@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.tools/
+.tmp-gh-auth/
+
+# Build output
+dist/
+dist-*/
+out/
+release/
+releases/
+win-unpacked/
+*.exe
+*.msi
+*.blockmap
+*.zip
+*.7z
+*.asar
+
+# User data and private state
+.cookie
+.qq-cookie
+updates/
+backups/
+*.log
+*.tmp
+*.cache
+.env
+.env.*
+
+# Local development noise
+.DS_Store
+Thumbs.db
+desktop.ini
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Historical local experiment files
+public/index.*.html
+!public/index.html
+
+# Screenshots and transient verification artifacts
+.playwright-cli/
+output/
+tmp/
+*.png.tmp
+verification/
+screenshots/
