@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+function onlineProviderDisabled() {
+  return Promise.resolve({ ok: false, localOnly: true, error: 'LOCAL_ONLY_MODE' });
+}
+
 contextBridge.exposeInMainWorld('desktopWindow', {
   isDesktop: true,
   minimize: () => ipcRenderer.invoke('desktop-window-minimize'),
@@ -11,10 +15,10 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   getTraySettings: () => ipcRenderer.invoke('mineradio-tray-get-settings'),
   setCloseToTray: (enabled) => ipcRenderer.invoke('mineradio-tray-set-close-to-tray', !!enabled),
   setStartupEnabled: (enabled) => ipcRenderer.invoke('mineradio-startup-set-enabled', !!enabled),
-  openNeteaseMusicLogin: () => ipcRenderer.invoke('netease-music-open-login'),
-  clearNeteaseMusicLogin: () => ipcRenderer.invoke('netease-music-clear-login'),
-  openQQMusicLogin: () => ipcRenderer.invoke('qq-music-open-login'),
-  clearQQMusicLogin: () => ipcRenderer.invoke('qq-music-clear-login'),
+  openNeteaseMusicLogin: onlineProviderDisabled,
+  clearNeteaseMusicLogin: onlineProviderDisabled,
+  openQQMusicLogin: onlineProviderDisabled,
+  clearQQMusicLogin: onlineProviderDisabled,
   openUpdateInstaller: (filePath) => ipcRenderer.invoke('mineradio-open-update-installer', filePath),
   restartApp: () => ipcRenderer.invoke('mineradio-restart-app'),
   configureGlobalHotkeys: (bindings) => ipcRenderer.invoke('mineradio-hotkeys-configure-global', bindings || []),
@@ -22,6 +26,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   importJsonFile: () => ipcRenderer.invoke('mineradio-import-json-file'),
   chooseLocalMusicFolder: () => ipcRenderer.invoke('mineradio-local-music-choose-folder'),
   scanLocalMusicFolder: (folderPath) => ipcRenderer.invoke('mineradio-local-music-scan-folder', folderPath),
+  refreshLocalMusicFiles: (folderPath, files) => ipcRenderer.invoke('mineradio-local-music-refresh-entries', folderPath, files || []),
   readLocalFileRange: (filePath, start, end) => ipcRenderer.invoke('mineradio-local-file-read-range', filePath, start, end),
   readLocalFileDataUrl: (filePath) => ipcRenderer.invoke('mineradio-local-file-read-data-url', filePath),
   onGlobalHotkey: (callback) => {

@@ -39,6 +39,7 @@ const APP_NAME = 'Mineradio';
 const APP_USER_MODEL_ID = 'com.mineradio.desktop';
 const APP_ICON_ICO = path.join(__dirname, '..', 'build', 'icon.ico');
 const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
+const LOCAL_ONLY_MODE = true;
 const NETEASE_LOGIN_PARTITION = 'persist:mineradio-netease-login';
 const NETEASE_LOGIN_URL = 'https://music.163.com/#/login';
 const QQ_LOGIN_PARTITION = 'persist:mineradio-qqmusic-login';
@@ -222,6 +223,34 @@ async function scanLocalMusicFolder(folderPath) {
     if (visited > 60000) break;
   }
   return { ok: true, folderPath: root, files, truncated: visited > 60000 };
+}
+
+async function refreshLocalMusicFileEntries(folderPath, files) {
+  const root = rememberLocalMusicRoot(folderPath);
+  const list = Array.isArray(files) ? files : [];
+  const out = [];
+  for (const file of list) {
+    if (!file) continue;
+    const rawPath = file.fullPath || file.filePath || file.path || file.localFilePathAbsolute || '';
+    if (!rawPath) continue;
+    const abs = path.resolve(String(rawPath));
+    if (abs !== root && !abs.startsWith(root + path.sep)) continue;
+    const ext = path.extname(file.name || abs).toLowerCase();
+    if (!LOCAL_LIBRARY_EXTS.has(ext)) continue;
+    out.push({
+      ...file,
+      fullPath: abs,
+      filePath: abs,
+      url: localFileProxyUrl(abs),
+      name: file.name || path.basename(abs),
+      relativePath: file.relativePath || file.webkitRelativePath || localLibraryRelativePath(root, path.relative(root, abs)),
+      webkitRelativePath: file.webkitRelativePath || file.relativePath || localLibraryRelativePath(root, path.relative(root, abs)),
+      size: Number(file.size) || 0,
+      lastModified: Number(file.lastModified) || 0,
+      type: file.type || LOCAL_LIBRARY_MIME[ext] || '',
+    });
+  }
+  return { ok: true, folderPath: root, files: out, snapshot: true };
 }
 
 async function readAuthorizedLocalFileRange(filePath, start, end) {
@@ -865,6 +894,10 @@ async function clearNeteaseMusicLoginSession() {
   return { ok: true };
 }
 
+function onlineProviderDisabled() {
+  return { ok: false, localOnly: true, error: 'LOCAL_ONLY_MODE' };
+}
+
 function getWindowedBounds(win) {
   const display = win && !win.isDestroyed()
     ? screen.getDisplayMatching(win.getBounds())
@@ -1449,6 +1482,15 @@ ipcMain.handle('mineradio-local-music-scan-folder', async (_event, folderPath) =
   }
 });
 
+ipcMain.handle('mineradio-local-music-refresh-entries', async (_event, folderPath, files) => {
+  try {
+    if (!folderPath) return { ok: false, error: 'LOCAL_LIBRARY_PATH_EMPTY' };
+    return await refreshLocalMusicFileEntries(folderPath, files);
+  } catch (e) {
+    return { ok: false, error: e.message || 'LOCAL_LIBRARY_REFRESH_FAILED' };
+  }
+});
+
 ipcMain.handle('mineradio-local-file-read-range', async (_event, filePath, start, end) => {
   try {
     return await readAuthorizedLocalFileRange(filePath, start, end);
@@ -1466,18 +1508,22 @@ ipcMain.handle('mineradio-local-file-read-data-url', async (_event, filePath) =>
 });
 
 ipcMain.handle('netease-music-open-login', async (event) => {
+  if (LOCAL_ONLY_MODE) return onlineProviderDisabled();
   return openNeteaseMusicLoginWindow(getSenderWindow(event));
 });
 
 ipcMain.handle('netease-music-clear-login', async () => {
+  if (LOCAL_ONLY_MODE) return onlineProviderDisabled();
   return clearNeteaseMusicLoginSession();
 });
 
 ipcMain.handle('qq-music-open-login', async (event) => {
+  if (LOCAL_ONLY_MODE) return onlineProviderDisabled();
   return openQQMusicLoginWindow(getSenderWindow(event));
 });
 
 ipcMain.handle('qq-music-clear-login', async () => {
+  if (LOCAL_ONLY_MODE) return onlineProviderDisabled();
   return clearQQMusicLoginSession();
 });
 
@@ -1630,20 +1676,22 @@ async function createWindow() {
 
   process.env.HOST = '127.0.0.1';
   process.env.PORT = String(port);
-  process.env.COOKIE_FILE = path.join(app.getPath('userData'), '.cookie');
-  process.env.QQ_COOKIE_FILE = path.join(app.getPath('userData'), '.qq-cookie');
   process.env.MINERADIO_UPDATE_DIR = getUpdateDownloadDir();
   process.env.MINERADIO_LOCAL_FILE_TOKEN = LOCAL_FILE_TOKEN;
-  try {
-    const legacyQQCookie = path.join(__dirname, '..', '.qq-cookie');
-    if (fs.existsSync(legacyQQCookie)) {
-      if (!fs.existsSync(process.env.QQ_COOKIE_FILE)) {
-        fs.copyFileSync(legacyQQCookie, process.env.QQ_COOKIE_FILE);
+  if (!LOCAL_ONLY_MODE) {
+    process.env.COOKIE_FILE = path.join(app.getPath('userData'), '.cookie');
+    process.env.QQ_COOKIE_FILE = path.join(app.getPath('userData'), '.qq-cookie');
+    try {
+      const legacyQQCookie = path.join(__dirname, '..', '.qq-cookie');
+      if (fs.existsSync(legacyQQCookie)) {
+        if (!fs.existsSync(process.env.QQ_COOKIE_FILE)) {
+          fs.copyFileSync(legacyQQCookie, process.env.QQ_COOKIE_FILE);
+        }
+        fs.unlinkSync(legacyQQCookie);
       }
-      fs.unlinkSync(legacyQQCookie);
+    } catch (e) {
+      console.warn('QQ cookie migration skipped:', e.message);
     }
-  } catch (e) {
-    console.warn('QQ cookie migration skipped:', e.message);
   }
 
   localServer = require(path.join(__dirname, '..', 'server.js'));

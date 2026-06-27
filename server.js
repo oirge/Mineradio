@@ -1,10 +1,10 @@
 // ====================================================================
-//  粒子音乐可视化播放器 — Server v2
-//  - 网易云搜索 / 歌曲URL / 封面/音频代理
-//  - 扫码登录 (login_qr_*) + cookie 持久化 (./.cookie)
-//  - 试听检测 (freeTrialInfo) + 全 quality 探测
-//  - 所有受保护 API 都会带上已登录用户的 cookie
+//  Mineradio local desktop server
+//  - 本地文件代理 / 本地节奏缓存 / 更新检查
+//  - 默认纯本地模式，不再加载网易云 / QQ 音乐运行依赖
 // ====================================================================
+const ONLINE_PROVIDER_ENABLED = false;
+const neteaseApi = {};
 const {
   search,
   cloudsearch,
@@ -43,7 +43,7 @@ const {
   sati_resource_sub_list,
   lyric,
   lyric_new,
-} = require('NeteaseCloudMusicApi');
+} = neteaseApi;
 const http = require('http');
 const https = require('https');
 const fs   = require('fs');
@@ -57,8 +57,8 @@ const { analyzePodcastDjStream, analyzePodcastDjIntro } = require('./dj-analyzer
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const COOKIE_FILE = process.env.COOKIE_FILE || path.join(__dirname, '.cookie');
-const QQ_COOKIE_FILE = process.env.QQ_COOKIE_FILE || path.join(__dirname, '.qq-cookie');
+const COOKIE_FILE = ONLINE_PROVIDER_ENABLED ? (process.env.COOKIE_FILE || path.join(__dirname, '.cookie')) : '';
+const QQ_COOKIE_FILE = ONLINE_PROVIDER_ENABLED ? (process.env.QQ_COOKIE_FILE || path.join(__dirname, '.qq-cookie')) : '';
 const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
 const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(__dirname, 'updates');
 const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.join(UPDATE_WORK_DIR, 'downloads');
@@ -120,6 +120,134 @@ const MIME = {
   '.svg':  'image/svg+xml',
 };
 
+const API_CACHE_TTL = {
+  discoverHome: 5 * 60 * 1000,
+  userPlaylists: 5 * 60 * 1000,
+  playlistTracks: 20 * 60 * 1000,
+  lyrics: 24 * 60 * 60 * 1000,
+};
+const API_MEMORY_CACHE_MAX = 160;
+const COVER_MEMORY_CACHE_TTL = 24 * 60 * 60 * 1000;
+const COVER_MEMORY_CACHE_MAX_BYTES = 42 * 1024 * 1024;
+const COVER_MEMORY_CACHE_MAX_ITEM_BYTES = 8 * 1024 * 1024;
+const apiMemoryCache = new Map();
+const apiInflightCache = new Map();
+const coverMemoryCache = new Map();
+const coverInflightCache = new Map();
+let coverMemoryCacheBytes = 0;
+
+function stableCacheKey(parts) {
+  return (parts || []).map(part => String(part == null ? '' : part)).join('|');
+}
+function cacheHash(value) {
+  return crypto.createHash('sha1').update(String(value || '')).digest('hex').slice(0, 16);
+}
+function authCacheParts() {
+  return [cacheHash(userCookie), cacheHash(qqCookie)];
+}
+function clearApiMemoryCache() {
+  apiMemoryCache.clear();
+  apiInflightCache.clear();
+}
+function getApiMemoryCache(key) {
+  const hit = apiMemoryCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    apiMemoryCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+function setApiMemoryCache(key, value, ttl) {
+  if (!key || !ttl) return value;
+  apiMemoryCache.set(key, { value, expiresAt: Date.now() + ttl });
+  if (apiMemoryCache.size > API_MEMORY_CACHE_MAX) {
+    const firstKey = apiMemoryCache.keys().next().value;
+    if (firstKey) apiMemoryCache.delete(firstKey);
+  }
+  return value;
+}
+async function withApiMemoryCache(key, ttl, producer) {
+  const hit = getApiMemoryCache(key);
+  if (hit) return { value: hit, cache: 'hit' };
+  if (apiInflightCache.has(key)) {
+    const value = await apiInflightCache.get(key);
+    return { value, cache: 'joined' };
+  }
+  const pending = Promise.resolve().then(producer).then(value => setApiMemoryCache(key, value, ttl));
+  apiInflightCache.set(key, pending);
+  try {
+    const value = await pending;
+    return { value, cache: 'miss' };
+  } finally {
+    apiInflightCache.delete(key);
+  }
+}
+function coverFetchHeaders(coverUrl) {
+  const headers = { 'User-Agent': UA, Referer: 'https://music.163.com/' };
+  try {
+    const host = new URL(coverUrl).hostname.toLowerCase();
+    if (host.includes('qq.com') || host.includes('qpic.cn')) headers.Referer = 'https://y.qq.com/';
+  } catch (e) {}
+  return headers;
+}
+function getCoverMemoryCache(key) {
+  const hit = coverMemoryCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    coverMemoryCache.delete(key);
+    coverMemoryCacheBytes = Math.max(0, coverMemoryCacheBytes - (hit.bytes || 0));
+    return null;
+  }
+  return hit;
+}
+function trimCoverMemoryCache() {
+  while (coverMemoryCacheBytes > COVER_MEMORY_CACHE_MAX_BYTES && coverMemoryCache.size) {
+    const firstKey = coverMemoryCache.keys().next().value;
+    const removed = coverMemoryCache.get(firstKey);
+    coverMemoryCache.delete(firstKey);
+    coverMemoryCacheBytes = Math.max(0, coverMemoryCacheBytes - ((removed && removed.bytes) || 0));
+  }
+}
+function setCoverMemoryCache(key, entry) {
+  if (!entry || !entry.buffer || entry.buffer.length > COVER_MEMORY_CACHE_MAX_ITEM_BYTES) return entry;
+  const old = coverMemoryCache.get(key);
+  if (old) coverMemoryCacheBytes = Math.max(0, coverMemoryCacheBytes - (old.bytes || 0));
+  const next = {
+    status: entry.status || 200,
+    contentType: entry.contentType || 'image/jpeg',
+    buffer: entry.buffer,
+    bytes: entry.buffer.length,
+    expiresAt: Date.now() + COVER_MEMORY_CACHE_TTL,
+  };
+  coverMemoryCache.set(key, next);
+  coverMemoryCacheBytes += next.bytes;
+  trimCoverMemoryCache();
+  return next;
+}
+async function fetchCoverThroughCache(coverUrl) {
+  const cached = getCoverMemoryCache(coverUrl);
+  if (cached) return { ...cached, cache: 'hit' };
+  if (coverInflightCache.has(coverUrl)) {
+    const joined = await coverInflightCache.get(coverUrl);
+    return { ...joined, cache: 'joined' };
+  }
+  const pending = (async () => {
+    const resp = await fetch(coverUrl, { headers: coverFetchHeaders(coverUrl) });
+    const contentType = resp.headers.get('content-type') || 'image/jpeg';
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    const entry = { status: resp.status, contentType, buffer };
+    if (resp.ok && /^image\//i.test(contentType)) return setCoverMemoryCache(coverUrl, entry);
+    return entry;
+  })();
+  coverInflightCache.set(coverUrl, pending);
+  try {
+    return await pending;
+  } finally {
+    coverInflightCache.delete(coverUrl);
+  }
+}
+
 // ---------- Cookie 持久化 ----------
 const COOKIE_ATTRIBUTE_NAMES = new Set(['path', 'domain', 'expires', 'max-age', 'samesite', 'secure', 'httponly']);
 function collectCookiePair(picked, key, value) {
@@ -172,19 +300,21 @@ function rawCookieFallback(input) {
   return '';
 }
 let userCookie = '';
-try { if (fs.existsSync(COOKIE_FILE)) userCookie = fs.readFileSync(COOKIE_FILE, 'utf8').trim(); }
+try { if (COOKIE_FILE && fs.existsSync(COOKIE_FILE)) userCookie = fs.readFileSync(COOKIE_FILE, 'utf8').trim(); }
 catch (e) { userCookie = ''; }
 function saveCookie(c) {
   userCookie = normalizeCookieHeader(c) || rawCookieFallback(c);
-  try { fs.writeFileSync(COOKIE_FILE, userCookie); } catch (e) {}
+  try { if (COOKIE_FILE) fs.writeFileSync(COOKIE_FILE, userCookie); } catch (e) {}
+  clearApiMemoryCache();
 }
 
 let qqCookie = '';
-try { if (fs.existsSync(QQ_COOKIE_FILE)) qqCookie = fs.readFileSync(QQ_COOKIE_FILE, 'utf8').trim(); }
+try { if (QQ_COOKIE_FILE && fs.existsSync(QQ_COOKIE_FILE)) qqCookie = fs.readFileSync(QQ_COOKIE_FILE, 'utf8').trim(); }
 catch (e) { qqCookie = ''; }
 function saveQQCookie(c) {
   qqCookie = normalizeCookieHeader(c) || rawCookieFallback(c);
-  try { fs.writeFileSync(QQ_COOKIE_FILE, qqCookie); } catch (e) {}
+  try { if (QQ_COOKIE_FILE) fs.writeFileSync(QQ_COOKIE_FILE, qqCookie); } catch (e) {}
+  clearApiMemoryCache();
 }
 
 // ---------- 工具 ----------
@@ -205,6 +335,59 @@ function sendJSON(res, data, status) {
     'Expires': '0',
   });
   res.end(JSON.stringify(data));
+}
+function isOnlineProviderApiPath(pn) {
+  if (ONLINE_PROVIDER_ENABLED) return false;
+  return pn === '/api/discover/home' ||
+    pn === '/api/weather/radio' ||
+    pn === '/api/weather/ip-location' ||
+    pn === '/api/search' ||
+    pn === '/api/song/url' ||
+    pn === '/api/login/cookie' ||
+    pn === '/api/login/qr/key' ||
+    pn === '/api/login/qr/create' ||
+    pn === '/api/login/qr/check' ||
+    pn === '/api/login/status' ||
+    pn === '/api/logout' ||
+    pn === '/api/user/playlists' ||
+    pn === '/api/song/like/check' ||
+    pn === '/api/song/like' ||
+    pn === '/api/playlist/create' ||
+    pn === '/api/playlist/add-song' ||
+    pn === '/api/playlist/tracks' ||
+    pn === '/api/lyric' ||
+    pn === '/api/song/comments' ||
+    pn === '/api/artist/detail' ||
+    pn === '/api/podcast/search' ||
+    pn === '/api/podcast/hot' ||
+    pn === '/api/podcast/detail' ||
+    pn === '/api/podcast/programs' ||
+    pn === '/api/podcast/my' ||
+    pn === '/api/podcast/my/items' ||
+    pn === '/api/podcast/dj-beatmap' ||
+    pn.startsWith('/api/qq/');
+}
+function sendLocalOnlyProviderDisabled(res, pn) {
+  if (pn === '/api/login/status') {
+    sendJSON(res, { localOnly: true, loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '本地模式' });
+    return;
+  }
+  if (pn === '/api/qq/login/status') {
+    sendJSON(res, { localOnly: true, provider: 'qq', loggedIn: false, hasCookie: false });
+    return;
+  }
+  sendJSON(res, {
+    localOnly: true,
+    error: 'LOCAL_ONLY_MODE',
+    message: 'Mineradio 当前为纯本地播放器，在线音乐平台接口已关闭。',
+    songs: [],
+    playlists: [],
+    tracks: [],
+    programs: [],
+    collections: [],
+    comments: [],
+    lyric: '',
+  }, 410);
 }
 function readPackageInfo() {
   try {
@@ -3259,6 +3442,11 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost:' + PORT);
   const pn = url.pathname;
 
+  if (isOnlineProviderApiPath(pn)) {
+    sendLocalOnlyProviderDisabled(res, pn);
+    return;
+  }
+
   if (pn === '/api/app/version') {
     sendJSON(res, {
       name: APP_PACKAGE.name || 'mineradio',
@@ -3388,7 +3576,12 @@ const server = http.createServer(async (req, res) => {
 
   if (pn === '/api/discover/home') {
     try {
-      sendJSON(res, await handleDiscoverHome());
+      const cached = await withApiMemoryCache(
+        stableCacheKey(['discover-home', ...authCacheParts()]),
+        API_CACHE_TTL.discoverHome,
+        () => handleDiscoverHome()
+      );
+      sendJSON(res, cached.value);
     } catch (err) {
       console.error('[DiscoverHome]', err);
       sendJSON(res, { error: err.message, loggedIn: false, dailySongs: [], playlists: [], podcasts: [] }, 500);
@@ -3470,8 +3663,12 @@ const server = http.createServer(async (req, res) => {
       const mid = url.searchParams.get('mid') || url.searchParams.get('songmid') || '';
       const id = url.searchParams.get('id') || url.searchParams.get('qqId') || '';
       if (!mid && !id) { sendJSON(res, { provider: 'qq', error: 'Missing QQ song mid or id', lyric: '' }, 400); return; }
-      const data = await handleQQLyric(mid, id);
-      sendJSON(res, data);
+      const cached = await withApiMemoryCache(
+        stableCacheKey(['qq-lyric', mid, id, ...authCacheParts()]),
+        API_CACHE_TTL.lyrics,
+        () => handleQQLyric(mid, id)
+      );
+      sendJSON(res, cached.value);
     } catch (err) {
       console.error('[QQLyric]', err);
       sendJSON(res, { provider: 'qq', error: err.message, lyric: '' }, 500);
@@ -3519,8 +3716,15 @@ const server = http.createServer(async (req, res) => {
 
   if (pn === '/api/qq/user/playlists') {
     try {
-      const data = await handleQQUserPlaylists();
-      sendJSON(res, data);
+      const cookieObj = qqCookieObject();
+      const uin = qqCookieUin(cookieObj);
+      if (!uin || !qqCookieMusicKey(cookieObj)) { sendJSON(res, { loggedIn: false, provider: 'qq', playlists: [] }); return; }
+      const cached = await withApiMemoryCache(
+        stableCacheKey(['qq-user-playlists', uin, ...authCacheParts()]),
+        API_CACHE_TTL.userPlaylists,
+        () => handleQQUserPlaylists()
+      );
+      sendJSON(res, cached.value);
     } catch (err) {
       console.error('[QQUserPlaylists]', err);
       sendJSON(res, { provider: 'qq', loggedIn: false, error: err.message, playlists: [] }, 500);
@@ -3531,8 +3735,12 @@ const server = http.createServer(async (req, res) => {
   if (pn === '/api/qq/playlist/tracks') {
     try {
       const id = url.searchParams.get('id') || url.searchParams.get('disstid') || '';
-      const data = await handleQQPlaylistTracks(id);
-      sendJSON(res, data);
+      const cached = await withApiMemoryCache(
+        stableCacheKey(['qq-playlist-tracks', id, ...authCacheParts()]),
+        API_CACHE_TTL.playlistTracks,
+        () => handleQQPlaylistTracks(id)
+      );
+      sendJSON(res, cached.value);
     } catch (err) {
       console.error('[QQPlaylistTracks]', err);
       sendJSON(res, { provider: 'qq', error: err.message, tracks: [] }, 500);
@@ -3854,18 +4062,25 @@ const server = http.createServer(async (req, res) => {
       const info = await getLoginInfo();
       if (!info.loggedIn || !info.userId) { sendJSON(res, { loggedIn: false, playlists: [] }); return; }
       const limit = Math.max(12, Math.min(100, parseInt(url.searchParams.get('limit') || '60', 10) || 60));
-      const r = await user_playlist({ uid: info.userId, limit, cookie: userCookie, timestamp: Date.now() });
-      const list = ((r.body && r.body.playlist) || []).map(pl => ({
-        id: pl.id,
-        name: pl.name,
-        cover: pl.coverImgUrl || '',
-        trackCount: pl.trackCount || 0,
-        playCount: pl.playCount || 0,
-        creator: (pl.creator && pl.creator.nickname) || '',
-        subscribed: !!pl.subscribed,
-        specialType: pl.specialType || 0,
-      }));
-      sendJSON(res, { loggedIn: true, userId: info.userId, playlists: list });
+      const cached = await withApiMemoryCache(
+        stableCacheKey(['user-playlists', info.userId, limit, ...authCacheParts()]),
+        API_CACHE_TTL.userPlaylists,
+        async () => {
+          const r = await user_playlist({ uid: info.userId, limit, cookie: userCookie, timestamp: Date.now() });
+          const list = ((r.body && r.body.playlist) || []).map(pl => ({
+            id: pl.id,
+            name: pl.name,
+            cover: pl.coverImgUrl || '',
+            trackCount: pl.trackCount || 0,
+            playCount: pl.playCount || 0,
+            creator: (pl.creator && pl.creator.nickname) || '',
+            subscribed: !!pl.subscribed,
+            specialType: pl.specialType || 0,
+          }));
+          return { loggedIn: true, userId: info.userId, playlists: list };
+        }
+      );
+      sendJSON(res, cached.value);
     } catch (err) {
       console.error('[UserPlaylists]', err);
       sendJSON(res, { error: err.message, loggedIn: false, playlists: [] }, 500);
@@ -4007,28 +4222,35 @@ const server = http.createServer(async (req, res) => {
     try {
       const id = url.searchParams.get('id');
       if (!id) { sendJSON(res, { error: 'Missing song id', lyric: '' }, 400); return; }
-      let body = {};
-      let source = 'lyric';
-      try {
-        if (typeof lyric_new === 'function') {
-          const nr = await lyric_new({ id, cookie: userCookie, timestamp: Date.now() });
-          body = nr.body || {};
-          source = 'lyric_new';
+      const cached = await withApiMemoryCache(
+        stableCacheKey(['netease-lyric', id, cacheHash(userCookie)]),
+        API_CACHE_TTL.lyrics,
+        async () => {
+          let body = {};
+          let source = 'lyric';
+          try {
+            if (typeof lyric_new === 'function') {
+              const nr = await lyric_new({ id, cookie: userCookie, timestamp: Date.now() });
+              body = nr.body || {};
+              source = 'lyric_new';
+            }
+          } catch (errNew) {
+            console.warn('[LyricNew]', errNew.message);
+          }
+          if (!((body.lrc && body.lrc.lyric) || (body.yrc && body.yrc.lyric))) {
+            const r = await lyric({ id, cookie: userCookie, timestamp: Date.now() });
+            body = r.body || body || {};
+            source = 'lyric';
+          }
+          return {
+            lyric: (body.lrc && body.lrc.lyric) || '',
+            tlyric: (body.tlyric && body.tlyric.lyric) || '',
+            yrc: (body.yrc && body.yrc.lyric) || '',
+            source,
+          };
         }
-      } catch (errNew) {
-        console.warn('[LyricNew]', errNew.message);
-      }
-      if (!((body.lrc && body.lrc.lyric) || (body.yrc && body.yrc.lyric))) {
-        const r = await lyric({ id, cookie: userCookie, timestamp: Date.now() });
-        body = r.body || body || {};
-        source = 'lyric';
-      }
-      sendJSON(res, {
-        lyric: (body.lrc && body.lrc.lyric) || '',
-        tlyric: (body.tlyric && body.tlyric.lyric) || '',
-        yrc: (body.yrc && body.yrc.lyric) || '',
-        source,
-      });
+      );
+      sendJSON(res, cached.value);
     } catch (err) {
       console.error('[Lyric]', err);
       sendJSON(res, { error: err.message, lyric: '' }, 500);
@@ -4114,31 +4336,36 @@ const server = http.createServer(async (req, res) => {
     try {
       const id = url.searchParams.get('id');
       if (!id) { sendJSON(res, { error: 'Missing playlist id', tracks: [] }, 400); return; }
+      const cached = await withApiMemoryCache(
+        stableCacheKey(['playlist-tracks', id, ...authCacheParts()]),
+        API_CACHE_TTL.playlistTracks,
+        async () => {
+          let playlistMeta = { id, name: '', cover: '', trackCount: 0 };
+          let rawTracks = [];
 
-      let playlistMeta = { id, name: '', cover: '', trackCount: 0 };
-      let rawTracks = [];
+          // 历史在线歌单逻辑保留在本地模式总闸之后，默认不会执行。
+          if (typeof playlist_track_all === 'function') {
+            try {
+              const all = await playlist_track_all({ id, limit: 500, offset: 0, cookie: userCookie, timestamp: Date.now() });
+              rawTracks = (all.body && (all.body.songs || all.body.tracks)) || [];
+            } catch (err) {
+              console.warn('[PlaylistTracks] playlist_track_all failed, fallback to detail:', err.message);
+            }
+          }
 
-      // 新版本 NeteaseCloudMusicApi 通常提供 playlist_track_all；旧版本退回 playlist_detail。
-      if (typeof playlist_track_all === 'function') {
-        try {
-          const all = await playlist_track_all({ id, limit: 500, offset: 0, cookie: userCookie, timestamp: Date.now() });
-          rawTracks = (all.body && (all.body.songs || all.body.tracks)) || [];
-        } catch (err) {
-          console.warn('[PlaylistTracks] playlist_track_all failed, fallback to detail:', err.message);
+          if (!rawTracks.length && typeof playlist_detail === 'function') {
+            const detail = await playlist_detail({ id, s: 0, cookie: userCookie, timestamp: Date.now() });
+            const pl = (detail.body && detail.body.playlist) || {};
+            playlistMeta = { id: pl.id || id, name: pl.name || '', cover: pl.coverImgUrl || '', trackCount: pl.trackCount || 0 };
+            rawTracks = pl.tracks || [];
+          }
+
+          const tracks = rawTracks.map(mapSongRecord).filter(t => t.id);
+          if (!playlistMeta.trackCount) playlistMeta.trackCount = tracks.length;
+          return { playlist: playlistMeta, tracks };
         }
-      }
-
-      if (!rawTracks.length && typeof playlist_detail === 'function') {
-        const detail = await playlist_detail({ id, s: 0, cookie: userCookie, timestamp: Date.now() });
-        const pl = (detail.body && detail.body.playlist) || {};
-        playlistMeta = { id: pl.id || id, name: pl.name || '', cover: pl.coverImgUrl || '', trackCount: pl.trackCount || 0 };
-        rawTracks = pl.tracks || [];
-      }
-
-      const tracks = rawTracks.map(mapSongRecord).filter(t => t.id);
-
-      if (!playlistMeta.trackCount) playlistMeta.trackCount = tracks.length;
-      sendJSON(res, { playlist: playlistMeta, tracks });
+      );
+      sendJSON(res, cached.value);
     } catch (err) {
       console.error('[PlaylistTracks]', err);
       sendJSON(res, { error: err.message, tracks: [] }, 500);
@@ -4156,20 +4383,16 @@ const server = http.createServer(async (req, res) => {
         res.end('Invalid cover url');
         return;
       }
-      const resp = await fetch(coverUrl, { headers: { 'User-Agent': UA, 'Referer': 'https://music.163.com/' } });
-      const ct  = resp.headers.get('content-type') || 'image/jpeg';
-      const cl  = resp.headers.get('content-length');
+      const entry = await fetchCoverThroughCache(coverUrl);
       const hdr = {
-        'Content-Type': ct,
+        'Content-Type': entry.contentType || 'image/jpeg',
         'Access-Control-Allow-Origin': '*',
         'Cross-Origin-Resource-Policy': 'cross-origin',
-        'Cache-Control': 'public, max-age=86400',
+        'Cache-Control': 'public, max-age=604800, immutable',
+        'Content-Length': String(entry.buffer ? entry.buffer.length : 0),
       };
-      if (cl) hdr['Content-Length'] = cl;
-      res.writeHead(resp.status, hdr);
-      const reader = resp.body.getReader();
-      while (true) { const c = await reader.read(); if (c.done) break; res.write(c.value); }
-      res.end();
+      res.writeHead(entry.status || 200, hdr);
+      res.end(entry.buffer || Buffer.alloc(0));
     } catch (err) { console.error('[Cover]', err); res.writeHead(500); res.end(); }
     return;
   }
