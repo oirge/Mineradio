@@ -1349,7 +1349,9 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1080px,cal
 .pl-card{display:flex;align-items:center;gap:10px;padding:9px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);transition:all .2s;cursor:pointer;margin-bottom:7px;will-change:transform,opacity}
 .pl-card:hover{background:rgba(255,255,255,.06)}
 .pl-card img{width:44px;height:44px;border-radius:8px;object-fit:cover;background:rgba(255,255,255,.06);flex-shrink:0}
-.pl-load-more{width:100%;height:30px;margin:8px 0 2px;display:flex;align-items:center;justify-content:center}
+.pl-load-more,.queue-load-more{width:100%;height:30px;margin:8px 0 2px;display:flex;align-items:center;justify-content:center}
+.mini-queue-load-more{height:28px;margin:4px 0 0;font-size:10.5px}
+.queue-current-hint{border-color:rgba(var(--fc-accent-rgb),.26)!important;background:rgba(var(--fc-accent-rgb),.075)!important;color:rgba(255,255,255,.86)!important}
 .pl-name{font-size:12px;color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pl-sub{font-size:10.5px;color:rgba(255,255,255,.42);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pl-section-label{margin:14px 2px 7px;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(0,245,212,.50)}
@@ -2896,9 +2898,17 @@ installStartupLongTaskObserver();
 var queueViewTab = 'queue', playMode = 'loop', miniQueueOpen = false;
 var miniQueueRenderSeq = 0, queueRenderSeq = 0, playlistRenderSeq = 0;
 var queuePanelDirty = false;
+var QUEUE_PANEL_INITIAL_RENDER = 72;
+var QUEUE_PANEL_BATCH_SIZE = 48;
+var MINI_QUEUE_INITIAL_RENDER = 42;
+var MINI_QUEUE_BATCH_SIZE = 42;
+var queuePanelRenderLimit = QUEUE_PANEL_INITIAL_RENDER;
+var miniQueueRenderLimit = MINI_QUEUE_INITIAL_RENDER;
+var queuePanelRenderFingerprint = '';
+var miniQueueRenderFingerprint = '';
 var PLAYLIST_PANEL_BATCH_SIZE = 28;
 var playlistPanelRenderLimit = PLAYLIST_PANEL_BATCH_SIZE;
-var playlistPanelLazyBound = false;
+var playlistPanelLazyBound = false, miniQueueLazyBound = false;
 var PLAYLIST_DETAIL_INITIAL_RENDER = 64;
 var PLAYLIST_DETAIL_BATCH_SIZE = 48;
 var smoothWheelScrollBound = false;
@@ -20541,11 +20551,15 @@ function renderMiniQueuePanel(opts) {
   var total = playQueue.length;
   $count.textContent = total ? (total + ' 首' + (currentIdx >= 0 ? ' · 正在播放 ' + (currentIdx + 1) : '')) : '0 首';
   if (!miniQueueOpen && !opts.animate && !opts.scrollCurrent) return;
+  syncQueueRenderLimits(opts);
   if (!total) {
     $list.innerHTML = '<div class="mini-queue-empty">队列为空，先搜索或打开歌单</div>';
     return;
   }
-  $list.innerHTML = playQueue.map(function(song, i){
+  miniQueueRenderLimit = normalizedQueueRenderLimit(miniQueueRenderLimit, MINI_QUEUE_INITIAL_RENDER, MINI_QUEUE_BATCH_SIZE, total);
+  var renderLimit = Math.min(total, miniQueueRenderLimit);
+  $list.innerHTML = playQueue.slice(0, renderLimit).map(function(song, offset){
+    var i = offset;
     var thumb = songCoverSrc(song, 60);
     var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="mini-queue-cover"></div>';
     var sub = songDisplaySubtitle(song);
@@ -20556,6 +20570,11 @@ function renderMiniQueuePanel(opts) {
       '<button class="mini-queue-remove" onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
     '</div>';
   }).join('');
+  var currentHint = hiddenCurrentQueueHintHtml(renderLimit, true);
+  if (currentHint) $list.insertAdjacentHTML('beforeend', currentHint);
+  if (total > renderLimit) {
+    $list.insertAdjacentHTML('beforeend', '<button type="button" class="fx-mini-btn ghost queue-load-more mini-queue-load-more" data-mini-queue-load-more="1">加载更多 ' + renderLimit + '/' + total + '</button>');
+  }
   if (opts.animate || opts.scrollCurrent) {
     requestAnimationFrame(function(){
       if (opts.animate) animateListItems($list, '.mini-queue-item', { x: 0, y: 6, stagger: 0.01, duration: 0.20, limit: 16 });
@@ -20566,46 +20585,195 @@ function renderMiniQueuePanel(opts) {
 document.addEventListener('click', function(e){
   if (miniQueueOpen && !(e.target && e.target.closest && e.target.closest('#bottom-bar'))) closeMiniQueue();
 });
+var queueListEl = document.getElementById('queue-list');
+if (queueListEl) {
+  queueListEl.addEventListener('click', function(e){
+    var jumpCurrent = e.target && e.target.closest ? e.target.closest('[data-queue-jump-current]') : null;
+    if (jumpCurrent) {
+      e.preventDefault();
+      e.stopPropagation();
+      jumpQueueRenderToCurrent(false);
+      return;
+    }
+    var loadMore = e.target && e.target.closest ? e.target.closest('[data-queue-load-more]') : null;
+    if (!loadMore) return;
+    e.preventDefault();
+    e.stopPropagation();
+    growQueuePanelRenderLimit();
+  });
+}
 bindSmoothQueueScrolling();
 bindPlaylistPanelLazyRender();
+bindMiniQueueLazyRender();
 bindModalBackdropClose();
+function normalizedQueueRenderLimit(current, initial, batch, total) {
+  var min = Math.max(1, Number(initial) || 1);
+  var step = Math.max(1, Number(batch) || min);
+  var limit = Math.max(min, Number(current) || min);
+  if (currentIdx >= limit && currentIdx < limit + step) limit = currentIdx + Math.ceil(step * 0.5);
+  return Math.min(total, limit);
+}
+function queueRenderFingerprint() {
+  if (!playQueue.length) return '0';
+  function songKey(song) {
+    song = song || {};
+    return song.id || song.mid || song.path || song.url || song.name || '';
+  }
+  var len = playQueue.length;
+  var anchors = [0, 1, Math.floor(len / 3), Math.floor(len / 2), Math.floor(len * 2 / 3), len - 2, len - 1];
+  var seen = {};
+  var keys = [len];
+  anchors.forEach(function(index){
+    if (index < 0 || index >= len || seen[index]) return;
+    seen[index] = true;
+    keys.push(index + ':' + songKey(playQueue[index]));
+  });
+  return keys.join('|');
+}
+function syncQueueRenderLimits(opts) {
+  opts = opts || {};
+  var next = queueRenderFingerprint();
+  if (opts.resetLimit || next !== queuePanelRenderFingerprint) {
+    resetQueuePanelRenderLimit();
+    queuePanelRenderFingerprint = next;
+  }
+  if (opts.resetLimit || next !== miniQueueRenderFingerprint) {
+    resetMiniQueueRenderLimit();
+    miniQueueRenderFingerprint = next;
+  }
+}
+function resetQueuePanelRenderLimit() {
+  queuePanelRenderLimit = QUEUE_PANEL_INITIAL_RENDER;
+}
+function resetMiniQueueRenderLimit() {
+  miniQueueRenderLimit = MINI_QUEUE_INITIAL_RENDER;
+}
+function hiddenCurrentQueueHintHtml(renderLimit, mini) {
+  if (currentIdx < renderLimit || currentIdx < 0 || currentIdx >= playQueue.length) return '';
+  var label = '正在播放第 ' + (currentIdx + 1) + ' 首';
+  var attr = mini ? 'data-mini-queue-jump-current="1"' : 'data-queue-jump-current="1"';
+  return '<button type="button" class="fx-mini-btn ghost queue-load-more queue-current-hint" ' + attr + '>' + label + ' · 定位</button>';
+}
+function queueItemHtml(song, i) {
+  var thumb = songCoverSrc(song, 60);
+  var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:38px;height:38px;border-radius:6px;background:rgba(255,255,255,.06);flex-shrink:0"></div>';
+  var artist = songArtistText(song);
+  var sub = songDisplaySubtitle(song);
+  var subHtml = song.type === 'local'
+    ? escHtml(sub)
+    : '<button class="queue-artist-link" type="button" onclick="event.stopPropagation();openQueueArtist(' + i + ')">' + escHtml(artist || '未知歌手') + '</button>' + (song.album ? (' · ' + escHtml(song.album)) : '');
+  var actionsHtml = LOCAL_ONLY_MODE
+    ? '<div class="qi-act">' +
+      '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
+      '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
+      '</div>'
+    : '<div class="qi-act">' +
+      '<button class="' + (isSongLiked(song) ? 'liked' : '') + '" onclick="event.stopPropagation();toggleLikeQueueIndex(' + i + ')" title="' + (isSongLiked(song) ? '取消红心' : '红心喜欢') + '">' + heartIconSvg() + '</button>' +
+      '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
+      '<button onclick="event.stopPropagation();collectQueueIndex(' + i + ')" title="收藏到歌单">' + playlistPlusIconSvg() + '</button>' +
+      '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
+      '</div>';
+  return '<div class="queue-item' + (i === currentIdx ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
+    imgTag +
+    '<div class="qi-info"><div class="qi-name">' + escHtml(song.name) + '</div><div class="qi-sub">' + subHtml + '</div></div>' +
+    actionsHtml +
+  '</div>';
+}
+function growQueuePanelRenderLimit(amount) {
+  if (!playQueue.length) return false;
+  var total = playQueue.length;
+  var current = normalizedQueueRenderLimit(queuePanelRenderLimit, QUEUE_PANEL_INITIAL_RENDER, QUEUE_PANEL_BATCH_SIZE, total);
+  var next = Math.min(total, current + (amount || QUEUE_PANEL_BATCH_SIZE));
+  if (next <= current) return false;
+  var panel = document.getElementById('playlist-panel');
+  var keepTop = panel ? panel.scrollTop : 0;
+  queuePanelRenderLimit = next;
+  renderQueuePanel({ animate: true, scrollCurrent: false });
+  if (panel) panel.scrollTop = keepTop;
+  return true;
+}
+function growMiniQueueRenderLimit(amount) {
+  if (!playQueue.length) return false;
+  var total = playQueue.length;
+  var current = normalizedQueueRenderLimit(miniQueueRenderLimit, MINI_QUEUE_INITIAL_RENDER, MINI_QUEUE_BATCH_SIZE, total);
+  var next = Math.min(total, current + (amount || MINI_QUEUE_BATCH_SIZE));
+  if (next <= current) return false;
+  var list = document.getElementById('mini-queue-list');
+  var keepTop = list ? list.scrollTop : 0;
+  miniQueueRenderLimit = next;
+  renderMiniQueuePanel({ animate: true });
+  if (list) list.scrollTop = keepTop;
+  return true;
+}
+function jumpQueueRenderToCurrent(mini) {
+  if (currentIdx < 0 || currentIdx >= playQueue.length) return false;
+  var batch = mini ? MINI_QUEUE_BATCH_SIZE : QUEUE_PANEL_BATCH_SIZE;
+  var next = Math.min(playQueue.length, currentIdx + Math.max(12, Math.floor(batch * 0.5)));
+  if (mini) {
+    miniQueueRenderLimit = Math.max(miniQueueRenderLimit || 0, next);
+    renderMiniQueuePanel({ scrollCurrent: true });
+  } else {
+    queuePanelRenderLimit = Math.max(queuePanelRenderLimit || 0, next);
+    renderQueuePanel({ animate: true, scrollCurrent: true });
+  }
+  return true;
+}
+function maybeGrowQueuePanelRenderLimit() {
+  var panel = document.getElementById('playlist-panel');
+  if (!panel || queueViewTab !== 'queue' || queuePanelRenderLimit >= playQueue.length) return;
+  if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 220) growQueuePanelRenderLimit();
+}
+function maybeGrowMiniQueueRenderLimit() {
+  var list = document.getElementById('mini-queue-list');
+  if (!miniQueueOpen || !list || miniQueueRenderLimit >= playQueue.length) return;
+  if (list.scrollTop + list.clientHeight >= list.scrollHeight - 120) growMiniQueueRenderLimit();
+}
+function bindMiniQueueLazyRender() {
+  var list = document.getElementById('mini-queue-list');
+  if (!list || miniQueueLazyBound) return;
+  miniQueueLazyBound = true;
+  list.addEventListener('scroll', maybeGrowMiniQueueRenderLimit, { passive: true });
+  list.addEventListener('click', function(e){
+    var jumpCurrent = e.target && e.target.closest ? e.target.closest('[data-mini-queue-jump-current]') : null;
+    if (jumpCurrent) {
+      e.preventDefault();
+      e.stopPropagation();
+      jumpQueueRenderToCurrent(true);
+      return;
+    }
+    var loadMore = e.target && e.target.closest ? e.target.closest('[data-mini-queue-load-more]') : null;
+    if (!loadMore) return;
+    e.preventDefault();
+    e.stopPropagation();
+    growMiniQueueRenderLimit();
+  });
+}
 function renderQueuePanel(opts) {
   opts = opts || {};
   var $ql = document.getElementById('queue-list');
+  if (!$ql) return;
   var seq = ++queueRenderSeq;
+  syncQueueRenderLimits(opts);
   if (!playQueue.length) {
     $ql.innerHTML = '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">队列为空，搜索后点 + 设为下一首</div>';
+    resetQueuePanelRenderLimit();
+    resetMiniQueueRenderLimit();
     renderMiniQueuePanel();
     var panel = document.getElementById('playlist-panel');
     if (panel && (panel.classList.contains('show') || panel.classList.contains('peek')) && queueViewTab === 'queue') switchPlaylistTab('playlists');
     return;
   }
-  $ql.innerHTML = playQueue.map(function(song, i){
-    var thumb = songCoverSrc(song, 60);
-    var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:38px;height:38px;border-radius:6px;background:rgba(255,255,255,.06);flex-shrink:0"></div>';
-    var artist = songArtistText(song);
-    var sub = songDisplaySubtitle(song);
-    var subHtml = song.type === 'local'
-      ? escHtml(sub)
-      : '<button class="queue-artist-link" type="button" onclick="event.stopPropagation();openQueueArtist(' + i + ')">' + escHtml(artist || '未知歌手') + '</button>' + (song.album ? (' · ' + escHtml(song.album)) : '');
-    var actionsHtml = LOCAL_ONLY_MODE
-      ? '<div class="qi-act">' +
-        '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
-        '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
-        '</div>'
-      : '<div class="qi-act">' +
-        '<button class="' + (isSongLiked(song) ? 'liked' : '') + '" onclick="event.stopPropagation();toggleLikeQueueIndex(' + i + ')" title="' + (isSongLiked(song) ? '取消红心' : '红心喜欢') + '">' + heartIconSvg() + '</button>' +
-        '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
-        '<button onclick="event.stopPropagation();collectQueueIndex(' + i + ')" title="收藏到歌单">' + playlistPlusIconSvg() + '</button>' +
-        '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
-        '</div>';
-    return '<div class="queue-item' + (i === currentIdx ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
-      imgTag +
-      '<div class="qi-info"><div class="qi-name">' + escHtml(song.name) + '</div><div class="qi-sub">' + subHtml + '</div></div>' +
-      actionsHtml +
-    '</div>';
-  }).join('');
-  if (opts.animate && seq === queueRenderSeq) animateVisiblePanelList($ql, '.queue-item', document.getElementById('playlist-panel'), '.queue-item.now');
+  queuePanelRenderLimit = normalizedQueueRenderLimit(queuePanelRenderLimit, QUEUE_PANEL_INITIAL_RENDER, QUEUE_PANEL_BATCH_SIZE, playQueue.length);
+  var renderLimit = Math.min(playQueue.length, queuePanelRenderLimit);
+  $ql.innerHTML = playQueue.slice(0, renderLimit).map(function(song, i){ return queueItemHtml(song, i); }).join('');
+  var currentHint = hiddenCurrentQueueHintHtml(renderLimit, false);
+  if (currentHint) $ql.insertAdjacentHTML('beforeend', currentHint);
+  if (playQueue.length > renderLimit) {
+    $ql.insertAdjacentHTML('beforeend', '<button type="button" class="fx-mini-btn ghost queue-load-more" data-queue-load-more="1">加载更多 ' + renderLimit + '/' + playQueue.length + '</button>');
+  }
+  if (opts.animate && seq === queueRenderSeq) {
+    animateVisiblePanelList($ql, '.queue-item', document.getElementById('playlist-panel'), '.queue-item.now', { scrollActive: opts.scrollCurrent !== false });
+  }
   renderMiniQueuePanel({ scrollCurrent: miniQueueOpen });
 }
 async function refreshUserPlaylists(force) {
@@ -20823,6 +20991,7 @@ function bindPlaylistPanelLazyRender() {
   if (!panel || playlistPanelLazyBound) return;
   playlistPanelLazyBound = true;
   panel.addEventListener('scroll', function(){
+    maybeGrowQueuePanelRenderLimit();
     maybeGrowPlaylistPanelDetailRenderLimit();
     if (queueViewTab !== 'playlists' || playlistPanelRenderLimit >= userPlaylists.length) return;
     if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 180) growPlaylistPanelRenderLimit();
