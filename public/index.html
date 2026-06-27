@@ -8209,6 +8209,9 @@ function localAssetCacheSnapshot(song) {
     duration: Number(song.duration) || 0,
     localFormat: song.localFormat || '',
     localFileSize: Number(song.localFileSize) || 0,
+    localFileLastModified: Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0,
+    localLibraryPathKey: localLibraryPathKeyFromSong(song),
+    localLibraryFileSignature: localLibraryFileSignatureFromSong(song),
     localBitrateKbps: Number(song.localBitrateKbps) || 0,
     localLyricFileName: song.localLyricFileName || '',
     localLyricTagName: song.localLyricTagName || '',
@@ -8308,6 +8311,10 @@ async function hydrateLocalAssetCacheForSongs(songs) {
   var seen = {};
   songs.forEach(function(song){
     var key = localAssetCacheKey(song);
+    if (song) {
+      song.localAssetCacheHydrated = false;
+      song.localAssetCacheMiss = false;
+    }
     if (key && !seen[key]) { seen[key] = true; keys.push(key); }
   });
   if (!keys.length) return 0;
@@ -8315,12 +8322,22 @@ async function hydrateLocalAssetCacheForSongs(songs) {
     var records = await readLocalAssetCacheRecords(keys);
     var count = 0;
     songs.forEach(function(song){
-      var record = records[localAssetCacheKey(song)];
+      var key = localAssetCacheKey(song);
+      var record = records[key];
+      if (song) {
+        song.localAssetCacheHydrated = true;
+        song.localAssetCacheMiss = !record;
+      }
       if (record && applyLocalAssetCacheToSong(song, record)) count++;
     });
     return count;
   } catch (e) {
     console.warn('[LocalAssetCacheRead]', e);
+    songs.forEach(function(song){
+      if (!song) return;
+      song.localAssetCacheHydrated = true;
+      song.localAssetCacheMiss = true;
+    });
     return 0;
   }
 }
@@ -12620,11 +12637,23 @@ function localAssetBackgroundDelayMs() {
   if (typeof isRenderInteractionActive === 'function' && isRenderInteractionActive()) delay = Math.max(delay, activePlayback ? 2200 : 820);
   return delay;
 }
+function localIndexedAssetCanWaitForCache(song, kind) {
+  if (!song || song.localAssetCacheMiss) return false;
+  if (song.localLibraryChangeState !== 'unchanged' && !song.localLibraryIndexApplied) return false;
+  var status = kind === 'cover' ? song.localIndexedCoverStatus : song.localIndexedLyricStatus;
+  return status === 'ready';
+}
 function localSongNeedsAssetPreload(song) {
   if (!song || song.type !== 'local') return false;
   if (!song.localMetadataLoaded) return true;
-  if (!song.localLyricLoaded && !song.localLyricLightScanned && (song.localLyricFile || canReadEmbeddedFlacLyrics(song))) return true;
-  if (!song.localCoverLoaded && !song.localCoverLightScanned && !song.localCoverDataUrl && !song.localCoverThumbDataUrl && (song.localCoverFile || canReadEmbeddedCover(song))) return true;
+  if (!song.localLyricLoaded && !song.localLyricLightScanned && (song.localLyricFile || canReadEmbeddedFlacLyrics(song))) {
+    if (localIndexedAssetCanWaitForCache(song, 'lyric')) return false;
+    return true;
+  }
+  if (!song.localCoverLoaded && !song.localCoverLightScanned && !song.localCoverDataUrl && !song.localCoverThumbDataUrl && (song.localCoverFile || canReadEmbeddedCover(song))) {
+    if (localIndexedAssetCanWaitForCache(song, 'cover')) return false;
+    return true;
+  }
   return false;
 }
 function localAssetQueuePositionMap() {
@@ -19858,8 +19887,40 @@ function localFileUrlFromEntry(file) {
 function localFileSize(file) {
   return Number(file && file.size || 0) || 0;
 }
+function localFileLastModified(file) {
+  return Number(file && file.lastModified || 0) || 0;
+}
 function localFilePath(file) {
   return String((file && (file.webkitRelativePath || file.relativePath || file.name || localFullPath(file))) || '').replace(/\\/g, '/');
+}
+function normalizeLocalLibraryPathKey(value) {
+  return String(value || '')
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .trim()
+    .toLowerCase();
+}
+function localLibraryPathKeyFromFile(file) {
+  return normalizeLocalLibraryPathKey(localFullPath(file) || localFilePath(file) || (file && file.name) || '');
+}
+function localLibraryPathKeyFromSong(song) {
+  if (!song) return '';
+  return normalizeLocalLibraryPathKey(song.localFilePathAbsolute || song.localPath || song.name || '');
+}
+function localLibraryFileSignatureFromFile(file) {
+  return [
+    localLibraryPathKeyFromFile(file),
+    localFileSize(file),
+    localFileLastModified(file)
+  ].join('|');
+}
+function localLibraryFileSignatureFromSong(song) {
+  if (!song) return '';
+  return [
+    localLibraryPathKeyFromSong(song),
+    Number(song.localFileSize || (song.localFile && localFileSize(song.localFile)) || 0) || 0,
+    Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0
+  ].join('|');
 }
 function localPathDir(file) {
   var p = localFilePath(file);
@@ -19974,6 +20035,9 @@ function makeLocalSongFromFile(file, lyricFile, coverFile) {
     localPath: localFilePath(file),
     localFilePathAbsolute: localFullPath(file),
     localFileSize: localFileSize(file),
+    localFileLastModified: localFileLastModified(file),
+    localLibraryPathKey: localLibraryPathKeyFromFile(file),
+    localLibraryFileSignature: localLibraryFileSignatureFromFile(file),
     localFormat: localAudioFormatLabel({ type:'local', localFile:file, localPath:localFilePath(file), name:info.title }),
     localFileUrl: localFileUrlFromEntry(file),
     localFile: file,
@@ -20647,11 +20711,18 @@ function localLibraryAssetStatus(readyValue, loaded, lightScanned) {
 function localLibraryIndexRecord(song) {
   if (!song || !song.localKey) return null;
   updateLocalAudioQualityInfo(song);
+  var pathKey = localLibraryPathKeyFromSong(song);
+  var fileSignature = localLibraryFileSignatureFromSong(song);
+  var mtime = Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0;
   return {
+    schemaVersion: 2,
     key: song.localKey,
+    pathKey: pathKey,
+    fileSignature: fileSignature,
     path: song.localPath || '',
     fullPath: song.localFilePathAbsolute || '',
     size: Number(song.localFileSize) || 0,
+    mtime: mtime,
     name: song.name || '',
     artist: song.artist || '',
     album: song.album || '',
@@ -20685,9 +20756,55 @@ function readLocalLibraryIndex(folderPath) {
     return null;
   }
 }
+function localLibraryRecordPathKey(record) {
+  return record ? normalizeLocalLibraryPathKey(record.pathKey || record.fullPath || record.path || '') : '';
+}
+function localLibraryRecordFileSignature(record) {
+  if (!record) return '';
+  if (record.fileSignature) return String(record.fileSignature);
+  var pathKey = localLibraryRecordPathKey(record);
+  if (pathKey && (record.mtime || record.size)) {
+    return [pathKey, Number(record.size) || 0, Number(record.mtime) || 0].join('|');
+  }
+  return '';
+}
+function createLocalLibraryIndexLookup(index) {
+  var lookup = { byKey:{}, byPath:{}, records:[] };
+  if (!index || !index.records) return lookup;
+  Object.keys(index.records).forEach(function(key){
+    var record = index.records[key];
+    if (!record) return;
+    if (!record.key) record.key = key;
+    lookup.records.push(record);
+    if (record.key && !lookup.byKey[record.key]) lookup.byKey[record.key] = record;
+    var pathKey = localLibraryRecordPathKey(record);
+    if (pathKey) {
+      var prev = lookup.byPath[pathKey];
+      if (!prev || (Number(record.updatedAt) || 0) >= (Number(prev.updatedAt) || 0)) lookup.byPath[pathKey] = record;
+    }
+  });
+  return lookup;
+}
+function localLibraryRecordMatchesSong(record, song) {
+  if (!record || !song) return false;
+  if (record.key && song.localKey && record.key === song.localKey) return true;
+  var recordSig = localLibraryRecordFileSignature(record);
+  var songSig = localLibraryFileSignatureFromSong(song);
+  return !!(recordSig && songSig && recordSig === songSig);
+}
+function findLocalLibraryIndexRecordForSong(song, lookup) {
+  if (!song || !lookup) return null;
+  if (song.localKey && lookup.byKey[song.localKey]) return lookup.byKey[song.localKey];
+  var pathKey = localLibraryPathKeyFromSong(song);
+  return pathKey && lookup.byPath[pathKey] ? lookup.byPath[pathKey] : null;
+}
 function applyLocalLibraryIndexToSong(song, record) {
-  if (!song || !record || record.key !== song.localKey) return false;
+  if (!song || !record || !localLibraryRecordMatchesSong(record, song)) return false;
   var changed = false;
+  song.localLibraryIndexApplied = true;
+  song.localIndexedLyricStatus = '';
+  song.localIndexedCoverStatus = '';
+  song.localIndexedFileSignature = localLibraryRecordFileSignature(record) || '';
   if (record.localMetadataLoaded) {
     ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'].forEach(function(key){
       if (Object.prototype.hasOwnProperty.call(record, key) && song[key] !== record[key]) {
@@ -20705,6 +20822,7 @@ function applyLocalLibraryIndexToSong(song, record) {
   });
   var lyricSig = localAssetFileSignature(song.localLyricFile);
   var lyricSigOk = song.localLyricFile ? (record.lyricFileSignature && record.lyricFileSignature === lyricSig) : record.lyricSource !== 'file';
+  if (lyricSigOk) song.localIndexedLyricStatus = record.lyricStatus || '';
   if (lyricSigOk && record.lyricStatus === 'none') {
     song.localLyricLoaded = true;
     song.localLyricLightScanned = false;
@@ -20717,6 +20835,7 @@ function applyLocalLibraryIndexToSong(song, record) {
   }
   var coverSig = localAssetFileSignature(song.localCoverFile);
   var coverSigOk = song.localCoverFile ? (record.coverFileSignature && record.coverFileSignature === coverSig) : record.coverSource !== 'file';
+  if (coverSigOk) song.localIndexedCoverStatus = record.coverStatus || '';
   if (coverSigOk && record.coverStatus === 'none') {
     song.localCoverLoaded = true;
     song.localCoverLightScanned = false;
@@ -20728,14 +20847,83 @@ function applyLocalLibraryIndexToSong(song, record) {
   }
   return changed;
 }
-function applyLocalLibraryIndexToSongs(folderPath, songs) {
+function syncLocalLibraryIndexWithSongs(folderPath, songs) {
   var index = readLocalLibraryIndex(folderPath || savedLocalLibraryFolderPath());
-  if (!index || !songs || !songs.length) return 0;
-  var count = 0;
+  var stats = {
+    total: (songs || []).length,
+    added: 0,
+    modified: 0,
+    unchanged: 0,
+    removed: 0,
+    reused: 0,
+    hasIndex: !!index
+  };
+  songs = songs || [];
+  if (!index || !songs.length) {
+    stats.added = songs.length;
+    songs.forEach(function(song){
+      if (!song) return;
+      song.localLibraryChangeState = 'new';
+      song.localLibraryIndexApplied = false;
+    });
+    return { index:index, lookup:createLocalLibraryIndexLookup(index), stats:stats };
+  }
+  var lookup = createLocalLibraryIndexLookup(index);
+  var seenPathKeys = {};
+  var seenKeys = {};
   songs.forEach(function(song){
-    if (applyLocalLibraryIndexToSong(song, index.records[song.localKey])) count++;
+    if (!song) return;
+    var pathKey = localLibraryPathKeyFromSong(song);
+    if (pathKey) seenPathKeys[pathKey] = true;
+    if (song.localKey) seenKeys[song.localKey] = true;
+    var record = findLocalLibraryIndexRecordForSong(song, lookup);
+    song.localLibraryPreviousRecord = record || null;
+    if (!record) {
+      song.localLibraryChangeState = 'new';
+      song.localLibraryIndexApplied = false;
+      stats.added++;
+      return;
+    }
+    if (localLibraryRecordMatchesSong(record, song)) {
+      song.localLibraryChangeState = 'unchanged';
+      if (applyLocalLibraryIndexToSong(song, record)) stats.reused++;
+      stats.unchanged++;
+      return;
+    }
+    song.localLibraryChangeState = 'modified';
+    song.localLibraryIndexApplied = false;
+    stats.modified++;
   });
-  return count;
+  lookup.records.forEach(function(record){
+    var recordPathKey = localLibraryRecordPathKey(record);
+    if (recordPathKey) {
+      if (!seenPathKeys[recordPathKey]) stats.removed++;
+    } else if (record.key && !seenKeys[record.key]) {
+      stats.removed++;
+    }
+  });
+  return { index:index, lookup:lookup, stats:stats };
+}
+function applyLocalLibraryIndexToSongs(folderPath, songs) {
+  var sync = syncLocalLibraryIndexWithSongs(folderPath, songs);
+  return sync && sync.stats ? sync.stats.reused : 0;
+}
+function localLibraryAssetProcessingSongs(songs) {
+  return (songs || []).filter(function(song){
+    if (!song || song.type !== 'local') return false;
+    if (song.localLibraryChangeState === 'unchanged' && !localSongNeedsAssetPreload(song)) return false;
+    return localSongNeedsAssetPreload(song);
+  });
+}
+function localLibrarySyncToastText(sync) {
+  var stats = sync && sync.stats;
+  if (!stats || !stats.hasIndex) return '';
+  var bits = [];
+  if (stats.added) bits.push('新增 ' + stats.added);
+  if (stats.modified) bits.push('更新 ' + stats.modified);
+  if (stats.removed) bits.push('删除 ' + stats.removed);
+  if (!bits.length && stats.unchanged) bits.push('无变化');
+  return bits.length ? '，' + bits.join(' / ') : '';
 }
 function saveLocalLibraryIndex(folderPath, songs) {
   folderPath = folderPath || savedLocalLibraryFolderPath();
@@ -20873,8 +21061,8 @@ async function handleLocalFolderFiles(files, opts) {
     return;
   }
   var libraryFolderPath = opts.folderPath || savedLocalLibraryFolderPath();
-  applyLocalLibraryIndexToSongs(libraryFolderPath, songs);
-  var deferAssetHydration = !!opts.restored;
+  var librarySync = syncLocalLibraryIndexWithSongs(libraryFolderPath, songs);
+  var deferAssetHydration = !!opts.restored || !!(librarySync && librarySync.stats && librarySync.stats.hasIndex && librarySync.stats.unchanged > 64);
   var assetHydrationPromise = hydrateLocalAssetCacheForSongs(songs);
   if (!deferAssetHydration) await assetHydrationPromise;
   if (opts.folderPath && opts.persist !== false) saveLocalLibraryFolderPath(opts.folderPath);
@@ -20909,9 +21097,9 @@ async function handleLocalFolderFiles(files, opts) {
   }
   function startDeferredAssetProcessing() {
     if (localLibrarySongs !== songs) return 0;
-    return startLocalLibraryBackgroundProcessing(songs, opts);
+    return startLocalLibraryBackgroundProcessing(localLibraryAssetProcessingSongs(songs), opts);
   }
-  var pendingAssetCount = 0;
+  var pendingAssetCount = localLibraryAssetProcessingSongs(songs).length;
   if (deferAssetHydration) {
     assetHydrationPromise
       .then(refreshAfterAssetHydration)
@@ -20922,7 +21110,8 @@ async function handleLocalFolderFiles(files, opts) {
   }
   if (!opts.restored) {
     var tail = (opts.truncated ? '，文件较多已截断' : '') + (opts.folderPath ? '，下次启动自动载入' : '');
-    showToast('已导入 ' + songs.length + ' 首本地音乐' + (pendingAssetCount ? '，后台加载封面/歌词' : '，封面/歌词缓存已就绪') + tail);
+    var assetText = pendingAssetCount ? '，后台加载封面/歌词' : (deferAssetHydration ? '，后台校验封面/歌词' : '，封面/歌词缓存已就绪');
+    showToast('已导入 ' + songs.length + ' 首本地音乐' + localLibrarySyncToastText(librarySync) + assetText + tail);
   }
   if (opts.restored && restorePlaybackSessionForLocalLibrary(songs, opts.folderPath || savedLocalLibraryFolderPath())) {
     safeRenderQueuePanel('playback-session-restore', { scrollCurrent: true });

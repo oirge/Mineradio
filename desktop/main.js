@@ -216,6 +216,13 @@ async function refreshLocalMusicFileEntries(folderPath, files) {
     if (abs !== root && !abs.startsWith(root + path.sep)) continue;
     const ext = path.extname(file.name || abs).toLowerCase();
     if (!LOCAL_LIBRARY_EXTS.has(ext)) continue;
+    let stat = null;
+    try {
+      stat = await fs.promises.stat(abs);
+    } catch (_e) {
+      continue;
+    }
+    if (!stat.isFile()) continue;
     out.push({
       ...file,
       fullPath: abs,
@@ -224,8 +231,8 @@ async function refreshLocalMusicFileEntries(folderPath, files) {
       name: file.name || path.basename(abs),
       relativePath: file.relativePath || file.webkitRelativePath || localLibraryRelativePath(root, path.relative(root, abs)),
       webkitRelativePath: file.webkitRelativePath || file.relativePath || localLibraryRelativePath(root, path.relative(root, abs)),
-      size: Number(file.size) || 0,
-      lastModified: Number(file.lastModified) || 0,
+      size: stat.size,
+      lastModified: Math.round(stat.mtimeMs),
       type: file.type || LOCAL_LIBRARY_MIME[ext] || '',
     });
   }
