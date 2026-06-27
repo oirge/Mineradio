@@ -2,6 +2,7 @@
 node_modules/
 .tools/
 .tmp-gh-auth/
+.tmp-*/
 
 # Build output
 dist/

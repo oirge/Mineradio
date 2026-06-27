@@ -2703,6 +2703,7 @@ try {
 } catch (e) {}
 var lyricsLines = [], lyricsVisible = false, lyricsHasNativeKaraoke = false, lyricsTimingSource = 'none';
 var playlist = [], playQueue = [], localLibrarySongs = [], currentIdx = -1, playing = false, playToggleBusy = false;
+var localLibraryPassiveQueue = false;
 var searchMode = 'song';
 var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '本地模式' };
 var loginStatusChecked = false, loginStatusCheckFailed = false;
@@ -2818,6 +2819,8 @@ var localBeatAnalysis = { song:null, audioUrl:'', mode:'mr', active:false, token
 var localLibraryProcessToken = 0;
 var localLibraryProcessing = { active:false, token:0, total:0, assetsDone:0 };
 var localLibraryProgressHideTimer = null;
+var localLibraryRestoreScheduled = false;
+var localLibraryRestoreStarted = false;
 var localAssetUiRefreshTimer = null;
 var localAssetCacheMemory = {};
 var localAssetCacheWriteTimers = {};
@@ -16064,8 +16067,9 @@ function shouldShowEmptyHomeCore(ignoreSplash) {
   if (homeSuppressed) return false;
   if (shelfPinnedOpen) return false;
   if (shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent()) return false;
-  if (playQueue && playQueue.length) return false;
-  if (currentIdx >= 0 && playQueue[currentIdx]) return false;
+  var passiveQueue = localLibraryPassiveQueue && !playing && !(audio && audio.src && !audio.paused);
+  if (!passiveQueue && playQueue && playQueue.length) return false;
+  if (!passiveQueue && currentIdx >= 0 && playQueue[currentIdx]) return false;
   if (playing) return false;
   return true;
 }
@@ -16079,8 +16083,9 @@ function shouldForceEmptyHomeAfterSplash() {
   if (immersiveMode) return false;
   if (shelfPinnedOpen) return false;
   if (shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent()) return false;
-  if (playQueue && playQueue.length) return false;
-  if (currentIdx >= 0 && playQueue[currentIdx]) return false;
+  var passiveQueue = localLibraryPassiveQueue && !playing && !(audio && audio.src && !audio.paused);
+  if (!passiveQueue && playQueue && playQueue.length) return false;
+  if (!passiveQueue && currentIdx >= 0 && playQueue[currentIdx]) return false;
   if (playing) return false;
   return true;
 }
@@ -16090,6 +16095,9 @@ function shouldUseIdleWallpaperPreview(ignoreSplash) {
   if (shelfPinnedOpen) return false;
   if (shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent()) return false;
   return true;
+}
+function clearLocalLibraryPassiveQueue() {
+  localLibraryPassiveQueue = false;
 }
 function setHomeControlsLocked(locked) {
   document.body.classList.toggle('home-controls-locked', !!locked);
@@ -16129,14 +16137,23 @@ function activateHomeWallpaperPreview(opts) {
   ensureHomeWallpaperParticles(opts);
 }
 var homeWallpaperPrewarmStarted = false;
+var homeWallpaperPrewarmPending = false;
 function prewarmHomeWallpaperPreview() {
   if (homeWallpaperPrewarmStarted) return;
+  if (document.body.classList.contains('splash-active')) {
+    homeWallpaperPrewarmPending = true;
+    return;
+  }
+  homeWallpaperPrewarmPending = false;
   homeWallpaperPrewarmStarted = true;
   if (!shouldUseIdleWallpaperPreview(true)) return;
   scheduleVisualApply(function(){
     if (!shouldUseIdleWallpaperPreview(true)) return;
     activateHomeWallpaperPreview({ skipTransition: true, instant: true });
   }, 900, 2600);
+}
+function flushHomeWallpaperPrewarmAfterSplash() {
+  if (homeWallpaperPrewarmPending || !homeWallpaperPrewarmStarted) prewarmHomeWallpaperPreview();
 }
 function deactivateHomeWallpaperPreview(playback) {
   document.body.classList.remove('home-wallpaper-preview');
@@ -16237,6 +16254,7 @@ function localLibraryPlaybackSongs() {
   return localSearchPool();
 }
 function openLocalLibraryQueue() {
+  clearLocalLibraryPassiveQueue();
   homeForcedOpen = false;
   homeSuppressed = false;
   setHomeControlsLocked(false);
@@ -16262,6 +16280,7 @@ function openLocalLibraryQueue() {
   }
 }
 function playLocalLibrarySong(index) {
+  clearLocalLibraryPassiveQueue();
   homeForcedOpen = false;
   homeSuppressed = false;
   setHomeControlsLocked(false);
@@ -17956,6 +17975,7 @@ function restorePlaybackSessionForLocalLibrary(songs, folderPath) {
 function queueSong(song, opts) {
   opts = opts || {};
   if (!song) return -1;
+  clearLocalLibraryPassiveQueue();
   var cloned = cloneSong(song);
   var insertAt = playQueue.length;
   if (opts.position === 'next') {
@@ -18336,6 +18356,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
 async function playQueueAt(idx, opts) {
   opts = opts || {};
   if (idx < 0 || idx >= playQueue.length) return;
+  clearLocalLibraryPassiveQueue();
   markRenderInteraction('track-switch', 1500);
   var playPhase = 'start';
   var token = trackSwitchToken;
@@ -21022,6 +21043,22 @@ async function restoreSavedLocalMusicFolder() {
     return false;
   }
 }
+function scheduleSavedLocalMusicFolderRestore(delay) {
+  if (!LOCAL_ONLY_MODE || localLibraryRestoreStarted || localLibraryRestoreScheduled) return;
+  localLibraryRestoreScheduled = true;
+  setTimeout(function(){
+    localLibraryRestoreScheduled = false;
+    if (localLibraryRestoreStarted) return;
+    if (document.body.classList.contains('splash-active')) {
+      scheduleSavedLocalMusicFolderRestore(650);
+      return;
+    }
+    localLibraryRestoreStarted = true;
+    restoreSavedLocalMusicFolder().catch(function(e){
+      console.warn('[LocalLibraryRestoreScheduled]', e);
+    });
+  }, delay == null ? 450 : delay);
+}
 function refreshSavedLocalMusicFolderInBackground(folderPath, snapshotSignature) {
   var api = desktopLocalMusicApi();
   if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return;
@@ -21071,6 +21108,7 @@ async function handleLocalFolderFiles(files, opts) {
   localLibrarySongs = songs;
   playQueue = songs;
   currentIdx = 0;
+  localLibraryPassiveQueue = !!(opts.restored && opts.autoPlay === false);
   currentLocalSong = null;
   homeForcedOpen = false;
   homeSuppressed = false;
@@ -21148,6 +21186,7 @@ async function handleFiles(files) {
     localLibrarySongs = [singleSong];
     playQueue = [singleSong];
     currentIdx = 0;
+    clearLocalLibraryPassiveQueue();
     currentLocalSong = null;
     homeForcedOpen = false;
     homeSuppressed = false;
@@ -26357,9 +26396,11 @@ function drawMineradioSplashWebgl(elapsed) {
     splashCtx = splashCanvas.getContext('2d');
   }
   function resize() {
-    splashPixelRatio = Math.min(1.6, Math.max(1, window.devicePixelRatio || 1));
     splashW = window.innerWidth;
     splashH = window.innerHeight;
+    var splashPixels = splashW * splashH;
+    var splashMaxRatio = splashPixels > 2600000 ? 1.16 : (splashPixels > 1600000 ? 1.25 : 1.36);
+    splashPixelRatio = Math.min(splashMaxRatio, Math.max(1, window.devicePixelRatio || 1));
     splashCanvas.width = Math.max(1, Math.floor(splashW * splashPixelRatio));
     splashCanvas.height = Math.max(1, Math.floor(splashH * splashPixelRatio));
     if (splashCtx) splashCtx.setTransform(splashPixelRatio, 0, 0, splashPixelRatio, 0, 0);
@@ -26677,11 +26718,9 @@ function dismissSplash() {
   if (splashTimer) { clearTimeout(splashTimer); splashTimer = null; }
   splashReadyToEnter = false;
   s.classList.remove('ready');
-  if (typeof shouldUseIdleWallpaperPreview === 'function'
+  var shouldPrimeHomeWallpaper = typeof shouldUseIdleWallpaperPreview === 'function'
     ? shouldUseIdleWallpaperPreview(true)
-    : (typeof shouldShowEmptyHomeAfterSplash === 'function' && shouldShowEmptyHomeAfterSplash())) {
-    activateHomeWallpaperPreview();
-  }
+    : (typeof shouldShowEmptyHomeAfterSplash === 'function' && shouldShowEmptyHomeAfterSplash());
   revealIdleParticles(0, reduceSplashMotion ? 700 : 2400);
   document.body.classList.add('splash-revealing');
   s.classList.add('exiting');
@@ -26698,6 +26737,9 @@ function dismissSplash() {
     splashAnimating = false;
     document.body.classList.remove('splash-active');
     document.body.classList.remove('splash-revealing');
+    if (shouldPrimeHomeWallpaper && typeof activateHomeWallpaperPreview === 'function') activateHomeWallpaperPreview({ instant: true });
+    if (typeof flushHomeWallpaperPrewarmAfterSplash === 'function') flushHomeWallpaperPrewarmAfterSplash();
+    if (typeof scheduleSavedLocalMusicFolderRestore === 'function') scheduleSavedLocalMusicFolderRestore(420);
     markAppPerf('home-revealed');
     if (s && s.parentNode) s.style.display = 'none';
     requestAnimationFrame(function(){
@@ -27248,7 +27290,7 @@ safeRenderQueuePanel('startup');
 updateCustomCoverButton();
 updateCustomLyricControls();
 updateLikeButtons();
-if (LOCAL_ONLY_MODE) setTimeout(restoreSavedLocalMusicFolder, 250);
+if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 if (!LOCAL_ONLY_MODE) setTimeout(initUpdatePreview, 9000);
 
 // ============================================================
