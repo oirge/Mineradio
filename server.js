@@ -63,6 +63,24 @@ const MIME = {
   '.svg':  'image/svg+xml',
 };
 
+const LOCAL_FILE_MIME = {
+  '.mp3': 'audio/mpeg',
+  '.flac': 'audio/flac',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.lrc': 'text/plain; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+
+function localContentTypeForPath(filePath) {
+  return LOCAL_FILE_MIME[path.extname(String(filePath || '')).toLowerCase()] || 'application/octet-stream';
+}
+
 // ---------- 工具 ----------
 function serveStatic(res, filePath) {
   const ext = path.extname(filePath);

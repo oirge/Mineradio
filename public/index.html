@@ -18231,7 +18231,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   }
 
   markPlayPhase('audio-start');
-  var playbackStarted = await playAudio({ silent: false });
+  var playbackStarted = await playAudio({ manual: !!opts.manual, silent: false });
   if (!playbackStarted) {
     forcePlaybackControlsInteractive();
     showToast(opts.manual ? '本地音乐启动失败，请重新选择文件' : '歌曲已载入，点击播放按钮继续播放');
@@ -18358,7 +18358,7 @@ async function attemptAudioPlay(opts) {
 }
 async function playAudio(opts) {
   opts = opts || {};
-  return attemptAudioPlay({ manual: false, silent: !!opts.silent });
+  return attemptAudioPlay({ manual: !!opts.manual, silent: !!opts.silent, fade: opts.fade });
 }
 async function togglePlay() {
   if (playToggleBusy) return;
