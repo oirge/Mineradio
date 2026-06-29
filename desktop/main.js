@@ -702,6 +702,21 @@ function overlayUrl(page) {
   return `http://127.0.0.1:${port}/${page}`;
 }
 
+/**
+ * 打开 Mineradio 官方 GitHub 链接，避免渲染层触发本机协议或任意外部站点。
+ * @param {string} rawUrl 渲染层请求打开的外部链接。
+ * @returns {void}
+ */
+function openAllowedExternalUrl(rawUrl) {
+  try {
+    const parsed = new URL(String(rawUrl || ''));
+    const host = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== 'https:' || (host !== 'github.com' && host !== 'www.github.com')) return;
+    if (!/^\/oirge\/Mineradio(?:\/|$)/i.test(parsed.pathname)) return;
+    shell.openExternal(parsed.toString()).catch((error) => console.warn('Open external URL failed:', error.message));
+  } catch (_) {}
+}
+
 function clampNumber(value, min, max, fallback) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -1416,7 +1431,7 @@ async function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openAllowedExternalUrl(url);
     return { action: 'deny' };
   });
 

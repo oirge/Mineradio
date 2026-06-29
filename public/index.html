@@ -1011,7 +1011,6 @@ body.login-guide-active #login-guide-canvas{opacity:1}
 #beat-chip.show{display:flex}
 #beat-chip .mini-spin{width:11px;height:11px;border:1.5px solid rgba(126,226,168,.25);border-top-color:#7ee2a8;border-radius:50%;animation:spin .7s linear infinite}
 html.local-only-mode #visual-guide-btn,
-html.local-only-mode #update-entry,
 html.local-only-mode #upload-tip,
 html.local-only-mode #source-fallback-notice,
 html.local-only-mode #beat-chip,
@@ -27291,7 +27290,7 @@ updateCustomCoverButton();
 updateCustomLyricControls();
 updateLikeButtons();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
-if (!LOCAL_ONLY_MODE) setTimeout(initUpdatePreview, 9000);
+setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
 
 // ============================================================
 //  主循环

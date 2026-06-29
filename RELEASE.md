@@ -1,5 +1,13 @@
 # 发布流程
 
+## v1.1.6 更新入口与免安装版修复
+
+- `v1.1.6` 修复纯本地模式下更新入口不可见的问题，更新检查延后到启动动画和本地库恢复之后执行。
+- 桌面端 `window.open` 只允许打开 `https://github.com/oirge/Mineradio` 仓库链接，避免渲染层误触发任意外部协议。
+- Windows 构建同时生成 NSIS 安装包和 Portable ZIP。
+- 本次发布需要上传完整安装包、blockmap、`latest.yml`、Portable ZIP 和 SHA256 校验文件。
+- Release 标题建议使用 `Mineradio v1.1.6 更新入口修复版`。
+
 ## v1.1.4 界面状态持久化修复
 
 - `v1.1.4` 修复每次打开软件界面像被重置的问题。
