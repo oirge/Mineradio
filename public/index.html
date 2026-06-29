@@ -2791,7 +2791,9 @@ function hasSavedLyricLayout() {
 syncPersistentUiStateBackup();
 var LOCAL_ASSET_CACHE_DB_NAME = 'mineradio-local-assets-v1';
 var LOCAL_ASSET_CACHE_STORE = 'assets';
+var LOCAL_LIBRARY_CACHE_STORE = 'library';
 var LOCAL_ASSET_CACHE_SCHEMA = 1;
+var LOCAL_LIBRARY_CACHE_SCHEMA = 1;
 var LOCAL_COVER_THUMB_MAX_SIZE = 512;
 var LOCAL_COVER_THUMB_QUALITY = 0.82;
 var LOCAL_BEAT_COMBOS = ['', 'downbeat', 'push', 'drop', 'rebound', 'accent'];
@@ -2826,7 +2828,10 @@ var localLibraryRestoreStarted = false;
 var localAssetUiRefreshTimer = null;
 var localAssetCacheMemory = {};
 var localAssetCacheWriteTimers = {};
+var localLibraryPersistentMemory = {};
 var localLibraryIndexWriteTimer = null;
+var localCoverThumbPromiseCache = {};
+var localCoverThumbPromiseOrder = [];
 var LOCAL_ASSET_LIGHT_SCAN_BYTES = 4 * 1024 * 1024;
 var LOCAL_ASSET_IDLE_DELAY_MS = 520;
 var LOCAL_ASSET_PLAYING_DELAY_MS = 1800;
@@ -2872,6 +2877,7 @@ installStartupLongTaskObserver();
 var queueViewTab = 'queue', playMode = 'loop', miniQueueOpen = false;
 var miniQueueRenderSeq = 0, queueRenderSeq = 0, playlistRenderSeq = 0;
 var queuePanelDirty = false;
+var queuePanelPendingRender = { raf: 0, reason: '', opts: null };
 var QUEUE_PANEL_INITIAL_RENDER = 72;
 var QUEUE_PANEL_BATCH_SIZE = 48;
 var MINI_QUEUE_INITIAL_RENDER = 42;
@@ -2880,6 +2886,8 @@ var queuePanelRenderLimit = QUEUE_PANEL_INITIAL_RENDER;
 var miniQueueRenderLimit = MINI_QUEUE_INITIAL_RENDER;
 var queuePanelRenderFingerprint = '';
 var miniQueueRenderFingerprint = '';
+var queuePanelLastDomSignature = '';
+var miniQueueLastDomSignature = '';
 var PLAYLIST_PANEL_BATCH_SIZE = 28;
 var playlistPanelRenderLimit = PLAYLIST_PANEL_BATCH_SIZE;
 var playlistPanelLazyBound = false, miniQueueLazyBound = false;
@@ -4434,6 +4442,25 @@ function scheduleUiWarmTask(fn, timeout) {
   } else {
     requestAnimationFrame(fn);
   }
+}
+var namedAnimationFrameTasks = {};
+/**
+ * 按名称合并同一帧内的 UI 动画任务。相同 key 只执行最后一次，减少连续状态刷新抢帧。
+ * @param {string} key 任务名称。
+ * @param {Function} fn 要执行的任务。
+ * @returns {void}
+ */
+function scheduleNamedAnimationFrame(key, fn) {
+  if (!key || typeof fn !== 'function') return;
+  if (namedAnimationFrameTasks[key]) cancelAnimationFrame(namedAnimationFrameTasks[key].raf);
+  namedAnimationFrameTasks[key] = {
+    fn: fn,
+    raf: requestAnimationFrame(function(){
+      var task = namedAnimationFrameTasks[key];
+      delete namedAnimationFrameTasks[key];
+      if (task && typeof task.fn === 'function') task.fn();
+    })
+  };
 }
 
 function cancelBeatAnalysisTimer() {
@@ -8132,10 +8159,11 @@ async function getCustomBackgroundBlob(id) {
 function openLocalAssetCacheDb() {
   return new Promise(function(resolve, reject){
     if (!window.indexedDB) { reject(new Error('indexedDB unavailable')); return; }
-    var req = indexedDB.open(LOCAL_ASSET_CACHE_DB_NAME, 1);
+    var req = indexedDB.open(LOCAL_ASSET_CACHE_DB_NAME, 2);
     req.onupgradeneeded = function(){
       var db = req.result;
       if (!db.objectStoreNames.contains(LOCAL_ASSET_CACHE_STORE)) db.createObjectStore(LOCAL_ASSET_CACHE_STORE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(LOCAL_LIBRARY_CACHE_STORE)) db.createObjectStore(LOCAL_LIBRARY_CACHE_STORE, { keyPath: 'id' });
     };
     req.onsuccess = function(){ resolve(req.result); };
     req.onerror = function(){ reject(req.error || new Error('indexedDB open failed')); };
@@ -8152,6 +8180,102 @@ function localAssetFileSignature(file) {
 function localAssetCacheKey(song) {
   return song && song.localKey ? String(song.localKey) : '';
 }
+/**
+ * 生成本地库持久化记录的存储键。快照和索引分开存放，避免一个大 JSON 同步阻塞主线程。
+ * @param {string} folderPath 本地库文件夹路径。
+ * @param {string} kind 记录类型，取 snapshot 或 index。
+ * @returns {string} IndexedDB 记录键。
+ */
+function localLibraryPersistentKey(folderPath, kind) {
+  return String(kind || '') + ':' + String(folderPath || '');
+}
+/**
+ * 读取本地库持久化记录。优先使用内存缓存，未命中时从 IndexedDB 读取。
+ * @param {string} folderPath 本地库文件夹路径。
+ * @param {string} kind 记录类型。
+ * @returns {Promise<object|null>} 命中的持久化记录。
+ */
+async function readLocalLibraryPersistentRecord(folderPath, kind) {
+  var id = localLibraryPersistentKey(folderPath, kind);
+  if (!folderPath || !kind) return null;
+  if (localLibraryPersistentMemory[id]) return localLibraryPersistentMemory[id];
+  try {
+    var db = await openLocalAssetCacheDb();
+    return await new Promise(function(resolve, reject){
+      var tx = db.transaction(LOCAL_LIBRARY_CACHE_STORE, 'readonly');
+      var req = tx.objectStore(LOCAL_LIBRARY_CACHE_STORE).get(id);
+      req.onsuccess = function(){
+        var record = req.result || null;
+        if (record) localLibraryPersistentMemory[id] = record;
+        resolve(record);
+      };
+      req.onerror = function(){ reject(req.error || new Error('indexedDB library read failed')); };
+      tx.oncomplete = function(){ db.close(); };
+      tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB library tx failed')); };
+    });
+  } catch (e) {
+    return null;
+  }
+}
+/**
+ * 写入本地库持久化记录。内存同步更新，IndexedDB 异步落盘，调用侧无需等待。
+ * @param {string} folderPath 本地库文件夹路径。
+ * @param {string} kind 记录类型。
+ * @param {object} data 需要保存的快照或索引。
+ * @returns {Promise<boolean>} 是否写入成功。
+ */
+async function writeLocalLibraryPersistentRecord(folderPath, kind, data) {
+  var id = localLibraryPersistentKey(folderPath, kind);
+  if (!folderPath || !kind || !data) return false;
+  var record = { id: id, schema: LOCAL_LIBRARY_CACHE_SCHEMA, kind: kind, folderPath: folderPath, savedAt: Date.now(), data: data };
+  localLibraryPersistentMemory[id] = record;
+  try {
+    var db = await openLocalAssetCacheDb();
+    return await new Promise(function(resolve, reject){
+      var tx = db.transaction(LOCAL_LIBRARY_CACHE_STORE, 'readwrite');
+      tx.objectStore(LOCAL_LIBRARY_CACHE_STORE).put(record);
+      tx.oncomplete = function(){ db.close(); resolve(true); };
+      tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB library write failed')); };
+    });
+  } catch (e) {
+    console.warn('[LocalLibraryPersistentWrite]', kind, e);
+    return false;
+  }
+}
+/**
+ * 删除本地库 IndexedDB 记录。清空本地库时同步释放快照和索引。
+ * @param {string} folderPath 本地库文件夹路径。
+ * @returns {Promise<boolean>} 是否完成删除。
+ */
+async function deleteLocalLibraryPersistentRecords(folderPath) {
+  if (!folderPath) return false;
+  ['snapshot', 'index'].forEach(function(kind){ delete localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, kind)]; });
+  try {
+    var db = await openLocalAssetCacheDb();
+    return await new Promise(function(resolve, reject){
+      var tx = db.transaction(LOCAL_LIBRARY_CACHE_STORE, 'readwrite');
+      var store = tx.objectStore(LOCAL_LIBRARY_CACHE_STORE);
+      store.delete(localLibraryPersistentKey(folderPath, 'snapshot'));
+      store.delete(localLibraryPersistentKey(folderPath, 'index'));
+      tx.oncomplete = function(){ db.close(); resolve(true); };
+      tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB library delete failed')); };
+    });
+  } catch (e) {
+    return false;
+  }
+}
+/**
+ * 预热本地库快照和索引。后续同步接口可以直接从内存读取，避免改动所有调用点。
+ * @param {string} folderPath 本地库文件夹路径。
+ * @returns {Promise<void>}
+ */
+async function hydrateLocalLibraryPersistentState(folderPath) {
+  if (!folderPath) return;
+  await Promise.all([
+    readLocalLibraryPersistentRecord(folderPath, 'snapshot'),
+    readLocalLibraryPersistentRecord(folderPath, 'index')
+  ]);
+}
 function loadImageForDataUrl(dataUrl) {
   return new Promise(function(resolve, reject){
     var img = new Image();
@@ -8163,6 +8287,8 @@ function loadImageForDataUrl(dataUrl) {
 async function createLocalCoverThumbnailDataUrl(dataUrl) {
   dataUrl = String(dataUrl || '');
   if (!/^data:image\//i.test(dataUrl)) return '';
+  if (localCoverThumbPromiseCache[dataUrl]) return localCoverThumbPromiseCache[dataUrl];
+  var promise = (async function(){
   try {
     var img = await loadImageForDataUrl(dataUrl);
     var maxSide = Math.max(64, LOCAL_COVER_THUMB_MAX_SIZE || 512);
@@ -8186,6 +8312,11 @@ async function createLocalCoverThumbnailDataUrl(dataUrl) {
     console.warn('[LocalCoverThumb]', e);
     return '';
   }
+  })();
+  localCoverThumbPromiseCache[dataUrl] = promise;
+  localCoverThumbPromiseOrder.push(dataUrl);
+  while (localCoverThumbPromiseOrder.length > 24) delete localCoverThumbPromiseCache[localCoverThumbPromiseOrder.shift()];
+  return promise;
 }
 async function assignLocalCoverDataUrl(song, dataUrl, opts) {
   opts = opts || {};
@@ -14343,8 +14474,9 @@ function scheduleShelfRebuild(reason, asyncCards) {
   deferredShelfRebuild.asyncCards = asyncCards !== false;
   deferredShelfRebuild.token += 1;
   var token = deferredShelfRebuild.token;
-  if (deferredShelfRebuild.raf) cancelAnimationFrame(deferredShelfRebuild.raf);
-  deferredShelfRebuild.raf = requestAnimationFrame(function(){
+  if (deferredShelfRebuild.raf) deferredShelfRebuild.raf = 0;
+  deferredShelfRebuild.raf = 1;
+  scheduleNamedAnimationFrame('shelf-rebuild', function(){
     deferredShelfRebuild.raf = 0;
     scheduleUiWarmTask(function(){
       if (token !== deferredShelfRebuild.token) return;
@@ -14371,6 +14503,24 @@ function safeRenderQueuePanel(reason, opts) {
   opts = opts || {};
   if (!isPlaylistPanelVisibleForRender() && opts.deferWhenHidden !== false) {
     queuePanelDirty = true;
+    return true;
+  }
+  if (opts.immediate !== true) {
+    queuePanelPendingRender.reason = reason || queuePanelPendingRender.reason || 'deferred';
+    queuePanelPendingRender.opts = Object.assign({}, queuePanelPendingRender.opts || {}, opts);
+    if (opts.scrollCurrent) queuePanelPendingRender.opts.scrollCurrent = true;
+    if (opts.animate === false) queuePanelPendingRender.opts.animate = false;
+    if (!queuePanelPendingRender.raf) {
+      queuePanelPendingRender.raf = 1;
+      scheduleNamedAnimationFrame('queue-panel-render', function(){
+        var pendingReason = queuePanelPendingRender.reason;
+        var pendingOpts = Object.assign({}, queuePanelPendingRender.opts || {}, { immediate: true });
+        queuePanelPendingRender.raf = 0;
+        queuePanelPendingRender.reason = '';
+        queuePanelPendingRender.opts = null;
+        safeRenderQueuePanel(pendingReason || 'deferred', pendingOpts);
+      });
+    }
     return true;
   }
   try {
@@ -19252,11 +19402,15 @@ function renderMiniQueuePanel(opts) {
   if (!miniQueueOpen && !opts.animate && !opts.scrollCurrent) return;
   syncQueueRenderLimits(opts);
   if (!total) {
+    miniQueueLastDomSignature = 'empty';
     $list.innerHTML = '<div class="mini-queue-empty">队列为空，先搜索或打开歌单</div>';
     return;
   }
   miniQueueRenderLimit = normalizedQueueRenderLimit(miniQueueRenderLimit, MINI_QUEUE_INITIAL_RENDER, MINI_QUEUE_BATCH_SIZE, total);
   var renderLimit = Math.min(total, miniQueueRenderLimit);
+  var domSignature = queueVisibleDomSignature(renderLimit, true);
+  if (domSignature === miniQueueLastDomSignature && !opts.animate && !opts.scrollCurrent) return;
+  miniQueueLastDomSignature = domSignature;
   $list.innerHTML = playQueue.slice(0, renderLimit).map(function(song, offset){
     var i = offset;
     var thumb = songCoverSrc(song, 60);
@@ -19327,6 +19481,30 @@ function queueRenderFingerprint() {
     seen[index] = true;
     keys.push(index + ':' + songKey(playQueue[index]));
   });
+  return keys.join('|');
+}
+/**
+ * 生成队列可见 DOM 的签名。签名未变化时跳过 innerHTML 重建，降低封面/歌词连续完成时的抖动。
+ * @param {number} renderLimit 当前可见渲染上限。
+ * @param {boolean} mini 是否为底部迷你队列。
+ * @returns {string} 可见队列内容签名。
+ */
+function queueVisibleDomSignature(renderLimit, mini) {
+  var limit = Math.min(playQueue.length, Math.max(0, renderLimit || 0));
+  var keys = [mini ? 'mini' : 'panel', playQueue.length, limit, currentIdx, LOCAL_ONLY_MODE ? 1 : 0];
+  for (var i = 0; i < limit; i++) {
+    var song = playQueue[i] || {};
+    keys.push([
+      i,
+      queueItemKey(song),
+      song.name || song.title || '',
+      songDisplaySubtitle(song),
+      song.album || '',
+      songCoverSrc(song, mini ? 60 : 60),
+      isSongLiked(song) ? 1 : 0
+    ].join('~'));
+  }
+  if (currentIdx >= limit && currentIdx < playQueue.length) keys.push('hidden:' + currentIdx);
   return keys.join('|');
 }
 function syncQueueRenderLimits(opts) {
@@ -19454,6 +19632,8 @@ function renderQueuePanel(opts) {
   var seq = ++queueRenderSeq;
   syncQueueRenderLimits(opts);
   if (!playQueue.length) {
+    queuePanelLastDomSignature = 'empty';
+    miniQueueLastDomSignature = '';
     $ql.innerHTML = '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">队列为空，搜索后点 + 设为下一首</div>';
     resetQueuePanelRenderLimit();
     resetMiniQueueRenderLimit();
@@ -19464,11 +19644,15 @@ function renderQueuePanel(opts) {
   }
   queuePanelRenderLimit = normalizedQueueRenderLimit(queuePanelRenderLimit, QUEUE_PANEL_INITIAL_RENDER, QUEUE_PANEL_BATCH_SIZE, playQueue.length);
   var renderLimit = Math.min(playQueue.length, queuePanelRenderLimit);
+  var domSignature = queueVisibleDomSignature(renderLimit, false);
+  if (domSignature !== queuePanelLastDomSignature || opts.animate || opts.scrollCurrent) {
+    queuePanelLastDomSignature = domSignature;
   $ql.innerHTML = playQueue.slice(0, renderLimit).map(function(song, i){ return queueItemHtml(song, i); }).join('');
   var currentHint = hiddenCurrentQueueHintHtml(renderLimit, false);
   if (currentHint) $ql.insertAdjacentHTML('beforeend', currentHint);
   if (playQueue.length > renderLimit) {
     $ql.insertAdjacentHTML('beforeend', '<button type="button" class="fx-mini-btn ghost queue-load-more" data-queue-load-more="1">加载更多 ' + renderLimit + '/' + playQueue.length + '</button>');
+  }
   }
   if (opts.animate && seq === queueRenderSeq) {
     animateVisiblePanelList($ql, '.queue-item', document.getElementById('playlist-panel'), '.queue-item.now', { scrollActive: opts.scrollCurrent !== false });
@@ -20692,11 +20876,13 @@ function saveLocalLibraryFolderPath(folderPath) {
   if (folderPath) setPersistentLocalStorageItem(LOCAL_LIBRARY_FOLDER_STORE_KEY, folderPath);
 }
 function clearSavedLocalLibraryFolderPath() {
+  var folderPath = savedLocalLibraryFolderPath();
   try {
     removePersistentLocalStorageItem(LOCAL_LIBRARY_FOLDER_STORE_KEY);
     localStorage.removeItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY);
     localStorage.removeItem(LOCAL_LIBRARY_INDEX_STORE_KEY);
   } catch (e) {}
+  deleteLocalLibraryPersistentRecords(folderPath);
 }
 function compactLocalLibrarySnapshotFile(file) {
   if (!file) return null;
@@ -20745,20 +20931,30 @@ function saveLocalLibrarySnapshot(folderPath, files, truncated) {
       signature: localLibrarySnapshotSignature(compact),
       files: compact.slice(0, 16000)
     };
-    localStorage.setItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY, JSON.stringify(payload));
+    localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'snapshot')] = {
+      id: localLibraryPersistentKey(folderPath, 'snapshot'),
+      schema: LOCAL_LIBRARY_CACHE_SCHEMA,
+      kind: 'snapshot',
+      folderPath: folderPath,
+      savedAt: Date.now(),
+      data: payload
+    };
+    writeLocalLibraryPersistentRecord(folderPath, 'snapshot', payload);
     return true;
   } catch (e) {
     console.warn('[LocalLibrarySnapshotSave]', e);
-    try { localStorage.removeItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY); } catch (_e) {}
     return false;
   }
 }
-function readLocalLibrarySnapshot(folderPath) {
+async function readLocalLibrarySnapshot(folderPath) {
+  var cached = await readLocalLibraryPersistentRecord(folderPath, 'snapshot');
+  if (cached && cached.data && cached.data.schema === 1 && cached.data.folderPath === folderPath && Array.isArray(cached.data.files) && cached.data.files.length) return cached.data;
   try {
     var raw = localStorage.getItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY);
     if (!raw) return null;
     var data = JSON.parse(raw);
     if (!data || data.schema !== 1 || data.folderPath !== folderPath || !Array.isArray(data.files) || !data.files.length) return null;
+    writeLocalLibraryPersistentRecord(folderPath, 'snapshot', data);
     return data;
   } catch (e) {
     return null;
@@ -20808,11 +21004,22 @@ function localLibraryIndexRecord(song) {
   };
 }
 function readLocalLibraryIndex(folderPath) {
+  var cached = localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'index')];
+  if (cached && cached.data && cached.data.schema === 1 && cached.data.folderPath === folderPath && cached.data.records && typeof cached.data.records === 'object') return cached.data;
   try {
     var raw = localStorage.getItem(LOCAL_LIBRARY_INDEX_STORE_KEY);
     if (!raw) return null;
     var data = JSON.parse(raw);
     if (!data || data.schema !== 1 || data.folderPath !== folderPath || !data.records || typeof data.records !== 'object') return null;
+    localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'index')] = {
+      id: localLibraryPersistentKey(folderPath, 'index'),
+      schema: LOCAL_LIBRARY_CACHE_SCHEMA,
+      kind: 'index',
+      folderPath: folderPath,
+      savedAt: Date.now(),
+      data: data
+    };
+    writeLocalLibraryPersistentRecord(folderPath, 'index', data);
     return data;
   } catch (e) {
     return null;
@@ -20997,13 +21204,22 @@ function saveLocalLibraryIndex(folderPath, songs) {
       var record = localLibraryIndexRecord(song);
       if (record) records[record.key] = record;
     });
-    localStorage.setItem(LOCAL_LIBRARY_INDEX_STORE_KEY, JSON.stringify({
+    var payload = {
       schema: 1,
       folderPath: folderPath,
       savedAt: Date.now(),
       count: Object.keys(records).length,
       records: records
-    }));
+    };
+    localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'index')] = {
+      id: localLibraryPersistentKey(folderPath, 'index'),
+      schema: LOCAL_LIBRARY_CACHE_SCHEMA,
+      kind: 'index',
+      folderPath: folderPath,
+      savedAt: Date.now(),
+      data: payload
+    };
+    writeLocalLibraryPersistentRecord(folderPath, 'index', payload);
     return true;
   } catch (e) {
     console.warn('[LocalLibraryIndexSave]', e);
@@ -21044,7 +21260,8 @@ async function restoreSavedLocalMusicFolder() {
   var folderPath = savedLocalLibraryFolderPath();
   var api = desktopLocalMusicApi();
   if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return false;
-  var snapshot = readLocalLibrarySnapshot(folderPath);
+  await hydrateLocalLibraryPersistentState(folderPath);
+  var snapshot = await readLocalLibrarySnapshot(folderPath);
   if (snapshot && typeof api.refreshLocalMusicFiles === 'function') {
     try {
       var restored = await api.refreshLocalMusicFiles(folderPath, snapshot.files || []);
@@ -21139,6 +21356,7 @@ async function handleLocalFolderFiles(files, opts) {
     return;
   }
   var libraryFolderPath = opts.folderPath || savedLocalLibraryFolderPath();
+  await hydrateLocalLibraryPersistentState(libraryFolderPath);
   var librarySync = syncLocalLibraryIndexWithSongs(libraryFolderPath, songs);
   var deferAssetHydration = !!opts.restored || !!(librarySync && librarySync.stats && librarySync.stats.hasIndex && librarySync.stats.unchanged > 64);
   var assetHydrationPromise = hydrateLocalAssetCacheForSongs(songs);
