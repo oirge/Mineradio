@@ -22,6 +22,8 @@ const APP_PACKAGE = readPackageInfo();
 const APP_VERSION = process.env.MINERADIO_VERSION || APP_PACKAGE.version || '0.9.11';
 const UPDATE_CONFIG = readUpdateConfig(APP_PACKAGE);
 const PATCH_MAX_BYTES = 12 * 1024 * 1024;
+const UPDATE_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
+const UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS = 30 * 1000;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
@@ -30,6 +32,8 @@ const UPDATE_FALLBACK_NOTES = [
   '右上角更新提示',
 ];
 const updateDownloadJobs = new Map();
+let updateInfoCache = null;
+let latestUpdateInfoPromise = null;
 
 function applySystemCertificateAuthorities() {
   try {
@@ -485,6 +489,47 @@ function localUpdateFallback(reason, opts) {
     reason: reason || '',
   };
 }
+/**
+ * 复制更新检测结果，避免缓存对象被下载任务或响应处理流程意外改写。
+ * @param {object} info 更新检测结果对象。
+ * @returns {object} 可独立返回给调用方的检测结果副本。
+ */
+function cloneUpdateInfo(info) {
+  return JSON.parse(JSON.stringify(info || localUpdateFallback()));
+}
+/**
+ * 写入更新检测缓存；失败兜底结果只短暂缓存，避免临时网络问题长时间挡住新版提示。
+ * @param {object} info 更新检测结果对象。
+ * @returns {object} 原始更新检测结果对象。
+ */
+function rememberUpdateInfo(info) {
+  const ttl = info && info.reason ? 45 * 1000 : UPDATE_CHECK_CACHE_TTL_MS;
+  updateInfoCache = {
+    value: cloneUpdateInfo(info),
+    expiresAt: Date.now() + ttl,
+  };
+  return info;
+}
+/**
+ * 创建下载读流空闲计时器，防止线路响应头成功但正文长时间卡死。
+ * @param {number} timeoutMs 空闲超时时间，单位毫秒。
+ * @returns {{signal: AbortSignal, touch: Function, clear: Function}} fetch 可使用的中止信号和计时控制函数。
+ */
+function createUpdateDownloadIdleGuard(timeoutMs) {
+  const controller = new AbortController();
+  const timeout = Math.max(5000, Number(timeoutMs) || UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS);
+  let timer = null;
+  const touch = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(), timeout);
+  };
+  const clear = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+  touch();
+  return { signal: controller.signal, touch, clear };
+}
 function updateError(code, message, cause) {
   const err = new Error(message || code);
   err.code = code;
@@ -607,7 +652,7 @@ async function fetchLatestYmlUpdateInfo(reason) {
   const result = await fetchTextFromCandidates(candidates, 6500);
   return parseLatestYmlUpdateInfo(result.text, reason);
 }
-async function fetchLatestUpdateInfo() {
+async function fetchLatestUpdateInfoUncached() {
   if (UPDATE_CONFIG.manifest) return fetchManifestUpdateInfo(UPDATE_CONFIG.manifest);
   if (!UPDATE_CONFIG.configured || UPDATE_CONFIG.provider !== 'github') return localUpdateFallback();
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(UPDATE_CONFIG.owner)}/${encodeURIComponent(UPDATE_CONFIG.repo)}/releases/latest`;
@@ -657,6 +702,26 @@ async function fetchLatestUpdateInfo() {
   } finally {
     clearTimeout(timer);
   }
+}
+/**
+ * 读取最新版本信息，自动复用短期缓存和正在进行的检测请求，减少启动和点击下载时的重复 GitHub 请求。
+ * @param {{force?: boolean}=} opts force 为 true 时跳过已有缓存，但仍复用正在进行的检测。
+ * @returns {Promise<object>} 更新检测结果副本。
+ */
+async function fetchLatestUpdateInfo(opts) {
+  opts = opts || {};
+  const now = Date.now();
+  if (!opts.force && updateInfoCache && updateInfoCache.expiresAt > now) {
+    return cloneUpdateInfo(updateInfoCache.value);
+  }
+  if (!latestUpdateInfoPromise) {
+    latestUpdateInfoPromise = fetchLatestUpdateInfoUncached()
+      .then(rememberUpdateInfo)
+      .finally(() => {
+        latestUpdateInfoPromise = null;
+      });
+  }
+  return cloneUpdateInfo(await latestUpdateInfoPromise);
 }
 function safeUpdateFileName(name, version) {
   const raw = String(name || '').trim() || `Mineradio-${version || APP_VERSION}.exe`;
@@ -899,47 +964,55 @@ async function downloadUpdateAssetWithMirrors(job) {
       prepareUpdateJobAttempt(job, candidate, i, candidates.length);
       job.message = job.total ? '正在下载完整安装包' : '正在下载完整安装包，等待服务器返回大小';
 
-      const resp = await fetchWithTimeout(candidate.url, {
-        headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
-      }, 14000);
-      if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
-
-      const totalHeader = parseInt(resp.headers.get('content-length') || '0', 10) || 0;
-      job.total = totalHeader || job.expectedSize || job.total || 0;
-      job.progress = 0;
-      job.updatedAt = Date.now();
-      let speedWindowAt = Date.now();
-      let speedWindowBytes = 0;
-
-      const writer = fs.createWriteStream(tmpPath);
-      const reader = resp.body.getReader();
+      const idleGuard = createUpdateDownloadIdleGuard(UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS);
       try {
-        while (true) {
-          const chunk = await reader.read();
-          if (chunk.done) break;
-          const buf = Buffer.from(chunk.value);
-          job.received += buf.length;
-          speedWindowBytes += buf.length;
-          const now = Date.now();
-          if (now - speedWindowAt >= 900) {
-            job.speedBps = Math.round(speedWindowBytes / Math.max(0.001, (now - speedWindowAt) / 1000));
-            speedWindowAt = now;
-            speedWindowBytes = 0;
+        const resp = await fetch(candidate.url, {
+          signal: idleGuard.signal,
+          headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
+        });
+        if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
+
+        const totalHeader = parseInt(resp.headers.get('content-length') || '0', 10) || 0;
+        job.total = totalHeader || job.expectedSize || job.total || 0;
+        job.progress = 0;
+        job.updatedAt = Date.now();
+        let speedWindowAt = Date.now();
+        let speedWindowBytes = 0;
+
+        const writer = fs.createWriteStream(tmpPath);
+        const reader = resp.body.getReader();
+        try {
+          while (true) {
+            idleGuard.touch();
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            idleGuard.touch();
+            const buf = Buffer.from(chunk.value);
+            job.received += buf.length;
+            speedWindowBytes += buf.length;
+            const now = Date.now();
+            if (now - speedWindowAt >= 900) {
+              job.speedBps = Math.round(speedWindowBytes / Math.max(0.001, (now - speedWindowAt) / 1000));
+              speedWindowAt = now;
+              speedWindowBytes = 0;
+            }
+            if (job.total > 0) {
+              job.progress = Math.max(1, Math.min(99, Math.round((job.received / job.total) * 100)));
+              job.etaSeconds = job.speedBps > 0 ? Math.max(0, Math.round((job.total - job.received) / job.speedBps)) : 0;
+            } else {
+              const kb = Math.max(1, job.received / 1024);
+              job.progress = Math.max(1, Math.min(88, Math.round(Math.log10(kb + 1) * 24)));
+            }
+            job.message = job.total > 0 ? '正在下载完整安装包' : '正在下载完整安装包，服务器未提供总大小';
+            job.updatedAt = Date.now();
+            if (!writer.write(buf)) await once(writer, 'drain');
           }
-          if (job.total > 0) {
-            job.progress = Math.max(1, Math.min(99, Math.round((job.received / job.total) * 100)));
-            job.etaSeconds = job.speedBps > 0 ? Math.max(0, Math.round((job.total - job.received) / job.speedBps)) : 0;
-          } else {
-            const kb = Math.max(1, job.received / 1024);
-            job.progress = Math.max(1, Math.min(88, Math.round(Math.log10(kb + 1) * 24)));
-          }
-          job.message = job.total > 0 ? '正在下载完整安装包' : '正在下载完整安装包，服务器未提供总大小';
-          job.updatedAt = Date.now();
-          if (!writer.write(buf)) await once(writer, 'drain');
+        } finally {
+          writer.end();
+          await once(writer, 'finish').catch(() => {});
         }
       } finally {
-        writer.end();
-        await once(writer, 'finish').catch(() => {});
+        idleGuard.clear();
       }
 
       verifyUpdateFile(tmpPath, job);
@@ -1312,7 +1385,8 @@ const server = http.createServer(async (req, res) => {
 
   if (pn === '/api/update/latest') {
     try {
-      sendJSON(res, await fetchLatestUpdateInfo());
+      const force = url.searchParams.get('force') === '1' || url.searchParams.get('refresh') === '1';
+      sendJSON(res, await fetchLatestUpdateInfo({ force }));
     } catch (err) {
       sendJSON(res, {
         ...localUpdateFallback(err.message || 'Update check failed', { configured: UPDATE_CONFIG.configured }),

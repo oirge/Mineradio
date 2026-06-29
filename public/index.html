@@ -23862,9 +23862,16 @@ function setUpdatePreviewVisible(visible) {
   }
 }
 
-async function checkLatestUpdate() {
+/**
+ * 检查软件更新；启动路径复用后端缓存，用户主动打开更新面板时强制刷新一次。
+ * @param {{force?: boolean}=} opts force 为 true 时要求后端跳过已有检测缓存。
+ * @returns {Promise<void>} 更新预览状态写入全局 updatePreviewState，无直接返回值。
+ */
+async function checkLatestUpdate(opts) {
+  opts = opts || {};
   try {
-    var data = await apiJson('/api/update/latest?t=' + Date.now());
+    var query = opts.force ? '?force=1&t=' + Date.now() : '?t=' + Date.now();
+    var data = await apiJson('/api/update/latest' + query);
     applyLatestUpdateInfo(data);
   } catch (e) {
     updatePreviewState.preview = true;
@@ -23995,6 +24002,10 @@ function updateUpdatePreviewProgress(progress) {
   syncUpdatePreviewStateClass();
 }
 
+/**
+ * 打开更新面板，并在非下载状态下触发一次强制刷新，避免长时间运行后仍显示旧版本信息。
+ * @returns {void}
+ */
 function openUpdatePanel() {
   var mask = document.getElementById('update-modal');
   var entry = document.getElementById('update-entry');
@@ -24003,6 +24014,7 @@ function openUpdatePanel() {
   if (entry && window.gsap) {
     window.gsap.fromTo(entry, { scale: 0.93 }, { scale: 1, duration: 0.42, ease: 'back.out(1.7)', overwrite: 'auto' });
   }
+  if (updatePreviewState.status !== 'downloading' && updatePreviewState.status !== 'opening') checkLatestUpdate({ force: true });
   openGsapModal(mask);
   updatePreviewState.open = true;
   animateUpdatePanelContents();
