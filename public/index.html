@@ -2683,6 +2683,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 var audio = null, audioCtx = null, source = null, analyser = null, beatAnalyser = null, gainNode = null, audioReady = false;
 var uiSfxCtx = null, lastShelfSelectSfxAt = 0;
 var FFT_SIZE = 2048;
+var AUDIO_ANALYSIS_TARGET_FPS = 60;
 var frequencyData = new Uint8Array(FFT_SIZE / 2);
 var timeDomainData = new Uint8Array(FFT_SIZE);
 var BEAT_FFT_SIZE = 2048;
@@ -2692,6 +2693,7 @@ var bass = 0, mid = 0, treble = 0, audioEnergy = 0, beatPulse = 0, prevEnergy = 
 var lyricSunEnergy = 0, lyricSunTarget = 0, lyricSunHold = 0, lyricSunAvg = 0, lyricSunPeak = 0.55;
 var smoothBass = 0, smoothMid = 0, smoothTreb = 0, smoothEnergy = 0;
 var bassPeak = 0.12, midPeak = 0.10, treblePeak = 0.08, energyPeak = 0.10;
+var audioAnalysisLastAt = 0;
 var beatOnsetFlag = false;        // beat 上升沿瞬时标志,每帧消费一次
 var lastStrongDrop = 0;           // 用于 burst 预设的强 drop 时刻
 
@@ -2703,6 +2705,7 @@ try {
 var lyricsLines = [], lyricsVisible = false, lyricsHasNativeKaraoke = false, lyricsTimingSource = 'none';
 var playlist = [], playQueue = [], localLibrarySongs = [], currentIdx = -1, playing = false, playToggleBusy = false;
 var localLibraryPassiveQueue = false;
+var LOCAL_SEARCH_RESULT_LIMIT = 80;
 var searchMode = 'song';
 var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '本地模式' };
 var loginStatusChecked = false, loginStatusCheckFailed = false;
@@ -3762,7 +3765,7 @@ function updateDesktopRuntimeState(state) {
   desktopRuntimeState.fullscreen = !!(state.isFullScreen || state.isNativeFullScreen || state.isHtmlFullScreen || state.isWindowFullScreen);
   updateRenderPowerClasses();
   applyRendererPowerMode();
-  if (fx && (fx.desktopLyrics || fx.wallpaperMode)) setTimeout(syncDesktopOverlayState, 0);
+  if (fx && (fx.desktopLyrics || fx.wallpaperMode)) scheduleDesktopOverlaySync(0);
   if (wasDeep && !isDeepBackgroundMode()) recoverVisualsAfterBackground('desktop-runtime-state');
   if (desktopRuntimeState.fullscreen !== wasFullscreen) scheduleMainRendererViewportRefresh('desktop-runtime-state');
 }
@@ -17463,14 +17466,34 @@ function localSongSearchText(song) {
     song && song.localCoverFileName
   ].filter(Boolean).join(' ');
 }
+/**
+ * 读取本地歌曲的归一化搜索文本。该函数会缓存结果，避免输入每个字时重复拼接路径并执行正则归一化。
+ * @param {object} song 本地歌曲对象。
+ * @returns {string} 用于本地搜索匹配的归一化文本。
+ */
+function cachedLocalSongSearchText(song) {
+  if (!song) return '';
+  var key = localSongSearchText(song);
+  if (song._mineradioSearchTextKey === key && typeof song._mineradioSearchTextNorm === 'string') return song._mineradioSearchTextNorm;
+  song._mineradioSearchTextKey = key;
+  song._mineradioSearchTextNorm = simpleSearchNorm(key);
+  return song._mineradioSearchTextNorm;
+}
+/**
+ * 搜索本地歌曲；命中数量达到界面展示上限后立即停止扫描，避免大曲库每次输入都遍历完整列表。
+ * @param {string} q 搜索关键词。
+ * @returns {Array<object>} 最多 LOCAL_SEARCH_RESULT_LIMIT 条搜索结果。
+ */
 function searchLocalSongs(q) {
   var pool = localSearchPool();
   q = String(q || '').trim();
-  if (!q) return pool.slice(0, 80);
+  if (!q) return pool.slice(0, LOCAL_SEARCH_RESULT_LIMIT);
   var nq = simpleSearchNorm(q);
-  return pool.filter(function(song){
-    return simpleSearchNorm(localSongSearchText(song)).indexOf(nq) >= 0;
-  }).slice(0, 80);
+  var results = [];
+  for (var i = 0; i < pool.length && results.length < LOCAL_SEARCH_RESULT_LIMIT; i++) {
+    if (cachedLocalSongSearchText(pool[i]).indexOf(nq) >= 0) results.push(pool[i]);
+  }
+  return results;
 }
 function renderLocalLibraryResults(q, opts) {
   opts = opts || {};
@@ -19695,6 +19718,7 @@ async function loadPlaylistIntoQueueById(id, autoplay, title) {
 
 // 进度条
 var progressDragState = { active: false, lastParticleAt: 0 };
+var playbackProgressUiState = { fill: null, thumb: null, timeDisplay: null, lastText: '' };
 function normalizePlaybackDurationSeconds(value) {
   var raw = Number(value);
   if (!isFinite(raw) || raw <= 0) return 0;
@@ -19711,20 +19735,33 @@ function getPlaybackDurationSeconds() {
 function getPlaybackCurrentSeconds() {
   return audio && isFinite(audio.currentTime) && audio.currentTime > 0 ? audio.currentTime : 0;
 }
+/**
+ * 读取播放进度条 DOM 缓存。进度循环会高频调用，缓存节点可避免重复查找同一组固定元素。
+ * @returns {{fill: HTMLElement|null, thumb: HTMLElement|null, timeDisplay: HTMLElement|null}} 进度条相关元素。
+ */
+function playbackProgressElements() {
+  if (!playbackProgressUiState.fill || !playbackProgressUiState.fill.isConnected) playbackProgressUiState.fill = document.getElementById('progress-fill');
+  if (!playbackProgressUiState.thumb || !playbackProgressUiState.thumb.isConnected) playbackProgressUiState.thumb = document.getElementById('progress-thumb');
+  if (!playbackProgressUiState.timeDisplay || !playbackProgressUiState.timeDisplay.isConnected) playbackProgressUiState.timeDisplay = document.getElementById('time-display');
+  return playbackProgressUiState;
+}
 function setProgressVisual(percent) {
   percent = clampRange(percent || 0, 0, 100);
-  var fill = document.getElementById('progress-fill');
-  var thumb = document.getElementById('progress-thumb');
-  if (fill) fill.style.width = percent + '%';
-  if (thumb) thumb.style.left = percent + '%';
+  var els = playbackProgressElements();
+  if (els.fill) els.fill.style.width = percent + '%';
+  if (els.thumb) els.thumb.style.left = percent + '%';
 }
 function updatePlaybackProgressUi() {
   var durationSec = getPlaybackDurationSeconds();
   var currentSec = getPlaybackCurrentSeconds();
   if (durationSec > 0 && currentSec > durationSec) currentSec = durationSec;
   setProgressVisual(durationSec > 0 ? (currentSec / durationSec * 100) : 0);
-  var timeDisplay = document.getElementById('time-display');
-  if (timeDisplay) timeDisplay.textContent = formatProgramTime(currentSec) + ' / ' + (durationSec > 0 ? formatProgramTime(durationSec) : '0:00');
+  var timeDisplay = playbackProgressElements().timeDisplay;
+  var timeText = formatProgramTime(currentSec) + ' / ' + (durationSec > 0 ? formatProgramTime(durationSec) : '0:00');
+  if (timeDisplay && playbackProgressUiState.lastText !== timeText) {
+    playbackProgressUiState.lastText = timeText;
+    timeDisplay.textContent = timeText;
+  }
   updateSystemMediaSessionPosition();
   savePlaybackSession(false);
 }
@@ -19752,6 +19789,7 @@ function systemMediaSessionArtwork(meta) {
     { src: cover, sizes: '512x512', type: 'image/png' }
   ];
 }
+var systemMediaSessionPositionState = { lastAt: 0 };
 /**
  * 同步系统媒体控制元数据，供 Windows 音量浮窗、键盘媒体键和蓝牙耳机控制显示。
  * @returns {void}
@@ -19780,21 +19818,25 @@ function updateSystemMediaSessionPlaybackState(reason) {
       ? (audio.paused || audio.ended ? 'paused' : 'playing')
       : 'none';
     updateSystemMediaSessionMetadata();
-    updateSystemMediaSessionPosition();
+    updateSystemMediaSessionPosition(true);
   } catch (e) {}
 }
 /**
  * 同步系统媒体控制进度，只有 duration 可用时才调用 setPositionState。
+ * @param {boolean=} force 是否跳过节流；播放/暂停等状态切换需要立即同步。
  * @returns {void}
  */
-function updateSystemMediaSessionPosition() {
+function updateSystemMediaSessionPosition(force) {
   if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState || !audio) return;
   var duration = getPlaybackDurationSeconds();
   if (!isFinite(duration) || duration <= 0) return;
   var position = Math.max(0, Math.min(duration, getPlaybackCurrentSeconds()));
   var playbackRate = audio && isFinite(audio.playbackRate) && audio.playbackRate > 0 ? audio.playbackRate : 1;
+  var now = performance.now();
+  if (!force && now - systemMediaSessionPositionState.lastAt < 900) return;
   try {
     navigator.mediaSession.setPositionState({ duration: duration, position: position, playbackRate: playbackRate });
+    systemMediaSessionPositionState.lastAt = now;
   } catch (e) {}
 }
 /**
@@ -19878,10 +19920,10 @@ progressBar.addEventListener('pointerup', endProgressDrag);
 progressBar.addEventListener('pointercancel', endProgressDrag);
 progressBar.addEventListener('lostpointercapture', function(){ progressDragState.active = false; progressBar.classList.remove('is-dragging'); });
 setInterval(function(){
-  if (!audio) { updatePlaybackProgressUi(); return; }
+  if (!audio || !audio.src) return;
   updateListenStatsTick(false);
-  updatePlaybackProgressUi();
-  if (audio.currentTime) updateLyricsHighlight();
+  if (!audio.paused && !audio.ended) updatePlaybackProgressUi();
+  if (audio.currentTime && !audio.paused) updateLyricsHighlight();
 }, 200);
 
 // ============================================================
@@ -26816,6 +26858,42 @@ var desktopOverlayPushState = {
   lastLyricsBeatKey: '',
   lastWallpaperKey: ''
 };
+var desktopOverlaySyncTimer = null;
+var desktopLyricSnapshotState = { lines: null, idx: -1 };
+/**
+ * 判断桌面覆盖层是否需要持续同步。功能关闭时停止自调度，避免后台常驻轮询。
+ * @returns {boolean} 当前是否存在启用的桌面覆盖层。
+ */
+function desktopOverlayActive() {
+  return !!(fx && (fx.desktopLyrics || fx.wallpaperMode) && window.desktopWindow && window.desktopWindow.isDesktop);
+}
+/**
+ * 取消桌面覆盖层同步循环。关闭桌面歌词或壁纸模式后立即释放计时器。
+ * @returns {void}
+ */
+function cancelDesktopOverlaySync() {
+  if (!desktopOverlaySyncTimer) return;
+  clearTimeout(desktopOverlaySyncTimer);
+  desktopOverlaySyncTimer = null;
+}
+/**
+ * 启动桌面覆盖层的自调度同步循环。只在覆盖层开启时运行，替代固定 setInterval 空转。
+ * @param {number=} delay 下一次同步延迟毫秒。
+ * @returns {void}
+ */
+function scheduleDesktopOverlaySync(delay) {
+  if (!desktopOverlayActive()) {
+    cancelDesktopOverlaySync();
+    return;
+  }
+  if (desktopOverlaySyncTimer) return;
+  desktopOverlaySyncTimer = setTimeout(function(){
+    desktopOverlaySyncTimer = null;
+    if (!desktopOverlayActive()) return;
+    syncDesktopOverlayState();
+    scheduleDesktopOverlaySync(320);
+  }, Math.max(0, delay == null ? 320 : delay));
+}
 function getDesktopWindowApi() {
   return window.desktopWindow && window.desktopWindow.isDesktop ? window.desktopWindow : null;
 }
@@ -26838,15 +26916,41 @@ function normalizeDesktopLyricText(text, maxLines) {
     .slice(0, maxLines)
     .join('\n');
 }
+/**
+ * 查找桌面歌词当前行。播放顺序推进时沿用上次游标，拖动或切歌时退回二分查找。
+ * @param {Array<object>} lines 当前歌词行数组。
+ * @param {number} time 当前播放秒数。
+ * @returns {number} 当前歌词行索引，尚未到首行时返回 -1。
+ */
+function findDesktopLyricIndex(lines, time) {
+  var target = time + 0.05;
+  var idx = desktopLyricSnapshotState.lines === lines ? desktopLyricSnapshotState.idx : -1;
+  if (idx >= 0 && idx < lines.length && lines[idx] && lines[idx].t <= target) {
+    while (idx + 1 < lines.length && lines[idx + 1].t <= target) idx++;
+    desktopLyricSnapshotState.lines = lines;
+    desktopLyricSnapshotState.idx = idx;
+    return idx;
+  }
+  var lo = 0, hi = lines.length - 1, found = -1;
+  while (lo <= hi) {
+    var mid = (lo + hi) >> 1;
+    var lineTime = Number(lines[mid] && lines[mid].t) || 0;
+    if (lineTime <= target) {
+      found = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  desktopLyricSnapshotState.lines = lines;
+  desktopLyricSnapshotState.idx = found;
+  return found;
+}
 function currentDesktopLyricSnapshot() {
   var t = audio && isFinite(audio.currentTime) ? Number(audio.currentTime) : 0;
   var lines = Array.isArray(lyricsLines) ? lyricsLines : [];
   if (playing && audio && lines.length) {
-    var idx = -1;
-    for (var i = 0; i < lines.length; i++) {
-      if (lines[i].t <= t + 0.05) idx = i;
-      else break;
-    }
+    var idx = findDesktopLyricIndex(lines, t);
     if (idx >= 0) {
       var curLine = lines[idx] || { t:t, text:'' };
       var nextLine = lines[idx + 1];
@@ -27021,6 +27125,7 @@ function applyDesktopLyricsState(force) {
     api.setDesktopLyricsEnabled(!!payload.enabled, payload).catch(function(e){ console.warn('desktop lyrics state failed:', e); });
   }
   pushDesktopLyricsState(!!force);
+  scheduleDesktopOverlaySync(320);
 }
 function pushWallpaperState(force) {
   var api = getDesktopWindowApi();
@@ -27043,14 +27148,17 @@ function applyWallpaperModeState(force) {
     api.setWallpaperMode(!!payload.enabled, payload).catch(function(e){ console.warn('wallpaper state failed:', e); });
   }
   pushWallpaperState(!!force);
+  scheduleDesktopOverlaySync(320);
 }
 function syncDesktopOverlayState() {
+  if (!desktopOverlayActive()) {
+    cancelDesktopOverlaySync();
+    return;
+  }
   if (fx.desktopLyrics) pushDesktopLyricsState(false);
   if (fx.wallpaperMode) pushWallpaperState(false);
 }
-setInterval(function(){
-  if (fx && (fx.desktopLyrics || fx.wallpaperMode)) syncDesktopOverlayState();
-}, 320);
+scheduleDesktopOverlaySync(320);
 
 // 全屏
 var desktopFullscreenActive = false;
@@ -27360,6 +27468,23 @@ function sampleRenderPerf(now, dt) {
   }
   maybeTrimRuntimeCaches(now);
 }
+/**
+ * 消费一次音频分析时间片。渲染可以跟随高刷屏运行，但频谱分析限制在固定帧率，避免高刷屏重复计算同一段音频。
+ * @param {number} now 当前 performance.now() 时间。
+ * @param {number} fallbackDt 首帧或计时重置时使用的渲染时间片。
+ * @returns {number} 本次允许音频分析时返回分析时间片，否则返回 0。
+ */
+function consumeAudioAnalysisDelta(now, fallbackDt) {
+  var minGap = 1000 / AUDIO_ANALYSIS_TARGET_FPS;
+  if (!audioAnalysisLastAt) {
+    audioAnalysisLastAt = now;
+    return Math.max(0.001, fallbackDt || (1 / AUDIO_ANALYSIS_TARGET_FPS));
+  }
+  var elapsed = now - audioAnalysisLastAt;
+  if (elapsed < minGap) return 0;
+  audioAnalysisLastAt = now;
+  return Math.min(elapsed / 1000, 0.08);
+}
 function animate() {
   requestAnimationFrame(animate);
   var now = performance.now();
@@ -27385,7 +27510,9 @@ function animate() {
   // 真正的 mid 乐器/和声: 3000-6000Hz → bin 140-280
   // treble: 6000Hz+ → bin 280+
   beatOnsetFlag = false;
-  if (analyser && playing && audio && !audio.paused) {
+  var shouldAnalyzeAudio = !!(analyser && playing && audio && !audio.paused);
+  var analysisDt = shouldAnalyzeAudio ? consumeAudioAnalysisDelta(now, dt) : 0;
+  if (shouldAnalyzeAudio && analysisDt > 0) {
     if (audioCtx && audioCtx.state === 'suspended') resumeAudioAnalysis();
     analyser.getByteFrequencyData(frequencyData);
     analyser.getByteTimeDomainData(timeDomainData);
@@ -27425,7 +27552,7 @@ function animate() {
     var energyOnset = Math.max(0, re - prevEnergy);
     prevEnergy = prevEnergy * 0.88 + re * 0.12;
 
-    var realtimeBeat = processRealtimeBeatEngine(dt);
+    var realtimeBeat = processRealtimeBeatEngine(analysisDt);
     if (realtimeBeat && realtimeBeat.hit) {
       var dj = djMode.active;
       var djMapCoversCurrentTime = !dj || !currentDjBeatMap || !currentDjBeatMap.partialUntilSec || !audio || (audio.currentTime || 0) <= currentDjBeatMap.partialUntilSec - 1.25;
@@ -27472,7 +27599,7 @@ function animate() {
     } else if (bassOnset > 0.075 && rb > 0.32 && energyOnset > 0.020) {
       beatPulse = Math.max(beatPulse, Math.min(0.12, bassOnset * 0.18));
     }
-    beatPulse *= Math.pow(0.36, dt);
+    beatPulse *= Math.pow(0.36, analysisDt);
 
     // v7.2+: 预解析 beatmap 只在实时引擎暂时没锁住时补位.
     tickPodcastDjBeatMap();
@@ -27483,7 +27610,7 @@ function animate() {
     }
     // scheduledBeatPulse 衰减并合并到 beatPulse
     if (scheduledBeatPulse > beatPulse) beatPulse = scheduledBeatPulse;
-    scheduledBeatPulse *= Math.pow(0.32, dt);
+    scheduledBeatPulse *= Math.pow(0.32, analysisDt);
 
     function env(prev, next, attack, release) {
       var k = next > prev ? attack : release;
@@ -27512,7 +27639,8 @@ function animate() {
     lyricSunHold += (sunGate - lyricSunHold) * (sunGate > lyricSunHold ? 0.035 : 0.014);
     lyricSunTarget = lyricSunHold > 0.16 ? clamp01((lyricSunHold - 0.16) / 0.84) : 0;
     lyricSunEnergy += (lyricSunTarget - lyricSunEnergy) * (lyricSunTarget > lyricSunEnergy ? 0.075 : 0.030);
-  } else {
+  } else if (!shouldAnalyzeAudio) {
+    audioAnalysisLastAt = 0;
     smoothBass *= 0.91; smoothMid *= 0.91; smoothTreb *= 0.91; smoothEnergy *= 0.91; beatPulse *= 0.82;
     liveCamAvg *= 0.94;
     liveCamPeak = Math.max(0.28, liveCamPeak * 0.98);
