@@ -122,6 +122,7 @@ const LOCAL_LIBRARY_MIME = {
   '.png': 'image/png',
   '.webp': 'image/webp',
 };
+const LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY = 24;
 
 function normalizeLocalMusicRoot(folderPath) {
   const resolved = path.resolve(String(folderPath || ''));
@@ -153,6 +154,49 @@ function localFileProxyUrl(filePath) {
   return `http://127.0.0.1:${mainServerPort}/api/local-file?token=${encodeURIComponent(LOCAL_FILE_TOKEN)}&path=${encodeURIComponent(filePath)}`;
 }
 
+/**
+ * 并发执行本地库文件 stat。大曲库逐个 await 会把文件夹导入时间拉长，这里限制并发避免压满磁盘队列。
+ * @param {string} root 已授权的本地曲库根目录。
+ * @param {Array<{abs:string, rel:string, entry:{name:string}, ext:string, index:number, source?:object}>} items 待读取元数据的文件。
+ * @returns {Promise<Array<object>>} 可直接返回给渲染层的文件描述。
+ */
+async function statLocalLibraryFiles(root, items) {
+  const files = [];
+  let cursor = 0;
+  /**
+   * 消费共享游标读取文件元数据；共享游标只在当前事件循环同步递增，不会改变最终排序。
+   * @returns {Promise<void>} 当前 worker 完成时 resolve。
+   */
+  async function worker() {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      let stat = null;
+      try {
+        stat = await fs.promises.stat(item.abs);
+      } catch (_e) {
+        continue;
+      }
+      if (!stat.isFile()) continue;
+      const webkitRelativePath = localLibraryRelativePath(root, item.rel);
+      files[item.index] = {
+        ...(item.source || {}),
+        fullPath: item.abs,
+        filePath: item.abs,
+        url: localFileProxyUrl(item.abs),
+        name: item.entry.name,
+        relativePath: webkitRelativePath,
+        webkitRelativePath,
+        size: stat.size,
+        lastModified: Math.round(stat.mtimeMs),
+        type: LOCAL_LIBRARY_MIME[item.ext] || '',
+      };
+    }
+  }
+  const workerCount = Math.min(LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY, Math.max(1, items.length));
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return files.filter(Boolean);
+}
+
 async function scanLocalMusicFolder(folderPath) {
   const root = rememberLocalMusicRoot(folderPath);
   const files = [];
@@ -180,34 +224,17 @@ async function scanLocalMusicFolder(folderPath) {
       if (!entry.isFile()) continue;
       const ext = path.extname(entry.name).toLowerCase();
       if (!LOCAL_LIBRARY_EXTS.has(ext)) continue;
-      let stat = null;
-      try {
-        stat = await fs.promises.stat(abs);
-      } catch (_e) {
-        continue;
-      }
-      const webkitRelativePath = localLibraryRelativePath(root, rel);
-      files.push({
-        fullPath: abs,
-        filePath: abs,
-        url: localFileProxyUrl(abs),
-        name: entry.name,
-        relativePath: webkitRelativePath,
-        webkitRelativePath,
-        size: stat.size,
-        lastModified: Math.round(stat.mtimeMs),
-        type: LOCAL_LIBRARY_MIME[ext] || '',
-      });
+      files.push({ abs, rel, entry, ext, index: files.length });
     }
     if (visited > 60000) break;
   }
-  return { ok: true, folderPath: root, files, truncated: visited > 60000 };
+  return { ok: true, folderPath: root, files: await statLocalLibraryFiles(root, files), truncated: visited > 60000 };
 }
 
 async function refreshLocalMusicFileEntries(folderPath, files) {
   const root = rememberLocalMusicRoot(folderPath);
   const list = Array.isArray(files) ? files : [];
-  const out = [];
+  const pending = [];
   for (const file of list) {
     if (!file) continue;
     const rawPath = file.fullPath || file.filePath || file.path || file.localFilePathAbsolute || '';
@@ -216,27 +243,22 @@ async function refreshLocalMusicFileEntries(folderPath, files) {
     if (abs !== root && !abs.startsWith(root + path.sep)) continue;
     const ext = path.extname(file.name || abs).toLowerCase();
     if (!LOCAL_LIBRARY_EXTS.has(ext)) continue;
-    let stat = null;
-    try {
-      stat = await fs.promises.stat(abs);
-    } catch (_e) {
-      continue;
-    }
-    if (!stat.isFile()) continue;
-    out.push({
-      ...file,
-      fullPath: abs,
-      filePath: abs,
-      url: localFileProxyUrl(abs),
-      name: file.name || path.basename(abs),
-      relativePath: file.relativePath || file.webkitRelativePath || localLibraryRelativePath(root, path.relative(root, abs)),
-      webkitRelativePath: file.webkitRelativePath || file.relativePath || localLibraryRelativePath(root, path.relative(root, abs)),
-      size: stat.size,
-      lastModified: Math.round(stat.mtimeMs),
-      type: file.type || LOCAL_LIBRARY_MIME[ext] || '',
+    pending.push({
+      abs,
+      rel: path.relative(root, abs),
+      ext,
+      index: pending.length,
+      entry: { name: file.name || path.basename(abs) },
+      source: file,
     });
   }
-  return { ok: true, folderPath: root, files: out, snapshot: true };
+  const fresh = await statLocalLibraryFiles(root, pending);
+  return {
+    ok: true,
+    folderPath: root,
+    files: fresh,
+    snapshot: true,
+  };
 }
 
 async function readAuthorizedLocalFileRange(filePath, start, end) {

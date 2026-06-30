@@ -2833,6 +2833,8 @@ var localLibraryPersistentMemory = {};
 var localLibraryIndexWriteTimer = null;
 var localCoverThumbPromiseCache = {};
 var localCoverThumbPromiseOrder = [];
+var localCoverThumbResultCache = {};
+var localCoverThumbResultOrder = [];
 var LOCAL_ASSET_LIGHT_SCAN_BYTES = 4 * 1024 * 1024;
 var LOCAL_ASSET_IDLE_DELAY_MS = 520;
 var LOCAL_ASSET_PLAYING_DELAY_MS = 1800;
@@ -8287,9 +8289,15 @@ function loadImageForDataUrl(dataUrl) {
     img.src = dataUrl;
   });
 }
+/**
+ * 生成本地封面缩略图 data URL。成功结果会短期复用，避免队列、搜索和歌单架重复 decode 与 canvas 缩放。
+ * @param {string} dataUrl 原始封面 data URL。
+ * @returns {Promise<string>} 缩略图 data URL，无法生成时返回空字符串。
+ */
 async function createLocalCoverThumbnailDataUrl(dataUrl) {
   dataUrl = String(dataUrl || '');
   if (!/^data:image\//i.test(dataUrl)) return '';
+  if (localCoverThumbResultCache[dataUrl]) return localCoverThumbResultCache[dataUrl];
   if (localCoverThumbPromiseCache[dataUrl]) return localCoverThumbPromiseCache[dataUrl];
   var promise = (async function(){
   try {
@@ -8319,7 +8327,14 @@ async function createLocalCoverThumbnailDataUrl(dataUrl) {
   localCoverThumbPromiseCache[dataUrl] = promise;
   localCoverThumbPromiseOrder.push(dataUrl);
   while (localCoverThumbPromiseOrder.length > 24) delete localCoverThumbPromiseCache[localCoverThumbPromiseOrder.shift()];
-  return promise;
+  var result = await promise;
+  delete localCoverThumbPromiseCache[dataUrl];
+  if (result) {
+    localCoverThumbResultCache[dataUrl] = result;
+    localCoverThumbResultOrder.push(dataUrl);
+    while (localCoverThumbResultOrder.length > 96) delete localCoverThumbResultCache[localCoverThumbResultOrder.shift()];
+  }
+  return result;
 }
 async function assignLocalCoverDataUrl(song, dataUrl, opts) {
   opts = opts || {};
@@ -12776,6 +12791,17 @@ function localAssetBackgroundDelayMs() {
   if (typeof isRenderInteractionActive === 'function' && isRenderInteractionActive()) delay = Math.max(delay, activePlayback ? 2200 : 820);
   return delay;
 }
+/**
+ * 计算本地曲库后台资产任务的启动延迟。启动恢复阶段先让首屏、队列和播放会话落稳，再读封面/歌词。
+ * @param {{restored?: boolean, refreshed?: boolean, single?: boolean}} opts 本地库导入或恢复参数。
+ * @returns {number} 延迟毫秒数。
+ */
+function localAssetProcessingStartDelay(opts) {
+  opts = opts || {};
+  if (opts.single) return 80;
+  if (opts.restored) return opts.refreshed ? 900 : 1600;
+  return 120;
+}
 function localIndexedAssetCanWaitForCache(song, kind) {
   if (!song || song.localAssetCacheMiss) return false;
   if (song.localLibraryChangeState !== 'unchanged' && !song.localLibraryIndexApplied) return false;
@@ -12842,6 +12868,12 @@ async function waitForLocalAssetPreloadTurn(token) {
     await yieldToIdle(localAssetBackgroundDelayMs());
   }
 }
+/**
+ * 启动本地曲库后台封面/歌词处理。会先按当前播放位置排序，并把进度状态暴露给导入提示。
+ * @param {Array<object>} songs 候选本地歌曲列表。
+ * @param {{restored?: boolean, refreshed?: boolean, single?: boolean}} opts 本地库导入或恢复参数。
+ * @returns {number} 实际进入后台处理的歌曲数量。
+ */
 function startLocalLibraryBackgroundProcessing(songs, opts) {
   opts = opts || {};
   songs = sortLocalAssetPreloadQueue((songs || []).filter(localSongNeedsAssetPreload));
@@ -12853,9 +12885,16 @@ function startLocalLibraryBackgroundProcessing(songs, opts) {
     runLocalLibraryBackgroundProcessing(songs.slice(), token, opts).catch(function(err){
       console.warn('[LocalLibraryProcessing]', err);
     });
-  }, opts.restored ? 300 : 120);
+  }, localAssetProcessingStartDelay(opts));
   return songs.length;
 }
+/**
+ * 串行执行本地曲库资产预载。恢复启动阶段降低中途 UI 刷新频率，避免首屏队列反复重绘。
+ * @param {Array<object>} songs 已排序的本地歌曲列表。
+ * @param {number} token 当前后台任务令牌。
+ * @param {{restored?: boolean}} opts 本地库导入或恢复参数。
+ * @returns {Promise<void>}
+ */
 async function runLocalLibraryBackgroundProcessing(songs, token, opts) {
   opts = opts || {};
   try {
@@ -12869,7 +12908,7 @@ async function runLocalLibraryBackgroundProcessing(songs, token, opts) {
       await preloadLocalSongAssets(song, { token:token, applyCurrent:applyCurrent, background:true });
       localLibraryProcessing.assetsDone = i + 1;
       updateLocalLibraryProcessingProgress(false);
-      if (applyCurrent || i % 5 === 0 || i === songs.length - 1) refreshLocalSongAssetUi(song, 'local-library-assets');
+      if (applyCurrent || (!opts.restored && i % 5 === 0) || i === songs.length - 1) refreshLocalSongAssetUi(song, 'local-library-assets');
       await yieldToIdle(localAssetBackgroundDelayMs());
     }
   } finally {
@@ -21433,6 +21472,12 @@ function refreshSavedLocalMusicFolderInBackground(folderPath, snapshotSignature)
     });
   }, 1200);
 }
+/**
+ * 将导入或恢复的本地文件转换为播放队列，并安排缓存读取、后台资产处理和播放会话恢复。
+ * @param {Array<File|object>} files 本地文件列表或主进程扫描结果。
+ * @param {{folderOnly?: boolean, folderPath?: string, persist?: boolean, autoPlay?: boolean, restored?: boolean, refreshed?: boolean, truncated?: boolean, fromSnapshot?: boolean}} opts 导入、恢复和持久化参数。
+ * @returns {Promise<void>}
+ */
 async function handleLocalFolderFiles(files, opts) {
   opts = opts || {};
   var songs = createLocalSongsFromFiles(files, { folderOnly: !!opts.folderOnly });
@@ -21444,7 +21489,7 @@ async function handleLocalFolderFiles(files, opts) {
   await hydrateLocalLibraryPersistentState(libraryFolderPath);
   var librarySync = syncLocalLibraryIndexWithSongs(libraryFolderPath, songs);
   var deferAssetHydration = !!opts.restored || !!(librarySync && librarySync.stats && librarySync.stats.hasIndex && librarySync.stats.unchanged > 64);
-  var assetHydrationPromise = hydrateLocalAssetCacheForSongs(songs);
+  var assetHydrationPromise = deferAssetHydration ? null : hydrateLocalAssetCacheForSongs(songs);
   if (!deferAssetHydration) await assetHydrationPromise;
   if (opts.folderPath && opts.persist !== false) saveLocalLibraryFolderPath(opts.folderPath);
   if (opts.folderPath && !opts.fromSnapshot) saveLocalLibrarySnapshot(opts.folderPath, files, !!opts.truncated);
@@ -21484,6 +21529,11 @@ async function handleLocalFolderFiles(files, opts) {
   }
   var pendingAssetCount = localLibraryAssetProcessingSongs(songs).length;
   if (deferAssetHydration) {
+    // 恢复启动和大曲库先完成队列渲染，再把 IndexedDB 封面/歌词读取让给空闲时段。
+    assetHydrationPromise = (async function(){
+      await yieldToIdle(opts.restored ? 900 : 360);
+      return hydrateLocalAssetCacheForSongs(songs);
+    })();
     assetHydrationPromise
       .then(refreshAfterAssetHydration)
       .catch(function(e){ console.warn('[LocalAssetCacheRead]', e); })
