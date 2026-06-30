@@ -2502,6 +2502,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
     </div>
     <div class="control-cluster modes">
     <button class="ctrl-btn lyrics-toggle-btn" onclick="toggleLyricsPanel()" title="歌词"><span class="lyrics-word-icon">词</span></button>
+    <button id="desktop-lyrics-btn" class="ctrl-btn" onclick="toggleFx('desktopLyrics')" title="桌面歌词" aria-label="桌面歌词" aria-pressed="false"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2.2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M8 10h8"/><path d="M9.5 13h5"/></svg></button>
     <div id="volume-control" class="volume-control">
       <button id="volume-btn" class="ctrl-btn" onclick="toggleVolumePanel(event)" title="音量 / 静音"><svg id="volume-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15 9.5a4 4 0 0 1 0 5"/></svg></button>
       <div class="volume-popover" onclick="event.stopPropagation()">
@@ -2912,8 +2913,8 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.1.8',
-  version: '1.1.8',
+  currentVersion: '1.1.9',
+  version: '1.1.9',
   configured: false,
   preview: true,
   updateAvailable: false,
@@ -22990,6 +22991,12 @@ function updateFxInputs() {
   document.getElementById('t-edge').classList.toggle('on', fx.edge);
   var desktopLyricsToggle = document.getElementById('t-desktopLyrics');
   if (desktopLyricsToggle) desktopLyricsToggle.classList.toggle('on', fx.desktopLyrics);
+  var desktopLyricsBtn = document.getElementById('desktop-lyrics-btn');
+  if (desktopLyricsBtn) {
+    desktopLyricsBtn.classList.toggle('active', !!fx.desktopLyrics && !isDevelopmentLockedFx('desktopLyrics'));
+    desktopLyricsBtn.setAttribute('aria-pressed', (!!fx.desktopLyrics && !isDevelopmentLockedFx('desktopLyrics')) ? 'true' : 'false');
+    desktopLyricsBtn.title = isDevelopmentLockedFx('desktopLyrics') ? '桌面歌词开发中' : (fx.desktopLyrics ? '关闭桌面歌词' : '开启桌面歌词');
+  }
   var desktopLyricsClickToggle = document.getElementById('t-desktopLyricsClickThrough');
   if (desktopLyricsClickToggle) desktopLyricsClickToggle.classList.toggle('on', fx.desktopLyricsClickThrough !== false);
   var desktopLyricsCinemaToggle = document.getElementById('t-desktopLyricsCinema');
@@ -23934,6 +23941,7 @@ function toggleFx(key) {
     }
     showToast(fx.aiDepth ? '已开启后台 AI 立体增强' : '已关闭 AI 立体增强, 使用轻量弧面');
   }
+  if (key === 'desktopLyrics') updateFxInputs();
 }
 function toggleFxPanel(force) {
   var el = document.getElementById('fx-panel');
@@ -27183,9 +27191,14 @@ function desktopOverlayActive() {
  * @returns {void}
  */
 function cancelDesktopOverlaySync() {
-  if (!desktopOverlaySyncTimer) return;
-  clearTimeout(desktopOverlaySyncTimer);
-  desktopOverlaySyncTimer = null;
+  if (desktopOverlaySyncTimer) {
+    clearTimeout(desktopOverlaySyncTimer);
+    desktopOverlaySyncTimer = null;
+  }
+  desktopOverlayPushState.lastLyricsKey = '';
+  desktopOverlayPushState.lastWallpaperKey = '';
+  desktopLyricSnapshotState.lines = null;
+  desktopLyricSnapshotState.idx = -1;
 }
 /**
  * 启动桌面覆盖层的自调度同步循环。只在覆盖层开启时运行，替代固定 setInterval 空转。
