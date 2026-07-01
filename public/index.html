@@ -21097,6 +21097,18 @@ function compactLocalLibrarySnapshotFile(file) {
     type: file.type || ''
   };
 }
+function compactLocalLibrarySnapshotDirectory(dir) {
+  if (!dir) return null;
+  var relPath = String(dir.relativePath || dir.webkitRelativePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  var fullPath = String(dir.fullPath || dir.filePath || dir.path || '');
+  var hasRelativePath = Object.prototype.hasOwnProperty.call(dir, 'relativePath') || Object.prototype.hasOwnProperty.call(dir, 'webkitRelativePath');
+  if (!hasRelativePath && !fullPath) return null;
+  return {
+    fullPath: fullPath,
+    relativePath: relPath,
+    lastModified: Number(dir.lastModified) || 0
+  };
+}
 function localLibrarySnapshotSignature(files) {
   files = fileListToArray(files);
   var count = files.length;
@@ -21115,16 +21127,31 @@ function localLibrarySnapshotSignature(files) {
   });
   return [count, audio, size, mtime, first, last].join('|');
 }
+function normalizeLocalLibrarySnapshotInput(files, directories, truncated) {
+  var input = files || {};
+  if (Array.isArray(input) || (typeof FileList !== 'undefined' && input instanceof FileList)) {
+    return { files: fileListToArray(input), directories: fileListToArray(directories), truncated: !!truncated };
+  }
+  return {
+    files: fileListToArray(input.files || []),
+    directories: fileListToArray(input.directories || directories || []),
+    truncated: !!(input.truncated || truncated)
+  };
+}
 function saveLocalLibrarySnapshot(folderPath, files, truncated) {
-  if (!folderPath || !files || !files.length) return false;
+  if (!folderPath || !files) return false;
   try {
-    var compact = fileListToArray(files).map(compactLocalLibrarySnapshotFile).filter(Boolean);
+    var normalized = normalizeLocalLibrarySnapshotInput(files, null, truncated);
+    if (!normalized.files.length) return false;
+    var compact = normalized.files.map(compactLocalLibrarySnapshotFile).filter(Boolean);
+    var directories = normalized.directories.map(compactLocalLibrarySnapshotDirectory).filter(Boolean);
     var payload = {
-      schema: 1,
+      schema: 2,
       folderPath: folderPath,
       savedAt: Date.now(),
-      truncated: !!truncated,
+      truncated: !!normalized.truncated,
       signature: localLibrarySnapshotSignature(compact),
+      directories: directories.slice(0, 20000),
       files: compact.slice(0, 16000)
     };
     localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'snapshot')] = {
@@ -21144,12 +21171,16 @@ function saveLocalLibrarySnapshot(folderPath, files, truncated) {
 }
 async function readLocalLibrarySnapshot(folderPath) {
   var cached = await readLocalLibraryPersistentRecord(folderPath, 'snapshot');
-  if (cached && cached.data && cached.data.schema === 1 && cached.data.folderPath === folderPath && Array.isArray(cached.data.files) && cached.data.files.length) return cached.data;
+  if (cached && cached.data && cached.data.folderPath === folderPath && Array.isArray(cached.data.files) && cached.data.files.length) {
+    if (!Array.isArray(cached.data.directories)) cached.data.directories = [];
+    return cached.data;
+  }
   try {
     var raw = localStorage.getItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY);
     if (!raw) return null;
     var data = JSON.parse(raw);
-    if (!data || data.schema !== 1 || data.folderPath !== folderPath || !Array.isArray(data.files) || !data.files.length) return null;
+    if (!data || data.folderPath !== folderPath || !Array.isArray(data.files) || !data.files.length) return null;
+    if (!Array.isArray(data.directories)) data.directories = [];
     writeLocalLibraryPersistentRecord(folderPath, 'snapshot', data);
     return data;
   } catch (e) {
@@ -21441,6 +21472,7 @@ async function openLocalFolderImport() {
         folderPath: result.folderPath || '',
         persist: true,
         autoPlay: true,
+        directories: result.directories || [],
         truncated: !!result.truncated
       });
       return;
@@ -21460,7 +21492,7 @@ async function restoreSavedLocalMusicFolder() {
   var snapshot = await readLocalLibrarySnapshot(folderPath);
   if (snapshot && typeof api.refreshLocalMusicFiles === 'function') {
     try {
-      var restored = await api.refreshLocalMusicFiles(folderPath, snapshot.files || []);
+      var restored = await api.refreshLocalMusicFiles(folderPath, snapshot);
       if (restored && restored.ok && restored.files && restored.files.length) {
         await handleLocalFolderFiles(restored.files, {
           folderOnly: true,
@@ -21469,9 +21501,10 @@ async function restoreSavedLocalMusicFolder() {
           autoPlay: false,
           restored: true,
           fromSnapshot: true,
+          directories: restored.directories || snapshot.directories || [],
           truncated: !!snapshot.truncated
         });
-        refreshSavedLocalMusicFolderInBackground(restored.folderPath || folderPath, snapshot.signature || '');
+        refreshSavedLocalMusicFolderInBackground(restored.folderPath || folderPath, snapshot);
         return true;
       }
     } catch (e) {
@@ -21487,6 +21520,7 @@ async function restoreSavedLocalMusicFolder() {
       persist: false,
       autoPlay: false,
       restored: true,
+      directories: result.directories || [],
       truncated: !!result.truncated
     });
     return true;
@@ -21513,19 +21547,22 @@ function scheduleSavedLocalMusicFolderRestore(delay) {
     });
   }, delay == null ? 450 : delay);
 }
-function refreshSavedLocalMusicFolderInBackground(folderPath, snapshotSignature) {
+function refreshSavedLocalMusicFolderInBackground(folderPath, snapshot) {
   var api = desktopLocalMusicApi();
   if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return;
+  var snapshotSignature = typeof snapshot === 'string' ? snapshot : (snapshot && snapshot.signature || '');
+  var previousSnapshot = snapshot && typeof snapshot === 'object' ? snapshot : null;
   setTimeout(function(){
-    api.scanLocalMusicFolder(folderPath).then(function(result){
+    api.scanLocalMusicFolder(folderPath, previousSnapshot ? { previousSnapshot: previousSnapshot } : {}).then(function(result){
       if (!result || !result.ok || !result.files || !result.files.length) return;
       var nextSig = localLibrarySnapshotSignature(result.files || []);
-      saveLocalLibrarySnapshot(result.folderPath || folderPath, result.files || [], !!result.truncated);
+      saveLocalLibrarySnapshot(result.folderPath || folderPath, result);
       if (snapshotSignature && nextSig === snapshotSignature) {
         scheduleLocalLibraryIndexSave(result.folderPath || folderPath, localLibrarySongs || [], 900);
         return;
       }
-      if (playQueue.length) {
+      var passiveRestoredQueue = localLibraryPassiveQueue && !playing && !(audio && audio.src && !audio.paused);
+      if (playQueue.length && !passiveRestoredQueue) {
         showToast('本地音乐文件夹已更新，下次启动会自动同步');
         scheduleLocalLibraryIndexSave(result.folderPath || folderPath, localLibrarySongs || [], 900);
         return;
@@ -21537,6 +21574,7 @@ function refreshSavedLocalMusicFolderInBackground(folderPath, snapshotSignature)
         autoPlay: false,
         restored: true,
         refreshed: true,
+        directories: result.directories || [],
         truncated: !!result.truncated
       });
     }).catch(function(e){
@@ -21564,7 +21602,11 @@ async function handleLocalFolderFiles(files, opts) {
   var assetHydrationPromise = deferAssetHydration ? null : hydrateLocalAssetCacheForSongs(songs);
   if (!deferAssetHydration) await assetHydrationPromise;
   if (opts.folderPath && opts.persist !== false) saveLocalLibraryFolderPath(opts.folderPath);
-  if (opts.folderPath && !opts.fromSnapshot) saveLocalLibrarySnapshot(opts.folderPath, files, !!opts.truncated);
+  if (opts.folderPath && !opts.fromSnapshot) saveLocalLibrarySnapshot(opts.folderPath, {
+    files: files,
+    directories: opts.directories || [],
+    truncated: !!opts.truncated
+  });
   finalizeListenSession(false);
   localLibrarySongs = songs;
   playQueue = songs;

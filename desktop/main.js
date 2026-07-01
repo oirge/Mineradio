@@ -125,6 +125,8 @@ const LOCAL_LIBRARY_MIME = {
   '.webp': 'image/webp',
 };
 const LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY = 24;
+const LOCAL_LIBRARY_SCAN_VISIT_LIMIT = 60000;
+const LOCAL_LIBRARY_INCREMENTAL_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 function normalizeLocalMusicRoot(folderPath) {
   const resolved = path.resolve(String(folderPath || ''));
@@ -151,9 +153,85 @@ function localLibraryRelativePath(root, relPath) {
   return path.join(path.basename(root), relPath).replace(/\\/g, '/');
 }
 
+function isPathInsideLocalLibraryRoot(root, absPath) {
+  const rel = path.relative(root, absPath);
+  return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function normalizeLocalLibraryRelPath(relPath) {
+  return String(relPath || '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/');
+}
+
+function localLibraryRelPathFromRecord(root, record) {
+  if (!record) return '';
+  const fullPath = record.fullPath || record.filePath || record.path || record.localFilePathAbsolute || '';
+  if (fullPath) {
+    const abs = path.resolve(String(fullPath));
+    if (isPathInsideLocalLibraryRoot(root, abs)) return normalizeLocalLibraryRelPath(path.relative(root, abs));
+  }
+  let rel = record.relativePath || record.webkitRelativePath || record.name || '';
+  rel = normalizeLocalLibraryRelPath(rel);
+  const rootBase = normalizeLocalLibraryRelPath(path.basename(root));
+  if (rootBase && (rel === rootBase || rel.startsWith(rootBase + '/'))) rel = rel.slice(rootBase.length).replace(/^\/+/, '');
+  if (!rel || rel.split('/').includes('..')) return '';
+  return rel;
+}
+
+function localLibraryDirRelPath(relPath) {
+  const dir = normalizeLocalLibraryRelPath(path.dirname(String(relPath || '')));
+  return dir === '.' ? '' : dir;
+}
+
 function localFileProxyUrl(filePath) {
   if (!mainServerPort) return pathToFileURL(filePath).href;
   return `http://127.0.0.1:${mainServerPort}/api/local-file?token=${encodeURIComponent(LOCAL_FILE_TOKEN)}&path=${encodeURIComponent(filePath)}`;
+}
+
+function makeLocalLibraryFileRecord(root, item, stat) {
+  const webkitRelativePath = localLibraryRelativePath(root, item.rel);
+  return {
+    ...(item.source || {}),
+    fullPath: item.abs,
+    filePath: item.abs,
+    url: localFileProxyUrl(item.abs),
+    name: item.entry.name,
+    relativePath: webkitRelativePath,
+    webkitRelativePath,
+    size: stat.size,
+    lastModified: Math.round(stat.mtimeMs),
+    type: LOCAL_LIBRARY_MIME[item.ext] || '',
+  };
+}
+
+function rehydrateLocalLibraryFileRecord(root, record, relPath) {
+  const rel = normalizeLocalLibraryRelPath(relPath || localLibraryRelPathFromRecord(root, record));
+  if (!rel) return null;
+  const abs = path.resolve(root, rel);
+  if (!isPathInsideLocalLibraryRoot(root, abs)) return null;
+  const ext = path.extname(record && record.name || abs).toLowerCase();
+  if (!LOCAL_LIBRARY_EXTS.has(ext)) return null;
+  const webkitRelativePath = localLibraryRelativePath(root, rel);
+  return {
+    ...(record || {}),
+    fullPath: abs,
+    filePath: abs,
+    url: localFileProxyUrl(abs),
+    name: (record && record.name) || path.basename(abs),
+    relativePath: webkitRelativePath,
+    webkitRelativePath,
+    size: Number(record && record.size) || 0,
+    lastModified: Number(record && record.lastModified) || 0,
+    type: (record && record.type) || LOCAL_LIBRARY_MIME[ext] || '',
+  };
+}
+
+function makeLocalLibraryDirectoryRecord(root, relPath, stat) {
+  const rel = normalizeLocalLibraryRelPath(relPath);
+  return {
+    fullPath: path.join(root, rel),
+    relativePath: rel,
+    lastModified: Math.round(stat.mtimeMs),
+  };
 }
 
 /**
@@ -179,19 +257,7 @@ async function statLocalLibraryFiles(root, items) {
         continue;
       }
       if (!stat.isFile()) continue;
-      const webkitRelativePath = localLibraryRelativePath(root, item.rel);
-      files[item.index] = {
-        ...(item.source || {}),
-        fullPath: item.abs,
-        filePath: item.abs,
-        url: localFileProxyUrl(item.abs),
-        name: item.entry.name,
-        relativePath: webkitRelativePath,
-        webkitRelativePath,
-        size: stat.size,
-        lastModified: Math.round(stat.mtimeMs),
-        type: LOCAL_LIBRARY_MIME[item.ext] || '',
-      };
+      files[item.index] = makeLocalLibraryFileRecord(root, item, stat);
     }
   }
   const workerCount = Math.min(LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY, Math.max(1, items.length));
@@ -199,14 +265,22 @@ async function statLocalLibraryFiles(root, items) {
   return files.filter(Boolean);
 }
 
-async function scanLocalMusicFolder(folderPath) {
-  const root = rememberLocalMusicRoot(folderPath);
+async function collectLocalLibraryFolderEntries(root) {
   const files = [];
+  const directories = [];
   const stack = [''];
   let visited = 0;
   while (stack.length) {
     const relDir = stack.pop();
     const absDir = path.join(root, relDir);
+    let dirStat = null;
+    try {
+      dirStat = await fs.promises.stat(absDir);
+    } catch (_e) {
+      continue;
+    }
+    if (!dirStat.isDirectory()) continue;
+    directories.push(makeLocalLibraryDirectoryRecord(root, relDir, dirStat));
     let entries = [];
     try {
       entries = await fs.promises.readdir(absDir, { withFileTypes: true });
@@ -216,7 +290,7 @@ async function scanLocalMusicFolder(folderPath) {
     entries.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }));
     for (const entry of entries) {
       visited += 1;
-      if (visited > 60000) break;
+      if (visited > LOCAL_LIBRARY_SCAN_VISIT_LIMIT) break;
       const rel = path.join(relDir, entry.name);
       const abs = path.join(root, rel);
       if (entry.isDirectory()) {
@@ -228,38 +302,130 @@ async function scanLocalMusicFolder(folderPath) {
       if (!LOCAL_LIBRARY_EXTS.has(ext)) continue;
       files.push({ abs, rel, entry, ext, index: files.length });
     }
-    if (visited > 60000) break;
+    if (visited > LOCAL_LIBRARY_SCAN_VISIT_LIMIT) break;
   }
-  return { ok: true, folderPath: root, files: await statLocalLibraryFiles(root, files), truncated: visited > 60000 };
+  return { files, directories, truncated: visited > LOCAL_LIBRARY_SCAN_VISIT_LIMIT };
 }
 
-async function refreshLocalMusicFileEntries(folderPath, files) {
-  const root = rememberLocalMusicRoot(folderPath);
-  const list = Array.isArray(files) ? files : [];
-  const pending = [];
-  for (const file of list) {
-    if (!file) continue;
-    const rawPath = file.fullPath || file.filePath || file.path || file.localFilePathAbsolute || '';
-    if (!rawPath) continue;
-    const abs = path.resolve(String(rawPath));
-    if (abs !== root && !abs.startsWith(root + path.sep)) continue;
-    const ext = path.extname(file.name || abs).toLowerCase();
-    if (!LOCAL_LIBRARY_EXTS.has(ext)) continue;
-    pending.push({
-      abs,
-      rel: path.relative(root, abs),
-      ext,
-      index: pending.length,
-      entry: { name: file.name || path.basename(abs) },
-      source: file,
-    });
+function normalizeLocalLibraryPreviousSnapshot(snapshot) {
+  const source = Array.isArray(snapshot) ? { files: snapshot } : (snapshot || {});
+  const files = Array.isArray(source.files) ? source.files : [];
+  const directories = Array.isArray(source.directories) ? source.directories : [];
+  return { files, directories, truncated: !!source.truncated, savedAt: Number(source.savedAt) || 0 };
+}
+
+function createPreviousLocalLibraryLookups(root, snapshot) {
+  const previous = normalizeLocalLibraryPreviousSnapshot(snapshot);
+  const filesByRel = new Map();
+  const dirsByRel = new Map();
+  for (const file of previous.files) {
+    const rel = localLibraryRelPathFromRecord(root, file);
+    if (rel && !filesByRel.has(rel)) filesByRel.set(rel, file);
   }
-  const fresh = await statLocalLibraryFiles(root, pending);
+  for (const dir of previous.directories) {
+    let rel = normalizeLocalLibraryRelPath(dir && dir.relativePath || '');
+    const fullPath = dir && (dir.fullPath || dir.path);
+    if (fullPath) {
+      const abs = path.resolve(String(fullPath));
+      if (isPathInsideLocalLibraryRoot(root, abs)) rel = normalizeLocalLibraryRelPath(path.relative(root, abs));
+    }
+    dirsByRel.set(rel, dir);
+  }
+  return { previous, filesByRel, dirsByRel };
+}
+
+async function scanLocalMusicFolderFull(folderPath) {
+  const root = rememberLocalMusicRoot(folderPath);
+  const listed = await collectLocalLibraryFolderEntries(root);
   return {
     ok: true,
     folderPath: root,
-    files: fresh,
+    files: await statLocalLibraryFiles(root, listed.files),
+    directories: listed.directories,
+    truncated: listed.truncated,
+    scanMode: 'full',
+  };
+}
+
+async function scanLocalMusicFolderIncremental(folderPath, previousSnapshot) {
+  const root = rememberLocalMusicRoot(folderPath);
+  const { previous, filesByRel, dirsByRel } = createPreviousLocalLibraryLookups(root, previousSnapshot);
+  if (!previous.files.length || !previous.directories.length || previous.truncated) return scanLocalMusicFolderFull(root);
+  if (previous.savedAt && Date.now() - previous.savedAt > LOCAL_LIBRARY_INCREMENTAL_MAX_AGE_MS) return scanLocalMusicFolderFull(root);
+
+  const listed = await collectLocalLibraryFolderEntries(root);
+  const changedDirs = new Set();
+  for (const dir of listed.directories) {
+    const rel = normalizeLocalLibraryRelPath(dir.relativePath);
+    const prev = dirsByRel.get(rel);
+    if (!prev || Number(prev.lastModified) !== Number(dir.lastModified)) changedDirs.add(rel);
+  }
+
+  const pending = [];
+  const reusedByRel = new Map();
+  for (const item of listed.files) {
+    const rel = normalizeLocalLibraryRelPath(item.rel);
+    const previousFile = filesByRel.get(rel);
+    if (!previousFile || changedDirs.has(localLibraryDirRelPath(rel))) {
+      pending.push({ ...item, index: pending.length, source: previousFile || {} });
+      continue;
+    }
+    const reused = rehydrateLocalLibraryFileRecord(root, previousFile, rel);
+    if (reused) reusedByRel.set(rel, reused);
+    else pending.push({ ...item, index: pending.length, source: previousFile || {} });
+  }
+
+  const fresh = await statLocalLibraryFiles(root, pending);
+  const freshByRel = new Map();
+  for (const file of fresh) {
+    const rel = localLibraryRelPathFromRecord(root, file);
+    if (rel) freshByRel.set(rel, file);
+  }
+
+  const files = [];
+  for (const item of listed.files) {
+    const rel = normalizeLocalLibraryRelPath(item.rel);
+    const file = freshByRel.get(rel) || reusedByRel.get(rel);
+    if (file) files.push(file);
+  }
+
+  return {
+    ok: true,
+    folderPath: root,
+    files,
+    directories: listed.directories,
+    truncated: listed.truncated,
+    scanMode: 'incremental',
+    reused: reusedByRel.size,
+    refreshed: fresh.length,
+  };
+}
+
+async function scanLocalMusicFolder(folderPath, options) {
+  const snapshot = options && options.previousSnapshot;
+  if (snapshot && Array.isArray(snapshot.files) && Array.isArray(snapshot.directories)) {
+    return scanLocalMusicFolderIncremental(folderPath, snapshot);
+  }
+  return scanLocalMusicFolderFull(folderPath);
+}
+
+async function refreshLocalMusicFileEntries(folderPath, snapshotOrFiles) {
+  const root = rememberLocalMusicRoot(folderPath);
+  const snapshot = normalizeLocalLibraryPreviousSnapshot(snapshotOrFiles);
+  const list = snapshot.files;
+  const files = [];
+  for (const file of list) {
+    if (!file) continue;
+    const record = rehydrateLocalLibraryFileRecord(root, file);
+    if (record) files.push(record);
+  }
+  return {
+    ok: true,
+    folderPath: root,
+    files,
+    directories: snapshot.directories,
     snapshot: true,
+    restoredFromSnapshot: true,
   };
 }
 
@@ -1307,10 +1473,10 @@ ipcMain.handle('mineradio-local-music-choose-folder', async (event) => {
   }
 });
 
-ipcMain.handle('mineradio-local-music-scan-folder', async (_event, folderPath) => {
+ipcMain.handle('mineradio-local-music-scan-folder', async (_event, folderPath, options) => {
   try {
     if (!folderPath) return { ok: false, error: 'LOCAL_LIBRARY_PATH_EMPTY' };
-    return await scanLocalMusicFolder(folderPath);
+    return await scanLocalMusicFolder(folderPath, options || {});
   } catch (e) {
     return { ok: false, error: e.message || 'LOCAL_LIBRARY_SCAN_FAILED' };
   }
