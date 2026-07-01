@@ -2831,12 +2831,20 @@ var localAssetCacheMemory = {};
 var localAssetCacheWriteTimers = {};
 var localLibraryPersistentMemory = {};
 var localLibraryIndexWriteTimer = null;
+var localIndexedDbTrimTimer = null;
+var localIndexedDbTrimRunning = false;
+var localIndexedDbLastTrimAt = 0;
 var localCoverThumbPromiseCache = {};
 var localCoverThumbPromiseOrder = [];
 var localCoverThumbResultCache = {};
 var localCoverThumbResultOrder = [];
 var localCoverThumbResultBytes = 0;
 var LOCAL_COVER_THUMB_RESULT_MAX_BYTES = 18 * 1024 * 1024;
+var LOCAL_ASSET_CACHE_MAX_RECORDS = 9000;
+var LOCAL_ASSET_CACHE_MAX_BYTES = 96 * 1024 * 1024;
+var LOCAL_ASSET_CACHE_MAX_AGE_MS = 120 * 24 * 60 * 60 * 1000;
+var LOCAL_LIBRARY_CACHE_MAX_RECORDS = 12;
+var LOCAL_LIBRARY_CACHE_MAX_AGE_MS = 180 * 24 * 60 * 60 * 1000;
 var LOCAL_ASSET_LIGHT_SCAN_BYTES = 4 * 1024 * 1024;
 var LOCAL_ASSET_IDLE_DELAY_MS = 520;
 var LOCAL_ASSET_PLAYING_DELAY_MS = 1800;
@@ -8188,6 +8196,170 @@ function localAssetFileSignature(file) {
 function localAssetCacheKey(song) {
   return song && song.localKey ? String(song.localKey) : '';
 }
+function collectProtectedLocalAssetCacheKeys() {
+  var keep = Object.create(null);
+  try {
+    [currentLocalSong, playQueue && playQueue[currentIdx]].forEach(function(song){
+      var key = localAssetCacheKey(song);
+      if (key) keep[key] = true;
+    });
+    if (playQueue && playQueue.length && currentIdx >= 0) {
+      var start = Math.max(0, currentIdx - 8);
+      var end = Math.min(playQueue.length - 1, currentIdx + 18);
+      for (var i = start; i <= end; i++) {
+        var key = localAssetCacheKey(playQueue[i]);
+        if (key) keep[key] = true;
+      }
+    }
+  } catch (e) {}
+  return keep;
+}
+function pruneLocalAssetMemoryCache(keep) {
+  var keys = Object.keys(localAssetCacheMemory || {});
+  if (keys.length <= Math.min(LOCAL_ASSET_CACHE_MAX_RECORDS, 1500)) return 0;
+  keys.sort(function(a, b){
+    var ar = localAssetCacheMemory[a] || {};
+    var br = localAssetCacheMemory[b] || {};
+    return (Number(ar.savedAt) || 0) - (Number(br.savedAt) || 0);
+  });
+  var target = Math.min(LOCAL_ASSET_CACHE_MAX_RECORDS, 1200);
+  var dropped = 0;
+  for (var i = 0; i < keys.length && keys.length - dropped > target; i++) {
+    var key = keys[i];
+    if (keep && keep[key]) continue;
+    delete localAssetCacheMemory[key];
+    dropped++;
+  }
+  return dropped;
+}
+function scheduleLocalIndexedDbTrim(reason, delay) {
+  if (localIndexedDbTrimTimer) return;
+  var now = Date.now();
+  var minGap = reason === 'startup' ? 0 : 6 * 60 * 1000;
+  if (reason !== 'force' && localIndexedDbLastTrimAt && now - localIndexedDbLastTrimAt < minGap) return;
+  localIndexedDbTrimTimer = setTimeout(function(){
+    localIndexedDbTrimTimer = null;
+    var run = function(){
+      trimLocalIndexedDbCaches(reason || 'scheduled').catch(function(e){
+        console.warn('[LocalIndexedDbTrim]', e);
+      });
+    };
+    if (window.requestIdleCallback && !isHiddenForBackgroundOptimization()) requestIdleCallback(run, { timeout: 1600 });
+    else run();
+  }, delay == null ? 1800 : delay);
+}
+async function trimLocalIndexedDbCaches(reason) {
+  if (localIndexedDbTrimRunning || !window.indexedDB) return 0;
+  localIndexedDbTrimRunning = true;
+  localIndexedDbLastTrimAt = Date.now();
+  var dropped = 0;
+  try {
+    var keep = collectProtectedLocalAssetCacheKeys();
+    pruneLocalAssetMemoryCache(keep);
+    var db = await openLocalAssetCacheDb();
+    dropped += await new Promise(function(resolve, reject){
+      var now = Date.now();
+      var assetEntries = [];
+      var libraryEntries = [];
+      var tx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readonly');
+      var assetStore = tx.objectStore(LOCAL_ASSET_CACHE_STORE);
+      var libraryStore = tx.objectStore(LOCAL_LIBRARY_CACHE_STORE);
+      assetStore.openCursor().onsuccess = function(event){
+        var cursor = event.target.result;
+        if (!cursor) return;
+        var record = cursor.value || {};
+        var id = String(record.id || cursor.key || '');
+        var savedAt = Number(record.savedAt) || 0;
+        assetEntries.push({ id:id, savedAt:savedAt, bytes:estimateLocalAssetRecordBytes(record) });
+        cursor.continue();
+      };
+      libraryStore.openCursor().onsuccess = function(event){
+        var cursor = event.target.result;
+        if (!cursor) return;
+        var record = cursor.value || {};
+        libraryEntries.push({
+          id: String(record.id || cursor.key || ''),
+          savedAt: Number(record.savedAt || (record.data && record.data.savedAt)) || 0,
+          folderPath: String(record.folderPath || (record.data && record.data.folderPath) || '')
+        });
+        cursor.continue();
+      };
+      tx.oncomplete = function(){
+        var dropIds = [];
+        var totalBytes = 0;
+        assetEntries.sort(function(a, b){ return (a.savedAt || 0) - (b.savedAt || 0); });
+        assetEntries.forEach(function(entry){ totalBytes += entry.bytes || 0; });
+        assetEntries.forEach(function(entry){
+          if (!entry.id || keep[entry.id]) return;
+          if (entry.savedAt && now - entry.savedAt > LOCAL_ASSET_CACHE_MAX_AGE_MS) dropIds.push(entry.id);
+        });
+        var dropSet = Object.create(null);
+        var dropCount = 0;
+        dropIds.forEach(function(id){
+          if (!dropSet[id]) {
+            dropSet[id] = true;
+            dropCount++;
+          }
+        });
+        assetEntries.forEach(function(entry){
+          if (assetEntries.length - dropCount <= LOCAL_ASSET_CACHE_MAX_RECORDS && totalBytes <= LOCAL_ASSET_CACHE_MAX_BYTES) return;
+          if (!entry.id || keep[entry.id] || dropSet[entry.id]) return;
+          dropSet[entry.id] = true;
+          dropCount++;
+          totalBytes = Math.max(0, totalBytes - (entry.bytes || 0));
+        });
+        var libraryDropSet = Object.create(null);
+        var byFolder = {};
+        libraryEntries.sort(function(a, b){ return (Number(b.savedAt) || 0) - (Number(a.savedAt) || 0); });
+        libraryEntries.forEach(function(entry){
+          if (!entry.id) return;
+          if (entry.savedAt && now - entry.savedAt > LOCAL_LIBRARY_CACHE_MAX_AGE_MS) libraryDropSet[entry.id] = true;
+          var folder = entry.folderPath || entry.id;
+          byFolder[folder] = (byFolder[folder] || 0) + 1;
+        });
+        var folders = Object.keys(byFolder).sort(function(a, b){
+          var at = 0, bt = 0;
+          libraryEntries.forEach(function(entry){
+            if (entry.folderPath === a) at = Math.max(at, Number(entry.savedAt) || 0);
+            if (entry.folderPath === b) bt = Math.max(bt, Number(entry.savedAt) || 0);
+          });
+          return bt - at;
+        });
+        var keepFolders = Object.create(null);
+        folders.slice(0, LOCAL_LIBRARY_CACHE_MAX_RECORDS).forEach(function(folder){ keepFolders[folder] = true; });
+        libraryEntries.forEach(function(entry){
+          if (entry.folderPath && !keepFolders[entry.folderPath]) libraryDropSet[entry.id] = true;
+        });
+        var ids = Object.keys(dropSet);
+        var libraryIds = Object.keys(libraryDropSet);
+        if (!ids.length && !libraryIds.length) {
+          db.close();
+          resolve(0);
+          return;
+        }
+        var deleteTx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readwrite');
+        ids.forEach(function(id){
+          delete localAssetCacheMemory[id];
+          deleteTx.objectStore(LOCAL_ASSET_CACHE_STORE).delete(id);
+        });
+        libraryIds.forEach(function(id){
+          delete localLibraryPersistentMemory[id];
+          deleteTx.objectStore(LOCAL_LIBRARY_CACHE_STORE).delete(id);
+        });
+        deleteTx.oncomplete = function(){ db.close(); resolve(ids.length + libraryIds.length); };
+        deleteTx.onerror = function(){ db.close(); reject(deleteTx.error || new Error('indexedDB trim delete failed')); };
+      };
+      tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB trim scan failed')); };
+    });
+    if (dropped && runtimePerfState) {
+      runtimePerfState.cacheTrimCount += 1;
+      runtimePerfState.lastCacheTrimReason = 'indexeddb-' + (reason || 'trim');
+    }
+  } finally {
+    localIndexedDbTrimRunning = false;
+  }
+  return dropped;
+}
 /**
  * 生成本地库持久化记录的存储键。快照和索引分开存放，避免一个大 JSON 同步阻塞主线程。
  * @param {string} folderPath 本地库文件夹路径。
@@ -8242,7 +8414,11 @@ async function writeLocalLibraryPersistentRecord(folderPath, kind, data) {
     return await new Promise(function(resolve, reject){
       var tx = db.transaction(LOCAL_LIBRARY_CACHE_STORE, 'readwrite');
       tx.objectStore(LOCAL_LIBRARY_CACHE_STORE).put(record);
-      tx.oncomplete = function(){ db.close(); resolve(true); };
+      tx.oncomplete = function(){
+        db.close();
+        scheduleLocalIndexedDbTrim('library-write', 4800);
+        resolve(true);
+      };
       tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB library write failed')); };
     });
   } catch (e) {
@@ -8284,6 +8460,7 @@ async function hydrateLocalLibraryPersistentState(folderPath) {
     readLocalLibraryPersistentRecord(folderPath, 'index')
   ]);
 }
+scheduleLocalIndexedDbTrim('startup', 9000);
 function loadImageForDataUrl(dataUrl) {
   return new Promise(function(resolve, reject){
     var img = new Image();
@@ -8306,6 +8483,21 @@ function estimateDataUrlBytes(dataUrl) {
   var comma = dataUrl.indexOf(',');
   var bodyLength = comma >= 0 ? dataUrl.length - comma - 1 : dataUrl.length;
   return Math.max(0, Math.round(bodyLength * 0.75));
+}
+function estimateTextBytes(text) {
+  text = String(text || '');
+  if (!text) return 0;
+  return text.length * 2;
+}
+function estimateLocalAssetRecordBytes(record) {
+  if (!record) return 0;
+  return 256
+    + estimateTextBytes(record.name)
+    + estimateTextBytes(record.artist)
+    + estimateTextBytes(record.album)
+    + estimateTextBytes(record.localLyricText)
+    + estimateDataUrlBytes(record.localCoverThumbDataUrl)
+    + estimateDataUrlBytes(record.localCoverDataUrl);
 }
 function trimLocalCoverThumbResultCache() {
   while (localCoverThumbResultOrder.length > 0 && (localCoverThumbResultOrder.length > 96 || localCoverThumbResultBytes > LOCAL_COVER_THUMB_RESULT_MAX_BYTES)) {
@@ -8442,7 +8634,11 @@ async function putLocalAssetCacheRecord(record) {
   return new Promise(function(resolve, reject){
     var tx = db.transaction(LOCAL_ASSET_CACHE_STORE, 'readwrite');
     tx.objectStore(LOCAL_ASSET_CACHE_STORE).put(record);
-    tx.oncomplete = function(){ db.close(); resolve(true); };
+    tx.oncomplete = function(){
+      db.close();
+      scheduleLocalIndexedDbTrim('asset-write', 5200);
+      resolve(true);
+    };
     tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB put failed')); };
   });
 }
