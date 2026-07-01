@@ -2835,6 +2835,8 @@ var localCoverThumbPromiseCache = {};
 var localCoverThumbPromiseOrder = [];
 var localCoverThumbResultCache = {};
 var localCoverThumbResultOrder = [];
+var localCoverThumbResultBytes = 0;
+var LOCAL_COVER_THUMB_RESULT_MAX_BYTES = 18 * 1024 * 1024;
 var LOCAL_ASSET_LIGHT_SCAN_BYTES = 4 * 1024 * 1024;
 var LOCAL_ASSET_IDLE_DELAY_MS = 520;
 var LOCAL_ASSET_PLAYING_DELAY_MS = 1800;
@@ -2916,8 +2918,8 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.2.1',
-  version: '1.2.1',
+  currentVersion: '1.2.2',
+  version: '1.2.2',
   configured: false,
   preview: true,
   updateAvailable: false,
@@ -8290,6 +8292,39 @@ function loadImageForDataUrl(dataUrl) {
     img.src = dataUrl;
   });
 }
+function localCoverThumbCacheKey(dataUrl) {
+  dataUrl = String(dataUrl || '');
+  var hash = 2166136261;
+  for (var i = 0; i < dataUrl.length; i++) {
+    hash ^= dataUrl.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36) + ':' + dataUrl.length + ':' + dataUrl.slice(5, 30);
+}
+function estimateDataUrlBytes(dataUrl) {
+  dataUrl = String(dataUrl || '');
+  var comma = dataUrl.indexOf(',');
+  var bodyLength = comma >= 0 ? dataUrl.length - comma - 1 : dataUrl.length;
+  return Math.max(0, Math.round(bodyLength * 0.75));
+}
+function trimLocalCoverThumbResultCache() {
+  while (localCoverThumbResultOrder.length > 0 && (localCoverThumbResultOrder.length > 96 || localCoverThumbResultBytes > LOCAL_COVER_THUMB_RESULT_MAX_BYTES)) {
+    var key = localCoverThumbResultOrder.shift();
+    var entry = localCoverThumbResultCache[key];
+    if (!entry) continue;
+    localCoverThumbResultBytes = Math.max(0, localCoverThumbResultBytes - (entry.bytes || 0));
+    delete localCoverThumbResultCache[key];
+  }
+}
+function rememberLocalCoverThumbResult(key, value) {
+  if (!key || !value) return;
+  var existing = localCoverThumbResultCache[key];
+  if (existing) localCoverThumbResultBytes = Math.max(0, localCoverThumbResultBytes - (existing.bytes || 0));
+  localCoverThumbResultCache[key] = { value: value, bytes: estimateDataUrlBytes(value) };
+  localCoverThumbResultBytes += localCoverThumbResultCache[key].bytes;
+  localCoverThumbResultOrder.push(key);
+  trimLocalCoverThumbResultCache();
+}
 /**
  * 生成本地封面缩略图 data URL。成功结果会短期复用，避免队列、搜索和歌单架重复 decode 与 canvas 缩放。
  * @param {string} dataUrl 原始封面 data URL。
@@ -8298,8 +8333,10 @@ function loadImageForDataUrl(dataUrl) {
 async function createLocalCoverThumbnailDataUrl(dataUrl) {
   dataUrl = String(dataUrl || '');
   if (!/^data:image\//i.test(dataUrl)) return '';
-  if (localCoverThumbResultCache[dataUrl]) return localCoverThumbResultCache[dataUrl];
-  if (localCoverThumbPromiseCache[dataUrl]) return localCoverThumbPromiseCache[dataUrl];
+  var cacheKey = localCoverThumbCacheKey(dataUrl);
+  var cached = cacheKey && localCoverThumbResultCache[cacheKey];
+  if (cached) return cached.value || '';
+  if (cacheKey && localCoverThumbPromiseCache[cacheKey]) return localCoverThumbPromiseCache[cacheKey];
   var promise = (async function(){
   try {
     var img = await loadImageForDataUrl(dataUrl);
@@ -8325,16 +8362,13 @@ async function createLocalCoverThumbnailDataUrl(dataUrl) {
     return '';
   }
   })();
-  localCoverThumbPromiseCache[dataUrl] = promise;
-  localCoverThumbPromiseOrder.push(dataUrl);
+  if (!cacheKey) return promise;
+  localCoverThumbPromiseCache[cacheKey] = promise;
+  localCoverThumbPromiseOrder.push(cacheKey);
   while (localCoverThumbPromiseOrder.length > 24) delete localCoverThumbPromiseCache[localCoverThumbPromiseOrder.shift()];
   var result = await promise;
-  delete localCoverThumbPromiseCache[dataUrl];
-  if (result) {
-    localCoverThumbResultCache[dataUrl] = result;
-    localCoverThumbResultOrder.push(dataUrl);
-    while (localCoverThumbResultOrder.length > 96) delete localCoverThumbResultCache[localCoverThumbResultOrder.shift()];
-  }
+  delete localCoverThumbPromiseCache[cacheKey];
+  if (result) rememberLocalCoverThumbResult(cacheKey, result);
   return result;
 }
 async function assignLocalCoverDataUrl(song, dataUrl, opts) {
@@ -17531,7 +17565,7 @@ function renderSearchHistory() {
       '</div>' +
     '</div>';
   $results.classList.add('show');
-  requestAnimationFrame(updateSearchPillGlassDisplacementMap);
+  scheduleGlassDisplacementMapUpdate('searchPill');
   return true;
 }
 function clearSearchHistory() {
@@ -17555,7 +17589,7 @@ function updateSearchModeTabs() {
   if ($input) {
     $input.placeholder = '搜索本地歌曲、歌手、文件名...';
   }
-  requestAnimationFrame(updateSearchPillGlassDisplacementMap);
+  scheduleGlassDisplacementMapUpdate('searchPill');
 }
 function setSearchMode(mode) {
   mode = 'song';
@@ -19005,6 +19039,14 @@ function updateSearchPillGlassDisplacementMap() {
   img.setAttribute('href', href);
   try { img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', href); } catch (e) {}
 }
+function scheduleGlassDisplacementMapUpdate(target) {
+  var key = target ? ('glass-map-' + target) : 'glass-map-all';
+  scheduleNamedAnimationFrame(key, function(){
+    if (!target || target === 'control') updateControlGlassDisplacementMap();
+    if (!target || target === 'searchBox') updateSearchBoxGlassDisplacementMap();
+    if (!target || target === 'searchPill') updateSearchPillGlassDisplacementMap();
+  });
+}
 function initControlGlassSurface() {
   if (supportsControlGlassSvgFilter()) document.documentElement.classList.add('control-glass-svg-ok');
   applyControlGlassChromaticOffset();
@@ -19017,9 +19059,7 @@ function initControlGlassSurface() {
   var searchResults = document.getElementById('search-results');
   if (window.ResizeObserver && (bar || searchBox || searchTabs || searchResults)) {
     var ro = new ResizeObserver(function(){
-      requestAnimationFrame(updateControlGlassDisplacementMap);
-      requestAnimationFrame(updateSearchBoxGlassDisplacementMap);
-      requestAnimationFrame(updateSearchPillGlassDisplacementMap);
+      scheduleGlassDisplacementMapUpdate();
     });
     if (bar) ro.observe(bar);
     if (searchBox) ro.observe(searchBox);
@@ -19028,15 +19068,13 @@ function initControlGlassSurface() {
   }
   if (window.MutationObserver && (searchTabs || searchResults)) {
     var mo = new MutationObserver(function(){
-      requestAnimationFrame(updateSearchPillGlassDisplacementMap);
+      scheduleGlassDisplacementMapUpdate('searchPill');
     });
     if (searchTabs) mo.observe(searchTabs, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     if (searchResults) mo.observe(searchResults, { childList: true, subtree: true });
   }
   window.addEventListener('resize', function(){
-    requestAnimationFrame(updateControlGlassDisplacementMap);
-    requestAnimationFrame(updateSearchBoxGlassDisplacementMap);
-    requestAnimationFrame(updateSearchPillGlassDisplacementMap);
+    scheduleGlassDisplacementMapUpdate();
   });
 }
 
@@ -27497,6 +27535,57 @@ function desktopLyricsPayload(forceBeatMap) {
   if (Object.prototype.hasOwnProperty.call(beatPayload, 'beatMap')) payload.beatMap = beatPayload.beatMap;
   return payload;
 }
+function roundOverlayNumber(value, scale) {
+  var n = Number(value);
+  return isFinite(n) ? Math.round(n * (scale || 1000)) : 0;
+}
+function desktopLyricsPayloadSignature(payload) {
+  payload = payload || {};
+  var colors = payload.colors || {};
+  var motion = payload.motion || {};
+  var playback = payload.playback || {};
+  return [
+    payload.enabled ? 1 : 0,
+    payload.text || '',
+    roundOverlayNumber(payload.progress, 1000),
+    roundOverlayNumber(payload.progressSpan, 100),
+    payload.title || '',
+    payload.artist || '',
+    payload.playing ? 1 : 0,
+    roundOverlayNumber(payload.size, 100),
+    roundOverlayNumber(payload.opacity, 100),
+    roundOverlayNumber(payload.y, 1000),
+    payload.clickThrough === false ? 0 : 1,
+    payload.lyricGlowParticles ? 1 : 0,
+    payload.cinema === false ? 0 : 1,
+    payload.highlightFollow ? 1 : 0,
+    payload.frameRate || 0,
+    payload.fontFamily || '',
+    payload.fontWeight || '',
+    roundOverlayNumber(payload.letterSpacing, 1000),
+    roundOverlayNumber(payload.lineHeight, 100),
+    payload.rows || '',
+    payload.align || '',
+    roundOverlayNumber(payload.lyricScale, 100),
+    roundOverlayNumber(payload.feather, 1000),
+    payload.beatMapKey || '',
+    Object.prototype.hasOwnProperty.call(payload, 'beatMap') ? 'map' : 'nomap',
+    colors.primary || '',
+    colors.secondary || '',
+    colors.highlight || '',
+    colors.glow || '',
+    motion.lyricGlow ? 1 : 0,
+    motion.lyricGlowBeat ? 1 : 0,
+    roundOverlayNumber(motion.lyricGlowStrength, 100),
+    roundOverlayNumber(motion.highBloom, 100),
+    roundOverlayNumber(motion.beatGlow, 100),
+    roundOverlayNumber(motion.beatPulse, 100),
+    roundOverlayNumber(motion.bass, 100),
+    roundOverlayNumber(playback.time, 4),
+    roundOverlayNumber(playback.duration, 10),
+    roundOverlayNumber(playback.rate, 100)
+  ].join('|');
+}
 function wallpaperPayload() {
   var meta = currentDesktopSongMeta();
   return {
@@ -27516,9 +27605,7 @@ function pushDesktopLyricsState(force) {
   var now = performance.now();
   if (!force && now - desktopOverlayPushState.lyricsAt < desktopLyricsPushInterval()) return;
   var payload = desktopLyricsPayload(!!force);
-  var colors = payload.colors || {};
-  var motion = payload.motion || {};
-  var key = payload.enabled + '|' + payload.text + '|' + Math.round(payload.progress * 1000) + '|' + Math.round((payload.progressSpan || 0) * 100) + '|' + payload.playing + '|' + payload.size + '|' + payload.opacity + '|' + payload.y + '|' + payload.clickThrough + '|' + payload.cinema + '|' + payload.highlightFollow + '|' + payload.frameRate + '|' + payload.fontFamily + '|' + payload.fontWeight + '|' + payload.letterSpacing + '|' + payload.lineHeight + '|' + payload.lyricScale + '|' + payload.feather + '|' + payload.beatMapKey + '|' + colors.primary + '|' + colors.secondary + '|' + colors.highlight + '|' + colors.glow + '|' + motion.lyricGlow + '|' + motion.lyricGlowBeat + '|' + Math.round((motion.lyricGlowStrength || 0) * 100) + '|' + Math.round((motion.highBloom || 0) * 100) + '|' + Math.round((motion.beatGlow || 0) * 100) + '|' + Math.round((motion.beatPulse || 0) * 100) + '|' + Math.round((motion.bass || 0) * 100);
+  var key = desktopLyricsPayloadSignature(payload);
   if (!force && key === desktopOverlayPushState.lastLyricsKey && now - desktopOverlayPushState.lyricsAt < 900) return;
   desktopOverlayPushState.lyricsAt = now;
   desktopOverlayPushState.lastLyricsKey = key;
@@ -27762,9 +27849,7 @@ bindVolumeControls();
 initControlGlassSurface();
 bindPlayerControlAnimations();
 scheduleUiWarmTask(function(){
-  updateControlGlassDisplacementMap();
-  updateSearchBoxGlassDisplacementMap();
-  updateSearchPillGlassDisplacementMap();
+  scheduleGlassDisplacementMapUpdate();
   try {
     if (renderer && renderer.compile && scene && camera) renderer.compile(scene, camera);
   } catch (e) {}
