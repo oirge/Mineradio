@@ -2895,6 +2895,7 @@ var localSearchPoolCache = { source: null, signature: '', items: [] };
 var searchResultsLastDomSignature = '';
 var PLAYLIST_PANEL_BATCH_SIZE = 28;
 var playlistPanelRenderLimit = PLAYLIST_PANEL_BATCH_SIZE;
+var playlistPanelLastDomSignature = '';
 var playlistPanelLazyBound = false, miniQueueLazyBound = false;
 var PLAYLIST_DETAIL_INITIAL_RENDER = 64;
 var PLAYLIST_DETAIL_BATCH_SIZE = 48;
@@ -2915,8 +2916,8 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.1.9',
-  version: '1.1.9',
+  currentVersion: '1.2.1',
+  version: '1.2.1',
   configured: false,
   preview: true,
   updateAvailable: false,
@@ -18448,7 +18449,7 @@ function scheduleAudioResumePosition(media, seconds, token) {
       applied = true;
       if (typeof syncBeatMapPlaybackCursor === 'function') syncBeatMapPlaybackCursor(target, true);
       if (typeof syncPodcastDjMapCursor === 'function') syncPodcastDjMapCursor(target, true);
-      updatePlaybackProgressUi();
+      schedulePlaybackProgressUi('resume-position');
     } catch (e) {}
   }
   media.addEventListener('loadedmetadata', applyResume, { once: true });
@@ -18588,7 +18589,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   bindPlaybackProgressEvents(audio);
   applyVolumeToAudio();
   audio.src = localUrl;
-  updatePlaybackProgressUi();
+  schedulePlaybackProgressUi('audio-source', true);
   audio.onended = function(){
     if (token !== trackSwitchToken) return;
     finalizeListenSession(true);
@@ -19903,6 +19904,22 @@ function maybeGrowPlaylistPanelDetailRenderLimit() {
 function resetPlaylistPanelRenderLimit() {
   playlistPanelRenderLimit = PLAYLIST_PANEL_BATCH_SIZE;
 }
+function localLibraryPlaylistDomSignature(songs, renderLimit) {
+  songs = songs || [];
+  var keys = ['local-playlist', songs.length, renderLimit];
+  for (var i = 0; i < renderLimit; i++) {
+    var song = songs[i] || {};
+    keys.push([
+      i,
+      queueItemKey(song),
+      song.name || song.title || '',
+      songDisplaySubtitle(song),
+      songCoverSignature(song)
+    ].join('~'));
+  }
+  if (songs.length > renderLimit) keys.push('more:' + songs.length);
+  return keys.join('|');
+}
 function growPlaylistPanelRenderLimit() {
   var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
   if (!total) return;
@@ -19931,11 +19948,16 @@ function renderLocalLibraryPlaylistPanel(opts) {
   var songs = localLibraryPlaybackSongs();
   var seq = ++playlistRenderSeq;
   if (!songs.length) {
+    if (playlistPanelLastDomSignature === 'empty') return;
+    playlistPanelLastDomSignature = 'empty';
     $pl.innerHTML = '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">还没有本地音乐<br><button class="fx-mini-btn ghost" type="button" onclick="openLocalFolderImport()" style="margin-top:10px">导入文件夹</button></div>';
     return;
   }
   playlistPanelRenderLimit = Math.max(PLAYLIST_PANEL_BATCH_SIZE, Math.min(songs.length, playlistPanelRenderLimit || PLAYLIST_PANEL_BATCH_SIZE));
   var visible = songs.slice(0, playlistPanelRenderLimit);
+  var domSignature = localLibraryPlaylistDomSignature(songs, visible.length);
+  if (domSignature === playlistPanelLastDomSignature) return;
+  playlistPanelLastDomSignature = domSignature;
   $pl.innerHTML = '<div class="pl-section-label">本地音乐库 · ' + songs.length + ' 首</div>' + visible.map(function(song, i){
     var thumb = songCoverSrc(song, 88);
     var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,.06);flex-shrink:0"></div>';
@@ -20026,7 +20048,7 @@ async function loadPlaylistIntoQueueById(id, autoplay, title) {
 
 // 进度条
 var progressDragState = { active: false, lastParticleAt: 0 };
-var playbackProgressUiState = { fill: null, thumb: null, timeDisplay: null, lastText: '' };
+var playbackProgressUiState = { fill: null, thumb: null, timeDisplay: null, lastText: '', lastPercent: null };
 function normalizePlaybackDurationSeconds(value) {
   var raw = Number(value);
   if (!isFinite(raw) || raw <= 0) return 0;
@@ -20056,8 +20078,12 @@ function playbackProgressElements() {
 function setProgressVisual(percent) {
   percent = clampRange(percent || 0, 0, 100);
   var els = playbackProgressElements();
-  if (els.fill) els.fill.style.width = percent + '%';
-  if (els.thumb) els.thumb.style.left = percent + '%';
+  if (!els.fill && !els.thumb) return;
+  var nextPercent = Math.round(percent * 100) / 100;
+  if (playbackProgressUiState.lastPercent === nextPercent) return;
+  playbackProgressUiState.lastPercent = nextPercent;
+  if (els.fill) els.fill.style.width = nextPercent + '%';
+  if (els.thumb) els.thumb.style.left = nextPercent + '%';
 }
 function updatePlaybackProgressUi() {
   var durationSec = getPlaybackDurationSeconds();
@@ -20073,11 +20099,18 @@ function updatePlaybackProgressUi() {
   updateSystemMediaSessionPosition();
   savePlaybackSession(false);
 }
+function schedulePlaybackProgressUi(reason, force) {
+  if (force) {
+    updatePlaybackProgressUi();
+    return;
+  }
+  scheduleNamedAnimationFrame('playback-progress-ui', updatePlaybackProgressUi);
+}
 function bindPlaybackProgressEvents(audioEl) {
   if (!audioEl || audioEl._mineradioProgressBound) return;
   audioEl._mineradioProgressBound = true;
   ['loadedmetadata', 'durationchange', 'timeupdate', 'seeked', 'play', 'pause', 'emptied'].forEach(function(name){
-    audioEl.addEventListener(name, updatePlaybackProgressUi);
+    audioEl.addEventListener(name, function(){ schedulePlaybackProgressUi(name); });
   });
   ['play', 'playing', 'pause', 'ended', 'emptied', 'abort', 'error'].forEach(function(name){
     audioEl.addEventListener(name, function(){ syncPlaybackStateFromAudioEvent(name); });
@@ -20204,6 +20237,7 @@ function seekFromProgressPointer(e, emitParticles) {
   audio.currentTime = ratio * durationSec;
   setProgressVisual(ratio * 100);
   syncBeatMapPlaybackCursor(audio.currentTime);
+  schedulePlaybackProgressUi('progress-seek');
   if (emitParticles) emitProgressDragParticles(e.clientX, rect.top + rect.height / 2);
 }
 var progressBar = document.getElementById('progress-bar');
@@ -20231,7 +20265,7 @@ setInterval(function(){
   if (!audio || !audio.src || audio.paused || audio.ended) return;
   if (document.hidden && !isLiveBackgroundKeepMode()) return;
   updateListenStatsTick(false);
-  updatePlaybackProgressUi();
+  schedulePlaybackProgressUi('playback-tick');
 }, 280);
 
 // ============================================================

@@ -15,6 +15,8 @@ let desktopLyricsUserBounds = null;
 let desktopLyricsProgrammaticMove = false;
 let desktopLyricsPointerCapture = false;
 let desktopLyricsMouseIgnored = null;
+let desktopLyricsLastStateSignature = '';
+let desktopLyricsLastOpacity = null;
 let desktopLyricsMousePoller = null;
 let desktopLyricsMousePollerBuffer = '';
 let desktopLyricsHotBounds = null;
@@ -921,13 +923,75 @@ function positionDesktopLyricsWindow(payload = desktopLyricsState, options = {})
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
   const shouldUseManualBounds = desktopLyricsUserBounds && !options.force;
   setDesktopLyricsBounds(shouldUseManualBounds ? desktopLyricsUserBounds : desktopLyricsDefaultBounds(payload));
-  if (typeof desktopLyricsWindow.setOpacity === 'function') {
-    desktopLyricsWindow.setOpacity(clampNumber(payload.opacity, 0.28, 1, 0.92));
-  }
+  setDesktopLyricsOpacity(payload.opacity);
 }
 
-function sendDesktopLyricsState() {
+function roundedStateValue(value, scale = 1000) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * scale) : 0;
+}
+
+function desktopLyricsStateSignature(state) {
+  const payload = state || {};
+  const motion = payload.motion || {};
+  const playback = payload.playback || {};
+  const colors = payload.colors || {};
+  return [
+    payload.enabled ? 1 : 0,
+    payload.text || '',
+    roundedStateValue(payload.progress, 1000),
+    roundedStateValue(payload.progressSpan, 100),
+    payload.title || '',
+    payload.artist || '',
+    payload.playing ? 1 : 0,
+    roundedStateValue(payload.size, 100),
+    roundedStateValue(payload.opacity, 100),
+    roundedStateValue(payload.y, 1000),
+    payload.clickThrough === false ? 0 : 1,
+    payload.lyricGlowParticles ? 1 : 0,
+    payload.cinema === false ? 0 : 1,
+    payload.highlightFollow ? 1 : 0,
+    payload.frameRate || 0,
+    payload.fontFamily || '',
+    payload.fontWeight || '',
+    roundedStateValue(payload.letterSpacing, 1000),
+    roundedStateValue(payload.lineHeight, 100),
+    payload.rows || '',
+    payload.align || '',
+    roundedStateValue(payload.lyricScale, 100),
+    roundedStateValue(payload.feather, 1000),
+    payload.beatMapKey || '',
+    Object.prototype.hasOwnProperty.call(payload, 'beatMap') ? 'map' : 'nomap',
+    colors.primary || '',
+    colors.secondary || '',
+    colors.highlight || '',
+    colors.glow || '',
+    motion.lyricGlow ? 1 : 0,
+    motion.lyricGlowBeat ? 1 : 0,
+    roundedStateValue(motion.lyricGlowStrength, 100),
+    roundedStateValue(motion.highBloom, 100),
+    roundedStateValue(motion.beatGlow, 100),
+    roundedStateValue(motion.beatPulse, 100),
+    roundedStateValue(motion.bass, 100),
+    roundedStateValue(playback.time, 4),
+    roundedStateValue(playback.duration, 10),
+    roundedStateValue(playback.rate, 100),
+  ].join('|');
+}
+
+function setDesktopLyricsOpacity(value) {
+  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed() || typeof desktopLyricsWindow.setOpacity !== 'function') return;
+  const nextOpacity = clampNumber(value, 0.28, 1, 0.92);
+  if (desktopLyricsLastOpacity != null && Math.abs(desktopLyricsLastOpacity - nextOpacity) <= 0.001) return;
+  desktopLyricsLastOpacity = nextOpacity;
+  desktopLyricsWindow.setOpacity(nextOpacity);
+}
+
+function sendDesktopLyricsState(force = false) {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
+  const signature = desktopLyricsStateSignature(desktopLyricsState);
+  if (!force && signature === desktopLyricsLastStateSignature) return;
+  desktopLyricsLastStateSignature = signature;
   desktopLyricsWindow.webContents.send('mineradio-desktop-lyrics-state', desktopLyricsState);
 }
 
@@ -944,8 +1008,8 @@ function createDesktopLyricsWindow(payload = {}) {
   if (desktopLyricsWindow && !desktopLyricsWindow.isDestroyed()) {
     if (yChanged) {
       positionDesktopLyricsWindow(desktopLyricsState, { force: yChanged });
-    } else if (opacityChanged && typeof desktopLyricsWindow.setOpacity === 'function') {
-      desktopLyricsWindow.setOpacity(clampNumber(desktopLyricsState.opacity, 0.28, 1, 0.92));
+    } else if (opacityChanged) {
+      setDesktopLyricsOpacity(desktopLyricsState.opacity);
     }
     applyDesktopLyricsMouseBehavior();
     sendDesktopLyricsState();
@@ -985,12 +1049,14 @@ function createDesktopLyricsWindow(payload = {}) {
   desktopLyricsWindow.once('ready-to-show', () => {
     if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
     desktopLyricsWindow.showInactive();
-    sendDesktopLyricsState();
+    sendDesktopLyricsState(true);
   });
-  desktopLyricsWindow.webContents.once('did-finish-load', sendDesktopLyricsState);
+  desktopLyricsWindow.webContents.once('did-finish-load', () => sendDesktopLyricsState(true));
   desktopLyricsWindow.on('closed', () => {
     desktopLyricsWindow = null;
     desktopLyricsMouseIgnored = null;
+    desktopLyricsLastStateSignature = '';
+    desktopLyricsLastOpacity = null;
   });
   desktopLyricsWindow.on('moved', rememberDesktopLyricsBounds);
   desktopLyricsWindow.loadURL(overlayUrl('desktop-lyrics.html')).catch((e) => console.warn('Desktop lyrics load failed:', e.message));
@@ -1001,6 +1067,8 @@ function closeDesktopLyricsWindow() {
   desktopLyricsState = { ...desktopLyricsState, enabled: false };
   desktopLyricsPointerCapture = false;
   desktopLyricsMouseIgnored = null;
+  desktopLyricsLastStateSignature = '';
+  desktopLyricsLastOpacity = null;
   desktopLyricsHotBounds = null;
   stopDesktopLyricsMousePoller();
   if (desktopLyricsWindow && !desktopLyricsWindow.isDestroyed()) {
