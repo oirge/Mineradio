@@ -2907,6 +2907,7 @@ var PLAYLIST_PANEL_BATCH_SIZE = 28;
 var playlistPanelRenderLimit = PLAYLIST_PANEL_BATCH_SIZE;
 var playlistPanelLastDomSignature = '';
 var playlistPanelLazyBound = false, miniQueueLazyBound = false;
+var localSearchResultCache = { signature: '', normalizedQuery: '', results: [], exhaustive: false };
 var PLAYLIST_DETAIL_INITIAL_RENDER = 64;
 var PLAYLIST_DETAIL_BATCH_SIZE = 48;
 var smoothWheelScrollBound = false;
@@ -2926,8 +2927,8 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.2.3',
-  version: '1.2.3',
+  currentVersion: '1.2.4',
+  version: '1.2.4',
   configured: false,
   preview: true,
   updateAvailable: false,
@@ -17941,12 +17942,14 @@ function resetSearchRenderCache() {
   localSearchPoolCache.source = null;
   localSearchPoolCache.signature = '';
   localSearchPoolCache.items = [];
+  localSearchResultCache = { signature: '', normalizedQuery: '', results: [], exhaustive: false };
   searchResultsLastDomSignature = '';
 }
 function markQueueContentChanged() {
   localSearchPoolCache.source = null;
   localSearchPoolCache.signature = '';
   localSearchPoolCache.items = [];
+  localSearchResultCache = { signature: '', normalizedQuery: '', results: [], exhaustive: false };
 }
 function searchResultsDomSignature(songs, key) {
   var list = songs || [];
@@ -17975,10 +17978,35 @@ function searchLocalSongs(q) {
   q = String(q || '').trim();
   if (!q) return pool.slice(0, LOCAL_SEARCH_RESULT_LIMIT);
   var nq = simpleSearchNorm(q);
-  var results = [];
-  for (var i = 0; i < pool.length && results.length < LOCAL_SEARCH_RESULT_LIMIT; i++) {
-    if (cachedLocalSongSearchText(pool[i]).indexOf(nq) >= 0) results.push(pool[i]);
+  if (!nq) return pool.slice(0, LOCAL_SEARCH_RESULT_LIMIT);
+  var sourceSignature = localSearchPoolCache.signature || '';
+  if (localSearchResultCache.signature === sourceSignature && localSearchResultCache.normalizedQuery === nq) {
+    return localSearchResultCache.results.slice();
   }
+  var previous = localSearchResultCache;
+  var canNarrowPrevious = previous.signature === sourceSignature
+    && previous.exhaustive
+    && previous.normalizedQuery
+    && nq.indexOf(previous.normalizedQuery) === 0
+    && Array.isArray(previous.results);
+  var scanPool = canNarrowPrevious ? previous.results : pool;
+  var results = [];
+  var scannedAll = true;
+  for (var i = 0; i < scanPool.length; i++) {
+    if (cachedLocalSongSearchText(scanPool[i]).indexOf(nq) >= 0) {
+      results.push(scanPool[i]);
+      if (results.length >= LOCAL_SEARCH_RESULT_LIMIT) {
+        scannedAll = i >= scanPool.length - 1;
+        break;
+      }
+    }
+  }
+  localSearchResultCache = {
+    signature: sourceSignature,
+    normalizedQuery: nq,
+    results: results.slice(),
+    exhaustive: scannedAll
+  };
   return results;
 }
 function renderLocalLibraryResults(q, opts) {
