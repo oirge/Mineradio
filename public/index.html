@@ -2928,8 +2928,8 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.2.5',
-  version: '1.2.5',
+  currentVersion: '1.2.6',
+  version: '1.2.6',
   configured: false,
   preview: true,
   updateAvailable: false,
@@ -3841,6 +3841,88 @@ var RENDER_INTERACTION_HUGE_FPS = 0;
 var RENDER_INTERACTION_HOLD_MS = 900;
 var renderInteractionBoostUntil = 0;
 var renderInteractionReason = '';
+var runtimeFramePressureState = {
+  level: 0,
+  score: 0,
+  pressureUntil: 0,
+  lastReason: '',
+  lastUpdateAt: 0
+};
+function runtimeFramePressureNow() {
+  return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+}
+function getRuntimeFramePressureLevel(now) {
+  now = now || runtimeFramePressureNow();
+  if (isDeepBackgroundMode()) return 0;
+  if (!runtimeFramePressureState.level) return 0;
+  if (now > runtimeFramePressureState.pressureUntil) {
+    runtimeFramePressureState.level = 0;
+    runtimeFramePressureState.lastReason = '';
+    if (typeof renderPerfState !== 'undefined' && renderPerfState) {
+      renderPerfState.pressureLevel = 0;
+      renderPerfState.pressureReason = '';
+      renderPerfState.backgroundDelayScale = 1;
+    }
+    return 0;
+  }
+  return runtimeFramePressureState.level;
+}
+function isRuntimeFramePressureActive(now) {
+  return getRuntimeFramePressureLevel(now) > 0;
+}
+function runtimeFramePressureDelayScale(now) {
+  var level = getRuntimeFramePressureLevel(now);
+  if (level >= 2) return 2.2;
+  if (level >= 1) return 1.45;
+  return 1;
+}
+function runtimeFramePressureUiDelay(baseDelay, now) {
+  var level = getRuntimeFramePressureLevel(now);
+  if (level >= 2) return Math.max(baseDelay || 0, 140);
+  if (level >= 1) return Math.max(baseDelay || 0, 70);
+  return baseDelay || 0;
+}
+function updateRuntimeFramePressure(now, sample) {
+  if (!runtimeFramePressureState || isDeepBackgroundMode() || (typeof isMainSceneCoveredBySplash === 'function' && isMainSceneCoveredBySplash())) {
+    runtimeFramePressureState.level = 0;
+    runtimeFramePressureState.score = 0;
+    runtimeFramePressureState.pressureUntil = 0;
+    return;
+  }
+  sample = sample || {};
+  var frames = Math.max(1, sample.frames || 1);
+  var longRatio = Math.max(0, Math.min(1, (sample.longFrames || 0) / frames));
+  var fps = Number(sample.fps) || 0;
+  var worst = Number(sample.worstFrameMs) || 0;
+  var fpsCapped = !!(typeof renderPerfState !== 'undefined' && renderPerfState && renderPerfState.mode && renderPerfState.mode !== 'vsync');
+  var severe = worst >= 88 || longRatio >= 0.28 || (!fpsCapped && frames >= 18 && fps > 0 && fps < 38);
+  var moderate = worst >= 54 || longRatio >= 0.12 || (!fpsCapped && frames >= 18 && fps > 0 && fps < 50);
+  if (severe) runtimeFramePressureState.score += 2.3;
+  else if (moderate) runtimeFramePressureState.score += 1.05;
+  else runtimeFramePressureState.score -= 0.85;
+  runtimeFramePressureState.score = Math.max(0, Math.min(6, runtimeFramePressureState.score));
+  var nextLevel = runtimeFramePressureState.score >= 4.1 ? 2 : (runtimeFramePressureState.score >= 2.2 ? 1 : 0);
+  if (nextLevel > 0) {
+    runtimeFramePressureState.level = Math.max(runtimeFramePressureState.level || 0, nextLevel);
+    runtimeFramePressureState.pressureUntil = Math.max(
+      runtimeFramePressureState.pressureUntil || 0,
+      now + (runtimeFramePressureState.level >= 2 ? 3800 : 2600)
+    );
+    runtimeFramePressureState.lastReason = severe ? 'severe-frame-jank' : 'frame-jank';
+  } else if (now > (runtimeFramePressureState.pressureUntil || 0)) {
+    runtimeFramePressureState.level = 0;
+    runtimeFramePressureState.lastReason = '';
+  }
+  runtimeFramePressureState.lastUpdateAt = now;
+  if (typeof renderPerfState !== 'undefined' && renderPerfState) {
+    renderPerfState.pressureLevel = getRuntimeFramePressureLevel(now);
+    renderPerfState.pressureScore = Number(runtimeFramePressureState.score.toFixed(2));
+    renderPerfState.pressureReason = runtimeFramePressureState.lastReason;
+    renderPerfState.backgroundDelayScale = runtimeFramePressureDelayScale(now);
+    renderPerfState.worstFrameMs = Math.round(worst);
+    renderPerfState.longFrameRatio = Number(longRatio.toFixed(3));
+  }
+}
 function renderQualityProfile() {
   var quality = normalizePerformanceQuality(fx && fx.performanceQuality);
   if (quality === 'eco') return { cap: 0.95, min: 0.56, budget: 2400000 };
@@ -4416,10 +4498,12 @@ function yieldToIdle(timeout) {
       setTimeout(resolve, Math.min(timeout || 80, 80));
       return;
     }
+    var waitTimeout = timeout || 1200;
+    if (typeof runtimeFramePressureDelayScale === 'function') waitTimeout = Math.round(waitTimeout * runtimeFramePressureDelayScale());
     if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(function(){ resolve(); }, { timeout: timeout || 1200 });
+      requestIdleCallback(function(){ resolve(); }, { timeout: waitTimeout });
     } else {
-      setTimeout(resolve, timeout ? Math.min(timeout, 600) : 160);
+      setTimeout(resolve, timeout ? Math.min(waitTimeout, 1200) : 160);
     }
   });
 }
@@ -4430,35 +4514,45 @@ function scheduleAnalysisTask(fn, timeout) {
     setTimeout(fn, 0);
     return;
   }
+  var analysisTimeout = timeout || 900;
+  if (typeof runtimeFramePressureDelayScale === 'function') analysisTimeout = Math.round(analysisTimeout * runtimeFramePressureDelayScale());
   if (window.requestIdleCallback) {
-    requestIdleCallback(fn, { timeout: timeout || 900 });
+    requestIdleCallback(fn, { timeout: analysisTimeout });
   } else {
-    setTimeout(fn, Math.min(timeout || 420, 420));
+    setTimeout(fn, Math.min(analysisTimeout || 420, 900));
   }
 }
 
 function scheduleVisualApply(fn, delay, timeout) {
   if (typeof fn !== 'function') return;
+  var applyDelay = delay || 0;
+  var applyTimeout = timeout || 360;
+  if (typeof isRuntimeFramePressureActive === 'function' && isRuntimeFramePressureActive()) {
+    applyDelay = typeof runtimeFramePressureUiDelay === 'function' ? runtimeFramePressureUiDelay(applyDelay) : applyDelay;
+    if (typeof runtimeFramePressureDelayScale === 'function') applyTimeout = Math.round(applyTimeout * runtimeFramePressureDelayScale());
+  }
   setTimeout(function(){
     if (isHiddenForBackgroundOptimization() || typeof requestAnimationFrame !== 'function') {
       fn();
       return;
     }
     var run = function(){ requestAnimationFrame(fn); };
-    if (window.requestIdleCallback) requestIdleCallback(run, { timeout: timeout || 360 });
+    if (window.requestIdleCallback) requestIdleCallback(run, { timeout: applyTimeout });
     else run();
-  }, delay || 0);
+  }, applyDelay);
 }
 
 function scheduleUiWarmTask(fn, timeout) {
   if (typeof fn !== 'function') return;
   var run = function(){ requestAnimationFrame(fn); };
+  var warmTimeout = timeout || 220;
+  if (typeof runtimeFramePressureDelayScale === 'function') warmTimeout = Math.round(warmTimeout * runtimeFramePressureDelayScale());
   if (isHiddenForBackgroundOptimization() || typeof requestAnimationFrame !== 'function') {
     setTimeout(fn, 0);
   } else if (window.requestIdleCallback) {
-    requestIdleCallback(run, { timeout: timeout || 220 });
+    requestIdleCallback(run, { timeout: warmTimeout });
   } else {
-    requestAnimationFrame(fn);
+    setTimeout(run, typeof runtimeFramePressureUiDelay === 'function' ? runtimeFramePressureUiDelay(0) : 0);
   }
 }
 var namedAnimationFrameTasks = {};
@@ -12992,7 +13086,7 @@ function scheduleLocalAssetUiRefresh(song, reason) {
     if (LOCAL_ONLY_MODE && $results && $results.classList.contains('show') && $input) renderLocalLibraryResults($input.value || '');
     if (LOCAL_ONLY_MODE && emptyHomeActive) renderHomeDiscover();
     scheduleShelfRebuild(reason || 'local-asset-refresh', true);
-  }, 180);
+  }, typeof runtimeFramePressureUiDelay === 'function' ? runtimeFramePressureUiDelay(180) : 180);
 }
 async function ensureLocalBeatMapForSong(song, opts) {
   return null;
@@ -13032,6 +13126,9 @@ function localAssetBackgroundDelayMs() {
   if (!activePlayback && document.hasFocus && document.hasFocus()) delay = Math.min(delay, 380);
   if (activePlayback) delay = Math.max(delay, LOCAL_ASSET_PLAYING_DELAY_MS);
   if (typeof isRenderInteractionActive === 'function' && isRenderInteractionActive()) delay = Math.max(delay, activePlayback ? 2200 : 820);
+  if (typeof runtimeFramePressureDelayScale === 'function' && !isHiddenForBackgroundOptimization()) {
+    delay = Math.round(delay * runtimeFramePressureDelayScale());
+  }
   return delay;
 }
 /**
@@ -13042,8 +13139,9 @@ function localAssetBackgroundDelayMs() {
 function localAssetProcessingStartDelay(opts) {
   opts = opts || {};
   if (opts.single) return 80;
-  if (opts.restored) return opts.refreshed ? 900 : 1600;
-  return 120;
+  var delay = opts.restored ? (opts.refreshed ? 900 : 1600) : 120;
+  if (typeof runtimeFramePressureDelayScale === 'function') delay = Math.round(delay * runtimeFramePressureDelayScale());
+  return delay;
 }
 function localIndexedAssetCanWaitForCache(song, kind) {
   if (!song || song.localAssetCacheMiss) return false;
@@ -14168,7 +14266,10 @@ function makeShelfManager() {
       if (!job || job.cancelled || cardBuildQueue !== job || !group) return;
       var started = performance.now();
       var built = 0;
-      while (job.next <= job.end && built < 2 && performance.now() - started < 7) {
+      var pressureLevel = (typeof getRuntimeFramePressureLevel === 'function') ? getRuntimeFramePressureLevel(started) : 0;
+      var maxBuilt = pressureLevel >= 2 ? 1 : 2;
+      var maxBudget = pressureLevel >= 2 ? 3.5 : (pressureLevel >= 1 ? 5 : 7);
+      while (job.next <= job.end && built < maxBuilt && performance.now() - started < maxBudget) {
         var card = buildOneCard(allItems[job.next], job.next);
         cards.push(card);
         drawCard(card, card.item);
@@ -14177,8 +14278,9 @@ function makeShelfManager() {
         built += 1;
       }
       if (job.next <= job.end) {
+        var idleTimeout = pressureLevel >= 2 ? 360 : (pressureLevel >= 1 ? 260 : 180);
         if (window.requestIdleCallback) {
-          requestIdleCallback(step, { timeout: 180 });
+          requestIdleCallback(step, { timeout: idleTimeout });
         } else {
           job.raf = requestAnimationFrame(step);
         }
@@ -14186,7 +14288,8 @@ function makeShelfManager() {
         cardBuildQueue = null;
       }
     }
-    if (window.requestIdleCallback) requestIdleCallback(step, { timeout: 180 });
+    var initialTimeout = (typeof getRuntimeFramePressureLevel === 'function' && getRuntimeFramePressureLevel() >= 1) ? 260 : 180;
+    if (window.requestIdleCallback) requestIdleCallback(step, { timeout: initialTimeout });
     else job.raf = requestAnimationFrame(step);
   }
 
@@ -14636,6 +14739,11 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         else {
           var pulseBucket = Math.round((bass + beatPulse * 0.85) * 10);
           var redrawInterval = playing ? 1.35 : 4.0;
+          if (typeof getRuntimeFramePressureLevel === 'function') {
+            var pressureLevel = getRuntimeFramePressureLevel();
+            if (pressureLevel >= 2) redrawInterval *= 1.85;
+            else if (pressureLevel >= 1) redrawInterval *= 1.35;
+          }
           if (pulseBucket !== lastCardPulseBucket || uniforms.uTime.value - lastCardRedrawAt > redrawInterval) {
             lastCardPulseBucket = pulseBucket;
             lastCardRedrawAt = uniforms.uTime.value;
@@ -14766,7 +14874,7 @@ function scheduleShelfRebuild(reason, asyncCards) {
     scheduleUiWarmTask(function(){
       if (token !== deferredShelfRebuild.token) return;
       safeShelfRebuild(deferredShelfRebuild.reason, deferredShelfRebuild.asyncCards);
-    }, 260);
+    }, typeof runtimeFramePressureUiDelay === 'function' ? runtimeFramePressureUiDelay(260) : 260);
   });
 }
 function safeShelfCloseContent(reason) {
@@ -14803,7 +14911,9 @@ function safeRenderQueuePanel(reason, opts) {
         queuePanelPendingRender.raf = 0;
         queuePanelPendingRender.reason = '';
         queuePanelPendingRender.opts = null;
-        safeRenderQueuePanel(pendingReason || 'deferred', pendingOpts);
+        var delay = (typeof runtimeFramePressureUiDelay === 'function' && pendingOpts.scrollCurrent !== true) ? runtimeFramePressureUiDelay(0) : 0;
+        if (delay > 0) setTimeout(function(){ safeRenderQueuePanel(pendingReason || 'deferred', pendingOpts); }, delay);
+        else safeRenderQueuePanel(pendingReason || 'deferred', pendingOpts);
       });
     }
     return true;
@@ -18110,7 +18220,8 @@ function renderSongSearchResults(songs) {
   playlist = songs || [];
   var domSignature = searchResultsDomSignature(playlist, searchLastResultQuery);
   var now = performance && performance.now ? performance.now() : Date.now();
-  var shouldAnimate = window.gsap && (now - searchResultsLastAnimateAt > 420);
+  var searchAnimateGap = (typeof isRuntimeFramePressureActive === 'function' && isRuntimeFramePressureActive(now)) ? 900 : 420;
+  var shouldAnimate = window.gsap && (now - searchResultsLastAnimateAt > searchAnimateGap);
   if (domSignature === searchResultsLastDomSignature) {
     var currentHtml = $results.innerHTML || '';
     if (currentHtml.indexOf('search-result') >= 0) {
@@ -23302,7 +23413,8 @@ function updateHomeAudioVisual(dt) {
   var wave = document.getElementById('home-wave-track');
   if (!wave) return;
   var nowMs = performance.now();
-  if (homeWaveTrackState.lastAt && nowMs - homeWaveTrackState.lastAt < 80) return;
+  var minGap = (typeof isRuntimeFramePressureActive === 'function' && isRuntimeFramePressureActive(nowMs)) ? 150 : 80;
+  if (homeWaveTrackState.lastAt && nowMs - homeWaveTrackState.lastAt < minGap) return;
   homeWaveTrackState.lastAt = nowMs;
   ensureHomeWaveTrackBars();
   var bars = wave.children;
@@ -28285,6 +28397,12 @@ var renderPerfState = {
   frames: 0,
   skipped: 0,
   longFrames: 0,
+  sampleLongFrames: 0,
+  sampleWorstFrameMs: 0,
+  pressureLevel: 0,
+  pressureScore: 0,
+  pressureReason: '',
+  backgroundDelayScale: 1,
   lastRenderAt: 0,
   lastSampleAt: performance.now()
 };
@@ -28295,7 +28413,12 @@ function isMainSceneCoveredBySplash() {
 }
 function getAdaptiveRenderFps() {
   if (isDeepBackgroundMode()) return 1;
-  if (RENDER_VISIBLE_VSYNC) return 0;
+  var pressureLevel = (typeof getRuntimeFramePressureLevel === 'function') ? getRuntimeFramePressureLevel() : 0;
+  if (RENDER_VISIBLE_VSYNC) {
+    if (pressureLevel >= 2) return (typeof isRenderInteractionActive === 'function' && isRenderInteractionActive()) ? 60 : 48;
+    if (pressureLevel >= 1 && !(typeof isRenderInteractionActive === 'function' && isRenderInteractionActive())) return 60;
+    return 0;
+  }
   var tier = (typeof getRenderLoadTier === 'function') ? getRenderLoadTier() : 0;
   if (typeof isRenderInteractionActive === 'function' && isRenderInteractionActive()) {
     if (tier >= 2) return RENDER_INTERACTION_HUGE_FPS;
@@ -28323,10 +28446,28 @@ function shouldSkipAdaptiveRenderFrame(now) {
 }
 function sampleRenderPerf(now, dt) {
   renderPerfState.frames += 1;
-  if (dt > 0.034) renderPerfState.longFrames += 1;
+  var frameMs = dt * 1000;
+  if (dt > 0.034) {
+    renderPerfState.longFrames += 1;
+    renderPerfState.sampleLongFrames += 1;
+  }
+  if (frameMs > renderPerfState.sampleWorstFrameMs) renderPerfState.sampleWorstFrameMs = frameMs;
   if (now - renderPerfState.lastSampleAt >= 1000) {
-    renderPerfState.fps = Math.round(renderPerfState.frames * 1000 / Math.max(1, now - renderPerfState.lastSampleAt));
+    var sampleFrames = renderPerfState.frames;
+    var sampleLongFrames = renderPerfState.sampleLongFrames;
+    var sampleWorstFrameMs = renderPerfState.sampleWorstFrameMs;
+    renderPerfState.fps = Math.round(sampleFrames * 1000 / Math.max(1, now - renderPerfState.lastSampleAt));
+    if (typeof updateRuntimeFramePressure === 'function') {
+      updateRuntimeFramePressure(now, {
+        frames: sampleFrames,
+        fps: renderPerfState.fps,
+        longFrames: sampleLongFrames,
+        worstFrameMs: sampleWorstFrameMs
+      });
+    }
     renderPerfState.frames = 0;
+    renderPerfState.sampleLongFrames = 0;
+    renderPerfState.sampleWorstFrameMs = 0;
     renderPerfState.lastSampleAt = now;
   }
   maybeTrimRuntimeCaches(now);
