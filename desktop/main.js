@@ -128,6 +128,18 @@ const LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY = 24;
 const LOCAL_LIBRARY_SCAN_VISIT_LIMIT = 60000;
 const LOCAL_LIBRARY_INCREMENTAL_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
+function localLibraryScanStatConcurrency(count) {
+  count = Math.max(0, Number(count) || 0);
+  if (count >= 12000) return 10;
+  if (count >= 5000) return 12;
+  if (count >= 1200) return 16;
+  return LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY;
+}
+
+function yieldLocalLibraryScanTurn() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 function normalizeLocalMusicRoot(folderPath) {
   const resolved = path.resolve(String(folderPath || ''));
   const stat = fs.statSync(resolved);
@@ -243,6 +255,7 @@ function makeLocalLibraryDirectoryRecord(root, relPath, stat) {
 async function statLocalLibraryFiles(root, items) {
   const files = [];
   let cursor = 0;
+  let processed = 0;
   /**
    * 消费共享游标读取文件元数据；共享游标只在当前事件循环同步递增，不会改变最终排序。
    * @returns {Promise<void>} 当前 worker 完成时 resolve。
@@ -250,6 +263,8 @@ async function statLocalLibraryFiles(root, items) {
   async function worker() {
     while (cursor < items.length) {
       const item = items[cursor++];
+      processed += 1;
+      if (processed % 160 === 0) await yieldLocalLibraryScanTurn();
       let stat = null;
       try {
         stat = await fs.promises.stat(item.abs);
@@ -260,7 +275,7 @@ async function statLocalLibraryFiles(root, items) {
       files[item.index] = makeLocalLibraryFileRecord(root, item, stat);
     }
   }
-  const workerCount = Math.min(LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY, Math.max(1, items.length));
+  const workerCount = Math.min(localLibraryScanStatConcurrency(items.length), Math.max(1, items.length));
   await Promise.all(Array.from({ length: workerCount }, worker));
   return files.filter(Boolean);
 }

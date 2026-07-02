@@ -2827,6 +2827,7 @@ var localLibraryProgressHideTimer = null;
 var localLibraryRestoreScheduled = false;
 var localLibraryRestoreStarted = false;
 var localAssetUiRefreshTimer = null;
+var localAssetUiRefreshReason = '';
 var localAssetCacheMemory = {};
 var localAssetCacheWriteTimers = {};
 var localLibraryPersistentMemory = {};
@@ -2908,6 +2909,7 @@ var PLAYLIST_PANEL_BATCH_SIZE = 28;
 var playlistPanelRenderLimit = PLAYLIST_PANEL_BATCH_SIZE;
 var playlistPanelLastDomSignature = '';
 var playlistPanelLazyBound = false, miniQueueLazyBound = false;
+var playlistPanelLazyCheckRaf = 0, miniQueueLazyCheckRaf = 0;
 var localSearchResultCache = { signature: '', normalizedQuery: '', results: [], exhaustive: false };
 var PLAYLIST_DETAIL_INITIAL_RENDER = 64;
 var PLAYLIST_DETAIL_BATCH_SIZE = 48;
@@ -2928,8 +2930,8 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.2.6',
-  version: '1.2.6',
+  currentVersion: '1.2.7',
+  version: '1.2.7',
   configured: false,
   preview: true,
   updateAvailable: false,
@@ -3688,7 +3690,8 @@ function collectRuntimePerfSnapshot(now) {
     playlistCovers: safeObjectKeys(playlistCoverCache).length,
     coverDepth: coverDepthCacheKeys ? coverDepthCacheKeys.length : 0,
     beatMaps: safeObjectKeys(beatMapCache).length,
-    djBeatMaps: safeObjectKeys(djBeatMapCache).length
+    djBeatMaps: safeObjectKeys(djBeatMapCache).length,
+    localCoverThumbs: localCoverThumbResultOrder ? localCoverThumbResultOrder.length : 0
   };
   if (performance && performance.memory && now - runtimePerfState.lastHeapSampleAt > 12000) {
     runtimePerfState.lastHeapSampleAt = now;
@@ -3734,6 +3737,11 @@ function trimRuntimeCaches(reason, aggressive) {
   dropped += trimCoverDepthCache(aggressive ? 4 : 10, collectProtectedCoverDepthIds());
   dropped += trimObjectCache(beatMapCache, aggressive ? 12 : 36, protectedBeats);
   dropped += trimObjectCache(djBeatMapCache, aggressive ? 4 : 12, protectedBeats);
+  if (typeof trimLocalCoverThumbResultCache === 'function') {
+    var beforeThumbs = localCoverThumbResultOrder ? localCoverThumbResultOrder.length : 0;
+    trimLocalCoverThumbResultCache(aggressive ? 32 : 72, aggressive ? 6 * 1024 * 1024 : 14 * 1024 * 1024);
+    dropped += Math.max(0, beforeThumbs - (localCoverThumbResultOrder ? localCoverThumbResultOrder.length : 0));
+  }
   if (aggressive && typeof renderer !== 'undefined' && renderer && renderer.renderLists && renderer.renderLists.dispose) {
     try { renderer.renderLists.dispose(); } catch (e) {}
   }
@@ -3881,6 +3889,50 @@ function runtimeFramePressureUiDelay(baseDelay, now) {
   if (level >= 2) return Math.max(baseDelay || 0, 140);
   if (level >= 1) return Math.max(baseDelay || 0, 70);
   return baseDelay || 0;
+}
+function runtimeFramePressureListScale(now) {
+  var level = getRuntimeFramePressureLevel(now);
+  if (level >= 2) return 0.42;
+  if (level >= 1) return 0.66;
+  return 1;
+}
+function scaledRuntimeBatchSize(value, minValue, now) {
+  value = Math.max(1, Number(value) || 1);
+  minValue = Math.max(1, Number(minValue) || 1);
+  return Math.max(minValue, Math.round(value * runtimeFramePressureListScale(now)));
+}
+function queuePanelInitialRenderLimit(now) {
+  return scaledRuntimeBatchSize(QUEUE_PANEL_INITIAL_RENDER, 28, now);
+}
+function queuePanelBatchSize(now) {
+  return scaledRuntimeBatchSize(QUEUE_PANEL_BATCH_SIZE, 18, now);
+}
+function miniQueueInitialRenderLimit(now) {
+  return scaledRuntimeBatchSize(MINI_QUEUE_INITIAL_RENDER, 18, now);
+}
+function miniQueueBatchSize(now) {
+  return scaledRuntimeBatchSize(MINI_QUEUE_BATCH_SIZE, 14, now);
+}
+function playlistPanelBatchSize(now) {
+  return scaledRuntimeBatchSize(PLAYLIST_PANEL_BATCH_SIZE, 12, now);
+}
+function playlistDetailInitialRenderLimit(now) {
+  return scaledRuntimeBatchSize(PLAYLIST_DETAIL_INITIAL_RENDER, 26, now);
+}
+function playlistDetailBatchSize(now) {
+  return scaledRuntimeBatchSize(PLAYLIST_DETAIL_BATCH_SIZE, 18, now);
+}
+function searchInputDebounceMs(now) {
+  var level = getRuntimeFramePressureLevel(now);
+  if (level >= 2) return 340;
+  if (level >= 1) return 260;
+  return 180;
+}
+function listAnimationLimit(defaultLimit, now) {
+  var level = getRuntimeFramePressureLevel(now);
+  if (level >= 2) return 0;
+  if (level >= 1) return Math.max(4, Math.min(defaultLimit || 0, 8));
+  return defaultLimit || 0;
 }
 function updateRuntimeFramePressure(now, sample) {
   if (!runtimeFramePressureState || isDeepBackgroundMode() || (typeof isMainSceneCoveredBySplash === 'function' && isMainSceneCoveredBySplash())) {
@@ -8595,8 +8647,10 @@ function estimateLocalAssetRecordBytes(record) {
     + estimateDataUrlBytes(record.localCoverThumbDataUrl)
     + estimateDataUrlBytes(record.localCoverDataUrl);
 }
-function trimLocalCoverThumbResultCache() {
-  while (localCoverThumbResultOrder.length > 0 && (localCoverThumbResultOrder.length > 96 || localCoverThumbResultBytes > LOCAL_COVER_THUMB_RESULT_MAX_BYTES)) {
+function trimLocalCoverThumbResultCache(maxEntries, maxBytes) {
+  maxEntries = Math.max(8, maxEntries || 96);
+  maxBytes = Math.max(1024 * 1024, maxBytes || LOCAL_COVER_THUMB_RESULT_MAX_BYTES);
+  while (localCoverThumbResultOrder.length > 0 && (localCoverThumbResultOrder.length > maxEntries || localCoverThumbResultBytes > maxBytes)) {
     var key = localCoverThumbResultOrder.shift();
     var entry = localCoverThumbResultCache[key];
     if (!entry) continue;
@@ -8618,17 +8672,21 @@ function rememberLocalCoverThumbResult(key, value) {
  * @param {string} dataUrl 原始封面 data URL。
  * @returns {Promise<string>} 缩略图 data URL，无法生成时返回空字符串。
  */
-async function createLocalCoverThumbnailDataUrl(dataUrl) {
+async function createLocalCoverThumbnailDataUrl(dataUrl, opts) {
+  opts = opts || {};
   dataUrl = String(dataUrl || '');
   if (!/^data:image\//i.test(dataUrl)) return '';
-  var cacheKey = localCoverThumbCacheKey(dataUrl);
+  var pressureLevel = (typeof getRuntimeFramePressureLevel === 'function') ? getRuntimeFramePressureLevel() : 0;
+  var requestedMaxSide = opts.maxSide || (opts.background ? (pressureLevel >= 1 ? 192 : 224) : LOCAL_COVER_THUMB_MAX_SIZE);
+  var maxSide = Math.max(64, Math.min(LOCAL_COVER_THUMB_MAX_SIZE || 512, requestedMaxSide || 512));
+  var quality = opts.quality || (opts.background ? 0.74 : LOCAL_COVER_THUMB_QUALITY) || 0.82;
+  var cacheKey = localCoverThumbCacheKey(dataUrl) + ':s' + maxSide + ':q' + Math.round(quality * 100);
   var cached = cacheKey && localCoverThumbResultCache[cacheKey];
   if (cached) return cached.value || '';
   if (cacheKey && localCoverThumbPromiseCache[cacheKey]) return localCoverThumbPromiseCache[cacheKey];
   var promise = (async function(){
   try {
     var img = await loadImageForDataUrl(dataUrl);
-    var maxSide = Math.max(64, LOCAL_COVER_THUMB_MAX_SIZE || 512);
     var width = img.naturalWidth || img.width || maxSide;
     var height = img.naturalHeight || img.height || maxSide;
     var scale = Math.min(1, maxSide / Math.max(width, height));
@@ -8640,9 +8698,9 @@ async function createLocalCoverThumbnailDataUrl(dataUrl) {
     var ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return '';
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = opts.background || pressureLevel >= 1 ? 'medium' : 'high';
     ctx.drawImage(img, 0, 0, targetW, targetH);
-    var webp = canvas.toDataURL('image/webp', LOCAL_COVER_THUMB_QUALITY || 0.82);
+    var webp = canvas.toDataURL('image/webp', quality);
     if (/^data:image\/webp/i.test(webp)) return webp;
     return canvas.toDataURL('image/jpeg', 0.86);
   } catch (e) {
@@ -8662,7 +8720,11 @@ async function createLocalCoverThumbnailDataUrl(dataUrl) {
 async function assignLocalCoverDataUrl(song, dataUrl, opts) {
   opts = opts || {};
   if (!song || !dataUrl) return false;
-  var thumb = await createLocalCoverThumbnailDataUrl(dataUrl);
+  var thumb = await createLocalCoverThumbnailDataUrl(dataUrl, {
+    background: !!opts.thumbnailOnly,
+    maxSide: opts.thumbnailOnly ? 0 : LOCAL_COVER_THUMB_MAX_SIZE,
+    quality: opts.thumbnailOnly ? 0.74 : LOCAL_COVER_THUMB_QUALITY
+  });
   song.localCoverThumbDataUrl = thumb || dataUrl;
   if (!opts.thumbnailOnly) song.localCoverDataUrl = dataUrl;
   else song.localCoverDataUrl = '';
@@ -8823,6 +8885,22 @@ async function hydrateLocalAssetCacheForSongs(songs) {
     });
     return 0;
   }
+}
+async function hydrateLocalAssetCacheForSongsChunked(songs, opts) {
+  opts = opts || {};
+  songs = songs || [];
+  var chunkSize = Math.max(16, opts.chunkSize || 96);
+  var firstChunkSize = Math.max(16, opts.firstChunkSize || Math.min(chunkSize, 72));
+  var delay = Math.max(0, opts.delay == null ? 120 : opts.delay);
+  var total = 0;
+  var first = songs.slice(0, firstChunkSize);
+  if (first.length) total += await hydrateLocalAssetCacheForSongs(first);
+  for (var i = firstChunkSize; i < songs.length; i += chunkSize) {
+    if (opts.isStale && opts.isStale()) break;
+    await yieldToIdle(delay);
+    total += await hydrateLocalAssetCacheForSongs(songs.slice(i, i + chunkSize));
+  }
+  return total;
 }
 async function writeLocalAssetCacheForSong(song) {
   var record = localAssetCacheSnapshot(song);
@@ -13061,6 +13139,7 @@ function refreshLocalSongAssetUi(song, reason) {
   scheduleShelfRebuild(reason || 'local-assets-ready', true);
 }
 function scheduleLocalAssetUiRefresh(song, reason) {
+  localAssetUiRefreshReason = reason || localAssetUiRefreshReason || 'local-asset-refresh';
   if (song && isCurrentLocalQueueSong(song)) {
     updateControlTrackInfo(song);
     var thumbArtist = document.getElementById('thumb-artist');
@@ -13081,12 +13160,14 @@ function scheduleLocalAssetUiRefresh(song, reason) {
   }
   if (localAssetUiRefreshTimer) return;
   localAssetUiRefreshTimer = setTimeout(function(){
+    var pendingReason = localAssetUiRefreshReason || reason || 'local-asset-refresh';
     localAssetUiRefreshTimer = null;
-    safeRenderQueuePanel(reason || 'local-asset-refresh', { scrollCurrent: miniQueueOpen });
+    localAssetUiRefreshReason = '';
+    safeRenderQueuePanel(pendingReason, { scrollCurrent: miniQueueOpen });
     if (LOCAL_ONLY_MODE && $results && $results.classList.contains('show') && $input) renderLocalLibraryResults($input.value || '');
     if (LOCAL_ONLY_MODE && emptyHomeActive) renderHomeDiscover();
-    scheduleShelfRebuild(reason || 'local-asset-refresh', true);
-  }, typeof runtimeFramePressureUiDelay === 'function' ? runtimeFramePressureUiDelay(180) : 180);
+    scheduleShelfRebuild(pendingReason, true);
+  }, typeof runtimeFramePressureUiDelay === 'function' ? runtimeFramePressureUiDelay(220) : 220);
 }
 async function ensureLocalBeatMapForSong(song, opts) {
   return null;
@@ -17995,7 +18076,7 @@ $input.addEventListener('input', function(){
   }
   $results.innerHTML = '<div class="search-empty">正在搜索 “' + escHtml(q) + '”…</div>';
   $results.classList.add('show');
-  searchTimer = setTimeout(function(){ doSearch(q); }, 180);
+  searchTimer = setTimeout(function(){ doSearch(q); }, searchInputDebounceMs());
 });
 $input.addEventListener('focus', function(){
   var searchArea = document.getElementById('search-area');
@@ -19787,6 +19868,11 @@ function updateLyricsHighlight() { /* v8: 由 tickLyricsParticles 接管 */ }
 function animateListItems(container, selector, opts) {
   if (!container || !window.gsap) return;
   opts = opts || {};
+  if (typeof listAnimationLimit === 'function') {
+    var requestedLimit = opts.limit || 18;
+    opts.limit = listAnimationLimit(requestedLimit);
+    if (opts.limit <= 0) return;
+  }
   var items = Array.prototype.slice.call(container.querySelectorAll(selector));
   if (!items.length) return;
   var limit = opts.limit || 18;
@@ -20003,7 +20089,7 @@ function renderMiniQueuePanel(opts) {
     $list.innerHTML = '<div class="mini-queue-empty">队列为空，先搜索或打开歌单</div>';
     return;
   }
-  miniQueueRenderLimit = normalizedQueueRenderLimit(miniQueueRenderLimit, MINI_QUEUE_INITIAL_RENDER, MINI_QUEUE_BATCH_SIZE, total);
+  miniQueueRenderLimit = normalizedQueueRenderLimit(miniQueueRenderLimit, miniQueueInitialRenderLimit(), miniQueueBatchSize(), total);
   var renderLimit = Math.min(total, miniQueueRenderLimit);
   var domSignature = queueVisibleDomSignature(renderLimit, true);
   if (domSignature === miniQueueLastDomSignature && !opts.animate && !opts.scrollCurrent) return;
@@ -20117,10 +20203,10 @@ function syncQueueRenderLimits(opts) {
   }
 }
 function resetQueuePanelRenderLimit() {
-  queuePanelRenderLimit = QUEUE_PANEL_INITIAL_RENDER;
+  queuePanelRenderLimit = queuePanelInitialRenderLimit();
 }
 function resetMiniQueueRenderLimit() {
-  miniQueueRenderLimit = MINI_QUEUE_INITIAL_RENDER;
+  miniQueueRenderLimit = miniQueueInitialRenderLimit();
 }
 function hiddenCurrentQueueHintHtml(renderLimit, mini) {
   if (currentIdx < renderLimit || currentIdx < 0 || currentIdx >= playQueue.length) return '';
@@ -20156,8 +20242,9 @@ function queueItemHtml(song, i) {
 function growQueuePanelRenderLimit(amount) {
   if (!playQueue.length) return false;
   var total = playQueue.length;
-  var current = normalizedQueueRenderLimit(queuePanelRenderLimit, QUEUE_PANEL_INITIAL_RENDER, QUEUE_PANEL_BATCH_SIZE, total);
-  var next = Math.min(total, current + (amount || QUEUE_PANEL_BATCH_SIZE));
+  var batch = queuePanelBatchSize();
+  var current = normalizedQueueRenderLimit(queuePanelRenderLimit, queuePanelInitialRenderLimit(), batch, total);
+  var next = Math.min(total, current + (amount || batch));
   if (next <= current) return false;
   var panel = document.getElementById('playlist-panel');
   var keepTop = panel ? panel.scrollTop : 0;
@@ -20169,8 +20256,9 @@ function growQueuePanelRenderLimit(amount) {
 function growMiniQueueRenderLimit(amount) {
   if (!playQueue.length) return false;
   var total = playQueue.length;
-  var current = normalizedQueueRenderLimit(miniQueueRenderLimit, MINI_QUEUE_INITIAL_RENDER, MINI_QUEUE_BATCH_SIZE, total);
-  var next = Math.min(total, current + (amount || MINI_QUEUE_BATCH_SIZE));
+  var batch = miniQueueBatchSize();
+  var current = normalizedQueueRenderLimit(miniQueueRenderLimit, miniQueueInitialRenderLimit(), batch, total);
+  var next = Math.min(total, current + (amount || batch));
   if (next <= current) return false;
   var list = document.getElementById('mini-queue-list');
   var keepTop = list ? list.scrollTop : 0;
@@ -20181,7 +20269,7 @@ function growMiniQueueRenderLimit(amount) {
 }
 function jumpQueueRenderToCurrent(mini) {
   if (currentIdx < 0 || currentIdx >= playQueue.length) return false;
-  var batch = mini ? MINI_QUEUE_BATCH_SIZE : QUEUE_PANEL_BATCH_SIZE;
+  var batch = mini ? miniQueueBatchSize() : queuePanelBatchSize();
   var next = Math.min(playQueue.length, currentIdx + Math.max(12, Math.floor(batch * 0.5)));
   if (mini) {
     miniQueueRenderLimit = Math.max(miniQueueRenderLimit || 0, next);
@@ -20197,16 +20285,36 @@ function maybeGrowQueuePanelRenderLimit() {
   if (!panel || queueViewTab !== 'queue' || queuePanelRenderLimit >= playQueue.length) return;
   if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 220) growQueuePanelRenderLimit();
 }
+function schedulePlaylistPanelLazyCheck() {
+  if (playlistPanelLazyCheckRaf) return;
+  playlistPanelLazyCheckRaf = requestAnimationFrame(function(){
+    playlistPanelLazyCheckRaf = 0;
+    var panel = document.getElementById('playlist-panel');
+    if (!panel) return;
+    maybeGrowQueuePanelRenderLimit();
+    maybeGrowPlaylistPanelDetailRenderLimit();
+    var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
+    if (queueViewTab !== 'playlists' || playlistPanelRenderLimit >= total) return;
+    if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 180) growPlaylistPanelRenderLimit();
+  });
+}
 function maybeGrowMiniQueueRenderLimit() {
   var list = document.getElementById('mini-queue-list');
   if (!miniQueueOpen || !list || miniQueueRenderLimit >= playQueue.length) return;
   if (list.scrollTop + list.clientHeight >= list.scrollHeight - 120) growMiniQueueRenderLimit();
 }
+function scheduleMiniQueueLazyCheck() {
+  if (miniQueueLazyCheckRaf) return;
+  miniQueueLazyCheckRaf = requestAnimationFrame(function(){
+    miniQueueLazyCheckRaf = 0;
+    maybeGrowMiniQueueRenderLimit();
+  });
+}
 function bindMiniQueueLazyRender() {
   var list = document.getElementById('mini-queue-list');
   if (!list || miniQueueLazyBound) return;
   miniQueueLazyBound = true;
-  list.addEventListener('scroll', maybeGrowMiniQueueRenderLimit, { passive: true });
+  list.addEventListener('scroll', scheduleMiniQueueLazyCheck, { passive: true });
   list.addEventListener('click', function(e){
     var jumpCurrent = e.target && e.target.closest ? e.target.closest('[data-mini-queue-jump-current]') : null;
     if (jumpCurrent) {
@@ -20239,7 +20347,7 @@ function renderQueuePanel(opts) {
     if (panel && (panel.classList.contains('show') || panel.classList.contains('peek')) && queueViewTab === 'queue') switchPlaylistTab('playlists');
     return;
   }
-  queuePanelRenderLimit = normalizedQueueRenderLimit(queuePanelRenderLimit, QUEUE_PANEL_INITIAL_RENDER, QUEUE_PANEL_BATCH_SIZE, playQueue.length);
+  queuePanelRenderLimit = normalizedQueueRenderLimit(queuePanelRenderLimit, queuePanelInitialRenderLimit(), queuePanelBatchSize(), playQueue.length);
   var renderLimit = Math.min(playQueue.length, queuePanelRenderLimit);
   var domSignature = queueVisibleDomSignature(renderLimit, false);
   if (domSignature !== queuePanelLastDomSignature || opts.animate || opts.scrollCurrent) {
@@ -20260,7 +20368,7 @@ async function refreshUserPlaylists(force) {
   if (force) resetPlaylistPanelRenderLimit();
   renderLocalLibraryPlaylistPanel({ animate: isPlaylistPanelVisibleForRender() });
 }
-var playlistPanelDetailState = { key: '', loading: false, playlist: null, tracks: [], token: 0, renderLimit: PLAYLIST_DETAIL_INITIAL_RENDER };
+var playlistPanelDetailState = { key: '', loading: false, playlist: null, tracks: [], token: 0, renderLimit: playlistDetailInitialRenderLimit() };
 function playlistPanelKey(provider, id) {
   return 'local:' + String(id || '');
 }
@@ -20274,7 +20382,8 @@ function playlistPanelDetailHtml(pl, provider) {
   var loading = playlistPanelDetailState.loading;
   var cover = pl && pl.cover ? pl.cover : '';
   var img = cover ? '<img class="pl-detail-cover" src="' + escHtml(cover) + '" alt="" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="pl-detail-cover"></div>';
-  var renderLimit = loading ? 0 : Math.max(PLAYLIST_DETAIL_INITIAL_RENDER, playlistPanelDetailState.renderLimit || PLAYLIST_DETAIL_INITIAL_RENDER);
+  var detailInitialLimit = playlistDetailInitialRenderLimit();
+  var renderLimit = loading ? 0 : Math.max(detailInitialLimit, playlistPanelDetailState.renderLimit || detailInitialLimit);
   renderLimit = Math.min(tracks.length, renderLimit);
   var visibleTracks = loading ? [] : tracks.slice(0, renderLimit);
   var rows = loading
@@ -20291,7 +20400,7 @@ function playlistPanelDetailHtml(pl, provider) {
   if (!loading && !rows) rows = '<div style="text-align:center;padding:14px 0;color:rgba(255,255,255,.30);font-size:11.5px">歌单暂无可播放歌曲</div>';
   if (!loading && tracks.length > renderLimit) {
     rows += '<button type="button" class="fx-mini-btn ghost pl-detail-load-more" data-pl-detail-load-more="1">加载更多 ' + renderLimit + '/' + tracks.length + '</button>';
-  } else if (!loading && tracks.length > PLAYLIST_DETAIL_INITIAL_RENDER) {
+  } else if (!loading && tracks.length > detailInitialLimit) {
     rows += '<div class="pl-detail-progress">已显示全部 ' + tracks.length + ' 首</div>';
   }
   return '<div class="pl-inline-detail" data-pl-detail="' + escHtml(key) + '">' +
@@ -20356,8 +20465,10 @@ function growPlaylistPanelDetailRenderLimit(amount) {
   var st = playlistPanelDetailState;
   var total = st && st.tracks ? st.tracks.length : 0;
   if (!st || st.loading || !st.key || !total) return false;
-  var current = Math.max(PLAYLIST_DETAIL_INITIAL_RENDER, st.renderLimit || PLAYLIST_DETAIL_INITIAL_RENDER);
-  var next = Math.min(total, current + (amount || PLAYLIST_DETAIL_BATCH_SIZE));
+  var initial = playlistDetailInitialRenderLimit();
+  var batch = playlistDetailBatchSize();
+  var current = Math.max(initial, st.renderLimit || initial);
+  var next = Math.min(total, current + (amount || batch));
   if (next <= current) return false;
   var panel = document.getElementById('playlist-panel');
   var keepTop = panel ? panel.scrollTop : 0;
@@ -20375,7 +20486,7 @@ function maybeGrowPlaylistPanelDetailRenderLimit() {
   }
 }
 function resetPlaylistPanelRenderLimit() {
-  playlistPanelRenderLimit = PLAYLIST_PANEL_BATCH_SIZE;
+  playlistPanelRenderLimit = playlistPanelBatchSize();
 }
 function localLibraryPlaylistDomSignature(songs, renderLimit) {
   songs = songs || [];
@@ -20396,7 +20507,8 @@ function localLibraryPlaylistDomSignature(songs, renderLimit) {
 function growPlaylistPanelRenderLimit() {
   var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
   if (!total) return;
-  var next = Math.min(total, (playlistPanelRenderLimit || PLAYLIST_PANEL_BATCH_SIZE) + PLAYLIST_PANEL_BATCH_SIZE);
+  var batch = playlistPanelBatchSize();
+  var next = Math.min(total, (playlistPanelRenderLimit || batch) + batch);
   if (next <= playlistPanelRenderLimit) return;
   playlistPanelRenderLimit = next;
   if (LOCAL_ONLY_MODE) renderLocalLibraryPlaylistPanel({ animate: true });
@@ -20406,13 +20518,7 @@ function bindPlaylistPanelLazyRender() {
   var panel = document.getElementById('playlist-panel');
   if (!panel || playlistPanelLazyBound) return;
   playlistPanelLazyBound = true;
-  panel.addEventListener('scroll', function(){
-    maybeGrowQueuePanelRenderLimit();
-    maybeGrowPlaylistPanelDetailRenderLimit();
-    var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
-    if (queueViewTab !== 'playlists' || playlistPanelRenderLimit >= total) return;
-    if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 180) growPlaylistPanelRenderLimit();
-  }, { passive: true });
+  panel.addEventListener('scroll', schedulePlaylistPanelLazyCheck, { passive: true });
 }
 function renderLocalLibraryPlaylistPanel(opts) {
   opts = opts || {};
@@ -20426,7 +20532,8 @@ function renderLocalLibraryPlaylistPanel(opts) {
     $pl.innerHTML = '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">还没有本地音乐<br><button class="fx-mini-btn ghost" type="button" onclick="openLocalFolderImport()" style="margin-top:10px">导入文件夹</button></div>';
     return;
   }
-  playlistPanelRenderLimit = Math.max(PLAYLIST_PANEL_BATCH_SIZE, Math.min(songs.length, playlistPanelRenderLimit || PLAYLIST_PANEL_BATCH_SIZE));
+  var panelBatch = playlistPanelBatchSize();
+  playlistPanelRenderLimit = Math.max(panelBatch, Math.min(songs.length, playlistPanelRenderLimit || panelBatch));
   var visible = songs.slice(0, playlistPanelRenderLimit);
   var domSignature = localLibraryPlaylistDomSignature(songs, visible.length);
   if (domSignature === playlistPanelLastDomSignature) return;
@@ -21420,7 +21527,7 @@ function ensureLocalCoverForSong(song, opts) {
   if (song.localCoverDataUrl) {
     song.localCoverLoaded = true;
     if (!song.localCoverThumbDataUrl) {
-      createLocalCoverThumbnailDataUrl(song.localCoverDataUrl).then(function(thumb){
+      createLocalCoverThumbnailDataUrl(song.localCoverDataUrl, { maxSide: LOCAL_COVER_THUMB_MAX_SIZE, quality: LOCAL_COVER_THUMB_QUALITY }).then(function(thumb){
         if (!thumb || song.localCoverThumbDataUrl) return;
         song.localCoverThumbDataUrl = thumb;
         invalidateSongCoverCache(song);
@@ -22037,7 +22144,10 @@ async function handleLocalFolderFiles(files, opts) {
   var libraryFolderPath = opts.folderPath || savedLocalLibraryFolderPath();
   await hydrateLocalLibraryPersistentState(libraryFolderPath);
   var librarySync = syncLocalLibraryIndexWithSongs(libraryFolderPath, songs);
-  var deferAssetHydration = !!opts.restored || !!(librarySync && librarySync.stats && librarySync.stats.hasIndex && librarySync.stats.unchanged > 64);
+  var deferAssetHydration = !!opts.restored
+    || songs.length > 700
+    || !!(librarySync && librarySync.stats && librarySync.stats.hasIndex && librarySync.stats.unchanged > 64);
+  var shouldChunkAssetHydration = deferAssetHydration && songs.length > 220;
   var assetHydrationPromise = deferAssetHydration ? null : hydrateLocalAssetCacheForSongs(songs);
   if (!deferAssetHydration) await assetHydrationPromise;
   if (opts.folderPath && opts.persist !== false) saveLocalLibraryFolderPath(opts.folderPath);
@@ -22085,7 +22195,13 @@ async function handleLocalFolderFiles(files, opts) {
     // 恢复启动和大曲库先完成队列渲染，再把 IndexedDB 封面/歌词读取让给空闲时段。
     assetHydrationPromise = (async function(){
       await yieldToIdle(opts.restored ? 900 : 360);
-      return hydrateLocalAssetCacheForSongs(songs);
+      if (!shouldChunkAssetHydration) return hydrateLocalAssetCacheForSongs(songs);
+      return hydrateLocalAssetCacheForSongsChunked(songs, {
+        chunkSize: opts.restored ? 128 : 180,
+        firstChunkSize: Math.max(queuePanelInitialRenderLimit(), opts.restored ? 72 : 96),
+        delay: opts.restored ? 180 : 90,
+        isStale: function(){ return localLibrarySongs !== songs; }
+      });
     })();
     assetHydrationPromise
       .then(refreshAfterAssetHydration)
