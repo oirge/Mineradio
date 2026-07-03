@@ -2754,11 +2754,39 @@ var PERSISTENT_UI_STATE_KEYS = [
   VISUAL_GUIDE_SEEN_STORE_KEY,
   UPLOAD_TIP_STORE_KEY
 ];
-function backupPersistentUiState(patch) {
+var persistentUiStateBackupPendingPatch = null;
+var persistentUiStateBackupTimer = 0;
+var PERSISTENT_UI_STATE_BACKUP_DELAY = 180;
+function mergePersistentUiStateBackupPatch(patch) {
+  if (!patch || typeof patch !== 'object') return false;
+  if (!persistentUiStateBackupPendingPatch) persistentUiStateBackupPendingPatch = {};
+  Object.keys(patch).forEach(function(key){
+    persistentUiStateBackupPendingPatch[key] = patch[key];
+  });
+  return true;
+}
+function flushPersistentUiStateBackup() {
+  if (persistentUiStateBackupTimer) {
+    clearTimeout(persistentUiStateBackupTimer);
+    persistentUiStateBackupTimer = 0;
+  }
+  if (!persistentUiStateBackupPendingPatch) return;
+  var patch = persistentUiStateBackupPendingPatch;
+  persistentUiStateBackupPendingPatch = null;
   try {
     var api = window.desktopWindow;
     if (api && typeof api.backupUiState === 'function') api.backupUiState(patch || {});
   } catch (e) {}
+}
+function backupPersistentUiState(patch, opts) {
+  opts = opts || {};
+  if (!mergePersistentUiStateBackupPatch(patch)) return;
+  if (opts.immediate) {
+    flushPersistentUiStateBackup();
+    return;
+  }
+  if (persistentUiStateBackupTimer) clearTimeout(persistentUiStateBackupTimer);
+  persistentUiStateBackupTimer = setTimeout(flushPersistentUiStateBackup, PERSISTENT_UI_STATE_BACKUP_DELAY);
 }
 function setPersistentLocalStorageItem(key, value) {
   var text = String(value == null ? '' : value);
@@ -2784,7 +2812,7 @@ function syncPersistentUiStateBackup() {
       hasAny = true;
     });
   } catch (e) {}
-  if (hasAny) backupPersistentUiState(patch);
+  if (hasAny) backupPersistentUiState(patch, { immediate: true });
 }
 function hasSavedLyricLayout() {
   try { return localStorage.getItem(LYRIC_LAYOUT_STORE_KEY) != null; } catch (e) { return false; }
@@ -4314,6 +4342,7 @@ function updateFreeCamera(dt) {
 function flushPersistentVisualState() {
   try { saveLyricLayout(); } catch (e) {}
   try { saveFreeCameraState(); } catch (e) {}
+  try { flushPersistentUiStateBackup(); } catch (e) {}
 }
 window.addEventListener('beforeunload', flushPersistentVisualState);
 window.addEventListener('pagehide', flushPersistentVisualState);

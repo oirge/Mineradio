@@ -1,85 +1,65 @@
 # Mineradio Next Chat Handoff
 
-更新时间：2026-06-24
+更新时间：2026-07-03
 
 ## 新对话先执行
 
+当前可用工作区：
+
 ```powershell
-cd E:\桌面\播放器软件\Mineradio\resources\app
+cd C:\Users\Administrator\Desktop\Mineradio-main
 git status --short --branch
 git log --oneline -5 --decorate
-Get-Content AGENTS.md
-Get-Content docs\PROJECT_MEMORY.md
-Get-Content docs\HANDOFF_NEXT_CHAT.md
+Get-Content AGENTS.md -Encoding UTF8
+Get-Content docs\PROJECT_MEMORY.md -Encoding UTF8
+Get-Content docs\HANDOFF_NEXT_CHAT.md -Encoding UTF8
 ```
 
-如涉及 3D 歌单架、安全重建、发布、安装包或旧备份取用，再读：
+如涉及 3D 歌单架、玻璃 SVG 质感、发布或安装包，再读：
 
 ```powershell
-Get-Content docs\3D_PLAYLIST_SHELF_MEMORY.md
-Get-Content docs\SECURITY_REBUILD_2026-06-24.md
-Get-Content CHANGELOG.md -TotalCount 80
-Get-Content RELEASE.md
+Get-Content docs\3D_PLAYLIST_SHELF_MEMORY.md -Encoding UTF8
+Get-Content docs\GLASS_SVG_TEXTURE.md -Encoding UTF8
+Get-Content CHANGELOG.md -Encoding UTF8 -TotalCount 120
+Get-Content RELEASE.md -Encoding UTF8
+Get-Content package.json -Encoding UTF8
 ```
 
 ## 当前状态
 
-- 当前真实代码/Git 仓库：`E:\桌面\播放器软件\Mineradio\resources\app`
-- 当前版本：`v1.1.0`
-- 当前发布策略：纯净安装版，从当前可信源码重新构建；`v1.0.10` 及更早旧安装包需要隔离，不再建议安装或传播。
-- 本次发布不做 `v1.0.10 -> v1.1.0` 软件内本地更新，不上传 `latest.yml`，不生成快速补丁。
-- 安装包样式继续沿用 `docs/INSTALLER_STYLE.md` 的中文极简黑白蓝格式。
-- GitHub 仓库已公开：`https://github.com/XxHuberrr/Mineradio`
-- `v1.1.0` Release：`https://github.com/XxHuberrr/Mineradio/releases/tag/v1.1.0`
-- GitHub `/releases/latest` 仍返回 `v1.0.10`，这是刻意设置，避免旧版软件内更新到 1.1.0。
+- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
+- 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
+- 当前版本：`v1.2.8`
+- GitHub 仓库：`https://github.com/oirge/Mineradio`
+- 当前分支：`main...origin/main`
+- 当前提交：以 `git log --oneline -5 --decorate` 为准
+- `package.json` 发布配置 owner/repo 已是 `oirge/Mineradio`。
 
-## 本轮重点
+## 最近完成
 
-- 已将 `E:\Download\默认测试.json` 设为首次启动默认用户存档和软件内默认视觉参数。
-- 新增 `public/default-user-fx-archive.json`，代码中 `PACKAGED_DEFAULT_FX_SNAPSHOT` 与该 JSON 已脚本比对一致。
-- 没有本地 `mineradio-lyric-layout-v1` 时，`readSavedLyricLayout()` 使用 packaged 默认快照；没有本地用户存档 key 时自动创建「默认测试」槽位。
-- 已恢复详细日志和发布说明：`CHANGELOG.md`、`README.md`、`SECURITY.md`、`RELEASE.md`、`docs/SECURITY_REBUILD_2026-06-24.md`、`docs/RELEASE_NOTES_v1.1.0.md`。
-- 已生成安装包：`dist/Mineradio-1.1.0-Setup.exe`。
-- 已生成校验文件：`dist/Mineradio-1.1.0-SHA256SUMS.txt`。
-- 已发布资产：安装包、blockmap、SHA256SUMS；未上传 `latest.yml`。
-- 已批量给旧 Release（`v1.0.10` 到 `v0.9.9`）正文顶部追加旧安装包隔离警示。
+- 2026-07-03：将渲染进程 UI 状态备份从每次立即 IPC/写盘，改为 180ms 合并写入；首次全量同步仍立即写，`beforeunload` / `pagehide` 前会 flush，降低连续拖动视觉滑条和设置切换时的主进程写盘抖动。
+- 2026-07-03：交接文档从旧 `v1.1.0 / XxHuberrr` 发布线更新到当前 `v1.2.8 / oirge` 工作区，避免后续接手走错仓库。
 
 ## 已知验证
 
-- `git diff --check`：通过。
-- `node --check server.js`：通过。
-- 前端 `public/index.html` 5 个内联脚本解析：通过。
-- `public/default-user-fx-archive.json` JSON 解析：通过。
-- 代码内置默认快照与 `public/default-user-fx-archive.json` 字段比对：一致。
-- Git 跟踪高风险残留检查：没有匹配 `.exe/.dll/.scr/.bat/.cmd/.ps1/.vbs/.jse/.wsf/.hta/.xlsm/.msi`。
-- `npm run build:win`：第一次被旧代理 `127.0.0.1:26001` 拦截；切到 `127.0.0.1:10808` 后构建成功。
-- Defender 状态：实时防护开启，签名版本 `1.453.247.0`。
-- Defender 已扫描新安装包和 `dist\win-unpacked`；`Get-MpThreatDetection` 查询为空。
-- 安装包 SHA256：`bd53aae4e551f5b0b5a398a51e6ec1de5a9a57cb42e5eecedb0a1647fdcee6e6`。
+- `git diff --check`
+- `node --check server.js`
+- `node --check desktop\main.js`
+- 前端内联脚本解析检查
+- 当前 Windows 系统代理为 `127.0.0.1:7897`；PowerShell / Node 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
+- 已使用该代理成功执行 `npm run build:win:dir`，生成 `dist\win-unpacked`。
+- 已使用该代理成功执行 `npm run build:win`，生成 `dist\Mineradio-1.2.8-Setup.exe`、`.blockmap`、`dist\Mineradio-1.2.8-Portable-win-x64.zip` 和 `dist\latest.yml`。
+- 本次 `Mineradio-1.2.8-Setup.exe` SHA256：`ED16AAB84BC994BDA0512D6250EAF12FC2DAD8AABCA6ABF6FD98B65CBF5C4601`。
 
-## 发布注意
+## 后续优先级
 
-- GitHub CLI 命令需要在命令内覆盖代理：
-
-```powershell
-$env:HTTP_PROXY='http://127.0.0.1:10808'
-$env:HTTPS_PROXY='http://127.0.0.1:10808'
-$env:ALL_PROXY='socks5://127.0.0.1:10808'
-```
-
-- 发布 `v1.1.0` 时不要上传 `dist/latest.yml`。
-- Release 建议上传：
-  - `dist/Mineradio-1.1.0-Setup.exe`
-  - `dist/Mineradio-1.1.0-Setup.exe.blockmap`
-  - `dist/Mineradio-1.1.0-SHA256SUMS.txt`
-- Release 正文使用 `docs/RELEASE_NOTES_v1.1.0.md`。
-- Release 需要 `--latest=false` 或等价 API，避免旧版客户端通过 `/releases/latest` 自动发现。
-- 旧 release 尤其 `v1.0.10` 需要追加隔离警示，不要删除旧资产。
+- 继续小步优化 3D 歌单架“悬停展开”和“点击可用”之间的手感边界；先读 `docs\3D_PLAYLIST_SHELF_MEMORY.md`，不要推倒重做。
+- 继续关注本地大曲库：搜索索引预热、队列/歌单架分批渲染、封面缩略图缓存和桌面歌词 IPC 频率。
+- 如要发布，先确认版本号、`CHANGELOG.md`、`RELEASE.md`、安装包和 GitHub Release 资产一致。
 
 ## 不要做
 
-- 不要修改旧外层源码目录，只有 `resources\app` 会影响运行版。
-- 不要从 `工作区备份\2026-06-18-workspace-cleanup`、旧 `dist`、旧 `node_modules` 或旧 packaged build 中恢复可执行产物。
-- 不要使用 `git reset --hard` 或 `git checkout --` 回滚用户改动。
-- 不要把 `v1.1.0` 当作 `v1.0.10` 的软件内更新发布。
-- 不要上传 `latest.yml` 或 `v1.0.10 -> v1.1.0` 快速补丁。
+- 不要修改不存在或旧归档的外层源码目录。
+- 不要恢复旧的侧边栏闪烁、控制台播放暂停失效、3D 歌单架强制切回星河等问题。
+- 不要把搜索结果、左侧歌单、3D 歌单架的性能优化做成一次性渲染全部内容。
+- 不要把玻璃 SVG 黄金质感改成普通毛玻璃或廉价透明面板。

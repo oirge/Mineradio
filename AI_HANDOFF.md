@@ -2,16 +2,14 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
-## 当前权威入口（2026-06-24）
+## 当前权威入口（2026-07-03）
 
-- 当前真实代码/Git 仓库仍是 `E:\桌面\播放器软件\Mineradio\resources\app`。
-- 当前版本是 `v1.1.0` 纯净安装发布线；本轮已从当前可信源码重新生成并发布 `dist/Mineradio-1.1.0-Setup.exe`。
-- GitHub 仓库已公开：`https://github.com/XxHuberrr/Mineradio`
-- `v1.1.0` Release：`https://github.com/XxHuberrr/Mineradio/releases/tag/v1.1.0`
-- GitHub `/releases/latest` 仍返回 `v1.0.10`，这是刻意设置，避免旧版软件内更新到 1.1.0。
-- `v1.0.10` 及更早旧安装包不再信任，需要在 GitHub Release/README/SECURITY 中标记隔离。
-- `v1.1.0` 不提供从 `v1.0.10` 的软件内本地更新，不上传 `latest.yml`，不生成 `v1.0.10 -> v1.1.0` 快速补丁。
-- 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及安全重建或发布时再读 `docs/SECURITY_REBUILD_2026-06-24.md`。本文件下面包含较早历史记录，不能覆盖上述文件的当前结论。
+- 当前可写代码/Git 仓库是 `C:\Users\Administrator\Desktop\Mineradio-main`。
+- 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
+- 当前版本是 `v1.2.8`，最新提交以 `git log --oneline -5 --decorate` 为准。
+- GitHub 仓库：`https://github.com/oirge/Mineradio`
+- `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
+- 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录，不能覆盖上述文件的当前结论。
 
 ## 用户偏好
 
@@ -41,7 +39,7 @@
 
 ### dist 发布区
 
-`dist` 根部只保留当前可发布资产。`v1.1.0` 安全发布只上传安装包、可选 blockmap 和 SHA256，不上传 `latest.yml`：
+`dist` 根部只保留当前可发布资产。发布前必须确认安装包、blockmap、`latest.yml`、版本号和 GitHub Release 资产一致：
 
 - `Mineradio-<version>-Setup.exe`
 - `Mineradio-<version>-Setup.exe.blockmap`
@@ -74,6 +72,14 @@
 这个目录是人工归档区，不参与软件更新流程。
 
 ## 已完成工作日志
+
+### 2026-07-03
+
+- 权限恢复后确认当前可写仓库为 `C:\Users\Administrator\Desktop\Mineradio-main`，旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 在本环境不存在；本地 `main...origin/main` 位于 `v1.2.8`。
+- 确认远端与发布配置均为 `oirge/Mineradio`，并将 `docs/HANDOFF_NEXT_CHAT.md` 从旧 `v1.1.0 / XxHuberrr` 发布线更新到当前 `v1.2.8 / oirge` 工作区。
+- 优化渲染进程 UI 状态备份：`public/index.html` 中连续 `setPersistentLocalStorageItem()` 触发的桌面壳备份改为 180ms 合并写入；首次全量同步仍立即写，退出和页面隐藏前 flush，降低视觉滑条/设置连续保存时的 IPC 与主进程写盘抖动。
+- 已通过 `git diff --check`、`node --check server.js`、`node --check desktop\main.js`、`node --check desktop\preload.js` 和前端内联脚本解析；确认当前系统代理为 `127.0.0.1:7897`，用 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY=http://127.0.0.1:7897` 成功执行 `npm run build:win:dir` 和 `npm run build:win`。
+- 本轮完整构建产物：`dist\Mineradio-1.2.8-Setup.exe`、`dist\Mineradio-1.2.8-Setup.exe.blockmap`、`dist\Mineradio-1.2.8-Portable-win-x64.zip`、`dist\latest.yml`；安装包 SHA256 为 `ED16AAB84BC994BDA0512D6250EAF12FC2DAD8AABCA6ABF6FD98B65CBF5C4601`。
 
 ### 2026-06-24
 
