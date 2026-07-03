@@ -2828,6 +2828,7 @@ var localLibraryRestoreScheduled = false;
 var localLibraryRestoreStarted = false;
 var localAssetUiRefreshTimer = null;
 var localAssetUiRefreshReason = '';
+var localLibraryAssetUiBatchState = { progressAt: 0, refreshAt: 0 };
 var localAssetCacheMemory = {};
 var localAssetCacheWriteTimers = {};
 var localLibraryPersistentMemory = {};
@@ -2903,6 +2904,7 @@ var miniQueueRenderFingerprint = '';
 var queuePanelLastDomSignature = '';
 var miniQueueLastDomSignature = '';
 var localSearchPoolCache = { source: null, signature: '', items: [] };
+var localSearchIndexWarmState = { token: 0, source: null, signature: '', cursor: 0, timer: null, complete: true };
 var searchResultsLastDomSignature = '';
 var searchResultsLastAnimateAt = 0;
 var PLAYLIST_PANEL_BATCH_SIZE = 28;
@@ -2930,8 +2932,8 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.2.7',
-  version: '1.2.7',
+  currentVersion: '1.2.8',
+  version: '1.2.8',
   configured: false,
   preview: true,
   updateAvailable: false,
@@ -3924,6 +3926,11 @@ function playlistDetailBatchSize(now) {
 }
 function searchInputDebounceMs(now) {
   var level = getRuntimeFramePressureLevel(now);
+  if (typeof localSearchIndexWarmState !== 'undefined' && localSearchIndexWarmState && !localSearchIndexWarmState.complete) {
+    if (level >= 2) return 460;
+    if (level >= 1) return 360;
+    return 240;
+  }
   if (level >= 2) return 340;
   if (level >= 1) return 260;
   return 180;
@@ -13224,6 +13231,40 @@ function localAssetProcessingStartDelay(opts) {
   if (typeof runtimeFramePressureDelayScale === 'function') delay = Math.round(delay * runtimeFramePressureDelayScale());
   return delay;
 }
+function localAssetProgressUiMinGap(now) {
+  if (typeof isHiddenForBackgroundOptimization === 'function' && isHiddenForBackgroundOptimization()) return 1400;
+  var level = typeof getRuntimeFramePressureLevel === 'function' ? getRuntimeFramePressureLevel(now) : 0;
+  if (level >= 2) return 1250;
+  if (level >= 1) return 820;
+  return 360;
+}
+function localAssetRefreshUiMinGap(now) {
+  if (typeof isHiddenForBackgroundOptimization === 'function' && isHiddenForBackgroundOptimization()) return 2200;
+  var level = typeof getRuntimeFramePressureLevel === 'function' ? getRuntimeFramePressureLevel(now) : 0;
+  if (level >= 2) return 2200;
+  if (level >= 1) return 1450;
+  return 760;
+}
+function shouldUpdateLocalAssetProgressUi(force) {
+  var now = runtimeFramePressureNow();
+  if (force || !localLibraryAssetUiBatchState.progressAt || now - localLibraryAssetUiBatchState.progressAt >= localAssetProgressUiMinGap(now)) {
+    localLibraryAssetUiBatchState.progressAt = now;
+    return true;
+  }
+  return false;
+}
+function shouldRefreshLocalAssetUiBatch(song, force) {
+  if (force || isCurrentLocalQueueSong(song)) {
+    localLibraryAssetUiBatchState.refreshAt = runtimeFramePressureNow();
+    return true;
+  }
+  var now = runtimeFramePressureNow();
+  if (!localLibraryAssetUiBatchState.refreshAt || now - localLibraryAssetUiBatchState.refreshAt >= localAssetRefreshUiMinGap(now)) {
+    localLibraryAssetUiBatchState.refreshAt = now;
+    return true;
+  }
+  return false;
+}
 function localIndexedAssetCanWaitForCache(song, kind) {
   if (!song || song.localAssetCacheMiss) return false;
   if (song.localLibraryChangeState !== 'unchanged' && !song.localLibraryIndexApplied) return false;
@@ -13302,6 +13343,8 @@ function startLocalLibraryBackgroundProcessing(songs, opts) {
   if (!songs.length) return 0;
   var token = ++localLibraryProcessToken;
   localLibraryProcessing = { active:true, token:token, total:songs.length, assetsDone:0 };
+  localLibraryAssetUiBatchState.progressAt = 0;
+  localLibraryAssetUiBatchState.refreshAt = 0;
   updateLocalLibraryProcessingProgress(false);
   setTimeout(function(){
     runLocalLibraryBackgroundProcessing(songs.slice(), token, opts).catch(function(err){
@@ -13329,8 +13372,9 @@ async function runLocalLibraryBackgroundProcessing(songs, token, opts) {
       var applyCurrent = isCurrentLocalQueueSong(song);
       await preloadLocalSongAssets(song, { token:token, applyCurrent:applyCurrent, background:true });
       localLibraryProcessing.assetsDone = i + 1;
-      updateLocalLibraryProcessingProgress(false);
-      if (applyCurrent || (!opts.restored && i % 5 === 0) || i === songs.length - 1) refreshLocalSongAssetUi(song, 'local-library-assets');
+      var isLast = i === songs.length - 1;
+      if (shouldUpdateLocalAssetProgressUi(isLast || applyCurrent)) updateLocalLibraryProcessingProgress(false);
+      if (shouldRefreshLocalAssetUiBatch(song, isLast || applyCurrent)) scheduleLocalAssetUiRefresh(song, 'local-library-assets');
       await yieldToIdle(localAssetBackgroundDelayMs());
     }
   } finally {
@@ -18173,6 +18217,7 @@ function localSearchPool() {
   localSearchPoolCache.source = sourceList;
   localSearchPoolCache.signature = signature;
   localSearchPoolCache.items = (sourceList || []).filter(function(song){ return song && song.type === 'local'; });
+  scheduleLocalSearchIndexWarmup(localSearchPoolCache.items, { signature: signature, delay: 120 });
   return localSearchPoolCache.items;
 }
 function localSongSearchText(song) {
@@ -18199,7 +18244,90 @@ function cachedLocalSongSearchText(song) {
   song._mineradioSearchTextNorm = simpleSearchNorm(key);
   return song._mineradioSearchTextNorm;
 }
+function cancelLocalSearchIndexWarmup() {
+  if (localSearchIndexWarmState.timer) {
+    clearTimeout(localSearchIndexWarmState.timer);
+    localSearchIndexWarmState.timer = null;
+  }
+  localSearchIndexWarmState.token++;
+  localSearchIndexWarmState.source = null;
+  localSearchIndexWarmState.signature = '';
+  localSearchIndexWarmState.cursor = 0;
+  localSearchIndexWarmState.complete = true;
+}
+function localSearchIndexWarmChunkSize(now) {
+  if (typeof isHiddenForBackgroundOptimization === 'function' && isHiddenForBackgroundOptimization()) return 120;
+  var level = getRuntimeFramePressureLevel(now);
+  if (level >= 2) return 48;
+  if (level >= 1) return 96;
+  return 180;
+}
+function localSearchIndexWarmDelay(now) {
+  if (typeof isHiddenForBackgroundOptimization === 'function' && isHiddenForBackgroundOptimization()) return 360;
+  var level = getRuntimeFramePressureLevel(now);
+  if (level >= 2) return 260;
+  if (level >= 1) return 150;
+  return 54;
+}
+function runLocalSearchIndexWarmChunk(token) {
+  if (token !== localSearchIndexWarmState.token) return;
+  var source = localSearchIndexWarmState.source;
+  if (!source || localSearchIndexWarmState.complete) return;
+  var now = runtimeFramePressureNow();
+  var budgetMs = getRuntimeFramePressureLevel(now) >= 2 ? 3.5 : 6.5;
+  var deadline = now + budgetMs;
+  var chunk = localSearchIndexWarmChunkSize(now);
+  var processed = 0;
+  while (localSearchIndexWarmState.cursor < source.length && processed < chunk) {
+    cachedLocalSongSearchText(source[localSearchIndexWarmState.cursor]);
+    localSearchIndexWarmState.cursor++;
+    processed++;
+    if (processed >= 12 && runtimeFramePressureNow() > deadline) break;
+  }
+  if (token !== localSearchIndexWarmState.token) return;
+  if (localSearchIndexWarmState.cursor >= source.length) {
+    localSearchIndexWarmState.complete = true;
+    localSearchIndexWarmState.timer = null;
+    return;
+  }
+  localSearchIndexWarmState.timer = setTimeout(function(){
+    localSearchIndexWarmState.timer = null;
+    runLocalSearchIndexWarmChunk(token);
+  }, localSearchIndexWarmDelay(runtimeFramePressureNow()));
+}
+/**
+ * 在空闲切片里预热本地搜索归一化索引，减少第一次冷门词搜索时的同步扫库开销。
+ * @param {Array<object>} songs 本地歌曲列表。
+ * @param {{signature?: string, delay?: number}} opts 调度选项。
+ * @returns {void}
+ */
+function scheduleLocalSearchIndexWarmup(songs, opts) {
+  opts = opts || {};
+  songs = (songs || []).filter(function(song){ return song && song.type === 'local'; });
+  var signature = opts.signature || ('library:' + songs.length);
+  if (!songs.length) {
+    cancelLocalSearchIndexWarmup();
+    return;
+  }
+  if (localSearchIndexWarmState.source === songs && localSearchIndexWarmState.signature === signature) {
+    if (localSearchIndexWarmState.complete || localSearchIndexWarmState.timer) return;
+  } else {
+    if (localSearchIndexWarmState.timer) clearTimeout(localSearchIndexWarmState.timer);
+    localSearchIndexWarmState.token++;
+    localSearchIndexWarmState.source = songs;
+    localSearchIndexWarmState.signature = signature;
+    localSearchIndexWarmState.cursor = 0;
+    localSearchIndexWarmState.complete = false;
+  }
+  var token = localSearchIndexWarmState.token;
+  var delay = opts.delay == null ? localSearchIndexWarmDelay(runtimeFramePressureNow()) : opts.delay;
+  localSearchIndexWarmState.timer = setTimeout(function(){
+    localSearchIndexWarmState.timer = null;
+    runLocalSearchIndexWarmChunk(token);
+  }, Math.max(0, delay));
+}
 function resetSearchRenderCache() {
+  cancelLocalSearchIndexWarmup();
   localSearchPoolCache.source = null;
   localSearchPoolCache.signature = '';
   localSearchPoolCache.items = [];
@@ -18207,6 +18335,7 @@ function resetSearchRenderCache() {
   searchResultsLastDomSignature = '';
 }
 function markQueueContentChanged() {
+  cancelLocalSearchIndexWarmup();
   localSearchPoolCache.source = null;
   localSearchPoolCache.signature = '';
   localSearchPoolCache.items = [];
@@ -20669,15 +20798,19 @@ function updatePlaybackProgressUi() {
   var durationSec = getPlaybackDurationSeconds();
   var currentSec = getPlaybackCurrentSeconds();
   if (durationSec > 0 && currentSec > durationSec) currentSec = durationSec;
+  var visualPercent = durationSec > 0 ? (currentSec / durationSec * 100) : 0;
+  var prevPercent = playbackProgressUiState.lastPercent;
   setProgressVisual(durationSec > 0 ? (currentSec / durationSec * 100) : 0);
   var timeDisplay = playbackProgressElements().timeDisplay;
   var timeText = formatProgramTime(currentSec) + ' / ' + (durationSec > 0 ? formatProgramTime(durationSec) : '0:00');
-  if (timeDisplay && playbackProgressUiState.lastText !== timeText) {
+  var textChanged = playbackProgressUiState.lastText !== timeText;
+  if (textChanged) {
     playbackProgressUiState.lastText = timeText;
-    timeDisplay.textContent = timeText;
+    if (timeDisplay) timeDisplay.textContent = timeText;
   }
-  updateSystemMediaSessionPosition();
-  savePlaybackSession(false);
+  var nextPercent = Math.round(visualPercent * 100) / 100;
+  if (textChanged || prevPercent !== nextPercent) updateSystemMediaSessionPosition();
+  if (textChanged || Math.abs((prevPercent == null ? -1 : prevPercent) - nextPercent) >= 0.25) savePlaybackSession(false);
 }
 function schedulePlaybackProgressUi(reason, force) {
   if (force) {
@@ -27935,8 +28068,8 @@ function scheduleDesktopOverlaySync(delay) {
     desktopOverlaySyncTimer = null;
     if (!desktopOverlayActive()) return;
     syncDesktopOverlayState();
-    scheduleDesktopOverlaySync(320);
-  }, Math.max(0, delay == null ? 320 : delay));
+    scheduleDesktopOverlaySync(desktopOverlaySyncDelay());
+  }, Math.max(0, delay == null ? desktopOverlaySyncDelay() : delay));
 }
 function getDesktopWindowApi() {
   return window.desktopWindow && window.desktopWindow.isDesktop ? window.desktopWindow : null;
@@ -28092,10 +28225,22 @@ function notifyDesktopLyricsBeatMapReady() {
     if (fx && fx.desktopLyrics) pushDesktopLyricsState(true);
   } catch (e) {}
 }
+function desktopOverlaySyncDelay() {
+  if (typeof isHiddenForBackgroundOptimization === 'function' && isHiddenForBackgroundOptimization()) return 900;
+  var level = typeof getRuntimeFramePressureLevel === 'function' ? getRuntimeFramePressureLevel() : 0;
+  if (level >= 2) return 620;
+  if (level >= 1) return 420;
+  return 320;
+}
 function desktopLyricsPushInterval() {
   var fps = normalizeDesktopLyricsFps(fx && fx.desktopLyricsFps);
   if (!fps) return 8;
-  return Math.max(8, Math.min(42, 1000 / fps));
+  var interval = Math.max(8, Math.min(42, 1000 / fps));
+  if (typeof isHiddenForBackgroundOptimization === 'function' && isHiddenForBackgroundOptimization()) return Math.max(interval, 120);
+  var level = typeof getRuntimeFramePressureLevel === 'function' ? getRuntimeFramePressureLevel() : 0;
+  if (level >= 2) return Math.max(interval * 1.75, 38);
+  if (level >= 1) return Math.max(interval * 1.25, 26);
+  return interval;
 }
 function desktopLyricsPayload(forceBeatMap) {
   var meta = currentDesktopSongMeta();

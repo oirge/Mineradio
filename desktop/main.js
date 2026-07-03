@@ -130,6 +130,7 @@ const LOCAL_LIBRARY_INCREMENTAL_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 function localLibraryScanStatConcurrency(count) {
   count = Math.max(0, Number(count) || 0);
+  if (count >= 24000) return 8;
   if (count >= 12000) return 10;
   if (count >= 5000) return 12;
   if (count >= 1200) return 16;
@@ -285,9 +286,12 @@ async function collectLocalLibraryFolderEntries(root) {
   const directories = [];
   const stack = [''];
   let visited = 0;
+  let scannedDirs = 0;
   while (stack.length) {
     const relDir = stack.pop();
     const absDir = path.join(root, relDir);
+    scannedDirs += 1;
+    if (scannedDirs % 32 === 0) await yieldLocalLibraryScanTurn();
     let dirStat = null;
     try {
       dirStat = await fs.promises.stat(absDir);
@@ -305,6 +309,7 @@ async function collectLocalLibraryFolderEntries(root) {
     entries.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }));
     for (const entry of entries) {
       visited += 1;
+      if (visited % 360 === 0) await yieldLocalLibraryScanTurn();
       if (visited > LOCAL_LIBRARY_SCAN_VISIT_LIMIT) break;
       const rel = path.join(relDir, entry.name);
       const abs = path.join(root, rel);
