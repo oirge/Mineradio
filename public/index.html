@@ -2841,8 +2841,10 @@ var diyPlayerMode = readDiyModePreference();
 var customCoverMap = readCustomCoverMap();
 var customLyricMap = readCustomLyricMap();
 var customLyricPrefs = readCustomLyricPrefs();
-var localBeatMapCache = readLocalBeatMapCache();
-var localBeatMapPrefs = readLocalBeatPrefs();
+var localBeatMapCache = {};
+var localBeatMapPrefs = {};
+var localBeatMapCacheHydrated = false;
+var localBeatPrefsHydrated = false;
 var playbackQuality = readPlaybackQualityPreference();
 var coverCropState = null, coverCropBound = false;
 var currentLocalSong = null;
@@ -12995,6 +12997,7 @@ function readLocalBeatPrefs() {
   catch (e) { return {}; }
 }
 function saveLocalBeatPrefs() {
+  ensureLocalBeatPrefsCache();
   try { localStorage.setItem(LOCAL_BEAT_PREF_STORE_KEY, JSON.stringify(localBeatMapPrefs || {})); } catch (e) {}
 }
 function readLocalBeatMapCache() {
@@ -13012,9 +13015,32 @@ function readLocalBeatMapCache() {
   }
   return out;
 }
+/**
+ * 按需读取本地节奏偏好。启动阶段不主动解析节奏缓存，避免首屏前同步 localStorage 开销。
+ * @returns {object} 本地歌曲到节奏模式的偏好映射。
+ */
+function ensureLocalBeatPrefsCache() {
+  if (!localBeatPrefsHydrated) {
+    localBeatMapPrefs = readLocalBeatPrefs();
+    localBeatPrefsHydrated = true;
+  }
+  return localBeatMapPrefs;
+}
+/**
+ * 按需读取本地节奏分析缓存。只有打开节奏面板或使用缓存时才解析较大的节奏 JSON。
+ * @returns {object} 本地歌曲到节奏分析结果的缓存映射。
+ */
+function ensureLocalBeatMapCache() {
+  if (!localBeatMapCacheHydrated) {
+    localBeatMapCache = readLocalBeatMapCache();
+    localBeatMapCacheHydrated = true;
+  }
+  return localBeatMapCache;
+}
 function packLocalBeatCache(maxEntries) {
-  var entries = Object.keys(localBeatMapCache || {}).map(function(key){
-    var entry = localBeatMapCache[key] || {};
+  var cache = ensureLocalBeatMapCache();
+  var entries = Object.keys(cache || {}).map(function(key){
+    var entry = cache[key] || {};
     return { key:key, updatedAt: entry.updatedAt || 0, entry:entry };
   }).sort(function(a,b){ return b.updatedAt - a.updatedAt; });
   if (maxEntries) entries = entries.slice(0, maxEntries);
@@ -13027,6 +13053,7 @@ function packLocalBeatCache(maxEntries) {
   return packed;
 }
 function saveLocalBeatMapCache() {
+  ensureLocalBeatMapCache();
   var attempts = [12, 8, 5, 3];
   for (var i = 0; i < attempts.length; i++) {
     try {
@@ -13037,17 +13064,20 @@ function saveLocalBeatMapCache() {
   return false;
 }
 function getLocalBeatEntry(localKey, mode) {
-  var entry = localKey && localBeatMapCache ? localBeatMapCache[localKey] : null;
+  var cache = ensureLocalBeatMapCache();
+  var entry = localKey && cache ? cache[localKey] : null;
   return entry && entry[mode] ? entry[mode] : null;
 }
 function storeLocalBeatEntry(localKey, mode, map, song, opts) {
   if (!localKey || !map) return;
   opts = opts || {};
-  var entry = localBeatMapCache[localKey] || {};
+  var cache = ensureLocalBeatMapCache();
+  var prefs = ensureLocalBeatPrefsCache();
+  var entry = cache[localKey] || {};
   entry[mode] = map;
   entry.updatedAt = Date.now();
-  localBeatMapCache[localKey] = entry;
-  localBeatMapPrefs[localKey] = mode;
+  cache[localKey] = entry;
+  prefs[localKey] = mode;
   saveLocalBeatPrefs();
   saveLocalBeatMapCache();
   if (!opts.skipDisk) writeBeatDiskCache(localBeatDiskKey(localKey, mode), map, song || { type:'local', localKey:localKey }, mode);
@@ -13065,7 +13095,8 @@ function localBeatVisualCount(map) {
 }
 function setLocalBeatPreference(localKey, mode) {
   if (!localKey) return;
-  localBeatMapPrefs[localKey] = mode === 'dj' ? 'dj' : 'mr';
+  var prefs = ensureLocalBeatPrefsCache();
+  prefs[localKey] = mode === 'dj' ? 'dj' : 'mr';
   saveLocalBeatPrefs();
 }
 function applyLocalBeatMap(song, mode, map, fromCache) {
@@ -13423,7 +13454,8 @@ function openLocalBeatModal(song, audioUrl) {
   if (immersiveMode) setImmersiveMode(false);
   localBeatAnalysis.song = song || currentLocalSong;
   localBeatAnalysis.audioUrl = audioUrl || (audio && audio.src) || '';
-  localBeatAnalysis.mode = (localBeatAnalysis.song && localBeatMapPrefs[localBeatAnalysis.song.localKey] === 'dj') ? 'dj' : 'mr';
+  var prefs = ensureLocalBeatPrefsCache();
+  localBeatAnalysis.mode = (localBeatAnalysis.song && prefs[localBeatAnalysis.song.localKey] === 'dj') ? 'dj' : 'mr';
   localBeatAnalysis.active = false;
   setLocalBeatStatus('', '');
   updateLocalBeatModal();
@@ -22487,14 +22519,6 @@ var lyricColorPresets = [
 var USER_FX_ARCHIVE_STORE_KEY = 'mineradio-user-fx-archives-v1';
 var USER_FX_ARCHIVE_EXPORT_TYPE = 'mineradio-user-fx-archive';
 var USER_FX_ARCHIVE_SCHEMA = 1;
-function defaultUserFxArchiveName(index) {
-  return '存档 ' + (index + 1);
-}
-function normalizeUserFxArchiveName(name, index) {
-  name = String(name || '').replace(/\s+/g, ' ').trim();
-  if (!name) name = defaultUserFxArchiveName(index);
-  return name.slice(0, 18);
-}
 function archiveNumber(raw, key, fallback, min, max) {
   var value = raw && raw[key] != null ? Number(raw[key]) : fallback;
   if (!isFinite(value)) value = fallback;
@@ -22695,77 +22719,6 @@ if (!hadStoredUserFxArchives) {
   saveUserFxArchives();
 }
 var userFxArchiveEditing = -1;
-function renderUserFxArchives() {
-  var grid = document.getElementById('user-archive-grid');
-  if (!grid) return;
-  grid.innerHTML = userFxArchives.map(function(slot, index){
-    var hasSave = !!slot.snapshot;
-    var editing = userFxArchiveEditing === index;
-    var nameHtml = editing
-      ? '<input class="user-archive-input" id="user-archive-input-' + index + '" type="text" maxlength="18" value="' + escHtml(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
-      : '<div class="user-archive-name" title="' + escHtml(slot.name) + '">' + escHtml(slot.name) + '</div>';
-    var actionsHtml = editing
-      ? '<button type="button" onclick="commitUserFxArchiveRename(' + index + ')">确定</button>' +
-        '<button type="button" onclick="cancelUserFxArchiveRename()">取消</button>'
-      : '<button type="button" onclick="applyUserFxArchive(' + index + ')"' + (hasSave ? '' : ' disabled') + '>应用</button>' +
-        '<button type="button" onclick="saveUserFxArchive(' + index + ')">保存</button>' +
-        '<button type="button" onclick="renameUserFxArchive(' + index + ')">命名</button>';
-    return '<div class="user-archive-slot' + (hasSave ? ' has-save' : '') + '" data-slot="' + index + '">' +
-      nameHtml +
-      '<div class="user-archive-meta">' + formatUserArchiveTime(slot.savedAt) + '</div>' +
-      '<div class="user-archive-actions">' +
-        actionsHtml +
-      '</div>' +
-    '</div>';
-  }).join('');
-  if (userFxArchiveEditing >= 0) {
-    setTimeout(function(){
-      var input = document.getElementById('user-archive-input-' + userFxArchiveEditing);
-      if (input) {
-        input.focus();
-        input.select();
-      }
-    }, 0);
-  }
-}
-function saveUserFxArchive(index) {
-  index = clampRange(Number(index) || 0, 0, Math.max(0, userFxArchives.length - 1));
-  userFxArchives[index].snapshot = captureFxArchiveSnapshot();
-  userFxArchives[index].savedAt = Date.now();
-  userFxArchives[index].name = normalizeUserFxArchiveName(userFxArchives[index].name, index);
-  saveUserFxArchives();
-  renderUserFxArchives();
-  showToast('已保存到 ' + userFxArchives[index].name);
-}
-function applyUserFxArchive(index) {
-  index = clampRange(Number(index) || 0, 0, Math.max(0, userFxArchives.length - 1));
-  var slot = userFxArchives[index];
-  if (!slot || !slot.snapshot) {
-    showToast('这个用户存档还是空的');
-    return;
-  }
-  if (applyFxArchiveSnapshot(slot.snapshot)) {
-    showToast('已应用 ' + slot.name);
-  }
-}
-function renameUserFxArchive(index) {
-  index = clampRange(Number(index) || 0, 0, Math.max(0, userFxArchives.length - 1));
-  userFxArchiveEditing = index;
-  renderUserFxArchives();
-}
-function commitUserFxArchiveRename(index) {
-  index = clampRange(Number(index) || 0, 0, Math.max(0, userFxArchives.length - 1));
-  var input = document.getElementById('user-archive-input-' + index);
-  userFxArchives[index].name = normalizeUserFxArchiveName(input && input.value, index);
-  userFxArchiveEditing = -1;
-  saveUserFxArchives();
-  renderUserFxArchives();
-  showToast('已命名为 ' + userFxArchives[index].name);
-}
-function cancelUserFxArchiveRename() {
-  userFxArchiveEditing = -1;
-  renderUserFxArchives();
-}
 function handleUserFxArchiveRenameKey(e, index) {
   if (e.key === 'Enter') {
     e.preventDefault();

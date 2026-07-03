@@ -8,8 +8,10 @@
 
 - 队列、封面、歌词和本地元数据会在切歌或后台资产加载时连续触发刷新。如果每次都重建可见 DOM，会造成主线程抖动。
 - 本地曲库快照和索引可能包含上万首歌。同步 `localStorage.setItem(JSON.stringify(...))` 和 `JSON.parse(...)` 会阻塞主线程。
+- 本地节奏缓存也可能包含多个长节奏图。启动时同步解析 `LOCAL_BEATMAP_STORE_KEY` 会拖慢首屏，即使用户本次没有打开节奏分析面板。
 - 同一张本地封面可能被多个队列视图、歌单详情和当前播放视图同时请求。重复 decode 和缩略图 canvas 缩放会浪费 CPU。
 - 3D 歌单架、队列面板和视觉暖身任务都可能请求 `requestAnimationFrame`。缺少命名合并时，同一帧会堆积重复任务。
+- 用户视觉存档历史实现曾出现重复函数声明，后声明会覆盖前声明；这类死代码会增加解析量并让维护者误读实际生效路径。
 - 主进程导入或刷新大曲库时，逐个等待 `fs.promises.stat()` 会把扫描时间线性拉长；改成无限并发又可能压满磁盘队列。
 - 启动恢复阶段如果先读取全量封面/歌词缓存，会推迟队列和播放会话可见时间，造成首屏像卡住。
 
@@ -18,11 +20,13 @@
 - 队列面板刷新必须通过 `safeRenderQueuePanel()`，由内部调度合并到命名 RAF 任务。
 - 队列 DOM 更新前先比较 `queueVisibleDomSignature()`；签名未变化时跳过 `innerHTML` 重建。
 - 本地曲库快照和索引新写入走 `LOCAL_LIBRARY_CACHE_STORE` IndexedDB 记录；旧 `localStorage` 只作为迁移回退读取。
+- 本地节奏缓存启动时只初始化空对象，进入节奏面板或读取缓存时再调用 `ensureLocalBeatPrefsCache()` / `ensureLocalBeatMapCache()`。
 - 进入本地曲库同步比对前先调用 `hydrateLocalLibraryPersistentState(folderPath)`，确保同步比对读取内存缓存。
 - 本地封面缩略图通过 `localCoverThumbPromiseCache` 合并并发请求，不要为同一 data URL 重复创建 canvas。
 - 成功生成的本地封面缩略图还必须进入 `localCoverThumbResultCache` 短期结果缓存，避免队列、搜索和歌单架在不同时间点重复缩放同一封面。
 - 主进程本地曲库扫描和快照刷新统一走 `statLocalLibraryFiles()`，用有上限并发池读取文件元数据，并通过原始 `index` 保持排序稳定。
 - 启动恢复或大曲库未变化时，先渲染播放队列和恢复播放会话，再延迟调用 `hydrateLocalAssetCacheForSongs()`；后台封面/歌词任务在恢复阶段减少中途 UI 刷新。
+- 同一作用域内不得保留重复函数声明；如果后续实现已经覆盖旧实现，必须删除旧实现而不是依赖函数提升覆盖。
 - 新增同帧 UI 任务优先使用 `scheduleNamedAnimationFrame(key, fn)`；同一 key 只保留最后一次任务。
 
 ## Reference
