@@ -33,9 +33,9 @@
   - `latest.yml`
   - `Mineradio-1.2.12-Setup.exe`
   - `Mineradio-1.2.12-Setup.exe.blockmap`
-  - `Mineradio-1.2.12-Portable-win-x64.zip`
   - `Mineradio-1.2.12-SHA256SUMS.txt`
   - `Mineradio-1.2.11-to-1.2.12.patch.json`
+- `v1.2.12` 按用户要求只上传安装器相关资产，Portable ZIP 本次跳过。
 - `v1.2.12` 安装包 SHA256：`e792948dd9502410952fc7c86fc0374966819157c89a437bff1be7662300c22a`
 - `v1.2.11` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.11`
 - `v1.2.11` 重点优化本地封面/歌词缓存按范围补水、后台资产预载候选复用、队列位置映射和排序少分配，以及列表入场动画只收集实际动画项；左侧歌单显示/隐藏/固定按钮和 3D 歌单架“自动隐藏/常驻”选项保持不变。
