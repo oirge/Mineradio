@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.9`
-- 最近正式安装包 Release 基线：`v1.2.9`。
+- 当前源码检查点：`v1.2.10`
+- 最近正式安装包 Release 基线：`v1.2.10`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,6 +27,16 @@
 
 ## Release Memory
 
+- `v1.2.10` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.10`
+- `v1.2.10` 重点优化启动阶段大 JSON 按需读取、Home 听歌画像单次扫描、3D 歌单架大队列虚拟取项、队列/搜索/歌单详情 HTML 少分配、本地搜索池复用，以及大曲库快照/索引单次循环保存；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
+- `v1.2.10` Release 资产包括：
+  - `latest.yml`
+  - `Mineradio-1.2.10-Setup.exe`
+  - `Mineradio-1.2.10-Setup.exe.blockmap`
+  - `Mineradio-1.2.10-Portable-win-x64.zip`
+  - `Mineradio-1.2.10-SHA256SUMS.txt`
+  - `Mineradio-1.2.9-to-1.2.10.patch.json`
+- `v1.2.10` 安装包 SHA256：`925968ab6902e876c0acebd4cc3a2a6cd05d95c111e92fbce58528699080fd3c`
 - `v1.2.9` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.9`
 - `v1.2.9` 重点优化 3D 歌单架指针命中、滚轮交互、详情面板射线检测和鼠标移动布局读取；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
 - `v1.2.9` Release 资产包括：

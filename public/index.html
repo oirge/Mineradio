@@ -2838,9 +2838,12 @@ var HOTKEY_ACTIONS = [
 var hotkeyCaptureState = null;
 var hotkeyGlobalStatus = {};
 var diyPlayerMode = readDiyModePreference();
-var customCoverMap = readCustomCoverMap();
-var customLyricMap = readCustomLyricMap();
-var customLyricPrefs = readCustomLyricPrefs();
+var customCoverMap = {};
+var customCoverMapHydrated = false;
+var customLyricMap = {};
+var customLyricMapHydrated = false;
+var customLyricPrefs = {};
+var customLyricPrefsHydrated = false;
 var localBeatMapCache = {};
 var localBeatMapPrefs = {};
 var localBeatMapCacheHydrated = false;
@@ -2893,7 +2896,8 @@ var homeVisualPresetActive = false;
 var homeVisualPrevPreset = 0;
 var HOME_LISTEN_STATS_KEY = 'mineradio-listen-stats-v1';
 var activePlaybackContext = null;
-var listenStatsState = loadListenStatsState();
+var listenStatsState = createEmptyListenStatsState();
+var listenStatsHydrated = false;
 var listenSession = null;
 var appPerfMarks = [];
 function markAppPerf(name) {
@@ -14225,6 +14229,7 @@ function makeShelfManager() {
   var group = null;
   var cards = [];          // [{canvas, ctx, texture, mesh, item, index, slot}]
   var allItems = [];
+  var allItemsIsQueue = false;
   var renderedStart = -1;
   var SHELF_VISIBLE_RADIUS = 5;
   var SHELF_MAX_RENDER = SHELF_VISIBLE_RADIUS * 2 + 1;
@@ -14255,14 +14260,30 @@ function makeShelfManager() {
   var connectorParticles = null;
   var floorMirror = null;
 
+  function makeQueueShelfItem(song, idx) {
+    song = song || {};
+    return {
+      type: 'queue',
+      title: song.name,
+      sub: songDisplaySubtitle(song) || '未知',
+      cover: songCoverSrc(song, 360),
+      tag: idx === currentIdx ? '正在播放' : ('#' + (idx + 1)),
+      queueIndex: idx
+    };
+  }
   function currentItems() {
-    if (playQueue.length) {
-      return playQueue.map(function(song, idx){
-        return { type:'queue', title: song.name, sub: songDisplaySubtitle(song) || '未知',
-          cover: songCoverSrc(song, 360), tag: idx === currentIdx ? '正在播放' : ('#' + (idx+1)), queueIndex: idx };
-      });
-    }
+    allItemsIsQueue = !!playQueue.length;
+    if (allItemsIsQueue) return new Array(playQueue.length);
     return [];
+  }
+  function shelfItemAt(index) {
+    index = Math.round(Number(index) || 0);
+    if (index < 0 || index >= allItems.length) return null;
+    if (allItemsIsQueue) {
+      if (!allItems[index]) allItems[index] = makeQueueShelfItem(playQueue[index], index);
+      return allItems[index];
+    }
+    return allItems[index] || null;
   }
 
   function makeRoundRect(ctx, x, y, w, h, r) {
@@ -14465,7 +14486,7 @@ function makeShelfManager() {
       var maxBuilt = pressureLevel >= 2 ? 1 : 2;
       var maxBudget = pressureLevel >= 2 ? 3.5 : (pressureLevel >= 1 ? 5 : 7);
       while (job.next <= job.end && built < maxBuilt && performance.now() - started < maxBudget) {
-        var card = buildOneCard(allItems[job.next], job.next);
+        var card = buildOneCard(shelfItemAt(job.next), job.next);
         cards.push(card);
         drawCard(card, card.item);
         warmTextureUpload(card.texture);
@@ -14498,7 +14519,7 @@ function makeShelfManager() {
     start = Math.max(0, end - SHELF_MAX_RENDER + 1);
     if (!force && start === renderedStart && cards.length === (end - start + 1)) {
       cards.forEach(function(c) {
-        var nextItem = allItems[c.index] || c.item;
+        var nextItem = shelfItemAt(c.index) || c.item;
         if (c.item !== nextItem) {
           c.item = nextItem;
           c.drawKey = '';
@@ -14515,7 +14536,7 @@ function makeShelfManager() {
       return;
     }
     for (var itemIdx = start; itemIdx <= end; itemIdx++) {
-      var card = buildOneCard(allItems[itemIdx], itemIdx);
+      var card = buildOneCard(shelfItemAt(itemIdx), itemIdx);
       cards.push(card);
       drawCard(card, card.item);
     }
@@ -14537,11 +14558,11 @@ function makeShelfManager() {
       floorMirror = null;
     }
     allItems = currentItems();
-    lastSig = sig(allItems);
+    lastSig = sig(allItemsIsQueue ? null : allItems);
     lastCardRedrawAt = -10;
     lastCardPulseBucket = -1;
     // center 起始 = currentIdx (如果是 queue), 否则 0
-    if (allItems.length && allItems[0].type === 'queue' && currentIdx >= 0) {
+    if (allItemsIsQueue && currentIdx >= 0) {
       centerTarget = Math.min(allItems.length - 1, currentIdx);
       centerSmooth = centerTarget;
       centerIdx = centerTarget;
@@ -14786,7 +14807,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     return parts.join('||');
   }
   function sig(items) {
-    if (!items) return ['queue', playQueue.length, currentIdx, queueSampleSig()].join('::');
+    if (!items || allItemsIsQueue) return ['queue', playQueue.length, currentIdx, queueSampleSig()].join('::');
     var sample = items.slice(0, 3).concat(items.slice(Math.max(3, items.length - 3)));
     return ['queue', items.length, currentIdx, sample.map(sigItemPart).join('||')].join('::');
   }
@@ -14985,7 +15006,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
             lastCardPulseBucket = pulseBucket;
             lastCardRedrawAt = uniforms.uTime.value;
             cards.forEach(function(c){
-              c.item = allItems[c.index] || c.item;
+              c.item = shelfItemAt(c.index) || c.item;
               c.isCenter = Math.abs(c.index - centerSmooth) < 0.5;
               if (c.isCenter || c.dofBucket <= 1 || c.index === currentIdx) drawCard(c, c.item);
             });
@@ -16547,7 +16568,15 @@ function readCustomCoverMap() {
     return {};
   }
 }
+function ensureCustomCoverMap() {
+  if (!customCoverMapHydrated) {
+    customCoverMap = readCustomCoverMap();
+    customCoverMapHydrated = true;
+  }
+  return customCoverMap;
+}
 function saveCustomCoverMap() {
+  ensureCustomCoverMap();
   try {
     localStorage.setItem(CUSTOM_COVER_STORE_KEY, JSON.stringify(customCoverMap || {}));
     return true;
@@ -16595,7 +16624,8 @@ function songCustomCoverKey(song) {
 function getCustomCoverForSong(song) {
   if (!song) return '';
   var key = songCustomCoverKey(song);
-  if (key && customCoverMap[key]) return customCoverMap[key];
+  var covers = ensureCustomCoverMap();
+  if (key && covers[key]) return covers[key];
   if (song.type === 'local' && song.localCoverThumbDataUrl) return song.localCoverThumbDataUrl;
   if (song.type === 'local' && song.localCoverDataUrl) return song.localCoverDataUrl;
   if (song.customCover) return song.customCover;
@@ -16626,7 +16656,8 @@ function hydrateCustomCover(song) {
 function songCoverSrc(song, size) {
   if (!song) return '';
   var customKey = songCustomCoverKey(song);
-  var mappedCustom = customKey && customCoverMap[customKey] ? customCoverMap[customKey] : '';
+  var covers = ensureCustomCoverMap();
+  var mappedCustom = customKey && covers[customKey] ? covers[customKey] : '';
   var coverKey = [
     size || 0,
     song._mineradioCoverCacheVersion || 0,
@@ -16654,7 +16685,8 @@ function compactCoverSignatureValue(value) {
 function songCoverSignature(song) {
   if (!song) return '';
   var customKey = songCustomCoverKey(song);
-  var mappedCustom = customKey && customCoverMap[customKey] ? customCoverMap[customKey] : '';
+  var covers = ensureCustomCoverMap();
+  var mappedCustom = customKey && covers[customKey] ? covers[customKey] : '';
   var signatureKey = [
     song._mineradioCoverCacheVersion || 0,
     customKey,
@@ -16671,7 +16703,7 @@ function songCoverSignature(song) {
   if (song._mineradioCoverSignatureKey === signatureKey && typeof song._mineradioCoverSignatureValue === 'string') return song._mineradioCoverSignatureValue;
   var key = customKey;
   var result = '';
-  if (key && customCoverMap[key]) result = 'custom:' + key + ':' + compactCoverSignatureValue(customCoverMap[key]);
+  if (key && covers[key]) result = 'custom:' + key + ':' + compactCoverSignatureValue(covers[key]);
   else if (song.type === 'local' && song.localCoverThumbDataUrl) result = 'local-thumb:' + compactCoverSignatureValue(song.localCoverThumbDataUrl);
   else if (song.type === 'local' && song.localCoverDataUrl) result = 'local-data:' + compactCoverSignatureValue(song.localCoverDataUrl);
   else if (song.customCover) result = 'song-custom:' + compactCoverSignatureValue(song.customCover);
@@ -16702,10 +16734,13 @@ function compactHomeCount(n) {
   if (n >= 10000) return Math.round(n / 10000) + '万';
   return n ? String(n) : '';
 }
+function createEmptyListenStatsState() {
+  return { history: [], songs: {}, artists: {}, updatedAt: 0 };
+}
 function loadListenStatsState() {
   try {
     var raw = localStorage.getItem(HOME_LISTEN_STATS_KEY);
-    if (!raw) return { history: [], songs: {}, artists: {}, updatedAt: 0 };
+    if (!raw) return createEmptyListenStatsState();
     var data = JSON.parse(raw);
     return {
       history: Array.isArray(data.history) ? data.history.slice(0, 180) : [],
@@ -16714,10 +16749,26 @@ function loadListenStatsState() {
       updatedAt: Number(data.updatedAt) || 0,
     };
   } catch (e) {
-    return { history: [], songs: {}, artists: {}, updatedAt: 0 };
+    return createEmptyListenStatsState();
   }
 }
+function ensureListenStatsState() {
+  if (!listenStatsHydrated) {
+    listenStatsState = loadListenStatsState();
+    listenStatsHydrated = true;
+  }
+  return listenStatsState;
+}
+function compareListenStatRank(a, b) {
+  if (!a && !b) return 0;
+  if (a && !b) return 1;
+  if (!a && b) return -1;
+  return ((a.plays || 0) - (b.plays || 0))
+    || ((a.listenMs || 0) - (b.listenMs || 0))
+    || ((a.lastPlayedAt || 0) - (b.lastPlayedAt || 0));
+}
 function saveListenStatsState() {
+  ensureListenStatsState();
   try {
     listenStatsState.updatedAt = Date.now();
     localStorage.setItem(HOME_LISTEN_STATS_KEY, JSON.stringify(listenStatsState));
@@ -16781,6 +16832,7 @@ function finalizeListenSession(completed) {
   listenSession = null;
   var effective = completed || session.listenMs >= 45000 || session.maxProgress >= 0.5 || (!audio || !audio.duration ? session.listenMs >= 30000 : false);
   if (!effective) return;
+  ensureListenStatsState();
   var now = Date.now();
   var snap = session.song || {};
   var record = {
@@ -16823,20 +16875,48 @@ function finalizeListenSession(completed) {
   if (emptyHomeActive) renderHomeDiscover();
 }
 function mostPlayedSong() {
-  var list = Object.keys(listenStatsState.songs || {}).map(function(key){ return listenStatsState.songs[key]; });
-  list.sort(function(a, b){ return (b.plays - a.plays) || (b.listenMs - a.listenMs) || (b.lastPlayedAt - a.lastPlayedAt); });
-  return list[0] || null;
+  var songs = ensureListenStatsState().songs || {};
+  var best = null;
+  for (var key in songs) {
+    if (!Object.prototype.hasOwnProperty.call(songs, key)) continue;
+    var item = songs[key];
+    if (!item) continue;
+    if (compareListenStatRank(item, best) > 0) best = item;
+  }
+  return best;
 }
 function topListenArtist() {
-  var list = Object.keys(listenStatsState.artists || {}).map(function(key){ return listenStatsState.artists[key]; });
-  list.sort(function(a, b){ return (b.plays - a.plays) || (b.listenMs - a.listenMs) || (b.lastPlayedAt - a.lastPlayedAt); });
-  return list[0] || null;
+  var artists = ensureListenStatsState().artists || {};
+  var best = null;
+  for (var key in artists) {
+    if (!Object.prototype.hasOwnProperty.call(artists, key)) continue;
+    var item = artists[key];
+    if (!item) continue;
+    if (compareListenStatRank(item, best) > 0) best = item;
+  }
+  return best;
 }
 function homeListenSummary() {
-  var recent = (listenStatsState.history || [])[0] || null;
-  var topSong = mostPlayedSong();
-  var topArtist = topListenArtist();
-  var totalPlays = Object.keys(listenStatsState.songs || {}).reduce(function(sum, key){ return sum + ((listenStatsState.songs[key] && listenStatsState.songs[key].plays) || 0); }, 0);
+  var state = ensureListenStatsState();
+  var recent = (state.history || [])[0] || null;
+  var songs = state.songs || {};
+  var artists = state.artists || {};
+  var topSong = null;
+  var topArtist = null;
+  var totalPlays = 0;
+  for (var songKey in songs) {
+    if (!Object.prototype.hasOwnProperty.call(songs, songKey)) continue;
+    var item = songs[songKey];
+    if (!item) continue;
+    totalPlays += Number(item.plays) || 0;
+    if (compareListenStatRank(item, topSong) > 0) topSong = item;
+  }
+  for (var artistKey in artists) {
+    if (!Object.prototype.hasOwnProperty.call(artists, artistKey)) continue;
+    var item = artists[artistKey];
+    if (!item) continue;
+    if (compareListenStatRank(item, topArtist) > 0) topArtist = item;
+  }
   return { recent: recent, topSong: topSong, topArtist: topArtist, totalPlays: totalPlays };
 }
 function fallbackHomeTiles() {
@@ -17711,7 +17791,8 @@ function setCustomCoverForCurrent(dataUrl, opts) {
     invalidateSongCoverCache(song);
     if (key) {
       hasKey = true;
-      customCoverMap[key] = dataUrl;
+      var covers = ensureCustomCoverMap();
+      covers[key] = dataUrl;
       saved = saveCustomCoverMap();
       for (var i = 0; i < playQueue.length; i++) {
         if (songCustomCoverKey(playQueue[i]) === key) {
@@ -17755,8 +17836,9 @@ function clearCustomCoverForCurrent() {
     return;
   }
   var key = songCustomCoverKey(song);
-  if (key && customCoverMap[key]) {
-    delete customCoverMap[key];
+  var covers = ensureCustomCoverMap();
+  if (key && covers[key]) {
+    delete covers[key];
     saveCustomCoverMap();
   }
   delete playlistCoverCache[custom];
@@ -17795,7 +17877,15 @@ function readCustomLyricMap() {
     return {};
   }
 }
+function ensureCustomLyricMap() {
+  if (!customLyricMapHydrated) {
+    customLyricMap = readCustomLyricMap();
+    customLyricMapHydrated = true;
+  }
+  return customLyricMap;
+}
 function saveCustomLyricMap() {
+  ensureCustomLyricMap();
   try {
     localStorage.setItem(CUSTOM_LYRIC_STORE_KEY, JSON.stringify(customLyricMap || {}));
     return true;
@@ -17808,7 +17898,15 @@ function readCustomLyricPrefs() {
   try { return JSON.parse(localStorage.getItem(CUSTOM_LYRIC_PREF_STORE_KEY) || '{}') || {}; }
   catch (e) { return {}; }
 }
+function ensureCustomLyricPrefs() {
+  if (!customLyricPrefsHydrated) {
+    customLyricPrefs = readCustomLyricPrefs();
+    customLyricPrefsHydrated = true;
+  }
+  return customLyricPrefs;
+}
 function saveCustomLyricPrefs() {
+  ensureCustomLyricPrefs();
   try { localStorage.setItem(CUSTOM_LYRIC_PREF_STORE_KEY, JSON.stringify(customLyricPrefs || {})); } catch (e) {}
 }
 function songCustomLyricKey(song) {
@@ -17820,7 +17918,8 @@ function currentLyricSong() {
 }
 function getCustomLyricEntry(song) {
   var key = songCustomLyricKey(song);
-  return key && customLyricMap[key] ? customLyricMap[key] : null;
+  var map = ensureCustomLyricMap();
+  return key && map[key] ? map[key] : null;
 }
 function hasCustomLyricForSong(song) {
   var entry = getCustomLyricEntry(song);
@@ -17899,7 +17998,8 @@ function applyCustomLyricState(song, silent) {
 function preferredLyricSourceForSong(song) {
   var key = songCustomLyricKey(song);
   var hasCustom = hasCustomLyricForSong(song);
-  var pref = key ? customLyricPrefs[key] : '';
+  var prefs = ensureCustomLyricPrefs();
+  var pref = key ? prefs[key] : '';
   if (!hasCustom) return 'original';
   if (pref === 'custom') return 'custom';
   if (pref === 'original') return 'original';
@@ -17926,7 +18026,8 @@ function setLyricSourceMode(mode, silent) {
     applyOriginalLyricsState();
   }
   if (key) {
-    customLyricPrefs[key] = mode;
+    var prefs = ensureCustomLyricPrefs();
+    prefs[key] = mode;
     saveCustomLyricPrefs();
   }
   if (!silent) showToast(mode === 'custom' ? '已切换到自定义歌词' : '已切换到原歌词');
@@ -17999,8 +18100,10 @@ function saveCustomLyricForCurrent() {
     setCustomLyricStatus('没有识别到可显示的歌词行', 'fail');
     return;
   }
-  customLyricMap[key] = { text: text, updatedAt: Date.now() };
-  customLyricPrefs[key] = 'custom';
+  var map = ensureCustomLyricMap();
+  var prefs = ensureCustomLyricPrefs();
+  map[key] = { text: text, updatedAt: Date.now() };
+  prefs[key] = 'custom';
   var saved = saveCustomLyricMap();
   saveCustomLyricPrefs();
   applyCustomLyricState(song, true);
@@ -18015,12 +18118,14 @@ function deleteCustomLyricForCurrent() {
     setCustomLyricStatus('请先播放或选择一首歌', 'fail');
     return;
   }
-  if (!customLyricMap[key]) {
+  var map = ensureCustomLyricMap();
+  var prefs = ensureCustomLyricPrefs();
+  if (!map[key]) {
     setCustomLyricStatus('当前歌曲没有自定义歌词', 'fail');
     return;
   }
-  delete customLyricMap[key];
-  delete customLyricPrefs[key];
+  delete map[key];
+  delete prefs[key];
   saveCustomLyricMap();
   saveCustomLyricPrefs();
   applyOriginalLyricsState();
@@ -18186,6 +18291,7 @@ var searchTimer = null;
 var searchRequestSeq = 0;
 var searchLastResultQuery = '';
 var SEARCH_HISTORY_STORE_KEY = 'mineradio-search-history';
+var searchHistoryCache = null;
 var $input = document.getElementById('search-input');
 var $results = document.getElementById('search-results');
 var $loading = document.getElementById('loading-overlay');
@@ -18214,15 +18320,19 @@ function clearSearchResults() {
   $results.classList.remove('show');
 }
 function readSearchHistory() {
+  if (searchHistoryCache) return searchHistoryCache.slice();
   try {
     var raw = JSON.parse(localStorage.getItem(SEARCH_HISTORY_STORE_KEY) || '[]');
-    return Array.isArray(raw) ? raw.map(function(v){ return String(v || '').trim(); }).filter(Boolean).slice(0, 10) : [];
+    searchHistoryCache = Array.isArray(raw) ? raw.map(function(v){ return String(v || '').trim(); }).filter(Boolean).slice(0, 10) : [];
+    return searchHistoryCache.slice();
   } catch (e) {
+    searchHistoryCache = [];
     return [];
   }
 }
 function writeSearchHistory(items) {
-  try { localStorage.setItem(SEARCH_HISTORY_STORE_KEY, JSON.stringify((items || []).slice(0, 10))); } catch (e) {}
+  searchHistoryCache = (items || []).slice(0, 10);
+  try { localStorage.setItem(SEARCH_HISTORY_STORE_KEY, JSON.stringify(searchHistoryCache)); } catch (e) {}
 }
 function rememberSearchQuery(q) {
   q = String(q || '').trim();
@@ -18398,7 +18508,7 @@ function localSearchPool() {
   if (localSearchPoolCache.source === sourceList && localSearchPoolCache.signature === signature) return localSearchPoolCache.items;
   localSearchPoolCache.source = sourceList;
   localSearchPoolCache.signature = signature;
-  localSearchPoolCache.items = (sourceList || []).filter(function(song){ return song && song.type === 'local'; });
+  localSearchPoolCache.items = localSearchWarmupSource(sourceList);
   scheduleLocalSearchIndexWarmup(localSearchPoolCache.items, { signature: signature, delay: 120 });
   return localSearchPoolCache.items;
 }
@@ -18477,6 +18587,26 @@ function runLocalSearchIndexWarmChunk(token) {
     runLocalSearchIndexWarmChunk(token);
   }, localSearchIndexWarmDelay(runtimeFramePressureNow()));
 }
+function localSearchWarmupSource(songs) {
+  songs = Array.isArray(songs) ? songs : [];
+  var localOnly = true;
+  var localSongs = null;
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    if (song && song.type === 'local') {
+      if (localSongs) localSongs.push(song);
+      continue;
+    }
+    if (localOnly) {
+      localOnly = false;
+      localSongs = [];
+      for (var j = 0; j < i; j++) {
+        if (songs[j] && songs[j].type === 'local') localSongs.push(songs[j]);
+      }
+    }
+  }
+  return localOnly ? songs : (localSongs || []);
+}
 /**
  * 在空闲切片里预热本地搜索归一化索引，减少第一次冷门词搜索时的同步扫库开销。
  * @param {Array<object>} songs 本地歌曲列表。
@@ -18485,7 +18615,7 @@ function runLocalSearchIndexWarmChunk(token) {
  */
 function scheduleLocalSearchIndexWarmup(songs, opts) {
   opts = opts || {};
-  songs = (songs || []).filter(function(song){ return song && song.type === 'local'; });
+  songs = localSearchWarmupSource(songs);
   var signature = opts.signature || ('library:' + songs.length);
   if (!songs.length) {
     cancelLocalSearchIndexWarmup();
@@ -18622,13 +18752,15 @@ function renderSongSearchResults(songs) {
     }
   }
   searchResultsLastDomSignature = domSignature;
-  $results.innerHTML = playlist.map(function(s, i){
+  var resultHtml = '';
+  for (var i = 0; i < playlist.length; i++) {
+    var s = playlist[i] || {};
     var sourceTag = songSourceTagHtml(s);
     var thumb = songCoverSrc(s, 80);
     var imgTag = thumb
       ? '<img src="' + thumb + '" alt="" loading="lazy" onerror="this.style.opacity=0.2">'
       : '<div style="width:40px;height:40px;border-radius:6px;background:rgba(255,255,255,0.06);flex-shrink:0"></div>';
-    return '<div class="search-result local-source">' +
+    resultHtml += '<div class="search-result local-source">' +
       '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0" onclick="playSearchResult(' + i + ')">' +
         imgTag +
         '<div class="search-result-info">' +
@@ -18638,7 +18770,8 @@ function renderSongSearchResults(songs) {
       '</div>' +
       '<button class="add-btn" title="下一首播放" onclick="event.stopPropagation();queueSearchResult(' + i + ')">+</button>' +
     '</div>';
-  }).join('');
+  }
+  $results.innerHTML = resultHtml;
   $results.classList.add('show');
   if (shouldAnimate) {
     searchResultsLastAnimateAt = now;
@@ -20405,18 +20538,7 @@ function renderMiniQueuePanel(opts) {
   var domSignature = queueVisibleDomSignature(renderLimit, true);
   if (domSignature === miniQueueLastDomSignature && !opts.animate && !opts.scrollCurrent) return;
   miniQueueLastDomSignature = domSignature;
-  $list.innerHTML = playQueue.slice(0, renderLimit).map(function(song, offset){
-    var i = offset;
-    var thumb = songCoverSrc(song, 60);
-    var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="mini-queue-cover"></div>';
-    var sub = songDisplaySubtitle(song);
-    return '<div class="mini-queue-item' + (i === currentIdx ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
-      imgTag +
-      '<div class="mini-queue-info"><div class="mini-queue-name">' + escHtml(song.name) + '</div><div class="mini-queue-sub">' + escHtml(sub) + '</div></div>' +
-      '<button class="mini-queue-remove mini-queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
-      '<button class="mini-queue-remove" onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
-    '</div>';
-  }).join('');
+  $list.innerHTML = queueItemsHtml(renderLimit, true);
   var currentHint = hiddenCurrentQueueHintHtml(renderLimit, true);
   if (currentHint) $list.insertAdjacentHTML('beforeend', currentHint);
   if (total > renderLimit) {
@@ -20500,6 +20622,27 @@ function queueVisibleDomSignature(renderLimit, mini) {
   }
   if (currentIdx >= limit && currentIdx < playQueue.length) keys.push('hidden:' + currentIdx);
   return keys.join('|');
+}
+function queueItemsHtml(renderLimit, mini) {
+  var limit = Math.min(playQueue.length, Math.max(0, renderLimit || 0));
+  var html = '';
+  for (var i = 0; i < limit; i++) {
+    if (mini) {
+      var song = playQueue[i] || {};
+      var thumb = songCoverSrc(song, 60);
+      var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="mini-queue-cover"></div>';
+      var sub = songDisplaySubtitle(song);
+      html += '<div class="mini-queue-item' + (i === currentIdx ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
+        imgTag +
+        '<div class="mini-queue-info"><div class="mini-queue-name">' + escHtml(song.name) + '</div><div class="mini-queue-sub">' + escHtml(sub) + '</div></div>' +
+        '<button class="mini-queue-remove mini-queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
+        '<button class="mini-queue-remove" onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
+      '</div>';
+    } else {
+      html += queueItemHtml(playQueue[i], i);
+    }
+  }
+  return html;
 }
 function syncQueueRenderLimits(opts) {
   opts = opts || {};
@@ -20663,7 +20806,7 @@ function renderQueuePanel(opts) {
   var domSignature = queueVisibleDomSignature(renderLimit, false);
   if (domSignature !== queuePanelLastDomSignature || opts.animate || opts.scrollCurrent) {
     queuePanelLastDomSignature = domSignature;
-  $ql.innerHTML = playQueue.slice(0, renderLimit).map(function(song, i){ return queueItemHtml(song, i); }).join('');
+  $ql.innerHTML = queueItemsHtml(renderLimit, false);
   var currentHint = hiddenCurrentQueueHintHtml(renderLimit, false);
   if (currentHint) $ql.insertAdjacentHTML('beforeend', currentHint);
   if (playQueue.length > renderLimit) {
@@ -20696,18 +20839,21 @@ function playlistPanelDetailHtml(pl, provider) {
   var detailInitialLimit = playlistDetailInitialRenderLimit();
   var renderLimit = loading ? 0 : Math.max(detailInitialLimit, playlistPanelDetailState.renderLimit || detailInitialLimit);
   renderLimit = Math.min(tracks.length, renderLimit);
-  var visibleTracks = loading ? [] : tracks.slice(0, renderLimit);
-  var rows = loading
-    ? '<div class="pl-detail-row"><div style="width:34px;height:34px;border-radius:7px;background:rgba(255,255,255,.06)"></div><div style="flex:1;min-width:0"><div class="pl-detail-row-title">正在载入歌单</div><div class="pl-detail-row-artist">请稍候</div></div></div>'
-    : visibleTracks.map(function(song, i){
-        var thumb = songCoverSrc(song, 60);
-        var imgTag = thumb ? '<img src="' + escHtml(thumb) + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:34px;height:34px;border-radius:7px;background:rgba(255,255,255,.06);flex:0 0 auto"></div>';
-        return '<div class="pl-detail-row" data-pl-detail-row="' + i + '">' +
-          imgTag +
-          '<div style="flex:1;min-width:0"><div class="pl-detail-row-title">' + escHtml(song.name || '') + '</div>' +
-          '<button type="button" class="pl-detail-row-artist" data-pl-detail-artist="' + i + '">' + escHtml(song.artist || '未知歌手') + '</button></div>' +
-        '</div>';
-      }).join('');
+  var rows = '';
+  if (loading) {
+    rows = '<div class="pl-detail-row"><div style="width:34px;height:34px;border-radius:7px;background:rgba(255,255,255,.06)"></div><div style="flex:1;min-width:0"><div class="pl-detail-row-title">正在载入歌单</div><div class="pl-detail-row-artist">请稍候</div></div></div>';
+  } else {
+    for (var rowIdx = 0; rowIdx < renderLimit; rowIdx++) {
+      var song = tracks[rowIdx] || {};
+      var thumb = songCoverSrc(song, 60);
+      var imgTag = thumb ? '<img src="' + escHtml(thumb) + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:34px;height:34px;border-radius:7px;background:rgba(255,255,255,.06);flex:0 0 auto"></div>';
+      rows += '<div class="pl-detail-row" data-pl-detail-row="' + rowIdx + '">' +
+        imgTag +
+        '<div style="flex:1;min-width:0"><div class="pl-detail-row-title">' + escHtml(song.name || '') + '</div>' +
+        '<button type="button" class="pl-detail-row-artist" data-pl-detail-artist="' + rowIdx + '">' + escHtml(song.artist || '未知歌手') + '</button></div>' +
+      '</div>';
+    }
+  }
   if (!loading && !rows) rows = '<div style="text-align:center;padding:14px 0;color:rgba(255,255,255,.30);font-size:11.5px">歌单暂无可播放歌曲</div>';
   if (!loading && tracks.length > renderLimit) {
     rows += '<button type="button" class="fx-mini-btn ghost pl-detail-load-more" data-pl-detail-load-more="1">加载更多 ' + renderLimit + '/' + tracks.length + '</button>';
@@ -22004,16 +22150,38 @@ function saveLocalLibrarySnapshot(folderPath, files, truncated) {
   try {
     var normalized = normalizeLocalLibrarySnapshotInput(files, null, truncated);
     if (!normalized.files.length) return false;
-    var compact = normalized.files.map(compactLocalLibrarySnapshotFile).filter(Boolean);
-    var directories = normalized.directories.map(compactLocalLibrarySnapshotDirectory).filter(Boolean);
+    var compact = [];
+    var directories = [];
+    var sigCount = 0;
+    var sigAudio = 0;
+    var sigSize = 0;
+    var sigMtime = 0;
+    var sigFirst = '';
+    var sigLast = '';
+    for (var fileIdx = 0; fileIdx < normalized.files.length; fileIdx++) {
+      var compactFile = compactLocalLibrarySnapshotFile(normalized.files[fileIdx]);
+      if (!compactFile) continue;
+      var path = localFilePath(compactFile);
+      if (!sigFirst || path < sigFirst) sigFirst = path;
+      if (!sigLast || path > sigLast) sigLast = path;
+      if (isLocalAudioFile(compactFile, true)) sigAudio++;
+      sigSize += localFileSize(compactFile);
+      sigMtime = Math.max(sigMtime, Number(compactFile.lastModified) || 0);
+      sigCount++;
+      if (compact.length < 16000) compact.push(compactFile);
+    }
+    for (var dirIdx = 0; dirIdx < normalized.directories.length && directories.length < 20000; dirIdx++) {
+      var compactDir = compactLocalLibrarySnapshotDirectory(normalized.directories[dirIdx]);
+      if (compactDir) directories.push(compactDir);
+    }
     var payload = {
       schema: 2,
       folderPath: folderPath,
       savedAt: Date.now(),
       truncated: !!normalized.truncated,
-      signature: localLibrarySnapshotSignature(compact),
-      directories: directories.slice(0, 20000),
-      files: compact.slice(0, 16000)
+      signature: [sigCount, sigAudio, sigSize, sigMtime, sigFirst, sigLast].join('|'),
+      directories: directories,
+      files: compact
     };
     localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'snapshot')] = {
       id: localLibraryPersistentKey(folderPath, 'snapshot'),
@@ -22284,19 +22452,26 @@ function localLibrarySyncToastText(sync) {
 }
 function saveLocalLibraryIndex(folderPath, songs) {
   folderPath = folderPath || savedLocalLibraryFolderPath();
-  songs = (songs || localLibrarySongs || []).filter(function(song){ return song && song.localKey; });
+  songs = songs || localLibrarySongs || [];
   if (!folderPath || !songs.length) return false;
   try {
     var records = {};
-    songs.slice(0, 16000).forEach(function(song){
+    var count = 0;
+    for (var i = 0; i < songs.length && count < 16000; i++) {
+      var song = songs[i];
+      if (!song || !song.localKey) continue;
       var record = localLibraryIndexRecord(song);
-      if (record) records[record.key] = record;
-    });
+      if (record) {
+        records[record.key] = record;
+        count++;
+      }
+    }
+    if (!count) return false;
     var payload = {
       schema: 1,
       folderPath: folderPath,
       savedAt: Date.now(),
-      count: Object.keys(records).length,
+      count: count,
       records: records
     };
     localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'index')] = {
@@ -22758,6 +22933,7 @@ function readUserFxArchives() {
   });
 }
 function saveUserFxArchives() {
+  if (!userFxArchivesHydrated) ensureUserFxArchives();
   try {
     setPersistentLocalStorageItem(USER_FX_ARCHIVE_STORE_KEY, JSON.stringify(userFxArchives));
   } catch (e) {
@@ -22833,13 +23009,24 @@ function applyFxArchiveSnapshot(snapshot) {
   saveLyricLayout();
   return true;
 }
-var hadStoredUserFxArchives = hasStoredUserFxArchives();
-var userFxArchives = readUserFxArchives();
-if (!hadStoredUserFxArchives) {
-  userFxArchives = [createPackagedDefaultUserFxArchiveSlot()];
-  saveUserFxArchives();
-}
+var userFxArchives = [];
+var userFxArchivesHydrated = false;
 var userFxArchiveEditing = -1;
+function ensureUserFxArchives() {
+  if (userFxArchivesHydrated) return userFxArchives;
+  var hadStored = hasStoredUserFxArchives();
+  userFxArchives = readUserFxArchives();
+  userFxArchivesHydrated = true;
+  if (!hadStored) {
+    userFxArchives = [createPackagedDefaultUserFxArchiveSlot()];
+    saveUserFxArchives();
+  }
+  return userFxArchives;
+}
+function isUserFxArchivePanelVisible() {
+  var panel = document.getElementById('fx-panel');
+  return !!(panel && (panel.classList.contains('show') || panel.classList.contains('peek')));
+}
 function handleUserFxArchiveRenameKey(e, index) {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -22859,12 +23046,14 @@ function normalizeUserFxArchiveName(name, index) {
   return name.slice(0, 28);
 }
 function userFxArchiveAt(index) {
+  ensureUserFxArchives();
   index = Number(index);
   if (!isFinite(index)) return null;
   index = Math.floor(index);
   return index >= 0 && index < userFxArchives.length ? userFxArchives[index] : null;
 }
-function renderUserFxArchives() {
+function renderUserFxArchives(opts) {
+  opts = opts || {};
   var grid = document.getElementById('user-archive-grid');
   if (!grid) return;
   var toolbar =
@@ -22875,6 +23064,12 @@ function renderUserFxArchives() {
         '<button class="fx-mini-btn ghost" type="button" onclick="importUserFxArchiveFromDialog()">导入</button>' +
       '</div>' +
     '</div>';
+  if (!userFxArchivesHydrated && opts.force !== true && !isUserFxArchivePanelVisible()) {
+    grid.innerHTML = toolbar + '<button class="user-archive-slot is-new" type="button" onclick="renderUserFxArchives({force:true})"><strong>加载用户存档</strong><span class="user-archive-meta">首次打开时读取，减少启动解析</span></button>';
+    bindUserFxArchiveDrop();
+    return;
+  }
+  ensureUserFxArchives();
   var cards = userFxArchives.map(function(slot, index){
     var hasSave = !!slot.snapshot;
     var editing = userFxArchiveEditing === index;
@@ -22909,6 +23104,7 @@ function renderUserFxArchives() {
   }
 }
 function createUserFxArchive() {
+  ensureUserFxArchives();
   var index = userFxArchives.length;
   userFxArchives.push({
     name: normalizeUserFxArchiveName('', index),
@@ -23018,6 +23214,7 @@ function normalizeImportedFxArchivePayload(payload, fileName) {
   };
 }
 function importUserFxArchiveText(text, fileName) {
+  ensureUserFxArchives();
   var payload = null;
   try { payload = JSON.parse(String(text || '')); } catch (e) {}
   var slot = normalizeImportedFxArchivePayload(payload, fileName);
@@ -27246,6 +27443,9 @@ function setPeek(el, on, key) {
     if (key === 'fx') {
       var fabOn = document.getElementById('fx-fab');
       if (fabOn) fabOn.classList.add('active');
+      if (!userFxArchivesHydrated) {
+        scheduleUiWarmTask(function(){ renderUserFxArchives({ force: true }); }, 80);
+      }
     }
   } else {
     if (peekTimers[key]) clearTimeout(peekTimers[key]);
