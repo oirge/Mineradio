@@ -14826,8 +14826,19 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
   }
   function sig(items) {
     if (!items || allItemsIsQueue) return ['queue', playQueue.length, currentIdx, queueSampleSig()].join('::');
-    var sample = items.slice(0, 3).concat(items.slice(Math.max(3, items.length - 3)));
-    return ['queue', items.length, currentIdx, sample.map(sigItemPart).join('||')].join('::');
+    var len = items.length;
+    var parts = [];
+    var seen = {};
+    function addItemSigIndex(idx) {
+      if (idx < 0 || idx >= len || seen[idx]) return;
+      seen[idx] = true;
+      parts.push(sigItemPart(items[idx] || {}));
+    }
+    var headEnd = Math.min(3, len);
+    for (var i = 0; i < headEnd; i++) addItemSigIndex(i);
+    var tailStart = Math.max(headEnd, len - 3);
+    for (var j = tailStart; j < len; j++) addItemSigIndex(j);
+    return ['queue', len, currentIdx, parts.join('||')].join('::');
   }
 
   function switchPane(nextPane) {
@@ -18530,16 +18541,29 @@ function localSearchPool() {
   scheduleLocalSearchIndexWarmup(localSearchPoolCache.items, { signature: signature, delay: 120 });
   return localSearchPoolCache.items;
 }
+/**
+ * 拼接本地搜索索引文本。搜索热路径避免创建字段数组和 filter 回调，降低大曲库输入时的短命对象分配。
+ * @param {object} song 本地歌曲对象。
+ * @returns {string} 未归一化的搜索字段文本。
+ */
 function localSongSearchText(song) {
-  return [
-    song && song.name,
-    song && song.artist,
-    song && song.albumArtist,
-    song && song.album,
-    song && song.localPath,
-    song && song.localLyricFileName,
-    song && song.localCoverFileName
-  ].filter(Boolean).join(' ');
+  if (!song) return '';
+  var text = '';
+  var value = song.name;
+  if (value) text = String(value);
+  value = song.artist;
+  if (value) text += (text ? ' ' : '') + value;
+  value = song.albumArtist;
+  if (value) text += (text ? ' ' : '') + value;
+  value = song.album;
+  if (value) text += (text ? ' ' : '') + value;
+  value = song.localPath;
+  if (value) text += (text ? ' ' : '') + value;
+  value = song.localLyricFileName;
+  if (value) text += (text ? ' ' : '') + value;
+  value = song.localCoverFileName;
+  if (value) text += (text ? ' ' : '') + value;
+  return text;
 }
 /**
  * 读取本地歌曲的归一化搜索文本。该函数会缓存结果，避免输入每个字时重复拼接路径并执行正则归一化。
@@ -21011,21 +21035,24 @@ function renderLocalLibraryPlaylistPanel(opts) {
   }
   var panelBatch = playlistPanelBatchSize();
   playlistPanelRenderLimit = Math.max(panelBatch, Math.min(songs.length, playlistPanelRenderLimit || panelBatch));
-  var visible = songs.slice(0, playlistPanelRenderLimit);
-  var domSignature = localLibraryPlaylistDomSignature(songs, visible.length);
+  var visibleLength = Math.min(songs.length, playlistPanelRenderLimit);
+  var domSignature = localLibraryPlaylistDomSignature(songs, visibleLength);
   if (domSignature === playlistPanelLastDomSignature) return;
   playlistPanelLastDomSignature = domSignature;
-  $pl.innerHTML = '<div class="pl-section-label">本地音乐库 · ' + songs.length + ' 首</div>' + visible.map(function(song, i){
+  var html = '<div class="pl-section-label">本地音乐库 · ' + songs.length + ' 首</div>';
+  for (var i = 0; i < visibleLength; i++) {
+    var song = songs[i] || {};
     var thumb = songCoverSrc(song, 88);
     var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,.06);flex-shrink:0"></div>';
-    return '<div class="pl-card" data-local-library-index="' + i + '">' +
+    html += '<div class="pl-card" data-local-library-index="' + i + '">' +
       imgTag +
       '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(song.name || '本地音乐') + '</div><div class="pl-sub">' + escHtml(songDisplaySubtitle(song) || '本地文件') + '</div></div>' +
     '</div>';
-  }).join('');
-  if (songs.length > visible.length) {
-    $pl.insertAdjacentHTML('beforeend', '<button type="button" class="fx-mini-btn ghost pl-load-more" data-pl-load-more="1">加载更多 ' + visible.length + '/' + songs.length + '</button>');
   }
+  if (songs.length > visibleLength) {
+    html += '<button type="button" class="fx-mini-btn ghost pl-load-more" data-pl-load-more="1">加载更多 ' + visibleLength + '/' + songs.length + '</button>';
+  }
+  $pl.innerHTML = html;
   if (opts.animate && seq === playlistRenderSeq) animateVisiblePanelList($pl, '.pl-card', document.getElementById('playlist-panel'));
 }
 function renderUserPlaylistsList(opts) {
