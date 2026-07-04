@@ -29,7 +29,7 @@ Get-Content package.json -Encoding UTF8
 
 - 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
-- 当前版本：`v1.2.10`
+- 当前版本：`v1.2.11`
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - 当前分支：`main...origin/main`
 - 当前提交：以 `git log --oneline -5 --decorate` 为准
@@ -37,6 +37,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 最近完成
 
+- 2026-07-04：发布 `v1.2.11`，继续低风险性能优化：本地封面/歌词缓存补水改为按范围读取，分块阶段不再反复 `slice`；后台资产预载候选、播放队列位置映射和排序队列减少中间数组并复用同一轮候选；列表入场动画只收集实际需要动画的前几项。左侧歌单显示/隐藏/固定按钮和 3D 歌单架“自动隐藏/常驻”选项保持不变。
 - 2026-07-04：发布 `v1.2.10`，继续做多维性能优化：启动阶段自定义封面/歌词/用户视觉存档按需解析，Home 听歌画像按需水合并单次扫描，3D 歌单架大队列虚拟取项，队列/搜索/歌单详情 HTML 减少中间数组，本地搜索池和索引预热复用纯本地数组，本地曲库快照/索引保存改为单次循环；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
 - 2026-07-04：发布 `v1.2.9`，继续优化 3D 歌单架交互性能：同一指针事件复用 Raycaster/卡片命中结果，详情行、面板和卡片屏幕命中复用临时对象，滚轮路径延迟射线检测，鼠标移动只在面板可见或需要时读取矩形；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
 - 2026-07-03：将渲染进程 UI 状态备份从每次立即 IPC/写盘，改为 180ms 合并写入；首次全量同步仍立即写，`beforeunload` / `pagehide` 前会 flush，降低连续拖动视觉滑条和设置切换时的主进程写盘抖动。
@@ -50,10 +51,10 @@ Get-Content package.json -Encoding UTF8
 - `node --check desktop\preload.js`
 - 前端内联脚本解析检查
 - 当前 Windows 系统代理为 `127.0.0.1:7897`；PowerShell / Node 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
-- 已使用该代理成功执行 `npm run build:win:dir`，生成 `dist\win-unpacked`。
-- 已执行 `npm run build:win`，生成 `dist\Mineradio-1.2.10-Setup.exe`、`.blockmap`、`dist\Mineradio-1.2.10-Portable-win-x64.zip` 和 `dist\latest.yml`。
-- 已生成 `dist\Mineradio-1.2.9-to-1.2.10.patch.json` 快速补丁和 `dist\Mineradio-1.2.10-SHA256SUMS.txt`。
-- 本次 `Mineradio-1.2.10-Setup.exe` SHA256：`925968ab6902e876c0acebd4cc3a2a6cd05d95c111e92fbce58528699080fd3c`。
+- 已使用该代理成功执行 `npm run build:win:dir`，生成 `dist\win-unpacked`，并启动 `dist\win-unpacked\Mineradio.exe` 做 8 秒 Electron smoke，未提前退出。
+- 已执行 `npm run build:win`，生成 `dist\Mineradio-1.2.11-Setup.exe`、`.blockmap`、`dist\Mineradio-1.2.11-Portable-win-x64.zip` 和 `dist\latest.yml`。
+- 已生成 `dist\Mineradio-1.2.10-to-1.2.11.patch.json` 快速补丁和 `dist\Mineradio-1.2.11-SHA256SUMS.txt`。
+- 本次 `Mineradio-1.2.11-Setup.exe` SHA256：`d07d0b313aaecdca41521bb0221ec2501bca98e0d502090465ae01e43bfb9741`。
 
 ## 后续优先级
 

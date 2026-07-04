@@ -8896,23 +8896,27 @@ function applyLocalAssetCacheToSong(song, record) {
   }
   return changed;
 }
-async function hydrateLocalAssetCacheForSongs(songs) {
+async function hydrateLocalAssetCacheForSongRange(songs, start, end) {
   songs = songs || [];
+  start = Math.max(0, Math.floor(Number(start) || 0));
+  end = Math.min(songs.length, Math.max(start, Math.floor(Number(end) || 0)));
   var keys = [];
   var seen = {};
-  songs.forEach(function(song){
+  for (var i = start; i < end; i++) {
+    var song = songs[i];
     var key = localAssetCacheKey(song);
     if (song) {
       song.localAssetCacheHydrated = false;
       song.localAssetCacheMiss = false;
     }
     if (key && !seen[key]) { seen[key] = true; keys.push(key); }
-  });
+  }
   if (!keys.length) return 0;
   try {
     var records = await readLocalAssetCacheRecords(keys);
     var count = 0;
-    songs.forEach(function(song){
+    for (var j = start; j < end; j++) {
+      var song = songs[j];
       var key = localAssetCacheKey(song);
       var record = records[key];
       if (song) {
@@ -8920,17 +8924,22 @@ async function hydrateLocalAssetCacheForSongs(songs) {
         song.localAssetCacheMiss = !record;
       }
       if (record && applyLocalAssetCacheToSong(song, record)) count++;
-    });
+    }
     return count;
   } catch (e) {
     console.warn('[LocalAssetCacheRead]', e);
-    songs.forEach(function(song){
-      if (!song) return;
+    for (var k = start; k < end; k++) {
+      var song = songs[k];
+      if (!song) continue;
       song.localAssetCacheHydrated = true;
       song.localAssetCacheMiss = true;
-    });
+    }
     return 0;
   }
+}
+async function hydrateLocalAssetCacheForSongs(songs) {
+  songs = songs || [];
+  return hydrateLocalAssetCacheForSongRange(songs, 0, songs.length);
 }
 async function hydrateLocalAssetCacheForSongsChunked(songs, opts) {
   opts = opts || {};
@@ -8939,12 +8948,11 @@ async function hydrateLocalAssetCacheForSongsChunked(songs, opts) {
   var firstChunkSize = Math.max(16, opts.firstChunkSize || Math.min(chunkSize, 72));
   var delay = Math.max(0, opts.delay == null ? 120 : opts.delay);
   var total = 0;
-  var first = songs.slice(0, firstChunkSize);
-  if (first.length) total += await hydrateLocalAssetCacheForSongs(first);
+  if (songs.length) total += await hydrateLocalAssetCacheForSongRange(songs, 0, Math.min(songs.length, firstChunkSize));
   for (var i = firstChunkSize; i < songs.length; i += chunkSize) {
     if (opts.isStale && opts.isStale()) break;
     await yieldToIdle(delay);
-    total += await hydrateLocalAssetCacheForSongs(songs.slice(i, i + chunkSize));
+    total += await hydrateLocalAssetCacheForSongRange(songs, i, i + chunkSize);
   }
   return total;
 }
@@ -13354,25 +13362,35 @@ function localSongNeedsAssetPreload(song) {
 }
 function localAssetQueuePositionMap() {
   var positions = {};
-  (playQueue || []).forEach(function(song, index){
+  var queue = playQueue || [];
+  for (var index = 0; index < queue.length; index++) {
+    var song = queue[index];
     if (song && song.localKey && positions[song.localKey] == null) positions[song.localKey] = index;
-  });
+  }
   return positions;
 }
 function sortLocalAssetPreloadQueue(songs) {
   var positions = localAssetQueuePositionMap();
   var active = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
   var activeKey = active && active.localKey ? active.localKey : '';
-  return (songs || []).map(function(song, index){
+  var ranked = [];
+  songs = songs || [];
+  for (var index = 0; index < songs.length; index++) {
+    var song = songs[index];
+    if (!localSongNeedsAssetPreload(song)) continue;
     var pos = song && song.localKey && positions[song.localKey] != null ? positions[song.localKey] : null;
     var rank = 100000 + index;
     if (song && song.localKey && activeKey && song.localKey === activeKey) rank = 0;
     else if (pos != null && currentIdx >= 0) rank = 10 + Math.abs(pos - currentIdx);
     else if (pos != null) rank = 50000 + pos;
-    return { song:song, index:index, rank:rank };
-  }).sort(function(a, b){
+    ranked.push({ song:song, index:index, rank:rank });
+  }
+  ranked.sort(function(a, b){
     return (a.rank - b.rank) || (a.index - b.index);
-  }).map(function(item){ return item.song; });
+  });
+  var sorted = new Array(ranked.length);
+  for (var i = 0; i < ranked.length; i++) sorted[i] = ranked[i].song;
+  return sorted;
 }
 function promoteCurrentLocalAssetInQueue(queue, start) {
   var active = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
@@ -13407,7 +13425,7 @@ async function waitForLocalAssetPreloadTurn(token) {
  */
 function startLocalLibraryBackgroundProcessing(songs, opts) {
   opts = opts || {};
-  songs = sortLocalAssetPreloadQueue((songs || []).filter(localSongNeedsAssetPreload));
+  songs = sortLocalAssetPreloadQueue(songs || []);
   if (!songs.length) return 0;
   var token = ++localLibraryProcessToken;
   localLibraryProcessing = { active:true, token:token, total:songs.length, assetsDone:0 };
@@ -13415,7 +13433,7 @@ function startLocalLibraryBackgroundProcessing(songs, opts) {
   localLibraryAssetUiBatchState.refreshAt = 0;
   updateLocalLibraryProcessingProgress(false);
   setTimeout(function(){
-    runLocalLibraryBackgroundProcessing(songs.slice(), token, opts).catch(function(err){
+    runLocalLibraryBackgroundProcessing(songs, token, opts).catch(function(err){
       console.warn('[LocalLibraryProcessing]', err);
     });
   }, localAssetProcessingStartDelay(opts));
@@ -20317,10 +20335,12 @@ function animateListItems(container, selector, opts) {
     opts.limit = listAnimationLimit(requestedLimit);
     if (opts.limit <= 0) return;
   }
-  var items = Array.prototype.slice.call(container.querySelectorAll(selector));
-  if (!items.length) return;
   var limit = opts.limit || 18;
-  var targets = items.slice(0, limit);
+  var items = container.querySelectorAll(selector);
+  if (!items.length) return;
+  var targets = [];
+  for (var i = 0; i < items.length && i < limit; i++) targets.push(items[i]);
+  if (!targets.length) return;
   window.gsap.killTweensOf(targets);
   window.gsap.fromTo(targets, {
     autoAlpha: 0,
@@ -22434,11 +22454,14 @@ function applyLocalLibraryIndexToSongs(folderPath, songs) {
   return sync && sync.stats ? sync.stats.reused : 0;
 }
 function localLibraryAssetProcessingSongs(songs) {
-  return (songs || []).filter(function(song){
-    if (!song || song.type !== 'local') return false;
-    if (song.localLibraryChangeState === 'unchanged' && !localSongNeedsAssetPreload(song)) return false;
-    return localSongNeedsAssetPreload(song);
-  });
+  songs = songs || [];
+  var candidates = [];
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    if (!song || song.type !== 'local') continue;
+    if (localSongNeedsAssetPreload(song)) candidates.push(song);
+  }
+  return candidates;
 }
 function localLibrarySyncToastText(sync) {
   var stats = sync && sync.stats;
@@ -22676,11 +22699,16 @@ async function handleLocalFolderFiles(files, opts) {
     if (currentIdx >= 0 && playQueue[currentIdx]) updateControlTrackInfo(playQueue[currentIdx]);
     scheduleLocalLibraryIndexSave(opts.folderPath || libraryFolderPath, songs, 160);
   }
+  var assetProcessingCandidates = null;
+  function pendingAssetProcessingSongs() {
+    if (!assetProcessingCandidates) assetProcessingCandidates = localLibraryAssetProcessingSongs(songs);
+    return assetProcessingCandidates;
+  }
   function startDeferredAssetProcessing() {
     if (localLibrarySongs !== songs) return 0;
-    return startLocalLibraryBackgroundProcessing(localLibraryAssetProcessingSongs(songs), opts);
+    return startLocalLibraryBackgroundProcessing(pendingAssetProcessingSongs(), opts);
   }
-  var pendingAssetCount = localLibraryAssetProcessingSongs(songs).length;
+  var pendingAssetCount = pendingAssetProcessingSongs().length;
   if (deferAssetHydration) {
     // 恢复启动和大曲库先完成队列渲染，再把 IndexedDB 封面/歌词读取让给空闲时段。
     assetHydrationPromise = (async function(){

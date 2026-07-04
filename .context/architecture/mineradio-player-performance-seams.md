@@ -38,6 +38,7 @@
 - 成功生成的本地封面缩略图还必须进入 `localCoverThumbResultCache` 短期结果缓存，避免队列、搜索和歌单架在不同时间点重复缩放同一封面。
 - 主进程本地曲库扫描和快照刷新统一走 `statLocalLibraryFiles()`，用有上限并发池读取文件元数据，并通过原始 `index` 保持排序稳定。
 - 启动恢复或大曲库未变化时，先渲染播放队列和恢复播放会话，再延迟调用 `hydrateLocalAssetCacheForSongs()`；后台封面/歌词任务在恢复阶段减少中途 UI 刷新。
+- 本地封面/歌词缓存分块补水优先使用 `hydrateLocalAssetCacheForSongRange()` 按范围读取，不要在热路径里反复 `songs.slice(...)`；后台资产预载候选应复用同一轮 `localLibraryAssetProcessingSongs()` 结果，再由排序函数二次过滤当前仍需要预载的歌曲。
 - 同一作用域内不得保留重复函数声明；如果后续实现已经覆盖旧实现，必须删除旧实现而不是依赖函数提升覆盖。
 - 新增同帧 UI 任务优先使用 `scheduleNamedAnimationFrame(key, fn)`；同一 key 只保留最后一次任务。
 
