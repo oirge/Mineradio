@@ -5822,11 +5822,15 @@ var particlePointerQuat = new THREE.Quaternion();
 var particlePointerFrame = { dirty:false, ndcX:0, ndcY:0 };
 var CLICK_THRESHOLD = 6;  // 像素, 拖动 > 6px 视为 drag
 var UI_HIT_SELECTOR = '#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#drop-overlay';
+var pointerUiHitCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
 function isPointerOverUi(e) {
   if (!e) return false;
+  if (pointerUiHitCache && pointerUiHitCache.has(e)) return pointerUiHitCache.get(e);
   var el = document.elementFromPoint(e.clientX, e.clientY);
-  return !!(el && el.closest && el.closest(UI_HIT_SELECTOR));
+  var hit = !!(el && el.closest && el.closest(UI_HIT_SELECTOR));
+  if (pointerUiHitCache) pointerUiHitCache.set(e, hit);
+  return hit;
 }
 
 function particleLocalPointFromNdc(ndcX, ndcY, out) {
@@ -14236,6 +14240,11 @@ function makeShelfManager() {
   var lastCardPulseBucket = -1;
   var cardBuildQueue = null;
   var selectedIdx = -1;
+  var cardRaycastMeshes = [];
+  var cardRaycastHits = [];
+  var cardScreenCorners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  var cardScreenBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  var cardFramePose = { wallpaper: false, skull: false };
 
   // v7.2 PSP 风格状态
   var centerIdx = 0;          // 当前居中卡片 index (在 items 数组中的位置)
@@ -14551,7 +14560,7 @@ function makeShelfManager() {
   //  PSP 弧形布局: 以 centerSmooth 为基准, 卡片绕弧排列
   //  i 距离 center 越远 → 越靠后, 越小, 越淡
   // ====================================================
-  function placeCard(card, i, totalCards, modeIs) {
+  function placeCard(card, i, totalCards, modeIs, frameLayout, frameShelfLook, framePose) {
     var delta = card.index - centerSmooth;     // 正=下方, 负=上方
     var absD = Math.abs(delta);
     // 隐藏太远的卡 (>4 全隐藏)
@@ -14562,8 +14571,8 @@ function makeShelfManager() {
     var parY = pointerParallax.y || 0;
     var parWeight = Math.max(0, 1 - absD * 0.16);
     var pulse = card.fxPulse || 0;
-    var layout = shelfLayoutProfile();
-    var shelfLook = shelfSettings();
+    var layout = frameLayout || shelfLayoutProfile();
+    var shelfLook = frameShelfLook || shelfSettings();
     var nextDof = Math.max(0, Math.min(1, (absD - 0.45) / 3.2));
     var nextDofBucket = Math.round(nextDof * 5);
     if (card.dofBucket !== nextDofBucket) {
@@ -14593,8 +14602,8 @@ function makeShelfManager() {
       var entry = (1 - reveal) * (0.82 + absD * 0.075);
       var paneRaw = Math.max(0, Math.min(1, (nowT - paneSwitchAt - absD * 0.030) / 0.72));
       var paneEase = 1 - paneRaw * paneRaw * (3 - 2 * paneRaw);
-      var wallpaperShelfPose = shouldUseWallpaperSafeShelfCamera();
-      var skullShelfPose = shouldUseSkullSafeShelfCamera();
+      var wallpaperShelfPose = framePose ? framePose.wallpaper : shouldUseWallpaperSafeShelfCamera();
+      var skullShelfPose = framePose ? framePose.skull : shouldUseSkullSafeShelfCamera();
       var safeShelfPose = wallpaperShelfPose || skullShelfPose;
       var px = layout.sideX + absD * layout.sideXStep - (detailOpenSide ? layout.sideDetailShift : 0) + entry * layout.sideEntryX;
       var py = (layout.sideY || 0) - delta * layout.sideYStep + (1 - reveal) * (delta < 0 ? -0.18 : 0.18);
@@ -14755,12 +14764,31 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     if (group.parent) group.parent.add(floorMirror); else scene.add(floorMirror);
   }
 
+  function sigItemPart(it) {
+    return [it.type, it.playlistId || '', it.queueIndex || '', it.title || ''].join('|');
+  }
+  function queueSampleSig() {
+    var len = playQueue.length;
+    var parts = [];
+    var seen = {};
+    function addQueueSigIndex(idx) {
+      if (idx < 0 || idx >= len || seen[idx]) return;
+      seen[idx] = true;
+      var song = playQueue[idx] || {};
+      var stableId = song.id || song.songId || song.mid || song.url || song.path || song.filePath || '';
+      parts.push(['queue', '', idx, song.name || '', stableId].join('|'));
+    }
+    var headEnd = Math.min(3, len);
+    for (var i = 0; i < headEnd; i++) addQueueSigIndex(i);
+    for (var cur = currentIdx - 2; cur <= currentIdx + 2; cur++) addQueueSigIndex(cur);
+    var tailStart = Math.max(headEnd, len - 3);
+    for (var j = tailStart; j < len; j++) addQueueSigIndex(j);
+    return parts.join('||');
+  }
   function sig(items) {
-    items = items || playQueue.map(function(song, idx){
-      return { type:'queue', title: song.name, queueIndex: idx };
-    });
+    if (!items) return ['queue', playQueue.length, currentIdx, queueSampleSig()].join('::');
     var sample = items.slice(0, 3).concat(items.slice(Math.max(3, items.length - 3)));
-    return ['queue', items.length, currentIdx, sample.map(function(it){ return [it.type, it.playlistId||'', it.queueIndex||'', it.title||''].join('|'); }).join('||')].join('::');
+    return ['queue', items.length, currentIdx, sample.map(sigItemPart).join('||')].join('::');
   }
 
   function switchPane(nextPane) {
@@ -14814,36 +14842,47 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     var params = card.mesh.geometry && card.mesh.geometry.parameters || {};
     var hw = (params.width || 1.7) / 2;
     var hh = (params.height || 0.85) / 2;
-    var pts = [
-      new THREE.Vector3(-hw, -hh, 0),
-      new THREE.Vector3( hw, -hh, 0),
-      new THREE.Vector3( hw,  hh, 0),
-      new THREE.Vector3(-hw,  hh, 0),
-    ];
-    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    cardScreenCorners[0].set(-hw, -hh, 0);
+    cardScreenCorners[1].set(hw, -hh, 0);
+    cardScreenCorners[2].set(hw, hh, 0);
+    cardScreenCorners[3].set(-hw, hh, 0);
+    cardScreenBounds.minX = Infinity;
+    cardScreenBounds.minY = Infinity;
+    cardScreenBounds.maxX = -Infinity;
+    cardScreenBounds.maxY = -Infinity;
     card.mesh.updateMatrixWorld(true);
-    for (var i = 0; i < pts.length; i++) {
-      pts[i].applyMatrix4(card.mesh.matrixWorld).project(camera);
-      var x = (pts[i].x + 1) * innerWidth / 2;
-      var y = (1 - pts[i].y) * innerHeight / 2;
-      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    for (var i = 0; i < cardScreenCorners.length; i++) {
+      cardScreenCorners[i].applyMatrix4(card.mesh.matrixWorld).project(camera);
+      var x = (cardScreenCorners[i].x + 1) * innerWidth / 2;
+      var y = (1 - cardScreenCorners[i].y) * innerHeight / 2;
+      cardScreenBounds.minX = Math.min(cardScreenBounds.minX, x);
+      cardScreenBounds.maxX = Math.max(cardScreenBounds.maxX, x);
+      cardScreenBounds.minY = Math.min(cardScreenBounds.minY, y);
+      cardScreenBounds.maxY = Math.max(cardScreenBounds.maxY, y);
     }
     pad = pad == null ? 28 : pad;
-    if (sx < minX - pad || sx > maxX + pad || sy < minY - pad || sy > maxY + pad) return null;
-    var u = clampRange((sx - minX) / Math.max(1, maxX - minX), 0, 1);
-    var v = 1 - clampRange((sy - minY) / Math.max(1, maxY - minY), 0, 1);
+    if (sx < cardScreenBounds.minX - pad || sx > cardScreenBounds.maxX + pad || sy < cardScreenBounds.minY - pad || sy > cardScreenBounds.maxY + pad) return null;
+    var u = clampRange((sx - cardScreenBounds.minX) / Math.max(1, cardScreenBounds.maxX - cardScreenBounds.minX), 0, 1);
+    var v = 1 - clampRange((sy - cardScreenBounds.minY) / Math.max(1, cardScreenBounds.maxY - cardScreenBounds.minY), 0, 1);
     return { x: u, y: v };
   }
 
   function pickCardAtScreen(sx, sy, pad) {
     if (!cards.length || !group || !group.visible) return null;
-    var ordered = cards.slice().sort(function(a, b){ return (b.mesh.renderOrder || 0) - (a.mesh.renderOrder || 0); });
-    for (var i = 0; i < ordered.length; i++) {
-      var uv = screenHitCard(ordered[i], sx, sy, pad == null ? 72 : pad);
-      if (uv) return { card: ordered[i], uv: uv, screenPick: true };
+    var bestCard = null;
+    var bestUv = null;
+    var bestOrder = -Infinity;
+    for (var i = 0; i < cards.length; i++) {
+      var order = cards[i].mesh ? (cards[i].mesh.renderOrder || 0) : 0;
+      if (order <= bestOrder) continue;
+      var uv = screenHitCard(cards[i], sx, sy, pad == null ? 72 : pad);
+      if (uv) {
+        bestCard = cards[i];
+        bestUv = uv;
+        bestOrder = order;
+      }
     }
-    return null;
+    return bestCard ? { card: bestCard, uv: bestUv, screenPick: true } : null;
   }
 
   return {
@@ -14893,7 +14932,15 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       if (floorMirror) floorMirror.visible = group.visible && mode === 'stage';
       if (mode === 'side') {
         var passiveAlwaysGroup = shelfAlwaysVisible() && !shelfPinnedOpen && !(contentList && contentList.isOpen());
-        var liftedCardActive = passiveAlwaysGroup && cards.some(function(c){ return c.selected || (c.floatMix || 0) > 0.025; });
+        var liftedCardActive = false;
+        if (passiveAlwaysGroup) {
+          for (var liftIdx = 0; liftIdx < cards.length; liftIdx++) {
+            if (cards[liftIdx].selected || (cards[liftIdx].floatMix || 0) > 0.025) {
+              liftedCardActive = true;
+              break;
+            }
+          }
+        }
         group.renderOrder = passiveAlwaysGroup && !liftedCardActive ? 30 : 50;
         group.position.set(0, 0, 0);
         var bindToCover = shelfAlwaysVisible() && particles && particles.rotation && !(contentList && contentList.isOpen());
@@ -14914,8 +14961,12 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         group.rotation.y = px * 0.025;
         group.rotation.x = -py * 0.012;
       }
+      var frameLayout = shelfLayoutProfile();
+      var frameShelfLook = shelfSettings();
+      cardFramePose.wallpaper = shouldUseWallpaperSafeShelfCamera();
+      cardFramePose.skull = shouldUseSkullSafeShelfCamera();
       for (var i = 0; i < cards.length; i++) {
-        placeCard(cards[i], i, cards.length, mode);
+        placeCard(cards[i], i, cards.length, mode, frameLayout, frameShelfLook, cardFramePose);
       }
       // 内容更新 (节流)
       if (uniforms.uTime.value - lastUpdate > 0.8) {
@@ -14960,10 +15011,20 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     },
     raycastCards: function(raycaster) {
       if (!group || !group.visible || !cards.length) return null;
-      var visibleMeshes = cards.filter(function(c){ return c.mesh.visible; }).map(function(c){ return c.mesh; });
-      var hits = raycaster.intersectObjects(visibleMeshes, false);
+      cardRaycastMeshes.length = 0;
+      cardRaycastHits.length = 0;
+      for (var i = 0; i < cards.length; i++) {
+        if (cards[i].mesh && cards[i].mesh.visible) cardRaycastMeshes.push(cards[i].mesh);
+      }
+      var hits = raycaster.intersectObjects(cardRaycastMeshes, false, cardRaycastHits);
       if (!hits.length) return null;
-      var card = cards.find(function(c){ return c.mesh === hits[0].object; });
+      var card = null;
+      for (var ci = 0; ci < cards.length; ci++) {
+        if (cards[ci].mesh === hits[0].object) {
+          card = cards[ci];
+          break;
+        }
+      }
       return { card: card, point: hits[0].point, uv: hits[0].uv };
     },
     pickCardAtScreen: pickCardAtScreen,
@@ -15155,8 +15216,37 @@ function makeContentListManager() {
   var panelDrawAt = -10, rowDrawAt = -10;
   var LOADING_ANIM_INTERVAL = 1 / 30;
   var DETAIL_BASE = { x: 1.28, y: 0.18, z: 1.36, rx: -0.008, ry: 0.020 };
+  var rowRaycastMeshes = [];
+  var rowRaycastHits = [];
+  var panelRaycastHits = [];
+  var panelScreenCorners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  var panelScreenBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   function detailLayout() {
     return shelfLayoutProfile().detail || DETAIL_BASE;
+  }
+
+  function measurePanelScreenBounds(width, height) {
+    var hw = width / 2;
+    var hh = height / 2;
+    panelScreenCorners[0].set(-hw, -hh, 0);
+    panelScreenCorners[1].set(hw, -hh, 0);
+    panelScreenCorners[2].set(hw, hh, 0);
+    panelScreenCorners[3].set(-hw, hh, 0);
+    panelScreenBounds.minX = Infinity;
+    panelScreenBounds.minY = Infinity;
+    panelScreenBounds.maxX = -Infinity;
+    panelScreenBounds.maxY = -Infinity;
+    panel.mesh.updateMatrixWorld(true);
+    for (var pi = 0; pi < panelScreenCorners.length; pi++) {
+      panelScreenCorners[pi].applyMatrix4(panel.mesh.matrixWorld).project(camera);
+      var x = (panelScreenCorners[pi].x + 1) * innerWidth / 2;
+      var y = (1 - panelScreenCorners[pi].y) * innerHeight / 2;
+      panelScreenBounds.minX = Math.min(panelScreenBounds.minX, x);
+      panelScreenBounds.maxX = Math.max(panelScreenBounds.maxX, x);
+      panelScreenBounds.minY = Math.min(panelScreenBounds.minY, y);
+      panelScreenBounds.maxY = Math.max(panelScreenBounds.maxY, y);
+    }
+    return panelScreenBounds;
   }
 
   function makeRoundRect(ctx, x, y, w, h, r) {
@@ -15784,10 +15874,20 @@ function makeContentListManager() {
     },
     raycastRows: function(rc) {
       if (!rows.length) return null;
-      var vm = rows.filter(function(r){return r.mesh.visible;}).map(function(r){return r.mesh;});
-      var hits = rc.intersectObjects(vm, false);
+      rowRaycastMeshes.length = 0;
+      rowRaycastHits.length = 0;
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].mesh && rows[i].mesh.visible) rowRaycastMeshes.push(rows[i].mesh);
+      }
+      var hits = rc.intersectObjects(rowRaycastMeshes, false, rowRaycastHits);
       if (!hits.length) return null;
-      var row = rows.find(function(r){ return r.mesh === hits[0].object; });
+      var row = null;
+      for (var ri = 0; ri < rows.length; ri++) {
+        if (rows[ri].mesh === hits[0].object) {
+          row = rows[ri];
+          break;
+        }
+      }
       return { row: row, uv: hits[0].uv };
     },
     pickRowAtScreen: function(sx, sy) {
@@ -15825,31 +15925,16 @@ function makeContentListManager() {
     },
     raycastPanel: function(rc) {
       if (!panel || !panel.mesh) return null;
-      var hits = rc.intersectObject(panel.mesh, false);
+      panelRaycastHits.length = 0;
+      var hits = rc.intersectObject(panel.mesh, false, panelRaycastHits);
       return hits && hits.length ? hits[0] : null;
     },
     screenContainsPanel: function(sx, sy) {
       if (!panel || !panel.mesh || !open) return false;
       var params = panel.mesh.geometry && panel.mesh.geometry.parameters || {};
-      var hw = (params.width || 2.62) / 2;
-      var hh = (params.height || 3.02) / 2;
-      var pts = [
-        new THREE.Vector3(-hw, -hh, 0),
-        new THREE.Vector3( hw, -hh, 0),
-        new THREE.Vector3( hw,  hh, 0),
-        new THREE.Vector3(-hw,  hh, 0),
-      ];
-      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      panel.mesh.updateMatrixWorld(true);
-      for (var pi = 0; pi < pts.length; pi++) {
-        pts[pi].applyMatrix4(panel.mesh.matrixWorld).project(camera);
-        var x = (pts[pi].x + 1) * innerWidth / 2;
-        var y = (1 - pts[pi].y) * innerHeight / 2;
-        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-      }
+      var bounds = measurePanelScreenBounds(params.width || 2.62, params.height || 3.02);
       var pad = 42;
-      return sx >= minX - pad && sx <= maxX + pad && sy >= minY - pad && sy <= maxY + pad;
+      return sx >= bounds.minX - pad && sx <= bounds.maxX + pad && sy >= bounds.minY - pad && sy <= bounds.maxY + pad;
     },
     rowActionAtScreen: function(row, sx, sy) {
       if (!row || !row.mesh || !row.mesh.visible) return null;
@@ -15987,16 +16072,39 @@ function requestPlaylistCover(url, cb) {
 //   - 点击两侧卡: 滚到那张
 //   - ESC: 关闭内容框
 // ============================================================
+var shelfPointerRaycasterCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+var shelfPointerCardHitCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+var shelfPointerNdc = new THREE.Vector2();
 function raycasterFromPointerEvent(e) {
+  if (e && shelfPointerRaycasterCache) {
+    var cached = shelfPointerRaycasterCache.get(e);
+    if (cached) return cached;
+  }
   var mx = (e.clientX / innerWidth) * 2 - 1;
   var my = -(e.clientY / innerHeight) * 2 + 1;
   var rc = new THREE.Raycaster();
-  rc.setFromCamera(new THREE.Vector2(mx, my), camera);
+  shelfPointerNdc.set(mx, my);
+  rc.setFromCamera(shelfPointerNdc, camera);
+  if (e && shelfPointerRaycasterCache) shelfPointerRaycasterCache.set(e, rc);
   return rc;
 }
 function pointerCardHit(rc, e, screenPad) {
   if (!shelfManager) return null;
-  return shelfManager.raycastCards(rc) || (shelfManager.pickCardAtScreen && shelfManager.pickCardAtScreen(e.clientX, e.clientY, screenPad));
+  var cacheKey = screenPad == null ? 'default' : String(screenPad);
+  var eventCache = null;
+  if (e && shelfPointerCardHitCache) {
+    eventCache = shelfPointerCardHitCache.get(e);
+    if (eventCache && Object.prototype.hasOwnProperty.call(eventCache, cacheKey)) return eventCache[cacheKey];
+  }
+  var hit = shelfManager.raycastCards(rc) || (shelfManager.pickCardAtScreen && shelfManager.pickCardAtScreen(e.clientX, e.clientY, screenPad));
+  if (e && shelfPointerCardHitCache) {
+    if (!eventCache) {
+      eventCache = {};
+      shelfPointerCardHitCache.set(e, eventCache);
+    }
+    eventCache[cacheKey] = hit || null;
+  }
+  return hit;
 }
 function isSideShelfFocusHit(e) {
   if (!e || !shelfManager || !shelfManager.getMode || shelfManager.getMode() !== 'side') return false;
@@ -16008,7 +16116,7 @@ function isSideShelfFocusHit(e) {
 }
 function updateShelfCardHoverSelection(e) {
   if (!shelfManager || !shelfManager.clearSelected || !shelfManager.setSelected) return;
-  if (!e || document.body.classList.contains('splash-active') || isPointerOverUi(e)) {
+  if (!e || document.body.classList.contains('splash-active')) {
     shelfManager.clearSelected();
     return;
   }
@@ -16023,6 +16131,10 @@ function updateShelfCardHoverSelection(e) {
   }
   var canInteract = shelfManager.canInteract && shelfManager.canInteract();
   if (!canInteract) {
+    shelfManager.clearSelected();
+    return;
+  }
+  if (isPointerOverUi(e)) {
     shelfManager.clearSelected();
     return;
   }
@@ -16161,13 +16273,18 @@ renderer.domElement.addEventListener('wheel', function(e){
   if (isPointerOverUi(e)) return;
   if (!shelfManager || shelfManager.getMode() === 'off') return;
   markRenderInteraction('shelf-wheel', 900);
-  var rc = raycasterFromPointerEvent(e);
+  var rc = null;
+  function shelfWheelRaycaster() {
+    if (!rc) rc = raycasterFromPointerEvent(e);
+    return rc;
+  }
   // 二级框打开时, 只有真正命中详情行才接管滚轮
   if (shelfManager.hasOpenContent()) {
     var cl = shelfManager.getContentList();
     if (cl) {
-      var rowHit = cl.raycastRows(rc);
-      var panelHit = !rowHit && cl.raycastPanel ? cl.raycastPanel(rc) : null;
+      var detailRc = shelfWheelRaycaster();
+      var rowHit = cl.raycastRows(detailRc);
+      var panelHit = !rowHit && cl.raycastPanel ? cl.raycastPanel(detailRc) : null;
       var panelScreenHit = !rowHit && !panelHit && cl.screenContainsPanel ? cl.screenContainsPanel(e.clientX, e.clientY) : false;
       if (!rowHit && !panelHit && !panelScreenHit) return;
       e.preventDefault(); e.stopImmediatePropagation();
@@ -16179,7 +16296,11 @@ renderer.domElement.addEventListener('wheel', function(e){
   var inShelfArea = false;
   var canScrollShelf = shelfManager.canInteract && shelfManager.canInteract();
   var shelfPreviewActive = shelfAutoHiddenInputReady();
-  var cardWheelHit = canScrollShelf ? pointerCardHit(rc, e, mode === 'side' && !shelfPinnedOpen && shelfAlwaysVisible() ? 18 : undefined) : null;
+  var needsCardWheelHit = canScrollShelf && (
+    mode === 'stage' ||
+    (mode === 'side' && (shelfPinnedOpen || shelfAlwaysVisible() || shelfPreviewActive))
+  );
+  var cardWheelHit = needsCardWheelHit ? pointerCardHit(shelfWheelRaycaster(), e, mode === 'side' && !shelfPinnedOpen && shelfAlwaysVisible() ? 18 : undefined) : null;
   if (canScrollShelf && e.shiftKey && (mode !== 'side' || shelfPinnedOpen || shelfPreviewActive || shelfAlwaysVisible())) inShelfArea = true;
   else if (canScrollShelf && mode === 'side') {
     if (shelfPinnedOpen) inShelfArea = isShelfWheelZone(e) || !!cardWheelHit;
@@ -27301,9 +27422,13 @@ window.addEventListener('mousemove', function(e){
     updateShelfCardHoverSelection(e);
     updateControlsAutoHideFromPointer(ex, ey);
     var ppOnImm = pp.classList.contains('peek');
-    var ppRectImm = pp.getBoundingClientRect();
     var inQueueTriggerImm = isPlaylistEdgeTrigger(ex, ey, H);
-    var inQueuePanelImm = ppOnImm && ex >= ppRectImm.left - 18 && ex <= ppRectImm.right + 24 && ey >= ppRectImm.top - 22 && ey <= ppRectImm.bottom + 22;
+    var ppRectImm = null;
+    var inQueuePanelImm = false;
+    if (ppOnImm) {
+      ppRectImm = pp.getBoundingClientRect();
+      inQueuePanelImm = ex >= ppRectImm.left - 18 && ex <= ppRectImm.right + 24 && ey >= ppRectImm.top - 22 && ey <= ppRectImm.bottom + 22;
+    }
     if (inQueueTriggerImm || inQueuePanelImm) setPeek(pp, true, 'pl');
     else if (shouldClosePlaylistPanelFromPointer(ppOnImm, ex, ppRectImm)) setPeek(pp, false, 'pl');
     var shelfCanFocusImm = !!(shelfManager && shelfManager.canInteract && shelfManager.canInteract());
@@ -27321,29 +27446,40 @@ window.addEventListener('mousemove', function(e){
   updateShelfCardHoverSelection(e);
   // 搜索 (上): 顶部 48px 内进入; 已显示时鼠标在 280px 内保留
   var saOn = sa.classList.contains('peek');
-  var saRect = sa.getBoundingClientRect();
   var searchFocused = document.activeElement === $input;
   var uploadTip = document.getElementById('upload-tip');
   var uploadTipOpen = !!(uploadTip && uploadTip.classList.contains('show'));
-  var inSearchPanel = saOn && ex >= saRect.left - 24 && ex <= saRect.right + 24 && ey >= saRect.top - 22 && ey <= saRect.bottom + 42;
+  var inSearchPanel = false;
+  if (saOn) {
+    var saRect = sa.getBoundingClientRect();
+    inSearchPanel = ex >= saRect.left - 24 && ex <= saRect.right + 24 && ey >= saRect.top - 22 && ey <= saRect.bottom + 42;
+  }
   if (ey < 66 || inSearchPanel || searchFocused || uploadTipOpen) setPeek(sa, true, 'search');
   else if (saOn && !emptyHomeActive) setPeek(sa, false, 'search');
   // 控制台: 右下角触发；一旦面板出现，就按真实面板矩形保留显示
   var fpOn = fp.classList.contains('peek') || fp.classList.contains('show');
-  var fpRect = fp.getBoundingClientRect();
   var fab = document.getElementById('fx-fab');
   var fabRect = fab ? fab.getBoundingClientRect() : { left:W, right:W, top:H, bottom:H };
-  var inFxPanel = fpOn && ex >= fpRect.left - 24 && ex <= fpRect.right + 24 && ey >= fpRect.top - 24 && ey <= fpRect.bottom + 24;
+  var inFxPanel = false;
   var inFxFab = ex >= fabRect.left - 18 && ex <= fabRect.right + 18 && ey >= fabRect.top - 18 && ey <= fabRect.bottom + 18;
-  var inFxBridge = fpOn && ex >= Math.min(fpRect.left, fabRect.left) - 18 && ex <= W && ey >= fpRect.bottom - 10 && ey <= fabRect.bottom + 18;
+  var inFxBridge = false;
+  if (fpOn) {
+    var fpRect = fp.getBoundingClientRect();
+    inFxPanel = ex >= fpRect.left - 24 && ex <= fpRect.right + 24 && ey >= fpRect.top - 24 && ey <= fpRect.bottom + 24;
+    inFxBridge = ex >= Math.min(fpRect.left, fabRect.left) - 18 && ex <= W && ey >= fpRect.bottom - 10 && ey <= fabRect.bottom + 18;
+  }
   if (!diyPlayerMode) inFxPanel = inFxFab = inFxBridge = false;
   if (inFxFab || inFxPanel || inFxBridge) setPeek(fp, true, 'fx');
   else if (fpOn) setPeek(fp, false, 'fx');
   // 歌单/队列 DOM 面板只在左侧明确停留时出现，避免和右侧 3D 架抢焦点
   var ppOn = pp.classList.contains('peek');
-  var ppRect = pp.getBoundingClientRect();
   var inQueueTrigger = isPlaylistEdgeTrigger(ex, ey, H);
-  var inQueuePanel = ppOn && ex >= ppRect.left - 18 && ex <= ppRect.right + 24 && ey >= ppRect.top - 22 && ey <= ppRect.bottom + 22;
+  var ppRect = null;
+  var inQueuePanel = false;
+  if (ppOn) {
+    ppRect = pp.getBoundingClientRect();
+    inQueuePanel = ex >= ppRect.left - 18 && ex <= ppRect.right + 24 && ey >= ppRect.top - 22 && ey <= ppRect.bottom + 22;
+  }
   if (inQueueTrigger || inQueuePanel) setPeek(pp, true, 'pl');
   else if (shouldClosePlaylistPanelFromPointer(ppOn, ex, ppRect)) setPeek(pp, false, 'pl');
 

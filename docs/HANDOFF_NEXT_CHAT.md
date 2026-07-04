@@ -1,6 +1,6 @@
 # Mineradio Next Chat Handoff
 
-更新时间：2026-07-03
+更新时间：2026-07-04
 
 ## 新对话先执行
 
@@ -29,7 +29,7 @@ Get-Content package.json -Encoding UTF8
 
 - 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
-- 当前版本：`v1.2.8`
+- 当前版本：`v1.2.9`
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - 当前分支：`main...origin/main`
 - 当前提交：以 `git log --oneline -5 --decorate` 为准
@@ -37,6 +37,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 最近完成
 
+- 2026-07-04：发布 `v1.2.9`，继续优化 3D 歌单架交互性能：同一指针事件复用 Raycaster/卡片命中结果，详情行、面板和卡片屏幕命中复用临时对象，滚轮路径延迟射线检测，鼠标移动只在面板可见或需要时读取矩形；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
 - 2026-07-03：将渲染进程 UI 状态备份从每次立即 IPC/写盘，改为 180ms 合并写入；首次全量同步仍立即写，`beforeunload` / `pagehide` 前会 flush，降低连续拖动视觉滑条和设置切换时的主进程写盘抖动。
 - 2026-07-03：交接文档从旧 `v1.1.0 / XxHuberrr` 发布线更新到当前 `v1.2.8 / oirge` 工作区，避免后续接手走错仓库。
 
@@ -45,11 +46,13 @@ Get-Content package.json -Encoding UTF8
 - `git diff --check`
 - `node --check server.js`
 - `node --check desktop\main.js`
+- `node --check desktop\preload.js`
 - 前端内联脚本解析检查
 - 当前 Windows 系统代理为 `127.0.0.1:7897`；PowerShell / Node 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 已使用该代理成功执行 `npm run build:win:dir`，生成 `dist\win-unpacked`。
-- 已使用该代理成功执行 `npm run build:win`，生成 `dist\Mineradio-1.2.8-Setup.exe`、`.blockmap`、`dist\Mineradio-1.2.8-Portable-win-x64.zip` 和 `dist\latest.yml`。
-- 本次 `Mineradio-1.2.8-Setup.exe` SHA256：`ED16AAB84BC994BDA0512D6250EAF12FC2DAD8AABCA6ABF6FD98B65CBF5C4601`。
+- 已执行 `npm run build:win`，生成 `dist\Mineradio-1.2.9-Setup.exe`、`.blockmap`、`dist\Mineradio-1.2.9-Portable-win-x64.zip` 和 `dist\latest.yml`。
+- 已生成 `dist\Mineradio-1.2.8-to-1.2.9.patch.json` 快速补丁和 `dist\Mineradio-1.2.9-SHA256SUMS.txt`。
+- 本次 `Mineradio-1.2.9-Setup.exe` SHA256：`c36c125bb61db014caaa9a72e2e40e6c72f1e23769efcd2528e169f5585dbe04`。
 
 ## 后续优先级
 
