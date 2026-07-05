@@ -17411,7 +17411,7 @@ function openLocalLibraryQueue() {
     return;
   }
   if (!playQueue.some(function(song){ return song && song.type === 'local'; })) {
-    playQueue = songs.map(cloneSong);
+    playQueue = cloneSongList(songs);
     markQueueContentChanged();
     currentIdx = playQueue.length ? 0 : -1;
     safeRenderQueuePanel('local-library-open');
@@ -17438,7 +17438,7 @@ function playLocalLibrarySong(index) {
     return;
   }
   var start = Math.max(0, Math.min(songs.length - 1, Number(index) || 0));
-  playQueue = songs.map(cloneSong);
+  playQueue = cloneSongList(songs);
   markQueueContentChanged();
   currentIdx = start;
   safeRenderQueuePanel('local-library-play', { scrollCurrent: miniQueueOpen });
@@ -17871,7 +17871,7 @@ function renderDetailComments(comments) {
   }).join('') + '</div>';
 }
 function renderArtistSongList(songs) {
-  detailArtistSongs = (songs || []).map(cloneSong);
+  detailArtistSongs = cloneSongList(songs);
   if (!detailArtistSongs.length) return '<div class="detail-empty">暂无热门歌曲</div>';
   return '<div class="detail-scroll">' + detailArtistSongs.map(function(s, i){
     var cover = songCoverSrc(s, 80);
@@ -17892,7 +17892,7 @@ function renderArtistSongList(songs) {
 function playArtistDetailSong(i) {
   var song = detailArtistSongs[i];
   if (!song) return;
-  playQueue = detailArtistSongs.map(cloneSong);
+  playQueue = cloneSongList(detailArtistSongs);
   markQueueContentChanged();
   currentIdx = i;
   safeRenderQueuePanel('artist-detail-play');
@@ -18142,13 +18142,29 @@ function hasCustomLyricForSong(song) {
   var entry = getCustomLyricEntry(song);
   return !!(entry && String(entry.text || '').trim());
 }
+/**
+ * 克隆单行歌词。歌词行可能带逐字时间轴，显式循环能降低本地歌词加载时的回调分配。
+ * @param {object} line 原始歌词行。
+ * @returns {object} 可写入当前歌词状态的副本。
+ */
 function cloneLyricLine(line) {
   var copy = Object.assign({}, line || {});
-  if (line && Array.isArray(line.words)) copy.words = line.words.map(function(w){ return Object.assign({}, w); });
+  if (line && Array.isArray(line.words)) {
+    copy.words = new Array(line.words.length);
+    for (var i = 0; i < line.words.length; i++) copy.words[i] = Object.assign({}, line.words[i]);
+  }
   return copy;
 }
+/**
+ * 克隆歌词行列表。切歌和歌词源切换都会调用，避免 map 为长歌词额外创建回调开销。
+ * @param {Array<object>} lines 原始歌词行列表。
+ * @returns {Array<object>} 歌词行副本列表。
+ */
 function cloneLyricLines(lines) {
-  return (Array.isArray(lines) ? lines : []).map(cloneLyricLine);
+  var source = Array.isArray(lines) ? lines : [];
+  var out = new Array(source.length);
+  for (var i = 0; i < source.length; i++) out[i] = cloneLyricLine(source[i]);
+  return out;
 }
 function setOriginalLyricsState(lines, hasNativeKaraoke, timingSource) {
   originalLyricsState = {
@@ -18170,24 +18186,48 @@ function applyOriginalLyricsState() {
   lyricSourceMode = 'original';
   applyLyricsState(originalLyricsState.lines, originalLyricsState.hasNativeKaraoke, originalLyricsState.timingSource);
 }
+/**
+ * 解析用户或本地纯文本歌词。优先识别 LRC，普通文本按歌曲时长均分，避免链式 map/filter 放大长歌词加载成本。
+ * @param {string} text 歌词原文。
+ * @returns {Array<object>} 标准化歌词行。
+ */
 function parseCustomLyricText(text) {
   var raw = String(text || '').trim();
   if (!raw) return [];
   var lrcLines = parseLyricText(raw);
-  if (lrcLines.length && !lrcLines.every(function(line){ return isNoLyricText(line.text); })) {
-    return lrcLines.map(function(line){
-      var copy = cloneLyricLine(line);
-      copy.source = 'custom-lrc';
-      return copy;
-    });
+  if (lrcLines.length) {
+    var hasLyricText = false;
+    for (var lrcIdx = 0; lrcIdx < lrcLines.length; lrcIdx++) {
+      if (!isNoLyricText(lrcLines[lrcIdx] && lrcLines[lrcIdx].text)) {
+        hasLyricText = true;
+        break;
+      }
+    }
+    if (hasLyricText) {
+      var customLines = new Array(lrcLines.length);
+      for (var copyIdx = 0; copyIdx < lrcLines.length; copyIdx++) {
+        var copy = cloneLyricLine(lrcLines[copyIdx]);
+        copy.source = 'custom-lrc';
+        customLines[copyIdx] = copy;
+      }
+      return customLines;
+    }
   }
-  var rows = raw.split(/\r?\n/).map(function(line){ return line.trim(); }).filter(function(line){ return line && !isNoLyricText(line); });
+  var rawRows = raw.split(/\r?\n/);
+  var rows = [];
+  for (var rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+    var row = rawRows[rowIdx].trim();
+    if (row && !isNoLyricText(row)) rows.push(row);
+  }
   if (!rows.length) return [];
   var duration = audio && isFinite(audio.duration) && audio.duration > 8 ? audio.duration : 0;
   var gap = duration ? Math.max(2.8, Math.min(7.2, duration / Math.max(1, rows.length))) : 4.8;
-  return finalizeLyricLineDurations(rows.map(function(line, i){
-    return { t: i * gap, duration: gap, text: line, source: 'custom-text', charCount: Math.max(1, line.length) };
-  }));
+  var generated = new Array(rows.length);
+  for (var genIdx = 0; genIdx < rows.length; genIdx++) {
+    var line = rows[genIdx];
+    generated[genIdx] = { t: genIdx * gap, duration: gap, text: line, source: 'custom-text', charCount: Math.max(1, line.length) };
+  }
+  return finalizeLyricLineDurations(generated);
 }
 function applyCustomLyricState(song, silent) {
   song = song || currentLyricSong();
@@ -18495,7 +18535,25 @@ async function verifySongInPlaylist(pid, songId) {
 async function addCollectTargetToPlaylist(pid) {
   showToast('纯本地模式不使用在线收藏');
 }
+/**
+ * 克隆歌曲对象并套用自定义封面。入队路径会批量调用，单首逻辑保持集中，避免各入口重复拼字段。
+ * @param {object} song 原始歌曲对象。
+ * @returns {object} 可安全写入播放队列的歌曲副本。
+ */
 function cloneSong(song){ return hydrateCustomCover(Object.assign({}, song)); }
+/**
+ * 批量克隆歌曲列表。大本地库或大歌单入队时用显式循环减少 map 回调开销，并保持数组长度语义。
+ * @param {Array<object>} songs 原始歌曲列表。
+ * @returns {Array<object>} 歌曲副本列表。
+ */
+function cloneSongList(songs) {
+  var source = Array.isArray(songs) ? songs : [];
+  var list = new Array(source.length);
+  for (var i = 0; i < source.length; i++) {
+    if (Object.prototype.hasOwnProperty.call(source, i)) list[i] = cloneSong(source[i]);
+  }
+  return list;
+}
 function avatarSrc(url) {
   if (!url) return '';
   return coverProxySrc(url, true);
@@ -19719,13 +19777,21 @@ function ensureLocalSongUrl(song) {
   }
   return '';
 }
+/**
+ * 解析本地歌词并标记来源。该函数位于本地文件切歌路径，保持输出字段不变但减少 map 回调。
+ * @param {string} text 本地歌词文本。
+ * @returns {Array<object>} 带 local 来源标记的歌词行。
+ */
 function parseLocalLyricText(text) {
-  return parseCustomLyricText(text).map(function(line){
-    var copy = cloneLyricLine(line);
+  var lines = parseCustomLyricText(text);
+  var out = new Array(lines.length);
+  for (var i = 0; i < lines.length; i++) {
+    var copy = cloneLyricLine(lines[i]);
     if (copy.source === 'custom-lrc') copy.source = 'local-lrc';
     else if (copy.source === 'custom-text') copy.source = 'local-text';
-    return copy;
-  });
+    out[i] = copy;
+  }
+  return out;
 }
 function applyLocalOriginalLyricsState(song) {
   var text = song && String(song.localLyricText || '').trim();
@@ -20470,9 +20536,23 @@ function isNoLyricText(text) {
     compact === '暂无歌词敬请期待' ||
     compact === '此歌曲为没有填词的纯音乐请您欣赏';
 }
+/**
+ * 过滤空歌词并在无有效歌词时补兜底文本。切歌后会频繁调用，单次扫描同时完成过滤和有效性判断。
+ * @param {Array<object>} lines 候选歌词行。
+ * @returns {Array<object>} 可渲染歌词行。
+ */
 function withLyricFallback(lines) {
-  lines = Array.isArray(lines) ? lines.filter(function(line){ return line && String(line.text || '').trim(); }) : [];
-  if (lines.length && !lines.every(function(line){ return isNoLyricText(line.text); })) return lines;
+  var source = Array.isArray(lines) ? lines : [];
+  var compact = [];
+  var hasLyricText = false;
+  for (var i = 0; i < source.length; i++) {
+    var line = source[i];
+    var text = line && String(line.text || '').trim();
+    if (!text) continue;
+    compact.push(line);
+    if (!isNoLyricText(text)) hasLyricText = true;
+  }
+  if (compact.length && hasLyricText) return compact;
   var text = currentLyricFallbackText();
   return text ? [{ t:0, text:text, duration:9999, charCount:Math.max(1, text.length), fallback:true }] : [];
 }
@@ -20492,45 +20572,57 @@ function finalizeLyricLineDurations(lines) {
   }
   return lines;
 }
+/**
+ * 解析 LRC 歌词文本。同一时间戳的双语歌词会合并到同一行，解析过程避免 entries/map/filter 中间数组。
+ * @param {string} text LRC 原文。
+ * @returns {Array<object>} 标准化歌词行。
+ */
 function parseLyricText(text) {
-  var entries = [], reg = /\[(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?\]/g;
-  String(text || '').split(/\r?\n/).forEach(function(line){
-    var times = [], m;
+  var reg = /\[(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?\]/g;
+  var buckets = {};
+  var ordered = [];
+  var rawLines = String(text || '').split(/\r?\n/);
+  for (var rawIdx = 0; rawIdx < rawLines.length; rawIdx++) {
+    var rawLine = rawLines[rawIdx];
+    var times = [];
+    var m;
     reg.lastIndex = 0;
-    while ((m = reg.exec(line))) times.push(lyricTagTimeToSeconds(m[1], m[2], m[3]));
-    if (!times.length) return;
-    var txt = line.replace(reg, '').trim();
-    if (!txt) return;
-    times.forEach(function(t){ entries.push({ t: t, text: txt }); });
-  });
-  var buckets = {}, ordered = [];
-  entries.forEach(function(entry){
-    var key = String(Math.round((Number(entry.t) || 0) * 1000));
-    var bucket = buckets[key];
-    if (!bucket) {
-      bucket = buckets[key] = { t: entry.t, texts: [], seen: Object.create(null) };
-      ordered.push(bucket);
+    while ((m = reg.exec(rawLine))) times.push(lyricTagTimeToSeconds(m[1], m[2], m[3]));
+    if (!times.length) continue;
+    reg.lastIndex = 0;
+    var txt = rawLine.replace(reg, '').trim();
+    if (!txt) continue;
+    for (var timeIdx = 0; timeIdx < times.length; timeIdx++) {
+      var t = times[timeIdx];
+      var key = String(Math.round((Number(t) || 0) * 1000));
+      var bucket = buckets[key];
+      if (!bucket) {
+        bucket = buckets[key] = { t: t, texts: [], seen: Object.create(null) };
+        ordered.push(bucket);
+      }
+      var rows = String(txt || '').split(/\n+/);
+      for (var rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+        var row = rows[rowIdx].replace(/[ \t]+/g, ' ').trim();
+        if (!row) continue;
+        var norm = row.toLowerCase();
+        if (bucket.seen[norm]) continue;
+        bucket.seen[norm] = true;
+        if (bucket.texts.length < 2) bucket.texts.push(row);
+      }
     }
-    String(entry.text || '').split(/\n+/).forEach(function(row){
-      row = row.replace(/[ \t]+/g, ' ').trim();
-      if (!row) return;
-      var norm = row.toLowerCase();
-      if (bucket.seen[norm]) return;
-      bucket.seen[norm] = true;
-      if (bucket.texts.length < 2) bucket.texts.push(row);
-    });
-  });
-  var lines = ordered.map(function(bucket){
+  }
+  var lines = [];
+  for (var bucketIdx = 0; bucketIdx < ordered.length; bucketIdx++) {
+    var bucket = ordered[bucketIdx];
     var text = bucket.texts.join('\n');
-    return {
+    var line = {
       t: bucket.t,
       text: text,
       source: bucket.texts.length > 1 ? 'lrc-bilingual' : 'lrc',
       charCount: Math.max(1, text.replace(/\n/g, '').length)
     };
-  }).filter(function(line){
-    return line.text && !isNoLyricText(line.text);
-  });
+    if (line.text && !isNoLyricText(line.text)) lines.push(line);
+  }
   return finalizeLyricLineDurations(lines);
 }
 function parseYrcText(text) {
@@ -21187,7 +21279,7 @@ function playPlaylistPanelDetail() {
 function playPlaylistPanelDetailTrack(index) {
   var tracks = playlistPanelDetailState.tracks || [];
   if (!tracks[index]) return;
-  playQueue = tracks.map(cloneSong);
+  playQueue = cloneSongList(tracks);
   markQueueContentChanged();
   currentIdx = index;
   safeRenderQueuePanel('playlist-panel-detail');

@@ -41,6 +41,8 @@
 - 启动恢复阶段如果先读取全量封面/歌词缓存，会推迟队列和播放会话可见时间，造成首屏像卡住。
 - 本地封面/歌词缓存按范围补水时，单个分块内不要重复计算同一首歌的 asset cache key。
 - IndexedDB 缓存清理属于后台任务，但大缓存下也不能在 folder 排序比较器里反复扫描完整 `libraryEntries`。
+- 大本地库或大歌单入队会批量克隆歌曲对象；不要恢复 `songs.map(cloneSong)` 这类回调式批量克隆。
+- 本地歌词、内嵌歌词和自定义歌词加载会解析长文本；不要在 LRC 解析、歌词 source 转换和 fallback 过滤路径恢复 `map/filter/forEach/every` 链式扫描。
 
 ## Solution / Convention
 
@@ -85,6 +87,8 @@
 - `hydrateLocalAssetCacheForSongRange()` 第一轮收集 key 时同步保存每首歌的 key，应用记录时复用，避免同一分块重复执行 `localAssetCacheKey(song)`。
 - 同一作用域内不得保留重复函数声明；如果后续实现已经覆盖旧实现，必须删除旧实现而不是依赖函数提升覆盖。
 - 新增同帧 UI 任务优先使用 `scheduleNamedAnimationFrame(key, fn)`；同一 key 只保留最后一次任务。
+- 大歌单、本地库整队播放和歌手详情播放使用 `cloneSongList()` 显式循环克隆，保持播放队列语义并减少回调分配。
+- 歌词状态克隆、LRC 解析、自定义歌词普通文本拆行和本地歌词 source 标记使用显式循环；输出字段、source 值和双语合并规则必须保持不变。
 
 ## Reference
 
