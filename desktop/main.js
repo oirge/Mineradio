@@ -257,6 +257,7 @@ async function statLocalLibraryFiles(root, items) {
   const files = [];
   let cursor = 0;
   let processed = 0;
+  let found = 0;
   /**
    * 消费共享游标读取文件元数据；共享游标只在当前事件循环同步递增，不会改变最终排序。
    * @returns {Promise<void>} 当前 worker 完成时 resolve。
@@ -274,11 +275,17 @@ async function statLocalLibraryFiles(root, items) {
       }
       if (!stat.isFile()) continue;
       files[item.index] = makeLocalLibraryFileRecord(root, item, stat);
+      found += 1;
     }
   }
   const workerCount = Math.min(localLibraryScanStatConcurrency(items.length), Math.max(1, items.length));
   await Promise.all(Array.from({ length: workerCount }, worker));
-  return files.filter(Boolean);
+  const compact = new Array(found);
+  let write = 0;
+  for (let i = 0; i < files.length; i += 1) {
+    if (files[i]) compact[write++] = files[i];
+  }
+  return compact;
 }
 
 async function collectLocalLibraryFolderEntries(root) {

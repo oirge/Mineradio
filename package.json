@@ -1,7 +1,7 @@
 {
   "name": "mineradio",
   "productName": "Mineradio",
-  "version": "1.2.13",
+  "version": "1.2.14",
   "description": "Mineradio 二改本地音乐播放器，支持 MP3/FLAC、本地封面和歌词",
   "author": "Mineradio",
   "main": "desktop/main.js",
