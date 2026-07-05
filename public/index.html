@@ -7,7 +7,6 @@
 <meta name="referrer" content="no-referrer">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
 <script src="vendor/three.r128.min.js"></script>
-<script src="vendor/music-tempo.min.js"></script>
 <script src="vendor/gsap.min.js"></script>
 <script>
 try {
@@ -15184,6 +15183,14 @@ function safeShelfCloseContent(reason) {
     return false;
   }
 }
+/**
+ * 判断 3D 歌单详情行是否可进入播放队列。本地歌没有在线 id，必须使用 localKey 保持纯本地播放可用。
+ * @param {object} song 歌曲对象。
+ * @returns {boolean} true 表示可作为普通歌曲播放。
+ */
+function isShelfContentPlayableSong(song) {
+  return !!(song && song.type !== 'podcast-radio' && (song.localKey || (song.id != null && song.id !== '')));
+}
 function isPlaylistPanelVisibleForRender() {
   var panel = document.getElementById('playlist-panel');
   var panelOpen = panel && (panel.classList.contains('show') || panel.classList.contains('peek') || panel.classList.contains('pinned'));
@@ -15352,8 +15359,10 @@ function makeContentListManager() {
     ctx.fillText(ellipsize(ctx, playlistTitle || '歌单详情', W - 310), 72, 92);
     ctx.font = '500 18px Inter, "Microsoft YaHei", Arial';
     ctx.fillStyle = canvasAccent(0.62);
-    var playableCount = allTracks.filter(function(song){ return song && song.id && song.type !== 'podcast-radio'; }).length;
-    var contentCount = allTracks.filter(function(song){ return song && song.id; }).length;
+    var playableCount = 0;
+    for (var countIdx = 0; countIdx < allTracks.length; countIdx++) {
+      if (isShelfContentPlayableSong(allTracks[countIdx])) playableCount++;
+    }
     var isLoading = allTracks.length === 1 && isLoadingLabel(allTracks[0] && allTracks[0].name);
     var countLabel = playableCount ? (playableCount + ' 首歌曲') : (isLoading ? '正在载入' : '暂无可播放歌曲');
     ctx.fillText(countLabel, 74, 128);
@@ -15418,7 +15427,7 @@ function makeContentListManager() {
     var cv = row.canvas, ctx = cv.getContext('2d');
     var W = cv.width, H = cv.height;
     var isPodcastRadio = !!(song && song.type === 'podcast-radio');
-    var playable = !!(song && song.id && !isPodcastRadio);
+    var playable = isShelfContentPlayableSong(song);
     var actionReady = playable || isPodcastRadio;
     ctx.clearRect(0, 0, W, H);
     makeRoundRect(ctx, 14, 10, W - 28, H - 20, 22);
@@ -15769,7 +15778,7 @@ function makeContentListManager() {
       try {
         // 清 loading
         disposeRows();
-        var tracks = localLibraryPlaybackSongs().map(cloneSong);
+        var tracks = localLibraryPlaybackSongs();
         if (!tracks.length) {
           allTracks = [{ name: '本地库为空', artist: '' }];
           panelDirty = true;
@@ -15990,7 +15999,7 @@ function makeContentListManager() {
       if (!row || !row.mesh || !row.mesh.visible) return null;
       var song = row.song || {};
       var isCenter = Math.abs(row.index - Math.round(centerSmooth)) < 0.5;
-      if (!isCenter || !((song && song.id) || song.type === 'podcast-radio')) return null;
+      if (!isCenter || !(isShelfContentPlayableSong(song) || song.type === 'podcast-radio')) return null;
       var params = row.mesh.geometry && row.mesh.geometry.parameters || {};
       var hw = (params.width || 2.50) / 2;
       var hh = (params.height || 0.36) / 2;
@@ -16030,10 +16039,14 @@ function makeContentListManager() {
         if (smRadio) safeShelfCloseContent('content-play-podcast-radio');
         return;
       }
-      var playIndex = allTracks.slice(0, idx + 1).filter(function(song){ return song && song.id; }).length - 1;
-      var allSongs = allTracks.filter(function(song){ return song && song.id; }).map(function(song){
-        return cloneSong(song);
-      });
+      var playIndex = -1;
+      var allSongs = [];
+      for (var trackIdx = 0; trackIdx < allTracks.length; trackIdx++) {
+        var track = allTracks[trackIdx];
+        if (!isShelfContentPlayableSong(track)) continue;
+        if (trackIdx <= idx) playIndex++;
+        allSongs.push(cloneSong(track));
+      }
       if (!allSongs.length || playIndex < 0) return;
       playQueue = allSongs;
       markQueueContentChanged();
@@ -16248,7 +16261,7 @@ renderer.domElement.addEventListener('click', function(e){
           collectDetailSong(rowHit.row.song);
         } else if (selectedRow && !rowIsPodcastRadio && hitNextButton) {
           queueDetailSongNext(rowHit.row.song);
-        } else if ((rowHit.row.song && rowHit.row.song.id) || rowIsPodcastRadio || (selectedRow && hitPlayButton)) {
+        } else if (isShelfContentPlayableSong(rowHit.row.song) || rowIsPodcastRadio || (selectedRow && hitPlayButton)) {
           cl.playRow(rowHit.row);
         } else {
           // 滚到这行
@@ -16301,7 +16314,7 @@ renderer.domElement.addEventListener('contextmenu', function(e){
     var rc = raycasterFromPointerEvent(e);
     var cl = shelfManager.getContentList && shelfManager.getContentList();
     var rowHit = cl && cl.raycastRows ? cl.raycastRows(rc) : null;
-    if (rowHit && rowHit.row && rowHit.row.song && rowHit.row.song.id && rowHit.row.song.type !== 'podcast-radio') {
+    if (rowHit && rowHit.row && isShelfContentPlayableSong(rowHit.row.song)) {
       if (cl.pulseRow) cl.pulseRow(rowHit.row, 0.88);
       queueDetailSongNext(rowHit.row.song);
       return;
@@ -16460,7 +16473,20 @@ async function apiJson(url, opts) {
     if (timer) clearTimeout(timer);
   }
 }
-function escHtml(s){ var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+/**
+ * 转义插入 innerHTML 的文本。列表热路径不能创建临时 DOM 节点，否则大曲库渲染会制造短命对象和 GC 压力。
+ * @param {unknown} s 待展示文本。
+ * @returns {string} 已转义 HTML 文本。
+ */
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(ch) {
+    return ch === '&' ? '&amp;' :
+      ch === '<' ? '&lt;' :
+      ch === '>' ? '&gt;' :
+      ch === '"' ? '&quot;' :
+      '&#39;';
+  });
+}
 function normalizePlaybackQuality(value) {
   value = String(value || '').toLowerCase();
   if (value === 'jymaster' || value === 'master' || value === 'svip') return 'jymaster';
@@ -17608,30 +17634,89 @@ function updateLocalAudioQualityInfo(song) {
   var kbps = estimateLocalAudioBitrateKbps(song);
   if (kbps) song.localBitrateKbps = kbps;
 }
+/**
+ * 生成本地音质缓存键。键里包含会改变展示文本的字段，避免元数据补齐后继续使用旧副标题。
+ * @param {object} song 本地歌曲对象。
+ * @returns {string} 本地音质展示缓存键。
+ */
+function localAudioQualityCacheKey(song) {
+  if (!song || song.type !== 'local') return '';
+  var file = song.localFile || null;
+  return [
+    song.localFormat || '',
+    song.localFileSize || song.size || (file && localFileSize(file)) || 0,
+    song.localBitrateKbps || '',
+    song.duration || '',
+    song.durationMs || '',
+    song.dt || '',
+    song.localPath || song.localFilePathAbsolute || (file && localFilePath(file)) || song.name || ''
+  ].join('|');
+}
+/**
+ * 返回本地歌曲音质文本。队列、搜索和 3D 歌单架会反复调用，缓存可减少重复格式化和数组分配。
+ * @param {object} song 本地歌曲对象。
+ * @returns {string} 例如 “FLAC · 921 kbps”。
+ */
 function localAudioQualityText(song) {
   if (!song || song.type !== 'local') return '';
+  var beforeKey = localAudioQualityCacheKey(song);
+  if (song._mineradioQualityKey === beforeKey && typeof song._mineradioQualityText === 'string') return song._mineradioQualityText;
   updateLocalAudioQualityInfo(song);
   var format = song.localFormat || localAudioFormatLabel(song);
   var kbps = Number(song.localBitrateKbps) || estimateLocalAudioBitrateKbps(song);
-  var bits = [];
-  if (format) bits.push(format);
-  if (kbps) bits.push(Math.round(kbps) + ' kbps');
-  else if (format === 'FLAC' || format === 'WAV') bits.push('无损');
-  return bits.join(' · ');
+  var text = format || '';
+  var quality = kbps ? (Math.round(kbps) + ' kbps') : ((format === 'FLAC' || format === 'WAV') ? '无损' : '');
+  if (quality) text = text ? (text + ' · ' + quality) : quality;
+  song._mineradioQualityKey = localAudioQualityCacheKey(song);
+  song._mineradioQualityText = text;
+  return text;
 }
+/**
+ * 生成歌曲副标题缓存键。字段级缓存比手动失效更稳，元数据、时长或码率变化会自然重算。
+ * @param {object} song 歌曲对象。
+ * @returns {string} 副标题展示缓存键。
+ */
+function songDisplaySubtitleCacheKey(song) {
+  if (!song) return '';
+  return [
+    song.type || '',
+    song.artist || '',
+    song.albumArtist || '',
+    song.album || '',
+    song.localFormat || '',
+    song.localFileSize || song.size || 0,
+    song.localBitrateKbps || '',
+    song.duration || '',
+    song.durationMs || '',
+    song.dt || '',
+    song.localPath || song.localFilePathAbsolute || '',
+    song.localKey || song.id || ''
+  ].join('|');
+}
+/**
+ * 返回歌曲列表副标题。该函数处在队列签名、搜索结果和歌单详情热路径，需避免重复拼装短命数组。
+ * @param {object} song 歌曲对象。
+ * @returns {string} 歌手、专辑和本地音质组成的展示文本。
+ */
 function songDisplaySubtitle(song) {
   if (!song) return '';
+  var beforeKey = songDisplaySubtitleCacheKey(song);
+  if (song._mineradioSubtitleKey === beforeKey && typeof song._mineradioSubtitleText === 'string') return song._mineradioSubtitleText;
   var artist = songArtistText(song);
   var album = String(song.album || '').trim();
-  var bits = [];
-  if (artist) bits.push(artist);
-  if (album && bits.indexOf(album) < 0) bits.push(album);
+  var text = artist || '';
+  if (album && album !== artist) text = text ? (text + ' · ' + album) : album;
   if (song.type === 'local') {
     var quality = localAudioQualityText(song);
-    if (quality) bits.push(quality);
-    return bits.join(' · ');
+    if (quality) text = text ? (text + ' · ' + quality) : quality;
+    song._mineradioSubtitleKey = songDisplaySubtitleCacheKey(song);
+    song._mineradioSubtitleText = text;
+    return text;
   }
-  return bits.join(' · ') || songSourceLabel(song);
+  text = text || songSourceLabel(song);
+  song._mineradioSubtitleKey = songDisplaySubtitleCacheKey(song);
+  song._mineradioSubtitleText = text;
+  return text;
 }
 function detailRow(label, value) {
   value = value == null || value === '' ? '未知' : value;
@@ -18578,6 +18663,18 @@ function cachedLocalSongSearchText(song) {
   song._mineradioSearchTextNorm = simpleSearchNorm(key);
   return song._mineradioSearchTextNorm;
 }
+/**
+ * 返回本地搜索默认展示列表。空查询也会频繁触发，显式限量循环可避免通用 slice 额外处理。
+ * @param {Array<object>} pool 本地搜索候选池。
+ * @returns {Array<object>} 最多 LOCAL_SEARCH_RESULT_LIMIT 条歌曲。
+ */
+function localSearchDefaultResults(pool) {
+  var source = Array.isArray(pool) ? pool : [];
+  var count = Math.min(source.length, LOCAL_SEARCH_RESULT_LIMIT);
+  var results = new Array(count);
+  for (var i = 0; i < count; i++) results[i] = source[i];
+  return results;
+}
 function cancelLocalSearchIndexWarmup() {
   if (localSearchIndexWarmState.timer) {
     clearTimeout(localSearchIndexWarmState.timer);
@@ -18720,9 +18817,9 @@ function searchResultsDomSignature(songs, key) {
 function searchLocalSongs(q) {
   var pool = localSearchPool();
   q = String(q || '').trim();
-  if (!q) return pool.slice(0, LOCAL_SEARCH_RESULT_LIMIT);
+  if (!q) return localSearchDefaultResults(pool);
   var nq = simpleSearchNorm(q);
-  if (!nq) return pool.slice(0, LOCAL_SEARCH_RESULT_LIMIT);
+  if (!nq) return localSearchDefaultResults(pool);
   var sourceSignature = localSearchPoolCache.signature || '';
   if (localSearchResultCache.signature === sourceSignature && localSearchResultCache.normalizedQuery === nq) {
     return localSearchResultCache.results.slice();
@@ -19585,6 +19682,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   var localUrl = ensureLocalSongUrl(song);
   if (!localUrl) throw new Error('本地音频文件不可用');
   currentLocalSong = song;
+  schedulePlaybackMetadataRefresh(song, token);
   applyLocalOriginalLyricsState(song);
   loadLocalLyricsForSong(song, token);
   document.getElementById('trial-banner').classList.remove('show');
@@ -19690,7 +19788,7 @@ async function playQueueAt(idx, opts) {
       return;
     }
     markPlayPhase('local-metadata');
-    await ensureLocalMetadataForSong(song, { background:true });
+    updateLocalAudioQualityInfo(song);
     activePlaybackContext = null;
     safeRenderQueuePanel('play-local-queue-at-switch', { scrollCurrent: miniQueueOpen });
     safePlaybackStep('shelf-preview-suppress', suppressShelfPreviewForPlaybackSwitch);
@@ -21469,22 +21567,31 @@ function findLocalLyricFile(audioFile, maps) {
     (maps.byLoose && maps.byLoose[looseKey]) ||
     null;
 }
+/**
+ * 构建本地封面文件索引。大文件夹导入时避免 filter/forEach 链式中间数组，降低导入前主线程分配。
+ * @param {FileList|Array<object>} files 导入文件集合。
+ * @returns {{byPath: object, byBase: object, byLoose: object, byDirNamed: object, byDirFirst: object}} 封面匹配索引。
+ */
 function buildLocalCoverMaps(files) {
   var maps = { byPath: {}, byBase: {}, byLoose: {}, byDirNamed: {}, byDirFirst: {} };
-  fileListToArray(files)
-    .filter(isLocalCoverFile)
-    .sort(function(a, b){ return localFilePath(a).localeCompare(localFilePath(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }); })
-    .forEach(function(file){
-      var pathKey = localPathStem(file);
-      var baseKey = localBaseStem(file);
-      var looseKey = normalizeLocalAssetName(localFileBaseName(file));
-      var dirKey = localPathDir(file).toLowerCase();
-      if (pathKey && !maps.byPath[pathKey]) maps.byPath[pathKey] = file;
-      if (baseKey && !maps.byBase[baseKey]) maps.byBase[baseKey] = file;
-      if (looseKey && !maps.byLoose[looseKey]) maps.byLoose[looseKey] = file;
-      if (!maps.byDirFirst[dirKey]) maps.byDirFirst[dirKey] = file;
-      if (LOCAL_COVER_NAME_RE.test(localFileBaseName(file)) && !maps.byDirNamed[dirKey]) maps.byDirNamed[dirKey] = file;
-    });
+  var list = fileListToArray(files);
+  var coverFiles = [];
+  for (var i = 0; i < list.length; i++) {
+    if (isLocalCoverFile(list[i])) coverFiles.push(list[i]);
+  }
+  coverFiles.sort(function(a, b){ return localFilePath(a).localeCompare(localFilePath(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }); });
+  for (var j = 0; j < coverFiles.length; j++) {
+    var file = coverFiles[j];
+    var pathKey = localPathStem(file);
+    var baseKey = localBaseStem(file);
+    var looseKey = normalizeLocalAssetName(localFileBaseName(file));
+    var dirKey = localPathDir(file).toLowerCase();
+    if (pathKey && !maps.byPath[pathKey]) maps.byPath[pathKey] = file;
+    if (baseKey && !maps.byBase[baseKey]) maps.byBase[baseKey] = file;
+    if (looseKey && !maps.byLoose[looseKey]) maps.byLoose[looseKey] = file;
+    if (!maps.byDirFirst[dirKey]) maps.byDirFirst[dirKey] = file;
+    if (LOCAL_COVER_NAME_RE.test(localFileBaseName(file)) && !maps.byDirNamed[dirKey]) maps.byDirNamed[dirKey] = file;
+  }
   return maps;
 }
 function findLocalCoverFile(audioFile, maps) {
@@ -21549,15 +21656,29 @@ function makeLocalSongFromFile(file, lyricFile, coverFile) {
     duration: 0
   });
 }
+/**
+ * 将导入文件转换为本地歌曲列表。筛选、排序和构造拆成显式循环，减少大曲库导入时的临时数组。
+ * @param {FileList|Array<object>} files 导入文件集合。
+ * @param {{folderOnly?: boolean}} opts 导入选项。
+ * @returns {Array<object>} 本地歌曲对象列表。
+ */
 function createLocalSongsFromFiles(files, opts) {
   opts = opts || {};
   var list = fileListToArray(files);
   var lyricMaps = buildLocalLyricMaps(list);
   var coverMaps = buildLocalCoverMaps(list);
-  return list
-    .filter(function(file){ return isLocalAudioFile(file, !!opts.folderOnly); })
-    .sort(function(a, b){ return localFilePath(a).localeCompare(localFilePath(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }); })
-    .map(function(file){ return makeLocalSongFromFile(file, findLocalLyricFile(file, lyricMaps), findLocalCoverFile(file, coverMaps)); });
+  var folderOnly = !!opts.folderOnly;
+  var audioFiles = [];
+  for (var i = 0; i < list.length; i++) {
+    if (isLocalAudioFile(list[i], folderOnly)) audioFiles.push(list[i]);
+  }
+  audioFiles.sort(function(a, b){ return localFilePath(a).localeCompare(localFilePath(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }); });
+  var songs = new Array(audioFiles.length);
+  for (var j = 0; j < audioFiles.length; j++) {
+    var file = audioFiles[j];
+    songs[j] = makeLocalSongFromFile(file, findLocalLyricFile(file, lyricMaps), findLocalCoverFile(file, coverMaps));
+  }
+  return songs;
 }
 function decodeLocalTextBuffer(buffer) {
   var bytes = new Uint8Array(buffer || []);
@@ -21989,6 +22110,7 @@ function refreshLocalMetadataUi(song, reason) {
     var artist = document.getElementById('thumb-artist');
     if (title) title.textContent = song.name || '';
     if (artist) artist.textContent = songDisplaySubtitle(song);
+    updateSystemMediaSessionPlaybackState(reason || 'local-metadata-ready');
   }
   safeRenderQueuePanel(reason || 'local-metadata-ready', { scrollCurrent: miniQueueOpen });
   if (LOCAL_ONLY_MODE && $results && $results.classList.contains('show') && $input) renderLocalLibraryResults($input.value || '');
@@ -22017,6 +22139,19 @@ function ensureLocalMetadataForSong(song, opts) {
     song.localMetadataPromise = null;
   });
   return song.localMetadataPromise;
+}
+/**
+ * 后台补齐当前播放歌曲元数据。切歌路径不等待标签解析，避免大文件或冷磁盘拖慢点歌到出声。
+ * @param {object} song 当前播放歌曲。
+ * @param {number} token 切歌令牌，用于丢弃过期刷新。
+ * @returns {void}
+ */
+function schedulePlaybackMetadataRefresh(song, token) {
+  if (!song || song.type !== 'local' || song.localMetadataLoaded) return;
+  ensureLocalMetadataForSong(song, { background:true, applyCurrent:true }).then(function(changed){
+    if (token !== trackSwitchToken || !isCurrentLocalQueueSong(song)) return;
+    if (changed) updateSystemMediaSessionPlaybackState('local-metadata-ready');
+  });
 }
 function maybeApplyLocalCoverForSong(song, opts) {
   opts = opts || {};
@@ -22774,17 +22909,23 @@ var fileInput = document.getElementById('file-input');
 if (fileInput) fileInput.addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value = ''; });
 var localFolderInput = document.getElementById('local-folder-input');
 if (localFolderInput) localFolderInput.addEventListener('change', function(e){ handleLocalFolderFiles(e.target.files, { folderOnly: true }); e.target.value = ''; });
+/**
+ * 处理单文件导入入口。该路径会被拖入文件触发，单次循环即可判断是否转入批量导入，避免额外 filter 扫描。
+ * @param {FileList|Array<object>} files 用户选择或拖入的文件集合。
+ * @returns {Promise<void>} 导入和播放流程完成后返回。
+ */
 async function handleFiles(files) {
   var list = fileListToArray(files);
-  var audioFiles = list.filter(function(file){ return isLocalAudioFile(file, false); });
-  if (audioFiles.length > 1) {
-    handleLocalFolderFiles(list, { folderOnly: false });
-    return;
-  }
   var audioFile = null, imgFile = null;
   for (var i = 0; i < list.length; i++) {
     var f = list[i];
-    if (isLocalAudioFile(f, false)) audioFile = f;
+    if (isLocalAudioFile(f, false)) {
+      if (audioFile) {
+        handleLocalFolderFiles(list, { folderOnly: false });
+        return;
+      }
+      audioFile = f;
+    }
     else if ((f.type && f.type.indexOf('image/') === 0) || /\.(jpg|jpeg|png|webp)$/i.test(f.name || '')) imgFile = f;
   }
   if (audioFile) {
