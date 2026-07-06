@@ -2954,6 +2954,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [];
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
+var APP_VERSION = '1.2.15';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -2967,8 +2968,8 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.2.8',
-  version: '1.2.8',
+  currentVersion: APP_VERSION,
+  version: APP_VERSION,
   configured: false,
   preview: true,
   updateAvailable: false,
@@ -2991,9 +2992,7 @@ var updatePreviewState = {
   patchFallbackTried: false,
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '安装包文字对比修复',
-    '安装目录可自由选择',
-    '单实例与快捷方式修复'
+    '反正没什么人看，布想写日志了'
   ]
 };
 function readSavedVolume() {
@@ -3666,19 +3665,19 @@ function collectProtectedCoverDepthIds() {
   var keep = Object.create(null);
   try {
     if (typeof coverDepthCacheId !== 'function') return keep;
-    var candidates = [];
-    if (typeof currentCoverSource !== 'undefined' && currentCoverSource && currentCoverSource.src) candidates.push(currentCoverSource.src);
-    var song = (typeof currentCoverSong === 'function') ? currentCoverSong() : null;
-    if (song && typeof songCoverSrc === 'function') {
-      candidates.push(songCoverSrc(song, 360));
-      candidates.push(songCoverSrc(song, 400));
-    }
     var texImg = (typeof coverTex !== 'undefined' && coverTex && coverTex.image) ? coverTex.image : null;
     var w = texImg && texImg.width ? texImg.width : 0;
     var h = texImg && texImg.height ? texImg.height : 0;
-    candidates.forEach(function(src){
-      if (src) markProtectedKey(keep, coverDepthCacheId(src + '|tex=' + w + 'x' + h));
-    });
+    if (typeof currentCoverSource !== 'undefined' && currentCoverSource && currentCoverSource.src) {
+      markProtectedKey(keep, coverDepthCacheId(currentCoverSource.src + '|tex=' + w + 'x' + h));
+    }
+    var song = (typeof currentCoverSong === 'function') ? currentCoverSong() : null;
+    if (song && typeof songCoverSrc === 'function') {
+      var src360 = songCoverSrc(song, 360);
+      var src400 = songCoverSrc(song, 400);
+      if (src360) markProtectedKey(keep, coverDepthCacheId(src360 + '|tex=' + w + 'x' + h));
+      if (src400) markProtectedKey(keep, coverDepthCacheId(src400 + '|tex=' + w + 'x' + h));
+    }
   } catch (e) {}
   return keep;
 }
@@ -3700,7 +3699,11 @@ function trimObjectCache(cache, keep, protectedKeys, skipRecord) {
 }
 function trimCoverDepthCache(keep, protectedKeys) {
   if (!coverDepthCache || !coverDepthCacheKeys) return 0;
-  var keys = coverDepthCacheKeys.filter(function(key){ return !!coverDepthCache[key]; });
+  var keys = [];
+  for (var liveIdx = 0; liveIdx < coverDepthCacheKeys.length; liveIdx++) {
+    var liveKey = coverDepthCacheKeys[liveIdx];
+    if (liveKey && coverDepthCache[liveKey]) keys.push(liveKey);
+  }
   if (keys.length <= keep) {
     coverDepthCacheKeys = keys;
     return 0;
@@ -3711,14 +3714,24 @@ function trimCoverDepthCache(keep, protectedKeys) {
     keepSet[keys[i]] = true;
     count++;
   }
-  Object.keys(protectedKeys || {}).forEach(function(key){ keepSet[key] = true; });
+  if (protectedKeys) {
+    for (var protectedKey in protectedKeys) {
+      if (Object.prototype.hasOwnProperty.call(protectedKeys, protectedKey)) keepSet[protectedKey] = true;
+    }
+  }
   var dropped = 0;
-  keys.forEach(function(key){
-    if (keepSet[key]) return;
+  for (var dropIdx = 0; dropIdx < keys.length; dropIdx++) {
+    var key = keys[dropIdx];
+    if (keepSet[key]) continue;
     delete coverDepthCache[key];
     dropped++;
-  });
-  coverDepthCacheKeys = keys.filter(function(key){ return !!coverDepthCache[key]; });
+  }
+  var compactKeys = [];
+  for (var compactIdx = 0; compactIdx < keys.length; compactIdx++) {
+    var compactKey = keys[compactIdx];
+    if (compactKey && coverDepthCache[compactKey]) compactKeys.push(compactKey);
+  }
+  coverDepthCacheKeys = compactKeys;
   return dropped;
 }
 function collectRuntimePerfSnapshot(now) {
@@ -13004,15 +13017,33 @@ function unpackLocalBeatEvent(row) {
     step: row[11] || 0
   };
 }
+function packLocalBeatEventList(source) {
+  var rows = Array.isArray(source) ? source : [];
+  var out = new Array(rows.length);
+  for (var i = 0; i < rows.length; i++) out[i] = packLocalBeatEvent(rows[i]);
+  return out;
+}
+function unpackLocalBeatEventList(source) {
+  var rows = Array.isArray(source) ? source : [];
+  var out = new Array(rows.length);
+  for (var i = 0; i < rows.length; i++) out[i] = unpackLocalBeatEvent(rows[i]);
+  return out;
+}
+function packLocalBeatNumberList(source) {
+  var rows = Array.isArray(source) ? source : [];
+  var out = new Array(rows.length);
+  for (var i = 0; i < rows.length; i++) out[i] = localBeatRound(rows[i], 1000);
+  return out;
+}
 function packLocalBeatMap(map) {
   if (!map) return null;
-  var camera = (map.cameraBeats || map.beats || map.kicks || []).map(packLocalBeatEvent);
-  var pulse = (map.pulseBeats || map.kicks || []).map(packLocalBeatEvent);
+  var camera = packLocalBeatEventList(map.cameraBeats || map.beats || map.kicks);
+  var pulse = packLocalBeatEventList(map.pulseBeats || map.kicks);
   return {
     v: 1,
     duration: localBeatRound(map.duration || 0, 1000),
     gridStep: localBeatRound(map.gridStep || 0, 1000),
-    sectionSteps: (map.sectionSteps || []).map(function(v){ return localBeatRound(v, 1000); }),
+    sectionSteps: packLocalBeatNumberList(map.sectionSteps),
     tempoSource: map.tempoSource || 'local',
     visualBeatCount: map.visualBeatCount || camera.length,
     analyzedAt: map.analyzedAt || Date.now(),
@@ -13025,10 +13056,15 @@ function packLocalBeatMap(map) {
 function unpackLocalBeatMap(stored) {
   if (!stored) return null;
   if (stored.v && stored.v !== 1 && stored.v !== 2) return stored;
-  var camera = (stored.cameraBeats || []).map(unpackLocalBeatEvent);
-  var pulse = (stored.pulseBeats || []).map(unpackLocalBeatEvent);
+  var camera = unpackLocalBeatEventList(stored.cameraBeats);
+  var pulse = unpackLocalBeatEventList(stored.pulseBeats);
+  var kicks = new Array(camera.length);
+  for (var i = 0; i < camera.length; i++) {
+    var beat = camera[i];
+    kicks[i] = typeof beat === 'number' ? beat : beat.time;
+  }
   return {
-    kicks: camera.map(function(b){ return typeof b === 'number' ? b : b.time; }),
+    kicks: kicks,
     beats: camera,
     pulseBeats: pulse,
     cameraBeats: camera,
@@ -13054,12 +13090,13 @@ function readLocalBeatMapCache() {
   var out = {};
   try {
     var raw = JSON.parse(localStorage.getItem(LOCAL_BEATMAP_STORE_KEY) || '{}') || {};
-    Object.keys(raw).forEach(function(key){
+    for (var key in raw) {
+      if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
       var entry = raw[key] || {};
       out[key] = { updatedAt: entry.updatedAt || 0 };
       if (entry.mr) out[key].mr = unpackLocalBeatMap(entry.mr);
       if (entry.dj) out[key].dj = unpackLocalBeatMap(entry.dj);
-    });
+    }
   } catch (e) {
     out = {};
   }
@@ -13089,17 +13126,21 @@ function ensureLocalBeatMapCache() {
 }
 function packLocalBeatCache(maxEntries) {
   var cache = ensureLocalBeatMapCache();
-  var entries = Object.keys(cache || {}).map(function(key){
+  var entries = [];
+  for (var key in (cache || {})) {
+    if (!Object.prototype.hasOwnProperty.call(cache, key)) continue;
     var entry = cache[key] || {};
-    return { key:key, updatedAt: entry.updatedAt || 0, entry:entry };
-  }).sort(function(a,b){ return b.updatedAt - a.updatedAt; });
-  if (maxEntries) entries = entries.slice(0, maxEntries);
+    entries.push({ key:key, updatedAt: entry.updatedAt || 0, entry:entry });
+  }
+  entries.sort(function(a,b){ return b.updatedAt - a.updatedAt; });
   var packed = {};
-  entries.forEach(function(item){
+  var limit = maxEntries ? Math.min(entries.length, maxEntries) : entries.length;
+  for (var i = 0; i < limit; i++) {
+    var item = entries[i];
     packed[item.key] = { updatedAt: item.entry.updatedAt || Date.now() };
     if (item.entry.mr) packed[item.key].mr = packLocalBeatMap(item.entry.mr);
     if (item.entry.dj) packed[item.key].dj = packLocalBeatMap(item.entry.dj);
-  });
+  }
   return packed;
 }
 function saveLocalBeatMapCache() {
@@ -20325,14 +20366,18 @@ function mutationTouchesSearchPill(mutation) {
   if (!mutation) return false;
   var target = mutation.target;
   if (target && target.closest && target.closest('.search-mode-tabs,.search-history,.search-history-chip')) return true;
-  var nodes = [];
-  if (mutation.addedNodes) nodes = nodes.concat(Array.prototype.slice.call(mutation.addedNodes));
-  if (mutation.removedNodes) nodes = nodes.concat(Array.prototype.slice.call(mutation.removedNodes));
+  return nodeListTouchesSearchPill(mutation.addedNodes) || nodeListTouchesSearchPill(mutation.removedNodes);
+}
+function nodeListTouchesSearchPill(nodes) {
+  if (!nodes) return false;
   for (var i = 0; i < nodes.length; i++) {
-    var node = nodes[i];
-    if (!node || node.nodeType !== 1) continue;
-    if ((node.matches && node.matches('.search-history,.search-history-chip')) || (node.querySelector && node.querySelector('.search-history,.search-history-chip'))) return true;
+    if (nodeTouchesSearchPill(nodes[i])) return true;
   }
+  return false;
+}
+function nodeTouchesSearchPill(node) {
+  if (!node || node.nodeType !== 1) return false;
+  if ((node.matches && node.matches('.search-history,.search-history-chip')) || (node.querySelector && node.querySelector('.search-history,.search-history-chip'))) return true;
   return false;
 }
 function scheduleGlassDisplacementMapUpdate(target) {
@@ -20489,7 +20534,13 @@ function applyFetchedLyricPayload(payload) {
   payload = payload || {};
   var nativeLines = parseYrcText(payload.yrc || '');
   var lrcLines = parseLyricText(payload.lyric || '');
-  var hasNativeKaraoke = nativeLines.some(function(line){ return line.words && line.words.length; });
+  var hasNativeKaraoke = false;
+  for (var i = 0; i < nativeLines.length; i++) {
+    if (nativeLines[i] && nativeLines[i].words && nativeLines[i].words.length) {
+      hasNativeKaraoke = true;
+      break;
+    }
+  }
   var timingSource = hasNativeKaraoke ? 'yrc-word' : (nativeLines.length ? 'yrc-line' : (lrcLines.length ? 'lrc-line' : 'fallback'));
   var lines = withLyricFallback(nativeLines.length ? nativeLines : lrcLines);
   if (lines.length && lines[0].fallback) timingSource = 'fallback';
@@ -20627,9 +20678,11 @@ function parseLyricText(text) {
 }
 function parseYrcText(text) {
   var lines = [];
-  String(text || '').split(/\r?\n/).forEach(function(line){
+  var rawLines = String(text || '').split(/\r?\n/);
+  for (var lineIdx = 0; lineIdx < rawLines.length; lineIdx++) {
+    var line = rawLines[lineIdx];
     var m = line.match(/^\[(\d+),(\d+)\](.*)$/);
-    if (!m) return;
+    if (!m) continue;
     var lineStartMs = parseInt(m[1], 10) || 0;
     var lineDurMs = parseInt(m[2], 10) || 0;
     var body = m[3] || '';
@@ -20648,16 +20701,19 @@ function parseYrcText(text) {
     if (!fullText) fullText = body.replace(/\(\d+,\d+,\d+\)/g, '').replace(/\s+/g, ' ');
     var leading = (fullText.match(/^\s+/) || [''])[0].length;
     fullText = fullText.replace(/\s+/g, ' ').trim();
-    if (!fullText) return;
+    if (!fullText) continue;
     if (words.length) {
-      words.forEach(function(w){
+      var compactWords = [];
+      for (var wordIdx = 0; wordIdx < words.length; wordIdx++) {
+        var w = words[wordIdx];
         w.c0 = Math.max(0, Math.min(fullText.length, w.c0 - leading));
         w.c1 = Math.max(w.c0, Math.min(fullText.length, w.c1 - leading));
-      });
-      words = words.filter(function(w){ return w.c1 > w.c0; });
+        if (w.c1 > w.c0) compactWords.push(w);
+      }
+      words = compactWords;
     }
     lines.push({ t:lineStartMs / 1000, duration:lineDurMs / 1000, text:fullText, words:words, charCount:Math.max(1, fullText.length), source: words.length ? 'yrc-word' : 'yrc-line' });
-  });
+  }
   return finalizeLyricLineDurations(lines);
 }
 function renderLyrics() {
@@ -25871,7 +25927,8 @@ function applyLatestUpdateInfo(data) {
   data = data || {};
   var release = data.release || {};
   updatePreviewState.currentVersion = data.currentVersion || updatePreviewState.currentVersion;
-  updatePreviewState.version = data.latestVersion || release.version || updatePreviewState.currentVersion;
+  var latestVersion = data.latestVersion || release.version || updatePreviewState.currentVersion;
+  updatePreviewState.version = data.updateAvailable ? latestVersion : updatePreviewState.currentVersion;
   updatePreviewState.configured = !!data.configured;
   updatePreviewState.preview = !!data.preview;
   updatePreviewState.updateAvailable = !!data.updateAvailable;
@@ -25923,9 +25980,11 @@ function renderUpdatePreviewPanel() {
   if (hero) hero.textContent = updatePreviewState.hero || '当前版本，更新检测已就绪。';
   if (list) {
     var notes = Array.isArray(updatePreviewState.notes) && updatePreviewState.notes.length ? updatePreviewState.notes : ['更新检测已就绪'];
-    list.innerHTML = notes.map(function(text, i){
-      return '<div class="update-item"><span class="update-item-dot" data-index="' + String(i + 1).padStart(2, '0') + '"></span><div class="update-item-text">' + escHtml(text) + '</div></div>';
-    }).join('');
+    var html = '';
+    for (var i = 0; i < notes.length; i++) {
+      html += '<div class="update-item"><span class="update-item-dot" data-index="' + String(i + 1).padStart(2, '0') + '"></span><div class="update-item-text">' + escHtml(notes[i]) + '</div></div>';
+    }
+    list.innerHTML = html;
   }
   updateUpdatePreviewProgress(updatePreviewState.progress);
   syncUpdatePreviewStateClass();

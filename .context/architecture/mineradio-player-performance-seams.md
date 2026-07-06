@@ -43,6 +43,9 @@
 - IndexedDB 缓存清理属于后台任务，但大缓存下也不能在 folder 排序比较器里反复扫描完整 `libraryEntries`。
 - 大本地库或大歌单入队会批量克隆歌曲对象；不要恢复 `songs.map(cloneSong)` 这类回调式批量克隆。
 - 本地歌词、内嵌歌词和自定义歌词加载会解析长文本；不要在 LRC 解析、歌词 source 转换和 fallback 过滤路径恢复 `map/filter/forEach/every` 链式扫描。
+- YRC 逐字歌词、节奏缓存和封面深度缓存也属于切歌/视觉后台路径；不要在解析、打包/解包或裁剪时恢复 `map/filter/forEach/Object.keys` 链式处理。
+- 搜索玻璃贴图的 MutationObserver 会在搜索历史和标签变化时触发；不要把 added/removed NodeList 先 `slice/concat` 成数组再判断。
+- 软件内更新面板的前端版本号必须跟随统一 `APP_VERSION`，不要再把 `currentVersion` / `version` 写死成历史版本。
 
 ## Solution / Convention
 
@@ -89,6 +92,8 @@
 - 新增同帧 UI 任务优先使用 `scheduleNamedAnimationFrame(key, fn)`；同一 key 只保留最后一次任务。
 - 大歌单、本地库整队播放和歌手详情播放使用 `cloneSongList()` 显式循环克隆，保持播放队列语义并减少回调分配。
 - 歌词状态克隆、LRC 解析、自定义歌词普通文本拆行和本地歌词 source 标记使用显式循环；输出字段、source 值和双语合并规则必须保持不变。
+- YRC 解析、逐字范围压缩、本地节奏缓存 pack/unpack 和封面深度缓存 trim 使用显式循环；输出结构、缓存顺序和保留保护项语义必须保持不变。
+- 搜索玻璃贴图变更检测直接遍历 `addedNodes` / `removedNodes`，更新说明列表用循环拼接 HTML，避免小面板在启动后反复制造临时数组。
 
 ## Reference
 
