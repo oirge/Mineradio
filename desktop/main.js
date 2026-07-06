@@ -683,16 +683,19 @@ function readDesktopUiState() {
 function writeDesktopUiStatePatch(patch) {
   const current = readDesktopUiState();
   const values = { ...(current.values || {}) };
-  Object.entries(patch || {}).forEach(([key, value]) => {
-    if (!DESKTOP_UI_STATE_KEYS.has(key)) return;
+  const source = patch || {};
+  for (const key in source) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+    const value = source[key];
+    if (!DESKTOP_UI_STATE_KEYS.has(key)) continue;
     if (value == null) {
       delete values[key];
-      return;
+      continue;
     }
     const text = String(value);
-    if (text.length > 2 * 1024 * 1024) return;
+    if (text.length > 2 * 1024 * 1024) continue;
     values[key] = text;
-  });
+  }
   const next = { schema: 1, updatedAt: Date.now(), values };
   const file = desktopUiStatePath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -1042,6 +1045,21 @@ function handleDesktopLyricsGlobalMiddleClick() {
   broadcastDesktopLyricsLockState();
 }
 
+function consumeDesktopLyricsMousePollerOutput(chunk) {
+  desktopLyricsMousePollerBuffer += chunk.toString('utf8');
+  let lineStart = 0;
+  for (let i = 0; i < desktopLyricsMousePollerBuffer.length; i += 1) {
+    if (desktopLyricsMousePollerBuffer.charCodeAt(i) !== 10) continue;
+    let lineEnd = i;
+    if (lineEnd > lineStart && desktopLyricsMousePollerBuffer.charCodeAt(lineEnd - 1) === 13) lineEnd -= 1;
+    if (desktopLyricsMousePollerBuffer.slice(lineStart, lineEnd).trim() === 'MMB') {
+      handleDesktopLyricsGlobalMiddleClick();
+    }
+    lineStart = i + 1;
+  }
+  desktopLyricsMousePollerBuffer = lineStart > 0 ? desktopLyricsMousePollerBuffer.slice(lineStart) : desktopLyricsMousePollerBuffer;
+}
+
 function startDesktopLyricsMousePoller() {
   if (process.platform !== 'win32' || desktopLyricsMousePoller) return;
   const script = `
@@ -1069,14 +1087,7 @@ while ($true) {
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    desktopLyricsMousePoller.stdout.on('data', (chunk) => {
-      desktopLyricsMousePollerBuffer += chunk.toString('utf8');
-      const lines = desktopLyricsMousePollerBuffer.split(/\r?\n/);
-      desktopLyricsMousePollerBuffer = lines.pop() || '';
-      lines.forEach((line) => {
-        if (line.trim() === 'MMB') handleDesktopLyricsGlobalMiddleClick();
-      });
-    });
+    desktopLyricsMousePoller.stdout.on('data', consumeDesktopLyricsMousePollerOutput);
     desktopLyricsMousePoller.on('exit', () => {
       desktopLyricsMousePoller = null;
       desktopLyricsMousePollerBuffer = '';
