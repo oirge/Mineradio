@@ -46,6 +46,9 @@
 - YRC 逐字歌词、节奏缓存和封面深度缓存也属于切歌/视觉后台路径；不要在解析、打包/解包或裁剪时恢复 `map/filter/forEach/Object.keys` 链式处理。
 - 搜索玻璃贴图的 MutationObserver 会在搜索历史和标签变化时触发；不要把 added/removed NodeList 先 `slice/concat` 成数组再判断。
 - 软件内更新面板的前端版本号必须跟随统一 `APP_VERSION`，不要再把 `currentVersion` / `version` 写死成历史版本。
+- 大文件夹导入会反复构建歌词/封面映射、文件签名和本地歌曲 key；不要在这些路径恢复重复 `fileListToArray()`、`split().pop()`、数组 `join` 或每帧对象字面量查表。
+- 本地 MP3/FLAC 标签扫描可能在后台连续读取很多文件；`TextDecoder` 和 ID3 frame key 解析要复用轻量路径，不要每个 frame 新建 decoder 或 lookup 对象。
+- 主进程本地曲库扫描 worker 数量不大但处于导入启动前；不要恢复 `Array.from({ length }, worker)` 这类额外数组构造。
 
 ## Solution / Convention
 
@@ -94,6 +97,9 @@
 - 歌词状态克隆、LRC 解析、自定义歌词普通文本拆行和本地歌词 source 标记使用显式循环；输出字段、source 值和双语合并规则必须保持不变。
 - YRC 解析、逐字范围压缩、本地节奏缓存 pack/unpack 和封面深度缓存 trim 使用显式循环；输出结构、缓存顺序和保留保护项语义必须保持不变。
 - 搜索玻璃贴图变更检测直接遍历 `addedNodes` / `removedNodes`，更新说明列表用循环拼接 HTML，避免小面板在启动后反复制造临时数组。
+- 本地歌词/封面映射函数直接遍历传入文件集合；调用方已压缩过数组时不要二次复制。
+- 本地文件签名、曲库签名和本地歌曲 key 用直接字符串拼接；basename 用 `lastIndexOf('/')` / `lastIndexOf('.')`，避免为每个文件创建路径分段数组。
+- 本地标签解析复用 `TextDecoder` 缓存，ID3 frame key 使用 `switch`；主进程 stat worker 使用显式循环创建 Promise 列表。
 
 ## Reference
 

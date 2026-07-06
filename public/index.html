@@ -2954,7 +2954,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [];
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.15';
+var APP_VERSION = '1.2.16';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -8395,11 +8395,7 @@ function openLocalAssetCacheDb() {
 }
 function localAssetFileSignature(file) {
   if (!file) return '';
-  return [
-    localFullPath(file) || localFilePath(file) || (file && file.name) || '',
-    localFileSize(file),
-    file && file.lastModified || 0
-  ].join(':');
+  return (localFullPath(file) || localFilePath(file) || (file && file.name) || '') + ':' + localFileSize(file) + ':' + (file && file.lastModified || 0);
 }
 function localAssetCacheKey(song) {
   return song && song.localKey ? String(song.localKey) : '';
@@ -8407,10 +8403,10 @@ function localAssetCacheKey(song) {
 function collectProtectedLocalAssetCacheKeys() {
   var keep = Object.create(null);
   try {
-    [currentLocalSong, playQueue && playQueue[currentIdx]].forEach(function(song){
-      var key = localAssetCacheKey(song);
-      if (key) keep[key] = true;
-    });
+    var currentKey = localAssetCacheKey(currentLocalSong);
+    if (currentKey) keep[currentKey] = true;
+    var queueKey = localAssetCacheKey(playQueue && playQueue[currentIdx]);
+    if (queueKey) keep[queueKey] = true;
     if (playQueue && playQueue.length && currentIdx >= 0) {
       var start = Math.max(0, currentIdx - 8);
       var end = Math.min(playQueue.length - 1, currentIdx + 18);
@@ -21797,19 +21793,13 @@ function localLibraryPathKeyFromSong(song) {
   return normalizeLocalLibraryPathKey(song.localFilePathAbsolute || song.localPath || song.name || '');
 }
 function localLibraryFileSignatureFromFile(file) {
-  return [
-    localLibraryPathKeyFromFile(file),
-    localFileSize(file),
-    localFileLastModified(file)
-  ].join('|');
+  return localLibraryPathKeyFromFile(file) + '|' + localFileSize(file) + '|' + localFileLastModified(file);
 }
 function localLibraryFileSignatureFromSong(song) {
   if (!song) return '';
-  return [
-    localLibraryPathKeyFromSong(song),
-    Number(song.localFileSize || (song.localFile && localFileSize(song.localFile)) || 0) || 0,
-    Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0
-  ].join('|');
+  return localLibraryPathKeyFromSong(song) + '|' +
+    (Number(song.localFileSize || (song.localFile && localFileSize(song.localFile)) || 0) || 0) + '|' +
+    (Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0);
 }
 function localPathDir(file) {
   var p = localFilePath(file);
@@ -21818,8 +21808,10 @@ function localPathDir(file) {
 }
 function localFileBaseName(file) {
   var p = localFilePath(file);
-  var name = p.split('/').pop() || (file && file.name) || '';
-  return name.replace(/\.[^.]+$/, '');
+  var idx = p.lastIndexOf('/');
+  var name = (idx >= 0 ? p.slice(idx + 1) : p) || (file && file.name) || '';
+  var dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(0, dot) : name;
 }
 function localPathStem(file) {
   return (localPathDir(file) + localFileBaseName(file)).toLowerCase();
@@ -21850,9 +21842,9 @@ function isLocalCoverFile(file) {
  */
 function buildLocalLyricMaps(files) {
   var maps = { byPath: {}, byBase: {}, byLoose: {} };
-  var list = fileListToArray(files);
-  for (var i = 0; i < list.length; i++) {
-    var file = list[i];
+  var length = Number(files && files.length) || 0;
+  for (var i = 0; i < length; i++) {
+    var file = files[i];
     if (!isLocalLyricFile(file)) continue;
     var pathKey = localPathStem(file);
     var baseKey = localBaseStem(file);
@@ -21880,10 +21872,11 @@ function findLocalLyricFile(audioFile, maps) {
  */
 function buildLocalCoverMaps(files) {
   var maps = { byPath: {}, byBase: {}, byLoose: {}, byDirNamed: {}, byDirFirst: {} };
-  var list = fileListToArray(files);
+  var length = Number(files && files.length) || 0;
   var coverFiles = [];
-  for (var i = 0; i < list.length; i++) {
-    if (isLocalCoverFile(list[i])) coverFiles.push(list[i]);
+  for (var i = 0; i < length; i++) {
+    var candidate = files[i];
+    if (isLocalCoverFile(candidate)) coverFiles.push(candidate);
   }
   coverFiles.sort(function(a, b){ return localFilePath(a).localeCompare(localFilePath(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }); });
   for (var j = 0; j < coverFiles.length; j++) {
@@ -21924,11 +21917,9 @@ function localTrackInfoFromFile(file) {
   return { title: title, artist: artist };
 }
 function localSongKeyFromFile(file) {
-  return [
-    localFullPath(file) || localFilePath(file) || (file && file.name) || 'local',
-    file && file.size || 0,
-    file && file.lastModified || 0
-  ].join(':');
+  return (localFullPath(file) || localFilePath(file) || (file && file.name) || 'local') + ':' +
+    (file && file.size || 0) + ':' +
+    (file && file.lastModified || 0);
 }
 function makeLocalSongFromFile(file, lyricFile, coverFile) {
   var info = localTrackInfoFromFile(file);
@@ -22072,17 +22063,17 @@ function uint32LE(bytes, offset) {
   return (bytes[offset] || 0) + ((bytes[offset + 1] || 0) * 0x100) + ((bytes[offset + 2] || 0) * 0x10000) + ((bytes[offset + 3] || 0) * 0x1000000);
 }
 function utf8FromBytes(bytes, start, len) {
-  try {
-    return new TextDecoder('utf-8').decode(bytes.subarray(start, start + len)).replace(/^\uFEFF/, '');
-  } catch (e) {
-    var out = '';
-    for (var i = 0; i < len && start + i < bytes.length; i++) out += String.fromCharCode(bytes[start + i]);
-    return out;
-  }
+  return decodeBytesWithEncoding(bytes.subarray(start, start + len), 'utf-8');
+}
+var localTextDecoderCache = Object.create(null);
+function localTextDecoder(encoding) {
+  encoding = encoding || 'utf-8';
+  if (!localTextDecoderCache[encoding]) localTextDecoderCache[encoding] = new TextDecoder(encoding);
+  return localTextDecoderCache[encoding];
 }
 function decodeBytesWithEncoding(bytes, encoding) {
   try {
-    return new TextDecoder(encoding).decode(bytes).replace(/^\uFEFF/, '');
+    return localTextDecoder(encoding).decode(bytes).replace(/^\uFEFF/, '');
   } catch (e) {
     var out = '';
     for (var i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
@@ -22120,14 +22111,29 @@ function putLocalMetadataTag(tags, key, value) {
   else if (key === 'year' && !tags.year) tags.year = value;
 }
 function id3TextFrameKey(id) {
-  return {
-    TIT2: 'title', TT2: 'title',
-    TPE1: 'artist', TP1: 'artist',
-    TALB: 'album', TAL: 'album',
-    TPE2: 'albumArtist', TP2: 'albumArtist',
-    TRCK: 'track', TRK: 'track',
-    TYER: 'year', TDRC: 'year', TYE: 'year'
-  }[id] || '';
+  switch (id) {
+    case 'TIT2':
+    case 'TT2':
+      return 'title';
+    case 'TPE1':
+    case 'TP1':
+      return 'artist';
+    case 'TALB':
+    case 'TAL':
+      return 'album';
+    case 'TPE2':
+    case 'TP2':
+      return 'albumArtist';
+    case 'TRCK':
+    case 'TRK':
+      return 'track';
+    case 'TYER':
+    case 'TDRC':
+    case 'TYE':
+      return 'year';
+    default:
+      return '';
+  }
 }
 async function extractMp3LocalMetadata(file) {
   var fileSize = localFileSize(file);

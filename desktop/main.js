@@ -279,7 +279,9 @@ async function statLocalLibraryFiles(root, items) {
     }
   }
   const workerCount = Math.min(localLibraryScanStatConcurrency(items.length), Math.max(1, items.length));
-  await Promise.all(Array.from({ length: workerCount }, worker));
+  const workers = new Array(workerCount);
+  for (let i = 0; i < workerCount; i += 1) workers[i] = worker();
+  await Promise.all(workers);
   const compact = new Array(found);
   let write = 0;
   for (let i = 0; i < files.length; i += 1) {

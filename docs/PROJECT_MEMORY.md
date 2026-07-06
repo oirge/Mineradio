@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.15`
-- 最近正式安装包 Release 基线：`v1.2.15`。
+- 当前源码检查点：`v1.2.16`
+- 最近正式安装包 Release 基线：`v1.2.16`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,6 +27,16 @@
 
 ## Release Memory
 
+- `v1.2.16` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.16`
+- `v1.2.16` 重点优化本地文件导入映射、资产/曲库文件签名、本地歌曲 key、ID3/FLAC 元数据解码和主进程本地曲库 stat worker 创建；视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.16` Release 资产包括：
+  - `latest.yml`
+  - `Mineradio-1.2.16-Setup.exe`
+  - `Mineradio-1.2.16-Setup.exe.blockmap`
+  - `Mineradio-1.2.16-SHA256SUMS.txt`
+  - `Mineradio-1.2.15-to-1.2.16.patch.json`
+- `v1.2.16` 按用户要求只上传安装器相关资产，Portable ZIP 本次跳过。
+- `v1.2.16` 安装包 SHA256：`36af95b9dd9df40e04568a4b3ebf0fd3c5a4dc5729683e81f167b21b06cb88c7`
 - `v1.2.15` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.15`
 - `v1.2.15` 重点优化本地整队播放批量克隆、LRC/YRC/本地歌词解析、本地节奏缓存打包/解包、封面深度缓存裁剪、搜索玻璃贴图变更检测，并修正软件内更新面板前端版本硬编码和远端 latest 偏旧时的显示倒退；视觉、播放控制和 3D 歌单架交互保持不变。
 - `v1.2.15` Release 资产包括：
