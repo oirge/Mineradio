@@ -46,6 +46,7 @@
 - 本地资产内存缓存裁剪超过阈值后只收集可删除候选排序，保护项不参与排序；IndexedDB 清理标记删除时同步维护 id 列表，不要末尾再 `Object.keys(dropSet)`。
 - 大本地库或大歌单入队会批量克隆歌曲对象；不要恢复 `songs.map(cloneSong)` 这类回调式批量克隆。
 - 本地歌词、内嵌歌词和自定义歌词加载会解析长文本；不要在 LRC 解析、歌词 source 转换和 fallback 过滤路径恢复 `map/filter/forEach/every` 链式扫描。
+- 舞台歌词和桌面歌词刷新会反复压缩空白、过滤空行并限制行数；不要恢复 `split('\n').map(...).filter(...).slice(...)` 这类为每次歌词刷新制造多轮临时数组的路径。
 - YRC 逐字歌词、节奏缓存和封面深度缓存也属于切歌/视觉后台路径；不要在解析、打包/解包或裁剪时恢复 `map/filter/forEach/Object.keys` 链式处理。
 - 搜索玻璃贴图的 MutationObserver 会在搜索历史和标签变化时触发；不要把 added/removed NodeList 先 `slice/concat` 成数组再判断。
 - 软件内更新面板的前端版本号必须跟随统一 `APP_VERSION`，不要再把 `currentVersion` / `version` 写死成历史版本。
@@ -101,6 +102,7 @@
 - 新增同帧 UI 任务优先使用 `scheduleNamedAnimationFrame(key, fn)`；同一 key 只保留最后一次任务。
 - 大歌单、本地库整队播放和歌手详情播放使用 `cloneSongList()` 显式循环克隆，保持播放队列语义并减少回调分配。
 - 歌词状态克隆、LRC 解析、自定义歌词普通文本拆行和本地歌词 source 标记使用显式循环；输出字段、source 值和双语合并规则必须保持不变。
+- 舞台歌词换行和桌面歌词文本归一化使用 `normalizedLyricTextLines()` 与单次扫描；保持空白压缩、空行过滤、最大行数和省略号语义不变，减少播放中歌词贴图/覆盖层刷新时的短命数组。
 - YRC 解析、逐字范围压缩、本地节奏缓存 pack/unpack 和封面深度缓存 trim 使用显式循环；输出结构、缓存顺序和保留保护项语义必须保持不变。
 - 本地封面缩略图、封面深度和歌词 fetch 这类小型 FIFO/LRU 缓存的队首淘汰使用 head 游标推进，并在阈值后原地压缩数组；统计和运行时清理必须读取 active count，而不是原始数组 length。
 - 搜索玻璃贴图变更检测直接遍历 `addedNodes` / `removedNodes`，更新说明列表用循环拼接 HTML，避免小面板在启动后反复制造临时数组。

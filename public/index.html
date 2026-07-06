@@ -2956,7 +2956,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.20';
+var APP_VERSION = '1.2.21';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -9480,22 +9480,35 @@ function updateLyricPaletteFromCover(coverCanvas) {
 function wrapLyricText(ctx, text, maxWidth, maxLines, fontSize) {
   text = String(text || '').trim();
   var useWords = /\s/.test(text) && /[A-Za-z0-9]/.test(text);
-  var units = useWords ? text.split(/(\s+)/).filter(Boolean) : text.split('');
   var lines = [], line = '';
-  for (var i = 0; i < units.length; i++) {
-    var test = line + units[i];
+  var done = false;
+  function appendUnit(unit, restStart) {
+    var test = line + unit;
     if (lyricMeasureText(ctx, test, fontSize) > maxWidth && line) {
       lines.push(line.trim());
-      line = units[i].trimStart ? units[i].trimStart() : units[i].replace(/^\s+/, '');
+      line = unit.trimStart ? unit.trimStart() : unit.replace(/^\s+/, '');
       if (lines.length >= maxLines) {
-        var rest = units.slice(i).join('').trim();
+        var rest = text.slice(restStart).trim();
         if (rest) lines[lines.length - 1] = lines[lines.length - 1].replace(/[.。,…，、\s]*$/, '') + '...';
-        return lines;
+        done = true;
       }
     } else {
       line = test;
     }
   }
+  if (useWords) {
+    var len = text.length;
+    for (var i = 0; i < len && !done;) {
+      var start = i;
+      var whitespace = /\s/.test(text.charAt(i));
+      i++;
+      while (i < len && /\s/.test(text.charAt(i)) === whitespace) i++;
+      appendUnit(text.slice(start, i), start);
+    }
+  } else {
+    for (var ci = 0; ci < text.length && !done; ci++) appendUnit(text.charAt(ci), ci);
+  }
+  if (done) return lines;
   if (line && lines.length < maxLines) lines.push(line.trim());
   return lines.length ? lines : [''];
 }
@@ -9538,14 +9551,26 @@ function lyricThreeColor(css, fallback, minLum) {
 
 var STAGE_LYRIC_MAX_LINES = 2;
 
+function normalizedLyricTextLines(text, maxLines) {
+  var limit = maxLines || STAGE_LYRIC_MAX_LINES || 2;
+  var source = String(text || '').replace(/\r/g, '\n');
+  var lines = [];
+  var start = 0;
+  for (var i = 0, len = source.length; i <= len; i++) {
+    if (i !== len && source.charAt(i) !== '\n') continue;
+    var line = source.slice(start, i).replace(/[ \t]+/g, ' ').trim();
+    if (line) {
+      lines.push(line);
+      if (lines.length >= limit) break;
+    }
+    start = i + 1;
+  }
+  return lines;
+}
+
 function lyricDisplayLines(text, maxLines) {
-  var lines = String(text || '')
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .map(function(line){ return line.replace(/[ \t]+/g, ' ').trim(); })
-    .filter(Boolean);
-  if (!lines.length) lines = [''];
-  return lines.slice(0, maxLines || STAGE_LYRIC_MAX_LINES || 2);
+  var lines = normalizedLyricTextLines(text, maxLines);
+  return lines.length ? lines : [''];
 }
 
 function makeLyricMask(text) {
@@ -17943,7 +17968,16 @@ function detailRow(label, value) {
 function currentArtistNames(song) {
   var text = songArtistText(song);
   if (!text) return [];
-  return text.split(/\s*\/\s*|\s*,\s*|、/).map(function(s){ return s.trim(); }).filter(Boolean);
+  var names = [];
+  var start = 0;
+  for (var i = 0; i <= text.length; i++) {
+    var ch = i < text.length ? text.charAt(i) : '';
+    if (i !== text.length && ch !== '/' && ch !== ',' && ch !== '、') continue;
+    var name = text.slice(start, i).trim();
+    if (name) names.push(name);
+    start = i + 1;
+  }
+  return names;
 }
 var trackDetailSeq = 0;
 var detailArtistSongs = [];
@@ -17975,20 +18009,25 @@ function commentTimeLabel(ms) {
 }
 function renderDetailComments(comments) {
   if (!comments || !comments.length) return '<div class="detail-empty">暂无评论</div>';
-  return '<div class="detail-scroll">' + comments.map(function(c){
+  var html = '<div class="detail-scroll">';
+  for (var i = 0; i < comments.length; i++) {
+    var c = comments[i] || {};
     var user = c.user || {};
     var avatar = user.avatar ? coverUrlWithSize(user.avatar, 64) : '';
-    return '<div class="comment-item">' +
+    html += '<div class="comment-item">' +
       (avatar ? '<img class="comment-avatar" src="' + avatar + '" alt="">' : '<div class="comment-avatar"></div>') +
       '<div class="comment-main"><div class="comment-meta">' + escHtml(user.nickname || '音乐用户') + (c.likedCount ? (' · ' + c.likedCount + ' 赞') : '') + (c.time ? (' · ' + escHtml(commentTimeLabel(c.time))) : '') + '</div>' +
       '<div class="comment-text">' + escHtml(c.content || '') + '</div></div>' +
     '</div>';
-  }).join('') + '</div>';
+  }
+  return html + '</div>';
 }
 function renderArtistSongList(songs) {
   detailArtistSongs = cloneSongList(songs);
   if (!detailArtistSongs.length) return '<div class="detail-empty">暂无热门歌曲</div>';
-  return '<div class="detail-scroll">' + detailArtistSongs.map(function(s, i){
+  var html = '<div class="detail-scroll">';
+  for (var i = 0; i < detailArtistSongs.length; i++) {
+    var s = detailArtistSongs[i];
     var cover = songCoverSrc(s, 80);
     var coverHtml = cover ? '<img class="artist-song-cover" src="' + escHtml(cover) + '" alt="" onerror="this.style.opacity=0.18">' : '<div class="artist-song-cover"></div>';
     var actionsHtml = '<div class="artist-song-actions">' +
@@ -18002,7 +18041,8 @@ function renderArtistSongList(songs) {
       '<div class="artist-song-meta">' + escHtml((s.album || '未知专辑') + (s.duration ? (' · ' + songDurationLabel(s)) : '')) + '</div></div>' +
       actionsHtml +
     '</div>';
-  }).join('') + '</div>';
+  }
+  return html + '</div>';
 }
 function playArtistDetailSong(i) {
   var song = detailArtistSongs[i];
@@ -29086,13 +29126,7 @@ function currentDesktopSongMeta() {
 }
 function normalizeDesktopLyricText(text, maxLines) {
   maxLines = normalizeDesktopLyricsRows(maxLines || (fx && fx.desktopLyricsRows)) === 'single' ? 1 : 2;
-  return String(text || '')
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .map(function(line){ return line.replace(/[ \t]+/g, ' ').trim(); })
-    .filter(Boolean)
-    .slice(0, maxLines)
-    .join('\n');
+  return normalizedLyricTextLines(text, maxLines).join('\n');
 }
 /**
  * 查找桌面歌词当前行。播放顺序推进时沿用上次游标，拖动或切歌时退回二分查找。
