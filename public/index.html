@@ -2872,8 +2872,10 @@ var localIndexedDbTrimRunning = false;
 var localIndexedDbLastTrimAt = 0;
 var localCoverThumbPromiseCache = {};
 var localCoverThumbPromiseOrder = [];
+var localCoverThumbPromiseOrderHead = 0;
 var localCoverThumbResultCache = {};
 var localCoverThumbResultOrder = [];
+var localCoverThumbResultOrderHead = 0;
 var localCoverThumbResultBytes = 0;
 var LOCAL_COVER_THUMB_RESULT_MAX_BYTES = 18 * 1024 * 1024;
 var LOCAL_ASSET_CACHE_MAX_RECORDS = 9000;
@@ -2952,9 +2954,9 @@ var PLAYLIST_DETAIL_INITIAL_RENDER = 64;
 var PLAYLIST_DETAIL_BATCH_SIZE = 48;
 var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
-var coverDepthCache = Object.create(null), coverDepthCacheKeys = [];
+var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.16';
+var APP_VERSION = '1.2.17';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -3700,10 +3702,11 @@ function trimObjectCache(cache, keep, protectedKeys, skipRecord) {
 function trimCoverDepthCache(keep, protectedKeys) {
   if (!coverDepthCache || !coverDepthCacheKeys) return 0;
   var keys = [];
-  for (var liveIdx = 0; liveIdx < coverDepthCacheKeys.length; liveIdx++) {
+  for (var liveIdx = coverDepthCacheKeysHead || 0; liveIdx < coverDepthCacheKeys.length; liveIdx++) {
     var liveKey = coverDepthCacheKeys[liveIdx];
     if (liveKey && coverDepthCache[liveKey]) keys.push(liveKey);
   }
+  coverDepthCacheKeysHead = 0;
   if (keys.length <= keep) {
     coverDepthCacheKeys = keys;
     return 0;
@@ -3732,16 +3735,31 @@ function trimCoverDepthCache(keep, protectedKeys) {
     if (compactKey && coverDepthCache[compactKey]) compactKeys.push(compactKey);
   }
   coverDepthCacheKeys = compactKeys;
+  coverDepthCacheKeysHead = 0;
   return dropped;
+}
+function coverDepthCacheActiveCount() {
+  if (!coverDepthCacheKeys) return 0;
+  return Math.max(0, coverDepthCacheKeys.length - (coverDepthCacheKeysHead || 0));
+}
+function compactCoverDepthCacheKeys(force) {
+  if (!coverDepthCacheKeysHead) return;
+  if (!force && coverDepthCacheKeysHead < 24 && coverDepthCacheKeysHead * 2 < coverDepthCacheKeys.length) return;
+  var write = 0;
+  for (var read = coverDepthCacheKeysHead; read < coverDepthCacheKeys.length; read++) {
+    coverDepthCacheKeys[write++] = coverDepthCacheKeys[read];
+  }
+  coverDepthCacheKeys.length = write;
+  coverDepthCacheKeysHead = 0;
 }
 function collectRuntimePerfSnapshot(now) {
   now = now || performance.now();
   runtimePerfState.cacheCounts = {
     playlistCovers: safeObjectKeys(playlistCoverCache).length,
-    coverDepth: coverDepthCacheKeys ? coverDepthCacheKeys.length : 0,
+    coverDepth: coverDepthCacheActiveCount(),
     beatMaps: safeObjectKeys(beatMapCache).length,
     djBeatMaps: safeObjectKeys(djBeatMapCache).length,
-    localCoverThumbs: localCoverThumbResultOrder ? localCoverThumbResultOrder.length : 0
+    localCoverThumbs: localCoverThumbResultActiveCount()
   };
   if (performance && performance.memory && now - runtimePerfState.lastHeapSampleAt > 12000) {
     runtimePerfState.lastHeapSampleAt = now;
@@ -3788,9 +3806,9 @@ function trimRuntimeCaches(reason, aggressive) {
   dropped += trimObjectCache(beatMapCache, aggressive ? 12 : 36, protectedBeats);
   dropped += trimObjectCache(djBeatMapCache, aggressive ? 4 : 12, protectedBeats);
   if (typeof trimLocalCoverThumbResultCache === 'function') {
-    var beforeThumbs = localCoverThumbResultOrder ? localCoverThumbResultOrder.length : 0;
+    var beforeThumbs = localCoverThumbResultActiveCount();
     trimLocalCoverThumbResultCache(aggressive ? 32 : 72, aggressive ? 6 * 1024 * 1024 : 14 * 1024 * 1024);
-    dropped += Math.max(0, beforeThumbs - (localCoverThumbResultOrder ? localCoverThumbResultOrder.length : 0));
+    dropped += Math.max(0, beforeThumbs - localCoverThumbResultActiveCount());
   }
   if (aggressive && typeof renderer !== 'undefined' && renderer && renderer.renderLists && renderer.renderLists.dispose) {
     try { renderer.renderLists.dispose(); } catch (e) {}
@@ -8714,16 +8732,43 @@ function estimateLocalAssetRecordBytes(record) {
     + estimateDataUrlBytes(record.localCoverThumbDataUrl)
     + estimateDataUrlBytes(record.localCoverDataUrl);
 }
+function localCoverThumbResultActiveCount() {
+  return Math.max(0, localCoverThumbResultOrder.length - (localCoverThumbResultOrderHead || 0));
+}
+function compactLocalCoverThumbResultOrder(force) {
+  if (!localCoverThumbResultOrderHead) return;
+  if (!force && localCoverThumbResultOrderHead < 64 && localCoverThumbResultOrderHead * 2 < localCoverThumbResultOrder.length) return;
+  var write = 0;
+  for (var read = localCoverThumbResultOrderHead; read < localCoverThumbResultOrder.length; read++) {
+    localCoverThumbResultOrder[write++] = localCoverThumbResultOrder[read];
+  }
+  localCoverThumbResultOrder.length = write;
+  localCoverThumbResultOrderHead = 0;
+}
+function localCoverThumbPromiseActiveCount() {
+  return Math.max(0, localCoverThumbPromiseOrder.length - (localCoverThumbPromiseOrderHead || 0));
+}
+function compactLocalCoverThumbPromiseOrder(force) {
+  if (!localCoverThumbPromiseOrderHead) return;
+  if (!force && localCoverThumbPromiseOrderHead < 32 && localCoverThumbPromiseOrderHead * 2 < localCoverThumbPromiseOrder.length) return;
+  var write = 0;
+  for (var read = localCoverThumbPromiseOrderHead; read < localCoverThumbPromiseOrder.length; read++) {
+    localCoverThumbPromiseOrder[write++] = localCoverThumbPromiseOrder[read];
+  }
+  localCoverThumbPromiseOrder.length = write;
+  localCoverThumbPromiseOrderHead = 0;
+}
 function trimLocalCoverThumbResultCache(maxEntries, maxBytes) {
   maxEntries = Math.max(8, maxEntries || 96);
   maxBytes = Math.max(1024 * 1024, maxBytes || LOCAL_COVER_THUMB_RESULT_MAX_BYTES);
-  while (localCoverThumbResultOrder.length > 0 && (localCoverThumbResultOrder.length > maxEntries || localCoverThumbResultBytes > maxBytes)) {
-    var key = localCoverThumbResultOrder.shift();
+  while (localCoverThumbResultActiveCount() > 0 && (localCoverThumbResultActiveCount() > maxEntries || localCoverThumbResultBytes > maxBytes)) {
+    var key = localCoverThumbResultOrder[localCoverThumbResultOrderHead++];
     var entry = localCoverThumbResultCache[key];
     if (!entry) continue;
     localCoverThumbResultBytes = Math.max(0, localCoverThumbResultBytes - (entry.bytes || 0));
     delete localCoverThumbResultCache[key];
   }
+  compactLocalCoverThumbResultOrder(localCoverThumbResultActiveCount() === 0);
 }
 function rememberLocalCoverThumbResult(key, value) {
   if (!key || !value) return;
@@ -8778,7 +8823,11 @@ async function createLocalCoverThumbnailDataUrl(dataUrl, opts) {
   if (!cacheKey) return promise;
   localCoverThumbPromiseCache[cacheKey] = promise;
   localCoverThumbPromiseOrder.push(cacheKey);
-  while (localCoverThumbPromiseOrder.length > 24) delete localCoverThumbPromiseCache[localCoverThumbPromiseOrder.shift()];
+  while (localCoverThumbPromiseActiveCount() > 24) {
+    var oldPromiseKey = localCoverThumbPromiseOrder[localCoverThumbPromiseOrderHead++];
+    if (oldPromiseKey) delete localCoverThumbPromiseCache[oldPromiseKey];
+  }
+  compactLocalCoverThumbPromiseOrder(localCoverThumbPromiseActiveCount() === 0);
   var result = await promise;
   delete localCoverThumbPromiseCache[cacheKey];
   if (result) rememberLocalCoverThumbResult(cacheKey, result);
@@ -10447,24 +10496,26 @@ function getCoverDepthCache(raw) {
   var id = coverDepthCacheId(raw);
   if (!id || !coverDepthCache[id]) return null;
   coverDepthCache[id].at = Date.now();
-  var idx = coverDepthCacheKeys.indexOf(id);
+  var idx = coverDepthCacheKeys.indexOf(id, coverDepthCacheKeysHead || 0);
   if (idx >= 0) {
     coverDepthCacheKeys.splice(idx, 1);
     coverDepthCacheKeys.push(id);
   } else coverDepthCacheKeys.push(id);
+  compactCoverDepthCacheKeys(false);
   return coverDepthCache[id];
 }
 function setCoverDepthCache(raw, canvas, aiEnhanced) {
   var id = coverDepthCacheId(raw);
   if (!id || !canvas) return;
-  var idx = coverDepthCacheKeys.indexOf(id);
+  var idx = coverDepthCacheKeys.indexOf(id, coverDepthCacheKeysHead || 0);
   if (idx >= 0) coverDepthCacheKeys.splice(idx, 1);
   coverDepthCacheKeys.push(id);
   coverDepthCache[id] = { canvas: canvas, ai: !!aiEnhanced, at: Date.now() };
-  while (coverDepthCacheKeys.length > 18) {
-    var drop = coverDepthCacheKeys.shift();
+  while (coverDepthCacheActiveCount() > 18) {
+    var drop = coverDepthCacheKeys[coverDepthCacheKeysHead++];
     delete coverDepthCache[drop];
   }
+  compactCoverDepthCacheKeys(coverDepthCacheActiveCount() === 0);
 }
 
 function buildEdgeAndDepth(srcCanvas) {
@@ -20508,6 +20559,7 @@ function clearPlayerControlFocusState(reason) {
 // ============================================================
 var lyricFetchCache = {};
 var lyricFetchCacheOrder = [];
+var lyricFetchCacheOrderHead = 0;
 var lyricFetchInflight = {};
 var LYRIC_FETCH_CACHE_MAX = 96;
 
@@ -20519,9 +20571,17 @@ function rememberLyricFetchPayload(key, payload) {
   if (!key || !payload) return payload;
   if (!lyricFetchCache[key]) lyricFetchCacheOrder.push(key);
   lyricFetchCache[key] = payload;
-  while (lyricFetchCacheOrder.length > LYRIC_FETCH_CACHE_MAX) {
-    var oldKey = lyricFetchCacheOrder.shift();
+  while (lyricFetchCacheOrder.length - lyricFetchCacheOrderHead > LYRIC_FETCH_CACHE_MAX) {
+    var oldKey = lyricFetchCacheOrder[lyricFetchCacheOrderHead++];
     if (oldKey) delete lyricFetchCache[oldKey];
+  }
+  if (lyricFetchCacheOrderHead && (lyricFetchCacheOrderHead >= 64 || lyricFetchCacheOrderHead * 2 >= lyricFetchCacheOrder.length)) {
+    var write = 0;
+    for (var read = lyricFetchCacheOrderHead; read < lyricFetchCacheOrder.length; read++) {
+      lyricFetchCacheOrder[write++] = lyricFetchCacheOrder[read];
+    }
+    lyricFetchCacheOrder.length = write;
+    lyricFetchCacheOrderHead = 0;
   }
   return payload;
 }
