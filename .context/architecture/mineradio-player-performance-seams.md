@@ -53,6 +53,7 @@
 - 本地 MP3/FLAC 标签扫描可能在后台连续读取很多文件；`TextDecoder` 和 ID3 frame key 解析要复用轻量路径，不要每个 frame 新建 decoder 或 lookup 对象。
 - 主进程本地曲库扫描 worker 数量不大但处于导入启动前；不要恢复 `Array.from({ length }, worker)` 这类额外数组构造。
 - 软件内更新状态接口会被更新面板轮询；取最新下载/补丁任务或裁剪旧任务时不要恢复 `Array.from(updateDownloadJobs.values()).sort(...)`、`slice(...).forEach(...)` 这类全量排序和回调链。
+- 软件内更新面板轮询期间会高频刷新按钮、脚注和进度条；状态未变化时不要重复写 DOM 文本、class、`width` 或 SVG ring offset。
 
 ## Solution / Convention
 
@@ -107,6 +108,7 @@
 - 本地文件签名、曲库签名和本地歌曲 key 用直接字符串拼接；basename 用 `lastIndexOf('/')` / `lastIndexOf('.')`，避免为每个文件创建路径分段数组。
 - 本地标签解析复用 `TextDecoder` 缓存，ID3 frame key 使用 `switch`；主进程 stat worker 使用显式循环创建 Promise 列表。
 - 更新下载任务的最新/匹配最新查询使用 `latestUpdateDownloadJob()` 单次扫描；任务裁剪使用 `newestUpdateDownloadJobs(8)` 的小窗口维护，状态轮询和快速补丁复用判断不要恢复全量任务数组排序。
+- 更新面板前端使用 `updatePreviewContentSignature()`、`updatePreviewClassSignature()` 和 `lastProgressSignature` 判重；下载/补丁轮询状态未变化时必须跳过重复 DOM 写入。
 
 ## Reference
 

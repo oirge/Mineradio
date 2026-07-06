@@ -2956,7 +2956,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.19';
+var APP_VERSION = '1.2.20';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -2992,6 +2992,9 @@ var updatePreviewState = {
   message: '',
   restartRequired: false,
   patchFallbackTried: false,
+  lastContentSignature: '',
+  lastClassSignature: '',
+  lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
     '反正没什么人看，布想写日志了'
@@ -26062,13 +26065,53 @@ function startUpdateIconBreathing() {
   }
 }
 
+function updatePreviewContentSignature() {
+  var notes = Array.isArray(updatePreviewState.notes) && updatePreviewState.notes.length ? updatePreviewState.notes : null;
+  var notesSig = '';
+  if (notes) {
+    for (var i = 0; i < notes.length; i++) notesSig += '\u001f' + String(notes[i] || '');
+  }
+  return String(updatePreviewState.version || '') + '\u001e' +
+    String(updatePreviewState.hero || '') + '\u001e' +
+    notesSig;
+}
+
+function updatePreviewClassSignature() {
+  return String(updatePreviewState.status || '') + '\u001f' +
+    String(updatePreviewState.mode || '') + '\u001f' +
+    Math.round(Number(updatePreviewState.progress) || 0) + '\u001f' +
+    (updatePreviewState.configured ? 1 : 0) + '\u001f' +
+    (updatePreviewState.updateAvailable ? 1 : 0) + '\u001f' +
+    (updatePreviewState.downloadUrl ? 1 : 0) + '\u001f' +
+    (updatePreviewState.releaseUrl ? 1 : 0) + '\u001f' +
+    (updatePreviewState.patchAvailable ? 1 : 0) + '\u001f' +
+    (updatePreviewState.restartRequired ? 1 : 0) + '\u001f' +
+    (updatePreviewState.installerOpened ? 1 : 0) + '\u001f' +
+    (updatePreviewState.installerPath ? 1 : 0) + '\u001f' +
+    (updatePreviewState.cached ? 1 : 0) + '\u001f' +
+    String(updatePreviewState.message || '') + '\u001f' +
+    String(updatePreviewState.errorReason || '') + '\u001f' +
+    String(updatePreviewState.errorDetail || '') + '\u001f' +
+    String(updatePreviewState.sourceLabel || '') + '\u001f' +
+    (Number(updatePreviewState.received) || 0) + '\u001f' +
+    (Number(updatePreviewState.total) || 0) + '\u001f' +
+    Math.round(Number(updatePreviewState.speedBps) || 0) + '\u001f' +
+    (Number(updatePreviewState.etaSeconds) || 0) + '\u001f' +
+    (Number(updatePreviewState.attempt) || 0) + '\u001f' +
+    (Number(updatePreviewState.attempts) || 0) + '\u001f' +
+    (updatePreviewState.failedAttempts && updatePreviewState.failedAttempts.length || 0);
+}
+
 function renderUpdatePreviewPanel() {
+  var contentSignature = updatePreviewContentSignature();
+  var contentChanged = contentSignature !== updatePreviewState.lastContentSignature;
+  updatePreviewState.lastContentSignature = contentSignature;
   var version = document.getElementById('update-modal-version');
   var hero = document.getElementById('update-hero-main');
   var list = document.getElementById('update-list');
-  if (version) version.textContent = 'v' + updatePreviewState.version;
-  if (hero) hero.textContent = updatePreviewState.hero || '当前版本，更新检测已就绪。';
-  if (list) {
+  if (contentChanged && version) version.textContent = 'v' + updatePreviewState.version;
+  if (contentChanged && hero) hero.textContent = updatePreviewState.hero || '当前版本，更新检测已就绪。';
+  if (contentChanged && list) {
     var notes = Array.isArray(updatePreviewState.notes) && updatePreviewState.notes.length ? updatePreviewState.notes : ['更新检测已就绪'];
     var html = '';
     for (var i = 0; i < notes.length; i++) {
@@ -26081,6 +26124,9 @@ function renderUpdatePreviewPanel() {
 }
 
 function syncUpdatePreviewStateClass() {
+  var classSignature = updatePreviewClassSignature();
+  if (classSignature === updatePreviewState.lastClassSignature) return;
+  updatePreviewState.lastClassSignature = classSignature;
   var entry = document.getElementById('update-entry');
   var modal = document.querySelector('#update-modal .update-modal');
   var isDownloading = updatePreviewState.status === 'downloading';
@@ -26126,6 +26172,12 @@ function syncUpdatePreviewStateClass() {
 
 function updateUpdatePreviewProgress(progress) {
   updatePreviewState.progress = clampRange(Number(progress) || 0, 0, 100);
+  var progressSignature = updatePreviewState.progress.toFixed(2);
+  if (progressSignature === updatePreviewState.lastProgressSignature) {
+    syncUpdatePreviewStateClass();
+    return;
+  }
+  updatePreviewState.lastProgressSignature = progressSignature;
   var fill = document.getElementById('update-btn-fill');
   if (fill) fill.style.width = updatePreviewState.progress + '%';
   var ring = document.getElementById('update-progress-ring');
@@ -26164,12 +26216,16 @@ function animateUpdatePanelContents() {
   if (!window.gsap) return;
   var modal = document.querySelector('#update-modal .update-modal');
   if (!modal) return;
-  var parts = [
-    modal.querySelector('.update-kicker'),
-    modal.querySelector('.update-version'),
-    modal.querySelector('.update-hero')
-  ].filter(Boolean);
-  var items = Array.prototype.slice.call(modal.querySelectorAll('.update-item'));
+  var parts = [];
+  var kicker = modal.querySelector('.update-kicker');
+  var version = modal.querySelector('.update-version');
+  var hero = modal.querySelector('.update-hero');
+  if (kicker) parts.push(kicker);
+  if (version) parts.push(version);
+  if (hero) parts.push(hero);
+  var itemNodes = modal.querySelectorAll('.update-item');
+  var items = [];
+  for (var i = 0; i < itemNodes.length; i++) items.push(itemNodes[i]);
   var actions = modal.querySelector('.update-actions');
   window.gsap.fromTo(parts,
     { autoAlpha: 0, x: -7, filter: 'blur(5px)' },
