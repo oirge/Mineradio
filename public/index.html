@@ -2956,7 +2956,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.17';
+var APP_VERSION = '1.2.18';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -3614,6 +3614,16 @@ function updateRenderPowerClasses() {
 function safeObjectKeys(obj) {
   try { return obj ? Object.keys(obj) : []; } catch (e) { return []; }
 }
+function safeObjectKeyCount(obj) {
+  if (!obj) return 0;
+  var count = 0;
+  try {
+    for (var key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) count++;
+    }
+  } catch (e) {}
+  return count;
+}
 function markProtectedKey(map, key) {
   if (key) map[String(key)] = true;
 }
@@ -3755,10 +3765,10 @@ function compactCoverDepthCacheKeys(force) {
 function collectRuntimePerfSnapshot(now) {
   now = now || performance.now();
   runtimePerfState.cacheCounts = {
-    playlistCovers: safeObjectKeys(playlistCoverCache).length,
+    playlistCovers: safeObjectKeyCount(playlistCoverCache),
     coverDepth: coverDepthCacheActiveCount(),
-    beatMaps: safeObjectKeys(beatMapCache).length,
-    djBeatMaps: safeObjectKeys(djBeatMapCache).length,
+    beatMaps: safeObjectKeyCount(beatMapCache),
+    djBeatMaps: safeObjectKeyCount(djBeatMapCache),
     localCoverThumbs: localCoverThumbResultActiveCount()
   };
   if (performance && performance.memory && now - runtimePerfState.lastHeapSampleAt > 12000) {
@@ -8437,18 +8447,25 @@ function collectProtectedLocalAssetCacheKeys() {
   return keep;
 }
 function pruneLocalAssetMemoryCache(keep) {
-  var keys = Object.keys(localAssetCacheMemory || {});
-  if (keys.length <= Math.min(LOCAL_ASSET_CACHE_MAX_RECORDS, 1500)) return 0;
-  keys.sort(function(a, b){
-    var ar = localAssetCacheMemory[a] || {};
-    var br = localAssetCacheMemory[b] || {};
-    return (Number(ar.savedAt) || 0) - (Number(br.savedAt) || 0);
-  });
+  if (!localAssetCacheMemory) return 0;
+  var total = 0;
+  for (var cacheKey in localAssetCacheMemory) {
+    if (!Object.prototype.hasOwnProperty.call(localAssetCacheMemory, cacheKey)) continue;
+    total++;
+  }
+  if (total <= Math.min(LOCAL_ASSET_CACHE_MAX_RECORDS, 1500)) return 0;
+  var candidates = [];
+  for (var candidateKey in localAssetCacheMemory) {
+    if (!Object.prototype.hasOwnProperty.call(localAssetCacheMemory, candidateKey)) continue;
+    if (keep && keep[candidateKey]) continue;
+    var record = localAssetCacheMemory[candidateKey] || {};
+    candidates.push({ key: candidateKey, savedAt: Number(record.savedAt) || 0 });
+  }
+  candidates.sort(function(a, b){ return (a.savedAt || 0) - (b.savedAt || 0); });
   var target = Math.min(LOCAL_ASSET_CACHE_MAX_RECORDS, 1200);
   var dropped = 0;
-  for (var i = 0; i < keys.length && keys.length - dropped > target; i++) {
-    var key = keys[i];
-    if (keep && keep[key]) continue;
+  for (var i = 0; i < candidates.length && total - dropped > target; i++) {
+    var key = candidates[i].key;
     delete localAssetCacheMemory[key];
     dropped++;
   }
@@ -8514,7 +8531,15 @@ async function trimLocalIndexedDbCaches(reason) {
       tx.oncomplete = function(){
         var totalBytes = 0;
         var dropSet = Object.create(null);
+        var ids = [];
         var dropCount = 0;
+        function markAssetDrop(id) {
+          if (!id || dropSet[id]) return false;
+          dropSet[id] = true;
+          ids.push(id);
+          dropCount++;
+          return true;
+        }
         assetEntries.sort(function(a, b){ return (a.savedAt || 0) - (b.savedAt || 0); });
         for (var assetIdx = 0; assetIdx < assetEntries.length; assetIdx++) {
           totalBytes += assetEntries[assetIdx].bytes || 0;
@@ -8522,25 +8547,26 @@ async function trimLocalIndexedDbCaches(reason) {
         for (var staleIdx = 0; staleIdx < assetEntries.length; staleIdx++) {
           var staleEntry = assetEntries[staleIdx];
           if (!staleEntry.id || keep[staleEntry.id]) continue;
-          if (staleEntry.savedAt && now - staleEntry.savedAt > LOCAL_ASSET_CACHE_MAX_AGE_MS && !dropSet[staleEntry.id]) {
-            dropSet[staleEntry.id] = true;
-            dropCount++;
-          }
+          if (staleEntry.savedAt && now - staleEntry.savedAt > LOCAL_ASSET_CACHE_MAX_AGE_MS) markAssetDrop(staleEntry.id);
         }
         for (var sizeIdx = 0; sizeIdx < assetEntries.length; sizeIdx++) {
           if (assetEntries.length - dropCount <= LOCAL_ASSET_CACHE_MAX_RECORDS && totalBytes <= LOCAL_ASSET_CACHE_MAX_BYTES) break;
           var sizeEntry = assetEntries[sizeIdx];
           if (!sizeEntry.id || keep[sizeEntry.id] || dropSet[sizeEntry.id]) continue;
-          dropSet[sizeEntry.id] = true;
-          dropCount++;
-          totalBytes = Math.max(0, totalBytes - (sizeEntry.bytes || 0));
+          if (markAssetDrop(sizeEntry.id)) totalBytes = Math.max(0, totalBytes - (sizeEntry.bytes || 0));
         }
         var libraryDropSet = Object.create(null);
+        var libraryIds = [];
+        function markLibraryDrop(id) {
+          if (!id || libraryDropSet[id]) return;
+          libraryDropSet[id] = true;
+          libraryIds.push(id);
+        }
         var folderStats = Object.create(null);
         for (var libraryIdx = 0; libraryIdx < libraryEntries.length; libraryIdx++) {
           var libraryEntry = libraryEntries[libraryIdx];
           if (!libraryEntry.id) continue;
-          if (libraryEntry.savedAt && now - libraryEntry.savedAt > LOCAL_LIBRARY_CACHE_MAX_AGE_MS) libraryDropSet[libraryEntry.id] = true;
+          if (libraryEntry.savedAt && now - libraryEntry.savedAt > LOCAL_LIBRARY_CACHE_MAX_AGE_MS) markLibraryDrop(libraryEntry.id);
           var folder = libraryEntry.folderPath || libraryEntry.id;
           var stat = folderStats[folder];
           if (!stat) stat = folderStats[folder] = { savedAt: 0 };
@@ -8559,10 +8585,8 @@ async function trimLocalIndexedDbCaches(reason) {
         }
         for (var dropLibraryIdx = 0; dropLibraryIdx < libraryEntries.length; dropLibraryIdx++) {
           var dropLibraryEntry = libraryEntries[dropLibraryIdx];
-          if (dropLibraryEntry.folderPath && !keepFolders[dropLibraryEntry.folderPath]) libraryDropSet[dropLibraryEntry.id] = true;
+          if (dropLibraryEntry.folderPath && !keepFolders[dropLibraryEntry.folderPath]) markLibraryDrop(dropLibraryEntry.id);
         }
-        var ids = Object.keys(dropSet);
-        var libraryIds = Object.keys(libraryDropSet);
         if (!ids.length && !libraryIds.length) {
           db.close();
           resolve(0);

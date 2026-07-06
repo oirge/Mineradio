@@ -42,6 +42,8 @@
 - 启动恢复阶段如果先读取全量封面/歌词缓存，会推迟队列和播放会话可见时间，造成首屏像卡住。
 - 本地封面/歌词缓存按范围补水时，单个分块内不要重复计算同一首歌的 asset cache key。
 - IndexedDB 缓存清理属于后台任务，但大缓存下也不能在 folder 排序比较器里反复扫描完整 `libraryEntries`。
+- 运行时缓存统计只需要数量时不要调用 `Object.keys(cache).length`；用直接计数避免定期性能快照制造 key 数组。
+- 本地资产内存缓存裁剪超过阈值后只收集可删除候选排序，保护项不参与排序；IndexedDB 清理标记删除时同步维护 id 列表，不要末尾再 `Object.keys(dropSet)`。
 - 大本地库或大歌单入队会批量克隆歌曲对象；不要恢复 `songs.map(cloneSong)` 这类回调式批量克隆。
 - 本地歌词、内嵌歌词和自定义歌词加载会解析长文本；不要在 LRC 解析、歌词 source 转换和 fallback 过滤路径恢复 `map/filter/forEach/every` 链式扫描。
 - YRC 逐字歌词、节奏缓存和封面深度缓存也属于切歌/视觉后台路径；不要在解析、打包/解包或裁剪时恢复 `map/filter/forEach/Object.keys` 链式处理。
@@ -84,6 +86,7 @@
 - 本地曲库快照签名直接遍历类数组；索引 lookup 和索引同步使用显式循环；lookup 构建用 `for...in + hasOwnProperty`，避免 `Object.keys()` 先生成完整 key 数组。
 - 本地资产缓存读取用显式循环压缩 key 列表，并用 IndexedDB 返回记录的 `id` 回填结果表；资产缓存和曲库索引套用复用全局元数据字段列表。
 - IndexedDB 缓存清理先单次统计每个本地库文件夹的最新时间，再按 folder 排序；不要在 comparator 中扫描完整记录表。
+- 运行时缓存数量统计使用 `safeObjectKeyCount()`；本地资产内存缓存和 IndexedDB 删除集合维护删除 id 数组，减少后台 trim 的全量 key 数组和重复查表。
 - 进入本地曲库同步比对前先调用 `hydrateLocalLibraryPersistentState(folderPath)`，确保同步比对读取内存缓存。
 - 本地封面缩略图通过 `localCoverThumbPromiseCache` 合并并发请求，不要为同一 data URL 重复创建 canvas。
 - 成功生成的本地封面缩略图还必须进入 `localCoverThumbResultCache` 短期结果缓存，避免队列、搜索和歌单架在不同时间点重复缩放同一封面。
