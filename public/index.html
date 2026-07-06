@@ -2956,7 +2956,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.22';
+var APP_VERSION = '1.2.23';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -14484,12 +14484,13 @@ function makeShelfManager() {
     ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
   }
   function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
-    var chars = String(text || '').split('');
+    var source = String(text || '');
     var line = '', lines = [];
-    for (var i = 0; i < chars.length; i++) {
-      var test = line + chars[i];
+    for (var i = 0; i < source.length; i++) {
+      var ch = source.charAt(i);
+      var test = line + ch;
       if (ctx.measureText(test).width > maxWidth && line) {
-        lines.push(line); line = chars[i];
+        lines.push(line); line = ch;
         if (lines.length >= maxLines - 1) break;
       } else line = test;
     }
@@ -18368,12 +18369,11 @@ function parseCustomLyricText(text) {
       return customLines;
     }
   }
-  var rawRows = raw.split(/\r?\n/);
   var rows = [];
-  for (var rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
-    var row = rawRows[rowIdx].trim();
+  forEachNewlineRow(raw, function(rawRow){
+    var row = rawRow.trim();
     if (row && !isNoLyricText(row)) rows.push(row);
-  }
+  });
   if (!rows.length) return [];
   var duration = audio && isFinite(audio.duration) && audio.duration > 8 ? audio.duration : 0;
   var gap = duration ? Math.max(2.8, Math.min(7.2, duration / Math.max(1, rows.length))) : 4.8;
@@ -20746,6 +20746,32 @@ function finalizeLyricLineDurations(lines) {
   }
   return lines;
 }
+function forEachNewlineRow(text, visit) {
+  var source = String(text || '');
+  for (var start = 0, i = 0, len = source.length; i <= len; i++) {
+    if (i !== len && source.charCodeAt(i) !== 10) continue;
+    var end = i;
+    if (end > start && source.charCodeAt(end - 1) === 13) end--;
+    if (visit(source.slice(start, end)) === false) return false;
+    start = i + 1;
+  }
+  return true;
+}
+function rememberLyricBucketText(bucket, text) {
+  var source = String(text || '');
+  for (var start = 0, i = 0, len = source.length; i <= len; i++) {
+    if (i !== len && source.charCodeAt(i) !== 10) continue;
+    var row = source.slice(start, i).replace(/[ \t]+/g, ' ').trim();
+    if (row) {
+      var norm = row.toLowerCase();
+      if (!bucket.seen[norm]) {
+        bucket.seen[norm] = true;
+        if (bucket.texts.length < 2) bucket.texts.push(row);
+      }
+    }
+    start = i + 1;
+  }
+}
 /**
  * 解析 LRC 歌词文本。同一时间戳的双语歌词会合并到同一行，解析过程避免 entries/map/filter 中间数组。
  * @param {string} text LRC 原文。
@@ -20755,17 +20781,15 @@ function parseLyricText(text) {
   var reg = /\[(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?\]/g;
   var buckets = {};
   var ordered = [];
-  var rawLines = String(text || '').split(/\r?\n/);
-  for (var rawIdx = 0; rawIdx < rawLines.length; rawIdx++) {
-    var rawLine = rawLines[rawIdx];
+  forEachNewlineRow(text, function(rawLine) {
     var times = [];
     var m;
     reg.lastIndex = 0;
     while ((m = reg.exec(rawLine))) times.push(lyricTagTimeToSeconds(m[1], m[2], m[3]));
-    if (!times.length) continue;
+    if (!times.length) return;
     reg.lastIndex = 0;
     var txt = rawLine.replace(reg, '').trim();
-    if (!txt) continue;
+    if (!txt) return;
     for (var timeIdx = 0; timeIdx < times.length; timeIdx++) {
       var t = times[timeIdx];
       var key = String(Math.round((Number(t) || 0) * 1000));
@@ -20774,17 +20798,9 @@ function parseLyricText(text) {
         bucket = buckets[key] = { t: t, texts: [], seen: Object.create(null) };
         ordered.push(bucket);
       }
-      var rows = String(txt || '').split(/\n+/);
-      for (var rowIdx = 0; rowIdx < rows.length; rowIdx++) {
-        var row = rows[rowIdx].replace(/[ \t]+/g, ' ').trim();
-        if (!row) continue;
-        var norm = row.toLowerCase();
-        if (bucket.seen[norm]) continue;
-        bucket.seen[norm] = true;
-        if (bucket.texts.length < 2) bucket.texts.push(row);
-      }
+      rememberLyricBucketText(bucket, txt);
     }
-  }
+  });
   var lines = [];
   for (var bucketIdx = 0; bucketIdx < ordered.length; bucketIdx++) {
     var bucket = ordered[bucketIdx];
@@ -20801,11 +20817,9 @@ function parseLyricText(text) {
 }
 function parseYrcText(text) {
   var lines = [];
-  var rawLines = String(text || '').split(/\r?\n/);
-  for (var lineIdx = 0; lineIdx < rawLines.length; lineIdx++) {
-    var line = rawLines[lineIdx];
+  forEachNewlineRow(text, function(line) {
     var m = line.match(/^\[(\d+),(\d+)\](.*)$/);
-    if (!m) continue;
+    if (!m) return;
     var lineStartMs = parseInt(m[1], 10) || 0;
     var lineDurMs = parseInt(m[2], 10) || 0;
     var body = m[3] || '';
@@ -20824,7 +20838,7 @@ function parseYrcText(text) {
     if (!fullText) fullText = body.replace(/\(\d+,\d+,\d+\)/g, '').replace(/\s+/g, ' ');
     var leading = (fullText.match(/^\s+/) || [''])[0].length;
     fullText = fullText.replace(/\s+/g, ' ').trim();
-    if (!fullText) continue;
+    if (!fullText) return;
     if (words.length) {
       var compactWords = [];
       for (var wordIdx = 0; wordIdx < words.length; wordIdx++) {
@@ -20836,7 +20850,7 @@ function parseYrcText(text) {
       words = compactWords;
     }
     lines.push({ t:lineStartMs / 1000, duration:lineDurMs / 1000, text:fullText, words:words, charCount:Math.max(1, fullText.length), source: words.length ? 'yrc-word' : 'yrc-line' });
-  }
+  });
   return finalizeLyricLineDurations(lines);
 }
 function renderLyrics() {

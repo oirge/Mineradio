@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.22`
-- 最近正式安装包 Release 基线：`v1.2.22`。
+- 当前源码检查点：`v1.2.23`
+- 最近正式安装包 Release 基线：`v1.2.23`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,6 +27,15 @@
 
 ## Release Memory
 
+- `v1.2.23` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.23`
+- `v1.2.23` 重点优化歌词解析和 3D 歌单架卡片绘字低分配路径；LRC/YRC/自定义歌词原文按行处理改为单次换行扫描，保留 CRLF、尾空行、双语合并、空歌词过滤和逐字时间轴语义；3D 歌单架卡片标题/副标题绘制不再通过 `split('')` 创建字符数组。UI、左侧歌单、播放控制、视觉质感和 3D 歌单架交互保持不变。
+- `v1.2.23` Release 资产包括：
+  - `latest.yml`
+  - `Mineradio-1.2.23-Setup.exe`
+  - `Mineradio-1.2.23-Setup.exe.blockmap`
+  - `Mineradio-1.2.23-SHA256SUMS.txt`
+  - `Mineradio-1.2.22-to-1.2.23.patch.json`
+- `v1.2.23` 按用户要求只上传安装器相关资产，Portable ZIP 本次跳过。
 - `v1.2.22` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.22`
 - `v1.2.22` 重点优化桌面歌词后台轮询和桌面 UI 状态持久化低分配路径；主进程桌面歌词中键锁定轮询 stdout 解析改为流式单次扫描，保留 `MMB` 触发语义和半行缓存；桌面 UI 状态补丁写入改为 `for...in` 白名单遍历，保留字段过滤、空值删除和超大值跳过语义。UI、左侧歌单、播放控制、视觉质感和 3D 歌单架交互保持不变。
 - `v1.2.22` Release 资产包括：
