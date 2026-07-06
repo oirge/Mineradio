@@ -762,13 +762,47 @@ function publicUpdateJob(job) {
     updatedAt: job.updatedAt,
   };
 }
+function isActiveUpdateJob(job) {
+  return job && (job.status === 'queued' || job.status === 'downloading' || job.status === 'ready');
+}
+function latestUpdateDownloadJob(predicate) {
+  let latest = null;
+  let latestCreatedAt = -1;
+  for (const job of updateDownloadJobs.values()) {
+    if (predicate && !predicate(job)) continue;
+    const createdAt = job.createdAt || 0;
+    if (!latest || createdAt > latestCreatedAt) {
+      latest = job;
+      latestCreatedAt = createdAt;
+    }
+  }
+  return latest;
+}
+function newestUpdateDownloadJobs(limit) {
+  const max = Math.max(0, Number(limit) || 0);
+  const newest = [];
+  if (!max) return newest;
+  for (const job of updateDownloadJobs.values()) {
+    const createdAt = job.createdAt || 0;
+    let insertAt = newest.length;
+    while (insertAt > 0 && createdAt > (newest[insertAt - 1].createdAt || 0)) insertAt--;
+    if (insertAt >= max) continue;
+    newest.splice(insertAt, 0, job);
+    if (newest.length > max) newest.length = max;
+  }
+  return newest;
+}
 function activeUpdateJobFor(version) {
-  const jobs = Array.from(updateDownloadJobs.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return jobs.find(job => job.version === version && (job.status === 'queued' || job.status === 'downloading' || job.status === 'ready'));
+  return latestUpdateDownloadJob(job => job.version === version && isActiveUpdateJob(job));
 }
 function trimUpdateJobs() {
-  const jobs = Array.from(updateDownloadJobs.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  jobs.slice(8).forEach(job => updateDownloadJobs.delete(job.id));
+  if (updateDownloadJobs.size <= 8) return;
+  const keep = new Set();
+  const newest = newestUpdateDownloadJobs(8);
+  for (let i = 0; i < newest.length; i++) keep.add(newest[i].id);
+  for (const job of updateDownloadJobs.values()) {
+    if (!keep.has(job.id)) updateDownloadJobs.delete(job.id);
+  }
 }
 async function downloadUpdateAsset(job) {
   const tmpPath = job.filePath + '.download';
@@ -1301,9 +1335,7 @@ function startUpdatePatchJob(info) {
   if (!release.patchAvailable || !/^https?:\/\//i.test(downloadUrl)) return { ok: false, error: 'PATCH_ASSET_MISSING' };
 
   const version = info.latestVersion || release.version || patch.to || '';
-  const existing = Array.from(updateDownloadJobs.values())
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    .find(job => job.mode === 'patch' && job.version === version && (job.status === 'queued' || job.status === 'downloading' || job.status === 'ready'));
+  const existing = latestUpdateDownloadJob(job => job.mode === 'patch' && job.version === version && isActiveUpdateJob(job));
   if (existing) return publicUpdateJob(existing);
 
   const now = Date.now();
@@ -1412,7 +1444,7 @@ const server = http.createServer(async (req, res) => {
     const id = url.searchParams.get('id') || '';
     const job = id
       ? updateDownloadJobs.get(id)
-      : Array.from(updateDownloadJobs.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+      : latestUpdateDownloadJob();
     sendJSON(res, publicUpdateJob(job), job ? 200 : 404);
     return;
   }
@@ -1433,7 +1465,7 @@ const server = http.createServer(async (req, res) => {
     const id = url.searchParams.get('id') || '';
     const job = id
       ? updateDownloadJobs.get(id)
-      : Array.from(updateDownloadJobs.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).find(item => item.mode === 'patch');
+      : latestUpdateDownloadJob(item => item.mode === 'patch');
     sendJSON(res, publicUpdateJob(job), job ? 200 : 404);
     return;
   }

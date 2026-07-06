@@ -2,7 +2,7 @@
 
 ## Context
 
-适用于 `public/index.html` 和 `desktop/main.js` 中播放器运行时性能优化，尤其是队列渲染、本地库恢复、封面缓存、歌单架刷新、主进程本地曲库扫描和同帧 UI 任务调度。
+适用于 `public/index.html`、`desktop/main.js` 和 `server.js` 中播放器运行时性能优化，尤其是队列渲染、本地库恢复、封面缓存、歌单架刷新、主进程本地曲库扫描、软件内更新任务状态和同帧 UI 任务调度。
 
 ## Fact / Pitfall
 
@@ -52,6 +52,7 @@
 - 大文件夹导入会反复构建歌词/封面映射、文件签名和本地歌曲 key；不要在这些路径恢复重复 `fileListToArray()`、`split().pop()`、数组 `join` 或每帧对象字面量查表。
 - 本地 MP3/FLAC 标签扫描可能在后台连续读取很多文件；`TextDecoder` 和 ID3 frame key 解析要复用轻量路径，不要每个 frame 新建 decoder 或 lookup 对象。
 - 主进程本地曲库扫描 worker 数量不大但处于导入启动前；不要恢复 `Array.from({ length }, worker)` 这类额外数组构造。
+- 软件内更新状态接口会被更新面板轮询；取最新下载/补丁任务或裁剪旧任务时不要恢复 `Array.from(updateDownloadJobs.values()).sort(...)`、`slice(...).forEach(...)` 这类全量排序和回调链。
 
 ## Solution / Convention
 
@@ -105,9 +106,10 @@
 - 本地歌词/封面映射函数直接遍历传入文件集合；调用方已压缩过数组时不要二次复制。
 - 本地文件签名、曲库签名和本地歌曲 key 用直接字符串拼接；basename 用 `lastIndexOf('/')` / `lastIndexOf('.')`，避免为每个文件创建路径分段数组。
 - 本地标签解析复用 `TextDecoder` 缓存，ID3 frame key 使用 `switch`；主进程 stat worker 使用显式循环创建 Promise 列表。
+- 更新下载任务的最新/匹配最新查询使用 `latestUpdateDownloadJob()` 单次扫描；任务裁剪使用 `newestUpdateDownloadJobs(8)` 的小窗口维护，状态轮询和快速补丁复用判断不要恢复全量任务数组排序。
 
 ## Reference
 
-- 相关实现：`public/index.html`、`desktop/main.js`
+- 相关实现：`public/index.html`、`desktop/main.js`、`server.js`
 - 浏览器 IndexedDB API：<https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API>
 - 浏览器 requestAnimationFrame API：<https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame>

@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.18`
-- 最近正式安装包 Release 基线：`v1.2.18`。
+- 当前源码检查点：`v1.2.19`
+- 最近正式安装包 Release 基线：`v1.2.19`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,6 +27,16 @@
 
 ## Release Memory
 
+- `v1.2.19` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.19`
+- `v1.2.19` 重点优化软件内更新任务状态查询、快速补丁复用判断和更新任务裁剪；下载/补丁状态接口改为单次扫描最新匹配项，后台只维护 8 条最新任务的小窗口，减少更新面板轮询和任务维护时的数组排序/切片分配；视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.19` Release 资产包括：
+  - `latest.yml`
+  - `Mineradio-1.2.19-Setup.exe`
+  - `Mineradio-1.2.19-Setup.exe.blockmap`
+  - `Mineradio-1.2.19-SHA256SUMS.txt`
+  - `Mineradio-1.2.18-to-1.2.19.patch.json`
+- `v1.2.19` 按用户要求只上传安装器相关资产，Portable ZIP 本次跳过。
+- `v1.2.19` 安装包 SHA256：`960477a0350fafd1c489cd5d10367bb2a0b255c987d445b2ef5e87bddde87417`
 - `v1.2.18` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.18`
 - `v1.2.18` 重点优化运行时缓存统计、本地资产内存缓存裁剪和 IndexedDB 缓存清理；缓存数量改为直接计数，trim 只排序可删除候选，删除集合同步维护 id 列表，减少后台维护任务的小分配；视觉、播放控制和 3D 歌单架交互保持不变。
 - `v1.2.18` Release 资产包括：
