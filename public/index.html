@@ -20815,6 +20815,22 @@ function parseLyricText(text) {
   }
   return finalizeLyricLineDurations(lines);
 }
+/**
+ * 统计字符串前导空白长度。YRC 逐字对齐只需要长度，避免 match 创建数组。
+ * @param {string} text 待检查文本。
+ * @returns {number} 前导空白字符数。
+ */
+function leadingWhitespaceLength(text) {
+  text = String(text || '');
+  var count = 0;
+  while (count < text.length && /\s/.test(text.charAt(count))) count++;
+  return count;
+}
+/**
+ * 解析逐字 YRC 歌词。逐字歌词可能很长，使用显式循环压缩词项并保持逐字时间轴语义。
+ * @param {string} text YRC 原文。
+ * @returns {Array<object>} 标准化逐字歌词行。
+ */
 function parseYrcText(text) {
   var lines = [];
   forEachNewlineRow(text, function(line) {
@@ -20836,7 +20852,7 @@ function parseYrcText(text) {
       words.push({ text:txt, t:absStartMs / 1000, d:Math.max(0.06, rawDur / 1000), c0:c0, c1:fullText.length });
     }
     if (!fullText) fullText = body.replace(/\(\d+,\d+,\d+\)/g, '').replace(/\s+/g, ' ');
-    var leading = (fullText.match(/^\s+/) || [''])[0].length;
+    var leading = leadingWhitespaceLength(fullText);
     fullText = fullText.replace(/\s+/g, ' ').trim();
     if (!fullText) return;
     if (words.length) {
@@ -22118,18 +22134,36 @@ function createLocalSongsFromFiles(files, opts) {
   }
   return songs;
 }
+/**
+ * 统计解码替换字符数量。文本解码回退判断只需要计数，不需要正则 match 生成数组。
+ * @param {string} text 已解码文本。
+ * @returns {number} U+FFFD 替换字符数量。
+ */
+function countTextReplacementChars(text) {
+  text = String(text || '');
+  var count = 0;
+  for (var i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 0xfffd) count++;
+  }
+  return count;
+}
+/**
+ * 解码本地歌词或文本文件。优先 UTF 编码，乱码较多时尝试 gb18030，并复用 TextDecoder 缓存。
+ * @param {ArrayBuffer|Uint8Array} buffer 本地文本字节。
+ * @returns {string} 解码后的文本。
+ */
 function decodeLocalTextBuffer(buffer) {
   var bytes = new Uint8Array(buffer || []);
   var decoder = null;
-  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) decoder = new TextDecoder('utf-16le');
-  else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) decoder = new TextDecoder('utf-16be');
-  else decoder = new TextDecoder('utf-8');
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) decoder = localTextDecoder('utf-16le');
+  else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) decoder = localTextDecoder('utf-16be');
+  else decoder = localTextDecoder('utf-8');
   var text = decoder.decode(bytes).replace(/^\uFEFF/, '');
-  var bad = (text.match(/\uFFFD/g) || []).length;
+  var bad = countTextReplacementChars(text);
   if (bad && window.TextDecoder) {
     try {
-      var gbText = new TextDecoder('gb18030').decode(bytes).replace(/^\uFEFF/, '');
-      if ((gbText.match(/\uFFFD/g) || []).length < bad) text = gbText;
+      var gbText = localTextDecoder('gb18030').decode(bytes).replace(/^\uFEFF/, '');
+      if (countTextReplacementChars(gbText) < bad) text = gbText;
     } catch (e) {}
   }
   return text;
