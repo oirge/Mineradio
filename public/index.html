@@ -21921,24 +21921,31 @@ var miniPlayerSyncState = null;
 /**
  * 将迷你播放器状态按字段增量同步到主进程。歌曲或播放状态未变化时不产生 IPC。
  * @param {boolean=} force 是否强制发送完整状态。
+ * @param {boolean=} playbackOnly 是否只检查播放状态；首次同步或歌曲对象变化时仍自动补齐元数据。
  * @returns {void}
  */
-function pushMiniPlayerState(force) {
+function pushMiniPlayerState(force, playbackOnly) {
   var api = getDesktopWindowApi();
   if (!api || typeof api.updateMiniPlayer !== 'function') return;
   if (typeof desktopSongMetaCache === 'undefined' || !desktopSongMetaCache) return;
-  var hasTrack = !!(playQueue && currentIdx >= 0 && playQueue[currentIdx]);
-  var meta = hasTrack ? currentDesktopSongMeta() : null;
+  var song = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
+  var hasTrack = !!song;
   var isPlaying = !!(hasTrack && audio && audio.src && !audio.paused && !audio.ended);
-  var metaSignature = hasTrack
-    ? String(meta && (meta._signature || ((meta.title || '') + '|' + (meta.artist || '') + '|' + (meta.cover || ''))) || '')
-    : '';
   var state = miniPlayerSyncState || (miniPlayerSyncState = {
+    song: null,
     metaSignature: '',
     playing: null,
     hasTrack: null,
     serial: 0
   });
+  var resolveMetadata = !!(hasTrack && (force || !playbackOnly || state.song !== song || !state.metaSignature));
+  var meta = resolveMetadata ? currentDesktopSongMeta() : null;
+  var metaSignature = hasTrack
+    ? (resolveMetadata
+      ? String(meta && (meta._signature || ((meta.title || '') + '|' + (meta.artist || '') + '|' + (meta.cover || ''))) || '')
+      : state.metaSignature)
+    : '';
+  if (resolveMetadata || !hasTrack) state.song = song;
   var patch = {};
   var changed = false;
   if (force || state.metaSignature !== metaSignature) {
@@ -21963,6 +21970,7 @@ function pushMiniPlayerState(force) {
   var serial = ++state.serial;
   api.updateMiniPlayer(patch).catch(function(){
     if (!miniPlayerSyncState || miniPlayerSyncState.serial !== serial) return;
+    miniPlayerSyncState.song = null;
     miniPlayerSyncState.metaSignature = '';
     miniPlayerSyncState.playing = null;
     miniPlayerSyncState.hasTrack = null;
@@ -21996,7 +22004,7 @@ function updateSystemMediaSessionMetadata() {
  * @returns {void}
  */
 function updateSystemMediaSessionPlaybackState(reason) {
-  pushMiniPlayerState(false);
+  pushMiniPlayerState(false, true);
   if (!('mediaSession' in navigator)) return;
   try {
     var nextState = audio && audio.src
