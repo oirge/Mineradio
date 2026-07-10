@@ -2306,6 +2306,8 @@ if (!gotSingleInstanceLock) {
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
+    powerMonitor.on('suspend', stopMiniPlayerRecoveryTimer);
+    powerMonitor.on('lock-screen', stopMiniPlayerRecoveryTimer);
     powerMonitor.on('resume', () => scheduleMiniPlayerRecovery(180));
     powerMonitor.on('unlock-screen', () => scheduleMiniPlayerRecovery(180));
     await createWindow();

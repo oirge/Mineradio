@@ -69,6 +69,7 @@
 - `setBounds()` 和显示器工作区校正产生的 `moved` 事件不能覆盖用户位置；程序定位前必须清除手动移动标记，校正后的已有用户坐标只在签名变化时落盘。
 - `play` / `playing` / `pause` 等音频状态事件不应让迷你播放器重复执行 `currentDesktopSongMeta()` 和封面签名解析；同一事件后续还会同步 Windows Media Session 元数据。
 - 迷你播放器 IPC 使用乐观状态判重时，Promise rejection 和主进程返回 `ok:false` 都代表补丁未确认；旧完整请求晚失败也不能因后续序号变化而被忽略。
+- 迷你播放器 5 秒可见性恢复只在用户可见会话中有意义；Windows `lock-screen` / `suspend` 时应停止恢复定时器，由 `unlock-screen` / `resume` 重新启动。
 - 音量滑块 `input` 会在拖动期间连续触发；不要在每次输入中同步写 `localStorage`、重建音量 SVG 或重复写未变化的百分比/class。
 - 播放进度刷新处于 RAF/`timeupdate` 热路径；本地播放会话的 JSON 与 `localStorage` 写入不要直接占用进度 UI 动画帧，清空队列时也必须取消待执行保存。
 - `play` / `playing` / `pause` 等音频事件可能连续到达；不要为相同状态重复重建播放图标、恢复全部控制节点、创建 `MediaMetadata` 或强制写系统播放位置。
@@ -140,6 +141,7 @@
 - 迷你播放器位置保存在 `desktop-shell-settings.json` 的 `miniPlayerBounds`；启动时严格读取数值坐标并重新夹紧到当前工作区。用户位置写入必须由 `will-move` + `moved` 事件对触发，并通过坐标签名跳过重复写入。
 - `updateSystemMediaSessionPlaybackState()` 调用迷你同步时使用 playback-only 路径；`pushMiniPlayerState()` 通过当前歌曲对象判断是否仍需补齐元数据，确保首次同步、切歌和空队列不会被状态-only 优化漏掉。
 - 迷你状态补丁失败时使用 `invalidateMiniPlayerSyncPatch()` 按字段失效缓存：元数据字段清空歌曲引用和签名，播放字段只清空对应布尔值。下一次真实状态事件负责重发，不保留错误的“已同步”标记。
+- 主进程电源事件必须保持成对：`lock-screen` / `suspend` 调用 `stopMiniPlayerRecoveryTimer()`，`unlock-screen` / `resume` 调用 `scheduleMiniPlayerRecovery(180)`；不要在锁屏期间保留周期性 `moveTop()`。
 - 音量偏好通过 `scheduleVolumePreference()` 合并写入，`flushVolumePreference()` 在 change/blur/退出时落盘；音量百分比、静音 class 和 SVG 图标按状态签名更新。
 - 播放会话常规保存通过空闲回调执行，退出时强制保存，`clearPlaybackSession()` 必须先取消待执行任务，避免清空后旧会话被重新写回。
 - 播放图标、控制栏节点、控制区歌曲信息和 Media Session 元数据使用节点/内容签名缓存；相同播放状态事件只同步必要的系统位置节流任务。
