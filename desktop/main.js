@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, screen, globalShortcut, dialog, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, globalShortcut, dialog, Tray, Menu } = require('electron');
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
@@ -26,10 +26,12 @@ let wallpaperState = {};
 let miniPlayerWindow = null;
 let miniPlayerEnabled = true;
 let miniPlayerActive = false;
-let miniPlayerClosingProgrammatically = false;
 let miniPlayerUserBounds = null;
 let miniPlayerProgrammaticMove = false;
 let miniPlayerLastSentState = null;
+let miniPlayerRecoveryTimer = null;
+let miniPlayerRecreateTimer = null;
+const miniPlayerProgrammaticCloseWindows = new WeakSet();
 let miniPlayerState = {
   title: 'Mineradio',
   artist: '',
@@ -55,6 +57,7 @@ const MIN_WINDOWED_HEIGHT = 540;
 const MINI_PLAYER_WIDTH = 360;
 const MINI_PLAYER_HEIGHT = 84;
 const MINI_PLAYER_MARGIN = 14;
+const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
 const APP_NAME = 'Mineradio';
 const APP_USER_MODEL_ID = 'com.mineradio.desktop';
 const APP_ICON_ICO = path.join(__dirname, '..', 'build', 'icon.ico');
@@ -1480,7 +1483,8 @@ function applyMiniPlayerStatePatch(payload) {
 }
 
 function sendMiniPlayerState(force = false) {
-  if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
+  const win = miniPlayerWindow;
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
   const next = {
     title: miniPlayerState.title || 'Mineradio',
     artist: miniPlayerState.artist || '',
@@ -1512,8 +1516,13 @@ function sendMiniPlayerState(force = false) {
     changed = true;
   }
   if (!changed) return;
-  miniPlayerLastSentState = next;
-  miniPlayerWindow.webContents.send('mineradio-mini-player-state', patch);
+  try {
+    win.webContents.send('mineradio-mini-player-state', patch);
+    miniPlayerLastSentState = next;
+  } catch (e) {
+    console.warn('Mini player state sync failed:', e.message);
+    scheduleMiniPlayerWindowRecovery(win, 'state-sync-failed');
+  }
 }
 
 function shouldShowMiniPlayer() {
@@ -1526,10 +1535,79 @@ function shouldShowMiniPlayer() {
   );
 }
 
+function stopMiniPlayerRecoveryTimer() {
+  if (!miniPlayerRecoveryTimer) return;
+  clearTimeout(miniPlayerRecoveryTimer);
+  miniPlayerRecoveryTimer = null;
+}
+
+function stopMiniPlayerRecreateTimer() {
+  if (!miniPlayerRecreateTimer) return;
+  clearTimeout(miniPlayerRecreateTimer);
+  miniPlayerRecreateTimer = null;
+}
+
+function scheduleMiniPlayerRecovery(delay = MINI_PLAYER_RECOVERY_INTERVAL) {
+  stopMiniPlayerRecoveryTimer();
+  if (!shouldShowMiniPlayer()) return;
+  miniPlayerRecoveryTimer = setTimeout(() => {
+    miniPlayerRecoveryTimer = null;
+    if (shouldShowMiniPlayer()) showMiniPlayerWindow();
+  }, Math.max(0, Number(delay) || 0));
+  if (typeof miniPlayerRecoveryTimer.unref === 'function') miniPlayerRecoveryTimer.unref();
+}
+
+function keepMiniPlayerOnTop(win) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.setAlwaysOnTop(true, 'screen-saver');
+    if (win.isVisible()) win.moveTop();
+  } catch (e) {
+    console.warn('Mini player topmost recovery skipped:', e.message);
+  }
+}
+
+function destroyMiniPlayerWindowInstance(win) {
+  if (!win) return;
+  if (miniPlayerWindow === win) miniPlayerWindow = null;
+  miniPlayerLastSentState = null;
+  if (win.isDestroyed()) return;
+  miniPlayerProgrammaticCloseWindows.add(win);
+  win.destroy();
+}
+
+function scheduleMiniPlayerWindowRecovery(win, reason) {
+  if (appQuitting || !win || miniPlayerWindow !== win || miniPlayerProgrammaticCloseWindows.has(win)) return;
+  if (miniPlayerRecreateTimer) return;
+  console.warn(`Mini player recovery scheduled: ${reason || 'unknown'}`);
+  miniPlayerRecreateTimer = setTimeout(() => {
+    miniPlayerRecreateTimer = null;
+    if (miniPlayerWindow !== win || win.isDestroyed()) {
+      if (shouldShowMiniPlayer()) showMiniPlayerWindow();
+      return;
+    }
+    const contents = win.webContents;
+    const rendererGone = String(reason || '').startsWith('renderer-gone:');
+    if (!contents.isDestroyed() && (rendererGone || contents.isCrashed())) {
+      try {
+        contents.reload();
+        scheduleMiniPlayerRecovery(800);
+        return;
+      } catch (e) {
+        console.warn('Mini player renderer reload failed:', e.message);
+      }
+    }
+    destroyMiniPlayerWindowInstance(win);
+    if (shouldShowMiniPlayer()) showMiniPlayerWindow();
+  }, 120);
+  if (typeof miniPlayerRecreateTimer.unref === 'function') miniPlayerRecreateTimer.unref();
+}
+
 function createMiniPlayerWindow() {
   if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) return miniPlayerWindow;
+  miniPlayerWindow = null;
   const bounds = clampMiniPlayerBounds(miniPlayerUserBounds || miniPlayerDefaultBounds());
-  miniPlayerWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     ...bounds,
     frame: false,
     transparent: true,
@@ -1553,57 +1631,104 @@ function createMiniPlayerWindow() {
       sandbox: false,
     },
   });
-  try {
-    miniPlayerWindow.setAlwaysOnTop(true, 'floating');
-  } catch (e) {
-    console.warn('Mini player topmost setup skipped:', e.message);
-  }
-  miniPlayerWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  miniPlayerWindow.once('ready-to-show', () => {
-    if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || !shouldShowMiniPlayer()) return;
+  miniPlayerWindow = win;
+  keepMiniPlayerOnTop(win);
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.once('ready-to-show', () => {
+    if (miniPlayerWindow !== win || win.isDestroyed() || !shouldShowMiniPlayer()) return;
     positionMiniPlayerWindow();
-    miniPlayerWindow.showInactive();
+    if (win.isMinimized()) win.restore();
+    win.showInactive();
+    keepMiniPlayerOnTop(win);
     sendMiniPlayerState(true);
+    scheduleMiniPlayerRecovery();
   });
-  miniPlayerWindow.webContents.once('did-finish-load', () => sendMiniPlayerState(true));
-  miniPlayerWindow.on('move', () => {
-    if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || miniPlayerProgrammaticMove) return;
-    miniPlayerUserBounds = miniPlayerWindow.getBounds();
+  win.webContents.on('did-finish-load', () => {
+    if (miniPlayerWindow !== win) return;
+    miniPlayerLastSentState = null;
+    if (shouldShowMiniPlayer()) showMiniPlayerWindow();
+    else sendMiniPlayerState(true);
   });
-  miniPlayerWindow.on('close', (event) => {
-    if (appQuitting || miniPlayerClosingProgrammatically) return;
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _url, isMainFrame) => {
+    if (isMainFrame === false || errorCode === -3) return;
+    scheduleMiniPlayerWindowRecovery(win, `load-failed:${errorCode}:${errorDescription}`);
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    scheduleMiniPlayerWindowRecovery(win, `renderer-gone:${details && details.reason || 'unknown'}`);
+  });
+  win.on('move', () => {
+    if (miniPlayerWindow !== win || win.isDestroyed() || miniPlayerProgrammaticMove) return;
+    miniPlayerUserBounds = win.getBounds();
+  });
+  win.on('show', () => {
+    if (miniPlayerWindow !== win || !shouldShowMiniPlayer()) return;
+    keepMiniPlayerOnTop(win);
+    scheduleMiniPlayerRecovery();
+  });
+  win.on('hide', () => {
+    if (miniPlayerWindow === win && shouldShowMiniPlayer()) scheduleMiniPlayerRecovery(0);
+  });
+  win.on('minimize', () => {
+    if (miniPlayerWindow === win && shouldShowMiniPlayer()) scheduleMiniPlayerRecovery(0);
+  });
+  win.on('always-on-top-changed', (_event, isAlwaysOnTop) => {
+    if (!isAlwaysOnTop && miniPlayerWindow === win && shouldShowMiniPlayer()) scheduleMiniPlayerRecovery(0);
+  });
+  win.on('close', (event) => {
+    if (appQuitting || miniPlayerProgrammaticCloseWindows.has(win)) return;
     event.preventDefault();
     focusMainWindow();
   });
-  miniPlayerWindow.on('closed', () => {
-    miniPlayerWindow = null;
-    miniPlayerClosingProgrammatically = false;
-    miniPlayerLastSentState = null;
+  win.on('closed', () => {
+    const wasCurrent = miniPlayerWindow === win;
+    if (wasCurrent) {
+      miniPlayerWindow = null;
+      miniPlayerLastSentState = null;
+    }
+    if (wasCurrent && !appQuitting && !miniPlayerProgrammaticCloseWindows.has(win) && shouldShowMiniPlayer()) {
+      scheduleMiniPlayerRecovery(120);
+    }
   });
-  miniPlayerWindow.loadURL(overlayUrl('mini-player.html')).catch((e) => console.warn('Mini player load failed:', e.message));
-  return miniPlayerWindow;
+  win.loadURL(overlayUrl('mini-player.html')).catch((e) => {
+    console.warn('Mini player load failed:', e.message);
+    scheduleMiniPlayerWindowRecovery(win, 'load-rejected');
+  });
+  return win;
 }
 
 function showMiniPlayerWindow() {
-  if (!shouldShowMiniPlayer()) return;
+  if (!shouldShowMiniPlayer()) {
+    stopMiniPlayerRecoveryTimer();
+    return;
+  }
   const win = createMiniPlayerWindow();
-  if (!win || win.isDestroyed() || win.webContents.isLoadingMainFrame()) return;
-  positionMiniPlayerWindow();
+  scheduleMiniPlayerRecovery();
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  if (win.webContents.isCrashed()) {
+    scheduleMiniPlayerWindowRecovery(win, 'guard-detected-crash');
+    return;
+  }
+  if (win.webContents.isLoadingMainFrame()) return;
+  const wasVisible = win.isVisible();
+  const wasMinimized = win.isMinimized();
+  if (wasMinimized) win.restore();
+  if (!wasVisible || wasMinimized) positionMiniPlayerWindow();
   win.showInactive();
-  sendMiniPlayerState(true);
+  keepMiniPlayerOnTop(win);
+  sendMiniPlayerState(!wasVisible || wasMinimized);
 }
 
 function hideMiniPlayerWindow() {
+  stopMiniPlayerRecoveryTimer();
+  stopMiniPlayerRecreateTimer();
   if (miniPlayerWindow && !miniPlayerWindow.isDestroyed() && miniPlayerWindow.isVisible()) miniPlayerWindow.hide();
 }
 
 function closeMiniPlayerWindow() {
-  if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
-    miniPlayerClosingProgrammatically = true;
-    miniPlayerWindow.destroy();
-  }
-  miniPlayerWindow = null;
-  miniPlayerClosingProgrammatically = false;
+  stopMiniPlayerRecoveryTimer();
+  stopMiniPlayerRecreateTimer();
+  const win = miniPlayerWindow;
+  if (win) destroyMiniPlayerWindowInstance(win);
   miniPlayerLastSentState = null;
 }
 
@@ -2085,16 +2210,21 @@ if (!gotSingleInstanceLock) {
       positionDesktopLyricsWindow();
       positionWallpaperWindow();
       positionMiniPlayerWindow();
+      scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-added', () => {
       positionMiniPlayerWindow();
+      scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-removed', () => {
       positionMiniPlayerWindow();
+      scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
+    powerMonitor.on('resume', () => scheduleMiniPlayerRecovery(180));
+    powerMonitor.on('unlock-screen', () => scheduleMiniPlayerRecovery(180));
     await createWindow();
     createTray();
   });
