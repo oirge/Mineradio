@@ -2220,6 +2220,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
       <div class="fx-section-label">桌面 / 壁纸</div>
       <div class="fx-toggle-grid">
         <div class="fx-toggle" id="t-closeToTray" onclick="toggleDesktopShellSetting('closeToTray')" title="点击窗口关闭按钮时隐藏到系统托盘"><span>关闭到托盘</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-miniPlayer" onclick="toggleDesktopShellSetting('miniPlayer')" title="主窗口最小化或关闭到托盘时显示歌曲信息和播放控制"><span>最小化迷你播放器</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-startupLaunch" onclick="toggleDesktopShellSetting('startupLaunch')" title="登录 Windows 后自动启动 Mineradio"><span>开机启动</span><span class="dot"></span></div>
       </div>
       <div class="fx-slider"><label>桌面歌词大小</label><input id="fx-desktoplyricssize" type="range" min="0.72" max="1.55" step="0.01"><output></output></div>
@@ -2959,7 +2960,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.24';
+var APP_VERSION = '1.2.25';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -11018,6 +11019,7 @@ function updateControlTrackInfo(song) {
   if (state.artist && state.lastArtist !== artistText) state.artist.textContent = artistText;
   state.lastTitle = titleText;
   state.lastArtist = artistText;
+  if (typeof pushMiniPlayerState === 'function') pushMiniPlayerState(false);
 }
 
 function applyCoverCanvas(cv, thumbSrc, opts) {
@@ -11057,6 +11059,7 @@ function applyCoverCanvas(cv, thumbSrc, opts) {
   if (thumbSrc) {
     document.getElementById('thumb-cover').src = thumbSrc;
     setControlCoverSrc(thumbSrc);
+    if (typeof pushMiniPlayerState === 'function') pushMiniPlayerState(false);
   }
   if (shelfManager) shelfManager.onCoverChange(thumbSrc);
 
@@ -20416,6 +20419,7 @@ function clearQueue() {
   updateCustomCoverButton();
   updateCustomLyricControls();
   updateEmptyHomeVisibility({ forceLoad: false });
+  pushMiniPlayerState(false);
 }
 function removeFromQueue(idx) {
   if (idx < 0 || idx >= playQueue.length) return;
@@ -21881,6 +21885,56 @@ function systemMediaSessionArtwork(meta) {
 }
 var systemMediaSessionPositionState = { lastAt: 0 };
 var systemMediaSessionState = { metadataSignature: '', playbackState: '' };
+var miniPlayerSyncState = null;
+
+/**
+ * 将迷你播放器状态按字段增量同步到主进程。歌曲或播放状态未变化时不产生 IPC。
+ * @param {boolean=} force 是否强制发送完整状态。
+ * @returns {void}
+ */
+function pushMiniPlayerState(force) {
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.updateMiniPlayer !== 'function') return;
+  if (typeof desktopSongMetaCache === 'undefined' || !desktopSongMetaCache) return;
+  var meta = currentDesktopSongMeta();
+  var hasTrack = !!(playQueue && currentIdx >= 0 && playQueue[currentIdx]);
+  var isPlaying = !!(hasTrack && audio && audio.src && !audio.paused && !audio.ended);
+  var metaSignature = String(meta && (meta._signature || ((meta.title || '') + '|' + (meta.artist || '') + '|' + (meta.cover || ''))) || '');
+  var state = miniPlayerSyncState || (miniPlayerSyncState = {
+    metaSignature: '',
+    playing: null,
+    hasTrack: null,
+    serial: 0
+  });
+  var patch = {};
+  var changed = false;
+  if (force || state.metaSignature !== metaSignature) {
+    state.metaSignature = metaSignature;
+    patch.metaSignature = metaSignature;
+    patch.title = meta && meta.title || 'Mineradio';
+    patch.artist = meta && meta.artist || '';
+    patch.cover = meta && meta.cover || '';
+    changed = true;
+  }
+  if (force || state.playing !== isPlaying) {
+    state.playing = isPlaying;
+    patch.playing = isPlaying;
+    changed = true;
+  }
+  if (force || state.hasTrack !== hasTrack) {
+    state.hasTrack = hasTrack;
+    patch.hasTrack = hasTrack;
+    changed = true;
+  }
+  if (!changed) return;
+  var serial = ++state.serial;
+  api.updateMiniPlayer(patch).catch(function(){
+    if (!miniPlayerSyncState || miniPlayerSyncState.serial !== serial) return;
+    miniPlayerSyncState.metaSignature = '';
+    miniPlayerSyncState.playing = null;
+    miniPlayerSyncState.hasTrack = null;
+  });
+}
 /**
  * 同步系统媒体控制元数据，供 Windows 音量浮窗、键盘媒体键和蓝牙耳机控制显示。
  * @returns {boolean} 元数据是否发生变化并成功写入。
@@ -21909,6 +21963,7 @@ function updateSystemMediaSessionMetadata() {
  * @returns {void}
  */
 function updateSystemMediaSessionPlaybackState(reason) {
+  pushMiniPlayerState(false);
   if (!('mediaSession' in navigator)) return;
   try {
     var nextState = audio && audio.src
@@ -29651,21 +29706,25 @@ function toggleFullscreen() {
   }
 }
 
-var desktopShellSettings = { closeToTray:true, startupLaunch:false };
+var desktopShellSettings = { closeToTray:true, miniPlayer:true, startupLaunch:false };
 
 /**
  * 把主进程返回的桌面壳设置同步到设置面板按钮。
- * @param {{closeToTray?: boolean, startup?: boolean, startupEnabled?: boolean}} next 主进程设置快照。
+ * @param {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerEnabled?: boolean, startup?: boolean, startupEnabled?: boolean}} next 主进程设置快照。
  * @returns {void}
  */
 function applyDesktopShellSettings(next) {
   next = next || {};
   if (typeof next.closeToTray === 'boolean') desktopShellSettings.closeToTray = next.closeToTray;
+  if (typeof next.miniPlayerEnabled === 'boolean') desktopShellSettings.miniPlayer = next.miniPlayerEnabled;
+  else if (typeof next.miniPlayer === 'boolean') desktopShellSettings.miniPlayer = next.miniPlayer;
   if (typeof next.startupEnabled === 'boolean') desktopShellSettings.startupLaunch = next.startupEnabled;
   else if (typeof next.startup === 'boolean') desktopShellSettings.startupLaunch = next.startup;
   var closeBtn = document.getElementById('t-closeToTray');
+  var miniPlayerBtn = document.getElementById('t-miniPlayer');
   var startupBtn = document.getElementById('t-startupLaunch');
   if (closeBtn) closeBtn.classList.toggle('on', !!desktopShellSettings.closeToTray);
+  if (miniPlayerBtn) miniPlayerBtn.classList.toggle('on', !!desktopShellSettings.miniPlayer);
   if (startupBtn) startupBtn.classList.toggle('on', !!desktopShellSettings.startupLaunch);
 }
 
@@ -29688,7 +29747,7 @@ function refreshDesktopShellSettings() {
 
 /**
  * 切换主进程桌面壳设置。开机启动走 Windows 登录项，关闭到托盘走主进程配置文件。
- * @param {'closeToTray'|'startupLaunch'} key 要切换的设置项。
+ * @param {'closeToTray'|'miniPlayer'|'startupLaunch'} key 要切换的设置项。
  * @returns {void}
  */
 function toggleDesktopShellSetting(key) {
@@ -29698,8 +29757,18 @@ function toggleDesktopShellSetting(key) {
     var closeNext = !desktopShellSettings.closeToTray;
     api.setCloseToTray(closeNext).then(function(result){
       applyDesktopShellSettings({ closeToTray: result && result.closeToTray === true });
-      showToast(closeNext ? '关闭按钮已改为最小化到托盘' : '关闭按钮将直接退出');
+      showToast(closeNext
+        ? '关闭按钮已改为最小化到托盘'
+        : (desktopShellSettings.miniPlayer ? '迷你播放器开启时，关闭按钮仍会进入迷你模式' : '关闭按钮将直接退出'));
     }).catch(function(){ showToast('关闭到托盘设置失败'); });
+  }
+  if (key === 'miniPlayer' && typeof api.setMiniPlayerEnabled === 'function') {
+    var miniPlayerNext = !desktopShellSettings.miniPlayer;
+    api.setMiniPlayerEnabled(miniPlayerNext).then(function(result){
+      var enabled = !!(result && result.miniPlayerEnabled);
+      applyDesktopShellSettings({ miniPlayerEnabled: enabled });
+      showToast(enabled ? '最小化迷你播放器已开启' : '最小化迷你播放器已关闭');
+    }).catch(function(){ showToast('迷你播放器设置失败'); });
   }
   if (key === 'startupLaunch' && typeof api.setStartupEnabled === 'function') {
     var startupNext = !desktopShellSettings.startupLaunch;
@@ -29721,6 +29790,7 @@ function toggleDesktopShellSetting(key) {
   desktopFullscreenActive = false;
   syncCursorAutoHideMode();
   refreshDesktopShellSettings();
+  pushMiniPlayerState(true);
 
   var maxBtn = document.querySelector('[data-window-action="maximize"]');
   var maxIcon = maxBtn && maxBtn.querySelector('.icon-maximize');
@@ -29771,6 +29841,14 @@ function toggleDesktopShellSetting(key) {
       saveLyricLayout();
       pushDesktopLyricsState(true);
       showToast(locked ? '桌面歌词已锁定' : '桌面歌词可移动');
+    });
+  }
+  if (typeof api.onMiniPlayerCommand === 'function') {
+    api.onMiniPlayerCommand(function(payload){
+      var action = payload && payload.action;
+      if (action === 'toggle-play') togglePlay();
+      else if (action === 'previous') prevTrack();
+      else if (action === 'next') nextTrack();
     });
   }
   if (typeof api.onDesktopLyricsEnabledState === 'function') {

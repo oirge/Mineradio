@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   close: () => ipcRenderer.invoke('desktop-window-close'),
   getTraySettings: () => ipcRenderer.invoke('mineradio-tray-get-settings'),
   setCloseToTray: (enabled) => ipcRenderer.invoke('mineradio-tray-set-close-to-tray', !!enabled),
+  setMiniPlayerEnabled: (enabled) => ipcRenderer.invoke('mineradio-mini-player-set-enabled', !!enabled),
+  updateMiniPlayer: (payload) => ipcRenderer.invoke('mineradio-mini-player-update', payload || {}),
   setStartupEnabled: (enabled) => ipcRenderer.invoke('mineradio-startup-set-enabled', !!enabled),
   openUpdateInstaller: (filePath) => ipcRenderer.invoke('mineradio-open-update-installer', filePath),
   restartApp: () => ipcRenderer.invoke('mineradio-restart-app'),
@@ -58,6 +60,12 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     const listener = (_event, payload) => callback(payload || {});
     ipcRenderer.on('mineradio-global-hotkey', listener);
     return () => ipcRenderer.removeListener('mineradio-global-hotkey', listener);
+  },
+  onMiniPlayerCommand: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-mini-player-command', listener);
+    return () => ipcRenderer.removeListener('mineradio-mini-player-command', listener);
   },
   setDesktopLyricsEnabled: (enabled, payload) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-enabled', !!enabled, payload || {}),
   updateDesktopLyrics: (payload) => ipcRenderer.invoke('mineradio-desktop-lyrics-update', payload || {}),

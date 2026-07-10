@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.24`
-- 最近正式安装包 Release 基线：`v1.2.24`。
+- 当前源码检查点：`v1.2.25`
+- 最近正式安装包 Release 基线：`v1.2.25`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,6 +27,16 @@
 
 ## Release Memory
 
+- `v1.2.25` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.25`
+- `v1.2.25` 新增可开关的 `360 × 84` 紧凑迷你播放器；主窗口最小化或关闭后显示当前封面、歌曲名、歌手、上一首、播放/暂停、下一首和返回主界面，恢复主窗口时自动隐藏。小窗支持拖动、置顶和多显示器工作区校正，设置面板与托盘菜单同步开关。播放控制复用主播放器状态机，元数据、封面和播放状态采用签名判重与增量 IPC，不新增常驻轮询，暂停/继续时不重复传输整张封面。
+- `v1.2.25` Release 资产包括：
+  - `latest.yml`
+  - `Mineradio-1.2.25-Setup.exe`
+  - `Mineradio-1.2.25-Setup.exe.blockmap`
+  - `Mineradio-1.2.25-SHA256SUMS.txt`
+  - `Mineradio-1.2.24-to-1.2.25.patch.json`
+- `v1.2.25` 按用户要求只上传安装器相关资产，Portable ZIP 本次跳过。
+- `v1.2.25` 安装包 SHA256：`b705b1667efa12383563971513769593aa625cb555ff6b7d08df08941d57d007`
 - `v1.2.24` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.24`
 - `v1.2.24` 重点优化本地歌词/文本解码、YRC 前导空白、音量拖动、播放会话持久化、连续音频事件和桌面歌词 IPC 同步；解码器复用缓存，替换字符/前导空白改为单次计数，音量存储写入合并，常规播放会话保存移到空闲时段，播放图标/控制栏/系统媒体元数据按状态判重，桌面歌曲元数据、封面签名和 39 字段歌词载荷签名复用缓存或固定缓冲区。UI、布局、文案、视觉质感、歌词效果、播放入口和 3D 歌单架交互保持不变。
 - `v1.2.24` Release 资产包括：

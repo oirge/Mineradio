@@ -23,6 +23,21 @@ let desktopLyricsHotBounds = null;
 let desktopLyricsLastMiddleAt = 0;
 let wallpaperWindow = null;
 let wallpaperState = {};
+let miniPlayerWindow = null;
+let miniPlayerEnabled = true;
+let miniPlayerActive = false;
+let miniPlayerClosingProgrammatically = false;
+let miniPlayerUserBounds = null;
+let miniPlayerProgrammaticMove = false;
+let miniPlayerLastSentState = null;
+let miniPlayerState = {
+  title: 'Mineradio',
+  artist: '',
+  cover: '',
+  playing: false,
+  hasTrack: false,
+  metaSignature: '',
+};
 let htmlFullscreenActive = false;
 let windowFullscreenActive = false;
 let mainWindowStateTimer = null;
@@ -37,6 +52,9 @@ const WINDOWED_SCALE = 3 / 4;
 const WINDOWED_MARGIN = 32;
 const MIN_WINDOWED_WIDTH = 960;
 const MIN_WINDOWED_HEIGHT = 540;
+const MINI_PLAYER_WIDTH = 360;
+const MINI_PLAYER_HEIGHT = 84;
+const MINI_PLAYER_MARGIN = 14;
 const APP_NAME = 'Mineradio';
 const APP_USER_MODEL_ID = 'com.mineradio.desktop';
 const APP_ICON_ICO = path.join(__dirname, '..', 'build', 'icon.ico');
@@ -627,6 +645,8 @@ function getSenderWindow(event) {
 
 function focusMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
+  miniPlayerActive = false;
+  hideMiniPlayerWindow();
   if (mainWindow.isMinimized()) mainWindow.restore();
   if (!mainWindow.isVisible()) mainWindow.show();
   mainWindow.focus();
@@ -636,7 +656,7 @@ function focusMainWindow() {
 
 /**
  * 读取桌面壳设置文件。托盘关闭策略需要早于前端加载生效，所以放在主进程持久化。
- * @returns {{closeToTray?: boolean}} 已保存的桌面壳设置。
+ * @returns {{closeToTray?: boolean, miniPlayer?: boolean}} 已保存的桌面壳设置。
  */
 function readDesktopShellSettings() {
   try {
@@ -650,8 +670,8 @@ function readDesktopShellSettings() {
 
 /**
  * 写入桌面壳设置文件。该文件只保存主进程必须提前知道的窗口行为。
- * @param {{closeToTray?: boolean}} patch 要覆盖的设置字段。
- * @returns {{closeToTray?: boolean}} 写入后的完整设置。
+ * @param {{closeToTray?: boolean, miniPlayer?: boolean}} patch 要覆盖的设置字段。
+ * @returns {{closeToTray?: boolean, miniPlayer?: boolean}} 写入后的完整设置。
  */
 function writeDesktopShellSettings(patch) {
   const file = path.join(app.getPath('userData'), DESKTOP_SHELL_SETTINGS_FILE);
@@ -710,6 +730,7 @@ function writeDesktopUiStatePatch(patch) {
 function applySavedDesktopShellSettings() {
   const saved = readDesktopShellSettings();
   if (typeof saved.closeToTray === 'boolean') closeToTrayEnabled = saved.closeToTray;
+  if (typeof saved.miniPlayer === 'boolean') miniPlayerEnabled = saved.miniPlayer;
 }
 
 /**
@@ -757,6 +778,12 @@ function refreshTrayMenu() {
         writeDesktopShellSettings({ closeToTray: closeToTrayEnabled });
         refreshTrayMenu();
       },
+    },
+    {
+      label: '最小化时显示迷你播放器',
+      type: 'checkbox',
+      checked: miniPlayerEnabled,
+      click: (item) => setMiniPlayerEnabled(item.checked),
     },
     {
       label: '开机自动启动',
@@ -1401,9 +1428,204 @@ function closeWallpaperWindow() {
   wallpaperWindow = null;
 }
 
+function miniPlayerDefaultBounds() {
+  const referenceBounds = mainWindow && !mainWindow.isDestroyed()
+    ? mainWindow.getBounds()
+    : screen.getPrimaryDisplay().bounds;
+  const display = screen.getDisplayMatching(referenceBounds) || screen.getPrimaryDisplay();
+  const workArea = display.workArea;
+  return {
+    x: workArea.x + workArea.width - MINI_PLAYER_WIDTH - MINI_PLAYER_MARGIN,
+    y: workArea.y + workArea.height - MINI_PLAYER_HEIGHT - MINI_PLAYER_MARGIN,
+    width: MINI_PLAYER_WIDTH,
+    height: MINI_PLAYER_HEIGHT,
+  };
+}
+
+function clampMiniPlayerBounds(bounds) {
+  const source = bounds || miniPlayerDefaultBounds();
+  const display = screen.getDisplayMatching(source) || screen.getPrimaryDisplay();
+  const workArea = display.workArea;
+  return {
+    x: Math.round(Math.max(workArea.x, Math.min(source.x, workArea.x + workArea.width - MINI_PLAYER_WIDTH))),
+    y: Math.round(Math.max(workArea.y, Math.min(source.y, workArea.y + workArea.height - MINI_PLAYER_HEIGHT))),
+    width: MINI_PLAYER_WIDTH,
+    height: MINI_PLAYER_HEIGHT,
+  };
+}
+
+function positionMiniPlayerWindow() {
+  if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
+  const nextBounds = clampMiniPlayerBounds(miniPlayerUserBounds || miniPlayerDefaultBounds());
+  miniPlayerProgrammaticMove = true;
+  miniPlayerWindow.setBounds(nextBounds, false);
+  miniPlayerProgrammaticMove = false;
+  if (miniPlayerUserBounds) miniPlayerUserBounds = nextBounds;
+}
+
+function applyMiniPlayerStatePatch(payload) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const next = { ...miniPlayerState };
+  if (Object.prototype.hasOwnProperty.call(source, 'title')) next.title = String(source.title || 'Mineradio').slice(0, 260);
+  if (Object.prototype.hasOwnProperty.call(source, 'artist')) next.artist = String(source.artist || '').slice(0, 320);
+  if (Object.prototype.hasOwnProperty.call(source, 'cover')) {
+    const cover = String(source.cover || '');
+    next.cover = cover.length <= 8 * 1024 * 1024 ? cover : '';
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'playing')) next.playing = !!source.playing;
+  if (Object.prototype.hasOwnProperty.call(source, 'hasTrack')) next.hasTrack = !!source.hasTrack;
+  if (Object.prototype.hasOwnProperty.call(source, 'metaSignature')) next.metaSignature = String(source.metaSignature || '').slice(0, 240);
+  miniPlayerState = next;
+  return next;
+}
+
+function sendMiniPlayerState(force = false) {
+  if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
+  const next = {
+    title: miniPlayerState.title || 'Mineradio',
+    artist: miniPlayerState.artist || '',
+    cover: miniPlayerState.cover || '',
+    playing: !!miniPlayerState.playing,
+    hasTrack: !!miniPlayerState.hasTrack,
+    metaSignature: miniPlayerState.metaSignature || '',
+  };
+  const previous = miniPlayerLastSentState;
+  const patch = {};
+  let changed = false;
+  const metadataChanged = force || !previous
+    || next.metaSignature !== previous.metaSignature
+    || next.title !== previous.title
+    || next.artist !== previous.artist
+    || next.cover !== previous.cover;
+  if (metadataChanged) {
+    patch.title = next.title;
+    patch.artist = next.artist;
+    patch.cover = next.cover;
+    changed = true;
+  }
+  if (force || !previous || next.playing !== previous.playing) {
+    patch.playing = next.playing;
+    changed = true;
+  }
+  if (force || !previous || next.hasTrack !== previous.hasTrack) {
+    patch.hasTrack = next.hasTrack;
+    changed = true;
+  }
+  if (!changed) return;
+  miniPlayerLastSentState = next;
+  miniPlayerWindow.webContents.send('mineradio-mini-player-state', patch);
+}
+
+function shouldShowMiniPlayer() {
+  return !!(
+    miniPlayerEnabled
+    && miniPlayerActive
+    && mainWindow
+    && !mainWindow.isDestroyed()
+    && (mainWindow.isMinimized() || !mainWindow.isVisible())
+  );
+}
+
+function createMiniPlayerWindow() {
+  if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) return miniPlayerWindow;
+  const bounds = clampMiniPlayerBounds(miniPlayerUserBounds || miniPlayerDefaultBounds());
+  miniPlayerWindow = new BrowserWindow({
+    ...bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    movable: true,
+    focusable: true,
+    skipTaskbar: true,
+    show: false,
+    autoHideMenuBar: true,
+    title: 'Mineradio Mini Player',
+    icon: APP_ICON_ICO,
+    webPreferences: {
+      preload: path.join(__dirname, 'mini-player-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  try {
+    miniPlayerWindow.setAlwaysOnTop(true, 'floating');
+  } catch (e) {
+    console.warn('Mini player topmost setup skipped:', e.message);
+  }
+  miniPlayerWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  miniPlayerWindow.once('ready-to-show', () => {
+    if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || !shouldShowMiniPlayer()) return;
+    positionMiniPlayerWindow();
+    miniPlayerWindow.showInactive();
+    sendMiniPlayerState(true);
+  });
+  miniPlayerWindow.webContents.once('did-finish-load', () => sendMiniPlayerState(true));
+  miniPlayerWindow.on('move', () => {
+    if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || miniPlayerProgrammaticMove) return;
+    miniPlayerUserBounds = miniPlayerWindow.getBounds();
+  });
+  miniPlayerWindow.on('close', (event) => {
+    if (appQuitting || miniPlayerClosingProgrammatically) return;
+    event.preventDefault();
+    focusMainWindow();
+  });
+  miniPlayerWindow.on('closed', () => {
+    miniPlayerWindow = null;
+    miniPlayerClosingProgrammatically = false;
+    miniPlayerLastSentState = null;
+  });
+  miniPlayerWindow.loadURL(overlayUrl('mini-player.html')).catch((e) => console.warn('Mini player load failed:', e.message));
+  return miniPlayerWindow;
+}
+
+function showMiniPlayerWindow() {
+  if (!shouldShowMiniPlayer()) return;
+  const win = createMiniPlayerWindow();
+  if (!win || win.isDestroyed() || win.webContents.isLoadingMainFrame()) return;
+  positionMiniPlayerWindow();
+  win.showInactive();
+  sendMiniPlayerState(true);
+}
+
+function hideMiniPlayerWindow() {
+  if (miniPlayerWindow && !miniPlayerWindow.isDestroyed() && miniPlayerWindow.isVisible()) miniPlayerWindow.hide();
+}
+
+function closeMiniPlayerWindow() {
+  if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
+    miniPlayerClosingProgrammatically = true;
+    miniPlayerWindow.destroy();
+  }
+  miniPlayerWindow = null;
+  miniPlayerClosingProgrammatically = false;
+  miniPlayerLastSentState = null;
+}
+
+function setMiniPlayerEnabled(enabled) {
+  miniPlayerEnabled = !!enabled;
+  writeDesktopShellSettings({ miniPlayer: miniPlayerEnabled });
+  if (miniPlayerEnabled) {
+    if (mainWindow && !mainWindow.isDestroyed() && (mainWindow.isMinimized() || !mainWindow.isVisible())) miniPlayerActive = true;
+    showMiniPlayerWindow();
+  } else {
+    miniPlayerActive = false;
+    closeMiniPlayerWindow();
+  }
+  refreshTrayMenu();
+  return { ok: true, miniPlayerEnabled };
+}
+
 function closeOverlayWindows() {
+  miniPlayerActive = false;
   closeDesktopLyricsWindow();
   closeWallpaperWindow();
+  closeMiniPlayerWindow();
 }
 
 ipcMain.handle('desktop-window-minimize', (event) => {
@@ -1431,7 +1653,14 @@ ipcMain.handle('desktop-window-close', (event) => {
 });
 
 ipcMain.handle('mineradio-tray-get-settings', () => {
-  return { ok: true, closeToTray: closeToTrayEnabled, startup: isStartupEnabled(), startupEnabled: isStartupEnabled() };
+  return {
+    ok: true,
+    closeToTray: closeToTrayEnabled,
+    miniPlayer: miniPlayerEnabled,
+    miniPlayerEnabled,
+    startup: isStartupEnabled(),
+    startupEnabled: isStartupEnabled(),
+  };
 });
 
 ipcMain.handle('mineradio-tray-set-close-to-tray', (_event, enabled) => {
@@ -1445,6 +1674,31 @@ ipcMain.handle('mineradio-startup-set-enabled', (_event, enabled) => {
   const result = setStartupEnabled(!!enabled);
   refreshTrayMenu();
   return result;
+});
+
+ipcMain.handle('mineradio-mini-player-set-enabled', (_event, enabled) => {
+  return setMiniPlayerEnabled(enabled);
+});
+
+ipcMain.handle('mineradio-mini-player-update', (event, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+    return { ok: false, error: 'MINI_PLAYER_INVALID_SENDER' };
+  }
+  applyMiniPlayerStatePatch(payload);
+  sendMiniPlayerState();
+  return { ok: true };
+});
+
+ipcMain.handle('mineradio-mini-player-command', (event, action) => {
+  if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {
+    return { ok: false, error: 'MINI_PLAYER_INVALID_SENDER' };
+  }
+  const command = String(action || '');
+  if (command === 'restore') return { ok: focusMainWindow() };
+  if (!['toggle-play', 'previous', 'next'].includes(command)) return { ok: false, error: 'MINI_PLAYER_INVALID_COMMAND' };
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'MAIN_WINDOW_UNAVAILABLE' };
+  mainWindow.webContents.send('mineradio-mini-player-command', { action: command });
+  return { ok: true };
 });
 
 ipcMain.handle('mineradio-hotkeys-configure-global', (_event, bindings) => {
@@ -1749,18 +2003,38 @@ async function createWindow() {
 
   mainWindow.on('maximize', () => sendWindowState(mainWindow));
   mainWindow.on('unmaximize', () => sendWindowState(mainWindow));
-  mainWindow.on('minimize', () => sendWindowState(mainWindow));
-  mainWindow.on('restore', () => sendWindowState(mainWindow));
-  mainWindow.on('show', () => sendWindowState(mainWindow));
-  mainWindow.on('hide', () => sendWindowState(mainWindow));
+  mainWindow.on('minimize', () => {
+    miniPlayerActive = true;
+    sendWindowState(mainWindow);
+    showMiniPlayerWindow();
+  });
+  mainWindow.on('restore', () => {
+    miniPlayerActive = false;
+    hideMiniPlayerWindow();
+    sendWindowState(mainWindow);
+  });
+  mainWindow.on('show', () => {
+    if (!mainWindow.isMinimized()) {
+      miniPlayerActive = false;
+      hideMiniPlayerWindow();
+    }
+    sendWindowState(mainWindow);
+  });
+  mainWindow.on('hide', () => {
+    if (miniPlayerActive) showMiniPlayerWindow();
+    else hideMiniPlayerWindow();
+    sendWindowState(mainWindow);
+  });
   mainWindow.on('focus', () => sendWindowState(mainWindow));
   mainWindow.on('blur', () => sendWindowState(mainWindow));
   mainWindow.on('move', () => scheduleWindowStateSend(mainWindow));
   mainWindow.on('resize', () => scheduleWindowStateSend(mainWindow));
   mainWindow.on('close', (event) => {
-    if (!appQuitting && closeToTrayEnabled) {
+    if (!appQuitting && (closeToTrayEnabled || miniPlayerEnabled)) {
       event.preventDefault();
+      miniPlayerActive = miniPlayerEnabled;
       mainWindow.hide();
+      if (miniPlayerActive) showMiniPlayerWindow();
       sendWindowState(mainWindow);
     }
   });
@@ -1770,6 +2044,7 @@ async function createWindow() {
       mainWindowStateTimer = null;
     }
     closeOverlayWindows();
+    miniPlayerActive = false;
     mainWindow = null;
   });
   mainWindow.on('enter-full-screen', () => {
@@ -1809,10 +2084,17 @@ if (!gotSingleInstanceLock) {
     screen.on('display-metrics-changed', () => {
       positionDesktopLyricsWindow();
       positionWallpaperWindow();
+      positionMiniPlayerWindow();
       scheduleWindowStateSend(mainWindow);
     });
-    screen.on('display-added', () => scheduleWindowStateSend(mainWindow));
-    screen.on('display-removed', () => scheduleWindowStateSend(mainWindow));
+    screen.on('display-added', () => {
+      positionMiniPlayerWindow();
+      scheduleWindowStateSend(mainWindow);
+    });
+    screen.on('display-removed', () => {
+      positionMiniPlayerWindow();
+      scheduleWindowStateSend(mainWindow);
+    });
     await createWindow();
     createTray();
   });
