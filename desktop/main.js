@@ -27,7 +27,8 @@ let miniPlayerWindow = null;
 let miniPlayerEnabled = true;
 let miniPlayerActive = false;
 let miniPlayerUserBounds = null;
-let miniPlayerProgrammaticMove = false;
+let miniPlayerUserMovePending = false;
+let miniPlayerSavedBoundsSignature = '';
 let miniPlayerLastSentState = null;
 let miniPlayerRecoveryTimer = null;
 let miniPlayerRecreateTimer = null;
@@ -659,7 +660,7 @@ function focusMainWindow() {
 
 /**
  * 读取桌面壳设置文件。托盘关闭策略需要早于前端加载生效，所以放在主进程持久化。
- * @returns {{closeToTray?: boolean, miniPlayer?: boolean}} 已保存的桌面壳设置。
+ * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerBounds?: {x:number, y:number}}} 已保存的桌面壳设置。
  */
 function readDesktopShellSettings() {
   try {
@@ -673,8 +674,8 @@ function readDesktopShellSettings() {
 
 /**
  * 写入桌面壳设置文件。该文件只保存主进程必须提前知道的窗口行为。
- * @param {{closeToTray?: boolean, miniPlayer?: boolean}} patch 要覆盖的设置字段。
- * @returns {{closeToTray?: boolean, miniPlayer?: boolean}} 写入后的完整设置。
+ * @param {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerBounds?: {x:number, y:number}}} patch 要覆盖的设置字段。
+ * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerBounds?: {x:number, y:number}}} 写入后的完整设置。
  */
 function writeDesktopShellSettings(patch) {
   const file = path.join(app.getPath('userData'), DESKTOP_SHELL_SETTINGS_FILE);
@@ -734,6 +735,12 @@ function applySavedDesktopShellSettings() {
   const saved = readDesktopShellSettings();
   if (typeof saved.closeToTray === 'boolean') closeToTrayEnabled = saved.closeToTray;
   if (typeof saved.miniPlayer === 'boolean') miniPlayerEnabled = saved.miniPlayer;
+  const restoredBounds = savedMiniPlayerBounds(saved.miniPlayerBounds);
+  if (restoredBounds) {
+    miniPlayerUserBounds = restoredBounds;
+    miniPlayerSavedBoundsSignature = miniPlayerBoundsSignature(saved.miniPlayerBounds);
+    if (miniPlayerBoundsSignature(restoredBounds) !== miniPlayerSavedBoundsSignature) persistMiniPlayerUserBounds(restoredBounds);
+  }
 }
 
 /**
@@ -1457,13 +1464,75 @@ function clampMiniPlayerBounds(bounds) {
   };
 }
 
+/**
+ * 生成迷你播放器坐标签名，用于区分用户拖动、程序校正和重复持久化。
+ * @param {{x:number, y:number}} bounds 窗口坐标。
+ * @returns {string} 取整后的坐标签名。
+ */
+function miniPlayerBoundsSignature(bounds) {
+  if (!bounds) return '';
+  return `${Math.round(bounds.x)}|${Math.round(bounds.y)}`;
+}
+
+/**
+ * 读取并校正已保存的迷你播放器坐标。非法设置直接忽略，不改变当前默认定位。
+ * @param {unknown} value 设置文件中的坐标值。
+ * @returns {{x:number, y:number, width:number, height:number}|null} 当前显示器内的固定尺寸坐标。
+ */
+function savedMiniPlayerBounds(value) {
+  if (!value || typeof value !== 'object') return null;
+  if (typeof value.x !== 'number' || !Number.isFinite(value.x)) return null;
+  if (typeof value.y !== 'number' || !Number.isFinite(value.y)) return null;
+  return clampMiniPlayerBounds({ x: value.x, y: value.y, width: MINI_PLAYER_WIDTH, height: MINI_PLAYER_HEIGHT });
+}
+
+/**
+ * 保存用户迷你播放器坐标。同一位置只写入一次，避免拖动结束或系统事件重复落盘。
+ * @param {{x:number, y:number, width?:number, height?:number}} bounds 用户或系统校正后的坐标。
+ * @returns {{x:number, y:number, width:number, height:number}} 实际保存的工作区内坐标。
+ */
+function persistMiniPlayerUserBounds(bounds) {
+  const nextBounds = clampMiniPlayerBounds(bounds);
+  const signature = miniPlayerBoundsSignature(nextBounds);
+  miniPlayerUserBounds = nextBounds;
+  if (signature === miniPlayerSavedBoundsSignature) return nextBounds;
+  writeDesktopShellSettings({ miniPlayerBounds: { x: nextBounds.x, y: nextBounds.y } });
+  miniPlayerSavedBoundsSignature = signature;
+  return nextBounds;
+}
+
+/**
+ * 标记用户开始手动拖动迷你播放器。Electron 的 will-move 不会由 setBounds 触发。
+ * @param {BrowserWindow} win 即将被用户手动移动的迷你播放器窗口。
+ * @returns {void}
+ * @see https://www.electronjs.org/docs/latest/api/browser-window#event-will-move-macos-windows
+ */
+function beginMiniPlayerUserMove(win) {
+  if (miniPlayerWindow !== win || win.isDestroyed()) return;
+  miniPlayerUserMovePending = true;
+}
+
+/**
+ * 在用户拖动结束后保存坐标。没有 will-move 标记的程序移动事件直接忽略。
+ * @param {BrowserWindow} win 触发移动完成事件的迷你播放器窗口。
+ * @returns {void}
+ */
+function handleMiniPlayerMoved(win) {
+  if (miniPlayerWindow !== win || win.isDestroyed() || !miniPlayerUserMovePending) return;
+  miniPlayerUserMovePending = false;
+  persistMiniPlayerUserBounds(win.getBounds());
+}
+
+/**
+ * 把迷你播放器放回默认或用户坐标。程序定位前清除未完成的用户拖动标记。
+ * @returns {void}
+ */
 function positionMiniPlayerWindow() {
   if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
   const nextBounds = clampMiniPlayerBounds(miniPlayerUserBounds || miniPlayerDefaultBounds());
-  miniPlayerProgrammaticMove = true;
+  miniPlayerUserMovePending = false;
   miniPlayerWindow.setBounds(nextBounds, false);
-  miniPlayerProgrammaticMove = false;
-  if (miniPlayerUserBounds) miniPlayerUserBounds = nextBounds;
+  if (miniPlayerUserBounds) persistMiniPlayerUserBounds(nextBounds);
 }
 
 function applyMiniPlayerStatePatch(payload) {
@@ -1574,7 +1643,10 @@ function keepMiniPlayerOnTop(win) {
 
 function destroyMiniPlayerWindowInstance(win) {
   if (!win) return;
-  if (miniPlayerWindow === win) miniPlayerWindow = null;
+  if (miniPlayerWindow === win) {
+    miniPlayerWindow = null;
+    miniPlayerUserMovePending = false;
+  }
   miniPlayerLastSentState = null;
   if (win.isDestroyed()) return;
   miniPlayerProgrammaticCloseWindows.add(win);
@@ -1611,6 +1683,7 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
 function createMiniPlayerWindow() {
   if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) return miniPlayerWindow;
   miniPlayerWindow = null;
+  miniPlayerUserMovePending = false;
   const bounds = clampMiniPlayerBounds(miniPlayerUserBounds || miniPlayerDefaultBounds());
   const win = new BrowserWindow({
     ...bounds,
@@ -1661,10 +1734,8 @@ function createMiniPlayerWindow() {
   win.webContents.on('render-process-gone', (_event, details) => {
     scheduleMiniPlayerWindowRecovery(win, `renderer-gone:${details && details.reason || 'unknown'}`);
   });
-  win.on('move', () => {
-    if (miniPlayerWindow !== win || win.isDestroyed() || miniPlayerProgrammaticMove) return;
-    miniPlayerUserBounds = win.getBounds();
-  });
+  win.on('will-move', beginMiniPlayerUserMove.bind(null, win));
+  win.on('moved', handleMiniPlayerMoved.bind(null, win));
   win.on('show', () => {
     if (miniPlayerWindow !== win || !shouldShowMiniPlayer()) return;
     keepMiniPlayerOnTop(win);
@@ -1688,6 +1759,7 @@ function createMiniPlayerWindow() {
     const wasCurrent = miniPlayerWindow === win;
     if (wasCurrent) {
       miniPlayerWindow = null;
+      miniPlayerUserMovePending = false;
       miniPlayerLastSentState = null;
     }
     if (wasCurrent && !appQuitting && !miniPlayerProgrammaticCloseWindows.has(win) && shouldShowMiniPlayer()) {

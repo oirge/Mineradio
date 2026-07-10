@@ -65,6 +65,8 @@
 - 迷你播放器可见性恢复会按固定间隔校正窗口层级；健康窗口不要重复调用 `showInactive()`、`setAlwaysOnTop()` 或状态同步，只需刷新 Z 序。
 - 迷你播放器进入空队列时必须清空主进程和渲染器中的标题、歌手与封面状态，并跳过当前歌曲封面解析，避免长期保留大 data URL。
 - 迷你播放器封面加载失败后不能永久保留失败地址缓存；应释放当前 `src` 和缓存标记，让后续真实状态同步触发同地址重试。
+- 迷你播放器拖动位置需要跨启动恢复，但不能监听高频 `move` 后同步写设置文件；Windows 上应使用只由手动移动触发的 `will-move` 标记用户操作，并在 `moved` 后单次保存。
+- `setBounds()` 和显示器工作区校正产生的 `moved` 事件不能覆盖用户位置；程序定位前必须清除手动移动标记，校正后的已有用户坐标只在签名变化时落盘。
 - 音量滑块 `input` 会在拖动期间连续触发；不要在每次输入中同步写 `localStorage`、重建音量 SVG 或重复写未变化的百分比/class。
 - 播放进度刷新处于 RAF/`timeupdate` 热路径；本地播放会话的 JSON 与 `localStorage` 写入不要直接占用进度 UI 动画帧，清空队列时也必须取消待执行保存。
 - `play` / `playing` / `pause` 等音频事件可能连续到达；不要为相同状态重复重建播放图标、恢复全部控制节点、创建 `MediaMetadata` 或强制写系统播放位置。
@@ -133,6 +135,7 @@
 - 更新面板前端使用 `updatePreviewContentSignature()`、`updatePreviewClassSignature()` 和 `lastProgressSignature` 判重；下载/补丁轮询状态未变化时必须跳过重复 DOM 写入。
 - `showMiniPlayerWindow()` 只在窗口隐藏或最小化时调用 `showInactive()` 并强制同步状态；`keepMiniPlayerOnTop()` 仅在置顶状态丢失时重写置顶标记，健康恢复轮询只执行 `moveTop()`。
 - `pushMiniPlayerState()` 必须先判断 `hasTrack`；空队列使用空元数据签名并发送空封面，不能调用 `currentDesktopSongMeta()`。迷你页面封面错误回调需释放失败 `src` 与 `lastCover`。
+- 迷你播放器位置保存在 `desktop-shell-settings.json` 的 `miniPlayerBounds`；启动时严格读取数值坐标并重新夹紧到当前工作区。用户位置写入必须由 `will-move` + `moved` 事件对触发，并通过坐标签名跳过重复写入。
 - 音量偏好通过 `scheduleVolumePreference()` 合并写入，`flushVolumePreference()` 在 change/blur/退出时落盘；音量百分比、静音 class 和 SVG 图标按状态签名更新。
 - 播放会话常规保存通过空闲回调执行，退出时强制保存，`clearPlaybackSession()` 必须先取消待执行任务，避免清空后旧会话被重新写回。
 - 播放图标、控制栏节点、控制区歌曲信息和 Media Session 元数据使用节点/内容签名缓存；相同播放状态事件只同步必要的系统位置节流任务。
