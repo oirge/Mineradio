@@ -235,7 +235,14 @@
     cover.addEventListener('load', function(){
       if (cover.getAttribute('src')) coverWrap.classList.add('ready');
     });
-    cover.addEventListener('error', function(){ coverWrap.classList.remove('ready'); });
+    cover.addEventListener('error', function(){
+      coverWrap.classList.remove('ready');
+      // 失败地址需要释放缓存标记，后续播放状态同步才能重新触发加载。
+      if (cover.getAttribute('src') === lastCover) {
+        lastCover = '';
+        cover.removeAttribute('src');
+      }
+    });
     document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });
     playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
     document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });

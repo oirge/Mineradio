@@ -62,6 +62,9 @@
 - 主进程本地曲库扫描 worker 数量不大但处于导入启动前；不要恢复 `Array.from({ length }, worker)` 这类额外数组构造。
 - 软件内更新状态接口会被更新面板轮询；取最新下载/补丁任务或裁剪旧任务时不要恢复 `Array.from(updateDownloadJobs.values()).sort(...)`、`slice(...).forEach(...)` 这类全量排序和回调链。
 - 软件内更新面板轮询期间会高频刷新按钮、脚注和进度条；状态未变化时不要重复写 DOM 文本、class、`width` 或 SVG ring offset。
+- 迷你播放器可见性恢复会按固定间隔校正窗口层级；健康窗口不要重复调用 `showInactive()`、`setAlwaysOnTop()` 或状态同步，只需刷新 Z 序。
+- 迷你播放器进入空队列时必须清空主进程和渲染器中的标题、歌手与封面状态，并跳过当前歌曲封面解析，避免长期保留大 data URL。
+- 迷你播放器封面加载失败后不能永久保留失败地址缓存；应释放当前 `src` 和缓存标记，让后续真实状态同步触发同地址重试。
 - 音量滑块 `input` 会在拖动期间连续触发；不要在每次输入中同步写 `localStorage`、重建音量 SVG 或重复写未变化的百分比/class。
 - 播放进度刷新处于 RAF/`timeupdate` 热路径；本地播放会话的 JSON 与 `localStorage` 写入不要直接占用进度 UI 动画帧，清空队列时也必须取消待执行保存。
 - `play` / `playing` / `pause` 等音频事件可能连续到达；不要为相同状态重复重建播放图标、恢复全部控制节点、创建 `MediaMetadata` 或强制写系统播放位置。
@@ -128,6 +131,8 @@
 - 无歌词占位检测使用 `compactNoLyricText()` 单次扫描，保持忽略空白、常见中英文标点和固定占位文案的语义不变。
 - 更新下载任务的最新/匹配最新查询使用 `latestUpdateDownloadJob()` 单次扫描；任务裁剪使用 `newestUpdateDownloadJobs(8)` 的小窗口维护，状态轮询和快速补丁复用判断不要恢复全量任务数组排序。
 - 更新面板前端使用 `updatePreviewContentSignature()`、`updatePreviewClassSignature()` 和 `lastProgressSignature` 判重；下载/补丁轮询状态未变化时必须跳过重复 DOM 写入。
+- `showMiniPlayerWindow()` 只在窗口隐藏或最小化时调用 `showInactive()` 并强制同步状态；`keepMiniPlayerOnTop()` 仅在置顶状态丢失时重写置顶标记，健康恢复轮询只执行 `moveTop()`。
+- `pushMiniPlayerState()` 必须先判断 `hasTrack`；空队列使用空元数据签名并发送空封面，不能调用 `currentDesktopSongMeta()`。迷你页面封面错误回调需释放失败 `src` 与 `lastCover`。
 - 音量偏好通过 `scheduleVolumePreference()` 合并写入，`flushVolumePreference()` 在 change/blur/退出时落盘；音量百分比、静音 class 和 SVG 图标按状态签名更新。
 - 播放会话常规保存通过空闲回调执行，退出时强制保存，`clearPlaybackSession()` 必须先取消待执行任务，避免清空后旧会话被重新写回。
 - 播放图标、控制栏节点、控制区歌曲信息和 Media Session 元数据使用节点/内容签名缓存；相同播放状态事件只同步必要的系统位置节流任务。

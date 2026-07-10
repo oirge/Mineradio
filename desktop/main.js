@@ -1557,10 +1557,15 @@ function scheduleMiniPlayerRecovery(delay = MINI_PLAYER_RECOVERY_INTERVAL) {
   if (typeof miniPlayerRecoveryTimer.unref === 'function') miniPlayerRecoveryTimer.unref();
 }
 
+/**
+ * 恢复迷你播放器的置顶层级。健康窗口只刷新 Z 序，避免恢复轮询重复写原生置顶状态。
+ * @param {BrowserWindow} win 当前迷你播放器窗口。
+ * @returns {void}
+ */
 function keepMiniPlayerOnTop(win) {
   if (!win || win.isDestroyed()) return;
   try {
-    win.setAlwaysOnTop(true, 'screen-saver');
+    if (!win.isAlwaysOnTop()) win.setAlwaysOnTop(true, 'screen-saver');
     if (win.isVisible()) win.moveTop();
   } catch (e) {
     console.warn('Mini player topmost recovery skipped:', e.message);
@@ -1696,6 +1701,10 @@ function createMiniPlayerWindow() {
   return win;
 }
 
+/**
+ * 显示或恢复迷你播放器。已健康显示时只校正层级，不重复触发显示和状态同步。
+ * @returns {void}
+ */
 function showMiniPlayerWindow() {
   if (!shouldShowMiniPlayer()) {
     stopMiniPlayerRecoveryTimer();
@@ -1712,10 +1721,12 @@ function showMiniPlayerWindow() {
   const wasVisible = win.isVisible();
   const wasMinimized = win.isMinimized();
   if (wasMinimized) win.restore();
-  if (!wasVisible || wasMinimized) positionMiniPlayerWindow();
-  win.showInactive();
+  if (!wasVisible || wasMinimized) {
+    positionMiniPlayerWindow();
+    win.showInactive();
+  }
   keepMiniPlayerOnTop(win);
-  sendMiniPlayerState(!wasVisible || wasMinimized);
+  if (!wasVisible || wasMinimized) sendMiniPlayerState(true);
 }
 
 function hideMiniPlayerWindow() {

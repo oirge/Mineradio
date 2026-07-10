@@ -21927,10 +21927,12 @@ function pushMiniPlayerState(force) {
   var api = getDesktopWindowApi();
   if (!api || typeof api.updateMiniPlayer !== 'function') return;
   if (typeof desktopSongMetaCache === 'undefined' || !desktopSongMetaCache) return;
-  var meta = currentDesktopSongMeta();
   var hasTrack = !!(playQueue && currentIdx >= 0 && playQueue[currentIdx]);
+  var meta = hasTrack ? currentDesktopSongMeta() : null;
   var isPlaying = !!(hasTrack && audio && audio.src && !audio.paused && !audio.ended);
-  var metaSignature = String(meta && (meta._signature || ((meta.title || '') + '|' + (meta.artist || '') + '|' + (meta.cover || ''))) || '');
+  var metaSignature = hasTrack
+    ? String(meta && (meta._signature || ((meta.title || '') + '|' + (meta.artist || '') + '|' + (meta.cover || ''))) || '')
+    : '';
   var state = miniPlayerSyncState || (miniPlayerSyncState = {
     metaSignature: '',
     playing: null,
@@ -21942,9 +21944,9 @@ function pushMiniPlayerState(force) {
   if (force || state.metaSignature !== metaSignature) {
     state.metaSignature = metaSignature;
     patch.metaSignature = metaSignature;
-    patch.title = meta && meta.title || 'Mineradio';
-    patch.artist = meta && meta.artist || '';
-    patch.cover = meta && meta.cover || '';
+    patch.title = hasTrack && meta && meta.title || 'Mineradio';
+    patch.artist = hasTrack && meta && meta.artist || '';
+    patch.cover = hasTrack && meta && meta.cover || '';
     changed = true;
   }
   if (force || state.playing !== isPlaying) {
