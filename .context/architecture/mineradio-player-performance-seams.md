@@ -61,6 +61,11 @@
 - 主进程本地曲库扫描 worker 数量不大但处于导入启动前；不要恢复 `Array.from({ length }, worker)` 这类额外数组构造。
 - 软件内更新状态接口会被更新面板轮询；取最新下载/补丁任务或裁剪旧任务时不要恢复 `Array.from(updateDownloadJobs.values()).sort(...)`、`slice(...).forEach(...)` 这类全量排序和回调链。
 - 软件内更新面板轮询期间会高频刷新按钮、脚注和进度条；状态未变化时不要重复写 DOM 文本、class、`width` 或 SVG ring offset。
+- 音量滑块 `input` 会在拖动期间连续触发；不要在每次输入中同步写 `localStorage`、重建音量 SVG 或重复写未变化的百分比/class。
+- 播放进度刷新处于 RAF/`timeupdate` 热路径；本地播放会话的 JSON 与 `localStorage` 写入不要直接占用进度 UI 动画帧，清空队列时也必须取消待执行保存。
+- `play` / `playing` / `pause` 等音频事件可能连续到达；不要为相同状态重复重建播放图标、恢复全部控制节点、创建 `MediaMetadata` 或强制写系统播放位置。
+- 桌面歌词高帧率 IPC 同步会持续生成载荷签名；不要每帧重新创建签名数组、节奏图中间载荷或重复解析当前歌曲封面元数据。
+- 封面来源和签名会被队列、搜索、歌单架、桌面歌词及系统媒体信息反复读取；不要为缓存键创建字段数组，也不要在一次读取中重复水合自定义封面映射。
 
 ## Solution / Convention
 
@@ -121,6 +126,11 @@
 - 本地歌词/文本解码使用 `countTextReplacementChars()` 统计替换字符，并复用 `localTextDecoder()`；YRC 前导空白使用 `leadingWhitespaceLength()`。
 - 更新下载任务的最新/匹配最新查询使用 `latestUpdateDownloadJob()` 单次扫描；任务裁剪使用 `newestUpdateDownloadJobs(8)` 的小窗口维护，状态轮询和快速补丁复用判断不要恢复全量任务数组排序。
 - 更新面板前端使用 `updatePreviewContentSignature()`、`updatePreviewClassSignature()` 和 `lastProgressSignature` 判重；下载/补丁轮询状态未变化时必须跳过重复 DOM 写入。
+- 音量偏好通过 `scheduleVolumePreference()` 合并写入，`flushVolumePreference()` 在 change/blur/退出时落盘；音量百分比、静音 class 和 SVG 图标按状态签名更新。
+- 播放会话常规保存通过空闲回调执行，退出时强制保存，`clearPlaybackSession()` 必须先取消待执行任务，避免清空后旧会话被重新写回。
+- 播放图标、控制栏节点、控制区歌曲信息和 Media Session 元数据使用节点/内容签名缓存；相同播放状态事件只同步必要的系统位置节流任务。
+- `currentDesktopSongMeta()` 复用歌曲元数据对象，桌面歌词签名使用固定缓冲区，节奏图字段直接写入最终 IPC payload；字段顺序、量化精度和发送语义必须保持不变。
+- `songCoverSrc()` / `songCoverSignature()` 的缓存键直接拼接，并在同一轮读取中复用自定义封面映射；封面优先级和缓存失效字段必须保持不变。
 
 ## Reference
 

@@ -2710,6 +2710,7 @@ var searchMode = 'song';
 var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '本地模式' };
 var loginStatusChecked = false, loginStatusCheckFailed = false;
 var volumeTween = null, trackSwitchToken = 0;
+var playIconUiState = { node: null, playing: null };
 var audioFadeTimer = null, audioElementFadeFrame = 0, audioFadeSerial = 0;
 var AUDIO_FADE_IN_MS = 460;
 var AUDIO_FADE_OUT_MS = 420;
@@ -2730,6 +2731,7 @@ var CONTROLS_AUTO_HIDE_STORE_KEY = 'mineradio-controls-auto-hide-v1';
 var FREE_CAMERA_STORE_KEY = 'mineradio-free-camera-v1';
 var HOTKEY_SETTINGS_STORE_KEY = 'mineradio-hotkey-settings-v1';
 var VISUAL_GUIDE_SEEN_STORE_KEY = 'mineradio-visual-guide-seen-v2';
+var VOLUME_STORE_KEY = 'apex-player-volume';
 var LOCAL_BEATMAP_STORE_KEY = 'mineradio-local-beatmaps-v1';
 var LOCAL_BEAT_PREF_STORE_KEY = 'mineradio-local-beatmap-prefs-v1';
 var LOCAL_LIBRARY_FOLDER_STORE_KEY = 'mineradio-local-library-folder-v1';
@@ -2739,7 +2741,7 @@ var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
 var PERSISTENT_UI_STATE_KEYS = [
-  'apex-player-volume',
+  VOLUME_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
   PLAYBACK_QUALITY_STORE_KEY,
   DIY_MODE_STORE_KEY,
@@ -2761,9 +2763,10 @@ var PERSISTENT_UI_STATE_BACKUP_DELAY = 180;
 function mergePersistentUiStateBackupPatch(patch) {
   if (!patch || typeof patch !== 'object') return false;
   if (!persistentUiStateBackupPendingPatch) persistentUiStateBackupPendingPatch = {};
-  Object.keys(patch).forEach(function(key){
+  for (var key in patch) {
+    if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
     persistentUiStateBackupPendingPatch[key] = patch[key];
-  });
+  }
   return true;
 }
 function flushPersistentUiStateBackup() {
@@ -2956,7 +2959,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.23';
+var APP_VERSION = '1.2.24';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -3002,7 +3005,7 @@ var updatePreviewState = {
 };
 function readSavedVolume() {
   try {
-    var v = parseFloat(localStorage.getItem('apex-player-volume'));
+    var v = parseFloat(localStorage.getItem(VOLUME_STORE_KEY));
     return isFinite(v) ? Math.max(0, Math.min(1, v)) : 1.0;
   } catch (e) {
     return 1.0;
@@ -3179,6 +3182,16 @@ function toggleDiyMode() {
 var targetVolume = readSavedVolume();
 var lastNonZeroVolume = targetVolume > 0.01 ? targetVolume : 0.8;
 var volumeCloseTimer = null;
+var volumePersistenceState = { timer: 0, pendingValue: '', lastValue: String(targetVolume) };
+var volumeUiState = {
+  slider: null,
+  value: null,
+  icon: null,
+  wrap: null,
+  lastPercent: null,
+  lastMuted: null,
+  lastIconLevel: ''
+};
 
 // v7.2: 离线节拍预解析
 //   每次切歌, fetch 完整音频 → OfflineAudioContext 分析 → 标出真鼓点
@@ -4393,6 +4406,8 @@ function updateFreeCamera(dt) {
 function flushPersistentVisualState() {
   try { saveLyricLayout(); } catch (e) {}
   try { saveFreeCameraState(); } catch (e) {}
+  try { flushVolumePreference(); } catch (e) {}
+  try { savePlaybackSession(true); } catch (e) {}
   try { flushPersistentUiStateBackup(); } catch (e) {}
 }
 window.addEventListener('beforeunload', flushPersistentVisualState);
@@ -5685,24 +5700,35 @@ function wakeBottomHandle(duration) {
   }, duration == null ? 2000 : duration);
 }
 
+var PLAYBACK_CONTROL_BUTTON_IDS = ['play-btn', 'prev-btn', 'next-btn', 'mini-queue-btn', 'heart-btn', 'play-mode-btn', 'collect-btn'];
+var playbackControlElementCache = { bar: null, buttons: [] };
+function playbackControlElements() {
+  var cache = playbackControlElementCache;
+  if (!cache.bar || !cache.bar.isConnected) cache.bar = document.getElementById('bottom-bar');
+  for (var i = 0; i < PLAYBACK_CONTROL_BUTTON_IDS.length; i++) {
+    if (!cache.buttons[i] || !cache.buttons[i].isConnected) cache.buttons[i] = document.getElementById(PLAYBACK_CONTROL_BUTTON_IDS[i]);
+  }
+  return cache;
+}
 function forcePlaybackControlsInteractive() {
   if (!hasActivePlaybackControls()) return;
   try {
-    document.body.classList.remove('home-controls-locked');
-    var bar = document.getElementById('bottom-bar');
+    if (document.body.classList.contains('home-controls-locked')) document.body.classList.remove('home-controls-locked');
+    var elements = playbackControlElements();
+    var bar = elements.bar;
     if (bar) {
-      bar.style.pointerEvents = '';
+      if (bar.style.pointerEvents) bar.style.pointerEvents = '';
       if (!controlsAutoHide) {
         bar.classList.add('visible');
         bar.classList.remove('soft-hidden');
       }
     }
-    ['play-btn', 'prev-btn', 'next-btn', 'mini-queue-btn', 'heart-btn', 'play-mode-btn', 'collect-btn'].forEach(function(id){
-      var btn = document.getElementById(id);
-      if (!btn) return;
-      btn.disabled = false;
-      btn.classList.remove('busy');
-    });
+    for (var i = 0; i < elements.buttons.length; i++) {
+      var btn = elements.buttons[i];
+      if (!btn) continue;
+      if (btn.disabled) btn.disabled = false;
+      if (btn.classList.contains('busy')) btn.classList.remove('busy');
+    }
     updateControlsChromeState();
     if (bar && bar.classList.contains('visible') && controlsAutoHide && !controlsHovering) scheduleControlsHide(220);
   } catch (e) {
@@ -10974,12 +11000,24 @@ function setControlCoverSrc(src) {
   cover.classList.remove('cover-empty');
 }
 
+var controlTrackInfoUiState = { title: null, artist: null, lastTitle: null, lastArtist: null };
 function updateControlTrackInfo(song) {
   song = song || {};
-  var title = document.getElementById('control-title');
-  var artist = document.getElementById('control-artist');
-  if (title) title.textContent = song.name || '';
-  if (artist) artist.textContent = songDisplaySubtitle(song);
+  var state = controlTrackInfoUiState;
+  if (!state.title || !state.title.isConnected) {
+    state.title = document.getElementById('control-title');
+    state.lastTitle = null;
+  }
+  if (!state.artist || !state.artist.isConnected) {
+    state.artist = document.getElementById('control-artist');
+    state.lastArtist = null;
+  }
+  var titleText = song.name || '';
+  var artistText = songDisplaySubtitle(song);
+  if (state.title && state.lastTitle !== titleText) state.title.textContent = titleText;
+  if (state.artist && state.lastArtist !== artistText) state.artist.textContent = artistText;
+  state.lastTitle = titleText;
+  state.lastArtist = artistText;
 }
 
 function applyCoverCanvas(cv, thumbSrc, opts) {
@@ -16852,15 +16890,17 @@ function songCustomCoverKey(song) {
   var artist = String(song.artist || '').trim();
   return (title || artist) ? ('meta:' + (title + '|' + artist).slice(0, 220)) : '';
 }
-function getCustomCoverForSong(song) {
+function resolvedCustomCoverForSong(song, key, covers) {
   if (!song) return '';
-  var key = songCustomCoverKey(song);
-  var covers = ensureCustomCoverMap();
   if (key && covers[key]) return covers[key];
   if (song.type === 'local' && song.localCoverThumbDataUrl) return song.localCoverThumbDataUrl;
   if (song.type === 'local' && song.localCoverDataUrl) return song.localCoverDataUrl;
   if (song.customCover) return song.customCover;
   return song.localCoverThumbDataUrl || song.localCoverDataUrl || ensureLocalCoverPreviewUrl(song) || '';
+}
+function getCustomCoverForSong(song) {
+  if (!song) return '';
+  return resolvedCustomCoverForSong(song, songCustomCoverKey(song), ensureCustomCoverMap());
 }
 function ensureLocalCoverPreviewUrl(song) {
   if (!song || !song.localCoverFile) return '';
@@ -16889,19 +16929,17 @@ function songCoverSrc(song, size) {
   var customKey = songCustomCoverKey(song);
   var covers = ensureCustomCoverMap();
   var mappedCustom = customKey && covers[customKey] ? covers[customKey] : '';
-  var coverKey = [
-    size || 0,
-    song._mineradioCoverCacheVersion || 0,
-    customKey,
-    compactCoverSignatureValue(mappedCustom),
-    compactCoverSignatureValue(song.customCover),
-    compactCoverSignatureValue(song.localCoverThumbDataUrl),
-    compactCoverSignatureValue(song.localCoverDataUrl),
-    song.localCoverObjectUrl || '',
-    compactCoverSignatureValue(song.cover)
-  ].join('|');
+  var coverKey = (size || 0) + '|' +
+    (song._mineradioCoverCacheVersion || 0) + '|' +
+    customKey + '|' +
+    compactCoverSignatureValue(mappedCustom) + '|' +
+    compactCoverSignatureValue(song.customCover) + '|' +
+    compactCoverSignatureValue(song.localCoverThumbDataUrl) + '|' +
+    compactCoverSignatureValue(song.localCoverDataUrl) + '|' +
+    (song.localCoverObjectUrl || '') + '|' +
+    compactCoverSignatureValue(song.cover);
   if (song._mineradioCoverCacheKey === coverKey && typeof song._mineradioCoverCacheValue === 'string') return song._mineradioCoverCacheValue;
-  var custom = getCustomCoverForSong(song);
+  var custom = resolvedCustomCoverForSong(song, customKey, covers);
   var src = custom || (song.cover ? coverUrlWithSize(song.cover, size) : '');
   song._mineradioCoverCacheKey = coverKey;
   song._mineradioCoverCacheValue = src || '';
@@ -16918,19 +16956,17 @@ function songCoverSignature(song) {
   var customKey = songCustomCoverKey(song);
   var covers = ensureCustomCoverMap();
   var mappedCustom = customKey && covers[customKey] ? covers[customKey] : '';
-  var signatureKey = [
-    song._mineradioCoverCacheVersion || 0,
-    customKey,
-    compactCoverSignatureValue(mappedCustom),
-    compactCoverSignatureValue(song.customCover),
-    compactCoverSignatureValue(song.localCoverThumbDataUrl),
-    compactCoverSignatureValue(song.localCoverDataUrl),
-    song.localCoverObjectUrl || '',
-    song.localCoverFileName || '',
-    song.localCoverLoaded ? 1 : 0,
-    song.localCoverLightScanned ? 1 : 0,
-    compactCoverSignatureValue(song.cover)
-  ].join('|');
+  var signatureKey = (song._mineradioCoverCacheVersion || 0) + '|' +
+    customKey + '|' +
+    compactCoverSignatureValue(mappedCustom) + '|' +
+    compactCoverSignatureValue(song.customCover) + '|' +
+    compactCoverSignatureValue(song.localCoverThumbDataUrl) + '|' +
+    compactCoverSignatureValue(song.localCoverDataUrl) + '|' +
+    (song.localCoverObjectUrl || '') + '|' +
+    (song.localCoverFileName || '') + '|' +
+    (song.localCoverLoaded ? 1 : 0) + '|' +
+    (song.localCoverLightScanned ? 1 : 0) + '|' +
+    compactCoverSignatureValue(song.cover);
   if (song._mineradioCoverSignatureKey === signatureKey && typeof song._mineradioCoverSignatureValue === 'string') return song._mineradioCoverSignatureValue;
   var key = customKey;
   var result = '';
@@ -19517,8 +19553,9 @@ function fadeOutAndPauseAudio() {
 
 function applyVolumeToAudio() {
   if (audio) {
-    audio.muted = false;
-    audio.volume = gainNode ? 1 : targetVolume;
+    if (audio.muted) audio.muted = false;
+    var elementVolume = gainNode ? 1 : targetVolume;
+    if (Math.abs(audio.volume - elementVolume) > 0.001) audio.volume = elementVolume;
   }
   if (gainNode && audioCtx) {
     var now = audioCtx.currentTime || 0;
@@ -19527,29 +19564,68 @@ function applyVolumeToAudio() {
   }
 }
 
+function flushVolumePreference() {
+  if (volumePersistenceState.timer) {
+    clearTimeout(volumePersistenceState.timer);
+    volumePersistenceState.timer = 0;
+  }
+  var text = volumePersistenceState.pendingValue;
+  volumePersistenceState.pendingValue = '';
+  if (!text || text === volumePersistenceState.lastValue) return;
+  volumePersistenceState.lastValue = text;
+  setPersistentLocalStorageItem(VOLUME_STORE_KEY, text);
+}
+function scheduleVolumePreference(value) {
+  var text = String(value);
+  if (!volumePersistenceState.pendingValue && text === volumePersistenceState.lastValue) return;
+  volumePersistenceState.pendingValue = text;
+  if (volumePersistenceState.timer) clearTimeout(volumePersistenceState.timer);
+  volumePersistenceState.timer = setTimeout(flushVolumePreference, 220);
+}
+function volumeUiElements() {
+  var state = volumeUiState;
+  if (!state.slider || !state.slider.isConnected) state.slider = document.getElementById('volume-slider');
+  if (!state.value || !state.value.isConnected) {
+    state.value = document.getElementById('volume-value');
+    state.lastPercent = null;
+  }
+  if (!state.icon || !state.icon.isConnected) {
+    state.icon = document.getElementById('volume-icon');
+    state.lastIconLevel = '';
+  }
+  if (!state.wrap || !state.wrap.isConnected) {
+    state.wrap = document.getElementById('volume-control');
+    state.lastMuted = null;
+  }
+  return state;
+}
 function updateVolumeUi() {
-  var slider = document.getElementById('volume-slider');
-  var value = document.getElementById('volume-value');
-  var icon = document.getElementById('volume-icon');
-  var wrap = document.getElementById('volume-control');
+  var state = volumeUiElements();
   var pct = Math.round(targetVolume * 100);
-  if (slider && Math.abs(parseFloat(slider.value) - targetVolume) > 0.001) slider.value = targetVolume;
-  if (value) value.textContent = pct + '%';
-  if (wrap) wrap.classList.toggle('muted', targetVolume <= 0.01);
-  if (icon) {
-    icon.innerHTML = targetVolume <= 0.01
+  var sliderValue = state.slider ? parseFloat(state.slider.value) : NaN;
+  if (state.slider && (!isFinite(sliderValue) || Math.abs(sliderValue - targetVolume) > 0.001)) state.slider.value = targetVolume;
+  if (state.value && state.lastPercent !== pct) state.value.textContent = pct + '%';
+  state.lastPercent = pct;
+  var muted = targetVolume <= 0.01;
+  if (state.wrap && state.lastMuted !== muted) state.wrap.classList.toggle('muted', muted);
+  state.lastMuted = muted;
+  var iconLevel = muted ? 'muted' : (targetVolume < 0.45 ? 'low' : 'high');
+  if (state.icon && state.lastIconLevel !== iconLevel) {
+    state.icon.innerHTML = iconLevel === 'muted'
       ? '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="17" y1="9" x2="22" y2="14"/><line x1="22" y1="9" x2="17" y2="14"/>'
-      : targetVolume < 0.45
+      : iconLevel === 'low'
         ? '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15 10.5a2 2 0 0 1 0 3"/>'
         : '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15 9.5a4 4 0 0 1 0 5"/><path d="M18 7a7 7 0 0 1 0 10"/>';
   }
+  state.lastIconLevel = iconLevel;
 }
 
 function setVolume(value, silent) {
   var next = Math.max(0, Math.min(1, Number(value) || 0));
+  var changed = Math.abs(next - targetVolume) > 0.0001;
   targetVolume = next;
   if (next > 0.01) lastNonZeroVolume = next;
-  setPersistentLocalStorageItem('apex-player-volume', String(next));
+  if (changed) scheduleVolumePreference(next);
   applyVolumeToAudio();
   updateVolumeUi();
   if (!silent) showToast('音量 ' + Math.round(next * 100) + '%');
@@ -19593,8 +19669,8 @@ function bindVolumeControls() {
   if (slider) {
     slider.addEventListener('input', function(){ setVolume(slider.value, true); });
     slider.addEventListener('focus', keepVolumePanelOpen);
-    slider.addEventListener('blur', closeVolumePanelSoon);
-    slider.addEventListener('change', function(){ showToast('音量 ' + Math.round(targetVolume * 100) + '%'); });
+    slider.addEventListener('blur', function(){ flushVolumePreference(); closeVolumePanelSoon(); });
+    slider.addEventListener('change', function(){ flushVolumePreference(); showToast('音量 ' + Math.round(targetVolume * 100) + '%'); });
   }
   if (btn) {
     btn.addEventListener('dblclick', function(e){ e.stopPropagation(); toggleMute(); });
@@ -19619,7 +19695,7 @@ function queueItemKey(song) {
   if (song.id != null && song.id !== '') return 'local-id:' + song.id;
   return String(song.name || '') + '|' + String(song.artist || '');
 }
-var playbackSessionSaveState = { lastAt:0 };
+var playbackSessionSaveState = { lastAt:0, idleId:0, timer:0, pending:false };
 var pendingPlaybackSessionResume = { idx:-1, time:0 };
 
 /**
@@ -19645,14 +19721,17 @@ function readPlaybackSession() {
   }
 }
 
-/**
- * 保存当前本地播放会话。该函数会节流，避免 timeupdate 高频写 localStorage。
- * @param {boolean} force 是否忽略节流立即保存。
- * @returns {void}
- */
-function savePlaybackSession(force) {
+function cancelPendingPlaybackSessionSave() {
+  if (playbackSessionSaveState.idleId && window.cancelIdleCallback) {
+    window.cancelIdleCallback(playbackSessionSaveState.idleId);
+  }
+  if (playbackSessionSaveState.timer) clearTimeout(playbackSessionSaveState.timer);
+  playbackSessionSaveState.idleId = 0;
+  playbackSessionSaveState.timer = 0;
+  playbackSessionSaveState.pending = false;
+}
+function writePlaybackSession() {
   var now = Date.now();
-  if (!force && now - playbackSessionSaveState.lastAt < 2200) return;
   playbackSessionSaveState.lastAt = now;
   try {
     var song = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
@@ -19672,12 +19751,39 @@ function savePlaybackSession(force) {
     }));
   } catch (e) {}
 }
+/**
+ * 保存当前本地播放会话。常规进度保存移到空闲时段执行，强制保存仍立即落盘。
+ * @param {boolean} force 是否忽略节流立即保存。
+ * @returns {void}
+ */
+function savePlaybackSession(force) {
+  var now = Date.now();
+  if (force) {
+    cancelPendingPlaybackSessionSave();
+    writePlaybackSession();
+    return;
+  }
+  if (playbackSessionSaveState.pending || now - playbackSessionSaveState.lastAt < 2200) return;
+  playbackSessionSaveState.pending = true;
+  var run = function(){
+    playbackSessionSaveState.idleId = 0;
+    playbackSessionSaveState.timer = 0;
+    playbackSessionSaveState.pending = false;
+    writePlaybackSession();
+  };
+  if (window.requestIdleCallback && !document.hidden) {
+    playbackSessionSaveState.idleId = window.requestIdleCallback(run, { timeout: 900 });
+  } else {
+    playbackSessionSaveState.timer = setTimeout(run, document.hidden ? 0 : 80);
+  }
+}
 
 /**
  * 清理本地播放会话，避免用户清空队列后下次又恢复旧曲目。
  * @returns {void}
  */
 function clearPlaybackSession() {
+  cancelPendingPlaybackSessionSave();
   removePersistentLocalStorageItem(PLAYBACK_SESSION_STORE_KEY);
 }
 
@@ -20039,7 +20145,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   var localUrl = ensureLocalSongUrl(song);
   if (!localUrl) throw new Error('本地音频文件不可用');
   currentLocalSong = song;
-  schedulePlaybackMetadataRefresh(song, token);
+  schedulePlaybackMetadataRefresh(song);
   applyLocalOriginalLyricsState(song);
   loadLocalLyricsForSong(song, token);
   document.getElementById('trial-banner').classList.remove('show');
@@ -20264,9 +20370,17 @@ async function togglePlay() {
   }
 }
 function setPlayIcon(p) {
-  document.getElementById('play-icon').innerHTML = p
+  var state = playIconUiState;
+  if (!state.node || !state.node.isConnected) {
+    state.node = document.getElementById('play-icon');
+    state.playing = null;
+  }
+  p = !!p;
+  if (!state.node || state.playing === p) return;
+  state.node.innerHTML = p
     ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
     : '<path d="M8 5v14l11-7z"/>';
+  state.playing = p;
 }
 function nextTrack() {
   if (!playQueue.length) return;
@@ -21733,15 +21847,23 @@ function schedulePlaybackProgressUi(reason, force) {
   }
   scheduleNamedAnimationFrame('playback-progress-ui', updatePlaybackProgressUi);
 }
+var PLAYBACK_PROGRESS_EVENT_NAMES = ['loadedmetadata', 'durationchange', 'timeupdate', 'seeked', 'play', 'pause', 'emptied'];
+var PLAYBACK_STATE_EVENT_NAMES = ['play', 'playing', 'pause', 'ended', 'emptied', 'abort', 'error'];
+function handlePlaybackProgressEvent(event) {
+  schedulePlaybackProgressUi(event && event.type || 'audio-event');
+}
+function handlePlaybackStateEvent(event) {
+  syncPlaybackStateFromAudioEvent(event && event.type || 'audio-event');
+}
 function bindPlaybackProgressEvents(audioEl) {
   if (!audioEl || audioEl._mineradioProgressBound) return;
   audioEl._mineradioProgressBound = true;
-  ['loadedmetadata', 'durationchange', 'timeupdate', 'seeked', 'play', 'pause', 'emptied'].forEach(function(name){
-    audioEl.addEventListener(name, function(){ schedulePlaybackProgressUi(name); });
-  });
-  ['play', 'playing', 'pause', 'ended', 'emptied', 'abort', 'error'].forEach(function(name){
-    audioEl.addEventListener(name, function(){ syncPlaybackStateFromAudioEvent(name); });
-  });
+  for (var progressIdx = 0; progressIdx < PLAYBACK_PROGRESS_EVENT_NAMES.length; progressIdx++) {
+    audioEl.addEventListener(PLAYBACK_PROGRESS_EVENT_NAMES[progressIdx], handlePlaybackProgressEvent);
+  }
+  for (var stateIdx = 0; stateIdx < PLAYBACK_STATE_EVENT_NAMES.length; stateIdx++) {
+    audioEl.addEventListener(PLAYBACK_STATE_EVENT_NAMES[stateIdx], handlePlaybackStateEvent);
+  }
 }
 /**
  * 生成 Windows 媒体浮窗可用的封面列表。空封面直接返回空数组，避免 MediaMetadata 报错。
@@ -21758,13 +21880,16 @@ function systemMediaSessionArtwork(meta) {
   ];
 }
 var systemMediaSessionPositionState = { lastAt: 0 };
+var systemMediaSessionState = { metadataSignature: '', playbackState: '' };
 /**
  * 同步系统媒体控制元数据，供 Windows 音量浮窗、键盘媒体键和蓝牙耳机控制显示。
- * @returns {void}
+ * @returns {boolean} 元数据是否发生变化并成功写入。
  */
 function updateSystemMediaSessionMetadata() {
-  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return false;
   var meta = currentDesktopSongMeta();
+  var signature = meta._signature || ((meta.title || '') + '|' + (meta.artist || '') + '|' + (meta.cover || ''));
+  if (signature === systemMediaSessionState.metadataSignature) return false;
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: meta.title || 'Mineradio',
@@ -21772,7 +21897,11 @@ function updateSystemMediaSessionMetadata() {
       album: 'Mineradio',
       artwork: systemMediaSessionArtwork(meta)
     });
-  } catch (e) {}
+    systemMediaSessionState.metadataSignature = signature;
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 /**
  * 同步系统媒体控制播放状态。这里不改变播放器状态，只把真实 audio 状态暴露给系统。
@@ -21782,11 +21911,16 @@ function updateSystemMediaSessionMetadata() {
 function updateSystemMediaSessionPlaybackState(reason) {
   if (!('mediaSession' in navigator)) return;
   try {
-    navigator.mediaSession.playbackState = audio && audio.src
+    var nextState = audio && audio.src
       ? (audio.paused || audio.ended ? 'paused' : 'playing')
       : 'none';
-    updateSystemMediaSessionMetadata();
-    updateSystemMediaSessionPosition(true);
+    var stateChanged = nextState !== systemMediaSessionState.playbackState;
+    if (stateChanged) {
+      navigator.mediaSession.playbackState = nextState;
+      systemMediaSessionState.playbackState = nextState;
+    }
+    var metadataChanged = updateSystemMediaSessionMetadata();
+    updateSystemMediaSessionPosition(stateChanged || metadataChanged);
   } catch (e) {}
 }
 /**
@@ -22630,15 +22764,11 @@ function ensureLocalMetadataForSong(song, opts) {
 /**
  * 后台补齐当前播放歌曲元数据。切歌路径不等待标签解析，避免大文件或冷磁盘拖慢点歌到出声。
  * @param {object} song 当前播放歌曲。
- * @param {number} token 切歌令牌，用于丢弃过期刷新。
  * @returns {void}
  */
-function schedulePlaybackMetadataRefresh(song, token) {
+function schedulePlaybackMetadataRefresh(song) {
   if (!song || song.type !== 'local' || song.localMetadataLoaded) return;
-  ensureLocalMetadataForSong(song, { background:true, applyCurrent:true }).then(function(changed){
-    if (token !== trackSwitchToken || !isCurrentLocalQueueSong(song)) return;
-    if (changed) updateSystemMediaSessionPlaybackState('local-metadata-ready');
-  });
+  ensureLocalMetadataForSong(song, { background:true, applyCurrent:true });
 }
 function maybeApplyLocalCoverForSong(song, opts) {
   opts = opts || {};
@@ -29121,6 +29251,7 @@ var desktopOverlayPushState = {
 };
 var desktopOverlaySyncTimer = null;
 var desktopLyricSnapshotState = { lines: null, idx: -1 };
+var desktopSongMetaCache = { title: null, artist: null, coverSignature: null, version: 0, value: null };
 /**
  * 判断桌面覆盖层是否需要持续同步。功能关闭时停止自调度，避免后台常驻轮询。
  * @returns {boolean} 当前是否存在启用的桌面覆盖层。
@@ -29165,12 +29296,25 @@ function getDesktopWindowApi() {
 }
 function currentDesktopSongMeta() {
   var song = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
-  song = song || currentLyricSong && currentLyricSong() || {};
-  return {
-    title: song.name || song.title || 'Mineradio',
-    artist: song.artist || song.ar || song.author || '',
-    cover: (typeof songCoverSrc === 'function' && song) ? (songCoverSrc(song, 360) || song.cover || '') : (song.cover || '')
+  song = song || currentLyricSong && currentLyricSong() || null;
+  var title = song && (song.name || song.title) || 'Mineradio';
+  var artist = song && (song.artist || song.ar || song.author) || '';
+  var coverSignature = song && typeof songCoverSignature === 'function'
+    ? songCoverSignature(song)
+    : compactCoverSignatureValue(song && song.cover || '');
+  var cache = desktopSongMetaCache;
+  if (cache.value && cache.title === title && cache.artist === artist && cache.coverSignature === coverSignature) return cache.value;
+  cache.title = title;
+  cache.artist = artist;
+  cache.coverSignature = coverSignature;
+  cache.version++;
+  cache.value = {
+    title: title,
+    artist: artist,
+    cover: song && typeof songCoverSrc === 'function' ? (songCoverSrc(song, 360) || song.cover || '') : (song && song.cover || ''),
+    _signature: String(cache.version)
   };
+  return cache.value;
 }
 function normalizeDesktopLyricText(text, maxLines) {
   maxLines = normalizeDesktopLyricsRows(maxLines || (fx && fx.desktopLyricsRows)) === 'single' ? 1 : 2;
@@ -29279,29 +29423,21 @@ function desktopLyricsPlaybackPayload() {
     rate: clampRange(rate, 0.25, 4)
   };
 }
-function desktopLyricsActiveBeatMap() {
+function applyDesktopLyricsBeatMapPayload(payload, force) {
   var useDj = !!(djMode && djMode.active && currentDjBeatMap);
-  return {
-    source: useDj ? 'dj' : 'mr',
-    map: useDj ? currentDjBeatMap : currentBeatMap
-  };
-}
-function desktopLyricsBeatMapPayload(force) {
-  var selected = desktopLyricsActiveBeatMap();
-  var map = selected && selected.map;
-  var source = selected && selected.source || 'mr';
+  var source = useDj ? 'dj' : 'mr';
+  var map = useDj ? currentDjBeatMap : currentBeatMap;
   var cameraCount = map ? ((map.cameraBeats && map.cameraBeats.length) || (map.beats && map.beats.length) || (map.kicks && map.kicks.length) || 0) : 0;
   var pulseCount = map ? ((map.pulseBeats && map.pulseBeats.length) || (map.kicks && map.kicks.length) || 0) : 0;
   var duration = map && isFinite(map.duration) ? Number(map.duration) : 0;
   var partialUntil = map && isFinite(map.partialUntilSec) ? Number(map.partialUntilSec) : 0;
   var key = map
-    ? [source, map.analyzedAt || 0, cameraCount, pulseCount, Math.round(duration * 10), Math.round(partialUntil * 10), map.tempoSource || 'local'].join('|')
+    ? source + '|' + (map.analyzedAt || 0) + '|' + cameraCount + '|' + pulseCount + '|' + Math.round(duration * 10) + '|' + Math.round(partialUntil * 10) + '|' + (map.tempoSource || 'local')
     : 'none';
   var shouldSendMap = !!force || key !== desktopOverlayPushState.lastLyricsBeatKey;
   desktopOverlayPushState.lastLyricsBeatKey = key;
-  var payload = { beatMapKey: key };
+  payload.beatMapKey = key;
   if (shouldSendMap) payload.beatMap = map ? packLocalBeatMap(map) : null;
-  return payload;
 }
 function notifyDesktopLyricsBeatMapReady() {
   try {
@@ -29328,7 +29464,6 @@ function desktopLyricsPushInterval() {
 function desktopLyricsPayload(forceBeatMap) {
   var meta = currentDesktopSongMeta();
   var lyric = currentDesktopLyricSnapshot();
-  var beatPayload = desktopLyricsBeatMapPayload(!!forceBeatMap);
   var payload = {
     enabled: !!fx.desktopLyrics && !isDevelopmentLockedFx('desktopLyrics'),
     text: lyric.text,
@@ -29355,62 +29490,64 @@ function desktopLyricsPayload(forceBeatMap) {
     feather: lyricsHasNativeKaraoke ? 0.030 : 0.055,
     motion: desktopLyricsMotionPayload(),
     playback: desktopLyricsPlaybackPayload(),
-    beatMapKey: beatPayload.beatMapKey,
     colors: desktopOverlayColors()
   };
-  if (Object.prototype.hasOwnProperty.call(beatPayload, 'beatMap')) payload.beatMap = beatPayload.beatMap;
+  applyDesktopLyricsBeatMapPayload(payload, !!forceBeatMap);
   return payload;
 }
 function roundOverlayNumber(value, scale) {
   var n = Number(value);
   return isFinite(n) ? Math.round(n * (scale || 1000)) : 0;
 }
+var desktopLyricsSignatureParts = new Array(39);
 function desktopLyricsPayloadSignature(payload) {
   payload = payload || {};
   var colors = payload.colors || {};
   var motion = payload.motion || {};
   var playback = payload.playback || {};
-  return [
-    payload.enabled ? 1 : 0,
-    payload.text || '',
-    roundOverlayNumber(payload.progress, 1000),
-    roundOverlayNumber(payload.progressSpan, 100),
-    payload.title || '',
-    payload.artist || '',
-    payload.playing ? 1 : 0,
-    roundOverlayNumber(payload.size, 100),
-    roundOverlayNumber(payload.opacity, 100),
-    roundOverlayNumber(payload.y, 1000),
-    payload.clickThrough === false ? 0 : 1,
-    payload.lyricGlowParticles ? 1 : 0,
-    payload.cinema === false ? 0 : 1,
-    payload.highlightFollow ? 1 : 0,
-    payload.frameRate || 0,
-    payload.fontFamily || '',
-    payload.fontWeight || '',
-    roundOverlayNumber(payload.letterSpacing, 1000),
-    roundOverlayNumber(payload.lineHeight, 100),
-    payload.rows || '',
-    payload.align || '',
-    roundOverlayNumber(payload.lyricScale, 100),
-    roundOverlayNumber(payload.feather, 1000),
-    payload.beatMapKey || '',
-    Object.prototype.hasOwnProperty.call(payload, 'beatMap') ? 'map' : 'nomap',
-    colors.primary || '',
-    colors.secondary || '',
-    colors.highlight || '',
-    colors.glow || '',
-    motion.lyricGlow ? 1 : 0,
-    motion.lyricGlowBeat ? 1 : 0,
-    roundOverlayNumber(motion.lyricGlowStrength, 100),
-    roundOverlayNumber(motion.highBloom, 100),
-    roundOverlayNumber(motion.beatGlow, 100),
-    roundOverlayNumber(motion.beatPulse, 100),
-    roundOverlayNumber(motion.bass, 100),
-    roundOverlayNumber(playback.time, 4),
-    roundOverlayNumber(playback.duration, 10),
-    roundOverlayNumber(playback.rate, 100)
-  ].join('|');
+  var parts = desktopLyricsSignatureParts;
+  var i = 0;
+  parts[i++] = payload.enabled ? 1 : 0;
+  parts[i++] = payload.text || '';
+  parts[i++] = roundOverlayNumber(payload.progress, 1000);
+  parts[i++] = roundOverlayNumber(payload.progressSpan, 100);
+  parts[i++] = payload.title || '';
+  parts[i++] = payload.artist || '';
+  parts[i++] = payload.playing ? 1 : 0;
+  parts[i++] = roundOverlayNumber(payload.size, 100);
+  parts[i++] = roundOverlayNumber(payload.opacity, 100);
+  parts[i++] = roundOverlayNumber(payload.y, 1000);
+  parts[i++] = payload.clickThrough === false ? 0 : 1;
+  parts[i++] = payload.lyricGlowParticles ? 1 : 0;
+  parts[i++] = payload.cinema === false ? 0 : 1;
+  parts[i++] = payload.highlightFollow ? 1 : 0;
+  parts[i++] = payload.frameRate || 0;
+  parts[i++] = payload.fontFamily || '';
+  parts[i++] = payload.fontWeight || '';
+  parts[i++] = roundOverlayNumber(payload.letterSpacing, 1000);
+  parts[i++] = roundOverlayNumber(payload.lineHeight, 100);
+  parts[i++] = payload.rows || '';
+  parts[i++] = payload.align || '';
+  parts[i++] = roundOverlayNumber(payload.lyricScale, 100);
+  parts[i++] = roundOverlayNumber(payload.feather, 1000);
+  parts[i++] = payload.beatMapKey || '';
+  parts[i++] = Object.prototype.hasOwnProperty.call(payload, 'beatMap') ? 'map' : 'nomap';
+  parts[i++] = colors.primary || '';
+  parts[i++] = colors.secondary || '';
+  parts[i++] = colors.highlight || '';
+  parts[i++] = colors.glow || '';
+  parts[i++] = motion.lyricGlow ? 1 : 0;
+  parts[i++] = motion.lyricGlowBeat ? 1 : 0;
+  parts[i++] = roundOverlayNumber(motion.lyricGlowStrength, 100);
+  parts[i++] = roundOverlayNumber(motion.highBloom, 100);
+  parts[i++] = roundOverlayNumber(motion.beatGlow, 100);
+  parts[i++] = roundOverlayNumber(motion.beatPulse, 100);
+  parts[i++] = roundOverlayNumber(motion.bass, 100);
+  parts[i++] = roundOverlayNumber(playback.time, 4);
+  parts[i++] = roundOverlayNumber(playback.duration, 10);
+  parts[i++] = roundOverlayNumber(playback.rate, 100);
+  parts.length = i;
+  return parts.join('|');
 }
 function wallpaperPayload() {
   var meta = currentDesktopSongMeta();

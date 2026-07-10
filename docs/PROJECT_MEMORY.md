@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.23`
-- 最近正式安装包 Release 基线：`v1.2.23`。
+- 当前源码检查点：`v1.2.24`
+- 最近正式安装包 Release 基线：`v1.2.24`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,6 +27,16 @@
 
 ## Release Memory
 
+- `v1.2.24` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.24`
+- `v1.2.24` 重点优化本地歌词/文本解码、YRC 前导空白、音量拖动、播放会话持久化、连续音频事件和桌面歌词 IPC 同步；解码器复用缓存，替换字符/前导空白改为单次计数，音量存储写入合并，常规播放会话保存移到空闲时段，播放图标/控制栏/系统媒体元数据按状态判重，桌面歌曲元数据、封面签名和 39 字段歌词载荷签名复用缓存或固定缓冲区。UI、布局、文案、视觉质感、歌词效果、播放入口和 3D 歌单架交互保持不变。
+- `v1.2.24` Release 资产包括：
+  - `latest.yml`
+  - `Mineradio-1.2.24-Setup.exe`
+  - `Mineradio-1.2.24-Setup.exe.blockmap`
+  - `Mineradio-1.2.24-SHA256SUMS.txt`
+  - `Mineradio-1.2.23-to-1.2.24.patch.json`
+- `v1.2.24` 按用户要求只上传安装器相关资产，Portable ZIP 本次跳过。
+- `v1.2.24` 安装包 SHA256：`afe58e83053e924a962899910dd95dc912f380e5e2b98622ac7e39279fc392cc`
 - `v1.2.23` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.23`
 - `v1.2.23` 重点优化歌词解析和 3D 歌单架卡片绘字低分配路径；LRC/YRC/自定义歌词原文按行处理改为单次换行扫描，保留 CRLF、尾空行、双语合并、空歌词过滤和逐字时间轴语义；3D 歌单架卡片标题/副标题绘制不再通过 `split('')` 创建字符数组。UI、左侧歌单、播放控制、视觉质感和 3D 歌单架交互保持不变。
 - `v1.2.23` Release 资产包括：
