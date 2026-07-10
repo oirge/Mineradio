@@ -33,6 +33,7 @@ let miniPlayerLastSentState = null;
 let miniPlayerRecoveryTimer = null;
 let miniPlayerRecreateTimer = null;
 const miniPlayerProgrammaticCloseWindows = new WeakSet();
+const miniPlayerRendererReloadWindows = new WeakSet();
 let miniPlayerState = {
   title: 'Mineradio',
   artist: '',
@@ -1643,6 +1644,7 @@ function keepMiniPlayerOnTop(win) {
 
 function destroyMiniPlayerWindowInstance(win) {
   if (!win) return;
+  miniPlayerRendererReloadWindows.delete(win);
   if (miniPlayerWindow === win) {
     miniPlayerWindow = null;
     miniPlayerUserMovePending = false;
@@ -1665,8 +1667,9 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
     }
     const contents = win.webContents;
     const rendererGone = String(reason || '').startsWith('renderer-gone:');
-    if (!contents.isDestroyed() && (rendererGone || contents.isCrashed())) {
+    if (!contents.isDestroyed() && (rendererGone || contents.isCrashed()) && !miniPlayerRendererReloadWindows.has(win)) {
       try {
+        miniPlayerRendererReloadWindows.add(win);
         contents.reload();
         scheduleMiniPlayerRecovery(800);
         return;
@@ -1723,6 +1726,7 @@ function createMiniPlayerWindow() {
   });
   win.webContents.on('did-finish-load', () => {
     if (miniPlayerWindow !== win) return;
+    miniPlayerRendererReloadWindows.delete(win);
     miniPlayerLastSentState = null;
     if (shouldShowMiniPlayer()) showMiniPlayerWindow();
     else sendMiniPlayerState(true);
