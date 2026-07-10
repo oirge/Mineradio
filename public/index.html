@@ -20820,8 +20820,39 @@ function currentLyricFallbackText() {
   if (!title) return '';
   return artist ? title + ' - ' + artist : title;
 }
+/**
+ * 判断无歌词检测时需要忽略的空白和标点。歌词过滤会高频调用，避免正则 replace 生成中间字符串。
+ * @param {string} ch 单个字符。
+ * @returns {boolean} 是否应从比较文本中忽略。
+ */
+function isNoLyricIgnoredChar(ch) {
+  var code = ch.charCodeAt(0);
+  if ((code >= 0x09 && code <= 0x0d) || code === 0x20 || code === 0xa0 || code === 0x1680 || code === 0x2028 || code === 0x2029 || code === 0x202f || code === 0x205f || code === 0x3000 || code === 0xfeff) return true;
+  if (code >= 0x2000 && code <= 0x200a) return true;
+  return ch === '，' || ch === ',' || ch === '。' || ch === '.' || ch === '!' || ch === '！' ||
+    ch === '?' || ch === '？' || ch === '、' || ch === '~' || ch === '～';
+}
+/**
+ * 压缩无歌词检测文本。保持原有“去空白和常见标点后比较固定文案”的语义。
+ * @param {string} text 歌词文本。
+ * @returns {string} 用于无歌词文案比较的压缩文本。
+ */
+function compactNoLyricText(text) {
+  text = String(text || '');
+  var compact = '';
+  for (var i = 0; i < text.length; i++) {
+    var ch = text.charAt(i);
+    if (!isNoLyricIgnoredChar(ch)) compact += ch;
+  }
+  return compact;
+}
+/**
+ * 判断歌词文本是否属于“纯音乐/暂无歌词”占位文案。该函数位于 LRC/YRC/自定义歌词过滤热路径。
+ * @param {string} text 歌词文本。
+ * @returns {boolean} 是否为无歌词占位内容。
+ */
 function isNoLyricText(text) {
-  var compact = String(text || '').replace(/\s+/g, '').replace(/[，,。.!！?？、~～]/g, '');
+  var compact = compactNoLyricText(text);
   return !compact ||
     compact === '纯音乐请欣赏' ||
     compact === '暂无歌词' ||
