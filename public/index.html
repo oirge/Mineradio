@@ -21919,6 +21919,25 @@ var systemMediaSessionState = { metadataSignature: '', playbackState: '' };
 var miniPlayerSyncState = null;
 
 /**
+ * 按失败补丁字段失效迷你播放器同步缓存。旧请求失败也必须保留下一次重发机会。
+ * @param {object} patch 未被主进程确认的状态补丁。
+ * @returns {void}
+ */
+function invalidateMiniPlayerSyncPatch(patch) {
+  var state = miniPlayerSyncState;
+  if (!state || !patch) return;
+  if (Object.prototype.hasOwnProperty.call(patch, 'metaSignature') ||
+      Object.prototype.hasOwnProperty.call(patch, 'title') ||
+      Object.prototype.hasOwnProperty.call(patch, 'artist') ||
+      Object.prototype.hasOwnProperty.call(patch, 'cover')) {
+    state.song = null;
+    state.metaSignature = '';
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'playing')) state.playing = null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'hasTrack')) state.hasTrack = null;
+}
+
+/**
  * 将迷你播放器状态按字段增量同步到主进程。歌曲或播放状态未变化时不产生 IPC。
  * @param {boolean=} force 是否强制发送完整状态。
  * @param {boolean=} playbackOnly 是否只检查播放状态；首次同步或歌曲对象变化时仍自动补齐元数据。
@@ -21935,8 +21954,7 @@ function pushMiniPlayerState(force, playbackOnly) {
     song: null,
     metaSignature: '',
     playing: null,
-    hasTrack: null,
-    serial: 0
+    hasTrack: null
   });
   var resolveMetadata = !!(hasTrack && (force || !playbackOnly || state.song !== song || !state.metaSignature));
   var meta = resolveMetadata ? currentDesktopSongMeta() : null;
@@ -21967,13 +21985,10 @@ function pushMiniPlayerState(force, playbackOnly) {
     changed = true;
   }
   if (!changed) return;
-  var serial = ++state.serial;
-  api.updateMiniPlayer(patch).catch(function(){
-    if (!miniPlayerSyncState || miniPlayerSyncState.serial !== serial) return;
-    miniPlayerSyncState.song = null;
-    miniPlayerSyncState.metaSignature = '';
-    miniPlayerSyncState.playing = null;
-    miniPlayerSyncState.hasTrack = null;
+  api.updateMiniPlayer(patch).then(function(result){
+    if (!result || result.ok !== true) invalidateMiniPlayerSyncPatch(patch);
+  }, function(){
+    invalidateMiniPlayerSyncPatch(patch);
   });
 }
 /**
