@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mineradio Compact Mini Player</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+      color: #f4f7f8;
+      user-select: none;
+    }
+    body { padding: 4px; }
+    .mini-shell {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      border-radius: 7px;
+      background: rgba(9, 12, 15, 0.97);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      -webkit-app-region: drag;
+    }
+    .meta {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 2px;
+      overflow: hidden;
+    }
+    .title, .artist {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      letter-spacing: 0;
+    }
+    .title {
+      color: #f7fafb;
+      font-size: 11.5px;
+      font-weight: 650;
+      line-height: 1.2;
+    }
+    .artist {
+      color: rgba(226, 234, 237, 0.52);
+      font-size: 8.5px;
+      line-height: 1.15;
+    }
+    .transport {
+      flex: 0 0 76px;
+      display: grid;
+      grid-template-columns: 22px 28px 22px;
+      align-items: center;
+      gap: 2px;
+      -webkit-app-region: no-drag;
+    }
+    button {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 5px;
+      background: #151a1f;
+      color: rgba(244, 248, 249, 0.76);
+      cursor: pointer;
+      outline: none;
+      transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+      -webkit-app-region: no-drag;
+    }
+    button:hover:not(:disabled) {
+      border-color: rgba(110, 231, 216, 0.42);
+      background: #1b2428;
+      color: #ffffff;
+    }
+    button:active:not(:disabled) { transform: scale(0.93); }
+    button:focus-visible { box-shadow: 0 0 0 2px rgba(110, 231, 216, 0.34); }
+    button:disabled { opacity: 0.32; cursor: default; }
+    button svg { width: 12px; height: 12px; pointer-events: none; }
+    .play-toggle {
+      width: 28px;
+      height: 28px;
+      border-color: rgba(110, 231, 216, 0.3);
+      background: #172326;
+      color: #a9fff2;
+    }
+    .play-toggle svg { width: 14px; height: 14px; }
+    .pause-icon { display: none; }
+    body[data-playing="true"] .play-icon { display: none; }
+    body[data-playing="true"] .pause-icon { display: block; }
+    .restore {
+      flex: 0 0 18px;
+      width: 18px;
+      height: 18px;
+      align-self: flex-start;
+      margin: -2px -2px 0 0;
+      border-color: transparent;
+      background: transparent;
+      color: rgba(225, 232, 235, 0.46);
+    }
+    .restore svg { width: 11px; height: 11px; }
+    @media (prefers-reduced-motion: reduce) {
+      button { transition: none; }
+    }
+  </style>
+</head>
+<body data-playing="false">
+  <main class="mini-shell" id="mini-shell" aria-label="Mineradio 极简迷你播放器">
+    <div class="meta">
+      <div class="title" id="title">Mineradio</div>
+      <div class="artist" id="artist">等待播放</div>
+    </div>
+    <div class="transport">
+      <button id="previous" type="button" title="上一首" aria-label="上一首">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+      </button>
+      <button id="play" class="play-toggle" type="button" title="播放" aria-label="播放">
+        <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>
+      </button>
+      <button id="next" type="button" title="下一首" aria-label="下一首">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m6 18 8.5-6L6 6v12zM16 6v12h2V6z"/></svg>
+      </button>
+    </div>
+    <button id="restore" class="restore" type="button" title="返回主界面" aria-label="返回主界面">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+    </button>
+  </main>
+  <script>
+    'use strict';
+    var title = document.getElementById('title');
+    var artist = document.getElementById('artist');
+    var playButton = document.getElementById('play');
+    var controls = [document.getElementById('previous'), playButton, document.getElementById('next')];
+    var miniState = { title:'Mineradio', artist:'', playing:false, hasTrack:false };
+    var renderedPlaying = null;
+    var renderedHasTrack = null;
+
+    function sendCommand(action) {
+      if (!window.miniPlayer || typeof window.miniPlayer.command !== 'function') return;
+      window.miniPlayer.command(action).catch(function(){});
+    }
+
+    function applyState(patch) {
+      patch = patch || {};
+      miniState = Object.assign({}, miniState, patch);
+      var next = miniState;
+      var hasTrack = next.hasTrack === true;
+      var playing = hasTrack && next.playing === true;
+      var nextTitle = hasTrack ? String(next.title || '未知歌曲') : 'Mineradio';
+      var nextArtist = hasTrack ? String(next.artist || '本地音乐') : '等待播放';
+      if (title.textContent !== nextTitle) title.textContent = nextTitle;
+      if (artist.textContent !== nextArtist) artist.textContent = nextArtist;
+      title.title = nextTitle;
+      artist.title = nextArtist;
+      if (renderedPlaying !== playing) {
+        renderedPlaying = playing;
+        document.body.setAttribute('data-playing', playing ? 'true' : 'false');
+        playButton.title = playing ? '暂停' : '播放';
+        playButton.setAttribute('aria-label', playButton.title);
+      }
+      if (renderedHasTrack !== hasTrack) {
+        renderedHasTrack = hasTrack;
+        for (var i = 0; i < controls.length; i++) controls[i].disabled = !hasTrack;
+      }
+    }
+
+    document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });
+    playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
+    document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });
+    document.getElementById('restore').addEventListener('click', function(){ sendCommand('restore'); });
+    document.getElementById('mini-shell').addEventListener('dblclick', function(event){
+      if (!event.target.closest('button')) sendCommand('restore');
+    });
+    if (window.miniPlayer && typeof window.miniPlayer.onState === 'function') window.miniPlayer.onState(applyState);
+    applyState({});
+  </script>
+</body>
+</html>

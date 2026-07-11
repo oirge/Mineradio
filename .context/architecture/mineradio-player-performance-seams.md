@@ -67,6 +67,8 @@
 - 迷你播放器封面加载失败后不能永久保留失败地址缓存；应释放当前 `src` 和缓存标记，让后续真实状态同步触发同地址重试。
 - 迷你播放器拖动位置需要跨启动恢复，但不能监听高频 `move` 后同步写设置文件；Windows 上应使用只由手动移动触发的 `will-move` 标记用户操作，并在 `moved` 后单次保存。
 - `setBounds()` 和显示器工作区校正产生的 `moved` 事件不能覆盖用户位置；程序定位前必须清除手动移动标记，校正后的已有用户坐标只在签名变化时落盘。
+- 标准迷你播放器必须继续使用独立的 `public/mini-player.html` 和 `360 × 84` 尺寸；极简版使用 `public/mini-player-compact.html` 和 `268 × 58` 尺寸，不要通过条件 DOM/CSS 改写标准页面。
+- 极简迷你播放器不创建图片/封面节点，主进程向极简窗口发送状态时也不携带 `cover`；歌曲切换仍同步标题、歌手、播放状态和队列状态。
 - `play` / `playing` / `pause` 等音频状态事件不应让迷你播放器重复执行 `currentDesktopSongMeta()` 和封面签名解析；同一事件后续还会同步 Windows Media Session 元数据。
 - 迷你播放器 IPC 使用乐观状态判重时，Promise rejection 和主进程返回 `ok:false` 都代表补丁未确认；旧完整请求晚失败也不能因后续序号变化而被忽略。
 - 迷你播放器 5 秒可见性恢复只在用户可见会话中有意义；Windows `lock-screen` / `suspend` 时应停止恢复定时器，由 `unlock-screen` / `resume` 重新启动。
@@ -139,7 +141,7 @@
 - 更新面板前端使用 `updatePreviewContentSignature()`、`updatePreviewClassSignature()` 和 `lastProgressSignature` 判重；下载/补丁轮询状态未变化时必须跳过重复 DOM 写入。
 - `showMiniPlayerWindow()` 只在窗口隐藏或最小化时调用 `showInactive()` 并强制同步状态；`keepMiniPlayerOnTop()` 仅在置顶状态丢失时重写置顶标记，健康恢复轮询只执行 `moveTop()`。
 - `pushMiniPlayerState()` 必须先判断 `hasTrack`；空队列使用空元数据签名并发送空封面，不能调用 `currentDesktopSongMeta()`。迷你页面封面错误回调需释放失败 `src` 与 `lastCover`。
-- 迷你播放器位置保存在 `desktop-shell-settings.json` 的 `miniPlayerBounds`；启动时严格读取数值坐标并重新夹紧到当前工作区。用户位置写入必须由 `will-move` + `moved` 事件对触发，并通过坐标签名跳过重复写入。
+- 迷你播放器样式保存在 `desktop-shell-settings.json` 的 `miniPlayerMode`；标准/极简位置分别保存在 `miniPlayerBounds` 和 `miniPlayerCompactBounds`。启动时严格读取数值坐标并按各自尺寸重新夹紧到当前工作区；窗口实例必须捕获创建时的 mode，避免切换期间旧回调污染另一种样式的位置。
 - `updateSystemMediaSessionPlaybackState()` 调用迷你同步时使用 playback-only 路径；`pushMiniPlayerState()` 通过当前歌曲对象判断是否仍需补齐元数据，确保首次同步、切歌和空队列不会被状态-only 优化漏掉。
 - 迷你状态补丁失败时使用 `invalidateMiniPlayerSyncPatch()` 按字段失效缓存：元数据字段清空歌曲引用和签名，播放字段只清空对应布尔值。下一次真实状态事件负责重发，不保留错误的“已同步”标记。
 - 主进程电源事件必须保持成对：`lock-screen` / `suspend` 调用 `stopMiniPlayerRecoveryTimer()`，`unlock-screen` / `resume` 调用 `scheduleMiniPlayerRecovery(180)`；不要在锁屏期间保留周期性 `moveTop()`。

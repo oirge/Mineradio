@@ -2223,6 +2223,11 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         <div class="fx-toggle" id="t-miniPlayer" onclick="toggleDesktopShellSetting('miniPlayer')" title="主窗口最小化或关闭到托盘时显示歌曲信息和播放控制"><span>最小化迷你播放器</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-startupLaunch" onclick="toggleDesktopShellSetting('startupLaunch')" title="登录 Windows 后自动启动 Mineradio"><span>开机启动</span><span class="dot"></span></div>
       </div>
+      <div class="fx-section-label">迷你播放器样式</div>
+      <div class="fx-seg" id="mini-player-mode-seg">
+        <button type="button" data-mini-player-mode="standard" title="使用带封面的标准迷你播放器">标准</button>
+        <button type="button" data-mini-player-mode="compact" title="使用无封面的极简迷你播放器">极简</button>
+      </div>
       <div class="fx-slider"><label>桌面歌词大小</label><input id="fx-desktoplyricssize" type="range" min="0.72" max="1.55" step="0.01"><output></output></div>
       <div class="fx-slider"><label>桌面歌词透明</label><input id="fx-desktoplyricsopacity" type="range" min="0.28" max="1" step="0.01"><output></output></div>
       <div class="fx-slider"><label>桌面歌词高度</label><input id="fx-desktoplyricsy" type="range" min="0.08" max="0.92" step="0.01"><output></output></div>
@@ -2960,7 +2965,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.26';
+var APP_VERSION = '1.2.27';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -29762,11 +29767,15 @@ function toggleFullscreen() {
   }
 }
 
-var desktopShellSettings = { closeToTray:true, miniPlayer:true, startupLaunch:false };
+var desktopShellSettings = { closeToTray:true, miniPlayer:true, miniPlayerMode:'standard', startupLaunch:false };
+
+function normalizeDesktopMiniPlayerMode(value) {
+  return value === 'compact' ? 'compact' : 'standard';
+}
 
 /**
  * 把主进程返回的桌面壳设置同步到设置面板按钮。
- * @param {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerEnabled?: boolean, startup?: boolean, startupEnabled?: boolean}} next 主进程设置快照。
+ * @param {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerEnabled?: boolean, miniPlayerMode?: string, startup?: boolean, startupEnabled?: boolean}} next 主进程设置快照。
  * @returns {void}
  */
 function applyDesktopShellSettings(next) {
@@ -29774,6 +29783,7 @@ function applyDesktopShellSettings(next) {
   if (typeof next.closeToTray === 'boolean') desktopShellSettings.closeToTray = next.closeToTray;
   if (typeof next.miniPlayerEnabled === 'boolean') desktopShellSettings.miniPlayer = next.miniPlayerEnabled;
   else if (typeof next.miniPlayer === 'boolean') desktopShellSettings.miniPlayer = next.miniPlayer;
+  if (typeof next.miniPlayerMode === 'string') desktopShellSettings.miniPlayerMode = normalizeDesktopMiniPlayerMode(next.miniPlayerMode);
   if (typeof next.startupEnabled === 'boolean') desktopShellSettings.startupLaunch = next.startupEnabled;
   else if (typeof next.startup === 'boolean') desktopShellSettings.startupLaunch = next.startup;
   var closeBtn = document.getElementById('t-closeToTray');
@@ -29782,6 +29792,9 @@ function applyDesktopShellSettings(next) {
   if (closeBtn) closeBtn.classList.toggle('on', !!desktopShellSettings.closeToTray);
   if (miniPlayerBtn) miniPlayerBtn.classList.toggle('on', !!desktopShellSettings.miniPlayer);
   if (startupBtn) startupBtn.classList.toggle('on', !!desktopShellSettings.startupLaunch);
+  document.querySelectorAll('#mini-player-mode-seg [data-mini-player-mode]').forEach(function(button){
+    button.classList.toggle('active', button.getAttribute('data-mini-player-mode') === desktopShellSettings.miniPlayerMode);
+  });
 }
 
 /**
@@ -29836,6 +29849,19 @@ function toggleDesktopShellSetting(key) {
   }
 }
 
+function setDesktopMiniPlayerMode(mode) {
+  var api = window.desktopWindow;
+  var nextMode = normalizeDesktopMiniPlayerMode(mode);
+  if (!api || !api.isDesktop || typeof api.setMiniPlayerMode !== 'function') return;
+  if (nextMode === desktopShellSettings.miniPlayerMode) return;
+  api.setMiniPlayerMode(nextMode).then(function(result){
+    if (!result || result.ok !== true) throw new Error('MINI_PLAYER_MODE_REJECTED');
+    var appliedMode = normalizeDesktopMiniPlayerMode(result.miniPlayerMode);
+    applyDesktopShellSettings({ miniPlayerMode: appliedMode });
+    showToast(appliedMode === 'compact' ? '已切换到极简迷你播放器' : '已切换到标准迷你播放器');
+  }).catch(function(){ showToast('迷你播放器样式切换失败'); });
+}
+
 (function initDesktopWindowShell(){
   var api = window.desktopWindow;
   if (!api || !api.isDesktop) return;
@@ -29847,6 +29873,12 @@ function toggleDesktopShellSetting(key) {
   syncCursorAutoHideMode();
   refreshDesktopShellSettings();
   pushMiniPlayerState(true);
+
+  document.querySelectorAll('#mini-player-mode-seg [data-mini-player-mode]').forEach(function(button){
+    button.addEventListener('click', function(){
+      setDesktopMiniPlayerMode(button.getAttribute('data-mini-player-mode'));
+    });
+  });
 
   var maxBtn = document.querySelector('[data-window-action="maximize"]');
   var maxIcon = maxBtn && maxBtn.querySelector('.icon-maximize');

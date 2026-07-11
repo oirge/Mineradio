@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   getTraySettings: () => ipcRenderer.invoke('mineradio-tray-get-settings'),
   setCloseToTray: (enabled) => ipcRenderer.invoke('mineradio-tray-set-close-to-tray', !!enabled),
   setMiniPlayerEnabled: (enabled) => ipcRenderer.invoke('mineradio-mini-player-set-enabled', !!enabled),
+  setMiniPlayerMode: (mode) => ipcRenderer.invoke('mineradio-mini-player-set-mode', String(mode || '')),
   updateMiniPlayer: (payload) => ipcRenderer.invoke('mineradio-mini-player-update', payload || {}),
   setStartupEnabled: (enabled) => ipcRenderer.invoke('mineradio-startup-set-enabled', !!enabled),
   openUpdateInstaller: (filePath) => ipcRenderer.invoke('mineradio-open-update-installer', filePath),

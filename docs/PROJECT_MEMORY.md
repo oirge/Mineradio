@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.26`
-- 最近正式安装包 Release 基线：`v1.2.26`。
+- 当前源码检查点：`v1.2.27`
+- 最近正式安装包 Release 基线：`v1.2.27`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,6 +27,11 @@
 
 ## Release Memory
 
+- `v1.2.27` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.27`
+- `v1.2.27` 新增独立 `268 × 58` 极简迷你播放器，不创建或加载封面，只保留歌曲文字和播放控制；原有 `public/mini-player.html`、`360 × 84` 标准版视觉与功能保持不变。设置面板和托盘菜单可切换两种样式，模式和两套拖动位置分别持久化，极简窗口 IPC 不携带封面字段。
+- 2026-07-11 用户明确要求：现有标准迷你播放器不要改，新增更小且无歌曲图片的版本供切换使用。涉及 `desktop/main.js`、`desktop/preload.js`、`public/index.html`、`public/mini-player-compact.html`；后续不得把两种样式重新合并为条件渲染，也不得给极简版补回封面。
+- `v1.2.27` Release 资产包括：`latest.yml`、`Mineradio-1.2.27-Setup.exe`、`Mineradio-1.2.27-Setup.exe.blockmap`、`Mineradio-1.2.27-SHA256SUMS.txt`、`Mineradio-1.2.26-to-1.2.27.patch.json`；Portable ZIP 跳过。
+- `v1.2.27` 安装包 SHA256：`7e4679f7bc482302f81f8dfc96f1f61645d4cf3139bbeda219c811e35a7421c3`
 - `v1.2.26` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.26`
 - `v1.2.26` 修复迷你播放器长时间运行后被覆盖或无法再次显示的问题，并整合位置持久化、健康窗口轻量 Z 序恢复、锁屏/休眠暂停定时器、播放状态少解析、IPC 失败按字段重发、空队列与封面失败恢复。渲染进程首次崩溃优先重载，成功加载前再次崩溃升级为窗口重建；同时优化无歌词占位检测的临时字符串分配。
 - `v1.2.26` Release 资产包括：

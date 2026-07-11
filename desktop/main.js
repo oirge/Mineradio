@@ -26,14 +26,16 @@ let wallpaperState = {};
 let miniPlayerWindow = null;
 let miniPlayerEnabled = true;
 let miniPlayerActive = false;
-let miniPlayerUserBounds = null;
+let miniPlayerMode = 'standard';
 let miniPlayerUserMovePending = false;
-let miniPlayerSavedBoundsSignature = '';
 let miniPlayerLastSentState = null;
 let miniPlayerRecoveryTimer = null;
 let miniPlayerRecreateTimer = null;
+const miniPlayerUserBoundsByMode = { standard: null, compact: null };
+const miniPlayerSavedBoundsSignatures = { standard: '', compact: '' };
 const miniPlayerProgrammaticCloseWindows = new WeakSet();
 const miniPlayerRendererReloadWindows = new WeakSet();
+const miniPlayerWindowModes = new WeakMap();
 let miniPlayerState = {
   title: 'Mineradio',
   artist: '',
@@ -58,6 +60,8 @@ const MIN_WINDOWED_WIDTH = 960;
 const MIN_WINDOWED_HEIGHT = 540;
 const MINI_PLAYER_WIDTH = 360;
 const MINI_PLAYER_HEIGHT = 84;
+const COMPACT_MINI_PLAYER_WIDTH = 268;
+const COMPACT_MINI_PLAYER_HEIGHT = 58;
 const MINI_PLAYER_MARGIN = 14;
 const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
 const APP_NAME = 'Mineradio';
@@ -661,7 +665,7 @@ function focusMainWindow() {
 
 /**
  * 读取桌面壳设置文件。托盘关闭策略需要早于前端加载生效，所以放在主进程持久化。
- * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerBounds?: {x:number, y:number}}} 已保存的桌面壳设置。
+ * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number}, miniPlayerCompactBounds?: {x:number, y:number}}} 已保存的桌面壳设置。
  */
 function readDesktopShellSettings() {
   try {
@@ -675,8 +679,8 @@ function readDesktopShellSettings() {
 
 /**
  * 写入桌面壳设置文件。该文件只保存主进程必须提前知道的窗口行为。
- * @param {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerBounds?: {x:number, y:number}}} patch 要覆盖的设置字段。
- * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerBounds?: {x:number, y:number}}} 写入后的完整设置。
+ * @param {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number}, miniPlayerCompactBounds?: {x:number, y:number}}} patch 要覆盖的设置字段。
+ * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number}, miniPlayerCompactBounds?: {x:number, y:number}}} 写入后的完整设置。
  */
 function writeDesktopShellSettings(patch) {
   const file = path.join(app.getPath('userData'), DESKTOP_SHELL_SETTINGS_FILE);
@@ -736,11 +740,17 @@ function applySavedDesktopShellSettings() {
   const saved = readDesktopShellSettings();
   if (typeof saved.closeToTray === 'boolean') closeToTrayEnabled = saved.closeToTray;
   if (typeof saved.miniPlayer === 'boolean') miniPlayerEnabled = saved.miniPlayer;
-  const restoredBounds = savedMiniPlayerBounds(saved.miniPlayerBounds);
-  if (restoredBounds) {
-    miniPlayerUserBounds = restoredBounds;
-    miniPlayerSavedBoundsSignature = miniPlayerBoundsSignature(saved.miniPlayerBounds);
-    if (miniPlayerBoundsSignature(restoredBounds) !== miniPlayerSavedBoundsSignature) persistMiniPlayerUserBounds(restoredBounds);
+  miniPlayerMode = normalizeMiniPlayerMode(saved.miniPlayerMode);
+  const savedBoundsByMode = {
+    standard: saved.miniPlayerBounds,
+    compact: saved.miniPlayerCompactBounds,
+  };
+  for (const mode of ['standard', 'compact']) {
+    const restoredBounds = savedMiniPlayerBounds(savedBoundsByMode[mode], mode);
+    if (!restoredBounds) continue;
+    miniPlayerUserBoundsByMode[mode] = restoredBounds;
+    miniPlayerSavedBoundsSignatures[mode] = miniPlayerBoundsSignature(savedBoundsByMode[mode]);
+    if (miniPlayerBoundsSignature(restoredBounds) !== miniPlayerSavedBoundsSignatures[mode]) persistMiniPlayerUserBounds(restoredBounds, mode);
   }
 }
 
@@ -795,6 +805,23 @@ function refreshTrayMenu() {
       type: 'checkbox',
       checked: miniPlayerEnabled,
       click: (item) => setMiniPlayerEnabled(item.checked),
+    },
+    {
+      label: '迷你播放器样式',
+      submenu: [
+        {
+          label: '标准（带封面）',
+          type: 'radio',
+          checked: miniPlayerMode === 'standard',
+          click: () => setMiniPlayerMode('standard'),
+        },
+        {
+          label: '极简（无封面）',
+          type: 'radio',
+          checked: miniPlayerMode === 'compact',
+          click: () => setMiniPlayerMode('compact'),
+        },
+      ],
     },
     {
       label: '开机自动启动',
@@ -1439,29 +1466,45 @@ function closeWallpaperWindow() {
   wallpaperWindow = null;
 }
 
-function miniPlayerDefaultBounds() {
+function normalizeMiniPlayerMode(value) {
+  return value === 'compact' ? 'compact' : 'standard';
+}
+
+function miniPlayerSize(mode) {
+  return normalizeMiniPlayerMode(mode) === 'compact'
+    ? { width: COMPACT_MINI_PLAYER_WIDTH, height: COMPACT_MINI_PLAYER_HEIGHT }
+    : { width: MINI_PLAYER_WIDTH, height: MINI_PLAYER_HEIGHT };
+}
+
+function miniPlayerModeForWindow(win) {
+  return normalizeMiniPlayerMode(win ? miniPlayerWindowModes.get(win) : miniPlayerMode);
+}
+
+function miniPlayerDefaultBounds(mode) {
+  const size = miniPlayerSize(mode);
   const referenceBounds = mainWindow && !mainWindow.isDestroyed()
     ? mainWindow.getBounds()
     : screen.getPrimaryDisplay().bounds;
   const display = screen.getDisplayMatching(referenceBounds) || screen.getPrimaryDisplay();
   const workArea = display.workArea;
   return {
-    x: workArea.x + workArea.width - MINI_PLAYER_WIDTH - MINI_PLAYER_MARGIN,
-    y: workArea.y + workArea.height - MINI_PLAYER_HEIGHT - MINI_PLAYER_MARGIN,
-    width: MINI_PLAYER_WIDTH,
-    height: MINI_PLAYER_HEIGHT,
+    x: workArea.x + workArea.width - size.width - MINI_PLAYER_MARGIN,
+    y: workArea.y + workArea.height - size.height - MINI_PLAYER_MARGIN,
+    width: size.width,
+    height: size.height,
   };
 }
 
-function clampMiniPlayerBounds(bounds) {
-  const source = bounds || miniPlayerDefaultBounds();
+function clampMiniPlayerBounds(bounds, mode) {
+  const size = miniPlayerSize(mode);
+  const source = bounds || miniPlayerDefaultBounds(mode);
   const display = screen.getDisplayMatching(source) || screen.getPrimaryDisplay();
   const workArea = display.workArea;
   return {
-    x: Math.round(Math.max(workArea.x, Math.min(source.x, workArea.x + workArea.width - MINI_PLAYER_WIDTH))),
-    y: Math.round(Math.max(workArea.y, Math.min(source.y, workArea.y + workArea.height - MINI_PLAYER_HEIGHT))),
-    width: MINI_PLAYER_WIDTH,
-    height: MINI_PLAYER_HEIGHT,
+    x: Math.round(Math.max(workArea.x, Math.min(source.x, workArea.x + workArea.width - size.width))),
+    y: Math.round(Math.max(workArea.y, Math.min(source.y, workArea.y + workArea.height - size.height))),
+    width: size.width,
+    height: size.height,
   };
 }
 
@@ -1478,27 +1521,32 @@ function miniPlayerBoundsSignature(bounds) {
 /**
  * 读取并校正已保存的迷你播放器坐标。非法设置直接忽略，不改变当前默认定位。
  * @param {unknown} value 设置文件中的坐标值。
+ * @param {'standard'|'compact'} mode 迷你播放器样式。
  * @returns {{x:number, y:number, width:number, height:number}|null} 当前显示器内的固定尺寸坐标。
  */
-function savedMiniPlayerBounds(value) {
+function savedMiniPlayerBounds(value, mode) {
   if (!value || typeof value !== 'object') return null;
   if (typeof value.x !== 'number' || !Number.isFinite(value.x)) return null;
   if (typeof value.y !== 'number' || !Number.isFinite(value.y)) return null;
-  return clampMiniPlayerBounds({ x: value.x, y: value.y, width: MINI_PLAYER_WIDTH, height: MINI_PLAYER_HEIGHT });
+  const size = miniPlayerSize(mode);
+  return clampMiniPlayerBounds({ x: value.x, y: value.y, ...size }, mode);
 }
 
 /**
  * 保存用户迷你播放器坐标。同一位置只写入一次，避免拖动结束或系统事件重复落盘。
  * @param {{x:number, y:number, width?:number, height?:number}} bounds 用户或系统校正后的坐标。
+ * @param {'standard'|'compact'} mode 迷你播放器样式。
  * @returns {{x:number, y:number, width:number, height:number}} 实际保存的工作区内坐标。
  */
-function persistMiniPlayerUserBounds(bounds) {
-  const nextBounds = clampMiniPlayerBounds(bounds);
+function persistMiniPlayerUserBounds(bounds, mode) {
+  const normalizedMode = normalizeMiniPlayerMode(mode);
+  const nextBounds = clampMiniPlayerBounds(bounds, normalizedMode);
   const signature = miniPlayerBoundsSignature(nextBounds);
-  miniPlayerUserBounds = nextBounds;
-  if (signature === miniPlayerSavedBoundsSignature) return nextBounds;
-  writeDesktopShellSettings({ miniPlayerBounds: { x: nextBounds.x, y: nextBounds.y } });
-  miniPlayerSavedBoundsSignature = signature;
+  miniPlayerUserBoundsByMode[normalizedMode] = nextBounds;
+  if (signature === miniPlayerSavedBoundsSignatures[normalizedMode]) return nextBounds;
+  const settingKey = normalizedMode === 'compact' ? 'miniPlayerCompactBounds' : 'miniPlayerBounds';
+  writeDesktopShellSettings({ [settingKey]: { x: nextBounds.x, y: nextBounds.y } });
+  miniPlayerSavedBoundsSignatures[normalizedMode] = signature;
   return nextBounds;
 }
 
@@ -1521,7 +1569,7 @@ function beginMiniPlayerUserMove(win) {
 function handleMiniPlayerMoved(win) {
   if (miniPlayerWindow !== win || win.isDestroyed() || !miniPlayerUserMovePending) return;
   miniPlayerUserMovePending = false;
-  persistMiniPlayerUserBounds(win.getBounds());
+  persistMiniPlayerUserBounds(win.getBounds(), miniPlayerModeForWindow(win));
 }
 
 /**
@@ -1530,10 +1578,11 @@ function handleMiniPlayerMoved(win) {
  */
 function positionMiniPlayerWindow() {
   if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
-  const nextBounds = clampMiniPlayerBounds(miniPlayerUserBounds || miniPlayerDefaultBounds());
+  const mode = miniPlayerModeForWindow(miniPlayerWindow);
+  const nextBounds = clampMiniPlayerBounds(miniPlayerUserBoundsByMode[mode] || miniPlayerDefaultBounds(mode), mode);
   miniPlayerUserMovePending = false;
   miniPlayerWindow.setBounds(nextBounds, false);
-  if (miniPlayerUserBounds) persistMiniPlayerUserBounds(nextBounds);
+  if (miniPlayerUserBoundsByMode[mode]) persistMiniPlayerUserBounds(nextBounds, mode);
 }
 
 function applyMiniPlayerStatePatch(payload) {
@@ -1555,14 +1604,15 @@ function applyMiniPlayerStatePatch(payload) {
 function sendMiniPlayerState(force = false) {
   const win = miniPlayerWindow;
   if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  const includeCover = miniPlayerModeForWindow(win) === 'standard';
   const next = {
     title: miniPlayerState.title || 'Mineradio',
     artist: miniPlayerState.artist || '',
-    cover: miniPlayerState.cover || '',
     playing: !!miniPlayerState.playing,
     hasTrack: !!miniPlayerState.hasTrack,
     metaSignature: miniPlayerState.metaSignature || '',
   };
+  if (includeCover) next.cover = miniPlayerState.cover || '';
   const previous = miniPlayerLastSentState;
   const patch = {};
   let changed = false;
@@ -1570,11 +1620,11 @@ function sendMiniPlayerState(force = false) {
     || next.metaSignature !== previous.metaSignature
     || next.title !== previous.title
     || next.artist !== previous.artist
-    || next.cover !== previous.cover;
+    || (includeCover && next.cover !== previous.cover);
   if (metadataChanged) {
     patch.title = next.title;
     patch.artist = next.artist;
-    patch.cover = next.cover;
+    if (includeCover) patch.cover = next.cover;
     changed = true;
   }
   if (force || !previous || next.playing !== previous.playing) {
@@ -1687,7 +1737,8 @@ function createMiniPlayerWindow() {
   if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) return miniPlayerWindow;
   miniPlayerWindow = null;
   miniPlayerUserMovePending = false;
-  const bounds = clampMiniPlayerBounds(miniPlayerUserBounds || miniPlayerDefaultBounds());
+  const mode = normalizeMiniPlayerMode(miniPlayerMode);
+  const bounds = clampMiniPlayerBounds(miniPlayerUserBoundsByMode[mode] || miniPlayerDefaultBounds(mode), mode);
   const win = new BrowserWindow({
     ...bounds,
     frame: false,
@@ -1713,6 +1764,7 @@ function createMiniPlayerWindow() {
     },
   });
   miniPlayerWindow = win;
+  miniPlayerWindowModes.set(win, mode);
   keepMiniPlayerOnTop(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.once('ready-to-show', () => {
@@ -1770,7 +1822,8 @@ function createMiniPlayerWindow() {
       scheduleMiniPlayerRecovery(120);
     }
   });
-  win.loadURL(overlayUrl('mini-player.html')).catch((e) => {
+  const page = mode === 'compact' ? 'mini-player-compact.html' : 'mini-player.html';
+  win.loadURL(overlayUrl(page)).catch((e) => {
     console.warn('Mini player load failed:', e.message);
     scheduleMiniPlayerWindowRecovery(win, 'load-rejected');
   });
@@ -1833,6 +1886,19 @@ function setMiniPlayerEnabled(enabled) {
   return { ok: true, miniPlayerEnabled };
 }
 
+function setMiniPlayerMode(mode) {
+  const nextMode = normalizeMiniPlayerMode(mode);
+  const changed = nextMode !== miniPlayerMode;
+  miniPlayerMode = nextMode;
+  writeDesktopShellSettings({ miniPlayerMode });
+  if (changed) {
+    closeMiniPlayerWindow();
+    if (shouldShowMiniPlayer()) showMiniPlayerWindow();
+  }
+  refreshTrayMenu();
+  return { ok: true, miniPlayerMode };
+}
+
 function closeOverlayWindows() {
   miniPlayerActive = false;
   closeDesktopLyricsWindow();
@@ -1870,6 +1936,7 @@ ipcMain.handle('mineradio-tray-get-settings', () => {
     closeToTray: closeToTrayEnabled,
     miniPlayer: miniPlayerEnabled,
     miniPlayerEnabled,
+    miniPlayerMode,
     startup: isStartupEnabled(),
     startupEnabled: isStartupEnabled(),
   };
@@ -1890,6 +1957,10 @@ ipcMain.handle('mineradio-startup-set-enabled', (_event, enabled) => {
 
 ipcMain.handle('mineradio-mini-player-set-enabled', (_event, enabled) => {
   return setMiniPlayerEnabled(enabled);
+});
+
+ipcMain.handle('mineradio-mini-player-set-mode', (_event, mode) => {
+  return setMiniPlayerMode(mode);
 });
 
 ipcMain.handle('mineradio-mini-player-update', (event, payload) => {
