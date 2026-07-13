@@ -17918,9 +17918,9 @@ function localAudioFileBytes(song) {
 function localAudioDurationSeconds(song) {
   if (!song) return 0;
   var sec = Number(song.duration) || 0;
-  if (sec > 10000) sec = sec / 1000;
-  if (!sec) sec = normalizePlaybackDurationSeconds(song.durationMs || song.dt || 0);
-  return sec > 0 ? sec : 0;
+  if (!isFinite(sec) || sec <= 0) sec = 0;
+  if (!sec) sec = playbackMillisecondsToSeconds(song.durationMs || song.dt || 0);
+  return sec;
 }
 function estimateLocalAudioBitrateKbps(song) {
   if (!song || song.type !== 'local') return 0;
@@ -21844,15 +21844,31 @@ async function loadPlaylistIntoQueueById(id, autoplay, title) {
 
 // 进度条
 var progressDragState = { active: false, pointerId: null, rect: null, lastParticleAt: 0 };
-var playbackProgressUiState = { fill: null, thumb: null, timeDisplay: null, lastText: '', lastPercent: null };
+var playbackProgressUiState = {
+  fill: null,
+  thumb: null,
+  timeDisplay: null,
+  lastText: '',
+  lastPercent: null,
+  lastCurrentSecond: null,
+  lastDurationSecond: null
+};
 function normalizePlaybackDurationSeconds(value) {
   var raw = Number(value);
   if (!isFinite(raw) || raw <= 0) return 0;
-  return raw > 1000 ? raw / 1000 : raw;
+  return raw > 10000 ? raw / 1000 : raw;
+}
+function playbackMillisecondsToSeconds(value) {
+  var raw = Number(value);
+  return isFinite(raw) && raw > 0 ? raw / 1000 : 0;
 }
 function playbackDurationFromSong(song) {
   if (!song) return 0;
-  return normalizePlaybackDurationSeconds(song.duration || song.durationMs || song.dt || 0);
+  var seconds = song.type === 'local'
+    ? (Number(song.duration) || 0)
+    : normalizePlaybackDurationSeconds(song.duration);
+  if (!isFinite(seconds) || seconds <= 0) seconds = 0;
+  return seconds || playbackMillisecondsToSeconds(song.durationMs || song.dt || 0);
 }
 function getPlaybackDurationSeconds() {
   if (audio && isFinite(audio.duration) && audio.duration > 0) return audio.duration;
@@ -21866,9 +21882,22 @@ function getPlaybackCurrentSeconds() {
  * @returns {{fill: HTMLElement|null, thumb: HTMLElement|null, timeDisplay: HTMLElement|null}} 进度条相关元素。
  */
 function playbackProgressElements() {
-  if (!playbackProgressUiState.fill || !playbackProgressUiState.fill.isConnected) playbackProgressUiState.fill = document.getElementById('progress-fill');
-  if (!playbackProgressUiState.thumb || !playbackProgressUiState.thumb.isConnected) playbackProgressUiState.thumb = document.getElementById('progress-thumb');
-  if (!playbackProgressUiState.timeDisplay || !playbackProgressUiState.timeDisplay.isConnected) playbackProgressUiState.timeDisplay = document.getElementById('time-display');
+  var visualNodesChanged = false;
+  if (!playbackProgressUiState.fill || !playbackProgressUiState.fill.isConnected) {
+    playbackProgressUiState.fill = document.getElementById('progress-fill');
+    visualNodesChanged = true;
+  }
+  if (!playbackProgressUiState.thumb || !playbackProgressUiState.thumb.isConnected) {
+    playbackProgressUiState.thumb = document.getElementById('progress-thumb');
+    visualNodesChanged = true;
+  }
+  if (visualNodesChanged) playbackProgressUiState.lastPercent = null;
+  if (!playbackProgressUiState.timeDisplay || !playbackProgressUiState.timeDisplay.isConnected) {
+    playbackProgressUiState.timeDisplay = document.getElementById('time-display');
+    playbackProgressUiState.lastText = '';
+    playbackProgressUiState.lastCurrentSecond = null;
+    playbackProgressUiState.lastDurationSecond = null;
+  }
   return playbackProgressUiState;
 }
 function setProgressVisual(percent) {
@@ -21887,11 +21916,15 @@ function updatePlaybackProgressUi() {
   if (durationSec > 0 && currentSec > durationSec) currentSec = durationSec;
   var visualPercent = durationSec > 0 ? (currentSec / durationSec * 100) : 0;
   var prevPercent = playbackProgressUiState.lastPercent;
-  setProgressVisual(durationSec > 0 ? (currentSec / durationSec * 100) : 0);
+  setProgressVisual(visualPercent);
   var timeDisplay = playbackProgressElements().timeDisplay;
-  var timeText = formatProgramTime(currentSec) + ' / ' + (durationSec > 0 ? formatProgramTime(durationSec) : '0:00');
-  var textChanged = playbackProgressUiState.lastText !== timeText;
+  var currentSecond = Math.floor(currentSec);
+  var durationSecond = durationSec > 0 ? Math.floor(durationSec) : 0;
+  var textChanged = playbackProgressUiState.lastCurrentSecond !== currentSecond || playbackProgressUiState.lastDurationSecond !== durationSecond;
   if (textChanged) {
+    var timeText = formatProgramTime(currentSecond) + ' / ' + (durationSecond > 0 ? formatProgramTime(durationSecond) : '0:00');
+    playbackProgressUiState.lastCurrentSecond = currentSecond;
+    playbackProgressUiState.lastDurationSecond = durationSecond;
     playbackProgressUiState.lastText = timeText;
     if (timeDisplay) timeDisplay.textContent = timeText;
   }
@@ -22065,12 +22098,12 @@ function updateSystemMediaSessionPlaybackState(reason) {
  */
 function updateSystemMediaSessionPosition(force) {
   if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState || !audio) return;
+  var now = performance.now();
+  if (!force && now - systemMediaSessionPositionState.lastAt < 900) return;
   var duration = getPlaybackDurationSeconds();
   if (!isFinite(duration) || duration <= 0) return;
   var position = Math.max(0, Math.min(duration, getPlaybackCurrentSeconds()));
   var playbackRate = audio && isFinite(audio.playbackRate) && audio.playbackRate > 0 ? audio.playbackRate : 1;
-  var now = performance.now();
-  if (!force && now - systemMediaSessionPositionState.lastAt < 900) return;
   try {
     navigator.mediaSession.setPositionState({ duration: duration, position: position, playbackRate: playbackRate });
     systemMediaSessionPositionState.lastAt = now;

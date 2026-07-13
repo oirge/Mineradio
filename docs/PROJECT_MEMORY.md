@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.29`
-- 最近正式安装包 Release 基线：`v1.2.29`。
+- 当前源码检查点：`v1.2.30`
+- 最近正式安装包 Release 基线：`v1.2.29`（待发布 `v1.2.30`）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,6 +27,7 @@
 
 ## Release Memory
 
+- `v1.2.30` 重点修复长本地音频 duration 秒/毫秒误判和非有限时长回退，并优化整数秒进度文本缓存、进度 DOM 重连补写及 Media Session 节流前置；视觉、播放控制和 3D 歌单架交互保持不变。
 - `v1.2.29` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.29`
 - `v1.2.29` 重点优化歌词字距 Unicode 游标绘制、进度拖动布局缓存与指针归属、异常拖动状态恢复和粒子批量插入/清理；视觉、歌词质感、播放控制和 3D 歌单架交互保持不变。
 - `v1.2.29` Release 资产包括：`latest.yml`、`Mineradio-1.2.29-Setup.exe`、`Mineradio-1.2.29-Setup.exe.blockmap`、`Mineradio-1.2.29-SHA256SUMS.txt`、`Mineradio-1.2.28-to-1.2.29.patch.json`；Portable ZIP 跳过。
