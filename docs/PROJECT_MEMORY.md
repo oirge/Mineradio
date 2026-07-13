@@ -9,7 +9,7 @@
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.2.31`
-- 最近正式安装包 Release 基线：`v1.2.30`（待发布 `v1.2.31`）。
+- 最近正式安装包 Release 基线：`v1.2.31`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,7 +27,10 @@
 
 ## Release Memory
 
+- `v1.2.31` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.31`
 - `v1.2.31` 重点把永久 `280ms` 播放进度/听歌统计定时器改为按真实播放状态单任务自调度；暂停、结束、空队列和普通隐藏时零 tick，直播后台保持仍维持原刷新语义。视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.31` Release 资产包括：`latest.yml`、`Mineradio-1.2.31-Setup.exe`、`Mineradio-1.2.31-Setup.exe.blockmap`、`Mineradio-1.2.31-SHA256SUMS.txt`、`Mineradio-1.2.30-to-1.2.31.patch.json`；Portable ZIP 跳过。
+- `v1.2.31` 安装包 SHA256：`d3c4e8f50bdfeb3657acf8a4387dcdfbd9bb51c793e265ffd1932dfc663c928c`
 - `v1.2.30` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.30`
 - `v1.2.30` 重点修复长本地音频 duration 秒/毫秒误判和非有限时长回退，并优化整数秒进度文本缓存、进度 DOM 重连补写及 Media Session 节流前置；视觉、播放控制和 3D 歌单架交互保持不变。
 - `v1.2.30` Release 资产包括：`latest.yml`、`Mineradio-1.2.30-Setup.exe`、`Mineradio-1.2.30-Setup.exe.blockmap`、`Mineradio-1.2.30-SHA256SUMS.txt`、`Mineradio-1.2.29-to-1.2.30.patch.json`；Portable ZIP 跳过。
