@@ -8250,11 +8250,13 @@ function measureTextWithLetterSpacing(ctx, text, spacing) {
   text = String(text || '');
   spacing = Number(spacing) || 0;
   if (!spacing || text.length < 2) return ctx.measureText(text).width;
-  var chars = Array.from(text);
   var w = 0;
-  for (var i = 0; i < chars.length; i++) {
-    w += ctx.measureText(chars[i]).width;
-    if (i < chars.length - 1) w += spacing;
+  for (var i = 0; i < text.length;) {
+    var codePoint = text.codePointAt(i);
+    var next = i + (codePoint > 0xFFFF ? 2 : 1);
+    w += ctx.measureText(text.slice(i, next)).width;
+    if (next < text.length) w += spacing;
+    i = next;
   }
   return Math.max(1, w);
 }
@@ -8269,7 +8271,6 @@ function drawTextWithLetterSpacing(ctx, text, x, y, spacing, stroke) {
     else ctx.fillText(text, x, y);
     return;
   }
-  var chars = Array.from(text);
   var align = ctx.textAlign || 'left';
   var width = measureTextWithLetterSpacing(ctx, text, spacing);
   var start = x;
@@ -8277,10 +8278,14 @@ function drawTextWithLetterSpacing(ctx, text, x, y, spacing, stroke) {
   else if (align === 'right' || align === 'end') start = x - width;
   ctx.textAlign = 'left';
   var cursor = start;
-  for (var i = 0; i < chars.length; i++) {
-    if (stroke) ctx.strokeText(chars[i], cursor, y);
-    else ctx.fillText(chars[i], cursor, y);
-    cursor += ctx.measureText(chars[i]).width + (i < chars.length - 1 ? spacing : 0);
+  for (var i = 0; i < text.length;) {
+    var codePoint = text.codePointAt(i);
+    var next = i + (codePoint > 0xFFFF ? 2 : 1);
+    var character = text.slice(i, next);
+    if (stroke) ctx.strokeText(character, cursor, y);
+    else ctx.fillText(character, cursor, y);
+    cursor += ctx.measureText(character).width + (next < text.length ? spacing : 0);
+    i = next;
   }
   ctx.textAlign = align;
 }
@@ -21838,7 +21843,7 @@ async function loadPlaylistIntoQueueById(id, autoplay, title) {
 }
 
 // 进度条
-var progressDragState = { active: false, lastParticleAt: 0 };
+var progressDragState = { active: false, pointerId: null, rect: null, lastParticleAt: 0 };
 var playbackProgressUiState = { fill: null, thumb: null, timeDisplay: null, lastText: '', lastPercent: null };
 function normalizePlaybackDurationSeconds(value) {
   var raw = Number(value);
@@ -22106,6 +22111,8 @@ function emitProgressDragParticles(x, y) {
   var now = performance.now();
   if (now - progressDragState.lastParticleAt < 46) return;
   progressDragState.lastParticleAt = now;
+  var fragment = document.createDocumentFragment();
+  var dots = new Array(3);
   for (var i = 0; i < 3; i++) {
     var dot = document.createElement('span');
     dot.className = 'progress-drag-particle';
@@ -22115,17 +22122,23 @@ function emitProgressDragParticles(x, y) {
     dot.style.setProperty('--py', y + 'px');
     dot.style.setProperty('--dx', dx + 'px');
     dot.style.setProperty('--dy', dy + 'px');
-    document.body.appendChild(dot);
-    setTimeout((function(el){ return function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }; })(dot), 700);
+    dots[i] = dot;
+    fragment.appendChild(dot);
   }
+  document.body.appendChild(fragment);
+  setTimeout(function(){
+    for (var i = 0; i < dots.length; i++) {
+      if (dots[i] && dots[i].parentNode) dots[i].parentNode.removeChild(dots[i]);
+    }
+  }, 700);
 }
 function seekFromProgressPointer(e, emitParticles) {
   var durationSec = getPlaybackDurationSeconds();
   if (!audio || !durationSec) return;
-  var bar = document.getElementById('progress-bar');
-  var rect = bar.getBoundingClientRect();
+  var rect = progressDragState.rect || (progressBar && progressBar.getBoundingClientRect());
+  if (!rect || !isFinite(rect.width) || rect.width <= 0) return;
   var ratio = clampRange((e.clientX - rect.left) / rect.width, 0, 1);
-  audio.currentTime = ratio * durationSec;
+  try { audio.currentTime = ratio * durationSec; } catch (err) { return; }
   setProgressVisual(ratio * 100);
   syncBeatMapPlaybackCursor(audio.currentTime);
   schedulePlaybackProgressUi('progress-seek');
@@ -22133,25 +22146,44 @@ function seekFromProgressPointer(e, emitParticles) {
 }
 var progressBar = document.getElementById('progress-bar');
 progressBar.addEventListener('pointerdown', function(e){
-  if (!audio || !audio.duration) return;
+  if (!audio || !audio.duration || progressDragState.active || (e.pointerType === 'mouse' && e.button !== 0)) return;
   progressDragState.active = true;
+  progressDragState.pointerId = e.pointerId;
   progressBar.classList.add('is-dragging');
+  progressDragState.rect = progressBar.getBoundingClientRect();
+  if (!progressDragState.rect.width) {
+    progressDragState.active = false;
+    progressDragState.pointerId = null;
+    progressDragState.rect = null;
+    progressBar.classList.remove('is-dragging');
+    return;
+  }
   try { progressBar.setPointerCapture(e.pointerId); } catch (err) {}
   seekFromProgressPointer(e, true);
 });
 progressBar.addEventListener('pointermove', function(e){
-  if (!progressDragState.active) return;
+  if (!progressDragState.active || e.pointerId !== progressDragState.pointerId) return;
   seekFromProgressPointer(e, true);
 });
-function endProgressDrag(e) {
-  if (!progressDragState.active) return;
+function resetProgressDragState() {
   progressDragState.active = false;
+  progressDragState.pointerId = null;
+  progressDragState.rect = null;
   progressBar.classList.remove('is-dragging');
+}
+function endProgressDrag(e) {
+  if (!progressDragState.active || e.pointerId !== progressDragState.pointerId) return;
+  resetProgressDragState();
   try { progressBar.releasePointerCapture(e.pointerId); } catch (err) {}
+  schedulePlaybackProgressUi('progress-drag-end', true);
 }
 progressBar.addEventListener('pointerup', endProgressDrag);
 progressBar.addEventListener('pointercancel', endProgressDrag);
-progressBar.addEventListener('lostpointercapture', function(){ progressDragState.active = false; progressBar.classList.remove('is-dragging'); });
+progressBar.addEventListener('lostpointercapture', function(e){
+  if (!progressDragState.active || e.pointerId !== progressDragState.pointerId) return;
+  resetProgressDragState();
+  schedulePlaybackProgressUi('progress-capture-lost', true);
+});
 setInterval(function(){
   if (!audio || !audio.src || audio.paused || audio.ended) return;
   if (document.hidden && !isLiveBackgroundKeepMode()) return;

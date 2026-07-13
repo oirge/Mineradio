@@ -81,6 +81,9 @@
 - 歌曲副标题/本地音质缓存键、3D 歌单架 draw/rebuild 签名、队列渲染指纹、本地曲库面板签名和本地快照签名如果用数组 `join`，会在高频刷新时反复创建短命数组。
 - 播放进度时间格式化处于 `timeupdate`/RAF 热路径；`padStart` 会额外制造临时字符串包装。
 - 引导尾迹数组如果用循环 `shift()` 裁剪，会在动画帧中反复搬移剩余元素。
+- 歌词字距测量和绘制会在歌词贴图重建时逐字调用 Canvas；先 `Array.from(text)` 会为每一行额外创建字符数组，且必须保持 Emoji/扩展汉字按 Unicode code point 处理。
+- 进度条拖动的 `pointermove` 频率很高；每次重新调用 `getBoundingClientRect()` 会强制读取布局，未绑定发起指针还会让第二个触点或右键误改播放位置。
+- 拖动粒子每轮固定创建三个节点；分别插入 DOM 和创建三个清理定时器会放大连续拖动时的主线程任务数量。
 
 ## Solution / Convention
 
@@ -157,6 +160,9 @@
 - 歌曲副标题缓存键、本地音质缓存键、3D 歌单架 `cardDrawSignature`/`queueSampleSig`、队列 `queueRenderFingerprint`、本地曲库面板签名和本地快照/记录签名统一改为直接字符串拼接，不要恢复数组 `join`。
 - `formatProgramTime()` 使用轻量补零，不要在进度热路径恢复 `padStart`。
 - 引导尾迹长度和过期裁剪使用批量 `splice(0, n)`，不要恢复循环 `shift()`。
+- `measureTextWithLetterSpacing()` / `drawTextWithLetterSpacing()` 使用 code point 游标扫描文本，不要恢复 `Array.from(text)`；字宽、字距、对齐和代理对语义必须保持不变。
+- 进度拖动开始时缓存轨道矩形并记录 `pointerId`，移动阶段只接受发起指针；结束、取消或捕获丢失时必须同时清空指针和矩形状态并强制同步最终进度。
+- 拖动粒子每轮仍保持三个节点，但使用 `DocumentFragment` 单次插入和一个清理任务，不要恢复逐节点插入与逐节点定时器。
 
 ## Reference
 
