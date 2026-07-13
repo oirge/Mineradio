@@ -14548,12 +14548,21 @@ function makeShelfManager() {
     var rec = item.cover ? playlistCoverCache[item.cover] : null;
     var coverState = item.cover ? (rec && rec.loaded ? 'ready' : (rec && rec.failed ? 'fail' : 'wait')) : 'none';
     var pulseBucket = card && card.isCenter ? Math.round((bass + beatPulse * 0.85) * 6) : 0;
-    return [
-      item.type || '', item.title || '', item.sub || '', item.tag || '',
-      item.playlistId || '', item.podcastKey || '', item.queueIndex == null ? '' : item.queueIndex,
-      item.cover || '', coverState, card && card.isCenter ? 1 : 0, card && card.selected ? 1 : 0,
-      card && card.dofBucket == null ? -1 : card.dofBucket, pulseBucket, shelfAccentHex(), shelfSettings().bgOpacity
-    ].join('|');
+    return (item.type || '') + '|' +
+      (item.title || '') + '|' +
+      (item.sub || '') + '|' +
+      (item.tag || '') + '|' +
+      (item.playlistId || '') + '|' +
+      (item.podcastKey || '') + '|' +
+      (item.queueIndex == null ? '' : item.queueIndex) + '|' +
+      (item.cover || '') + '|' +
+      coverState + '|' +
+      (card && card.isCenter ? 1 : 0) + '|' +
+      (card && card.selected ? 1 : 0) + '|' +
+      (card && card.dofBucket == null ? -1 : card.dofBucket) + '|' +
+      pulseBucket + '|' +
+      shelfAccentHex() + '|' +
+      shelfSettings().bgOpacity;
   }
 
   function drawCard(card, item) {
@@ -15025,41 +15034,43 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
   }
 
   function sigItemPart(it) {
-    return [it.type, it.playlistId || '', it.queueIndex || '', it.title || ''].join('|');
+    return (it.type || '') + '|' + (it.playlistId || '') + '|' + (it.queueIndex || '') + '|' + (it.title || '');
   }
   function queueSampleSig() {
     var len = playQueue.length;
-    var parts = [];
+    var signature = '';
     var seen = {};
     function addQueueSigIndex(idx) {
       if (idx < 0 || idx >= len || seen[idx]) return;
       seen[idx] = true;
       var song = playQueue[idx] || {};
       var stableId = song.id || song.songId || song.mid || song.url || song.path || song.filePath || '';
-      parts.push(['queue', '', idx, song.name || '', stableId].join('|'));
+      if (signature) signature += '||';
+      signature += 'queue||' + idx + '|' + (song.name || '') + '|' + stableId;
     }
     var headEnd = Math.min(3, len);
     for (var i = 0; i < headEnd; i++) addQueueSigIndex(i);
     for (var cur = currentIdx - 2; cur <= currentIdx + 2; cur++) addQueueSigIndex(cur);
     var tailStart = Math.max(headEnd, len - 3);
     for (var j = tailStart; j < len; j++) addQueueSigIndex(j);
-    return parts.join('||');
+    return signature;
   }
   function sig(items) {
-    if (!items || allItemsIsQueue) return ['queue', playQueue.length, currentIdx, queueSampleSig()].join('::');
+    if (!items || allItemsIsQueue) return 'queue::' + playQueue.length + '::' + currentIdx + '::' + queueSampleSig();
     var len = items.length;
-    var parts = [];
+    var signature = '';
     var seen = {};
     function addItemSigIndex(idx) {
       if (idx < 0 || idx >= len || seen[idx]) return;
       seen[idx] = true;
-      parts.push(sigItemPart(items[idx] || {}));
+      if (signature) signature += '||';
+      signature += sigItemPart(items[idx] || {});
     }
     var headEnd = Math.min(3, len);
     for (var i = 0; i < headEnd; i++) addItemSigIndex(i);
     var tailStart = Math.max(headEnd, len - 3);
     for (var j = tailStart; j < len; j++) addItemSigIndex(j);
-    return ['queue', len, currentIdx, parts.join('||')].join('::');
+    return 'queue::' + len + '::' + currentIdx + '::' + signature;
   }
 
   function switchPane(nextPane) {
@@ -17930,15 +17941,13 @@ function updateLocalAudioQualityInfo(song) {
 function localAudioQualityCacheKey(song) {
   if (!song || song.type !== 'local') return '';
   var file = song.localFile || null;
-  return [
-    song.localFormat || '',
-    song.localFileSize || song.size || (file && localFileSize(file)) || 0,
-    song.localBitrateKbps || '',
-    song.duration || '',
-    song.durationMs || '',
-    song.dt || '',
-    song.localPath || song.localFilePathAbsolute || (file && localFilePath(file)) || song.name || ''
-  ].join('|');
+  return (song.localFormat || '') + '|' +
+    (song.localFileSize || song.size || (file && localFileSize(file)) || 0) + '|' +
+    (song.localBitrateKbps || '') + '|' +
+    (song.duration || '') + '|' +
+    (song.durationMs || '') + '|' +
+    (song.dt || '') + '|' +
+    (song.localPath || song.localFilePathAbsolute || (file && localFilePath(file)) || song.name || '');
 }
 /**
  * 返回本地歌曲音质文本。队列、搜索和 3D 歌单架会反复调用，缓存可减少重复格式化和数组分配。
@@ -17966,20 +17975,18 @@ function localAudioQualityText(song) {
  */
 function songDisplaySubtitleCacheKey(song) {
   if (!song) return '';
-  return [
-    song.type || '',
-    song.artist || '',
-    song.albumArtist || '',
-    song.album || '',
-    song.localFormat || '',
-    song.localFileSize || song.size || 0,
-    song.localBitrateKbps || '',
-    song.duration || '',
-    song.durationMs || '',
-    song.dt || '',
-    song.localPath || song.localFilePathAbsolute || '',
-    song.localKey || song.id || ''
-  ].join('|');
+  return (song.type || '') + '|' +
+    (song.artist || '') + '|' +
+    (song.albumArtist || '') + '|' +
+    (song.album || '') + '|' +
+    (song.localFormat || '') + '|' +
+    (song.localFileSize || song.size || 0) + '|' +
+    (song.localBitrateKbps || '') + '|' +
+    (song.duration || '') + '|' +
+    (song.durationMs || '') + '|' +
+    (song.dt || '') + '|' +
+    (song.localPath || song.localFilePathAbsolute || '') + '|' +
+    (song.localKey || song.id || '');
 }
 /**
  * 返回歌曲列表副标题。该函数处在队列签名、搜索结果和歌单详情热路径，需避免重复拼装短命数组。
@@ -18002,7 +18009,7 @@ function songDisplaySubtitle(song) {
     return text;
   }
   text = text || songSourceLabel(song);
-  song._mineradioSubtitleKey = songDisplaySubtitleCacheKey(song);
+  song._mineradioSubtitleKey = beforeKey;
   song._mineradioSubtitleText = text;
   return text;
 }
@@ -18909,7 +18916,9 @@ function formatProgramTime(sec) {
   var h = Math.floor(sec / 3600);
   var m = Math.floor((sec % 3600) / 60);
   var s = Math.floor(sec % 60);
-  return h ? (h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')) : (m + ':' + String(s).padStart(2, '0'));
+  var mm = m < 10 ? ('0' + m) : String(m);
+  var ss = s < 10 ? ('0' + s) : String(s);
+  return h ? (h + ':' + mm + ':' + ss) : (m + ':' + ss);
 }
 $input.addEventListener('input', function(){
   clearTimeout(searchTimer);
@@ -21327,15 +21336,21 @@ function queueRenderFingerprint() {
     return song.id || song.mid || song.path || song.url || song.name || '';
   }
   var len = playQueue.length;
-  var anchors = [0, 1, Math.floor(len / 3), Math.floor(len / 2), Math.floor(len * 2 / 3), len - 2, len - 1];
+  var signature = String(len);
   var seen = {};
-  var keys = [len];
-  anchors.forEach(function(index){
+  function addAnchor(index) {
     if (index < 0 || index >= len || seen[index]) return;
     seen[index] = true;
-    keys.push(index + ':' + songKey(playQueue[index]));
-  });
-  return keys.join('|');
+    signature += '|' + index + ':' + songKey(playQueue[index]);
+  }
+  addAnchor(0);
+  addAnchor(1);
+  addAnchor(Math.floor(len / 3));
+  addAnchor(Math.floor(len / 2));
+  addAnchor(Math.floor(len * 2 / 3));
+  addAnchor(len - 2);
+  addAnchor(len - 1);
+  return signature;
 }
 /**
  * 生成队列可见 DOM 的签名。签名未变化时跳过 innerHTML 重建，降低封面/歌词连续完成时的抖动。
@@ -21684,19 +21699,18 @@ function resetPlaylistPanelRenderLimit() {
 }
 function localLibraryPlaylistDomSignature(songs, renderLimit) {
   songs = songs || [];
-  var keys = ['local-playlist', songs.length, renderLimit];
+  var signature = 'local-playlist|' + songs.length + '|' + renderLimit;
   for (var i = 0; i < renderLimit; i++) {
     var song = songs[i] || {};
-    keys.push([
-      i,
-      queueItemKey(song),
-      song.name || song.title || '',
-      songDisplaySubtitle(song),
-      songCoverSignature(song)
-    ].join('~'));
+    signature += '|' +
+      i + '~' +
+      queueItemKey(song) + '~' +
+      (song.name || song.title || '') + '~' +
+      songDisplaySubtitle(song) + '~' +
+      songCoverSignature(song);
   }
-  if (songs.length > renderLimit) keys.push('more:' + songs.length);
-  return keys.join('|');
+  if (songs.length > renderLimit) signature += '|more:' + songs.length;
+  return signature;
 }
 function growPlaylistPanelRenderLimit() {
   var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
@@ -23056,7 +23070,7 @@ function localLibrarySnapshotSignature(files) {
     size += localFileSize(file);
     mtime = Math.max(mtime, Number(file.lastModified) || 0);
   }
-  return [count, audio, size, mtime, first, last].join('|');
+  return count + '|' + audio + '|' + size + '|' + mtime + '|' + first + '|' + last;
 }
 function normalizeLocalLibrarySnapshotInput(files, directories, truncated) {
   var input = files || {};
@@ -23103,7 +23117,7 @@ function saveLocalLibrarySnapshot(folderPath, files, truncated) {
       folderPath: folderPath,
       savedAt: Date.now(),
       truncated: !!normalized.truncated,
-      signature: [sigCount, sigAudio, sigSize, sigMtime, sigFirst, sigLast].join('|'),
+      signature: sigCount + '|' + sigAudio + '|' + sigSize + '|' + sigMtime + '|' + sigFirst + '|' + sigLast,
       directories: directories,
       files: compact
     };
@@ -23213,7 +23227,7 @@ function localLibraryRecordFileSignature(record) {
   if (record.fileSignature) return String(record.fileSignature);
   var pathKey = localLibraryRecordPathKey(record);
   if (pathKey && (record.mtime || record.size)) {
-    return [pathKey, Number(record.size) || 0, Number(record.mtime) || 0].join('|');
+    return pathKey + '|' + (Number(record.size) || 0) + '|' + (Number(record.mtime) || 0);
   }
   return '';
 }
@@ -27335,11 +27349,13 @@ function pushIdleGuideTrail(index, pt, alpha, now) {
   if (!last || Math.sqrt(dx * dx + dy * dy) > 1.4 || now - last.t > 42) {
     trail.push({ x: pt.x, y: pt.y, scale: pt.scale || 1, alpha: alpha || 1, t: now });
   }
-  while (trail.length > 26) trail.shift();
+  if (trail.length > 26) trail.splice(0, trail.length - 26);
 }
 function drawIdleGuideTrail(ctx, trail, now, alpha, energy) {
   if (!trail || trail.length < 2) return;
-  while (trail.length && now - trail[0].t > 680) trail.shift();
+  var drop = 0;
+  while (drop < trail.length && now - trail[drop].t > 680) drop++;
+  if (drop) trail.splice(0, drop);
   if (trail.length < 2) return;
   ctx.save();
   ctx.lineCap = 'round';
