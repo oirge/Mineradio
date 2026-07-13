@@ -19996,6 +19996,7 @@ function pauseCurrentAudioForTrackSwitch() {
 function syncPlaybackStateFromAudioEvent(reason) {
   var isPlaying = !!(audio && audio.src && !audio.paused && !audio.ended);
   playing = isPlaying;
+  syncPlaybackTickTimer(isPlaying);
   setPlayIcon(isPlaying);
   if (!isPlaying) hideLoading();
   if (reason === 'play' || reason === 'playing') switchPlaybackVisualToEmily();
@@ -22217,12 +22218,38 @@ progressBar.addEventListener('lostpointercapture', function(e){
   resetProgressDragState();
   schedulePlaybackProgressUi('progress-capture-lost', true);
 });
-setInterval(function(){
-  if (!audio || !audio.src || audio.paused || audio.ended) return;
+var PLAYBACK_TICK_INTERVAL = 280;
+var playbackTickTimer = 0;
+function playbackTickActive() {
+  return !!(audio && audio.src && !audio.paused && !audio.ended);
+}
+function stopPlaybackTickTimer() {
+  if (playbackTickTimer) clearTimeout(playbackTickTimer);
+  playbackTickTimer = 0;
+}
+function schedulePlaybackTickTimer(delay) {
+  if (playbackTickTimer || !playbackTickActive()) return;
   if (document.hidden && !isLiveBackgroundKeepMode()) return;
+  playbackTickTimer = setTimeout(runPlaybackTick, Math.max(0, delay == null ? PLAYBACK_TICK_INTERVAL : delay));
+}
+function runPlaybackTick() {
+  playbackTickTimer = 0;
+  if (!playbackTickActive()) return;
   updateListenStatsTick(false);
   schedulePlaybackProgressUi('playback-tick');
-}, 280);
+  schedulePlaybackTickTimer(PLAYBACK_TICK_INTERVAL);
+}
+function syncPlaybackTickTimer(active) {
+  if (!active || !playbackTickActive() || (document.hidden && !isLiveBackgroundKeepMode())) {
+    stopPlaybackTickTimer();
+    return;
+  }
+  schedulePlaybackTickTimer(0);
+}
+document.addEventListener('visibilitychange', function(){
+  stopPlaybackTickTimer();
+  if (playbackTickActive()) schedulePlaybackTickTimer(0);
+});
 
 // ============================================================
 //  文件拖放

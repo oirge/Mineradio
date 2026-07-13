@@ -87,6 +87,8 @@
 - 本地 `song.duration` 由 `audio.duration` 写入，单位是秒；`durationMs` / `dt` 才是毫秒。不能再用统一的 `>1000` 猜测，否则 20 分钟以上本地音频会被缩短一千倍。
 - 播放进度每约 280ms 刷新一次，但时间文案只按整数秒变化；每轮都调用两次 `formatProgramTime()` 会在同一秒重复创建相同字符串。
 - Media Session 位置同步有 900ms 节流；节流判断放在时长、位置和速率读取之后会让大多数调用白做一轮计算。
+- 播放进度/听歌统计旧实现使用永久 `280ms setInterval`；暂停、空队列或普通隐藏时虽然会提前返回，但仍持续唤醒渲染线程。
+- `play` / `playing` 事件会连续到达；播放 tick 如果每个事件都新建计时器，会形成多个并行进度循环。
 
 ## Solution / Convention
 
@@ -169,6 +171,8 @@
 - `localAudioDurationSeconds()` / `playbackDurationFromSong()` 必须区分字段单位：本地 `duration` 为秒，`durationMs` / `dt` 为毫秒；非有限值应回退到下一可用字段。
 - `updatePlaybackProgressUi()` 使用整数秒签名决定是否重建时间文本，进度条百分比仍保持原两位小数；重新获取进度 DOM 节点时必须失效对应缓存并补写状态。
 - `updateSystemMediaSessionPosition()` 在读取 duration/currentTime/playbackRate 前先执行 900ms 节流判断；强制同步仍必须跳过节流。
+- 播放 tick 使用 `playbackTickTimer` 单任务自调度：真实播放时按 `280ms` 重排，暂停/结束/空源时清除，普通隐藏时不保留定时器，恢复可见时立即启动。
+- “直播后台保持”必须继续允许隐藏播放 tick；连续播放状态事件只复用已有任务，不得叠加计时器。
 
 ## Reference
 
