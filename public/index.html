@@ -2965,7 +2965,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.27';
+var APP_VERSION = '1.2.32';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -7603,6 +7603,8 @@ var stageLyrics = {
   outgoing: [],
   currentIdx: -1,
   currentText: '',
+  cursorLines: null,
+  cursorIdx: -1,
   highBloom: 0,
   beatGlow: 0,
   glowFollowX: 0,
@@ -10122,6 +10124,8 @@ function clearStageLyrics() {
   stageLyrics.current = null;
   stageLyrics.currentIdx = -1;
   stageLyrics.currentText = '';
+  stageLyrics.cursorLines = null;
+  stageLyrics.cursorIdx = -1;
   while (stageLyrics.outgoing.length) disposeLyricMesh(stageLyrics.outgoing.pop());
 }
 
@@ -10440,6 +10444,36 @@ function getLyricLineProgress(line, nextLine, now) {
   return prog * prog * (3 - 2 * prog);
 }
 
+function findStageLyricIndex(lines, time) {
+  lines = Array.isArray(lines) ? lines : [];
+  if (!lines.length) {
+    stageLyrics.cursorLines = lines;
+    stageLyrics.cursorIdx = -1;
+    return -1;
+  }
+  var target = time + 0.05;
+  var index = stageLyrics.cursorLines === lines ? stageLyrics.cursorIdx : -1;
+  if (stageLyrics.cursorLines === lines && index >= 0 && index < lines.length && lines[index].t <= target) {
+    while (index + 1 < lines.length && lines[index + 1].t <= target) index++;
+    stageLyrics.cursorIdx = index;
+    return index;
+  }
+  if (stageLyrics.cursorLines === lines && index === -1 && lines[0].t > target) return -1;
+  var low = 0;
+  var high = lines.length;
+  while (low < high) {
+    var mid = (low + high) >> 1;
+    if (lines[mid].t <= target) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  stageLyrics.cursorLines = lines;
+  stageLyrics.cursorIdx = low - 1;
+  return stageLyrics.cursorIdx;
+}
+
 function tickLyricsParticles() {
   if (!fx.particleLyrics) {
     if (stageLyrics.current || stageLyrics.currentText || (stageLyrics.outgoing && stageLyrics.outgoing.length)) clearStageLyrics();
@@ -10457,10 +10491,7 @@ function tickLyricsParticles() {
     return;
   }
   var t = audio.currentTime;
-  var newIdx = -1;
-  for (var i = 0; i < lyricsLines.length; i++) {
-    if (lyricsLines[i].t <= t + 0.05) newIdx = i; else break;
-  }
+  var newIdx = findStageLyricIndex(lyricsLines, t);
   if (newIdx < 0) {
     var introText = currentLyricFallbackText();
     if (!introText) {

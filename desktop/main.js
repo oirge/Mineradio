@@ -154,6 +154,11 @@ const LOCAL_LIBRARY_MIME = {
 const LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY = 24;
 const LOCAL_LIBRARY_SCAN_VISIT_LIMIT = 60000;
 const LOCAL_LIBRARY_INCREMENTAL_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const LOCAL_LIBRARY_NAME_COMPARE = new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' }).compare;
+
+function compareLocalLibraryEntries(a, b) {
+  return LOCAL_LIBRARY_NAME_COMPARE(a.name, b.name);
+}
 
 function localLibraryScanStatConcurrency(count) {
   count = Math.max(0, Number(count) || 0);
@@ -342,7 +347,7 @@ async function collectLocalLibraryFolderEntries(root) {
     } catch (_e) {
       continue;
     }
-    entries.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }));
+    entries.sort(compareLocalLibraryEntries);
     for (const entry of entries) {
       visited += 1;
       if (visited % 360 === 0) await yieldLocalLibraryScanTurn();

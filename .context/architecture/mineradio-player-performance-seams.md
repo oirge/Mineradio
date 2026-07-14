@@ -89,6 +89,8 @@
 - Media Session 位置同步有 900ms 节流；节流判断放在时长、位置和速率读取之后会让大多数调用白做一轮计算。
 - 播放进度/听歌统计旧实现使用永久 `280ms setInterval`；暂停、空队列或普通隐藏时虽然会提前返回，但仍持续唤醒渲染线程。
 - `play` / `playing` 事件会连续到达；播放 tick 如果每个事件都新建计时器，会形成多个并行进度循环。
+- 舞台歌词当前行定位运行在主渲染循环里；不要在每帧从 `lyricsLines[0]` 扫到当前行，长歌词和高刷屏会把前缀比较放大到每秒上万次。
+- 主进程本地曲库目录排序会比较大量文件名；不要在排序比较器里反复调用带 locale/options 的 `localeCompare()`，否则每次比较都会重复准备区域排序规则。
 
 ## Solution / Convention
 
@@ -173,6 +175,8 @@
 - `updateSystemMediaSessionPosition()` 在读取 duration/currentTime/playbackRate 前先执行 900ms 节流判断；强制同步仍必须跳过节流。
 - 播放 tick 使用 `playbackTickTimer` 单任务自调度：真实播放时按 `280ms` 重排，暂停/结束/空源时清除，普通隐藏时不保留定时器，恢复可见时立即启动。
 - “直播后台保持”必须继续允许隐藏播放 tick；连续播放状态事件只复用已有任务，不得叠加计时器。
+- 舞台歌词使用独立 `cursorLines` / `cursorIdx` 定位当前行：同一数组顺序播放只向前推进，后退跳播、歌词数组变化或游标失效时用 upper-bound 二分；`clearStageLyrics()` 必须释放游标引用。
+- 本地曲库目录排序复用模块级 `Intl.Collator('zh-Hans-CN', { numeric:true, sensitivity:'base' }).compare`，文件名排序语义必须与旧实现一致。
 
 ## Reference
 
