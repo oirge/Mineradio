@@ -9,7 +9,7 @@
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.2.34`
-- 最近正式安装包 Release 基线：`v1.2.33`（待发布 `v1.2.34`）。
+- 最近正式安装包 Release 基线：`v1.2.34`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -27,7 +27,10 @@
 
 ## Release Memory
 
+- `v1.2.34` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.34`
 - `v1.2.34` 重点让不可见的舞台歌词光粒停止坐标重算与缓冲上传，清理主循环和安魂镜头的重复工作，并让同一缓存安装包的并发更新请求共享一次完整校验；歌词/相机输出、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.34` Release 资产包括：`latest.yml`、`Mineradio-1.2.34-Setup.exe`、`Mineradio-1.2.34-Setup.exe.blockmap`、`Mineradio-1.2.34-SHA256SUMS.txt`、`Mineradio-1.2.33-to-1.2.34.patch.json`；Portable ZIP 跳过。
+- `v1.2.34` 安装包 SHA256：`d4387788fefade2cf329b1b8a6b599b134715f78b5d7d360f4e79c25d9f7163c`
 - `v1.2.33` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.33`
 - `v1.2.33` 重点让封面涟漪纹理在排空后停止上传，复用舞台歌词 profile 与颜色对象，并把完整安装包校验改为 Electron 主进程友好的异步固定缓冲分块单遍哈希；涟漪/歌词输出、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
 - `v1.2.33` Release 资产包括：`latest.yml`、`Mineradio-1.2.33-Setup.exe`、`Mineradio-1.2.33-Setup.exe.blockmap`、`Mineradio-1.2.33-SHA256SUMS.txt`、`Mineradio-1.2.32-to-1.2.33.patch.json`；Portable ZIP 跳过。
