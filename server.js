@@ -873,12 +873,6 @@ async function downloadUpdateAsset(job) {
     job.updatedAt = Date.now();
   }
 }
-function sha512Base64(buffer) {
-  return crypto.createHash('sha512').update(buffer).digest('base64');
-}
-function sha512Hex(buffer) {
-  return crypto.createHash('sha512').update(buffer).digest('hex');
-}
 function verifyUpdateBuffer(buffer, job) {
   const expectedSize = Number(job.expectedSize || job.total || 0) || 0;
   if (expectedSize > 0 && buffer.length !== expectedSize) {
@@ -890,15 +884,61 @@ function verifyUpdateBuffer(buffer, job) {
   }
   const expectedSha512 = normalizeDigest(job.sha512 || '', 'sha512');
   if (expectedSha512) {
-    const actualBase64 = sha512Base64(buffer);
-    const actualHex = sha512Hex(buffer).toLowerCase();
+    const actual = crypto.createHash('sha512').update(buffer).digest();
+    const actualBase64 = actual.toString('base64');
+    const actualHex = actual.toString('hex');
     if (actualBase64 !== expectedSha512 && actualHex !== expectedSha512.toLowerCase()) {
       throw updateError('UPDATE_SHA512_MISMATCH', 'Downloaded sha512 mismatch');
     }
   }
 }
-function verifyUpdateFile(filePath, job) {
-  verifyUpdateBuffer(fs.readFileSync(filePath), job);
+async function verifyUpdateFile(filePath, job) {
+  const expectedSize = Number(job.expectedSize || job.total || 0) || 0;
+  const expectedSha256 = normalizeDigest(job.sha256 || '', 'sha256').toLowerCase();
+  const expectedSha512 = normalizeDigest(job.sha512 || '', 'sha512');
+  const stat = await fs.promises.stat(filePath);
+  if (!stat.isFile()) {
+    throw updateError('EISDIR', `EISDIR: illegal operation on a directory, read '${filePath}'`);
+  }
+  if (expectedSize > 0 && stat.size !== expectedSize) {
+    throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${expectedSize} bytes, got ${stat.size}`);
+  }
+  if (!expectedSha256 && !expectedSha512) return;
+
+  const sha256 = expectedSha256 ? crypto.createHash('sha256') : null;
+  const sha512 = expectedSha512 ? crypto.createHash('sha512') : null;
+  let actualSize = 0;
+  let handle = null;
+  try {
+    handle = await fs.promises.open(filePath, 'r');
+    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    let position = 0;
+    while (true) {
+      const result = await handle.read(buffer, 0, buffer.length, position);
+      if (!result.bytesRead) break;
+      position += result.bytesRead;
+      actualSize += result.bytesRead;
+      const chunk = result.bytesRead === buffer.length ? buffer : buffer.subarray(0, result.bytesRead);
+      if (sha256) sha256.update(chunk);
+      if (sha512) sha512.update(chunk);
+    }
+  } finally {
+    if (handle) await handle.close();
+  }
+  if (expectedSize > 0 && actualSize !== expectedSize) {
+    throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${expectedSize} bytes, got ${actualSize}`);
+  }
+  if (sha256 && sha256.digest('hex') !== expectedSha256) {
+    throw updateError('UPDATE_SHA256_MISMATCH', 'Downloaded sha256 mismatch');
+  }
+  if (sha512) {
+    const actual = sha512.digest();
+    const actualBase64 = actual.toString('base64');
+    const actualHex = actual.toString('hex');
+    if (actualBase64 !== expectedSha512 && actualHex !== expectedSha512.toLowerCase()) {
+      throw updateError('UPDATE_SHA512_MISMATCH', 'Downloaded sha512 mismatch');
+    }
+  }
 }
 function moveInvalidUpdateFile(filePath, reason) {
   try {
@@ -913,7 +953,7 @@ function moveInvalidUpdateFile(filePath, reason) {
     console.warn('[UpdateDownload] failed to move invalid cached installer:', e.message);
   }
 }
-function reuseVerifiedInstallerJob(opts) {
+async function reuseVerifiedInstallerJob(opts) {
   if (!opts || !opts.filePath || !fs.existsSync(opts.filePath)) return null;
   if (!opts.expectedSize && !opts.sha256 && !opts.sha512) return null;
   const now = Date.now();
@@ -947,7 +987,9 @@ function reuseVerifiedInstallerJob(opts) {
     error: '',
   };
   try {
-    verifyUpdateFile(opts.filePath, job);
+    await verifyUpdateFile(opts.filePath, job);
+    const existing = activeUpdateJobFor(job.version);
+    if (existing) return existing;
     updateDownloadJobs.set(job.id, job);
     trimUpdateJobs();
     return job;
@@ -1049,7 +1091,7 @@ async function downloadUpdateAssetWithMirrors(job) {
         idleGuard.clear();
       }
 
-      verifyUpdateFile(tmpPath, job);
+      await verifyUpdateFile(tmpPath, job);
       if (fs.existsSync(job.filePath)) fs.unlinkSync(job.filePath);
       fs.renameSync(tmpPath, job.filePath);
       job.status = 'ready';
@@ -1069,7 +1111,7 @@ async function downloadUpdateAssetWithMirrors(job) {
     }
   }
 }
-function startUpdateDownloadJob(info) {
+async function startUpdateDownloadJob(info) {
   const release = info && info.release ? info.release : {};
   const asset = release.asset || {};
   const downloadUrl = release.downloadUrl || asset.downloadUrl || '';
@@ -1087,7 +1129,7 @@ function startUpdateDownloadJob(info) {
   const expectedSize = asset.size || 0;
   const sha256 = normalizeDigest(asset.sha256 || '', 'sha256').toLowerCase();
   const sha512 = normalizeDigest(asset.sha512 || '', 'sha512');
-  const cached = reuseVerifiedInstallerJob({
+  const cached = await reuseVerifiedInstallerJob({
     fileName,
     filePath,
     version,
@@ -1100,6 +1142,8 @@ function startUpdateDownloadJob(info) {
     attempts: downloadCandidates.length,
   });
   if (cached) return publicUpdateJob(cached);
+  const current = activeUpdateJobFor(version);
+  if (current) return publicUpdateJob(current);
 
   const now = Date.now();
   const job = {
@@ -1431,7 +1475,7 @@ const server = http.createServer(async (req, res) => {
   if (pn === '/api/update/download') {
     try {
       const info = await fetchLatestUpdateInfo();
-      const job = startUpdateDownloadJob(info);
+      const job = await startUpdateDownloadJob(info);
       sendJSON(res, job, job.ok ? 200 : 400);
     } catch (err) {
       console.error('[UpdateDownload]', err);

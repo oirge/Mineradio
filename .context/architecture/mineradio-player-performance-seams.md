@@ -91,6 +91,9 @@
 - `play` / `playing` 事件会连续到达；播放 tick 如果每个事件都新建计时器，会形成多个并行进度循环。
 - 舞台歌词当前行定位运行在主渲染循环里；不要在每帧从 `lyricsLines[0]` 扫到当前行，长歌词和高刷屏会把前缀比较放大到每秒上万次。
 - 主进程本地曲库目录排序会比较大量文件名；不要在排序比较器里反复调用带 locale/options 的 `localeCompare()`，否则每次比较都会重复准备区域排序规则。
+- 涟漪 `DataTexture.needsUpdate = true` 会增加纹理版本并触发整张 `1×12 RGBA Float` 纹理上传；完全空闲时不能继续每帧写 48 个 Float32 并请求上传。
+- 舞台歌词处于渲染热路径；不要每帧新建详情 profile、重新解析同一调色板颜色或调用 `THREE.Color.clone()` 生成只使用一次的颜色对象。
+- 完整安装包校验运行在 Electron 主进程所加载的 `server.js` 中；不要用 `readFileSync()` 整包读入，也不要为了兼容 SHA-512 Base64/Hex 对同一内容做两次完整哈希。
 
 ## Solution / Convention
 
@@ -177,6 +180,9 @@
 - “直播后台保持”必须继续允许隐藏播放 tick；连续播放状态事件只复用已有任务，不得叠加计时器。
 - 舞台歌词使用独立 `cursorLines` / `cursorIdx` 定位当前行：同一数组顺序播放只向前推进，后退跳播、歌词数组变化或游标失效时用 upper-bound 二分；`clearStageLyrics()` 必须释放游标引用。
 - 本地曲库目录排序复用模块级 `Intl.Collator('zh-Hans-CN', { numeric:true, sensitivity:'base' }).compare`，文件名排序语义必须与旧实现一致。
+- `triggerRipple()` 必须设置纹理同步标记；`updateRipples()` 仍先维护 bass 上升沿与冷却状态，再在真正空闲时早退。最后一个 ripple 到期帧必须上传清零并把 `uRippleCount` 设为 0，外部预设触发也必须走同一入口。
+- 舞台歌词详情 profile 使用固定只读对象；调色板变化统一经 `setStageLyricPalette()` 更新预解析颜色。帧级 scratch color 只能让现有 setter/material 立即 copy，不能把共享 scratch 直接挂到 uniform。
+- `verifyUpdateFile()` 使用异步 `FileHandle.read()` 与固定复用缓冲分块读取，只为存在的摘要创建 hash；不要改回 Electron 运行时抖动更高的整包同步读取。SHA-512 只 digest 一次再转换 Base64/Hex；缓存复用、下载校验、任务启动和 HTTP 路由必须逐层 `await`，校验失败时继续保持坏缓存移走与镜像切换语义。
 
 ## Reference
 
