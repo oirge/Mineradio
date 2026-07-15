@@ -32,6 +32,7 @@ const UPDATE_FALLBACK_NOTES = [
   '右上角更新提示',
 ];
 const updateDownloadJobs = new Map();
+const installerReusePromises = new Map();
 let updateInfoCache = null;
 let latestUpdateInfoPromise = null;
 
@@ -953,17 +954,47 @@ function moveInvalidUpdateFile(filePath, reason) {
     console.warn('[UpdateDownload] failed to move invalid cached installer:', e.message);
   }
 }
-async function reuseVerifiedInstallerJob(opts) {
-  if (!opts || !opts.filePath || !fs.existsSync(opts.filePath)) return null;
-  if (!opts.expectedSize && !opts.sha256 && !opts.sha512) return null;
+function normalizeInstallerReuseIdentity(opts) {
+  const rawFilePath = String(opts && opts.filePath || '').trim();
+  if (!rawFilePath) return null;
+  let rawExpectedSize = 0;
+  try { rawExpectedSize = Number(opts && opts.expectedSize); } catch (_) {}
+  const expectedSize = Number.isFinite(rawExpectedSize) && rawExpectedSize > 0 ? rawExpectedSize : 0;
+  const sha256 = normalizeDigest(opts && opts.sha256 || '', 'sha256').toLowerCase();
+  const sha512 = normalizeDigest(opts && opts.sha512 || '', 'sha512');
+  if (!expectedSize && !sha256 && !sha512) return null;
+  return {
+    filePath: path.resolve(rawFilePath),
+    version: String(opts && opts.version || ''),
+    expectedSize,
+    sha256,
+    sha512,
+  };
+}
+function installerReuseKey(identity) {
+  return JSON.stringify([
+    identity.filePath,
+    identity.version,
+    identity.expectedSize,
+    identity.sha256,
+    identity.sha512,
+  ]);
+}
+async function reuseVerifiedInstallerJobUnshared(opts, identity) {
+  let stat;
+  try {
+    stat = fs.statSync(identity.filePath);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
   const now = Date.now();
-  const stat = fs.statSync(opts.filePath);
   const job = {
     id: 'cached-' + now.toString(36) + '-' + Math.random().toString(36).slice(2, 8),
     status: 'ready',
     progress: 100,
     received: stat.size || 0,
-    total: opts.expectedSize || stat.size || 0,
+    total: identity.expectedSize,
     speedBps: 0,
     etaSeconds: 0,
     sourceLabel: '本地缓存',
@@ -971,14 +1002,14 @@ async function reuseVerifiedInstallerJob(opts) {
     attempts: opts.attempts || 0,
     mode: 'installer',
     message: '安装包已下载，可直接打开安装',
-    fileName: opts.fileName || path.basename(opts.filePath),
-    filePath: opts.filePath,
-    version: opts.version || '',
+    fileName: opts.fileName || path.basename(identity.filePath),
+    filePath: identity.filePath,
+    version: identity.version,
     downloadUrl: opts.downloadUrl || '',
     downloadCandidates: opts.downloadCandidates || [],
-    expectedSize: opts.expectedSize || 0,
-    sha256: opts.sha256 || '',
-    sha512: opts.sha512 || '',
+    expectedSize: identity.expectedSize,
+    sha256: identity.sha256,
+    sha512: identity.sha512,
     releaseUrl: opts.releaseUrl || '',
     failedAttempts: [],
     cached: true,
@@ -987,16 +1018,30 @@ async function reuseVerifiedInstallerJob(opts) {
     error: '',
   };
   try {
-    await verifyUpdateFile(opts.filePath, job);
+    await verifyUpdateFile(identity.filePath, job);
+    if (!job.total) job.total = stat.size || 0;
     const existing = activeUpdateJobFor(job.version);
     if (existing) return existing;
     updateDownloadJobs.set(job.id, job);
     trimUpdateJobs();
     return job;
   } catch (err) {
-    moveInvalidUpdateFile(opts.filePath, (err && err.message) || 'cache verification failed');
+    moveInvalidUpdateFile(identity.filePath, (err && err.message) || 'cache verification failed');
     return null;
   }
+}
+function reuseVerifiedInstallerJob(opts) {
+  const identity = normalizeInstallerReuseIdentity(opts);
+  if (!identity) return Promise.resolve(null);
+  const key = installerReuseKey(identity);
+  const existing = installerReusePromises.get(key);
+  if (existing) return existing;
+  let promise = reuseVerifiedInstallerJobUnshared(opts, identity);
+  promise = promise.finally(() => {
+    if (installerReusePromises.get(key) === promise) installerReusePromises.delete(key);
+  });
+  installerReusePromises.set(key, promise);
+  return promise;
 }
 function setUpdateJobError(job, err, fallbackMessage) {
   const info = classifyUpdateError(err);

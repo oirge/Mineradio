@@ -94,6 +94,9 @@
 - 涟漪 `DataTexture.needsUpdate = true` 会增加纹理版本并触发整张 `1×12 RGBA Float` 纹理上传；完全空闲时不能继续每帧写 48 个 Float32 并请求上传。
 - 舞台歌词处于渲染热路径；不要每帧新建详情 profile、重新解析同一调色板颜色或调用 `THREE.Color.clone()` 生成只使用一次的颜色对象。
 - 完整安装包校验运行在 Electron 主进程所加载的 `server.js` 中；不要用 `readFileSync()` 整包读入，也不要为了兼容 SHA-512 Base64/Hex 对同一内容做两次完整哈希。
+- 舞台歌词光粒即使 `Points.visible === false` 也会继续执行 JS 位置循环；若仍设置 `position.needsUpdate`，高刷屏会把 132 个粒子的三轴三角计算和缓冲上传请求持续放大。
+- 永久 `display:none` 的旧封面节点不能继续留在主循环里写 transform；只改变位置/朝向的安魂相机姿态也不应在 `updateCamera()` 后重复重算投影矩阵。
+- 同一缓存安装包的并发下载请求会同时进入完整校验；只在校验结束后复查 active job 不能阻止 N 路重复读盘、哈希和坏缓存移动。
 
 ## Solution / Convention
 
@@ -183,6 +186,9 @@
 - `triggerRipple()` 必须设置纹理同步标记；`updateRipples()` 仍先维护 bass 上升沿与冷却状态，再在真正空闲时早退。最后一个 ripple 到期帧必须上传清零并把 `uRippleCount` 设为 0，外部预设触发也必须走同一入口。
 - 舞台歌词详情 profile 使用固定只读对象；调色板变化统一经 `setStageLyricPalette()` 更新预解析颜色。帧级 scratch color 只能让现有 setter/material 立即 copy，不能把共享 scratch 直接挂到 uniform。
 - `verifyUpdateFile()` 使用异步 `FileHandle.read()` 与固定复用缓冲分块读取，只为存在的摘要创建 hash；不要改回 Electron 运行时抖动更高的整包同步读取。SHA-512 只 digest 一次再转换 Base64/Hex；缓存复用、下载校验、任务启动和 HTTP 路由必须逐层 `await`，校验失败时继续保持坏缓存移走与镜像切换语义。
+- 歌词光粒位置循环和 `position.needsUpdate` 只在 `data.sparks.visible` 时执行；旋转状态仍须逐帧维护，重新可见的首帧必须按 base position 与当前绝对时间全量覆盖坐标后再上传。
+- 帧级 scratch 返回对象只允许当前唯一同步调用者立即读取，不得跨下一次调用保存引用；安魂姿态只在主相机已经更新投影后运行，不能独立承担 FOV/aspect/near/far 同步。
+- 缓存安装包复用通过 `installerReusePromises` 合并相同验证身份；key 使用规范化文件路径、版本、有限正大小与摘要的 JSON tuple，成功、失败和空结果都必须用 Promise 身份检查在 `finally` 清理。
 
 ## Reference
 

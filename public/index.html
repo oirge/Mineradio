@@ -2703,6 +2703,11 @@ var audioAnalysisLastAt = 0;
 var beatOnsetFlag = false;        // beat 上升沿瞬时标志,每帧消费一次
 var lastStrongDrop = 0;           // 用于 burst 预设的强 drop 时刻
 
+function smoothAnalysisEnvelope(prev, next, attack, release) {
+  var k = next > prev ? attack : release;
+  return prev + (next - prev) * k;
+}
+
 var LOCAL_ONLY_MODE = true;
 try {
   document.documentElement.classList.add('local-only-mode');
@@ -2965,7 +2970,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.33';
+var APP_VERSION = '1.2.34';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -7365,13 +7370,13 @@ function resetSkullPresetView(immediate, opts) {
     camera.updateProjectionMatrix();
   }
 }
+var skullBreathOffsetScratch = { x:0, y:0, z:0 };
 function skullBreathOffset(t, shelfComposition) {
   var strength = shelfComposition ? 0.70 : 1.0;
-  return {
-    x: strength * (Math.sin(t * 0.33 + 1.7) * 0.028 + Math.sin(t * 0.61 + 0.4) * 0.010),
-    y: strength * (Math.sin(t * 0.38 + 0.2) * 0.036 + Math.sin(t * 0.83 + 2.1) * 0.012),
-    z: strength * (Math.sin(t * 0.24 + 2.6) * 0.026)
-  };
+  skullBreathOffsetScratch.x = strength * (Math.sin(t * 0.33 + 1.7) * 0.028 + Math.sin(t * 0.61 + 0.4) * 0.010);
+  skullBreathOffsetScratch.y = strength * (Math.sin(t * 0.38 + 0.2) * 0.036 + Math.sin(t * 0.83 + 2.1) * 0.012);
+  skullBreathOffsetScratch.z = strength * (Math.sin(t * 0.24 + 2.6) * 0.026);
+  return skullBreathOffsetScratch;
 }
 function setSkullCameraTargetVectors(pos, look, portrait, shelfComposition, zoom) {
   zoom = Number(zoom) || 0;
@@ -7401,7 +7406,6 @@ function applySkullCameraPose(dt) {
   camera.position.lerp(skullCameraTargetPos, skullCameraBlend);
   skullCameraMixedLook.set(orbit.lookAt.x, orbit.lookAt.y, orbit.lookAt.z).lerp(skullCameraTargetLook, skullCameraBlend);
   camera.lookAt(skullCameraMixedLook);
-  camera.updateProjectionMatrix();
 }
 function updateSkullParticleLayer(dt) {
   var active = fx && fx.preset === SKULL_PRESET_INDEX;
@@ -7566,9 +7570,6 @@ function refreshBackCoverColorsFromCanvas(coverCanvas) {
   }
   attr.aColor.needsUpdate = true;
 }
-function updateFloatLayer(dt) {
-  // 漂移已在 shader 中完成, JS 不需要每帧改 buffer
-}
 function refreshFloatColorsFromCover(coverCanvas) {
   if (!floatGroup || !coverCanvas) return;
   var ctx = coverCanvas.getContext('2d');
@@ -7702,6 +7703,7 @@ function stageLyricTargetQuaternion(baseQuat, tiltX, tiltY) {
   lyricTiltQuat.setFromEuler(lyricTiltEuler);
   return lyricTargetQuat.copy(baseQuat || lyricBaseQuat).multiply(lyricTiltQuat);
 }
+var stageLyricLockBoundsScratch = { w:0, h:0 };
 function getStageLyricLockBounds() {
   var maxW = 0, maxH = 0;
   function take(mesh) {
@@ -7713,7 +7715,9 @@ function getStageLyricLockBounds() {
   }
   take(stageLyrics.current);
   for (var i = 0; i < stageLyrics.outgoing.length; i++) take(stageLyrics.outgoing[i]);
-  return { w: maxW || 5.4, h: maxH || 0.78 };
+  stageLyricLockBoundsScratch.w = maxW || 5.4;
+  stageLyricLockBoundsScratch.h = maxH || 0.78;
+  return stageLyricLockBoundsScratch;
 }
 function lyricCameraLockFit(layoutScale, layoutX, layoutY, distance) {
   if (!camera || !camera.isPerspectiveCamera) return 1;
@@ -10402,16 +10406,18 @@ function updateStageLyrics3D(dt) {
         var arr = pos.array, base = data.basePositions;
         data.sparks.rotation.z += ((fx.lyricGlowParticles ? 0.0009 : 0.00025) + stageLyrics.beatGlow * 0.0007) * (dt * 60);
         data.sparks.rotation.x = Math.sin(t * 0.12 + seed) * 0.012;
-        for (var si = 0; si < arr.length / 3; si++) {
-          var s = si * 12.989 + seed;
-          var particleBeat = fx.lyricGlowParticles ? stageLyrics.beatGlow : 0;
-          var dustBreath = fx.lyricGlowParticles ? (0.62 + 0.38 * Math.sin(t * (0.32 + (si % 7) * 0.025) + s)) : 0.18;
-          var drift = fx.lyricGlowParticles ? 1 : 0.30;
-          arr[si*3] = base[si*3] + Math.sin(t * (0.18 + (si % 5) * 0.025) + s) * (0.045 + bass * 0.030 + particleBeat * 0.052) * drift + Math.cos(t * 0.11 + s) * 0.018 * dustBreath;
-          arr[si*3+1] = base[si*3+1] + Math.cos(t * (0.16 + (si % 6) * 0.024) + s) * (0.042 + mid * 0.026 + particleBeat * 0.046) * drift + Math.sin(t * 0.13 + s) * 0.016 * dustBreath;
-          arr[si*3+2] = base[si*3+2] + Math.sin(t * (0.24 + (si % 4) * 0.035) + s) * (0.036 + particleBeat * 0.028) * drift;
+        if (data.sparks.visible) {
+          for (var si = 0; si < arr.length / 3; si++) {
+            var s = si * 12.989 + seed;
+            var particleBeat = fx.lyricGlowParticles ? stageLyrics.beatGlow : 0;
+            var dustBreath = fx.lyricGlowParticles ? (0.62 + 0.38 * Math.sin(t * (0.32 + (si % 7) * 0.025) + s)) : 0.18;
+            var drift = fx.lyricGlowParticles ? 1 : 0.30;
+            arr[si*3] = base[si*3] + Math.sin(t * (0.18 + (si % 5) * 0.025) + s) * (0.045 + bass * 0.030 + particleBeat * 0.052) * drift + Math.cos(t * 0.11 + s) * 0.018 * dustBreath;
+            arr[si*3+1] = base[si*3+1] + Math.cos(t * (0.16 + (si % 6) * 0.024) + s) * (0.042 + mid * 0.026 + particleBeat * 0.046) * drift + Math.sin(t * 0.13 + s) * 0.016 * dustBreath;
+            arr[si*3+2] = base[si*3+2] + Math.sin(t * (0.24 + (si % 4) * 0.035) + s) * (0.036 + particleBeat * 0.028) * drift;
+          }
+          pos.needsUpdate = true;
         }
-        pos.needsUpdate = true;
       }
       return true;
     }
@@ -25069,8 +25075,7 @@ function syncFxUniforms() {
   syncSkullParticleColors();
 }
 var homeWaveTrackState = { bars: 0, smooth: [] };
-function ensureHomeWaveTrackBars() {
-  var el = document.getElementById('home-wave-track');
+function ensureHomeWaveTrackBars(el) {
   if (!el) return;
   var count = 24;
   if (homeWaveTrackState.bars === count && el.children.length === count) return;
@@ -25086,7 +25091,7 @@ function updateHomeAudioVisual(dt) {
   var minGap = (typeof isRuntimeFramePressureActive === 'function' && isRuntimeFramePressureActive(nowMs)) ? 150 : 80;
   if (homeWaveTrackState.lastAt && nowMs - homeWaveTrackState.lastAt < minGap) return;
   homeWaveTrackState.lastAt = nowMs;
-  ensureHomeWaveTrackBars();
+  ensureHomeWaveTrackBars(wave);
   var bars = wave.children;
   var nowT = uniforms && uniforms.uTime ? uniforms.uTime.value : performance.now() / 1000;
   for (var i = 0; i < bars.length; i++) {
@@ -30425,16 +30430,12 @@ function animate() {
     if (scheduledBeatPulse > beatPulse) beatPulse = scheduledBeatPulse;
     scheduledBeatPulse *= Math.pow(0.32, analysisDt);
 
-    function env(prev, next, attack, release) {
-      var k = next > prev ? attack : release;
-      return prev + (next - prev) * k;
-    }
     // smoothBass 主要由 kick 驱动 (不被人声干扰)
-    smoothBass  = env(smoothBass, Math.min(0.82, rb * 0.78 + re * 0.025), 0.28, 0.075);
+    smoothBass  = smoothAnalysisEnvelope(smoothBass, Math.min(0.82, rb * 0.78 + re * 0.025), 0.28, 0.075);
     // smoothMid 用 中高乐器, 不再混入人声
-    smoothMid   = env(smoothMid,  Math.min(0.68, rm * 0.64 + re * 0.025), 0.18, 0.060);
-    smoothTreb  = env(smoothTreb, Math.min(0.56, rt * 0.54), 0.18, 0.055);
-    smoothEnergy= env(smoothEnergy, Math.min(0.72, re), 0.16, 0.055);
+    smoothMid   = smoothAnalysisEnvelope(smoothMid,  Math.min(0.68, rm * 0.64 + re * 0.025), 0.18, 0.060);
+    smoothTreb  = smoothAnalysisEnvelope(smoothTreb, Math.min(0.56, rt * 0.54), 0.18, 0.055);
+    smoothEnergy= smoothAnalysisEnvelope(smoothEnergy, Math.min(0.72, re), 0.16, 0.055);
     updateCinemaDynamics(re, rb);
     updateCinemaTrackProfile({ energy: re, low: rb, vocal: voc, melody: rm, lowOnset: bassOnset, energyOnset: energyOnset });
     // 歌词阳光溢光: 独立于律动强度, 看持续能量 + 中高频抬升, 更像副歌/高音段落而不是单个鼓点.
@@ -30512,7 +30513,6 @@ function animate() {
   tickPresetTransition();
 
   updateRipples(dt);
-  updateFloatLayer(dt);
   if (shelfManager) shelfManager.update(dt);
   tickLyricsParticles();
   updateHomeAudioVisual(dt);
@@ -30547,13 +30547,6 @@ function animate() {
   updateSkullParticleLayer(dt);
   updateStageLyrics3D(dt);
   syncDesktopOverlayState();
-
-  // 缩略图脉动
-  if (currentIdx >= 0) {
-    var s = 1 + bass * 0.08;
-    var thumbCoverEl = document.getElementById('thumb-cover');
-    if (thumbCoverEl) thumbCoverEl.style.transform = 'scale(' + s + ')';
-  }
 
   renderer.render(scene, camera);
 }
