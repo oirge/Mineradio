@@ -2970,7 +2970,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.34';
+var APP_VERSION = '1.2.35';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -3269,6 +3269,30 @@ var cinemaTrackProfile = {
   punchPeak: 0.10,
   density: 0
 };
+var cinemaTrackProfileSample = {
+  energy: 0,
+  low: 0,
+  vocal: 0,
+  melody: 0,
+  lowOnset: 0,
+  energyOnset: 0
+};
+var cinemaAnalysisProfileDefault = {
+  id: 'default',
+  softGroove: false,
+  phaseScan: false,
+  localRefine: false,
+  sparseCamera: false,
+  introPattern: false
+};
+var cinemaAnalysisProfileSunset = {
+  id: 'sunset-boulevard-soft-groove',
+  softGroove: true,
+  phaseScan: true,
+  localRefine: true,
+  sparseCamera: true,
+  introPattern: true
+};
 var rtBeat = {
   subFast: 0, subSlow: 0, lowFast: 0, lowSlow: 0,
   bodyFast: 0, bodySlow: 0, vocalFast: 0, vocalSlow: 0, snapFast: 0, snapSlow: 0,
@@ -3284,6 +3308,32 @@ var rtBeat = {
   pulse: 0,
   score: 0,
   stats: { hits: 0, blocked: 0, assisted: 0, strong: 0, rejected: 0 }
+};
+var realtimeBeatMissResult = {
+  hit: false,
+  score: 0,
+  low: 0,
+  body: 0,
+  vocal: 0,
+  snap: 0,
+  tempoConfidence: 0
+};
+var realtimeBeatHitResult = {
+  hit: true,
+  time: 0,
+  strength: 0,
+  confidence: 0,
+  low: 0,
+  body: 0,
+  snap: 0,
+  mass: 0,
+  sharpness: 0,
+  tempoAssist: false,
+  tempoGap: 0,
+  combo: '',
+  score: 0,
+  lowDominance: 0,
+  dj: false
 };
 var djMode = {
   active: false,
@@ -4516,17 +4566,8 @@ function cinemaAnalysisProfileForSong(song) {
   var title = String((song && (song.name || song.title)) || '').toLowerCase().replace(/\s+/g, '');
   var artist = String((song && song.artist) || '').toLowerCase().replace(/\s+/g, '');
   var label = title + ' ' + artist;
-  if (/日落大道|sunsetboulevard/.test(label)) {
-    return {
-      id: 'sunset-boulevard-soft-groove',
-      softGroove: true,
-      phaseScan: true,
-      localRefine: true,
-      sparseCamera: true,
-      introPattern: true
-    };
-  }
-  return { id: 'default', softGroove: false, phaseScan: false, localRefine: false, sparseCamera: false, introPattern: false };
+  if (/日落大道|sunsetboulevard/.test(label)) return cinemaAnalysisProfileSunset;
+  return cinemaAnalysisProfileDefault;
 }
 
 function resetCinemaTrackProfile(song) {
@@ -4547,13 +4588,12 @@ function updateCinemaTrackProfile(sample) {
   if (!sample) return;
   var p = cinemaTrackProfile;
   p.frames++;
-  function follow(cur, next, k) { return cur + (next - cur) * k; }
   var early = p.frames < 360;
   var k = early ? 0.020 : 0.006;
-  p.energyAvg = follow(p.energyAvg, clamp01(sample.energy), k);
-  p.lowAvg = follow(p.lowAvg, clamp01(sample.low), k);
-  p.vocalAvg = follow(p.vocalAvg, clamp01(sample.vocal), k * 0.8);
-  p.melodyAvg = follow(p.melodyAvg, clamp01(sample.melody), k * 0.8);
+  p.energyAvg = mixToward(p.energyAvg, clamp01(sample.energy), k);
+  p.lowAvg = mixToward(p.lowAvg, clamp01(sample.low), k);
+  p.vocalAvg = mixToward(p.vocalAvg, clamp01(sample.vocal), k * 0.8);
+  p.melodyAvg = mixToward(p.melodyAvg, clamp01(sample.melody), k * 0.8);
   var punchRaw = clamp01((sample.lowOnset || 0) * 2.4 + (sample.energyOnset || 0) * 1.5 + sample.low * 0.16);
   p.punchPeak = Math.max(0.10, p.punchPeak * 0.9975, punchRaw);
   var lowDrive = clamp01((p.lowAvg - 0.20) / 0.42);
@@ -4774,6 +4814,15 @@ function beatBandRms(data, sampleRate, fftSize, hz0, hz1) {
   return count ? Math.sqrt(sum / count) : 0;
 }
 
+function mixToward(cur, next, k) {
+  return cur + (next - cur) * k;
+}
+
+function beatFollow(cur, next, dt, upTau, downTau) {
+  var tau = next > cur ? upTau : downTau;
+  return cur + (next - cur) * (1 - Math.exp(-dt / Math.max(0.001, tau)));
+}
+
 function processRealtimeBeatEngine(dt) {
   if (!beatAnalyser || !audioCtx || !audio || audio.paused) return null;
   dt = Math.max(0.001, Math.min(0.080, dt || 0.016));
@@ -4794,23 +4843,19 @@ function processRealtimeBeatEngine(dt) {
   }
   rms = Math.sqrt(rms / beatTimeDomainData.length);
 
-  function follow(cur, next, upTau, downTau) {
-    var tau = next > cur ? upTau : downTau;
-    return cur + (next - cur) * (1 - Math.exp(-dt / Math.max(0.001, tau)));
-  }
   var fastMul = dj ? 0.86 : 1;
   var downMul = dj ? 0.94 : 1;
   var slowMul = dj ? 1.06 : 1;
-  rtBeat.subFast = follow(rtBeat.subFast, sub, 0.018 * fastMul, 0.064 * downMul);
-  rtBeat.subSlow = follow(rtBeat.subSlow, sub, 0.320 * slowMul, 0.520 * slowMul);
-  rtBeat.lowFast = follow(rtBeat.lowFast, low, 0.016 * fastMul, 0.070 * downMul);
-  rtBeat.lowSlow = follow(rtBeat.lowSlow, low, 0.300 * slowMul, 0.540 * slowMul);
-  rtBeat.bodyFast = follow(rtBeat.bodyFast, body, 0.020 * fastMul, 0.082 * downMul);
-  rtBeat.bodySlow = follow(rtBeat.bodySlow, body, 0.360 * slowMul, 0.600 * slowMul);
-  rtBeat.vocalFast = follow(rtBeat.vocalFast, vocal, 0.026 * fastMul, 0.090 * downMul);
-  rtBeat.vocalSlow = follow(rtBeat.vocalSlow, vocal, 0.340 * slowMul, 0.580 * slowMul);
-  rtBeat.snapFast = follow(rtBeat.snapFast, snap, 0.012 * fastMul, 0.060 * downMul);
-  rtBeat.snapSlow = follow(rtBeat.snapSlow, snap, 0.300 * slowMul, 0.520 * slowMul);
+  rtBeat.subFast = beatFollow(rtBeat.subFast, sub, dt, 0.018 * fastMul, 0.064 * downMul);
+  rtBeat.subSlow = beatFollow(rtBeat.subSlow, sub, dt, 0.320 * slowMul, 0.520 * slowMul);
+  rtBeat.lowFast = beatFollow(rtBeat.lowFast, low, dt, 0.016 * fastMul, 0.070 * downMul);
+  rtBeat.lowSlow = beatFollow(rtBeat.lowSlow, low, dt, 0.300 * slowMul, 0.540 * slowMul);
+  rtBeat.bodyFast = beatFollow(rtBeat.bodyFast, body, dt, 0.020 * fastMul, 0.082 * downMul);
+  rtBeat.bodySlow = beatFollow(rtBeat.bodySlow, body, dt, 0.360 * slowMul, 0.600 * slowMul);
+  rtBeat.vocalFast = beatFollow(rtBeat.vocalFast, vocal, dt, 0.026 * fastMul, 0.090 * downMul);
+  rtBeat.vocalSlow = beatFollow(rtBeat.vocalSlow, vocal, dt, 0.340 * slowMul, 0.580 * slowMul);
+  rtBeat.snapFast = beatFollow(rtBeat.snapFast, snap, dt, 0.012 * fastMul, 0.060 * downMul);
+  rtBeat.snapSlow = beatFollow(rtBeat.snapSlow, snap, dt, 0.300 * slowMul, 0.520 * slowMul);
 
   var peakDecay = dj ? 0.988 : 0.990;
   rtBeat.subPeak = Math.max(rtBeat.subPeak * Math.pow(peakDecay, dt * 60), sub, 0.045);
@@ -4835,7 +4880,7 @@ function processRealtimeBeatEngine(dt) {
   var onset = dj ? drumOnset * 1.05 + musicalOnset * 0.07 : drumOnset + musicalOnset * 0.16;
 
   var avgTau = onset > rtBeat.onsetAvg ? (dj ? 0.88 : 1.10) : (dj ? 0.30 : 0.34);
-  rtBeat.onsetAvg = follow(rtBeat.onsetAvg, onset, avgTau, avgTau);
+  rtBeat.onsetAvg = beatFollow(rtBeat.onsetAvg, onset, dt, avgTau, avgTau);
   rtBeat.onsetPeak = Math.max(rtBeat.onsetPeak * Math.pow(dj ? 0.986 : 0.988, dt * 60), onset, 0.032);
   var floor = rtBeat.onsetAvg * (dj ? 0.88 : 0.84);
   var score = clamp01((onset - floor) / Math.max(dj ? 0.013 : 0.014, rtBeat.onsetPeak - floor));
@@ -4909,7 +4954,13 @@ function processRealtimeBeatEngine(dt) {
       djMode.tempoGap = rtBeat.tempoGap;
       djMode.tempoConfidence = rtBeat.tempoConfidence;
     }
-    return { hit: false, score: score, low: lowNorm, body: bodyNorm, vocal: vocalNorm, snap: snapNorm, tempoConfidence: rtBeat.tempoConfidence };
+    realtimeBeatMissResult.score = score;
+    realtimeBeatMissResult.low = lowNorm;
+    realtimeBeatMissResult.body = bodyNorm;
+    realtimeBeatMissResult.vocal = vocalNorm;
+    realtimeBeatMissResult.snap = snapNorm;
+    realtimeBeatMissResult.tempoConfidence = rtBeat.tempoConfidence;
+    return realtimeBeatMissResult;
   }
 
   var gapShift = 0;
@@ -4947,23 +4998,21 @@ function processRealtimeBeatEngine(dt) {
     djMode.visualPulse = Math.max(djMode.visualPulse, strength);
     djMode.lastBeatAt = nowT;
   }
-  return {
-    hit: true,
-    time: dj ? Math.max(0, nowT - 0.026) : nowT,
-    strength: strength,
-    confidence: dj ? clamp01(score * 0.58 + lowPresence * 0.30 + rtBeat.tempoConfidence * 0.12) : clamp01(score * 0.62 + lowPresence * 0.26 + rtBeat.tempoConfidence * 0.12),
-    low: Math.max(0.05, lowPresence),
-    body: Math.max(0.02, bodyNorm * (dj ? 0.50 : 0.62)),
-    snap: Math.max(0.02, snapNorm * (dj ? 0.86 : 1)),
-    mass: dj ? clamp01(lowPresence * 0.84 + bodyNorm * 0.10) : clamp01(lowPresence * 0.76 + bodyNorm * 0.20),
-    sharpness: dj ? clamp01(snapNorm * 0.58 + bodyNorm * 0.10) : clamp01(snapNorm * 0.70 + bodyNorm * 0.12),
-    tempoAssist: tempoAssist,
-    tempoGap: rtBeat.tempoGap,
-    combo: combo,
-    score: score,
-    lowDominance: lowDominance,
-    dj: dj
-  };
+  realtimeBeatHitResult.time = dj ? Math.max(0, nowT - 0.026) : nowT;
+  realtimeBeatHitResult.strength = strength;
+  realtimeBeatHitResult.confidence = dj ? clamp01(score * 0.58 + lowPresence * 0.30 + rtBeat.tempoConfidence * 0.12) : clamp01(score * 0.62 + lowPresence * 0.26 + rtBeat.tempoConfidence * 0.12);
+  realtimeBeatHitResult.low = Math.max(0.05, lowPresence);
+  realtimeBeatHitResult.body = Math.max(0.02, bodyNorm * (dj ? 0.50 : 0.62));
+  realtimeBeatHitResult.snap = Math.max(0.02, snapNorm * (dj ? 0.86 : 1));
+  realtimeBeatHitResult.mass = dj ? clamp01(lowPresence * 0.84 + bodyNorm * 0.10) : clamp01(lowPresence * 0.76 + bodyNorm * 0.20);
+  realtimeBeatHitResult.sharpness = dj ? clamp01(snapNorm * 0.58 + bodyNorm * 0.10) : clamp01(snapNorm * 0.70 + bodyNorm * 0.12);
+  realtimeBeatHitResult.tempoAssist = tempoAssist;
+  realtimeBeatHitResult.tempoGap = rtBeat.tempoGap;
+  realtimeBeatHitResult.combo = combo;
+  realtimeBeatHitResult.score = score;
+  realtimeBeatHitResult.lowDominance = lowDominance;
+  realtimeBeatHitResult.dj = dj;
+  return realtimeBeatHitResult;
 }
 
 function mergeRealtimeBeatCamera(time, amp, tone) {
@@ -30437,7 +30486,13 @@ function animate() {
     smoothTreb  = smoothAnalysisEnvelope(smoothTreb, Math.min(0.56, rt * 0.54), 0.18, 0.055);
     smoothEnergy= smoothAnalysisEnvelope(smoothEnergy, Math.min(0.72, re), 0.16, 0.055);
     updateCinemaDynamics(re, rb);
-    updateCinemaTrackProfile({ energy: re, low: rb, vocal: voc, melody: rm, lowOnset: bassOnset, energyOnset: energyOnset });
+    cinemaTrackProfileSample.energy = re;
+    cinemaTrackProfileSample.low = rb;
+    cinemaTrackProfileSample.vocal = voc;
+    cinemaTrackProfileSample.melody = rm;
+    cinemaTrackProfileSample.lowOnset = bassOnset;
+    cinemaTrackProfileSample.energyOnset = energyOnset;
+    updateCinemaTrackProfile(cinemaTrackProfileSample);
     // 歌词阳光溢光: 独立于律动强度, 看持续能量 + 中高频抬升, 更像副歌/高音段落而不是单个鼓点.
     var sunEnergy = clamp01((smoothEnergy - 0.18) / 0.38);
     var sunVoice = clamp01((voc - 0.11) / 0.34);

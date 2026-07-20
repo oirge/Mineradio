@@ -97,6 +97,7 @@
 - 舞台歌词光粒即使 `Points.visible === false` 也会继续执行 JS 位置循环；若仍设置 `position.needsUpdate`，高刷屏会把 132 个粒子的三轴三角计算和缓冲上传请求持续放大。
 - 永久 `display:none` 的旧封面节点不能继续留在主循环里写 transform；只改变位置/朝向的安魂相机姿态也不应在 `updateCamera()` 后重复重算投影矩阵。
 - 同一缓存安装包的并发下载请求会同时进入完整校验；只在校验结束后复查 active job 不能阻止 N 路重复读盘、哈希和坏缓存移动。
+- 实时节拍引擎跟随音频分析帧持续执行；在 `processRealtimeBeatEngine()` 内声明 helper 或直接返回对象字面量会在播放期间反复创建闭包与短命对象。
 
 ## Solution / Convention
 
@@ -189,6 +190,8 @@
 - 歌词光粒位置循环和 `position.needsUpdate` 只在 `data.sparks.visible` 时执行；旋转状态仍须逐帧维护，重新可见的首帧必须按 base position 与当前绝对时间全量覆盖坐标后再上传。
 - 帧级 scratch 返回对象只允许当前唯一同步调用者立即读取，不得跨下一次调用保存引用；安魂姿态只在主相机已经更新投影后运行，不能独立承担 FOV/aspect/near/far 同步。
 - 缓存安装包复用通过 `installerReusePromises` 合并相同验证身份；key 使用规范化文件路径、版本、有限正大小与摘要的 JSON tuple，成功、失败和空结果都必须用 Promise 身份检查在 `finally` 清理。
+- `processRealtimeBeatEngine()` 使用模块级 `beatFollow()`，命中/未命中分别复用 `realtimeBeatHitResult` 与 `realtimeBeatMissResult`；两种对象的字段结构必须保持原样，调用方只能在当前同步帧立即读取，不得跨调用保存引用。
+- 音频分析帧向 `updateCinemaTrackProfile()` 必须复用模块级 `cinemaTrackProfileSample`，线性混合使用模块级 `mixToward()`；`cinemaAnalysisProfileForSong()` 返回固定常量对象，调用方不得原地改写 profile 字段。
 
 ## Reference
 
