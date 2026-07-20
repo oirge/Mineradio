@@ -9,7 +9,7 @@
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.2.35`
-- 最近正式安装包 Release 基线：`v1.2.34`。
+- 最近正式安装包 Release 基线：`v1.2.35`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -26,6 +26,11 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.35` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.35`
+- `v1.2.35` 重点复用实时节拍命中/未命中返回对象与 `beatFollow()`，并让电影镜头曲目画像分析帧复用 sample、`mixToward()` 与常量 analysis profile；节拍/镜头输出、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.35` Release 资产包括：`latest.yml`、`Mineradio-1.2.35-Setup.exe`、`Mineradio-1.2.35-Setup.exe.blockmap`、`Mineradio-1.2.35-SHA256SUMS.txt`、`Mineradio-1.2.34-to-1.2.35.patch.json`；Portable ZIP 跳过。
+- `v1.2.35` 安装包 SHA256：`7e2c823a11c95463deed25d9c63d82b848d4a7954396d346ec9442a68e04bd92`
 
 - `v1.2.34` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.34`
 - `v1.2.34` 重点让不可见的舞台歌词光粒停止坐标重算与缓冲上传，清理主循环和安魂镜头的重复工作，并让同一缓存安装包的并发更新请求共享一次完整校验；歌词/相机输出、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
