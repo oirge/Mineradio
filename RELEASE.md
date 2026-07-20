@@ -1,5 +1,11 @@
 # 发布流程
 
+## v1.2.37 舞台歌词网格 tick 低分配优化
+- `v1.2.37` 继续降低舞台歌词持续显示时的每帧函数分配，不改变 UI、视觉质感、歌词输出、播放入口或 3D 歌单架交互。
+- `tickStageLyricMesh()` 模块级复用，帧状态写入 `stageLyricTickCtx`；当前行与退场行仍走同一 tick 路径。
+- 本次发布继续只上传安装器相关资产：安装包、blockmap、`latest.yml`、SHA256 校验文件和 `1.2.36 -> 1.2.37` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.37 舞台歌词网格 tick 低分配优化版`。
+
 ## v1.2.36 电影节拍镜头事件池与歌词进度低分配优化
 - `v1.2.36` 继续降低播放中电影节拍镜头事件、live 调度 payload 和舞台歌词进度路径的短命对象，不改变 UI、视觉质感、镜头输出、播放入口或 3D 歌单架交互。
 - `beatCam.events` 使用对象池：`acquireBeatCamEvent()` / `releaseBeatCamEvent()` / `clearBeatCamEvents()` / `removeBeatCamEventAt()` / `trimBeatCamEventsFront()`；事件字段与过期语义保持不变。

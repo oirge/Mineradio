@@ -198,6 +198,10 @@
 - live 节拍调度必须复用 `liveBeatCameraPayload` 与 `liveBeatCameraTone`；`sampleRenderPerf` 向帧压反馈复用 `runtimeFramePressureSample`。
 - 舞台歌词 intro/fallback 进度行复用 `stageLyricIntroLine` / `stageLyricFallbackLine`，调用方不得跨帧依赖字段不被覆盖。
 
+
+- `updateStageLyrics3D()` 不得再内嵌每帧新建的 `tickMesh`；必须调用模块级 `tickStageLyricMesh()`，并通过 `stageLyricTickCtx` 传入 `dt/t/shelfDetailLyricProfile/shelfDetailOpen/lyricGlowStrength/glowDrive/skullMouthLyrics`。
+- 歌词 mesh 缺 `userData.lyric` 时只能回退到冻结的 `EMPTY_LYRIC_MESH_DATA`，不得写回该空对象字段。
+
 ## Reference
 
 - 相关实现：`public/index.html`、`desktop/main.js`、`server.js`
