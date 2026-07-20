@@ -1,5 +1,11 @@
 # 发布流程
 
+## v1.2.38 歌单架布局与画质 profile 低分配优化
+- `v1.2.38` 继续降低 3D 歌单架刷新与画质档位查询路径的短命对象，不改变 UI、视觉质感、歌单架布局结果、播放入口或镜头交互。
+- `shelfLayoutProfile()` / `shelfSettings()` 复用固定缓存；`renderQualityProfile()` 返回冻结档位常量；`renderPowerState` 就地更新。
+- 本次发布继续只上传安装器相关资产：安装包、blockmap、`latest.yml`、SHA256 校验文件和 `1.2.37 -> 1.2.38` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.38 歌单架布局与画质 profile 低分配优化版`。
+
 ## v1.2.37 舞台歌词网格 tick 低分配优化
 - `v1.2.37` 继续降低舞台歌词持续显示时的每帧函数分配，不改变 UI、视觉质感、歌词输出、播放入口或 3D 歌单架交互。
 - `tickStageLyricMesh()` 模块级复用，帧状态写入 `stageLyricTickCtx`；当前行与退场行仍走同一 tick 路径。

@@ -202,6 +202,10 @@
 - `updateStageLyrics3D()` 不得再内嵌每帧新建的 `tickMesh`；必须调用模块级 `tickStageLyricMesh()`，并通过 `stageLyricTickCtx` 传入 `dt/t/shelfDetailLyricProfile/shelfDetailOpen/lyricGlowStrength/glowDrive/skullMouthLyrics`。
 - 歌词 mesh 缺 `userData.lyric` 时只能回退到冻结的 `EMPTY_LYRIC_MESH_DATA`，不得写回该空对象字段。
 
+
+- `shelfLayoutProfile()` / `shelfSettings()` 必须复用固定缓存对象就地填充；调用方不得长期保存并假定字段跨下次调用不变，也不得原地改写返回对象作为私有状态。
+- `renderQualityProfile()` 只返回冻结档位常量；`applyRendererPowerMode()` 必须就地更新 `renderPowerState` 字段，不得每次新建状态对象。
+
 ## Reference
 
 - 相关实现：`public/index.html`、`desktop/main.js`、`server.js`

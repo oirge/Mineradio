@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v1.2.38
+
+- 优化 3D 歌单架布局热路径：`shelfLayoutProfile()` / `shelfSettings()` 改为固定缓存对象就地填充，避免歌单架可见时每帧创建布局与 detail 临时对象。
+- 画质档位 `renderQualityProfile()` 改为返回冻结常量对象；渲染功耗状态切换改为就地写入 `renderPowerState` 字段。
+- 对照旧对象返回语义，校验 portrait/narrow/skull 组合与 eco/balanced/high/ultra 档位字段完全一致。
+- 本轮只调整内部布局/画质缓存与短命分配，不改变 UI、布局视觉结果、玻璃质感、电影镜头、播放控制或 3D 歌单架交互。
+
 ## v1.2.37
 
 - 优化舞台歌词网格逐帧 tick：把 `updateStageLyrics3D()` 内每帧重建的嵌套 `tickMesh` 提升为模块级 `tickStageLyricMesh()`，通过固定 `stageLyricTickCtx` 传入帧状态。

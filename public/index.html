@@ -2970,7 +2970,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.37';
+var APP_VERSION = '1.2.38';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -3994,7 +3994,10 @@ function applyRendererPowerMode() {
   var pixelRatio = getRenderPixelRatio();
   var mode = deep ? 'sleep' : 'active';
   if (renderPowerState.mode === mode && renderPowerState.width === width && renderPowerState.height === height && Math.abs(renderPowerState.pixelRatio - pixelRatio) < 0.001) return;
-  renderPowerState = { mode: mode, width: width, height: height, pixelRatio: pixelRatio };
+  renderPowerState.mode = mode;
+  renderPowerState.width = width;
+  renderPowerState.height = height;
+  renderPowerState.pixelRatio = pixelRatio;
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height, false);
   if (typeof uniforms !== 'undefined' && uniforms && uniforms.uPixel) uniforms.uPixel.value = renderer.getPixelRatio();
@@ -4195,12 +4198,16 @@ function updateRuntimeFramePressure(now, sample) {
     renderPerfState.longFrameRatio = Number(longRatio.toFixed(3));
   }
 }
+var RENDER_QUALITY_PROFILE_ECO = Object.freeze({ cap: 0.95, min: 0.56, budget: 2400000 });
+var RENDER_QUALITY_PROFILE_BALANCED = Object.freeze({ cap: 1.12, min: 0.66, budget: 3800000 });
+var RENDER_QUALITY_PROFILE_ULTRA = Object.freeze({ cap: 1.75, min: 0.85, budget: 7800000 });
+var RENDER_QUALITY_PROFILE_HIGH = Object.freeze({ cap: RENDER_DPR_CAP, min: RENDER_MIN_DPR, budget: RENDER_PIXEL_BUDGET });
 function renderQualityProfile() {
   var quality = normalizePerformanceQuality(fx && fx.performanceQuality);
-  if (quality === 'eco') return { cap: 0.95, min: 0.56, budget: 2400000 };
-  if (quality === 'balanced') return { cap: 1.12, min: 0.66, budget: 3800000 };
-  if (quality === 'ultra') return { cap: 1.75, min: 0.85, budget: 7800000 };
-  return { cap: RENDER_DPR_CAP, min: RENDER_MIN_DPR, budget: RENDER_PIXEL_BUDGET };
+  if (quality === 'eco') return RENDER_QUALITY_PROFILE_ECO;
+  if (quality === 'balanced') return RENDER_QUALITY_PROFILE_BALANCED;
+  if (quality === 'ultra') return RENDER_QUALITY_PROFILE_ULTRA;
+  return RENDER_QUALITY_PROFILE_HIGH;
 }
 function getRenderPixelRatio() {
   var device = window.devicePixelRatio || 1;
@@ -8333,20 +8340,29 @@ function normalizedShelfNumber(key, fallback, min, max) {
   if (!isFinite(value)) value = fallback;
   return clampRange(value, min, max);
 }
+var shelfSettingsCache = {
+  size: 1,
+  x: 0,
+  y: 0,
+  z: 0,
+  angle: 0,
+  opacity: 1,
+  bgOpacity: 0.9,
+  accent: '#f4d28a'
+};
 function shelfSettings() {
   var angleDeg = fx && fx.shelfAngleYManual === true
     ? normalizedShelfNumber('shelfAngleY', shelfDefaultAngleForCameraMode(fx.shelfCameraMode), -30, 30)
     : shelfDefaultAngleForCameraMode(fx && fx.shelfCameraMode);
-  return {
-    size: normalizedShelfNumber('shelfSize', fxDefaults.shelfSize, 0.65, 1.45),
-    x: normalizedShelfNumber('shelfOffsetX', fxDefaults.shelfOffsetX, -1.2, 1.2),
-    y: normalizedShelfNumber('shelfOffsetY', fxDefaults.shelfOffsetY, -0.9, 0.9),
-    z: normalizedShelfNumber('shelfOffsetZ', fxDefaults.shelfOffsetZ, -0.9, 0.9),
-    angle: angleDeg * Math.PI / 180,
-    opacity: normalizedShelfNumber('shelfOpacity', fxDefaults.shelfOpacity, 0.25, 1),
-    bgOpacity: normalizedShelfNumber('shelfBgOpacity', fxDefaults.shelfBgOpacity, 0.25, 0.98),
-    accent: normalizeHexColor((fx && fx.shelfAccentColor) || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor)
-  };
+  shelfSettingsCache.size = normalizedShelfNumber('shelfSize', fxDefaults.shelfSize, 0.65, 1.45);
+  shelfSettingsCache.x = normalizedShelfNumber('shelfOffsetX', fxDefaults.shelfOffsetX, -1.2, 1.2);
+  shelfSettingsCache.y = normalizedShelfNumber('shelfOffsetY', fxDefaults.shelfOffsetY, -0.9, 0.9);
+  shelfSettingsCache.z = normalizedShelfNumber('shelfOffsetZ', fxDefaults.shelfOffsetZ, -0.9, 0.9);
+  shelfSettingsCache.angle = angleDeg * Math.PI / 180;
+  shelfSettingsCache.opacity = normalizedShelfNumber('shelfOpacity', fxDefaults.shelfOpacity, 0.25, 1);
+  shelfSettingsCache.bgOpacity = normalizedShelfNumber('shelfBgOpacity', fxDefaults.shelfBgOpacity, 0.25, 0.98);
+  shelfSettingsCache.accent = normalizeHexColor((fx && fx.shelfAccentColor) || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor);
+  return shelfSettingsCache;
 }
 function shelfAlwaysVisible() {
   return !!(fx && normalizeShelfPresence(fx.shelfPresence) === 'always');
@@ -14493,42 +14509,71 @@ var shelfVisibility = 0;  // 0..1, 侧栏自动隐藏的整体透明度系数
 function isPortraitShelfViewport() {
   return innerHeight > innerWidth * 1.08;
 }
+var shelfLayoutProfileCache = {
+  portrait: false,
+  narrow: false,
+  sideX: 0,
+  sideY: 0,
+  sideXStep: 0,
+  sideYStep: 0,
+  sideZ: 0,
+  sideZStep: 0,
+  sideEntryX: 0,
+  sideDetailShift: 0,
+  sideScale: 1,
+  sideRotY: 0,
+  sideRotX: 0,
+  stageX: 0,
+  stageXStep: 0,
+  stageY: 0,
+  stageZ: 0,
+  stageScale: 1,
+  detail: {
+    x: 0,
+    y: 0,
+    z: 0,
+    rx: 0,
+    ry: 0,
+    scale: 1,
+    rowStep: 0,
+    rowScale: 1
+  }
+};
 function shelfLayoutProfile() {
   var portrait = isPortraitShelfViewport();
   var narrow = !portrait && innerWidth < 980;
   var skullShelf = shouldUseSkullSafeShelfCamera();
   var detailScale = portrait ? clampRange(innerWidth / 820, 0.70, 0.86) : (narrow ? 0.92 : 1.04);
   var shelfCtl = shelfSettings();
-  return {
-    portrait: portrait,
-    narrow: narrow,
-    sideX: (skullShelf ? (portrait ? 0.22 : (narrow ? 0.46 : 0.76)) : (portrait ? 1.56 : (narrow ? 2.48 : 3.18))) + shelfCtl.x,
-    sideY: (skullShelf ? (portrait ? -0.22 : (narrow ? -0.30 : -0.34)) : 0) + shelfCtl.y,
-    sideXStep: skullShelf ? (portrait ? 0.018 : 0.034) : (portrait ? 0.018 : 0.040),
-    sideYStep: skullShelf ? (portrait ? 0.46 : 0.62) : (portrait ? 0.52 : 0.68),
-    sideZ: (skullShelf ? (portrait ? 0.86 : 0.92) : (portrait ? 0.78 : 0.86)) + shelfCtl.z,
-    sideZStep: skullShelf ? (portrait ? 0.108 : 0.158) : (portrait ? 0.118 : 0.170),
-    sideEntryX: skullShelf ? (portrait ? 0.30 : 0.50) : (portrait ? 0.38 : 0.82),
-    sideDetailShift: skullShelf ? (portrait ? 0.00 : 0.00) : (portrait ? 0.38 : 0.82),
-    sideScale: (skullShelf ? (portrait ? 0.84 : (narrow ? 1.04 : 1.22)) : (portrait ? 0.70 : (narrow ? 0.86 : 1))) * shelfCtl.size,
-    sideRotY: (skullShelf ? (portrait ? -0.085 : -0.190) : (portrait ? 0.12 : 0.28)) + shelfCtl.angle,
-    sideRotX: skullShelf ? (portrait ? 0.018 : 0.030) : (portrait ? 0.022 : 0.042),
-    stageX: shelfCtl.x,
-    stageXStep: portrait ? 0.92 : (narrow ? 1.22 : 1.55),
-    stageY: (portrait ? -2.46 : -2.20) + shelfCtl.y,
-    stageZ: (portrait ? 0.84 : 1.0) + shelfCtl.z,
-    stageScale: (portrait ? 0.72 : (narrow ? 0.86 : 1)) * shelfCtl.size,
-    detail: {
-      x: (skullShelf ? (portrait ? 0.16 : (narrow ? 0.40 : 0.64)) : (portrait ? 0.38 : (narrow ? 0.96 : 1.28))) + shelfCtl.x * 0.62,
-      y: (skullShelf ? (portrait ? -0.40 : -0.68) : (portrait ? 0.10 : 0.18)) + shelfCtl.y * 0.55,
-      z: (skullShelf ? (portrait ? 1.10 : 1.22) : (portrait ? 1.28 : 1.36)) + shelfCtl.z * 0.45,
-      rx: skullShelf ? (portrait ? 0.006 : 0.014) : (portrait ? -0.004 : -0.008),
-      ry: (skullShelf ? (portrait ? -0.070 : -0.165) : (portrait ? 0.00 : 0.020)) + shelfCtl.angle * 0.55,
-      scale: (skullShelf ? detailScale * (portrait ? 0.88 : 1.02) : detailScale) * shelfCtl.size,
-      rowStep: skullShelf ? (portrait ? 0.37 : 0.43) : (portrait ? 0.36 : 0.42),
-      rowScale: skullShelf ? (portrait ? 0.90 : 1.02) : (portrait ? 0.88 : (narrow ? 0.96 : 1.00))
-    }
-  };
+  var cache = shelfLayoutProfileCache;
+  var detail = cache.detail;
+  cache.portrait = portrait;
+  cache.narrow = narrow;
+  cache.sideX = (skullShelf ? (portrait ? 0.22 : (narrow ? 0.46 : 0.76)) : (portrait ? 1.56 : (narrow ? 2.48 : 3.18))) + shelfCtl.x;
+  cache.sideY = (skullShelf ? (portrait ? -0.22 : (narrow ? -0.30 : -0.34)) : 0) + shelfCtl.y;
+  cache.sideXStep = skullShelf ? (portrait ? 0.018 : 0.034) : (portrait ? 0.018 : 0.040);
+  cache.sideYStep = skullShelf ? (portrait ? 0.46 : 0.62) : (portrait ? 0.52 : 0.68);
+  cache.sideZ = (skullShelf ? (portrait ? 0.86 : 0.92) : (portrait ? 0.78 : 0.86)) + shelfCtl.z;
+  cache.sideZStep = skullShelf ? (portrait ? 0.108 : 0.158) : (portrait ? 0.118 : 0.170);
+  cache.sideEntryX = skullShelf ? (portrait ? 0.30 : 0.50) : (portrait ? 0.38 : 0.82);
+  cache.sideDetailShift = skullShelf ? (portrait ? 0.00 : 0.00) : (portrait ? 0.38 : 0.82);
+  cache.sideScale = (skullShelf ? (portrait ? 0.84 : (narrow ? 1.04 : 1.22)) : (portrait ? 0.70 : (narrow ? 0.86 : 1))) * shelfCtl.size;
+  cache.sideRotY = (skullShelf ? (portrait ? -0.085 : -0.190) : (portrait ? 0.12 : 0.28)) + shelfCtl.angle;
+  cache.sideRotX = skullShelf ? (portrait ? 0.018 : 0.030) : (portrait ? 0.022 : 0.042);
+  cache.stageX = shelfCtl.x;
+  cache.stageXStep = portrait ? 0.92 : (narrow ? 1.22 : 1.55);
+  cache.stageY = (portrait ? -2.46 : -2.20) + shelfCtl.y;
+  cache.stageZ = (portrait ? 0.84 : 1.0) + shelfCtl.z;
+  cache.stageScale = (portrait ? 0.72 : (narrow ? 0.86 : 1)) * shelfCtl.size;
+  detail.x = (skullShelf ? (portrait ? 0.16 : (narrow ? 0.40 : 0.64)) : (portrait ? 0.38 : (narrow ? 0.96 : 1.28))) + shelfCtl.x * 0.62;
+  detail.y = (skullShelf ? (portrait ? -0.40 : -0.68) : (portrait ? 0.10 : 0.18)) + shelfCtl.y * 0.55;
+  detail.z = (skullShelf ? (portrait ? 1.10 : 1.22) : (portrait ? 1.28 : 1.36)) + shelfCtl.z * 0.45;
+  detail.rx = skullShelf ? (portrait ? 0.006 : 0.014) : (portrait ? -0.004 : -0.008);
+  detail.ry = (skullShelf ? (portrait ? -0.070 : -0.165) : (portrait ? 0.00 : 0.020)) + shelfCtl.angle * 0.55;
+  detail.scale = (skullShelf ? detailScale * (portrait ? 0.88 : 1.02) : detailScale) * shelfCtl.size;
+  detail.rowStep = skullShelf ? (portrait ? 0.37 : 0.43) : (portrait ? 0.36 : 0.42);
+  detail.rowScale = skullShelf ? (portrait ? 0.90 : 1.02) : (portrait ? 0.88 : (narrow ? 0.96 : 1.00));
+  return cache;
 }
 function shelfHotZoneWidth() {
   var ratio = isPortraitShelfViewport() ? 0.26 : 0.18;
