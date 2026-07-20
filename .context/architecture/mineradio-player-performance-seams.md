@@ -193,6 +193,11 @@
 - `processRealtimeBeatEngine()` 使用模块级 `beatFollow()`，命中/未命中分别复用 `realtimeBeatHitResult` 与 `realtimeBeatMissResult`；两种对象的字段结构必须保持原样，调用方只能在当前同步帧立即读取，不得跨调用保存引用。
 - 音频分析帧向 `updateCinemaTrackProfile()` 必须复用模块级 `cinemaTrackProfileSample`，线性混合使用模块级 `mixToward()`；`cinemaAnalysisProfileForSong()` 返回固定常量对象，调用方不得原地改写 profile 字段。
 
+
+- `beatCam.events` 使用对象池：新增事件走 `acquireBeatCamEvent()`，过期/队首裁剪/清空走 `removeBeatCamEventAt` / `trimBeatCamEventsFront` / `clearBeatCamEvents`；不得再直接 `events.length = 0` 丢弃可回收对象（`clearBeatCamEvents` 内部除外）。
+- live 节拍调度必须复用 `liveBeatCameraPayload` 与 `liveBeatCameraTone`；`sampleRenderPerf` 向帧压反馈复用 `runtimeFramePressureSample`。
+- 舞台歌词 intro/fallback 进度行复用 `stageLyricIntroLine` / `stageLyricFallbackLine`，调用方不得跨帧依赖字段不被覆盖。
+
 ## Reference
 
 - 相关实现：`public/index.html`、`desktop/main.js`、`server.js`

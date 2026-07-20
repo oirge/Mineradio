@@ -1,5 +1,12 @@
 # 发布流程
 
+## v1.2.36 电影节拍镜头事件池与歌词进度低分配优化
+- `v1.2.36` 继续降低播放中电影节拍镜头事件、live 调度 payload 和舞台歌词进度路径的短命对象，不改变 UI、视觉质感、镜头输出、播放入口或 3D 歌单架交互。
+- `beatCam.events` 使用对象池：`acquireBeatCamEvent()` / `releaseBeatCamEvent()` / `clearBeatCamEvents()` / `removeBeatCamEventAt()` / `trimBeatCamEventsFront()`；事件字段与过期语义保持不变。
+- live 节拍 `scheduleBeatCamera` 与 `mergeRealtimeBeatCamera` tone 复用固定对象；帧压采样与歌词 intro/fallback 行也改为 scratch 复用。
+- 本次发布继续只上传安装器相关资产：安装包、blockmap、`latest.yml`、SHA256 校验文件和 `1.2.35 -> 1.2.36` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.36 电影节拍镜头事件池与歌词进度低分配优化版`。
+
 ## v1.2.35 实时节拍与电影画像低分配性能优化
 - `v1.2.35` 继续降低播放中音频分析与电影镜头曲目画像热路径的短命对象与函数分配，不改变 UI、视觉质感、节拍识别输出、电影镜头参数、播放入口或 3D 歌单架交互。
 - `processRealtimeBeatEngine()` 的指数包络跟随函数提升为模块级 `beatFollow()`，命中/未命中结果复用固定对象；公式、时间常数和 DJ/普通模式分支保持不变。

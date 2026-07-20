@@ -2970,7 +2970,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.35';
+var APP_VERSION = '1.2.36';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -3255,6 +3255,66 @@ var beatCam = {
   prevAudioTime: -1,
   stats: { map: 0, live: 0, merged: 0, liveBlocked: 0 }
 };
+var beatCamEventPool = [];
+var liveBeatCameraPayload = {
+  time: 0,
+  strength: 0,
+  confidence: 0,
+  low: 0,
+  body: 0,
+  snap: 0,
+  mass: 0,
+  sharpness: 0,
+  combo: '',
+  impact: 0,
+  preview: false,
+  primary: true,
+  dj: false
+};
+var liveBeatCameraTone = {
+  zoomAmp: 0,
+  thetaAmp: 0,
+  phiAmp: 0,
+  rollAmp: 0,
+  mode: 'deep',
+  low: 0,
+  body: 0,
+  snap: 0,
+  dj: false
+};
+var runtimeFramePressureSample = {
+  frames: 0,
+  fps: 0,
+  longFrames: 0,
+  worstFrameMs: 0
+};
+function acquireBeatCamEvent() {
+  return beatCamEventPool.length ? beatCamEventPool.pop() : {
+    start: 0, hit: 0, amp: 0, attack: 0, hold: 0, release: 0,
+    zoomAmp: 0, thetaAmp: 0, phiAmp: 0, rollAmp: 0,
+    mode: 'deep', combo: '', phase: 0,
+    low: 0, body: 0, snap: 0, mass: 0, source: 'map', dj: false
+  };
+}
+function releaseBeatCamEvent(ev) {
+  if (ev) beatCamEventPool.push(ev);
+}
+function clearBeatCamEvents() {
+  for (var i = 0; i < beatCam.events.length; i++) releaseBeatCamEvent(beatCam.events[i]);
+  beatCam.events.length = 0;
+}
+function removeBeatCamEventAt(index) {
+  if (index < 0 || index >= beatCam.events.length) return;
+  releaseBeatCamEvent(beatCam.events[index]);
+  beatCam.events.splice(index, 1);
+}
+function trimBeatCamEventsFront(keepCount) {
+  keepCount = Math.max(0, keepCount | 0);
+  if (beatCam.events.length <= keepCount) return;
+  var remove = beatCam.events.length - keepCount;
+  for (var i = 0; i < remove; i++) releaseBeatCamEvent(beatCam.events[i]);
+  beatCam.events.splice(0, remove);
+}
 var liveCamAvg = 0, liveCamPeak = 0.28, liveCamLastRaw = 0;
 var cinemaDynamics = { avg: 0, lowAvg: 0, peak: 0.30, scale: 0.82 };
 var cinemaTrackProfile = {
@@ -4476,7 +4536,7 @@ window.addEventListener('pagehide', flushPersistentVisualState);
 
 function resetBeatCameraSync(t) {
   beatCam.nextIdx = 0;
-  beatCam.events.length = 0;
+  clearBeatCamEvents();
   beatCam.punch = 0;
   beatCam.lastTriggerAt = -10;
   beatCam.lastRealtimeAt = -10;
@@ -5269,17 +5329,23 @@ function scheduleBeatCamera(beat, source) {
       return;
     }
     beatCam.lastRealtimeAt = time;
-    if (mergeRealtimeBeatCamera(time, amp, {
-      zoomAmp: zoomAmp, thetaAmp: thetaAmp, phiAmp: phiAmp, rollAmp: rollAmp, mode: mode,
-      low: lowTone, body: bodyTone, snap: snapTone, dj: dj
-    })) {
+    liveBeatCameraTone.zoomAmp = zoomAmp;
+    liveBeatCameraTone.thetaAmp = thetaAmp;
+    liveBeatCameraTone.phiAmp = phiAmp;
+    liveBeatCameraTone.rollAmp = rollAmp;
+    liveBeatCameraTone.mode = mode;
+    liveBeatCameraTone.low = lowTone;
+    liveBeatCameraTone.body = bodyTone;
+    liveBeatCameraTone.snap = snapTone;
+    liveBeatCameraTone.dj = dj;
+    if (mergeRealtimeBeatCamera(time, amp, liveBeatCameraTone)) {
       beatCam.lastTriggerAt = Math.max(beatCam.lastTriggerAt, time);
       return;
     }
     for (var ei = beatCam.events.length - 1; ei >= 0; ei--) {
       var pending = beatCam.events[ei];
       if (pending.source === 'map' && pending.hit > time && pending.hit - time < beatCam.realtimeMergeWindow) {
-        beatCam.events.splice(ei, 1);
+        removeBeatCamEventAt(ei);
       }
     }
   }
@@ -5300,29 +5366,29 @@ function scheduleBeatCamera(beat, source) {
     beatCam.lastTriggerAt = Math.max(beatCam.lastTriggerAt, time);
     beatCam.stats.live++;
   }
-  beatCam.events.push({
-    start: isLiveSource ? nowT - attack * 0.42 : nowT + (time - nowT) - attack,
-    hit: time,
-    amp: amp,
-    attack: attack,
-    hold: hold,
-    release: release,
-    zoomAmp: zoomAmp,
-    thetaAmp: thetaAmp,
-    phiAmp: phiAmp,
-    rollAmp: rollAmp,
-    mode: mode,
-    combo: combo,
-    phase: idx * 2.399963 + (snapTone - lowTone) * 1.4,
-    low: lowTone,
-    body: bodyTone,
-    snap: snapTone,
-    mass: mass,
-    source: source || 'map',
-    dj: dj
-  });
+  var camEvent = acquireBeatCamEvent();
+  camEvent.start = isLiveSource ? nowT - attack * 0.42 : nowT + (time - nowT) - attack;
+  camEvent.hit = time;
+  camEvent.amp = amp;
+  camEvent.attack = attack;
+  camEvent.hold = hold;
+  camEvent.release = release;
+  camEvent.zoomAmp = zoomAmp;
+  camEvent.thetaAmp = thetaAmp;
+  camEvent.phiAmp = phiAmp;
+  camEvent.rollAmp = rollAmp;
+  camEvent.mode = mode;
+  camEvent.combo = combo;
+  camEvent.phase = idx * 2.399963 + (snapTone - lowTone) * 1.4;
+  camEvent.low = lowTone;
+  camEvent.body = bodyTone;
+  camEvent.snap = snapTone;
+  camEvent.mass = mass;
+  camEvent.source = source || 'map';
+  camEvent.dj = dj;
+  beatCam.events.push(camEvent);
   var maxEvents = djMode.active ? 12 : 8;
-  if (beatCam.events.length > maxEvents) beatCam.events.splice(0, beatCam.events.length - maxEvents);
+  if (beatCam.events.length > maxEvents) trimBeatCamEventsFront(maxEvents);
 }
 
 function updateBeatCamera(dt) {
@@ -5333,7 +5399,7 @@ function updateBeatCamera(dt) {
     beatCam.phiKick *= Math.pow(0.05, dt);
     beatCam.radiusKick *= Math.pow(0.05, dt);
     beatCam.rollKick *= Math.pow(0.05, dt);
-    beatCam.events.length = 0;
+    clearBeatCamEvents();
     beatCam.prevAudioTime = t;
     return;
   }
@@ -5368,7 +5434,7 @@ function updateBeatCamera(dt) {
       var r = (local - attack - hold) / release;
       val = 1 - easeBeatCamera(r);
     } else {
-      beatCam.events.splice(i, 1);
+      removeBeatCamEventAt(i);
       continue;
     }
     var evPunch = val * ev.amp;
@@ -7680,6 +7746,16 @@ var stageLyrics = {
   starRiverHeight: 0.58,
   lockFitScale: 1,
   snapCameraLockFrames: 0,
+};
+var stageLyricIntroLine = {
+  t: 0,
+  text: '',
+  duration: 0.8,
+  charCount: 1,
+  fallback: true
+};
+var stageLyricFallbackLine = {
+  t: 0
 };
 var lyricSunColor = new THREE.Color(0xffe6a4);
 var lyricSunHotColor = new THREE.Color(0xfff4cc);
@@ -10580,8 +10656,12 @@ function tickLyricsParticles() {
     if (stageLyrics.current) {
       var firstLine = lyricsLines[0];
       var introEnd = firstLine && firstLine.t > 0 ? firstLine.t : Math.min((audio && audio.duration) || 4.8, 4.8);
-      var introLine = { t:0, text:introText, duration:Math.max(0.8, introEnd), charCount:Math.max(1, introText.length), fallback:true };
-      updateLyricMeshProgress(stageLyrics.current, getLyricLineProgress(introLine, null, t));
+      stageLyricIntroLine.t = 0;
+      stageLyricIntroLine.text = introText;
+      stageLyricIntroLine.duration = Math.max(0.8, introEnd);
+      stageLyricIntroLine.charCount = Math.max(1, introText.length);
+      stageLyricIntroLine.fallback = true;
+      updateLyricMeshProgress(stageLyrics.current, getLyricLineProgress(stageLyricIntroLine, null, t));
     }
     return;
   }
@@ -10590,7 +10670,11 @@ function tickLyricsParticles() {
     showStageLine(lyricsLines[newIdx].text || '');
   }
   if (stageLyrics.current) {
-    var curLine = lyricsLines[newIdx] || { t:t };
+    var curLine = lyricsLines[newIdx];
+    if (!curLine) {
+      stageLyricFallbackLine.t = t;
+      curLine = stageLyricFallbackLine;
+    }
     var nextLine = lyricsLines[newIdx + 1];
     var progress = getLyricLineProgress(curLine, nextLine, t);
     updateLyricMeshProgress(stageLyrics.current, progress);
@@ -30321,12 +30405,11 @@ function sampleRenderPerf(now, dt) {
     var sampleWorstFrameMs = renderPerfState.sampleWorstFrameMs;
     renderPerfState.fps = Math.round(sampleFrames * 1000 / Math.max(1, now - renderPerfState.lastSampleAt));
     if (typeof updateRuntimeFramePressure === 'function') {
-      updateRuntimeFramePressure(now, {
-        frames: sampleFrames,
-        fps: renderPerfState.fps,
-        longFrames: sampleLongFrames,
-        worstFrameMs: sampleWorstFrameMs
-      });
+      runtimeFramePressureSample.frames = sampleFrames;
+      runtimeFramePressureSample.fps = renderPerfState.fps;
+      runtimeFramePressureSample.longFrames = sampleLongFrames;
+      runtimeFramePressureSample.worstFrameMs = sampleWorstFrameMs;
+      updateRuntimeFramePressure(now, runtimeFramePressureSample);
     }
     renderPerfState.frames = 0;
     renderPerfState.sampleLongFrames = 0;
@@ -30441,21 +30524,20 @@ function animate() {
           ? (liveStrongHit || liveTempoHit)
           : (realtimeBeat.confidence > 0.84 && realtimeBeat.strength > 0.80 && realtimeBeat.low > 0.54 && (liveKickFrame || realtimeBeat.score > 0.68)));
       if (!beatMapReadyForCamera && liveFallbackOk) {
-        scheduleBeatCamera({
-          time: realtimeBeat.time,
-          strength: realtimeBeat.strength,
-          confidence: realtimeBeat.confidence,
-          low: realtimeBeat.low,
-          body: realtimeBeat.body,
-          snap: realtimeBeat.snap,
-          mass: realtimeBeat.mass,
-          sharpness: realtimeBeat.sharpness,
-          combo: realtimeBeat.combo,
-          impact: clamp01(realtimeBeat.strength * 0.46 + realtimeBeat.confidence * 0.20 + realtimeBeat.low * 0.28),
-          preview: waitingForBeatMap,
-          primary: true,
-          dj: dj
-        }, 'live');
+        liveBeatCameraPayload.time = realtimeBeat.time;
+        liveBeatCameraPayload.strength = realtimeBeat.strength;
+        liveBeatCameraPayload.confidence = realtimeBeat.confidence;
+        liveBeatCameraPayload.low = realtimeBeat.low;
+        liveBeatCameraPayload.body = realtimeBeat.body;
+        liveBeatCameraPayload.snap = realtimeBeat.snap;
+        liveBeatCameraPayload.mass = realtimeBeat.mass;
+        liveBeatCameraPayload.sharpness = realtimeBeat.sharpness;
+        liveBeatCameraPayload.combo = realtimeBeat.combo;
+        liveBeatCameraPayload.impact = clamp01(realtimeBeat.strength * 0.46 + realtimeBeat.confidence * 0.20 + realtimeBeat.low * 0.28);
+        liveBeatCameraPayload.preview = waitingForBeatMap;
+        liveBeatCameraPayload.primary = true;
+        liveBeatCameraPayload.dj = dj;
+        scheduleBeatCamera(liveBeatCameraPayload, 'live');
       }
       if (!beatMapReadyForCamera && liveFallbackOk) {
         var previewPulseScale = waitingForBeatMap && !dj ? 0.68 : 1;
