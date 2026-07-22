@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.38`
-- 最近正式安装包 Release 基线：`v1.2.38`。
+- 当前源码检查点：`v1.2.39`
+- 最近正式安装包 Release 基线：`v1.2.39`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -26,6 +26,11 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.39` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.39`
+- `v1.2.39` 重点优化桌面歌词/壁纸覆盖层同步：复用歌词快照、动效/播放/颜色子载荷和完整 payload；IPC 结构化快照取得后释放 `beatMap` 与壁纸 `cover`，不改变歌词、壁纸、UI、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。
+- `v1.2.39` Release 资产包括：`latest.yml`、`Mineradio-1.2.39-Setup.exe`、`Mineradio-1.2.39-Setup.exe.blockmap`、`Mineradio-1.2.39-SHA256SUMS.txt`、`Mineradio-1.2.38-to-1.2.39.patch.json`；Portable ZIP 跳过。
+- `v1.2.39` 安装包 SHA256：`33156b1c79e25feb9a035a3f8c95cb38aa54fdec7d2a7e54c573fea1acf80b1a`
 
 - `v1.2.38` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.38`
 - `v1.2.38` 重点把 3D 歌单架 `shelfLayoutProfile()` / `shelfSettings()` 改为固定缓存对象就地填充，`renderQualityProfile()` 返回冻结档位常量，`applyRendererPowerMode()` 就地更新 `renderPowerState`；布局结果、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。

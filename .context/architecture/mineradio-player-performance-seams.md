@@ -77,6 +77,7 @@
 - 播放进度刷新处于 RAF/`timeupdate` 热路径；本地播放会话的 JSON 与 `localStorage` 写入不要直接占用进度 UI 动画帧，清空队列时也必须取消待执行保存。
 - `play` / `playing` / `pause` 等音频事件可能连续到达；不要为相同状态重复重建播放图标、恢复全部控制节点、创建 `MediaMetadata` 或强制写系统播放位置。
 - 桌面歌词高帧率 IPC 同步会持续生成载荷签名；不要每帧重新创建签名数组、节奏图中间载荷或重复解析当前歌曲封面元数据。
+- 桌面歌词/壁纸同步会在同一渲染循环内生成多个嵌套 payload；不要恢复每帧新建歌词快照、动效/播放对象、颜色对象或完整覆盖层 payload。
 - 封面来源和签名会被队列、搜索、歌单架、桌面歌词及系统媒体信息反复读取；不要为缓存键创建字段数组，也不要在一次读取中重复水合自定义封面映射。
 - 歌曲副标题/本地音质缓存键、3D 歌单架 draw/rebuild 签名、队列渲染指纹、本地曲库面板签名和本地快照签名如果用数组 `join`，会在高频刷新时反复创建短命数组。
 - 播放进度时间格式化处于 `timeupdate`/RAF 热路径；`padStart` 会额外制造临时字符串包装。
@@ -170,6 +171,8 @@
 - 播放会话常规保存通过空闲回调执行，退出时强制保存，`clearPlaybackSession()` 必须先取消待执行任务，避免清空后旧会话被重新写回。
 - 播放图标、控制栏节点、控制区歌曲信息和 Media Session 元数据使用节点/内容签名缓存；相同播放状态事件只同步必要的系统位置节流任务。
 - `currentDesktopSongMeta()` 复用歌曲元数据对象，桌面歌词签名使用固定缓冲区，节奏图字段直接写入最终 IPC payload；字段顺序、量化精度和发送语义必须保持不变。
+- 桌面覆盖层同步使用固定 scratch payload：`desktopLyricSnapshotCache`、`desktopLyricsMotionPayloadCache`、`desktopLyricsPlaybackPayloadCache`、`desktopOverlayColorsCache`、`desktopLyricsPayloadCache` 与 `wallpaperPayloadCache`；preload IPC 调用会立即序列化，调用方不得跨帧保存这些引用，序列化后必须释放缓存中的 `beatMap` 与壁纸 `cover` 重型字段。
+- `applyDesktopLyricsBeatMapPayload()` 在复用 payload 上必须显式删除不再发送的 `beatMap` 字段，保持签名中的 `map/nomap` 判重和旧载荷结构一致。
 - `songCoverSrc()` / `songCoverSignature()` 的缓存键直接拼接，并在同一轮读取中复用自定义封面映射；封面优先级和缓存失效字段必须保持不变。
 - 歌曲副标题缓存键、本地音质缓存键、3D 歌单架 `cardDrawSignature`/`queueSampleSig`、队列 `queueRenderFingerprint`、本地曲库面板签名和本地快照/记录签名统一改为直接字符串拼接，不要恢复数组 `join`。
 - `formatProgramTime()` 使用轻量补零，不要在进度热路径恢复 `padStart`。
