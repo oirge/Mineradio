@@ -9,7 +9,7 @@
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.2.40`
-- 最近正式安装包 Release 基线：`v1.2.39`。
+- 最近正式安装包 Release 基线：`v1.2.40`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -26,6 +26,12 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.40` 于 2026-07-22 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.40`；tag 对应提交 `72873d48c18286fa2aabf0e00d3457baa97d2b94`，并设为 Latest。
+- `v1.2.40` 在 `public/index.html` 缓存桌面歌词最终归一化字符串，并让封面取色放大镜每次打开只编码一次 JPEG/CSS 背景；关闭时释放 canvas、Base64 和内联背景引用。
+- `v1.2.40` 在 `server.js` 为快速补丁保持 12 秒首包超时和 30 秒正文空闲 watchdog，所有退出路径清理计时器；`AbortError` / `TimeoutError` 统一返回 `UPDATE_TIMEOUT`，并读取 Node `fetch failed` 的 `cause` 区分 DNS 与连接中断。
+- `v1.2.40` 不改变 UI、布局、歌词输出、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。发布资产仅含 `latest.yml`、安装包、blockmap、SHA256 清单和 `1.2.39 -> 1.2.40` 快速补丁，Portable ZIP 跳过。
+- `v1.2.40` 资产校验：安装包 `104726206` 字节 / SHA256 `b4ee5580e4708e80e9037899664b8924b162ba13f84277eab3c20ce87ab6cb2b`；blockmap `111905` 字节 / `336ba976c7e711453121053e0ab3f26e9b5c39826eb4495ebdfa0e76313e7b6d`；补丁 `2270317` 字节 / `f3ff7ead1390e38261f1fcedae3dbfcf1227c82188fa5de8f415abac17bc939f`；`latest.yml` `350` 字节 / `a7022ce1426ad21006c096d3d5f4781fb947844daa332d0d3fd2e77efc76627e`；SHA256 清单 `299` 字节 / `2489669892d24d2c06c5e659372cec8f40d1da4b6c321f8084553b857ae12269`。
 
 - `v1.2.39` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.39`
 - `v1.2.39` 重点优化桌面歌词/壁纸覆盖层同步：复用歌词快照、动效/播放/颜色子载荷和完整 payload；IPC 结构化快照取得后释放 `beatMap` 与壁纸 `cover`，不改变歌词、壁纸、UI、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。
