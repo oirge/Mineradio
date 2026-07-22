@@ -47,6 +47,7 @@
 - 大本地库或大歌单入队会批量克隆歌曲对象；不要恢复 `songs.map(cloneSong)` 这类回调式批量克隆。
 - 本地歌词、内嵌歌词和自定义歌词加载会解析长文本；不要在 LRC 解析、歌词 source 转换和 fallback 过滤路径恢复 `map/filter/forEach/every` 链式扫描。
 - 舞台歌词和桌面歌词刷新会反复压缩空白、过滤空行并限制行数；不要恢复 `split('\n').map(...).filter(...).slice(...)` 这类为每次歌词刷新制造多轮临时数组的路径。
+- 桌面歌词持续同步时，相同原文和 single/double 行数模式必须复用最终归一化字符串；文本或行数模式变化时再失效，不能让每帧重复清洗同一歌词。
 - 桌面歌词中键锁定轮询会在主进程后台持续读取 stdout；不要恢复 `buffer.split(/\r?\n/).forEach(...)`，应保持流式扫描和半行缓存。
 - 桌面 UI 状态补丁写入可能在连续拖动歌词/壁纸设置滑条时触发；不要恢复 `Object.entries(patch).forEach(...)` 这类每次写入都生成字段数组的路径。
 - LRC/YRC/自定义歌词加载会处理长文本和逐字时间轴；不要恢复按整段 `split(/\r?\n/)` 先生成完整行数组的路径，尤其是切歌、桌面歌词同步和自定义歌词切换期间。
@@ -136,6 +137,7 @@
 - 运行时缓存数量统计使用 `safeObjectKeyCount()`；本地资产内存缓存和 IndexedDB 删除集合维护删除 id 数组，减少后台 trim 的全量 key 数组和重复查表。
 - 进入本地曲库同步比对前先调用 `hydrateLocalLibraryPersistentState(folderPath)`，确保同步比对读取内存缓存。
 - 本地封面缩略图通过 `localCoverThumbPromiseCache` 合并并发请求，不要为同一 data URL 重复创建 canvas。
+- 封面取色放大镜打开时只允许对当前 canvas 做一次 JPEG/Base64 编码；鼠标移动复用已缓存的 CSS 背景，只更新位置，关闭时释放大字符串和 canvas 引用。
 - 成功生成的本地封面缩略图还必须进入 `localCoverThumbResultCache` 短期结果缓存，避免队列、搜索和歌单架在不同时间点重复缩放同一封面。
 - 主进程本地曲库扫描和快照刷新统一走 `statLocalLibraryFiles()`，用有上限并发池读取文件元数据，并通过原始 `index` 保持排序稳定。
 - `statLocalLibraryFiles()` 用显式循环压缩稀疏结果数组，避免大曲库扫盘完成后再跑 `filter(Boolean)` 回调。
@@ -159,6 +161,8 @@
 - 本地歌词/文本解码使用 `countTextReplacementChars()` 统计替换字符，并复用 `localTextDecoder()`；YRC 前导空白使用 `leadingWhitespaceLength()`。
 - 无歌词占位检测使用 `compactNoLyricText()` 单次扫描，保持忽略空白、常见中英文标点和固定占位文案的语义不变。
 - 更新下载任务的最新/匹配最新查询使用 `latestUpdateDownloadJob()` 单次扫描；任务裁剪使用 `newestUpdateDownloadJobs(8)` 的小窗口维护，状态轮询和快速补丁复用判断不要恢复全量任务数组排序。
+- 快速补丁下载必须同时覆盖首包连接超时和正文读取空闲超时；每次 `reader.read()` 前后刷新 watchdog，并在成功、异常和镜像切换路径 `finally` 清理计时器。
+- Node `fetch` 的 DNS/连接错误通常包装在 `TypeError: fetch failed` 的 `cause` 中；分类时必须检查嵌套 code/name/message，不能把裸 `fetch failed` 一律当作 DNS。DOM `AbortError` / `TimeoutError` 的数值 code 也必须归一为稳定的 `UPDATE_TIMEOUT`。
 - 更新面板前端使用 `updatePreviewContentSignature()`、`updatePreviewClassSignature()` 和 `lastProgressSignature` 判重；下载/补丁轮询状态未变化时必须跳过重复 DOM 写入。
 - `showMiniPlayerWindow()` 只在窗口隐藏或最小化时调用 `showInactive()` 并强制同步状态；`keepMiniPlayerOnTop()` 仅在置顶状态丢失时重写置顶标记，健康恢复轮询只执行 `moveTop()`。
 - `pushMiniPlayerState()` 必须先判断 `hasTrack`；空队列使用空元数据签名并发送空封面，不能调用 `currentDesktopSongMeta()`。迷你页面封面错误回调需释放失败 `src` 与 `lastCover`。

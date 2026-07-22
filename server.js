@@ -520,9 +520,10 @@ function createUpdateDownloadIdleGuard(timeoutMs) {
   const controller = new AbortController();
   const timeout = Math.max(5000, Number(timeoutMs) || UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS);
   let timer = null;
-  const touch = () => {
+  const touch = (nextTimeoutMs) => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => controller.abort(), timeout);
+    const delay = Math.max(5000, Number(nextTimeoutMs) || timeout);
+    timer = setTimeout(() => controller.abort(), delay);
   };
   const clear = () => {
     if (timer) clearTimeout(timer);
@@ -539,21 +540,32 @@ function updateError(code, message, cause) {
 }
 function classifyUpdateError(err) {
   const code = String(err && err.code || '').trim();
+  const name = String(err && err.name || '').trim();
   const message = String(err && err.message || err || '').trim();
-  const detail = message || code || '未知错误';
-  if (/HASH|DIGEST|CHECKSUM/i.test(code + ' ' + message)) {
+  const cause = err && err.cause;
+  const causeCode = String(cause && cause.code || '').trim();
+  const causeName = String(cause && cause.name || '').trim();
+  const causeMessage = String(cause && cause.message || '').trim();
+  const causeDetail = causeMessage || causeCode;
+  const detail = message && causeDetail && causeDetail !== message
+    ? message + ': ' + causeDetail
+    : (message || causeDetail || code || '未知错误');
+  const classificationText = [code, name, message, causeCode, causeName, causeMessage].join(' ');
+  if (/HASH|DIGEST|CHECKSUM/i.test(classificationText)) {
     return { code: code || 'UPDATE_HASH_MISMATCH', reason: '文件校验失败，可能是线路缓存异常，已拦截该安装包。', detail };
   }
-  if (/SIZE_MISMATCH|content length/i.test(code + ' ' + message)) {
+  if (/SIZE_MISMATCH|content length/i.test(classificationText)) {
     return { code: code || 'UPDATE_SIZE_MISMATCH', reason: '下载文件大小不一致，可能是网络中断或线路缓存不完整。', detail };
   }
-  if (/AbortError|TIMEOUT|ETIMEDOUT|timeout/i.test(code + ' ' + message)) {
-    return { code: code || 'UPDATE_TIMEOUT', reason: '连接超时，当前网络到更新线路不稳定。', detail };
+  if (/AbortError|TIMEOUT|ETIMEDOUT|timeout/i.test(classificationText)) {
+    const domTimeout = /^(?:AbortError|TimeoutError)$/i.test(name) || /^(?:AbortError|TimeoutError)$/i.test(causeName);
+    const timeoutCode = domTimeout ? 'UPDATE_TIMEOUT' : (code || 'UPDATE_TIMEOUT');
+    return { code: timeoutCode, reason: '连接超时，当前网络到更新线路不稳定。', detail };
   }
-  if (/ENOTFOUND|EAI_AGAIN|DNS|fetch failed|getaddrinfo/i.test(code + ' ' + message)) {
+  if (/ENOTFOUND|EAI_AGAIN|DNS|getaddrinfo/i.test(classificationText)) {
     return { code: code || 'UPDATE_DNS_FAILED', reason: '域名解析失败，可能是当前网络无法连接该更新线路。', detail };
   }
-  if (/ECONNRESET|ECONNREFUSED|socket|network/i.test(code + ' ' + message)) {
+  if (/ECONNRESET|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|socket|network|fetch failed/i.test(classificationText)) {
     return { code: code || 'UPDATE_NETWORK_FAILED', reason: '网络连接被中断，已尝试切换更新线路。', detail };
   }
   const http = message.match(/\bHTTP[_\s-]?(\d{3})\b/i) || message.match(/\b(\d{3})\b/);
@@ -1345,40 +1357,50 @@ async function downloadPatchBufferFromCandidate(job, candidate, index, total) {
   job.progress = 0;
   job.updatedAt = Date.now();
 
-  const resp = await fetchWithTimeout(candidate.url, {
-    headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
-  }, 12000);
-  if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
+  const idleGuard = createUpdateDownloadIdleGuard(UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS);
+  idleGuard.touch(12000);
+  try {
+    const resp = await fetch(candidate.url, {
+      signal: idleGuard.signal,
+      headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
+    });
+    if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
 
-  job.total = parseInt(resp.headers.get('content-length') || '0', 10) || job.expectedSize || job.total || 0;
-  job.received = 0;
-  const chunks = [];
-  const reader = resp.body.getReader();
-  let speedWindowAt = Date.now();
-  let speedWindowBytes = 0;
-  while (true) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    const buf = Buffer.from(chunk.value);
-    job.received += buf.length;
-    speedWindowBytes += buf.length;
-    if (job.received > PATCH_MAX_BYTES) throw updateError('PATCH_TOO_LARGE', 'Patch package is too large');
-    chunks.push(buf);
-    const now = Date.now();
-    if (now - speedWindowAt >= 700) {
-      job.speedBps = Math.round(speedWindowBytes / Math.max(0.001, (now - speedWindowAt) / 1000));
-      speedWindowAt = now;
-      speedWindowBytes = 0;
+    idleGuard.touch();
+    job.total = parseInt(resp.headers.get('content-length') || '0', 10) || job.expectedSize || job.total || 0;
+    job.received = 0;
+    const chunks = [];
+    const reader = resp.body.getReader();
+    let speedWindowAt = Date.now();
+    let speedWindowBytes = 0;
+    while (true) {
+      idleGuard.touch();
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      idleGuard.touch();
+      const buf = Buffer.from(chunk.value);
+      job.received += buf.length;
+      speedWindowBytes += buf.length;
+      if (job.received > PATCH_MAX_BYTES) throw updateError('PATCH_TOO_LARGE', 'Patch package is too large');
+      chunks.push(buf);
+      const now = Date.now();
+      if (now - speedWindowAt >= 700) {
+        job.speedBps = Math.round(speedWindowBytes / Math.max(0.001, (now - speedWindowAt) / 1000));
+        speedWindowAt = now;
+        speedWindowBytes = 0;
+      }
+      job.progress = job.total > 0
+        ? Math.max(1, Math.min(84, Math.round((job.received / job.total) * 84)))
+        : Math.max(1, Math.min(76, Math.round(Math.log10(job.received / 1024 + 1) * 24)));
+      job.etaSeconds = job.total > 0 && job.speedBps > 0 ? Math.max(0, Math.round((job.total - job.received) / job.speedBps)) : 0;
+      job.updatedAt = Date.now();
     }
-    job.progress = job.total > 0
-      ? Math.max(1, Math.min(84, Math.round((job.received / job.total) * 84)))
-      : Math.max(1, Math.min(76, Math.round(Math.log10(job.received / 1024 + 1) * 24)));
-    job.etaSeconds = job.total > 0 && job.speedBps > 0 ? Math.max(0, Math.round((job.total - job.received) / job.speedBps)) : 0;
-    job.updatedAt = Date.now();
+    const raw = Buffer.concat(chunks);
+    verifyUpdateBuffer(raw, job);
+    return raw;
+  } finally {
+    idleGuard.clear();
   }
-  const raw = Buffer.concat(chunks);
-  verifyUpdateBuffer(raw, job);
-  return raw;
 }
 async function downloadAndApplyPatchWithMirrors(job) {
   const candidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length

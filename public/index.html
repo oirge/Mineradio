@@ -2970,7 +2970,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.39';
+var APP_VERSION = '1.2.40';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -24959,7 +24959,7 @@ function setVisualTintCustom(color, silent) {
   saveLyricLayout();
   if (!silent) showToast('视觉主色: ' + fx.visualTintColor.toUpperCase());
 }
-var coverColorPickerState = { target: 'visualTint', canvas: null };
+var coverColorPickerState = { target: 'visualTint', canvas: null, loupeImageCss: '' };
 function currentCoverPickerCanvas() {
   if (coverPickerCanvas && coverPickerCanvas.getContext) return coverPickerCanvas;
   if (coverTex && coverTex.image && coverTex.image.getContext) return coverTex.image;
@@ -25008,10 +25008,17 @@ function openCoverColorPicker(target) {
     showToast('暂无封面，已切换为自动封面取色');
     return;
   }
-  var imgSrc = '';
-  try { imgSrc = cv.toDataURL('image/jpeg', 0.84); } catch (e) {}
-  if (!imgSrc && currentCoverSource && currentCoverSource.src) imgSrc = currentCoverSource.src;
-  art.style.backgroundImage = imgSrc ? 'url("' + cssImageUrl(imgSrc) + '")' : '';
+  var canvasSrc = '';
+  try { canvasSrc = cv.toDataURL('image/jpeg', 0.84); } catch (e) {}
+  var imgSrc = canvasSrc || (currentCoverSource && currentCoverSource.src) || '';
+  var imageCss = imgSrc ? 'url("' + cssImageUrl(imgSrc) + '")' : '';
+  coverColorPickerState.loupeImageCss = canvasSrc ? imageCss : '';
+  art.style.backgroundImage = imageCss;
+  var loupe = document.getElementById('cover-color-loupe');
+  if (loupe) {
+    loupe.style.backgroundImage = coverColorPickerState.loupeImageCss;
+    loupe.style.backgroundSize = coverColorPickerState.loupeImageCss ? '680% 680%' : '';
+  }
   setCoverPickerPreview(fx.visualTintColor || (stageLyrics.coverPalette && stageLyrics.coverPalette.primary) || '#9db8cf');
   renderCoverPickerSwatches();
   if (hint) hint.textContent = '点击专辑封面任意位置取色，或使用下方推荐色。';
@@ -25021,6 +25028,15 @@ function openCoverColorPicker(target) {
 function closeCoverColorPicker() {
   var pop = document.getElementById('cover-color-pop');
   if (pop) pop.classList.remove('show');
+  var art = document.getElementById('cover-color-art');
+  if (art) art.style.backgroundImage = '';
+  var loupe = document.getElementById('cover-color-loupe');
+  if (loupe) {
+    loupe.style.backgroundImage = '';
+    loupe.style.backgroundSize = '';
+  }
+  coverColorPickerState.canvas = null;
+  coverColorPickerState.loupeImageCss = '';
   hideCoverColorLoupe();
 }
 function applyCoverPickerColor(hex) {
@@ -25035,16 +25051,12 @@ function applyCoverPickerColor(hex) {
 function moveCoverColorLoupe(e) {
   var cv = coverColorPickerState.canvas || currentCoverPickerCanvas();
   var loupe = document.getElementById('cover-color-loupe');
-  var art = document.getElementById('cover-color-art');
+  var art = e && e.currentTarget || document.getElementById('cover-color-art');
   if (!cv || !loupe || !art) return;
   var rect = art.getBoundingClientRect();
   var x = clampRange((e.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
   var y = clampRange((e.clientY - rect.top) / Math.max(1, rect.height), 0, 1);
-  var imgSrc = '';
-  try { imgSrc = cv.toDataURL('image/jpeg', 0.84); } catch (err) {}
-  if (imgSrc) {
-    loupe.style.backgroundImage = 'url("' + cssImageUrl(imgSrc) + '")';
-    loupe.style.backgroundSize = '680% 680%';
+  if (coverColorPickerState.loupeImageCss) {
     loupe.style.backgroundPosition = (x * 100).toFixed(2) + '% ' + (y * 100).toFixed(2) + '%';
   }
   loupe.style.left = Math.min(window.innerWidth - 128, e.clientX + 18) + 'px';
@@ -29804,9 +29816,17 @@ function currentDesktopSongMeta() {
   };
   return cache.value;
 }
+var desktopLyricTextNormalizeCache = { raw: '', maxLines: 0, value: '', valid: false };
 function normalizeDesktopLyricText(text, maxLines) {
   maxLines = normalizeDesktopLyricsRows(maxLines || (fx && fx.desktopLyricsRows)) === 'single' ? 1 : 2;
-  return normalizedLyricTextLines(text, maxLines).join('\n');
+  var raw = String(text || '');
+  var cache = desktopLyricTextNormalizeCache;
+  if (cache.valid && cache.raw === raw && cache.maxLines === maxLines) return cache.value;
+  cache.raw = raw;
+  cache.maxLines = maxLines;
+  cache.value = normalizedLyricTextLines(raw, maxLines).join('\n');
+  cache.valid = true;
+  return cache.value;
 }
 /**
  * 查找桌面歌词当前行。播放顺序推进时沿用上次游标，拖动或切歌时退回二分查找。
