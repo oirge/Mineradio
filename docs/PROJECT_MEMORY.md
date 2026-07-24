@@ -9,7 +9,7 @@
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.2.43`
-- 最近正式安装包 Release 基线：`v1.2.42`。
+- 最近正式安装包 Release 基线：`v1.2.43`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -26,6 +26,11 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.43` 于 2026-07-24 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.43`；tag 对应提交 `4055208`，并设为 Latest。
+- `v1.2.43` 音质展示全面对标网易云：列表/详情用中文档位，`FLAC · 921 kbps` 变为 `FLAC · 无损`，`MP3 · 320 kbps` 变为 `MP3 · 极高`；有损最高只到极高，无损容器才标无损/高解析度。
+- `v1.2.43` 控制台音质菜单中文化：母带/高解/无损/极高/标准；缓存键 `tier-v2` 失效旧 kbps 文案。不改变 UI 布局、播放逻辑、玻璃质感、电影视觉或 3D 歌单架交互。
+- `v1.2.43` 资产校验：安装包 `104728388` 字节 / SHA256 `4443d64499f4b4f6c4ab8965dae1eed0792aa9c003b984eb79db61700d46c790`；blockmap `111846` 字节 / `8ea5c3090e71fe6047683a0f9f3dc7b2ea88a504d8bf0da977d27f1a670dbbf5`；补丁 `2282433` 字节 / `1a4c624438863c14c113352f80567f33ae8417b57ab8b1b8909cb0665b356565`；`latest.yml` `350` 字节 / `88caf42a2708ea5c76c7f6ea6a07dd23c08f2c98ef9e3730f4d5b052a805d2f7`。
 
 - `v1.2.42` 于 2026-07-24 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.42`；tag 对应提交 `7c1d3ab`，并设为 Latest。
 - `v1.2.42` 优化本地曲库导入排序：前端封面索引与音频列表复用模块级 `Intl.Collator('zh-Hans-CN', { numeric:true, sensitivity:'base' })`，与主进程一致，避免大文件夹导入时每次比较重复初始化区域排序规则。
