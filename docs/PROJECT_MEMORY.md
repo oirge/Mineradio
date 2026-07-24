@@ -9,7 +9,7 @@
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.2.41`
-- 最近正式安装包 Release 基线：`v1.2.40`。
+- 最近正式安装包 Release 基线：`v1.2.41`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -26,6 +26,11 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.41` 于 2026-07-24 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.41`；tag 对应提交 `48d8c76`，并设为 Latest。
+- `v1.2.41` 修复更新候选镜像二次展开，完整包边下边累计 SHA-256/SHA-512 流式校验，句柄关闭保留主错误；快速补丁整组校验/备份/事务应用；MediaPipe 手势帧复用掌心 scratch 与 tips 常量。
+- `v1.2.41` 不改变 UI、布局、手势视觉与交互语义、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。发布资产仅含 `latest.yml`、安装包、blockmap、SHA256 清单和 `1.2.40 -> 1.2.41` 快速补丁，Portable ZIP 跳过。
+- `v1.2.41` 资产校验：安装包 `104727871` 字节 / SHA256 `6eebd0e6e10b6ede9f82362a046102a1b16385cd24c0217195aa347b79b09a91`；blockmap `111949` 字节 / `f3241c92291855166f0e4f944dc9ebeebb9f784f4622fe686acfbb115c72adf9`；补丁 `2280453` 字节 / `1c1c0bbc205ad0d5810c3816b489d344363e3f54444b7141b4bad5a3a8f71654`；`latest.yml` `350` 字节 / `1c21a0e3178b4b1dbc12b760850f4ecab4fc0a5433a4d0698f4cb6de2693f103`；SHA256 清单见 `Mineradio-1.2.41-SHA256SUMS.txt`。
 
 - `v1.2.40` 于 2026-07-22 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.40`；tag 对应提交 `72873d48c18286fa2aabf0e00d3457baa97d2b94`，并设为 Latest。
 - `v1.2.40` 在 `public/index.html` 缓存桌面歌词最终归一化字符串，并让封面取色放大镜每次打开只编码一次 JPEG/CSS 背景；关闭时释放 canvas、Base64 和内联背景引用。
