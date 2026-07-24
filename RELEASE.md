@@ -1,5 +1,11 @@
 ﻿# 发布流程
 
+## v1.2.42 本地导入排序 Collator 复用
+- `v1.2.42` 继续降低大曲库导入时的排序开销，不改变 UI、视觉质感、导入结果顺序语义或播放入口。
+- 前端 `buildLocalCoverMaps()` / `createLocalSongsFromFiles()` 复用模块级 `Intl.Collator`，与主进程 `LOCAL_LIBRARY_NAME_COMPARE` 对齐。
+- 本次发布继续只上传安装器相关资产：安装包、blockmap、`latest.yml`、SHA256 校验文件和 `1.2.41 -> 1.2.42` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.42 本地导入排序 Collator 复用优化版`。
+
 ## v1.2.41 更新候选链路与手势帧低分配优化
 - `v1.2.41` 修复软件内更新镜像候选重复展开与镜像标记丢失，不改变 UI、视觉质感、手势输出或播放入口。
 - 完整包和快速补丁保留结构化候选元数据；默认 3 条镜像加 GitHub 直连去重后保持 4 条，并兼容旧 manifest、URL 对象与四类镜像模板。

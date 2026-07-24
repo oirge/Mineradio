@@ -2970,7 +2970,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.41';
+var APP_VERSION = '1.2.42';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -22524,6 +22524,12 @@ var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac)$/i;
 var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt)$/i;
 var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|png|webp)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
+var LOCAL_LIBRARY_NAME_COMPARE = (typeof Intl !== 'undefined' && Intl.Collator)
+  ? new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' }).compare
+  : function(a, b){ return String(a || '').localeCompare(String(b || '')); };
+function compareLocalFilePath(a, b) {
+  return LOCAL_LIBRARY_NAME_COMPARE(localFilePath(a), localFilePath(b));
+}
 /**
  * 将 FileList 或类数组转换为紧凑数组。大文件夹导入会反复调用，单次循环避免 slice/filter 中间数组。
  * @param {FileList|Array<object>} files 文件集合。
@@ -22656,7 +22662,7 @@ function buildLocalCoverMaps(files) {
     var candidate = files[i];
     if (isLocalCoverFile(candidate)) coverFiles.push(candidate);
   }
-  coverFiles.sort(function(a, b){ return localFilePath(a).localeCompare(localFilePath(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }); });
+  coverFiles.sort(compareLocalFilePath);
   for (var j = 0; j < coverFiles.length; j++) {
     var file = coverFiles[j];
     var pathKey = localPathStem(file);
@@ -22747,7 +22753,7 @@ function createLocalSongsFromFiles(files, opts) {
   for (var i = 0; i < list.length; i++) {
     if (isLocalAudioFile(list[i], folderOnly)) audioFiles.push(list[i]);
   }
-  audioFiles.sort(function(a, b){ return localFilePath(a).localeCompare(localFilePath(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }); });
+  audioFiles.sort(compareLocalFilePath);
   var songs = new Array(audioFiles.length);
   for (var j = 0; j < audioFiles.length; j++) {
     var file = audioFiles[j];
