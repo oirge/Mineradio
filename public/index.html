@@ -2486,13 +2486,13 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         </div>
       </div>
       <div id="quality-control" class="quality-control">
-        <button id="quality-btn" class="ctrl-btn quality-pill" onclick="toggleQualityPanel(event)" title="音质"><span id="quality-btn-label">臻音</span></button>
+        <button id="quality-btn" class="ctrl-btn quality-pill" onclick="toggleQualityPanel(event)" title="音质"><span id="quality-btn-label">高解</span></button>
         <div class="quality-popover" onclick="event.stopPropagation()">
-          <button class="quality-option svip-only" data-quality="jymaster" data-svip="1" onclick="setPlaybackQuality('jymaster')"><span>超清母带</span><small>SVIP / 最高规格</small></button>
-          <button class="quality-option" data-quality="hires" onclick="setPlaybackQuality('hires')"><span>高清臻音</span><small>默认 / 细节优先</small></button>
-          <button class="quality-option" data-quality="lossless" onclick="setPlaybackQuality('lossless')"><span>无损 SQ</span><small>FLAC 优先</small></button>
-          <button class="quality-option" data-quality="exhigh" onclick="setPlaybackQuality('exhigh')"><span>极高 HQ</span><small>320kbps</small></button>
-          <button class="quality-option" data-quality="standard" onclick="setPlaybackQuality('standard')"><span>标准</span><small>128kbps</small></button>
+          <button class="quality-option svip-only" data-quality="jymaster" data-svip="1" onclick="setPlaybackQuality('jymaster')"><span>超清母带</span><small>会员最高档</small></button>
+          <button class="quality-option" data-quality="hires" onclick="setPlaybackQuality('hires')"><span>高解析度</span><small>Hi-Res / 默认</small></button>
+          <button class="quality-option" data-quality="lossless" onclick="setPlaybackQuality('lossless')"><span>无损</span><small>SQ / FLAC</small></button>
+          <button class="quality-option" data-quality="exhigh" onclick="setPlaybackQuality('exhigh')"><span>极高</span><small>HQ / 约 320K</small></button>
+          <button class="quality-option" data-quality="standard" onclick="setPlaybackQuality('standard')"><span>标准</span><small>约 128K</small></button>
         </div>
       </div>
       <button id="heart-btn" class="ctrl-btn" onclick="toggleLikeCurrent()" title="红心喜欢"><svg class="heart-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.45c-.32 0-.62-.12-.86-.34l-1.23-1.12C5.54 16.03 2.25 13.05 2.25 8.9 2.25 5.48 4.88 2.9 8.28 2.9c1.7 0 3.35.72 4.52 1.96C13.97 3.62 15.62 2.9 17.32 2.9c3.4 0 6.03 2.58 6.03 6 0 4.15-3.29 7.13-7.66 11.09l-1.23 1.12c-.24.22-.54.34-.86.34z"/></svg></button>
@@ -2970,7 +2970,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.42';
+var APP_VERSION = '1.2.43';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -17002,20 +17002,20 @@ function normalizePlaybackQuality(value) {
 function playbackQualityLabel(value) {
   value = normalizePlaybackQuality(value);
   if (value === 'jymaster') return '超清母带';
-  if (value === 'hires') return '高清臻音';
+  if (value === 'hires') return '高解析度';
   if (value === 'lossless') return '无损';
   if (value === 'exhigh') return '极高';
   if (value === 'standard') return '标准';
-  return '高清臻音';
+  return '高解析度';
 }
 function playbackQualityShortLabel(value) {
   value = normalizePlaybackQuality(value);
   if (value === 'jymaster') return '母带';
-  if (value === 'hires') return '臻音';
-  if (value === 'lossless') return 'SQ';
-  if (value === 'exhigh') return 'HQ';
-  if (value === 'standard') return 'STD';
-  return '臻音';
+  if (value === 'hires') return '高解';
+  if (value === 'lossless') return '无损';
+  if (value === 'exhigh') return '极高';
+  if (value === 'standard') return '标准';
+  return '高解';
 }
 function playbackQualityRank(value) {
   value = normalizePlaybackQuality(value);
@@ -17033,13 +17033,15 @@ function playbackBitrateLabel(br) {
   br = Number(br) || 0;
   if (!br) return '';
   if (br >= 1000000) return (br / 1000000).toFixed(br >= 2000000 ? 1 : 2).replace(/\.0+$/, '') + ' Mbps';
-  return Math.round(br / 1000) + ' kbps';
+  return Math.round(br / 1000) + 'K';
 }
 function playbackResolvedQualityText(data) {
   data = data || {};
-  var label = playbackQualityLabel(data.level || data.quality || playbackQuality);
-  var br = playbackBitrateLabel(data.br);
-  return br ? (label + ' · ' + br) : label;
+  var level = normalizePlaybackQuality(data.level || data.quality || playbackQuality);
+  var label = playbackQualityLabel(level);
+  // 在线解析结果也优先用档位中文名；仅在档位缺失时回退码率数字。
+  if (label) return label;
+  return playbackBitrateLabel(data.br) || '';
 }
 function readPlaybackQualityPreference() {
   try {
@@ -18211,7 +18213,8 @@ function updateLocalAudioQualityInfo(song) {
 function localAudioQualityCacheKey(song) {
   if (!song || song.type !== 'local') return '';
   var file = song.localFile || null;
-  return (song.localFormat || '') + '|' +
+  return 'tier-v2|' +
+    (song.localFormat || '') + '|' +
     (song.localFileSize || song.size || (file && localFileSize(file)) || 0) + '|' +
     (song.localBitrateKbps || '') + '|' +
     (song.duration || '') + '|' +
@@ -18220,9 +18223,32 @@ function localAudioQualityCacheKey(song) {
     (song.localPath || song.localFilePathAbsolute || (file && localFilePath(file)) || song.name || '');
 }
 /**
+ * 将本地码率/格式映射为网易云风格中文音质档位。
+ * @param {number} kbps 估算或实测码率（kbps）。
+ * @param {string} format 容器/编码标签，如 FLAC、MP3。
+ * @returns {string} 高解析度 / 无损 / 极高 / 较高 / 标准 / 流畅。
+ */
+function localBitrateTierLabel(kbps, format) {
+  format = String(format || '').toUpperCase();
+  kbps = Number(kbps) || 0;
+  // 网易云：无损/高解析度只给无损容器；有损最高到「极高」。
+  var losslessFormat = format === 'FLAC' || format === 'WAV' || format === 'ALAC' || format === 'APE' || format === 'AIFF' || format === 'AIF' || format === 'DSF' || format === 'DFF';
+  if (losslessFormat) {
+    // 缺采样率/位深时，用码率粗分 CD 无损与 Hi-Res。
+    if (kbps >= 2000 || (format === 'WAV' && kbps >= 1800) || format === 'DSF' || format === 'DFF') return '高解析度';
+    return '无损';
+  }
+  // 有损：320≈极高，192≈较高，128≈标准，更低≈流畅。估错的超高码率也不标无损。
+  if (kbps >= 256) return '极高';
+  if (kbps >= 192) return '较高';
+  if (kbps >= 96) return '标准';
+  if (kbps > 0) return '流畅';
+  return '';
+}
+/**
  * 返回本地歌曲音质文本。队列、搜索和 3D 歌单架会反复调用，缓存可减少重复格式化和数组分配。
  * @param {object} song 本地歌曲对象。
- * @returns {string} 例如 “FLAC · 921 kbps”。
+ * @returns {string} 例如 “FLAC · 无损” 或 “MP3 · 极高”。
  */
 function localAudioQualityText(song) {
   if (!song || song.type !== 'local') return '';
@@ -18231,9 +18257,10 @@ function localAudioQualityText(song) {
   updateLocalAudioQualityInfo(song);
   var format = song.localFormat || localAudioFormatLabel(song);
   var kbps = Number(song.localBitrateKbps) || estimateLocalAudioBitrateKbps(song);
-  var text = format || '';
-  var quality = kbps ? (Math.round(kbps) + ' kbps') : ((format === 'FLAC' || format === 'WAV') ? '无损' : '');
-  if (quality) text = text ? (text + ' · ' + quality) : quality;
+  var tier = localBitrateTierLabel(kbps, format);
+  var text = '';
+  if (format && format !== 'LOCAL') text = format;
+  if (tier) text = text ? (text + ' · ' + tier) : tier;
   song._mineradioQualityKey = localAudioQualityCacheKey(song);
   song._mineradioQualityText = text;
   return text;
@@ -18245,7 +18272,8 @@ function localAudioQualityText(song) {
  */
 function songDisplaySubtitleCacheKey(song) {
   if (!song) return '';
-  return (song.type || '') + '|' +
+  return 'tier-v2|' +
+    (song.type || '') + '|' +
     (song.artist || '') + '|' +
     (song.albumArtist || '') + '|' +
     (song.album || '') + '|' +

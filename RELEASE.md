@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.43 本地音质中文档位
+- `v1.2.43` 音质展示全面对标网易云中文档位，不改变 UI 布局与播放链路。
+- `localAudioQualityText()` 使用 `localBitrateTierLabel()`：无损容器为无损/高解析度，有损格式最高极高，并含较高/标准/流畅。
+- 音质按钮与菜单短标签中文化；缓存键加 `tier-v1` 前缀，升级后自动失效旧 kbps 文案。
+- 本次发布继续只上传安装器相关资产：安装包、blockmap、`latest.yml`、SHA256 校验文件和 `1.2.42 -> 1.2.43` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.43 本地音质中文档位优化版`。
+
 ## v1.2.42 本地导入排序 Collator 复用
 - `v1.2.42` 继续降低大曲库导入时的排序开销，不改变 UI、视觉质感、导入结果顺序语义或播放入口。
 - 前端 `buildLocalCoverMaps()` / `createLocalSongsFromFiles()` 复用模块级 `Intl.Collator`，与主进程 `LOCAL_LIBRARY_NAME_COMPARE` 对齐。
