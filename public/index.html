@@ -2970,7 +2970,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.40';
+var APP_VERSION = '1.2.41';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -28400,6 +28400,9 @@ function rebaseParticleRotationIfNeeded() {
 var handCanvas = null, handCanvasCtx = null;
 // 平滑系数 (越小越平滑, 但反应越慢)
 var HAND_SMOOTH_ALPHA = 0.35;
+var handPalmScratch = { x: 0, y: 0 };
+var HAND_OPENNESS_TIPS = [8, 12, 16, 20];
+var HAND_SKELETON_TIPS = [4, 8, 12, 16, 20];
 
 async function startGestureControl() {
   if (gestureActive) return;
@@ -28500,16 +28503,19 @@ function smoothLandmarks(lm) {
 }
 
 // 手掌中心 ≈ wrist(0) 和 mcp 平均 (5,9,13,17 是各指根)
-function palmCenter(lm) {
+function palmCenter(lm, out) {
   var px = (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5;
   var py = (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5;
-  return { x: px, y: py };
+  var target = out || { x: 0, y: 0 };
+  target.x = px;
+  target.y = py;
+  return target;
 }
 
 function handOpenness(lm, palm) {
   var span = Math.hypot(lm[5].x - lm[17].x, lm[5].y - lm[17].y);
   span = Math.max(0.055, span);
-  var tips = [8, 12, 16, 20];
+  var tips = HAND_OPENNESS_TIPS;
   var avg = 0;
   for (var i = 0; i < tips.length; i++) avg += Math.hypot(lm[tips[i]].x - palm.x, lm[tips[i]].y - palm.y);
   avg /= tips.length;
@@ -28521,7 +28527,7 @@ function processHandFrame(rawLm) {
   var lm = smoothLandmarks(rawLm);
 
   // 推开粒子位置: 手掌中心 (而非单一食指)
-  var palm = palmCenter(lm);
+  var palm = palmCenter(lm, handPalmScratch);
   var openness = handOpenness(lm, palm);
   gestureGrip.openness += (openness - gestureGrip.openness) * 0.28;
   var gripTarget = clampRange(1 - openness, 0, 1);
@@ -28591,7 +28597,7 @@ function processHandFrame(rawLm) {
     showGestureHUD(openness > 0.62 ? '张开恢复' : '悬停', 0.30 + openness * 0.34, '手掌推开粒子 / 捏合旋转 / 握拳收束');
   }
 
-  drawHandSkeleton(lm, isPinch, openness, isFist);
+  drawHandSkeleton(lm, isPinch, openness, isFist, palm);
 }
 
 // 画手掌骨架: 连线 + 关节圆点
@@ -28604,13 +28610,13 @@ var HAND_BONES = [
   [0,17],[17,18],[18,19],[19,20], // 小指
   [5,9],[9,13],[13,17],           // 掌横连
 ];
-function drawHandSkeleton(lm, isPinch, openness, isFist) {
+function drawHandSkeleton(lm, isPinch, openness, isFist, palm) {
   if (!handCanvasCtx) return;
   var ctx = handCanvasCtx;
   ctx.clearRect(0, 0, innerWidth, innerHeight);
   var W = innerWidth, H = innerHeight;
   openness = clampRange(openness == null ? 1 : openness, 0, 1);
-  var palm = palmCenter(lm);
+  palm = palm || palmCenter(lm, handPalmScratch);
   var px = palm.x * W, py = palm.y * H;
   var primary = isFist ? 'rgba(244,210,138,0.92)' : (isPinch ? 'rgba(156,255,223,0.95)' : 'rgba(226,247,255,0.92)');
   var soft = isFist ? 'rgba(244,210,138,0.18)' : (isPinch ? 'rgba(156,255,223,0.20)' : 'rgba(143,233,255,0.18)');
@@ -28638,7 +28644,7 @@ function drawHandSkeleton(lm, isPinch, openness, isFist) {
     ctx.stroke();
   }
 
-  var tips = [4, 8, 12, 16, 20];
+  var tips = HAND_SKELETON_TIPS;
   for (var i = 0; i < tips.length; i++) {
     var p = lm[tips[i]];
     var tx = p.x * W, ty = p.y * H;

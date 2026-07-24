@@ -8,7 +8,6 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const tls = require('tls');
-const { once } = require('events');
 const { fileURLToPath } = require('url');
 
 const PORT = process.env.PORT || 3000;
@@ -22,8 +21,10 @@ const APP_PACKAGE = readPackageInfo();
 const APP_VERSION = process.env.MINERADIO_VERSION || APP_PACKAGE.version || '0.9.11';
 const UPDATE_CONFIG = readUpdateConfig(APP_PACKAGE);
 const PATCH_MAX_BYTES = 12 * 1024 * 1024;
+const UPDATE_INSTALLER_MAX_BYTES = 512 * 1024 * 1024;
 const UPDATE_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
 const UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS = 30 * 1000;
+const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
@@ -33,6 +34,7 @@ const UPDATE_FALLBACK_NOTES = [
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
+let updateVerifyChunkBuffer = null;
 let updateInfoCache = null;
 let latestUpdateInfoPromise = null;
 
@@ -189,15 +191,70 @@ function buildMirrorUrl(originalUrl, mirror) {
   if (base.includes('{url}')) return base.replace(/\{url\}/g, source);
   return base.replace(/\/+$/, '/') + source;
 }
+function isKnownMirrorDownloadUrl(value) {
+  const url = String(value || '').trim().toLowerCase();
+  if (!url) return false;
+  const mirrors = UPDATE_CONFIG.mirrors || [];
+  for (let i = 0; i < mirrors.length; i++) {
+    const mirror = String(mirrors[i] || '').trim().toLowerCase();
+    if (!mirror) continue;
+    const encodedIndex = mirror.indexOf('{encodedurl}');
+    const plainIndex = mirror.indexOf('{url}');
+    let prefix = mirror;
+    if (encodedIndex >= 0 && (plainIndex < 0 || encodedIndex < plainIndex)) prefix = mirror.slice(0, encodedIndex);
+    else if (plainIndex >= 0) prefix = mirror.slice(0, plainIndex);
+    prefix = prefix.replace(/\/+$/, '');
+    if (prefix && url.startsWith(prefix)) return true;
+  }
+  return false;
+}
 function uniqueDownloadCandidates(urls, opts) {
   opts = opts || {};
-  const directUrls = (Array.isArray(urls) ? urls : [urls])
-    .map(url => String(url || '').trim())
-    .filter(url => /^https?:\/\//i.test(url));
-  const directSet = new Set(directUrls.map(url => url.toLowerCase()));
+  const rawEntries = Array.isArray(urls) ? urls : [urls];
+  const entries = [];
+  const entryByUrl = new Map();
+  for (let i = 0; i < rawEntries.length; i++) {
+    const raw = rawEntries[i];
+    const object = raw && typeof raw === 'object' ? raw : null;
+    const url = String(object ? (object.url || object.downloadUrl || object.href || '') : raw || '').trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    const explicitlyMirrored = object && object.mirrored === true
+      ? true
+      : isKnownMirrorDownloadUrl(url);
+    const label = String(object && object.label || '').trim();
+    const key = url.toLowerCase();
+    const existing = entryByUrl.get(key);
+    if (existing) {
+      existing.mirrored = existing.mirrored || explicitlyMirrored;
+      if (label) existing.label = label;
+      continue;
+    }
+    const entry = {
+      url,
+      label,
+      mirrored: explicitlyMirrored,
+    };
+    entries.push(entry);
+    entryByUrl.set(key, entry);
+  }
+  const directEntries = entries.filter(item => !item.mirrored);
   const mirrors = opts.useMirrors === false ? [] : (UPDATE_CONFIG.mirrors || []);
   const mirrored = [];
-  directUrls.forEach(source => {
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].mirrored) {
+      mirrored.push({
+        url: entries[i].url,
+        label: entries[i].label || '国内加速线路',
+        mirrored: true,
+      });
+    }
+  }
+  const generatedSources = new Set();
+  directEntries.forEach(entry => {
+    const source = entry.url;
+    const sourceKey = source.toLowerCase();
+    if (generatedSources.has(sourceKey)) return;
+    generatedSources.add(sourceKey);
     mirrors.forEach((mirror, index) => {
       const url = buildMirrorUrl(source, mirror);
       if (url) mirrored.push({
@@ -207,24 +264,33 @@ function uniqueDownloadCandidates(urls, opts) {
       });
     });
   });
-  const direct = directUrls.map(url => ({
-    url,
-    label: directSet.has(url.toLowerCase()) ? 'GitHub 直连' : '下载线路',
+  const direct = directEntries.map(entry => ({
+    url: entry.url,
+    label: entry.label || 'GitHub 直连',
     mirrored: false,
   }));
   const ordered = UPDATE_CONFIG.preferMirrors === false ? direct.concat(mirrored) : mirrored.concat(direct);
   const seen = new Set();
-  return ordered.filter(item => {
+  const result = [];
+  for (let i = 0; i < ordered.length; i++) {
+    const item = ordered[i];
     const key = item.url.toLowerCase();
-    if (seen.has(key)) return false;
+    if (seen.has(key)) continue;
     seen.add(key);
-    return true;
-  });
+    result.push(item);
+  }
+  return result;
 }
 function publicDownloadUrls(candidates) {
   return (Array.isArray(candidates) ? candidates : [])
     .map(item => item && item.url)
     .filter(Boolean);
+}
+function downloadCandidateInputs(primaryUrl, source) {
+  const candidates = source && Array.isArray(source.downloadCandidates) && source.downloadCandidates.length
+    ? source.downloadCandidates
+    : (source && Array.isArray(source.downloadUrls) ? source.downloadUrls : []);
+  return [primaryUrl].concat(candidates);
 }
 function normalizeVersion(value) {
   return String(value || '').trim().replace(/^v/i, '').replace(/[+].*$/, '').replace(/-.+$/, '');
@@ -276,6 +342,7 @@ function pickReleaseAsset(assets) {
     contentType: preferred.content_type || '',
     downloadUrl: preferred.browser_download_url || '',
     downloadUrls: publicDownloadUrls(candidates),
+    downloadCandidates: candidates,
     sha256: digest.sha256 || '',
     sha512: digest.sha512 || '',
   };
@@ -309,6 +376,7 @@ function pickPatchAsset(assets, currentVersion, latestVersion) {
     contentType: preferred.content_type || '',
     downloadUrl: preferred.browser_download_url || '',
     downloadUrls: publicDownloadUrls(candidates),
+    downloadCandidates: candidates,
     sha256: digest.sha256 || '',
     sha512: digest.sha512 || '',
   };
@@ -336,14 +404,15 @@ function normalizeManifestUpdateInfo(data) {
   ) || APP_VERSION;
   const downloadUrl = release.downloadUrl || data.downloadUrl || asset.downloadUrl || asset.browser_download_url || '';
   const patch = release.patch || data.patch || null;
-  const assetUrls = [downloadUrl].concat(Array.isArray(asset.downloadUrls) ? asset.downloadUrls : []);
-  const patchUrls = patch ? [patch.downloadUrl].concat(Array.isArray(patch.downloadUrls) ? patch.downloadUrls : []) : [];
+  const assetCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, asset));
+  const patchCandidates = patch ? uniqueDownloadCandidates(downloadCandidateInputs(patch.downloadUrl, patch)) : [];
   const patchInfo = patch && patch.downloadUrl ? {
     name: patch.name || updateAssetNameFromUrl(patch.downloadUrl) || `Mineradio-${APP_VERSION}→${latestVersion}.patch.json`,
     size: Number(patch.size || 0) || 0,
     contentType: patch.contentType || patch.content_type || 'application/json',
     downloadUrl: patch.downloadUrl,
-    downloadUrls: publicDownloadUrls(uniqueDownloadCandidates(patchUrls)),
+    downloadUrls: publicDownloadUrls(patchCandidates),
+    downloadCandidates: patchCandidates,
     from: normalizeVersion(patch.from || APP_VERSION),
     to: normalizeVersion(patch.to || latestVersion),
     sha256: normalizeDigest(patch.sha256 || '', 'sha256').toLowerCase(),
@@ -357,7 +426,8 @@ function normalizeManifestUpdateInfo(data) {
     size: Number(asset.size || 0) || 0,
     contentType: asset.contentType || asset.content_type || '',
     downloadUrl,
-    downloadUrls: publicDownloadUrls(uniqueDownloadCandidates(assetUrls)),
+    downloadUrls: publicDownloadUrls(assetCandidates),
+    downloadCandidates: assetCandidates,
     sha256: normalizeDigest(asset.sha256 || '', 'sha256').toLowerCase(),
     sha512: normalizeDigest(asset.sha512 || release.sha512 || data.sha512 || '', 'sha512'),
   } : null;
@@ -551,11 +621,17 @@ function classifyUpdateError(err) {
     ? message + ': ' + causeDetail
     : (message || causeDetail || code || '未知错误');
   const classificationText = [code, name, message, causeCode, causeName, causeMessage].join(' ');
+  if (/PATCH_ROLLBACK_FAILED/i.test(classificationText)) {
+    return { code: code || 'PATCH_ROLLBACK_FAILED', reason: '快速补丁回滚失败，请改用完整安装包修复。', detail };
+  }
   if (/HASH|DIGEST|CHECKSUM/i.test(classificationText)) {
     return { code: code || 'UPDATE_HASH_MISMATCH', reason: '文件校验失败，可能是线路缓存异常，已拦截该安装包。', detail };
   }
   if (/SIZE_MISMATCH|content length/i.test(classificationText)) {
     return { code: code || 'UPDATE_SIZE_MISMATCH', reason: '下载文件大小不一致，可能是网络中断或线路缓存不完整。', detail };
+  }
+  if (/UPDATE_WRITE_FAILED|UPDATE_LOCAL_IO_FAILED|EACCES|EPERM|ENOSPC|EIO|EBUSY|EROFS|EMFILE|ENFILE|ENOTDIR|EISDIR|ENOENT|ENAMETOOLONG|EEXIST|EXDEV|ENOTEMPTY/i.test(classificationText)) {
+    return { code: code || 'UPDATE_LOCAL_IO_FAILED', reason: '本地保存更新文件失败，请检查磁盘空间或文件占用。', detail };
   }
   if (/AbortError|TIMEOUT|ETIMEDOUT|timeout/i.test(classificationText)) {
     const domTimeout = /^(?:AbortError|TimeoutError)$/i.test(name) || /^(?:AbortError|TimeoutError)$/i.test(causeName);
@@ -632,6 +708,7 @@ function parseLatestYmlUpdateInfo(text, reason) {
     contentType: 'application/octet-stream',
     downloadUrl,
     downloadUrls: publicDownloadUrls(candidates),
+    downloadCandidates: candidates,
     sha256: '',
     sha512,
   };
@@ -817,73 +894,44 @@ function trimUpdateJobs() {
     if (!keep.has(job.id)) updateDownloadJobs.delete(job.id);
   }
 }
-async function downloadUpdateAsset(job) {
-  const tmpPath = job.filePath + '.download';
+function getUpdateVerifyChunkBuffer() {
+  if (!updateVerifyChunkBuffer || updateVerifyChunkBuffer.length !== UPDATE_VERIFY_CHUNK_BYTES) {
+    updateVerifyChunkBuffer = Buffer.allocUnsafe(UPDATE_VERIFY_CHUNK_BYTES);
+  }
+  return updateVerifyChunkBuffer;
+}
+async function closeUpdateFileHandle(handle, primaryErr) {
+  if (!handle) return primaryErr || null;
   try {
-    fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
-    job.status = 'downloading';
-    job.updatedAt = Date.now();
-
-    const resp = await fetch(job.downloadUrl, {
-      headers: {
-        'User-Agent': `Mineradio/${APP_VERSION}`,
-      },
-    });
-    if (!resp.ok) throw new Error('Download failed ' + resp.status);
-
-    const totalHeader = parseInt(resp.headers.get('content-length') || '0', 10) || 0;
-    job.total = totalHeader || job.total || 0;
-    job.received = 0;
-    job.progress = 0;
-    job.speedBps = 0;
-    job.etaSeconds = 0;
-    job.message = job.total ? '正在下载完整安装包' : '正在下载完整安装包，等待服务器返回大小';
-    job.updatedAt = Date.now();
-    let speedWindowAt = Date.now();
-    let speedWindowBytes = 0;
-
-    const writer = fs.createWriteStream(tmpPath);
-    const reader = resp.body.getReader();
-    try {
-      while (true) {
-        const chunk = await reader.read();
-        if (chunk.done) break;
-        const buf = Buffer.from(chunk.value);
-        job.received += buf.length;
-        speedWindowBytes += buf.length;
-        const now = Date.now();
-        if (now - speedWindowAt >= 900) {
-          job.speedBps = Math.round(speedWindowBytes / Math.max(0.001, (now - speedWindowAt) / 1000));
-          speedWindowAt = now;
-          speedWindowBytes = 0;
-        }
-        if (job.total > 0) {
-          job.progress = Math.max(1, Math.min(99, Math.round((job.received / job.total) * 100)));
-          job.etaSeconds = job.speedBps > 0 ? Math.max(0, Math.round((job.total - job.received) / job.speedBps)) : 0;
-        } else {
-          const kb = Math.max(1, job.received / 1024);
-          job.progress = Math.max(1, Math.min(88, Math.round(Math.log10(kb + 1) * 24)));
-        }
-        job.message = job.total > 0 ? '正在下载完整安装包' : '正在下载完整安装包，服务器未提供总大小';
-        job.updatedAt = Date.now();
-        if (!writer.write(buf)) await once(writer, 'drain');
-      }
-    } finally {
-      writer.end();
-      await once(writer, 'finish').catch(() => {});
+    await handle.close();
+    return primaryErr || null;
+  } catch (closeErr) {
+    if (primaryErr) return primaryErr;
+    return updateError("UPDATE_WRITE_FAILED", "Update file handle close failed", closeErr);
+  }
+}
+function verifyStreamedUpdatePayload(job, received, sha256, sha512) {
+  const expectedSize = Number(job && (job.expectedSize || job.total) || 0) || 0;
+  const actualSize = Number(received) || 0;
+  if (expectedSize > 0 && actualSize !== expectedSize) {
+    throw updateError("UPDATE_SIZE_MISMATCH", `Expected ${expectedSize} bytes, got ${actualSize}`);
+  }
+  const expectedSha256 = normalizeDigest(job && job.sha256 || "", "sha256").toLowerCase();
+  if (expectedSha256) {
+    if (!sha256) throw updateError("UPDATE_SHA256_MISMATCH", "Downloaded sha256 missing during stream");
+    if (sha256.digest("hex") !== expectedSha256) {
+      throw updateError("UPDATE_SHA256_MISMATCH", "Downloaded sha256 mismatch");
     }
-
-    if (fs.existsSync(job.filePath)) fs.unlinkSync(job.filePath);
-    fs.renameSync(tmpPath, job.filePath);
-    job.status = 'ready';
-    job.progress = 100;
-    job.message = '安装包已下载';
-    job.updatedAt = Date.now();
-  } catch (e) {
-    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
-    job.status = 'error';
-    job.error = e.message || 'UPDATE_DOWNLOAD_FAILED';
-    job.updatedAt = Date.now();
+  }
+  const expectedSha512 = normalizeDigest(job && job.sha512 || "", "sha512");
+  if (expectedSha512) {
+    if (!sha512) throw updateError("UPDATE_SHA512_MISMATCH", "Downloaded sha512 missing during stream");
+    const actual = sha512.digest();
+    const actualBase64 = actual.toString("base64");
+    const actualHex = actual.toString("hex");
+    if (actualBase64 !== expectedSha512 && actualHex !== expectedSha512.toLowerCase()) {
+      throw updateError("UPDATE_SHA512_MISMATCH", "Downloaded sha512 mismatch");
+    }
   }
 }
 function verifyUpdateBuffer(buffer, job) {
@@ -922,9 +970,10 @@ async function verifyUpdateFile(filePath, job) {
   const sha512 = expectedSha512 ? crypto.createHash('sha512') : null;
   let actualSize = 0;
   let handle = null;
+  let verifyErr = null;
   try {
     handle = await fs.promises.open(filePath, 'r');
-    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    const buffer = getUpdateVerifyChunkBuffer();
     let position = 0;
     while (true) {
       const result = await handle.read(buffer, 0, buffer.length, position);
@@ -935,9 +984,12 @@ async function verifyUpdateFile(filePath, job) {
       if (sha256) sha256.update(chunk);
       if (sha512) sha512.update(chunk);
     }
+  } catch (err) {
+    verifyErr = err;
   } finally {
-    if (handle) await handle.close();
+    verifyErr = await closeUpdateFileHandle(handle, verifyErr);
   }
+  if (verifyErr) throw verifyErr;
   if (expectedSize > 0 && actualSize !== expectedSize) {
     throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${expectedSize} bytes, got ${actualSize}`);
   }
@@ -1064,12 +1116,21 @@ function setUpdateJobError(job, err, fallbackMessage) {
   job.message = fallbackMessage || info.reason;
   job.updatedAt = Date.now();
 }
+function isFatalUpdateLocalError(err) {
+  const code = String(err && err.code || '').trim();
+  const causeCode = String(err && err.cause && err.cause.code || '').trim();
+  return /^(?:UPDATE_WRITE_FAILED|UPDATE_LOCAL_IO_FAILED|EACCES|EPERM|ENOSPC|EIO|EBUSY|EROFS|EMFILE|ENFILE|ENOTDIR|EISDIR|ENOENT|ENAMETOOLONG|EEXIST|EXDEV|ENOTEMPTY)$/i.test(code)
+    || /^(?:UPDATE_WRITE_FAILED|UPDATE_LOCAL_IO_FAILED|EACCES|EPERM|ENOSPC|EIO|EBUSY|EROFS|EMFILE|ENFILE|ENOTDIR|EISDIR|ENOENT|ENAMETOOLONG|EEXIST|EXDEV|ENOTEMPTY)$/i.test(causeCode);
+}
 function prepareUpdateJobAttempt(job, candidate, index, total) {
+  const expectedSize = Number(job.expectedSize);
   job.status = 'downloading';
   job.sourceLabel = candidate.label || '下载线路';
   job.attempt = index + 1;
   job.attempts = total;
   job.received = 0;
+  job.total = Number.isFinite(expectedSize) && expectedSize > 0 ? expectedSize : 0;
+  job.progress = 0;
   job.speedBps = 0;
   job.etaSeconds = 0;
   job.error = '';
@@ -1087,6 +1148,7 @@ async function downloadUpdateAssetWithMirrors(job) {
   const candidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
     ? job.downloadCandidates
     : uniqueDownloadCandidates(job.downloadUrl || '');
+  if (!candidates.length) throw updateError('UPDATE_ASSET_MISSING', 'No usable installer download candidate');
   const failures = [];
   fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
   for (let i = 0; i < candidates.length; i++) {
@@ -1098,6 +1160,11 @@ async function downloadUpdateAssetWithMirrors(job) {
       job.message = job.total ? '正在下载完整安装包' : '正在下载完整安装包，等待服务器返回大小';
 
       const idleGuard = createUpdateDownloadIdleGuard(UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS);
+      idleGuard.touch(12000);
+      const expectedSha256 = normalizeDigest(job.sha256 || '', 'sha256').toLowerCase();
+      const expectedSha512 = normalizeDigest(job.sha512 || '', 'sha512');
+      const sha256 = expectedSha256 ? crypto.createHash('sha256') : null;
+      const sha512 = expectedSha512 ? crypto.createHash('sha512') : null;
       try {
         const resp = await fetch(candidate.url, {
           signal: idleGuard.signal,
@@ -1105,23 +1172,45 @@ async function downloadUpdateAssetWithMirrors(job) {
         });
         if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
 
+        idleGuard.touch();
         const totalHeader = parseInt(resp.headers.get('content-length') || '0', 10) || 0;
-        job.total = totalHeader || job.expectedSize || job.total || 0;
-        job.progress = 0;
+        const expectedSize = job.total;
+        if (expectedSize > 0 && totalHeader > 0 && totalHeader !== expectedSize) {
+          throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${expectedSize} bytes, response declared ${totalHeader}`);
+        }
+        if (!expectedSize && totalHeader > UPDATE_INSTALLER_MAX_BYTES) {
+          throw updateError('UPDATE_SIZE_MISMATCH', `Installer exceeds ${UPDATE_INSTALLER_MAX_BYTES} byte safety limit`);
+        }
+        job.total = expectedSize || totalHeader;
         job.updatedAt = Date.now();
         let speedWindowAt = Date.now();
         let speedWindowBytes = 0;
+        const maxBytes = expectedSize || totalHeader || UPDATE_INSTALLER_MAX_BYTES;
 
-        const writer = fs.createWriteStream(tmpPath);
+        if (!resp.body || typeof resp.body.getReader !== 'function') {
+          throw updateError('UPDATE_EMPTY_RESPONSE', 'Installer response has no readable body');
+        }
         const reader = resp.body.getReader();
+        let fileHandle = null;
+        let readComplete = false;
+        let streamErr = null;
         try {
+          fileHandle = await fs.promises.open(tmpPath, 'w');
           while (true) {
             idleGuard.touch();
             const chunk = await reader.read();
-            if (chunk.done) break;
+            if (chunk.done) {
+              readComplete = true;
+              break;
+            }
             idleGuard.touch();
             const buf = Buffer.from(chunk.value);
             job.received += buf.length;
+            if (job.received > maxBytes) {
+              throw updateError('UPDATE_SIZE_MISMATCH', `Installer exceeded ${maxBytes} byte limit`);
+            }
+            if (sha256) sha256.update(buf);
+            if (sha512) sha512.update(buf);
             speedWindowBytes += buf.length;
             const now = Date.now();
             if (now - speedWindowAt >= 900) {
@@ -1138,17 +1227,27 @@ async function downloadUpdateAssetWithMirrors(job) {
             }
             job.message = job.total > 0 ? '正在下载完整安装包' : '正在下载完整安装包，服务器未提供总大小';
             job.updatedAt = Date.now();
-            if (!writer.write(buf)) await once(writer, 'drain');
+            let offset = 0;
+            while (offset < buf.length) {
+              const result = await fileHandle.write(buf, offset, buf.length - offset, null);
+              if (!result.bytesWritten) throw updateError('UPDATE_WRITE_FAILED', 'Installer write returned zero bytes');
+              offset += result.bytesWritten;
+            }
           }
+        } catch (err) {
+          streamErr = err;
         } finally {
-          writer.end();
-          await once(writer, 'finish').catch(() => {});
+          if (!readComplete) await reader.cancel().catch(() => {});
+          streamErr = await closeUpdateFileHandle(fileHandle, streamErr);
+          fileHandle = null;
         }
+        if (streamErr) throw streamErr;
       } finally {
         idleGuard.clear();
       }
 
-      await verifyUpdateFile(tmpPath, job);
+      // 下载过程中已流式累计摘要，避免完整安装包二次整文件读盘校验。
+      verifyStreamedUpdatePayload(job, job.received, sha256, sha512);
       if (fs.existsSync(job.filePath)) fs.unlinkSync(job.filePath);
       fs.renameSync(tmpPath, job.filePath);
       job.status = 'ready';
@@ -1162,6 +1261,11 @@ async function downloadUpdateAssetWithMirrors(job) {
       const info = classifyUpdateError(err);
       failures.push({ source: candidate.label || '下载线路', reason: info.reason, detail: info.detail });
       job.failedAttempts = failures.slice(-6);
+      if (isFatalUpdateLocalError(err)) {
+        if (err && typeof err === 'object') err.fatalUpdate = true;
+        setUpdateJobError(job, err, info.reason);
+        return;
+      }
       job.message = i < candidates.length - 1 ? ((candidate.label || '当前线路') + '失败，正在切换线路') : info.reason;
       job.updatedAt = Date.now();
       if (i >= candidates.length - 1) setUpdateJobError(job, err, '下载失败：' + info.reason);
@@ -1182,7 +1286,7 @@ async function startUpdateDownloadJob(info) {
 
   const fileName = safeUpdateFileName(asset.name || '', version);
   const filePath = path.join(UPDATE_DOWNLOAD_DIR, fileName);
-  const downloadCandidates = uniqueDownloadCandidates([downloadUrl].concat(Array.isArray(asset.downloadUrls) ? asset.downloadUrls : []));
+  const downloadCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, asset));
   const expectedSize = asset.size || 0;
   const sha256 = normalizeDigest(asset.sha256 || '', 'sha256').toLowerCase();
   const sha512 = normalizeDigest(asset.sha512 || '', 'sha512');
@@ -1229,7 +1333,10 @@ async function startUpdateDownloadJob(info) {
   };
   updateDownloadJobs.set(job.id, job);
   trimUpdateJobs();
-  downloadUpdateAssetWithMirrors(job);
+  void downloadUpdateAssetWithMirrors(job).catch(err => {
+    const info = classifyUpdateError(err);
+    setUpdateJobError(job, err, '下载失败：' + info.reason);
+  });
   return publicUpdateJob(job);
 }
 function sha256Hex(buffer) {
@@ -1260,28 +1367,108 @@ function decodePatchFile(file) {
   if (typeof file.content === 'string') return Buffer.from(file.content, file.encoding === 'base64' ? 'base64' : 'utf8');
   return null;
 }
-function backupPatchTarget(job, rel, target) {
-  if (!fs.existsSync(target)) return;
-  const backup = path.join(UPDATE_PATCH_BACKUP_DIR, job.id, rel);
-  fs.mkdirSync(path.dirname(backup), { recursive: true });
-  fs.copyFileSync(target, backup);
+function preparePatchFileEntries(files) {
+  const entries = [];
+  const seen = new Set();
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const rel = safePatchRelativePath(file && (file.path || file.name));
+    const target = rel ? patchTargetPath(rel) : null;
+    const content = decodePatchFile(file);
+    if (!rel || !target || !content) throw new Error('INVALID_PATCH_FILE');
+    if (/\.(?:mineradio-patch|mineradio-rollback)$/i.test(rel)) throw new Error('PATCH_RESERVED_PATH:' + rel);
+    const key = rel.toLowerCase();
+    if (seen.has(key)) throw new Error('PATCH_DUPLICATE_FILE:' + rel);
+    seen.add(key);
+    if (content.length > PATCH_MAX_BYTES) throw new Error('PATCH_FILE_TOO_LARGE');
+    const expected = normalizeDigest(file.sha256 || '', 'sha256').toLowerCase();
+    if (expected && sha256Hex(content) !== expected) throw new Error('PATCH_HASH_MISMATCH:' + rel);
+    entries.push({ rel, target, content, expected, originalExists: false, backupPath: '', replaced: false });
+  }
+  return entries;
 }
-function writePatchFile(job, file) {
-  const rel = safePatchRelativePath(file.path || file.name);
-  const target = rel ? patchTargetPath(rel) : null;
-  const content = decodePatchFile(file);
-  if (!rel || !target || !content) throw new Error('INVALID_PATCH_FILE');
-  if (content.length > PATCH_MAX_BYTES) throw new Error('PATCH_FILE_TOO_LARGE');
-  const expected = String(file.sha256 || '').trim().toLowerCase();
-  const actual = sha256Hex(content);
-  if (expected && expected !== actual) throw new Error('PATCH_HASH_MISMATCH:' + rel);
-  backupPatchTarget(job, rel, target);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const tmp = target + '.mineradio-patch';
-  fs.writeFileSync(tmp, content);
-  fs.renameSync(tmp, target);
-  if (expected && sha256Hex(fs.readFileSync(target)) !== expected) throw new Error('PATCH_WRITE_VERIFY_FAILED:' + rel);
-  return rel;
+function backupPatchFileEntries(job, entries) {
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    entry.originalExists = fs.existsSync(entry.target);
+    if (!entry.originalExists) continue;
+    entry.backupPath = path.join(UPDATE_PATCH_BACKUP_DIR, job.id, entry.rel);
+    fs.mkdirSync(path.dirname(entry.backupPath), { recursive: true });
+    fs.copyFileSync(entry.target, entry.backupPath);
+  }
+}
+function writePatchFileEntry(entry) {
+  fs.mkdirSync(path.dirname(entry.target), { recursive: true });
+  const tmp = entry.target + '.mineradio-patch';
+  try {
+    if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    fs.writeFileSync(tmp, entry.content);
+    fs.renameSync(tmp, entry.target);
+    entry.replaced = true;
+    if (entry.expected && sha256Hex(fs.readFileSync(entry.target)) !== entry.expected) {
+      throw new Error('PATCH_WRITE_VERIFY_FAILED:' + entry.rel);
+    }
+  } finally {
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
+  }
+}
+function rollbackPatchFileEntries(entries) {
+  const failures = [];
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    const tmp = entry.target + '.mineradio-patch';
+    const rollbackTmp = entry.target + '.mineradio-rollback';
+    try {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+      if (fs.existsSync(rollbackTmp)) fs.unlinkSync(rollbackTmp);
+      if (!entry.replaced) continue;
+      if (entry.originalExists) {
+        if (!entry.backupPath || !fs.existsSync(entry.backupPath)) throw new Error('PATCH_BACKUP_MISSING');
+        fs.mkdirSync(path.dirname(entry.target), { recursive: true });
+        fs.copyFileSync(entry.backupPath, rollbackTmp);
+        fs.renameSync(rollbackTmp, entry.target);
+      } else if (fs.existsSync(entry.target)) {
+        fs.unlinkSync(entry.target);
+      }
+    } catch (err) {
+      failures.push(entry.rel + ': ' + (err && err.message || err));
+    } finally {
+      try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
+      try { if (fs.existsSync(rollbackTmp)) fs.unlinkSync(rollbackTmp); } catch (_) {}
+    }
+  }
+  if (failures.length) throw updateError('PATCH_ROLLBACK_FAILED', failures.join('; '));
+}
+function applyPatchFiles(job, files) {
+  const entries = preparePatchFileEntries(files);
+  try {
+    backupPatchFileEntries(job, entries);
+  } catch (err) {
+    if (err && typeof err === 'object') err.fatalUpdate = true;
+    throw err;
+  }
+  const changed = [];
+  try {
+    for (let i = 0; i < entries.length; i++) {
+      writePatchFileEntry(entries[i]);
+      changed.push(entries[i].rel);
+    }
+    return changed;
+  } catch (err) {
+    try {
+      rollbackPatchFileEntries(entries);
+    } catch (rollbackErr) {
+      const fatal = updateError(
+        'PATCH_ROLLBACK_FAILED',
+        (err && err.message || err) + '; rollback: ' + (rollbackErr && rollbackErr.message || rollbackErr),
+        err
+      );
+      fatal.fatalUpdate = true;
+      throw fatal;
+    }
+    if (err && typeof err === 'object') err.fatalUpdate = true;
+    throw err;
+  }
 }
 function normalizePatchPayload(payload) {
   if (!payload || typeof payload !== 'object') throw new Error('INVALID_PATCH_PAYLOAD');
@@ -1295,59 +1482,6 @@ function normalizePatchPayload(payload) {
   if (!files.length) throw new Error('PATCH_EMPTY');
   if (files.length > 40) throw new Error('PATCH_TOO_MANY_FILES');
   return { from, to, files, restartRequired: payload.restartRequired !== false };
-}
-async function downloadAndApplyPatch(job) {
-  const chunks = [];
-  try {
-    fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
-    job.status = 'downloading';
-    job.mode = 'patch';
-    job.message = '正在下载快速补丁';
-    job.updatedAt = Date.now();
-
-    const resp = await fetch(job.downloadUrl, {
-      headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
-    });
-    if (!resp.ok) throw new Error('Patch download failed ' + resp.status);
-
-    job.total = parseInt(resp.headers.get('content-length') || '0', 10) || job.total || 0;
-    job.received = 0;
-    const reader = resp.body.getReader();
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      const buf = Buffer.from(chunk.value);
-      job.received += buf.length;
-      if (job.received > PATCH_MAX_BYTES) throw new Error('PATCH_TOO_LARGE');
-      chunks.push(buf);
-      job.progress = job.total > 0
-        ? Math.max(1, Math.min(84, Math.round((job.received / job.total) * 84)))
-        : Math.max(1, Math.min(76, Math.round(Math.log10(job.received / 1024 + 1) * 24)));
-      job.updatedAt = Date.now();
-    }
-
-    const raw = Buffer.concat(chunks);
-    const expectedPatchHash = String(job.sha256 || '').trim().toLowerCase();
-    if (expectedPatchHash && sha256Hex(raw) !== expectedPatchHash) throw new Error('PATCH_PACKAGE_HASH_MISMATCH');
-    const patch = normalizePatchPayload(JSON.parse(raw.toString('utf8').replace(/^\uFEFF/, '')));
-    job.version = patch.to;
-    job.message = '正在应用快速补丁';
-    job.progress = 88;
-    job.updatedAt = Date.now();
-    const changed = [];
-    patch.files.forEach(file => changed.push(writePatchFile(job, file)));
-    job.changedFiles = changed;
-    job.status = 'ready';
-    job.progress = 100;
-    job.restartRequired = patch.restartRequired;
-    job.message = patch.restartRequired ? '快速补丁已应用，重启后生效' : '快速补丁已应用';
-    job.updatedAt = Date.now();
-  } catch (e) {
-    job.status = 'error';
-    job.error = e.message || 'PATCH_APPLY_FAILED';
-    job.message = '快速补丁失败，可改用完整安装包';
-    job.updatedAt = Date.now();
-  }
 }
 async function downloadPatchBufferFromCandidate(job, candidate, index, total) {
   ensureMirrorCanBeVerified(job, candidate);
@@ -1367,33 +1501,50 @@ async function downloadPatchBufferFromCandidate(job, candidate, index, total) {
     if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
 
     idleGuard.touch();
-    job.total = parseInt(resp.headers.get('content-length') || '0', 10) || job.expectedSize || job.total || 0;
+    const totalHeader = parseInt(resp.headers.get('content-length') || '0', 10) || 0;
+    const expectedSize = job.total;
+    if (expectedSize > 0 && totalHeader > 0 && totalHeader !== expectedSize) {
+      throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${expectedSize} bytes, response declared ${totalHeader}`);
+    }
+    if (totalHeader > PATCH_MAX_BYTES) throw updateError('PATCH_TOO_LARGE', 'Patch package is too large');
+    job.total = expectedSize || totalHeader;
     job.received = 0;
     const chunks = [];
+    if (!resp.body || typeof resp.body.getReader !== 'function') {
+      throw updateError('UPDATE_EMPTY_RESPONSE', 'Patch response has no readable body');
+    }
     const reader = resp.body.getReader();
     let speedWindowAt = Date.now();
     let speedWindowBytes = 0;
-    while (true) {
-      idleGuard.touch();
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      idleGuard.touch();
-      const buf = Buffer.from(chunk.value);
-      job.received += buf.length;
-      speedWindowBytes += buf.length;
-      if (job.received > PATCH_MAX_BYTES) throw updateError('PATCH_TOO_LARGE', 'Patch package is too large');
-      chunks.push(buf);
-      const now = Date.now();
-      if (now - speedWindowAt >= 700) {
-        job.speedBps = Math.round(speedWindowBytes / Math.max(0.001, (now - speedWindowAt) / 1000));
-        speedWindowAt = now;
-        speedWindowBytes = 0;
+    let readComplete = false;
+    try {
+      while (true) {
+        idleGuard.touch();
+        const chunk = await reader.read();
+        if (chunk.done) {
+          readComplete = true;
+          break;
+        }
+        idleGuard.touch();
+        const buf = Buffer.from(chunk.value);
+        job.received += buf.length;
+        speedWindowBytes += buf.length;
+        if (job.received > PATCH_MAX_BYTES) throw updateError('PATCH_TOO_LARGE', 'Patch package is too large');
+        chunks.push(buf);
+        const now = Date.now();
+        if (now - speedWindowAt >= 700) {
+          job.speedBps = Math.round(speedWindowBytes / Math.max(0.001, (now - speedWindowAt) / 1000));
+          speedWindowAt = now;
+          speedWindowBytes = 0;
+        }
+        job.progress = job.total > 0
+          ? Math.max(1, Math.min(84, Math.round((job.received / job.total) * 84)))
+          : Math.max(1, Math.min(76, Math.round(Math.log10(job.received / 1024 + 1) * 24)));
+        job.etaSeconds = job.total > 0 && job.speedBps > 0 ? Math.max(0, Math.round((job.total - job.received) / job.speedBps)) : 0;
+        job.updatedAt = Date.now();
       }
-      job.progress = job.total > 0
-        ? Math.max(1, Math.min(84, Math.round((job.received / job.total) * 84)))
-        : Math.max(1, Math.min(76, Math.round(Math.log10(job.received / 1024 + 1) * 24)));
-      job.etaSeconds = job.total > 0 && job.speedBps > 0 ? Math.max(0, Math.round((job.total - job.received) / job.speedBps)) : 0;
-      job.updatedAt = Date.now();
+    } finally {
+      if (!readComplete) await reader.cancel().catch(() => {});
     }
     const raw = Buffer.concat(chunks);
     verifyUpdateBuffer(raw, job);
@@ -1406,6 +1557,7 @@ async function downloadAndApplyPatchWithMirrors(job) {
   const candidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
     ? job.downloadCandidates
     : uniqueDownloadCandidates(job.downloadUrl || '');
+  if (!candidates.length) throw updateError('PATCH_ASSET_MISSING', 'No usable patch download candidate');
   const failures = [];
   fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
   for (let i = 0; i < candidates.length; i++) {
@@ -1418,9 +1570,7 @@ async function downloadAndApplyPatchWithMirrors(job) {
       job.progress = 88;
       job.etaSeconds = 0;
       job.updatedAt = Date.now();
-      const changed = [];
-      patch.files.forEach(file => changed.push(writePatchFile(job, file)));
-      job.changedFiles = changed;
+      job.changedFiles = applyPatchFiles(job, patch.files);
       job.status = 'ready';
       job.progress = 100;
       job.restartRequired = patch.restartRequired;
@@ -1431,6 +1581,10 @@ async function downloadAndApplyPatchWithMirrors(job) {
       const info = classifyUpdateError(err);
       failures.push({ source: candidate.label || '下载线路', reason: info.reason, detail: info.detail });
       job.failedAttempts = failures.slice(-6);
+      if (err && err.fatalUpdate) {
+        setUpdateJobError(job, err, info.reason);
+        return;
+      }
       job.message = i < candidates.length - 1 ? ((candidate.label || '当前线路') + '失败，正在切换线路') : info.reason;
       job.updatedAt = Date.now();
       if (i >= candidates.length - 1) setUpdateJobError(job, err, '快速补丁失败：' + info.reason);
@@ -1450,7 +1604,7 @@ function startUpdatePatchJob(info) {
   if (existing) return publicUpdateJob(existing);
 
   const now = Date.now();
-  const downloadCandidates = uniqueDownloadCandidates([downloadUrl].concat(Array.isArray(patch.downloadUrls) ? patch.downloadUrls : []));
+  const downloadCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, patch));
   const job = {
     id: 'patch-' + now.toString(36) + '-' + Math.random().toString(36).slice(2, 8),
     status: 'queued',
@@ -1479,7 +1633,10 @@ function startUpdatePatchJob(info) {
   };
   updateDownloadJobs.set(job.id, job);
   trimUpdateJobs();
-  downloadAndApplyPatchWithMirrors(job);
+  void downloadAndApplyPatchWithMirrors(job).catch(err => {
+    const info = classifyUpdateError(err);
+    setUpdateJobError(job, err, '快速补丁失败：' + info.reason);
+  });
   return publicUpdateJob(job);
 }
 function readRequestBody(req) {

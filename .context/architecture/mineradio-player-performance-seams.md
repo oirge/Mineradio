@@ -1,4 +1,4 @@
-# Mineradio Player Performance Seams
+﻿# Mineradio Player Performance Seams
 
 ## Context
 
@@ -62,6 +62,11 @@
 - 无歌词占位检测会在 LRC/YRC/自定义歌词过滤里反复调用；不要恢复 `String(text).replace(/\s+/g, '').replace(...)` 双正则链。
 - 主进程本地曲库扫描 worker 数量不大但处于导入启动前；不要恢复 `Array.from({ length }, worker)` 这类额外数组构造。
 - 软件内更新状态接口会被更新面板轮询；取最新下载/补丁任务或裁剪旧任务时不要恢复 `Array.from(updateDownloadJobs.values()).sort(...)`、`slice(...).forEach(...)` 这类全量排序和回调链。
+- 更新候选已经包含镜像时不得再次展开镜像，也不得只保留 URL 字符串而丢失 `mirrored` 标记；否则候选数会膨胀，且无摘要镜像可能绕过校验保护。
+- 更新镜像切换时如果继承上一线路的 `total/progress/received`，后续无 `Content-Length` 的正确响应可能被误判为大小不一致。
+- 完整包/补丁后台任务是 fire-and-forget Promise；目录创建、无候选等候选循环外的异常如果没有最终 `catch`，会留下永久 `queued` 任务和未处理 rejection。
+- 快速补丁逐文件直接覆盖会在中途写失败时留下混合版本；重命名/校验失败还可能残留 `.mineradio-patch` 临时文件。
+- 补丁目标不得使用内部保留的 `.mineradio-patch` / `.mineradio-rollback` 后缀；否则文件目标与清理路径会相互碰撞。
 - 软件内更新面板轮询期间会高频刷新按钮、脚注和进度条；状态未变化时不要重复写 DOM 文本、class、`width` 或 SVG ring offset。
 - 迷你播放器可见性恢复会按固定间隔校正窗口层级；健康窗口不要重复调用 `showInactive()`、`setAlwaysOnTop()` 或状态同步，只需刷新 Z 序。
 - 迷你播放器进入空队列时必须清空主进程和渲染器中的标题、歌手与封面状态，并跳过当前歌曲封面解析，避免长期保留大 data URL。
@@ -95,11 +100,13 @@
 - 主进程本地曲库目录排序会比较大量文件名；不要在排序比较器里反复调用带 locale/options 的 `localeCompare()`，否则每次比较都会重复准备区域排序规则。
 - 涟漪 `DataTexture.needsUpdate = true` 会增加纹理版本并触发整张 `1×12 RGBA Float` 纹理上传；完全空闲时不能继续每帧写 48 个 Float32 并请求上传。
 - 舞台歌词处于渲染热路径；不要每帧新建详情 profile、重新解析同一调色板颜色或调用 `THREE.Color.clone()` 生成只使用一次的颜色对象。
+- 完整安装包下载后如果再整文件读盘做摘要，会让大安装包在下载完成后额外阻塞主进程；下载路径应边写边累计 hash。
 - 完整安装包校验运行在 Electron 主进程所加载的 `server.js` 中；不要用 `readFileSync()` 整包读入，也不要为了兼容 SHA-512 Base64/Hex 对同一内容做两次完整哈希。
 - 舞台歌词光粒即使 `Points.visible === false` 也会继续执行 JS 位置循环；若仍设置 `position.needsUpdate`，高刷屏会把 132 个粒子的三轴三角计算和缓冲上传请求持续放大。
 - 永久 `display:none` 的旧封面节点不能继续留在主循环里写 transform；只改变位置/朝向的安魂相机姿态也不应在 `updateCamera()` 后重复重算投影矩阵。
 - 同一缓存安装包的并发下载请求会同时进入完整校验；只在校验结束后复查 active job 不能阻止 N 路重复读盘、哈希和坏缓存移动。
 - 实时节拍引擎跟随音频分析帧持续执行；在 `processRealtimeBeatEngine()` 内声明 helper 或直接返回对象字面量会在播放期间反复创建闭包与短命对象。
+- MediaPipe 手势帧会同时计算粒子位置、张开度和 Canvas 骨架；不要重复计算掌心，也不要在帧内新建 tips 数组或掌心对象。
 
 ## Solution / Convention
 
@@ -161,7 +168,13 @@
 - 本地歌词/文本解码使用 `countTextReplacementChars()` 统计替换字符，并复用 `localTextDecoder()`；YRC 前导空白使用 `leadingWhitespaceLength()`。
 - 无歌词占位检测使用 `compactNoLyricText()` 单次扫描，保持忽略空白、常见中英文标点和固定占位文案的语义不变。
 - 更新下载任务的最新/匹配最新查询使用 `latestUpdateDownloadJob()` 单次扫描；任务裁剪使用 `newestUpdateDownloadJobs(8)` 的小窗口维护，状态轮询和快速补丁复用判断不要恢复全量任务数组排序。
-- 快速补丁下载必须同时覆盖首包连接超时和正文读取空闲超时；每次 `reader.read()` 前后刷新 watchdog，并在成功、异常和镜像切换路径 `finally` 清理计时器。
+- 更新资产与补丁必须同时保留 `downloadCandidates` 对象元数据和 `downloadUrls` 兼容字符串；已有 `mirrored:true` 或命中配置镜像前缀的候选只透传，不得再次套镜像。
+- 默认顺序保持配置镜像优先、GitHub 直连兜底；镜像候选必须经过 `ensureMirrorCanBeVerified()`，并继续兼容旧纯字符串 manifest、URL 对象及四类镜像模板。
+- 完整安装包与快速补丁均使用 12 秒响应头超时和 30 秒正文空闲超时；每次 `reader.read()` 前后刷新 watchdog，所有退出路径在 `finally` 清理。
+- `prepareUpdateJobAttempt()` 必须在每次换线前按 `expectedSize` 重置 `total`，并清空进度/收包状态；后台入口必须用最终 `catch` 把候选循环外的异常收敛到 `setUpdateJobError()`。
+- 完整包落盘使用异步 `FileHandle.write()` 循环处理部分写入，不得吞掉写盘/关闭错误；已知大小时超量立即中止，未知大小时使用安全上限，异常路径取消 reader 并删除临时包。
+- 完整包本地磁盘/权限/文件占用错误必须标记为 fatal，不得因为镜像切换重复读取整个安装包；网络、HTTP、摘要和读流超时才允许换线。
+- 快速补丁必须经过 `preparePatchFileEntries()` 整组验证重复路径/大小/摘要，再用 `backupPatchFileEntries()` 完成整组备份；`applyPatchFiles()` 中任一落盘失败必须调用 `rollbackPatchFileEntries()` 恢复已有文件、删除新建文件，并在 `finally` 清理 `.mineradio-patch`。一旦进入应用阶段，任何错误都必须标记为致命并结束任务，不得再换镜像重复写盘。
 - Node `fetch` 的 DNS/连接错误通常包装在 `TypeError: fetch failed` 的 `cause` 中；分类时必须检查嵌套 code/name/message，不能把裸 `fetch failed` 一律当作 DNS。DOM `AbortError` / `TimeoutError` 的数值 code 也必须归一为稳定的 `UPDATE_TIMEOUT`。
 - 更新面板前端使用 `updatePreviewContentSignature()`、`updatePreviewClassSignature()` 和 `lastProgressSignature` 判重；下载/补丁轮询状态未变化时必须跳过重复 DOM 写入。
 - `showMiniPlayerWindow()` 只在窗口隐藏或最小化时调用 `showInactive()` 并强制同步状态；`keepMiniPlayerOnTop()` 仅在置顶状态丢失时重写置顶标记，健康恢复轮询只执行 `moveTop()`。
@@ -193,9 +206,12 @@
 - 本地曲库目录排序复用模块级 `Intl.Collator('zh-Hans-CN', { numeric:true, sensitivity:'base' }).compare`，文件名排序语义必须与旧实现一致。
 - `triggerRipple()` 必须设置纹理同步标记；`updateRipples()` 仍先维护 bass 上升沿与冷却状态，再在真正空闲时早退。最后一个 ripple 到期帧必须上传清零并把 `uRippleCount` 设为 0，外部预设触发也必须走同一入口。
 - 舞台歌词详情 profile 使用固定只读对象；调色板变化统一经 `setStageLyricPalette()` 更新预解析颜色。帧级 scratch color 只能让现有 setter/material 立即 copy，不能把共享 scratch 直接挂到 uniform。
+- 完整包下载必须边写盘边累计已声明的 SHA-256/SHA-512，完成后调用 `verifyStreamedUpdatePayload()`；缓存复用路径继续走 `verifyUpdateFile()`。
+- `verifyUpdateFile()` 与下载落盘关闭句柄统一走 `closeUpdateFileHandle()`，主错误优先，close 失败不得覆盖写盘/读盘异常；校验分块缓冲使用模块级 `getUpdateVerifyChunkBuffer()`。
 - `verifyUpdateFile()` 使用异步 `FileHandle.read()` 与固定复用缓冲分块读取，只为存在的摘要创建 hash；不要改回 Electron 运行时抖动更高的整包同步读取。SHA-512 只 digest 一次再转换 Base64/Hex；缓存复用、下载校验、任务启动和 HTTP 路由必须逐层 `await`，校验失败时继续保持坏缓存移走与镜像切换语义。
 - 歌词光粒位置循环和 `position.needsUpdate` 只在 `data.sparks.visible` 时执行；旋转状态仍须逐帧维护，重新可见的首帧必须按 base position 与当前绝对时间全量覆盖坐标后再上传。
 - 帧级 scratch 返回对象只允许当前唯一同步调用者立即读取，不得跨下一次调用保存引用；安魂姿态只在主相机已经更新投影后运行，不能独立承担 FOV/aspect/near/far 同步。
+- MediaPipe 手势帧复用 `handPalmScratch`、`HAND_OPENNESS_TIPS` 和 `HAND_SKELETON_TIPS`；`processHandFrame()` 单次计算掌心并传给张开度与骨架绘制。`palmCenter(lm, out)` 无 `out` 时仍保留返回新对象的兼容语义，scratch 引用不得跨帧保存。
 - 缓存安装包复用通过 `installerReusePromises` 合并相同验证身份；key 使用规范化文件路径、版本、有限正大小与摘要的 JSON tuple，成功、失败和空结果都必须用 Promise 身份检查在 `finally` 清理。
 - `processRealtimeBeatEngine()` 使用模块级 `beatFollow()`，命中/未命中分别复用 `realtimeBeatHitResult` 与 `realtimeBeatMissResult`；两种对象的字段结构必须保持原样，调用方只能在当前同步帧立即读取，不得跨调用保存引用。
 - 音频分析帧向 `updateCinemaTrackProfile()` 必须复用模块级 `cinemaTrackProfileSample`，线性混合使用模块级 `mixToward()`；`cinemaAnalysisProfileForSong()` 返回固定常量对象，调用方不得原地改写 profile 字段。
