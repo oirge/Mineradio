@@ -9,13 +9,14 @@ Mineradio 使用了以下第三方项目或服务。各项目版权归其原作�
 - GSAP
 - music-tempo
 - NeteaseCloudMusicApi
+- KuGouMusicApi（扫码登录与歌单接口签名流程参考，MIT License，Copyright (c) 2023 MakcRe）
 - mpg123-decoder
 
 ## Third-party Services
 
-Mineradio 可能与网易云音乐、QQ 音乐等第三方音乐服务进行用户自有账号相关的本地客户端交互。
+Mineradio 可能与网易云音乐、QQ 音乐、酷狗音乐等第三方音乐服务进行用户自有账号相关的本地客户端交互。
 
-Mineradio 不是任何音乐平台的官方客户端，也不隶属于网易云音乐、QQ 音乐或腾讯音乐娱乐集团。请用户自行遵守对应平台的服务协议、版权规则和会员权益规则。
+Mineradio 不是任何音乐平台的官方客户端，也不隶属于网易云音乐、QQ 音乐、酷狗音乐或腾讯音乐娱乐集团。请用户自行遵守对应平台的服务协议、版权规则和会员权益规则。
 
 ## Original Design
 

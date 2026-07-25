@@ -33,7 +33,9 @@
       background: rgba(9, 12, 15, 0.96);
       box-shadow: 0 14px 38px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
       -webkit-app-region: drag;
+      transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
     }
+    body.dismissing .mini-shell { opacity: 0; transform: translateY(8px) scale(0.985); filter: blur(3px); }
     .cover {
       position: relative;
       flex: 0 0 54px;
@@ -135,17 +137,28 @@
     .pause-icon { display: none; }
     body[data-playing="true"] .play-icon { display: none; }
     body[data-playing="true"] .pause-icon { display: block; }
-    .restore {
+    .window-actions {
       flex: 0 0 24px;
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      -webkit-app-region: no-drag;
+    }
+    .window-action {
       width: 24px;
       height: 24px;
-      align-self: flex-start;
-      margin: -1px -1px 0 0;
       border-color: transparent;
       background: transparent;
       color: rgba(225, 232, 235, 0.48);
     }
-    .restore svg { width: 13px; height: 13px; }
+    .window-action svg { width: 13px; height: 13px; }
+    .close-mini:hover:not(:disabled) {
+      border-color: rgba(255, 102, 122, 0.34);
+      background: rgba(255, 82, 108, 0.14);
+      color: #ffd7de;
+    }
     @media (prefers-reduced-motion: reduce) {
       .cover img, button { transition: none; }
     }
@@ -173,9 +186,14 @@
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m6 18 8.5-6L6 6v12zM16 6v12h2V6z"/></svg>
       </button>
     </div>
-    <button id="restore" class="restore" type="button" title="返回主界面" aria-label="返回主界面">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
-    </button>
+    <div class="window-actions" aria-label="小窗操作">
+      <button id="restore" class="window-action restore" type="button" title="返回主界面" aria-label="返回主界面">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+      </button>
+      <button id="close-mini" class="window-action close-mini" type="button" title="关闭小窗" aria-label="关闭小窗">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>
+      </button>
+    </div>
   </main>
   <script>
     'use strict';
@@ -189,10 +207,33 @@
     var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false };
     var renderedPlaying = null;
     var renderedHasTrack = null;
+    var dismissVisualTimer = 0;
 
     function sendCommand(action) {
-      if (!window.miniPlayer || typeof window.miniPlayer.command !== 'function') return;
-      window.miniPlayer.command(action).catch(function(){});
+      if (!window.miniPlayer || typeof window.miniPlayer.command !== 'function') return Promise.resolve({ ok:false });
+      return window.miniPlayer.command(action).catch(function(){ return { ok:false }; });
+    }
+
+    function runTransportCommand(action) {
+      var previousPlaying = miniState.playing === true;
+      if (action === 'toggle-play') applyState({ playing: !previousPlaying });
+      sendCommand(action).then(function(result){
+        if (!result || result.ok !== true) {
+          if (action === 'toggle-play') applyState({ playing: previousPlaying });
+          return;
+        }
+        if (action === 'toggle-play' && typeof result.expectedPlaying === 'boolean') {
+          applyState({ playing: result.expectedPlaying });
+        }
+        var dismissAfterMs = Math.max(0, Number(result.dismissAfterMs) || 0);
+        if (dismissAfterMs > 0) {
+          if (dismissVisualTimer) clearTimeout(dismissVisualTimer);
+          dismissVisualTimer = setTimeout(function(){
+            dismissVisualTimer = 0;
+            document.body.classList.add('dismissing');
+          }, Math.max(0, dismissAfterMs - 190));
+        }
+      });
     }
 
     function setCover(src) {
@@ -209,6 +250,7 @@
 
     function applyState(patch) {
       patch = patch || {};
+      if (document.body.classList.contains('dismissing')) document.body.classList.remove('dismissing');
       miniState = Object.assign({}, miniState, patch);
       var next = miniState;
       var hasTrack = next.hasTrack === true;
@@ -243,10 +285,11 @@
         cover.removeAttribute('src');
       }
     });
-    document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });
-    playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
-    document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });
+    document.getElementById('previous').addEventListener('click', function(){ runTransportCommand('previous'); });
+    playButton.addEventListener('click', function(){ runTransportCommand('toggle-play'); });
+    document.getElementById('next').addEventListener('click', function(){ runTransportCommand('next'); });
     document.getElementById('restore').addEventListener('click', function(){ sendCommand('restore'); });
+    document.getElementById('close-mini').addEventListener('click', function(){ sendCommand('close'); });
     document.getElementById('mini-shell').addEventListener('dblclick', function(event){
       if (!event.target.closest('button')) sendCommand('restore');
     });
