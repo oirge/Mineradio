@@ -168,23 +168,16 @@ body.splash-active.splash-revealing #top-right{opacity:1;transition:opacity 1100
 .search-mode-tabs button{height:24px;padding:0 12px;border:0;border-radius:999px;background:transparent;color:rgba(255,255,255,.42);font-family:inherit;font-size:10.5px;font-weight:650;letter-spacing:.7px;cursor:pointer;transition:background .22s,color .22s,box-shadow .22s,transform .22s}
 .search-mode-tabs button:hover{color:rgba(255,255,255,.78)}
 .search-mode-tabs button.active{color:#eafffb;background:rgba(0,245,212,.11);box-shadow:inset 0 0 0 1px rgba(0,245,212,.22),0 8px 24px rgba(0,245,212,.055)}
-body.local-only-mode #user-btn,
 body.local-only-mode #user-capsule-hide-btn,
-body.local-only-mode #search-mode-tabs,
-body.local-only-mode #tab-pl,
 body.local-only-mode #tab-podcast,
-body.local-only-mode #pl-pane,
 body.local-only-mode #podcast-pane,
 body.local-only-mode #heart-btn,
 body.local-only-mode #collect-btn,
 body.local-only-mode #quality-control,
 body.local-only-mode #trial-banner,
-body.local-only-mode #login-modal,
-body.local-only-mode #user-modal,
 body.local-only-mode #login-guide-canvas,
 body.local-only-mode .login-link,
 body.local-only-mode #search-results .song-action-btn{display:none!important}
-body.local-only-mode #queue-pane{display:block!important}
 body.local-only-mode .tag-source.local{color:#e6edf3;border-color:rgba(157,184,207,.34);background:rgba(157,184,207,.12)}
 body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs{display:none}
 #search-results{margin-top:8px;background:rgba(12,12,18,0.55);border:1px solid rgba(255,255,255,0.06);border-radius:14px;max-height:360px;overflow-y:auto;overscroll-behavior:contain;backdrop-filter:blur(40px) saturate(1.4);-webkit-backdrop-filter:blur(40px) saturate(1.4);display:none}
@@ -215,6 +208,12 @@ body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs
 .tag-source.qq{color:#f0ffc8;border-color:rgba(191,214,107,.30);background:rgba(191,214,107,.075)}
 .search-result.qq-source:hover{background:rgba(191,214,107,.052)}
 .search-result.netease-source:hover{background:rgba(217,91,103,.045)}
+.tag-source.kugou{color:#bafff6;border-color:rgba(0,245,212,.32);background:rgba(0,245,212,.085)}
+.search-result.kugou-source:hover{background:rgba(0,245,212,.06)}
+.search-online-note{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;border-top:1px solid rgba(255,255,255,.045);background:rgba(0,245,212,.035);color:rgba(255,255,255,.48);font-size:10.5px;line-height:1.45}
+.search-online-note b{color:#a9fff3;font-size:10px;letter-spacing:.08em}
+.search-online-note button{height:26px;padding:0 10px;border:1px solid rgba(0,245,212,.24);border-radius:999px;background:rgba(0,245,212,.08);color:#cafff8;font:inherit;cursor:pointer;white-space:nowrap}
+.search-online-note button:hover{border-color:rgba(0,245,212,.48);background:rgba(0,245,212,.15);color:#fff}
 .podcast-result-head{display:flex;align-items:center;gap:10px;padding:11px 13px 9px;border-bottom:1px solid rgba(255,255,255,.04);background:rgba(255,255,255,.025)}
 .podcast-result-head img{width:40px;height:40px;border-radius:7px;object-fit:cover;background:rgba(255,255,255,.05);flex-shrink:0}
 .podcast-back-btn{width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);color:rgba(255,255,255,.66);cursor:pointer;font-family:inherit;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;transition:all .2s}
@@ -264,6 +263,29 @@ body.home-wallpaper-preview #canvas-container{filter:none}
 .home-hero-inner{position:relative;z-index:2;height:100%;display:grid;grid-template-columns:minmax(0,1.16fr) minmax(150px,.64fr);grid-template-rows:auto auto auto auto minmax(150px,1fr);column-gap:18px}
 .home-hero-inner.home-construction-inner{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:18px;padding:4px 2px;min-height:100%}
 .home-hero-inner.home-local-import-inner{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;padding:8px;min-height:100%;text-align:center}
+.home-hero-inner.home-now-inner{display:flex;flex-direction:column;justify-content:center;gap:0;padding:2px 4px;min-height:100%}
+.home-now-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.home-now-kicker{font-size:10px;font-weight:800;letter-spacing:.18em;color:rgba(0,245,212,.72);text-transform:uppercase}
+.home-now-daypart{height:27px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.05);display:inline-flex;align-items:center;font-size:10px;font-weight:760;letter-spacing:.12em;color:rgba(255,255,255,.68)}
+.home-clock-row{display:flex;align-items:baseline;gap:12px;margin-top:9px}
+.home-clock{font-variant-numeric:tabular-nums;font-size:clamp(62px,8.4vw,96px);font-weight:720;line-height:.9;letter-spacing:-.055em;color:rgba(255,255,255,.98);text-shadow:0 16px 46px rgba(0,0,0,.34)}
+.home-clock-date{margin-top:10px;font-size:13px;font-weight:620;letter-spacing:.04em;color:rgba(255,255,255,.54)}
+.home-weather-now{display:grid;grid-template-columns:54px minmax(0,1fr) auto;align-items:center;gap:14px;margin-top:22px;padding:15px 16px;border-radius:20px;border:1px solid rgba(255,255,255,.10);background:linear-gradient(135deg,rgba(255,255,255,.075),rgba(255,255,255,.028));box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 18px 50px rgba(0,0,0,.20)}
+.home-weather-icon{width:54px;height:54px;border-radius:17px;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,rgba(0,245,212,.17),rgba(36,66,255,.13));box-shadow:inset 0 1px 0 rgba(255,255,255,.09);font-size:26px}
+.home-weather-copy{min-width:0}
+.home-weather-label{font-size:9px;font-weight:800;letter-spacing:.17em;text-transform:uppercase;color:rgba(0,245,212,.64)}
+.home-weather-title{margin-top:4px;font-size:15px;font-weight:760;color:rgba(255,255,255,.93);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.home-weather-sub{margin-top:4px;font-size:10.5px;line-height:1.42;color:rgba(255,255,255,.46)}
+.home-weather-actions{display:flex;flex-direction:column;align-items:stretch;gap:7px}
+.home-weather-action{height:31px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.055);color:rgba(255,255,255,.78);font-family:inherit;font-size:10.5px;font-weight:720;cursor:pointer;white-space:nowrap;transition:transform .18s,border-color .18s,background .18s,color .18s}
+.home-weather-action:hover{transform:translateY(-1px);border-color:rgba(0,245,212,.35);background:rgba(0,245,212,.10);color:#fff}
+.home-weather-action.primary{border-color:rgba(0,245,212,.25);background:rgba(0,245,212,.085)}
+.home-weather-action[hidden]{display:none!important}
+.home-now-divider{height:1px;margin:21px 0 17px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent)}
+.home-now-local-label{margin-bottom:10px;font-size:9px;font-weight:780;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.32)}
+.home-now-inner .home-local-actions{width:100%;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.home-now-inner .home-local-action{height:44px;border-radius:14px;font-size:12px}
+.home-now-inner .local-analysis-progress{width:100%;margin-top:10px}
 .home-local-actions{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:14px;width:min(420px,100%)}
 .home-local-action{height:54px;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.035));color:rgba(255,255,255,.92);font-family:inherit;font-size:15px;font-weight:760;letter-spacing:0;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 16px 44px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.10);transition:transform .2s,border-color .2s,background .2s,box-shadow .2s}
 .home-local-action:hover{transform:translateY(-2px);border-color:rgba(0,245,212,.42);background:linear-gradient(145deg,rgba(0,245,212,.12),rgba(255,255,255,.045));box-shadow:0 22px 58px rgba(0,0,0,.30),0 0 28px rgba(0,245,212,.10),inset 0 1px 0 rgba(255,255,255,.13)}
@@ -274,11 +296,12 @@ body.home-wallpaper-preview #canvas-container{filter:none}
 .local-analysis-progress-count{color:rgba(0,245,212,.88);font-weight:760}
 .local-analysis-progress-bar{height:5px;border-radius:999px;background:rgba(255,255,255,.10);overflow:hidden}
 .local-analysis-progress-fill{display:block;width:0%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#00f5d4,#9db8cf,#f8f4ee);box-shadow:0 0 18px rgba(0,245,212,.26);transition:width .28s ease}
-html.local-only-mode #empty-home .empty-home-shell{grid-template-columns:minmax(280px,620px);justify-content:center}
+html.local-only-mode #empty-home .empty-home-shell{grid-template-columns:minmax(280px,760px);justify-content:center}
 html.local-only-mode #empty-home .home-hero{grid-row:auto;min-height:250px}
 html.local-only-mode #empty-home .home-grid,
 html.local-only-mode #empty-home .home-rail{display:none!important}
 @media (max-width:420px){.home-local-actions{grid-template-columns:1fr}.home-local-action{height:50px}}
+@media (max-width:620px){.home-weather-now{grid-template-columns:46px minmax(0,1fr);padding:13px}.home-weather-icon{width:46px;height:46px;border-radius:15px;font-size:22px}.home-weather-actions{grid-column:1 / -1;flex-direction:row}.home-weather-action{flex:1}.home-clock{font-size:62px}}
 .home-kicker{grid-column:1;font-size:10px;font-weight:780;letter-spacing:.18em;color:color-mix(in srgb,var(--home-accent) 62%,rgba(255,255,255,.36));text-transform:uppercase;margin-bottom:14px}
 .home-title{grid-column:1;font-size:clamp(34px,4.6vw,58px);line-height:.98;font-weight:760;letter-spacing:0;color:rgba(255,255,255,.98);max-width:380px;text-shadow:0 10px 36px rgba(0,0,0,.26)}
 .home-title.home-construction-title{max-width:620px;font-size:clamp(32px,4.5vw,64px);line-height:1.08}
@@ -869,6 +892,26 @@ body.login-guide-active #login-guide-canvas{opacity:1}
 .account-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 .account-modal-actions .modal-btn{padding:8px 10px}
 .account-hint{margin-top:10px;font-size:11px;line-height:1.45;color:rgba(255,255,255,.38)}
+.kugou-modal{width:min(410px,92vw);max-width:min(410px,92vw);padding:28px}
+.kugou-modal-close{position:absolute;right:16px;top:14px;width:30px;height:30px;border:0;border-radius:9px;background:rgba(255,255,255,.045);color:rgba(255,255,255,.55);font:18px/1 inherit;cursor:pointer;transition:background .2s,color .2s,transform .2s}
+.kugou-modal-close:hover{background:rgba(255,255,255,.1);color:#fff;transform:rotate(5deg)}
+.kugou-brand{display:inline-flex;align-items:center;gap:8px;height:26px;padding:0 10px;margin-bottom:12px;border-radius:999px;border:1px solid rgba(0,245,212,.22);background:rgba(0,245,212,.07);color:#bafff6;font-size:10.5px;font-weight:750;letter-spacing:.09em}
+.kugou-brand-dot{width:7px;height:7px;border-radius:50%;background:#00f5d4;box-shadow:0 0 16px rgba(0,245,212,.8)}
+.kugou-qr-shell{position:relative;width:204px;height:204px;margin:4px auto 14px;padding:10px;border-radius:18px;background:#fff;box-shadow:0 18px 50px rgba(0,0,0,.42),0 0 0 1px rgba(0,245,212,.16)}
+#kugou-qr-img{display:block;width:184px;height:184px;border-radius:10px;object-fit:contain}
+.kugou-qr-placeholder{position:absolute;inset:10px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:linear-gradient(135deg,#f3f5f5,#fff);color:#596164;font-size:11px;letter-spacing:.04em}
+.kugou-qr-shell.ready .kugou-qr-placeholder{display:none}
+#kugou-qr-status{min-height:19px;margin-bottom:8px;color:rgba(255,255,255,.62);font-size:12px;letter-spacing:.02em}
+#kugou-qr-status.scan{color:#7ee2a8}#kugou-qr-status.fail{color:#f08080}
+.kugou-security-note{margin:12px auto 0;max-width:330px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.06);font-size:10.5px;line-height:1.55;color:rgba(255,255,255,.38);text-align:left}
+.kugou-user-card{display:flex;align-items:center;gap:13px;margin:2px 0 16px;padding:14px;border:1px solid rgba(0,245,212,.13);border-radius:15px;background:linear-gradient(135deg,rgba(0,245,212,.07),rgba(255,255,255,.025));text-align:left}
+.kugou-user-avatar{width:48px;height:48px;flex:0 0 auto;border-radius:13px;object-fit:cover;background:rgba(255,255,255,.06);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.kugou-user-name{font-size:15px;font-weight:720;color:rgba(255,255,255,.94);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kugou-user-id{margin-top:4px;font-size:10.5px;color:rgba(255,255,255,.38)}
+.kugou-sync-state{margin:0 0 12px;font-size:11.5px;color:rgba(255,255,255,.52)}
+.pl-kugou-badge{display:inline-flex;align-items:center;height:18px;margin-left:6px;padding:0 6px;border-radius:999px;border:1px solid rgba(0,245,212,.18);background:rgba(0,245,212,.07);color:#a9fff3;font-size:8.5px;font-weight:750;letter-spacing:.08em;vertical-align:1px}
+.pl-card.kugou-card{border-color:rgba(0,245,212,.08)}
+.pl-card.kugou-card:hover{border-color:rgba(0,245,212,.24)!important;background:rgba(0,245,212,.045)!important}
 .modal .btn-row{display:flex;gap:10px;justify-content:center;margin-top:16px}
 .dual-login-modal .btn-row{flex-wrap:wrap}
 .modal-btn{padding:8px 20px;font-size:12.5px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;cursor:pointer;letter-spacing:.5px;transition:all .2s;font-family:inherit}
@@ -1882,6 +1925,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   .fx-slider{grid-template-columns:74px minmax(0,1fr) 40px 28px;gap:8px;padding:8px}
   .lyric-color-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+body.local-only-mode.kugou-online-playing #quality-control{display:flex!important}
 </style>
 </head>
 <body>
@@ -1893,14 +1937,6 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   </div>
   <div class="desktop-window-controls">
     <button id="visual-guide-btn" class="icon-btn" type="button" onclick="startVisualGuide({ manual: true })" title="查看使用引导" aria-label="查看使用引导">?</button>
-    <button id="update-entry" class="update-entry" type="button" onclick="openUpdatePanel()" title="发现新版本" aria-label="发现新版本">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle class="update-ring" cx="12" cy="12" r="8.8"></circle>
-        <circle id="update-progress-ring" class="update-progress-ring" cx="12" cy="12" r="8.8"></circle>
-        <path class="update-arrow" d="M12 16.5V7.5"></path>
-        <path class="update-arrow" d="M8.7 10.7 12 7.4l3.3 3.3"></path>
-      </svg>
-    </button>
     <button id="diy-mode-btn" class="desktop-mode-btn" type="button" onclick="toggleDiyMode()" title="开启 DIY 玩家模式" aria-label="开启 DIY 玩家模式" aria-pressed="false">DIY</button>
     <button class="desktop-window-btn" data-window-action="minimize" title="最小化" aria-label="最小化">
       <svg viewBox="0 0 16 16"><path d="M3 8h10"/></svg>
@@ -1946,10 +1982,10 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   <div id="search-stack">
     <div id="search-box">
       <svg id="search-icon" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input id="search-input" type="text" placeholder="搜索本地歌曲、歌手、文件名..." autocomplete="off" spellcheck="false">
+      <input id="search-input" type="text" placeholder="搜索本地歌曲与酷狗曲库..." autocomplete="off" spellcheck="false">
     </div>
     <div id="search-mode-tabs" class="search-mode-tabs" role="tablist" aria-label="Search mode">
-      <button id="search-mode-song" class="active" type="button" onclick="setSearchMode('song')" aria-selected="true">Local</button>
+      <button id="search-mode-song" class="active" type="button" onclick="setSearchMode('song')" aria-selected="true">本地 + 酷狗</button>
     </div>
     <div id="search-results"></div>
   </div>
@@ -1973,23 +2009,25 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 <section id="empty-home" aria-label="Mineradio home">
   <div class="empty-home-shell">
     <div class="home-hero">
-      <div class="home-hero-inner home-local-import-inner">
-        <div class="home-local-actions">
-          <button class="home-local-action" type="button" onclick="openLocalFolderImport()" aria-label="导入文件夹">
-            <svg fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 14h6"/><path d="M12 11v6"/></svg>
-            <span>导入文件夹</span>
-          </button>
-          <button class="home-local-action" type="button" onclick="document.getElementById('file-input').click()" aria-label="导入本地文件">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span>本地文件</span>
-          </button>
+      <div class="home-hero-inner home-now-inner">
+        <div class="home-now-top">
+          <div class="home-now-kicker">NOW · LOCAL TIME</div>
+          <div class="home-now-daypart" id="home-daypart">本地时段</div>
         </div>
-        <div id="local-analysis-progress" class="local-analysis-progress" hidden>
-          <div class="local-analysis-progress-head">
-            <span id="local-analysis-progress-text">后台加载准备中</span>
-            <span id="local-analysis-progress-count" class="local-analysis-progress-count">0%</span>
+        <div class="home-clock-row">
+          <div class="home-clock" id="home-clock">--:--</div>
+        </div>
+        <div class="home-clock-date" id="home-clock-date">正在读取本地时间</div>
+        <div class="home-weather-now" id="home-weather-now">
+          <div class="home-weather-icon" id="home-weather-icon">◌</div>
+          <div class="home-weather-copy">
+            <div class="home-weather-label">MOJI WEATHER</div>
+            <div class="home-weather-title" id="home-weather-now-title">授权后显示城市天气</div>
+            <div class="home-weather-sub" id="home-weather-now-sub">首次授权定位后会记住城市，下次自动同步</div>
           </div>
-          <div class="local-analysis-progress-bar"><i id="local-analysis-progress-fill" class="local-analysis-progress-fill"></i></div>
+          <div class="home-weather-actions">
+            <button class="home-weather-action primary" id="home-weather-enable" type="button" onclick="enableLocalWeather(event)">授权定位</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2054,7 +2092,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   </button>
 </div>
 
-<button id="fx-fab" title="视觉控制台">
+<button id="fx-fab" type="button" onclick="toggleFxPanel()" title="视觉控制台" aria-label="视觉控制台">
   <svg width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M4 7h8"/><path d="M16 7h4"/><circle cx="14" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></svg>
 </button>
 <button id="fx-fab-hide-btn" type="button" onclick="toggleFxFabAutoHide(event)" title="自动隐藏视觉控制台">‹</button>
@@ -2062,7 +2100,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 <!-- 控制台 (右侧贴边自动显示, 无关闭按钮) -->
 <div id="fx-panel">
   <div class="fx-head">
-    <div><div class="fx-title">视觉控制台</div><div class="fx-sub">MINERADIO VISUALS · 鼠标移开自动隐藏</div></div>
+    <div><div class="fx-title">DIY 视觉控制台</div><div class="fx-sub">MINERADIO VISUALS · 点击固定 · 再点收起</div></div>
   </div>
 
   <div class="fx-section-label">视觉预设</div>
@@ -2348,7 +2386,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   </div>
   <div class="panel-tabs">
     <button id="tab-queue" class="panel-tab active" onclick="switchPlaylistTab('queue')">当前队列</button>
-    <button id="tab-pl" class="panel-tab" onclick="switchPlaylistTab('playlists')">本地库</button>
+    <button id="tab-pl" class="panel-tab" onclick="switchPlaylistTab('playlists')">歌单</button>
   </div>
   <div id="queue-pane">
     <div class="queue-toolbar">
@@ -2486,13 +2524,14 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         </div>
       </div>
       <div id="quality-control" class="quality-control">
-        <button id="quality-btn" class="ctrl-btn quality-pill" onclick="toggleQualityPanel(event)" title="音质"><span id="quality-btn-label">臻音</span></button>
+        <button id="quality-btn" class="ctrl-btn quality-pill" onclick="toggleQualityPanel(event)" title="音质"><span id="quality-btn-label">自动</span></button>
         <div class="quality-popover" onclick="event.stopPropagation()">
-          <button class="quality-option svip-only" data-quality="jymaster" data-svip="1" onclick="setPlaybackQuality('jymaster')"><span>超清母带</span><small>SVIP / 最高规格</small></button>
-          <button class="quality-option" data-quality="hires" onclick="setPlaybackQuality('hires')"><span>高清臻音</span><small>默认 / 细节优先</small></button>
-          <button class="quality-option" data-quality="lossless" onclick="setPlaybackQuality('lossless')"><span>无损 SQ</span><small>FLAC 优先</small></button>
-          <button class="quality-option" data-quality="exhigh" onclick="setPlaybackQuality('exhigh')"><span>极高 HQ</span><small>320kbps</small></button>
-          <button class="quality-option" data-quality="standard" onclick="setPlaybackQuality('standard')"><span>标准</span><small>128kbps</small></button>
+          <button class="quality-option" data-quality="auto" onclick="setPlaybackQuality('auto')"><span>自动选择</span><small>优先最高可播放音质</small></button>
+          <button class="quality-option svip-only" data-quality="jymaster" data-svip="1" onclick="setPlaybackQuality('jymaster')"><span>蝰蛇超清</span><small>VIP / 纯净通透</small></button>
+          <button class="quality-option" data-quality="hires" onclick="setPlaybackQuality('hires')"><span>Hi-Res</span><small>高解析音源优先</small></button>
+          <button class="quality-option" data-quality="lossless" onclick="setPlaybackQuality('lossless')"><span>无损 FLAC</span><small>无损音源优先</small></button>
+          <button class="quality-option" data-quality="exhigh" onclick="setPlaybackQuality('exhigh')"><span>极高 HQ</span><small>320 kbps</small></button>
+          <button class="quality-option" data-quality="standard" onclick="setPlaybackQuality('standard')"><span>标准</span><small>128 kbps / 更省流量</small></button>
         </div>
       </div>
       <button id="heart-btn" class="ctrl-btn" onclick="toggleLikeCurrent()" title="红心喜欢"><svg class="heart-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.45c-.32 0-.62-.12-.86-.34l-1.23-1.12C5.54 16.03 2.25 13.05 2.25 8.9 2.25 5.48 4.88 2.9 8.28 2.9c1.7 0 3.35.72 4.52 1.96C13.97 3.62 15.62 2.9 17.32 2.9c3.4 0 6.03 2.58 6.03 6 0 4.15-3.29 7.13-7.66 11.09l-1.23 1.12c-.24.22-.54.34-.86.34z"/></svg></button>
@@ -2532,8 +2571,41 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 
 <canvas id="login-guide-canvas" aria-hidden="true"></canvas>
 
-<div id="login-modal" class="modal-mask"></div>
-<div id="user-modal" class="modal-mask"></div>
+<div id="login-modal" class="modal-mask">
+  <div class="modal kugou-modal" role="dialog" aria-modal="true" aria-labelledby="kugou-login-title">
+    <button class="kugou-modal-close" type="button" onclick="closeLoginModal()" aria-label="关闭">×</button>
+    <div class="kugou-brand"><span class="kugou-brand-dot"></span>KUGOU SYNC</div>
+    <h2 id="kugou-login-title">登录酷狗音乐</h2>
+    <div class="desc">使用酷狗音乐 App 扫码，把你的歌单同步到 Mineradio</div>
+    <div id="kugou-qr-shell" class="kugou-qr-shell">
+      <img id="kugou-qr-img" alt="酷狗音乐登录二维码">
+      <div class="kugou-qr-placeholder">正在连接酷狗登录服务…</div>
+    </div>
+    <div id="kugou-qr-status">准备登录二维码</div>
+    <div class="btn-row">
+      <button class="modal-btn primary" type="button" onclick="refreshQr()">刷新二维码</button>
+      <button class="modal-btn" type="button" onclick="closeLoginModal()">稍后再说</button>
+    </div>
+    <div class="kugou-security-note">密码和短信验证码只在酷狗官方 App 中完成。Mineradio 不读取密码，仅在本机加密保存登录会话，用于读取你的歌单。</div>
+  </div>
+</div>
+<div id="user-modal" class="modal-mask">
+  <div class="modal kugou-modal" role="dialog" aria-modal="true" aria-labelledby="kugou-user-title">
+    <button class="kugou-modal-close" type="button" onclick="closeUserModal()" aria-label="关闭">×</button>
+    <div class="kugou-brand"><span class="kugou-brand-dot"></span>KUGOU CONNECTED</div>
+    <h2 id="kugou-user-title">酷狗音乐账号</h2>
+    <div class="kugou-user-card">
+      <img id="kugou-user-avatar" class="kugou-user-avatar" alt="">
+      <div style="min-width:0;flex:1"><div id="kugou-user-name" class="kugou-user-name">酷狗用户</div><div id="kugou-user-id" class="kugou-user-id"></div></div>
+    </div>
+    <div id="kugou-sync-state" class="kugou-sync-state">歌单尚未同步</div>
+    <div class="btn-row">
+      <button class="modal-btn primary" type="button" onclick="syncKugouPlaylistsFromModal()">同步歌单</button>
+      <button class="modal-btn" type="button" onclick="logoutActiveAccount()">退出登录</button>
+    </div>
+    <div class="kugou-security-note">登录后可同步歌单并在线播放；会员曲目按你的酷狗账号权益播放，不抓取或下载音频。</div>
+  </div>
+</div>
 
 <!-- 封面裁剪模态 -->
 <div id="cover-crop-modal" class="modal-mask">
@@ -2720,6 +2792,7 @@ var LOCAL_SEARCH_RESULT_LIMIT = 80;
 var searchMode = 'song';
 var loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '本地模式' };
 var loginStatusChecked = false, loginStatusCheckFailed = false;
+var kugouQrPollTimer = null, kugouQrCheckBusy = false, kugouPlaylistsLoading = false, kugouPlaylistsSyncedAt = 0;
 var volumeTween = null, trackSwitchToken = 0;
 var playIconUiState = { node: null, playing: null };
 var audioFadeTimer = null, audioElementFadeFrame = 0, audioFadeSerial = 0;
@@ -2749,6 +2822,7 @@ var LOCAL_LIBRARY_FOLDER_STORE_KEY = 'mineradio-local-library-folder-v1';
 var LOCAL_LIBRARY_SNAPSHOT_STORE_KEY = 'mineradio-local-library-snapshot-v1';
 var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
+var HOME_WEATHER_STORE_KEY = 'mineradio-weather-city-v2';
 var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
 var PERSISTENT_UI_STATE_KEYS = [
@@ -2763,6 +2837,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   FREE_CAMERA_STORE_KEY,
   LOCAL_LIBRARY_FOLDER_STORE_KEY,
   PLAYBACK_SESSION_STORE_KEY,
+  HOME_WEATHER_STORE_KEY,
   'mineradio-user-fx-archives-v1',
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
@@ -2909,6 +2984,9 @@ var emptyHomeActive = false;
 var homeForcedOpen = false;
 var homeSuppressed = false;
 var homeDiscoverState = { loading: false, loaded: false, loggedIn: false, mode: 'starter', songs: [], playlists: [], podcasts: [], error: '', updatedAt: 0 };
+var homeClockTimer = null;
+var homeWeatherRefreshTimer = null;
+var homeWeatherState = { status: 'idle', city: '', data: null, error: '', updatedAt: 0 };
 var homeVisualPresetActive = false;
 var homeVisualPrevPreset = 0;
 var HOME_LISTEN_STATS_KEY = 'mineradio-listen-stats-v1';
@@ -3185,6 +3263,9 @@ function applyDiyMode(on, opts) {
 }
 function toggleDiyMode() {
   applyDiyMode(!diyPlayerMode, { save: true, toast: true, animate: true });
+  if (diyPlayerMode) {
+    requestAnimationFrame(function(){ toggleFxPanel(true); });
+  }
   if (visualGuideActive) {
     visualGuideState.mode = diyPlayerMode ? 'diy' : 'simple';
     showVisualGuideStep(0);
@@ -10505,7 +10586,7 @@ function tickLyricsParticles() {
     if (stageLyrics.current || stageLyrics.currentText || (stageLyrics.outgoing && stageLyrics.outgoing.length)) clearStageLyrics();
     return;
   }
-  if (!playing || !audio || !lyricsLines.length) {
+  if (!audio || !lyricsLines.length) {
     if (stageLyrics.current) {
       stageLyrics.current.userData.state = 'out';
       stageLyrics.current.userData.age = 0;
@@ -16787,39 +16868,43 @@ function escHtml(s) {
 }
 function normalizePlaybackQuality(value) {
   value = String(value || '').toLowerCase();
+  if (value === 'auto' || value === 'best') return 'auto';
   if (value === 'jymaster' || value === 'master' || value === 'svip') return 'jymaster';
   if (value === 'hires' || value === 'hi-res' || value === 'highres' || value === 'highest') return 'hires';
   if (value === 'lossless' || value === 'flac' || value === 'sq') return 'lossless';
   if (value === 'exhigh' || value === 'high' || value === '320k' || value === 'hq') return 'exhigh';
   if (value === 'standard' || value === 'normal' || value === 'std') return 'standard';
-  return 'hires';
+  return 'auto';
 }
 function playbackQualityLabel(value) {
   value = normalizePlaybackQuality(value);
-  if (value === 'jymaster') return '超清母带';
-  if (value === 'hires') return '高清臻音';
-  if (value === 'lossless') return '无损';
-  if (value === 'exhigh') return '极高';
+  if (value === 'auto') return '自动选择';
+  if (value === 'jymaster') return '蝰蛇超清';
+  if (value === 'hires') return 'Hi-Res';
+  if (value === 'lossless') return '无损 FLAC';
+  if (value === 'exhigh') return '极高 HQ';
   if (value === 'standard') return '标准';
-  return '高清臻音';
+  return '自动选择';
 }
 function playbackQualityShortLabel(value) {
   value = normalizePlaybackQuality(value);
-  if (value === 'jymaster') return '母带';
-  if (value === 'hires') return '臻音';
+  if (value === 'auto') return '自动';
+  if (value === 'jymaster') return '蝰蛇';
+  if (value === 'hires') return 'Hi-Res';
   if (value === 'lossless') return 'SQ';
   if (value === 'exhigh') return 'HQ';
   if (value === 'standard') return 'STD';
-  return '臻音';
+  return '自动';
 }
 function playbackQualityRank(value) {
   value = normalizePlaybackQuality(value);
+  if (value === 'auto') return 6;
   if (value === 'jymaster') return 5;
   if (value === 'hires') return 4;
   if (value === 'lossless') return 3;
   if (value === 'exhigh') return 2;
   if (value === 'standard') return 1;
-  return 4;
+  return 6;
 }
 function playbackQualityWasDowngraded(requested, resolved) {
   return playbackQualityRank(resolved) < playbackQualityRank(requested);
@@ -16838,9 +16923,9 @@ function playbackResolvedQualityText(data) {
 }
 function readPlaybackQualityPreference() {
   try {
-    return normalizePlaybackQuality(localStorage.getItem(PLAYBACK_QUALITY_STORE_KEY) || 'hires');
+    return normalizePlaybackQuality(localStorage.getItem(PLAYBACK_QUALITY_STORE_KEY) || 'auto');
   } catch (e) {
-    return 'hires';
+    return 'auto';
   }
 }
 function savePlaybackQualityPreference() {
@@ -16851,28 +16936,38 @@ function updatePlaybackQualityUi() {
   var btn = document.getElementById('quality-btn');
   var displayQuality = playbackQuality;
   if (label) label.textContent = playbackQualityShortLabel(displayQuality);
-  if (btn) btn.title = '音质: 本地文件按原始编码播放';
+  var currentSong = currentIdx >= 0 && playQueue[currentIdx] ? playQueue[currentIdx] : null;
+  var kugouPlaying = !!(currentSong && currentSong.type === 'kugou');
+  if (btn) btn.title = kugouPlaying ? ('酷狗音质: ' + playbackQualityLabel(displayQuality)) : '本地文件按原始编码播放';
   document.querySelectorAll('.quality-option').forEach(function(option){
     var q = normalizePlaybackQuality(option.dataset.quality);
     option.classList.toggle('active', q === displayQuality);
     option.classList.remove('locked');
     option.disabled = false;
-    option.title = '本地文件按原始编码播放';
+    option.title = kugouPlaying ? ('切换到' + playbackQualityLabel(q)) : '酷狗在线播放时可选择';
   });
 }
 function setPlaybackQuality(value) {
   var next = normalizePlaybackQuality(value);
+  var previous = playbackQuality;
+  var wrap = document.getElementById('quality-control');
+  if (wrap) wrap.classList.remove('open');
+  if (next === previous) {
+    showToast('当前已是' + playbackQualityLabel(next));
+    return;
+  }
   playbackQuality = next;
   savePlaybackQualityPreference();
   updatePlaybackQualityUi();
-  var wrap = document.getElementById('quality-control');
-  if (wrap) wrap.classList.remove('open');
-  applyPlaybackQualityToCurrentTrack(next);
+  applyPlaybackQualityToCurrentTrack(next, previous);
 }
 function canReloadCurrentTrackForQuality() {
-  return false;
+  var song = currentIdx >= 0 && playQueue[currentIdx] ? playQueue[currentIdx] : null;
+  return !!(song && song.type === 'kugou');
 }
-function applyPlaybackQualityToCurrentTrack(nextQuality) {
+function applyPlaybackQualityToCurrentTrack(nextQuality, previousQuality) {
+  nextQuality = normalizePlaybackQuality(nextQuality || playbackQuality);
+  previousQuality = normalizePlaybackQuality(previousQuality || playbackQuality);
   var label = playbackQualityLabel(nextQuality || playbackQuality);
   if (!canReloadCurrentTrackForQuality()) {
     showToast('音质偏好: ' + label + ' · 下次播放生效');
@@ -16885,9 +16980,26 @@ function applyPlaybackQualityToCurrentTrack(nextQuality) {
     qualitySwitch: true,
     resumeAt: resumeAt,
     preserveHomeState: true,
+    propagateError: true,
   })).catch(function(e){
     console.warn('[QualitySwitch]', e);
-    showToast('音质切换失败，已保留偏好');
+    playbackQuality = previousQuality;
+    savePlaybackQualityPreference();
+    updatePlaybackQualityUi();
+    var previousLabel = playbackQualityLabel(previousQuality);
+    showToast('所选音质版本不一致，正在恢复' + previousLabel);
+    return Promise.resolve(playQueueAt(currentIdx, {
+      qualityOverride: previousQuality,
+      qualityRollback: true,
+      resumeAt: resumeAt,
+      preserveHomeState: true,
+      propagateError: true,
+    })).then(function(){
+      showToast('已恢复' + previousLabel + '并继续播放');
+    }).catch(function(rollbackError){
+      console.warn('[QualityRollback]', rollbackError);
+      showToast('音质切换失败，请重新点击播放');
+    });
   }).finally(forcePlaybackControlsInteractive);
 }
 function toggleQualityPanel(e) {
@@ -17342,6 +17454,238 @@ function homeToneForItem(item, index) {
  * @param {Array<object>} items Home 首屏卡片数据。
  * @returns {void}
  */
+function homeDaypart(hour) {
+  if (hour < 5) return { zh: '深夜', en: 'MIDNIGHT' };
+  if (hour < 8) return { zh: '清晨', en: 'EARLY AM' };
+  if (hour < 12) return { zh: '上午', en: 'MORNING' };
+  if (hour < 14) return { zh: '午间', en: 'NOON' };
+  if (hour < 18) return { zh: '下午', en: 'AFTERNOON' };
+  if (hour < 22) return { zh: '夜晚', en: 'EVENING' };
+  return { zh: '深夜', en: 'LATE NIGHT' };
+}
+function updateHomeClock() {
+  var now = new Date();
+  var clock = document.getElementById('home-clock');
+  var date = document.getElementById('home-clock-date');
+  var daypart = document.getElementById('home-daypart');
+  if (clock) clock.textContent = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  if (date) date.textContent = new Intl.DateTimeFormat('zh-CN', { year:'numeric', month:'long', day:'numeric', weekday:'long' }).format(now);
+  if (daypart) {
+    var part = homeDaypart(now.getHours());
+    daypart.textContent = part.zh + ' · ' + part.en;
+  }
+}
+function initHomeClock() {
+  updateHomeClock();
+  if (homeClockTimer) clearInterval(homeClockTimer);
+  homeClockTimer = setInterval(updateHomeClock, 30000);
+}
+function weatherIconForCondition(condition) {
+  condition = String(condition || '');
+  if (/雷/.test(condition)) return 'ϟ';
+  if (/雨/.test(condition)) return '☂';
+  if (/雪|冰/.test(condition)) return '❄';
+  if (/雾|霾|沙|尘/.test(condition)) return '≋';
+  if (/云|阴/.test(condition)) return '☁';
+  if (/晴/.test(condition)) return new Date().getHours() >= 19 || new Date().getHours() < 6 ? '☾' : '☀';
+  return '◌';
+}
+function readHomeWeatherCache() {
+  try {
+    var value = JSON.parse(localStorage.getItem(HOME_WEATHER_STORE_KEY) || 'null');
+    if (!value || !String(value.city || '').trim()) return null;
+    return {
+      city: String(value.city || '').trim().slice(0, 80),
+      data: value.data && typeof value.data === 'object' ? value.data : null,
+      updatedAt: Math.max(0, Number(value.updatedAt) || 0)
+    };
+  } catch (e) {
+    return null;
+  }
+}
+function saveHomeWeatherCache(city, data, updatedAt) {
+  city = String(city || '').trim().slice(0, 80);
+  if (!city) return;
+  setPersistentLocalStorageItem(HOME_WEATHER_STORE_KEY, JSON.stringify({
+    city: city,
+    data: data && typeof data === 'object' ? data : null,
+    updatedAt: Math.max(0, Number(updatedAt) || 0)
+  }));
+}
+function homeWeatherSyncLabel(updatedAt) {
+  if (!updatedAt) return '';
+  try {
+    return new Intl.DateTimeFormat('zh-CN', { hour:'2-digit', minute:'2-digit', hour12:false }).format(new Date(updatedAt)) + ' 同步';
+  } catch (e) {
+    return '';
+  }
+}
+function normalizeMojiWeather(body, city) {
+  var payload = body && body.data && typeof body.data === 'object' ? body.data : null;
+  var result = payload && payload.result && typeof payload.result === 'object' ? payload.result : null;
+  var current = result && result.condition && typeof result.condition === 'object' ? result.condition : null;
+  var rows = result && Array.isArray(result.forecastDayList) ? result.forecastDayList : [];
+  if (!current) throw new Error('墨迹天气实况数据为空');
+  var todayKey = String(result && result.date && result.date.today || '').trim();
+  var today = rows.find(function(item){
+    return String(item && item.fpredict_date || '').trim() === todayKey;
+  }) || rows.find(function(item){ return item && item.condition; }) || rows[0] || {};
+  var currentTemperature = String(current.ftemp == null ? '' : current.ftemp).replace(/℃/g, '').trim();
+  var feelsLike = String(current.freal_feel == null ? '' : current.freal_feel).replace(/℃/g, '').trim();
+  var low = String(today.ftemp_low == null ? '' : today.ftemp_low).replace(/℃/g, '').trim();
+  var high = String(today.ftemp_high == null ? '' : today.ftemp_high).replace(/℃/g, '').trim();
+  var windDirection = String(current.fwind_dir || today.fwind_dir_day || '').trim();
+  var windLevel = String(current.fwind_level == null ? '' : current.fwind_level).trim();
+  var humidity = String(current.fhumidity == null ? '' : current.fhumidity).replace(/%/g, '').trim();
+  return {
+    city: String(payload.city || city || '').trim(),
+    condition: String(current.fcondition || today.fcondition_day || '').trim(),
+    currentTemperature: currentTemperature ? currentTemperature + '℃' : '',
+    feelsLike: feelsLike ? feelsLike + '℃' : '',
+    todayTemperature: low && high ? low + '～' + high + '℃' : '',
+    wind: [windDirection, windLevel ? windLevel + '级' : ''].filter(Boolean).join(' '),
+    humidity: humidity ? humidity + '%' : '',
+    airQuality: String(result && result.aqi && result.aqi.level || today.aqiDesc || '').trim()
+  };
+}
+function renderHomeWeather() {
+  var icon = document.getElementById('home-weather-icon');
+  var title = document.getElementById('home-weather-now-title');
+  var sub = document.getElementById('home-weather-now-sub');
+  var enable = document.getElementById('home-weather-enable');
+  if (!icon || !title || !sub || !enable) return;
+  if (homeWeatherState.status === 'loading') {
+    icon.textContent = homeWeatherState.data ? weatherIconForCondition(homeWeatherState.data.condition) : '…';
+    title.textContent = homeWeatherState.city || '正在定位城市';
+    sub.textContent = homeWeatherState.city ? '正在同步墨迹天气…' : '首次授权后只保存城市名，不保存坐标';
+    enable.textContent = '同步中';
+    enable.disabled = true;
+    return;
+  }
+  enable.disabled = false;
+  if (homeWeatherState.status === 'ready' && homeWeatherState.data) {
+    var data = homeWeatherState.data;
+    var details = [
+      data.currentTemperature ? ('当前 ' + data.currentTemperature) : '',
+      data.condition,
+      data.feelsLike ? ('体感 ' + data.feelsLike) : '',
+      data.todayTemperature ? ('今日 ' + data.todayTemperature) : data.temperature,
+      data.wind,
+      data.humidity ? ('湿度 ' + data.humidity) : '',
+      data.airQuality ? ('空气 ' + data.airQuality) : '',
+      homeWeatherSyncLabel(homeWeatherState.updatedAt)
+    ].filter(Boolean);
+    icon.textContent = weatherIconForCondition(data.condition);
+    title.textContent = homeWeatherState.city || data.city || '当前城市';
+    sub.textContent = details.join(' · ') + (homeWeatherState.error ? ' · 使用上次数据' : '');
+    enable.textContent = '同步';
+    return;
+  }
+  icon.textContent = homeWeatherState.status === 'error' ? '!' : '◌';
+  title.textContent = homeWeatherState.city || (homeWeatherState.status === 'error' ? '天气暂时不可用' : '授权后显示城市天气');
+  sub.textContent = homeWeatherState.status === 'error' ? (homeWeatherState.error || '请稍后重试') : '首次授权定位后会记住城市，下次自动同步';
+  enable.textContent = homeWeatherState.city ? '重新同步' : '授权定位';
+}
+function fetchMojiWeather(city) {
+  city = String(city || '').trim().slice(0, 80);
+  if (!city) return Promise.reject(new Error('城市名为空'));
+  var cachedData = homeWeatherState.data;
+  var cachedUpdatedAt = homeWeatherState.updatedAt;
+  homeWeatherState = { status:'loading', city:city, data:cachedData, error:'', updatedAt:cachedUpdatedAt };
+  renderHomeWeather();
+  var controller = new AbortController();
+  var timeout = setTimeout(function(){ controller.abort(); }, 10000);
+  var request = window.desktopWindow && typeof window.desktopWindow.fetchMojiWeather === 'function'
+    ? window.desktopWindow.fetchMojiWeather(city).then(function(result){
+        if (!result || !result.ok) throw new Error(String(result && result.error || '墨迹天气请求失败'));
+        return result.body;
+      })
+    : fetch('https://api.xcvts.cn/api/weather/mojicax?city=' + encodeURIComponent(city) + '&n=1&num=20', { signal:controller.signal })
+        .then(function(response){ if (!response.ok) throw new Error('墨迹天气服务返回 ' + response.status); return response.json(); });
+  return request
+    .then(function(body){
+      var data = normalizeMojiWeather(body, city);
+      var updatedAt = Date.now();
+      homeWeatherState = { status:'ready', city:data.city || city, data:data, error:'', updatedAt:updatedAt };
+      saveHomeWeatherCache(homeWeatherState.city, data, updatedAt);
+      renderHomeWeather();
+      return data;
+    })
+    .catch(function(error){
+      var message = error && error.name === 'AbortError' ? '墨迹天气同步超时，请重试' : '墨迹天气暂时无法同步，请重试';
+      homeWeatherState = cachedData
+        ? { status:'ready', city:city, data:cachedData, error:message, updatedAt:cachedUpdatedAt }
+        : { status:'error', city:city, data:null, error:message, updatedAt:0 };
+      renderHomeWeather();
+      throw error;
+    })
+    .finally(function(){ clearTimeout(timeout); });
+}
+function resolveWeatherCity(latitude, longitude) {
+  var controller = new AbortController();
+  var timeout = setTimeout(function(){ controller.abort(); }, 9000);
+  var url = 'https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='
+    + encodeURIComponent(String(latitude)) + '&longitude=' + encodeURIComponent(String(longitude)) + '&localityLanguage=zh';
+  return fetch(url, { signal:controller.signal })
+    .then(function(response){ if (!response.ok) throw new Error('城市定位服务返回 ' + response.status); return response.json(); })
+    .then(function(body){
+      var city = String(body && (body.city || body.principalSubdivision || body.locality) || '').trim();
+      if (!city) throw new Error('没有识别到城市');
+      return city;
+    })
+    .finally(function(){ clearTimeout(timeout); });
+}
+function enableLocalWeather(event) {
+  if (event) { event.preventDefault(); event.stopPropagation(); }
+  if (homeWeatherState.status === 'loading') return;
+  var cached = readHomeWeatherCache();
+  var savedCity = String(homeWeatherState.city || cached && cached.city || '').trim();
+  if (savedCity) {
+    fetchMojiWeather(savedCity).catch(function(){});
+    return;
+  }
+  if (!navigator.geolocation) {
+    homeWeatherState = { status:'error', city:'', data:null, error:'当前系统不支持定位', updatedAt:0 };
+    renderHomeWeather();
+    return;
+  }
+  homeWeatherState = { status:'loading', city:'', data:null, error:'', updatedAt:0 };
+  renderHomeWeather();
+  navigator.geolocation.getCurrentPosition(function(position){
+    var latitude = Math.round(Number(position.coords.latitude) * 100) / 100;
+    var longitude = Math.round(Number(position.coords.longitude) * 100) / 100;
+    resolveWeatherCity(latitude, longitude).then(function(city){
+      saveHomeWeatherCache(city, null, 0);
+      fetchMojiWeather(city).catch(function(){});
+    }, function(error){
+      homeWeatherState = { status:'error', city:'', data:null, error:error && error.name === 'AbortError' ? '城市定位超时，请重试' : '暂时无法识别所在城市，请重试', updatedAt:0 };
+      renderHomeWeather();
+    });
+  }, function(error){
+    var denied = error && error.code === 1;
+    homeWeatherState = { status:'error', city:'', data:null, error:denied ? '未获得定位权限；允许一次后会记住城市' : '暂时无法取得位置，请重试', updatedAt:0 };
+    renderHomeWeather();
+  }, { enableHighAccuracy:false, timeout:9000, maximumAge:30 * 60 * 1000 });
+}
+function initHomeWeather() {
+  var cached = readHomeWeatherCache();
+  if (cached) {
+    homeWeatherState = cached.data
+      ? { status:'ready', city:cached.city, data:cached.data, error:'', updatedAt:cached.updatedAt }
+      : { status:'idle', city:cached.city, data:null, error:'', updatedAt:0 };
+    renderHomeWeather();
+    fetchMojiWeather(cached.city).catch(function(){});
+  } else {
+    renderHomeWeather();
+  }
+  if (homeWeatherRefreshTimer) clearInterval(homeWeatherRefreshTimer);
+  homeWeatherRefreshTimer = setInterval(function(){
+    var latest = readHomeWeatherCache();
+    var city = String(homeWeatherState.city || latest && latest.city || '').trim();
+    if (city && homeWeatherState.status !== 'loading') fetchMojiWeather(city).catch(function(){});
+  }, 30 * 60 * 1000);
+}
+
 function renderHomeMosaic(items) {
   var cells = document.querySelectorAll('#home-mosaic .home-mosaic-cell');
   if (!cells.length) return;
@@ -17948,6 +18292,7 @@ function songDurationLabel(song) {
 function songSourceLabel(song) {
   if (!song) return '未知';
   if (song.type === 'local') return '本地上传';
+  if (song.type === 'kugou') return '酷狗在线';
   return '本地音乐';
 }
 function isLocalPlaceholderArtist(text) {
@@ -18047,6 +18392,9 @@ function songDisplaySubtitleCacheKey(song) {
     (song.localFormat || '') + '|' +
     (song.localFileSize || song.size || 0) + '|' +
     (song.localBitrateKbps || '') + '|' +
+    (song.kugouBitrateKbps || '') + '|' +
+    (song.kugouQualityLabel || '') + '|' +
+    (song.kugouFormat || '') + '|' +
     (song.duration || '') + '|' +
     (song.durationMs || '') + '|' +
     (song.dt || '') + '|' +
@@ -18072,6 +18420,12 @@ function songDisplaySubtitle(song) {
     song._mineradioSubtitleKey = songDisplaySubtitleCacheKey(song);
     song._mineradioSubtitleText = text;
     return text;
+  }
+  if (song.type === 'kugou') {
+    var kugouQuality = '酷狗';
+    if (song.kugouQualityLabel) kugouQuality += ' · ' + song.kugouQualityLabel;
+    if (song.kugouBitrateKbps) kugouQuality += ' · ' + Math.round(song.kugouBitrateKbps) + ' kbps';
+    text = text ? (text + ' · ' + kugouQuality) : kugouQuality;
   }
   text = text || songSourceLabel(song);
   song._mineradioSubtitleKey = beforeKey;
@@ -18579,6 +18933,7 @@ function updateCustomLyricControls() {
 }
 function currentLyricSourceLabel() {
   if (lyricSourceMode === 'custom') return '自定义歌词';
+  if (lyricsTimingSource === 'kugou-lrc') return '酷狗同步歌词';
   return lyricsTimingSource === 'fallback' ? '占位歌词' : '原词';
 }
 function setCustomLyricStatus(text, tone) {
@@ -18836,6 +19191,7 @@ function avatarSrc(url) {
 var searchTimer = null;
 var searchRequestSeq = 0;
 var searchLastResultQuery = '';
+var kugouSearchState = { status: 'idle', count: 0, message: '' };
 var SEARCH_HISTORY_STORE_KEY = 'mineradio-search-history';
 var searchHistoryCache = null;
 var $input = document.getElementById('search-input');
@@ -18860,6 +19216,7 @@ function searchResultKey(q, mode) {
 function clearSearchResults() {
   searchRequestSeq++;
   searchLastResultQuery = '';
+  kugouSearchState = { status: 'idle', count: 0, message: '' };
   searchResultsLastDomSignature = '';
   playlist = [];
   $results.innerHTML = '';
@@ -18961,7 +19318,7 @@ function updateSearchModeTabs() {
     songBtn.setAttribute('aria-selected', searchMode === 'song' ? 'true' : 'false');
   }
   if ($input) {
-    $input.placeholder = '搜索本地歌曲、歌手、文件名...';
+    $input.placeholder = '搜索本地歌曲与酷狗曲库...';
   }
   scheduleGlassDisplacementMapUpdate('searchPill');
 }
@@ -19048,18 +19405,25 @@ document.addEventListener('click', function(e){
 updateSearchModeTabs();
 
 function songProviderKey(song) {
-  return 'local';
+  return song && song.type === 'kugou' ? 'kugou' : 'local';
 }
 function songSourceTagHtml(song) {
-  return '<span class="tag-source local">LOCAL</span>';
+  return songProviderKey(song) === 'kugou'
+    ? '<span class="tag-source kugou">KUGOU</span>'
+    : '<span class="tag-source local">LOCAL</span>';
 }
 function searchResultMetaText(song) {
   var bits = [];
   var artist = songArtistText(song);
   if (artist) bits.push(artist);
   if (song && song.album) bits.push(song.album);
-  var quality = localAudioQualityText(song);
-  if (quality) bits.push(quality);
+  if (song && song.type === 'kugou') {
+    if (song.duration) bits.push(formatProgramTime(song.duration));
+    bits.push('酷狗在线');
+  } else {
+    var quality = localAudioQualityText(song);
+    if (quality) bits.push(quality);
+  }
   return bits.join('  ·  ') || songSourceLabel(song);
 }
 function searchResultMetaHtml(song, index) {
@@ -19067,8 +19431,13 @@ function searchResultMetaHtml(song, index) {
   var artist = songArtistText(song);
   var bits = [];
   if (song.album) bits.push(song.album);
-  var quality = localAudioQualityText(song);
-  if (quality) bits.push(quality);
+  if (song.type === 'kugou') {
+    if (song.duration) bits.push(formatProgramTime(song.duration));
+    bits.push('酷狗在线');
+  } else {
+    var quality = localAudioQualityText(song);
+    if (quality) bits.push(quality);
+  }
   var tail = bits.length ? (' · ' + escHtml(bits.join('  ·  '))) : '';
   if (!artist) return escHtml(searchResultMetaText(song));
   return '<button class="search-artist-link" type="button" onclick="event.stopPropagation();openSearchResultArtist(' + index + ')">' + escHtml(artist) + '</button>' + tail;
@@ -19262,7 +19631,10 @@ function markQueueContentChanged() {
 }
 function searchResultsDomSignature(songs, key) {
   var list = songs || [];
-  var signature = 'search|' + (key || '') + '|' + list.length;
+  var signature = 'search|' + (key || '') + '|' + list.length + '|online:' +
+    String(kugouSearchState && kugouSearchState.status || 'idle') + ':' +
+    String(kugouSearchState && kugouSearchState.count || 0) + ':' +
+    String(kugouSearchState && kugouSearchState.message || '');
   for (var i = 0; i < list.length; i++) {
     var song = list[i] || {};
     signature += '|' +
@@ -19341,8 +19713,71 @@ function renderLocalLibraryResults(q, opts) {
   renderSongSearchResults(songs);
   if (opts.autoPlayFirst) playSearchResult(0);
 }
+function normalizeKugouSearchSong(track, index) {
+  track = track || {};
+  var hash = String(track.hash || '').trim();
+  var name = String(track.name || '').trim();
+  if (!/^[a-f0-9]{32}$/i.test(hash) || !name) return null;
+  return {
+    type: 'kugou',
+    provider: 'kugou',
+    source: 'kugou',
+    id: 'kugou-search:' + String(track.id || hash || index),
+    hash: hash,
+    albumId: String(track.albumId || '0'),
+    albumAudioId: String(track.albumAudioId || '0'),
+    name: name,
+    artist: String(track.artist || '未知歌手').trim(),
+    album: String(track.album || '').trim(),
+    duration: Math.max(0, Number(track.duration) || 0),
+    cover: String(track.cover || '').trim(),
+    onlineSearchResult: true
+  };
+}
 async function fetchMusicSearchResults(q, mode) {
-  return searchLocalSongs(q);
+  var localSongs = searchLocalSongs(q);
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.searchKugouTracks !== 'function') {
+    kugouSearchState = { status: 'unsupported', count: 0, message: '当前版本暂不支持酷狗在线搜索' };
+    return localSongs;
+  }
+  try {
+    var result = await api.searchKugouTracks(q, { page: 1, pageSize: 20 });
+    if (!result || result.ok !== true) {
+      var code = String(result && result.error || 'KUGOU_SEARCH_FAILED');
+      if (code === 'KUGOU_NOT_LOGGED_IN' || result && result.loggedIn === false) {
+        kugouSearchState = { status: 'login', count: 0, message: '登录酷狗后即可搜索完整曲库' };
+      } else {
+        kugouSearchState = { status: 'error', count: 0, message: '酷狗在线搜索暂时不可用，请稍后重试' };
+      }
+      return localSongs;
+    }
+    var remoteRows = Array.isArray(result.tracks) ? result.tracks : [];
+    var remoteSongs = [];
+    for (var i = 0; i < remoteRows.length; i++) {
+      var remoteSong = normalizeKugouSearchSong(remoteRows[i], i);
+      if (remoteSong) remoteSongs.push(remoteSong);
+    }
+    kugouSearchState = {
+      status: remoteSongs.length ? 'ready' : 'empty',
+      count: remoteSongs.length,
+      message: remoteSongs.length ? ('找到 ' + remoteSongs.length + ' 首酷狗歌曲') : '酷狗曲库没有找到相关歌曲'
+    };
+    return localSongs.concat(remoteSongs);
+  } catch (error) {
+    console.warn('[KugouSearch]', error);
+    kugouSearchState = { status: 'error', count: 0, message: '酷狗在线搜索连接失败，本地结果仍可使用' };
+    return localSongs;
+  }
+}
+function searchOnlineNoteHtml() {
+  var state = kugouSearchState || { status: 'idle', count: 0, message: '' };
+  if (state.status === 'idle') return '';
+  var action = state.status === 'login'
+    ? '<button type="button" onclick="event.stopPropagation();showLoginModal({source:\'search\'})">登录酷狗</button>'
+    : '';
+  var label = state.status === 'ready' ? ('KUGOU ONLINE · ' + state.count) : 'KUGOU ONLINE';
+  return '<div class="search-online-note"><div><b>' + escHtml(label) + '</b><div>' + escHtml(state.message || '') + '</div></div>' + action + '</div>';
 }
 function renderSongSearchResults(songs) {
   playlist = songs || [];
@@ -19366,7 +19801,8 @@ function renderSongSearchResults(songs) {
     var imgTag = thumb
       ? '<img src="' + thumb + '" alt="" loading="lazy" onerror="this.style.opacity=0.2">'
       : '<div style="width:40px;height:40px;border-radius:6px;background:rgba(255,255,255,0.06);flex-shrink:0"></div>';
-    resultHtml += '<div class="search-result local-source">' +
+    var providerKey = songProviderKey(s);
+    resultHtml += '<div class="search-result ' + providerKey + '-source">' +
       '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0" onclick="playSearchResult(' + i + ')">' +
         imgTag +
         '<div class="search-result-info">' +
@@ -19377,6 +19813,7 @@ function renderSongSearchResults(songs) {
       '<button class="add-btn" title="下一首播放" onclick="event.stopPropagation();queueSearchResult(' + i + ')">+</button>' +
     '</div>';
   }
+  resultHtml += searchOnlineNoteHtml();
   $results.innerHTML = resultHtml;
   $results.classList.add('show');
   if (shouldAnimate) {
@@ -19400,11 +19837,11 @@ async function doSearch(q, opts) {
       playlist = [];
       searchLastResultQuery = '';
       searchResultsLastDomSignature = '';
-      $results.innerHTML = '<div class="search-empty">本地库里没有找到相关歌曲</div>';
+      $results.innerHTML = '<div class="search-empty">本地音乐和酷狗曲库里都没有找到相关歌曲</div>' + searchOnlineNoteHtml();
       $results.classList.add('show');
       return;
     }
-    searchLastResultQuery = searchResultKey(q, 'local');
+    searchLastResultQuery = searchResultKey(q);
     rememberSearchQuery(q);
     renderSongSearchResults(songs);
     if (opts.autoPlayFirst) playSearchResult(0);
@@ -19986,8 +20423,12 @@ function playSearchResult(i) {
     if (matchIdx >= 0) currentIdx = moveQueueIndexToTop(matchIdx);
     else { playQueue.unshift(cloneSong(song)); markQueueContentChanged(); currentIdx = 0; }
   }
-  $results.classList.remove('show');
-  $input.value = ''; $input.blur();
+  clearTimeout(searchTimer);
+  $input.value = '';
+  $input.blur();
+  clearSearchResults();
+  syncSearchAreaResultState();
+  if (!emptyHomeActive) setPeek(document.getElementById('search-area'), false, 'search');
   playQueueAt(currentIdx);
 }
 var firstPlayDone = false;
@@ -20146,6 +20587,71 @@ function applyLocalOriginalLyricsState(song) {
   setOriginalLyricsState(withLyricFallback(lines), false, timingSource);
   applyPreferredLyricsForCurrent(true);
 }
+function isCurrentKugouQueueSong(song) {
+  return !!(song && currentIdx >= 0 && playQueue[currentIdx] === song && song.type === 'kugou');
+}
+function applyKugouOriginalLyricsState(song) {
+  var text = song && String(song.kugouLyricText || '').trim();
+  var lines = text ? parseLyricText(text) : [];
+  for (var i = 0; i < lines.length; i++) lines[i].source = 'kugou-lrc';
+  setOriginalLyricsState(withLyricFallback(lines), false, lines.length ? 'kugou-lrc' : 'fallback');
+  applyPreferredLyricsForCurrent(true);
+  if (fx && fx.particleLyrics) createLyricsParticles();
+  pushDesktopLyricsState(true);
+}
+function maybeApplyKugouLyricsForSong(song, token) {
+  if (token !== trackSwitchToken || !isCurrentKugouQueueSong(song)) return;
+  applyKugouOriginalLyricsState(song);
+  updateCustomLyricControls();
+}
+function loadKugouLyricsForSong(song, token) {
+  if (!song || song.type !== 'kugou') return Promise.resolve(false);
+  var currentHash = String(song.hash || '').trim().toLowerCase();
+  if (song.kugouLyricLoaded && song.kugouLyricHash === currentHash) {
+    maybeApplyKugouLyricsForSong(song, token);
+    return Promise.resolve(!!String(song.kugouLyricText || '').trim());
+  }
+  if (song.kugouLyricPromise && song.kugouLyricHash === currentHash) {
+    return song.kugouLyricPromise.then(function(ok){
+      maybeApplyKugouLyricsForSong(song, token);
+      return ok;
+    });
+  }
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.getKugouLyrics !== 'function') return Promise.resolve(false);
+  song.kugouLyricHash = currentHash;
+  song.kugouLyricLoading = true;
+  song.kugouLyricPromise = api.getKugouLyrics({
+    hash: song.hash,
+    albumAudioId: song.albumAudioId,
+    duration: song.duration,
+    name: song.name,
+    artist: song.artist
+  }).then(function(result){
+    if (song.kugouLyricHash !== currentHash) return false;
+    song.kugouLyricText = result && result.ok === true ? String(result.lyric || '').trim() : '';
+    song.kugouLyricLoaded = true;
+    maybeApplyKugouLyricsForSong(song, token);
+    if (song.kugouLyricText && isCurrentKugouQueueSong(song) && fx && !fx.particleLyrics) {
+      showToast('酷狗歌词已同步，点击“词”即可显示');
+    }
+    return !!song.kugouLyricText;
+  }).catch(function(error){
+    console.warn('[KugouLyrics]', song && song.name, error);
+    if (song.kugouLyricHash === currentHash) {
+      song.kugouLyricText = '';
+      song.kugouLyricLoaded = true;
+      maybeApplyKugouLyricsForSong(song, token);
+    }
+    return false;
+  }).finally(function(){
+    if (song.kugouLyricHash === currentHash) {
+      song.kugouLyricLoading = false;
+      song.kugouLyricPromise = null;
+    }
+  });
+  return song.kugouLyricPromise;
+}
 function canReadEmbeddedFlacLyrics(song) {
   return !!(song && song.localFile && /\.flac$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
 }
@@ -20300,6 +20806,126 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   safePlaybackStep('shelf-preview-suppress-end', suppressShelfPreviewForPlaybackSwitch);
 }
 
+async function playKugouQueueItem(song, idx, opts, token, firstVisualPlay, bmKey, markPlayPhase) {
+  markPlayPhase('kugou-stream-url');
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.getKugouStreamUrl !== 'function') throw new Error('当前版本不支持酷狗在线播放');
+  var result = await api.getKugouStreamUrl({
+    hash: song.hash,
+    albumId: song.albumId,
+    albumAudioId: song.albumAudioId,
+    name: song.name,
+    artist: song.artist,
+    quality: opts.qualityOverride || playbackQuality
+  });
+  if (token !== trackSwitchToken || playQueue[idx] !== song) return;
+  if (!result || result.ok !== true || !result.url) {
+    var errorCode = String(result && result.error || 'KUGOU_STREAM_URL_EMPTY');
+    if (errorCode === 'KUGOU_SESSION_EXPIRED' || errorCode === 'KUGOU_NOT_LOGGED_IN') throw new Error('酷狗登录已过期，请重新登录');
+    if (errorCode === 'KUGOU_STREAM_IDENTITY_MISMATCH') {
+      var actualFileName = String(result && result.actualFileName || '').trim();
+      var identityError = new Error(actualFileName
+        ? ('酷狗实际返回「' + actualFileName + '」，与歌单不一致，已停止播放')
+        : '酷狗返回了不同版本，已停止播放，避免播错歌');
+      identityError.preventAutoSkip = true;
+      throw identityError;
+    }
+    if (errorCode === 'KUGOU_STREAM_URL_EMPTY') throw new Error('酷狗暂未返回这首歌的播放地址');
+    throw new Error('酷狗播放地址获取失败（' + errorCode + '）');
+  }
+  if (result.matchedTrack && typeof result.matchedTrack === 'object') {
+    var matchedHash = String(result.matchedTrack.hash || '').trim();
+    if (/^[a-f0-9]{32}$/i.test(matchedHash)) {
+      if (String(song.hash || '').toLowerCase() !== matchedHash.toLowerCase()) {
+        song.kugouLyricLoaded = false;
+        song.kugouLyricText = '';
+        song.kugouLyricHash = '';
+      }
+      song.hash = matchedHash;
+    }
+    song.albumId = String(result.matchedTrack.albumId || song.albumId || '0');
+    song.albumAudioId = String(result.matchedTrack.albumAudioId || song.albumAudioId || '0');
+  }
+  song.kugouMatchedBySearch = result.matchedBySearch === true;
+  song.kugouBitrateKbps = Math.max(0, Math.round((Number(result.bitRate) || 0) / 1000));
+  song.kugouQualityLevel = String(result.resolvedLevel || '');
+  song.kugouQualityLabel = String(result.qualityLabel || playbackQualityLabel(result.resolvedLevel || playbackQuality));
+  song.kugouFormat = String(result.format || '').toUpperCase();
+  song.kugouIdentityVerified = result.identityVerified === true;
+  if (Number(result.duration) > 0) song.duration = Number(result.duration);
+  currentLocalSong = null;
+  document.getElementById('trial-banner').classList.remove('show');
+  loadCoverFromUrl(songCoverSrc(song, 640), { trackToken: token });
+  loadKugouLyricsForSong(song, token);
+
+  markPlayPhase('audio-element');
+  if (!audio) { audio = new Audio(); audio.crossOrigin = 'anonymous'; }
+  else {
+    audioFadeSerial++;
+    clearAudioFadeTimers();
+    audio.pause();
+  }
+  bindPlaybackProgressEvents(audio);
+  applyVolumeToAudio();
+  audio.src = result.url;
+  schedulePlaybackProgressUi('audio-source', true);
+  audio.onended = function(){
+    if (token !== trackSwitchToken) return;
+    finalizeListenSession(true);
+    if (playMode === 'single') setTimeout(function(){ playQueueAt(currentIdx, { autoRepeat: true }); }, 0);
+    else setTimeout(nextTrack, 0);
+  };
+  audio.onloadedmetadata = function(){
+    if (token !== trackSwitchToken || playQueue[idx] !== song) return;
+    if (audio && isFinite(audio.duration) && audio.duration > 0) song.duration = audio.duration;
+    updateControlTrackInfo(song);
+    var thumbArtist = document.getElementById('thumb-artist');
+    if (thumbArtist) thumbArtist.textContent = songDisplaySubtitle(song);
+    safeRenderQueuePanel('kugou-metadata', { scrollCurrent: miniQueueOpen });
+  };
+  scheduleAudioResumePosition(audio, opts.resumeAt, token);
+  audio.load();
+
+  markPlayPhase('visual-prep');
+  try {
+    currentBeatMap = null;
+    beatMapNextIdx = 0;
+    resetAudioVisualState();
+    resetBeatCameraSync(0);
+    cancelBeatAnalysisTimer();
+    cancelDjBeatAnalysisTimer();
+    beatMapToken++;
+    djBeatMapToken++;
+    resetDjBeatMapState();
+    setDjModeActive(false);
+    hideBeatChip();
+    notifyDesktopLyricsBeatMapReady();
+  } catch (visualErr) {
+    console.warn('[KugouPlaybackVisualPrep]', song && song.name, visualErr);
+  }
+
+  markPlayPhase('audio-start');
+  var playbackStarted = await playAudio({ manual: !!opts.manual, silent: false });
+  if (!playbackStarted) {
+    forcePlaybackControlsInteractive();
+    showToast(opts.manual ? '酷狗音乐启动失败，请再试一次' : '歌曲已载入，点击播放按钮继续播放');
+    return;
+  }
+  if (result.matchedBySearch) {
+    showToast('原歌单链接不可用，已按歌名和歌手重新匹配播放');
+  } else if (result.downgraded) {
+    showToast(playbackQualityLabel(result.requestedLevel) + '暂不可用，已使用' + song.kugouQualityLabel);
+  } else if (opts.qualitySwitch) {
+    showToast('已切换到' + song.kugouQualityLabel);
+  }
+  forcePlaybackControlsInteractive();
+  markPlayPhase('session-begin');
+  safePlaybackStep('listen-session-begin', function(){ beginListenSession(song, opts.context || null); });
+  safeRenderQueuePanel('play-kugou-queue-item');
+  scheduleShelfRebuild('play-kugou-queue-item', true);
+  safePlaybackStep('shelf-preview-suppress-end', suppressShelfPreviewForPlaybackSwitch);
+}
+
 async function playQueueAt(idx, opts) {
   opts = opts || {};
   if (idx < 0 || idx >= playQueue.length) return;
@@ -20327,14 +20953,16 @@ async function playQueueAt(idx, opts) {
     var song = safePlaybackStep('hydrate-song', function(){ return hydrateCustomCover(playQueue[idx]); }) || playQueue[idx];
     playQueue[idx] = song;
     markQueueContentChanged();
-    if (!song || song.type !== 'local') {
+    if (!song || (song.type !== 'local' && song.type !== 'kugou')) {
       hideLoading();
       forcePlaybackControlsInteractive();
-      showToast('纯本地播放器只播放本地音乐文件');
+      showToast('当前歌曲来源暂不支持播放');
       return;
     }
-    markPlayPhase('local-metadata');
-    updateLocalAudioQualityInfo(song);
+    document.body.classList.toggle('kugou-online-playing', song.type === 'kugou');
+    safePlaybackStep('quality-ui', updatePlaybackQualityUi);
+    markPlayPhase(song.type === 'local' ? 'local-metadata' : 'kugou-metadata');
+    if (song.type === 'local') updateLocalAudioQualityInfo(song);
     activePlaybackContext = null;
     safeRenderQueuePanel('play-local-queue-at-switch', { scrollCurrent: miniQueueOpen });
     safePlaybackStep('shelf-preview-suppress', suppressShelfPreviewForPlaybackSwitch);
@@ -20369,12 +20997,14 @@ async function playQueueAt(idx, opts) {
         tweenParticleAlpha(uniforms.uAlpha.value || 0, 1.0, 220);
       });
     }
-    await playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey, markPlayPhase);
+    if (song.type === 'local') await playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey, markPlayPhase);
+    else await playKugouQueueItem(song, idx, opts, token, firstVisualPlay, bmKey, markPlayPhase);
   } catch (setupErr) {
     console.error('Play setup failed:', { phase: playPhase, error: setupErr }, setupErr);
     hideLoading();
     forcePlaybackControlsInteractive();
-    if (!isPlaybackRecursionError(setupErr) && token === trackSwitchToken && !opts.manual && playQueue.length > 1) {
+    if (opts.propagateError) throw setupErr;
+    if (!isPlaybackRecursionError(setupErr) && !setupErr.preventAutoSkip && token === trackSwitchToken && !opts.manual && playQueue.length > 1) {
       skipFailedQueueItem(idx, token, '当前歌曲切换失败，正在尝试队列里的下一首。');
       return;
     }
@@ -21565,7 +22195,7 @@ function schedulePlaylistPanelLazyCheck() {
     if (!panel) return;
     maybeGrowQueuePanelRenderLimit();
     maybeGrowPlaylistPanelDetailRenderLimit();
-    var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
+    var total = (localLibrarySongs || []).length + (hasPlatformLogin('kugou') ? userPlaylists.length : 0);
     if (queueViewTab !== 'playlists' || playlistPanelRenderLimit >= total) return;
     if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 180) growPlaylistPanelRenderLimit();
   });
@@ -21638,14 +22268,48 @@ function renderQueuePanel(opts) {
 }
 async function refreshUserPlaylists(force) {
   if (force) resetPlaylistPanelRenderLimit();
-  renderLocalLibraryPlaylistPanel({ animate: isPlaylistPanelVisibleForRender() });
+  if (!hasPlatformLogin('kugou')) {
+    renderLocalLibraryPlaylistPanel({ animate: isPlaylistPanelVisibleForRender() });
+    return [];
+  }
+  if (!force && (kugouPlaylistsLoading || userPlaylists.length)) {
+    renderUserPlaylistsList({ animate: isPlaylistPanelVisibleForRender() });
+    return userPlaylists;
+  }
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.getKugouPlaylists !== 'function') {
+    renderUserPlaylistsList({ animate: isPlaylistPanelVisibleForRender() });
+    return userPlaylists;
+  }
+  kugouPlaylistsLoading = true;
+  updateUserModalUi();
+  playlistPanelLastDomSignature = '';
+  renderUserPlaylistsList({ animate: false });
+  try {
+    var result = await api.getKugouPlaylists();
+    if (!result || result.ok !== true) {
+      if (result && result.loggedIn === false) await refreshLoginStatus(true);
+      throw new Error(result && result.error || 'KUGOU_PLAYLISTS_FAILED');
+    }
+    userPlaylists = Array.isArray(result.playlists) ? result.playlists : [];
+    kugouPlaylistsSyncedAt = Number(result.syncedAt) || Date.now();
+  } catch (e) {
+    console.warn('[KugouPlaylists]', e);
+    if (force) showToast('酷狗歌单同步失败，请稍后再试');
+  } finally {
+    kugouPlaylistsLoading = false;
+    playlistPanelLastDomSignature = '';
+    renderUserPlaylistsList({ animate: isPlaylistPanelVisibleForRender() });
+    updateUserModalUi();
+  }
+  return userPlaylists;
 }
-var playlistPanelDetailState = { key: '', loading: false, playlist: null, tracks: [], token: 0, renderLimit: playlistDetailInitialRenderLimit() };
+var playlistPanelDetailState = { key: '', loading: false, playlist: null, tracks: [], remoteTotal: 0, matchedCount: 0, token: 0, renderLimit: playlistDetailInitialRenderLimit() };
 function playlistPanelKey(provider, id) {
-  return 'local:' + String(id || '');
+  return String(provider || 'local') + ':' + String(id || '');
 }
 function playlistPanelProviderId(provider, id) {
-  return 'local:' + String(id || '');
+  return playlistPanelKey(provider, id);
 }
 function playlistPanelDetailHtml(pl, provider) {
   var key = playlistPanelKey(provider, pl && pl.id);
@@ -21672,7 +22336,7 @@ function playlistPanelDetailHtml(pl, provider) {
       '</div>';
     }
   }
-  if (!loading && !rows) rows = '<div style="text-align:center;padding:14px 0;color:rgba(255,255,255,.30);font-size:11.5px">歌单暂无可播放歌曲</div>';
+  if (!loading && !rows) rows = '<div style="text-align:center;padding:14px 0;color:rgba(255,255,255,.30);font-size:11.5px">酷狗歌单暂时没有可播放歌曲</div>';
   if (!loading && tracks.length > renderLimit) {
     rows += '<button type="button" class="fx-mini-btn ghost pl-detail-load-more" data-pl-detail-load-more="1">加载更多 ' + renderLimit + '/' + tracks.length + '</button>';
   } else if (!loading && tracks.length > detailInitialLimit) {
@@ -21680,7 +22344,7 @@ function playlistPanelDetailHtml(pl, provider) {
   }
   return '<div class="pl-inline-detail" data-pl-detail="' + escHtml(key) + '">' +
     '<div class="pl-detail-sticky">' +
-      '<div class="pl-detail-head">' + img + '<div style="flex:1;min-width:0"><div class="pl-detail-title">' + escHtml(pl.name || '歌单详情') + '</div><div class="pl-detail-sub">' + escHtml((pl.trackCount || tracks.length || 0) + ' 首 · ' + (pl.creator || '本地音乐库')) + '</div></div><div class="pl-detail-count">' + (loading ? '载入中' : (renderLimit + '/' + tracks.length)) + '</div></div>' +
+      '<div class="pl-detail-head">' + img + '<div style="flex:1;min-width:0"><div class="pl-detail-title">' + escHtml(pl.name || '歌单详情') + '</div><div class="pl-detail-sub">' + escHtml(loading ? '正在读取酷狗歌单' : (tracks.length + '/' + (playlistPanelDetailState.remoteTotal || pl.trackCount || tracks.length) + ' 首可播放 · ' + (playlistPanelDetailState.matchedCount || 0) + ' 首优先使用本地文件')) + '</div></div><div class="pl-detail-count">' + (loading ? '载入中' : (renderLimit + '/' + tracks.length)) + '</div></div>' +
       '<div class="pl-detail-actions"><button class="pl-detail-play" type="button" data-pl-detail-play="' + escHtml(key) + '"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>播放歌单</button><button class="fx-mini-btn ghost pl-detail-top-btn" type="button" data-pl-detail-top="1">回到顶部</button></div>' +
     '</div>' +
     '<div class="pl-detail-list">' + rows + '</div>' +
@@ -21714,11 +22378,127 @@ function scrollPlaylistPanelDetailIntoView(key) {
     catch (e) { panel.scrollTop = top; }
   });
 }
+function kugouMatchText(value) {
+  var text = String(value || '').toLowerCase();
+  try { text = text.normalize('NFKC'); } catch (e) {}
+  return text.replace(/[\s\-_.·•'’"“”《》【】()\[\]{}:：,，!！?？/\\]+/g, '');
+}
+function matchKugouTracksToLocalLibrary(remoteTracks) {
+  var locals = localLibraryPlaybackSongs();
+  var exact = Object.create(null);
+  var byTitle = Object.create(null);
+  locals.forEach(function(song){
+    var titleKey = kugouMatchText(song.name || song.title || '');
+    var artistKey = kugouMatchText(songArtistText(song) || song.artist || '');
+    if (!titleKey) return;
+    exact[titleKey + '|' + artistKey] = exact[titleKey + '|' + artistKey] || song;
+    (byTitle[titleKey] || (byTitle[titleKey] = [])).push(song);
+  });
+  var localMatchedCount = 0;
+  var tracks = (remoteTracks || []).map(function(remote){
+    var titleKey = kugouMatchText(remote.name || '');
+    var artistKey = kugouMatchText(remote.artist || '');
+    var local = exact[titleKey + '|' + artistKey] || null;
+    if (!local && byTitle[titleKey] && byTitle[titleKey].length === 1) local = byTitle[titleKey][0];
+    if (!local && byTitle[titleKey] && artistKey) {
+      local = byTitle[titleKey].find(function(candidate){
+        var candidateArtist = kugouMatchText(songArtistText(candidate) || candidate.artist || '');
+        return candidateArtist && (candidateArtist.indexOf(artistKey) >= 0 || artistKey.indexOf(candidateArtist) >= 0);
+      }) || null;
+    }
+    if (local) {
+      localMatchedCount++;
+      return Object.assign({}, local, {
+        kugouTrackId: remote.id || '',
+        kugouHash: remote.hash || '',
+        kugouAlbumId: remote.albumId || '0',
+        kugouAlbumAudioId: remote.albumAudioId || '0',
+        kugouPlaylistMatch: true
+      });
+    }
+    return {
+      type: 'kugou',
+      provider: 'kugou',
+      source: 'kugou',
+      id: 'kugou:' + String(remote.id || remote.hash || (titleKey + ':' + artistKey)),
+      hash: String(remote.hash || ''),
+      albumId: String(remote.albumId || '0'),
+      albumAudioId: String(remote.albumAudioId || remote.id || '0'),
+      name: String(remote.name || '未知歌曲'),
+      artist: String(remote.artist || '未知歌手'),
+      album: String(remote.album || ''),
+      duration: Number(remote.duration) || 0,
+      cover: String(remote.cover || '')
+    };
+  }).filter(function(song){ return song && (song.type === 'local' || (song.hash && song.name)); });
+  return { tracks: tracks, localMatchedCount: localMatchedCount };
+}
 async function openPlaylistPanelDetail(provider, pid, title) {
-  openHomeLibrary();
+  provider = provider || 'kugou';
+  var playlist = userPlaylists.find(function(item){
+    return String(item.id || '') === String(pid || '') || String(item.globalId || '') === String(pid || '');
+  });
+  if (!playlist || provider !== 'kugou') return;
+  var key = playlistPanelKey(provider, playlist.id);
+  if (playlistPanelDetailState.key === key && !playlistPanelDetailState.loading) {
+    playlistPanelDetailState.key = '';
+    renderPlaylistPanelDetailState();
+    return;
+  }
+  var token = (playlistPanelDetailState.token || 0) + 1;
+  playlistPanelDetailState = {
+    key: key,
+    loading: true,
+    playlist: playlist,
+    tracks: [],
+    remoteTotal: Number(playlist.trackCount) || 0,
+    matchedCount: 0,
+    token: token,
+    renderLimit: playlistDetailInitialRenderLimit()
+  };
+  renderPlaylistPanelDetailState();
+  scrollPlaylistPanelDetailIntoView(key);
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.getKugouPlaylistTracks !== 'function') return;
+  try {
+    var result = await api.getKugouPlaylistTracks({ id: playlist.id, globalId: playlist.globalId, listId: playlist.listId });
+    if (playlistPanelDetailState.token !== token) return;
+    if (!result || result.ok !== true) throw new Error(result && result.error || 'KUGOU_PLAYLIST_TRACKS_FAILED');
+    var remoteTracks = Array.isArray(result.tracks) ? result.tracks : [];
+    var resolved = matchKugouTracksToLocalLibrary(remoteTracks);
+    playlist.trackCount = Number(result.total) || remoteTracks.length || playlist.trackCount || 0;
+    playlistPanelDetailState.loading = false;
+    playlistPanelDetailState.tracks = resolved.tracks;
+    playlistPanelDetailState.remoteTotal = Number(result.total) || remoteTracks.length;
+    playlistPanelDetailState.matchedCount = resolved.localMatchedCount;
+    playlistPanelDetailState.renderLimit = playlistDetailInitialRenderLimit();
+    playlistPanelLastDomSignature = '';
+    renderPlaylistPanelDetailState();
+    scrollPlaylistPanelDetailIntoView(key);
+  } catch (e) {
+    if (playlistPanelDetailState.token !== token) return;
+    console.warn('[KugouPlaylistTracks]', e);
+    playlistPanelDetailState.loading = false;
+    playlistPanelDetailState.tracks = [];
+    playlistPanelLastDomSignature = '';
+    renderPlaylistPanelDetailState();
+    showToast('酷狗歌单曲目读取失败');
+  }
 }
 function playPlaylistPanelDetail() {
-  playLocalLibrarySong(0);
+  var tracks = playlistPanelDetailState.tracks || [];
+  if (!tracks.length) {
+    showToast('这个歌单暂时没有可播放歌曲');
+    return;
+  }
+  playQueue = cloneSongList(tracks);
+  markQueueContentChanged();
+  currentIdx = 0;
+  safeRenderQueuePanel('kugou-playlist-detail');
+  safeSwitchPlaylistTab('queue', 'kugou-playlist-detail');
+  safeShelfRebuild('kugou-playlist-detail', true);
+  forcePlaybackControlsInteractive();
+  playQueueAt(0).catch(function(e){ console.warn('[KugouPlaylistPlay]', e); });
 }
 function playPlaylistPanelDetailTrack(index) {
   var tracks = playlistPanelDetailState.tracks || [];
@@ -21779,14 +22559,14 @@ function localLibraryPlaylistDomSignature(songs, renderLimit) {
   return signature;
 }
 function growPlaylistPanelRenderLimit() {
-  var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
+  var total = localLibraryPlaybackSongs().length;
   if (!total) return;
   var batch = playlistPanelBatchSize();
   var next = Math.min(total, (playlistPanelRenderLimit || batch) + batch);
   if (next <= playlistPanelRenderLimit) return;
   playlistPanelRenderLimit = next;
-  if (LOCAL_ONLY_MODE) renderLocalLibraryPlaylistPanel({ animate: true });
-  else renderUserPlaylistsList({ animate: true });
+  if (hasPlatformLogin('kugou')) renderUserPlaylistsList({ animate: true });
+  else renderLocalLibraryPlaylistPanel({ animate: true });
 }
 function bindPlaylistPanelLazyRender() {
   var panel = document.getElementById('playlist-panel');
@@ -21829,7 +22609,50 @@ function renderLocalLibraryPlaylistPanel(opts) {
   if (opts.animate && seq === playlistRenderSeq) animateVisiblePanelList($pl, '.pl-card', document.getElementById('playlist-panel'));
 }
 function renderUserPlaylistsList(opts) {
-  renderLocalLibraryPlaylistPanel(opts || {});
+  opts = opts || {};
+  var $pl = document.getElementById('pl-list');
+  if (!$pl) return;
+  var songs = localLibraryPlaybackSongs();
+  var seq = ++playlistRenderSeq;
+  var panelBatch = playlistPanelBatchSize();
+  playlistPanelRenderLimit = Math.max(panelBatch, Math.min(songs.length || panelBatch, playlistPanelRenderLimit || panelBatch));
+  var visibleLength = Math.min(songs.length, playlistPanelRenderLimit);
+  var signature = 'kugou|' + (kugouPlaylistsLoading ? 'loading' : 'ready') + '|' + userPlaylists.length + '|' + visibleLength + '|' + playlistPanelDetailState.key + '|' + (playlistPanelDetailState.loading ? 'loading' : playlistPanelDetailState.matchedCount);
+  userPlaylists.forEach(function(pl){ signature += '|' + pl.id + '~' + pl.name + '~' + pl.trackCount; });
+  for (var si = 0; si < visibleLength; si++) signature += '|' + queueItemKey(songs[si]);
+  if (signature === playlistPanelLastDomSignature) return;
+  playlistPanelLastDomSignature = signature;
+  var html = '<div class="pl-section-label">酷狗歌单 · ' + userPlaylists.length + ' 个 <span class="pl-kugou-badge">SYNC</span></div>';
+  if (kugouPlaylistsLoading) {
+    html += '<div style="text-align:center;padding:18px 0;color:rgba(255,255,255,.38);font-size:11.5px">正在同步酷狗歌单…</div>';
+  } else if (!userPlaylists.length) {
+    html += '<div style="text-align:center;padding:18px 0;color:rgba(255,255,255,.32);font-size:11.5px">当前账号没有可同步的歌单</div>';
+  } else {
+    userPlaylists.forEach(function(pl){
+      var thumb = pl.cover || '';
+      var imgTag = thumb ? '<img src="' + escHtml(thumb) + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:44px;height:44px;border-radius:8px;background:rgba(0,245,212,.06);flex-shrink:0"></div>';
+      var key = playlistPanelKey('kugou', pl.id);
+      var expanded = playlistPanelDetailState.key === key;
+      html += '<div class="pl-card kugou-card' + (expanded ? ' expanded' : '') + '" data-playlist-provider="kugou" data-playlist-id="' + escHtml(pl.id) + '" data-playlist-title="' + escHtml(pl.name) + '">' +
+        imgTag + '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(pl.name) + '</div><div class="pl-sub">' + escHtml((pl.trackCount || 0) + ' 首 · ' + (pl.subscribed ? '收藏歌单' : '我的歌单')) + '</div></div>' +
+      '</div>';
+      if (expanded) html += playlistPanelDetailHtml(pl, 'kugou');
+    });
+  }
+  html += '<div class="pl-section-label" style="margin-top:14px">本地音乐库 · ' + songs.length + ' 首</div>';
+  if (!songs.length) {
+    html += '<div style="text-align:center;padding:18px 0;color:rgba(255,255,255,.32);font-size:11.5px">酷狗歌单无需本地文件即可播放<br>导入后会优先使用本地歌曲<br><button class="fx-mini-btn ghost" type="button" onclick="openLocalFolderImport()" style="margin-top:10px">导入文件夹</button></div>';
+  } else {
+    for (var i = 0; i < visibleLength; i++) {
+      var song = songs[i] || {};
+      var cover = songCoverSrc(song, 88);
+      var localImg = cover ? '<img src="' + escHtml(cover) + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,.06);flex-shrink:0"></div>';
+      html += '<div class="pl-card" data-local-library-index="' + i + '">' + localImg + '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(song.name || '本地音乐') + '</div><div class="pl-sub">' + escHtml(songDisplaySubtitle(song) || '本地文件') + '</div></div></div>';
+    }
+    if (songs.length > visibleLength) html += '<button type="button" class="fx-mini-btn ghost pl-load-more" data-pl-load-more="1">加载更多 ' + visibleLength + '/' + songs.length + '</button>';
+  }
+  $pl.innerHTML = html;
+  if (opts.animate && seq === playlistRenderSeq) animateVisiblePanelList($pl, '.pl-card', document.getElementById('playlist-panel'));
 }
 function renderMyPodcastCollections(opts) {
   renderLocalLibraryPlaylistPanel(opts || {});
@@ -21886,7 +22709,7 @@ document.getElementById('pl-list').addEventListener('click', function(e){
   }
   var card = e.target && e.target.closest ? e.target.closest('.pl-card') : null;
   if (!card) return;
-  var provider = card.getAttribute('data-playlist-provider') || 'netease';
+  var provider = card.getAttribute('data-playlist-provider') || 'local';
   var pid = card.getAttribute('data-playlist-id') || '';
   openPlaylistPanelDetail(provider, pid, card.getAttribute('data-playlist-title') || '');
 });
@@ -25526,7 +26349,7 @@ function applyBackgroundMediaHint() {
 }
 function relabelFxPanelControls() {
   var title = document.querySelector('#fx-panel .fx-title');
-  if (title) title.textContent = '视觉控制台';
+  if (title) title.textContent = 'DIY 视觉控制台';
   ensureLyricPrimaryControls();
   applyBackgroundMediaHint();
   var overlayGrid = document.getElementById('t-cinema');
@@ -26229,10 +27052,11 @@ function toggleFxPanel(force) {
     showToast('开启 DIY 玩家模式后可打开视觉控制台');
     return;
   }
-  var currentlyOpen = el.classList.contains('show') || el.classList.contains('peek');
+  var pinnedOpen = el.classList.contains('show');
+  var currentlyOpen = pinnedOpen || el.classList.contains('peek');
   if (peekTimers && peekTimers.fx) { clearTimeout(peekTimers.fx); peekTimers.fx = null; }
-  fxPanelPinned = false;
-  if (force === false) {
+  if (force === false || (force == null && pinnedOpen)) {
+    fxPanelPinned = false;
     el.classList.remove('show', 'peek');
     el.classList.toggle('closing', currentlyOpen);
     setTimeout(function(){ el.classList.remove('closing'); }, 280);
@@ -26240,8 +27064,15 @@ function toggleFxPanel(force) {
     if (fab) fab.classList.remove('active');
     return;
   }
-  el.classList.remove('show', 'closing');
-  setPeek(el, true, 'fx');
+  fxPanelPinned = true;
+  el.classList.remove('peek', 'closing');
+  el.classList.add('show');
+  var fabOpen = document.getElementById('fx-fab');
+  if (fabOpen) fabOpen.classList.add('active');
+  document.body.classList.remove('fullscreen-diy-peek');
+  if (!userFxArchivesHydrated) {
+    scheduleUiWarmTask(function(){ renderUserFxArchives({ force: true }); }, 40);
+  }
 }
 function resetFx() {
   var savedCam = fx.cam;
@@ -27101,21 +27932,36 @@ function bindModalBackdropClose() {
   });
 }
 function onUserBtnClick() {
-  openHomeLocalImport();
+  if (loginStatus && loginStatus.loggedIn) showUserModal();
+  else showLoginModal({ source: 'user-button' });
 }
 function hasPlatformLogin(provider) {
-  return false;
+  return provider === 'kugou' && !!(loginStatus && loginStatus.loggedIn);
 }
 function hasAnyPlatformLogin() {
-  return false;
+  return hasPlatformLogin('kugou');
 }
 function firstLoggedProvider() {
-  return 'local';
+  return hasPlatformLogin('kugou') ? 'kugou' : 'local';
 }
 async function refreshLoginStatus(force) {
   loginStatusChecked = true;
   loginStatusCheckFailed = false;
-  loginStatus = { loggedIn: false, vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, vipLabel: '本地模式' };
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.getKugouStatus !== 'function') {
+    loginStatus = { loggedIn: false, provider: 'kugou', vipLabel: '酷狗同步不可用' };
+    loginStatusCheckFailed = true;
+    renderUserBtn();
+    return loginStatus;
+  }
+  try {
+    var result = await api.getKugouStatus();
+    if (!result || result.ok !== true) throw new Error(result && result.error || 'KUGOU_STATUS_FAILED');
+    loginStatus = Object.assign({ provider: 'kugou', loggedIn: false, vipLabel: '酷狗歌单同步' }, result);
+  } catch (e) {
+    loginStatus = { loggedIn: false, provider: 'kugou', vipLabel: '酷狗歌单同步' };
+    loginStatusCheckFailed = true;
+  }
   renderUserBtn();
   return loginStatus;
 }
@@ -27124,62 +27970,188 @@ function renderUserBtn() {
   if (!btn) return;
   btn.classList.remove('multi-account');
   btn.classList.remove('logged-in');
-  btn.classList.add('logged-out');
-  btn.title = '导入本地音乐';
-  btn.innerHTML = '<span class="login-word">导入</span>';
+  btn.classList.toggle('logged-in', !!(loginStatus && loginStatus.loggedIn));
+  btn.classList.toggle('logged-out', !(loginStatus && loginStatus.loggedIn));
+  if (loginStatus && loginStatus.loggedIn) {
+    var label = String(loginStatus.nickname || '酷狗').trim();
+    if (label.length > 6) label = label.slice(0, 6);
+    btn.title = '酷狗账号与歌单同步';
+    btn.innerHTML = '<span class="login-word">' + escHtml(label || '酷狗') + '</span>';
+  } else {
+    btn.title = '登录酷狗音乐并同步歌单';
+    btn.innerHTML = '<span class="login-word">酷狗</span>';
+  }
   updatePlaybackQualityUi();
 }
 async function showLoginModal(opts) {
-  closeLoginModal();
-  openHomeLocalImport();
+  if (loginStatus && loginStatus.loggedIn) {
+    showUserModal();
+    return;
+  }
+  closeUserModal();
+  openGsapModal(document.getElementById('login-modal'));
+  await refreshQr();
 }
 function closeLoginModal() {
+  stopQrPoll();
   closeGsapModal(document.getElementById('login-modal'));
 }
 function setLoginProvider(provider, silent) {
+  return provider === 'kugou';
 }
 function updateLoginProviderUi() {
 }
 async function refreshQr() {
-  openHomeLocalImport();
+  var api = getDesktopWindowApi();
+  var shell = document.getElementById('kugou-qr-shell');
+  var image = document.getElementById('kugou-qr-img');
+  stopQrPoll();
+  if (shell) shell.classList.remove('ready');
+  if (image) image.removeAttribute('src');
+  setKugouQrStatus('正在获取酷狗登录二维码…', '');
+  if (!api || typeof api.startKugouLogin !== 'function') {
+    setKugouQrStatus('当前不是 Mineradio 桌面版，无法登录', 'fail');
+    return;
+  }
+  try {
+    var result = await api.startKugouLogin();
+    if (!result || result.ok !== true || !result.image) throw new Error(result && result.error || 'KUGOU_QR_FAILED');
+    if (image) image.src = result.image;
+    if (shell) shell.classList.add('ready');
+    setKugouQrStatus('请使用酷狗音乐 App 扫码', '');
+    startQrPoll();
+  } catch (e) {
+    console.warn('[KugouLoginQr]', e);
+    setKugouQrStatus('二维码加载失败，请稍后刷新', 'fail');
+  }
 }
-function startQrPoll() {}
-function stopQrPoll() {}
+function setKugouQrStatus(message, kind) {
+  var node = document.getElementById('kugou-qr-status');
+  if (!node) return;
+  node.textContent = message || '';
+  node.classList.toggle('scan', kind === 'scan');
+  node.classList.toggle('fail', kind === 'fail');
+}
+function startQrPoll() {
+  stopQrPoll();
+  kugouQrPollTimer = setInterval(checkQr, 1800);
+}
+function stopQrPoll() {
+  if (kugouQrPollTimer) clearInterval(kugouQrPollTimer);
+  kugouQrPollTimer = null;
+  kugouQrCheckBusy = false;
+}
 async function checkQr() {
+  if (kugouQrCheckBusy) return;
+  var api = getDesktopWindowApi();
+  if (!api || typeof api.checkKugouLogin !== 'function') return;
+  kugouQrCheckBusy = true;
+  try {
+    var result = await api.checkKugouLogin();
+    if (!result || result.ok !== true) throw new Error(result && result.error || 'KUGOU_QR_CHECK_FAILED');
+    if (result.status === 'authorized' && result.loggedIn) {
+      stopQrPoll();
+      loginStatusChecked = true;
+      loginStatusCheckFailed = false;
+      loginStatus = Object.assign({ provider: 'kugou', vipLabel: '酷狗歌单同步' }, result);
+      renderUserBtn();
+      setKugouQrStatus('登录成功，正在同步歌单…', 'scan');
+      await refreshUserPlaylists(true);
+      closeLoginModal();
+      showUserModal();
+      showToast('酷狗登录成功，歌单已同步');
+      return;
+    }
+    if (result.status === 'confirming') setKugouQrStatus(result.message || '已扫码，请在手机上确认', 'scan');
+    else if (result.status === 'expired') {
+      stopQrPoll();
+      setKugouQrStatus(result.message || '二维码已过期，请刷新', 'fail');
+    } else setKugouQrStatus(result.message || '请使用酷狗音乐 App 扫码', '');
+  } catch (e) {
+    console.warn('[KugouLoginCheck]', e);
+    stopQrPoll();
+    setKugouQrStatus('登录状态检查失败，请刷新二维码', 'fail');
+  } finally {
+    kugouQrCheckBusy = false;
+  }
 }
 function updateUserModalUi() {
+  var name = document.getElementById('kugou-user-name');
+  var id = document.getElementById('kugou-user-id');
+  var avatar = document.getElementById('kugou-user-avatar');
+  var sync = document.getElementById('kugou-sync-state');
+  if (name) name.textContent = loginStatus && loginStatus.nickname || '酷狗用户';
+  if (id) id.textContent = loginStatus && loginStatus.userid ? ('账号 ID · ' + loginStatus.userid) : '';
+  if (avatar) {
+    if (loginStatus && loginStatus.avatar) {
+      avatar.src = loginStatus.avatar;
+      avatar.style.opacity = '1';
+    } else {
+      avatar.removeAttribute('src');
+      avatar.style.opacity = '.22';
+    }
+  }
+  if (sync) {
+    if (kugouPlaylistsLoading) sync.textContent = '正在同步酷狗歌单…';
+    else if (kugouPlaylistsSyncedAt) sync.textContent = '已同步 ' + userPlaylists.length + ' 个歌单 · ' + new Date(kugouPlaylistsSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    else sync.textContent = '歌单尚未同步';
+  }
 }
 function showUserModal() {
-  openHomeLocalImport();
+  if (!loginStatus || !loginStatus.loggedIn) {
+    showLoginModal({ source: 'account' });
+    return;
+  }
+  closeLoginModal();
+  updateUserModalUi();
+  openGsapModal(document.getElementById('user-modal'));
 }
 function closeUserModal() { closeGsapModal(document.getElementById('user-modal')); }
 function setActiveAccountProvider(provider) {
-  openHomeLocalImport();
+  return provider === 'kugou';
 }
 function enableDualAccountView() {
-  openHomeLocalImport();
+  showLoginModal({ source: 'account' });
 }
 function requestDualLoginMode() {
   enableDualAccountView();
 }
 function openProviderLogin(provider) {
   closeUserModal();
-  closeLoginModal();
-  openHomeLocalImport();
+  showLoginModal({ source: provider || 'kugou' });
 }
 async function logoutActiveAccount() {
+  var api = getDesktopWindowApi();
+  try {
+    if (api && typeof api.logoutKugou === 'function') await api.logoutKugou();
+  } catch (e) {
+    console.warn('[KugouLogout]', e);
+  }
   doLogout();
+  showToast('已退出酷狗音乐登录');
 }
 async function doLogout() {
-  loginStatus = { loggedIn: false };
+  loginStatus = { loggedIn: false, provider: 'kugou', vipLabel: '酷狗歌单同步' };
   userPlaylists = [];
+  kugouPlaylistsSyncedAt = 0;
   likedSongMap = {};
   closeCollectModal();
   updateLikeButtons();
   safeRenderQueuePanel('logout', { scrollCurrent: miniQueueOpen });
+  playlistPanelLastDomSignature = '';
+  renderLocalLibraryPlaylistPanel({ animate: true });
   renderUserBtn();
   safeShelfRebuild('logout');
   closeUserModal();
+}
+async function syncKugouPlaylistsFromModal() {
+  await refreshUserPlaylists(true);
+  updateUserModalUi();
+  if (loginStatus && loginStatus.loggedIn) {
+    closeUserModal();
+    safeSwitchPlaylistTab('playlists', 'kugou-sync');
+    togglePlaylistPanel(true);
+  }
 }
 var startupLoginGuideShown = false;
 var loginGuideAnimating = false;
@@ -30142,6 +31114,8 @@ bindFxPanel();
 applySavedLyricPaletteState();
 bindQualityControl();
 bindVolumeControls();
+initHomeClock();
+initHomeWeather();
 initControlGlassSurface();
 bindPlayerControlAnimations();
 scheduleUiWarmTask(function(){
@@ -30174,6 +31148,11 @@ if (LOCAL_ONLY_MODE) {
   homeDiscoverState.playlists = [];
   homeDiscoverState.podcasts = [];
   renderUserBtn();
+  setTimeout(function(){
+    refreshLoginStatus().then(function(status){
+      if (status && status.loggedIn) refreshUserPlaylists(false);
+    });
+  }, 450);
   if (!document.body.classList.contains('splash-active')) updateEmptyHomeVisibility({ forceLoad: false });
 }
 var collectNameInput = document.getElementById('collect-new-name');
@@ -30199,7 +31178,6 @@ updateCustomCoverButton();
 updateCustomLyricControls();
 updateLikeButtons();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
-setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
 
 // ============================================================
 //  主循环

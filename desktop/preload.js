@@ -12,6 +12,7 @@ const PERSISTENT_UI_STATE_KEYS = [
   'mineradio-free-camera-v1',
   'mineradio-local-library-folder-v1',
   'mineradio-playback-session-v1',
+  'mineradio-weather-city-v2',
   'mineradio-user-fx-archives-v1',
   'mineradio-hotkey-settings-v1',
   'mineradio-visual-guide-seen-v2',
@@ -56,6 +57,20 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   refreshLocalMusicFiles: (folderPath, files) => ipcRenderer.invoke('mineradio-local-music-refresh-entries', folderPath, files || []),
   readLocalFileRange: (filePath, start, end) => ipcRenderer.invoke('mineradio-local-file-read-range', filePath, start, end),
   readLocalFileDataUrl: (filePath) => ipcRenderer.invoke('mineradio-local-file-read-data-url', filePath),
+  getKugouStatus: () => ipcRenderer.invoke('mineradio-kugou-status'),
+  startKugouLogin: () => ipcRenderer.invoke('mineradio-kugou-login-start'),
+  checkKugouLogin: () => ipcRenderer.invoke('mineradio-kugou-login-check'),
+  getKugouPlaylists: () => ipcRenderer.invoke('mineradio-kugou-playlists'),
+  getKugouPlaylistTracks: (playlist) => ipcRenderer.invoke('mineradio-kugou-playlist-tracks', playlist || {}),
+  searchKugouTracks: (query, options) => ipcRenderer.invoke('mineradio-kugou-search', {
+    query: String(query || ''),
+    page: Number(options && options.page) || 1,
+    pageSize: Number(options && options.pageSize) || 20,
+  }),
+  getKugouStreamUrl: (track) => ipcRenderer.invoke('mineradio-kugou-stream-url', track || {}),
+  getKugouLyrics: (track) => ipcRenderer.invoke('mineradio-kugou-lyrics', track || {}),
+  logoutKugou: () => ipcRenderer.invoke('mineradio-kugou-logout'),
+  fetchMojiWeather: (city) => ipcRenderer.invoke('mineradio-moji-weather', String(city || '')),
   onGlobalHotkey: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload || {});

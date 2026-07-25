@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, globalShortcut, dialog, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, globalShortcut, dialog, Tray, Menu, safeStorage, net: electronNet } = require('electron');
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
+const { createKugouSync } = require('./kugou-sync');
 
 let mainWindow = null;
 let localServer = null;
@@ -31,6 +32,8 @@ let miniPlayerUserMovePending = false;
 let miniPlayerLastSentState = null;
 let miniPlayerRecoveryTimer = null;
 let miniPlayerRecreateTimer = null;
+let miniPlayerDismissTimer = null;
+let miniPlayerAutoDismissed = false;
 const miniPlayerUserBoundsByMode = { standard: null, compact: null };
 const miniPlayerSavedBoundsSignatures = { standard: '', compact: '' };
 const miniPlayerProgrammaticCloseWindows = new WeakSet();
@@ -50,6 +53,7 @@ let mainWindowStateTimer = null;
 let tray = null;
 let closeToTrayEnabled = true;
 let appQuitting = false;
+let kugouSync = null;
 const registeredGlobalHotkeys = new Map();
 const authorizedLocalMusicRoots = new Set();
 
@@ -64,6 +68,7 @@ const COMPACT_MINI_PLAYER_WIDTH = 268;
 const COMPACT_MINI_PLAYER_HEIGHT = 58;
 const MINI_PLAYER_MARGIN = 14;
 const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
+const MINI_PLAYER_PLAY_DISMISS_DELAY = 620;
 const APP_NAME = 'Mineradio';
 const APP_USER_MODEL_ID = 'com.mineradio.desktop';
 const APP_ICON_ICO = path.join(__dirname, '..', 'build', 'icon.ico');
@@ -82,6 +87,7 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-free-camera-v1',
   'mineradio-local-library-folder-v1',
   'mineradio-playback-session-v1',
+  'mineradio-weather-city-v2',
   'mineradio-user-fx-archives-v1',
   'mineradio-hotkey-settings-v1',
   'mineradio-visual-guide-seen-v2',
@@ -660,6 +666,7 @@ function getSenderWindow(event) {
 function focusMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   miniPlayerActive = false;
+  resetMiniPlayerAutoDismiss();
   hideMiniPlayerWindow();
   if (mainWindow.isMinimized()) mainWindow.restore();
   if (!mainWindow.isVisible()) mainWindow.show();
@@ -1654,10 +1661,29 @@ function shouldShowMiniPlayer() {
   return !!(
     miniPlayerEnabled
     && miniPlayerActive
+    && !miniPlayerAutoDismissed
     && mainWindow
     && !mainWindow.isDestroyed()
     && (mainWindow.isMinimized() || !mainWindow.isVisible())
   );
+}
+
+function resetMiniPlayerAutoDismiss() {
+  miniPlayerAutoDismissed = false;
+  if (!miniPlayerDismissTimer) return;
+  clearTimeout(miniPlayerDismissTimer);
+  miniPlayerDismissTimer = null;
+}
+
+function dismissMiniPlayerAfterPlay() {
+  if (miniPlayerDismissTimer) clearTimeout(miniPlayerDismissTimer);
+  miniPlayerDismissTimer = setTimeout(() => {
+    miniPlayerDismissTimer = null;
+    if (!miniPlayerActive || !mainWindow || mainWindow.isDestroyed()) return;
+    miniPlayerAutoDismissed = true;
+    hideMiniPlayerWindow();
+  }, MINI_PLAYER_PLAY_DISMISS_DELAY);
+  if (typeof miniPlayerDismissTimer.unref === 'function') miniPlayerDismissTimer.unref();
 }
 
 function stopMiniPlayerRecoveryTimer() {
@@ -1814,7 +1840,11 @@ function createMiniPlayerWindow() {
   win.on('close', (event) => {
     if (appQuitting || miniPlayerProgrammaticCloseWindows.has(win)) return;
     event.preventDefault();
-    focusMainWindow();
+    miniPlayerActive = false;
+    miniPlayerAutoDismissed = true;
+    setImmediate(() => {
+      if (miniPlayerWindow === win) closeMiniPlayerWindow();
+    });
   });
   win.on('closed', () => {
     const wasCurrent = miniPlayerWindow === win;
@@ -1879,6 +1909,7 @@ function closeMiniPlayerWindow() {
 
 function setMiniPlayerEnabled(enabled) {
   miniPlayerEnabled = !!enabled;
+  resetMiniPlayerAutoDismiss();
   writeDesktopShellSettings({ miniPlayer: miniPlayerEnabled });
   if (miniPlayerEnabled) {
     if (mainWindow && !mainWindow.isDestroyed() && (mainWindow.isMinimized() || !mainWindow.isVisible())) miniPlayerActive = true;
@@ -1911,6 +1942,40 @@ function closeOverlayWindows() {
   closeMiniPlayerWindow();
 }
 
+function getKugouSync() {
+  if (!kugouSync) {
+    kugouSync = createKugouSync({
+      fetchImpl: (url, options) => electronNet.fetch(url, options),
+      userDataPath: app.getPath('userData'),
+      safeStorage,
+    });
+  }
+  return kugouSync;
+}
+
+function isMainRendererEvent(event) {
+  return !!(mainWindow && !mainWindow.isDestroyed() && event && event.sender === mainWindow.webContents);
+}
+
+async function runKugouIpc(event, operation) {
+  if (!isMainRendererEvent(event)) return { ok: false, error: 'KUGOU_INVALID_SENDER' };
+  try {
+    return await operation(getKugouSync());
+  } catch (error) {
+    const code = String(error && error.code || error && error.message || 'KUGOU_REQUEST_FAILED');
+    const sessionExpired = ['20010', '20011', '20017', '10009'].includes(code);
+    const actualFileName = code === 'KUGOU_STREAM_IDENTITY_MISMATCH'
+      ? String(error && error.actualFileName || '').trim().slice(0, 300)
+      : '';
+    return {
+      ok: false,
+      error: sessionExpired ? 'KUGOU_SESSION_EXPIRED' : code.slice(0, 160),
+      loggedIn: sessionExpired ? false : undefined,
+      actualFileName,
+    };
+  }
+}
+
 ipcMain.handle('desktop-window-minimize', (event) => {
   getSenderWindow(event)?.minimize();
 });
@@ -1933,6 +1998,97 @@ ipcMain.handle('desktop-window-get-state', (event) => {
 
 ipcMain.handle('desktop-window-close', (event) => {
   getSenderWindow(event)?.close();
+});
+
+ipcMain.handle('mineradio-moji-weather', async (event, city) => {
+  if (!isMainRendererEvent(event)) return { ok: false, error: 'WEATHER_INVALID_SENDER' };
+  const safeCity = String(city || '').trim().slice(0, 80);
+  if (!safeCity) return { ok: false, error: 'WEATHER_CITY_EMPTY' };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const url = new URL('https://api.xcvts.cn/api/weather/mojicax');
+    url.searchParams.set('city', safeCity);
+    url.searchParams.set('n', '1');
+    url.searchParams.set('num', '20');
+    const response = await electronNet.fetch(url.toString(), {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return { ok: false, error: `WEATHER_HTTP_${response.status}` };
+    const text = await response.text();
+    if (text.length > 2 * 1024 * 1024) return { ok: false, error: 'WEATHER_RESPONSE_TOO_LARGE' };
+    return { ok: true, body: JSON.parse(text) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error && error.name === 'AbortError' ? 'WEATHER_TIMEOUT' : 'WEATHER_REQUEST_FAILED',
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+
+ipcMain.handle('mineradio-kugou-status', (event) => {
+  return runKugouIpc(event, (service) => service.getStatus());
+});
+
+ipcMain.handle('mineradio-kugou-login-start', (event) => {
+  return runKugouIpc(event, (service) => service.startLogin());
+});
+
+ipcMain.handle('mineradio-kugou-login-check', (event) => {
+  return runKugouIpc(event, (service) => service.checkLogin());
+});
+
+ipcMain.handle('mineradio-kugou-playlists', (event) => {
+  return runKugouIpc(event, (service) => service.getPlaylists());
+});
+
+ipcMain.handle('mineradio-kugou-playlist-tracks', (event, playlist) => {
+  const safePlaylist = {
+    id: String(playlist && playlist.id || '').slice(0, 200),
+    globalId: String(playlist && playlist.globalId || '').slice(0, 200),
+    listId: String(playlist && playlist.listId || '').slice(0, 80),
+  };
+  return runKugouIpc(event, (service) => service.getPlaylistTracks(safePlaylist));
+});
+
+ipcMain.handle('mineradio-kugou-search', (event, input) => {
+  const safeInput = {
+    query: String(input && input.query || '').trim().slice(0, 120),
+    page: Math.max(1, Math.min(20, Number(input && input.page) || 1)),
+    pageSize: Math.max(1, Math.min(30, Number(input && input.pageSize) || 20)),
+  };
+  return runKugouIpc(event, (service) => service.searchTracks(safeInput));
+});
+
+ipcMain.handle('mineradio-kugou-stream-url', (event, track) => {
+  const requestedQuality = String(track && track.quality || 'auto').toLowerCase();
+  const safeTrack = {
+    hash: String(track && track.hash || '').trim().slice(0, 64),
+    albumId: String(track && track.albumId || '0').replace(/[^0-9]/g, '').slice(0, 20) || '0',
+    albumAudioId: String(track && track.albumAudioId || '0').replace(/[^0-9]/g, '').slice(0, 20) || '0',
+    name: String(track && track.name || '').trim().slice(0, 300),
+    artist: String(track && track.artist || '').trim().slice(0, 300),
+    quality: ['auto', 'jymaster', 'hires', 'lossless', 'exhigh', 'standard'].includes(requestedQuality) ? requestedQuality : 'auto',
+  };
+  return runKugouIpc(event, (service) => service.getStreamUrl(safeTrack));
+});
+
+ipcMain.handle('mineradio-kugou-lyrics', (event, track) => {
+  const safeTrack = {
+    hash: String(track && track.hash || '').trim().slice(0, 64),
+    albumAudioId: String(track && track.albumAudioId || '0').replace(/[^0-9]/g, '').slice(0, 20) || '0',
+    duration: Math.max(0, Math.min(86400, Number(track && track.duration) || 0)),
+    name: String(track && track.name || '').trim().slice(0, 300),
+    artist: String(track && track.artist || '').trim().slice(0, 300),
+  };
+  return runKugouIpc(event, (service) => service.getLyrics(safeTrack));
+});
+
+ipcMain.handle('mineradio-kugou-logout', (event) => {
+  return runKugouIpc(event, (service) => service.logout());
 });
 
 ipcMain.handle('mineradio-tray-get-settings', () => {
@@ -1983,10 +2139,28 @@ ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   }
   const command = String(action || '');
   if (command === 'restore') return { ok: focusMainWindow() };
+  if (command === 'close') {
+    miniPlayerActive = false;
+    miniPlayerAutoDismissed = true;
+    setImmediate(closeMiniPlayerWindow);
+    return { ok: true, closed: true };
+  }
   if (!['toggle-play', 'previous', 'next'].includes(command)) return { ok: false, error: 'MINI_PLAYER_INVALID_COMMAND' };
   if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'MAIN_WINDOW_UNAVAILABLE' };
+  const wasPlaying = !!miniPlayerState.playing;
+  const expectedPlaying = command === 'toggle-play' ? !wasPlaying : wasPlaying;
+  if (command === 'toggle-play') {
+    miniPlayerState = { ...miniPlayerState, playing: expectedPlaying };
+    sendMiniPlayerState(true);
+    if (expectedPlaying) dismissMiniPlayerAfterPlay();
+    else resetMiniPlayerAutoDismiss();
+  }
   mainWindow.webContents.send('mineradio-mini-player-command', { action: command });
-  return { ok: true };
+  return {
+    ok: true,
+    expectedPlaying,
+    dismissAfterMs: command === 'toggle-play' && expectedPlaying ? MINI_PLAYER_PLAY_DISMISS_DELAY : 0,
+  };
 });
 
 ipcMain.handle('mineradio-hotkeys-configure-global', (_event, bindings) => {
@@ -2292,12 +2466,14 @@ async function createWindow() {
   mainWindow.on('maximize', () => sendWindowState(mainWindow));
   mainWindow.on('unmaximize', () => sendWindowState(mainWindow));
   mainWindow.on('minimize', () => {
+    resetMiniPlayerAutoDismiss();
     miniPlayerActive = true;
     sendWindowState(mainWindow);
     showMiniPlayerWindow();
   });
   mainWindow.on('restore', () => {
     miniPlayerActive = false;
+    resetMiniPlayerAutoDismiss();
     hideMiniPlayerWindow();
     sendWindowState(mainWindow);
   });
@@ -2320,6 +2496,7 @@ async function createWindow() {
   mainWindow.on('close', (event) => {
     if (!appQuitting && (closeToTrayEnabled || miniPlayerEnabled)) {
       event.preventDefault();
+      resetMiniPlayerAutoDismiss();
       miniPlayerActive = miniPlayerEnabled;
       mainWindow.hide();
       if (miniPlayerActive) showMiniPlayerWindow();
@@ -2332,6 +2509,7 @@ async function createWindow() {
       mainWindowStateTimer = null;
     }
     closeOverlayWindows();
+    resetMiniPlayerAutoDismiss();
     miniPlayerActive = false;
     mainWindow = null;
   });
