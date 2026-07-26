@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.56 快速补丁备份目录从不清理的磁盘泄漏修复
+- `v1.2.56` 修复 `server.js` 快速补丁应用后备份目录永不清理的磁盘泄漏：`applyPatchFiles` 补丁成功后直接 `return changed`，从不删除 `updates/backups/patches/<job.id>/` 下的原文件备份，而 `job.id` 每次唯一，导致每次快速补丁升级都永久遗留一份备份（单份 index.html 约 2MB）无限累积。
+- 新增 `removePatchBackupDir(job)`，在补丁成功应用后与回滚成功后各清理一次对应备份目录；回滚失败的致命分支保留备份。清理失败只 `warn` 不抛出。
+- 新增 4 条回归测试（`tests/patch-backup-cleanup.test.js`）。全套 129/129、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.55 -> 1.2.56` 快速补丁（本版运行时变更为 `server.js`）；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.56`。
+
 ## v1.2.55 latest.yml 标量解析可能命中错误资产的更新校验加固
 - `v1.2.55` 加固 `server.js` 的 `yamlScalar`：解析 `latest.yml` 时原用 `^\s*key:` 匹配任意缩进，会命中 `files:` 首项而非顶层字段。单资产 latest.yml（当前构建）两处值一致尚不可触发，但 files 首项若不是主安装包会取到错误资产的 sha512/size，令自动更新校验失败。
 - 修复为优先锚定顶层 `^key:`，顶层缺失才回退任意缩进；对当前单资产 latest.yml 输出逐项不变。

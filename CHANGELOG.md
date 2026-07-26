@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v1.2.56 快速补丁备份目录从不清理的磁盘泄漏修复
+
+- 修复 `server.js` 快速补丁应用后备份目录永不清理导致的磁盘泄漏：`backupPatchFileEntries` 会把每个被替换文件的原始内容备份到 `updates/backups/patches/<job.id>/` 供回滚使用，但 `applyPatchFiles` 在补丁成功应用后直接 `return changed`，从不删除该备份目录。
+- `job.id` 为 `patch-<时间戳>-<随机>` 每次唯一，导致每完成一次快速补丁升级就在磁盘上永久遗留一份原文件备份（单份 `index.html` 备份约 2MB、`server.js` 约 100KB），随版本累积无限增长且用户无从察觉。
+- 新增辅助函数 `removePatchBackupDir(job)`，在补丁成功应用后与回滚成功完成后各清理一次对应 `job.id` 的备份目录；回滚失败的致命分支刻意保留备份不清理。清理失败只 `warn` 不抛出，绝不影响更新成功或回滚结果。
+- 新增 4 条回归测试（`tests/patch-backup-cleanup.test.js`）：应用后删除备份目录、目录不存在时静默不误删其它 job、缺失 `job.id` 时绝不删除备份根目录、清理失败只记录警告。全套测试 129/129、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本轮只修复更新补丁的备份清理与补测试，不改动 UI、布局、文案、玻璃质感、电影视觉或 3D 歌单架交互。
+
+
 ## v1.2.55 latest.yml 标量解析可能命中错误资产的更新校验加固
 
 - 加固 `server.js` 的 `yamlScalar`：更新检测解析 electron-builder 的 `latest.yml` 时，`files:` 数组项会以相同缩进重复出现 `sha512`/`size` 等字段。原实现用 `^\s*key:` 匹配任意缩进层级，会命中 `files:` 首项而非顶层字段。单资产 `latest.yml`（本项目当前构建）里两处值一致，尚不可触发；但一旦 `files:` 首项不是主安装包（例如未来把 blockmap 或多目标产物排进 files），`yamlScalar('sha512')`/`yamlScalar('size')` 会取到错误资产的哈希与大小，导致自动更新的完整性校验用错基准而失败。
