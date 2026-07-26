@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.53 本地曲库整批替换导致 Object URL 泄漏修复
+- `v1.2.53` 修复重新导入本地文件/文件夹造成的 `blob:` Object URL 内存泄漏：`ensureLocalSongUrl`/本地封面对浏览器 `File` 创建的 Object URL 写入 `song.localUrl`/`localCoverObjectUrl`，而整批替换 `localLibrarySongs` 时旧对象被丢弃却从不 `revokeObjectURL`。
+- 新增 `revokeDiscardedLocalSongObjectUrls`，在 `handleLocalFolderFiles`/`handleFiles` 替换曲库前回收被丢弃且无存活引用的 `blob:` 地址；保留集覆盖新曲库与存活歌单，持久地址（http/自定义协议）与空值不动，重复地址只撤销一次。
+- 新增 5 条回归测试（`tests/local-media-object-url-revoke.test.js`）。全套 117/117、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.52 -> 1.2.53` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.53`。
+
 ## v1.2.52 IndexedDB 事务中止导致缓存永久停摆修复
 - `v1.2.52` 修复 IndexedDB 事务 abort 时 Promise 永不结算的缺陷：9 处事务此前缺 `onabort`，事务因配额/`versionchange`/页面冻结中止时 `await` 永挂、连接泄漏。
 - 最严重的是 `trimLocalIndexedDbCaches`：`await` 永挂使 `finally` 不执行，互斥锁 `localIndexedDbTrimRunning` 永为 true，缓存清理永久停摆、缓存无限增长。

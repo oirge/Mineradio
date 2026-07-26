@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v1.2.53 本地曲库整批替换导致 Object URL 泄漏修复
+
+- 修复重新导入本地文件/文件夹时旧曲库创建的浏览器 Object URL（`blob:`）从不回收的内存泄漏。`ensureLocalSongUrl` 会对拖拽或选择进来的浏览器 `File` 对象调用 `URL.createObjectURL`，把 `blob:` 地址写入 `song.localUrl`；本地封面同理写入 `localCoverObjectUrl`。
+- `handleLocalFolderFiles` 与 `handleFiles` 会用新数组整体替换 `localLibrarySongs`/`playQueue`，旧歌曲对象被直接丢弃，但它们持有的 `blob:` 句柄不会被 `URL.revokeObjectURL` 释放。反复重导入会不断累积 detached blob，长会话内存持续增长。
+- 新增 `revokeDiscardedLocalSongObjectUrls`：整批替换前，先汇总新曲库与存活歌单仍引用的 `blob:` 地址作为保留集，只撤销被丢弃且无任何存活引用的地址。跨列表（曲库/队列/歌单）按 `localKey` 共享同一 Object URL 时不会误撤销，主进程持久地址（http/自定义协议）与空值一律不动，重复地址只撤销一次。
+- 新增 5 条回归测试（`tests/local-media-object-url-revoke.test.js`）：丢弃撤销与存活保留、歌单引用保护、持久地址不动、去重、空列表空操作。全套测试 117/117、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本轮只加固本地曲库 Object URL 生命周期与补测试，不改动 UI、布局、文案、玻璃质感、电影视觉或 3D 歌单架交互。
+
+
 ## v1.2.52 IndexedDB 事务中止导致缓存永久停摆修复
 
 - 修复 IndexedDB 事务被中止（abort）时 Promise 永不结算的缺陷。项目内 9 处 IndexedDB 事务（自定义背景读写、本地资产/曲库缓存读写与清理）此前只挂了 `oncomplete`/`onerror`，没有 `onabort`。当事务因配额超限、`versionchange` 强制关闭连接或页面被浏览器冻结而中止时，只会触发 `onabort`，对应 `new Promise` 既不 resolve 也不 reject，`await` 永久挂起，`db` 连接也不再关闭。
