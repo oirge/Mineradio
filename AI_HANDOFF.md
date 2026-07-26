@@ -2,11 +2,11 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
-## 当前权威入口（2026-07-03）
+## 当前权威入口（2026-07-18）
 
-- 当前可写代码/Git 仓库是 `C:\Users\Administrator\Desktop\Mineradio-main`。
+- 当前可写代码/Git 仓库是 `C:\Users\oirg\Desktop\mok\Mineradio-sync`。
 - 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
-- 当前版本是 `v1.2.8`，最新提交以 `git log --oneline -5 --decorate` 为准。
+- 当前源码版本是 `v1.2.25`，最新提交以 `git log --oneline -5 --decorate` 为准。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
 - 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录，不能覆盖上述文件的当前结论。
@@ -72,6 +72,64 @@
 这个目录是人工归档区，不参与软件更新流程。
 
 ## 已完成工作日志
+
+### 2026-07-19
+
+- 完整安装包校验改为固定 1 MiB 缓冲区流式扫描，单次同时计算 SHA-256/SHA-512，不再通过 `fs.readFileSync()` 额外分配安装器等大的 Buffer；新增 `tests/update-file-verification-memory.test.js` 覆盖整文件读取禁令、单块上限和文件描述符关闭。
+- FLAC 标签读取改为 descriptor 精确扫描：标准文件先读 8 字节，probe 外只读 4 字节 block header，按声明长度跳过 PADDING，只读取实际需要的 Vorbis/PICTURE payload；多个 Vorbis、损坏 PICTURE 后继续查找、light/full 所有权和短读语义均有纯 Node 回归。
+- 修复空曲库无法取消旧后台资产任务：启动请求统一递增 token、取消旧启动定时器并清空旧私有排序队列；在途单曲 I/O 返回后再次校验所有权，不再污染新进度或触发旧 UI 刷新。新增 `tests/local-library-background-cancellation.test.js` 覆盖排队和在途两种时序。
+- 已播放本地歌词原文改为精确当前对象播放租约：切歌和清队列释放旧 raw，同 key 新对象可接管；曲库/歌单副本不再广播持有 `localLyricText`。迟到文件读取或 IndexedDB 水合完成后会持久化并清除旧对象，缓存 debounce 在调度时捕获歌词快照，后续轻量写入合并待写或已落盘原文。`tests/local-lyric-cache-residency.test.js` 现覆盖 12 项驻留、恢复和竞态行为。
+- 本轮所有测试继续使用 `BelowNormal` 与 `--test-concurrency=1`；未启动 Electron、浏览器、服务或后台轮询；未提交、未推送、未发布。
+
+### 2026-07-18
+
+- 原歌词状态改为单一只读对象图：`setOriginalLyricsState()` 仍深克隆一次隔离解析输入，`applyLyricsState()` 激活时直接借用该快照；从自定义歌词切回原词不再为每行和每个 YRC `words` 词项重新创建对象。
+- 新增 `tests/lyrics-state-residency.test.js` 纯 Node 行为回归，验证输入隔离、原快照与激活态引用共享、原生逐字标记/时间来源保持，以及自定义状态切回原词时继续复用同一快照。
+- 普通本地封面 Blob URL 改为可见读取时懒创建；音频 URL 由 `assignLocalSongUrl()` 同步给同 `localKey` 的活跃副本，重复入队不再为同一 `File` 生成多个地址。新增 `tests/local-media-object-url-residency.test.js` 覆盖两条驻留约束。
+- 当前未主动 revoke 音频或封面 Blob URL：`audio.src`、异步节奏分析 `fetch(audioUrl)`、懒加载图片、3D 缓存和桌面覆盖层尚未形成统一可等待租约；按队列对象或歌曲位置直接回收会制造播放、分析或图片加载回归。
+- 本地文件范围 IPC 改为 768 KiB 固定小块读取和 base64 分块返回；renderer 预分配唯一最终 `Uint8Array` 后逐块 `atob` 写入。桌面歌词文本入口直接把该视图交给 `decodeLocalTextBuffer()`，解码器识别 `Uint8Array` 后原样复用，不再 `buffer.slice` 或通过 `new Uint8Array(existingView)` 复制完整范围。`tests/local-file-range-memory.test.js` 验证临时分配上限、跨分块字节一致性和文本解码对象身份。
+- 本地标签范围读取增加短生命周期批次：同文件、同起点的同步排队请求先扩大到最大结束偏移，在途大范围可继续服务较小请求并返回共享 `subarray`。当前 FLAC 元数据/歌词/封面从 `4 + 32 + 32 MiB` 三次重叠读取收敛为一次 32 MiB；MP3 探针和完整 ID3 范围也分别只读一次。批次成功或失败后立即从全局表删除，不保留原始标签字节。
+- FLAC Vorbis comment 解析改为先扫描原始字节 key：元数据未知字段和已命中的重复字段不再解码大型 value；歌词按字段理论最高优先级跳过不可能胜出的字段，未知字段通过原始字节时间标签扫描确认后才解码，priority 100 命中立即返回。空 comment 只跳过当前项，不再截断后续元数据或歌词。
+- 新增 `tests/flac-vorbis-metadata-memory.test.js` 的 8 条纯 Node 回归，覆盖未知/重复大字段、未知 timed 回退、普通方括号误判、字段最高优先级、最高优先级提前结束，以及元数据/歌词空 comment 继续解析。
+- 修复缩略图失败时完整封面伪装成 `localCoverThumbDataUrl` 并进入 IndexedDB 的驻留问题：非当前歌曲不再保留大图，后台失败保持前台可重试；当前歌曲可临时显示完整图，但只有缩略图成功后才置 `localCoverLoaded=true` 和写入资产缓存。`tests/local-cover-full-residency.test.js` 现有 8 条回归覆盖该状态机。
+- MP3 APIC、ID3v2.2 PIC 与 FLAC PICTURE 图片提取从 `slice()` 改为 `subarray()`，删除进入 Blob 前的一份图片大小 typed-array 副本。新增 `tests/local-embedded-cover-byte-view.test.js`，使用非零 byteOffset 夹具验证三种格式共享完整标签 backing buffer、精确图片边界、MIME 和字节内容；Blob 自身快照及 data URL 仍按原语义保留。
+- `preloadLocalSongAssets()` 只对同一音频文件的元数据、内嵌封面和内嵌歌词同轮启动，使后台两个 4 MiB 轻量扫描也能合并；外置封面和歌词继续串行，避免不同大文件同时驻留。`cloneSong()` 删除源对象的 4 个资产 Promise 与 2 个 loading 标记，避免队列副本长期持有已决 Promise 或错误继承封面加载所有权。新增 `tests/local-tag-range-read-coalescing.test.js`，并扩展 `tests/local-cover-full-residency.test.js`。
+- 歌单封面缓存增加精确计数和 `loading` 请求硬上限：超过 196 条裁回 180 条，后台 aggressive trim 保留 72 条；先删除完成/失败项，再取消最旧非保护请求。成功图片完成后解除 `onload/onerror` 闭包，失败或无效地址同时清空 `src` 与 `rec.img`；`tests/playlist-cover-cache-residency.test.js` 覆盖成功、失败、无效地址和容量取消生命周期。
+- 修复本地封面缩略图 Promise 所有权与顺序队列竞态：旧任务被 24 条并发缓存淘汰后若同键重试，迟到完成不再删除替代 Promise；活跃数使用精确计数，同键结果原位更新唯一 FIFO 槽位。顺序队列压缩同时识别已消费前缀和内部空洞，一个永久挂起任务不会再让后续已完成记录随长会话持续增长。`tests/local-cover-thumb-promise-ownership.test.js` 覆盖所有权、计数归零、结果唯一槽位和 100 次挂起任务压力场景。
+- 当前最终检查全部为短时低优先级纯 Node/静态验证：65/65 测试通过，35 个项目 JS 文件语法通过，`public/index.html` 2 个内联脚本解析通过，PowerShell 内存脚本仅做 AST 语法解析，`git diff --check`、未跟踪 JS/PS1 行尾空白和调试前缀扫描通过；未执行 Electron、浏览器、服务、PowerShell 轮询或后台 GUI 测试。
+
+### 2026-07-16
+
+- 完整本地封面改为单一运行时所有者：只有 `currentLocalSong` 与 `playQueue[currentIdx]` 共同指向的当前对象可以持有完整 `localCoverDataUrl`；歌曲克隆和同曲资产同步只保留缩略图，切歌、清空队列和迟到异步读取均按对象身份释放或拒绝旧引用。
+- `MiniPlayerStateCache` 增加独立窗口驻留态。功能启用但迷你 BrowserWindow 不存在时，主进程立即清空并拒绝最多 8 MiB 的封面补丁；新窗口取得所有权后才接受状态，并通过现有 `sync-state` 要求 renderer 强制补齐完整快照。
+- 程序化销毁和当前窗口意外 `closed` 均释放迷你状态；旧窗口迟到的 `closed` 事件仍由全局窗口所有权门禁隔离，不能清理替代窗口缓存。新增纯 Node 行为测试覆盖无窗口拒收、销毁释放、新驻留补齐和旧事件不越权。
+- 最终检查全部为短时低优先级纯 Node/静态验证：38/38 测试通过，27 个 JS 文件语法通过，`public/index.html` 2 个内联脚本解析通过，PowerShell 内存脚本仅做 AST 语法解析，`git diff --check` 通过；未执行 Electron、浏览器、服务、PowerShell 轮询或后台 GUI 测试。
+
+### 2026-07-14
+
+- 修复迷你播放器在 `lock-screen` / `suspend` 期间仍会因 renderer 崩溃重新安排 120ms 重载的问题；新增 `MiniPlayerRecoverySession` 按 `screen` / `suspend` 原因暂停，同时取消周期恢复与崩溃重建，全部原因解除后才恢复一次。
+- 新增 `tests/mini-player-recovery-session.test.js` 纯 Node 回归测试，覆盖任务同时取消和锁屏/休眠交叠顺序。按用户要求，本轮修复后不再启动 Electron、浏览器或后台 GUI 测试，只运行 Node 与静态检查。
+- 修复迷你播放器功能关闭后主进程仍保留/继续接收封面状态的问题；新增 `MiniPlayerStateCache`，禁用时释放歌曲与封面引用并拒绝后续补丁，重新启用时用现有命令通道请求 `sync-state`。
+- 新增 `tests/mini-player-state-cache.test.js` 纯 Node 回归，使用 64 KiB 合成封面验证禁用释放、禁用期间拒绝和重新启用后只接受新状态。
+- 修复桌面歌词中键 PowerShell 轮询快速关开时的所有权竞态：旧进程延迟 `exit/error` 不再清空替代进程句柄，避免新轮询成为无法停止的后台孤儿；`tests/desktop-lyrics-mouse-poller.test.js` 用假 ChildProcess 覆盖两种事件顺序，未启动 PowerShell。
+- 新增 `DesktopOverlayStateCache` 管理桌面歌词和壁纸主进程状态；关闭后把状态替换为最小 `{enabled:false}`，释放 `beatMap`、歌词和封面 data URL，禁用期间拒绝补丁，重新启用只接受当前完整状态。
+- renderer 在桌面歌词或壁纸禁用时不再构造重载荷或发送 update IPC；关闭入口只发送最小状态。`tests/desktop-overlay-state-cache.test.js` 与 `tests/desktop-overlay-disabled-ipc.test.js` 覆盖释放、拒收和禁用门禁。
+- 删除从无读取命中的 `localAssetCacheMemory` 全局镜像，保留歌曲对象补水和 IndexedDB 持久化；`tests/local-asset-cache-ownership.test.js` 固定单一运行时所有权契约。
+- 修复覆盖层状态补丁调用顺序导致的桌面歌词纵向位置/透明度滑块失效；壁纸更新统一直接交给窗口生命周期入口，避免重复合并和重复发送。
+- 修复桌面歌词/壁纸 BrowserWindow 快速关开时的实例所有权竞态；旧窗口迟到的 ready/load/move/closed 事件不再操作替代窗口。桌面歌词旧轮询进程的迟到 stdout 同样增加实例门禁。
+- 桌面歌词 IPC 增加 sender 所有权：主 renderer 负责启用和状态更新，当前歌词 renderer 只负责自身关闭、移动、热区、指针和锁定；旧 renderer 的迟到命令返回 ignored。
+- renderer 关闭单个覆盖层时立即释放对应签名：桌面歌词清除歌词行、歌词签名和节奏签名，壁纸清除包含完整封面 data URL 的签名，不再依赖两个覆盖层同时关闭。
+- `localLibraryPersistentMemory` 改为只持有当前文件夹索引；大快照按需从 IndexedDB 读取后释放，切库时替换内存域，并以 generation 阻止 A→B→A 后的旧异步读取回填。
+- 修复旧曲库后台扫描在切库后误用全局 `localLibrarySongs` 的竞态，旧结果不再把 B 歌曲写进 A 索引或重新覆盖当前界面。
+- 大曲库资产补水改为跳过歌词重载荷；歌曲实际播放时才读取该单曲的 IndexedDB 歌词，后台处理未播放歌曲时不再读歌词文件。
+- 本地节奏图的内存与 `localStorage` 所有权统一限制为最近 12 首；淘汰时只删除通用节奏缓存中与旧条目共享的同一对象，不影响通用缓存后来独立更新的结果。
+- 删除从无读取者的 `localLibraryPreviousRecord`；曲库索引同步后不再由每首歌曲继续强引用上一版索引记录。
+- 完整本地封面 data URL 改为只由当前播放队列对象临时持有：`cloneSong()` 不复制完整图，资产同步只传播缩略图，切歌按 `localKey` 转移或释放旧引用；异步封面写入按对象身份校验当前所有者，避免迟到读取重新占住旧队列对象。缩略图仍保留“内嵌封面”元数据语义。
+
+### 2026-07-13
+
+- 修复主窗口恢复后迷你播放器仅隐藏、独立渲染进程持续常驻的问题；`desktop/main.js` 现在释放迷你 BrowserWindow，再次最小化时按当前主进程状态重新创建，不改变 UI、IPC 协议或播放控制。
+- 新增 `scripts/test-mini-player-memory.ps1` Windows Electron 生命周期回归检查，使用独立临时用户目录验证“创建 → 释放 → 再创建 → 再释放”。修复后两轮恢复均从 6 个 Electron 进程回到 5 个，单轮释放约 100 MiB 工作集。
 
 ### 2026-07-03
 
@@ -170,6 +228,9 @@
 
 ## 未完成/待确认事项
 
+- `includeLyrics:false` 目前只阻止把歌词应用到歌曲对象，IndexedDB `store.get()` 仍会 structured-clone 完整合并记录；真正降低大批量补水峰值需要把轻量资产摘要与歌词重载荷拆成独立记录/存储，不能只增加无效 selection 参数。
+- 外置本地封面仍可能走完整 data URL；后续可利用已有同源 `localFileProxyUrl` 或 Blob/URL 缩略图接缝，避免主进程 Buffer、base64 字符串和 renderer 解码对象同时驻留。
+- 迷你播放器持续 `did-fail-load` 或“加载完成后很快再次崩溃”仍可能跨窗口反复重建。下一轮应先建立纯 Node fake clock / BrowserWindow 回归接缝，再由用户确认重试上限与退避策略，不能直接加入猜测性容错。
 - `v1.1.0` 发布时不要上传 `latest.yml` 或快速补丁；Release 需要通过 `--latest=false` 或等价 API 避免成为旧版软件内更新通道的 latest。
 - 搜索结果排序仍需要继续优化：例如“日落大道”应优先梁博原唱，“Beauty and a Beat”应优先原唱/官方版本，避免翻唱排第一。
 - 3D 歌单架交互仍需继续优化：悬停展开和点击后可用状态之间要更丝滑，避免用户误以为悬停后可直接使用。

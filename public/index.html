@@ -2726,7 +2726,7 @@ var audioFadeTimer = null, audioElementFadeFrame = 0, audioFadeSerial = 0;
 var AUDIO_FADE_IN_MS = 460;
 var AUDIO_FADE_OUT_MS = 420;
 var AUDIO_SILENCE_GAIN = 0.0001;
-var userPlaylists = [], playlistCoverCache = {};
+var userPlaylists = [], playlistCoverCache = {}, playlistCoverCacheCount = 0;
 var CUSTOM_COVER_STORE_KEY = 'mineradio-custom-covers';
 var CUSTOM_LYRIC_STORE_KEY = 'mineradio-custom-lyrics-v1';
 var CUSTOM_LYRIC_PREF_STORE_KEY = 'mineradio-custom-lyric-prefs-v1';
@@ -2751,6 +2751,7 @@ var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
+var LOCAL_METADATA_TAG_SCHEMA = 1;
 var PERSISTENT_UI_STATE_KEYS = [
   VOLUME_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
@@ -2870,6 +2871,8 @@ var lyricSourceMode = 'original';
 var originalLyricsState = { lines: [], hasNativeKaraoke: false, timingSource: 'none' };
 var localBeatAnalysis = { song:null, audioUrl:'', mode:'mr', active:false, token:0 };
 var localLibraryProcessToken = 0;
+var localLibraryProcessStartTimer = null;
+var localLibraryProcessSongs = null;
 var localLibraryProcessing = { active:false, token:0, total:0, assetsDone:0 };
 var localLibraryProgressHideTimer = null;
 var localLibraryRestoreScheduled = false;
@@ -2877,9 +2880,11 @@ var localLibraryRestoreStarted = false;
 var localAssetUiRefreshTimer = null;
 var localAssetUiRefreshReason = '';
 var localLibraryAssetUiBatchState = { progressAt: 0, refreshAt: 0 };
-var localAssetCacheMemory = {};
 var localAssetCacheWriteTimers = {};
+var localAssetCacheWriteRecords = {};
 var localLibraryPersistentMemory = {};
+var localLibraryPersistentFolderPath = '';
+var localLibraryPersistentGeneration = 0;
 var localLibraryIndexWriteTimer = null;
 var localIndexedDbTrimTimer = null;
 var localIndexedDbTrimRunning = false;
@@ -2887,6 +2892,7 @@ var localIndexedDbLastTrimAt = 0;
 var localCoverThumbPromiseCache = {};
 var localCoverThumbPromiseOrder = [];
 var localCoverThumbPromiseOrderHead = 0;
+var localCoverThumbPromiseCount = 0;
 var localCoverThumbResultCache = {};
 var localCoverThumbResultOrder = [];
 var localCoverThumbResultOrderHead = 0;
@@ -3946,9 +3952,7 @@ function trimRuntimeCaches(reason, aggressive) {
   var protectedCovers = collectProtectedCoverUrls();
   var protectedBeats = collectProtectedBeatMapKeys();
   var dropped = 0;
-  dropped += trimObjectCache(playlistCoverCache, aggressive ? 72 : 180, protectedCovers, function(rec){
-    return rec && rec.loading;
-  });
+  dropped += trimPlaylistCoverCache(aggressive ? 72 : 180, protectedCovers);
   dropped += trimCoverDepthCache(aggressive ? 4 : 10, collectProtectedCoverDepthIds());
   dropped += trimObjectCache(beatMapCache, aggressive ? 12 : 36, protectedBeats);
   dropped += trimObjectCache(djBeatMapCache, aggressive ? 4 : 12, protectedBeats);
@@ -8658,31 +8662,6 @@ function collectProtectedLocalAssetCacheKeys() {
   } catch (e) {}
   return keep;
 }
-function pruneLocalAssetMemoryCache(keep) {
-  if (!localAssetCacheMemory) return 0;
-  var total = 0;
-  for (var cacheKey in localAssetCacheMemory) {
-    if (!Object.prototype.hasOwnProperty.call(localAssetCacheMemory, cacheKey)) continue;
-    total++;
-  }
-  if (total <= Math.min(LOCAL_ASSET_CACHE_MAX_RECORDS, 1500)) return 0;
-  var candidates = [];
-  for (var candidateKey in localAssetCacheMemory) {
-    if (!Object.prototype.hasOwnProperty.call(localAssetCacheMemory, candidateKey)) continue;
-    if (keep && keep[candidateKey]) continue;
-    var record = localAssetCacheMemory[candidateKey] || {};
-    candidates.push({ key: candidateKey, savedAt: Number(record.savedAt) || 0 });
-  }
-  candidates.sort(function(a, b){ return (a.savedAt || 0) - (b.savedAt || 0); });
-  var target = Math.min(LOCAL_ASSET_CACHE_MAX_RECORDS, 1200);
-  var dropped = 0;
-  for (var i = 0; i < candidates.length && total - dropped > target; i++) {
-    var key = candidates[i].key;
-    delete localAssetCacheMemory[key];
-    dropped++;
-  }
-  return dropped;
-}
 function scheduleLocalIndexedDbTrim(reason, delay) {
   if (localIndexedDbTrimTimer) return;
   var now = Date.now();
@@ -8711,7 +8690,6 @@ async function trimLocalIndexedDbCaches(reason) {
   var dropped = 0;
   try {
     var keep = collectProtectedLocalAssetCacheKeys();
-    pruneLocalAssetMemoryCache(keep);
     var db = await openLocalAssetCacheDb();
     dropped += await new Promise(function(resolve, reject){
       var now = Date.now();
@@ -8807,7 +8785,6 @@ async function trimLocalIndexedDbCaches(reason) {
         var deleteTx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readwrite');
         for (var deleteAssetIdx = 0; deleteAssetIdx < ids.length; deleteAssetIdx++) {
           var id = ids[deleteAssetIdx];
-          delete localAssetCacheMemory[id];
           deleteTx.objectStore(LOCAL_ASSET_CACHE_STORE).delete(id);
         }
         for (var deleteLibraryIdx = 0; deleteLibraryIdx < libraryIds.length; deleteLibraryIdx++) {
@@ -8839,6 +8816,44 @@ function localLibraryPersistentKey(folderPath, kind) {
   return String(kind || '') + ':' + String(folderPath || '');
 }
 /**
+ * 激活唯一的本地曲库内存域；切换文件夹时整体释放旧索引。
+ * @param {string} folderPath 当前准备读取或同步的曲库文件夹。
+ * @returns {number} 当前内存域代次，供异步读取校验所有权。
+ */
+function activateLocalLibraryPersistentMemory(folderPath) {
+  var nextFolderPath = String(folderPath || '');
+  if (nextFolderPath !== localLibraryPersistentFolderPath) {
+    localLibraryPersistentFolderPath = nextFolderPath;
+    localLibraryPersistentGeneration += 1;
+    localLibraryPersistentMemory = {};
+  }
+  return localLibraryPersistentGeneration;
+}
+/**
+ * 仅缓存当前曲库索引；快照按需读取即用即放，旧异步结果也不能重新占用内存。
+ * @param {object} record IndexedDB 返回或准备写入的快照/索引记录。
+ * @param {number} generation 发起读写时捕获的内存域代次。
+ * @returns {boolean} 当前记录是否进入内存缓存。
+ */
+function rememberLocalLibraryPersistentRecord(record, generation) {
+  if (generation !== localLibraryPersistentGeneration) return false;
+  if (!record || record.kind !== 'index' || !record.id || String(record.folderPath || '') !== localLibraryPersistentFolderPath) return false;
+  localLibraryPersistentMemory[record.id] = record;
+  return true;
+}
+/**
+ * 释放指定当前曲库的全部内存记录，并让尚未完成的旧读取结果失效。
+ * @param {string} folderPath 需要释放的曲库文件夹。
+ * @returns {boolean} 是否释放了当前内存域。
+ */
+function releaseLocalLibraryPersistentMemory(folderPath) {
+  if (String(folderPath || '') !== localLibraryPersistentFolderPath) return false;
+  localLibraryPersistentFolderPath = '';
+  localLibraryPersistentGeneration += 1;
+  localLibraryPersistentMemory = {};
+  return true;
+}
+/**
  * 读取本地库持久化记录。优先使用内存缓存，未命中时从 IndexedDB 读取。
  * @param {string} folderPath 本地库文件夹路径。
  * @param {string} kind 记录类型。
@@ -8848,6 +8863,7 @@ async function readLocalLibraryPersistentRecord(folderPath, kind) {
   var id = localLibraryPersistentKey(folderPath, kind);
   if (!folderPath || !kind) return null;
   if (localLibraryPersistentMemory[id]) return localLibraryPersistentMemory[id];
+  var generation = localLibraryPersistentGeneration;
   try {
     var db = await openLocalAssetCacheDb();
     return await new Promise(function(resolve, reject){
@@ -8855,7 +8871,7 @@ async function readLocalLibraryPersistentRecord(folderPath, kind) {
       var req = tx.objectStore(LOCAL_LIBRARY_CACHE_STORE).get(id);
       req.onsuccess = function(){
         var record = req.result || null;
-        if (record) localLibraryPersistentMemory[id] = record;
+        if (record) rememberLocalLibraryPersistentRecord(record, generation);
         resolve(record);
       };
       req.onerror = function(){ reject(req.error || new Error('indexedDB library read failed')); };
@@ -8877,7 +8893,7 @@ async function writeLocalLibraryPersistentRecord(folderPath, kind, data) {
   var id = localLibraryPersistentKey(folderPath, kind);
   if (!folderPath || !kind || !data) return false;
   var record = { id: id, schema: LOCAL_LIBRARY_CACHE_SCHEMA, kind: kind, folderPath: folderPath, savedAt: Date.now(), data: data };
-  localLibraryPersistentMemory[id] = record;
+  rememberLocalLibraryPersistentRecord(record, localLibraryPersistentGeneration);
   try {
     var db = await openLocalAssetCacheDb();
     return await new Promise(function(resolve, reject){
@@ -8902,7 +8918,7 @@ async function writeLocalLibraryPersistentRecord(folderPath, kind, data) {
  */
 async function deleteLocalLibraryPersistentRecords(folderPath) {
   if (!folderPath) return false;
-  ['snapshot', 'index'].forEach(function(kind){ delete localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, kind)]; });
+  releaseLocalLibraryPersistentMemory(folderPath);
   try {
     var db = await openLocalAssetCacheDb();
     return await new Promise(function(resolve, reject){
@@ -8918,25 +8934,60 @@ async function deleteLocalLibraryPersistentRecords(folderPath) {
   }
 }
 /**
- * 预热本地库快照和索引。后续同步接口可以直接从内存读取，避免改动所有调用点。
+ * 预热本地库索引供后续同步接口读取；大快照由恢复入口按需读取后释放。
  * @param {string} folderPath 本地库文件夹路径。
  * @returns {Promise<void>}
  */
 async function hydrateLocalLibraryPersistentState(folderPath) {
   if (!folderPath) return;
-  await Promise.all([
-    readLocalLibraryPersistentRecord(folderPath, 'snapshot'),
-    readLocalLibraryPersistentRecord(folderPath, 'index')
-  ]);
+  activateLocalLibraryPersistentMemory(folderPath);
+  await readLocalLibraryPersistentRecord(folderPath, 'index');
 }
 scheduleLocalIndexedDbTrim('startup', 9000);
-function loadImageForDataUrl(dataUrl) {
-  return new Promise(function(resolve, reject){
+/**
+ * 打开完整封面来源供单次缩略图绘制，Blob 路径避免先生成完整 base64 字符串。
+ * @param {string|Blob} coverSource data URL 或短生命周期封面 Blob。
+ * @returns {Promise<{image:CanvasImageSource,release:function():void}>} 可绘制图片及显式释放函数。
+ */
+async function openLocalCoverImageSource(coverSource) {
+  if (coverSource instanceof Blob) {
+    var bitmap = await createImageBitmap(coverSource);
+    /** @returns {void} 缩略图编码完成后立即释放完整解码位图。 */
+    function releaseBitmap() {
+      bitmap.close();
+    }
+    return { image: bitmap, release: releaseBitmap };
+  }
+  /**
+   * 解码 data URL 图片并建立单次绘制租约。
+   * @param {Function} resolve 图片解码成功回调。
+   * @param {Function} reject 图片解码失败回调。
+   * @returns {void}
+   */
+  function openImageElement(resolve, reject) {
     var img = new Image();
-    img.onload = function(){ resolve(img); };
-    img.onerror = function(){ reject(new Error('cover image decode failed')); };
-    img.src = dataUrl;
-  });
+    /** @returns {void} 绘制完成后解除图片来源，缩短完整解码资源驻留时间。 */
+    function releaseImage() {
+      img.onload = null;
+      img.onerror = null;
+      if (typeof img.removeAttribute === 'function') img.removeAttribute('src');
+    }
+    /** @returns {void} 图片解码完成后移除事件闭包并交出单次绘制租约。 */
+    function handleImageLoad() {
+      img.onload = null;
+      img.onerror = null;
+      resolve({ image: img, release: releaseImage });
+    }
+    /** @returns {void} 图片解码失败时立即解除来源并返回明确失败。 */
+    function handleImageError() {
+      releaseImage();
+      reject(new Error('cover image decode failed'));
+    }
+    img.onload = handleImageLoad;
+    img.onerror = handleImageError;
+    img.src = String(coverSource || '');
+  }
+  return new Promise(openImageElement);
 }
 function localCoverThumbCacheKey(dataUrl) {
   dataUrl = String(dataUrl || '');
@@ -8981,15 +9032,36 @@ function compactLocalCoverThumbResultOrder(force) {
   localCoverThumbResultOrder.length = write;
   localCoverThumbResultOrderHead = 0;
 }
+/**
+ * 返回当前仍由并发缓存持有的缩略图任务数量。
+ * @returns {number} 活跃 Promise 数量。
+ */
 function localCoverThumbPromiseActiveCount() {
-  return Math.max(0, localCoverThumbPromiseOrder.length - (localCoverThumbPromiseOrderHead || 0));
+  return Math.max(0, localCoverThumbPromiseCount || 0);
 }
+/**
+ * 压缩缩略图 Promise 顺序队列；全部任务结束时直接释放所有过期键和记录。
+ * @param {boolean} force 是否强制清空已无活跃任务的队列。
+ * @returns {void}
+ */
 function compactLocalCoverThumbPromiseOrder(force) {
-  if (!localCoverThumbPromiseOrderHead) return;
-  if (!force && localCoverThumbPromiseOrderHead < 32 && localCoverThumbPromiseOrderHead * 2 < localCoverThumbPromiseOrder.length) return;
+  if (force) {
+    localCoverThumbPromiseOrder.length = 0;
+    localCoverThumbPromiseOrderHead = 0;
+    return;
+  }
+  if (!localCoverThumbPromiseOrder.length) return;
+  var start = localCoverThumbPromiseOrderHead || 0;
+  var queued = Math.max(0, localCoverThumbPromiseOrder.length - start);
+  var inactive = Math.max(0, queued - localCoverThumbPromiseActiveCount());
+  var stale = start + inactive;
+  if (start < 32 && inactive < 32 && stale * 2 < localCoverThumbPromiseOrder.length) return;
   var write = 0;
-  for (var read = localCoverThumbPromiseOrderHead; read < localCoverThumbPromiseOrder.length; read++) {
-    localCoverThumbPromiseOrder[write++] = localCoverThumbPromiseOrder[read];
+  // 长期挂起任务会让已完成记录散落在队列内部，压缩时只保留仍持有 Promise 的所有者。
+  for (var read = start; read < localCoverThumbPromiseOrder.length; read++) {
+    var record = localCoverThumbPromiseOrder[read];
+    if (!record || !record.promise) continue;
+    localCoverThumbPromiseOrder[write++] = record;
   }
   localCoverThumbPromiseOrder.length = write;
   localCoverThumbPromiseOrderHead = 0;
@@ -9006,35 +9078,55 @@ function trimLocalCoverThumbResultCache(maxEntries, maxBytes) {
   }
   compactLocalCoverThumbResultOrder(localCoverThumbResultActiveCount() === 0);
 }
+/**
+ * 保存缩略图结果；同键更新复用原顺序槽位，避免重复键导致最新结果被提前淘汰。
+ * @param {string} key 缩略图缓存键。
+ * @param {string} value 缩略图 data URL。
+ * @returns {void}
+ */
 function rememberLocalCoverThumbResult(key, value) {
   if (!key || !value) return;
   var existing = localCoverThumbResultCache[key];
-  if (existing) localCoverThumbResultBytes = Math.max(0, localCoverThumbResultBytes - (existing.bytes || 0));
-  localCoverThumbResultCache[key] = { value: value, bytes: estimateDataUrlBytes(value) };
-  localCoverThumbResultBytes += localCoverThumbResultCache[key].bytes;
+  var bytes = estimateDataUrlBytes(value);
+  // 并发旧任务和替代任务可能先后完成；原位更新可保持唯一 FIFO 所有权。
+  if (existing) {
+    localCoverThumbResultBytes = Math.max(0, localCoverThumbResultBytes - (existing.bytes || 0));
+    existing.value = value;
+    existing.bytes = bytes;
+    localCoverThumbResultBytes += bytes;
+    trimLocalCoverThumbResultCache();
+    return;
+  }
+  localCoverThumbResultCache[key] = { value: value, bytes: bytes };
+  localCoverThumbResultBytes += bytes;
   localCoverThumbResultOrder.push(key);
   trimLocalCoverThumbResultCache();
 }
 /**
  * 生成本地封面缩略图 data URL。成功结果会短期复用，避免队列、搜索和歌单架重复 decode 与 canvas 缩放。
- * @param {string} dataUrl 原始封面 data URL。
+ * @param {string|Blob} coverSource 原始封面 data URL 或短生命周期 Blob。
+ * @param {{maxSide?:number,background?:boolean,quality?:number,cacheKey?:string}=} opts 缩略图尺寸、后台模式、编码质量和稳定缓存键。
  * @returns {Promise<string>} 缩略图 data URL，无法生成时返回空字符串。
  */
-async function createLocalCoverThumbnailDataUrl(dataUrl, opts) {
+async function createLocalCoverThumbnailDataUrl(coverSource, opts) {
   opts = opts || {};
-  dataUrl = String(dataUrl || '');
-  if (!/^data:image\//i.test(dataUrl)) return '';
+  var dataUrl = typeof coverSource === 'string' ? String(coverSource || '') : '';
+  var blobSource = coverSource instanceof Blob ? coverSource : null;
+  if (!blobSource && !/^data:image\//i.test(dataUrl)) return '';
   var pressureLevel = (typeof getRuntimeFramePressureLevel === 'function') ? getRuntimeFramePressureLevel() : 0;
   var requestedMaxSide = opts.maxSide || (opts.background ? (pressureLevel >= 1 ? 192 : 224) : LOCAL_COVER_THUMB_MAX_SIZE);
   var maxSide = Math.max(64, Math.min(LOCAL_COVER_THUMB_MAX_SIZE || 512, requestedMaxSide || 512));
   var quality = opts.quality || (opts.background ? 0.74 : LOCAL_COVER_THUMB_QUALITY) || 0.82;
-  var cacheKey = localCoverThumbCacheKey(dataUrl) + ':s' + maxSide + ':q' + Math.round(quality * 100);
+  var sourceCacheKey = String(opts.cacheKey || '') || (dataUrl ? localCoverThumbCacheKey(dataUrl) : '');
+  var cacheKey = sourceCacheKey ? sourceCacheKey + ':s' + maxSide + ':q' + Math.round(quality * 100) : '';
   var cached = cacheKey && localCoverThumbResultCache[cacheKey];
   if (cached) return cached.value || '';
   if (cacheKey && localCoverThumbPromiseCache[cacheKey]) return localCoverThumbPromiseCache[cacheKey];
   var promise = (async function(){
+  var imageLease = null;
   try {
-    var img = await loadImageForDataUrl(dataUrl);
+    imageLease = await openLocalCoverImageSource(blobSource || dataUrl);
+    var img = imageLease.image;
     var width = img.naturalWidth || img.width || maxSide;
     var height = img.naturalHeight || img.height || maxSide;
     var scale = Math.min(1, maxSide / Math.max(width, height));
@@ -9054,35 +9146,69 @@ async function createLocalCoverThumbnailDataUrl(dataUrl, opts) {
   } catch (e) {
     console.warn('[LocalCoverThumb]', e);
     return '';
+  } finally {
+    if (imageLease) imageLease.release();
   }
   })();
   if (!cacheKey) return promise;
+  var promiseRecord = { key: cacheKey, promise: promise };
   localCoverThumbPromiseCache[cacheKey] = promise;
-  localCoverThumbPromiseOrder.push(cacheKey);
+  localCoverThumbPromiseOrder.push(promiseRecord);
+  localCoverThumbPromiseCount++;
+  // 队首可能已经完成或被旧一轮淘汰，只有仍拥有缓存槽位的记录才计入释放数量。
   while (localCoverThumbPromiseActiveCount() > 24) {
-    var oldPromiseKey = localCoverThumbPromiseOrder[localCoverThumbPromiseOrderHead++];
-    if (oldPromiseKey) delete localCoverThumbPromiseCache[oldPromiseKey];
+    var oldPromiseRecord = localCoverThumbPromiseOrder[localCoverThumbPromiseOrderHead++];
+    if (!oldPromiseRecord || !oldPromiseRecord.promise) continue;
+    if (localCoverThumbPromiseCache[oldPromiseRecord.key] === oldPromiseRecord.promise) {
+      delete localCoverThumbPromiseCache[oldPromiseRecord.key];
+      localCoverThumbPromiseCount = Math.max(0, localCoverThumbPromiseCount - 1);
+    }
+    oldPromiseRecord.promise = null;
   }
   compactLocalCoverThumbPromiseOrder(localCoverThumbPromiseActiveCount() === 0);
   var result = await promise;
-  delete localCoverThumbPromiseCache[cacheKey];
+  // 旧任务可能已被容量淘汰；只有当前所有者才能删除槽位并递减精确计数。
+  if (localCoverThumbPromiseCache[cacheKey] === promise) {
+    delete localCoverThumbPromiseCache[cacheKey];
+    localCoverThumbPromiseCount = Math.max(0, localCoverThumbPromiseCount - 1);
+  }
+  promiseRecord.promise = null;
+  compactLocalCoverThumbPromiseOrder(localCoverThumbPromiseActiveCount() === 0);
   if (result) rememberLocalCoverThumbResult(cacheKey, result);
   return result;
 }
-async function assignLocalCoverDataUrl(song, dataUrl, opts) {
+/**
+ * 为歌曲生成本地封面缩略图，并仅在歌曲仍为当前播放对象时生成和保留完整 data URL。
+ * @param {object} song 接收封面资产的歌曲对象。
+ * @param {string|Blob} coverSource 原始完整封面 data URL 或短生命周期 Blob。
+ * @param {{thumbnailOnly?:boolean,cacheKey?:string}=} opts 缩略图生成是否使用后台轻量参数及稳定缓存键。
+ * @returns {Promise<boolean>} 是否成功生成并写入封面资产。
+ */
+async function assignLocalCoverSource(song, coverSource, opts) {
   opts = opts || {};
-  if (!song || !dataUrl) return false;
-  var thumb = await createLocalCoverThumbnailDataUrl(dataUrl, {
+  if (!song || !coverSource) return false;
+  var dataUrl = typeof coverSource === 'string' ? coverSource : '';
+  var thumb = await createLocalCoverThumbnailDataUrl(coverSource, {
     background: !!opts.thumbnailOnly,
     maxSide: opts.thumbnailOnly ? 0 : LOCAL_COVER_THUMB_MAX_SIZE,
-    quality: opts.thumbnailOnly ? 0.74 : LOCAL_COVER_THUMB_QUALITY
+    quality: opts.thumbnailOnly ? 0.74 : LOCAL_COVER_THUMB_QUALITY,
+    cacheKey: opts.cacheKey || ''
   });
-  song.localCoverThumbDataUrl = thumb || dataUrl;
-  if (!opts.thumbnailOnly) song.localCoverDataUrl = dataUrl;
-  else song.localCoverDataUrl = '';
+  if (thumb) song.localCoverThumbDataUrl = thumb;
+  else if (song.localCoverThumbDataUrl === dataUrl) song.localCoverThumbDataUrl = '';
+  var retainFullCover = shouldRetainLocalFullCoverData(song);
+  if (retainFullCover && !dataUrl) dataUrl = await readFileAsDataUrl(coverSource);
+  // Blob 转换期间可能已经切歌；完整图写回前必须重新确认对象仍拥有当前播放租约。
+  retainFullCover = !!dataUrl && shouldRetainLocalFullCoverData(song);
+  song.localCoverDataUrl = retainFullCover ? dataUrl : '';
   invalidateSongCoverCache(song);
-  return true;
+  return !!(song.localCoverThumbDataUrl || retainFullCover);
 }
+/**
+ * 生成单曲本地资产持久化快照，完整封面始终排除在记录之外。
+ * @param {object} song 待持久化的本地歌曲。
+ * @returns {object|null} 可写入 IndexedDB 的轻量资产记录。
+ */
 function localAssetCacheSnapshot(song) {
   var key = localAssetCacheKey(song);
   if (!key) return null;
@@ -9098,6 +9224,7 @@ function localAssetCacheSnapshot(song) {
     trackNumber: song.trackNumber || '',
     year: song.year || '',
     localMetadataLoaded: !!song.localMetadataLoaded,
+    localMetadataTagSchema: song.localMetadataLoaded ? LOCAL_METADATA_TAG_SCHEMA : 0,
     duration: Number(song.duration) || 0,
     localFormat: song.localFormat || '',
     localFileSize: Number(song.localFileSize) || 0,
@@ -9118,7 +9245,7 @@ function localAssetCacheSnapshot(song) {
     localCoverLoaded: !!song.localCoverLoaded,
     localCoverLightScanned: !!song.localCoverLightScanned,
     localCoverFileSignature: localAssetFileSignature(song.localCoverFile),
-    localCoverSource: song.localCoverFile ? 'file' : (song.localCoverDataUrl ? 'embedded' : (song.localCoverLoaded ? 'none' : ''))
+    localCoverSource: song.localCoverFile ? 'file' : ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? 'embedded' : (song.localCoverLoaded ? 'none' : ''))
   };
 }
 /**
@@ -9166,15 +9293,31 @@ async function putLocalAssetCacheRecord(record) {
   });
 }
 /**
+ * 判断持久缓存中的元数据是否由当前标签映射规则生成。
+ * @param {object} song 待补水的本地歌曲。
+ * @param {object} record 资产缓存或曲库索引记录。
+ * @returns {boolean} 是否允许复用缓存中的展示元数据。
+ */
+function canUseCachedLocalMetadata(song, record) {
+  if (!record || !record.localMetadataLoaded) return false;
+  var fileName = String(song && (song.localPath || song.localFilePathAbsolute || (song.localFile && song.localFile.name) || '') || '');
+  if (!/\.flac$/i.test(fileName)) return true;
+  return Number(record.localMetadataTagSchema) === LOCAL_METADATA_TAG_SCHEMA;
+}
+/**
  * 将本地资产缓存记录套用到歌曲对象。该函数会在缓存补水阶段批量执行，复用字段列表避免每首歌分配临时数组。
  * @param {object} song 需要补水的本地歌曲。
  * @param {object} record IndexedDB 中的资产缓存记录。
+ * @param {{includeLyrics?:boolean,includeCover?:boolean}=} opts 本轮允许写入歌曲对象的重载荷字段。
  * @returns {boolean} 是否修改了歌曲对象。
  */
-function applyLocalAssetCacheToSong(song, record) {
+function applyLocalAssetCacheToSong(song, record, opts) {
   if (!song || !record || record.id !== song.localKey) return false;
+  opts = opts || {};
+  var includeLyrics = opts.includeLyrics !== false;
+  var includeCover = opts.includeCover !== false;
   var changed = false;
-  if (record.localMetadataLoaded) {
+  if (canUseCachedLocalMetadata(song, record)) {
     for (var textIdx = 0; textIdx < LOCAL_METADATA_TEXT_FIELDS.length; textIdx++) {
       var key = LOCAL_METADATA_TEXT_FIELDS[textIdx];
       if (Object.prototype.hasOwnProperty.call(record, key) && song[key] !== record[key]) {
@@ -9183,6 +9326,7 @@ function applyLocalAssetCacheToSong(song, record) {
       }
     }
     song.localMetadataLoaded = true;
+    song.localMetadataTagSchema = LOCAL_METADATA_TAG_SCHEMA;
   }
   for (var valueIdx = 0; valueIdx < LOCAL_METADATA_VALUE_FIELDS.length; valueIdx++) {
     var valueKey = LOCAL_METADATA_VALUE_FIELDS[valueIdx];
@@ -9195,9 +9339,10 @@ function applyLocalAssetCacheToSong(song, record) {
   var canUseLyricCache = song.localLyricFile
     ? (record.localLyricFileSignature && record.localLyricFileSignature === lyricFileSig)
     : record.localLyricSource !== 'file';
-  if (canUseLyricCache && (record.localLyricText || record.localLyricLoaded)) {
+  if (includeLyrics && canUseLyricCache && (record.localLyricText || record.localLyricLoaded)) {
     if (Object.prototype.hasOwnProperty.call(record, 'localLyricText')) song.localLyricText = record.localLyricText || '';
     song.localLyricLoaded = !!record.localLyricLoaded;
+    if (song.localLyricText) song.localLyricResidencyReleased = false;
     song.localLyricLightScanned = !!record.localLyricLightScanned;
     song.localLyricFileName = record.localLyricFileName || song.localLyricFileName || '';
     song.localLyricTagName = record.localLyricTagName || song.localLyricTagName || '';
@@ -9207,7 +9352,7 @@ function applyLocalAssetCacheToSong(song, record) {
   var canUseCoverCache = song.localCoverFile
     ? (record.localCoverFileSignature && record.localCoverFileSignature === coverFileSig)
     : record.localCoverSource !== 'file';
-  if (canUseCoverCache && (record.localCoverThumbDataUrl || record.localCoverDataUrl || record.localCoverLoaded)) {
+  if (includeCover && canUseCoverCache && (record.localCoverThumbDataUrl || record.localCoverDataUrl || record.localCoverLoaded)) {
     var cachedThumb = record.localCoverThumbDataUrl || record.localCoverDataUrl || '';
     if (cachedThumb) song.localCoverThumbDataUrl = cachedThumb;
     song.localCoverLoaded = !!record.localCoverLoaded;
@@ -9217,12 +9362,21 @@ function applyLocalAssetCacheToSong(song, record) {
     changed = true;
   }
   if (changed) {
-    localAssetCacheMemory[song.localKey] = record;
     syncLocalSongAssetFields(song);
   }
+  if (includeLyrics) song.localLyricCacheHydrated = !song.localLyricResidencyReleased;
   return changed;
 }
-async function hydrateLocalAssetCacheForSongRange(songs, start, end) {
+/**
+ * 按歌曲范围读取 IndexedDB 资产，并按字段选项控制重载荷驻留。
+ * @param {Array<object>} songs 本地歌曲数组。
+ * @param {number} start 起始下标。
+ * @param {number} end 结束下标，不包含该位置。
+ * @param {{includeLyrics?:boolean,includeCover?:boolean}=} opts 允许补水的字段类别。
+ * @returns {Promise<number>} 实际命中并修改的歌曲数量。
+ */
+async function hydrateLocalAssetCacheForSongRange(songs, start, end, opts) {
+  opts = opts || {};
   songs = songs || [];
   start = Math.max(0, Math.floor(Number(start) || 0));
   end = Math.min(songs.length, Math.max(start, Math.floor(Number(end) || 0)));
@@ -9251,7 +9405,8 @@ async function hydrateLocalAssetCacheForSongRange(songs, start, end) {
         song.localAssetCacheHydrated = true;
         song.localAssetCacheMiss = !record;
       }
-      if (record && applyLocalAssetCacheToSong(song, record)) count++;
+      if (record && applyLocalAssetCacheToSong(song, record, opts)) count++;
+      if (song && opts.includeLyrics !== false) song.localLyricCacheHydrated = !song.localLyricResidencyReleased;
     }
     return count;
   } catch (e) {
@@ -9261,13 +9416,20 @@ async function hydrateLocalAssetCacheForSongRange(songs, start, end) {
       if (!song) continue;
       song.localAssetCacheHydrated = true;
       song.localAssetCacheMiss = true;
+      if (opts.includeLyrics !== false) song.localLyricCacheHydrated = !song.localLyricResidencyReleased;
     }
     return 0;
   }
 }
-async function hydrateLocalAssetCacheForSongs(songs) {
+/**
+ * 读取整组歌曲的 IndexedDB 资产；大曲库可关闭歌词字段以避免全量文本常驻。
+ * @param {Array<object>} songs 本地歌曲数组。
+ * @param {{includeLyrics?:boolean,includeCover?:boolean}=} opts 允许补水的字段类别。
+ * @returns {Promise<number>} 实际命中并修改的歌曲数量。
+ */
+async function hydrateLocalAssetCacheForSongs(songs, opts) {
   songs = songs || [];
-  return hydrateLocalAssetCacheForSongRange(songs, 0, songs.length);
+  return hydrateLocalAssetCacheForSongRange(songs, 0, songs.length, opts);
 }
 async function hydrateLocalAssetCacheForSongsChunked(songs, opts) {
   opts = opts || {};
@@ -9276,35 +9438,96 @@ async function hydrateLocalAssetCacheForSongsChunked(songs, opts) {
   var firstChunkSize = Math.max(16, opts.firstChunkSize || Math.min(chunkSize, 72));
   var delay = Math.max(0, opts.delay == null ? 120 : opts.delay);
   var total = 0;
-  if (songs.length) total += await hydrateLocalAssetCacheForSongRange(songs, 0, Math.min(songs.length, firstChunkSize));
+  if (songs.length) total += await hydrateLocalAssetCacheForSongRange(songs, 0, Math.min(songs.length, firstChunkSize), opts);
   for (var i = firstChunkSize; i < songs.length; i += chunkSize) {
     if (opts.isStale && opts.isStale()) break;
     await yieldToIdle(delay);
-    total += await hydrateLocalAssetCacheForSongRange(songs, i, i + chunkSize);
+    total += await hydrateLocalAssetCacheForSongRange(songs, i, i + chunkSize, opts);
   }
   return total;
 }
-async function writeLocalAssetCacheForSong(song) {
-  var record = localAssetCacheSnapshot(song);
+/**
+ * 把既有记录中的歌词重载荷复制到新的轻量资产快照。
+ * @param {object} sourceRecord 已持有完整歌词的缓存记录。
+ * @param {object} targetRecord 需要保留歌词字段的新记录。
+ * @returns {void}
+ */
+function copyLocalLyricCachePayload(sourceRecord, targetRecord) {
+  if (!sourceRecord || !targetRecord) return;
+  targetRecord.localLyricText = sourceRecord.localLyricText || '';
+  targetRecord.localLyricLoaded = !!sourceRecord.localLyricLoaded;
+  targetRecord.localLyricLightScanned = !!sourceRecord.localLyricLightScanned;
+  targetRecord.localLyricFileName = sourceRecord.localLyricFileName || '';
+  targetRecord.localLyricTagName = sourceRecord.localLyricTagName || '';
+  targetRecord.localLyricFileSignature = sourceRecord.localLyricFileSignature || '';
+  targetRecord.localLyricSource = sourceRecord.localLyricSource || '';
+}
+/**
+ * 把已捕获的单曲资产快照写入 IndexedDB；已释放歌词的轻量更新会先合并既有原文。
+ * @param {object} record 不再依赖歌曲对象后续字段的持久化快照。
+ * @param {string=} songName 仅用于失败日志的歌曲名。
+ * @returns {Promise<boolean>} 是否成功写入持久缓存。
+ */
+async function writeLocalAssetCacheRecord(record, songName) {
   if (!record) return false;
-  localAssetCacheMemory[record.id] = record;
   try {
+    // 旧歌曲已释放 raw 文本时，轻量字段更新必须先合并现有歌词，不能用空值覆盖持久缓存。
+    if (record._preserveLocalLyricPayload) {
+      delete record._preserveLocalLyricPayload;
+      var records = await readLocalAssetCacheRecords([record.id]);
+      if (records && records[record.id]) copyLocalLyricCachePayload(records[record.id], record);
+    }
     return await putLocalAssetCacheRecord(record);
   } catch (e) {
-    console.warn('[LocalAssetCacheWrite]', song && song.name, e);
+    console.warn('[LocalAssetCacheWrite]', songName || record.name || '', e);
     return false;
   }
 }
+/**
+ * 把单曲当前资产状态立即捕获并持久化到 IndexedDB。
+ * @param {object} song 需要持久化的本地歌曲。
+ * @returns {Promise<boolean>} 是否成功写入持久缓存。
+ */
+async function writeLocalAssetCacheForSong(song) {
+  return writeLocalAssetCacheRecord(localAssetCacheSnapshot(song), song && song.name);
+}
+/**
+ * 延迟写入单曲资产；调度时捕获快照，避免切歌释放重载荷后把空字段写入 IndexedDB。
+ * @param {object} song 需要持久化的本地歌曲。
+ * @returns {void}
+ */
 function scheduleLocalAssetCacheWrite(song) {
-  var key = localAssetCacheKey(song);
-  if (!key) return;
+  var record = localAssetCacheSnapshot(song);
+  if (!record) return;
+  var key = record.id;
+  var pendingRecord = localAssetCacheWriteRecords[key];
+  // 同 key debounce 若仍持有完整快照就直接复用；否则在真正写入前从 IndexedDB 合并。
+  if (song.localLyricResidencyReleased && song.localIndexedLyricStatus === 'ready' && !record.localLyricText) {
+    if (pendingRecord && (pendingRecord.localLyricText || pendingRecord.localLyricLoaded)) {
+      copyLocalLyricCachePayload(pendingRecord, record);
+    } else {
+      record._preserveLocalLyricPayload = true;
+    }
+  }
   if (localAssetCacheWriteTimers[key]) clearTimeout(localAssetCacheWriteTimers[key]);
-  localAssetCacheWriteTimers[key] = setTimeout(function(){
+  localAssetCacheWriteRecords[key] = record;
+  /**
+   * 写入本轮最后一次调度捕获的快照，并延后同步曲库索引。
+   * @returns {void}
+   */
+  function flushLocalAssetCacheWrite() {
+    if (localAssetCacheWriteTimers[key] !== timer) return;
     delete localAssetCacheWriteTimers[key];
-    writeLocalAssetCacheForSong(song).finally(function(){
+    var ownedRecord = localAssetCacheWriteRecords[key];
+    if (ownedRecord === record) delete localAssetCacheWriteRecords[key];
+    /** @returns {void} 资产落盘后安排轻量曲库索引同步。 */
+    function scheduleIndexAfterAssetWrite() {
       scheduleLocalLibraryIndexSave(savedLocalLibraryFolderPath(), localLibrarySongs || [], 650);
-    });
-  }, 160);
+    }
+    writeLocalAssetCacheRecord(ownedRecord || record, record.name).finally(scheduleIndexAfterAssetWrite);
+  }
+  var timer = setTimeout(flushLocalAssetCacheWrite, 160);
+  localAssetCacheWriteTimers[key] = timer;
 }
 var colorLabState = { picker: null, id: '', h: 0, s: 1, v: 1, dragging: false };
 var COLOR_LAB_PRESETS = [
@@ -13529,6 +13752,43 @@ function packLocalBeatCache(maxEntries) {
   }
   return packed;
 }
+/**
+ * 将 renderer 中的本地节奏图裁剪到指定上限，并同步释放通用节奏缓存中的同曲引用。
+ * @param {number} maxEntries 允许常驻内存的最大歌曲数。
+ * @param {string} protectedKey 本轮刚写入、不得被淘汰的歌曲键。
+ * @returns {void} 直接删除各内存缓存中更新时间最早的本地歌曲条目。
+ */
+function trimLocalBeatMapMemoryCache(maxEntries, protectedKey) {
+  var cache = ensureLocalBeatMapCache();
+  var count = 0;
+  // 缓存是无原型约束的普通对象，只统计自有歌曲条目，避免把继承属性纳入淘汰额度。
+  for (var key in cache) {
+    if (!Object.prototype.hasOwnProperty.call(cache, key)) continue;
+    count++;
+  }
+  // 每轮只定位并删除一个最旧条目，避免为大型节奏图缓存创建键数组和排序副本。
+  while (count > maxEntries) {
+    var oldestKey = '';
+    var oldestAt = Infinity;
+    for (var candidateKey in cache) {
+      if (!Object.prototype.hasOwnProperty.call(cache, candidateKey) || candidateKey === protectedKey) continue;
+      var candidate = cache[candidateKey];
+      var updatedAt = candidate && candidate.updatedAt ? candidate.updatedAt : 0;
+      if (!oldestKey || updatedAt < oldestAt) {
+        oldestKey = candidateKey;
+        oldestAt = updatedAt;
+      }
+    }
+    if (!oldestKey) return;
+    var oldestEntry = cache[oldestKey] || {};
+    delete cache[oldestKey];
+    var runtimeKey = 'local:' + oldestKey;
+    // 只释放由本地专用缓存共享出去的同一对象，不能误删通用缓存后来独立更新的结果。
+    if (oldestEntry.mr && beatMapCache[runtimeKey] === oldestEntry.mr) delete beatMapCache[runtimeKey];
+    if (oldestEntry.dj && djBeatMapCache[runtimeKey] === oldestEntry.dj) delete djBeatMapCache[runtimeKey];
+    count--;
+  }
+}
 function saveLocalBeatMapCache() {
   ensureLocalBeatMapCache();
   var attempts = [12, 8, 5, 3];
@@ -13545,6 +13805,15 @@ function getLocalBeatEntry(localKey, mode) {
   var entry = localKey && cache ? cache[localKey] : null;
   return entry && entry[mode] ? entry[mode] : null;
 }
+/**
+ * 保存单首本地歌曲的节奏图，并同步更新模式偏好、内存上限和持久缓存。
+ * @param {string} localKey 本地歌曲唯一键。
+ * @param {string} mode 节奏分析模式。
+ * @param {object} map 完整节奏分析结果。
+ * @param {object} song 写入磁盘缓存时使用的歌曲元数据。
+ * @param {{skipDisk?:boolean}} opts 是否跳过磁盘缓存写入。
+ * @returns {void} 直接更新 renderer 缓存，并按选项写入持久存储。
+ */
 function storeLocalBeatEntry(localKey, mode, map, song, opts) {
   if (!localKey || !map) return;
   opts = opts || {};
@@ -13554,6 +13823,7 @@ function storeLocalBeatEntry(localKey, mode, map, song, opts) {
   entry[mode] = map;
   entry.updatedAt = Date.now();
   cache[localKey] = entry;
+  trimLocalBeatMapMemoryCache(12, localKey);
   prefs[localKey] = mode;
   saveLocalBeatPrefs();
   saveLocalBeatMapCache();
@@ -13606,17 +13876,147 @@ function isCurrentLocalQueueSong(song) {
   var active = playQueue[currentIdx];
   return !!(song && song.localKey && currentLocalSong && currentLocalSong.localKey === song.localKey && active && active.localKey === song.localKey);
 }
+/**
+ * 释放歌曲对象持有的完整本地封面，同时清除可能间接引用该大字符串的派生字段。
+ * @param {object} song 待释放完整封面的歌曲对象。
+ * @returns {void}
+ */
+function releaseLocalFullCoverData(song) {
+  if (!song || !song.localCoverDataUrl) return;
+  var fullCover = song.localCoverDataUrl;
+  song.localCoverDataUrl = '';
+  if (song.customCover === fullCover) {
+    if (song.localCoverThumbDataUrl) song.customCover = song.localCoverThumbDataUrl;
+    else delete song.customCover;
+  }
+  invalidateSongCoverCache(song);
+}
+/**
+ * 在切歌时移交完整本地封面所有权；同一歌曲的新对象接管封面，其他情况直接释放旧引用。
+ * @param {object|null} previousSong 切换前持有完整封面的歌曲对象。
+ * @param {object|null} nextSong 即将成为当前播放项的歌曲对象。
+ * @returns {void}
+ */
+function handoffLocalFullCoverData(previousSong, nextSong) {
+  if (!previousSong || previousSong === nextSong || !previousSong.localCoverDataUrl) return;
+  var fullCover = previousSong.localCoverDataUrl;
+  var transfer = !!(nextSong && previousSong.localKey && previousSong.localKey === nextSong.localKey);
+  releaseLocalFullCoverData(previousSong);
+  if (!transfer) return;
+  nextSong.localCoverDataUrl = fullCover;
+  if (!nextSong.localCoverThumbDataUrl && previousSong.localCoverThumbDataUrl) {
+    nextSong.localCoverThumbDataUrl = previousSong.localCoverThumbDataUrl;
+  }
+  if (previousSong.localCoverLoaded) nextSong.localCoverLoaded = true;
+  invalidateSongCoverCache(nextSong);
+}
+/**
+ * 判断完整本地封面能否驻留在指定对象上；对象身份门禁可隔离同一 localKey 的旧队列副本。
+ * @param {object} song 待判断的歌曲对象。
+ * @returns {boolean} 该对象是否同时由当前播放状态和当前队列位置持有。
+ */
+function shouldRetainLocalFullCoverData(song) {
+  return !!(song && currentLocalSong === song && playQueue[currentIdx] === song);
+}
+/**
+ * 判断歌词原文能否驻留在指定歌曲对象上；只有精确当前队列对象拥有播放租约。
+ * @param {object} song 待判断的本地歌曲对象。
+ * @returns {boolean} 是否允许该对象持有歌词原文。
+ */
+function shouldRetainLocalLyricText(song) {
+  return !!(song && currentLocalSong === song && playQueue[currentIdx] === song);
+}
+/**
+ * 清除歌曲对象的歌词原文驻留，同时保留文件、标签和 IndexedDB 按需恢复线索。
+ * @param {object} song 待清理的本地歌曲对象。
+ * @returns {boolean} 是否释放了歌词原文。
+ */
+function clearLocalLyricTextResidency(song) {
+  if (!song || !song.localLyricText) return false;
+  song.localIndexedLyricStatus = 'ready';
+  song.localLyricText = '';
+  song.localLyricLoaded = false;
+  song.localLyricCacheHydrated = false;
+  song.localLyricResidencyReleased = true;
+  return true;
+}
+/**
+ * 在释放歌词原文前捕获持久化快照，确保下次播放可按单曲恢复。
+ * @param {object} song 待释放的本地歌曲对象。
+ * @returns {boolean} 是否释放了歌词原文。
+ */
+function releaseLocalLyricText(song) {
+  if (!song || !song.localLyricText) return false;
+  scheduleLocalAssetCacheWrite(song);
+  return clearLocalLyricTextResidency(song);
+}
+/**
+ * 清理同一歌曲在曲库、队列和歌单中的非租约副本，最多由一个副本捕获持久快照。
+ * @param {string} localKey 本地歌曲稳定键。
+ * @param {object|null} retainedSong 唯一允许保留原文的歌曲对象。
+ * @param {boolean=} payloadPersisted 调用前是否已捕获完整歌词快照。
+ * @returns {boolean} 本轮是否已捕获持久快照。
+ */
+function trimLocalLyricTextCopies(localKey, retainedSong, payloadPersisted) {
+  if (!localKey) return !!payloadPersisted;
+  var persisted = !!payloadPersisted;
+  var lists = [localLibrarySongs, playQueue, playlist];
+  // 三个视图可能共享同一对象；循环按身份跳过唯一租约持有者，其余副本立即释放 raw 文本。
+  for (var listIndex = 0; listIndex < lists.length; listIndex++) {
+    var list = lists[listIndex] || [];
+    for (var songIndex = 0; songIndex < list.length; songIndex++) {
+      var target = list[songIndex];
+      if (!target || target === retainedSong || target.localKey !== localKey || !target.localLyricText) continue;
+      if (!persisted) persisted = releaseLocalLyricText(target);
+      else clearLocalLyricTextResidency(target);
+    }
+  }
+  return persisted;
+}
+/**
+ * 在切歌时移交歌词原文播放租约；同 key 新对象接管原文，其他情况释放全部旧副本。
+ * @param {object|null} previousSong 切换前的当前本地歌曲。
+ * @param {object|null} nextSong 即将成为当前播放项的歌曲。
+ * @returns {void}
+ */
+function handoffLocalLyricText(previousSong, nextSong) {
+  if (!previousSong) {
+    if (nextSong && nextSong.localKey) trimLocalLyricTextCopies(nextSong.localKey, nextSong, false);
+    return;
+  }
+  if (previousSong === nextSong) {
+    trimLocalLyricTextCopies(previousSong.localKey, previousSong, false);
+    return;
+  }
+  // 同曲不同队列对象需要无缝接管，避免重播时先闪回 fallback 或重复读取 IndexedDB。
+  var transfer = !!(nextSong && previousSong.localKey && previousSong.localKey === nextSong.localKey);
+  if (transfer && previousSong.localLyricText) {
+    nextSong.localLyricText = previousSong.localLyricText;
+    nextSong.localLyricLoaded = true;
+    nextSong.localLyricCacheHydrated = !!previousSong.localLyricCacheHydrated;
+    nextSong.localIndexedLyricStatus = previousSong.localIndexedLyricStatus || 'ready';
+    nextSong.localLyricResidencyReleased = false;
+  }
+  var persisted = releaseLocalLyricText(previousSong);
+  trimLocalLyricTextCopies(previousSong.localKey, transfer ? nextSong : null, persisted);
+}
+/**
+ * 将本地歌曲的轻量资产和元数据同步给同一曲目的其他视图对象，不传播完整封面大字符串。
+ * @param {object} sourceSong 已完成资产补齐的源歌曲对象。
+ * @returns {void}
+ */
 function syncLocalSongAssetFields(sourceSong) {
   if (!sourceSong || !sourceSong.localKey) return;
   var lists = [localLibrarySongs, playQueue, playlist];
-  lists.forEach(function(list){
-    (list || []).forEach(function(target){
-      if (!target || target === sourceSong || target.localKey !== sourceSong.localKey) return;
+  var retainedLyricSong = shouldRetainLocalLyricText(sourceSong) ? sourceSong : null;
+  // 资产字段仍可跨视图同步，但歌词原文只能写入精确当前对象，避免任一副本阻止大字符串回收。
+  for (var listIndex = 0; listIndex < lists.length; listIndex++) {
+    var list = lists[listIndex] || [];
+    for (var songIndex = 0; songIndex < list.length; songIndex++) {
+      var target = list[songIndex];
+      if (!target || target === sourceSong || target.localKey !== sourceSong.localKey) continue;
       var coverChanged = false;
-      if (sourceSong.localCoverDataUrl && target.localCoverDataUrl !== sourceSong.localCoverDataUrl) {
-        target.localCoverDataUrl = sourceSong.localCoverDataUrl;
-        coverChanged = true;
-      }
+      if (sourceSong.localUrl && !target.localUrl) target.localUrl = sourceSong.localUrl;
       if (sourceSong.localCoverThumbDataUrl && target.localCoverThumbDataUrl !== sourceSong.localCoverThumbDataUrl) {
         target.localCoverThumbDataUrl = sourceSong.localCoverThumbDataUrl;
         coverChanged = true;
@@ -13627,8 +14027,16 @@ function syncLocalSongAssetFields(sourceSong) {
       if (sourceSong.localCoverFileName && !target.localCoverFileName) { target.localCoverFileName = sourceSong.localCoverFileName; coverChanged = true; }
       if (sourceSong.localCoverObjectUrl && !target.localCoverObjectUrl) { target.localCoverObjectUrl = sourceSong.localCoverObjectUrl; coverChanged = true; }
       if (coverChanged) invalidateSongCoverCache(target);
-      if (sourceSong.localLyricText && !target.localLyricText) target.localLyricText = sourceSong.localLyricText;
-      if (sourceSong.localLyricLoaded) target.localLyricLoaded = true;
+      if (sourceSong.localLyricText && shouldRetainLocalLyricText(target)) {
+        target.localLyricText = sourceSong.localLyricText;
+        target.localLyricLoaded = true;
+        target.localLyricCacheHydrated = !!sourceSong.localLyricCacheHydrated;
+        target.localIndexedLyricStatus = sourceSong.localIndexedLyricStatus || 'ready';
+        target.localLyricResidencyReleased = false;
+        retainedLyricSong = target;
+      } else if (sourceSong.localLyricLoaded && !sourceSong.localLyricText && !sourceSong.localLyricResidencyReleased) {
+        target.localLyricLoaded = true;
+      }
       if (sourceSong.localLyricLightScanned) target.localLyricLightScanned = true;
       if (sourceSong.localLyricFile && !target.localLyricFile) target.localLyricFile = sourceSong.localLyricFile;
       if (sourceSong.localLyricFileName && !target.localLyricFileName) target.localLyricFileName = sourceSong.localLyricFileName;
@@ -13641,13 +14049,17 @@ function syncLocalSongAssetFields(sourceSong) {
         if (sourceSong.trackNumber) target.trackNumber = sourceSong.trackNumber;
         if (sourceSong.year) target.year = sourceSong.year;
         target.localMetadataLoaded = true;
+        target.localMetadataTagSchema = sourceSong.localMetadataTagSchema || 0;
       }
       if (sourceSong.duration && !target.duration) target.duration = sourceSong.duration;
       if (sourceSong.localFormat && !target.localFormat) target.localFormat = sourceSong.localFormat;
       if (sourceSong.localFileSize && !target.localFileSize) target.localFileSize = sourceSong.localFileSize;
       if (sourceSong.localBitrateKbps && !target.localBitrateKbps) target.localBitrateKbps = sourceSong.localBitrateKbps;
-    });
-  });
+    }
+  }
+  var persisted = false;
+  if (sourceSong.localLyricText && sourceSong !== retainedLyricSong) persisted = releaseLocalLyricText(sourceSong);
+  trimLocalLyricTextCopies(sourceSong.localKey, retainedLyricSong, persisted);
 }
 async function readLocalBeatCacheForSong(song, mode) {
   if (!song || !song.localKey) return null;
@@ -13808,13 +14220,14 @@ function localIndexedAssetCanWaitForCache(song, kind) {
   var status = kind === 'cover' ? song.localIndexedCoverStatus : song.localIndexedLyricStatus;
   return status === 'ready';
 }
+/**
+ * 判断歌曲是否需要后台准备元数据或封面；歌词只在实际播放时按需读取。
+ * @param {object} song 待检查的本地歌曲。
+ * @returns {boolean} 后台任务是否仍有必要处理该歌曲。
+ */
 function localSongNeedsAssetPreload(song) {
   if (!song || song.type !== 'local') return false;
   if (!song.localMetadataLoaded) return true;
-  if (!song.localLyricLoaded && !song.localLyricLightScanned && (song.localLyricFile || canReadEmbeddedFlacLyrics(song))) {
-    if (localIndexedAssetCanWaitForCache(song, 'lyric')) return false;
-    return true;
-  }
   if (!song.localCoverLoaded && !song.localCoverLightScanned && !song.localCoverDataUrl && !song.localCoverThumbDataUrl && (song.localCoverFile || canReadEmbeddedCover(song))) {
     if (localIndexedAssetCanWaitForCache(song, 'cover')) return false;
     return true;
@@ -13886,18 +14299,46 @@ async function waitForLocalAssetPreloadTurn(token) {
  */
 function startLocalLibraryBackgroundProcessing(songs, opts) {
   opts = opts || {};
-  songs = sortLocalAssetPreloadQueue(songs || []);
-  if (!songs.length) return 0;
+  var previousProcessSongs = localLibraryProcessSongs;
+  if (localLibraryProcessStartTimer) {
+    clearTimeout(localLibraryProcessStartTimer);
+    localLibraryProcessStartTimer = null;
+  }
   var token = ++localLibraryProcessToken;
+  songs = sortLocalAssetPreloadQueue(songs || []);
+  if (previousProcessSongs && previousProcessSongs !== songs) previousProcessSongs.length = 0;
+  if (!songs.length) {
+    localLibraryProcessSongs = null;
+    localLibraryProcessing = { active:false, token:token, total:0, assetsDone:0 };
+    localLibraryAssetUiBatchState.progressAt = 0;
+    localLibraryAssetUiBatchState.refreshAt = 0;
+    updateLocalLibraryProcessingProgress(false);
+    return 0;
+  }
+  localLibraryProcessSongs = songs;
   localLibraryProcessing = { active:true, token:token, total:songs.length, assetsDone:0 };
   localLibraryAssetUiBatchState.progressAt = 0;
   localLibraryAssetUiBatchState.refreshAt = 0;
   updateLocalLibraryProcessingProgress(false);
-  setTimeout(function(){
-    runLocalLibraryBackgroundProcessing(songs, token, opts).catch(function(err){
+  /**
+   * 在启动延迟结束后移交排队任务所有权；已被新曲库替代的回调不得继续持有或处理旧歌曲数组。
+   * @returns {void}
+   */
+  function beginLocalLibraryBackgroundProcessing() {
+    if (localLibraryProcessStartTimer === startTimer) localLibraryProcessStartTimer = null;
+    if (token !== localLibraryProcessToken) return;
+    /**
+     * 记录当前仍有效的后台资产任务异常，保持既有失败可见性。
+     * @param {Error} err 后台资产任务异常。
+     * @returns {void}
+     */
+    function reportLocalLibraryProcessingError(err) {
       console.warn('[LocalLibraryProcessing]', err);
-    });
-  }, localAssetProcessingStartDelay(opts));
+    }
+    runLocalLibraryBackgroundProcessing(songs, token, opts).catch(reportLocalLibraryProcessingError);
+  }
+  var startTimer = setTimeout(beginLocalLibraryBackgroundProcessing, localAssetProcessingStartDelay(opts));
+  localLibraryProcessStartTimer = startTimer;
   return songs.length;
 }
 /**
@@ -13918,6 +14359,7 @@ async function runLocalLibraryBackgroundProcessing(songs, token, opts) {
       var song = songs[i];
       var applyCurrent = isCurrentLocalQueueSong(song);
       await preloadLocalSongAssets(song, { token:token, applyCurrent:applyCurrent, background:true });
+      if (token !== localLibraryProcessToken) return;
       localLibraryProcessing.assetsDone = i + 1;
       var isLast = i === songs.length - 1;
       if (shouldUpdateLocalAssetProgressUi(isLast || applyCurrent)) updateLocalLibraryProcessingProgress(false);
@@ -13925,6 +14367,7 @@ async function runLocalLibraryBackgroundProcessing(songs, token, opts) {
       await yieldToIdle(localAssetBackgroundDelayMs());
     }
   } finally {
+    if (localLibraryProcessSongs === songs) localLibraryProcessSongs = null;
     if (token === localLibraryProcessToken) {
       localLibraryProcessing.active = false;
       updateLocalLibraryProcessingProgress(true);
@@ -16606,29 +17049,133 @@ function drawCanvasHeart(ctx, cx, cy, size, color) {
   ctx.fill();
   ctx.restore();
 }
+/**
+ * 结束歌单封面图片请求并释放事件闭包；失败时同时释放图片地址和缓存引用。
+ * @param {object} rec 当前歌单封面缓存记录。
+ * @param {object} img 当前图片对象。
+ * @param {boolean} keepImage 成功后是否继续保留可复用图片。
+ * @returns {void}
+ */
+function settlePlaylistCoverImage(rec, img, keepImage) {
+  if (!img) {
+    if (!keepImage && rec) rec.img = null;
+    return;
+  }
+  img.onload = null;
+  img.onerror = null;
+  if (keepImage) {
+    if (rec) rec.img = img;
+    return;
+  }
+  try { img.src = ''; } catch (e) {}
+  if (rec && rec.img === img) rec.img = null;
+}
+/**
+ * 请求歌单封面并合并同地址并发回调；缓存超过上限时同步裁剪旧的非保护请求。
+ * @param {string} url 原始封面地址。
+ * @param {Function=} cb 图片完成后的可选回调。
+ * @returns {void}
+ */
 function requestPlaylistCover(url, cb) {
   if (!url) { if (cb) cb(null); return; }
   var rec = playlistCoverCache[url];
   if (rec && rec.loaded) { if (cb) setTimeout(function(){ cb(rec.img); }, 0); return; }
   if (rec && rec.loading) { if (cb) rec.waiters.push(cb); return; }
+  var isNewRecord = !rec;
   rec = playlistCoverCache[url] = { loaded:false, loading:true, waiters: cb ? [cb] : [], img:null, failed:false };
+  if (isNewRecord) playlistCoverCacheCount++;
   var img = new Image();
+  rec.img = img;
   if (!isInlineCoverSrc(url)) img.crossOrigin = 'anonymous';
+  /**
+   * 仅完成仍拥有当前缓存槽位的图片请求，忽略已被裁剪的迟到事件。
+   * @returns {void}
+   */
   img.onload = function(){
-    rec.loaded = true; rec.loading = false; rec.img = img;
+    if (playlistCoverCache[url] !== rec) return;
+    rec.loaded = true; rec.loading = false;
+    settlePlaylistCoverImage(rec, img, true);
     rec.waiters.splice(0).forEach(function(fn){ setTimeout(function(){ fn(img); }, 0); });
   };
+  /**
+   * 仅标记仍拥有当前缓存槽位的失败请求，忽略已被裁剪的迟到事件。
+   * @returns {void}
+   */
   img.onerror = function(){
+    if (playlistCoverCache[url] !== rec) return;
     rec.loading = false; rec.failed = true;
+    settlePlaylistCoverImage(rec, img, false);
     rec.waiters.splice(0).forEach(function(fn){ setTimeout(function(){ fn(null); }, 0); });
   };
   var src = coverProxySrc(url);
   if (!src) {
     rec.loading = false; rec.failed = true;
+    settlePlaylistCoverImage(rec, img, false);
     rec.waiters.splice(0).forEach(function(fn){ setTimeout(function(){ fn(null); }, 0); });
+    enforcePlaylistCoverCacheLimit(url);
     return;
   }
   img.src = src;
+  enforcePlaylistCoverCacheLimit(url);
+}
+/**
+ * 在成功或失败请求超过缓冲上限时统一裁回常规缓存目标。
+ * @param {string} currentUrl 本次新建且暂时需要保护的封面地址。
+ * @returns {number} 本次删除或取消的记录数量。
+ */
+function enforcePlaylistCoverCacheLimit(currentUrl) {
+  if (playlistCoverCacheCount <= 196) return 0;
+  var protectedCovers = collectProtectedCoverUrls();
+  if (currentUrl) protectedCovers[String(currentUrl)] = true;
+  return trimPlaylistCoverCache(180, protectedCovers);
+}
+/**
+ * 取消一个仍在加载的旧封面请求，并释放图片事件、地址和 waiter 闭包。
+ * @param {string} url 缓存键。
+ * @param {object} rec 待取消的缓存记录。
+ * @returns {boolean} 是否取消并删除了当前记录。
+ */
+function cancelPlaylistCoverRequest(url, rec) {
+  if (!rec || playlistCoverCache[url] !== rec) return false;
+  rec.loading = false;
+  rec.failed = true;
+  var img = rec.img;
+  rec.waiters.length = 0;
+  settlePlaylistCoverImage(rec, img, false);
+  delete playlistCoverCache[url];
+  playlistCoverCacheCount = Math.max(0, playlistCoverCacheCount - 1);
+  return true;
+}
+/**
+ * 把歌单封面缓存裁到目标数量；优先删除完成项，必要时取消最旧的非保护加载项。
+ * @param {number} keep 目标保留数量。
+ * @param {object=} protectedKeys 当前可见或正在使用的封面键集合。
+ * @returns {number} 删除或取消的记录数量。
+ */
+function trimPlaylistCoverCache(keep, protectedKeys) {
+  keep = Math.max(0, Number(keep) || 0);
+  var key;
+  var drop = playlistCoverCacheCount - keep;
+  if (drop <= 0) return 0;
+  var dropped = 0;
+  for (key in playlistCoverCache) {
+    if (drop <= 0) break;
+    if (!Object.prototype.hasOwnProperty.call(playlistCoverCache, key) || (protectedKeys && protectedKeys[key])) continue;
+    var rec = playlistCoverCache[key];
+    if (rec && rec.loading) continue;
+    delete playlistCoverCache[key];
+    playlistCoverCacheCount = Math.max(0, playlistCoverCacheCount - 1);
+    drop--;
+    dropped++;
+  }
+  for (key in playlistCoverCache) {
+    if (drop <= 0) break;
+    if (!Object.prototype.hasOwnProperty.call(playlistCoverCache, key) || (protectedKeys && protectedKeys[key])) continue;
+    if (!cancelPlaylistCoverRequest(key, playlistCoverCache[key])) continue;
+    drop--;
+    dropped++;
+  }
+  return dropped;
 }
 
 // ============================================================
@@ -17209,9 +17756,16 @@ function ensureLocalCoverPreviewUrl(song) {
     return '';
   }
 }
+/**
+ * 只把用户持久化的自定义封面水合到歌曲；普通本地封面由可见读取路径按需解析。
+ * @param {object} song 待水合自定义封面的歌曲。
+ * @returns {object} 原歌曲对象。
+ */
 function hydrateCustomCover(song) {
   if (!song) return song;
-  var custom = getCustomCoverForSong(song);
+  var key = songCustomCoverKey(song);
+  var covers = ensureCustomCoverMap();
+  var custom = key && covers[key] ? covers[key] : '';
   if (custom) song.customCover = custom;
   return song;
 }
@@ -18468,7 +19022,7 @@ function openTrackDetailModal(type, songOverride) {
       ? detailRow('音质', detailQuality || '未知') +
         detailRow('文件路径', song.localPath || song.localFile && song.localFile.name || '未知') +
         detailRow('歌词文件', song.localLyricFileName || '未匹配') +
-        detailRow('封面文件', song.localCoverFileName || (song.localCoverDataUrl ? '内嵌封面' : '未匹配'))
+        detailRow('封面文件', song.localCoverFileName || ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? '内嵌封面' : '未匹配'))
       : '';
     body.innerHTML =
       '<div class="detail-hero">' + coverHtml +
@@ -18563,7 +19117,10 @@ function clearCustomCoverForCurrent() {
     delete covers[key];
     saveCustomCoverMap();
   }
-  delete playlistCoverCache[custom];
+  if (playlistCoverCache[custom]) {
+    delete playlistCoverCache[custom];
+    playlistCoverCacheCount = Math.max(0, playlistCoverCacheCount - 1);
+  }
   delete song.customCover;
   invalidateSongCoverCache(song);
   if (key) {
@@ -18671,6 +19228,13 @@ function cloneLyricLines(lines) {
   for (var i = 0; i < source.length; i++) out[i] = cloneLyricLine(source[i]);
   return out;
 }
+/**
+ * 保存一份与解析输入隔离的原歌词只读快照，行对象和逐字对象发布后不得原地修改。
+ * @param {Array<object>} lines 新解析的歌词行。
+ * @param {boolean} hasNativeKaraoke 是否包含原生逐字时间轴。
+ * @param {string} timingSource 歌词时间轴来源。
+ * @returns {void}
+ */
 function setOriginalLyricsState(lines, hasNativeKaraoke, timingSource) {
   originalLyricsState = {
     lines: cloneLyricLines(lines || []),
@@ -18678,15 +19242,26 @@ function setOriginalLyricsState(lines, hasNativeKaraoke, timingSource) {
     timingSource: timingSource || 'fallback'
   };
 }
+/**
+ * 激活已隔离的只读歌词快照；调用者必须保证数组、行和逐字对象不会原地修改。
+ * @param {ReadonlyArray<object>} lines 已发布的只读歌词行快照。
+ * @param {boolean} hasNativeKaraoke 是否包含原生逐字时间轴。
+ * @param {string} timingSource 歌词时间轴来源。
+ * @returns {void}
+ */
 function applyLyricsState(lines, hasNativeKaraoke, timingSource) {
   lyricsHasNativeKaraoke = !!hasNativeKaraoke;
   lyricsTimingSource = timingSource || 'fallback';
-  lyricsLines = cloneLyricLines(lines || []);
+  lyricsLines = Array.isArray(lines) ? lines : [];
   if (!lyricsLines.length) lyricsLines = withLyricFallback([]);
   if (lyricsLines.length && lyricsLines[0].fallback) lyricsTimingSource = 'fallback';
   renderLyrics();
   updateCustomLyricControls();
 }
+/**
+ * 切回原歌词并复用其只读对象图，避免每次来源切换再次深克隆长歌词。
+ * @returns {void}
+ */
 function applyOriginalLyricsState() {
   lyricSourceMode = 'original';
   applyLyricsState(originalLyricsState.lines, originalLyricsState.hasNativeKaraoke, originalLyricsState.timingSource);
@@ -19044,7 +19619,21 @@ async function addCollectTargetToPlaylist(pid) {
  * @param {object} song 原始歌曲对象。
  * @returns {object} 可安全写入播放队列的歌曲副本。
  */
-function cloneSong(song){ return hydrateCustomCover(Object.assign({}, song)); }
+function cloneSong(song){
+  var copy = Object.assign({}, song);
+  var fullCover = copy.localCoverDataUrl;
+  delete copy.localCoverDataUrl;
+  // 在途任务只归源对象所有；副本若继承 Promise，源任务完成后无法清理副本状态。
+  delete copy.localMetadataPromise;
+  delete copy.localCoverPromise;
+  delete copy.localLyricPromise;
+  delete copy.localLyricCachePromise;
+  delete copy.localCoverLoading;
+  delete copy.localLyricLoading;
+  if (fullCover && copy.customCover === fullCover) delete copy.customCover;
+  invalidateSongCoverCache(copy);
+  return hydrateCustomCover(copy);
+}
 /**
  * 批量克隆歌曲列表。大本地库或大歌单入队时用显式循环减少 map 回调开销，并保持数组长度语义。
  * @param {Array<object>} songs 原始歌曲列表。
@@ -20337,20 +20926,33 @@ function scheduleAudioResumePosition(media, seconds, token) {
   applyResume();
 }
 
+/**
+ * 保存首次解析出的本地音频地址，并同步给同曲活跃对象以复用同一 Object URL。
+ * @param {object} song 持有本地文件的歌曲对象。
+ * @param {string} url 已解析的音频地址。
+ * @returns {string} 写入后的音频地址。
+ */
+function assignLocalSongUrl(song, url) {
+  song.localUrl = url || '';
+  if (song.localUrl) syncLocalSongAssetFields(song);
+  return song.localUrl;
+}
+/**
+ * 按需解析本地音频地址；仅在没有主进程持久地址时创建浏览器 Object URL。
+ * @param {object} song 待播放的本地歌曲。
+ * @returns {string} 可赋给音频元素的地址。
+ */
 function ensureLocalSongUrl(song) {
   if (!song) return '';
   if (song.localUrl) return song.localUrl;
   if (song.localFileUrl) {
-    song.localUrl = song.localFileUrl;
-    return song.localUrl;
+    return assignLocalSongUrl(song, song.localFileUrl);
   }
   if (song.localFile && localFileUrlFromEntry(song.localFile)) {
-    song.localUrl = localFileUrlFromEntry(song.localFile);
-    return song.localUrl;
+    return assignLocalSongUrl(song, localFileUrlFromEntry(song.localFile));
   }
   if (song.localFile && song.localFile.slice) {
-    song.localUrl = URL.createObjectURL(song.localFile);
-    return song.localUrl;
+    return assignLocalSongUrl(song, URL.createObjectURL(song.localFile));
   }
   return '';
 }
@@ -20396,6 +20998,44 @@ function maybeApplyLocalLyricsForSong(song, opts) {
   applyLocalOriginalLyricsState(song);
   updateCustomLyricControls();
 }
+/**
+ * 为即将播放的单曲按需恢复 IndexedDB 歌词，避免启动时把全曲库歌词文本挂入歌曲对象。
+ * @param {object} song 当前需要歌词的本地歌曲。
+ * @returns {Promise<boolean>} 是否从缓存恢复到已加载歌词状态。
+ */
+function hydrateLocalLyricCacheForSong(song) {
+  if (!song || song.localLyricCacheHydrated || song.localIndexedLyricStatus !== 'ready') return Promise.resolve(false);
+  if (song.localLyricCachePromise) return song.localLyricCachePromise;
+
+  /**
+   * 标记本轮单曲缓存读取已完成，并返回歌词命中状态。
+   * @returns {boolean} 歌曲是否已有可用歌词文本。
+   */
+  function finishLocalLyricCacheHydration() {
+    // IndexedDB 返回期间可能已经切歌；旧对象只能保留可重试状态，不能重新获得 raw 驻留权。
+    if (song.localLyricResidencyReleased && !shouldRetainLocalLyricText(song)) {
+      song.localLyricCacheHydrated = false;
+      return false;
+    }
+    song.localLyricResidencyReleased = false;
+    song.localLyricCacheHydrated = true;
+    return !!(song.localLyricLoaded && String(song.localLyricText || '').trim());
+  }
+
+  /**
+   * 释放单曲缓存读取 Promise，后续调用只读取最终字段状态。
+   * @returns {void}
+   */
+  function releaseLocalLyricCachePromise() {
+    song.localLyricCachePromise = null;
+  }
+
+  song.localLyricCachePromise = hydrateLocalAssetCacheForSongRange([song], 0, 1, {
+    includeLyrics: true,
+    includeCover: false
+  }).then(finishLocalLyricCacheHydration).finally(releaseLocalLyricCachePromise);
+  return song.localLyricCachePromise;
+}
 function ensureLocalLyricsForSong(song, opts) {
   opts = opts || {};
   if (!song) return Promise.resolve(false);
@@ -20404,13 +21044,31 @@ function ensureLocalLyricsForSong(song, opts) {
     return Promise.resolve(!!String(song.localLyricText || '').trim());
   }
   if (song.localLyricPromise) {
-    return song.localLyricPromise.then(function(ok){
+    /**
+     * 复用正在进行的歌词读取，并在前台调用时补齐应用动作或内嵌歌词回退。
+     * @param {boolean} ok 既有读取是否得到歌词。
+     * @returns {Promise<boolean>|boolean} 最终歌词加载结果。
+     */
+    function continuePendingLocalLyricLoad(ok) {
       maybeApplyLocalLyricsForSong(song, opts);
       if (!ok && !opts.background && !song.localLyricLoaded && !song.localLyricText && canReadEmbeddedFlacLyrics(song)) {
         return ensureLocalLyricsForSong(song, opts);
       }
       return ok;
-    });
+    }
+    return song.localLyricPromise.then(continuePendingLocalLyricLoad);
+  }
+  if (!song.localLyricCacheHydrated && song.localIndexedLyricStatus === 'ready') {
+    /**
+     * 缓存读取后重新进入既有歌词状态机；命中则直接应用，未命中才读取原文件。
+     * @returns {Promise<boolean>|boolean} 最终歌词加载结果。
+     */
+    function continueAfterLocalLyricCache() {
+      // 失去播放租约后直接结束旧调用，避免以 ready 状态再次递归水合同一首旧歌曲。
+      if (song.localLyricResidencyReleased && !shouldRetainLocalLyricText(song)) return false;
+      return ensureLocalLyricsForSong(song, opts);
+    }
+    return hydrateLocalLyricCacheForSong(song).then(continueAfterLocalLyricCache);
   }
   if (!song.localLyricFile && !canReadEmbeddedFlacLyrics(song)) {
     song.localLyricLoaded = true;
@@ -20425,6 +21083,7 @@ function ensureLocalLyricsForSong(song, opts) {
     result = result || {};
     var text = String(result.text || '').trim();
     song.localLyricText = text;
+    if (text) song.localLyricResidencyReleased = false;
     if (text) {
       if (!song.localLyricFile) song.localLyricTagName = result.source || 'FLAC LYRICS';
       if (!song.localLyricFile && !song.localLyricFileName) song.localLyricFileName = song.localLyricTagName;
@@ -20436,8 +21095,8 @@ function ensureLocalLyricsForSong(song, opts) {
     } else {
       song.localLyricLoaded = true;
     }
-    syncLocalSongAssetFields(song);
     if (song.localLyricLoaded || text) scheduleLocalAssetCacheWrite(song);
+    syncLocalSongAssetFields(song);
     if (text || !opts.background || song.localLyricLoaded) maybeApplyLocalLyricsForSong(song, opts);
     scheduleLocalAssetUiRefresh(song, 'local-lyric-prefetch');
     return !!text;
@@ -20575,6 +21234,8 @@ async function playQueueAt(idx, opts) {
     var bmKey = safePlaybackStep('beatmap-key', function(){ return beatMapSongKey(song); }) || '';
     safePlaybackStep('dj-mode', function(){ setDjModeActive(false, song); });
     safePlaybackStep('visual-switch', switchPlaybackVisualToEmily);
+    handoffLocalFullCoverData(currentLocalSong, song);
+    handoffLocalLyricText(currentLocalSong, song);
     currentLocalSong = null;
     safePlaybackStep('cover-button', updateCustomCoverButton);
     safePlaybackStep('like-buttons', function(){ updateLikeButtons(song); });
@@ -20723,8 +21384,14 @@ function shuffleQueue() {
   showToast('队列已随机');
   safeShelfRebuild('shuffle-queue');
 }
+/**
+ * 清空播放队列和恢复会话，并释放已失去队列所有权的完整本地封面。
+ * @returns {void}
+ */
 function clearQueue() {
+  handoffLocalLyricText(currentLocalSong, null);
   playQueue = []; currentIdx = -1;
+  releaseLocalFullCoverData(currentLocalSong);
   markQueueContentChanged();
   clearPlaybackSession();
   safeRenderQueuePanel('clear-queue');
@@ -22808,7 +23475,7 @@ function countTextReplacementChars(text) {
  * @returns {string} 解码后的文本。
  */
 function decodeLocalTextBuffer(buffer) {
-  var bytes = new Uint8Array(buffer || []);
+  var bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer || []);
   var decoder = null;
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) decoder = localTextDecoder('utf-16le');
   else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) decoder = localTextDecoder('utf-16be');
@@ -22823,6 +23490,11 @@ function decodeLocalTextBuffer(buffer) {
   }
   return text;
 }
+/**
+ * 读取并解码本地歌词或文本文件；桌面路径直接复用范围读取返回的字节视图。
+ * @param {object} file 浏览器 File 或桌面本地文件记录。
+ * @returns {Promise<string>} 解码后的文本。
+ */
 async function readLocalTextFile(file) {
   if (!file) return '';
   if (file.arrayBuffer) return decodeLocalTextBuffer(await file.arrayBuffer());
@@ -22830,7 +23502,7 @@ async function readLocalTextFile(file) {
   var api = desktopLocalMusicApi();
   if (fullPath && api && typeof api.readLocalFileRange === 'function') {
     var bytes = await readLocalFileBytes(file, 0, localFileSize(file) || null);
-    return decodeLocalTextBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    return decodeLocalTextBuffer(bytes);
   }
   return new Promise(function(resolve){
     var reader = new FileReader();
@@ -22856,16 +23528,86 @@ function readFileAsDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
-function base64ToBytes(base64) {
-  var binary = atob(String(base64 || ''));
-  var bytes = new Uint8Array(binary.length);
-  for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+/**
+ * 把主进程返回的 base64 分块直接写入唯一最终数组，避免整段 atob 二进制字符串峰值。
+ * @param {Array<string>} chunks base64 字符串块。
+ * @param {number} byteLength 预期总字节数。
+ * @returns {Uint8Array} 完整文件范围字节。
+ */
+function base64ChunksToBytes(chunks, byteLength) {
+  if (!Array.isArray(chunks)) throw new Error('LOCAL_FILE_RANGE_CHUNKS_INVALID');
+  var expectedLength = Math.max(0, Number(byteLength) || 0);
+  var bytes = new Uint8Array(expectedLength);
+  var offset = 0;
+  // 每块独立解码，使短命 binary 字符串上限由固定 IPC 块大小决定。
+  for (var chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+    var binary = atob(String(chunks[chunkIdx] || ''));
+    if (offset + binary.length > expectedLength) throw new Error('LOCAL_FILE_RANGE_LENGTH_MISMATCH');
+    for (var byteIdx = 0; byteIdx < binary.length; byteIdx++) bytes[offset + byteIdx] = binary.charCodeAt(byteIdx);
+    offset += binary.length;
+  }
+  if (offset !== expectedLength) throw new Error('LOCAL_FILE_RANGE_LENGTH_MISMATCH');
   return bytes;
 }
-async function readLocalFileBytes(file, start, end) {
-  start = Math.max(0, Number(start) || 0);
-  var size = localFileSize(file);
-  var stop = end == null ? size : Math.max(start, Number(end) || 0);
+var localFileRangeReadBatches = [];
+/**
+ * 判断批次是否属于同一本地文件和同一起始偏移。
+ * @param {object} batch 在途范围读取批次。
+ * @param {object} file 本地 File 或桌面文件记录。
+ * @param {string} fullPath 桌面文件绝对路径。
+ * @param {number} start 起始字节偏移。
+ * @returns {boolean} 是否可在同一批次内复用。
+ */
+function matchesLocalFileRangeReadBatch(batch, file, fullPath, start) {
+  if (!batch || batch.start !== start) return false;
+  if (batch.fullPath || fullPath) return !!batch.fullPath && batch.fullPath === fullPath;
+  return batch.file === file;
+}
+/**
+ * 判断已启动批次的读取范围能否覆盖新请求。
+ * @param {number} batchStop 批次结束偏移；0 表示读取到文件结尾。
+ * @param {number} requestedStop 新请求结束偏移；0 表示读取到文件结尾。
+ * @returns {boolean} 已启动批次是否足以服务新请求。
+ */
+function localFileRangeReadCovers(batchStop, requestedStop) {
+  if (!batchStop) return true;
+  return !!requestedStop && requestedStop <= batchStop;
+}
+/**
+ * 查找可合并的排队或在途范围读取批次。
+ * @param {object} file 本地 File 或桌面文件记录。
+ * @param {string} fullPath 桌面文件绝对路径。
+ * @param {number} start 起始字节偏移。
+ * @param {number} stop 结束字节偏移；0 表示读取到文件结尾。
+ * @returns {object|null} 可复用批次。
+ */
+function findLocalFileRangeReadBatch(file, fullPath, start, stop) {
+  for (var i = 0; i < localFileRangeReadBatches.length; i++) {
+    var batch = localFileRangeReadBatches[i];
+    if (!matchesLocalFileRangeReadBatch(batch, file, fullPath, start)) continue;
+    if (!batch.started || localFileRangeReadCovers(batch.stop, stop)) return batch;
+  }
+  return null;
+}
+/**
+ * 从全局在途表移除指定批次，避免完成后继续持有文件和等待者。
+ * @param {object} batch 已完成或失败的范围读取批次。
+ * @returns {void}
+ */
+function removeLocalFileRangeReadBatch(batch) {
+  var index = localFileRangeReadBatches.indexOf(batch);
+  if (index < 0) return;
+  var last = localFileRangeReadBatches.pop();
+  if (index < localFileRangeReadBatches.length) localFileRangeReadBatches[index] = last;
+}
+/**
+ * 执行一次真实文件范围读取，不参与请求合并。
+ * @param {object} file 本地 File 或桌面文件记录。
+ * @param {number} start 起始字节偏移。
+ * @param {number} stop 结束字节偏移；0 表示读取到文件结尾。
+ * @returns {Promise<Uint8Array>} 读取到的字节。
+ */
+async function readLocalFileBytesDirect(file, start, stop) {
   if (file && file.slice) {
     return new Uint8Array(await file.slice(start, stop || undefined).arrayBuffer());
   }
@@ -22873,7 +23615,270 @@ async function readLocalFileBytes(file, start, end) {
   var api = desktopLocalMusicApi();
   if (!fullPath || !api || typeof api.readLocalFileRange !== 'function') return new Uint8Array();
   var result = await api.readLocalFileRange(fullPath, start, stop || null);
-  return result && result.ok ? base64ToBytes(result.base64 || '') : new Uint8Array();
+  return result && result.ok ? base64ChunksToBytes(result.base64Chunks, result.byteLength) : new Uint8Array();
+}
+/**
+ * 用批次结果完成全部等待者；较小范围通过视图复用，不复制底层字节。
+ * @param {object} batch 已取得最终字节的读取批次。
+ * @param {Uint8Array} bytes 最大范围读取结果。
+ * @returns {void}
+ */
+function resolveLocalFileRangeReadBatch(batch, bytes) {
+  var waiters = batch.waiters;
+  batch.waiters = [];
+  for (var i = 0; i < waiters.length; i++) {
+    var waiter = waiters[i];
+    var requestedLength = waiter.stop ? Math.max(0, waiter.stop - batch.start) : bytes.length;
+    waiter.resolve(requestedLength < bytes.length ? bytes.subarray(0, requestedLength) : bytes);
+  }
+}
+/**
+ * 用同一错误拒绝批次中的全部等待者。
+ * @param {object} batch 读取失败的批次。
+ * @param {*} error 底层读取错误。
+ * @returns {void}
+ */
+function rejectLocalFileRangeReadBatch(batch, error) {
+  var waiters = batch.waiters;
+  batch.waiters = [];
+  for (var i = 0; i < waiters.length; i++) waiters[i].reject(error);
+}
+/**
+ * 在当前微任务轮收集完范围后启动唯一底层读取，并在完成后释放批次所有权。
+ * @param {object} batch 待读取批次。
+ * @returns {Promise<void>} 批次完成 Promise。
+ */
+async function startLocalFileRangeReadBatch(batch) {
+  if (batch.started) return;
+  batch.started = true;
+  try {
+    var bytes = await readLocalFileBytesDirect(batch.file, batch.start, batch.stop);
+    removeLocalFileRangeReadBatch(batch);
+    resolveLocalFileRangeReadBatch(batch, bytes);
+  } catch (error) {
+    removeLocalFileRangeReadBatch(batch);
+    rejectLocalFileRangeReadBatch(batch, error);
+  }
+}
+/**
+ * 读取本地文件指定范围；浏览器 File 直接切片，桌面路径通过分块 IPC 解码。
+ * @param {object} file 本地 File 或桌面文件记录。
+ * @param {number} start 起始字节偏移。
+ * @param {number|null} end 结束字节偏移，不含该位置。
+ * @returns {Promise<Uint8Array>} 读取到的字节。
+ */
+async function readLocalFileBytes(file, start, end) {
+  start = Math.max(0, Number(start) || 0);
+  var size = localFileSize(file);
+  var stop = end == null ? size : Math.max(start, Number(end) || 0);
+  var fullPath = localFullPath(file);
+  var batch = findLocalFileRangeReadBatch(file, fullPath, start, stop);
+  if (!batch) {
+    batch = {
+      file: file,
+      fullPath: fullPath,
+      start: start,
+      stop: stop,
+      started: false,
+      waiters: []
+    };
+    localFileRangeReadBatches.push(batch);
+    Promise.resolve(batch).then(startLocalFileRangeReadBatch);
+  } else if (!batch.started) {
+    // 排队阶段允许扩大到最大范围，使同轮元数据、歌词和封面只触发一次底层读取。
+    if (!batch.stop || !stop) batch.stop = 0;
+    else if (stop > batch.stop) batch.stop = stop;
+  }
+  /**
+   * 登记当前调用者需要的原始范围，批次完成时按该长度返回共享视图。
+   * @param {Function} resolve Promise 完成函数。
+   * @param {Function} reject Promise 拒绝函数。
+   * @returns {void}
+   */
+  function registerLocalFileRangeReadWaiter(resolve, reject) {
+    batch.waiters.push({ stop: stop, resolve: resolve, reject: reject });
+  }
+  return new Promise(registerLocalFileRangeReadWaiter);
+}
+var FLAC_METADATA_INITIAL_PROBE_BYTES = 8;
+var FLAC_METADATA_FALLBACK_PROBE_BYTES = 4096 + 8;
+var FLAC_METADATA_SESSION_MAX_BLOCKS = 1024;
+var localFlacMetadataSessionReadBatches = [];
+/**
+ * 查找可复用的 FLAC metadata 目录扫描批次。
+ * @param {object} file 本地 File 或桌面文件记录。
+ * @param {string} fullPath 桌面文件绝对路径。
+ * @param {number} maxScan 本轮允许扫描的最大绝对偏移。
+ * @returns {object|null} 可复用批次；已启动轻量批次不能服务完整请求。
+ */
+function findLocalFlacMetadataSessionReadBatch(file, fullPath, maxScan) {
+  for (var i = 0; i < localFlacMetadataSessionReadBatches.length; i++) {
+    var batch = localFlacMetadataSessionReadBatches[i];
+    if (!matchesLocalFileRangeReadBatch(batch, file, fullPath, 0)) continue;
+    if (!batch.started || batch.maxScan >= maxScan) return batch;
+  }
+  return null;
+}
+/**
+ * 从全局表移除已完成的 FLAC metadata 目录批次。
+ * @param {object} batch 已完成或失败的批次。
+ * @returns {void}
+ */
+function removeLocalFlacMetadataSessionReadBatch(batch) {
+  var index = localFlacMetadataSessionReadBatches.indexOf(batch);
+  if (index < 0) return;
+  var last = localFlacMetadataSessionReadBatches.pop();
+  if (index < localFlacMetadataSessionReadBatches.length) localFlacMetadataSessionReadBatches[index] = last;
+}
+/**
+ * 只读取 FLAC marker、block 头部和长度，跳过无消费者的 PADDING payload。
+ * @param {object} file 本地 File 或桌面文件记录。
+ * @param {number} maxScan 轻量或完整扫描的绝对偏移上限。
+ * @returns {Promise<object>} 只含小探针和 block descriptor 的短生命周期会话。
+ */
+async function readFlacMetadataSessionDirect(file, maxScan) {
+  var fileSize = localFileSize(file) || 0;
+  var limit = Math.min(fileSize || maxScan, maxScan);
+  var probeBytes = new Uint8Array();
+  if (limit > 0) probeBytes = await readLocalFileBytes(file, 0, Math.min(limit, FLAC_METADATA_INITIAL_PROBE_BYTES));
+  var metadataStart = asciiFromBytes(probeBytes, 0, 4) === 'fLaC' ? 4 : -1;
+  if (metadataStart < 0 && limit > probeBytes.length) {
+    probeBytes = await readLocalFileBytes(file, 0, Math.min(limit, FLAC_METADATA_FALLBACK_PROBE_BYTES));
+    metadataStart = findFlacMetadataStart(probeBytes);
+  }
+  var blocks = [];
+  var resolvedStop = metadataStart >= 0 ? metadataStart : probeBytes.length;
+  var reachedLastBlock = false;
+  var pos = metadataStart;
+  var blockCount = 0;
+  while (pos >= 0 && pos + 4 <= limit && blockCount < FLAC_METADATA_SESSION_MAX_BLOCKS) {
+    var headerBytes = probeBytes;
+    var headerOffset = pos;
+    if (pos + 4 > probeBytes.length) {
+      headerBytes = await readLocalFileBytes(file, pos, pos + 4);
+      headerOffset = 0;
+    }
+    if (headerOffset + 4 > headerBytes.length) break;
+    var header = headerBytes[headerOffset];
+    var length = uint24BE(headerBytes, headerOffset + 1);
+    var payloadStart = pos + 4;
+    var payloadEnd = payloadStart + length;
+    // 轻量上限、文件末尾或损坏长度之外不生成 descriptor，消费者因此保持可重试。
+    if (payloadEnd < payloadStart || payloadEnd > limit) break;
+    var last = !!(header & 0x80);
+    blocks.push({
+      type: header & 0x7f,
+      last: last,
+      length: length,
+      payloadStart: payloadStart,
+      payloadEnd: payloadEnd
+    });
+    resolvedStop = payloadEnd;
+    blockCount++;
+    if (last) {
+      reachedLastBlock = true;
+      break;
+    }
+    pos = payloadEnd;
+  }
+  return {
+    probeBytes: probeBytes,
+    metadataStart: metadataStart,
+    blocks: blocks,
+    resolvedStop: resolvedStop,
+    reachedLastBlock: reachedLastBlock,
+    fullyRead: !!(fileSize && (probeBytes.length >= fileSize || resolvedStop >= fileSize))
+  };
+}
+/**
+ * 读取单个 FLAC metadata block payload；探针内直接返回共享视图，探针外只读精确范围。
+ * @param {object} file 本地 File 或桌面文件记录。
+ * @param {object} session metadata 目录扫描结果。
+ * @param {object} block 目标 block descriptor。
+ * @returns {Promise<Uint8Array|null>} 完整 payload；短读时返回 null。
+ */
+async function readFlacMetadataBlockBytes(file, session, block) {
+  if (block.payloadStart >= 0 && block.payloadEnd <= session.probeBytes.length) {
+    return session.probeBytes.subarray(block.payloadStart, block.payloadEnd);
+  }
+  var bytes = await readLocalFileBytes(file, block.payloadStart, block.payloadEnd);
+  return bytes.length === block.length ? bytes : null;
+}
+/**
+ * 用同一 descriptor 会话完成共享批次中的全部 FLAC 消费者。
+ * @param {object} batch 已完成扫描的共享批次。
+ * @param {object} session metadata descriptor 会话。
+ * @returns {void}
+ */
+function resolveLocalFlacMetadataSessionReadBatch(batch, session) {
+  var waiters = batch.waiters;
+  batch.waiters = [];
+  for (var i = 0; i < waiters.length; i++) waiters[i].resolve(session);
+}
+/**
+ * 用同一底层错误拒绝共享批次中的全部 FLAC 消费者。
+ * @param {object} batch 读取失败的共享批次。
+ * @param {*} error 底层读取错误。
+ * @returns {void}
+ */
+function rejectLocalFlacMetadataSessionReadBatch(batch, error) {
+  var waiters = batch.waiters;
+  batch.waiters = [];
+  for (var i = 0; i < waiters.length; i++) waiters[i].reject(error);
+}
+/**
+ * 在当前微任务轮收集 light/full 需求后启动唯一 FLAC metadata 目录扫描。
+ * @param {object} batch 待执行的共享批次。
+ * @returns {Promise<void>} 批次完成 Promise。
+ */
+async function startLocalFlacMetadataSessionReadBatch(batch) {
+  if (batch.started) return;
+  batch.started = true;
+  try {
+    var session = await readFlacMetadataSessionDirect(batch.file, batch.maxScan);
+    removeLocalFlacMetadataSessionReadBatch(batch);
+    resolveLocalFlacMetadataSessionReadBatch(batch, session);
+  } catch (error) {
+    removeLocalFlacMetadataSessionReadBatch(batch);
+    rejectLocalFlacMetadataSessionReadBatch(batch, error);
+  }
+}
+/**
+ * 为 FLAC 元数据、歌词和封面共享一次短生命周期的 descriptor 扫描。
+ * @param {object} file 本地 File 或桌面文件记录。
+ * @param {{light?:boolean}=} opts 是否限制在后台轻量扫描边界内。
+ * @returns {Promise<object>} metadata descriptor 会话；不包含完整连续前缀。
+ */
+function readFlacMetadataSession(file, opts) {
+  opts = opts || {};
+  var maxScan = opts.light ? LOCAL_ASSET_LIGHT_SCAN_BYTES : 32 * 1024 * 1024;
+  var fullPath = localFullPath(file);
+  var batch = findLocalFlacMetadataSessionReadBatch(file, fullPath, maxScan);
+  if (!batch) {
+    batch = {
+      file: file,
+      fullPath: fullPath,
+      start: 0,
+      maxScan: maxScan,
+      started: false,
+      waiters: []
+    };
+    localFlacMetadataSessionReadBatches.push(batch);
+    Promise.resolve(batch).then(startLocalFlacMetadataSessionReadBatch);
+  } else if (!batch.started && maxScan > batch.maxScan) {
+    // 同一微任务轮出现前台请求时，把尚未启动的轻量扫描提升为完整扫描。
+    batch.maxScan = maxScan;
+  }
+  /**
+   * 登记需要共享本轮 FLAC metadata descriptor 的调用者。
+   * @param {Function} resolve Promise 完成函数。
+   * @param {Function} reject Promise 拒绝函数。
+   * @returns {void}
+   */
+  function registerLocalFlacMetadataSessionWaiter(resolve, reject) {
+    batch.waiters.push({ resolve: resolve, reject: reject });
+  }
+  return new Promise(registerLocalFlacMetadataSessionWaiter);
 }
 function asciiFromBytes(bytes, start, len) {
   var out = '';
@@ -23004,50 +24009,92 @@ async function extractMp3LocalMetadata(file) {
   }
   return tags;
 }
+/**
+ * 把 Vorbis comment key 映射到播放器展示元数据字段。
+ * @param {string} key 原始 Vorbis 字段名。
+ * @returns {string} 播放器字段名；无消费者的排序字段返回空字符串。
+ */
 function vorbisCommentKey(key) {
   key = String(key || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (key === 'TITLE') return 'title';
   if (key === 'ARTIST' || key === 'PERFORMER') return 'artist';
   if (key === 'ALBUM') return 'album';
-  if (key === 'ALBUMARTIST' || key === 'ALBUMARTISTSORT') return 'albumArtist';
+  if (key === 'ALBUMARTIST') return 'albumArtist';
   if (key === 'TRACKNUMBER' || key === 'TRACK') return 'track';
   if (key === 'DATE' || key === 'YEAR') return 'year';
   return '';
 }
+/**
+ * 在指定字节范围内查找单字节分隔符，避免为判断 Vorbis key 先解码完整 value。
+ * @param {Uint8Array} bytes 待扫描字节。
+ * @param {number} start 起始偏移。
+ * @param {number} end 结束偏移，不含该位置。
+ * @param {number} value 目标单字节值。
+ * @returns {number} 首个匹配偏移，未找到时返回 -1。
+ */
+function findByteInRange(bytes, start, end, value) {
+  // Vorbis key/value 分隔符是单字节 ASCII，直接扫描可隔离大型无关 value。
+  for (var i = start; i < end; i++) {
+    if (bytes[i] === value) return i;
+  }
+  return -1;
+}
+/**
+ * 把单个 VORBIS_COMMENT payload 合并到跨 block 的展示元数据结果。
+ * @param {Uint8Array} bytes 完整 Vorbis payload。
+ * @param {object} tags 跨 block 复用的标签结果。
+ * @returns {void}
+ */
+function parseFlacMetadataVorbisPayload(bytes, tags) {
+  var end = bytes.length;
+  if (end <= 8) return;
+  var p = 0;
+  var vendorLen = uint32LE(bytes, p); p += 4 + vendorLen;
+  if (p + 4 > end) return;
+  var count = Math.min(uint32LE(bytes, p), 10000); p += 4;
+  for (var i = 0; i < count && p + 4 <= end; i++) {
+    var commentLen = uint32LE(bytes, p); p += 4;
+    // 只有越界才说明 block 损坏；零长度 comment 仅跳过当前计数项。
+    if (p + commentLen > end) break;
+    if (!commentLen) continue;
+    var commentStart = p;
+    var commentEnd = p + commentLen;
+    p = commentEnd;
+    var eq = findByteInRange(bytes, commentStart, commentEnd, 61);
+    if (eq <= commentStart) continue;
+    var key = vorbisCommentKey(utf8FromBytes(bytes, commentStart, eq - commentStart));
+    if (!key || tags[key]) continue;
+    putLocalMetadataTag(tags, key, utf8FromBytes(bytes, eq + 1, commentEnd - eq - 1));
+  }
+}
+/**
+ * 解析 FLAC Vorbis 展示元数据，并标记轻量范围是否足以得出最终结果。
+ * @param {File|object} file 本地 FLAC 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制为后台轻量读取范围。
+ * @returns {Promise<object>} 标签对象；`_mineradioScanComplete=false` 表示需要完整重试。
+ */
 async function extractFlacLocalMetadata(file, opts) {
   opts = opts || {};
-  var maxScan = opts.light ? LOCAL_ASSET_LIGHT_SCAN_BYTES : 32 * 1024 * 1024;
-  var limit = Math.min(localFileSize(file) || 0, maxScan);
-  var bytes = await readLocalFileBytes(file, 0, limit || maxScan);
-  var pos = findFlacMetadataStart(bytes);
-  if (pos < 0) return {};
+  var session = await readFlacMetadataSession(file, opts);
   var tags = {};
-  while (pos + 4 <= bytes.length) {
-    var header = bytes[pos];
-    var last = !!(header & 0x80);
-    var type = header & 0x7f;
-    var len = uint24BE(bytes, pos + 1);
-    var start = pos + 4;
-    var end = start + len;
-    if (end > bytes.length) break;
-    if (type === 4 && len > 8) {
-      var p = start;
-      var vendorLen = uint32LE(bytes, p); p += 4 + vendorLen;
-      if (p + 4 <= end) {
-        var count = Math.min(uint32LE(bytes, p), 10000); p += 4;
-        for (var i = 0; i < count && p + 4 <= end; i++) {
-          var commentLen = uint32LE(bytes, p); p += 4;
-          if (!commentLen || p + commentLen > end) { p = end; break; }
-          var comment = utf8FromBytes(bytes, p, commentLen); p += commentLen;
-          var eq = comment.indexOf('=');
-          if (eq <= 0) continue;
-          putLocalMetadataTag(tags, vorbisCommentKey(comment.slice(0, eq)), comment.slice(eq + 1));
-        }
-      }
-    }
-    pos = end;
-    if (last) break;
+  if (session.metadataStart < 0) {
+    tags._mineradioScanComplete = session.fullyRead;
+    return tags;
   }
+  var commentResolved = false;
+  var payloadIncomplete = false;
+  for (var blockIndex = 0; blockIndex < session.blocks.length; blockIndex++) {
+    var block = session.blocks[blockIndex];
+    if (block.type !== 4) continue;
+    var bytes = await readFlacMetadataBlockBytes(file, session, block);
+    if (!bytes) {
+      payloadIncomplete = true;
+      break;
+    }
+    commentResolved = true;
+    parseFlacMetadataVorbisPayload(bytes, tags);
+  }
+  tags._mineradioScanComplete = !payloadIncomplete && (commentResolved || session.reachedLastBlock || session.fullyRead);
   return tags;
 }
 async function extractLocalMetadataTags(file, opts) {
@@ -23085,43 +24132,106 @@ function embeddedLyricFieldPriority(key, value) {
   if (normalized === 'UNSYNCEDLYRICS' || normalized === 'UNSYNCEDLYRIC') return hasTimeTags ? 80 : 45;
   return hasTimeTags ? 25 : 0;
 }
+/**
+ * 返回歌词字段在现有规则下可能达到的最高优先级，用于跳过不可能胜出的 value 解码。
+ * @param {string} key Vorbis comment 字段名。
+ * @returns {number} 该字段理论最高优先级。
+ */
+function embeddedLyricFieldMaxPriority(key) {
+  var normalized = String(key || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (normalized === 'LYRICS') return 100;
+  if (normalized === 'SYNCEDLYRICS' || normalized === 'SYNCLYRICS') return 95;
+  if (normalized === 'LYRIC') return 92;
+  if (normalized === 'UNSYNCEDLYRICS' || normalized === 'UNSYNCEDLYRIC') return 80;
+  return 25;
+}
+/**
+ * 判断字节是否为现有 LRC 时间标签规则使用的 ASCII 数字。
+ * @param {number} value 单字节值。
+ * @returns {boolean} 是否为 0 到 9。
+ */
+function isAsciiDigitByte(value) {
+  return value >= 48 && value <= 57;
+}
+/**
+ * 在原始 UTF-8 字节中识别现有正则支持的 LRC 时间标签，避免仅因普通方括号解码大型未知字段。
+ * @param {Uint8Array} bytes Vorbis comment 字节。
+ * @param {number} start value 起始偏移。
+ * @param {number} end value 结束偏移，不含该位置。
+ * @returns {boolean} 是否存在 `[m:ss]`、`[m:ss.xx]` 或 `[m:ss:xx]` 形式时间标签。
+ */
+function hasEmbeddedLyricTimeTagBytes(bytes, start, end) {
+  // 逐个方括号验证完整数字结构，保持与 embeddedLyricFieldPriority() 的正则语义一致。
+  for (var i = start; i < end; i++) {
+    if (bytes[i] !== 91) continue;
+    var p = i + 1;
+    var minuteDigits = 0;
+    while (p < end && minuteDigits < 3 && isAsciiDigitByte(bytes[p])) { p++; minuteDigits++; }
+    if (!minuteDigits || p >= end || bytes[p] !== 58) continue;
+    p++;
+    if (p + 1 >= end || !isAsciiDigitByte(bytes[p]) || !isAsciiDigitByte(bytes[p + 1])) continue;
+    p += 2;
+    if (p < end && bytes[p] === 93) return true;
+    if (p >= end || (bytes[p] !== 46 && bytes[p] !== 58)) continue;
+    p++;
+    var fractionDigits = 0;
+    while (p < end && fractionDigits < 3 && isAsciiDigitByte(bytes[p])) { p++; fractionDigits++; }
+    if (fractionDigits && p < end && bytes[p] === 93) return true;
+  }
+  return false;
+}
+/**
+ * 把单个 VORBIS_COMMENT payload 合并到跨 block 的歌词候选结果。
+ * @param {Uint8Array} bytes 完整 Vorbis payload。
+ * @param {{priority:number,text:string}} best 当前最高优先级结果。
+ * @returns {boolean} 是否命中最高优先级并可结束后续 block 读取。
+ */
+function parseFlacLyricsVorbisPayload(bytes, best) {
+  var end = bytes.length;
+  if (end <= 8) return false;
+  var p = 0;
+  var vendorLen = uint32LE(bytes, p); p += 4 + vendorLen;
+  if (p + 4 > end) return false;
+  var count = Math.min(uint32LE(bytes, p), 10000); p += 4;
+  for (var i = 0; i < count && p + 4 <= end; i++) {
+    var commentLen = uint32LE(bytes, p); p += 4;
+    // 只有越界才说明 block 损坏；零长度 comment 仅跳过当前计数项。
+    if (p + commentLen > end) break;
+    if (!commentLen) continue;
+    var commentStart = p;
+    var commentEnd = p + commentLen;
+    p = commentEnd;
+    var eq = findByteInRange(bytes, commentStart, commentEnd, 61);
+    if (eq <= commentStart) continue;
+    var key = utf8FromBytes(bytes, commentStart, eq - commentStart).trim();
+    var valueStart = eq + 1;
+    var maxPriority = embeddedLyricFieldMaxPriority(key);
+    if (best.priority >= maxPriority) continue;
+    // 未知字段只有存在完整 LRC 时间标签才可能命中 priority 25 回退。
+    if (maxPriority === 25 && !hasEmbeddedLyricTimeTagBytes(bytes, valueStart, commentEnd)) continue;
+    var value = normalizeEmbeddedLyricText(utf8FromBytes(bytes, valueStart, commentEnd - valueStart));
+    var priority = embeddedLyricFieldPriority(key, value);
+    if (value && priority > best.priority) {
+      best.priority = priority;
+      best.text = value;
+      // 100 是现有优先级上限，后续字段和 block 都不可能替换当前 first-wins 结果。
+      if (priority === 100) return true;
+    }
+  }
+  return false;
+}
 async function extractFlacEmbeddedLyricsText(file, opts) {
   if (!file) return '';
   opts = opts || {};
-  var maxScan = opts.light ? LOCAL_ASSET_LIGHT_SCAN_BYTES : 32 * 1024 * 1024;
-  var limit = Math.min(localFileSize(file) || 0, maxScan);
-  var bytes = await readLocalFileBytes(file, 0, limit || maxScan);
-  var pos = findFlacMetadataStart(bytes);
-  if (pos < 0) return '';
+  var session = await readFlacMetadataSession(file, opts);
+  if (session.metadataStart < 0) return '';
   var best = { priority: 0, text: '' };
-  while (pos + 4 <= bytes.length) {
-    var header = bytes[pos];
-    var last = !!(header & 0x80);
-    var type = header & 0x7f;
-    var len = uint24BE(bytes, pos + 1);
-    var start = pos + 4;
-    var end = start + len;
-    if (end > bytes.length) break;
-    if (type === 4 && len > 8) {
-      var p = start;
-      var vendorLen = uint32LE(bytes, p); p += 4 + vendorLen;
-      if (p + 4 <= end) {
-        var count = Math.min(uint32LE(bytes, p), 10000); p += 4;
-        for (var i = 0; i < count && p + 4 <= end; i++) {
-          var commentLen = uint32LE(bytes, p); p += 4;
-          if (!commentLen || p + commentLen > end) { p = end; break; }
-          var comment = utf8FromBytes(bytes, p, commentLen); p += commentLen;
-          var eq = comment.indexOf('=');
-          if (eq <= 0) continue;
-          var key = comment.slice(0, eq).trim();
-          var value = normalizeEmbeddedLyricText(comment.slice(eq + 1));
-          var priority = embeddedLyricFieldPriority(key, value);
-          if (value && priority > best.priority) best = { priority: priority, text: value };
-        }
-      }
-    }
-    pos = end;
-    if (last) break;
+  for (var blockIndex = 0; blockIndex < session.blocks.length; blockIndex++) {
+    var block = session.blocks[blockIndex];
+    if (block.type !== 4 || block.length <= 8) continue;
+    var bytes = await readFlacMetadataBlockBytes(file, session, block);
+    if (!bytes) break;
+    if (parseFlacLyricsVorbisPayload(bytes, best)) return best.text;
   }
   return best.text || '';
 }
@@ -23136,16 +24246,56 @@ function findZero(bytes, start, end, step) {
   }
   return -1;
 }
-function blobBytesToDataUrl(bytes, mime) {
-  return readFileAsDataUrl(new Blob([bytes], { type: mime || 'image/jpeg' }));
+/**
+ * 把内嵌图片字节固化为独立 Blob，使完整标签范围可在解析后释放。
+ * @param {Uint8Array} bytes 图片字节视图。
+ * @param {string} mime 图片 MIME。
+ * @returns {Blob} 只持有图片稳定快照的 Blob。
+ */
+function blobBytesToCoverBlob(bytes, mime) {
+  return new Blob([bytes], { type: mime || 'image/jpeg' });
 }
-async function extractMp3EmbeddedCoverDataUrl(file) {
+/**
+ * 在单个 FLAC PICTURE block 边界内解析图片，拒绝越界的可变长度字段。
+ * @param {Uint8Array} bytes FLAC 元数据字节。
+ * @param {number} start PICTURE block 数据起点。
+ * @param {number} end PICTURE block 结束偏移。
+ * @returns {Blob|null} 有效图片 Blob；损坏 block 返回 null。
+ */
+function extractFlacPictureBlob(bytes, start, end) {
+  var p = start;
+  if (p + 8 > end) return null;
+  p += 4;
+  var mimeLen = uint32BE(bytes, p);
+  p += 4;
+  if (mimeLen > end - p) return null;
+  var mimeStart = p;
+  p += mimeLen;
+  if (p + 4 > end) return null;
+  var descLen = uint32BE(bytes, p);
+  p += 4;
+  if (descLen > end - p) return null;
+  p += descLen;
+  if (p + 20 > end) return null;
+  p += 16;
+  var dataLen = uint32BE(bytes, p);
+  p += 4;
+  if (dataLen <= 0 || dataLen > end - p) return null;
+  var mime = asciiFromBytes(bytes, mimeStart, mimeLen) || 'image/jpeg';
+  return blobBytesToCoverBlob(bytes.subarray(p, p + dataLen), mime);
+}
+/**
+ * 解析 MP3 APIC/PIC 并返回短生命周期封面 Blob。
+ * @param {File|object} file 本地 MP3 文件记录。
+ * @returns {Promise<Blob|null>} 找到的封面 Blob；没有封面时返回 null。
+ */
+async function extractMp3EmbeddedCoverSource(file) {
   var fileSize = localFileSize(file);
   var first = await readLocalFileBytes(file, 0, Math.min(fileSize || 0, 256 * 1024) || 256 * 1024);
-  if (asciiFromBytes(first, 0, 3) !== 'ID3' || first.length < 10) return '';
+  if (asciiFromBytes(first, 0, 3) !== 'ID3' || first.length < 10) return null;
   var version = first[3] || 3;
   var tagSize = synchsafeInt(first, 6);
-  if (!tagSize || tagSize > 48 * 1024 * 1024) return '';
+  if (!tagSize || tagSize > 48 * 1024 * 1024) return null;
   var total = Math.min((fileSize || tagSize + 10), tagSize + 10);
   var bytes = first.length >= total ? first : await readLocalFileBytes(file, 0, total);
   var pos = 10;
@@ -23164,7 +24314,7 @@ async function extractMp3EmbeddedCoverDataUrl(file) {
       var descStart = mimeEnd + 2;
       var descEnd = findZero(bytes, descStart, frameEnd, (enc === 1 || enc === 2) ? 2 : 1);
       var imageStart = descEnd >= 0 ? descEnd + ((enc === 1 || enc === 2) ? 2 : 1) : descStart;
-      if (imageStart < frameEnd) return blobBytesToDataUrl(bytes.slice(imageStart, frameEnd), mime);
+      if (imageStart < frameEnd) return blobBytesToCoverBlob(bytes.subarray(imageStart, frameEnd), mime);
     }
     pos = frameEnd;
   }
@@ -23182,56 +24332,49 @@ async function extractMp3EmbeddedCoverDataUrl(file) {
       var shortDescStart = shortStart + 5;
       var shortDescEnd = findZero(bytes, shortDescStart, shortEnd, (shortEnc === 1 || shortEnc === 2) ? 2 : 1);
       var shortImageStart = shortDescEnd >= 0 ? shortDescEnd + ((shortEnc === 1 || shortEnc === 2) ? 2 : 1) : shortDescStart;
-      if (shortImageStart < shortEnd) return blobBytesToDataUrl(bytes.slice(shortImageStart, shortEnd), shortMime);
+      if (shortImageStart < shortEnd) return blobBytesToCoverBlob(bytes.subarray(shortImageStart, shortEnd), shortMime);
     }
     pos = shortEnd;
   }
-  return '';
+  return null;
 }
-async function extractFlacEmbeddedCoverDataUrl(file, opts) {
+/**
+ * 解析 FLAC PICTURE 并返回短生命周期封面 Blob。
+ * @param {File|object} file 本地 FLAC 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制后台轻量扫描范围。
+ * @returns {Promise<Blob|null>} 找到的封面 Blob；没有封面时返回 null。
+ */
+async function extractFlacEmbeddedCoverSource(file, opts) {
   opts = opts || {};
-  var maxScan = opts.light ? LOCAL_ASSET_LIGHT_SCAN_BYTES : 32 * 1024 * 1024;
-  var limit = Math.min(localFileSize(file) || 0, maxScan);
-  var bytes = await readLocalFileBytes(file, 0, limit || maxScan);
-  var pos = asciiFromBytes(bytes, 0, 4) === 'fLaC' ? 4 : -1;
-  if (pos < 0) {
-    for (var scan = 0; scan < Math.min(bytes.length - 4, 4096); scan++) {
-      if (asciiFromBytes(bytes, scan, 4) === 'fLaC') { pos = scan + 4; break; }
+  var session = await readFlacMetadataSession(file, opts);
+  if (session.metadataStart < 0) return null;
+  for (var blockIndex = 0; blockIndex < session.blocks.length; blockIndex++) {
+    var block = session.blocks[blockIndex];
+    if (block.type === 6 && block.length > 32) {
+      var bytes = await readFlacMetadataBlockBytes(file, session, block);
+      if (!bytes) return null;
+      var pictureBlob = extractFlacPictureBlob(bytes, 0, bytes.length);
+      if (pictureBlob) return pictureBlob;
     }
   }
-  if (pos < 0) return '';
-  while (pos + 4 <= bytes.length) {
-    var header = bytes[pos];
-    var last = !!(header & 0x80);
-    var type = header & 0x7f;
-    var len = uint24BE(bytes, pos + 1);
-    var start = pos + 4;
-    var end = start + len;
-    if (end > bytes.length) return '';
-    if (type === 6 && len > 32) {
-      var p = start + 4;
-      var mimeLen = uint32BE(bytes, p); p += 4;
-      var mime = asciiFromBytes(bytes, p, mimeLen) || 'image/jpeg'; p += mimeLen;
-      var descLen = uint32BE(bytes, p); p += 4 + descLen;
-      p += 16;
-      var dataLen = uint32BE(bytes, p); p += 4;
-      if (dataLen > 0 && p + dataLen <= end) return blobBytesToDataUrl(bytes.slice(p, p + dataLen), mime);
-    }
-    pos = end;
-    if (last) break;
-  }
-  return '';
+  return null;
 }
-async function extractEmbeddedCoverDataUrl(file, opts) {
-  if (!file) return '';
+/**
+ * 按音频格式提取短生命周期内嵌封面 Blob，避免后台先构造完整 data URL。
+ * @param {File|object} file 本地音频文件记录。
+ * @param {{light?:boolean}=} opts 是否限制后台轻量扫描范围。
+ * @returns {Promise<Blob|null>} 找到的封面 Blob；没有封面时返回 null。
+ */
+async function extractEmbeddedCoverSource(file, opts) {
+  if (!file) return null;
   var name = String(file.name || '').toLowerCase();
   try {
-    if (/\.mp3$/i.test(name)) return await extractMp3EmbeddedCoverDataUrl(file);
-    if (/\.flac$/i.test(name)) return await extractFlacEmbeddedCoverDataUrl(file, opts);
+    if (/\.mp3$/i.test(name)) return await extractMp3EmbeddedCoverSource(file);
+    if (/\.flac$/i.test(name)) return await extractFlacEmbeddedCoverSource(file, opts);
   } catch (e) {
     console.warn('[LocalEmbeddedCover]', file && file.name, e);
   }
-  return '';
+  return null;
 }
 function applyLocalMetadataTags(song, tags) {
   if (!song || !tags) return false;
@@ -23259,15 +24402,48 @@ function refreshLocalMetadataUi(song, reason) {
   if (LOCAL_ONLY_MODE && emptyHomeActive) renderHomeDiscover();
   scheduleShelfRebuild(reason || 'local-metadata-ready', true);
 }
+/**
+ * 按需解析单曲本地标签；轻量范围被截断时保持未完成，允许当前播放路径完整重试。
+ * @param {object} song 待补齐元数据的本地歌曲。
+ * @param {{background?:boolean,applyCurrent?:boolean}=} opts 是否为非当前后台扫描及是否刷新当前界面。
+ * @returns {Promise<boolean>} 本轮是否修改了可见元数据。
+ */
 function ensureLocalMetadataForSong(song, opts) {
   opts = opts || {};
   if (!song || song.type !== 'local') return Promise.resolve(false);
   updateLocalAudioQualityInfo(song);
   if (song.localMetadataLoaded) return Promise.resolve(false);
-  if (song.localMetadataPromise) return song.localMetadataPromise;
-  song.localMetadataPromise = extractLocalMetadataTags(song.localFile, { light: !!opts.background }).then(function(tags){
+  if (song.localMetadataPromise) {
+    /**
+     * 轻量任务结束后按当前调用优先级决定是否补做完整扫描。
+     * @param {boolean} pendingChanged 既有任务是否修改了元数据。
+     * @returns {Promise<boolean>|boolean} 合并轻量与完整扫描后的修改状态。
+     */
+    function continuePendingLocalMetadataLoad(pendingChanged) {
+      if ((!opts.background || opts.applyCurrent) && !song.localMetadataLoaded) {
+        /**
+         * 合并轻量扫描已发生的修改，避免完整扫描未新增字段时丢失 true 结果。
+         * @param {boolean} fullChanged 完整扫描是否继续修改元数据。
+         * @returns {boolean} 两轮扫描是否任一发生修改。
+         */
+        function mergePendingLocalMetadataChange(fullChanged) {
+          return !!(pendingChanged || fullChanged);
+        }
+        return ensureLocalMetadataForSong(song, opts).then(mergePendingLocalMetadataChange);
+      }
+      return pendingChanged;
+    }
+    return song.localMetadataPromise.then(continuePendingLocalMetadataLoad);
+  }
+  song.localMetadataPromise = extractLocalMetadataTags(song.localFile, { light: !!(opts.background && !opts.applyCurrent) }).then(function(tags){
     var changed = applyLocalMetadataTags(song, tags || {});
+    // 非当前歌曲的轻量范围可能停在大 PADDING/PICTURE block 内，不能把空结果写成已完成 schema。
+    if (tags && tags._mineradioScanComplete === false) {
+      if (changed) syncLocalSongAssetFields(song);
+      return changed;
+    }
     song.localMetadataLoaded = true;
+    song.localMetadataTagSchema = LOCAL_METADATA_TAG_SCHEMA;
     syncLocalSongAssetFields(song);
     scheduleLocalAssetCacheWrite(song);
     if (changed || opts.applyCurrent) refreshLocalMetadataUi(song, 'local-metadata-ready');
@@ -23275,6 +24451,7 @@ function ensureLocalMetadataForSong(song, opts) {
   }).catch(function(e){
     console.warn('[LocalMetadata]', song && song.name, e);
     song.localMetadataLoaded = true;
+    song.localMetadataTagSchema = LOCAL_METADATA_TAG_SCHEMA;
     scheduleLocalAssetCacheWrite(song);
     return false;
   }).finally(function(){
@@ -23302,15 +24479,23 @@ function maybeApplyLocalCoverForSong(song, opts) {
   safeRenderQueuePanel('local-cover-ready', { scrollCurrent: miniQueueOpen });
   scheduleShelfRebuild('local-cover-ready', true);
 }
+/**
+ * 按需加载单曲封面，并区分后台缩略图与当前歌曲完整图的所有权。
+ * @param {object} song 待补齐封面的本地歌曲。
+ * @param {{background?:boolean,applyCurrent?:boolean,token?:number,coverOpts?:object}=} opts 加载优先级和当前播放应用选项。
+ * @returns {Promise<boolean>} 本轮是否取得可显示完整图或可持久化缩略图。
+ */
 function ensureLocalCoverForSong(song, opts) {
   opts = opts || {};
   if (!song) return Promise.resolve(false);
   if (song.localCoverDataUrl) {
-    song.localCoverLoaded = true;
+    // 当前完整封面可即时显示，但没有缩略图时仍需保留后续可重试状态。
+    song.localCoverLoaded = !!song.localCoverThumbDataUrl;
     if (!song.localCoverThumbDataUrl) {
       createLocalCoverThumbnailDataUrl(song.localCoverDataUrl, { maxSide: LOCAL_COVER_THUMB_MAX_SIZE, quality: LOCAL_COVER_THUMB_QUALITY }).then(function(thumb){
         if (!thumb || song.localCoverThumbDataUrl) return;
         song.localCoverThumbDataUrl = thumb;
+        song.localCoverLoaded = true;
         invalidateSongCoverCache(song);
         syncLocalSongAssetFields(song);
         scheduleLocalAssetCacheWrite(song);
@@ -23331,9 +24516,10 @@ function ensureLocalCoverForSong(song, opts) {
   }
   song.localCoverLoading = true;
   song.localCoverPromise = (async function(){
-    var dataUrl = song.localCoverFile ? await readFileAsDataUrl(song.localCoverFile) : '';
-    if (!dataUrl) dataUrl = await extractEmbeddedCoverDataUrl(song.localFile, { light: !!opts.background });
-    if (!dataUrl) {
+    var coverSource = song.localCoverFile ? await readFileAsDataUrl(song.localCoverFile) : null;
+    var embeddedSource = !coverSource;
+    if (!coverSource) coverSource = await extractEmbeddedCoverSource(song.localFile, { light: !!opts.background });
+    if (!coverSource) {
       if (opts.background && !song.localCoverFile && canReadEmbeddedFlacCover(song)) {
         song.localCoverLightScanned = true;
       } else {
@@ -23343,15 +24529,26 @@ function ensureLocalCoverForSong(song, opts) {
       if (song.localCoverLoaded) scheduleLocalAssetCacheWrite(song);
       return false;
     }
-    await assignLocalCoverDataUrl(song, dataUrl, { thumbnailOnly: !!(opts.background && !opts.applyCurrent) });
-    song.localCoverLoaded = true;
+    var assigned = await assignLocalCoverSource(song, coverSource, {
+      thumbnailOnly: !!(opts.background && !opts.applyCurrent),
+      cacheKey: embeddedSource ? 'embedded:' + localLibraryFileSignatureFromSong(song) : ''
+    });
+    // 非当前对象没有完整封面所有权；缩略图失败时保持未加载，避免把大图持久化并允许前台重试。
+    if (!assigned) {
+      song.localCoverLoaded = false;
+      song.localCoverLightScanned = !!opts.background;
+      syncLocalSongAssetFields(song);
+      return false;
+    }
+    // 完整封面只是当前会话租约；只有可持久化缩略图存在时才标记资产已加载。
+    song.localCoverLoaded = !!song.localCoverThumbDataUrl;
     song.localCoverLightScanned = false;
     if (song.type === 'local' && song.customCover && song.customCover === song.localCoverObjectUrl) {
       song.customCover = '';
       invalidateSongCoverCache(song);
     }
     syncLocalSongAssetFields(song);
-    scheduleLocalAssetCacheWrite(song);
+    if (song.localCoverLoaded) scheduleLocalAssetCacheWrite(song);
     maybeApplyLocalCoverForSong(song, opts);
     scheduleLocalAssetUiRefresh(song, 'local-cover-prefetch');
     return true;
@@ -23375,21 +24572,42 @@ function loadLocalCoverForSong(song, token, opts) {
     coverOpts: opts
   });
 }
+/**
+ * 准备单曲元数据和封面；歌词仅为当前播放歌曲或显式前台请求加载。
+ * @param {object} song 待处理的本地歌曲。
+ * @param {{applyCurrent?:boolean,background?:boolean}=} opts 处理上下文与是否作用于当前歌曲。
+ * @returns {Promise<boolean>} 是否完成本轮资产准备。
+ */
 async function preloadLocalSongAssets(song, opts) {
   opts = opts || {};
   if (!song || song.type !== 'local') return false;
-  await ensureLocalMetadataForSong(song, { applyCurrent: !!opts.applyCurrent, background: !!opts.background });
-  await ensureLocalCoverForSong(song, {
-    applyCurrent: !!opts.applyCurrent,
-    background: !!opts.background,
-    coverOpts: {
-      trackToken: trackSwitchToken,
-      deferHeavy: false,
-      delay: 0,
-      timeout: 1200
-    }
-  });
-  await ensureLocalLyricsForSong(song, { applyCurrent: !!opts.applyCurrent, background: !!opts.background });
+  var applyCurrent = !!opts.applyCurrent;
+  var background = !!opts.background;
+  var shouldLoadLyrics = !background || applyCurrent;
+  var metadataPromise = ensureLocalMetadataForSong(song, { applyCurrent: applyCurrent, background: background });
+  var coverPromise = !song.localCoverFile && canReadEmbeddedCover(song)
+    ? ensureLocalCoverForSong(song, {
+      applyCurrent: applyCurrent,
+      background: background,
+      coverOpts: { trackToken: trackSwitchToken, deferHeavy: false, delay: 0, timeout: 1200 }
+    })
+    : null;
+  var lyricPromise = shouldLoadLyrics && !song.localLyricFile && canReadEmbeddedFlacLyrics(song)
+    ? ensureLocalLyricsForSong(song, { applyCurrent: applyCurrent, background: background })
+    : null;
+  await metadataPromise;
+  if (!coverPromise) {
+    coverPromise = ensureLocalCoverForSong(song, {
+      applyCurrent: applyCurrent,
+      background: background,
+      coverOpts: { trackToken: trackSwitchToken, deferHeavy: false, delay: 0, timeout: 1200 }
+    });
+  }
+  await coverPromise;
+  if (shouldLoadLyrics) {
+    if (!lyricPromise) lyricPromise = ensureLocalLyricsForSong(song, { applyCurrent: applyCurrent, background: background });
+    await lyricPromise;
+  }
   return true;
 }
 function savedLocalLibraryFolderPath() {
@@ -23512,14 +24730,6 @@ function saveLocalLibrarySnapshot(folderPath, files, truncated) {
       directories: directories,
       files: compact
     };
-    localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'snapshot')] = {
-      id: localLibraryPersistentKey(folderPath, 'snapshot'),
-      schema: LOCAL_LIBRARY_CACHE_SCHEMA,
-      kind: 'snapshot',
-      folderPath: folderPath,
-      savedAt: Date.now(),
-      data: payload
-    };
     writeLocalLibraryPersistentRecord(folderPath, 'snapshot', payload);
     return true;
   } catch (e) {
@@ -23551,6 +24761,11 @@ function localLibraryAssetStatus(readyValue, loaded, lightScanned) {
   if (lightScanned) return 'light';
   return 'pending';
 }
+/**
+ * 生成单曲曲库索引记录，保存轻量元数据版本与资产扫描状态。
+ * @param {object} song 待索引的本地歌曲。
+ * @returns {object|null} 可持久化的曲库索引记录。
+ */
 function localLibraryIndexRecord(song) {
   if (!song || !song.localKey) return null;
   updateLocalAudioQualityInfo(song);
@@ -23576,7 +24791,10 @@ function localLibraryIndexRecord(song) {
     localFormat: song.localFormat || '',
     localBitrateKbps: Number(song.localBitrateKbps) || 0,
     localMetadataLoaded: !!song.localMetadataLoaded,
-    lyricStatus: localLibraryAssetStatus(song.localLyricText, song.localLyricLoaded, song.localLyricLightScanned),
+    localMetadataTagSchema: song.localMetadataLoaded ? LOCAL_METADATA_TAG_SCHEMA : 0,
+    lyricStatus: song.localLyricResidencyReleased && song.localIndexedLyricStatus === 'ready'
+      ? 'ready'
+      : localLibraryAssetStatus(song.localLyricText, song.localLyricLoaded, song.localLyricLightScanned),
     lyricFileName: song.localLyricFileName || '',
     lyricTagName: song.localLyricTagName || '',
     lyricFileSignature: localAssetFileSignature(song.localLyricFile),
@@ -23596,14 +24814,6 @@ function readLocalLibraryIndex(folderPath) {
     if (!raw) return null;
     var data = JSON.parse(raw);
     if (!data || data.schema !== 1 || data.folderPath !== folderPath || !data.records || typeof data.records !== 'object') return null;
-    localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'index')] = {
-      id: localLibraryPersistentKey(folderPath, 'index'),
-      schema: LOCAL_LIBRARY_CACHE_SCHEMA,
-      kind: 'index',
-      folderPath: folderPath,
-      savedAt: Date.now(),
-      data: data
-    };
     writeLocalLibraryPersistentRecord(folderPath, 'index', data);
     return data;
   } catch (e) {
@@ -23671,7 +24881,7 @@ function applyLocalLibraryIndexToSong(song, record) {
   song.localIndexedLyricStatus = '';
   song.localIndexedCoverStatus = '';
   song.localIndexedFileSignature = localLibraryRecordFileSignature(record) || '';
-  if (record.localMetadataLoaded) {
+  if (canUseCachedLocalMetadata(song, record)) {
     for (var textIdx = 0; textIdx < LOCAL_METADATA_TEXT_FIELDS.length; textIdx++) {
       var key = LOCAL_METADATA_TEXT_FIELDS[textIdx];
       if (Object.prototype.hasOwnProperty.call(record, key) && song[key] !== record[key]) {
@@ -23680,6 +24890,7 @@ function applyLocalLibraryIndexToSong(song, record) {
       }
     }
     song.localMetadataLoaded = true;
+    song.localMetadataTagSchema = LOCAL_METADATA_TAG_SCHEMA;
   }
   for (var valueIdx = 0; valueIdx < LOCAL_METADATA_VALUE_FIELDS.length; valueIdx++) {
     var valueKey = LOCAL_METADATA_VALUE_FIELDS[valueIdx];
@@ -23753,7 +24964,6 @@ function syncLocalLibraryIndexWithSongs(folderPath, songs) {
     if (pathKey) seenPathKeys[pathKey] = true;
     if (song.localKey) seenKeys[song.localKey] = true;
     var record = findLocalLibraryIndexRecordForSong(song, lookup);
-    song.localLibraryPreviousRecord = record || null;
     if (!record) {
       song.localLibraryChangeState = 'new';
       song.localLibraryIndexApplied = false;
@@ -23828,14 +25038,6 @@ function saveLocalLibraryIndex(folderPath, songs) {
       savedAt: Date.now(),
       count: count,
       records: records
-    };
-    localLibraryPersistentMemory[localLibraryPersistentKey(folderPath, 'index')] = {
-      id: localLibraryPersistentKey(folderPath, 'index'),
-      schema: LOCAL_LIBRARY_CACHE_SCHEMA,
-      kind: 'index',
-      folderPath: folderPath,
-      savedAt: Date.now(),
-      data: payload
     };
     writeLocalLibraryPersistentRecord(folderPath, 'index', payload);
     return true;
@@ -23938,40 +25140,73 @@ function scheduleSavedLocalMusicFolderRestore(delay) {
     });
   }, delay == null ? 450 : delay);
 }
+/**
+ * 延迟校验已恢复的本地曲库；切库后旧扫描不得写索引或替换当前界面。
+ * @param {string} folderPath 已恢复曲库的根路径。
+ * @param {object|string} snapshot 本轮恢复使用的快照或签名。
+ * @returns {void}
+ */
 function refreshSavedLocalMusicFolderInBackground(folderPath, snapshot) {
   var api = desktopLocalMusicApi();
   if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return;
   var snapshotSignature = typeof snapshot === 'string' ? snapshot : (snapshot && snapshot.signature || '');
   var previousSnapshot = snapshot && typeof snapshot === 'object' ? snapshot : null;
-  setTimeout(function(){
-    api.scanLocalMusicFolder(folderPath, previousSnapshot ? { previousSnapshot: previousSnapshot } : {}).then(function(result){
-      if (!result || !result.ok || !result.files || !result.files.length) return;
-      var nextSig = localLibrarySnapshotSignature(result.files || []);
-      saveLocalLibrarySnapshot(result.folderPath || folderPath, result);
-      if (snapshotSignature && nextSig === snapshotSignature) {
-        scheduleLocalLibraryIndexSave(result.folderPath || folderPath, localLibrarySongs || [], 900);
-        return;
-      }
-      var passiveRestoredQueue = localLibraryPassiveQueue && !playing && !(audio && audio.src && !audio.paused);
-      if (playQueue.length && !passiveRestoredQueue) {
-        showToast('本地音乐文件夹已更新，下次启动会自动同步');
-        scheduleLocalLibraryIndexSave(result.folderPath || folderPath, localLibrarySongs || [], 900);
-        return;
-      }
-      return handleLocalFolderFiles(result.files || [], {
-        folderOnly: true,
-        folderPath: result.folderPath || folderPath,
-        persist: false,
-        autoPlay: false,
-        restored: true,
-        refreshed: true,
-        directories: result.directories || [],
-        truncated: !!result.truncated
-      });
-    }).catch(function(e){
-      console.warn('[LocalLibraryBackgroundRefresh]', e);
+  var ownedSongs = localLibrarySongs;
+
+  /**
+   * 应用仍属于同一歌曲数组的后台扫描结果。
+   * @param {object} result 主进程返回的文件夹扫描结果。
+   * @returns {Promise<void>|void} 需要重建曲库时返回其异步任务。
+   */
+  function applyOwnedLocalLibraryRefresh(result) {
+    if (localLibrarySongs !== ownedSongs) return;
+    if (!result || !result.ok || !result.files || !result.files.length) return;
+    var nextSig = localLibrarySnapshotSignature(result.files || []);
+    saveLocalLibrarySnapshot(result.folderPath || folderPath, result);
+    if (snapshotSignature && nextSig === snapshotSignature) {
+      scheduleLocalLibraryIndexSave(result.folderPath || folderPath, ownedSongs || [], 900);
+      return;
+    }
+    var passiveRestoredQueue = localLibraryPassiveQueue && !playing && !(audio && audio.src && !audio.paused);
+    if (playQueue.length && !passiveRestoredQueue) {
+      showToast('本地音乐文件夹已更新，下次启动会自动同步');
+      scheduleLocalLibraryIndexSave(result.folderPath || folderPath, ownedSongs || [], 900);
+      return;
+    }
+    return handleLocalFolderFiles(result.files || [], {
+      folderOnly: true,
+      folderPath: result.folderPath || folderPath,
+      persist: false,
+      autoPlay: false,
+      restored: true,
+      refreshed: true,
+      directories: result.directories || [],
+      truncated: !!result.truncated
     });
-  }, 1200);
+  }
+
+  /**
+   * 记录仍属于当前曲库的后台扫描失败；切库后的旧失败无需干扰当前会话。
+   * @param {Error} error 扫描失败原因。
+   * @returns {void}
+   */
+  function reportOwnedLocalLibraryRefreshFailure(error) {
+    if (localLibrarySongs !== ownedSongs) return;
+    console.warn('[LocalLibraryBackgroundRefresh]', error);
+  }
+
+  /**
+   * 延迟启动扫描，并在磁盘任务开始前再次确认曲库所有权。
+   * @returns {void}
+   */
+  function startOwnedLocalLibraryRefresh() {
+    if (localLibrarySongs !== ownedSongs) return;
+    api.scanLocalMusicFolder(folderPath, previousSnapshot ? { previousSnapshot: previousSnapshot } : {})
+      .then(applyOwnedLocalLibraryRefresh)
+      .catch(reportOwnedLocalLibraryRefreshFailure);
+  }
+
+  setTimeout(startOwnedLocalLibraryRefresh, 1200);
 }
 /**
  * 将导入或恢复的本地文件转换为播放队列，并安排缓存读取、后台资产处理和播放会话恢复。
@@ -23993,7 +25228,7 @@ async function handleLocalFolderFiles(files, opts) {
     || songs.length > 700
     || !!(librarySync && librarySync.stats && librarySync.stats.hasIndex && librarySync.stats.unchanged > 64);
   var shouldChunkAssetHydration = deferAssetHydration && songs.length > 220;
-  var assetHydrationPromise = deferAssetHydration ? null : hydrateLocalAssetCacheForSongs(songs);
+  var assetHydrationPromise = deferAssetHydration ? null : hydrateLocalAssetCacheForSongs(songs, { includeLyrics:false });
   if (!deferAssetHydration) await assetHydrationPromise;
   if (opts.folderPath && opts.persist !== false) saveLocalLibraryFolderPath(opts.folderPath);
   if (opts.folderPath && !opts.fromSnapshot) saveLocalLibrarySnapshot(opts.folderPath, {
@@ -24045,8 +25280,9 @@ async function handleLocalFolderFiles(files, opts) {
     // 恢复启动和大曲库先完成队列渲染，再把 IndexedDB 封面/歌词读取让给空闲时段。
     assetHydrationPromise = (async function(){
       await yieldToIdle(opts.restored ? 900 : 360);
-      if (!shouldChunkAssetHydration) return hydrateLocalAssetCacheForSongs(songs);
+      if (!shouldChunkAssetHydration) return hydrateLocalAssetCacheForSongs(songs, { includeLyrics:false });
       return hydrateLocalAssetCacheForSongsChunked(songs, {
+        includeLyrics: false,
         chunkSize: opts.restored ? 128 : 180,
         firstChunkSize: Math.max(queuePanelInitialRenderLimit(), opts.restored ? 72 : 96),
         delay: opts.restored ? 180 : 90,
@@ -29809,6 +31045,7 @@ function cancelDesktopOverlaySync() {
     desktopOverlaySyncTimer = null;
   }
   desktopOverlayPushState.lastLyricsKey = '';
+  desktopOverlayPushState.lastLyricsBeatKey = '';
   desktopOverlayPushState.lastWallpaperKey = '';
   desktopLyricSnapshotState.lines = null;
   desktopLyricSnapshotState.idx = -1;
@@ -30185,9 +31422,15 @@ function releaseDesktopLyricsTransferFields(payload) {
 function releaseWallpaperTransferFields(payload) {
   if (payload) payload.cover = '';
 }
+/**
+ * 仅在桌面歌词启用时构造并发送状态，禁用态不打包节奏图。
+ * @param {boolean=} force 是否忽略签名和发送间隔判重。
+ * @returns {void}
+ */
 function pushDesktopLyricsState(force) {
   var api = getDesktopWindowApi();
   if (!api || typeof api.updateDesktopLyrics !== 'function') return;
+  if (!fx || !fx.desktopLyrics || isDevelopmentLockedFx('desktopLyrics')) return;
   var now = performance.now();
   if (!force && now - desktopOverlayPushState.lyricsAt < desktopLyricsPushInterval()) return;
   var payload = null;
@@ -30202,25 +31445,45 @@ function pushDesktopLyricsState(force) {
     releaseDesktopLyricsTransferFields(payload || desktopLyricsPayloadCache);
   }
 }
+/**
+ * 应用桌面歌词开关；关闭时只发送最小状态以释放主进程重载荷。
+ * @param {boolean=} force 启用时是否强制同步完整状态。
+ * @returns {void}
+ */
 function applyDesktopLyricsState(force) {
   var api = getDesktopWindowApi();
   if (!api) return;
   normalizeDevelopmentLockedFxState();
+  var enabled = !!fx.desktopLyrics && !isDevelopmentLockedFx('desktopLyrics');
+  if (!enabled) {
+    // 壁纸仍启用时同步循环不会整体取消，因此必须在本功能边界立即释放歌词签名和行引用。
+    desktopOverlayPushState.lyricsAt = 0;
+    desktopOverlayPushState.lastLyricsKey = '';
+    desktopOverlayPushState.lastLyricsBeatKey = '';
+    desktopLyricSnapshotState.lines = null;
+    desktopLyricSnapshotState.idx = -1;
+  }
   var payload = null;
   try {
-    payload = desktopLyricsPayload(true);
+    payload = enabled ? desktopLyricsPayload(true) : { enabled: false };
     if (typeof api.setDesktopLyricsEnabled === 'function') {
-      api.setDesktopLyricsEnabled(!!payload.enabled, payload).catch(function(e){ console.warn('desktop lyrics state failed:', e); });
+      api.setDesktopLyricsEnabled(enabled, payload).catch(function(e){ console.warn('desktop lyrics state failed:', e); });
     }
   } finally {
     releaseDesktopLyricsTransferFields(payload || desktopLyricsPayloadCache);
   }
-  pushDesktopLyricsState(!!force);
+  if (enabled) pushDesktopLyricsState(!!force);
   scheduleDesktopOverlaySync(320);
 }
+/**
+ * 仅在壁纸模式启用时构造并发送状态，禁用态不解析或传输封面。
+ * @param {boolean=} force 是否忽略签名和发送间隔判重。
+ * @returns {void}
+ */
 function pushWallpaperState(force) {
   var api = getDesktopWindowApi();
   if (!api || typeof api.updateWallpaperMode !== 'function') return;
+  if (!fx || !fx.wallpaperMode || isDevelopmentLockedFx('wallpaperMode')) return;
   var now = performance.now();
   if (!force && now - desktopOverlayPushState.wallpaperAt < 260) return;
   var payload = null;
@@ -30235,20 +31498,31 @@ function pushWallpaperState(force) {
     releaseWallpaperTransferFields(payload || wallpaperPayloadCache);
   }
 }
+/**
+ * 应用壁纸模式开关；关闭时只发送最小状态以释放主进程封面引用。
+ * @param {boolean=} force 启用时是否强制同步完整状态。
+ * @returns {void}
+ */
 function applyWallpaperModeState(force) {
   var api = getDesktopWindowApi();
   if (!api) return;
   normalizeDevelopmentLockedFxState();
+  var enabled = !!fx.wallpaperMode && !isDevelopmentLockedFx('wallpaperMode');
+  if (!enabled) {
+    // 桌面歌词仍启用时同步循环不会整体取消，单独清理含完整封面 data URL 的壁纸签名。
+    desktopOverlayPushState.wallpaperAt = 0;
+    desktopOverlayPushState.lastWallpaperKey = '';
+  }
   var payload = null;
   try {
-    payload = wallpaperPayload();
+    payload = enabled ? wallpaperPayload() : { enabled: false };
     if (typeof api.setWallpaperMode === 'function') {
-      api.setWallpaperMode(!!payload.enabled, payload).catch(function(e){ console.warn('wallpaper state failed:', e); });
+      api.setWallpaperMode(enabled, payload).catch(function(e){ console.warn('wallpaper state failed:', e); });
     }
   } finally {
     releaseWallpaperTransferFields(payload || wallpaperPayloadCache);
   }
-  pushWallpaperState(!!force);
+  if (enabled) pushWallpaperState(!!force);
   scheduleDesktopOverlaySync(320);
 }
 function syncDesktopOverlayState() {
@@ -30389,6 +31663,20 @@ function setDesktopMiniPlayerMode(mode) {
   }).catch(function(){ showToast('迷你播放器样式切换失败'); });
 }
 
+/**
+ * 处理主进程发给主 renderer 的迷你播放器控制或状态重同步命令。
+ * @param {{action?: string}=} payload 命令载荷。
+ * @returns {void}
+ */
+function handleDesktopMiniPlayerCommand(payload) {
+  var action = payload && payload.action;
+  // 主进程禁用时会释放状态缓存，重新启用必须绕过 renderer 判重补齐完整状态。
+  if (action === 'sync-state') pushMiniPlayerState(true);
+  else if (action === 'toggle-play') togglePlay();
+  else if (action === 'previous') prevTrack();
+  else if (action === 'next') nextTrack();
+}
+
 (function initDesktopWindowShell(){
   var api = window.desktopWindow;
   if (!api || !api.isDesktop) return;
@@ -30459,12 +31747,7 @@ function setDesktopMiniPlayerMode(mode) {
     });
   }
   if (typeof api.onMiniPlayerCommand === 'function') {
-    api.onMiniPlayerCommand(function(payload){
-      var action = payload && payload.action;
-      if (action === 'toggle-play') togglePlay();
-      else if (action === 'previous') prevTrack();
-      else if (action === 'next') nextTrack();
-    });
+    api.onMiniPlayerCommand(handleDesktopMiniPlayerCommand);
   }
   if (typeof api.onDesktopLyricsEnabledState === 'function') {
     api.onDesktopLyricsEnabledState(function(payload){

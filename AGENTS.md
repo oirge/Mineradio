@@ -4,7 +4,7 @@
 
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
-- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
+- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 当前源码版本：`v1.2.43`
@@ -15,7 +15,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 新对话开始处理 Mineradio 前，必须先确认当前目录是：
 
 ```powershell
-C:\Users\Administrator\Desktop\Mineradio-main
+C:\Users\oirg\Desktop\mok\Mineradio-sync
 ```
 
 然后读这些文件：
@@ -50,7 +50,7 @@ npm run build:win:dir
 npm run build:win
 ```
 
-前端主逻辑在 `public/index.html`。当前环境以 `C:\Users\Administrator\Desktop\Mineradio-main` 为可写源码仓库；旧 `E:\桌面\播放器软件\Mineradio\resources\app` 在本环境不存在。没有独立 npm test，改动后至少做：
+前端主逻辑在 `public/index.html`。当前环境以 `C:\Users\oirg\Desktop\mok\Mineradio-sync` 为可写源码仓库；旧 `E:\桌面\播放器软件\Mineradio\resources\app` 在本环境不存在。没有独立 npm test，改动后至少做：
 
 注意：运行版 `node_modules` 可能只包含运行依赖。如果发布打包时缺少 `electron-builder`，先在当前源码仓库执行 `npm install`，再执行 `npm run build:win`。
 
@@ -87,7 +87,7 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 视觉质量定义：质感、丝滑度、帧数稳定同时成立；性能优化不能牺牲既有质感。
 - 玻璃质感：当前播放器 SVG 玻璃质感是黄金版本，详见 `docs/GLASS_SVG_TEXTURE.md`。
 - 备份策略：不要删除旧资料；重复和历史内容移动到 `E:\桌面\播放器软件\工作区备份`。
-- 重要：不要再改旧外层源码目录。旧的 `E:\桌面\播放器软件\Mineradio\public` / `desktop` 已经归档；当前环境以 `C:\Users\Administrator\Desktop\Mineradio-main\public` / `desktop` 为准。
+- 重要：不要再改旧外层源码目录。旧的 `E:\桌面\播放器软件\Mineradio\public` / `desktop` 已经归档；当前环境以 `C:\Users\oirg\Desktop\mok\Mineradio-sync\public` / `desktop` 为准。
 
 ## Memory Protocol
 
@@ -109,4 +109,15 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 
 ## 当前仓库索引
 
-- 遇到 `播放器性能优化`、`UI 不动`、`播放启动速度`、`点歌到出声`、`启动恢复`、`迷你播放器`、`迷你播放器恢复`、`队列渲染`、`Home 首屏`、`听歌统计`、`搜索历史`、`搜索结果缓存`、`搜索玻璃贴图`、`HTML 转义`、`副标题缓存`、`空搜索`、`本地曲库导入`、`FileList 转数组`、`本地曲库缓存`、`本地资产缓存补水`、`元数据字段套用`、`本地歌词加载`、`本地文本解码`、`无歌词占位`、`LRC 解析`、`YRC 解析`、`歌词 source 转换`、`本地节奏缓存`、`3D 歌单详情`、`主进程本地曲库扫描`、`IndexedDB 缓存清理`、`IndexedDB`、`封面缩略图`、`重复函数声明` 或 `requestAnimationFrame 调度` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `桌面歌词轮询进程`、`PowerShell 孤儿进程`、`旧进程 exit 覆盖新进程`、`DesktopOverlayStateCache`、`桌面歌词 beatMap 保留` 或 `壁纸封面 data URL 保留` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `旧窗口 closed 覆盖新窗口`、`覆盖层 BrowserWindow 所有权`、`旧 renderer IPC 控制新窗口`、`桌面歌词透明度/位置失效`、`旧 poller stdout` 或 `覆盖层签名未释放` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `localAssetCacheMemory`、`本地资产镜像`、`只写不读缓存` 或 `切换曲库旧歌词封面保留` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `localLibraryPersistentMemory`、`曲库 snapshot 常驻`、`A→B→A ABA`、`旧曲库后台扫描覆盖新曲库`、`空曲库后台资产任务`、`localLibraryProcessToken`、`旧资产队列闭包常驻` 或 `跨曲库索引写错` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `全曲库歌词常驻`、`已播放歌词原文常驻`、`localLyricText O(n)`、`歌词按需恢复`、`歌词播放租约`、`handoffLocalLyricText`、`localLyricResidencyReleased`、`迟到歌词水合`、`原歌词双份克隆`、`originalLyricsState`、`歌词只读快照`、`localLyricCachePromise`、`localLibraryPreviousRecord`、`本地节奏图内存上限` 或 `localBeatMapCache` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `完整本地封面常驻`、`localCoverDataUrl`、`封面所有权`、`迟到封面读取`、`缩略图失败完整图持久化`、`空缩略图已加载` 或 `歌曲克隆复制封面` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `本地媒体 Object URL`、`Blob URL`、`重复入队音频地址`、`封面懒创建`、`revokeObjectURL`、`媒体租约`、`歌单封面缓存`、`loading 图片请求`、`playlistCoverCache`、`图片 waiter 常驻`、`Image 事件闭包常驻`、`失败封面 rec.img`、`缩略图 Promise 所有权`、`缩略图活跃计数不归零`、`缩略图 FIFO 重复键`、`挂起缩略图任务`、`Promise 队列内部空洞` 或 `迟到缩略图任务` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `关闭迷你播放器内存`、`迷你窗口非驻留`、`窗口驻留缓存`、`旧迷你窗口 closed`、`封面 data URL 保留`、`MiniPlayerStateCache` 或 `sync-state` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `迷你播放器锁屏恢复`、`休眠重建`、`powerMonitor` 或 `renderer 锁屏期间重载` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `本地文件范围读取`、`readAuthorizedLocalFileRange`、`base64Chunks`、`完整 Buffer 峰值`、`整段 atob`、`bytes.buffer.slice`、`Uint8Array 视图复制`、`APIC/PIC/PICTURE 图片副本`、`后台内嵌封面完整 data URL`、`ImageBitmap 封面缩略图`、`PICTURE 长度越界`、`ALBUMARTISTSORT`、`元数据缓存版本`、`MP3 标签大内存`、`FLAC 元数据大内存`、`FLAC metadata descriptor`、`大 PADDING`、`readFlacMetadataSession`、`localFlacMetadataSessionReadBatches`、`后台 light 元数据 Promise`、`Vorbis comment 大字段`、`FLAC 空 comment`、`标签范围合并`、`localFileRangeReadBatches`、`歌曲克隆在途 Promise` 或 `跨进程文件字节` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `verifyUpdateFile`、`安装包校验内存`、`fs.readFileSync 安装器`、`SHA-256/SHA-512 文件校验` 或 `更新安装包 Buffer 峰值` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `播放器性能优化`、`UI 不动`、`播放启动速度`、`点歌到出声`、`启动恢复`、`迷你播放器`、`迷你播放器恢复`、`迷你播放器内存释放`、`隐藏窗口渲染进程`、`队列渲染`、`Home 首屏`、`听歌统计`、`搜索历史`、`搜索结果缓存`、`搜索玻璃贴图`、`HTML 转义`、`副标题缓存`、`空搜索`、`本地曲库导入`、`FileList 转数组`、`本地曲库缓存`、`本地资产缓存补水`、`元数据字段套用`、`本地歌词加载`、`本地文本解码`、`无歌词占位`、`LRC 解析`、`YRC 解析`、`歌词 source 转换`、`本地节奏缓存`、`3D 歌单详情`、`主进程本地曲库扫描`、`IndexedDB 缓存清理`、`IndexedDB`、`封面缩略图`、`重复函数声明` 或 `requestAnimationFrame 调度` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。

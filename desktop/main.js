@@ -5,12 +5,15 @@ const fs = require('fs');
 const { pathToFileURL } = require('url');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
+const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
+const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
+const { MiniPlayerStateCache } = require('./mini-player-state-cache');
 
 let mainWindow = null;
 let localServer = null;
 let mainServerPort = 0;
 let desktopLyricsWindow = null;
-let desktopLyricsState = {};
+const desktopLyricsStateCache = new DesktopOverlayStateCache();
 let desktopLyricsUserBounds = null;
 let desktopLyricsProgrammaticMove = false;
 let desktopLyricsPointerCapture = false;
@@ -22,7 +25,7 @@ let desktopLyricsMousePollerBuffer = '';
 let desktopLyricsHotBounds = null;
 let desktopLyricsLastMiddleAt = 0;
 let wallpaperWindow = null;
-let wallpaperState = {};
+const wallpaperStateCache = new DesktopOverlayStateCache();
 let miniPlayerWindow = null;
 let miniPlayerEnabled = true;
 let miniPlayerActive = false;
@@ -36,14 +39,12 @@ const miniPlayerSavedBoundsSignatures = { standard: '', compact: '' };
 const miniPlayerProgrammaticCloseWindows = new WeakSet();
 const miniPlayerRendererReloadWindows = new WeakSet();
 const miniPlayerWindowModes = new WeakMap();
-let miniPlayerState = {
-  title: 'Mineradio',
-  artist: '',
-  cover: '',
-  playing: false,
-  hasTrack: false,
-  metaSignature: '',
-};
+const miniPlayerRecoverySession = new MiniPlayerRecoverySession({
+  stopRecoveryTimer: stopMiniPlayerRecoveryTimer,
+  stopRecreateTimer: stopMiniPlayerRecreateTimer,
+  scheduleRecovery: scheduleMiniPlayerRecovery,
+});
+const miniPlayerStateCache = new MiniPlayerStateCache(miniPlayerEnabled);
 let htmlFullscreenActive = false;
 let windowFullscreenActive = false;
 let mainWindowStateTimer = null;
@@ -490,6 +491,13 @@ async function refreshLocalMusicFileEntries(folderPath, snapshotOrFiles) {
   };
 }
 
+/**
+ * 分块读取已授权本地文件范围并编码，避免完整范围 Buffer 与 base64 大字符串同时驻留。
+ * @param {string} filePath 已授权文件路径。
+ * @param {number} start 起始字节偏移。
+ * @param {number|null} end 结束字节偏移，不含该位置。
+ * @returns {Promise<object>} 文件大小、实际范围和 base64 分块。
+ */
 async function readAuthorizedLocalFileRange(filePath, start, end) {
   const target = resolveAuthorizedLocalFile(filePath);
   const stat = await fs.promises.stat(target);
@@ -500,11 +508,30 @@ async function readAuthorizedLocalFileRange(filePath, start, end) {
   const to = Math.max(from, Math.min(fileSize, Number.isFinite(requestedEnd) ? requestedEnd : fileSize));
   const maxBytes = 64 * 1024 * 1024;
   const length = Math.min(maxBytes, to - from);
+  if (!length) return { ok: true, size: fileSize, start: from, end: from, byteLength: 0, base64Chunks: [] };
   const handle = await fs.promises.open(target, 'r');
   try {
-    const buffer = Buffer.alloc(length);
-    const result = await handle.read(buffer, 0, length, from);
-    return { ok: true, size: fileSize, start: from, end: from + result.bytesRead, base64: buffer.subarray(0, result.bytesRead).toString('base64') };
+    const chunkSize = 768 * 1024;
+    const buffer = Buffer.allocUnsafe(Math.min(chunkSize, length));
+    const base64Chunks = [];
+    let bytesReadTotal = 0;
+    // 文件读取允许短读；每轮沿实际字节数推进，直到范围结束或底层明确返回 EOF。
+    while (bytesReadTotal < length) {
+      const requestLength = Math.min(buffer.length, length - bytesReadTotal);
+      const result = await handle.read(buffer, 0, requestLength, from + bytesReadTotal);
+      const bytesRead = result && result.bytesRead || 0;
+      if (!bytesRead) break;
+      base64Chunks.push(buffer.subarray(0, bytesRead).toString('base64'));
+      bytesReadTotal += bytesRead;
+    }
+    return {
+      ok: true,
+      size: fileSize,
+      start: from,
+      end: from + bytesReadTotal,
+      byteLength: bytesReadTotal,
+      base64Chunks,
+    };
   } finally {
     await handle.close();
   }
@@ -745,6 +772,7 @@ function applySavedDesktopShellSettings() {
   const saved = readDesktopShellSettings();
   if (typeof saved.closeToTray === 'boolean') closeToTrayEnabled = saved.closeToTray;
   if (typeof saved.miniPlayer === 'boolean') miniPlayerEnabled = saved.miniPlayer;
+  miniPlayerStateCache.setEnabled(miniPlayerEnabled);
   miniPlayerMode = normalizeMiniPlayerMode(saved.miniPlayerMode);
   const savedBoundsByMode = {
     standard: saved.miniPlayerBounds,
@@ -1015,7 +1043,12 @@ function clampNumber(value, min, max, fallback) {
   return Math.max(min, Math.min(max, n));
 }
 
-function desktopLyricsDefaultBounds(payload = desktopLyricsState) {
+/**
+ * 根据歌词纵向偏好计算桌面歌词默认边界。
+ * @param {object} payload 当前桌面歌词状态。
+ * @returns {{x:number,y:number,width:number,height:number}} 当前显示器内的窗口边界。
+ */
+function desktopLyricsDefaultBounds(payload = desktopLyricsStateCache.value) {
   const display = desktopLyricsUserBounds
     ? screen.getDisplayMatching(desktopLyricsUserBounds)
     : screen.getPrimaryDisplay();
@@ -1070,9 +1103,13 @@ function rememberDesktopLyricsBounds() {
   desktopLyricsUserBounds = desktopLyricsWindow.getBounds();
 }
 
+/**
+ * 按锁定态和指针捕获态更新桌面歌词鼠标穿透行为。
+ * @returns {void}
+ */
 function applyDesktopLyricsMouseBehavior() {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-  const locked = desktopLyricsState.clickThrough !== false;
+  const locked = desktopLyricsStateCache.value.clickThrough !== false;
   const shouldIgnore = locked || !desktopLyricsPointerCapture;
   if (desktopLyricsMouseIgnored === shouldIgnore) return;
   desktopLyricsMouseIgnored = shouldIgnore;
@@ -1100,16 +1137,20 @@ function pointInBounds(point, bounds) {
     && point.y <= bounds.y + bounds.height;
 }
 
+/**
+ * 处理中键轮询命中，仅在歌词热区内切换锁定状态。
+ * @returns {void}
+ */
 function handleDesktopLyricsGlobalMiddleClick() {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-  if (!desktopLyricsState.enabled) return;
+  if (!desktopLyricsStateCache.enabled) return;
   const now = Date.now();
   if (now - desktopLyricsLastMiddleAt < 260) return;
   const point = screen.getCursorScreenPoint();
   if (!pointInBounds(point, desktopLyricsHotBoundsOnScreen())) return;
   desktopLyricsLastMiddleAt = now;
-  const nextLocked = desktopLyricsState.clickThrough === false;
-  desktopLyricsState = { ...desktopLyricsState, clickThrough: nextLocked };
+  const nextLocked = desktopLyricsStateCache.value.clickThrough === false;
+  desktopLyricsStateCache.apply({ clickThrough: nextLocked });
   desktopLyricsPointerCapture = !nextLocked;
   applyDesktopLyricsMouseBehavior();
   broadcastDesktopLyricsLockState();
@@ -1130,6 +1171,10 @@ function consumeDesktopLyricsMousePollerOutput(chunk) {
   desktopLyricsMousePollerBuffer = lineStart > 0 ? desktopLyricsMousePollerBuffer.slice(lineStart) : desktopLyricsMousePollerBuffer;
 }
 
+/**
+ * 启动桌面歌词中键轮询，并确保旧进程的结束事件不能覆盖新进程所有权。
+ * @returns {void}
+ */
 function startDesktopLyricsMousePoller() {
   if (process.platform !== 'win32' || desktopLyricsMousePoller) return;
   const script = `
@@ -1153,36 +1198,62 @@ while ($true) {
 }
 `;
   try {
-    desktopLyricsMousePoller = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+    const poller = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    desktopLyricsMousePoller.stdout.on('data', consumeDesktopLyricsMousePollerOutput);
-    desktopLyricsMousePoller.on('exit', () => {
+    desktopLyricsMousePoller = poller;
+
+    /**
+     * 只消费当前进程的输出；已停止进程的迟到数据不得污染替代进程的共享缓冲区。
+     * @param {Buffer|string} chunk PowerShell stdout 数据块。
+     * @returns {void}
+     */
+    function consumeOwnedPollerOutput(chunk) {
+      if (desktopLyricsMousePoller !== poller) return;
+      consumeDesktopLyricsMousePollerOutput(chunk);
+    }
+
+    poller.stdout.on('data', consumeOwnedPollerOutput);
+
+    /**
+     * 仅释放触发事件的当前进程；旧进程延迟结束时不得清空替代进程句柄。
+     * @returns {void}
+     */
+    function releaseOwnedPoller() {
+      if (desktopLyricsMousePoller !== poller) return;
       desktopLyricsMousePoller = null;
       desktopLyricsMousePollerBuffer = '';
-    });
-    desktopLyricsMousePoller.on('error', () => {
-      desktopLyricsMousePoller = null;
-      desktopLyricsMousePollerBuffer = '';
-    });
+    }
+
+    poller.on('exit', releaseOwnedPoller);
+    poller.on('error', releaseOwnedPoller);
   } catch (e) {
     desktopLyricsMousePoller = null;
     desktopLyricsMousePollerBuffer = '';
   }
 }
 
+/**
+ * 停止当前桌面歌词中键轮询；先移交所有权，再终止子进程以隔离延迟事件。
+ * @returns {void}
+ */
 function stopDesktopLyricsMousePoller() {
   if (!desktopLyricsMousePoller) return;
-  try {
-    desktopLyricsMousePoller.kill();
-  } catch (e) {}
+  const poller = desktopLyricsMousePoller;
   desktopLyricsMousePoller = null;
   desktopLyricsMousePollerBuffer = '';
+  try {
+    poller.kill();
+  } catch (e) {}
 }
 
+/**
+ * 向主 renderer 和歌词窗口广播当前锁定状态。
+ * @returns {void}
+ */
 function broadcastDesktopLyricsLockState() {
-  const locked = desktopLyricsState.clickThrough !== false;
+  const locked = desktopLyricsStateCache.value.clickThrough !== false;
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('mineradio-desktop-lyrics-lock-state', { locked });
   }
@@ -1195,7 +1266,13 @@ function broadcastDesktopLyricsEnabledState(enabled) {
   }
 }
 
-function positionDesktopLyricsWindow(payload = desktopLyricsState, options = {}) {
+/**
+ * 应用桌面歌词位置与透明度；已有手动位置默认优先。
+ * @param {object} payload 当前桌面歌词状态。
+ * @param {{force?:boolean}} options 是否忽略手动位置并强制按比例定位。
+ * @returns {void}
+ */
+function positionDesktopLyricsWindow(payload = desktopLyricsStateCache.value, options = {}) {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
   const shouldUseManualBounds = desktopLyricsUserBounds && !options.force;
   setDesktopLyricsBounds(shouldUseManualBounds ? desktopLyricsUserBounds : desktopLyricsDefaultBounds(payload));
@@ -1263,36 +1340,48 @@ function setDesktopLyricsOpacity(value) {
   desktopLyricsWindow.setOpacity(nextOpacity);
 }
 
+/**
+ * 将当前歌词状态增量发送到桌面歌词 renderer。
+ * @param {boolean} force 是否忽略签名判重。
+ * @returns {void}
+ */
 function sendDesktopLyricsState(force = false) {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-  const signature = desktopLyricsStateSignature(desktopLyricsState);
+  const state = desktopLyricsStateCache.value;
+  const signature = desktopLyricsStateSignature(state);
   if (!force && signature === desktopLyricsLastStateSignature) return;
   desktopLyricsLastStateSignature = signature;
-  desktopLyricsWindow.webContents.send('mineradio-desktop-lyrics-state', desktopLyricsState);
+  desktopLyricsWindow.webContents.send('mineradio-desktop-lyrics-state', state);
 }
 
+/**
+ * 启用或更新桌面歌词窗口，并把当前完整状态交给生命周期缓存。
+ * @param {object} payload renderer 提供的当前歌词状态。
+ * @returns {Electron.BrowserWindow} 桌面歌词窗口。
+ */
 function createDesktopLyricsWindow(payload = {}) {
-  const previousY = desktopLyricsState.y;
-  const previousOpacity = desktopLyricsState.opacity;
-  desktopLyricsState = { ...desktopLyricsState, ...payload, enabled: true };
+  const previousState = desktopLyricsStateCache.value;
+  const previousY = previousState.y;
+  const previousOpacity = previousState.opacity;
+  const state = desktopLyricsStateCache.setEnabled(true, payload);
   const hasY = Object.prototype.hasOwnProperty.call(payload || {}, 'y');
-  const nextY = clampNumber(desktopLyricsState.y, 0.08, 0.92, 0.76);
+  const nextY = clampNumber(state.y, 0.08, 0.92, 0.76);
   const yChanged = hasY && Number.isFinite(Number(previousY)) && Math.abs(nextY - clampNumber(previousY, 0.08, 0.92, 0.76)) > 0.001;
   const opacityChanged = Object.prototype.hasOwnProperty.call(payload || {}, 'opacity')
-    && Math.abs(clampNumber(desktopLyricsState.opacity, 0.28, 1, 0.92) - clampNumber(previousOpacity, 0.28, 1, 0.92)) > 0.001;
+    && Math.abs(clampNumber(state.opacity, 0.28, 1, 0.92) - clampNumber(previousOpacity, 0.28, 1, 0.92)) > 0.001;
   if (yChanged) desktopLyricsUserBounds = null;
   if (desktopLyricsWindow && !desktopLyricsWindow.isDestroyed()) {
     if (yChanged) {
-      positionDesktopLyricsWindow(desktopLyricsState, { force: yChanged });
+      positionDesktopLyricsWindow(state, { force: yChanged });
     } else if (opacityChanged) {
-      setDesktopLyricsOpacity(desktopLyricsState.opacity);
+      setDesktopLyricsOpacity(state.opacity);
     }
     applyDesktopLyricsMouseBehavior();
     sendDesktopLyricsState();
     return desktopLyricsWindow;
   }
 
-  desktopLyricsWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 920,
     height: 190,
     frame: false,
@@ -1313,34 +1402,80 @@ function createDesktopLyricsWindow(payload = {}) {
       backgroundThrottling: false,
     },
   });
+  desktopLyricsWindow = win;
   try {
-    desktopLyricsWindow.setAlwaysOnTop(true, 'screen-saver');
-    desktopLyricsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   } catch (e) {
     console.warn('Desktop lyrics topmost setup skipped:', e.message);
   }
   startDesktopLyricsMousePoller();
   applyDesktopLyricsMouseBehavior();
-  positionDesktopLyricsWindow(desktopLyricsState, { force: yChanged || !desktopLyricsUserBounds });
-  desktopLyricsWindow.once('ready-to-show', () => {
-    if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-    desktopLyricsWindow.showInactive();
+  positionDesktopLyricsWindow(state, { force: yChanged || !desktopLyricsUserBounds });
+
+  /**
+   * 仅显示仍持有全局槽位的歌词窗口，隔离旧实例迟到的 ready 事件。
+   * @returns {void}
+   */
+  function showOwnedDesktopLyricsWindow() {
+    if (desktopLyricsWindow !== win || win.isDestroyed()) return;
+    win.showInactive();
     sendDesktopLyricsState(true);
-  });
-  desktopLyricsWindow.webContents.once('did-finish-load', () => sendDesktopLyricsState(true));
-  desktopLyricsWindow.on('closed', () => {
+  }
+
+  /**
+   * 页面加载完成后只为当前歌词窗口发送状态。
+   * @returns {void}
+   */
+  function sendOwnedDesktopLyricsState() {
+    if (desktopLyricsWindow !== win || win.isDestroyed()) return;
+    sendDesktopLyricsState(true);
+  }
+
+  /**
+   * 仅由当前歌词窗口释放全局句柄，旧实例关闭不能覆盖替代窗口。
+   * @returns {void}
+   */
+  function releaseOwnedDesktopLyricsWindow() {
+    if (desktopLyricsWindow !== win) return;
     desktopLyricsWindow = null;
     desktopLyricsMouseIgnored = null;
     desktopLyricsLastStateSignature = '';
     desktopLyricsLastOpacity = null;
-  });
-  desktopLyricsWindow.on('moved', rememberDesktopLyricsBounds);
-  desktopLyricsWindow.loadURL(overlayUrl('desktop-lyrics.html')).catch((e) => console.warn('Desktop lyrics load failed:', e.message));
-  return desktopLyricsWindow;
+  }
+
+  /**
+   * 只记录当前歌词窗口的用户移动结果。
+   * @returns {void}
+   */
+  function rememberOwnedDesktopLyricsBounds() {
+    if (desktopLyricsWindow !== win) return;
+    rememberDesktopLyricsBounds();
+  }
+
+  /**
+   * 记录桌面歌词页面加载失败原因。
+   * @param {Error} error 加载错误。
+   * @returns {void}
+   */
+  function reportDesktopLyricsLoadFailure(error) {
+    console.warn('Desktop lyrics load failed:', error.message);
+  }
+
+  win.once('ready-to-show', showOwnedDesktopLyricsWindow);
+  win.webContents.once('did-finish-load', sendOwnedDesktopLyricsState);
+  win.on('closed', releaseOwnedDesktopLyricsWindow);
+  win.on('moved', rememberOwnedDesktopLyricsBounds);
+  win.loadURL(overlayUrl('desktop-lyrics.html')).catch(reportDesktopLyricsLoadFailure);
+  return win;
 }
 
+/**
+ * 关闭桌面歌词窗口和轮询进程，并释放歌词及节奏图状态。
+ * @returns {void}
+ */
 function closeDesktopLyricsWindow() {
-  desktopLyricsState = { ...desktopLyricsState, enabled: false };
+  desktopLyricsStateCache.setEnabled(false);
   desktopLyricsPointerCapture = false;
   desktopLyricsMouseIgnored = null;
   desktopLyricsLastStateSignature = '';
@@ -1413,20 +1548,29 @@ function positionWallpaperWindow() {
   wallpaperWindow.setBounds(bounds, false);
 }
 
+/**
+ * 将当前壁纸状态发送到壁纸 renderer。
+ * @returns {void}
+ */
 function sendWallpaperState() {
   if (!wallpaperWindow || wallpaperWindow.isDestroyed()) return;
-  wallpaperWindow.webContents.send('mineradio-wallpaper-state', wallpaperState);
+  wallpaperWindow.webContents.send('mineradio-wallpaper-state', wallpaperStateCache.value);
 }
 
+/**
+ * 启用或更新壁纸窗口，并缓存当前完整壁纸状态。
+ * @param {object} payload renderer 提供的当前壁纸状态。
+ * @returns {Electron.BrowserWindow} 壁纸窗口。
+ */
 function createWallpaperWindow(payload = {}) {
-  wallpaperState = { ...wallpaperState, ...payload, enabled: true };
+  wallpaperStateCache.setEnabled(true, payload);
   if (wallpaperWindow && !wallpaperWindow.isDestroyed()) {
     positionWallpaperWindow();
     sendWallpaperState();
     return wallpaperWindow;
   }
   const bounds = screen.getPrimaryDisplay().bounds;
-  wallpaperWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     ...bounds,
     frame: false,
     transparent: false,
@@ -1446,24 +1590,61 @@ function createWallpaperWindow(payload = {}) {
       backgroundThrottling: false,
     },
   });
-  wallpaperWindow.setIgnoreMouseEvents(true, { forward: true });
-  wallpaperWindow.once('ready-to-show', () => {
-    if (!wallpaperWindow || wallpaperWindow.isDestroyed()) return;
+  wallpaperWindow = win;
+  win.setIgnoreMouseEvents(true, { forward: true });
+
+  /**
+   * 仅显示并挂载仍持有全局槽位的壁纸窗口。
+   * @returns {void}
+   */
+  function showOwnedWallpaperWindow() {
+    if (wallpaperWindow !== win || win.isDestroyed()) return;
     positionWallpaperWindow();
-    wallpaperWindow.showInactive();
-    attachWallpaperToWorkerW(wallpaperWindow);
+    win.showInactive();
+    attachWallpaperToWorkerW(win);
     sendWallpaperState();
-  });
-  wallpaperWindow.webContents.once('did-finish-load', sendWallpaperState);
-  wallpaperWindow.on('closed', () => {
+  }
+
+  /**
+   * 页面加载完成后只为当前壁纸窗口发送状态。
+   * @returns {void}
+   */
+  function sendOwnedWallpaperState() {
+    if (wallpaperWindow !== win || win.isDestroyed()) return;
+    sendWallpaperState();
+  }
+
+  /**
+   * 仅由当前壁纸窗口释放全局句柄，旧实例关闭不能覆盖替代窗口。
+   * @returns {void}
+   */
+  function releaseOwnedWallpaperWindow() {
+    if (wallpaperWindow !== win) return;
     wallpaperWindow = null;
-  });
-  wallpaperWindow.loadURL(overlayUrl('wallpaper.html')).catch((e) => console.warn('Wallpaper load failed:', e.message));
-  return wallpaperWindow;
+  }
+
+  /**
+   * 记录壁纸页面加载失败原因。
+   * @param {Error} error 加载错误。
+   * @returns {void}
+   */
+  function reportWallpaperLoadFailure(error) {
+    console.warn('Wallpaper load failed:', error.message);
+  }
+
+  win.once('ready-to-show', showOwnedWallpaperWindow);
+  win.webContents.once('did-finish-load', sendOwnedWallpaperState);
+  win.on('closed', releaseOwnedWallpaperWindow);
+  win.loadURL(overlayUrl('wallpaper.html')).catch(reportWallpaperLoadFailure);
+  return win;
 }
 
+/**
+ * 关闭壁纸窗口并释放封面等重载荷状态。
+ * @returns {void}
+ */
 function closeWallpaperWindow() {
-  wallpaperState = { ...wallpaperState, enabled: false };
+  wallpaperStateCache.setEnabled(false);
   if (wallpaperWindow && !wallpaperWindow.isDestroyed()) {
     sendWallpaperState();
     wallpaperWindow.close();
@@ -1590,34 +1771,24 @@ function positionMiniPlayerWindow() {
   if (miniPlayerUserBoundsByMode[mode]) persistMiniPlayerUserBounds(nextBounds, mode);
 }
 
-function applyMiniPlayerStatePatch(payload) {
-  const source = payload && typeof payload === 'object' ? payload : {};
-  const next = { ...miniPlayerState };
-  if (Object.prototype.hasOwnProperty.call(source, 'title')) next.title = String(source.title || 'Mineradio').slice(0, 260);
-  if (Object.prototype.hasOwnProperty.call(source, 'artist')) next.artist = String(source.artist || '').slice(0, 320);
-  if (Object.prototype.hasOwnProperty.call(source, 'cover')) {
-    const cover = String(source.cover || '');
-    next.cover = cover.length <= 8 * 1024 * 1024 ? cover : '';
-  }
-  if (Object.prototype.hasOwnProperty.call(source, 'playing')) next.playing = !!source.playing;
-  if (Object.prototype.hasOwnProperty.call(source, 'hasTrack')) next.hasTrack = !!source.hasTrack;
-  if (Object.prototype.hasOwnProperty.call(source, 'metaSignature')) next.metaSignature = String(source.metaSignature || '').slice(0, 240);
-  miniPlayerState = next;
-  return next;
-}
-
+/**
+ * 把主进程缓存的迷你播放器状态按字段增量发送给迷你 renderer。
+ * @param {boolean} force 是否忽略上次发送快照并发送完整状态。
+ * @returns {void}
+ */
 function sendMiniPlayerState(force = false) {
   const win = miniPlayerWindow;
   if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
   const includeCover = miniPlayerModeForWindow(win) === 'standard';
+  const state = miniPlayerStateCache.value;
   const next = {
-    title: miniPlayerState.title || 'Mineradio',
-    artist: miniPlayerState.artist || '',
-    playing: !!miniPlayerState.playing,
-    hasTrack: !!miniPlayerState.hasTrack,
-    metaSignature: miniPlayerState.metaSignature || '',
+    title: state.title || 'Mineradio',
+    artist: state.artist || '',
+    playing: !!state.playing,
+    hasTrack: !!state.hasTrack,
+    metaSignature: state.metaSignature || '',
   };
-  if (includeCover) next.cover = miniPlayerState.cover || '';
+  if (includeCover) next.cover = state.cover || '';
   const previous = miniPlayerLastSentState;
   const patch = {};
   let changed = false;
@@ -1650,9 +1821,14 @@ function sendMiniPlayerState(force = false) {
   }
 }
 
+/**
+ * 判断当前会话是否允许显示迷你播放器；锁屏或休眠期间必须保持关闭。
+ * @returns {boolean} 功能启用、主窗口隐藏且恢复会话未暂停时返回 true。
+ */
 function shouldShowMiniPlayer() {
   return !!(
-    miniPlayerEnabled
+    !miniPlayerRecoverySession.paused
+    && miniPlayerEnabled
     && miniPlayerActive
     && mainWindow
     && !mainWindow.isDestroyed()
@@ -1697,12 +1873,18 @@ function keepMiniPlayerOnTop(win) {
   }
 }
 
+/**
+ * 销毁指定迷你窗口，并在其仍是当前所有者时释放主进程状态缓存。
+ * @param {Electron.BrowserWindow} win 待销毁的迷你播放器窗口。
+ * @returns {void}
+ */
 function destroyMiniPlayerWindowInstance(win) {
   if (!win) return;
   miniPlayerRendererReloadWindows.delete(win);
   if (miniPlayerWindow === win) {
     miniPlayerWindow = null;
     miniPlayerUserMovePending = false;
+    miniPlayerStateCache.setResident(false);
   }
   miniPlayerLastSentState = null;
   if (win.isDestroyed()) return;
@@ -1710,8 +1892,14 @@ function destroyMiniPlayerWindowInstance(win) {
   win.destroy();
 }
 
+/**
+ * 安排指定迷你窗口的 renderer 恢复；暂停会话和失去所有权的旧窗口直接忽略。
+ * @param {Electron.BrowserWindow} win 触发故障的迷你播放器窗口。
+ * @param {string} reason 恢复原因或 renderer 故障标识。
+ * @returns {void}
+ */
 function scheduleMiniPlayerWindowRecovery(win, reason) {
-  if (appQuitting || !win || miniPlayerWindow !== win || miniPlayerProgrammaticCloseWindows.has(win)) return;
+  if (appQuitting || miniPlayerRecoverySession.paused || !win || miniPlayerWindow !== win || miniPlayerProgrammaticCloseWindows.has(win)) return;
   if (miniPlayerRecreateTimer) return;
   console.warn(`Mini player recovery scheduled: ${reason || 'unknown'}`);
   miniPlayerRecreateTimer = setTimeout(() => {
@@ -1738,10 +1926,47 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
   if (typeof miniPlayerRecreateTimer.unref === 'function') miniPlayerRecreateTimer.unref();
 }
 
+/**
+ * 在系统休眠期间暂停迷你播放器恢复，避免后台重载或重建 renderer。
+ * @returns {void}
+ */
+function handleMiniPlayerSystemSuspend() {
+  miniPlayerRecoverySession.pause('suspend');
+}
+
+/**
+ * 系统唤醒后解除休眠原因；若屏幕仍锁定则继续保持暂停。
+ * @returns {void}
+ */
+function handleMiniPlayerSystemResume() {
+  miniPlayerRecoverySession.resume('suspend', 180);
+}
+
+/**
+ * 屏幕锁定时暂停迷你播放器恢复，避免锁屏会话继续占用资源。
+ * @returns {void}
+ */
+function handleMiniPlayerScreenLock() {
+  miniPlayerRecoverySession.pause('screen');
+}
+
+/**
+ * 屏幕解锁后解除锁屏原因；若系统仍处于休眠原因则不提前恢复。
+ * @returns {void}
+ */
+function handleMiniPlayerScreenUnlock() {
+  miniPlayerRecoverySession.resume('screen', 180);
+}
+
+/**
+ * 创建当前迷你播放器窗口，并建立只属于该窗口生命周期的状态缓存驻留。
+ * @returns {Electron.BrowserWindow} 当前可复用或新创建的迷你播放器窗口。
+ */
 function createMiniPlayerWindow() {
   if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) return miniPlayerWindow;
   miniPlayerWindow = null;
   miniPlayerUserMovePending = false;
+  miniPlayerStateCache.setResident(false);
   const mode = normalizeMiniPlayerMode(miniPlayerMode);
   const bounds = clampMiniPlayerBounds(miniPlayerUserBoundsByMode[mode] || miniPlayerDefaultBounds(mode), mode);
   const win = new BrowserWindow({
@@ -1770,6 +1995,8 @@ function createMiniPlayerWindow() {
   });
   miniPlayerWindow = win;
   miniPlayerWindowModes.set(win, mode);
+  miniPlayerStateCache.setResident(true);
+  requestMiniPlayerStateSync();
   keepMiniPlayerOnTop(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.once('ready-to-show', () => {
@@ -1816,12 +2043,17 @@ function createMiniPlayerWindow() {
     event.preventDefault();
     focusMainWindow();
   });
+  /**
+   * 在当前窗口意外关闭时释放其状态所有权；旧窗口迟到事件不得清理替代窗口缓存。
+   * @returns {void}
+   */
   win.on('closed', () => {
     const wasCurrent = miniPlayerWindow === win;
     if (wasCurrent) {
       miniPlayerWindow = null;
       miniPlayerUserMovePending = false;
       miniPlayerLastSentState = null;
+      miniPlayerStateCache.setResident(false);
     }
     if (wasCurrent && !appQuitting && !miniPlayerProgrammaticCloseWindows.has(win) && shouldShowMiniPlayer()) {
       scheduleMiniPlayerRecovery(120);
@@ -1863,10 +2095,13 @@ function showMiniPlayerWindow() {
   if (!wasVisible || wasMinimized) sendMiniPlayerState(true);
 }
 
+/**
+ * 在主窗口恢复后释放迷你播放器。隐藏 BrowserWindow 仍会保留独立渲染进程，
+ * 下次进入迷你模式时按当前主进程状态重新创建即可，不需要为不可见窗口常驻内存。
+ * @returns {void}
+ */
 function hideMiniPlayerWindow() {
-  stopMiniPlayerRecoveryTimer();
-  stopMiniPlayerRecreateTimer();
-  if (miniPlayerWindow && !miniPlayerWindow.isDestroyed() && miniPlayerWindow.isVisible()) miniPlayerWindow.hide();
+  closeMiniPlayerWindow();
 }
 
 function closeMiniPlayerWindow() {
@@ -1877,8 +2112,24 @@ function closeMiniPlayerWindow() {
   miniPlayerLastSentState = null;
 }
 
+/**
+ * 要求主 renderer 重新发送当前完整歌曲状态。
+ * 重新启用功能时主进程缓存为空，必须显式补齐而不能等待下一次播放事件。
+ * @returns {void}
+ */
+function requestMiniPlayerStateSync() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+  mainWindow.webContents.send('mineradio-mini-player-command', { action: 'sync-state' });
+}
+
+/**
+ * 切换迷你播放器功能并同步持久化、内存状态和窗口生命周期。
+ * @param {boolean} enabled 是否启用迷你播放器。
+ * @returns {{ok:boolean, miniPlayerEnabled:boolean}} 主进程确认后的开关状态。
+ */
 function setMiniPlayerEnabled(enabled) {
   miniPlayerEnabled = !!enabled;
+  miniPlayerStateCache.setEnabled(miniPlayerEnabled);
   writeDesktopShellSettings({ miniPlayer: miniPlayerEnabled });
   if (miniPlayerEnabled) {
     if (mainWindow && !mainWindow.isDestroyed() && (mainWindow.isMinimized() || !mainWindow.isVisible())) miniPlayerActive = true;
@@ -1968,14 +2219,22 @@ ipcMain.handle('mineradio-mini-player-set-mode', (_event, mode) => {
   return setMiniPlayerMode(mode);
 });
 
-ipcMain.handle('mineradio-mini-player-update', (event, payload) => {
+/**
+ * 接收主 renderer 的迷你播放器状态补丁；禁用期间确认但不保留补丁。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {unknown} payload 增量状态补丁。
+ * @returns {{ok:boolean, ignored?:boolean, error?:string}} 补丁处理结果。
+ */
+function handleMiniPlayerStateUpdate(event, payload) {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
     return { ok: false, error: 'MINI_PLAYER_INVALID_SENDER' };
   }
-  applyMiniPlayerStatePatch(payload);
+  if (!miniPlayerStateCache.apply(payload)) return { ok: true, ignored: true };
   sendMiniPlayerState();
   return { ok: true };
-});
+}
+
+ipcMain.handle('mineradio-mini-player-update', handleMiniPlayerStateUpdate);
 
 ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {
@@ -2114,8 +2373,38 @@ ipcMain.handle('mineradio-restart-app', async () => {
   }
 });
 
-ipcMain.handle('mineradio-desktop-lyrics-set-enabled', async (_event, enabled, payload) => {
+/**
+ * 判断 IPC 是否来自当前主 renderer，阻止覆盖层伪造状态更新。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @returns {boolean} sender 属于当前主窗口时返回 true。
+ */
+function isCurrentMainWindowSender(event) {
+  return !!(event && mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+}
+
+/**
+ * 判断 IPC 是否来自当前桌面歌词 renderer，旧窗口迟到命令必须被拒绝。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @returns {boolean} sender 属于当前桌面歌词窗口时返回 true。
+ */
+function isCurrentDesktopLyricsWindowSender(event) {
+  return !!(event && desktopLyricsWindow && !desktopLyricsWindow.isDestroyed() && event.sender === desktopLyricsWindow.webContents);
+}
+
+/**
+ * 切换桌面歌词功能；启用仅允许主 renderer，关闭同时允许当前歌词窗口。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {boolean} enabled 是否启用桌面歌词。
+ * @param {unknown} payload 启用时的完整歌词状态。
+ * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 开关处理结果。
+ */
+async function handleDesktopLyricsEnabledState(event, enabled, payload) {
   try {
+    const fromMainWindow = isCurrentMainWindowSender(event);
+    const fromLyricsWindow = isCurrentDesktopLyricsWindowSender(event);
+    if ((enabled && !fromMainWindow) || (!enabled && !fromMainWindow && !fromLyricsWindow)) {
+      return { ok: true, ignored: true };
+    }
     if (enabled) {
       createDesktopLyricsWindow(payload || {});
       broadcastDesktopLyricsEnabledState(true);
@@ -2126,41 +2415,74 @@ ipcMain.handle('mineradio-desktop-lyrics-set-enabled', async (_event, enabled, p
   } catch (e) {
     return { ok: false, error: e.message || 'DESKTOP_LYRICS_FAILED' };
   }
-});
+}
 
-ipcMain.handle('mineradio-desktop-lyrics-update', async (_event, payload) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-enabled', handleDesktopLyricsEnabledState);
+
+/**
+ * 接收桌面歌词状态；窗口关闭后确认但拒绝重载荷补丁。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {unknown} payload 桌面歌词状态补丁。
+ * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 主进程处理结果。
+ */
+async function handleDesktopLyricsStateUpdate(event, payload) {
   try {
-    const nextState = { ...desktopLyricsState, ...(payload || {}) };
-    if (nextState.enabled) {
-      createDesktopLyricsWindow(payload || {});
-    } else if (desktopLyricsWindow && !desktopLyricsWindow.isDestroyed()) {
-      desktopLyricsState = nextState;
+    if (!isCurrentMainWindowSender(event)) return { ok: true, ignored: true };
+    if (payload && payload.enabled === false) {
+      desktopLyricsStateCache.setEnabled(false);
       sendDesktopLyricsState();
-    } else {
-      desktopLyricsState = nextState;
+      return { ok: true, ignored: true };
     }
+    if (!desktopLyricsStateCache.enabled) return { ok: true, ignored: true };
+    createDesktopLyricsWindow(payload || {});
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message || 'DESKTOP_LYRICS_UPDATE_FAILED' };
   }
-});
+}
 
-ipcMain.handle('mineradio-desktop-lyrics-set-dragging', async () => {
+ipcMain.handle('mineradio-desktop-lyrics-update', handleDesktopLyricsStateUpdate);
+
+/**
+ * 确认当前歌词窗口的拖动状态通知；实际移动由相对位移通道完成。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @returns {Promise<{ok:boolean,ignored?:boolean}>} sender 校验结果。
+ */
+async function handleDesktopLyricsDragging(event) {
+  if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
   return { ok: true };
-});
+}
 
-ipcMain.handle('mineradio-desktop-lyrics-set-pointer-capture', async (_event, active) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-dragging', handleDesktopLyricsDragging);
+
+/**
+ * 更新当前歌词窗口的指针捕获状态。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {boolean} active 是否正在捕获指针。
+ * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 更新结果。
+ */
+async function handleDesktopLyricsPointerCapture(event, active) {
   try {
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
     desktopLyricsPointerCapture = !!active;
     applyDesktopLyricsMouseBehavior();
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message || 'DESKTOP_LYRICS_POINTER_FAILED' };
   }
-});
+}
 
-ipcMain.handle('mineradio-desktop-lyrics-set-hot-bounds', async (_event, bounds) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-pointer-capture', handleDesktopLyricsPointerCapture);
+
+/**
+ * 更新当前歌词窗口可响应中键的热区边界。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {object} bounds renderer 提供的相对边界。
+ * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 更新结果。
+ */
+async function handleDesktopLyricsHotBounds(event, bounds) {
   try {
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
     const left = clampNumber(bounds && bounds.left, -2000, 4000, 0);
     const top = clampNumber(bounds && bounds.top, -2000, 4000, 0);
     const right = clampNumber(bounds && bounds.right, left + 1, 6000, left + 1);
@@ -2170,24 +2492,43 @@ ipcMain.handle('mineradio-desktop-lyrics-set-hot-bounds', async (_event, bounds)
   } catch (e) {
     return { ok: false, error: e.message || 'DESKTOP_LYRICS_HOT_BOUNDS_FAILED' };
   }
-});
+}
 
-ipcMain.handle('mineradio-desktop-lyrics-set-lock-state', async (_event, locked) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-hot-bounds', handleDesktopLyricsHotBounds);
+
+/**
+ * 更新桌面歌词锁定态并同步鼠标穿透行为。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {boolean} locked 是否锁定并穿透鼠标。
+ * @returns {Promise<{ok:boolean,locked?:boolean,ignored?:boolean,error?:string}>} 锁定结果。
+ */
+async function handleDesktopLyricsLockState(event, locked) {
   try {
-    desktopLyricsState = { ...desktopLyricsState, clickThrough: !!locked };
-    if (desktopLyricsState.clickThrough !== false) desktopLyricsPointerCapture = false;
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
+    desktopLyricsStateCache.apply({ clickThrough: !!locked });
+    if (desktopLyricsStateCache.value.clickThrough !== false) desktopLyricsPointerCapture = false;
     applyDesktopLyricsMouseBehavior();
     broadcastDesktopLyricsLockState();
-    return { ok: true, locked: desktopLyricsState.clickThrough !== false };
+    return { ok: true, locked: desktopLyricsStateCache.value.clickThrough !== false };
   } catch (e) {
     return { ok: false, error: e.message || 'DESKTOP_LYRICS_LOCK_FAILED' };
   }
-});
+}
 
-ipcMain.handle('mineradio-desktop-lyrics-move-by', async (_event, dx, dy) => {
+ipcMain.handle('mineradio-desktop-lyrics-set-lock-state', handleDesktopLyricsLockState);
+
+/**
+ * 在解锁状态下按相对像素移动桌面歌词窗口。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {number} dx 水平位移。
+ * @param {number} dy 垂直位移。
+ * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 移动结果。
+ */
+async function handleDesktopLyricsMoveBy(event, dx, dy) {
   try {
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
     if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return { ok: false, error: 'NO_DESKTOP_LYRICS_WINDOW' };
-    if (desktopLyricsState.clickThrough !== false) return { ok: false, error: 'DESKTOP_LYRICS_LOCKED' };
+    if (desktopLyricsStateCache.value.clickThrough !== false) return { ok: false, error: 'DESKTOP_LYRICS_LOCKED' };
     const bounds = desktopLyricsWindow.getBounds();
     const next = {
       ...bounds,
@@ -2200,7 +2541,9 @@ ipcMain.handle('mineradio-desktop-lyrics-move-by', async (_event, dx, dy) => {
   } catch (e) {
     return { ok: false, error: e.message || 'DESKTOP_LYRICS_MOVE_FAILED' };
   }
-});
+}
+
+ipcMain.handle('mineradio-desktop-lyrics-move-by', handleDesktopLyricsMoveBy);
 
 ipcMain.handle('mineradio-wallpaper-set-enabled', async (_event, enabled, payload) => {
   try {
@@ -2212,23 +2555,28 @@ ipcMain.handle('mineradio-wallpaper-set-enabled', async (_event, enabled, payloa
   }
 });
 
-ipcMain.handle('mineradio-wallpaper-update', async (_event, payload) => {
+/**
+ * 接收壁纸状态；窗口关闭后确认但拒绝封面等重载荷补丁。
+ * @param {Electron.IpcMainInvokeEvent} _event IPC 调用事件。
+ * @param {unknown} payload 壁纸状态补丁。
+ * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 主进程处理结果。
+ */
+async function handleWallpaperStateUpdate(_event, payload) {
   try {
-    wallpaperState = { ...wallpaperState, ...(payload || {}) };
-    if (wallpaperState.enabled) {
-      createWallpaperWindow(wallpaperState);
-      if (wallpaperWindow && !wallpaperWindow.isDestroyed()) {
-        positionWallpaperWindow();
-        sendWallpaperState();
-      }
-    } else if (wallpaperWindow && !wallpaperWindow.isDestroyed()) {
+    if (payload && payload.enabled === false) {
+      wallpaperStateCache.setEnabled(false);
       sendWallpaperState();
+      return { ok: true, ignored: true };
     }
+    if (!wallpaperStateCache.enabled) return { ok: true, ignored: true };
+    createWallpaperWindow(payload || {});
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message || 'WALLPAPER_UPDATE_FAILED' };
   }
-});
+}
+
+ipcMain.handle('mineradio-wallpaper-update', handleWallpaperStateUpdate);
 
 async function createWindow() {
   htmlFullscreenActive = false;
@@ -2386,10 +2734,10 @@ if (!gotSingleInstanceLock) {
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
-    powerMonitor.on('suspend', stopMiniPlayerRecoveryTimer);
-    powerMonitor.on('lock-screen', stopMiniPlayerRecoveryTimer);
-    powerMonitor.on('resume', () => scheduleMiniPlayerRecovery(180));
-    powerMonitor.on('unlock-screen', () => scheduleMiniPlayerRecovery(180));
+    powerMonitor.on('suspend', handleMiniPlayerSystemSuspend);
+    powerMonitor.on('lock-screen', handleMiniPlayerScreenLock);
+    powerMonitor.on('resume', handleMiniPlayerSystemResume);
+    powerMonitor.on('unlock-screen', handleMiniPlayerScreenUnlock);
     await createWindow();
     createTray();
   });
