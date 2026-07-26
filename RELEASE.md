@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.54 封面图片上传解码失败静默无反馈修复
+- `v1.2.54` 修复用户上传封面解码失败时无任何反馈的缺陷：`loadCoverFromFile`/`applyCoverDataUrl` 只挂 `onload` 缺 `onerror`，损坏或超大图片解码失败时封面不更新也不提示，用户误以为卡死。
+- 对齐背景图片上传 `readBackgroundImageFile` 的做法，为封面上传的 `FileReader`/`Image` 补 `onerror` 反馈与解绑；`applyCoverDataUrl` 解码失败刻意保留现有封面不清空。
+- 新增 4 条回归测试（`tests/cover-upload-decode-failure.test.js`）。全套 121/121、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.53 -> 1.2.54` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.54`。
+
 ## v1.2.53 本地曲库整批替换导致 Object URL 泄漏修复
 - `v1.2.53` 修复重新导入本地文件/文件夹造成的 `blob:` Object URL 内存泄漏：`ensureLocalSongUrl`/本地封面对浏览器 `File` 创建的 Object URL 写入 `song.localUrl`/`localCoverObjectUrl`，而整批替换 `localLibrarySongs` 时旧对象被丢弃却从不 `revokeObjectURL`。
 - 新增 `revokeDiscardedLocalSongObjectUrls`，在 `handleLocalFolderFiles`/`handleFiles` 替换曲库前回收被丢弃且无存活引用的 `blob:` 地址；保留集覆盖新曲库与存活歌单，持久地址（http/自定义协议）与空值不动，重复地址只撤销一次。

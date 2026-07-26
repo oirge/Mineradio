@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v1.2.54 封面图片上传解码失败静默无反馈修复
+
+- 修复用户上传封面图片解码失败时界面毫无反馈的缺陷。`loadCoverFromFile` 只给 `Image`/`FileReader` 挂了 `onload`，没有 `onerror`；`applyCoverDataUrl` 同样只挂 `onload`。当选择或拖入损坏、超大或非法的图片文件，或本地封面缓存 data URL 已损坏时，解码永不触发 `onload`，封面既不更新也不提示，用户会误以为程序卡死。
+- 对照同类的背景图片上传 `readBackgroundImageFile`：它对 `Image` 和 `FileReader` 都挂了 `onerror` 并弹出失败提示，封面上传路径此前缺失这一层，行为不一致。
+- 为 `loadCoverFromFile` 的 `FileReader.onerror` 与 `Image.onerror` 补上 `showToast('封面图片读取失败')` 反馈并解绑回调；为 `applyCoverDataUrl` 的 `Image.onerror` 补上解绑与告警，且刻意保留现有封面不强行清空，避免临时解码失败误伤仍然有效的缓存封面。
+- 新增 4 条回归测试（`tests/cover-upload-decode-failure.test.js`）：损坏文件提示失败且不提交画布、正常方形封面直接提交、损坏 data URL 静默跳过、有效 data URL 正常应用。全套测试 121/121、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本轮只补齐封面上传的失败反馈与降级，不改动 UI、布局、文案、玻璃质感、电影视觉或 3D 歌单架交互。
+
+
 ## v1.2.53 本地曲库整批替换导致 Object URL 泄漏修复
 
 - 修复重新导入本地文件/文件夹时旧曲库创建的浏览器 Object URL（`blob:`）从不回收的内存泄漏。`ensureLocalSongUrl` 会对拖拽或选择进来的浏览器 `File` 对象调用 `URL.createObjectURL`，把 `blob:` 地址写入 `song.localUrl`；本地封面同理写入 `localCoverObjectUrl`。
