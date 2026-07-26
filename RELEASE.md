@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.47 请求体超限挂起修复
+- `v1.2.47` 修复本地 HTTP 服务 `readRequestBody` 在请求体超 8MB 上限时的挂起缺陷：`req.destroy()` 只触发 close/aborted 而非 end，旧实现只监听 end/error 导致 promise 永不结算，处理器永久挂起且 socket 泄漏。
+- 重构为单次结算门，超限以 `REQUEST_BODY_TOO_LARGE` 拒绝（Fail-Fast）并新增 close 兜底；end/error/close 任一路径都只结算一次。
+- 新增真实 HTTP server 回归测试覆盖四条终止路径；全套 104/104 、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.46 -> 1.2.47` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.47`。
+
 ## v1.2.46 本地曲库增量扫描截断回退修复
 - `v1.2.46` 修复本地曲库增量扫描在本次遍历达到访问上限（截断）时未回退全量的缺陷：残缺增量结果会把截断丢失的项误判为删除，导致当前会话丢歌并覆盖持久快照。
 - 增量扫描本次 `listed.truncated` 为真时改用全量语义返回已遍历结果（不重复 IO）并透传 `truncated=true`，与 `previous.truncated` 分支同源处理。
