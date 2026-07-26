@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.51 淡出暂停被切歌打断导致播放键卡死修复
+- `v1.2.51` 修复播放/暂停按钮可能永久失效的挂起缺陷：`fadeOutAndPauseAudio` 的 Promise 只由淡出计时器结算，而切歌与音量调节会 `clearAudioFadeTimers` 清掉该计时器；暂停淡出期间切歌会让 `await` 永挂、`playToggleBusy` 永为 true，按钮此后全部失灵。
+- 新增统一结算入口与兜底句柄 `pendingFadeOutSettle`：`clearAudioFadeTimers` 清理前先结算挂起淡出（false），正常到点仍结算 true 并暂停，`settled` 标志保证只结算一次。
+- 新增 3 条回归测试覆盖到点/打断/一次性结算；全套 109/109、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.50 -> 1.2.51` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.51`。
+
 ## v1.2.50 切歌竞态听歌会话污染修复
 - `v1.2.50` 修复快速切歌时听歌会话被旧歌覆盖的竞态：`playLocalQueueItem` 在 `await playAudio` 挂起期间若用户切到下一首，旧调用返回后的收尾段未复查 `trackSwitchToken`，会用旧歌快照覆盖新歌听歌会话，污染统计画像与最近播放数据。
 - 在 `await playAudio` 返回后补 `token !== trackSwitchToken` 守卫，过期调用直接返回；这是切歌路径中唯一未做 token 校验的 await 尾段，其余 await 分支早已有同款防护。

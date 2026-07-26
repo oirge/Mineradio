@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v1.2.51 淡出暂停被切歌打断导致播放键卡死修复
+
+- 修复播放/暂停按钮可能永久失效的挂起缺陷：`fadeOutAndPauseAudio` 的 Promise 此前只由 `audioFadeTimer` 的到点回调结算，而切歌路径（`pauseCurrentAudioForTrackSwitch`、`playLocalQueueItem`）与音量调节都会调用 `clearAudioFadeTimers` 静默清掉这个计时器。若用户点暂停进入淡出（约 500ms）期间又点了另一首歌，该计时器被清后回调永不触发，`togglePlay` 里的 `await fadeOutAndPauseAudio()` 永久挂起，其 `finally` 不再执行，`playToggleBusy` 永远为 `true`，此后所有播放/暂停点击都在入口被拦截，按钮直到刷新前彻底失灵。
+- 引入统一结算入口 `settleFadeOut` 与模块级兜底句柄 `pendingFadeOutSettle`：`clearAudioFadeTimers` 在清理计时器前先结算任何挂起的淡出（结算为 `false`，即“未完成暂停”），淡出到点正常路径仍结算为 `true` 并暂停音频；`settled` 标志确保只结算一次，避免打断与到点竞争时重复 resolve。
+- 新增 3 条回归测试（`tests/playback-fade-settlement.test.js`）：正常到点结算 true 并暂停、被切歌打断结算 false 而非永挂、打断后即使定时器到点也只结算一次。全套测试 109/109、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本轮只修淡出结算竞态与补测试，不改动 UI、布局、文案、玻璃质感、电影视觉或 3D 歌单架交互。
+
+
 ## v1.2.50 切歌竞态听歌会话污染修复
 
 - 修复快速切歌时听歌统计会话被旧歌覆盖的竞态：`playLocalQueueItem` 在 `await playAudio(...)` 处存在挂起窗口，若用户在音频起播前又切到下一首，`playQueueAt` 会递增 `trackSwitchToken` 并为新歌建立听歌会话；随后旧调用的 `await` 返回，其收尾段（`beginListenSession`、队列面板与货架重建）未复查 token，会用旧歌的快照覆盖新歌会话，进而污染听歌画像与 Home 最近播放数据。
