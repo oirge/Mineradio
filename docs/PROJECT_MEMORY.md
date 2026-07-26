@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.51`，当前 HEAD 为 `29d5160`（`release: finalize 1.2.51 fade-out settlement guard`）；tag `v1.2.51` 指向同一发布提交 `29d5160`，修复提交为 `7dcc8b8`。
+- 当前源码检查点：`v1.2.52`，当前 HEAD 为 `00d53e1`（`release: finalize 1.2.52 IndexedDB abort settlement guard`）；tag `v1.2.52` 指向同一发布提交 `00d53e1`，修复提交为 `9029e66`。
 - 当前工作分支：`codex/release-1.2.44-memory`（已推送到远端同名分支）。
-- 最近正式安装包 Release 基线：`v1.2.51`（tag 提交 `29d5160`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.50 -> 1.2.51` 快速补丁，补丁仅含 `public/index.html`）；远端 `main` 不是本轮发布基线，仍停在 `v1.2.34`。
+- 最近正式安装包 Release 基线：`v1.2.52`（tag 提交 `00d53e1`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.51 -> 1.2.52` 快速补丁，补丁仅含 `public/index.html`）；远端 `main` 不是本轮发布基线，仍停在 `v1.2.34`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
