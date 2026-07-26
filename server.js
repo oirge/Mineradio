@@ -699,9 +699,21 @@ async function fetchTextFromCandidates(candidates, timeoutMs) {
   }
   throw updateError('UPDATE_ALL_LINES_FAILED', failures.join('；') || 'All update lines failed');
 }
+/**
+ * 从 electron-builder 的 latest.yml 里提取指定顶层标量字段。
+ * latest.yml 的 files 数组项会用相同缩进重复出现 url/sha512/size，若只按任意缩进匹配，
+ * 多资产场景下会错误命中 files 首项（例如 blockmap）的值。这里优先锚定行首无缩进的顶层字段，
+ * 顶层缺失时才回退到任意缩进，确保拿到的是权威的主安装包信息。
+ * @param {string} text latest.yml 全文。
+ * @param {string} key 待提取的字段名。
+ * @returns {string} 去除首尾引号后的标量值；未命中返回空串。
+ */
 function yamlScalar(text, key) {
-  const pattern = new RegExp('^\\s*' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*:\\s*(.+?)\\s*$', 'm');
-  const match = String(text || '').match(pattern);
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const src = String(text || '');
+  const topPattern = new RegExp('^' + escaped + '\\s*:\\s*(.+?)\\s*$', 'm');
+  const anyPattern = new RegExp('^\\s*' + escaped + '\\s*:\\s*(.+?)\\s*$', 'm');
+  const match = src.match(topPattern) || src.match(anyPattern);
   if (!match) return '';
   return match[1].trim().replace(/^['"]|['"]$/g, '');
 }
