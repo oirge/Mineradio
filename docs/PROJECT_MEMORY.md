@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.44`，当前 HEAD 为 `9bba136`（`release: finalize 1.2.44 local asset and desktop memory ownership`）；tag `v1.2.44` 指向该提交。
+- 当前源码检查点：`v1.2.45`，当前 HEAD 为 `a185eec`（`docs: record v1.2.45 release and quick patch`）；tag `v1.2.45` 指向发布提交 `9900a5e`。
 - 当前工作分支：`codex/release-1.2.44-memory`（已推送到远端同名分支）。
-- 最近正式安装包 Release 基线：`v1.2.44`（tag 提交 `9bba136`）；远端 `main` 不是本轮发布基线，仍停在 `v1.2.34`。
+- 最近正式安装包 Release 基线：`v1.2.45`（tag 提交 `9900a5e`，GitHub Releases 已标记 Latest）；远端 `main` 不是本轮发布基线，仍停在 `v1.2.34`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -605,3 +605,11 @@
 - 涉及文件：`docs/QQ_MUSIC_INTERFACE_NOTES.md`、`server.js`、`desktop/main.js`、`public/index.html`。
 - 关键参数/实现：区分网页账号态 `p_skey` 和播放票据 `qm_keyst`/`qqmusic_key`/`music_key`/`wxskey`；`/api/qq/login/status` 返回 `playbackKeyReady`；缺播放票据时 `104003` 归类为 `login_required`；昵称头像用 `ptnick_*` 和 `qlogo.cn` 兜底。
 - 禁止回退或改坏的点：不要再把 `p_skey` 当作完整 QQ 音乐播放授权；不要因为 QQ 资料接口 `code:1000` 就清空头像/昵称或标记未登录；修 QQ 播放前先读 `docs/QQ_MUSIC_INTERFACE_NOTES.md`。
+
+### 2026-07-26 - v1.2.45 本地文件代理越权读取修复发布
+
+- 用户认可/要求保留：延续“修完验证、能发布就一起发布”的偏好，本轮把安全修复完整发布。
+- 涉及文件：`server.js`、`desktop/main.js`、`tests/local-file-proxy-authorization.test.js`、`.context/pitfalls/mineradio-local-file-proxy-authorization.md`、`AGENTS.md`、`CHANGELOG.md`、`RELEASE.md`。
+- 关键参数/实现：本地文件 HTTP 代理 `/api/local-file` 之前只校验随机令牌、未限制授权曲库根目录，可越权读任意文件（含 `..` 穿越）。修复给 `server.js` 增加可注入授权钩子 `setLocalFileAuthorizer`，缺省 Fail-Closed（未注入即拒绝）；`desktop/main.js` 在 `require` 后注入 `resolveAuthorizedLocalFile`，与 IPC 授权模型对齐。
+- 发布产物：GitHub Release `v1.2.45`（Latest），含 `Mineradio-1.2.45-Setup.exe`、`.blockmap`、`latest.yml` 和快速补丁 `Mineradio-1.2.44-to-1.2.45.patch.json`；已逐字节确认 `win-unpacked` 打包源码含授权门，安装包 SHA256 与本地一致。
+- 禁止回退或改坏的点：不要把 `/api/local-file` 改回只验令牌不验授权根目录；不要把授权钩子缺省改成 no-op（fail-open）；不要绕过 `resolveAuthorizedLocalFile` 直接 `statSync`/`createReadStream` 请求方 path。
