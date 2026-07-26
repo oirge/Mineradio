@@ -2978,7 +2978,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.51';
+var APP_VERSION = '1.2.52';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -8614,6 +8614,7 @@ async function putCustomBackgroundBlob(id, blob, meta) {
     tx.objectStore(CUSTOM_BG_STORE).put(Object.assign({ id: id, blob: blob, savedAt: Date.now() }, meta || {}));
     tx.oncomplete = function(){ db.close(); resolve(); };
     tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB put failed')); };
+    tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB put aborted')); };
   });
 }
 async function getCustomBackgroundBlob(id) {
@@ -8624,6 +8625,7 @@ async function getCustomBackgroundBlob(id) {
     req.onsuccess = function(){ resolve(req.result && req.result.blob ? req.result.blob : null); };
     req.onerror = function(){ reject(req.error || new Error('indexedDB get failed')); };
     tx.oncomplete = function(){ db.close(); };
+    tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB get aborted')); };
   });
 }
 function openLocalAssetCacheDb() {
@@ -8796,8 +8798,10 @@ async function trimLocalIndexedDbCaches(reason) {
         }
         deleteTx.oncomplete = function(){ db.close(); resolve(ids.length + libraryIds.length); };
         deleteTx.onerror = function(){ db.close(); reject(deleteTx.error || new Error('indexedDB trim delete failed')); };
+        deleteTx.onabort = function(){ db.close(); reject(deleteTx.error || new Error('indexedDB trim delete aborted')); };
       };
       tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB trim scan failed')); };
+      tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB trim scan aborted')); };
     });
     if (dropped && runtimePerfState) {
       runtimePerfState.cacheTrimCount += 1;
@@ -8879,6 +8883,7 @@ async function readLocalLibraryPersistentRecord(folderPath, kind) {
       req.onerror = function(){ reject(req.error || new Error('indexedDB library read failed')); };
       tx.oncomplete = function(){ db.close(); };
       tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB library tx failed')); };
+      tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB library tx aborted')); };
     });
   } catch (e) {
     return null;
@@ -8907,6 +8912,7 @@ async function writeLocalLibraryPersistentRecord(folderPath, kind, data) {
         resolve(true);
       };
       tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB library write failed')); };
+      tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB library write aborted')); };
     });
   } catch (e) {
     console.warn('[LocalLibraryPersistentWrite]', kind, e);
@@ -8930,6 +8936,7 @@ async function deleteLocalLibraryPersistentRecords(folderPath) {
       store.delete(localLibraryPersistentKey(folderPath, 'index'));
       tx.oncomplete = function(){ db.close(); resolve(true); };
       tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB library delete failed')); };
+      tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB library delete aborted')); };
     });
   } catch (e) {
     return false;
@@ -9278,6 +9285,7 @@ async function readLocalAssetCacheRecords(keys) {
     }
     tx.oncomplete = function(){ db.close(); resolve(out); };
     tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB read failed')); };
+    tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB read aborted')); };
   });
 }
 async function putLocalAssetCacheRecord(record) {
@@ -9292,6 +9300,7 @@ async function putLocalAssetCacheRecord(record) {
       resolve(true);
     };
     tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB put failed')); };
+    tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB put aborted')); };
   });
 }
 /**
