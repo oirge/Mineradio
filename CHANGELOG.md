@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v1.2.55 latest.yml 标量解析可能命中错误资产的更新校验加固
+
+- 加固 `server.js` 的 `yamlScalar`：更新检测解析 electron-builder 的 `latest.yml` 时，`files:` 数组项会以相同缩进重复出现 `sha512`/`size` 等字段。原实现用 `^\s*key:` 匹配任意缩进层级，会命中 `files:` 首项而非顶层字段。单资产 `latest.yml`（本项目当前构建）里两处值一致，尚不可触发；但一旦 `files:` 首项不是主安装包（例如未来把 blockmap 或多目标产物排进 files），`yamlScalar('sha512')`/`yamlScalar('size')` 会取到错误资产的哈希与大小，导致自动更新的完整性校验用错基准而失败。
+- 修复为优先锚定行首无缩进的顶层字段（`^key:`），顶层缺失时才回退到任意缩进层级。electron-builder 的 `latest.yml` 顶层字段才是权威的主安装包信息，锚定顶层与其语义一致。
+- 对当前真实的单资产 `latest.yml` 输出完全不变（version/path/sha512/size/releaseDate 逐项验证一致），仅修正多资产场景下的取值语义。
+- 新增 4 条回归测试（`tests/latest-yml-scalar-parsing.test.js`）：单资产字段保持不变、多资产优先取顶层 sha512/size、顶层缺失回退缩进、缺失字段返回空串且不抛异常。全套测试 125/125、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本轮只加固更新检测的 latest.yml 解析语义与补测试，不改动 UI、布局、文案、玻璃质感、电影视觉或 3D 歌单架交互。
+
+
 ## v1.2.54 封面图片上传解码失败静默无反馈修复
 
 - 修复用户上传封面图片解码失败时界面毫无反馈的缺陷。`loadCoverFromFile` 只给 `Image`/`FileReader` 挂了 `onload`，没有 `onerror`；`applyCoverDataUrl` 同样只挂 `onload`。当选择或拖入损坏、超大或非法的图片文件，或本地封面缓存 data URL 已损坏时，解码永不触发 `onload`，封面既不更新也不提示，用户会误以为程序卡死。

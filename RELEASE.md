@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.55 latest.yml 标量解析可能命中错误资产的更新校验加固
+- `v1.2.55` 加固 `server.js` 的 `yamlScalar`：解析 `latest.yml` 时原用 `^\s*key:` 匹配任意缩进，会命中 `files:` 首项而非顶层字段。单资产 latest.yml（当前构建）两处值一致尚不可触发，但 files 首项若不是主安装包会取到错误资产的 sha512/size，令自动更新校验失败。
+- 修复为优先锚定顶层 `^key:`，顶层缺失才回退任意缩进；对当前单资产 latest.yml 输出逐项不变。
+- 新增 4 条回归测试（`tests/latest-yml-scalar-parsing.test.js`）。全套 125/125、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.54 -> 1.2.55` 快速补丁（本版运行时变更为 `server.js`）；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.55`。
+
 ## v1.2.54 封面图片上传解码失败静默无反馈修复
 - `v1.2.54` 修复用户上传封面解码失败时无任何反馈的缺陷：`loadCoverFromFile`/`applyCoverDataUrl` 只挂 `onload` 缺 `onerror`，损坏或超大图片解码失败时封面不更新也不提示，用户误以为卡死。
 - 对齐背景图片上传 `readBackgroundImageFile` 的做法，为封面上传的 `FileReader`/`Image` 补 `onerror` 反馈与解绑；`applyCoverDataUrl` 解码失败刻意保留现有封面不清空。
