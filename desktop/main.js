@@ -1446,11 +1446,13 @@ function createDesktopLyricsWindow(payload = {}) {
 
   /**
    * 仅由当前歌词窗口释放全局句柄，旧实例关闭不能覆盖替代窗口。
+   * 窗口崩溃或被意外关闭时同步终止中键轮询子进程，避免孤儿 PowerShell 进程残留空转。
    * @returns {void}
    */
   function releaseOwnedDesktopLyricsWindow() {
     if (desktopLyricsWindow !== win) return;
     desktopLyricsWindow = null;
+    stopDesktopLyricsMousePoller();
     desktopLyricsMouseIgnored = null;
     desktopLyricsLastStateSignature = '';
     desktopLyricsLastOpacity = null;

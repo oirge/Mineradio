@@ -149,3 +149,41 @@ async function testDesktopLyricsIpcSenderOwnership() {
 }
 
 test('旧桌面歌词 renderer 命令不能控制替代窗口', testDesktopLyricsIpcSenderOwnership);
+/**
+ * 截取 releaseOwnedDesktopLyricsWindow 函数体。该函数是歌词窗口 closed 事件的唯一释放口，
+ * 覆盖渲染进程崩溃等不走 closeDesktopLyricsWindow 的意外关闭路径。
+ * @returns {string} releaseOwnedDesktopLyricsWindow 的函数体源码。
+ */
+function readReleaseOwnedDesktopLyricsWindowBody() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.js'), 'utf8');
+  const start = source.indexOf('function releaseOwnedDesktopLyricsWindow()');
+  assert.ok(start >= 0, '未找到 releaseOwnedDesktopLyricsWindow 定义');
+  const braceStart = source.indexOf('{', start);
+  assert.ok(braceStart > start, '未找到函数体起始花括号');
+  let depth = 0;
+  for (let i = braceStart; i < source.length; i += 1) {
+    const ch = source[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(braceStart, i + 1);
+    }
+  }
+  throw new Error('releaseOwnedDesktopLyricsWindow 函数体花括号不平衡');
+}
+
+/**
+ * 验证歌词窗口意外关闭（包括渲染进程崩溃）时同步终止中键轮询子进程，
+ * 避免孤儿 PowerShell 进程持续空转。
+ * @returns {void}
+ */
+function testReleaseStopsMousePoller() {
+  const body = readReleaseOwnedDesktopLyricsWindowBody();
+  assert.match(
+    body,
+    /stopDesktopLyricsMousePoller\(\)/,
+    'releaseOwnedDesktopLyricsWindow 必须在意外关闭时停止中键轮询子进程',
+  );
+}
+
+test('歌词窗口意外关闭时终止中键轮询子进程', testReleaseStopsMousePoller);
