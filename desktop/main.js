@@ -2284,6 +2284,12 @@ ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
   }
 });
 
+/**
+ * 导入 Mineradio 存档 JSON 文本。与本地文件/图片/请求体等读取路径一致，先校验大小上限，
+ * 避免用户误选超大文件时 readFileSync 一次性读入内存拖垮主进程。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件，用于定位对话框宿主窗口。
+ * @returns {Promise<{ok:boolean, filePath?:string, text?:string, canceled?:boolean, error?:string}>} 导入结果。
+ */
 ipcMain.handle('mineradio-import-json-file', async (event) => {
   try {
     const owner = getSenderWindow(event);
@@ -2294,6 +2300,9 @@ ipcMain.handle('mineradio-import-json-file', async (event) => {
     });
     if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true };
     const filePath = result.filePaths[0];
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return { ok: false, error: 'IMPORT_NOT_A_FILE' };
+    if (stat.size > 16 * 1024 * 1024) return { ok: false, error: 'IMPORT_FILE_TOO_LARGE' };
     const text = fs.readFileSync(filePath, 'utf8');
     return { ok: true, filePath, text };
   } catch (e) {
