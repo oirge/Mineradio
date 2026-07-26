@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v1.2.52 IndexedDB 事务中止导致缓存永久停摆修复
+
+- 修复 IndexedDB 事务被中止（abort）时 Promise 永不结算的缺陷。项目内 9 处 IndexedDB 事务（自定义背景读写、本地资产/曲库缓存读写与清理）此前只挂了 `oncomplete`/`onerror`，没有 `onabort`。当事务因配额超限、`versionchange` 强制关闭连接或页面被浏览器冻结而中止时，只会触发 `onabort`，对应 `new Promise` 既不 resolve 也不 reject，`await` 永久挂起，`db` 连接也不再关闭。
+- 影响最严重的是缓存清理 `trimLocalIndexedDbCaches`：它用 `localIndexedDbTrimRunning` 作互斥锁，锁的释放在 `finally` 里，而 `finally` 依赖那条 `await` 结算。事务一旦 abort，锁永远为 `true`，之后所有清理调用直接跳过，本地封面/歌词/元数据缓存无限增长，反过来更易触发配额中止，形成恶性循环。
+- 为全部 9 处事务补齐 `onabort`，镜像各自 `onerror` 的行为（关闭连接并 reject），使中止走既有失败结算路径：锁能释放、连接不泄漏、上层 `catch` 正常降级。
+- 新增 3 条回归测试（`tests/indexeddb-transaction-abort-settlement.test.js`）：事务 abort 时 put/get 均 reject 并关闭连接、正常 complete 仍正确 resolve。全套测试 112/112、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本轮只加固 IndexedDB 事务结算与补测试，不改动 UI、布局、文案、玻璃质感、电影视觉或 3D 歌单架交互。
+
+
 ## v1.2.51 淡出暂停被切歌打断导致播放键卡死修复
 
 - 修复播放/暂停按钮可能永久失效的挂起缺陷：`fadeOutAndPauseAudio` 的 Promise 此前只由 `audioFadeTimer` 的到点回调结算，而切歌路径（`pauseCurrentAudioForTrackSwitch`、`playLocalQueueItem`）与音量调节都会调用 `clearAudioFadeTimers` 静默清掉这个计时器。若用户点暂停进入淡出（约 500ms）期间又点了另一首歌，该计时器被清后回调永不触发，`togglePlay` 里的 `await fadeOutAndPauseAudio()` 永久挂起，其 `finally` 不再执行，`playToggleBusy` 永远为 `true`，此后所有播放/暂停点击都在入口被拦截，按钮直到刷新前彻底失灵。

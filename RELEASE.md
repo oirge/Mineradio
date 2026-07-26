@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.52 IndexedDB 事务中止导致缓存永久停摆修复
+- `v1.2.52` 修复 IndexedDB 事务 abort 时 Promise 永不结算的缺陷：9 处事务此前缺 `onabort`，事务因配额/`versionchange`/页面冻结中止时 `await` 永挂、连接泄漏。
+- 最严重的是 `trimLocalIndexedDbCaches`：`await` 永挂使 `finally` 不执行，互斥锁 `localIndexedDbTrimRunning` 永为 true，缓存清理永久停摆、缓存无限增长。
+- 为全部 9 处事务补 `onabort`（镜像 `onerror`：关闭连接并 reject）；新增 3 条回归测试。全套 112/112、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.51 -> 1.2.52` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.52`。
+
 ## v1.2.51 淡出暂停被切歌打断导致播放键卡死修复
 - `v1.2.51` 修复播放/暂停按钮可能永久失效的挂起缺陷：`fadeOutAndPauseAudio` 的 Promise 只由淡出计时器结算，而切歌与音量调节会 `clearAudioFadeTimers` 清掉该计时器；暂停淡出期间切歌会让 `await` 永挂、`playToggleBusy` 永为 true，按钮此后全部失灵。
 - 新增统一结算入口与兜底句柄 `pendingFadeOutSettle`：`clearAudioFadeTimers` 清理前先结算挂起淡出（false），正常到点仍结算 true 并暂停，`settled` 标志保证只结算一次。
