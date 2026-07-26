@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.48 桌面歌词轮询孤儿进程修复
+- `v1.2.48` 修复桌面歌词窗口意外关闭（如渲染进程崩溃）时泄漏中键轮询子进程的缺陷：`closed` 事件的释放口 `releaseOwnedDesktopLyricsWindow` 只置空窗口句柄、未停轮询，导致 spawn 的 PowerShell 轮询进程成为孤儿并以 24ms 间隔持续空转直到应用退出。
+- 在 `releaseOwnedDesktopLyricsWindow` 补上 `stopDesktopLyricsMousePoller()`；正常关闭路径已先停轮询，此处调用幂等，仅对崩溃等意外关闭路径补漏。
+- 新增回归测试：断言 `releaseOwnedDesktopLyricsWindow` 函数体调用了 `stopDesktopLyricsMousePoller()`；全套 105/105 、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.47 -> 1.2.48` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.48`。
+
 ## v1.2.47 请求体超限挂起修复
 - `v1.2.47` 修复本地 HTTP 服务 `readRequestBody` 在请求体超 8MB 上限时的挂起缺陷：`req.destroy()` 只触发 close/aborted 而非 end，旧实现只监听 end/error 导致 promise 永不结算，处理器永久挂起且 socket 泄漏。
 - 重构为单次结算门，超限以 `REQUEST_BODY_TOO_LARGE` 拒绝（Fail-Fast）并新增 close 兜底；end/error/close 任一路径都只结算一次。

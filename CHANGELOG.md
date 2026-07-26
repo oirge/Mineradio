@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v1.2.48 桌面歌词轮询孤儿进程修复
+
+- 修复桌面歌词窗口在意外关闭（如渲染进程崩溃）时泄漏中键轮询子进程的缺陷：歌词窗口的 `closed` 事件只由 `releaseOwnedDesktopLyricsWindow` 释放句柄，而它只把 `desktopLyricsWindow` 置空、未调用 `stopDesktopLyricsMousePoller()`；一旦窗口不走正常的 `closeDesktopLyricsWindow` 路径而被销毁，它 spawn 的 PowerShell 中键轮询子进程会成为孤儿进程，以 24ms 间隔持续空转 `GetAsyncKeyState` 直到整个应用退出。
+- 在 `releaseOwnedDesktopLyricsWindow` 里补上 `stopDesktopLyricsMousePoller()`：正常关闭路径已先停轮询，此处调用幂等（轮询已为空则立即返回）；仅对崩溃等意外关闭路径补漏，确保子进程随窗口一同终止。
+- 新增回归测试：截取 `releaseOwnedDesktopLyricsWindow` 函数体并断言其中调用了 `stopDesktopLyricsMousePoller()`，固定“意外关闭必须停止轮询”这条不变量；全套测试 105/105 通过。
+- 本轮只修复歌词窗口子进程生命周期，不改变 UI、布局、文案、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。
+
+
 ## v1.2.47 请求体超限挂起修复
 
 - 修复本地 HTTP 服务 `readRequestBody` 在请求体超过 8MB 上限时的挂起缺陷：超限时调用 `req.destroy()`，而销毁只触发 `close`/`aborted` 而非 `end`；旧实现只监听 `end`/`error`，导致 promise 永不结算，`await readRequestBody(req)` 的处理器永久挂起、响应永不发出、socket 与闭包资源泄漏。

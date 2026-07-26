@@ -54,6 +54,7 @@
 - 桌面歌词中键锁定轮询会在主进程后台持续读取 stdout；不要恢复 `buffer.split(/\r?\n/).forEach(...)`，应保持流式扫描和半行缓存。
 - 桌面歌词中键轮询停止后，旧 PowerShell 进程可能延迟触发 `exit` / `error`。结束回调如果无条件清空全局句柄，会把快速重启的新进程变成无法再停止的后台孤儿。
 - 旧 PowerShell 轮询进程在停止后还可能迟到输出 stdout；如果 stdout 直接绑定共享 consumer，即使进程句柄有所有权门禁，旧数据仍会污染新进程缓冲区并触发当前窗口动作。
+- 桌面歌词中键轮询子进程的生命周期必须与歌词窗口绑定：窗口 `closed` 事件（含渲染进程崩溃等不走 `closeDesktopLyricsWindow` 的意外关闭）只由 `releaseOwnedDesktopLyricsWindow` 释放，如果它只置空窗口句柄而不调用 `stopDesktopLyricsMousePoller()`，spawn 的 PowerShell 会成为孤儿进程以 24ms 间隔持续空转直到应用退出。释放口必须联动停止轮询（对已停轮询的正常关闭路径幂等）。
 - 桌面 UI 状态补丁写入可能在连续拖动歌词/壁纸设置滑条时触发；不要恢复 `Object.entries(patch).forEach(...)` 这类每次写入都生成字段数组的路径。
 - LRC/YRC/自定义歌词加载会处理长文本和逐字时间轴；不要恢复按整段 `split(/\r?\n/)` 先生成完整行数组的路径，尤其是切歌、桌面歌词同步和自定义歌词切换期间。
 - 3D 歌单架卡片标题/副标题绘字属于卡片重绘路径；不要恢复 `split('')` 这类每张卡片重绘都生成字符数组的写法。
@@ -204,6 +205,7 @@
 - 桌面歌词鼠标轮询输出使用 `consumeDesktopLyricsMousePollerOutput()` 流式扫描；桌面 UI 状态补丁写入使用 `for...in` 白名单遍历，保持原有字段过滤、空值删除和超大值跳过语义。
 - 桌面歌词轮询启动后必须由局部 `poller` 捕获进程实例；`exit` / `error` 仅在该实例仍是当前所有者时清空句柄。停止时先移交全局所有权，再调用 `kill()`，隔离延迟事件。
 - 桌面歌词轮询 stdout 必须通过同一局部 `poller` 校验所有权，旧进程的迟到数据不得进入共享缓冲区。
+- 桌面歌词窗口的 `closed` 释放口 `releaseOwnedDesktopLyricsWindow` 必须调用 `stopDesktopLyricsMousePoller()`，让中键轮询子进程随窗口意外关闭（崩溃/系统销毁）一同终止；正常关闭路径已先停轮询，此调用幂等。回归测试断言该函数体包含 `stopDesktopLyricsMousePoller()`。
 - 桌面歌词和壁纸主进程状态统一由 `DesktopOverlayStateCache` 管理；`setEnabled(false)` 必须替换为最小关闭状态，禁用期间 `apply()` 返回 false。renderer 的禁用路径只发送最小关闭状态，启用后再发送当前完整载荷。
 - 覆盖层 BrowserWindow 的事件回调必须捕获局部 `win` 并验证仍持有全局槽位；状态补丁应由 `createDesktopLyricsWindow(payload)` / `createWallpaperWindow(payload)` 一次完成缓存和窗口副作用。
 - 桌面歌词 IPC 必须区分角色：启用和状态更新只接受当前主 renderer；关闭允许主 renderer 或当前歌词 renderer；移动、热区、指针和锁定只接受当前歌词 renderer，旧 sender 返回 ignored。
