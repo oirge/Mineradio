@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v1.2.50 切歌竞态听歌会话污染修复
+
+- 修复快速切歌时听歌统计会话被旧歌覆盖的竞态：`playLocalQueueItem` 在 `await playAudio(...)` 处存在挂起窗口，若用户在音频起播前又切到下一首，`playQueueAt` 会递增 `trackSwitchToken` 并为新歌建立听歌会话；随后旧调用的 `await` 返回，其收尾段（`beginListenSession`、队列面板与货架重建）未复查 token，会用旧歌的快照覆盖新歌会话，进而污染听歌画像与 Home 最近播放数据。
+- 在 `await playAudio(...)` 返回后补一处 `token !== trackSwitchToken` 守卫：过期调用直接安静返回，收尾逻辑只对当前生效的切歌执行。此前切歌路径的其它 await 分支（onended、onloadedmetadata、封面/歌词加载、恢复进度）均已有同款 token 校验，本次补齐的是唯一缺口。
+- 该守卫属确定性纠错（会写坏统计数据），不引入新状态或投机逻辑；同时为 `playLocalQueueItem` 补齐中文 JSDoc 说明竞态约束。全套测试 106/106、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本轮只修播放竞态与补注释，不改动 UI、布局、文案、玻璃质感、电影视觉或 3D 歌单架交互。
+
+
 ## v1.2.49 存档导入大小上限修复
 
 - 为存档导入补齐文件大小上限：`mineradio-import-json-file` 处理器此前用 `fs.readFileSync(filePath, 'utf8')` 直接读取用户在对话框选中的文件，且未做任何大小校验；一旦误选被重命名为 `.json` 的超大文件，会一次性读入内存，可能拖垮主进程（OOM 崩溃）。这是项目内唯一缺少输入上限的外部文件读取路径——本地文件范围读取（64MB）、封面 data URL（32MB）、桌面 UI 状态（2MB）、请求体（8MB）、更新安装包与补丁均已设上限。

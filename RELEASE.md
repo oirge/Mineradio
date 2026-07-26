@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.50 切歌竞态听歌会话污染修复
+- `v1.2.50` 修复快速切歌时听歌会话被旧歌覆盖的竞态：`playLocalQueueItem` 在 `await playAudio` 挂起期间若用户切到下一首，旧调用返回后的收尾段未复查 `trackSwitchToken`，会用旧歌快照覆盖新歌听歌会话，污染统计画像与最近播放数据。
+- 在 `await playAudio` 返回后补 `token !== trackSwitchToken` 守卫，过期调用直接返回；这是切歌路径中唯一未做 token 校验的 await 尾段，其余 await 分支早已有同款防护。
+- 为 `playLocalQueueItem` 补中文 JSDoc；全套 106/106、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.49 -> 1.2.50` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.50`。
+
 ## v1.2.49 存档导入大小上限修复
 - `v1.2.49` 为 `mineradio-import-json-file` 补齐文件大小上限：此前 `fs.readFileSync` 直接读取用户选中的文件、无任何大小校验，误选超大文件会一次性读入内存拖垮主进程；这是项目内唯一缺少输入上限的外部文件读取路径。
 - 现在先 `fs.statSync` 校验，非文件返回 `IMPORT_NOT_A_FILE`、超过 16MB 返回 `IMPORT_FILE_TOO_LARGE`，正常存档不受影响，重新满足“所有外部文件读取都有内存上限”不变量。
