@@ -32,10 +32,10 @@ Get-Content package.json -Encoding UTF8
 - 当前版本：`v1.2.44`
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - 当前分支：`codex/release-1.2.44-memory`
-- 当前提交：`a124ad2 optimize renderer and desktop memory ownership`
-- 正式发布基线：远端 tag `v1.2.43`（提交 `4055208`）；本轮不要从远端旧 `main` 直接发布。
-- 旧基线保护提交为 `14c0a18`；`a124ad2` 是把该内存优化移植到 `v1.2.43` 后的当前提交。
-- 当前工作树仍有未提交的版本元数据、测试门禁和交接文档修改；尚未推送、打 `v1.2.44` tag 或创建 GitHub Release。
+- 当前提交：`9bba136 release: finalize 1.2.44 local asset and desktop memory ownership`（已推送到远端同名分支）。
+- 正式发布基线：远端 tag `v1.2.44`（提交 `9bba136`），已是 GitHub Latest；远端旧 `main` 仍停在 `v1.2.34`，不要从旧 `main` 发布。
+- `v1.2.44` 是把内存优化移植到 `v1.2.43` 基线后完成并发布的提交。
+- 当前工作树只剩本轮文档回填（`docs/PROJECT_MEMORY.md`、本文件、`AI_HANDOFF.md`）待提交；代码、tag 和 GitHub Release 均已完成。
 - `package.json` 发布配置 owner/repo 已是 `oirge/Mineradio`。
 
 ## 最近完成
@@ -58,13 +58,13 @@ Get-Content package.json -Encoding UTF8
 - `desktop/main.js`、`server.js`、`desktop/` 与 `tests/` 全部 JavaScript `node --check` 通过；`public/index.html` 4 个内联脚本解析通过。
 - AST-only 内存门禁、`git diff --check`、冲突标记扫描和调试标记扫描通过。
 - 所有测试使用 `BelowNormal` 与 `--test-concurrency=1`；本轮没有启动 Electron、浏览器、服务、PowerShell 轮询或后台 GUI，避免影响用户正常使用电脑。
-- Windows 构建使用代理 `127.0.0.1:7897`（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 均为 `http://127.0.0.1:7897`）；构建成功，但构建成功不等于已发布。
+- Windows 构建使用代理 `127.0.0.1:7897`（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 均为 `http://127.0.0.1:7897`）；构建、推送与 `gh release create` 均成功。
+- 已核对远端 Release：5 个资产（安装包、blockmap、`latest.yml`、SHA256 清单、快速补丁）状态均为 uploaded，大小与本地一致；重新下载安装包与 `latest.yml` 校验 SHA256 与本地字节级一致，`v1.2.44` 已是 Latest。
 
 ## 后续优先级
 
-- 提交当前修改并推送发布分支，创建并推送 `v1.2.44` tag；用 `gh release create` 上传安装包、blockmap、`latest.yml`、SHA256 清单和快速补丁，Portable ZIP 跳过。
-- 发布后核对 GitHub Release 资产与 `latest.yml`，再回填 `docs/PROJECT_MEMORY.md` 和本文件为“已发布”。
-- 发布后继续处理两个已知内存方向：IndexedDB `assets` 拆分 `lyrics` store 并做 v2→v3 流式迁移；外置封面改走 `/api/local-file` 流式 URL，避免主进程完整 Buffer/base64 和 renderer data URL。
+- `v1.2.44` 已发布并核对远端资产；剩余动作是提交本轮文档回填（`docs/PROJECT_MEMORY.md`、本文件、`AI_HANDOFF.md`）。
+- 继续处理两个已知内存方向：IndexedDB `assets` 拆分 `lyrics` store 并做 v2→v3 流式迁移；外置封面改走 `/api/local-file` 流式 URL，避免主进程完整 Buffer/base64 和 renderer data URL。
 
 ## 不要做
 

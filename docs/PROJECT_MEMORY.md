@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.44`，当前 HEAD 为 `a124ad2`（`optimize renderer and desktop memory ownership`）。
-- 当前工作分支：`codex/release-1.2.44-memory`。
-- 最近正式安装包 Release 基线：`v1.2.43`（tag 提交 `4055208`）；远端 `main` 不是本轮发布基线，仍停在 `v1.2.34`。
+- 当前源码检查点：`v1.2.44`，当前 HEAD 为 `9bba136`（`release: finalize 1.2.44 local asset and desktop memory ownership`）；tag `v1.2.44` 指向该提交。
+- 当前工作分支：`codex/release-1.2.44-memory`（已推送到远端同名分支）。
+- 最近正式安装包 Release 基线：`v1.2.44`（tag 提交 `9bba136`）；远端 `main` 不是本轮发布基线，仍停在 `v1.2.34`。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,13 +33,13 @@
 
 ## Release Memory
 
-- `v1.2.44`（2026-07-26）已完成本地内存优化、Windows 安装包构建和发布资产生成；当前仍待提交、推送、打 tag 和创建 GitHub Release，不能把本地构建产物当成已发布版本。
+- `v1.2.44`（2026-07-26）已正式发布到 GitHub：https://github.com/oirge/Mineradio/releases/tag/v1.2.44；tag v1.2.44 对应提交 9bba136，已设为 Latest（非 draft/prerelease）。5 个资产（安装包、blockmap、latest.yml、SHA256 清单、快速补丁）均 uploaded，远端安装包 SHA256 与本地/latest.yml 一致。
 - `v1.2.44` 的运行时改动包括：已播放本地歌词原文改为精确当前队列对象租约，切歌/清队列/同 key 接管/迟到异步结果均做对象所有权校验；空曲库后台资产任务使用递增 token、取消旧定时器并隔离旧队列；本地曲库持久内存按当前文件夹所有权管理，阻止 A→B→A 旧异步结果回填。
 - `v1.2.44` 进一步限制本地封面、Object URL、内嵌封面 Blob、文件范围读取和缓存生命周期，并为桌面歌词/壁纸/迷你播放器加入状态缓存与窗口、renderer、PowerShell 进程所有权门禁；新增 3 个桌面状态模块和 35 个纯 Node 回归测试。UI、布局、文案、玻璃质感、电影视觉、播放入口和 3D 歌单架交互保持不变。
 - `v1.2.44` 已验证：目标歌词回归 13/13；移植到 `v1.2.43` 基线后的完整 Node 测试 95/95；`desktop/main.js`、`server.js`、`desktop/`、`tests/` JavaScript 语法检查、`public/index.html` 4 个内联脚本解析、AST-only 内存门禁、`git diff --check`、冲突标记和调试标记扫描均通过。测试均使用 `BelowNormal` 与 `--test-concurrency=1`，没有启动 Electron、浏览器、服务或后台 GUI。
 - `npm run build:win` 已成功生成本地 `dist/Mineradio-1.2.44-Setup.exe`（`104747336` 字节）、`.blockmap`、`Mineradio-1.2.44-Portable-win-x64.zip` 和 `latest.yml`；`dist/latest.yml` 已确认指向 `1.2.44` 安装包。已生成 `dist/Mineradio-1.2.44-SHA256SUMS.txt`（4 项）和 `dist/Mineradio-1.2.43-to-1.2.44.patch.json`（`2401785` 字节，7 个运行时文件）。
 - `v1.2.44` 本地产物摘要：安装器 SHA256 `0c8e307a28e7c3b34ffc379037bea66ffc2ae0db0548d430bc9ebad3040e5a58`；blockmap `e358016aade247da68565ffd1c53d6956842fa53f17a1bf4bf11dd2f34936f50`；`latest.yml` `6c12c95e60b6e106868ed6502cbe140f75f454e8d0bd2db25237a61d7a960ecd`；快速补丁 `e9059df3fd6c18615082cb4dba63ef9f56c24a7a0b58b91771878de08e7554e4`。
-- 发布待办顺序：提交并推送发布分支，创建/推送 `v1.2.44` tag，再用 `gh release create` 上传安装包、blockmap、`latest.yml`、SHA256 清单和快速补丁，Portable ZIP 不上传；发布后核对远端资产并回填本文件。
+- 发布已完成：分支 `codex/release-1.2.44-memory` 与 tag `v1.2.44` 已推送，`gh release create` 上传了安装包、blockmap、`latest.yml`、SHA256 清单和快速补丁（Portable ZIP 未上传），远端资产大小与哈希已核对一致。
 - 发布后继续关注两个已确认的内存问题：IndexedDB `assets` 记录仍混合保存歌词原文，需要拆分 `lyrics` store 并做 v2→v3 流式迁移；外置封面仍可能经过主进程完整 Buffer/base64 和 renderer data URL，需要改用已有 `/api/local-file` 流式 URL。
 
 - `v1.2.43` 于 2026-07-24 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.43`；tag 对应提交 `4055208`，并作为本轮 `v1.2.44` 的正式基线。

@@ -7,6 +7,7 @@
 - 当前可写代码/Git 仓库是 `C:\Users\oirg\Desktop\mok\Mineradio-sync`。
 - 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
 - 当前源码版本是 `v1.2.44`，最新提交以 `git log --oneline -5 --decorate` 为准。
+- `v1.2.44` 已发布到 GitHub Release 并设为 Latest：`https://github.com/oirge/Mineradio/releases/tag/v1.2.44`（tag 提交 `9bba136`，分支 `codex/release-1.2.44-memory` 已推送）；远端资产已核对一致。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
 - 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录，不能覆盖上述文件的当前结论。
