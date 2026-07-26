@@ -1417,6 +1417,22 @@ function preparePatchFileEntries(files) {
   }
   return entries;
 }
+/**
+ * 删除某次补丁任务的备份目录。补丁成功应用或失败回滚完成后，`job.id` 下的原文件备份不再需要，
+ * 若不清理会随每次快速补丁升级在 updates/backups/patches 下无限累积（单份 index.html 备份约 2MB）。
+ * 清理失败只记录、不影响更新结果，因为备份此刻已无回滚价值。
+ * @param {object} job 补丁更新任务，需含唯一 id。
+ * @returns {void}
+ */
+function removePatchBackupDir(job) {
+  if (!job || !job.id) return;
+  const dir = path.join(UPDATE_PATCH_BACKUP_DIR, job.id);
+  try {
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  } catch (err) {
+    console.warn('[update] failed to clean patch backup dir:', dir, err && err.message || err);
+  }
+}
 function backupPatchFileEntries(job, entries) {
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
@@ -1483,6 +1499,7 @@ function applyPatchFiles(job, files) {
       writePatchFileEntry(entries[i]);
       changed.push(entries[i].rel);
     }
+    removePatchBackupDir(job);
     return changed;
   } catch (err) {
     try {
@@ -1496,6 +1513,7 @@ function applyPatchFiles(job, files) {
       fatal.fatalUpdate = true;
       throw fatal;
     }
+    removePatchBackupDir(job);
     if (err && typeof err === 'object') err.fatalUpdate = true;
     throw err;
   }
