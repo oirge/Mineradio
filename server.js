@@ -1657,24 +1657,48 @@ function startUpdatePatchJob(info) {
   });
   return publicUpdateJob(job);
 }
+/**
+ * 读取并解析请求体（JSON 优先，失败回退表单编码）。
+ * 请求体超过 8MB 上限时销毁连接并以 REQUEST_BODY_TOO_LARGE 拒绝（Fail-Fast）。
+ * 契约：promise 必须在 end/error/close 任一终止路径上恰好结算一次；`req.destroy()` 不会触发 end，
+ * 若仅监听 end/error 会在超限或客户端中断时泄漏请求而永不响应，因此必须同时兜底 close。
+ * @param {import('http').IncomingMessage} req 入站请求。
+ * @returns {Promise<object>} 解析后的请求体对象。
+ */
 function readRequestBody(req) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     let raw = '';
+    let settled = false;
+    // 单次结算门：无论哪条流事件先到（end/error/close）都只能 resolve/reject 一次，防止连接悬挂与重复回调。
+    const settle = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
     req.on('data', chunk => {
+      if (settled) return;
       raw += chunk;
-      if (raw.length > 8 * 1024 * 1024) req.destroy();
+      if (raw.length > 8 * 1024 * 1024) {
+        const err = new Error('REQUEST_BODY_TOO_LARGE');
+        err.code = 'REQUEST_BODY_TOO_LARGE';
+        // 先置位再销毁：destroy() 只触发 close/aborted 而非 end，必须在此处主动结算。
+        settle(reject, err);
+        req.destroy();
+      }
     });
     req.on('end', () => {
-      if (!raw) { resolve({}); return; }
-      try { resolve(JSON.parse(raw)); }
+      if (!raw) { settle(resolve, {}); return; }
+      try { settle(resolve, JSON.parse(raw)); }
       catch (e) {
         const params = new URLSearchParams(raw);
         const out = {};
         params.forEach((v, k) => { out[k] = v; });
-        resolve(out);
+        settle(resolve, out);
       }
     });
-    req.on('error', () => resolve({}));
+    req.on('error', () => settle(resolve, {}));
+    // 兜底：流在未正常 end 就关闭（客户端中断等）时仍需结算，避免处理器永久挂起。
+    req.on('close', () => settle(resolve, {}));
   });
 }
 // ====================================================================
