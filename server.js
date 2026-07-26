@@ -13,6 +13,24 @@ const { fileURLToPath } = require('url');
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
+/**
+ * 本地文件代理授权校验钩子。
+ * 由桌面主进程注入，强制 /api/local-file 只能读取已授权曲库根目录内的文件；
+ * 缺省为空表示未注入，此时一律拒绝，避免独立或异常场景退化为可读任意文件的开放代理。
+ * @type {((filePath: string) => string) | null}
+ */
+let localFileAuthorizer = null;
+
+/**
+ * 注入本地文件代理的授权校验函数（跨进程契约：与主进程 resolveAuthorizedLocalFile 对齐）。
+ * @param {(filePath: string) => string} authorizer 入参为解析后的绝对路径；越权时必须抛错，授权时返回可读绝对路径。
+ * @returns {void}
+ */
+function setLocalFileAuthorizer(authorizer) {
+  // 契约式校验：只接受函数，非法注入立即抛错（Fail-Fast），杜绝静默退化为无授权代理。
+  if (typeof authorizer !== 'function') throw new TypeError('LOCAL_FILE_AUTHORIZER_INVALID');
+  localFileAuthorizer = authorizer;
+}
 const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(__dirname, 'updates');
 const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.join(UPDATE_WORK_DIR, 'downloads');
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
@@ -1802,7 +1820,22 @@ const server = http.createServer(async (req, res) => {
         res.end('Forbidden');
         return;
       }
-      const target = path.resolve(String(url.searchParams.get('path') || ''));
+      const requestedPath = path.resolve(String(url.searchParams.get('path') || ''));
+      // 授权门：仅放行已授权曲库根目录内的文件，缺省拒绝，堵住 HTTP 代理越权读取任意文件（与 IPC resolveAuthorizedLocalFile 一致）。
+      if (!localFileAuthorizer) {
+        res.writeHead(403, { 'Access-Control-Allow-Origin': '*' });
+        res.end('Forbidden');
+        return;
+      }
+      let target;
+      try {
+        // 授权函数按契约在越权时抛错，这里将其明确转换为 403（已知异常路径，非兜底吞异常）。
+        target = localFileAuthorizer(requestedPath);
+      } catch (authErr) {
+        res.writeHead(403, { 'Access-Control-Allow-Origin': '*' });
+        res.end('Forbidden');
+        return;
+      }
       const stat = fs.statSync(target);
       if (!stat.isFile()) {
         res.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
@@ -1871,5 +1904,7 @@ server.listen(PORT, HOST, () => {
   console.log(' 粒子音乐可视化 v2  →  http://localhost:' + PORT);
   console.log('======================================================');
 });
+
+server.setLocalFileAuthorizer = setLocalFileAuthorizer;
 
 module.exports = server;

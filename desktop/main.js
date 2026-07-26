@@ -2590,6 +2590,8 @@ async function createWindow() {
   process.env.MINERADIO_LOCAL_FILE_TOKEN = LOCAL_FILE_TOKEN;
 
   localServer = require(path.join(__dirname, '..', 'server.js'));
+  // 注入授权校验：让 HTTP 本地文件代理复用与 IPC 相同的授权根目录约束，堵住越权读取任意文件。
+  localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
   await waitForServer(localServer);
 
   const initialBounds = getWindowedBounds();
