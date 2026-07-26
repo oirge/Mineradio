@@ -241,7 +241,9 @@ function testCreatingMiniPlayerWindowStartsFreshResidency() {
   const context = {
     miniPlayerWindow: null,
     miniPlayerUserMovePending: false,
-    miniPlayerUserBounds: null,
+    miniPlayerMode: 'standard',
+    miniPlayerUserBoundsByMode: { standard: null, compact: null },
+    miniPlayerWindowModes: new WeakMap(),
     miniPlayerStateCache: stateCache,
     miniPlayerRendererReloadWindows: new WeakSet(),
     miniPlayerProgrammaticCloseWindows: new WeakSet(),
@@ -252,6 +254,7 @@ function testCreatingMiniPlayerWindowStartsFreshResidency() {
     __dirname: path.join(__dirname, '..', 'desktop'),
     clampMiniPlayerBounds,
     miniPlayerDefaultBounds,
+    normalizeMiniPlayerMode(value) { return value === 'compact' ? 'compact' : 'standard'; },
     requestMiniPlayerStateSync,
     keepMiniPlayerOnTop: ignoreEventRegistration,
     beginMiniPlayerUserMove: ignoreEventRegistration,

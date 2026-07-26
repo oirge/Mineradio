@@ -1,13 +1,13 @@
 # Mineradio Next Chat Handoff
 
-更新时间：2026-07-04
+更新时间：2026-07-26
 
 ## 新对话先执行
 
 当前可用工作区：
 
 ```powershell
-cd C:\Users\Administrator\Desktop\Mineradio-main
+cd C:\Users\oirg\Desktop\mok\Mineradio-sync
 git status --short --branch
 git log --oneline -5 --decorate
 Get-Content AGENTS.md -Encoding UTF8
@@ -27,16 +27,24 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
+- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
 - 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
-- 当前版本：`v1.2.11`
+- 当前版本：`v1.2.44`
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
-- 当前分支：`main...origin/main`
-- 当前提交：以 `git log --oneline -5 --decorate` 为准
+- 当前分支：`codex/release-1.2.44-memory`
+- 当前提交：`a124ad2 optimize renderer and desktop memory ownership`
+- 正式发布基线：远端 tag `v1.2.43`（提交 `4055208`）；本轮不要从远端旧 `main` 直接发布。
+- 旧基线保护提交为 `14c0a18`；`a124ad2` 是把该内存优化移植到 `v1.2.43` 后的当前提交。
+- 当前工作树仍有未提交的版本元数据、测试门禁和交接文档修改；尚未推送、打 `v1.2.44` tag 或创建 GitHub Release。
 - `package.json` 发布配置 owner/repo 已是 `oirge/Mineradio`。
 
 ## 最近完成
 
+- 2026-07-26：完成 `v1.2.44` 本地资产与桌面状态内存优化。已播放歌词原文由精确当前队列对象持有播放租约；切歌、清队列、同 key 接管和迟到异步结果均校验对象所有权，释放后的 `ready` 摘要保持可恢复，不会错误退回 `pending`。
+- 2026-07-26：修复空曲库后台资产任务取消和旧 token 污染；本地曲库持久内存按当前文件夹所有权隔离，阻止 A→B→A 旧异步读取回填；本地封面、Object URL、内嵌封面 Blob、文件范围读取和缓存生命周期改为受限驻留。
+- 2026-07-26：桌面歌词、壁纸和迷你播放器加入状态缓存及窗口/renderer/PowerShell 进程所有权门禁；新增 3 个桌面状态模块和 35 个纯 Node 回归测试。`scripts/test-mini-player-memory.ps1` 已改为 AST-only 源码门禁，不启动 Electron。
+- 2026-07-26：`npm run build:win` 成功生成 `dist\Mineradio-1.2.44-Setup.exe`（104747336 字节）、blockmap、Portable ZIP 与 `latest.yml`；`latest.yml` 已确认版本为 `1.2.44`。已生成 `dist\Mineradio-1.2.44-SHA256SUMS.txt`（4 项）和 `dist\Mineradio-1.2.43-to-1.2.44.patch.json`（2401785 字节，7 个运行时文件）。
+- 2026-07-24：发布 `v1.2.43`，将本地音质显示切换为网易云风格中文档位，作为本轮正式基线。
 - 2026-07-04：发布 `v1.2.11`，继续低风险性能优化：本地封面/歌词缓存补水改为按范围读取，分块阶段不再反复 `slice`；后台资产预载候选、播放队列位置映射和排序队列减少中间数组并复用同一轮候选；列表入场动画只收集实际需要动画的前几项。左侧歌单显示/隐藏/固定按钮和 3D 歌单架“自动隐藏/常驻”选项保持不变。
 - 2026-07-04：发布 `v1.2.10`，继续做多维性能优化：启动阶段自定义封面/歌词/用户视觉存档按需解析，Home 听歌画像按需水合并单次扫描，3D 歌单架大队列虚拟取项，队列/搜索/歌单详情 HTML 减少中间数组，本地搜索池和索引预热复用纯本地数组，本地曲库快照/索引保存改为单次循环；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
 - 2026-07-04：发布 `v1.2.9`，继续优化 3D 歌单架交互性能：同一指针事件复用 Raycaster/卡片命中结果，详情行、面板和卡片屏幕命中复用临时对象，滚轮路径延迟射线检测，鼠标移动只在面板可见或需要时读取矩形；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
@@ -45,22 +53,18 @@ Get-Content package.json -Encoding UTF8
 
 ## 已知验证
 
-- `git diff --check`
-- `node --check server.js`
-- `node --check desktop\main.js`
-- `node --check desktop\preload.js`
-- 前端内联脚本解析检查
-- 当前 Windows 系统代理为 `127.0.0.1:7897`；PowerShell / Node 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
-- 已使用该代理成功执行 `npm run build:win:dir`，生成 `dist\win-unpacked`，并启动 `dist\win-unpacked\Mineradio.exe` 做 8 秒 Electron smoke，未提前退出。
-- 已执行 `npm run build:win`，生成 `dist\Mineradio-1.2.11-Setup.exe`、`.blockmap`、`dist\Mineradio-1.2.11-Portable-win-x64.zip` 和 `dist\latest.yml`。
-- 已生成 `dist\Mineradio-1.2.10-to-1.2.11.patch.json` 快速补丁和 `dist\Mineradio-1.2.11-SHA256SUMS.txt`。
-- 本次 `Mineradio-1.2.11-Setup.exe` SHA256：`d07d0b313aaecdca41521bb0221ec2501bca98e0d502090465ae01e43bfb9741`。
+- 旧基线回归曾复现 12 通过 / 1 失败的 `ready`→`pending` 回归；修复后目标回归为 13/13 通过。
+- 移植到 `v1.2.43` 基线后的完整 Node 测试：95/95 通过。
+- `desktop/main.js`、`server.js`、`desktop/` 与 `tests/` 全部 JavaScript `node --check` 通过；`public/index.html` 4 个内联脚本解析通过。
+- AST-only 内存门禁、`git diff --check`、冲突标记扫描和调试标记扫描通过。
+- 所有测试使用 `BelowNormal` 与 `--test-concurrency=1`；本轮没有启动 Electron、浏览器、服务、PowerShell 轮询或后台 GUI，避免影响用户正常使用电脑。
+- Windows 构建使用代理 `127.0.0.1:7897`（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 均为 `http://127.0.0.1:7897`）；构建成功，但构建成功不等于已发布。
 
 ## 后续优先级
 
-- 继续小步优化 3D 歌单架“悬停展开”和“点击可用”之间的手感边界；先读 `docs\3D_PLAYLIST_SHELF_MEMORY.md`，不要推倒重做。
-- 继续关注本地大曲库：搜索索引预热、队列/歌单架分批渲染、封面缩略图缓存和桌面歌词 IPC 频率。
-- 如要发布，先确认版本号、`CHANGELOG.md`、`RELEASE.md`、安装包和 GitHub Release 资产一致。
+- 提交当前修改并推送发布分支，创建并推送 `v1.2.44` tag；用 `gh release create` 上传安装包、blockmap、`latest.yml`、SHA256 清单和快速补丁，Portable ZIP 跳过。
+- 发布后核对 GitHub Release 资产与 `latest.yml`，再回填 `docs/PROJECT_MEMORY.md` 和本文件为“已发布”。
+- 发布后继续处理两个已知内存方向：IndexedDB `assets` 拆分 `lyrics` store 并做 v2→v3 流式迁移；外置封面改走 `/api/local-file` 流式 URL，避免主进程完整 Buffer/base64 和 renderer data URL。
 
 ## 不要做
 
@@ -68,3 +72,4 @@ Get-Content package.json -Encoding UTF8
 - 不要恢复旧的侧边栏闪烁、控制台播放暂停失效、3D 歌单架强制切回星河等问题。
 - 不要把搜索结果、左侧歌单、3D 歌单架的性能优化做成一次性渲染全部内容。
 - 不要把玻璃 SVG 黄金质感改成普通毛玻璃或廉价透明面板。
+- 后台验证默认保持低优先级、串行、无 Electron/GUI；除非用户明确要求，不要启动会占用桌面的长期测试进程。

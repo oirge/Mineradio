@@ -2,11 +2,11 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
-## 当前权威入口（2026-07-18）
+## 当前权威入口（2026-07-26）
 
 - 当前可写代码/Git 仓库是 `C:\Users\oirg\Desktop\mok\Mineradio-sync`。
 - 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
-- 当前源码版本是 `v1.2.25`，最新提交以 `git log --oneline -5 --decorate` 为准。
+- 当前源码版本是 `v1.2.44`，最新提交以 `git log --oneline -5 --decorate` 为准。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
 - 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录，不能覆盖上述文件的当前结论。

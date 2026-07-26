@@ -2976,7 +2976,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.43';
+var APP_VERSION = '1.2.44';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -31470,7 +31470,7 @@ function applyDesktopLyricsState(force) {
       api.setDesktopLyricsEnabled(enabled, payload).catch(function(e){ console.warn('desktop lyrics state failed:', e); });
     }
   } finally {
-    releaseDesktopLyricsTransferFields(payload || desktopLyricsPayloadCache);
+    if (enabled) releaseDesktopLyricsTransferFields(payload || desktopLyricsPayloadCache);
   }
   if (enabled) pushDesktopLyricsState(!!force);
   scheduleDesktopOverlaySync(320);
@@ -31520,7 +31520,7 @@ function applyWallpaperModeState(force) {
       api.setWallpaperMode(enabled, payload).catch(function(e){ console.warn('wallpaper state failed:', e); });
     }
   } finally {
-    releaseWallpaperTransferFields(payload || wallpaperPayloadCache);
+    if (enabled) releaseWallpaperTransferFields(payload || wallpaperPayloadCache);
   }
   if (enabled) pushWallpaperState(!!force);
   scheduleDesktopOverlaySync(320);

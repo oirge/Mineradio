@@ -21,21 +21,43 @@ function readUpdateVerificationSource() {
 
 /**
  * 验证完整安装包校验使用固定小块读取，不调用整文件 readFileSync。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testInstallerVerificationUsesBoundedReads() {
+async function testInstallerVerificationUsesBoundedReads() {
   const payload = Buffer.alloc(3 * 1024 * 1024 + 137, 0x5a);
   let readFileCalls = 0;
   let position = 0;
   let maxRequestedBytes = 0;
   let closeCalls = 0;
 
-  /** @returns {number} 返回固定测试文件描述符。 */
-  function openSync() { position = 0; return 17; }
+  /** @returns {Promise<object>} 返回固定测试文件句柄。 */
+  async function openFile() {
+    position = 0;
+    return {
+      /**
+       * 模拟异步分块读取并记录单次请求上限。
+       * @param {Buffer} target 目标缓冲区。
+       * @param {number} offset 目标写入偏移。
+       * @param {number} length 请求字节数。
+       * @param {number} _position 文件读取位置。
+       * @returns {Promise<{bytesRead:number}>} 实际读取字节数。
+       */
+      async read(target, offset, length, _position) {
+        maxRequestedBytes = Math.max(maxRequestedBytes, length);
+        const bytesRead = Math.min(length, payload.length - position);
+        if (bytesRead <= 0) return { bytesRead: 0 };
+        payload.copy(target, offset, position, position + bytesRead);
+        position += bytesRead;
+        return { bytesRead };
+      },
+      /** @returns {Promise<void>} 记录文件句柄已关闭。 */
+      async close() { closeCalls += 1; },
+    };
+  }
 
   /**
    * 模拟同步分块读取并记录单次请求上限。
-   * @param {number} _fd 测试文件描述符。
+   * @param {number} _fd 已废弃的同步描述符参数。
    * @param {Buffer} target 目标缓冲区。
    * @param {number} offset 目标写入偏移。
    * @param {number} length 请求字节数。
@@ -49,9 +71,6 @@ function testInstallerVerificationUsesBoundedReads() {
     position += bytesRead;
     return bytesRead;
   }
-
-  /** @returns {void} 记录文件描述符已关闭。 */
-  function closeSync() { closeCalls += 1; }
 
   /** @returns {{size:number}} 返回测试文件大小。 */
   function statSync() { return { size: payload.length }; }
@@ -83,14 +102,21 @@ function testInstallerVerificationUsesBoundedReads() {
   const context = {
     Buffer,
     crypto,
-    fs: { openSync, readSync, closeSync, statSync, readFileSync },
+    updateVerifyChunkBuffer: null,
+    fs: {
+      promises: {
+        stat: async () => ({ isFile: () => true, size: payload.length }),
+        open: openFile,
+      },
+      readFileSync,
+    },
     normalizeDigest,
     sha256Hex,
     updateError,
   };
   vm.runInNewContext(readUpdateVerificationSource() + '\nthis.verifyFile = verifyUpdateFile;', context);
 
-  context.verifyFile('virtual-installer.exe', {
+  await context.verifyFile('virtual-installer.exe', {
     expectedSize: payload.length,
     sha256: crypto.createHash('sha256').update(payload).digest('hex'),
     sha512: crypto.createHash('sha512').update(payload).digest('base64'),
