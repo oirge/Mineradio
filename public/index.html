@@ -2723,6 +2723,8 @@ var loginStatusChecked = false, loginStatusCheckFailed = false;
 var volumeTween = null, trackSwitchToken = 0;
 var playIconUiState = { node: null, playing: null };
 var audioFadeTimer = null, audioElementFadeFrame = 0, audioFadeSerial = 0;
+// 记录 fadeOutAndPauseAudio 未结算的兜底回调；淡出计时器被外部清理（如切歌）时必须借此结算，避免 await 永挂。
+var pendingFadeOutSettle = null;
 var AUDIO_FADE_IN_MS = 460;
 var AUDIO_FADE_OUT_MS = 420;
 var AUDIO_SILENCE_GAIN = 0.0001;
@@ -2976,7 +2978,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.50';
+var APP_VERSION = '1.2.51';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -20342,6 +20344,11 @@ function playShelfSelectTick(direction, variant) {
 }
 
 function clearAudioFadeTimers() {
+  if (pendingFadeOutSettle) {
+    var settleFade = pendingFadeOutSettle;
+    pendingFadeOutSettle = null;
+    settleFade(false);
+  }
   if (audioFadeTimer) {
     clearTimeout(audioFadeTimer);
     audioFadeTimer = null;
@@ -20442,15 +20449,25 @@ function fadeOutAndPauseAudio() {
   var serial = ++audioFadeSerial;
   rampAudioOutputGain(0, AUDIO_FADE_OUT_MS);
   return new Promise(function(resolve) {
+    var settled = false;
+    // 统一结算入口：无论是计时器到点还是淡出被外部（切歌等）取消，都只结算一次并清理兜底句柄。
+    function settleFadeOut(paused) {
+      if (settled) return;
+      settled = true;
+      if (pendingFadeOutSettle === settleFadeOut) pendingFadeOutSettle = null;
+      if (audioFadeTimer) { clearTimeout(audioFadeTimer); audioFadeTimer = null; }
+      resolve(!!paused);
+    }
+    pendingFadeOutSettle = settleFadeOut;
     audioFadeTimer = setTimeout(function(){
       audioFadeTimer = null;
       if (serial !== audioFadeSerial || !audio) {
-        resolve(false);
+        settleFadeOut(false);
         return;
       }
       try { audio.pause(); } catch (pauseErr) { console.warn('[TogglePlayPause]', pauseErr); }
+      settleFadeOut(true);
       setAudioOutputGainImmediate(0);
-      resolve(true);
     }, AUDIO_FADE_OUT_MS + 80);
   });
 }
