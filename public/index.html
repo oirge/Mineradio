@@ -2978,7 +2978,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.52';
+var APP_VERSION = '1.2.53';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -20983,6 +20983,44 @@ function ensureLocalSongUrl(song) {
   return '';
 }
 /**
+ * 回收被丢弃本地歌曲创建的浏览器 Object URL，避免整批曲库替换后 blob 句柄长期泄漏。
+ * 仅回收 blob: 前缀地址；主进程持久地址（http/自定义协议）不属于本函数职责，保持原样。
+ * 回收前会汇总所有存活列表仍引用的 blob 地址作为保留集，跨列表共享同一 Object URL 时不会被误撤销。
+ * @param {Array<object>} discardedSongs 即将被替换、准备丢弃的旧歌曲列表。
+ * @param {Array<Array<object>>} liveLists 仍然存活、可能继续引用同一 Object URL 的歌曲列表集合。
+ * @returns {number} 实际撤销的 Object URL 数量。
+ */
+function revokeDiscardedLocalSongObjectUrls(discardedSongs, liveLists) {
+  if (!discardedSongs || !discardedSongs.length) return 0;
+  if (typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') return 0;
+  var live = Object.create(null);
+  var lists = liveLists || [];
+  for (var li = 0; li < lists.length; li++) {
+    var list = lists[li] || [];
+    for (var si = 0; si < list.length; si++) {
+      var keepSong = list[si];
+      if (!keepSong) continue;
+      if (typeof keepSong.localUrl === 'string' && keepSong.localUrl.indexOf('blob:') === 0) live[keepSong.localUrl] = true;
+      if (typeof keepSong.localCoverObjectUrl === 'string' && keepSong.localCoverObjectUrl.indexOf('blob:') === 0) live[keepSong.localCoverObjectUrl] = true;
+    }
+  }
+  var revokedMap = Object.create(null);
+  var revokedCount = 0;
+  for (var di = 0; di < discardedSongs.length; di++) {
+    var oldSong = discardedSongs[di];
+    if (!oldSong) continue;
+    var candidates = [oldSong.localUrl, oldSong.localCoverObjectUrl];
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var candidate = candidates[ci];
+      if (typeof candidate !== 'string' || candidate.indexOf('blob:') !== 0) continue;
+      if (live[candidate] || revokedMap[candidate]) continue;
+      revokedMap[candidate] = true;
+      try { URL.revokeObjectURL(candidate); revokedCount++; } catch (e) {}
+    }
+  }
+  return revokedCount;
+}
+/**
  * 解析本地歌词并标记来源。该函数位于本地文件切歌路径，保持输出字段不变但减少 map 回调。
  * @param {string} text 本地歌词文本。
  * @returns {Array<object>} 带 local 来源标记的歌词行。
@@ -25277,6 +25315,7 @@ async function handleLocalFolderFiles(files, opts) {
     truncated: !!opts.truncated
   });
   finalizeListenSession(false);
+  revokeDiscardedLocalSongObjectUrls(localLibrarySongs, [songs, playlist]);
   localLibrarySongs = songs;
   playQueue = songs;
   resetSearchRenderCache();
@@ -25379,6 +25418,7 @@ async function handleFiles(files) {
     var singleSong = makeLocalSongFromFile(audioFile, lyricFile, imgFile);
     await hydrateLocalAssetCacheForSongs([singleSong]);
     finalizeListenSession(false);
+    revokeDiscardedLocalSongObjectUrls(localLibrarySongs, [[singleSong], playlist]);
     localLibrarySongs = [singleSong];
     playQueue = [singleSong];
     resetSearchRenderCache();
