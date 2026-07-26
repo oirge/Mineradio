@@ -416,6 +416,18 @@ async function scanLocalMusicFolderIncremental(folderPath, previousSnapshot) {
   if (previous.savedAt && Date.now() - previous.savedAt > LOCAL_LIBRARY_INCREMENTAL_MAX_AGE_MS) return scanLocalMusicFolderFull(root);
 
   const listed = await collectLocalLibraryFolderEntries(root);
+  // 本次遍历若已达访问上限，listed.files/listed.directories 与磁盘现状不一致；此时增量合并会把缺失项误判为删除。
+  // 与 previous.truncated 分支同源处理：改用全量语义返回已遍历结果，避免残缺增量覆盖当前会话与持久快照。
+  if (listed.truncated) {
+    return {
+      ok: true,
+      folderPath: root,
+      files: await statLocalLibraryFiles(root, listed.files),
+      directories: listed.directories,
+      truncated: true,
+      scanMode: 'full',
+    };
+  }
   const changedDirs = new Set();
   for (const dir of listed.directories) {
     const rel = normalizeLocalLibraryRelPath(dir.relativePath);
