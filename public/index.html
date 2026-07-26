@@ -2976,7 +2976,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.49';
+var APP_VERSION = '1.2.50';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -21115,6 +21115,19 @@ function ensureLocalLyricsForSong(song, opts) {
 function loadLocalLyricsForSong(song, token) {
   return ensureLocalLyricsForSong(song, { token:token, applyCurrent:true });
 }
+/**
+ * 载入并启动单个本地队列项的实际播放流程（在 playQueueAt 递增 trackSwitchToken 后调用）。
+ * 由于内部存在 await playAudio 的挂起窗口，切歌竞态期间此调用可能已过期，收尾逻辑必须先复查 token，
+ * 否则过期调用会用旧歌覆盖新歌的听歌会话，污染统计画像与最近播放数据。
+ * @param {Object} song 已水合的本地歌曲对象。
+ * @param {number} idx 该歌曲在 playQueue 中的索引。
+ * @param {Object} opts 播放选项（manual/resumeAt/context 等）。
+ * @param {number} token 本次切歌的 trackSwitchToken 快照，用于竞态校验。
+ * @param {boolean} firstVisualPlay 是否为首次可视化播放。
+ * @param {string} bmKey 节拍图缓存键。
+ * @param {Function} markPlayPhase 记录当前播放阶段的回调，用于失败诊断。
+ * @returns {Promise<void>}
+ */
 async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey, markPlayPhase) {
   markPlayPhase('local-source');
   var localUrl = ensureLocalSongUrl(song);
@@ -21179,6 +21192,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
 
   markPlayPhase('audio-start');
   var playbackStarted = await playAudio({ manual: !!opts.manual, silent: false });
+  if (token !== trackSwitchToken) return;
   if (!playbackStarted) {
     forcePlaybackControlsInteractive();
     showToast(opts.manual ? '本地音乐启动失败，请重新选择文件' : '歌曲已载入，点击播放按钮继续播放');
