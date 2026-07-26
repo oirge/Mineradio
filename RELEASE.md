@@ -1,5 +1,12 @@
 ﻿# 发布流程
 
+## v1.2.49 存档导入大小上限修复
+- `v1.2.49` 为 `mineradio-import-json-file` 补齐文件大小上限：此前 `fs.readFileSync` 直接读取用户选中的文件、无任何大小校验，误选超大文件会一次性读入内存拖垮主进程；这是项目内唯一缺少输入上限的外部文件读取路径。
+- 现在先 `fs.statSync` 校验，非文件返回 `IMPORT_NOT_A_FILE`、超过 16MB 返回 `IMPORT_FILE_TOO_LARGE`，正常存档不受影响，重新满足“所有外部文件读取都有内存上限”不变量。
+- 新增回归测试覆盖超大拒绝/正常放行/取消三条路径；全套 106/106、`node --check`、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.48 -> 1.2.49` 快速补丁；Portable ZIP 跳过。
+- Release 标题使用 `Mineradio v1.2.49`。
+
 ## v1.2.48 桌面歌词轮询孤儿进程修复
 - `v1.2.48` 修复桌面歌词窗口意外关闭（如渲染进程崩溃）时泄漏中键轮询子进程的缺陷：`closed` 事件的释放口 `releaseOwnedDesktopLyricsWindow` 只置空窗口句柄、未停轮询，导致 spawn 的 PowerShell 轮询进程成为孤儿并以 24ms 间隔持续空转直到应用退出。
 - 在 `releaseOwnedDesktopLyricsWindow` 补上 `stopDesktopLyricsMousePoller()`；正常关闭路径已先停轮询，此处调用幂等，仅对崩溃等意外关闭路径补漏。

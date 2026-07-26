@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v1.2.49 存档导入大小上限修复
+
+- 为存档导入补齐文件大小上限：`mineradio-import-json-file` 处理器此前用 `fs.readFileSync(filePath, 'utf8')` 直接读取用户在对话框选中的文件，且未做任何大小校验；一旦误选被重命名为 `.json` 的超大文件，会一次性读入内存，可能拖垮主进程（OOM 崩溃）。这是项目内唯一缺少输入上限的外部文件读取路径——本地文件范围读取（64MB）、封面 data URL（32MB）、桌面 UI 状态（2MB）、请求体（8MB）、更新安装包与补丁均已设上限。
+- 现在先 `fs.statSync` 校验：非普通文件返回 `IMPORT_NOT_A_FILE`，超过 16MB 返回 `IMPORT_FILE_TOO_LARGE`，正常存档（远小于该值）不受影响。补齐后“所有外部文件读取都有内存上限”这一既有不变量重新成立。
+- 新增回归测试覆盖超大文件拒绝、正常文件放行、未选择取消三条路径；全套测试 106/106 通过。
+- 本轮只加固存档导入的读取上限，不改动 UI、布局、文案、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。
+
+
 ## v1.2.48 桌面歌词轮询孤儿进程修复
 
 - 修复桌面歌词窗口在意外关闭（如渲染进程崩溃）时泄漏中键轮询子进程的缺陷：歌词窗口的 `closed` 事件只由 `releaseOwnedDesktopLyricsWindow` 释放句柄，而它只把 `desktopLyricsWindow` 置空、未调用 `stopDesktopLyricsMousePoller()`；一旦窗口不走正常的 `closeDesktopLyricsWindow` 路径而被销毁，它 spawn 的 PowerShell 中键轮询子进程会成为孤儿进程，以 24ms 间隔持续空转 `GetAsyncKeyState` 直到整个应用退出。
