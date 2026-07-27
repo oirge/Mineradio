@@ -2688,6 +2688,8 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 // ============================================================
 var audio = null, audioCtx = null, source = null, analyser = null, beatAnalyser = null, gainNode = null, audioReady = false;
 var uiSfxCtx = null, lastShelfSelectSfxAt = 0;
+var UI_SFX_NOISE_VARIANTS = 6;
+var uiSfxNoiseBuffers = null, uiSfxNoiseCtx = null, uiSfxNoiseSampleRate = 0, uiSfxNoiseCursor = 0;
 var FFT_SIZE = 2048;
 var AUDIO_ANALYSIS_TARGET_FPS = 60;
 var frequencyData = new Uint8Array(FFT_SIZE / 2);
@@ -15712,6 +15714,21 @@ function makeShelfManager() {
     pulseObjectValue(card, 'fxPulse', amount || 1, 0.46);
   }
 
+  // 步进/选中是滚动热路径，按索引直接扫描，避免每步再分配 find 回调。
+  function cardAtIndex(idx) {
+    for (var ci = 0; ci < cards.length; ci++) {
+      if (cards[ci].index === idx) return cards[ci];
+    }
+    return undefined;
+  }
+
+  function cardForAction(action) {
+    for (var ai = 0; ai < cards.length; ai++) {
+      if (cards[ai].mesh.userData.action === action) return cards[ai];
+    }
+    return undefined;
+  }
+
   function createStageExtras() {
     if (!group) return;
     var pcount = 80;
@@ -15852,7 +15869,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     syncRenderedWindow(false);
     applySelectedIndex(nextTarget);
     if (nextTarget !== prevTarget) playShelfSelectTick(direction, 'card');
-    pulseCard(cards.find(function(c){ return c.index === nextTarget; }), 0.55);
+    pulseCard(cardAtIndex(nextTarget), 0.55);
   }
 
   function screenHitCard(card, sx, sy, pad) {
@@ -16051,10 +16068,10 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     prev: function() { step(-1); },
     scrollBy: function(d) { step(d); },
     getCenterIdx: function() { return Math.round(centerSmooth); },
-    getCardAt: function(idx) { return cards.find(function(c){ return c.index === idx; }); },
+    getCardAt: function(idx) { return cardAtIndex(idx); },
     getCards: function() { return cards; },
     playPlaylistAt: function(idx) {
-      return playPlaylistCard(cards.find(function(c){ return c.index === idx; }));
+      return playPlaylistCard(cardAtIndex(idx));
     },
     clearSelected: function() {
       applySelectedIndex(-1);
@@ -16064,7 +16081,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     },
     triggerAction: function(action) {
       if (!action) return;
-      var card = cards.find(function(c) { return c.mesh.userData.action === action; });
+      var card = cardForAction(action);
       pulseCard(card, action.kind === 'loadPlaylist' ? 1.0 : 0.70);
       if (action.kind === 'playQueue') {
         playQueueAt(action.index);
@@ -16081,7 +16098,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     },
     // 二级内容框 open/close
     openContent: function(cardIdx) {
-      var card = cards.find(function(c){ return c.index === cardIdx; });
+      var card = cardAtIndex(cardIdx);
       if (!card) return;
       var action = card.mesh.userData.action;
       if (!action) return;
@@ -16225,6 +16242,13 @@ document.addEventListener('mouseout', function(e) {
 function makeContentListManager() {
   var group = null;
   var rows = [];           // 每行一张卡 (歌曲)
+  // 行步进同样是滚动热路径，按索引直接扫描，避免每步分配 find 回调。
+  function rowAtIndex(idx) {
+    for (var ri = 0; ri < rows.length; ri++) {
+      if (rows[ri].index === idx) return rows[ri];
+    }
+    return undefined;
+  }
   var panel = null;
   var allTracks = [];
   var renderedStart = -1;
@@ -16871,7 +16895,7 @@ function makeContentListManager() {
         var nextTarget = Math.round(centerTarget);
         syncRenderedRows(false);
         if (nextTarget !== prevTarget) playShelfSelectTick(1, 'row');
-        pulseObjectValue(rows.find(function(r){ return r.index === nextTarget; }), 'fxPulse', 0.48, 0.36);
+        pulseObjectValue(rowAtIndex(nextTarget), 'fxPulse', 0.48, 0.36);
       }
     },
     prev: function() {
@@ -16881,7 +16905,7 @@ function makeContentListManager() {
         var nextTarget = Math.round(centerTarget);
         syncRenderedRows(false);
         if (nextTarget !== prevTarget) playShelfSelectTick(-1, 'row');
-        pulseObjectValue(rows.find(function(r){ return r.index === nextTarget; }), 'fxPulse', 0.48, 0.36);
+        pulseObjectValue(rowAtIndex(nextTarget), 'fxPulse', 0.48, 0.36);
       }
     },
     scrollBy: function(d) {
@@ -16891,7 +16915,7 @@ function makeContentListManager() {
         var nextTarget = Math.round(centerTarget);
         syncRenderedRows(false);
         if (nextTarget !== prevTarget) playShelfSelectTick(d, 'row');
-        pulseObjectValue(rows.find(function(r){ return r.index === nextTarget; }), 'fxPulse', 0.48, 0.36);
+        pulseObjectValue(rowAtIndex(nextTarget), 'fxPulse', 0.48, 0.36);
       }
     },
     getRows: function() { return rows; },
@@ -20286,6 +20310,31 @@ function resumeAudioAnalysis() {
   return Promise.resolve();
 }
 
+// 选择音噪声段只依赖 sampleRate，按 AudioContext 预生成固定数量变体后轮换复用。
+function shelfSelectTickNoiseBuffer(ctx) {
+  var sampleRate = ctx.sampleRate || 44100;
+  if (!uiSfxNoiseBuffers || uiSfxNoiseCtx !== ctx || uiSfxNoiseSampleRate !== sampleRate) {
+    var len = Math.max(1, Math.floor(sampleRate * 0.034));
+    var pool = new Array(UI_SFX_NOISE_VARIANTS);
+    for (var v = 0; v < UI_SFX_NOISE_VARIANTS; v++) {
+      var buf = ctx.createBuffer(1, len, sampleRate);
+      var data = buf.getChannelData(0);
+      for (var i = 0; i < len; i++) {
+        var e = Math.pow(1 - i / len, 4.2);
+        data[i] = (Math.random() * 2 - 1) * e;
+      }
+      pool[v] = buf;
+    }
+    uiSfxNoiseBuffers = pool;
+    uiSfxNoiseCtx = ctx;
+    uiSfxNoiseSampleRate = sampleRate;
+    uiSfxNoiseCursor = 0;
+  }
+  var buffer = uiSfxNoiseBuffers[uiSfxNoiseCursor];
+  uiSfxNoiseCursor = (uiSfxNoiseCursor + 1) % uiSfxNoiseBuffers.length;
+  return buffer;
+}
+
 function ensureUiSfxContext() {
   var AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextCtor) return null;
@@ -20312,16 +20361,8 @@ function playShelfSelectTick(direction, variant) {
   out.gain.exponentialRampToValueAtTime(0.0001, t + 0.082);
   out.connect(ctx.destination);
 
-  var sampleRate = ctx.sampleRate || 44100;
-  var len = Math.max(1, Math.floor(sampleRate * 0.034));
-  var buf = ctx.createBuffer(1, len, sampleRate);
-  var data = buf.getChannelData(0);
-  for (var i = 0; i < len; i++) {
-    var e = Math.pow(1 - i / len, 4.2);
-    data[i] = (Math.random() * 2 - 1) * e;
-  }
   var noise = ctx.createBufferSource();
-  noise.buffer = buf;
+  noise.buffer = shelfSelectTickNoiseBuffer(ctx);
   var hp = ctx.createBiquadFilter();
   hp.type = 'highpass';
   hp.frequency.setValueAtTime(4200 * pitch, t);
