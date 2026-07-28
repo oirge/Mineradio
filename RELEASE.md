@@ -3,8 +3,9 @@
 ## v1.2.57 3D 歌单架滚动热路径低分配优化
 - `v1.2.57` 优化 3D 歌单架卡片/详情行滚动命中：步进与动作触发改为直接扫描，避免每步 `find` 回调分配。
 - 选择音效噪声缓冲按 AudioContext 预生成固定变体并轮换复用；音效参数与交互语义保持不变。
-- 全套测试 129/129、`node --check`、前端内联脚本解析、AST 门禁、`git diff --check` 均绿。
-- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.56 -> 1.2.57` 快速补丁（本版运行时变更为 `public/index.html`）；Portable ZIP 跳过。
+- 前端更新面板版本号同步为 `1.2.57`，并新增包版本一致性回归测试。
+- 全套测试 130/130、`node --check`、前端内联脚本解析、AST 门禁、`git diff --check` 均绿。
+- 本次发布上传安装器相关资产：安装包、blockmap、`latest.yml` 和 `1.2.56 -> 1.2.57` 快速补丁（运行时变更为 `public/index.html`，另含 `package.json` / `package-lock.json` 版本元数据）；Portable ZIP 跳过。
 - Release 标题使用 `Mineradio v1.2.57`。
 ## v1.2.56 快速补丁备份目录从不清理的磁盘泄漏修复
 - `v1.2.56` 修复 `server.js` 快速补丁应用后备份目录永不清理的磁盘泄漏：`applyPatchFiles` 补丁成功后直接 `return changed`，从不删除 `updates/backups/patches/<job.id>/` 下的原文件备份，而 `job.id` 每次唯一，导致每次快速补丁升级都永久遗留一份备份（单份 index.html 约 2MB）无限累积。
