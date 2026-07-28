@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.55`，当前 HEAD 为 `31f6de6`（`release: finalize 1.2.55 latest.yml parsing hardening`）；tag `v1.2.55` 指向同一发布提交 `31f6de6`，修复提交为 `a79e245`。
-- 当前工作分支：`codex/release-1.2.44-memory`（已推送到远端同名分支）。
-- 最近正式安装包 Release 基线：`v1.2.55`（tag 提交 `31f6de6`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.54 -> 1.2.55` 快速补丁，补丁仅含 `server.js`）；远端 `main` 不是本轮发布基线，仍停在 `v1.2.34`。
+- 当前源码检查点：`v1.2.57`；tag `v1.2.57` 指向发布提交 `c01dbe9`（`release: finalize 1.2.57 shelf hot-path optimizations`），优化准备提交为 `4e1ee37`。
+- 当前工作分支：`codex/continue-v1.2.57`（已推送到远端同名分支）。
+- 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -32,6 +32,11 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.57`（2026-07-28）已正式发布到 GitHub：https://github.com/oirge/Mineradio/releases/tag/v1.2.57；tag 指向 `c01dbe9`，Release 为 Latest、非 draft/prerelease，4 个资产全部 uploaded 且远端 SHA-256 与本地一致。
+- `v1.2.57` 优化 3D 歌单架卡片/详情行滚动命中路径，按索引或 action 直接扫描；选择音效按 AudioContext 预生成 6 个固定噪声缓冲并轮换复用。同步修正前端 `APP_VERSION = 1.2.57` 并新增包版本一致性测试。UI、布局、文案、玻璃质感、电影视觉、播放控制和歌单架交互保持不变。
+- `v1.2.57` 已验证：完整 Node 测试 130/130、46 个 JS 文件语法、2 个前端内联脚本解析、`git diff --check` 全部通过；真实 Chromium 验证 11 张虚拟卡片、中心索引 `4 -> 5 -> 4`、6 个音效缓冲、WebGL 非空且控制台/page error/失败请求均为 0。Windows 安装器 UI 自动化受 `GetCursorPos 0x80070005` 权限限制未能打开，NSIS 配置和安装器资源已确认与 `v1.2.56` 已验收基线一致。
+- `v1.2.57` 资产：安装包 `104751027` 字节 / SHA256 `87f73ac7dcd79497c7e07ff51f99b9d55b33bd5d08034ccd5c880426f8d44eb2`；blockmap `111971` 字节 / `57ee903f112caa212921b9f93415e38c9e7491e9067d7a499d8a3f45dbc3fe48`；`latest.yml` `350` 字节 / `ac33691ef16b79c87ba60ad9ef51d5231e66610ef148e64b3187dda292528afb`；快速补丁 `2269352` 字节 / `13befab3fcbf7269a9fce25ba134d367d83ab7779bc857fa883a611114265e7e`。
 
 - `v1.2.44`（2026-07-26）已正式发布到 GitHub：https://github.com/oirge/Mineradio/releases/tag/v1.2.44；tag v1.2.44 对应提交 9bba136，已设为 Latest（非 draft/prerelease）。5 个资产（安装包、blockmap、latest.yml、SHA256 清单、快速补丁）均 uploaded，远端安装包 SHA256 与本地/latest.yml 一致。
 - `v1.2.44` 的运行时改动包括：已播放本地歌词原文改为精确当前队列对象租约，切歌/清队列/同 key 接管/迟到异步结果均做对象所有权校验；空曲库后台资产任务使用递增 token、取消旧定时器并隔离旧队列；本地曲库持久内存按当前文件夹所有权管理，阻止 A→B→A 旧异步结果回填。
