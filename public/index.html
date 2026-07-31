@@ -2980,7 +2980,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.57';
+var APP_VERSION = '1.2.58';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -19370,8 +19370,10 @@ function applyCustomLyricState(song, silent) {
     return false;
   }
   lyricSourceMode = 'custom';
-  lyricsHasNativeKaraoke = false;
-  lyricsTimingSource = lines[0] && lines[0].source === 'custom-lrc' ? 'custom-lrc' : 'custom-text';
+  lyricsHasNativeKaraoke = lyricLinesHaveWordTiming(lines);
+  lyricsTimingSource = lyricsHasNativeKaraoke
+    ? 'custom-lrc-word'
+    : (lines[0] && lines[0].source === 'custom-lrc' ? 'custom-lrc' : 'custom-text');
   lyricsLines = withLyricFallback(lines);
   if (lyricsLines.length && lyricsLines[0].fallback) lyricsTimingSource = 'fallback';
   renderLyrics();
@@ -21092,10 +21094,11 @@ function parseLocalLyricText(text) {
 function applyLocalOriginalLyricsState(song) {
   var text = song && String(song.localLyricText || '').trim();
   var lines = text ? parseLocalLyricText(text) : [];
+  var hasNativeKaraoke = lyricLinesHaveWordTiming(lines);
   var timingSource = lines.length
-    ? (lines[0].source === 'local-lrc' ? 'local-lrc' : 'local-text')
+    ? (hasNativeKaraoke ? 'local-lrc-word' : (lines[0].source === 'local-lrc' ? 'local-lrc' : 'local-text'))
     : 'fallback';
-  setOriginalLyricsState(withLyricFallback(lines), false, timingSource);
+  setOriginalLyricsState(withLyricFallback(lines), hasNativeKaraoke, timingSource);
   applyPreferredLyricsForCurrent(true);
 }
 function canReadEmbeddedFlacLyrics(song) {
@@ -21886,15 +21889,12 @@ function applyFetchedLyricPayload(payload) {
   payload = payload || {};
   var nativeLines = parseYrcText(payload.yrc || '');
   var lrcLines = parseLyricText(payload.lyric || '');
-  var hasNativeKaraoke = false;
-  for (var i = 0; i < nativeLines.length; i++) {
-    if (nativeLines[i] && nativeLines[i].words && nativeLines[i].words.length) {
-      hasNativeKaraoke = true;
-      break;
-    }
-  }
-  var timingSource = hasNativeKaraoke ? 'yrc-word' : (nativeLines.length ? 'yrc-line' : (lrcLines.length ? 'lrc-line' : 'fallback'));
-  var lines = withLyricFallback(nativeLines.length ? nativeLines : lrcLines);
+  var parsedLines = nativeLines.length ? nativeLines : lrcLines;
+  var hasNativeKaraoke = lyricLinesHaveWordTiming(parsedLines);
+  var timingSource = hasNativeKaraoke
+    ? (nativeLines.length ? 'yrc-word' : 'lrc-word')
+    : (nativeLines.length ? 'yrc-line' : (lrcLines.length ? 'lrc-line' : 'fallback'));
+  var lines = withLyricFallback(parsedLines);
   if (lines.length && lines[0].fallback) timingSource = 'fallback';
   setOriginalLyricsState(lines, hasNativeKaraoke, timingSource);
   applyPreferredLyricsForCurrent(true);
@@ -22017,7 +22017,97 @@ function forEachNewlineRow(text, visit) {
   }
   return true;
 }
-function rememberLyricBucketText(bucket, text) {
+/**
+ * 判断歌词行是否带可用的逐字时间轴。
+ * @param {Array<object>} lines 标准化歌词行。
+ * @returns {boolean} 是否至少有一行包含逐字时间。
+ */
+function lyricLinesHaveWordTiming(lines) {
+  var source = Array.isArray(lines) ? lines : [];
+  for (var i = 0; i < source.length; i++) {
+    if (source[i] && Array.isArray(source[i].words) && source[i].words.length) return true;
+  }
+  return false;
+}
+var ENHANCED_LRC_WORD_TAG_REG = /<(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?>/g;
+/**
+ * 向 Enhanced LRC 正文追加一个带时间的片段，并让字符范围与折叠空白后的正文保持一致。
+ * @param {{text:string,words:Array<object>}} state 当前行解析状态。
+ * @param {string} rawText 当前时间标签后的原始片段。
+ * @param {number} startTime 片段开始秒数。
+ * @param {number} endTime 下一标签秒数；缺失时使用保守时长。
+ * @returns {void}
+ */
+function appendEnhancedLrcSegment(state, rawText, startTime, endTime) {
+  rawText = String(rawText || '');
+  if (!rawText) return;
+  var c0 = state.text.length;
+  for (var i = 0; i < rawText.length; i++) {
+    var ch = rawText.charAt(i);
+    if (ch === ' ' || ch === '\t') {
+      if (state.text && state.text.charAt(state.text.length - 1) !== ' ') state.text += ' ';
+    } else {
+      state.text += ch;
+    }
+  }
+  var c1 = state.text.length;
+  if (c1 <= c0 || !state.text.slice(c0, c1).trim()) return;
+  var duration = isFinite(endTime) ? Math.max(0, endTime - startTime) : 0.24;
+  var previous = state.words.length ? state.words[state.words.length - 1] : null;
+  if (previous && previous.c1 === c0 && Math.abs(previous.t - startTime) < 0.0005) {
+    previous.c1 = c1;
+    previous.text = state.text.slice(previous.c0, c1);
+    previous.d = Math.max(previous.d || 0, duration, 0.06);
+    return;
+  }
+  state.words.push({
+    text: state.text.slice(c0, c1),
+    t: Math.max(0, Number(startTime) || 0),
+    d: Math.max(0.06, duration),
+    c0: c0,
+    c1: c1
+  });
+}
+/**
+ * 解析 Enhanced LRC 的 `<mm:ss.xx>` 逐字标签；返回 null 表示普通 LRC 正文。
+ * @param {string} body 已移除方括号行时间的正文。
+ * @param {number} lineTime 当前行起始秒数。
+ * @returns {{text:string,words:Array<object>}|null} 清理后的正文与逐字时间轴。
+ */
+function parseEnhancedLrcBody(body, lineTime) {
+  body = String(body || '');
+  ENHANCED_LRC_WORD_TAG_REG.lastIndex = 0;
+  var firstMatch = ENHANCED_LRC_WORD_TAG_REG.exec(body);
+  if (!firstMatch) return null;
+  var state = { text: '', words: [] };
+  var currentStart = firstMatch.index;
+  var currentEnd = ENHANCED_LRC_WORD_TAG_REG.lastIndex;
+  var currentTime = lyricTagTimeToSeconds(firstMatch[1], firstMatch[2], firstMatch[3]);
+  if (currentStart > 0) {
+    appendEnhancedLrcSegment(state, body.slice(0, currentStart), lineTime, currentTime);
+  }
+  var nextMatch;
+  while ((nextMatch = ENHANCED_LRC_WORD_TAG_REG.exec(body))) {
+    var nextTime = lyricTagTimeToSeconds(nextMatch[1], nextMatch[2], nextMatch[3]);
+    appendEnhancedLrcSegment(state, body.slice(currentEnd, nextMatch.index), currentTime, nextTime);
+    currentEnd = ENHANCED_LRC_WORD_TAG_REG.lastIndex;
+    currentTime = nextTime;
+  }
+  appendEnhancedLrcSegment(state, body.slice(currentEnd), currentTime, NaN);
+  if (state.text.charAt(state.text.length - 1) === ' ') state.text = state.text.slice(0, -1);
+  var compactWords = [];
+  for (var wordIndex = 0; wordIndex < state.words.length; wordIndex++) {
+    var word = state.words[wordIndex];
+    word.c0 = Math.max(0, Math.min(state.text.length, word.c0));
+    word.c1 = Math.max(word.c0, Math.min(state.text.length, word.c1));
+    if (word.c1 <= word.c0) continue;
+    word.text = state.text.slice(word.c0, word.c1);
+    compactWords.push(word);
+  }
+  state.words = compactWords;
+  return state;
+}
+function rememberLyricBucketText(bucket, text, words) {
   var source = String(text || '');
   for (var start = 0, i = 0, len = source.length; i <= len; i++) {
     if (i !== len && source.charCodeAt(i) !== 10) continue;
@@ -22026,7 +22116,14 @@ function rememberLyricBucketText(bucket, text) {
       var norm = row.toLowerCase();
       if (!bucket.seen[norm]) {
         bucket.seen[norm] = true;
-        if (bucket.texts.length < 2) bucket.texts.push(row);
+        if (bucket.texts.length < 2) {
+          var textIndex = bucket.texts.length;
+          bucket.texts.push(row);
+          if (words && words.length) {
+            if (!bucket.wordLines) bucket.wordLines = [];
+            bucket.wordLines.push({ textIndex: textIndex, words: words });
+          }
+        }
       }
     }
     start = i + 1;
@@ -22048,29 +22145,63 @@ function parseLyricText(text) {
     while ((m = reg.exec(rawLine))) times.push(lyricTagTimeToSeconds(m[1], m[2], m[3]));
     if (!times.length) return;
     reg.lastIndex = 0;
-    var txt = rawLine.replace(reg, '').trim();
+    var body = rawLine.replace(reg, '');
+    var enhanced = parseEnhancedLrcBody(body, times[0]);
+    var txt = enhanced ? enhanced.text : body.trim();
     if (!txt) return;
     for (var timeIdx = 0; timeIdx < times.length; timeIdx++) {
       var t = times[timeIdx];
       var key = String(Math.round((Number(t) || 0) * 1000));
       var bucket = buckets[key];
       if (!bucket) {
-        bucket = buckets[key] = { t: t, texts: [], seen: Object.create(null) };
+        bucket = buckets[key] = { t: t, texts: [], seen: Object.create(null), wordLines: null };
         ordered.push(bucket);
       }
-      rememberLyricBucketText(bucket, txt);
+      var enhancedWords = enhanced && enhanced.words;
+      if (enhancedWords && timeIdx > 0 && t !== times[0]) {
+        var timeOffset = t - times[0];
+        var shiftedWords = new Array(enhancedWords.length);
+        for (var shiftIdx = 0; shiftIdx < enhancedWords.length; shiftIdx++) {
+          var shiftedSource = enhancedWords[shiftIdx];
+          shiftedWords[shiftIdx] = {
+            text: shiftedSource.text,
+            t: shiftedSource.t + timeOffset,
+            d: shiftedSource.d,
+            c0: shiftedSource.c0,
+            c1: shiftedSource.c1
+          };
+        }
+        enhancedWords = shiftedWords;
+      }
+      rememberLyricBucketText(bucket, txt, enhancedWords);
     }
   });
   var lines = [];
   for (var bucketIdx = 0; bucketIdx < ordered.length; bucketIdx++) {
     var bucket = ordered[bucketIdx];
     var text = bucket.texts.join('\n');
+    var words = [];
+    // 双语同时间行保持原有整行高亮；单行 Enhanced LRC 才启用逐字时间轴。
+    if (bucket.texts.length === 1 && bucket.wordLines && bucket.wordLines.length) {
+      var sourceWords = bucket.wordLines[0].words || [];
+      for (var wordIdx = 0; wordIdx < sourceWords.length; wordIdx++) {
+        var sourceWord = sourceWords[wordIdx];
+        words.push({
+          text: sourceWord.text,
+          t: sourceWord.t,
+          d: sourceWord.d,
+          c0: sourceWord.c0,
+          c1: sourceWord.c1
+        });
+      }
+    }
     var line = {
       t: bucket.t,
       text: text,
-      source: bucket.texts.length > 1 ? 'lrc-bilingual' : 'lrc',
+      source: words.length ? 'lrc-word' : (bucket.texts.length > 1 ? 'lrc-bilingual' : 'lrc'),
       charCount: Math.max(1, text.replace(/\n/g, '').length)
     };
+    if (words.length) line.words = words;
     if (line.text && !isNoLyricText(line.text)) lines.push(line);
   }
   return finalizeLyricLineDurations(lines);

@@ -71,6 +71,7 @@
 - 分块 IPC 只解决跨进程阶段还不够：桌面文本入口若对最终字节执行 `bytes.buffer.slice(...)` 会再复制完整范围；把现有 `Uint8Array` 传给 `new Uint8Array(existingView)` 同样会按元素复制，而不是创建零成本视图。
 - 本地歌词/文本解码的乱码判断只需要 U+FFFD 数量；不要恢复 `text.match(/\uFFFD/g)`，否则每次文本解码都会额外生成匹配数组。
 - YRC 逐字歌词前导空白只用于校正 `c0/c1`；不要恢复 `fullText.match(/^\s+/)` 数组计数。
+- Enhanced LRC 的 `<mm:ss.xx>` 标签必须由 `parseEnhancedLrcBody()` 转换为现有 `words` 结构，不得作为正文或 `charCount` 内容。相邻同时间片段合并为同一高亮区间，行尾空标签只提供上一段结束时间；同时间双语行保持整行高亮，普通 LRC 语义不变。
 - 无歌词占位检测会在 LRC/YRC/自定义歌词过滤里反复调用；不要恢复 `String(text).replace(/\s+/g, '').replace(...)` 双正则链。
 - 主进程本地曲库扫描 worker 数量不大但处于导入启动前；不要恢复 `Array.from({ length }, worker)` 这类额外数组构造。
 - 软件内更新状态接口会被更新面板轮询；取最新下载/补丁任务或裁剪旧任务时不要恢复 `Array.from(updateDownloadJobs.values()).sort(...)`、`slice(...).forEach(...)` 这类全量排序和回调链。
