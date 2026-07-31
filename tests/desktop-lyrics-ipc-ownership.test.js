@@ -69,7 +69,7 @@ function readDesktopLyricsIpcSource() {
  */
 function clampNumber(value, _min, _max, fallback) {
   const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
+  return Number.isFinite(number) ? Math.max(_min, Math.min(_max, number)) : fallback;
 }
 
 /**
@@ -85,7 +85,7 @@ async function testDesktopLyricsIpcSenderOwnership() {
   const ipcMain = new FakeIpcMain();
   const stateCache = new DesktopOverlayStateCache();
   stateCache.setEnabled(true, { clickThrough: false });
-  const calls = { closes: 0, creates: [] };
+  const calls = { closes: 0, creates: [], sizeRequests: [], sizeStates: [] };
 
   /** @returns {void} 记录允许执行的关闭。 */
   function closeDesktopLyricsWindow() { calls.closes += 1; }
@@ -102,6 +102,17 @@ async function testDesktopLyricsIpcSenderOwnership() {
   /** @returns {void} 测试不需要真实鼠标行为。 */
   function noop() {}
 
+  /** @param {number} size 记录转发给主 renderer 的字号请求。 */
+  function sendDesktopLyricsSizeRequest(size) {
+    calls.sizeRequests.push(size);
+    return true;
+  }
+
+  /** @param {number} size 记录发回歌词 renderer 的轻量字号状态。 */
+  function sendDesktopLyricsSizeState(size) {
+    calls.sizeStates.push(size);
+  }
+
   const context = {
     ipcMain,
     mainWindow,
@@ -116,6 +127,8 @@ async function testDesktopLyricsIpcSenderOwnership() {
     sendDesktopLyricsState: noop,
     applyDesktopLyricsMouseBehavior: noop,
     broadcastDesktopLyricsLockState: noop,
+    sendDesktopLyricsSizeRequest,
+    sendDesktopLyricsSizeState,
     clampNumber,
   };
   vm.runInNewContext(readDesktopLyricsIpcSource(), context);
@@ -125,6 +138,7 @@ async function testDesktopLyricsIpcSenderOwnership() {
   const setPointer = ipcMain.handlers.get('mineradio-desktop-lyrics-set-pointer-capture');
   const setHotBounds = ipcMain.handlers.get('mineradio-desktop-lyrics-set-hot-bounds');
   const setLock = ipcMain.handlers.get('mineradio-desktop-lyrics-set-lock-state');
+  const setSize = ipcMain.handlers.get('mineradio-desktop-lyrics-set-size');
   const move = ipcMain.handlers.get('mineradio-desktop-lyrics-move-by');
 
   assert.equal((await setEnabled({ sender: staleSender }, false, {})).ignored, true);
@@ -132,16 +146,28 @@ async function testDesktopLyricsIpcSenderOwnership() {
   assert.equal((await setPointer({ sender: staleSender }, true)).ignored, true);
   assert.equal((await setHotBounds({ sender: staleSender }, { left: 1, top: 2, right: 3, bottom: 4 })).ignored, true);
   assert.equal((await setLock({ sender: staleSender }, true)).ignored, true);
+  assert.equal((await setSize({ sender: staleSender }, 1.2)).ignored, true);
   assert.equal((await move({ sender: staleSender }, 80, 60)).ignored, true);
   assert.equal(calls.closes, 0);
   assert.equal(calls.creates.length, 0);
   assert.equal(context.desktopLyricsPointerCapture, false);
   assert.equal(context.desktopLyricsHotBounds, null);
+  assert.deepEqual(calls.sizeRequests, []);
+  assert.deepEqual(calls.sizeStates, []);
   assert.deepEqual(desktopLyricsWindow.bounds, { x: 100, y: 100, width: 900, height: 180 });
   assert.equal(stateCache.value.clickThrough, false);
 
   assert.equal((await setPointer({ sender: currentSender }, true)).ok, true);
   assert.equal(context.desktopLyricsPointerCapture, true);
+  assert.equal((await setSize({ sender: currentSender }, 9)).size, 1.55);
+  assert.deepEqual(calls.sizeRequests, [1.55]);
+  assert.deepEqual(calls.sizeStates, [1.55]);
+  assert.equal(stateCache.value.size, 1.55);
+  stateCache.apply({ clickThrough: true });
+  assert.equal((await setSize({ sender: currentSender }, 1.1)).error, 'DESKTOP_LYRICS_LOCKED');
+  assert.deepEqual(calls.sizeRequests, [1.55]);
+  assert.deepEqual(calls.sizeStates, [1.55]);
+  stateCache.apply({ clickThrough: false });
   assert.equal((await update({ sender: mainSender }, { opacity: 0.6 })).ok, true);
   assert.equal(calls.creates.length, 1);
   assert.equal((await setEnabled({ sender: currentSender }, false, {})).ok, true);

@@ -174,6 +174,13 @@
       -webkit-app-region:no-drag;
     }
     .lyrics-tool-btn:hover{color:#fff}
+    .lyrics-tool-btn:disabled{opacity:.34;cursor:default}
+    .lyrics-size-step{
+      width:23px;
+      margin-right:-4px;
+      padding:0 0 1px;
+      font:900 16px/1 Arial,sans-serif;
+    }
     body.unlocked .lyrics-tool-btn{display:flex}
     body.locked .lyrics-lock-toggle{display:flex}
     body.unlocked .stage.hint-visible .lock-hint,body.locked .stage.hint-visible .lock-hint{pointer-events:auto;-webkit-app-region:no-drag}
@@ -190,7 +197,7 @@
   <div class="wrap">
     <div id="stage" class="stage">
       <div id="lyricViewport" class="lyric-viewport"><div id="lyricScroller" class="lyric-scroll"><div id="line" class="line" data-text="Mineradio">Mineradio</div></div></div>
-      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="Close desktop lyrics">&#20851;&#38381;&#26700;&#38754;&#27468;&#35789;</button></div>
+      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="&#32553;&#23567;&#26700;&#38754;&#27468;&#35789;">&#8722;</button><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Enlarge desktop lyrics" title="&#25918;&#22823;&#26700;&#38754;&#27468;&#35789;">+</button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="Close desktop lyrics">&#20851;&#38381;&#26700;&#38754;&#27468;&#35789;</button></div>
     </div>
   </div>
   <script>
@@ -199,9 +206,12 @@
     var ctx = canvas.getContext('2d');
     var stage = document.getElementById('stage');
     var lyricViewport = document.getElementById('lyricViewport');
+    var lyricScroller = document.getElementById('lyricScroller');
     var line = document.getElementById('line');
     var lockHint = document.getElementById('lockHint');
     var lockText = document.getElementById('lockText');
+    var sizeDownBtn = document.getElementById('sizeDownBtn');
+    var sizeUpBtn = document.getElementById('sizeUpBtn');
     var lockToggleBtn = document.getElementById('lockToggleBtn');
     var closeLyricsBtn = document.getElementById('closeLyricsBtn');
     var dpr = 1;
@@ -221,6 +231,9 @@
     var hintVisible = false;
     var hintTimer = 0;
     var lastPointerEvent = null;
+    var sizeRequestSequence = 0;
+    var lastHotBoundsAt = 0;
+    var lastHotBoundsSignature = '';
     var scrollState = { needed:false, overflow:0, limit:0, offset:0, dir:-1, holdUntil:0, lastAt:0 };
     var particles = [];
     var live = { solar:0, beat:0, bass:0, scale:1, glow:0, spark:0, lift:0 };
@@ -667,7 +680,8 @@
       setRootVar('--lyric-fit-x', fitScaleX.toFixed(4));
       setRootVar('--lyric-mask-edge-width', maskEdgeWidth + 'px');
       setRootVar('--lyric-scroll-x', scrollState.offset.toFixed(2) + 'px');
-      sendHotBounds();
+      positionInteractionHint();
+      sendHotBounds(true);
     }
     function updateLyricScroll(nowMs, progress) {
       if (!scrollState.needed) {
@@ -709,6 +723,12 @@
       document.body.classList.toggle('unlocked', !locked);
       if (lockText) lockText.textContent = locked ? '\u4e2d\u952e\u89e3\u9501' : '\u4e2d\u952e\u9501\u5b9a';
       if (lockToggleBtn) lockToggleBtn.textContent = locked ? '\u89e3\u9501' : '\u9501\u5b9a';
+      syncSizeButtons();
+    }
+    function syncSizeButtons() {
+      var size = clamp(state.size, .72, 1.55, 1);
+      if (sizeDownBtn) sizeDownBtn.disabled = isLocked() || size <= .7201;
+      if (sizeUpBtn) sizeUpBtn.disabled = isLocked() || size >= 1.5499;
     }
     function setPointerCapture(active) {
       active = !!active;
@@ -718,17 +738,84 @@
         window.desktopOverlay.setLyricsPointerCapture(active).catch(function(){});
       }
     }
-    function sendHotBounds() {
+    function lyricInteractionBounds() {
+      var viewportRect = lyricViewport.getBoundingClientRect();
+      var textRect = line.getBoundingClientRect();
+      if (!textRect || textRect.right <= textRect.left || textRect.bottom <= textRect.top) {
+        textRect = lyricScroller.getBoundingClientRect();
+      }
+      var left = Math.max(viewportRect.left, textRect.left);
+      var top = Math.max(viewportRect.top, textRect.top);
+      var right = Math.min(viewportRect.right, textRect.right);
+      var bottom = Math.min(viewportRect.bottom, textRect.bottom);
+      if (right <= left || bottom <= top) {
+        var fallbackX = clamp(textRect.left + (textRect.width || 0) * .5, viewportRect.left, viewportRect.right, viewportRect.left);
+        var fallbackY = clamp(textRect.top + (textRect.height || 0) * .5, viewportRect.top, viewportRect.bottom, viewportRect.top);
+        left = right = fallbackX;
+        top = bottom = fallbackY;
+      }
+      var padX = Math.round(clamp(renderedFontSize * .22, 10, 16, 13));
+      var padY = Math.round(clamp(renderedFontSize * .13, 6, 10, 8));
+      return {
+        left:Math.max(viewportRect.left, left - padX),
+        top:Math.max(viewportRect.top, top - padY),
+        right:Math.min(viewportRect.right, right + padX),
+        bottom:Math.min(viewportRect.bottom, bottom + padY)
+      };
+    }
+    function positionInteractionHint() {
+      if (!lockHint || !lyricViewport || !lyricScroller) return;
+      var localTop = lyricViewport.offsetTop + lyricScroller.offsetTop;
+      var hintHeight = lockHint.offsetHeight || 30;
+      lockHint.style.top = Math.max(8, Math.round(localTop - hintHeight - 8)) + 'px';
+    }
+    function sendHotBounds(force) {
       if (!window.desktopOverlay || !window.desktopOverlay.setLyricsHotBounds) return;
-      var rect = lyricViewport.getBoundingClientRect();
-      var padX = Math.max(26, Math.min(72, innerWidth * .038));
-      var padY = Math.max(24, Math.min(56, innerHeight * .052));
+      var now = performance.now();
+      if (!force && now - lastHotBoundsAt < 240) return;
+      var rect = lyricInteractionBounds();
+      var bounds = {
+        left:Math.round(rect.left),
+        top:Math.round(rect.top),
+        right:Math.round(rect.right),
+        bottom:Math.round(rect.bottom)
+      };
+      var signature = bounds.left + '|' + bounds.top + '|' + bounds.right + '|' + bounds.bottom;
+      lastHotBoundsAt = now;
+      if (!force && signature === lastHotBoundsSignature) return;
+      lastHotBoundsSignature = signature;
       window.desktopOverlay.setLyricsHotBounds({
-        left:rect.left - padX,
-        top:rect.top - padY,
-        right:rect.right + padX,
-        bottom:rect.bottom + padY
+        left:bounds.left,
+        top:bounds.top,
+        right:bounds.right,
+        bottom:bounds.bottom
       }).catch(function(){});
+    }
+    function applyLocalLyricsSize(value) {
+      state.size = clamp(value, .72, 1.55, state.size || 1);
+      baseFontSize = Math.round(58 * state.size);
+      layoutKey = '';
+      fitLyricText(true);
+      syncSizeButtons();
+      return state.size;
+    }
+    function requestLyricsSize(delta) {
+      if (isLocked() || !window.desktopOverlay || !window.desktopOverlay.setLyricsSize) return;
+      var previous = clamp(state.size, .72, 1.55, 1);
+      var next = Math.round(clamp(previous + Number(delta || 0), .72, 1.55, previous) * 100) / 100;
+      if (Math.abs(next - previous) < .001) return;
+      var sequence = ++sizeRequestSequence;
+      applyLocalLyricsSize(next);
+      window.desktopOverlay.setLyricsSize(next).then(function(result){
+        if (sequence !== sizeRequestSequence) return;
+        if (!result || result.ok !== true || result.ignored === true) {
+          applyLocalLyricsSize(previous);
+          return;
+        }
+        if (isFinite(Number(result.size))) applyLocalLyricsSize(result.size);
+      }).catch(function(){
+        if (sequence === sizeRequestSequence) applyLocalLyricsSize(previous);
+      });
     }
     function applyState(next){
       next = next || {};
@@ -1035,6 +1122,7 @@
         var motion = updateMotion(now, offlineMotion);
         applyStageMotion(now);
         updateLyricScroll(nowMs, progress);
+        sendHotBounds(false);
       }
       scheduleNextDraw();
     }
@@ -1060,19 +1148,15 @@
     function pointInRect(evt, rect, padX, padY) {
       return evt.clientX >= rect.left - padX && evt.clientX <= rect.right + padX && evt.clientY >= rect.top - padY && evt.clientY <= rect.bottom + padY;
     }
+    function pointInLyric(evt) {
+      return !!(state.enabled && evt && pointInRect(evt, lyricInteractionBounds(), 0, 0));
+    }
     function pointInStage(evt) {
       if (!state.enabled || !evt) return false;
       if (dragging) return true;
-      if (!isLocked()) {
-        var stageRect = stage.getBoundingClientRect();
-        return pointInRect(evt, stageRect, 0, 0);
-      }
-      var padX = Math.max(24, Math.min(68, innerWidth * .034));
-      var padY = Math.max(22, Math.min(46, innerHeight * .045));
-      var lyricRect = lyricViewport.getBoundingClientRect();
-      if (pointInRect(evt, lyricRect, padX, padY)) return true;
-      var hintRect = lockHint.getBoundingClientRect();
-      return pointInRect(evt, hintRect, 10, 10);
+      if (pointInLyric(evt)) return true;
+      if (!hintVisible || !lockHint) return false;
+      return pointInRect(evt, lockHint.getBoundingClientRect(), 10, 10);
     }
     function setHintVisible(visible) {
       hintVisible = !!visible;
@@ -1170,9 +1254,8 @@
       if (!dragging) hideInteractionHint();
     });
     window.addEventListener('pointerdown', function(evt){
-      if (!pointInStage(evt)) return;
-      if (closeLyricsBtn && closeLyricsBtn.contains(evt.target)) return;
-      if (lockToggleBtn && lockToggleBtn.contains(evt.target)) return;
+      if (evt.target && evt.target.closest && evt.target.closest('.lyrics-tool-btn')) return;
+      if (!pointInLyric(evt)) return;
       if (evt.button === 1) {
         evt.preventDefault();
         hideInteractionHint();
@@ -1203,13 +1286,29 @@
     });
     stage.addEventListener('lostpointercapture', endDrag);
     window.addEventListener('auxclick', function(evt){
-      if (evt.button === 1 && pointInStage(evt)) evt.preventDefault();
+      if (evt.button === 1 && pointInLyric(evt)) evt.preventDefault();
     });
     if (lockToggleBtn) {
       lockToggleBtn.addEventListener('click', function(evt){
         evt.preventDefault();
         evt.stopPropagation();
         setLocked(!isLocked());
+        setHintVisible(true);
+      });
+    }
+    if (sizeDownBtn) {
+      sizeDownBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsSize(-.05);
+        setHintVisible(true);
+      });
+    }
+    if (sizeUpBtn) {
+      sizeUpBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsSize(.05);
         setHintVisible(true);
       });
     }

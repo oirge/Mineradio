@@ -1,6 +1,6 @@
 # Desktop Lyrics Visual Baseline
 
-Last saved: 2026-06-22
+Last saved: 2026-07-31
 
 ## Approved Effect
 
@@ -18,6 +18,9 @@ Last saved: 2026-06-22
 - Unlock/lock is handled by the main process middle-mouse poller using `GetAsyncKeyState(4)` and the lyric hot bounds. This lets middle-click work even when the overlay is click-through.
 - Renderer hover logic must not call pointer capture while locked. Locked hover may show the delayed hint, but it must keep `setPointerCapture(false)`.
 - Unlocked state may capture pointer for dragging and the close button only.
+- Unlocked hover exposes compact `− / +` controls that request the main renderer to persist `desktopLyricsSize`; the overlay must not become a second settings source.
+- Dragging, hover capture, and the main-process middle-click hot bounds use the visible lyric scroller clipped to `.lyric-viewport`, with at most `16px` horizontal and `10px` vertical padding. Do not fall back to the padded `.stage` rectangle.
+- Keep the interaction hint immediately above the rendered lyric so moving from the glyphs to the controls does not cross a large invisible capture area.
 
 ## Do Not Regress
 

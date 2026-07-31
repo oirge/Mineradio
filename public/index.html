@@ -2980,7 +2980,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.58';
+var APP_VERSION = '1.2.59';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -32021,6 +32021,18 @@ function handleDesktopMiniPlayerCommand(payload) {
       updateFxInputs();
       saveLyricLayout();
       showToast(enabled ? '桌面歌词已开启' : '桌面歌词已关闭');
+    });
+  }
+  if (typeof api.onDesktopLyricsSizeRequest === 'function') {
+    api.onDesktopLyricsSizeRequest(function(payload){
+      var currentSize = clampRange(Number(fx.desktopLyricsSize) || fxDefaults.desktopLyricsSize, 0.72, 1.55);
+      var requestedSize = Number(payload && payload.size);
+      var nextSize = clampRange(isFinite(requestedSize) ? requestedSize : currentSize, 0.72, 1.55);
+      if (Math.abs(nextSize - currentSize) < .001) return;
+      fx.desktopLyricsSize = nextSize;
+      updateFxInputs();
+      saveLyricLayout();
+      pushDesktopLyricsState(false);
     });
   }
 

@@ -1132,7 +1132,7 @@ function desktopLyricsHotBoundsOnScreen() {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return null;
   const winBounds = desktopLyricsWindow.getBounds();
   const rel = desktopLyricsHotBounds;
-  if (!rel) return winBounds;
+  if (!rel) return null;
   return {
     x: winBounds.x + rel.left,
     y: winBounds.y + rel.top,
@@ -1278,6 +1278,19 @@ function broadcastDesktopLyricsEnabledState(enabled) {
   }
 }
 
+function sendDesktopLyricsSizeRequest(size) {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (typeof mainWindow.webContents.isLoadingMainFrame === 'function' && mainWindow.webContents.isLoadingMainFrame()) return false;
+  mainWindow.webContents.send('mineradio-desktop-lyrics-size-request', { size });
+  return true;
+}
+
+function sendDesktopLyricsSizeState(size) {
+  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
+  desktopLyricsLastStateSignature = desktopLyricsStateSignature(desktopLyricsStateCache.value);
+  desktopLyricsWindow.webContents.send('mineradio-desktop-lyrics-state', { size });
+}
+
 /**
  * 应用桌面歌词位置与透明度；已有手动位置默认优先。
  * @param {object} payload 当前桌面歌词状态。
@@ -1415,6 +1428,7 @@ function createDesktopLyricsWindow(payload = {}) {
     },
   });
   desktopLyricsWindow = win;
+  desktopLyricsHotBounds = null;
   try {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -1456,6 +1470,12 @@ function createDesktopLyricsWindow(payload = {}) {
     desktopLyricsMouseIgnored = null;
     desktopLyricsLastStateSignature = '';
     desktopLyricsLastOpacity = null;
+    desktopLyricsHotBounds = null;
+  }
+
+  function resetOwnedDesktopLyricsHotBounds() {
+    if (desktopLyricsWindow !== win) return;
+    desktopLyricsHotBounds = null;
   }
 
   /**
@@ -1477,6 +1497,7 @@ function createDesktopLyricsWindow(payload = {}) {
   }
 
   win.once('ready-to-show', showOwnedDesktopLyricsWindow);
+  win.webContents.on('did-start-loading', resetOwnedDesktopLyricsHotBounds);
   win.webContents.once('did-finish-load', sendOwnedDesktopLyricsState);
   win.on('closed', releaseOwnedDesktopLyricsWindow);
   win.on('moved', rememberOwnedDesktopLyricsBounds);
@@ -2539,6 +2560,30 @@ async function handleDesktopLyricsLockState(event, locked) {
 }
 
 ipcMain.handle('mineradio-desktop-lyrics-set-lock-state', handleDesktopLyricsLockState);
+
+/**
+ * 请求主 renderer 持久化桌面歌词字号；覆盖层只负责交互，不成为第二套设置真源。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {number} size 目标字号倍率。
+ * @returns {Promise<{ok:boolean,size?:number,ignored?:boolean,error?:string}>} 请求结果。
+ */
+async function handleDesktopLyricsSizeRequest(event, size) {
+  try {
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
+    if (!desktopLyricsStateCache.enabled) return { ok: false, error: 'DESKTOP_LYRICS_DISABLED' };
+    if (desktopLyricsStateCache.value.clickThrough !== false) return { ok: false, error: 'DESKTOP_LYRICS_LOCKED' };
+    const currentSize = clampNumber(desktopLyricsStateCache.value.size, 0.72, 1.55, 1);
+    const nextSize = clampNumber(size, 0.72, 1.55, currentSize);
+    if (!sendDesktopLyricsSizeRequest(nextSize)) return { ok: false, error: 'NO_MAIN_RENDERER' };
+    desktopLyricsStateCache.apply({ size: nextSize });
+    sendDesktopLyricsSizeState(nextSize);
+    return { ok: true, size: nextSize };
+  } catch (e) {
+    return { ok: false, error: e.message || 'DESKTOP_LYRICS_SIZE_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-desktop-lyrics-set-size', handleDesktopLyricsSizeRequest);
 
 /**
  * 在解锁状态下按相对像素移动桌面歌词窗口。
