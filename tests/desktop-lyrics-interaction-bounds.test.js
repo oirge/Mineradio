@@ -74,6 +74,17 @@ test('desktop lyric interaction bounds follow the animated line instead of its s
   assert.ok(bounds.top >= 150 && bounds.bottom <= 230);
 });
 
+test('desktop lyric interaction padding shrinks with the rendered font size', () => {
+  const textRect = { left: 400, top: 150, right: 424, bottom: 164, width: 24, height: 14 };
+  const viewportRect = { left: 80, top: 70, right: 840, bottom: 270, width: 760, height: 200 };
+  const small = interactionBounds(textRect, viewportRect, 12);
+  const regular = interactionBounds(textRect, viewportRect, 58);
+  assert.deepEqual({ ...small }, { left: 397, top: 148, right: 427, bottom: 166 });
+  assert.deepEqual({ ...regular }, { left: 387, top: 142, right: 437, bottom: 172 });
+  assert.ok(small.right - small.left < regular.right - regular.left);
+  assert.ok(small.bottom - small.top < regular.bottom - regular.top);
+});
+
 test('drag hit testing no longer falls back to the padded stage rectangle', () => {
   const pointInStage = readFunction('pointInStage');
   const sendHotBounds = readFunction('sendHotBounds');
@@ -105,6 +116,74 @@ test('desktop lyric size requests persist through the main renderer settings sou
   assert.match(listener, /fx\.desktopLyricsSize = nextSize;/);
   assert.match(listener, /saveLyricLayout\(\);/);
   assert.match(listener, /pushDesktopLyricsState\(false\);/);
+});
+
+function runLyricsWheel({ locked = false, dragging = false, inside = true, deltaY = -100 } = {}) {
+  const calls = { deltas: [], hint: [], prevented: 0, stopped: 0 };
+  const context = {
+    DESKTOP_LYRICS_SIZE_STEP: 0.05,
+    dragging,
+    isFinite,
+    isLocked: () => locked,
+    lastSizeWheelAt: 0,
+    performance: { now: () => 1000 },
+    pointInStage: () => inside,
+    requestLyricsSize: (delta) => calls.deltas.push(delta),
+    setHintVisible: (visible) => calls.hint.push(visible),
+    evt: {
+      deltaY,
+      preventDefault: () => { calls.prevented += 1; },
+      stopPropagation: () => { calls.stopped += 1; },
+    },
+  };
+  vm.runInNewContext(`${readFunction('handleLyricsWheel')}\nresult = handleLyricsWheel(evt);`, context);
+  return { calls, result: context.result };
+}
+
+test('desktop lyric wheel resizes only the unlocked visible interaction region', () => {
+  const enlarge = runLyricsWheel({ deltaY: -100 });
+  assert.equal(enlarge.result, true);
+  assert.deepEqual(enlarge.calls.deltas, [0.05]);
+  assert.deepEqual(enlarge.calls.hint, [true]);
+  assert.equal(enlarge.calls.prevented, 1);
+  assert.equal(enlarge.calls.stopped, 1);
+
+  const shrink = runLyricsWheel({ deltaY: 100 });
+  assert.deepEqual(shrink.calls.deltas, [-0.05]);
+
+  const locked = runLyricsWheel({ locked: true });
+  assert.equal(locked.result, false);
+  assert.deepEqual(locked.calls.deltas, []);
+  assert.equal(locked.calls.prevented, 0);
+
+  const transparentBlank = runLyricsWheel({ inside: false });
+  assert.equal(transparentBlank.result, false);
+  assert.deepEqual(transparentBlank.calls.deltas, []);
+  assert.equal(transparentBlank.calls.prevented, 0);
+
+  assert.match(source, /window\.addEventListener\('wheel', handleLyricsWheel, \{ passive:false \}\);/);
+});
+
+test('desktop lyric size minimum is consistently lowered to 0.20', () => {
+  const mainSource = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.js'), 'utf8');
+  const mainRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(source, /var DESKTOP_LYRICS_SIZE_MIN = \.20;/);
+  assert.match(source, /var minSize = Math\.max\(8, Math\.min\(32, baseFontSize \* \.55\)\);/);
+  assert.doesNotMatch(source, /Math\.max\(24, Math\.min\(32, baseFontSize \* \.55\)\)/);
+  assert.match(mainSource, /const DESKTOP_LYRICS_SIZE_MIN = 0\.20;/);
+  assert.match(mainRenderer, /var DESKTOP_LYRICS_SIZE_MIN = 0\.20;/);
+  assert.match(mainRenderer, /id="fx-desktoplyricssize"[^>]*min="0\.20"/);
+});
+
+test('desktop lyric toolbar shows the current size percentage without changing hot bounds', () => {
+  const syncSizeButtons = readFunction('syncSizeButtons');
+  const sendHotBounds = readFunction('sendHotBounds');
+  assert.match(source, /id="sizeValue" class="lyrics-size-value" aria-live="polite">100%<\/span>/);
+  assert.match(source, /var sizeValue = document\.getElementById\('sizeValue'\);/);
+  assert.match(source, /\.lyrics-size-value\{[\s\S]*?width:34px;[\s\S]*?font:800 10px\/1[\s\S]*?font-variant-numeric:tabular-nums;/);
+  assert.match(syncSizeButtons, /sizeValue\.textContent = Math\.round\(size \* 100\) \+ '%';/);
+  assert.match(sendHotBounds, /lyricInteractionBounds\(\)/);
+  assert.doesNotMatch(sendHotBounds, /lockHint/);
 });
 
 test('missing desktop lyric hot bounds never fall back to the transparent window', () => {

@@ -130,6 +130,8 @@ async function testDesktopLyricsIpcSenderOwnership() {
     sendDesktopLyricsSizeRequest,
     sendDesktopLyricsSizeState,
     clampNumber,
+    DESKTOP_LYRICS_SIZE_MIN: 0.20,
+    DESKTOP_LYRICS_SIZE_MAX: 1.55,
   };
   vm.runInNewContext(readDesktopLyricsIpcSource(), context);
 
@@ -163,10 +165,14 @@ async function testDesktopLyricsIpcSenderOwnership() {
   assert.deepEqual(calls.sizeRequests, [1.55]);
   assert.deepEqual(calls.sizeStates, [1.55]);
   assert.equal(stateCache.value.size, 1.55);
+  assert.equal((await setSize({ sender: currentSender }, -9)).size, 0.20);
+  assert.deepEqual(calls.sizeRequests, [1.55, 0.20]);
+  assert.deepEqual(calls.sizeStates, [1.55, 0.20]);
+  assert.equal(stateCache.value.size, 0.20);
   stateCache.apply({ clickThrough: true });
   assert.equal((await setSize({ sender: currentSender }, 1.1)).error, 'DESKTOP_LYRICS_LOCKED');
-  assert.deepEqual(calls.sizeRequests, [1.55]);
-  assert.deepEqual(calls.sizeStates, [1.55]);
+  assert.deepEqual(calls.sizeRequests, [1.55, 0.20]);
+  assert.deepEqual(calls.sizeStates, [1.55, 0.20]);
   stateCache.apply({ clickThrough: false });
   assert.equal((await update({ sender: mainSender }, { opacity: 0.6 })).ok, true);
   assert.equal(calls.creates.length, 1);
