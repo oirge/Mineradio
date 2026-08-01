@@ -38,6 +38,7 @@
     .wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 12px;pointer-events:none}
     .stage{
       position:relative;
+      z-index:3;
       max-width:calc(100vw - 24px);
       padding:104px 86px 94px;
       box-sizing:border-box;
@@ -110,7 +111,7 @@
       backface-visibility:hidden;
       will-change:opacity,filter,transform,background;
     }
-    body.highlight .line{
+    body.highlight .line,body.flowing .line{
       background:linear-gradient(90deg,
         var(--lyric-highlight) 0%,
         var(--lyric-highlight) max(0%,calc(var(--lyric-progress) - var(--lyric-feather))),
@@ -908,6 +909,7 @@
       document.body.classList.toggle('paused', !state.playing);
       document.body.classList.toggle('stable', state.stable === true);
       document.body.classList.toggle('highlight', state.highlightFollow === true);
+      document.body.classList.toggle('flowing', state.lyricGlow === true && state.playing === true);
       document.body.style.opacity = state.enabled ? String(clamp(state.opacity, .28, 1, .92)) : '0';
       syncLockClasses();
       if (!state.enabled) {
@@ -1040,7 +1042,7 @@
       ctx.restore();
     }
     function drawHighlightBloom(rect, progress) {
-      if (!state.lyricGlow || state.highlightFollow !== true) return;
+      if (!state.lyricGlow || state.playing !== true) return;
       var p = clamp(progress, 0, 1, 0);
       var x = rect.left + rect.width * p;
       var y = rect.top + rect.height * .50 - live.lift * .10;
@@ -1158,7 +1160,7 @@
           ctx.clearRect(0, 0, innerWidth, innerHeight);
           if (rect && rect.width > 1 && rect.height > 1) {
             drawAura(rect, motion);
-            // Soft progress-edge bloom only; skip multi-blur glyph glow to keep fill clean.
+            drawGlowText(rect, motion);
             drawHighlightBloom(rect, progress);
             drawParticles(rect, motion, now);
           }

@@ -13,6 +13,10 @@ const renderer = fs.readFileSync(
   path.join(__dirname, '..', 'public', 'index.html'),
   'utf8',
 );
+const main = fs.readFileSync(
+  path.join(__dirname, '..', 'desktop', 'main.js'),
+  'utf8',
+);
 
 test('stable desktop lyrics mode is wired through the renderer payload', () => {
   assert.match(overlay, /body\.stable \.line\.in\{animation:lyr-in-stable/);
@@ -22,12 +26,18 @@ test('stable desktop lyrics mode is wired through the renderer payload', () => {
   assert.match(renderer, /desktopLyricsStable: false/);
   assert.match(renderer, /payload\.stable = fx\.desktopLyricsStable === true/);
   assert.match(renderer, /parts\[i\+\+\] = payload\.stable \? 1 : 0/);
+  assert.match(renderer, /desktopLyricsClickThrough'[\s\S]*desktopLyricsStable/);
+  assert.match(main, /desktopLyricsBounds/);
+  assert.match(main, /writeDesktopShellSettings\(\{[\s\S]*desktopLyricsBounds/);
+  assert.match(main, /savedDesktopLyricsBounds\(saved\.desktopLyricsBounds\)/);
 });
 
 test('desktop lyrics flowing glow is rendered on the overlay canvas', () => {
   assert.match(overlay, /canvas\{position:fixed/);
   assert.match(overlay, /drawAura\(rect, motion\)/);
+  assert.match(overlay, /drawGlowText\(rect, motion\)/);
   assert.match(overlay, /drawHighlightBloom\(rect, progress\)/);
   assert.match(overlay, /drawParticles\(rect, motion, now\)/);
-  assert.match(overlay, /body\.highlight \.line\{[\s\S]*var\(--lyric-progress\)/);
+  assert.match(overlay, /body\.highlight \.line,body\.flowing \.line/);
+  assert.match(overlay, /var\(--lyric-progress\)/);
 });
