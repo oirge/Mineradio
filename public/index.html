@@ -2981,7 +2981,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.60';
+var APP_VERSION = '1.2.61';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -32049,6 +32049,17 @@ function handleDesktopMiniPlayerCommand(payload) {
       updateFxInputs();
       saveLyricLayout();
       pushDesktopLyricsState(false);
+    });
+  }
+  if (typeof api.onDesktopLyricsStableRequest === 'function') {
+    api.onDesktopLyricsStableRequest(function(payload){
+      var nextStable = !!(payload && payload.stable === true);
+      if (fx.desktopLyricsStable === nextStable) return;
+      fx.desktopLyricsStable = nextStable;
+      updateFxInputs();
+      saveLyricLayout();
+      pushDesktopLyricsState(true);
+      showToast(nextStable ? '桌面歌词已固定' : '桌面歌词浮动已恢复');
     });
   }
 

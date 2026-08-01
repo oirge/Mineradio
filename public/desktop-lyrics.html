@@ -24,8 +24,8 @@
       --lyric-mask-edge-width:92px;
       --lyric-vertical-feather:46px;
       --lyric-css-beat-glow:0px;
-      --lyric-shadow-soft:rgba(156,255,223,.34);
-      --lyric-shadow-glow:rgba(156,255,223,.26);
+      --lyric-shadow-soft:rgba(156,255,223,.44);
+      --lyric-shadow-glow:rgba(156,255,223,.34);
       --lyric-shadow-hot:rgba(255,240,184,.22);
       --lyric-edge:rgba(4,6,12,.42);
       --lyric-drop:rgba(156,255,223,.38);
@@ -184,6 +184,8 @@
       padding:0 0 1px;
       font:900 16px/1 Arial,sans-serif;
     }
+    .lyrics-stable-toggle{display:flex;min-width:36px}
+    .lyrics-stable-toggle.active{color:var(--lyric-highlight);text-shadow:0 0 14px var(--lyric-glow)}
     .lyrics-size-value{
       display:none;
       align-items:center;
@@ -219,7 +221,7 @@
   <div class="wrap">
     <div id="stage" class="stage">
       <div id="lyricViewport" class="lyric-viewport"><div id="lyricScroller" class="lyric-scroll"><div id="line" class="line" data-text="Mineradio">Mineradio</div></div></div>
-      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="&#32553;&#23567;&#26700;&#38754;&#27468;&#35789;">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Enlarge desktop lyrics" title="&#25918;&#22823;&#26700;&#38754;&#27468;&#35789;">+</button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="Close desktop lyrics">&#20851;&#38381;&#26700;&#38754;&#27468;&#35789;</button></div>
+      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="&#32553;&#23567;&#26700;&#38754;&#27468;&#35789;">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Enlarge desktop lyrics" title="&#25918;&#22823;&#26700;&#38754;&#27468;&#35789;">+</button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="Close desktop lyrics">&#20851;&#38381;&#26700;&#38754;&#27468;&#35789;</button></div>
     </div>
   </div>
   <script>
@@ -236,6 +238,7 @@
     var sizeValue = document.getElementById('sizeValue');
     var sizeUpBtn = document.getElementById('sizeUpBtn');
     var lockToggleBtn = document.getElementById('lockToggleBtn');
+    var stableToggleBtn = document.getElementById('stableToggleBtn');
     var closeLyricsBtn = document.getElementById('closeLyricsBtn');
     var dpr = 1;
     var lastText = '';
@@ -750,6 +753,12 @@
       document.body.classList.toggle('unlocked', !locked);
       if (lockText) lockText.textContent = locked ? '\u4e2d\u952e\u89e3\u9501' : '\u4e2d\u952e\u9501\u5b9a';
       if (lockToggleBtn) lockToggleBtn.textContent = locked ? '\u89e3\u9501' : '\u9501\u5b9a';
+      if (stableToggleBtn) {
+        stableToggleBtn.textContent = state.stable === true ? '\u6d6e\u52a8' : '\u56fa\u5b9a';
+        stableToggleBtn.classList.toggle('active', state.stable === true);
+        stableToggleBtn.setAttribute('aria-pressed', state.stable === true ? 'true' : 'false');
+        stableToggleBtn.title = state.stable === true ? '\u6062\u590d\u6b4c\u8bcd\u4e0a\u4e0b\u6d6e\u52a8' : '\u56fa\u5b9a\u6b4c\u8bcd\u4f4d\u7f6e\uff0c\u4e0d\u4e0a\u4e0b\u6d6e\u52a8';
+      }
       syncSizeButtons();
     }
     function syncSizeButtons() {
@@ -843,6 +852,21 @@
         if (isFinite(Number(result.size))) applyLocalLyricsSize(result.size);
       }).catch(function(){
         if (sequence === sizeRequestSequence) applyLocalLyricsSize(previous);
+      });
+    }
+    function requestLyricsStable(stable) {
+      if (!window.desktopOverlay || !window.desktopOverlay.setLyricsStableState) return;
+      var previous = state.stable === true;
+      state.stable = !!stable;
+      syncLockClasses();
+      window.desktopOverlay.setLyricsStableState(state.stable).then(function(result){
+        if (!result || result.ok === false) {
+          state.stable = previous;
+          syncLockClasses();
+        }
+      }).catch(function(){
+        state.stable = previous;
+        syncLockClasses();
       });
     }
     function applyState(next){
@@ -1026,14 +1050,14 @@
       var ry = Math.max(rect.height * 1.02, 66) * (1 + live.solar * .10 + live.beat * .08);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = clamp(state.opacity, .28, 1, .92);
+      ctx.globalAlpha = clamp(state.opacity * 1.18, .28, 1, 1);
       ctx.translate(cx, cy);
       ctx.scale(rx, ry);
       var g = ctx.createRadialGradient(0,0,0,0,0,1);
-      g.addColorStop(0.00, colorWithAlpha(state.displayColors.highlight, .24));
-      g.addColorStop(0.28, colorWithAlpha(state.displayColors.glow, .15));
-      g.addColorStop(0.64, colorWithAlpha(state.displayColors.secondary, .040));
-      g.addColorStop(0.90, colorWithAlpha(state.displayColors.glow, .006));
+      g.addColorStop(0.00, colorWithAlpha(state.displayColors.highlight, .42));
+      g.addColorStop(0.28, colorWithAlpha(state.displayColors.glow, .28));
+      g.addColorStop(0.64, colorWithAlpha(state.displayColors.secondary, .085));
+      g.addColorStop(0.90, colorWithAlpha(state.displayColors.glow, .018));
       g.addColorStop(1.00, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -1048,15 +1072,15 @@
       var y = rect.top + rect.height * .50 - live.lift * .10;
       var rx = Math.max(42, Math.min(150, renderedFontSize * (1.05 + live.beat * .32)));
       var ry = Math.max(24, Math.min(82, renderedFontSize * (.42 + live.beat * .18)));
-      var alpha = clamp(.18 + live.solar * .12 + live.beat * .18, .12, .48) * clamp(state.opacity, .28, 1, .92);
+      var alpha = clamp(.34 + live.solar * .22 + live.beat * .28, .24, .78) * clamp(state.opacity, .28, 1, .92);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = alpha;
       ctx.translate(x, y);
       ctx.scale(rx, ry);
       var g = ctx.createRadialGradient(0,0,0,0,0,1);
-      g.addColorStop(0, colorWithAlpha(state.displayColors.highlight, .88));
-      g.addColorStop(.36, colorWithAlpha(state.displayColors.glow, .34));
+      g.addColorStop(0, colorWithAlpha(state.displayColors.highlight, 1));
+      g.addColorStop(.36, colorWithAlpha(state.displayColors.glow, .56));
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -1066,7 +1090,7 @@
     }
     function drawGlowText(rect, motion) {
       if (!state.lyricGlow || motion.glowStrength <= 0) return;
-      var target = Math.min(1.08, (0.09 + live.solar * .38 + live.beat * .22) * Math.min(3, motion.glowDrive));
+      var target = Math.min(1.50, (0.32 + live.solar * .82 + live.beat * .44) * Math.min(2.8, Math.max(.85, motion.glowDrive * 1.25)));
       live.glow += (target - live.glow) * (target > live.glow ? .11 : .06);
       if (live.glow <= .004) return;
       var text = line.textContent || 'Mineradio';
@@ -1076,10 +1100,10 @@
       var hotMix = Math.max(0, Math.min(1, live.solar * 1.05 + live.beat * .18));
       var color = hotMix > .42 ? state.displayColors.highlight : state.displayColors.glow;
       var layers = [
-        { blur:10, alpha:.54, stroke:Math.max(9, renderedFontSize * .09) },
-        { blur:24, alpha:.38, stroke:Math.max(15, renderedFontSize * .15) },
-        { blur:48, alpha:.20, stroke:Math.max(22, renderedFontSize * .22) },
-        { blur:78, alpha:.09, stroke:Math.max(30, renderedFontSize * .30) }
+        { blur:10, alpha:.88, stroke:Math.max(9, renderedFontSize * .09) },
+        { blur:24, alpha:.66, stroke:Math.max(15, renderedFontSize * .15) },
+        { blur:48, alpha:.42, stroke:Math.max(22, renderedFontSize * .22) },
+        { blur:78, alpha:.22, stroke:Math.max(30, renderedFontSize * .30) }
       ];
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -1368,6 +1392,14 @@
         evt.preventDefault();
         evt.stopPropagation();
         requestLyricsSize(DESKTOP_LYRICS_SIZE_STEP);
+        setHintVisible(true);
+      });
+    }
+    if (stableToggleBtn) {
+      stableToggleBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsStable(state.stable !== true);
         setHintVisible(true);
       });
     }

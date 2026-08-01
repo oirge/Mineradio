@@ -88,6 +88,12 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     ipcRenderer.on('mineradio-desktop-lyrics-size-request', listener);
     return () => ipcRenderer.removeListener('mineradio-desktop-lyrics-size-request', listener);
   },
+  onDesktopLyricsStableRequest: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-desktop-lyrics-stable-request', listener);
+    return () => ipcRenderer.removeListener('mineradio-desktop-lyrics-stable-request', listener);
+  },
   setWallpaperMode: (enabled, payload) => ipcRenderer.invoke('mineradio-wallpaper-set-enabled', !!enabled, payload || {}),
   updateWallpaperMode: (payload) => ipcRenderer.invoke('mineradio-wallpaper-update', payload || {}),
   onStateChange: (callback) => {

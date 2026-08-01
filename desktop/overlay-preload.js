@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('desktopOverlay', {
   setLyricsPointerCapture: (active) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-pointer-capture', !!active),
   setLyricsHotBounds: (bounds) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-hot-bounds', bounds || {}),
   setLyricsLockState: (locked) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-lock-state', !!locked),
+  setLyricsStableState: (stable) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-stable-state', !!stable),
   setLyricsSize: (size) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-size', Number(size)),
   moveLyricsBy: (dx, dy) => ipcRenderer.invoke('mineradio-desktop-lyrics-move-by', Number(dx) || 0, Number(dy) || 0),
   closeLyrics: () => ipcRenderer.invoke('mineradio-desktop-lyrics-set-enabled', false, {}),

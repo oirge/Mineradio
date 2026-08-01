@@ -1364,6 +1364,7 @@ function desktopLyricsStateSignature(state) {
     payload.clickThrough === false ? 0 : 1,
     payload.lyricGlowParticles ? 1 : 0,
     payload.cinema === false ? 0 : 1,
+    payload.stable ? 1 : 0,
     payload.highlightFollow ? 1 : 0,
     payload.frameRate || 0,
     payload.fontFamily || '',
@@ -2596,6 +2597,21 @@ async function handleDesktopLyricsLockState(event, locked) {
 }
 
 ipcMain.handle('mineradio-desktop-lyrics-set-lock-state', handleDesktopLyricsLockState);
+
+async function handleDesktopLyricsStableState(event, stable) {
+  try {
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
+      return { ok: false, error: 'MAIN_RENDERER_UNAVAILABLE' };
+    }
+    mainWindow.webContents.send('mineradio-desktop-lyrics-stable-request', { stable: !!stable });
+    return { ok: true, stable: !!stable };
+  } catch (e) {
+    return { ok: false, error: e.message || 'DESKTOP_LYRICS_STABLE_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-desktop-lyrics-set-stable-state', handleDesktopLyricsStableState);
 
 /**
  * 请求主 renderer 持久化桌面歌词字号；覆盖层只负责交互，不成为第二套设置真源。
