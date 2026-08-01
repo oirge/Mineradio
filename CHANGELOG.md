@@ -1,3 +1,8 @@
+## Unreleased
+
+- 桌面歌词新增「固定不跳动」选项（关闭切行弹入和上下漂浮，垂直位置保持固定）
+- 接通主软件歌词光效流动（canvas 轻量 aura + progress 高亮 bloom + 粒子，已默认高亮跟随开启并改善边缘流动效果）
+
 # Changelog
 
 ## Unreleased

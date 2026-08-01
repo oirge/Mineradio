@@ -34,7 +34,7 @@
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;user-select:none}
     body{opacity:0;transition:opacity .22s ease;-webkit-app-region:no-drag}
     body.show{opacity:1}
-    canvas{display:none}
+    canvas{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none;z-index:1}
     .wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 12px;pointer-events:none}
     .stage{
       position:relative;
@@ -114,13 +114,15 @@
       background:linear-gradient(90deg,
         var(--lyric-highlight) 0%,
         var(--lyric-highlight) max(0%,calc(var(--lyric-progress) - var(--lyric-feather))),
-        var(--lyric-glow) calc(var(--lyric-progress) + 1.2%),
-        var(--lyric-primary) calc(var(--lyric-progress) + var(--lyric-feather)),
+        color-mix(in srgb,var(--lyric-highlight) 72%,var(--lyric-glow)) var(--lyric-progress),
+        var(--lyric-glow) calc(var(--lyric-progress) + max(1.6%,var(--lyric-feather) * .55)),
+        var(--lyric-primary) calc(var(--lyric-progress) + var(--lyric-feather) * 1.35),
         var(--lyric-primary) 100%);
       -webkit-background-clip:text;
       background-clip:text;
     }
     .line.in{animation:lyr-in 820ms cubic-bezier(.16,.84,.32,1.02) forwards}
+    body.stable .line.in{animation:lyr-in-stable 420ms cubic-bezier(.2,.8,.2,1) forwards}
     body.paused .line{filter:none;opacity:.84}
     .lock-hint{
       position:absolute;
@@ -205,6 +207,10 @@
       58%{opacity:1;filter:blur(0)}
       100%{opacity:1;transform:translate3d(0,0,0) rotateX(0deg) rotateY(0deg) scale(1);filter:blur(0)}
     }
+    @keyframes lyr-in-stable{
+      0%{opacity:0;transform:translate3d(0,0,0) scale(.985);filter:blur(4px)}
+      100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:blur(0)}
+    }
   </style>
 </head>
 <body>
@@ -260,7 +266,7 @@
     var state = {
       enabled:false,text:'Mineradio',progress:0,progressSpan:4.8,progressReceivedAt:0,playing:false,
       playbackTime:0,playbackDuration:0,playbackRate:1,playbackReceivedAt:0,beatMapKey:'',
-      size:1,opacity:.92,clickThrough:true,lyricGlowParticles:false,cinema:true,highlightFollow:false,frameRate:60,
+      size:1,opacity:.92,clickThrough:true,lyricGlowParticles:false,cinema:true,stable:false,highlightFollow:false,frameRate:60,
       lyricGlow:true,lyricGlowBeat:true,lyricGlowStrength:.35,highBloom:0,beatGlow:0,beatPulse:0,bass:0,feather:.055,
       fontFamily:'Inter,"Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif',
       fontWeight:900,letterSpacing:0,lineHeight:1,lyricScale:1,rows:'double',align:'center',
@@ -896,8 +902,11 @@
       setRootVar('--lyric-line-height', String(state.lineHeight));
       setRootVar('--lyric-align', state.align);
       setRootVar('--lyric-feather', (state.feather * 100).toFixed(2) + '%');
+      state.stable = state.stable === true;
+      state.highlightFollow = state.highlightFollow === true;
       document.body.classList.toggle('show', !!state.enabled);
       document.body.classList.toggle('paused', !state.playing);
+      document.body.classList.toggle('stable', state.stable === true);
       document.body.classList.toggle('highlight', state.highlightFollow === true);
       document.body.style.opacity = state.enabled ? String(clamp(state.opacity, .28, 1, .92)) : '0';
       syncLockClasses();
@@ -989,18 +998,19 @@
     }
     function applyStageMotion(now) {
       var cinemaBinding = state.cinema !== false;
+      var stableLock = state.stable === true;
       var motionBeat = cinemaBinding ? live.beat : 0;
       var motionSolar = cinemaBinding ? live.solar : 0;
       var motionBass = cinemaBinding ? live.bass : 0;
-      var targetLift = cinemaBinding ? Math.min(22, motionBeat * 18 + motionSolar * 5.2 + motionBass * 4.4) : 0;
-      live.lift += (targetLift - live.lift) * (targetLift > live.lift ? .46 : .16);
-      var floatY = Math.sin(now * 1.08) * -9.8 + Math.sin(now * 2.10 + .7) * 3.1;
-      var floatX = Math.sin(now * .70 + .4) * 6.2 + Math.sin(now * 1.18 + 1.1) * 2.6;
+      var targetLift = (!stableLock && cinemaBinding) ? Math.min(22, motionBeat * 18 + motionSolar * 5.2 + motionBass * 4.4) : 0;
+      live.lift += (targetLift - live.lift) * (targetLift > live.lift ? .46 : (stableLock ? .42 : .16));
+      var floatY = stableLock ? 0 : (Math.sin(now * 1.08) * -9.8 + Math.sin(now * 2.10 + .7) * 3.1);
+      var floatX = stableLock ? 0 : (Math.sin(now * .70 + .4) * 6.2 + Math.sin(now * 1.18 + 1.1) * 2.6);
       var bobY = floatY - live.lift;
-      var bobX = floatX + Math.sin(now * 1.55) * motionBeat * 3.4;
-      var rotX = Math.sin(now * .86 + .2) * 3.25 - motionBeat * .92;
-      var rotY = Math.sin(now * .74 + 1.3) * -2.75 + motionBeat * .34;
-      var scale = 1 + motionBeat * .115 + motionSolar * .034 + motionBass * .026;
+      var bobX = stableLock ? 0 : (floatX + Math.sin(now * 1.55) * motionBeat * 3.4);
+      var rotX = stableLock ? 0 : (Math.sin(now * .86 + .2) * 3.25 - motionBeat * .92);
+      var rotY = stableLock ? 0 : (Math.sin(now * .74 + 1.3) * -2.75 + motionBeat * .34);
+      var scale = stableLock ? (1 + motionBeat * .028 + motionSolar * .012) : (1 + motionBeat * .115 + motionSolar * .034 + motionBass * .026);
       live.scale += (scale - live.scale) * (scale > live.scale ? .46 : .16);
       stage.style.transform = 'translate3d(' + bobX.toFixed(2) + 'px,' + bobY.toFixed(2) + 'px,0) rotateX(' + rotX.toFixed(3) + 'deg) rotateY(' + rotY.toFixed(3) + 'deg) scale(' + live.scale.toFixed(4) + ')';
       stage.style.filter = 'brightness(' + (1.04 + motionBeat * .12 + motionSolar * .05).toFixed(3) + ') saturate(' + (1.08 + motionBeat * .10).toFixed(3) + ')';
@@ -1143,7 +1153,19 @@
         var motion = updateMotion(now, offlineMotion);
         applyStageMotion(now);
         updateLyricScroll(nowMs, progress);
+        var rect = line.getBoundingClientRect();
+        if (canvas.width && canvas.height) {
+          ctx.clearRect(0, 0, innerWidth, innerHeight);
+          if (rect && rect.width > 1 && rect.height > 1) {
+            drawAura(rect, motion);
+            // Soft progress-edge bloom only; skip multi-blur glyph glow to keep fill clean.
+            drawHighlightBloom(rect, progress);
+            drawParticles(rect, motion, now);
+          }
+        }
         sendHotBounds(false);
+      } else if (canvas.width && canvas.height) {
+        ctx.clearRect(0, 0, innerWidth, innerHeight);
       }
       scheduleNextDraw();
     }

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -2214,7 +2214,8 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         <div class="fx-toggle" id="t-desktopLyrics" onclick="toggleFx('desktopLyrics')" title="全屏幕置顶歌词"><span>桌面歌词</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-desktopLyricsClickThrough" onclick="toggleFx('desktopLyricsClickThrough')" title="锁定后防误触；鼠标移到桌面歌词上按中键可锁定/解锁"><span>桌面歌词锁定</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-desktopLyricsCinema" onclick="toggleFx('desktopLyricsCinema')" title="桌面歌词绑定鼓点电影震动，基础漂浮始终保留"><span>桌面歌词电影震动</span><span class="dot"></span></div>
-        <div class="fx-toggle" id="t-desktopLyricsHighlight" onclick="toggleFx('desktopLyricsHighlight')" title="桌面歌词按播放进度高亮"><span>桌面歌词高亮跟随</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-desktopLyricsHighlight" onclick="toggleFx('desktopLyricsHighlight')" title="桌面歌词按播放进度高亮，金色到青色的进度光带沿歌词流动"><span>桌面歌词高亮跟随</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-desktopLyricsStable" onclick="toggleFx('desktopLyricsStable')" title="关闭切行弹入与上下漂浮，歌词垂直位置保持固定"><span>桌面歌词固定不跳</span><span class="dot"></span></div>
         <div class="fx-toggle dev-locked" id="t-wallpaperMode" onclick="toggleFx('wallpaperMode')" title="开发中，暂不可用"><span>壁纸模式<em class="fx-dev-badge">开发中</em></span><span class="dot"></span></div>
       </div>
       <div class="fx-section-label">桌面 / 壁纸</div>
@@ -3530,7 +3531,8 @@ var fxDefaults = {
   desktopLyricsY: 0.76,
   desktopLyricsClickThrough: false,
   desktopLyricsCinema: true,
-  desktopLyricsHighlight: false,
+  desktopLyricsStable: false,
+  desktopLyricsHighlight: true,
   desktopLyricsFps: 60,
   desktopLyricsRows: 'double',
   desktopLyricsAlign: 'center',
@@ -3621,7 +3623,8 @@ var PACKAGED_DEFAULT_FX_SNAPSHOT = Object.freeze({
   desktopLyricsY: 0.76,
   desktopLyricsClickThrough: false,
   desktopLyricsCinema: true,
-  desktopLyricsHighlight: false,
+  desktopLyricsStable: false,
+  desktopLyricsHighlight: true,
   desktopLyricsFps: 60,
   desktopLyricsRows: 'double',
   desktopLyricsAlign: 'center',
@@ -8172,6 +8175,7 @@ function readSavedLyricLayout() {
       desktopLyricsY: clampRange(raw.desktopLyricsY == null ? fxDefaults.desktopLyricsY : Number(raw.desktopLyricsY), 0.08, 0.92),
       desktopLyricsClickThrough: desktopLyricsSchemaReady ? raw.desktopLyricsClickThrough === true : fxDefaults.desktopLyricsClickThrough,
       desktopLyricsCinema: desktopLyricsSchemaReady ? raw.desktopLyricsCinema !== false : fxDefaults.desktopLyricsCinema,
+      desktopLyricsStable: desktopLyricsSchemaReady ? raw.desktopLyricsStable === true : fxDefaults.desktopLyricsStable,
       desktopLyricsHighlight: desktopLyricsSchemaReady ? raw.desktopLyricsHighlight === true : fxDefaults.desktopLyricsHighlight,
       desktopLyricsFps: desktopLyricsSchemaReady ? normalizeDesktopLyricsFps(raw.desktopLyricsFps) : fxDefaults.desktopLyricsFps,
       desktopLyricsRows: desktopLyricsSchemaReady ? normalizeDesktopLyricsRows(raw.desktopLyricsRows) : fxDefaults.desktopLyricsRows,
@@ -8264,6 +8268,7 @@ function saveLyricLayout() {
       desktopLyricsY: clampRange(fx.desktopLyricsY == null ? fxDefaults.desktopLyricsY : Number(fx.desktopLyricsY), 0.08, 0.92),
       desktopLyricsClickThrough: fx.desktopLyricsClickThrough === true,
       desktopLyricsCinema: fx.desktopLyricsCinema !== false,
+      desktopLyricsStable: fx.desktopLyricsStable === true,
       desktopLyricsHighlight: fx.desktopLyricsHighlight === true,
       desktopLyricsFps: normalizeDesktopLyricsFps(fx.desktopLyricsFps),
       desktopLyricsRows: normalizeDesktopLyricsRows(fx.desktopLyricsRows),
@@ -25753,6 +25758,7 @@ function normalizeFxArchiveSnapshot(raw) {
     desktopLyricsY: archiveNumber(raw, 'desktopLyricsY', fxDefaults.desktopLyricsY, 0.08, 0.92),
     desktopLyricsClickThrough: raw.desktopLyricsClickThrough === true,
     desktopLyricsCinema: raw.desktopLyricsCinema !== false,
+    desktopLyricsStable: raw.desktopLyricsStable === true,
     desktopLyricsHighlight: raw.desktopLyricsHighlight === true,
     desktopLyricsFps: normalizeDesktopLyricsFps(Object.prototype.hasOwnProperty.call(raw, 'desktopLyricsFps') ? raw.desktopLyricsFps : fxDefaults.desktopLyricsFps),
     desktopLyricsRows: normalizeDesktopLyricsRows(raw.desktopLyricsRows || fxDefaults.desktopLyricsRows),
@@ -26880,7 +26886,8 @@ function updateDevelopmentFxControls() {
     ['desktopLyrics', 't-desktopLyrics', '全屏幕置顶歌词'],
     ['desktopLyricsClickThrough', 't-desktopLyricsClickThrough', '锁定后防误触；鼠标移到桌面歌词上按中键可锁定/解锁'],
     ['desktopLyricsCinema', 't-desktopLyricsCinema', '桌面歌词绑定鼓点电影震动，基础漂浮始终保留'],
-    ['desktopLyricsHighlight', 't-desktopLyricsHighlight', '桌面歌词按播放进度高亮'],
+    ['desktopLyricsStable', 't-desktopLyricsStable', '关闭切行弹入与上下漂浮，歌词垂直位置保持固定'],
+    ['desktopLyricsHighlight', 't-desktopLyricsHighlight', '桌面歌词按播放进度高亮，金色到青色的进度光带沿歌词流动'],
     ['wallpaperMode', 't-wallpaperMode', '开发中，暂不可用']
   ].forEach(function(item){
     var locked = isDevelopmentLockedFx(item[0]);
@@ -27033,6 +27040,8 @@ function updateFxInputs() {
   if (desktopLyricsClickToggle) desktopLyricsClickToggle.classList.toggle('on', fx.desktopLyricsClickThrough !== false);
   var desktopLyricsCinemaToggle = document.getElementById('t-desktopLyricsCinema');
   if (desktopLyricsCinemaToggle) desktopLyricsCinemaToggle.classList.toggle('on', fx.desktopLyricsCinema !== false);
+  var desktopLyricsStableToggle = document.getElementById('t-desktopLyricsStable');
+  if (desktopLyricsStableToggle) desktopLyricsStableToggle.classList.toggle('on', fx.desktopLyricsStable === true);
   var desktopLyricsHighlightToggle = document.getElementById('t-desktopLyricsHighlight');
   if (desktopLyricsHighlightToggle) desktopLyricsHighlightToggle.classList.toggle('on', fx.desktopLyricsHighlight === true);
   updateDesktopLyricsFpsControls();
@@ -27256,6 +27265,7 @@ function ensureLyricPrimaryControls() {
     't-desktopLyrics',
     't-desktopLyricsClickThrough',
     't-desktopLyricsCinema',
+    't-desktopLyricsStable',
     't-desktopLyricsHighlight',
     't-lyricCameraLock',
     't-lyricGlow',
@@ -27929,10 +27939,10 @@ function toggleFx(key) {
   var toggle = document.getElementById(toggleId);
   if (toggle) toggle.classList.toggle('on', fx[key]);
   syncFxUniforms();
-  if (key === 'lyricCameraLock' || key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles' || key === 'bloom' || key === 'edge' || key === 'cinema' || key === 'desktopLyrics' || key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsHighlight' || key === 'wallpaperMode' || key === 'shelfShowPodcasts' || key === 'shelfMergeCollections' || key === 'liveBackgroundKeep') saveLyricLayout();
+  if (key === 'lyricCameraLock' || key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles' || key === 'bloom' || key === 'edge' || key === 'cinema' || key === 'desktopLyrics' || key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsStable' || key === 'desktopLyricsHighlight' || key === 'wallpaperMode' || key === 'shelfShowPodcasts' || key === 'shelfMergeCollections' || key === 'liveBackgroundKeep') saveLyricLayout();
   if (key === 'floatLayer') { if (fx.floatLayer) createFloatLayer(); else destroyFloatLayer(); }
   if (key === 'desktopLyrics') applyDesktopLyricsState(true);
-  if (key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsHighlight') pushDesktopLyricsState(true);
+  if (key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsStable' || key === 'desktopLyricsHighlight') pushDesktopLyricsState(true);
   if (key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles') pushDesktopLyricsState(true);
   if (key === 'wallpaperMode') applyWallpaperModeState(true);
   if (key === 'shelfShowPodcasts' || key === 'shelfMergeCollections') {
@@ -27957,7 +27967,8 @@ function toggleFx(key) {
   if (key === 'desktopLyrics') showToast(fx.desktopLyrics ? '桌面歌词已开启' : '桌面歌词已关闭');
   if (key === 'desktopLyricsClickThrough') showToast(fx.desktopLyricsClickThrough !== false ? '桌面歌词已锁定' : '桌面歌词可移动');
   if (key === 'desktopLyricsCinema') showToast(fx.desktopLyricsCinema !== false ? '桌面歌词电影震动已开启' : '桌面歌词电影震动已关闭，基础漂浮保留');
-  if (key === 'desktopLyricsHighlight') showToast(fx.desktopLyricsHighlight === true ? '桌面歌词高亮跟随已开启' : '桌面歌词高亮跟随已关闭');
+  if (key === 'desktopLyricsStable') showToast(fx.desktopLyricsStable === true ? '桌面歌词已固定，不再上下跳动' : '桌面歌词固定已关闭');
+  if (key === 'desktopLyricsHighlight') showToast(fx.desktopLyricsHighlight === true ? '桌面歌词高亮光效流动已开启' : '桌面歌词高亮跟随已关闭');
   if (key === 'wallpaperMode') showToast(fx.wallpaperMode ? '壁纸模式已开启' : '壁纸模式已关闭');
   if (key === 'shelfShowPodcasts') showToast('3D歌单架已保持纯本地内容');
   if (key === 'shelfMergeCollections') showToast(fx.shelfMergeCollections === true ? '我的歌单与收藏歌单已合并滚动' : '收藏歌单恢复滚到底切页');
@@ -31430,6 +31441,7 @@ var desktopLyricsPayloadCache = {
   clickThrough: true,
   lyricGlowParticles: false,
   cinema: true,
+  stable: false,
   highlightFollow: false,
   frameRate: 0,
   fontFamily: '',
@@ -31598,6 +31610,7 @@ function desktopLyricsPayload(forceBeatMap) {
   payload.clickThrough = isDevelopmentLockedFx('desktopLyricsClickThrough') ? true : fx.desktopLyricsClickThrough !== false;
   payload.lyricGlowParticles = !!fx.lyricGlowParticles;
   payload.cinema = fx.desktopLyricsCinema !== false;
+  payload.stable = fx.desktopLyricsStable === true;
   payload.highlightFollow = fx.desktopLyricsHighlight === true;
   payload.frameRate = normalizeDesktopLyricsFps(fx.desktopLyricsFps);
   payload.fontFamily = lyricFontStackForKey(fx.lyricFont);
@@ -31618,7 +31631,7 @@ function roundOverlayNumber(value, scale) {
   var n = Number(value);
   return isFinite(n) ? Math.round(n * (scale || 1000)) : 0;
 }
-var desktopLyricsSignatureParts = new Array(39);
+var desktopLyricsSignatureParts = new Array(40);
 function desktopLyricsPayloadSignature(payload) {
   payload = payload || {};
   var colors = payload.colors || {};
@@ -31639,6 +31652,7 @@ function desktopLyricsPayloadSignature(payload) {
   parts[i++] = payload.clickThrough === false ? 0 : 1;
   parts[i++] = payload.lyricGlowParticles ? 1 : 0;
   parts[i++] = payload.cinema === false ? 0 : 1;
+  parts[i++] = payload.stable ? 1 : 0;
   parts[i++] = payload.highlightFollow ? 1 : 0;
   parts[i++] = payload.frameRate || 0;
   parts[i++] = payload.fontFamily || '';
