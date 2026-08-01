@@ -25,16 +25,22 @@ test('stable desktop lyrics mode is wired through the renderer payload', () => {
   assert.match(overlay, /var bobX = stableLock \? 0/);
   assert.match(overlay, /id="stableToggleBtn"/);
   assert.match(overlay, /setLyricsStableState/);
+  assert.match(overlay, /id="glowDownBtn"/);
+  assert.match(overlay, /id="glowUpBtn"/);
+  assert.match(overlay, /setLyricsGlowStrength/);
   assert.match(renderer, /desktopLyricsStable: false/);
   assert.match(renderer, /payload\.stable = fx\.desktopLyricsStable === true/);
   assert.match(renderer, /parts\[i\+\+\] = payload\.stable \? 1 : 0/);
   assert.match(renderer, /onDesktopLyricsStableRequest/);
   assert.match(renderer, /showToast\(nextStable \? '桌面歌词已固定' : '桌面歌词浮动已恢复'\)/);
+  assert.match(renderer, /onDesktopLyricsGlowStrengthRequest/);
+  assert.match(renderer, /showToast\('歌词光效 ' \+ Math\.round\(nextStrength \* 100\) \+ '%'/);
   assert.match(renderer, /desktopLyricsClickThrough'[\s\S]*desktopLyricsStable/);
   assert.match(main, /desktopLyricsBounds/);
   assert.match(main, /writeDesktopShellSettings\(\{[\s\S]*desktopLyricsBounds/);
   assert.match(main, /savedDesktopLyricsBounds\(saved\.desktopLyricsBounds\)/);
   assert.match(main, /mineradio-desktop-lyrics-set-stable-state/);
+  assert.match(main, /mineradio-desktop-lyrics-set-glow-strength/);
 });
 
 test('desktop lyrics flowing glow is rendered on the overlay canvas', () => {

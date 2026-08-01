@@ -186,6 +186,8 @@
     }
     .lyrics-stable-toggle{display:flex;min-width:36px}
     .lyrics-stable-toggle.active{color:var(--lyric-highlight);text-shadow:0 0 14px var(--lyric-glow)}
+    .lyrics-tool-label{display:flex;align-items:center;height:22px;margin:0 -2px 0 1px;color:rgba(255,255,255,.58);font:800 10px/1 "Microsoft YaHei",sans-serif;white-space:nowrap}
+    .lyrics-glow-step{display:flex;width:20px;margin-right:-4px;padding:0 0 1px;font:900 15px/1 Arial,sans-serif}
     .lyrics-size-value{
       display:none;
       align-items:center;
@@ -194,6 +196,20 @@
       height:22px;
       margin:0 -4px;
       color:rgba(255,255,255,.52);
+      font:800 10px/1 "Microsoft YaHei",sans-serif;
+      font-variant-numeric:tabular-nums;
+      text-align:right;
+      white-space:nowrap;
+      pointer-events:none;
+    }
+    .lyrics-glow-value{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      width:34px;
+      height:22px;
+      margin:0 -4px;
+      color:rgba(255,255,255,.64);
       font:800 10px/1 "Microsoft YaHei",sans-serif;
       font-variant-numeric:tabular-nums;
       text-align:right;
@@ -221,7 +237,7 @@
   <div class="wrap">
     <div id="stage" class="stage">
       <div id="lyricViewport" class="lyric-viewport"><div id="lyricScroller" class="lyric-scroll"><div id="line" class="line" data-text="Mineradio">Mineradio</div></div></div>
-      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="&#32553;&#23567;&#26700;&#38754;&#27468;&#35789;">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Enlarge desktop lyrics" title="&#25918;&#22823;&#26700;&#38754;&#27468;&#35789;">+</button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="Close desktop lyrics">&#20851;&#38381;&#26700;&#38754;&#27468;&#35789;</button></div>
+      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="&#32553;&#23567;&#26700;&#38754;&#27468;&#35789;">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Enlarge desktop lyrics" title="&#25918;&#22823;&#26700;&#38754;&#27468;&#35789;">+</button><span class="lyrics-tool-label">光效</span><button id="glowDownBtn" class="lyrics-tool-btn lyrics-glow-step" type="button" aria-label="Reduce lyric glow" title="减弱歌词光效">&#8722;</button><span id="glowValue" class="lyrics-glow-value" aria-live="polite">35%</span><button id="glowUpBtn" class="lyrics-tool-btn lyrics-glow-step" type="button" aria-label="Increase lyric glow" title="增强歌词光效">+</button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="Close desktop lyrics">&#20851;&#38381;&#26700;&#38754;&#27468;&#35789;</button></div>
     </div>
   </div>
   <script>
@@ -237,6 +253,9 @@
     var sizeDownBtn = document.getElementById('sizeDownBtn');
     var sizeValue = document.getElementById('sizeValue');
     var sizeUpBtn = document.getElementById('sizeUpBtn');
+    var glowDownBtn = document.getElementById('glowDownBtn');
+    var glowValue = document.getElementById('glowValue');
+    var glowUpBtn = document.getElementById('glowUpBtn');
     var lockToggleBtn = document.getElementById('lockToggleBtn');
     var stableToggleBtn = document.getElementById('stableToggleBtn');
     var closeLyricsBtn = document.getElementById('closeLyricsBtn');
@@ -264,6 +283,10 @@
     var DESKTOP_LYRICS_SIZE_MIN = .20;
     var DESKTOP_LYRICS_SIZE_MAX = 1.55;
     var DESKTOP_LYRICS_SIZE_STEP = .05;
+    var DESKTOP_LYRICS_GLOW_MIN = 0;
+    var DESKTOP_LYRICS_GLOW_MAX = .85;
+    var DESKTOP_LYRICS_GLOW_STEP = .05;
+    var glowRequestSequence = 0;
     var scrollState = { needed:false, overflow:0, limit:0, offset:0, dir:-1, holdUntil:0, lastAt:0 };
     var particles = [];
     var live = { solar:0, beat:0, bass:0, scale:1, glow:0, spark:0, lift:0 };
@@ -760,12 +783,19 @@
         stableToggleBtn.title = state.stable === true ? '\u6062\u590d\u6b4c\u8bcd\u4e0a\u4e0b\u6d6e\u52a8' : '\u56fa\u5b9a\u6b4c\u8bcd\u4f4d\u7f6e\uff0c\u4e0d\u4e0a\u4e0b\u6d6e\u52a8';
       }
       syncSizeButtons();
+      syncGlowButtons();
     }
     function syncSizeButtons() {
       var size = clamp(state.size, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, 1);
       if (sizeValue) sizeValue.textContent = Math.round(size * 100) + '%';
       if (sizeDownBtn) sizeDownBtn.disabled = isLocked() || size <= DESKTOP_LYRICS_SIZE_MIN + .0001;
       if (sizeUpBtn) sizeUpBtn.disabled = isLocked() || size >= DESKTOP_LYRICS_SIZE_MAX - .0001;
+    }
+    function syncGlowButtons() {
+      var glow = clamp(state.lyricGlowStrength, DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, .35);
+      if (glowValue) glowValue.textContent = Math.round(glow * 100) + '%';
+      if (glowDownBtn) glowDownBtn.disabled = glow <= DESKTOP_LYRICS_GLOW_MIN + .0001;
+      if (glowUpBtn) glowUpBtn.disabled = glow >= DESKTOP_LYRICS_GLOW_MAX - .0001;
     }
     function setPointerCapture(active) {
       active = !!active;
@@ -836,6 +866,11 @@
       syncSizeButtons();
       return state.size;
     }
+    function applyLocalLyricsGlowStrength(value) {
+      state.lyricGlowStrength = clamp(value, DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, state.lyricGlowStrength || .35);
+      syncGlowButtons();
+      return state.lyricGlowStrength;
+    }
     function requestLyricsSize(delta) {
       if (isLocked() || !window.desktopOverlay || !window.desktopOverlay.setLyricsSize) return;
       var previous = clamp(state.size, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, 1);
@@ -852,6 +887,24 @@
         if (isFinite(Number(result.size))) applyLocalLyricsSize(result.size);
       }).catch(function(){
         if (sequence === sizeRequestSequence) applyLocalLyricsSize(previous);
+      });
+    }
+    function requestLyricsGlowStrength(delta) {
+      if (!window.desktopOverlay || !window.desktopOverlay.setLyricsGlowStrength) return;
+      var previous = clamp(state.lyricGlowStrength, DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, .35);
+      var next = Math.round(clamp(previous + Number(delta || 0), DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, previous) * 100) / 100;
+      if (Math.abs(next - previous) < .001) return;
+      var sequence = ++glowRequestSequence;
+      applyLocalLyricsGlowStrength(next);
+      window.desktopOverlay.setLyricsGlowStrength(next).then(function(result){
+        if (sequence !== glowRequestSequence) return;
+        if (!result || result.ok !== true || result.ignored === true) {
+          applyLocalLyricsGlowStrength(previous);
+          return;
+        }
+        if (isFinite(Number(result.strength))) applyLocalLyricsGlowStrength(result.strength);
+      }).catch(function(){
+        if (sequence === glowRequestSequence) applyLocalLyricsGlowStrength(previous);
       });
     }
     function requestLyricsStable(stable) {
@@ -1392,6 +1445,22 @@
         evt.preventDefault();
         evt.stopPropagation();
         requestLyricsSize(DESKTOP_LYRICS_SIZE_STEP);
+        setHintVisible(true);
+      });
+    }
+    if (glowDownBtn) {
+      glowDownBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsGlowStrength(-DESKTOP_LYRICS_GLOW_STEP);
+        setHintVisible(true);
+      });
+    }
+    if (glowUpBtn) {
+      glowUpBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsGlowStrength(DESKTOP_LYRICS_GLOW_STEP);
         setHintVisible(true);
       });
     }

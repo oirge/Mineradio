@@ -94,6 +94,12 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     ipcRenderer.on('mineradio-desktop-lyrics-stable-request', listener);
     return () => ipcRenderer.removeListener('mineradio-desktop-lyrics-stable-request', listener);
   },
+  onDesktopLyricsGlowStrengthRequest: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-desktop-lyrics-glow-strength-request', listener);
+    return () => ipcRenderer.removeListener('mineradio-desktop-lyrics-glow-strength-request', listener);
+  },
   setWallpaperMode: (enabled, payload) => ipcRenderer.invoke('mineradio-wallpaper-set-enabled', !!enabled, payload || {}),
   updateWallpaperMode: (payload) => ipcRenderer.invoke('mineradio-wallpaper-update', payload || {}),
   onStateChange: (callback) => {

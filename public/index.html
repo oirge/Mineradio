@@ -8132,7 +8132,7 @@ function readSavedLyricLayout() {
       scatter: clampRange(Number(raw.scatter) || fxDefaults.scatter, 0, 0.5),
       bgFade: clampRange(Number(raw.bgFade) || fxDefaults.bgFade, 0, 1.2),
       bloomStrength: clampRange(Number(raw.bloomStrength) || fxDefaults.bloomStrength, 0, 1.6),
-      lyricGlowStrength: clampRange(Number(raw.lyricGlowStrength) || fxDefaults.lyricGlowStrength, 0, 0.85),
+      lyricGlowStrength: clampRange(isFinite(Number(raw.lyricGlowStrength)) ? Number(raw.lyricGlowStrength) : fxDefaults.lyricGlowStrength, 0, 0.85),
       lyricScale: clampRange(Number(raw.lyricScale) || 1, 0.35, 1.65),
       lyricOffsetX: clampRange(Number(raw.lyricOffsetX) || 0, -2.0, 2.0),
       lyricOffsetY: clampRange(Number(raw.lyricOffsetY) || 0, -1.2, 1.35),
@@ -8225,7 +8225,7 @@ function saveLyricLayout() {
       scatter: clampRange(Number(fx.scatter) || fxDefaults.scatter, 0, 0.5),
       bgFade: clampRange(Number(fx.bgFade) || fxDefaults.bgFade, 0, 1.2),
       bloomStrength: clampRange(Number(fx.bloomStrength) || fxDefaults.bloomStrength, 0, 1.6),
-      lyricGlowStrength: clampRange(Number(fx.lyricGlowStrength) || fxDefaults.lyricGlowStrength, 0, 0.85),
+      lyricGlowStrength: clampRange(isFinite(Number(fx.lyricGlowStrength)) ? Number(fx.lyricGlowStrength) : fxDefaults.lyricGlowStrength, 0, 0.85),
       lyricScale: clampRange(Number(fx.lyricScale) || 1, 0.35, 1.65),
       lyricOffsetX: clampRange(Number(fx.lyricOffsetX) || 0, -2.0, 2.0),
       lyricOffsetY: clampRange(Number(fx.lyricOffsetY) || 0, -1.2, 1.35),
@@ -32060,6 +32060,21 @@ function handleDesktopMiniPlayerCommand(payload) {
       saveLyricLayout();
       pushDesktopLyricsState(true);
       showToast(nextStable ? '桌面歌词已固定' : '桌面歌词浮动已恢复');
+    });
+  }
+  if (typeof api.onDesktopLyricsGlowStrengthRequest === 'function') {
+    api.onDesktopLyricsGlowStrengthRequest(function(payload){
+      var currentStrength = Number(fx.lyricGlowStrength);
+      if (!isFinite(currentStrength)) currentStrength = fxDefaults.lyricGlowStrength;
+      currentStrength = clampRange(currentStrength, 0, 0.85);
+      var requestedStrength = Number(payload && payload.strength);
+      var nextStrength = clampRange(isFinite(requestedStrength) ? requestedStrength : currentStrength, 0, 0.85);
+      if (Math.abs(nextStrength - currentStrength) < .001) return;
+      fx.lyricGlowStrength = nextStrength;
+      updateFxInputs();
+      saveLyricLayout();
+      pushDesktopLyricsState(true);
+      showToast('歌词光效 ' + Math.round(nextStrength * 100) + '%');
     });
   }
 

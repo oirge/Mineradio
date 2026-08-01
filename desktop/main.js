@@ -27,6 +27,8 @@ let desktopLyricsHotBounds = null;
 let desktopLyricsLastMiddleAt = 0;
 const DESKTOP_LYRICS_SIZE_MIN = 0.20;
 const DESKTOP_LYRICS_SIZE_MAX = 1.55;
+const DESKTOP_LYRICS_GLOW_MIN = 0;
+const DESKTOP_LYRICS_GLOW_MAX = 0.85;
 let wallpaperWindow = null;
 const wallpaperStateCache = new DesktopOverlayStateCache();
 let miniPlayerWindow = null;
@@ -2612,6 +2614,23 @@ async function handleDesktopLyricsStableState(event, stable) {
 }
 
 ipcMain.handle('mineradio-desktop-lyrics-set-stable-state', handleDesktopLyricsStableState);
+
+async function handleDesktopLyricsGlowStrengthRequest(event, strength) {
+  try {
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
+    if (!desktopLyricsStateCache.enabled) return { ok: false, error: 'DESKTOP_LYRICS_DISABLED' };
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
+      return { ok: false, error: 'MAIN_RENDERER_UNAVAILABLE' };
+    }
+    const nextStrength = clampNumber(strength, DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, 0.35);
+    mainWindow.webContents.send('mineradio-desktop-lyrics-glow-strength-request', { strength: nextStrength });
+    return { ok: true, strength: nextStrength };
+  } catch (e) {
+    return { ok: false, error: e.message || 'DESKTOP_LYRICS_GLOW_STRENGTH_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-desktop-lyrics-set-glow-strength', handleDesktopLyricsGlowStrengthRequest);
 
 /**
  * 请求主 renderer 持久化桌面歌词字号；覆盖层只负责交互，不成为第二套设置真源。
