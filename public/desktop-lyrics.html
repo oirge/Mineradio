@@ -26,7 +26,7 @@
       --lyric-css-beat-glow:0px;
       --lyric-shadow-soft:rgba(156,255,223,.44);
       --lyric-shadow-glow:rgba(156,255,223,.34);
-      --lyric-shadow-hot:rgba(255,240,184,.22);
+      --lyric-shadow-hot:rgba(255,240,184,.32);
       --lyric-edge:rgba(4,6,12,.42);
       --lyric-drop:rgba(156,255,223,.38);
       --lyric-drop-paused:rgba(156,255,223,.22);
@@ -115,8 +115,8 @@
       background:linear-gradient(90deg,
         var(--lyric-highlight) 0%,
         var(--lyric-highlight) max(0%,calc(var(--lyric-progress) - var(--lyric-feather))),
-        color-mix(in srgb,var(--lyric-highlight) 72%,var(--lyric-glow)) var(--lyric-progress),
-        var(--lyric-glow) calc(var(--lyric-progress) + max(1.6%,var(--lyric-feather) * .55)),
+        color-mix(in srgb,var(--lyric-highlight) 84%,var(--lyric-glow)) var(--lyric-progress),
+        var(--lyric-glow) calc(var(--lyric-progress) + max(2.4%,var(--lyric-feather) * .70)),
         var(--lyric-primary) calc(var(--lyric-progress) + var(--lyric-feather) * 1.35),
         var(--lyric-primary) 100%);
       -webkit-background-clip:text;
@@ -1107,10 +1107,10 @@
       ctx.translate(cx, cy);
       ctx.scale(rx, ry);
       var g = ctx.createRadialGradient(0,0,0,0,0,1);
-      g.addColorStop(0.00, colorWithAlpha(state.displayColors.highlight, .42));
-      g.addColorStop(0.28, colorWithAlpha(state.displayColors.glow, .28));
-      g.addColorStop(0.64, colorWithAlpha(state.displayColors.secondary, .085));
-      g.addColorStop(0.90, colorWithAlpha(state.displayColors.glow, .018));
+      g.addColorStop(0.00, colorWithAlpha(state.displayColors.highlight, .54));
+      g.addColorStop(0.28, colorWithAlpha(state.displayColors.glow, .36));
+      g.addColorStop(0.64, colorWithAlpha(state.displayColors.secondary, .12));
+      g.addColorStop(0.90, colorWithAlpha(state.displayColors.glow, .028));
       g.addColorStop(1.00, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -1125,7 +1125,7 @@
       var y = rect.top + rect.height * .50 - live.lift * .10;
       var rx = Math.max(42, Math.min(150, renderedFontSize * (1.05 + live.beat * .32)));
       var ry = Math.max(24, Math.min(82, renderedFontSize * (.42 + live.beat * .18)));
-      var alpha = clamp(.34 + live.solar * .22 + live.beat * .28, .24, .78) * clamp(state.opacity, .28, 1, .92);
+      var alpha = clamp(.52 + live.solar * .28 + live.beat * .34, .34, .92) * clamp(state.opacity, .28, 1, .92);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = alpha;
@@ -1133,7 +1133,7 @@
       ctx.scale(rx, ry);
       var g = ctx.createRadialGradient(0,0,0,0,0,1);
       g.addColorStop(0, colorWithAlpha(state.displayColors.highlight, 1));
-      g.addColorStop(.36, colorWithAlpha(state.displayColors.glow, .56));
+      g.addColorStop(.36, colorWithAlpha(state.displayColors.glow, .78));
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -1143,7 +1143,7 @@
     }
     function drawGlowText(rect, motion) {
       if (!state.lyricGlow || motion.glowStrength <= 0) return;
-      var target = Math.min(1.50, (0.32 + live.solar * .82 + live.beat * .44) * Math.min(2.8, Math.max(.85, motion.glowDrive * 1.25)));
+      var target = Math.min(1.50, (0.42 + live.solar * .90 + live.beat * .50) * Math.min(2.8, Math.max(.95, motion.glowDrive * 1.25)));
       live.glow += (target - live.glow) * (target > live.glow ? .11 : .06);
       if (live.glow <= .004) return;
       var text = line.textContent || 'Mineradio';
@@ -1153,10 +1153,10 @@
       var hotMix = Math.max(0, Math.min(1, live.solar * 1.05 + live.beat * .18));
       var color = hotMix > .42 ? state.displayColors.highlight : state.displayColors.glow;
       var layers = [
-        { blur:10, alpha:.88, stroke:Math.max(9, renderedFontSize * .09) },
-        { blur:24, alpha:.66, stroke:Math.max(15, renderedFontSize * .15) },
-        { blur:48, alpha:.42, stroke:Math.max(22, renderedFontSize * .22) },
-        { blur:78, alpha:.22, stroke:Math.max(30, renderedFontSize * .30) }
+        { blur:10, alpha:.94, stroke:Math.max(9, renderedFontSize * .09) },
+        { blur:24, alpha:.74, stroke:Math.max(15, renderedFontSize * .15) },
+        { blur:48, alpha:.50, stroke:Math.max(22, renderedFontSize * .22) },
+        { blur:78, alpha:.28, stroke:Math.max(30, renderedFontSize * .30) }
       ];
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
