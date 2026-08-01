@@ -280,6 +280,21 @@
     var lastSizeWheelAt = 0;
     var lastHotBoundsAt = 0;
     var lastHotBoundsSignature = '';
+    var lastProgressVar = '';
+    var lastStageTransform = '';
+    var lastStageFilter = '';
+    var lastBeatGlowVar = '';
+    var lastScrollX = '';
+    var lastLineRect = null;
+    var lastLineRectKey = '';
+    var glyphWidthCache = Object.create(null);
+    var glyphWidthCacheKeys = [];
+    var GLOW_TEXT_LAYERS = [
+      { filter:'blur(10px)', alpha:.94, minStroke:9, strokeFactor:.09 },
+      { filter:'blur(24px)', alpha:.74, minStroke:15, strokeFactor:.15 },
+      { filter:'blur(48px)', alpha:.50, minStroke:22, strokeFactor:.22 },
+      { filter:'blur(78px)', alpha:.28, minStroke:30, strokeFactor:.30 }
+    ];
     var DESKTOP_LYRICS_SIZE_MIN = .20;
     var DESKTOP_LYRICS_SIZE_MAX = 1.55;
     var DESKTOP_LYRICS_SIZE_STEP = .05;
@@ -640,6 +655,8 @@
       canvas.style.width = innerWidth + 'px';
       canvas.style.height = innerHeight + 'px';
       ctx.setTransform(dpr,0,0,dpr,0,0);
+      lastLineRect = null;
+      lastLineRectKey = '';
       fitLyricText(true);
     }
     function measureLineWidth(fontSize) {
@@ -732,7 +749,11 @@
       setRootVar('--lyric-letter-spacing', (renderedFontSize * state.letterSpacing).toFixed(2) + 'px');
       setRootVar('--lyric-fit-x', fitScaleX.toFixed(4));
       setRootVar('--lyric-mask-edge-width', maskEdgeWidth + 'px');
-      setRootVar('--lyric-scroll-x', scrollState.offset.toFixed(2) + 'px');
+      var nextScrollX = scrollState.offset.toFixed(2) + 'px';
+      if (nextScrollX !== lastScrollX) {
+        lastScrollX = nextScrollX;
+        setRootVar('--lyric-scroll-x', lastScrollX);
+      }
       positionInteractionHint();
       sendHotBounds(true);
     }
@@ -740,7 +761,8 @@
       if (!scrollState.needed) {
         if (scrollState.offset !== 0) {
           scrollState.offset = 0;
-          setRootVar('--lyric-scroll-x', '0px');
+          lastScrollX = '0px';
+          setRootVar('--lyric-scroll-x', lastScrollX);
         }
         return;
       }
@@ -763,7 +785,11 @@
         if (nowMs < scrollState.holdUntil && p < startGate) targetOffset = 0;
         scrollState.offset = Math.max(-limit, Math.min(0, Math.min(scrollState.offset, targetOffset)));
       }
-      setRootVar('--lyric-scroll-x', scrollState.offset.toFixed(2) + 'px');
+      var nextScrollX = scrollState.offset.toFixed(2) + 'px';
+      if (nextScrollX !== lastScrollX) {
+        lastScrollX = nextScrollX;
+        setRootVar('--lyric-scroll-x', lastScrollX);
+      }
     }
     function replayLineAnimation() {
       line.classList.remove('in');
@@ -1003,6 +1029,10 @@
         scrollState.lastAt = 0;
         line.textContent = text;
         line.setAttribute('data-text', text);
+        lastLineRect = null;
+        lastLineRectKey = '';
+        glyphWidthCache = Object.create(null);
+        glyphWidthCacheKeys.length = 0;
         layoutKey = '';
         replayLineAnimation();
       }
@@ -1041,17 +1071,28 @@
         else ctx.fillText(text, x, y);
         return;
       }
-      var width = 0;
-      for (var i = 0; i < chars.length; i++) {
-        width += ctx.measureText(chars[i]).width;
-        if (i < chars.length - 1) width += spacing;
+      var key = text + '|' + fontSize + '|' + state.fontWeight + '|' + state.fontFamily + '|' + spacing.toFixed(2);
+      var entry = glyphWidthCache[key];
+      if (!entry) {
+        if (glyphWidthCacheKeys.length > 64) {
+          glyphWidthCache = Object.create(null);
+          glyphWidthCacheKeys.length = 0;
+        }
+        entry = { widths:new Array(chars.length), total:0 };
+        for (var i = 0; i < chars.length; i++) {
+          entry.widths[i] = ctx.measureText(chars[i]).width;
+          entry.total += entry.widths[i];
+          if (i < chars.length - 1) entry.total += spacing;
+        }
+        glyphWidthCacheKeys.push(key);
+        glyphWidthCache[key] = entry;
       }
-      var cursor = x - width / 2;
+      var cursor = x - entry.total / 2;
       ctx.textAlign = 'left';
       for (var c = 0; c < chars.length; c++) {
         if (stroke) ctx.strokeText(chars[c], cursor, y);
         else ctx.fillText(chars[c], cursor, y);
-        cursor += ctx.measureText(chars[c]).width + (c < chars.length - 1 ? spacing : 0);
+        cursor += entry.widths[c] + (c < chars.length - 1 ? spacing : 0);
       }
       ctx.textAlign = 'center';
     }
@@ -1091,9 +1132,21 @@
       var rotY = stableLock ? 0 : (Math.sin(now * .74 + 1.3) * -2.75 + motionBeat * .34);
       var scale = stableLock ? (1 + motionBeat * .028 + motionSolar * .012) : (1 + motionBeat * .115 + motionSolar * .034 + motionBass * .026);
       live.scale += (scale - live.scale) * (scale > live.scale ? .46 : .16);
-      stage.style.transform = 'translate3d(' + bobX.toFixed(2) + 'px,' + bobY.toFixed(2) + 'px,0) rotateX(' + rotX.toFixed(3) + 'deg) rotateY(' + rotY.toFixed(3) + 'deg) scale(' + live.scale.toFixed(4) + ')';
-      stage.style.filter = 'brightness(' + (1.04 + motionBeat * .12 + motionSolar * .05).toFixed(3) + ') saturate(' + (1.08 + motionBeat * .10).toFixed(3) + ')';
-      setRootVar('--lyric-css-beat-glow', (state.lyricGlow ? clamp(motionBeat * 8 + motionSolar * 3, 0, 12, 0) : 0).toFixed(2) + 'px');
+      var nextTransform = 'translate3d(' + bobX.toFixed(2) + 'px,' + bobY.toFixed(2) + 'px,0) rotateX(' + rotX.toFixed(3) + 'deg) rotateY(' + rotY.toFixed(3) + 'deg) scale(' + live.scale.toFixed(4) + ')';
+      if (nextTransform !== lastStageTransform) {
+        lastStageTransform = nextTransform;
+        stage.style.transform = nextTransform;
+      }
+      var nextFilter = 'brightness(' + (1.04 + motionBeat * .12 + motionSolar * .05).toFixed(3) + ') saturate(' + (1.08 + motionBeat * .10).toFixed(3) + ')';
+      if (nextFilter !== lastStageFilter) {
+        lastStageFilter = nextFilter;
+        stage.style.filter = nextFilter;
+      }
+      var nextBeatGlow = (state.lyricGlow ? clamp(motionBeat * 8 + motionSolar * 3, 0, 12, 0) : 0).toFixed(2) + 'px';
+      if (nextBeatGlow !== lastBeatGlowVar) {
+        lastBeatGlowVar = nextBeatGlow;
+        setRootVar('--lyric-css-beat-glow', nextBeatGlow);
+      }
     }
     function drawAura(rect, motion) {
       if (!state.lyricGlow || motion.glowStrength <= 0) return;
@@ -1152,12 +1205,6 @@
       var spacing = renderedFontSize * state.letterSpacing;
       var hotMix = Math.max(0, Math.min(1, live.solar * 1.05 + live.beat * .18));
       var color = hotMix > .42 ? state.displayColors.highlight : state.displayColors.glow;
-      var layers = [
-        { blur:10, alpha:.94, stroke:Math.max(9, renderedFontSize * .09) },
-        { blur:24, alpha:.74, stroke:Math.max(15, renderedFontSize * .15) },
-        { blur:48, alpha:.50, stroke:Math.max(22, renderedFontSize * .22) },
-        { blur:78, alpha:.28, stroke:Math.max(30, renderedFontSize * .30) }
-      ];
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.textAlign = 'center';
@@ -1165,13 +1212,14 @@
       ctx.font = state.fontWeight + ' ' + renderedFontSize + 'px ' + state.fontFamily;
       ctx.translate(cx, cy);
       ctx.scale(fitScaleX * live.scale, live.scale);
-      for (var i = 0; i < layers.length; i++) {
+      for (var i = 0; i < GLOW_TEXT_LAYERS.length; i++) {
+        var layer = GLOW_TEXT_LAYERS[i];
         ctx.save();
-        ctx.filter = 'blur(' + layers[i].blur + 'px)';
-        ctx.globalAlpha = live.glow * layers[i].alpha * clamp(state.opacity, .28, 1, .92);
+        ctx.filter = layer.filter;
+        ctx.globalAlpha = live.glow * layer.alpha * clamp(state.opacity, .28, 1, .92);
         ctx.fillStyle = color;
         ctx.strokeStyle = color;
-        ctx.lineWidth = layers[i].stroke;
+        ctx.lineWidth = Math.max(layer.minStroke, renderedFontSize * layer.strokeFactor);
         ctx.lineJoin = 'round';
         drawCanvasText(text, 0, 0, renderedFontSize, spacing, true);
         drawCanvasText(text, 0, 0, renderedFontSize, spacing, false);
@@ -1227,12 +1275,17 @@
       var now = nowMs * .001;
       if (state.enabled) {
         var progress = currentDisplayProgress();
-        setRootVar('--lyric-progress', (progress * 100).toFixed(2) + '%');
+        var nextProgress = (progress * 100).toFixed(2) + '%';
+        if (nextProgress !== lastProgressVar) {
+          lastProgressVar = nextProgress;
+          setRootVar('--lyric-progress', nextProgress);
+        }
         var offlineMotion = tickDesktopBeatMap(currentDesktopPlaybackTime(nowMs), dt);
         var motion = updateMotion(now, offlineMotion);
         applyStageMotion(now);
         updateLyricScroll(nowMs, progress);
-        var rect = line.getBoundingClientRect();
+        var rectKey = layoutKey + '|' + lastStageTransform + '|' + lastScrollX;
+        var rect = (lastLineRect && rectKey === lastLineRectKey) ? lastLineRect : (lastLineRectKey = rectKey, lastLineRect = line.getBoundingClientRect());
         if (canvas.width && canvas.height) {
           ctx.clearRect(0, 0, innerWidth, innerHeight);
           if (rect && rect.width > 1 && rect.height > 1) {

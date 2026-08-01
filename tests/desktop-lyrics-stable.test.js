@@ -52,6 +52,7 @@ test('desktop lyrics flowing glow is rendered on the overlay canvas', () => {
   assert.match(overlay, /body\.highlight \.line,body\.flowing \.line/);
   assert.match(overlay, /var\(--lyric-progress\)/);
   assert.match(overlay, /colorWithAlpha\(state\.displayColors\.highlight, \.54\)/);
-  assert.match(overlay, /alpha:\.94, stroke/);
+  assert.match(overlay, /GLOW_TEXT_LAYERS/);
+  assert.match(overlay, /filter:'blur\(10px\)', alpha:\.94, minStroke:9, strokeFactor:\.09/);
   assert.match(overlay, /var\(--lyric-progress\) \+ max\(2\.4%/);
 });
