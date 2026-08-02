@@ -1,4 +1,4 @@
-# Mineradio Player Performance Seams
+﻿# Mineradio Player Performance Seams
 
 ## Context
 
@@ -12,6 +12,7 @@
 - 队列和搜索结果 DOM 签名也属于热路径；每行用临时数组再 `join` 会在封面/歌词/元数据连续刷新时放大 GC 压力。
 - 本地搜索索引预热和连续输入会扫描大量歌曲；如果每首歌都用字段数组、`filter` 和 `join` 生成搜索文本，会产生大量短命对象。
 - 本地曲库快照和索引可能包含上万首歌。同步 `localStorage.setItem(JSON.stringify(...))` 和 `JSON.parse(...)` 会阻塞主线程。
+- 本地曲库的新一轮后台资产候选可能为空。若启动接口在递增令牌和取消启动定时器前直接返回，旧排序队列及闭包会继续持有整批歌曲并执行 I/O；在途单曲完成后若不再次校验令牌，还会污染新曲库的进度状态和触发旧 UI 刷新。
 - 本地节奏缓存也可能包含多个长节奏图。启动时同步解析 `LOCAL_BEATMAP_STORE_KEY` 会拖慢首屏，即使用户本次没有打开节奏分析面板。
 - 自定义封面、自定义歌词、用户视觉存档和搜索历史都可能在长期使用后变成较大的 JSON。启动或连续搜索时反复同步解析会放大首屏和输入卡顿。
 - 搜索历史最多 10 条；读写和去重不要恢复 `map/filter/slice` 链式处理。
@@ -29,6 +30,7 @@
 - 3D 歌单架 rebuild 签名即使只采样头尾项，也不能先用 `slice/concat/map` 创建临时采样数组。
 - HTML 转义处于队列、搜索、本地库和歌单详情渲染热路径；每次创建临时 DOM 节点会制造额外对象和 GC 压力。
 - 歌曲副标题和本地音质文本会被队列签名、搜索结果、左侧本地库和 3D 歌单架反复读取；不要在这些路径里重复创建数组并重新估算格式化结果。
+- 本地音质展示用中文档位（`localBitrateTierLabel`），不要在列表热路径恢复 `xxx kbps` 原始码率拼接；缓存键变更后必须升级版本前缀以失效旧文案。
 - 切歌路径不能等待本地元数据标签解析完成再设置 audio source；大 FLAC、机械硬盘或冷缓存会直接拉长“点歌到出声”的时间。
 - 空搜索会作为本地库默认列表反复触发；即使只取前 `LOCAL_SEARCH_RESULT_LIMIT` 条，也不要恢复通用 `slice`。
 - 本地大文件夹导入会同时建立封面索引和歌曲对象。不要把音频/封面筛选恢复成 `filter().sort().map()/forEach()` 链式写法制造中间数组。
@@ -43,11 +45,16 @@
 - 本地封面/歌词缓存按范围补水时，单个分块内不要重复计算同一首歌的 asset cache key。
 - IndexedDB 缓存清理属于后台任务，但大缓存下也不能在 folder 排序比较器里反复扫描完整 `libraryEntries`。
 - 运行时缓存统计只需要数量时不要调用 `Object.keys(cache).length`；用直接计数避免定期性能快照制造 key 数组。
-- 本地资产内存缓存裁剪超过阈值后只收集可删除候选排序，保护项不参与排序；IndexedDB 清理标记删除时同步维护 id 列表，不要末尾再 `Object.keys(dropSet)`。
+- `localAssetCacheMemory` 历史镜像只有写入、遍历和删除路径，没有任何读取命中；它会在切换曲库后继续持有旧歌词和封面记录。不要为 IndexedDB 记录再建立无消费者的 renderer 全局镜像。
 - 大本地库或大歌单入队会批量克隆歌曲对象；不要恢复 `songs.map(cloneSong)` 这类回调式批量克隆。
 - 本地歌词、内嵌歌词和自定义歌词加载会解析长文本；不要在 LRC 解析、歌词 source 转换和 fallback 过滤路径恢复 `map/filter/forEach/every` 链式扫描。
+- 原歌词写入会先保存 `originalLyricsState`，激活后再由 `lyricsLines` 提供给舞台和桌面歌词。若保存和激活各深克隆一次，逐字 YRC 会长期驻留两套行与 `words` 对象图，并在每次从自定义歌词切回时重新制造整套短命对象。
 - 舞台歌词和桌面歌词刷新会反复压缩空白、过滤空行并限制行数；不要恢复 `split('\n').map(...).filter(...).slice(...)` 这类为每次歌词刷新制造多轮临时数组的路径。
+- 桌面歌词持续同步时，相同原文和 single/double 行数模式必须复用最终归一化字符串；文本或行数模式变化时再失效，不能让每帧重复清洗同一歌词。
 - 桌面歌词中键锁定轮询会在主进程后台持续读取 stdout；不要恢复 `buffer.split(/\r?\n/).forEach(...)`，应保持流式扫描和半行缓存。
+- 桌面歌词中键轮询停止后，旧 PowerShell 进程可能延迟触发 `exit` / `error`。结束回调如果无条件清空全局句柄，会把快速重启的新进程变成无法再停止的后台孤儿。
+- 旧 PowerShell 轮询进程在停止后还可能迟到输出 stdout；如果 stdout 直接绑定共享 consumer，即使进程句柄有所有权门禁，旧数据仍会污染新进程缓冲区并触发当前窗口动作。
+- 桌面歌词中键轮询子进程的生命周期必须与歌词窗口绑定：窗口 `closed` 事件（含渲染进程崩溃等不走 `closeDesktopLyricsWindow` 的意外关闭）只由 `releaseOwnedDesktopLyricsWindow` 释放，如果它只置空窗口句柄而不调用 `stopDesktopLyricsMousePoller()`，spawn 的 PowerShell 会成为孤儿进程以 24ms 间隔持续空转直到应用退出。释放口必须联动停止轮询（对已停轮询的正常关闭路径幂等）。
 - 桌面 UI 状态补丁写入可能在连续拖动歌词/壁纸设置滑条时触发；不要恢复 `Object.entries(patch).forEach(...)` 这类每次写入都生成字段数组的路径。
 - LRC/YRC/自定义歌词加载会处理长文本和逐字时间轴；不要恢复按整段 `split(/\r?\n/)` 先生成完整行数组的路径，尤其是切歌、桌面歌词同步和自定义歌词切换期间。
 - 3D 歌单架卡片标题/副标题绘字属于卡片重绘路径；不要恢复 `split('')` 这类每张卡片重绘都生成字符数组的写法。
@@ -56,14 +63,28 @@
 - 软件内更新面板的前端版本号必须跟随统一 `APP_VERSION`，不要再把 `currentVersion` / `version` 写死成历史版本。
 - 大文件夹导入会反复构建歌词/封面映射、文件签名和本地歌曲 key；不要在这些路径恢复重复 `fileListToArray()`、`split().pop()`、数组 `join` 或每帧对象字面量查表。
 - 本地 MP3/FLAC 标签扫描可能在后台连续读取很多文件；`TextDecoder` 和 ID3 frame key 解析要复用轻量路径，不要每个 frame 新建 decoder 或 lookup 对象。
+- 桌面路径的 MP3/FLAC 元数据、歌词和内嵌封面读取范围最高可达 64 MiB；若主进程一次分配完整 Buffer 并返回单个 base64 字符串，renderer 再对整段执行 `atob`，同一范围会短时同时存在 Buffer、base64、binary 字符串和最终 `Uint8Array` 多份表示。
+- 当前播放 FLAC 时，元数据、内嵌歌词和内嵌封面会在同一事件轮分别请求最高 4 MiB、32 MiB、32 MiB 的重叠文件头；MP3 元数据和封面也会分别执行 256 KiB 探针与最高 48 MiB 完整 ID3 读取。仅有歌曲对象级 Promise 不能跨资产或跨同路径克隆合并这些请求。
+- 仅把三个 FLAC 请求合并成一次固定 32 MiB 或连续 metadata 前缀读取仍会制造不必要的最终 `Uint8Array` 峰值；前置 PADDING 会被原样带入内存。共享接缝必须把目录扫描与目标 payload 读取分离，按 block 声明长度直接跳过无消费者范围。
+- FLAC Vorbis comment 可能包含大型 `METADATA_BLOCK_PICTURE`、波形、JSON 或重复字段。若先把整条 `key=value` 解码成字符串再判断 key，完全无消费者的 value 也会制造大型 UTF-8 字符串和归一化副本；歌词路径仅以普通 `[` 预筛未知字段也会误解码不含真实时间标签的大文本。
+- Vorbis comment count 中的零长度项不能被当作列表终止；只有声明长度越过 metadata block 边界时才应停止，否则空项之后的标题、歌手或歌词会被漏掉。
+- 分块 IPC 只解决跨进程阶段还不够：桌面文本入口若对最终字节执行 `bytes.buffer.slice(...)` 会再复制完整范围；把现有 `Uint8Array` 传给 `new Uint8Array(existingView)` 同样会按元素复制，而不是创建零成本视图。
 - 本地歌词/文本解码的乱码判断只需要 U+FFFD 数量；不要恢复 `text.match(/\uFFFD/g)`，否则每次文本解码都会额外生成匹配数组。
 - YRC 逐字歌词前导空白只用于校正 `c0/c1`；不要恢复 `fullText.match(/^\s+/)` 数组计数。
+- Enhanced LRC 的 `<mm:ss.xx>` 标签必须由 `parseEnhancedLrcBody()` 转换为现有 `words` 结构，不得作为正文或 `charCount` 内容。相邻同时间片段合并为同一高亮区间，行尾空标签只提供上一段结束时间；同时间双语行保持整行高亮，普通 LRC 语义不变。
 - 无歌词占位检测会在 LRC/YRC/自定义歌词过滤里反复调用；不要恢复 `String(text).replace(/\s+/g, '').replace(...)` 双正则链。
 - 主进程本地曲库扫描 worker 数量不大但处于导入启动前；不要恢复 `Array.from({ length }, worker)` 这类额外数组构造。
 - 软件内更新状态接口会被更新面板轮询；取最新下载/补丁任务或裁剪旧任务时不要恢复 `Array.from(updateDownloadJobs.values()).sort(...)`、`slice(...).forEach(...)` 这类全量排序和回调链。
+- 更新候选已经包含镜像时不得再次展开镜像，也不得只保留 URL 字符串而丢失 `mirrored` 标记；否则候选数会膨胀，且无摘要镜像可能绕过校验保护。
+- 更新镜像切换时如果继承上一线路的 `total/progress/received`，后续无 `Content-Length` 的正确响应可能被误判为大小不一致。
+- 完整包/补丁后台任务是 fire-and-forget Promise；目录创建、无候选等候选循环外的异常如果没有最终 `catch`，会留下永久 `queued` 任务和未处理 rejection。
+- 快速补丁逐文件直接覆盖会在中途写失败时留下混合版本；重命名/校验失败还可能残留 `.mineradio-patch` 临时文件。
+- 补丁目标不得使用内部保留的 `.mineradio-patch` / `.mineradio-rollback` 后缀；否则文件目标与清理路径会相互碰撞。
 - 软件内更新面板轮询期间会高频刷新按钮、脚注和进度条；状态未变化时不要重复写 DOM 文本、class、`width` 或 SVG ring offset。
+- 完整安装包通常远大于快速补丁；`verifyUpdateFile()` 若使用 `fs.readFileSync()`，下载完成或命中缓存时会额外产生一个与安装包大小相等的 Buffer。文件校验不能复用仅适合 12 MiB 有界补丁的整块内存适配器。
 - 迷你播放器可见性恢复会按固定间隔校正窗口层级；健康窗口不要重复调用 `showInactive()`、`setAlwaysOnTop()` 或状态同步，只需刷新 Z 序。
 - 迷你播放器进入空队列时必须清空主进程和渲染器中的标题、歌手与封面状态，并跳过当前歌曲封面解析，避免长期保留大 data URL。
+- 迷你播放器功能开关和 BrowserWindow 驻留是两个独立维度。主窗口恢复后功能仍可开启但迷你窗口已经销毁；如果主进程此时继续接受 renderer 补丁，`miniPlayerStateCache.value.cover` 仍可长期强引用最多 8 MiB 的 data URL。只在禁用时清空不够，无窗口期间的下一次切歌会重新填回封面。
 - 迷你播放器封面加载失败后不能永久保留失败地址缓存；应释放当前 `src` 和缓存标记，让后续真实状态同步触发同地址重试。
 - 迷你播放器拖动位置需要跨启动恢复，但不能监听高频 `move` 后同步写设置文件；Windows 上应使用只由手动移动触发的 `will-move` 标记用户操作，并在 `moved` 后单次保存。
 - `setBounds()` 和显示器工作区校正产生的 `moved` 事件不能覆盖用户位置；程序定位前必须清除手动移动标记，校正后的已有用户坐标只在签名变化时落盘。
@@ -71,12 +92,43 @@
 - 极简迷你播放器不创建图片/封面节点，主进程向极简窗口发送状态时也不携带 `cover`；歌曲切换仍同步标题、歌手、播放状态和队列状态。
 - `play` / `playing` / `pause` 等音频状态事件不应让迷你播放器重复执行 `currentDesktopSongMeta()` 和封面签名解析；同一事件后续还会同步 Windows Media Session 元数据。
 - 迷你播放器 IPC 使用乐观状态判重时，Promise rejection 和主进程返回 `ok:false` 都代表补丁未确认；旧完整请求晚失败也不能因后续序号变化而被忽略。
-- 迷你播放器 5 秒可见性恢复只在用户可见会话中有意义；Windows `lock-screen` / `suspend` 时应停止恢复定时器，由 `unlock-screen` / `resume` 重新启动。
+- 迷你播放器 5 秒可见性恢复和 120ms 崩溃重建只在用户可见会话中有意义；仅清除已有定时器不够，锁屏后的 renderer/display 事件仍会重新安排任务。`lock-screen` 与 `suspend` 还可能重叠，不能用单一布尔值在第一个恢复事件到达时提前放行。
 - 迷你播放器渲染进程连续崩溃不能无限调用 `webContents.reload()`；同一窗口在一次成功 `did-finish-load` 之前只允许一次重载，后续失败必须升级为窗口重建。
+- 主窗口恢复后如果只对迷你 BrowserWindow 调用 `hide()`，独立渲染进程和已解码封面仍会常驻；独立临时用户目录实测会多保留 1 个 Electron 进程和约 100 MiB 工作集。
 - 音量滑块 `input` 会在拖动期间连续触发；不要在每次输入中同步写 `localStorage`、重建音量 SVG 或重复写未变化的百分比/class。
 - 播放进度刷新处于 RAF/`timeupdate` 热路径；本地播放会话的 JSON 与 `localStorage` 写入不要直接占用进度 UI 动画帧，清空队列时也必须取消待执行保存。
 - `play` / `playing` / `pause` 等音频事件可能连续到达；不要为相同状态重复重建播放图标、恢复全部控制节点、创建 `MediaMetadata` 或强制写系统播放位置。
 - 桌面歌词高帧率 IPC 同步会持续生成载荷签名；不要每帧重新创建签名数组、节奏图中间载荷或重复解析当前歌曲封面元数据。
+- 桌面歌词/壁纸同步会在同一渲染循环内生成多个嵌套 payload；不要恢复每帧新建歌词快照、动效/播放对象、颜色对象或完整覆盖层 payload。
+- 桌面歌词或壁纸窗口关闭后，如果主进程只把旧状态合并为 `enabled:false`，模块级状态仍会长期强引用完整 `beatMap`、歌词或封面 data URL；禁用后的 update IPC 还会把已经释放的载荷重新填回。
+- 桌面歌词和壁纸禁用时不需要构造完整 payload。关闭入口只需要最小 `{enabled:false}`；继续打包节奏图或封面再让主进程忽略，仍会制造跨进程序列化和瞬时 GC 压力。
+- 桌面歌词/壁纸 BrowserWindow 快速关闭再创建时，旧实例的 `ready-to-show`、`did-finish-load`、`moved`、`closed` 可能晚于新实例到达；回调引用全局句柄会误显示或清空替代窗口。
+- 只隔离 BrowserWindow 事件不够；旧桌面歌词 renderer 队列中的关闭、移动、热区、指针或锁定 IPC 也可能晚到，并在 handler 不校验 sender 时作用于替代窗口。
+- 桌面歌词状态补丁若先写入缓存，再无参数调用依赖前后差值的窗口更新入口，会让纵向位置和透明度副作用失效。
+- renderer 的 `lastWallpaperKey` 包含完整封面 data URL，`lastLyricsKey` 和歌词快照也可能持有长文本；关闭单个覆盖层时若另一个仍启用，整体同步取消不会执行，这些引用会继续常驻。
+- `localLibraryPersistentMemory` 若按文件夹累计快照和索引，单个快照最多包含 `16000` 文件与 `20000` 目录，单个索引最多 `16000` 条记录；IndexedDB 允许保留多个文件夹不代表 renderer 也应跨库强引用这些对象。
+- 仅用 folderPath 判断本地曲库内存所有权存在 A→B→A 的 ABA 竞态；第一轮 A 的迟到 IndexedDB 结果会在路径再次相等时被误收。
+- 旧曲库后台扫描完成时读取全局 `localLibrarySongs`，会在用户已切库后把当前歌曲写入旧文件夹索引，或重新调用导入流程覆盖当前界面。
+- 全曲库资产补水若把 IndexedDB 的 `localLyricText` 写入每首歌曲，即使不读取原歌词文件，也会让全部歌词文本在 renderer 长期常驻。
+- 实际播放加载歌词后，`syncLocalSongAssetFields()` 若把 `localLyricText` 广播到曲库、队列和歌单的同 key 副本，而切歌只释放完整封面，任一副本都会继续阻止原文回收，长会话按已播放歌曲数 O(n) 增长。仅在切歌点清字段还不够：迟到的歌词文件读取或 IndexedDB 水合会重新写回旧对象；延迟缓存写若在定时器触发时才读取歌曲字段，还可能把释放后的空歌词覆盖进持久记录。
+- 完整 `localCoverDataUrl` 可能达到数 MiB；浅克隆和同曲资产同步若传播该字段，会让曲库、队列和歌单对象同时持有它。仅在切歌时清字段也不够，迟到的异步封面读取仍可能把完整图写回旧队列对象。
+- 缩略图生成失败时不能用 `thumb || dataUrl` 把完整封面写入 `localCoverThumbDataUrl`。该字段会被 `localAssetCacheSnapshot()` 持久化并同步给同曲对象，使本应只由当前歌曲临时持有的大图改名后长期驻留。
+- 当前歌曲可能在缩略图失败后临时持有完整封面；这不等于持久资产已完成。若把 `localCoverLoaded=true` 写入空缩略图记录，下次启动会跳过封面重试并永久丢失可恢复封面。
+- MP3 APIC、ID3v2.2 PIC 和 FLAC PICTURE 已经位于完整标签 `Uint8Array` 内；提取时再调用 `bytes.slice(...)` 会先复制一份图片字节，随后 Blob 构造还要取得自己的稳定快照。在大内嵌封面场景会无意义地同时驻留“完整标签 + 图片 typed-array 副本 + Blob 快照”。
+- 后台非当前歌曲若先把内嵌图片 Blob 编码成完整 data URL，再交给 `Image` 和 canvas 生成缩略图，会额外驻留完整 base64 字符串并对整串计算缓存键；即使完成后立即清空歌曲字段，峰值分配已经发生。
+- FLAC PICTURE 的 `mimeLen`、`descLen` 和 `dataLen` 都来自文件。若在 metadata block 边界校验前解码 MIME 或推进偏移，损坏文件可让解析器扫描当前最高 32 MiB 读取范围中的无关字节。
+- `ALBUMARTIST` 是展示字段，`ALBUMARTISTSORT` 是独立排序字段。把两者都映射到 `albumArtist` 会与 Vorbis first-wins 结合，使 comment 顺序决定界面显示；旧 IndexedDB 资产缓存和曲库索引还会继续恢复已经污染的值并跳过重解析。
+- 旧 FLAC 元数据缓存失效后，非当前歌曲仍只做 4 MiB 轻量读取。若 VORBIS_COMMENT 位于更后的 PADDING/PICTURE block 之后，空标签不代表扫描完成；把该结果写成当前 schema 会让后续当前播放路径永久跳过完整解析。
+- `cloneSong()` 若浅复制 `localMetadataPromise`、`localCoverPromise`、`localLyricPromise`、`localLyricCachePromise` 或 loading 标记，源任务完成时只会清理源对象；队列副本会保留错误的在途状态，甚至把源对象的封面成功误当成副本已经持有完整封面。
+- 本地曲库构造阶段若为每首普通封面提前创建 Blob URL，大曲库即使没有展示这些封面也会长期持有浏览器对象地址；同一文件重复入队若每个副本各自创建音频 URL，也会让地址数量随队列副本增长。
+- 音频和封面 Blob URL 目前同时可能被 `audio.src`、异步节奏分析 `fetch(audioUrl)`、懒加载图片、3D 封面缓存和桌面覆盖层消费；在这些消费者没有显式租约前，按歌曲对象或队列位置直接 revoke 会造成播放、分析或图片加载竞态。
+- 歌单封面缓存的通用裁剪历史上跳过全部 `loading` 记录；当网络请求长期不完成或图片解码挂起时，缓存记录、`Image`、事件处理器和 waiter 闭包会绕过常规数量上限持续增长。
+- 歌单封面图片即使已经成功或失败，浏览器不会替应用自动清除赋给 `Image.onload/onerror` 的函数引用；缓存继续持有图片时，这些闭包会随记录驻留。失败图片和无效地址若仍保存在 `rec.img`，还会无意义地保留图片对象与 `src`。
+- 本地封面缩略图并发缓存允许淘汰仍在执行的旧 Promise；如果旧任务完成时无条件删除同键缓存槽位，它会把淘汰后新建的替代 Promise 一并删掉，后续读取会再次启动图片解码和 canvas 缩放，放大瞬时内存与 CPU 峰值。
+- 缩略图 Promise 顺序队列长度不等于活跃任务数；已完成任务若只删除缓存槽位但不退出计数，串行完成后仍会长期报告 24 个活跃任务并保留过期顺序键。并发旧/新任务还可能把同一结果 key 重复压入 FIFO，裁剪时会误删最新有效缩略图。
+- 仅在顺序队列头游标前进时压缩仍不够：一个长期挂起的早期任务会让 head 保持为 0，而后续完成记录在队列内部变成空洞并持续累积；精确活跃计数正确也不能自动释放这些失效记录。
+- 本地节奏图的落盘缓存即使只打包最近 12 首，若内存对象从不裁剪，或淘汰后仍由 `beatMapCache` / `djBeatMapCache` 强引用同一结果，长会话仍会累计大型节奏数组。
+- 曲库同步把旧索引记录挂到 `song.localLibraryPreviousRecord` 后若没有读取者，新索引替换内存记录时旧记录仍会由每首歌曲继续持有。
 - 封面来源和签名会被队列、搜索、歌单架、桌面歌词及系统媒体信息反复读取；不要为缓存键创建字段数组，也不要在一次读取中重复水合自定义封面映射。
 - 歌曲副标题/本地音质缓存键、3D 歌单架 draw/rebuild 签名、队列渲染指纹、本地曲库面板签名和本地快照签名如果用数组 `join`，会在高频刷新时反复创建短命数组。
 - 播放进度时间格式化处于 `timeupdate`/RAF 热路径；`padStart` 会额外制造临时字符串包装。
@@ -91,12 +143,16 @@
 - `play` / `playing` 事件会连续到达；播放 tick 如果每个事件都新建计时器，会形成多个并行进度循环。
 - 舞台歌词当前行定位运行在主渲染循环里；不要在每帧从 `lyricsLines[0]` 扫到当前行，长歌词和高刷屏会把前缀比较放大到每秒上万次。
 - 主进程本地曲库目录排序会比较大量文件名；不要在排序比较器里反复调用带 locale/options 的 `localeCompare()`，否则每次比较都会重复准备区域排序规则。
+- 前端本地曲库导入排序也会比较大量文件名；`buildLocalCoverMaps()` / `createLocalSongsFromFiles()` 不要在比较器里反复调用带 locale/options 的 `localeCompare()`。
 - 涟漪 `DataTexture.needsUpdate = true` 会增加纹理版本并触发整张 `1×12 RGBA Float` 纹理上传；完全空闲时不能继续每帧写 48 个 Float32 并请求上传。
 - 舞台歌词处于渲染热路径；不要每帧新建详情 profile、重新解析同一调色板颜色或调用 `THREE.Color.clone()` 生成只使用一次的颜色对象。
+- 完整安装包下载后如果再整文件读盘做摘要，会让大安装包在下载完成后额外阻塞主进程；下载路径应边写边累计 hash。
 - 完整安装包校验运行在 Electron 主进程所加载的 `server.js` 中；不要用 `readFileSync()` 整包读入，也不要为了兼容 SHA-512 Base64/Hex 对同一内容做两次完整哈希。
 - 舞台歌词光粒即使 `Points.visible === false` 也会继续执行 JS 位置循环；若仍设置 `position.needsUpdate`，高刷屏会把 132 个粒子的三轴三角计算和缓冲上传请求持续放大。
 - 永久 `display:none` 的旧封面节点不能继续留在主循环里写 transform；只改变位置/朝向的安魂相机姿态也不应在 `updateCamera()` 后重复重算投影矩阵。
 - 同一缓存安装包的并发下载请求会同时进入完整校验；只在校验结束后复查 active job 不能阻止 N 路重复读盘、哈希和坏缓存移动。
+- 实时节拍引擎跟随音频分析帧持续执行；在 `processRealtimeBeatEngine()` 内声明 helper 或直接返回对象字面量会在播放期间反复创建闭包与短命对象。
+- MediaPipe 手势帧会同时计算粒子位置、张开度和 Canvas 骨架；不要重复计算掌心，也不要在帧内新建 tips 数组或掌心对象。
 
 ## Solution / Convention
 
@@ -131,21 +187,56 @@
 - 本地曲库快照签名直接遍历类数组；索引 lookup 和索引同步使用显式循环；lookup 构建用 `for...in + hasOwnProperty`，避免 `Object.keys()` 先生成完整 key 数组。
 - 本地资产缓存读取用显式循环压缩 key 列表，并用 IndexedDB 返回记录的 `id` 回填结果表；资产缓存和曲库索引套用复用全局元数据字段列表。
 - IndexedDB 缓存清理先单次统计每个本地库文件夹的最新时间，再按 folder 排序；不要在 comparator 中扫描完整记录表。
-- 运行时缓存数量统计使用 `safeObjectKeyCount()`；本地资产内存缓存和 IndexedDB 删除集合维护删除 id 数组，减少后台 trim 的全量 key 数组和重复查表。
+- 运行时缓存数量统计使用 `safeObjectKeyCount()`；IndexedDB 删除集合维护删除 id 数组，减少后台 trim 的全量 key 数组和重复查表。资产记录只由歌曲对象和 IndexedDB 持有，不恢复 `localAssetCacheMemory`。
 - 进入本地曲库同步比对前先调用 `hydrateLocalLibraryPersistentState(folderPath)`，确保同步比对读取内存缓存。
 - 本地封面缩略图通过 `localCoverThumbPromiseCache` 合并并发请求，不要为同一 data URL 重复创建 canvas。
+- 封面取色放大镜打开时只允许对当前 canvas 做一次 JPEG/Base64 编码；鼠标移动复用已缓存的 CSS 背景，只更新位置，关闭时释放大字符串和 canvas 引用。
 - 成功生成的本地封面缩略图还必须进入 `localCoverThumbResultCache` 短期结果缓存，避免队列、搜索和歌单架在不同时间点重复缩放同一封面。
 - 主进程本地曲库扫描和快照刷新统一走 `statLocalLibraryFiles()`，用有上限并发池读取文件元数据，并通过原始 `index` 保持排序稳定。
 - `statLocalLibraryFiles()` 用显式循环压缩稀疏结果数组，避免大曲库扫盘完成后再跑 `filter(Boolean)` 回调。
 - 启动恢复或大曲库未变化时，先渲染播放队列和恢复播放会话，再延迟调用 `hydrateLocalAssetCacheForSongs()`；后台封面/歌词任务在恢复阶段减少中途 UI 刷新。
 - 本地封面/歌词缓存分块补水优先使用 `hydrateLocalAssetCacheForSongRange()` 按范围读取，不要在热路径里反复 `songs.slice(...)`；后台资产预载候选应复用同一轮 `localLibraryAssetProcessingSongs()` 结果，再由排序函数二次过滤当前仍需要预载的歌曲。
+- `startLocalLibraryBackgroundProcessing()` 每次调用都必须先取消旧启动定时器并递增 `localLibraryProcessToken`，空候选也必须把处理状态归零。当前私有排序队列由 `localLibraryProcessSongs` 持有；新请求清空旧数组以立即释放尚未处理的歌曲引用。串行 worker 在单曲 I/O 返回后必须再次校验令牌，旧任务不得写进度或刷新界面。
 - `hydrateLocalAssetCacheForSongRange()` 第一轮收集 key 时同步保存每首歌的 key，应用记录时复用，避免同一分块重复执行 `localAssetCacheKey(song)`。
 - 同一作用域内不得保留重复函数声明；如果后续实现已经覆盖旧实现，必须删除旧实现而不是依赖函数提升覆盖。
 - 新增同帧 UI 任务优先使用 `scheduleNamedAnimationFrame(key, fn)`；同一 key 只保留最后一次任务。
 - 大歌单、本地库整队播放和歌手详情播放使用 `cloneSongList()` 显式循环克隆，保持播放队列语义并减少回调分配。
-- 歌词状态克隆、LRC 解析、自定义歌词普通文本拆行和本地歌词 source 标记使用显式循环；输出字段、source 值和双语合并规则必须保持不变。
+- `setOriginalLyricsState()` 只在输入接缝深克隆一次，形成与解析器隔离的只读快照；`applyLyricsState()` 激活原词时必须复用该数组、行和嵌套 `words` 对象。舞台歌词与桌面歌词消费者不得原地修改快照；新歌曲通过整体替换快照更新。LRC 解析、自定义歌词普通文本拆行和本地歌词 source 标记继续使用显式循环，输出字段、source 值和双语合并规则保持不变。
 - 舞台歌词换行和桌面歌词文本归一化使用 `normalizedLyricTextLines()` 与单次扫描；保持空白压缩、空行过滤、最大行数和省略号语义不变，减少播放中歌词贴图/覆盖层刷新时的短命数组。
 - 桌面歌词鼠标轮询输出使用 `consumeDesktopLyricsMousePollerOutput()` 流式扫描；桌面 UI 状态补丁写入使用 `for...in` 白名单遍历，保持原有字段过滤、空值删除和超大值跳过语义。
+- 桌面歌词轮询启动后必须由局部 `poller` 捕获进程实例；`exit` / `error` 仅在该实例仍是当前所有者时清空句柄。停止时先移交全局所有权，再调用 `kill()`，隔离延迟事件。
+- 桌面歌词轮询 stdout 必须通过同一局部 `poller` 校验所有权，旧进程的迟到数据不得进入共享缓冲区。
+- 桌面歌词窗口的 `closed` 释放口 `releaseOwnedDesktopLyricsWindow` 必须调用 `stopDesktopLyricsMousePoller()`，让中键轮询子进程随窗口意外关闭（崩溃/系统销毁）一同终止；正常关闭路径已先停轮询，此调用幂等。回归测试断言该函数体包含 `stopDesktopLyricsMousePoller()`。
+- 桌面歌词和壁纸主进程状态统一由 `DesktopOverlayStateCache` 管理；`setEnabled(false)` 必须替换为最小关闭状态，禁用期间 `apply()` 返回 false。renderer 的禁用路径只发送最小关闭状态，启用后再发送当前完整载荷。
+- 覆盖层 BrowserWindow 的事件回调必须捕获局部 `win` 并验证仍持有全局槽位；状态补丁应由 `createDesktopLyricsWindow(payload)` / `createWallpaperWindow(payload)` 一次完成缓存和窗口副作用。
+- 桌面歌词 IPC 必须区分角色：启用和状态更新只接受当前主 renderer；关闭允许主 renderer 或当前歌词 renderer；移动、热区、指针和锁定只接受当前歌词 renderer，旧 sender 返回 ignored。
+- renderer 关闭桌面歌词时立即清空歌词时间、签名、节奏签名和歌词行快照；关闭壁纸时立即清空壁纸时间与封面签名，不能依赖 `cancelDesktopOverlaySync()`。
+- 本地曲库 IndexedDB 可持久保留多个文件夹，但 renderer 内存只缓存当前文件夹的 index；snapshot 由恢复入口按需读取即用即放。切库递增 generation，异步回填必须同时匹配 folderPath 和 generation。
+- `refreshSavedLocalMusicFolderInBackground()` 必须捕获启动时的歌曲数组所有权，扫描开始前和结果落地前都验证 `localLibrarySongs` 身份；旧扫描不得写索引、提示或重建界面。
+- 全曲库调用 `hydrateLocalAssetCacheForSongs()` 时必须传入 `{ includeLyrics:false }`；歌词只允许由 `hydrateLocalLyricCacheForSong()` 在实际播放时按单曲恢复，后台未播放歌曲不得预载歌词。
+- 歌词原文由精确对象身份播放租约管理：`shouldRetainLocalLyricText()` 只认 `currentLocalSong === song && playQueue[currentIdx] === song`；`handoffLocalLyricText()` 在切歌时同 key 移交、不同 key 释放，`clearQueue()` 在丢弃队列前释放。`syncLocalSongAssetFields()` 只把 raw 文本交给精确当前对象，并清理同 key 非租约副本；已确认 `lyricStatus:'none'` 的无原文状态保持轻量完成态。
+- `scheduleLocalAssetCacheWrite()` 必须在调度时捕获快照，并由 `localAssetCacheWriteRecords` 保存同 key 最后一条待写记录。`localLyricResidencyReleased` 歌曲的后续元数据/封面写入必须合并待写歌词；待写记录已释放时由 `writeLocalAssetCacheRecord()` 从 IndexedDB 合并既有歌词字段后再 `put`。迟到文件读取先调度完整快照再同步租约；迟到单曲缓存水合若已失去精确当前对象身份，必须保持 `localLyricCacheHydrated=false`，允许以后重播按单曲恢复。
+- `localBeatMapCache` 与 `packLocalBeatCache()` 的歌曲上限统一为 12；淘汰条目时只删除通用节奏缓存中与该条目 `mr` / `dj` 字段严格同一的引用，不能误删后来独立更新的 map，也不裁剪轻量的模式偏好。
+- 索引同步只套用当前歌曲需要的字段，不得把完整旧记录保存到歌曲对象；`localLibraryPreviousRecord` 没有运行时消费者，不应恢复。
+- 完整本地封面只允许由 `currentLocalSong` 与 `playQueue[currentIdx]` 共同指向的同一对象持有；`cloneSong()` 必须删除完整图和派生缓存，`syncLocalSongAssetFields()` 只传播缩略图。切歌时同 `localKey` 的新对象接管唯一引用，不同歌曲直接释放；异步缩略图完成后必须再次按对象身份决定是否写入完整图。
+- `assignLocalCoverSource()` 缩略图失败时必须清除与完整 data URL 相同的伪缩略图；只有当前歌曲可临时保留完整图。非当前对象返回 false，后台调用标记本轮 light scan 结束但保持 `localCoverLoaded=false`，不写资产缓存；当前对象即使可显示完整图，也只有真正生成缩略图后才置 `localCoverLoaded=true` 并持久化。
+- MP3 APIC、ID3v2.2 PIC 和 FLAC PICTURE 构造 Blob 时必须使用 `bytes.subarray(start,end)`，保持图片 MIME、边界和字节不变并复用完整标签 backing buffer。Blob 会取得稳定字节快照；不得把本规约误写成 Blob 内部零拷贝。
+- 内嵌封面解析器优先返回只持有图片稳定快照的 Blob；`createLocalCoverThumbnailDataUrl()` 可直接从 Blob 解码并使用 `embedded:<file-signature>` 紧凑键合并缩略图任务。后台非当前歌曲不得调用 `readFileAsDataUrl()`；当前歌曲只在缩略图完成且对象仍拥有播放租约时生成完整 data URL，并在异步转换后再次校验身份。
+- Blob 缩略图解码使用短生命周期 `ImageBitmap`；canvas 编码成功、失败或无 context 都必须在 `finally` 中调用 `close()`。该租约只覆盖单次绘制，不能替代音频、可见图片、3D 缓存和覆盖层尚未建立的长期 Blob URL 消费者租约。
+- FLAC PICTURE 必须在单个 block 的 `end` 内逐项校验 picture type、MIME 长度、描述长度、尺寸字段和图片数据长度；只有全部边界成立后才允许解码 MIME 和构造图片 Blob。
+- Vorbis 元数据只允许 `ALBUMARTIST` 写入 `albumArtist`，`ALBUMARTISTSORT` 在当前没有排序消费者时应忽略。持久记录使用 `LOCAL_METADATA_TAG_SCHEMA` 定向标记解析版本；旧 FLAC 记录只跳过展示元数据并触发重解析，封面、歌词、时长和音质字段继续复用。
+- `extractFlacLocalMetadata()` 必须通过 `_mineradioScanComplete` 区分“已找到完整 VORBIS_COMMENT / 已到 last block”和“轻量范围停在未读完 block”。截断结果不得设置 `localMetadataLoaded`、不得写当前 schema；`applyCurrent` 路径必须关闭 light 限制，在音频 source 已设置后异步执行完整标签读取。
+- `readFlacMetadataSession()` 对标准文件先读取 8 字节 marker/header；只有 marker 不在偏移 0 时才回退读取前 4104 字节。扫描最多 1024 个 block descriptor，probe 外只读取精确 4 字节 header；PADDING 等无消费者 payload 按声明长度直接跳过。元数据、歌词和封面按桌面绝对路径或浏览器 File 身份共享 `localFlacMetadataSessionReadBatches`，目标 Vorbis/PICTURE 通过 `readFlacMetadataBlockBytes()` 精确读取并由现有范围批次合并。
+- descriptor 必须保持物理顺序和全部 type 4/type 6 block：元数据跨多个 Vorbis block 保持字段 first-wins，歌词优先级可跨 block 提升，封面在首个损坏 PICTURE 后继续寻找下一个有效项。会话成功或失败后先移除全局批次，不能缓存连续前缀或已完成的原始 payload Promise。
+- 排队中的 FLAC light 会话可提升为 full，已启动的 light 不得服务 full；目标 block 短读时不得仅因 descriptor 中出现 last bit 就把元数据标记为完成。
+- 当前播放请求遇到在途后台元数据 Promise 时，如果轻量结果仍未设置 `localMetadataLoaded`，必须在 Promise 释放后重新进入 `ensureLocalMetadataForSong()` 执行 full 扫描，并合并两轮 changed 结果。
+- `hydrateCustomCover()` 只水合用户持久化的自定义封面；普通本地封面由 `songCoverSrc()` 在真实可见读取时懒创建 Blob URL。首次音频 URL 通过 `assignLocalSongUrl()` 同步给同 `localKey` 的活跃副本，避免重复入队重复创建地址。
+- 在音频播放、节奏分析、图片元素、3D 缓存和桌面覆盖层形成可等待租约前，不主动 revoke 本地媒体 Blob URL；后续回收必须按消费者租约结束，而不是按歌曲对象、队列删除或切歌位置推断。
+- 歌单封面缓存使用 `playlistCoverCacheCount` 精确计数；数量超过 196 时同步裁回 180，后台 aggressive trim 保留 72。裁剪先删除完成/失败项，再由 `cancelPlaylistCoverRequest()` 取消最旧的非保护 `loading` 请求并释放事件、`src`、waiter 和缓存槽位；迟到事件必须验证记录仍拥有当前槽位。
+- 歌单封面请求完成后统一走 `settlePlaylistCoverImage()`：成功记录保留可复用图片但立即解除 `onload/onerror`；失败、无效地址和容量取消同时清空事件、`src` 与 `rec.img`，不得让缓存记录继续持有无消费者图片对象。
+- 本地封面缩略图 Promise 完成后只能在 `localCoverThumbPromiseCache[cacheKey] === promise` 时删除缓存槽位；`localCoverThumbPromiseCount` 只统计仍由缓存持有的任务，淘汰或完成时精确递减，归零后立即清空顺序记录和 Promise 引用。
+- 缩略图 Promise 顺序队列记录必须同时保存 key 与 Promise 所有者；裁剪只删除仍匹配当前缓存槽位的记录。同键结果再次完成时由 `rememberLocalCoverThumbResult()` 原位更新既有条目，不重复追加 FIFO key。
+- `compactLocalCoverThumbPromiseOrder()` 必须同时统计已消费前缀和内部无 Promise 记录；失效记录达到 32 条或占队列一半时，用单次循环只保留活跃所有者。全部活跃任务归零时直接清空队列。
 - LRC/YRC/自定义歌词文本按行处理使用 `forEachNewlineRow()` 单次换行扫描；行内双语合并使用 `rememberLyricBucketText()`，必须保持 CRLF、尾空行、去重、最多两行双语和空歌词过滤语义不变。
 - 3D 歌单架卡片绘字使用字符游标扫描，不为标题/副标题先创建字符数组；换行测量、最大行数和绘制输出必须保持不变。
 - YRC 解析、逐字范围压缩、本地节奏缓存 pack/unpack 和封面深度缓存 trim 使用显式循环；输出结构、缓存顺序和保留保护项语义必须保持不变。
@@ -154,21 +245,41 @@
 - 本地歌词/封面映射函数直接遍历传入文件集合；调用方已压缩过数组时不要二次复制。
 - 本地文件签名、曲库签名和本地歌曲 key 用直接字符串拼接；basename 用 `lastIndexOf('/')` / `lastIndexOf('.')`，避免为每个文件创建路径分段数组。
 - 本地标签解析复用 `TextDecoder` 缓存，ID3 frame key 使用 `switch`；主进程 stat worker 使用显式循环创建 Promise 列表。
+- FLAC 元数据解析必须先在原始字节中定位 `=`，只解码短 key；未知 key 和已取得首个非空值的重复字段不得解码 value。歌词解析先按字段理论最高优先级剪枝；未知字段必须由 `hasEmbeddedLyricTimeTagBytes()` 在原始字节中确认真实 LRC 时间标签后才解码，priority 100 命中后立即返回。保持未知 timed 字段 priority 25 回退和同优先级 first-wins 语义。
+- FLAC 元数据与歌词 comment 循环对 `commentLen === 0` 必须 `continue`；只在 `p + commentLen > end` 时终止损坏 block。
+- `readAuthorizedLocalFileRange()` 使用 768 KiB 复用 Buffer 分块读取并返回 `base64Chunks + byteLength`；`base64ChunksToBytes()` 只预分配一个最终 `Uint8Array`，逐块解码写入并严格校验总长度。不得恢复完整范围 Buffer、单个 base64 大字符串或整段 `atob`。
+- `readLocalFileBytes()` 必须通过 `localFileRangeReadBatches` 合并同文件、同起点的排队/在途请求：同一事件轮读取最大结束偏移，较小请求只取得共享结果的 `subarray` 视图；桌面记录按绝对路径合并，浏览器 File 按对象身份合并。批次在读取成功或失败后必须先从全局表移除，不得把 32–48 MiB 原始标签字节变成长期缓存。
+- `preloadLocalSongAssets()` 只把同一音频文件中的元数据、内嵌封面和内嵌歌词在同一轮启动，才能进入范围读取批次；外置封面或外置歌词继续按元数据之后的既有顺序读取，避免不同大文件结果同时驻留。`cloneSong()` 必须删除资产 Promise 与 loading 标记，让每个副本重新取得自己的状态所有权，并由文件级在途批次合并真实 I/O。
+- `readLocalTextFile()` 在桌面路径直接把 `readLocalFileBytes()` 返回的 `Uint8Array` 交给解码器；`decodeLocalTextBuffer()` 对 `Uint8Array` 必须原样复用，只对 ArrayBuffer 创建视图。不得恢复 `buffer.slice` 或 `new Uint8Array(existingView)`。
 - 本地歌词/文本解码使用 `countTextReplacementChars()` 统计替换字符，并复用 `localTextDecoder()`；YRC 前导空白使用 `leadingWhitespaceLength()`。
 - 无歌词占位检测使用 `compactNoLyricText()` 单次扫描，保持忽略空白、常见中英文标点和固定占位文案的语义不变。
 - 更新下载任务的最新/匹配最新查询使用 `latestUpdateDownloadJob()` 单次扫描；任务裁剪使用 `newestUpdateDownloadJobs(8)` 的小窗口维护，状态轮询和快速补丁复用判断不要恢复全量任务数组排序。
+- 更新资产与补丁必须同时保留 `downloadCandidates` 对象元数据和 `downloadUrls` 兼容字符串；已有 `mirrored:true` 或命中配置镜像前缀的候选只透传，不得再次套镜像。
+- 默认顺序保持配置镜像优先、GitHub 直连兜底；镜像候选必须经过 `ensureMirrorCanBeVerified()`，并继续兼容旧纯字符串 manifest、URL 对象及四类镜像模板。
+- 完整安装包与快速补丁均使用 12 秒响应头超时和 30 秒正文空闲超时；每次 `reader.read()` 前后刷新 watchdog，所有退出路径在 `finally` 清理。
+- `prepareUpdateJobAttempt()` 必须在每次换线前按 `expectedSize` 重置 `total`，并清空进度/收包状态；后台入口必须用最终 `catch` 把候选循环外的异常收敛到 `setUpdateJobError()`。
+- 完整包落盘使用异步 `FileHandle.write()` 循环处理部分写入，不得吞掉写盘/关闭错误；已知大小时超量立即中止，未知大小时使用安全上限，异常路径取消 reader 并删除临时包。
+- 完整包本地磁盘/权限/文件占用错误必须标记为 fatal，不得因为镜像切换重复读取整个安装包；网络、HTTP、摘要和读流超时才允许换线。
+- 快速补丁必须经过 `preparePatchFileEntries()` 整组验证重复路径/大小/摘要，再用 `backupPatchFileEntries()` 完成整组备份；`applyPatchFiles()` 中任一落盘失败必须调用 `rollbackPatchFileEntries()` 恢复已有文件、删除新建文件，并在 `finally` 清理 `.mineradio-patch`。一旦进入应用阶段，任何错误都必须标记为致命并结束任务，不得再换镜像重复写盘。
+- Node `fetch` 的 DNS/连接错误通常包装在 `TypeError: fetch failed` 的 `cause` 中；分类时必须检查嵌套 code/name/message，不能把裸 `fetch failed` 一律当作 DNS。DOM `AbortError` / `TimeoutError` 的数值 code 也必须归一为稳定的 `UPDATE_TIMEOUT`。
 - 更新面板前端使用 `updatePreviewContentSignature()`、`updatePreviewClassSignature()` 和 `lastProgressSignature` 判重；下载/补丁轮询状态未变化时必须跳过重复 DOM 写入。
+- 更新产物校验统一通过 `verifyUpdateDigestResult()` 维持大小、SHA-256、SHA-512 和错误码接口；`verifyUpdateBuffer()` 只服务有 12 MiB 上限的快速补丁，`verifyUpdateFile()` 使用固定 1 MiB Buffer 顺序读取完整安装包，并在成功或异常路径关闭文件描述符。不得恢复整安装包 `readFileSync()`。
 - `showMiniPlayerWindow()` 只在窗口隐藏或最小化时调用 `showInactive()` 并强制同步状态；`keepMiniPlayerOnTop()` 仅在置顶状态丢失时重写置顶标记，健康恢复轮询只执行 `moveTop()`。
 - `pushMiniPlayerState()` 必须先判断 `hasTrack`；空队列使用空元数据签名并发送空封面，不能调用 `currentDesktopSongMeta()`。迷你页面封面错误回调需释放失败 `src` 与 `lastCover`。
-- 迷你播放器样式保存在 `desktop-shell-settings.json` 的 `miniPlayerMode`；标准/极简位置分别保存在 `miniPlayerBounds` 和 `miniPlayerCompactBounds`。启动时严格读取数值坐标并按各自尺寸重新夹紧到当前工作区；窗口实例必须捕获创建时的 mode，避免切换期间旧回调污染另一种样式的位置。
+ - 迷你播放器样式保存在 `desktop-shell-settings.json` 的 `miniPlayerMode`；标准/极简位置分别保存在 `miniPlayerBounds` 和 `miniPlayerCompactBounds`。启动时严格读取数值坐标并按各自尺寸重新夹紧到当前工作区；窗口实例必须捕获创建时的 mode，避免切换期间旧回调污染另一种样式的位置。
+ - 主进程迷你状态统一由 `MiniPlayerStateCache` 持有；`apply()` 仅在功能启用且当前迷你 BrowserWindow 驻留时接受补丁。`setEnabled(false)` 或 `setResident(false)` 必须替换为空状态；新窗口取得全局所有权后才 `setResident(true)`，并通过现有 `mineradio-mini-player-command` 通道发送 `sync-state`，由 renderer 调用 `pushMiniPlayerState(true)` 补齐当前状态。旧窗口迟到的 `closed` 事件只能在仍持有全局槽位时释放缓存。
+ - 迷你播放器位置保存在 `desktop-shell-settings.json` 的 `miniPlayerBounds`；启动时严格读取数值坐标并重新夹紧到当前工作区。用户位置写入必须由 `will-move` + `moved` 事件对触发，并通过坐标签名跳过重复写入。
 - `updateSystemMediaSessionPlaybackState()` 调用迷你同步时使用 playback-only 路径；`pushMiniPlayerState()` 通过当前歌曲对象判断是否仍需补齐元数据，确保首次同步、切歌和空队列不会被状态-only 优化漏掉。
 - 迷你状态补丁失败时使用 `invalidateMiniPlayerSyncPatch()` 按字段失效缓存：元数据字段清空歌曲引用和签名，播放字段只清空对应布尔值。下一次真实状态事件负责重发，不保留错误的“已同步”标记。
-- 主进程电源事件必须保持成对：`lock-screen` / `suspend` 调用 `stopMiniPlayerRecoveryTimer()`，`unlock-screen` / `resume` 调用 `scheduleMiniPlayerRecovery(180)`；不要在锁屏期间保留周期性 `moveTop()`。
+- 主进程电源事件通过 `MiniPlayerRecoverySession` 按 `screen` / `suspend` 原因暂停：进入任一原因时同时取消周期恢复和崩溃重建，`shouldShowMiniPlayer()` 与崩溃恢复入口在暂停期间拒绝新任务；只有最后一个原因解除后才调用 `scheduleMiniPlayerRecovery(180)`。
 - 迷你窗口重载额度使用 `miniPlayerRendererReloadWindows` 按窗口跟踪；首次崩溃加入集合并重载，`did-finish-load` 或窗口销毁时删除，集合已命中时直接走 `destroyMiniPlayerWindowInstance()` 和现有重建路径。
+- 主窗口恢复或重新显示时必须销毁不再需要的迷你 BrowserWindow，而不是仅隐藏；下次最小化/关闭到托盘时由现有状态重新创建。使用 `scripts/test-mini-player-memory.ps1` 验证创建、释放、再次创建和再次释放四段生命周期。
 - 音量偏好通过 `scheduleVolumePreference()` 合并写入，`flushVolumePreference()` 在 change/blur/退出时落盘；音量百分比、静音 class 和 SVG 图标按状态签名更新。
 - 播放会话常规保存通过空闲回调执行，退出时强制保存，`clearPlaybackSession()` 必须先取消待执行任务，避免清空后旧会话被重新写回。
 - 播放图标、控制栏节点、控制区歌曲信息和 Media Session 元数据使用节点/内容签名缓存；相同播放状态事件只同步必要的系统位置节流任务。
 - `currentDesktopSongMeta()` 复用歌曲元数据对象，桌面歌词签名使用固定缓冲区，节奏图字段直接写入最终 IPC payload；字段顺序、量化精度和发送语义必须保持不变。
+- 桌面覆盖层同步使用固定 scratch payload：`desktopLyricSnapshotCache`、`desktopLyricsMotionPayloadCache`、`desktopLyricsPlaybackPayloadCache`、`desktopOverlayColorsCache`、`desktopLyricsPayloadCache` 与 `wallpaperPayloadCache`；preload IPC 调用会立即序列化，调用方不得跨帧保存这些引用，序列化后必须释放缓存中的 `beatMap` 与壁纸 `cover` 重型字段。
+- `applyDesktopLyricsBeatMapPayload()` 在复用 payload 上必须显式删除不再发送的 `beatMap` 字段，保持签名中的 `map/nomap` 判重和旧载荷结构一致。
 - `songCoverSrc()` / `songCoverSignature()` 的缓存键直接拼接，并在同一轮读取中复用自定义封面映射；封面优先级和缓存失效字段必须保持不变。
 - 歌曲副标题缓存键、本地音质缓存键、3D 歌单架 `cardDrawSignature`/`queueSampleSig`、队列 `queueRenderFingerprint`、本地曲库面板签名和本地快照/记录签名统一改为直接字符串拼接，不要恢复数组 `join`。
 - `formatProgramTime()` 使用轻量补零，不要在进度热路径恢复 `padStart`。
@@ -183,15 +294,53 @@
 - “直播后台保持”必须继续允许隐藏播放 tick；连续播放状态事件只复用已有任务，不得叠加计时器。
 - 舞台歌词使用独立 `cursorLines` / `cursorIdx` 定位当前行：同一数组顺序播放只向前推进，后退跳播、歌词数组变化或游标失效时用 upper-bound 二分；`clearStageLyrics()` 必须释放游标引用。
 - 本地曲库目录排序复用模块级 `Intl.Collator('zh-Hans-CN', { numeric:true, sensitivity:'base' }).compare`，文件名排序语义必须与旧实现一致。
+- 前端导入路径 `buildLocalCoverMaps()` / `createLocalSongsFromFiles()` 必须复用同一语义的 `LOCAL_LIBRARY_NAME_COMPARE` / `compareLocalFilePath()`，不得在比较器内重新构造 locale 选项。
 - `triggerRipple()` 必须设置纹理同步标记；`updateRipples()` 仍先维护 bass 上升沿与冷却状态，再在真正空闲时早退。最后一个 ripple 到期帧必须上传清零并把 `uRippleCount` 设为 0，外部预设触发也必须走同一入口。
 - 舞台歌词详情 profile 使用固定只读对象；调色板变化统一经 `setStageLyricPalette()` 更新预解析颜色。帧级 scratch color 只能让现有 setter/material 立即 copy，不能把共享 scratch 直接挂到 uniform。
+- 完整包下载必须边写盘边累计已声明的 SHA-256/SHA-512，完成后调用 `verifyStreamedUpdatePayload()`；缓存复用路径继续走 `verifyUpdateFile()`。
+- `verifyUpdateFile()` 与下载落盘关闭句柄统一走 `closeUpdateFileHandle()`，主错误优先，close 失败不得覆盖写盘/读盘异常；校验分块缓冲使用模块级 `getUpdateVerifyChunkBuffer()`。
 - `verifyUpdateFile()` 使用异步 `FileHandle.read()` 与固定复用缓冲分块读取，只为存在的摘要创建 hash；不要改回 Electron 运行时抖动更高的整包同步读取。SHA-512 只 digest 一次再转换 Base64/Hex；缓存复用、下载校验、任务启动和 HTTP 路由必须逐层 `await`，校验失败时继续保持坏缓存移走与镜像切换语义。
 - 歌词光粒位置循环和 `position.needsUpdate` 只在 `data.sparks.visible` 时执行；旋转状态仍须逐帧维护，重新可见的首帧必须按 base position 与当前绝对时间全量覆盖坐标后再上传。
+- `tickStageLyricMesh()` 的光粒循环必须复用当前调用的 `lyricParticlesEnabled`、`particleBeat`、`particleDrift` 和 `particleCount`；不要在每个粒子上重复读取 `fx.lyricGlowParticles`、`stageLyrics.beatGlow` 或 `arr.length / 3`，坐标计算语义保持不变。
+- `shelfManager.update()` 每帧必须缓存 `contentList.isOpen()` 与 `shelfAlwaysVisible()` 的结果，再用于可见性、层级和封面绑定判断；这些状态在单次更新内不得重复查询。
 - 帧级 scratch 返回对象只允许当前唯一同步调用者立即读取，不得跨下一次调用保存引用；安魂姿态只在主相机已经更新投影后运行，不能独立承担 FOV/aspect/near/far 同步。
+- MediaPipe 手势帧复用 `handPalmScratch`、`HAND_OPENNESS_TIPS` 和 `HAND_SKELETON_TIPS`；`processHandFrame()` 单次计算掌心并传给张开度与骨架绘制。`palmCenter(lm, out)` 无 `out` 时仍保留返回新对象的兼容语义，scratch 引用不得跨帧保存。
 - 缓存安装包复用通过 `installerReusePromises` 合并相同验证身份；key 使用规范化文件路径、版本、有限正大小与摘要的 JSON tuple，成功、失败和空结果都必须用 Promise 身份检查在 `finally` 清理。
+- `processRealtimeBeatEngine()` 使用模块级 `beatFollow()`，命中/未命中分别复用 `realtimeBeatHitResult` 与 `realtimeBeatMissResult`；两种对象的字段结构必须保持原样，调用方只能在当前同步帧立即读取，不得跨调用保存引用。
+- 音频分析帧向 `updateCinemaTrackProfile()` 必须复用模块级 `cinemaTrackProfileSample`，线性混合使用模块级 `mixToward()`；`cinemaAnalysisProfileForSong()` 返回固定常量对象，调用方不得原地改写 profile 字段。
+
+
+- `beatCam.events` 使用对象池：新增事件走 `acquireBeatCamEvent()`，过期/队首裁剪/清空走 `removeBeatCamEventAt` / `trimBeatCamEventsFront` / `clearBeatCamEvents`；不得再直接 `events.length = 0` 丢弃可回收对象（`clearBeatCamEvents` 内部除外）。
+- live 节拍调度必须复用 `liveBeatCameraPayload` 与 `liveBeatCameraTone`；`sampleRenderPerf` 向帧压反馈复用 `runtimeFramePressureSample`。
+- 舞台歌词 intro/fallback 进度行复用 `stageLyricIntroLine` / `stageLyricFallbackLine`，调用方不得跨帧依赖字段不被覆盖。
+
+
+- `updateStageLyrics3D()` 不得再内嵌每帧新建的 `tickMesh`；必须调用模块级 `tickStageLyricMesh()`，并通过 `stageLyricTickCtx` 传入 `dt/t/shelfDetailLyricProfile/shelfDetailOpen/lyricGlowStrength/glowDrive/skullMouthLyrics`。
+- 歌词 mesh 缺 `userData.lyric` 时只能回退到冻结的 `EMPTY_LYRIC_MESH_DATA`，不得写回该空对象字段。
+
+
+- `shelfLayoutProfile()` / `shelfSettings()` 必须复用固定缓存对象就地填充；调用方不得长期保存并假定字段跨下次调用不变，也不得原地改写返回对象作为私有状态。
+- `renderQualityProfile()` 只返回冻结档位常量；`applyRendererPowerMode()` 必须就地更新 `renderPowerState` 字段，不得每次新建状态对象。
+
+- 主进程本地曲库增量扫描（`scanLocalMusicFolderIncremental`）必须处理本次遍历自身截断：`collectLocalLibraryFolderEntries` 在 `visited > LOCAL_LIBRARY_SCAN_VISIT_LIMIT`（60000）时提前 break，`listed.files/listed.directories` 与磁盘现状不一致。若上次快照完整（`previous.truncated=false`）而本次 `listed.truncated=true`，不能继续走增量合并；否则 `changedDirs`/`filesByRel` 对比会把截断丢失的项误判为删除，导致当前会话丢歌，并经 `saveLocalLibrarySnapshot` 把残缺结果写回持久快照。正确做法：`listed.truncated` 为真时以全量语义返回已遍历结果（复用同一次 `listed`，不重复磁盘 IO），设 `scanMode:'full'` 与 `truncated:true`，与 `previous.truncated` 回退分支同源。回归测试：`tests/local-library-incremental-truncation.test.js`。
+
+- 本地资产 IndexedDB 当前使用数据库版本 3，并把 `assets` 与 `lyrics` 分开存储。v2 到 v3 升级必须从 `assets.openCursor()` 逐条提取歌词字段到 `lyrics`，随后用同一游标更新去除歌词字段的资产记录，不能先 `getAll()` 把整库歌词一次性搬入内存。
+- `localAssetCacheSnapshot()` 只生成元数据、封面缩略图和扫描状态；`localLyricCacheSnapshot()` 承载歌词原文及其文件签名。资产补水需要并行读取两个 store，但仅在 `includeLyrics` 开启时读取歌词 store；释放后的延迟写入必须把 `_preserveLocalLyricPayload` 放在歌词记录上，并从 `lyrics` 合并旧原文。
+- IndexedDB 清理要把同一歌曲的 asset/lyric 记录一起裁剪，并清理没有对应 asset 的孤立 lyric 记录；新增读写路径均保留 `complete`、`error`、`abort` 三路结算和连接关闭。
+- 桌面持久曲库的外置封面优先复用 `localCoverFile.url` 的 `/api/local-file` 流地址。缩略图与当前封面 `Image` 解码前需设置 `crossOrigin='anonymous'`；仅浏览器拖放的普通 `File` 继续走 data URL 回退，不能重新对桌面外置封面调用整图 `readLocalFileDataUrl`。
+- 相关回归测试：`tests/local-asset-cache-v3.test.js`。
+- `localSearchPool()` 构建本地候选池后，`scheduleLocalSearchIndexWarmup()` 必须直接接收已经过滤的数组，不得再次调用 `localSearchWarmupSource()`；混合队列仍需保留首个非本地项之前的本地歌曲。空查询结果可按 `localSearchPoolCache.signature` 复用数组身份，调用方不得原地修改该缓存数组。
+- 3D 歌单详情页的 `syncRenderedRows()` 在可见窗口未变化时必须用单次索引循环同时更新歌曲引用和按需重绘，避免恢复为两个 `forEach` 遍历；`rowsDirty` / 加载动画刷新、中心行判定和绘制顺序必须保持原语义。
 
 ## Reference
 
-- 相关实现：`public/index.html`、`desktop/main.js`、`server.js`
+- 相关实现：`public/index.html`、`desktop/main.js`、`desktop/desktop-overlay-state-cache.js`、`desktop/mini-player-recovery-session.js`、`desktop/mini-player-state-cache.js`、`server.js`、`scripts/test-mini-player-memory.ps1`、`tests/desktop-lyrics-ipc-ownership.test.js`、`tests/desktop-lyrics-mouse-poller.test.js`、`tests/desktop-overlay-state-cache.test.js`、`tests/desktop-overlay-disabled-ipc.test.js`、`tests/desktop-overlay-main-update.test.js`、`tests/desktop-overlay-window-ownership.test.js`、`tests/local-asset-cache-ownership.test.js`、`tests/local-beat-cache-residency.test.js`、`tests/local-cover-thumb-promise-ownership.test.js`、`tests/local-file-range-memory.test.js`、`tests/local-library-persistent-memory.test.js`、`tests/local-library-background-refresh.test.js`、`tests/local-library-background-cancellation.test.js`、`tests/local-library-incremental-truncation.test.js`、`tests/local-lyric-cache-residency.test.js`、`tests/local-media-object-url-residency.test.js`、`tests/playlist-cover-cache-residency.test.js`、`tests/mini-player-main-gates.test.js`、`tests/mini-player-recovery-session.test.js`、`tests/mini-player-state-cache.test.js`
+- Electron 42.4.1 类型来源：`node_modules/electron/electron.d.ts` 中的 `PowerMonitor` 电源事件与 `WebContents.forcefullyCrashRenderer()`。
+- TypedArray `slice` / `subarray` 语义：<https://tc39.es/ecma262/multipage/indexed-collections.html#sec-%typedarray%.prototype.slice>、<https://tc39.es/ecma262/multipage/indexed-collections.html#sec-%typedarray%.prototype.subarray>。
+- Blob 对 BufferSource 字节的快照语义：<https://www.w3.org/TR/FileAPI/>。
+- `ImageBitmap` 创建和显式关闭：<https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#imagebitmap>。
+- MusicBrainz Picard Vorbis 标签映射：<https://picard-docs.musicbrainz.org/en/latest/appendices/tag_mapping.html>。
+- `music-metadata` Vorbis 字段映射源码：<https://github.com/Borewit/music-metadata/blob/master/lib/ogg/vorbis/VorbisTagMapper.ts>。
+- FLAC metadata block 头部、24 位长度和 PICTURE 结构：<https://www.rfc-editor.org/rfc/rfc9639.html#section-8.1>、<https://www.rfc-editor.org/rfc/rfc9639.html#section-8.8>。
 - 浏览器 IndexedDB API：<https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API>
 - 浏览器 requestAnimationFrame API：<https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame>

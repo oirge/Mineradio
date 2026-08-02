@@ -1,15 +1,16 @@
-# Mineradio Project Memory
+﻿# Mineradio Project Memory
 
 这个文件用于解决新开 Codex 对话时“失忆”的问题。每次用户明确说“保留”“喜欢”“这个很好”“记住”“保存一下”等表达时，要把关键结论追加到这里。
 
 ## Stable Project Facts
 
-- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
+- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.34`
-- 最近正式安装包 Release 基线：`v1.2.34`。
+- 当前源码检查点：`v1.2.69`；本轮最终提交将创建并推送 tag `v1.2.69`。
+- 当前工作分支：`codex/release-1.2.60`。
+- 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -18,7 +19,12 @@
 
 ## Workspace Organization
 
-2026-06-18 已整理工作区：
+2026-07-26 当前交接工作区：
+
+- 当前 Git 仓库为 `C:\Users\oirg\Desktop\mok\Mineradio-sync`；后续代码、文档和发布操作都在此目录进行。
+- `E:\桌面\播放器软件\Mineradio` 及其 `resources\app` 是历史工作区记录，本环境不存在；不要把新修改写回该路径。
+
+2026-06-18 历史工作区整理记录：
 
 - 真正项目移动到 `E:\桌面\播放器软件\Mineradio`。
 - 旧的 `editable-install`、历史 `backups`、`备份`、截图、旧计划文档和验证目录都归档到 `E:\桌面\播放器软件\工作区备份\2026-06-18-workspace-cleanup`。
@@ -26,6 +32,77 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.67`（2026-08-02）本轮继续优化播放帧热路径：`tickStageLyricMesh()` 复用光粒循环的帧级稳定状态，`shelfManager.update()` 复用内容打开与常驻显示状态；歌词坐标、歌单架布局、UI、玻璃质感、电影视觉、播放控制和交互语义保持不变。新增 `tests/frame-hot-path.test.js`，全量测试 `156/156`、56 个 JavaScript 文件语法、2 个前端内联脚本解析和 `git diff --check` 均通过。
+- `v1.2.67` 本地资产：安装包 `104841092` 字节 / SHA256 `e346de8c5d9ae8bd6b959de8a84160ba590ee9cc126e5c6612aa7d7a238a4a6b`；blockmap `111996` 字节 / `4da7eda9e19d2a27dc05e7f4013425bb51491b8f8ae77e272108ab46a7148e8f`；`latest.yml` SHA256 `b68d92e67641a1baf96379eaa7e7e223d32d3b9dcc8680c3b451c421f8a71497`；快速补丁 `2299088` 字节 / `59b5c10bac8c910eb2d143f1db72434c922ff765bae29ee29312b609445f7597`。Portable ZIP 本轮不上传。
+
+- `v1.2.68`（2026-08-02）继续优化 3D 歌单架卡片帧热路径：`placeCard()` 复用 `shelfManager.update()` 已计算的内容打开状态和常驻显示状态，避免每张可见卡片重复查询；卡片布局、透明度、层级、详情遮罩、UI、视觉质感和交互语义保持不变。帧级契约测试扩展覆盖参数传递与卡片循环零重复查询。
+- `v1.2.68` 本地资产：安装包 `104841201` 字节 / SHA256 `213e23771c5e8cec0892fb5131809f019a2f9b31ee51ce3753d50f71624f45f3`；blockmap `112027` 字节 / `67dd719758cef577034bd7281341d4074753f9e12179e8a6b216d9c1ed497a76`；`latest.yml` SHA256 `3b1bf61c6ef116d70fc344d2bd5b236fee8019d1ea2c8c90dd797d8118b82fae`；快速补丁 `2299236` 字节 / `656e1d7d5a3cbfc0e32a4fb5950470e58a633924b5211771145e2a298807f9cb`。Portable ZIP 本轮不上传。
+
+- `v1.2.69`（2026-08-02）继续优化 Home 首屏列表刷新：`renderHomeDiscover()` 将同一轮已计算的本地歌曲池和听歌统计摘要传给 `renderHomeTiles()`，避免重复扫描曲库和统计对象；Home 卡片顺序、封面、文案、UI、视觉质感和交互语义保持不变。新增帧热点契约测试，全量测试 `157/157` 通过。
+- `v1.2.69` 本地资产：安装包 `104841228` 字节 / SHA256 `9f7fc7b532dc267fac165ea02936314d100a9433cfcb1470648ba56e7ce9de13`；blockmap `111982` 字节 / `053644d4779bd3453fdb7dc6e4d859137c3ad248fac22e60cf0af602b1077a2e`；`latest.yml` SHA256 `6e60ef5b8e479eacf5ea3caf146e02894de7c1caaa83f59b70cf164faf837bad`；快速补丁 `2299420` 字节 / `00326da00858ac1b7e2596832daf4ae6b22de9e077430de064b944728b42ed2e`。Portable ZIP 本轮不上传。
+
+- `v1.2.60`（2026-08-01）已正式发布到 GitHub：https://github.com/oirge/Mineradio/releases/tag/v1.2.60；tag 指向提交 `3bd5657`，Release 为 Latest、非 draft/prerelease，4 个资产全部 uploaded 且远端下载后 SHA-256 与本地一致。桌面歌词解锁后支持滚轮按 `0.05` 缩放，范围统一为 `0.20–1.55`；最小档约 `12px`，超长歌词可自适应至约 `8px`。工具条在 `− / +` 之间显示实时百分比，拖动/悬停/中键热区余量随实际字号缩放，`12px` 时每侧约 `3px × 2px`，固定工具条不并入主进程热区。不要再把下限抬回 `0.35/0.72`，也不要恢复小字号固定 `10px × 6px` 余量。
+- `v1.2.60` 资产：安装包 `104753811` 字节 / SHA256 `c2f36d64b91480edfa6331cfd8c19d976e00ef93e5f577d337fdb6db5a7bc99e`；blockmap `111920` 字节 / `fcee44800a4eafdc582c7bb11663be18f8347f9f44cf550a9ffafd89c05eb517`；`latest.yml` `350` 字节 / `76edc3dd11766bfdac83a8b925c752fa579a1db203769d53c383071ac7123f90`；快速补丁 `2499947` 字节 / `2f56e6108dd97c6b098157fadc957f84b17c5ce4922a03e02359acb451850b3a`。
+
+- `v1.2.57`（2026-07-28）已正式发布到 GitHub：https://github.com/oirge/Mineradio/releases/tag/v1.2.57；tag 指向 `c01dbe9`，Release 为 Latest、非 draft/prerelease，4 个资产全部 uploaded 且远端 SHA-256 与本地一致。
+- `v1.2.57` 优化 3D 歌单架卡片/详情行滚动命中路径，按索引或 action 直接扫描；选择音效按 AudioContext 预生成 6 个固定噪声缓冲并轮换复用。同步修正前端 `APP_VERSION = 1.2.57` 并新增包版本一致性测试。UI、布局、文案、玻璃质感、电影视觉、播放控制和歌单架交互保持不变。
+- `v1.2.57` 已验证：完整 Node 测试 130/130、46 个 JS 文件语法、2 个前端内联脚本解析、`git diff --check` 全部通过；真实 Chromium 验证 11 张虚拟卡片、中心索引 `4 -> 5 -> 4`、6 个音效缓冲、WebGL 非空且控制台/page error/失败请求均为 0。Windows 安装器 UI 自动化受 `GetCursorPos 0x80070005` 权限限制未能打开，NSIS 配置和安装器资源已确认与 `v1.2.56` 已验收基线一致。
+- `v1.2.57` 资产：安装包 `104751027` 字节 / SHA256 `87f73ac7dcd79497c7e07ff51f99b9d55b33bd5d08034ccd5c880426f8d44eb2`；blockmap `111971` 字节 / `57ee903f112caa212921b9f93415e38c9e7491e9067d7a499d8a3f45dbc3fe48`；`latest.yml` `350` 字节 / `ac33691ef16b79c87ba60ad9ef51d5231e66610ef148e64b3187dda292528afb`；快速补丁 `2269352` 字节 / `13befab3fcbf7269a9fce25ba134d367d83ab7779bc857fa883a611114265e7e`。
+
+- `v1.2.44`（2026-07-26）已正式发布到 GitHub：https://github.com/oirge/Mineradio/releases/tag/v1.2.44；tag v1.2.44 对应提交 9bba136，已设为 Latest（非 draft/prerelease）。5 个资产（安装包、blockmap、latest.yml、SHA256 清单、快速补丁）均 uploaded，远端安装包 SHA256 与本地/latest.yml 一致。
+- `v1.2.44` 的运行时改动包括：已播放本地歌词原文改为精确当前队列对象租约，切歌/清队列/同 key 接管/迟到异步结果均做对象所有权校验；空曲库后台资产任务使用递增 token、取消旧定时器并隔离旧队列；本地曲库持久内存按当前文件夹所有权管理，阻止 A→B→A 旧异步结果回填。
+- `v1.2.44` 进一步限制本地封面、Object URL、内嵌封面 Blob、文件范围读取和缓存生命周期，并为桌面歌词/壁纸/迷你播放器加入状态缓存与窗口、renderer、PowerShell 进程所有权门禁；新增 3 个桌面状态模块和 35 个纯 Node 回归测试。UI、布局、文案、玻璃质感、电影视觉、播放入口和 3D 歌单架交互保持不变。
+- `v1.2.44` 已验证：目标歌词回归 13/13；移植到 `v1.2.43` 基线后的完整 Node 测试 95/95；`desktop/main.js`、`server.js`、`desktop/`、`tests/` JavaScript 语法检查、`public/index.html` 4 个内联脚本解析、AST-only 内存门禁、`git diff --check`、冲突标记和调试标记扫描均通过。测试均使用 `BelowNormal` 与 `--test-concurrency=1`，没有启动 Electron、浏览器、服务或后台 GUI。
+- `npm run build:win` 已成功生成本地 `dist/Mineradio-1.2.44-Setup.exe`（`104747336` 字节）、`.blockmap`、`Mineradio-1.2.44-Portable-win-x64.zip` 和 `latest.yml`；`dist/latest.yml` 已确认指向 `1.2.44` 安装包。已生成 `dist/Mineradio-1.2.44-SHA256SUMS.txt`（4 项）和 `dist/Mineradio-1.2.43-to-1.2.44.patch.json`（`2401785` 字节，7 个运行时文件）。
+- `v1.2.44` 本地产物摘要：安装器 SHA256 `0c8e307a28e7c3b34ffc379037bea66ffc2ae0db0548d430bc9ebad3040e5a58`；blockmap `e358016aade247da68565ffd1c53d6956842fa53f17a1bf4bf11dd2f34936f50`；`latest.yml` `6c12c95e60b6e106868ed6502cbe140f75f454e8d0bd2db25237a61d7a960ecd`；快速补丁 `e9059df3fd6c18615082cb4dba63ef9f56c24a7a0b58b91771878de08e7554e4`。
+- 发布已完成：分支 `codex/release-1.2.44-memory` 与 tag `v1.2.44` 已推送，`gh release create` 上传了安装包、blockmap、`latest.yml`、SHA256 清单和快速补丁（Portable ZIP 未上传），远端资产大小与哈希已核对一致。
+- 发布后继续关注两个已确认的内存问题：IndexedDB `assets` 记录仍混合保存歌词原文，需要拆分 `lyrics` store 并做 v2→v3 流式迁移；外置封面仍可能经过主进程完整 Buffer/base64 和 renderer data URL，需要改用已有 `/api/local-file` 流式 URL。
+
+- `v1.2.43` 于 2026-07-24 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.43`；tag 对应提交 `4055208`，并作为本轮 `v1.2.44` 的正式基线。
+- `v1.2.43` 将本地音质展示改为网易云风格中文档位（超清母带 / 高解析度 / 无损 / 极高 / 较高 / 标准 / 流畅），有损格式最高显示“极高”，并升级缓存键避免旧 kbps 文案残留；不改变 UI 布局、播放逻辑、玻璃质感、电影视觉或 3D 歌单架交互。
+- `v1.2.43` 发布资产按既有规则包含 `latest.yml`、安装包、blockmap、SHA256 清单和 `1.2.42 -> 1.2.43` 快速补丁，Portable ZIP 跳过。
+
+- `v1.2.42` 于 2026-07-24 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.42`；tag 对应提交 `7c1d3ab`，并设为 Latest。
+- `v1.2.42` 优化本地曲库导入排序：前端封面索引与音频列表复用模块级 `Intl.Collator('zh-Hans-CN', { numeric:true, sensitivity:'base' })`，与主进程一致，避免大文件夹导入时每次比较重复初始化区域排序规则。
+- `v1.2.42` 不改变 UI、布局、导入顺序语义、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。发布资产仅含 `latest.yml`、安装包、blockmap、SHA256 清单和 `1.2.41 -> 1.2.42` 快速补丁，Portable ZIP 跳过。
+- `v1.2.42` 资产校验：安装包 `104728004` 字节 / SHA256 `983c945217221b92efa6a4691fb75e7d62f17ed154fe56e2808b4dab154dd944`；blockmap `111921` 字节 / `a46580633923d2c9434f1dc45c32487febaff3e6023bdb33cffa28ebc5a37730`；补丁 `2280637` 字节 / `699f749a746fa16a9bc4b90077b38e1388283abb9dbada496dd1f1c7f2b36cce`；`latest.yml` `350` 字节 / `ec43eb648de2e48228e51cab0d6b35daef21470a63e8f8452dadf10cd6c1f3ce`。
+
+- `v1.2.41` 于 2026-07-24 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.41`；tag 对应提交 `48d8c76`，并设为 Latest。
+- `v1.2.41` 修复更新候选镜像二次展开，完整包边下边累计 SHA-256/SHA-512 流式校验，句柄关闭保留主错误；快速补丁整组校验/备份/事务应用；MediaPipe 手势帧复用掌心 scratch 与 tips 常量。
+- `v1.2.41` 不改变 UI、布局、手势视觉与交互语义、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。发布资产仅含 `latest.yml`、安装包、blockmap、SHA256 清单和 `1.2.40 -> 1.2.41` 快速补丁，Portable ZIP 跳过。
+- `v1.2.41` 资产校验：安装包 `104727871` 字节 / SHA256 `6eebd0e6e10b6ede9f82362a046102a1b16385cd24c0217195aa347b79b09a91`；blockmap `111949` 字节 / `f3241c92291855166f0e4f944dc9ebeebb9f784f4622fe686acfbb115c72adf9`；补丁 `2280453` 字节 / `1c1c0bbc205ad0d5810c3816b489d344363e3f54444b7141b4bad5a3a8f71654`；`latest.yml` `350` 字节 / `1c21a0e3178b4b1dbc12b760850f4ecab4fc0a5433a4d0698f4cb6de2693f103`；SHA256 清单见 `Mineradio-1.2.41-SHA256SUMS.txt`。
+
+- `v1.2.40` 于 2026-07-22 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.40`；tag 对应提交 `72873d48c18286fa2aabf0e00d3457baa97d2b94`，并设为 Latest。
+- `v1.2.40` 在 `public/index.html` 缓存桌面歌词最终归一化字符串，并让封面取色放大镜每次打开只编码一次 JPEG/CSS 背景；关闭时释放 canvas、Base64 和内联背景引用。
+- `v1.2.40` 在 `server.js` 为快速补丁保持 12 秒首包超时和 30 秒正文空闲 watchdog，所有退出路径清理计时器；`AbortError` / `TimeoutError` 统一返回 `UPDATE_TIMEOUT`，并读取 Node `fetch failed` 的 `cause` 区分 DNS 与连接中断。
+- `v1.2.40` 不改变 UI、布局、歌词输出、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。发布资产仅含 `latest.yml`、安装包、blockmap、SHA256 清单和 `1.2.39 -> 1.2.40` 快速补丁，Portable ZIP 跳过。
+- `v1.2.40` 资产校验：安装包 `104726206` 字节 / SHA256 `b4ee5580e4708e80e9037899664b8924b162ba13f84277eab3c20ce87ab6cb2b`；blockmap `111905` 字节 / `336ba976c7e711453121053e0ab3f26e9b5c39826eb4495ebdfa0e76313e7b6d`；补丁 `2270317` 字节 / `f3ff7ead1390e38261f1fcedae3dbfcf1227c82188fa5de8f415abac17bc939f`；`latest.yml` `350` 字节 / `a7022ce1426ad21006c096d3d5f4781fb947844daa332d0d3fd2e77efc76627e`；SHA256 清单 `299` 字节 / `2489669892d24d2c06c5e659372cec8f40d1da4b6c321f8084553b857ae12269`。
+
+- `v1.2.39` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.39`
+- `v1.2.39` 重点优化桌面歌词/壁纸覆盖层同步：复用歌词快照、动效/播放/颜色子载荷和完整 payload；IPC 结构化快照取得后释放 `beatMap` 与壁纸 `cover`，不改变歌词、壁纸、UI、玻璃质感、电影视觉、播放控制或 3D 歌单架交互。
+- `v1.2.39` Release 资产包括：`latest.yml`、`Mineradio-1.2.39-Setup.exe`、`Mineradio-1.2.39-Setup.exe.blockmap`、`Mineradio-1.2.39-SHA256SUMS.txt`、`Mineradio-1.2.38-to-1.2.39.patch.json`；Portable ZIP 跳过。
+- `v1.2.39` 安装包 SHA256：`33156b1c79e25feb9a035a3f8c95cb38aa54fdec7d2a7e54c573fea1acf80b1a`
+
+- `v1.2.38` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.38`
+- `v1.2.38` 重点把 3D 歌单架 `shelfLayoutProfile()` / `shelfSettings()` 改为固定缓存对象就地填充，`renderQualityProfile()` 返回冻结档位常量，`applyRendererPowerMode()` 就地更新 `renderPowerState`；布局结果、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.38` Release 资产包括：`latest.yml`、`Mineradio-1.2.38-Setup.exe`、`Mineradio-1.2.38-Setup.exe.blockmap`、`Mineradio-1.2.38-SHA256SUMS.txt`、`Mineradio-1.2.37-to-1.2.38.patch.json`；Portable ZIP 跳过。
+- `v1.2.38` 安装包 SHA256：`5a3677d6fc549fc55e0250021029d103039124c6ade5819f6161eaf1942ffb4b`
+
+- `v1.2.37` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.37`
+- `v1.2.37` 重点把舞台歌词 `updateStageLyrics3D()` 内每帧新建的 `tickMesh` 提升为模块级 `tickStageLyricMesh()`，并用 `stageLyricTickCtx` 传递帧状态；歌词输出、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.37` Release 资产包括：`latest.yml`、`Mineradio-1.2.37-Setup.exe`、`Mineradio-1.2.37-Setup.exe.blockmap`、`Mineradio-1.2.37-SHA256SUMS.txt`、`Mineradio-1.2.36-to-1.2.37.patch.json`；Portable ZIP 跳过。
+- `v1.2.37` 安装包 SHA256：`75175b1e2c12f90d95c65e0c7a0e928398628a1315fad6e67fef46ab23559ee4`
+
+- `v1.2.36` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.36`
+- `v1.2.36` 重点把电影节拍镜头 `beatCam.events` 改为对象池，并复用 live 调度 payload、merge tone、帧压 sample 与舞台歌词 intro/fallback 进度行；镜头/歌词输出、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.36` Release 资产包括：`latest.yml`、`Mineradio-1.2.36-Setup.exe`、`Mineradio-1.2.36-Setup.exe.blockmap`、`Mineradio-1.2.36-SHA256SUMS.txt`、`Mineradio-1.2.35-to-1.2.36.patch.json`；Portable ZIP 跳过。
+- `v1.2.36` 安装包 SHA256：`a63e5e9a883e760256827996ce9601a9917607888e3c20505b5e24a88f2f28ff`
+
+- `v1.2.35` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.35`
+- `v1.2.35` 重点复用实时节拍命中/未命中返回对象与 `beatFollow()`，并让电影镜头曲目画像分析帧复用 sample、`mixToward()` 与常量 analysis profile；节拍/镜头输出、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
+- `v1.2.35` Release 资产包括：`latest.yml`、`Mineradio-1.2.35-Setup.exe`、`Mineradio-1.2.35-Setup.exe.blockmap`、`Mineradio-1.2.35-SHA256SUMS.txt`、`Mineradio-1.2.34-to-1.2.35.patch.json`；Portable ZIP 跳过。
+- `v1.2.35` 安装包 SHA256：`7e2c823a11c95463deed25d9c63d82b848d4a7954396d346ec9442a68e04bd92`
 
 - `v1.2.34` 发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.2.34`
 - `v1.2.34` 重点让不可见的舞台歌词光粒停止坐标重算与缓冲上传，清理主循环和安魂镜头的重复工作，并让同一缓存安装包的并发更新请求共享一次完整校验；歌词/相机输出、UI、玻璃质感、电影视觉、播放控制和 3D 歌单架交互保持不变。
@@ -545,3 +622,11 @@
 - 涉及文件：`docs/QQ_MUSIC_INTERFACE_NOTES.md`、`server.js`、`desktop/main.js`、`public/index.html`。
 - 关键参数/实现：区分网页账号态 `p_skey` 和播放票据 `qm_keyst`/`qqmusic_key`/`music_key`/`wxskey`；`/api/qq/login/status` 返回 `playbackKeyReady`；缺播放票据时 `104003` 归类为 `login_required`；昵称头像用 `ptnick_*` 和 `qlogo.cn` 兜底。
 - 禁止回退或改坏的点：不要再把 `p_skey` 当作完整 QQ 音乐播放授权；不要因为 QQ 资料接口 `code:1000` 就清空头像/昵称或标记未登录；修 QQ 播放前先读 `docs/QQ_MUSIC_INTERFACE_NOTES.md`。
+
+### 2026-07-26 - v1.2.45 本地文件代理越权读取修复发布
+
+- 用户认可/要求保留：延续“修完验证、能发布就一起发布”的偏好，本轮把安全修复完整发布。
+- 涉及文件：`server.js`、`desktop/main.js`、`tests/local-file-proxy-authorization.test.js`、`.context/pitfalls/mineradio-local-file-proxy-authorization.md`、`AGENTS.md`、`CHANGELOG.md`、`RELEASE.md`。
+- 关键参数/实现：本地文件 HTTP 代理 `/api/local-file` 之前只校验随机令牌、未限制授权曲库根目录，可越权读任意文件（含 `..` 穿越）。修复给 `server.js` 增加可注入授权钩子 `setLocalFileAuthorizer`，缺省 Fail-Closed（未注入即拒绝）；`desktop/main.js` 在 `require` 后注入 `resolveAuthorizedLocalFile`，与 IPC 授权模型对齐。
+- 发布产物：GitHub Release `v1.2.45`（Latest），含 `Mineradio-1.2.45-Setup.exe`、`.blockmap`、`latest.yml` 和快速补丁 `Mineradio-1.2.44-to-1.2.45.patch.json`；已逐字节确认 `win-unpacked` 打包源码含授权门，安装包 SHA256 与本地一致。
+- 禁止回退或改坏的点：不要把 `/api/local-file` 改回只验令牌不验授权根目录；不要把授权钩子缺省改成 no-op（fail-open）；不要绕过 `resolveAuthorizedLocalFile` 直接 `statSync`/`createReadStream` 请求方 path。

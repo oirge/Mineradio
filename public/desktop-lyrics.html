@@ -24,9 +24,9 @@
       --lyric-mask-edge-width:92px;
       --lyric-vertical-feather:46px;
       --lyric-css-beat-glow:0px;
-      --lyric-shadow-soft:rgba(156,255,223,.34);
-      --lyric-shadow-glow:rgba(156,255,223,.26);
-      --lyric-shadow-hot:rgba(255,240,184,.22);
+      --lyric-shadow-soft:rgba(156,255,223,.44);
+      --lyric-shadow-glow:rgba(156,255,223,.34);
+      --lyric-shadow-hot:rgba(255,240,184,.32);
       --lyric-edge:rgba(4,6,12,.42);
       --lyric-drop:rgba(156,255,223,.38);
       --lyric-drop-paused:rgba(156,255,223,.22);
@@ -34,10 +34,11 @@
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;user-select:none}
     body{opacity:0;transition:opacity .22s ease;-webkit-app-region:no-drag}
     body.show{opacity:1}
-    canvas{display:none}
+    canvas{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none;z-index:1}
     .wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 12px;pointer-events:none}
     .stage{
       position:relative;
+      z-index:3;
       max-width:calc(100vw - 24px);
       padding:104px 86px 94px;
       box-sizing:border-box;
@@ -110,17 +111,19 @@
       backface-visibility:hidden;
       will-change:opacity,filter,transform,background;
     }
-    body.highlight .line{
+    body.highlight .line,body.flowing .line{
       background:linear-gradient(90deg,
         var(--lyric-highlight) 0%,
         var(--lyric-highlight) max(0%,calc(var(--lyric-progress) - var(--lyric-feather))),
-        var(--lyric-glow) calc(var(--lyric-progress) + 1.2%),
-        var(--lyric-primary) calc(var(--lyric-progress) + var(--lyric-feather)),
+        color-mix(in srgb,var(--lyric-highlight) 84%,var(--lyric-glow)) var(--lyric-progress),
+        var(--lyric-glow) calc(var(--lyric-progress) + max(2.4%,var(--lyric-feather) * .70)),
+        var(--lyric-primary) calc(var(--lyric-progress) + var(--lyric-feather) * 1.35),
         var(--lyric-primary) 100%);
       -webkit-background-clip:text;
       background-clip:text;
     }
     .line.in{animation:lyr-in 820ms cubic-bezier(.16,.84,.32,1.02) forwards}
+    body.stable .line.in{animation:lyr-in-stable 420ms cubic-bezier(.2,.8,.2,1) forwards}
     body.paused .line{filter:none;opacity:.84}
     .lock-hint{
       position:absolute;
@@ -174,7 +177,47 @@
       -webkit-app-region:no-drag;
     }
     .lyrics-tool-btn:hover{color:#fff}
+    .lyrics-tool-btn:disabled{opacity:.34;cursor:default}
+    .lyrics-size-step{
+      width:23px;
+      margin-right:-4px;
+      padding:0 0 1px;
+      font:900 16px/1 Arial,sans-serif;
+    }
+    .lyrics-stable-toggle{display:flex;min-width:36px}
+    .lyrics-stable-toggle.active{color:var(--lyric-highlight);text-shadow:0 0 14px var(--lyric-glow)}
+    .lyrics-tool-label{display:flex;align-items:center;height:22px;margin:0 -2px 0 1px;color:rgba(255,255,255,.58);font:800 10px/1 "Microsoft YaHei",sans-serif;white-space:nowrap}
+    .lyrics-glow-step{display:flex;width:20px;margin-right:-4px;padding:0 0 1px;font:900 15px/1 Arial,sans-serif}
+    .lyrics-size-value{
+      display:none;
+      align-items:center;
+      justify-content:flex-end;
+      width:34px;
+      height:22px;
+      margin:0 -4px;
+      color:rgba(255,255,255,.52);
+      font:800 10px/1 "Microsoft YaHei",sans-serif;
+      font-variant-numeric:tabular-nums;
+      text-align:right;
+      white-space:nowrap;
+      pointer-events:none;
+    }
+    .lyrics-glow-value{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      width:34px;
+      height:22px;
+      margin:0 -4px;
+      color:rgba(255,255,255,.64);
+      font:800 10px/1 "Microsoft YaHei",sans-serif;
+      font-variant-numeric:tabular-nums;
+      text-align:right;
+      white-space:nowrap;
+      pointer-events:none;
+    }
     body.unlocked .lyrics-tool-btn{display:flex}
+    body.unlocked .lyrics-size-value{display:flex}
     body.locked .lyrics-lock-toggle{display:flex}
     body.unlocked .stage.hint-visible .lock-hint,body.locked .stage.hint-visible .lock-hint{pointer-events:auto;-webkit-app-region:no-drag}
     .stage.hint-visible .lock-hint{opacity:.94;transform:translateX(-50%) translateY(0) scale(1)}
@@ -183,6 +226,10 @@
       58%{opacity:1;filter:blur(0)}
       100%{opacity:1;transform:translate3d(0,0,0) rotateX(0deg) rotateY(0deg) scale(1);filter:blur(0)}
     }
+    @keyframes lyr-in-stable{
+      0%{opacity:0;transform:translate3d(0,0,0) scale(.985);filter:blur(4px)}
+      100%{opacity:1;transform:translate3d(0,0,0) scale(1);filter:blur(0)}
+    }
   </style>
 </head>
 <body>
@@ -190,7 +237,7 @@
   <div class="wrap">
     <div id="stage" class="stage">
       <div id="lyricViewport" class="lyric-viewport"><div id="lyricScroller" class="lyric-scroll"><div id="line" class="line" data-text="Mineradio">Mineradio</div></div></div>
-      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="Close desktop lyrics">&#20851;&#38381;&#26700;&#38754;&#27468;&#35789;</button></div>
+      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="&#32553;&#23567;&#26700;&#38754;&#27468;&#35789;">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Enlarge desktop lyrics" title="&#25918;&#22823;&#26700;&#38754;&#27468;&#35789;">+</button><span class="lyrics-tool-label">光效</span><button id="glowDownBtn" class="lyrics-tool-btn lyrics-glow-step" type="button" aria-label="Reduce lyric glow" title="减弱歌词光效">&#8722;</button><span id="glowValue" class="lyrics-glow-value" aria-live="polite">35%</span><button id="glowUpBtn" class="lyrics-tool-btn lyrics-glow-step" type="button" aria-label="Increase lyric glow" title="增强歌词光效">+</button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="Close desktop lyrics">&#20851;&#38381;&#26700;&#38754;&#27468;&#35789;</button></div>
     </div>
   </div>
   <script>
@@ -199,10 +246,18 @@
     var ctx = canvas.getContext('2d');
     var stage = document.getElementById('stage');
     var lyricViewport = document.getElementById('lyricViewport');
+    var lyricScroller = document.getElementById('lyricScroller');
     var line = document.getElementById('line');
     var lockHint = document.getElementById('lockHint');
     var lockText = document.getElementById('lockText');
+    var sizeDownBtn = document.getElementById('sizeDownBtn');
+    var sizeValue = document.getElementById('sizeValue');
+    var sizeUpBtn = document.getElementById('sizeUpBtn');
+    var glowDownBtn = document.getElementById('glowDownBtn');
+    var glowValue = document.getElementById('glowValue');
+    var glowUpBtn = document.getElementById('glowUpBtn');
     var lockToggleBtn = document.getElementById('lockToggleBtn');
+    var stableToggleBtn = document.getElementById('stableToggleBtn');
     var closeLyricsBtn = document.getElementById('closeLyricsBtn');
     var dpr = 1;
     var lastText = '';
@@ -221,13 +276,39 @@
     var hintVisible = false;
     var hintTimer = 0;
     var lastPointerEvent = null;
+    var sizeRequestSequence = 0;
+    var lastSizeWheelAt = 0;
+    var lastHotBoundsAt = 0;
+    var lastHotBoundsSignature = '';
+    var lastProgressVar = '';
+    var lastStageTransform = '';
+    var lastStageFilter = '';
+    var lastBeatGlowVar = '';
+    var lastScrollX = '';
+    var lastLineRect = null;
+    var lastLineRectKey = '';
+    var glyphWidthCache = Object.create(null);
+    var glyphWidthCacheKeys = [];
+    var GLOW_TEXT_LAYERS = [
+      { filter:'blur(10px)', alpha:.94, minStroke:9, strokeFactor:.09 },
+      { filter:'blur(24px)', alpha:.74, minStroke:15, strokeFactor:.15 },
+      { filter:'blur(48px)', alpha:.50, minStroke:22, strokeFactor:.22 },
+      { filter:'blur(78px)', alpha:.28, minStroke:30, strokeFactor:.30 }
+    ];
+    var DESKTOP_LYRICS_SIZE_MIN = .20;
+    var DESKTOP_LYRICS_SIZE_MAX = 1.55;
+    var DESKTOP_LYRICS_SIZE_STEP = .05;
+    var DESKTOP_LYRICS_GLOW_MIN = 0;
+    var DESKTOP_LYRICS_GLOW_MAX = .85;
+    var DESKTOP_LYRICS_GLOW_STEP = .05;
+    var glowRequestSequence = 0;
     var scrollState = { needed:false, overflow:0, limit:0, offset:0, dir:-1, holdUntil:0, lastAt:0 };
     var particles = [];
     var live = { solar:0, beat:0, bass:0, scale:1, glow:0, spark:0, lift:0 };
     var state = {
       enabled:false,text:'Mineradio',progress:0,progressSpan:4.8,progressReceivedAt:0,playing:false,
       playbackTime:0,playbackDuration:0,playbackRate:1,playbackReceivedAt:0,beatMapKey:'',
-      size:1,opacity:.92,clickThrough:true,lyricGlowParticles:false,cinema:true,highlightFollow:false,frameRate:60,
+      size:1,opacity:.92,clickThrough:true,lyricGlowParticles:false,cinema:true,stable:false,highlightFollow:false,frameRate:60,
       lyricGlow:true,lyricGlowBeat:true,lyricGlowStrength:.35,highBloom:0,beatGlow:0,beatPulse:0,bass:0,feather:.055,
       fontFamily:'Inter,"Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif',
       fontWeight:900,letterSpacing:0,lineHeight:1,lyricScale:1,rows:'double',align:'center',
@@ -574,6 +655,8 @@
       canvas.style.width = innerWidth + 'px';
       canvas.style.height = innerHeight + 'px';
       ctx.setTransform(dpr,0,0,dpr,0,0);
+      lastLineRect = null;
+      lastLineRectKey = '';
       fitLyricText(true);
     }
     function measureLineWidth(fontSize) {
@@ -626,7 +709,7 @@
       setRootVar('--lyric-edge-width', edgeWidth + 'px');
       var size = baseFontSize;
       fitScaleX = 1;
-      var minSize = Math.max(24, Math.min(32, baseFontSize * .55));
+      var minSize = Math.max(8, Math.min(32, baseFontSize * .55));
       var maxScrollableWidth = readableWidth * 1.76;
       for (var i = 0; i < 24; i++) {
         var width = measureLineWidth(size);
@@ -666,14 +749,20 @@
       setRootVar('--lyric-letter-spacing', (renderedFontSize * state.letterSpacing).toFixed(2) + 'px');
       setRootVar('--lyric-fit-x', fitScaleX.toFixed(4));
       setRootVar('--lyric-mask-edge-width', maskEdgeWidth + 'px');
-      setRootVar('--lyric-scroll-x', scrollState.offset.toFixed(2) + 'px');
-      sendHotBounds();
+      var nextScrollX = scrollState.offset.toFixed(2) + 'px';
+      if (nextScrollX !== lastScrollX) {
+        lastScrollX = nextScrollX;
+        setRootVar('--lyric-scroll-x', lastScrollX);
+      }
+      positionInteractionHint();
+      sendHotBounds(true);
     }
     function updateLyricScroll(nowMs, progress) {
       if (!scrollState.needed) {
         if (scrollState.offset !== 0) {
           scrollState.offset = 0;
-          setRootVar('--lyric-scroll-x', '0px');
+          lastScrollX = '0px';
+          setRootVar('--lyric-scroll-x', lastScrollX);
         }
         return;
       }
@@ -696,7 +785,11 @@
         if (nowMs < scrollState.holdUntil && p < startGate) targetOffset = 0;
         scrollState.offset = Math.max(-limit, Math.min(0, Math.min(scrollState.offset, targetOffset)));
       }
-      setRootVar('--lyric-scroll-x', scrollState.offset.toFixed(2) + 'px');
+      var nextScrollX = scrollState.offset.toFixed(2) + 'px';
+      if (nextScrollX !== lastScrollX) {
+        lastScrollX = nextScrollX;
+        setRootVar('--lyric-scroll-x', lastScrollX);
+      }
     }
     function replayLineAnimation() {
       line.classList.remove('in');
@@ -709,6 +802,26 @@
       document.body.classList.toggle('unlocked', !locked);
       if (lockText) lockText.textContent = locked ? '\u4e2d\u952e\u89e3\u9501' : '\u4e2d\u952e\u9501\u5b9a';
       if (lockToggleBtn) lockToggleBtn.textContent = locked ? '\u89e3\u9501' : '\u9501\u5b9a';
+      if (stableToggleBtn) {
+        stableToggleBtn.textContent = state.stable === true ? '\u6d6e\u52a8' : '\u56fa\u5b9a';
+        stableToggleBtn.classList.toggle('active', state.stable === true);
+        stableToggleBtn.setAttribute('aria-pressed', state.stable === true ? 'true' : 'false');
+        stableToggleBtn.title = state.stable === true ? '\u6062\u590d\u6b4c\u8bcd\u4e0a\u4e0b\u6d6e\u52a8' : '\u56fa\u5b9a\u6b4c\u8bcd\u4f4d\u7f6e\uff0c\u4e0d\u4e0a\u4e0b\u6d6e\u52a8';
+      }
+      syncSizeButtons();
+      syncGlowButtons();
+    }
+    function syncSizeButtons() {
+      var size = clamp(state.size, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, 1);
+      if (sizeValue) sizeValue.textContent = Math.round(size * 100) + '%';
+      if (sizeDownBtn) sizeDownBtn.disabled = isLocked() || size <= DESKTOP_LYRICS_SIZE_MIN + .0001;
+      if (sizeUpBtn) sizeUpBtn.disabled = isLocked() || size >= DESKTOP_LYRICS_SIZE_MAX - .0001;
+    }
+    function syncGlowButtons() {
+      var glow = clamp(state.lyricGlowStrength, DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, .35);
+      if (glowValue) glowValue.textContent = Math.round(glow * 100) + '%';
+      if (glowDownBtn) glowDownBtn.disabled = glow <= DESKTOP_LYRICS_GLOW_MIN + .0001;
+      if (glowUpBtn) glowUpBtn.disabled = glow >= DESKTOP_LYRICS_GLOW_MAX - .0001;
     }
     function setPointerCapture(active) {
       active = !!active;
@@ -718,17 +831,122 @@
         window.desktopOverlay.setLyricsPointerCapture(active).catch(function(){});
       }
     }
-    function sendHotBounds() {
+    function lyricInteractionBounds() {
+      var viewportRect = lyricViewport.getBoundingClientRect();
+      var textRect = line.getBoundingClientRect();
+      if (!textRect || textRect.right <= textRect.left || textRect.bottom <= textRect.top) {
+        textRect = lyricScroller.getBoundingClientRect();
+      }
+      var left = Math.max(viewportRect.left, textRect.left);
+      var top = Math.max(viewportRect.top, textRect.top);
+      var right = Math.min(viewportRect.right, textRect.right);
+      var bottom = Math.min(viewportRect.bottom, textRect.bottom);
+      if (right <= left || bottom <= top) {
+        var fallbackX = clamp(textRect.left + (textRect.width || 0) * .5, viewportRect.left, viewportRect.right, viewportRect.left);
+        var fallbackY = clamp(textRect.top + (textRect.height || 0) * .5, viewportRect.top, viewportRect.bottom, viewportRect.top);
+        left = right = fallbackX;
+        top = bottom = fallbackY;
+      }
+      var padX = Math.round(clamp(renderedFontSize * .22, 2, 16, 8));
+      var padY = Math.round(clamp(renderedFontSize * .13, 1, 10, 5));
+      return {
+        left:Math.max(viewportRect.left, left - padX),
+        top:Math.max(viewportRect.top, top - padY),
+        right:Math.min(viewportRect.right, right + padX),
+        bottom:Math.min(viewportRect.bottom, bottom + padY)
+      };
+    }
+    function positionInteractionHint() {
+      if (!lockHint || !lyricViewport || !lyricScroller) return;
+      var localTop = lyricViewport.offsetTop + lyricScroller.offsetTop;
+      var hintHeight = lockHint.offsetHeight || 30;
+      lockHint.style.top = Math.max(8, Math.round(localTop - hintHeight - 8)) + 'px';
+    }
+    function sendHotBounds(force) {
       if (!window.desktopOverlay || !window.desktopOverlay.setLyricsHotBounds) return;
-      var rect = lyricViewport.getBoundingClientRect();
-      var padX = Math.max(26, Math.min(72, innerWidth * .038));
-      var padY = Math.max(24, Math.min(56, innerHeight * .052));
+      var now = performance.now();
+      if (!force && now - lastHotBoundsAt < 240) return;
+      var rect = lyricInteractionBounds();
+      var bounds = {
+        left:Math.round(rect.left),
+        top:Math.round(rect.top),
+        right:Math.round(rect.right),
+        bottom:Math.round(rect.bottom)
+      };
+      var signature = bounds.left + '|' + bounds.top + '|' + bounds.right + '|' + bounds.bottom;
+      lastHotBoundsAt = now;
+      if (!force && signature === lastHotBoundsSignature) return;
+      lastHotBoundsSignature = signature;
       window.desktopOverlay.setLyricsHotBounds({
-        left:rect.left - padX,
-        top:rect.top - padY,
-        right:rect.right + padX,
-        bottom:rect.bottom + padY
+        left:bounds.left,
+        top:bounds.top,
+        right:bounds.right,
+        bottom:bounds.bottom
       }).catch(function(){});
+    }
+    function applyLocalLyricsSize(value) {
+      state.size = clamp(value, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, state.size || 1);
+      baseFontSize = Math.round(58 * state.size);
+      layoutKey = '';
+      fitLyricText(true);
+      syncSizeButtons();
+      return state.size;
+    }
+    function applyLocalLyricsGlowStrength(value) {
+      state.lyricGlowStrength = clamp(value, DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, state.lyricGlowStrength || .35);
+      syncGlowButtons();
+      return state.lyricGlowStrength;
+    }
+    function requestLyricsSize(delta) {
+      if (isLocked() || !window.desktopOverlay || !window.desktopOverlay.setLyricsSize) return;
+      var previous = clamp(state.size, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, 1);
+      var next = Math.round(clamp(previous + Number(delta || 0), DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, previous) * 100) / 100;
+      if (Math.abs(next - previous) < .001) return;
+      var sequence = ++sizeRequestSequence;
+      applyLocalLyricsSize(next);
+      window.desktopOverlay.setLyricsSize(next).then(function(result){
+        if (sequence !== sizeRequestSequence) return;
+        if (!result || result.ok !== true || result.ignored === true) {
+          applyLocalLyricsSize(previous);
+          return;
+        }
+        if (isFinite(Number(result.size))) applyLocalLyricsSize(result.size);
+      }).catch(function(){
+        if (sequence === sizeRequestSequence) applyLocalLyricsSize(previous);
+      });
+    }
+    function requestLyricsGlowStrength(delta) {
+      if (!window.desktopOverlay || !window.desktopOverlay.setLyricsGlowStrength) return;
+      var previous = clamp(state.lyricGlowStrength, DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, .35);
+      var next = Math.round(clamp(previous + Number(delta || 0), DESKTOP_LYRICS_GLOW_MIN, DESKTOP_LYRICS_GLOW_MAX, previous) * 100) / 100;
+      if (Math.abs(next - previous) < .001) return;
+      var sequence = ++glowRequestSequence;
+      applyLocalLyricsGlowStrength(next);
+      window.desktopOverlay.setLyricsGlowStrength(next).then(function(result){
+        if (sequence !== glowRequestSequence) return;
+        if (!result || result.ok !== true || result.ignored === true) {
+          applyLocalLyricsGlowStrength(previous);
+          return;
+        }
+        if (isFinite(Number(result.strength))) applyLocalLyricsGlowStrength(result.strength);
+      }).catch(function(){
+        if (sequence === glowRequestSequence) applyLocalLyricsGlowStrength(previous);
+      });
+    }
+    function requestLyricsStable(stable) {
+      if (!window.desktopOverlay || !window.desktopOverlay.setLyricsStableState) return;
+      var previous = state.stable === true;
+      state.stable = !!stable;
+      syncLockClasses();
+      window.desktopOverlay.setLyricsStableState(state.stable).then(function(result){
+        if (!result || result.ok === false) {
+          state.stable = previous;
+          syncLockClasses();
+        }
+      }).catch(function(){
+        state.stable = previous;
+        syncLockClasses();
+      });
     }
     function applyState(next){
       next = next || {};
@@ -751,7 +969,7 @@
         .filter(Boolean)
         .slice(0, normalizeRows(state.rows) === 'single' ? 1 : 2)
         .join('\n') || 'Mineradio';
-      baseFontSize = Math.round(58 * clamp(state.size, .72, 1.55, 1));
+      baseFontSize = Math.round(58 * clamp(state.size, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, 1));
       state.progress = clamp(state.progress, 0, 1, 0);
       state.progressSpan = clamp(state.progressSpan, .75, 18, 4.8);
       state.progressReceivedAt = performance.now();
@@ -788,9 +1006,13 @@
       setRootVar('--lyric-line-height', String(state.lineHeight));
       setRootVar('--lyric-align', state.align);
       setRootVar('--lyric-feather', (state.feather * 100).toFixed(2) + '%');
+      state.stable = state.stable === true;
+      state.highlightFollow = state.highlightFollow === true;
       document.body.classList.toggle('show', !!state.enabled);
       document.body.classList.toggle('paused', !state.playing);
+      document.body.classList.toggle('stable', state.stable === true);
       document.body.classList.toggle('highlight', state.highlightFollow === true);
+      document.body.classList.toggle('flowing', state.lyricGlow === true && state.playing === true);
       document.body.style.opacity = state.enabled ? String(clamp(state.opacity, .28, 1, .92)) : '0';
       syncLockClasses();
       if (!state.enabled) {
@@ -807,6 +1029,10 @@
         scrollState.lastAt = 0;
         line.textContent = text;
         line.setAttribute('data-text', text);
+        lastLineRect = null;
+        lastLineRectKey = '';
+        glyphWidthCache = Object.create(null);
+        glyphWidthCacheKeys.length = 0;
         layoutKey = '';
         replayLineAnimation();
       }
@@ -845,17 +1071,28 @@
         else ctx.fillText(text, x, y);
         return;
       }
-      var width = 0;
-      for (var i = 0; i < chars.length; i++) {
-        width += ctx.measureText(chars[i]).width;
-        if (i < chars.length - 1) width += spacing;
+      var key = text + '|' + fontSize + '|' + state.fontWeight + '|' + state.fontFamily + '|' + spacing.toFixed(2);
+      var entry = glyphWidthCache[key];
+      if (!entry) {
+        if (glyphWidthCacheKeys.length > 64) {
+          glyphWidthCache = Object.create(null);
+          glyphWidthCacheKeys.length = 0;
+        }
+        entry = { widths:new Array(chars.length), total:0 };
+        for (var i = 0; i < chars.length; i++) {
+          entry.widths[i] = ctx.measureText(chars[i]).width;
+          entry.total += entry.widths[i];
+          if (i < chars.length - 1) entry.total += spacing;
+        }
+        glyphWidthCacheKeys.push(key);
+        glyphWidthCache[key] = entry;
       }
-      var cursor = x - width / 2;
+      var cursor = x - entry.total / 2;
       ctx.textAlign = 'left';
       for (var c = 0; c < chars.length; c++) {
         if (stroke) ctx.strokeText(chars[c], cursor, y);
         else ctx.fillText(chars[c], cursor, y);
-        cursor += ctx.measureText(chars[c]).width + (c < chars.length - 1 ? spacing : 0);
+        cursor += entry.widths[c] + (c < chars.length - 1 ? spacing : 0);
       }
       ctx.textAlign = 'center';
     }
@@ -881,22 +1118,35 @@
     }
     function applyStageMotion(now) {
       var cinemaBinding = state.cinema !== false;
+      var stableLock = state.stable === true;
       var motionBeat = cinemaBinding ? live.beat : 0;
       var motionSolar = cinemaBinding ? live.solar : 0;
       var motionBass = cinemaBinding ? live.bass : 0;
-      var targetLift = cinemaBinding ? Math.min(22, motionBeat * 18 + motionSolar * 5.2 + motionBass * 4.4) : 0;
-      live.lift += (targetLift - live.lift) * (targetLift > live.lift ? .46 : .16);
-      var floatY = Math.sin(now * 1.08) * -9.8 + Math.sin(now * 2.10 + .7) * 3.1;
-      var floatX = Math.sin(now * .70 + .4) * 6.2 + Math.sin(now * 1.18 + 1.1) * 2.6;
+      var targetLift = (!stableLock && cinemaBinding) ? Math.min(22, motionBeat * 18 + motionSolar * 5.2 + motionBass * 4.4) : 0;
+      live.lift += (targetLift - live.lift) * (targetLift > live.lift ? .46 : (stableLock ? .42 : .16));
+      var floatY = stableLock ? 0 : (Math.sin(now * 1.08) * -9.8 + Math.sin(now * 2.10 + .7) * 3.1);
+      var floatX = stableLock ? 0 : (Math.sin(now * .70 + .4) * 6.2 + Math.sin(now * 1.18 + 1.1) * 2.6);
       var bobY = floatY - live.lift;
-      var bobX = floatX + Math.sin(now * 1.55) * motionBeat * 3.4;
-      var rotX = Math.sin(now * .86 + .2) * 3.25 - motionBeat * .92;
-      var rotY = Math.sin(now * .74 + 1.3) * -2.75 + motionBeat * .34;
-      var scale = 1 + motionBeat * .115 + motionSolar * .034 + motionBass * .026;
+      var bobX = stableLock ? 0 : (floatX + Math.sin(now * 1.55) * motionBeat * 3.4);
+      var rotX = stableLock ? 0 : (Math.sin(now * .86 + .2) * 3.25 - motionBeat * .92);
+      var rotY = stableLock ? 0 : (Math.sin(now * .74 + 1.3) * -2.75 + motionBeat * .34);
+      var scale = stableLock ? (1 + motionBeat * .028 + motionSolar * .012) : (1 + motionBeat * .115 + motionSolar * .034 + motionBass * .026);
       live.scale += (scale - live.scale) * (scale > live.scale ? .46 : .16);
-      stage.style.transform = 'translate3d(' + bobX.toFixed(2) + 'px,' + bobY.toFixed(2) + 'px,0) rotateX(' + rotX.toFixed(3) + 'deg) rotateY(' + rotY.toFixed(3) + 'deg) scale(' + live.scale.toFixed(4) + ')';
-      stage.style.filter = 'brightness(' + (1.04 + motionBeat * .12 + motionSolar * .05).toFixed(3) + ') saturate(' + (1.08 + motionBeat * .10).toFixed(3) + ')';
-      setRootVar('--lyric-css-beat-glow', (state.lyricGlow ? clamp(motionBeat * 8 + motionSolar * 3, 0, 12, 0) : 0).toFixed(2) + 'px');
+      var nextTransform = 'translate3d(' + bobX.toFixed(2) + 'px,' + bobY.toFixed(2) + 'px,0) rotateX(' + rotX.toFixed(3) + 'deg) rotateY(' + rotY.toFixed(3) + 'deg) scale(' + live.scale.toFixed(4) + ')';
+      if (nextTransform !== lastStageTransform) {
+        lastStageTransform = nextTransform;
+        stage.style.transform = nextTransform;
+      }
+      var nextFilter = 'brightness(' + (1.04 + motionBeat * .12 + motionSolar * .05).toFixed(3) + ') saturate(' + (1.08 + motionBeat * .10).toFixed(3) + ')';
+      if (nextFilter !== lastStageFilter) {
+        lastStageFilter = nextFilter;
+        stage.style.filter = nextFilter;
+      }
+      var nextBeatGlow = (state.lyricGlow ? clamp(motionBeat * 8 + motionSolar * 3, 0, 12, 0) : 0).toFixed(2) + 'px';
+      if (nextBeatGlow !== lastBeatGlowVar) {
+        lastBeatGlowVar = nextBeatGlow;
+        setRootVar('--lyric-css-beat-glow', nextBeatGlow);
+      }
     }
     function drawAura(rect, motion) {
       if (!state.lyricGlow || motion.glowStrength <= 0) return;
@@ -906,14 +1156,14 @@
       var ry = Math.max(rect.height * 1.02, 66) * (1 + live.solar * .10 + live.beat * .08);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = clamp(state.opacity, .28, 1, .92);
+      ctx.globalAlpha = clamp(state.opacity * 1.18, .28, 1, 1);
       ctx.translate(cx, cy);
       ctx.scale(rx, ry);
       var g = ctx.createRadialGradient(0,0,0,0,0,1);
-      g.addColorStop(0.00, colorWithAlpha(state.displayColors.highlight, .24));
-      g.addColorStop(0.28, colorWithAlpha(state.displayColors.glow, .15));
-      g.addColorStop(0.64, colorWithAlpha(state.displayColors.secondary, .040));
-      g.addColorStop(0.90, colorWithAlpha(state.displayColors.glow, .006));
+      g.addColorStop(0.00, colorWithAlpha(state.displayColors.highlight, .54));
+      g.addColorStop(0.28, colorWithAlpha(state.displayColors.glow, .36));
+      g.addColorStop(0.64, colorWithAlpha(state.displayColors.secondary, .12));
+      g.addColorStop(0.90, colorWithAlpha(state.displayColors.glow, .028));
       g.addColorStop(1.00, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -922,21 +1172,21 @@
       ctx.restore();
     }
     function drawHighlightBloom(rect, progress) {
-      if (!state.lyricGlow || state.highlightFollow !== true) return;
+      if (!state.lyricGlow || state.playing !== true) return;
       var p = clamp(progress, 0, 1, 0);
       var x = rect.left + rect.width * p;
       var y = rect.top + rect.height * .50 - live.lift * .10;
       var rx = Math.max(42, Math.min(150, renderedFontSize * (1.05 + live.beat * .32)));
       var ry = Math.max(24, Math.min(82, renderedFontSize * (.42 + live.beat * .18)));
-      var alpha = clamp(.18 + live.solar * .12 + live.beat * .18, .12, .48) * clamp(state.opacity, .28, 1, .92);
+      var alpha = clamp(.52 + live.solar * .28 + live.beat * .34, .34, .92) * clamp(state.opacity, .28, 1, .92);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = alpha;
       ctx.translate(x, y);
       ctx.scale(rx, ry);
       var g = ctx.createRadialGradient(0,0,0,0,0,1);
-      g.addColorStop(0, colorWithAlpha(state.displayColors.highlight, .88));
-      g.addColorStop(.36, colorWithAlpha(state.displayColors.glow, .34));
+      g.addColorStop(0, colorWithAlpha(state.displayColors.highlight, 1));
+      g.addColorStop(.36, colorWithAlpha(state.displayColors.glow, .78));
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -946,7 +1196,7 @@
     }
     function drawGlowText(rect, motion) {
       if (!state.lyricGlow || motion.glowStrength <= 0) return;
-      var target = Math.min(1.08, (0.09 + live.solar * .38 + live.beat * .22) * Math.min(3, motion.glowDrive));
+      var target = Math.min(1.50, (0.42 + live.solar * .90 + live.beat * .50) * Math.min(2.8, Math.max(.95, motion.glowDrive * 1.25)));
       live.glow += (target - live.glow) * (target > live.glow ? .11 : .06);
       if (live.glow <= .004) return;
       var text = line.textContent || 'Mineradio';
@@ -955,12 +1205,6 @@
       var spacing = renderedFontSize * state.letterSpacing;
       var hotMix = Math.max(0, Math.min(1, live.solar * 1.05 + live.beat * .18));
       var color = hotMix > .42 ? state.displayColors.highlight : state.displayColors.glow;
-      var layers = [
-        { blur:10, alpha:.54, stroke:Math.max(9, renderedFontSize * .09) },
-        { blur:24, alpha:.38, stroke:Math.max(15, renderedFontSize * .15) },
-        { blur:48, alpha:.20, stroke:Math.max(22, renderedFontSize * .22) },
-        { blur:78, alpha:.09, stroke:Math.max(30, renderedFontSize * .30) }
-      ];
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.textAlign = 'center';
@@ -968,13 +1212,14 @@
       ctx.font = state.fontWeight + ' ' + renderedFontSize + 'px ' + state.fontFamily;
       ctx.translate(cx, cy);
       ctx.scale(fitScaleX * live.scale, live.scale);
-      for (var i = 0; i < layers.length; i++) {
+      for (var i = 0; i < GLOW_TEXT_LAYERS.length; i++) {
+        var layer = GLOW_TEXT_LAYERS[i];
         ctx.save();
-        ctx.filter = 'blur(' + layers[i].blur + 'px)';
-        ctx.globalAlpha = live.glow * layers[i].alpha * clamp(state.opacity, .28, 1, .92);
+        ctx.filter = layer.filter;
+        ctx.globalAlpha = live.glow * layer.alpha * clamp(state.opacity, .28, 1, .92);
         ctx.fillStyle = color;
         ctx.strokeStyle = color;
-        ctx.lineWidth = layers[i].stroke;
+        ctx.lineWidth = Math.max(layer.minStroke, renderedFontSize * layer.strokeFactor);
         ctx.lineJoin = 'round';
         drawCanvasText(text, 0, 0, renderedFontSize, spacing, true);
         drawCanvasText(text, 0, 0, renderedFontSize, spacing, false);
@@ -1030,11 +1275,29 @@
       var now = nowMs * .001;
       if (state.enabled) {
         var progress = currentDisplayProgress();
-        setRootVar('--lyric-progress', (progress * 100).toFixed(2) + '%');
+        var nextProgress = (progress * 100).toFixed(2) + '%';
+        if (nextProgress !== lastProgressVar) {
+          lastProgressVar = nextProgress;
+          setRootVar('--lyric-progress', nextProgress);
+        }
         var offlineMotion = tickDesktopBeatMap(currentDesktopPlaybackTime(nowMs), dt);
         var motion = updateMotion(now, offlineMotion);
         applyStageMotion(now);
         updateLyricScroll(nowMs, progress);
+        var rectKey = layoutKey + '|' + lastStageTransform + '|' + lastScrollX;
+        var rect = (lastLineRect && rectKey === lastLineRectKey) ? lastLineRect : (lastLineRectKey = rectKey, lastLineRect = line.getBoundingClientRect());
+        if (canvas.width && canvas.height) {
+          ctx.clearRect(0, 0, innerWidth, innerHeight);
+          if (rect && rect.width > 1 && rect.height > 1) {
+            drawAura(rect, motion);
+            drawGlowText(rect, motion);
+            drawHighlightBloom(rect, progress);
+            drawParticles(rect, motion, now);
+          }
+        }
+        sendHotBounds(false);
+      } else if (canvas.width && canvas.height) {
+        ctx.clearRect(0, 0, innerWidth, innerHeight);
       }
       scheduleNextDraw();
     }
@@ -1060,19 +1323,15 @@
     function pointInRect(evt, rect, padX, padY) {
       return evt.clientX >= rect.left - padX && evt.clientX <= rect.right + padX && evt.clientY >= rect.top - padY && evt.clientY <= rect.bottom + padY;
     }
+    function pointInLyric(evt) {
+      return !!(state.enabled && evt && pointInRect(evt, lyricInteractionBounds(), 0, 0));
+    }
     function pointInStage(evt) {
       if (!state.enabled || !evt) return false;
       if (dragging) return true;
-      if (!isLocked()) {
-        var stageRect = stage.getBoundingClientRect();
-        return pointInRect(evt, stageRect, 0, 0);
-      }
-      var padX = Math.max(24, Math.min(68, innerWidth * .034));
-      var padY = Math.max(22, Math.min(46, innerHeight * .045));
-      var lyricRect = lyricViewport.getBoundingClientRect();
-      if (pointInRect(evt, lyricRect, padX, padY)) return true;
-      var hintRect = lockHint.getBoundingClientRect();
-      return pointInRect(evt, hintRect, 10, 10);
+      if (pointInLyric(evt)) return true;
+      if (!hintVisible || !lockHint) return false;
+      return pointInRect(evt, lockHint.getBoundingClientRect(), 10, 10);
     }
     function setHintVisible(visible) {
       hintVisible = !!visible;
@@ -1170,9 +1429,8 @@
       if (!dragging) hideInteractionHint();
     });
     window.addEventListener('pointerdown', function(evt){
-      if (!pointInStage(evt)) return;
-      if (closeLyricsBtn && closeLyricsBtn.contains(evt.target)) return;
-      if (lockToggleBtn && lockToggleBtn.contains(evt.target)) return;
+      if (evt.target && evt.target.closest && evt.target.closest('.lyrics-tool-btn')) return;
+      if (!pointInLyric(evt)) return;
       if (evt.button === 1) {
         evt.preventDefault();
         hideInteractionHint();
@@ -1203,13 +1461,67 @@
     });
     stage.addEventListener('lostpointercapture', endDrag);
     window.addEventListener('auxclick', function(evt){
-      if (evt.button === 1 && pointInStage(evt)) evt.preventDefault();
+      if (evt.button === 1 && pointInLyric(evt)) evt.preventDefault();
     });
+    function handleLyricsWheel(evt) {
+      if (!evt || isLocked() || dragging || !pointInStage(evt)) return false;
+      var deltaY = Number(evt.deltaY);
+      if (!isFinite(deltaY) || Math.abs(deltaY) < .01) return false;
+      evt.preventDefault();
+      evt.stopPropagation();
+      var now = performance.now();
+      if (lastSizeWheelAt && now - lastSizeWheelAt < 70) return true;
+      lastSizeWheelAt = now;
+      requestLyricsSize(deltaY < 0 ? DESKTOP_LYRICS_SIZE_STEP : -DESKTOP_LYRICS_SIZE_STEP);
+      setHintVisible(true);
+      return true;
+    }
+    window.addEventListener('wheel', handleLyricsWheel, { passive:false });
     if (lockToggleBtn) {
       lockToggleBtn.addEventListener('click', function(evt){
         evt.preventDefault();
         evt.stopPropagation();
         setLocked(!isLocked());
+        setHintVisible(true);
+      });
+    }
+    if (sizeDownBtn) {
+      sizeDownBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsSize(-DESKTOP_LYRICS_SIZE_STEP);
+        setHintVisible(true);
+      });
+    }
+    if (sizeUpBtn) {
+      sizeUpBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsSize(DESKTOP_LYRICS_SIZE_STEP);
+        setHintVisible(true);
+      });
+    }
+    if (glowDownBtn) {
+      glowDownBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsGlowStrength(-DESKTOP_LYRICS_GLOW_STEP);
+        setHintVisible(true);
+      });
+    }
+    if (glowUpBtn) {
+      glowUpBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsGlowStrength(DESKTOP_LYRICS_GLOW_STEP);
+        setHintVisible(true);
+      });
+    }
+    if (stableToggleBtn) {
+      stableToggleBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsStable(state.stable !== true);
         setHintVisible(true);
       });
     }
