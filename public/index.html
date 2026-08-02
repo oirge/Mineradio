@@ -2984,7 +2984,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.65';
+var APP_VERSION = '1.2.66';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -16891,6 +16891,11 @@ function makeContentListManager() {
     }
   }
 
+  /**
+   * 同步歌单详情页的可见歌曲行，复用窗口并合并数据更新与绘制循环。
+   * @param {boolean} force 是否强制重建可见行。
+   * @returns {void}
+   */
   function syncRenderedRows(force) {
     if (!group) return;
     var nowT = uniforms.uTime.value || 0;
@@ -16903,13 +16908,17 @@ function makeContentListManager() {
     var end = Math.min(total - 1, start + CONTENT_MAX_RENDER - 1);
     start = Math.max(0, end - CONTENT_MAX_RENDER + 1);
     if (!force && start === renderedStart && rows.length === (end - start + 1)) {
-      rows.forEach(function(row) { row.song = allTracks[row.index] || row.song; });
-      if (rowsDirty || refreshLoading) {
-        rows.forEach(function(row) {
+      var shouldRedraw = rowsDirty || refreshLoading;
+      for (var rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+        var row = rows[rowIdx];
+        row.song = allTracks[row.index] || row.song;
+        if (shouldRedraw) {
           var isCenter = Math.abs(row.index - centerSmooth) < 0.5;
           drawRow(row, row.song, isCenter);
           row.lastCenter = isCenter;
-        });
+        }
+      }
+      if (shouldRedraw) {
         rowsDirty = false;
         rowDrawAt = nowT;
       }

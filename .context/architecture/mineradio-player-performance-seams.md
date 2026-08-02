@@ -328,6 +328,7 @@
 - 桌面持久曲库的外置封面优先复用 `localCoverFile.url` 的 `/api/local-file` 流地址。缩略图与当前封面 `Image` 解码前需设置 `crossOrigin='anonymous'`；仅浏览器拖放的普通 `File` 继续走 data URL 回退，不能重新对桌面外置封面调用整图 `readLocalFileDataUrl`。
 - 相关回归测试：`tests/local-asset-cache-v3.test.js`。
 - `localSearchPool()` 构建本地候选池后，`scheduleLocalSearchIndexWarmup()` 必须直接接收已经过滤的数组，不得再次调用 `localSearchWarmupSource()`；混合队列仍需保留首个非本地项之前的本地歌曲。空查询结果可按 `localSearchPoolCache.signature` 复用数组身份，调用方不得原地修改该缓存数组。
+- 3D 歌单详情页的 `syncRenderedRows()` 在可见窗口未变化时必须用单次索引循环同时更新歌曲引用和按需重绘，避免恢复为两个 `forEach` 遍历；`rowsDirty` / 加载动画刷新、中心行判定和绘制顺序必须保持原语义。
 
 ## Reference
 
