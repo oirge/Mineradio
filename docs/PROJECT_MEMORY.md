@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.70`；本轮最终提交将创建并推送 tag `v1.2.70`。
+- 当前源码检查点：`v1.2.71`；本轮最终提交将创建并推送 tag `v1.2.71`。
 - 当前工作分支：`codex/release-1.2.60`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -32,6 +32,8 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.71`（2026-08-02）继续优化播放帧热路径：实时节拍分析复用主频谱分析已计算的时域 RMS，避免同一帧再次扫描 `2048` 个时域采样点；实时节拍频段边界按采样率、FFT 尺寸和数组长度缓存；空 Home 波形在时间节流命中后才查询 DOM。节拍频段数值、命中判断、视觉响应、UI、布局、播放控制和交互语义保持不变。新增 `tests/audio-analysis-hot-path.test.js`，当前全量回归 `161/161` 通过。已生成便携包 `147491934` 字节 / SHA256 `8c49554192d4d11ee5e24f3c33bb48a8ff7f4df07e8c531c539c2cae29b4eee9` 和快速补丁 `2305532` 字节 / SHA256 `d4352b2b22417bd7feafc9a5da98566ea64291d2d0250be6fb84ee8e6cba0d93`；NSIS 安装器未产出，本轮不创建 Latest Release。
 
 - `v1.2.67`（2026-08-02）本轮继续优化播放帧热路径：`tickStageLyricMesh()` 复用光粒循环的帧级稳定状态，`shelfManager.update()` 复用内容打开与常驻显示状态；歌词坐标、歌单架布局、UI、玻璃质感、电影视觉、播放控制和交互语义保持不变。新增 `tests/frame-hot-path.test.js`，全量测试 `156/156`、56 个 JavaScript 文件语法、2 个前端内联脚本解析和 `git diff --check` 均通过。
 - `v1.2.67` 本地资产：安装包 `104841092` 字节 / SHA256 `e346de8c5d9ae8bd6b959de8a84160ba590ee9cc126e5c6612aa7d7a238a4a6b`；blockmap `111996` 字节 / `4da7eda9e19d2a27dc05e7f4013425bb51491b8f8ae77e272108ab46a7148e8f`；`latest.yml` SHA256 `b68d92e67641a1baf96379eaa7e7e223d32d3b9dcc8680c3b451c421f8a71497`；快速补丁 `2299088` 字节 / `59b5c10bac8c910eb2d143f1db72434c922ff765bae29ee29312b609445f7597`。Portable ZIP 本轮不上传。

@@ -203,6 +203,15 @@ Mineradio v1.1.0 绾噣瀹夎鐗?```
 - 安装器 SHA256：`e346de8c5d9ae8bd6b959de8a84160ba590ee9cc126e5c6612aa7d7a238a4a6b`；blockmap：`4da7eda9e19d2a27dc05e7f4013425bb51491b8f8ae77e272108ab46a7148e8f`；快速补丁：`59b5c10bac8c910eb2d143f1db72434c922ff765bae29ee29312b609445f7597`；`latest.yml`：`b68d92e67641a1baf96379eaa7e7e223d32d3b9dcc8680c3b451c421f8a71497`。
 - Release 标题使用 `Mineradio v1.2.67 舞台歌词与歌单架帧更新低开销优化版`，目标为 GitHub Latest Release。
 
+## v1.2.71 实时节拍分析低卡顿优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.71`。
+- 实时节拍分析复用主频谱分析已计算的时域 RMS，缓存频段采样桶边界，并删除持续播放中无消费者的相位误差计算；直接调用节拍引擎仍保留时域扫描回退。
+- 空 Home 波形先执行已有时间节流，再查询 DOM；保持播放视觉、UI、布局、文案、玻璃质感、电影视觉、播放控制和交互语义不变。
+- 新增 `tests/audio-analysis-hot-path.test.js`；完整 Node 回归测试、主进程语法检查、前端内联脚本解析和 `git diff --check` 在构建前执行。
+- 当前已生成：`dist/Mineradio-1.2.71-Portable-win-x64.zip`（147491934 字节，SHA256 `8c49554192d4d11ee5e24f3c33bb48a8ff7f4df07e8c531c539c2cae29b4eee9`）和 `dist/Mineradio-1.2.70-to-1.2.71.patch.json`（2305532 字节，SHA256 `d4352b2b22417bd7feafc9a5da98566ea64291d2d0250be6fb84ee8e6cba0d93`）。
+- NSIS 完整安装器连续构建未产出 `Setup.exe`、`.blockmap` 或 `latest.yml`，本轮不创建 GitHub Latest Release，避免发布不可用的更新元数据；安装器构建链恢复后再补齐正式发布资产。
+
 ## v1.2.70 队列可见行快照复用低卡顿优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.70`。

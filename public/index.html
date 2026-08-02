@@ -2698,6 +2698,21 @@ var timeDomainData = new Uint8Array(FFT_SIZE);
 var BEAT_FFT_SIZE = 2048;
 var beatFrequencyData = new Uint8Array(BEAT_FFT_SIZE / 2);
 var beatTimeDomainData = new Uint8Array(BEAT_FFT_SIZE);
+var beatBandRangeCache = {
+  sampleRate: 0,
+  fftSize: 0,
+  dataLength: 0,
+  subStart: 0,
+  subEnd: -1,
+  kickStart: 0,
+  kickEnd: -1,
+  bodyStart: 0,
+  bodyEnd: -1,
+  vocalStart: 0,
+  vocalEnd: -1,
+  snapStart: 0,
+  snapEnd: -1
+};
 var bass = 0, mid = 0, treble = 0, audioEnergy = 0, beatPulse = 0, prevEnergy = 0;
 var lyricSunEnergy = 0, lyricSunTarget = 0, lyricSunHold = 0, lyricSunAvg = 0, lyricSunPeak = 0.55;
 var smoothBass = 0, smoothMid = 0, smoothTreb = 0, smoothEnergy = 0;
@@ -2984,7 +2999,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.70';
+var APP_VERSION = '1.2.71';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -4884,17 +4899,48 @@ function beatAnalysisYieldMs(options, currentMs, prefetchMs) {
   return Math.min(currentMs == null ? 120 : currentMs, 160);
 }
 
-function beatBandRms(data, sampleRate, fftSize, hz0, hz1) {
-  var binHz = sampleRate / fftSize;
-  var a = Math.max(1, Math.floor(hz0 / binHz));
-  var b = Math.min(data.length - 1, Math.ceil(hz1 / binHz));
-  var sum = 0, count = 0;
-  for (var i = a; i <= b; i++) {
+/**
+ * 按已缓存的频段边界计算均方根值，避免播放期间重复换算相同的频率范围。
+ * @param {Uint8Array} data 频谱采样数据。
+ * @param {number} start 起始频谱桶，包含该桶。
+ * @param {number} end 结束频谱桶，包含该桶。
+ * @returns {number} 当前频段的均方根值。
+ */
+function beatBandRms(data, start, end) {
+  if (end < start) return 0;
+  var sum = 0;
+  for (var i = start; i <= end; i++) {
     var v = data[i] / 255;
     sum += v * v;
-    count++;
   }
-  return count ? Math.sqrt(sum / count) : 0;
+  return Math.sqrt(sum / (end - start + 1));
+}
+
+/**
+ * 缓存实时节拍分析的频谱桶边界；采样率、FFT 尺寸或数组长度变化时重新计算。
+ * @returns {object} 当前实时节拍分析使用的频段边界缓存。
+ */
+function ensureBeatBandRanges() {
+  var sampleRate = audioCtx && audioCtx.sampleRate || 44100;
+  var fftSize = beatAnalyser && beatAnalyser.fftSize || BEAT_FFT_SIZE;
+  var dataLength = beatFrequencyData.length;
+  var cache = beatBandRangeCache;
+  if (cache.sampleRate === sampleRate && cache.fftSize === fftSize && cache.dataLength === dataLength) return cache;
+  var binHz = sampleRate / fftSize;
+  cache.sampleRate = sampleRate;
+  cache.fftSize = fftSize;
+  cache.dataLength = dataLength;
+  cache.subStart = Math.max(1, Math.floor(38 / binHz));
+  cache.subEnd = Math.min(dataLength - 1, Math.ceil(74 / binHz));
+  cache.kickStart = Math.max(1, Math.floor(52 / binHz));
+  cache.kickEnd = Math.min(dataLength - 1, Math.ceil(165 / binHz));
+  cache.bodyStart = Math.max(1, Math.floor(165 / binHz));
+  cache.bodyEnd = Math.min(dataLength - 1, Math.ceil(420 / binHz));
+  cache.vocalStart = Math.max(1, Math.floor(420 / binHz));
+  cache.vocalEnd = Math.min(dataLength - 1, Math.ceil(2600 / binHz));
+  cache.snapStart = Math.max(1, Math.floor(1800 / binHz));
+  cache.snapEnd = Math.min(dataLength - 1, Math.ceil(9200 / binHz));
+  return cache;
 }
 
 function mixToward(cur, next, k) {
@@ -4906,25 +4952,34 @@ function beatFollow(cur, next, dt, upTau, downTau) {
   return cur + (next - cur) * (1 - Math.exp(-dt / Math.max(0.001, tau)));
 }
 
-function processRealtimeBeatEngine(dt) {
+/**
+ * 处理一次实时节拍分析；优先复用主频谱分析已经计算出的 RMS，避免同一帧再次扫描 2048 个时域采样点。
+ * @param {number} dt 本次音频分析时间片，单位为秒。
+ * @param {number=} rmsSample 主分析器计算出的时域均方根值；缺失时走兼容回退扫描。
+ * @returns {object|null} 可复用的命中或未命中结果对象。
+ */
+function processRealtimeBeatEngine(dt, rmsSample) {
   if (!beatAnalyser || !audioCtx || !audio || audio.paused) return null;
   dt = Math.max(0.001, Math.min(0.080, dt || 0.016));
   var dj = djMode.active;
   beatAnalyser.getByteFrequencyData(beatFrequencyData);
-  beatAnalyser.getByteTimeDomainData(beatTimeDomainData);
-  var sr = audioCtx.sampleRate || 44100;
-  var sub = beatBandRms(beatFrequencyData, sr, beatAnalyser.fftSize, 38, 74);
-  var kick = beatBandRms(beatFrequencyData, sr, beatAnalyser.fftSize, 52, 165);
-  var body = beatBandRms(beatFrequencyData, sr, beatAnalyser.fftSize, 165, 420);
-  var vocal = beatBandRms(beatFrequencyData, sr, beatAnalyser.fftSize, 420, 2600);
-  var snap = beatBandRms(beatFrequencyData, sr, beatAnalyser.fftSize, 1800, 9200);
+  var ranges = ensureBeatBandRanges();
+  var sub = beatBandRms(beatFrequencyData, ranges.subStart, ranges.subEnd);
+  var kick = beatBandRms(beatFrequencyData, ranges.kickStart, ranges.kickEnd);
+  var body = beatBandRms(beatFrequencyData, ranges.bodyStart, ranges.bodyEnd);
+  var vocal = beatBandRms(beatFrequencyData, ranges.vocalStart, ranges.vocalEnd);
+  var snap = beatBandRms(beatFrequencyData, ranges.snapStart, ranges.snapEnd);
   var low = Math.min(1, kick * 0.86 + sub * 0.42);
-  var rms = 0;
-  for (var i = 0; i < beatTimeDomainData.length; i++) {
-    var tv = (beatTimeDomainData[i] - 128) / 128;
-    rms += tv * tv;
+  var hasRmsSample = typeof rmsSample === 'number' && isFinite(rmsSample);
+  var rms = hasRmsSample ? rmsSample : 0;
+  if (!hasRmsSample) {
+    beatAnalyser.getByteTimeDomainData(beatTimeDomainData);
+    for (var i = 0; i < beatTimeDomainData.length; i++) {
+      var tv = (beatTimeDomainData[i] - 128) / 128;
+      rms += tv * tv;
+    }
+    rms = Math.sqrt(rms / beatTimeDomainData.length);
   }
-  rms = Math.sqrt(rms / beatTimeDomainData.length);
 
   var fastMul = dj ? 0.86 : 1;
   var downMul = dj ? 0.94 : 1;
@@ -4977,7 +5032,6 @@ function processRealtimeBeatEngine(dt) {
   var warmingUp = nowT < rtBeat.warmupUntil || rtBeat.primedFrames < (dj ? 8 : 18);
   var gapFromLast = nowT - rtBeat.lastHitAt;
   var expectedGap = rtBeat.tempoGap > 0 ? rtBeat.tempoGap : 0;
-  var phaseErr = expectedGap > 0 ? Math.abs(gapFromLast - expectedGap) : 99;
   var phaseWindow = expectedGap > 0 ? Math.max(dj ? 0.055 : 0.055, Math.min(dj ? 0.105 : 0.105, expectedGap * (dj ? 0.16 : 0.16))) : 0;
   var tempoDue = expectedGap > 0 && gapFromLast > expectedGap - phaseWindow && gapFromLast < expectedGap + phaseWindow;
   var lowPresence = Math.max(lowNorm, subNorm * 0.74);
@@ -27164,11 +27218,11 @@ function ensureHomeWaveTrackBars(el) {
 }
 function updateHomeAudioVisual(dt) {
   if (!emptyHomeActive) return;
-  var wave = document.getElementById('home-wave-track');
-  if (!wave) return;
   var nowMs = performance.now();
   var minGap = (typeof isRuntimeFramePressureActive === 'function' && isRuntimeFramePressureActive(nowMs)) ? 150 : 80;
   if (homeWaveTrackState.lastAt && nowMs - homeWaveTrackState.lastAt < minGap) return;
+  var wave = document.getElementById('home-wave-track');
+  if (!wave) return;
   homeWaveTrackState.lastAt = nowMs;
   ensureHomeWaveTrackBars(wave);
   var bars = wave.children;
@@ -32650,7 +32704,7 @@ function animate() {
     var energyOnset = Math.max(0, re - prevEnergy);
     prevEnergy = prevEnergy * 0.88 + re * 0.12;
 
-    var realtimeBeat = processRealtimeBeatEngine(analysisDt);
+    var realtimeBeat = processRealtimeBeatEngine(analysisDt, rms);
     if (realtimeBeat && realtimeBeat.hit) {
       var dj = djMode.active;
       var djMapCoversCurrentTime = !dj || !currentDjBeatMap || !currentDjBeatMap.partialUntilSec || !audio || (audio.currentTime || 0) <= currentDjBeatMap.partialUntilSec - 1.25;

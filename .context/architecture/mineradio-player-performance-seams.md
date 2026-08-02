@@ -332,6 +332,10 @@
 - `localSearchPool()` 构建本地候选池后，`scheduleLocalSearchIndexWarmup()` 必须直接接收已经过滤的数组，不得再次调用 `localSearchWarmupSource()`；混合队列仍需保留首个非本地项之前的本地歌曲。空查询结果可按 `localSearchPoolCache.signature` 复用数组身份，调用方不得原地修改该缓存数组。
 - 3D 歌单详情页的 `syncRenderedRows()` 在可见窗口未变化时必须用单次索引循环同时更新歌曲引用和按需重绘，避免恢复为两个 `forEach` 遍历；`rowsDirty` / 加载动画刷新、中心行判定和绘制顺序必须保持原语义。
 
+- 实时节拍分析调用方必须把主频谱分析已经计算的时域 RMS 传给 `processRealtimeBeatEngine(analysisDt, rms)`，这样持续播放时不再重复扫描第二份 `2048` 点时域数组；保留省略该参数时的 `beatTimeDomainData` 回退路径，供直接调用和未来独立分析入口使用。
+- `beatBandRms()` 接收 `start/end` 频谱桶边界，边界由 `ensureBeatBandRanges()` 按采样率、FFT 尺寸和数组长度缓存；不要在每个分析帧重新执行同一组 Hz 到桶的 `floor/ceil` 换算。`tests/audio-analysis-hot-path.test.js` 必须锁定采样桶和 RMS 数值等价。
+- `updateHomeAudioVisual()` 先命中已有时间节流，再查找 `home-wave-track` DOM 节点；空 Home 波形的显示和刷新间隔语义保持不变。
+
 ## Reference
 
 - 相关实现：`public/index.html`、`desktop/main.js`、`desktop/desktop-overlay-state-cache.js`、`desktop/mini-player-recovery-session.js`、`desktop/mini-player-state-cache.js`、`server.js`、`scripts/test-mini-player-memory.ps1`、`tests/desktop-lyrics-ipc-ownership.test.js`、`tests/desktop-lyrics-mouse-poller.test.js`、`tests/desktop-overlay-state-cache.test.js`、`tests/desktop-overlay-disabled-ipc.test.js`、`tests/desktop-overlay-main-update.test.js`、`tests/desktop-overlay-window-ownership.test.js`、`tests/local-asset-cache-ownership.test.js`、`tests/local-beat-cache-residency.test.js`、`tests/local-cover-thumb-promise-ownership.test.js`、`tests/local-file-range-memory.test.js`、`tests/local-library-persistent-memory.test.js`、`tests/local-library-background-refresh.test.js`、`tests/local-library-background-cancellation.test.js`、`tests/local-library-incremental-truncation.test.js`、`tests/local-lyric-cache-residency.test.js`、`tests/local-media-object-url-residency.test.js`、`tests/playlist-cover-cache-residency.test.js`、`tests/mini-player-main-gates.test.js`、`tests/mini-player-recovery-session.test.js`、`tests/mini-player-state-cache.test.js`
