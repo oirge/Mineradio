@@ -308,6 +308,7 @@
 - 缓存安装包复用通过 `installerReusePromises` 合并相同验证身份；key 使用规范化文件路径、版本、有限正大小与摘要的 JSON tuple，成功、失败和空结果都必须用 Promise 身份检查在 `finally` 清理。
 - `processRealtimeBeatEngine()` 使用模块级 `beatFollow()`，命中/未命中分别复用 `realtimeBeatHitResult` 与 `realtimeBeatMissResult`；两种对象的字段结构必须保持原样，调用方只能在当前同步帧立即读取，不得跨调用保存引用。
 - 音频分析帧向 `updateCinemaTrackProfile()` 必须复用模块级 `cinemaTrackProfileSample`，线性混合使用模块级 `mixToward()`；`cinemaAnalysisProfileForSong()` 返回固定常量对象，调用方不得原地改写 profile 字段。
+- 主循环中的普通镜头和自由镜头不得在投影参数未变化时重复调用 `camera.updateProjectionMatrix()`；`updateCameraProjectionIfNeeded()` 缓存 `fov/aspect/near/far/zoom/filmGauge/filmOffset`，`fov` 仅在漂移超过 `0.0005` 度时触发重建，窗口尺寸或显式强制同步时才强制重建，镜头位置和节拍推拉更新不受影响。回归测试：`tests/camera-projection-hot-path.test.js`。
 
 
 - `beatCam.events` 使用对象池：新增事件走 `acquireBeatCamEvent()`，过期/队首裁剪/清空走 `removeBeatCamEventAt` / `trimBeatCamEventsFront` / `clearBeatCamEvents`；不得再直接 `events.length = 0` 丢弃可回收对象（`clearBeatCamEvents` 内部除外）。

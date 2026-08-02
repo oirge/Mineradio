@@ -2999,7 +2999,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.71';
+var APP_VERSION = '1.2.72';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -4418,6 +4418,42 @@ function captureFreeCameraFromCurrent() {
   freeCamera.roll = FREE_CAMERA_EULER.z;
   freeCamera.fov = clampRange(camera.fov || BASE_FOV, 26, 72);
 }
+var cameraProjectionSyncState = {
+  fov: NaN,
+  aspect: NaN,
+  near: NaN,
+  far: NaN,
+  zoom: NaN,
+  filmGauge: NaN,
+  filmOffset: NaN
+};
+var CAMERA_PROJECTION_FOV_EPSILON = 0.0005;
+/**
+ * 仅在透视投影参数变化时重建相机投影矩阵，减少稳定播放帧中的重复矩阵计算。
+ * @param {boolean=} force 是否强制重建并刷新缓存。
+ * @returns {boolean} 本次是否执行了投影矩阵重建。
+ */
+function updateCameraProjectionIfNeeded(force) {
+  var state = cameraProjectionSyncState;
+  var fov = camera.fov;
+  var aspect = camera.aspect;
+  var near = camera.near;
+  var far = camera.far;
+  var zoom = camera.zoom;
+  var filmGauge = camera.filmGauge;
+  var filmOffset = camera.filmOffset;
+  var fovStable = isFinite(state.fov) && isFinite(fov) && Math.abs(state.fov - fov) <= CAMERA_PROJECTION_FOV_EPSILON;
+  if (!force && fovStable && state.aspect === aspect && state.near === near && state.far === far && state.zoom === zoom && state.filmGauge === filmGauge && state.filmOffset === filmOffset) return false;
+  camera.updateProjectionMatrix();
+  state.fov = fov;
+  state.aspect = aspect;
+  state.near = near;
+  state.far = far;
+  state.zoom = zoom;
+  state.filmGauge = filmGauge;
+  state.filmOffset = filmOffset;
+  return true;
+}
 function applyFreeCameraToCamera() {
   if (!freeCamera || !(freeCamera.active || freeCamera.locked)) return false;
   var cameraShake = clampRange(Number(fx.cinemaShake) || 0, 0, 1.8);
@@ -4435,7 +4471,7 @@ function applyFreeCameraToCamera() {
   var cameraPunch = Math.max(camPunch * 0.55, beatCam.punch * 0.54 + beatCam.radiusKick * 0.16) * cameraShake;
   var targetFov = clampRange(freeCamera.fov || BASE_FOV, 26, 72) - cameraPunch * 1.75;
   camera.fov += (targetFov - camera.fov) * (targetFov < camera.fov ? 0.24 : 0.12);
-  camera.updateProjectionMatrix();
+  updateCameraProjectionIfNeeded();
   camPunch *= 0.86;
   return true;
 }
@@ -5662,7 +5698,7 @@ function updateCamera() {
   var targetFOV = BASE_FOV - cameraPunch * (djMode.active ? 2.62 : 2.35);
   var fovEase = targetFOV < camera.fov ? 0.24 : 0.12;
   camera.fov += (targetFOV - camera.fov) * fovEase;
-  camera.updateProjectionMatrix();
+  updateCameraProjectionIfNeeded();
   camPunch *= 0.86;
 }
 
@@ -7559,7 +7595,7 @@ function resetSkullPresetView(immediate, opts) {
     camera.position.copy(skullCameraTargetPos);
     skullCameraMixedLook.copy(skullCameraTargetLook);
     camera.lookAt(skullCameraMixedLook);
-    camera.updateProjectionMatrix();
+    updateCameraProjectionIfNeeded(true);
   }
 }
 var skullBreathOffsetScratch = { x:0, y:0, z:0 };
@@ -30655,7 +30691,7 @@ function hideGestureCursor(){}  // stub: 兼容旧调用
 function refreshMainRendererViewport(reason) {
   if (typeof camera !== 'undefined' && camera) {
     camera.aspect = Math.max(1, innerWidth) / Math.max(1, innerHeight);
-    camera.updateProjectionMatrix();
+    updateCameraProjectionIfNeeded(true);
   }
   applyRendererPowerMode();
   if (typeof requestStageLyricCameraSnap === 'function' && (desktopRuntimeState.fullscreen || document.fullscreenElement)) {
