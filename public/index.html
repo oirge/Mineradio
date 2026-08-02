@@ -2999,7 +2999,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.73';
+var APP_VERSION = '1.2.74';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -16350,7 +16350,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         }
       }
       // 二级内容框 update
-      if (contentList) contentList.update(dt);
+      if (contentList) contentList.update(dt, frameLayout, frameShelfLook);
     },
     onCoverChange: function() {
       if (group && mode !== 'off' && uniforms.uTime.value - lastUpdate > 0.2) {
@@ -16593,8 +16593,13 @@ function makeContentListManager() {
   var panelRaycastHits = [];
   var panelScreenCorners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   var panelScreenBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
-  function detailLayout() {
-    return shelfLayoutProfile().detail || DETAIL_BASE;
+  /**
+   * 读取歌单详情布局，并优先复用当前帧已经归一化的歌单架设置。
+   * @param {object=} shelfCtl 当前帧的歌单架设置快照；省略时自行读取。
+   * @returns {object} 歌单详情布局对象。
+   */
+  function detailLayout(shelfCtl) {
+    return shelfLayoutProfile(shelfCtl).detail || DETAIL_BASE;
   }
 
   function measurePanelScreenBounds(width, height) {
@@ -16911,7 +16916,15 @@ function makeContentListManager() {
     row.texture.needsUpdate = true;
   }
 
-  function place(row, i) {
+  /**
+   * 根据当前帧快照放置一个详情歌曲行，避免可见行循环重复读取布局和外观设置。
+   * @param {object} row 详情歌曲行对象。
+   * @param {number} i 当前可见行序号。
+   * @param {object} layout 当前帧的详情布局快照。
+   * @param {object} shelfLook 当前帧的歌单架外观快照。
+   * @returns {void}
+   */
+  function place(row, i, layout, shelfLook) {
     var delta = row.index - centerSmooth;
     var absD = Math.abs(delta);
     if (absD > CONTENT_VISIBLE_RADIUS + 0.5) { row.mesh.visible = false; return; }
@@ -16925,8 +16938,6 @@ function makeContentListManager() {
     var parWeight = Math.max(0, 1 - absD * 0.12);
     var pulse = row.fxPulse || 0;
     var settle = group && group.userData ? (group.userData.rowSettle || 0) : 0;
-    var layout = detailLayout();
-    var shelfLook = shelfSettings();
     var skullDetail = shouldUseSkullSafeShelfCamera();
     var rowBaseX = skullDetail ? 0.22 : -0.04;
     var rowSpreadX = skullDetail ? 0.030 : 0.014;
@@ -17168,12 +17179,14 @@ function makeContentListManager() {
         disposeCapturedDetail(targetGroup, targetRows, targetPanel);
       }
     },
-    update: function(dt) {
+    update: function(dt, frameLayout, frameShelfLook) {
       if (!group || !open) return;
       var intro = group.userData.detailIntro || 0;
       var parX = pointerParallax.x || 0;
       var parY = pointerParallax.y || 0;
-      var layout = detailLayout();
+      // 由歌单架管理器驱动时直接复用帧快照；独立调用仍保留原有读取语义。
+      var shelfLook = frameShelfLook || shelfSettings();
+      var layout = frameLayout || detailLayout(shelfLook);
       var skullDetail = shouldUseSkullSafeShelfCamera();
       var dynamicDetail = !skullDetail && shouldUseShelfDynamicCamera('shelf-detail') && camera;
       var coverBoundDetail = !skullDetail && !dynamicDetail && particles && particles.rotation;
@@ -17208,10 +17221,10 @@ function makeContentListManager() {
       if (panel && panel.mesh) {
         var pr = Math.max(0, Math.min(1, (uniforms.uTime.value - openAnimAt) / 0.72));
         pr = pr * pr * (3 - 2 * pr);
-        panel.mesh.material.opacity = 0.86 * pr * shelfSettings().opacity;
+        panel.mesh.material.opacity = 0.86 * pr * shelfLook.opacity;
       }
       for (var i = 0; i < rows.length; i++) {
-        place(rows[i], i);
+        place(rows[i], i, layout, shelfLook);
         var isC = Math.abs(rows[i].index - centerSmooth) < 0.5;
         if (rows[i].lastCenter !== isC) {
           rows[i].lastCenter = isC;

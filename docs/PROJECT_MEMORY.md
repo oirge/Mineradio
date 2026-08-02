@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.73`；本轮最终提交将创建并推送 tag `v1.2.73`。
+- 当前源码检查点：`v1.2.74`；本轮最终提交将创建并推送 tag `v1.2.74`。
 - 当前工作分支：`codex/release-1.2.60`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -32,6 +32,8 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.74`（2026-08-02）继续优化 3D 歌单详情帧热路径：`shelfManager.update()` 将本帧已经计算的 `frameLayout` 与 `frameShelfLook` 传给详情列表；详情 `update()` 仅在独立调用且未传入快照时回退读取，面板透明度和可见行定位复用同一快照。布局、透明度、滚动、UI、视觉质感和交互语义保持不变。新增 `tests/frame-hot-path.test.js` 详情快照复用断言。
 
 - `v1.2.73`（2026-08-02）继续优化 3D 歌单架播放帧：`shelfManager.update()` 先生成一次 `shelfSettings()` 快照，再传给 `shelfLayoutProfile()`，避免同一帧重复归一化设置和解析颜色；歌单架布局、UI、视觉质感和交互语义保持不变。新增 `tests/frame-hot-path.test.js` 设置快照复用断言。
 - `v1.2.73` 本地资产：安装器 `104759712` 字节 / SHA256 `55b6451d13fb2a1fcd88d3fbe29ddaed4344471c9d346f17787e65b7ccc4a988`；blockmap `111857` 字节 / `0af5ce2f548968021323961dd18bf9ee029404355646fcc59a4040747713f4d2`；`latest.yml` `350` 字节 / `127709895f25a3ea77ff2a88978ab949195ebf9c3bc98846aeed409f488d6934`；快速补丁 `2307612` 字节 / `93ded123ff60284a3bcca938e6acb292ac45db2ccc347828f5924f511dd96e5d`；Portable ZIP `146495548` 字节 / `098533fe3599b66e91786be5192d9d811bbabd59cc51e98142bd9839cb915926`。ASCII 文件名补丁别名与箭头文件内容一致。

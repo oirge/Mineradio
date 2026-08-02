@@ -86,6 +86,25 @@ function testShelfFrameSettingsReuse() {
 }
 
 /**
+ * 验证歌单详情复用管理器已经生成的帧级布局与外观快照，避免每个可见行重复归一化设置。
+ * @returns {void}
+ */
+function testShelfContentFrameSnapshotReuse() {
+  const source = readRendererSource();
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const contentSource = readSourceBetween(source, 'function makeContentListManager() {', '\nfunction compactCount');
+  const updateSource = readSourceBetween(contentSource, '    update: function(dt, frameLayout, frameShelfLook) {', '\n    next: function()');
+  const placeSource = readSourceBetween(contentSource, '  function place(', '\n\n  function disposeRowList');
+  assert.match(managerSource, /contentList\.update\(dt, frameLayout, frameShelfLook\);/);
+  assert.match(contentSource, /function detailLayout\(shelfCtl\)/);
+  assert.match(updateSource, /var shelfLook = frameShelfLook \|\| shelfSettings\(\);/);
+  assert.match(updateSource, /var layout = frameLayout \|\| detailLayout\(shelfLook\);/);
+  assert.match(updateSource, /place\(rows\[i\], i, layout, shelfLook\);/);
+  assert.match(placeSource, /function place\(row, i, layout, shelfLook\)/);
+  assert.doesNotMatch(placeSource, /detailLayout\(\)|shelfSettings\(\)/);
+}
+
+/**
  * 验证 Home 刷新把同一轮已计算的本地歌曲池和听歌统计传给卡片渲染，避免重复扫描。
  * @returns {void}
  */
@@ -104,4 +123,5 @@ function testHomeRenderSnapshotReuse() {
 test('歌词光粒循环复用帧级状态', testLyricParticleFrameCache);
 test('歌单架更新复用帧级可见状态', testShelfFrameStateCache);
 test('歌单架布局复用帧级设置快照', testShelfFrameSettingsReuse);
+test('歌单详情复用帧级布局与外观快照', testShelfContentFrameSnapshotReuse);
 test('Home 刷新复用本地歌曲池与听歌统计快照', testHomeRenderSnapshotReuse);
