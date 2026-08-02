@@ -194,3 +194,11 @@ Mineradio v1.1.0 绾噣瀹夎鐗?```
 - 发布资产：`Mineradio-1.2.64-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.60→1.2.64.patch.json`、`Mineradio-1.2.61→1.2.64.patch.json`、`Mineradio-1.2.62→1.2.64.patch.json`、`Mineradio-1.2.63→1.2.64.patch.json` 和 `Mineradio-1.2.64-SHA256SUMS.txt`；Portable ZIP 按既有发布流程跳过。
 - 安装器大小：`104840914` 字节；补丁大小依次为 `2546840`、`2394486`、`2394486`、`2297783` 字节；校验值以 `Mineradio-1.2.64-SHA256SUMS.txt` 为准。
 - Release 标题使用 `Mineradio v1.2.64 本地资产缓存与封面流式读取优化版`，目标为 GitHub Latest Release。
+## v1.2.67 舞台歌词与歌单架帧更新低开销优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.67`。
+- 运行全量 Node 回归测试、主进程与前端内联脚本语法检查、`git diff --check` 后再构建 Windows 安装器。
+- 发布资产：`Mineradio-1.2.67-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.66→1.2.67.patch.json` 和 `Mineradio-1.2.67-SHA256SUMS.txt`；Portable ZIP 按既有流程跳过。
+- 安装器大小：`104841092` 字节；快速补丁大小：`2299088` 字节；校验值以 `Mineradio-1.2.67-SHA256SUMS.txt` 为准。
+- 安装器 SHA256：`e346de8c5d9ae8bd6b959de8a84160ba590ee9cc126e5c6612aa7d7a238a4a6b`；blockmap：`4da7eda9e19d2a27dc05e7f4013425bb51491b8f8ae77e272108ab46a7148e8f`；快速补丁：`59b5c10bac8c910eb2d143f1db72434c922ff765bae29ee29312b609445f7597`；`latest.yml`：`b68d92e67641a1baf96379eaa7e7e223d32d3b9dcc8680c3b451c421f8a71497`。
+- Release 标题使用 `Mineradio v1.2.67 舞台歌词与歌单架帧更新低开销优化版`，目标为 GitHub Latest Release。

@@ -301,6 +301,8 @@
 - `verifyUpdateFile()` 与下载落盘关闭句柄统一走 `closeUpdateFileHandle()`，主错误优先，close 失败不得覆盖写盘/读盘异常；校验分块缓冲使用模块级 `getUpdateVerifyChunkBuffer()`。
 - `verifyUpdateFile()` 使用异步 `FileHandle.read()` 与固定复用缓冲分块读取，只为存在的摘要创建 hash；不要改回 Electron 运行时抖动更高的整包同步读取。SHA-512 只 digest 一次再转换 Base64/Hex；缓存复用、下载校验、任务启动和 HTTP 路由必须逐层 `await`，校验失败时继续保持坏缓存移走与镜像切换语义。
 - 歌词光粒位置循环和 `position.needsUpdate` 只在 `data.sparks.visible` 时执行；旋转状态仍须逐帧维护，重新可见的首帧必须按 base position 与当前绝对时间全量覆盖坐标后再上传。
+- `tickStageLyricMesh()` 的光粒循环必须复用当前调用的 `lyricParticlesEnabled`、`particleBeat`、`particleDrift` 和 `particleCount`；不要在每个粒子上重复读取 `fx.lyricGlowParticles`、`stageLyrics.beatGlow` 或 `arr.length / 3`，坐标计算语义保持不变。
+- `shelfManager.update()` 每帧必须缓存 `contentList.isOpen()` 与 `shelfAlwaysVisible()` 的结果，再用于可见性、层级和封面绑定判断；这些状态在单次更新内不得重复查询。
 - 帧级 scratch 返回对象只允许当前唯一同步调用者立即读取，不得跨下一次调用保存引用；安魂姿态只在主相机已经更新投影后运行，不能独立承担 FOV/aspect/near/far 同步。
 - MediaPipe 手势帧复用 `handPalmScratch`、`HAND_OPENNESS_TIPS` 和 `HAND_SKELETON_TIPS`；`processHandFrame()` 单次计算掌心并传给张开度与骨架绘制。`palmCenter(lm, out)` 无 `out` 时仍保留返回新对象的兼容语义，scratch 引用不得跨帧保存。
 - 缓存安装包复用通过 `installerReusePromises` 合并相同验证身份；key 使用规范化文件路径、版本、有限正大小与摘要的 JSON tuple，成功、失败和空结果都必须用 Promise 身份检查在 `finally` 清理。

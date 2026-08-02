@@ -2984,7 +2984,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.66';
+var APP_VERSION = '1.2.67';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -10775,6 +10775,7 @@ function tickStageLyricMesh(mesh, isCurrent) {
   var lyricGlowStrength = ctx.lyricGlowStrength;
   var glowDrive = ctx.glowDrive;
   var skullMouthLyrics = ctx.skullMouthLyrics;
+  var lyricParticlesEnabled = !!fx.lyricGlowParticles;
   mesh.userData.age += dt;
   var a = Math.min(1, mesh.userData.age / (isCurrent ? 0.52 : 0.38));
   a = a * a * (3 - 2 * a);
@@ -10864,21 +10865,23 @@ function tickStageLyricMesh(mesh, isCurrent) {
       mesh.position.z += ((1.48 + Math.cos(t * 0.48 + seed) * 0.080) - mesh.position.z) * 0.080;
       mesh.rotation.z = Math.sin(t * 0.34 + seed) * 0.018;
     }
-    if (data.sparks && data.sparkMat) data.sparks.visible = fx.lyricGlowParticles || getLyricSparkOpacity(data) > 0.015;
+    if (data.sparks && data.sparkMat) data.sparks.visible = lyricParticlesEnabled || getLyricSparkOpacity(data) > 0.015;
     if (data.sparks && data.basePositions) {
       var pos = data.sparks.geometry.attributes.position;
       var arr = pos.array, base = data.basePositions;
-      data.sparks.rotation.z += ((fx.lyricGlowParticles ? 0.0009 : 0.00025) + stageLyrics.beatGlow * 0.0007) * (dt * 60);
+      var particleBeat = lyricParticlesEnabled ? stageLyrics.beatGlow : 0;
+      var particleDrift = lyricParticlesEnabled ? 1 : 0.30;
+      var particleCount = arr.length / 3;
+      data.sparks.rotation.z += ((lyricParticlesEnabled ? 0.0009 : 0.00025) + stageLyrics.beatGlow * 0.0007) * (dt * 60);
       data.sparks.rotation.x = Math.sin(t * 0.12 + seed) * 0.012;
       if (data.sparks.visible) {
-        for (var si = 0; si < arr.length / 3; si++) {
+        // 同一帧内这些量对所有粒子一致，提前计算可避免在大批量光粒中重复读取状态和分支判断。
+        for (var si = 0; si < particleCount; si++) {
           var s = si * 12.989 + seed;
-          var particleBeat = fx.lyricGlowParticles ? stageLyrics.beatGlow : 0;
-          var dustBreath = fx.lyricGlowParticles ? (0.62 + 0.38 * Math.sin(t * (0.32 + (si % 7) * 0.025) + s)) : 0.18;
-          var drift = fx.lyricGlowParticles ? 1 : 0.30;
-          arr[si*3] = base[si*3] + Math.sin(t * (0.18 + (si % 5) * 0.025) + s) * (0.045 + bass * 0.030 + particleBeat * 0.052) * drift + Math.cos(t * 0.11 + s) * 0.018 * dustBreath;
-          arr[si*3+1] = base[si*3+1] + Math.cos(t * (0.16 + (si % 6) * 0.024) + s) * (0.042 + mid * 0.026 + particleBeat * 0.046) * drift + Math.sin(t * 0.13 + s) * 0.016 * dustBreath;
-          arr[si*3+2] = base[si*3+2] + Math.sin(t * (0.24 + (si % 4) * 0.035) + s) * (0.036 + particleBeat * 0.028) * drift;
+          var dustBreath = lyricParticlesEnabled ? (0.62 + 0.38 * Math.sin(t * (0.32 + (si % 7) * 0.025) + s)) : 0.18;
+          arr[si*3] = base[si*3] + Math.sin(t * (0.18 + (si % 5) * 0.025) + s) * (0.045 + bass * 0.030 + particleBeat * 0.052) * particleDrift + Math.cos(t * 0.11 + s) * 0.018 * dustBreath;
+          arr[si*3+1] = base[si*3+1] + Math.cos(t * (0.16 + (si % 6) * 0.024) + s) * (0.042 + mid * 0.026 + particleBeat * 0.046) * particleDrift + Math.sin(t * 0.13 + s) * 0.016 * dustBreath;
+          arr[si*3+2] = base[si*3+2] + Math.sin(t * (0.24 + (si % 4) * 0.035) + s) * (0.036 + particleBeat * 0.028) * particleDrift;
         }
         pos.needsUpdate = true;
       }
@@ -16171,25 +16174,26 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       var px = pointerParallax.x, py = pointerParallax.y;
       var appRevealed = !document.body.classList.contains('splash-active');
+      var contentOpen = !!(contentList && contentList.isOpen());
+      var alwaysVisible = shelfAlwaysVisible();
       var cueVis = tickShelfHoverCue(dt);
       // v8: shelf 自动可见度 — 启动页期间不显示；侧栏只在右侧停留时淡入。
       var targetVis;
       if (!appRevealed) {
         targetVis = 0;
       } else if (mode === 'side') {
-        var contentOpen = contentList && contentList.isOpen();
         if (!allItems.length && !contentOpen) targetVis = 0;
-        else targetVis = (contentOpen || shelfPinnedOpen || shelfAlwaysVisible()) ? 1.0 : (cueVis > 0.01 ? Math.max(0.16, cueVis * 0.88) : 0);
+        else targetVis = (contentOpen || shelfPinnedOpen || alwaysVisible) ? 1.0 : (cueVis > 0.01 ? Math.max(0.16, cueVis * 0.88) : 0);
       } else {
         targetVis = allItems.length ? 1.0 : 0;
       }
       shelfVisibility += (targetVis - shelfVisibility) * (targetVis > shelfVisibility ? 0.22 : 0.18);
       if (shelfVisibility < 0.01 && targetVis === 0) shelfVisibility = 0;
-      group.visible = appRevealed && (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || (contentList && contentList.isOpen()));
+      group.visible = appRevealed && (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || contentOpen);
       if (connectorParticles) connectorParticles.visible = group.visible && mode === 'stage';
       if (floorMirror) floorMirror.visible = group.visible && mode === 'stage';
       if (mode === 'side') {
-        var passiveAlwaysGroup = shelfAlwaysVisible() && !shelfPinnedOpen && !(contentList && contentList.isOpen());
+        var passiveAlwaysGroup = alwaysVisible && !shelfPinnedOpen && !contentOpen;
         var liftedCardActive = false;
         if (passiveAlwaysGroup) {
           for (var liftIdx = 0; liftIdx < cards.length; liftIdx++) {
@@ -16201,7 +16205,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         }
         group.renderOrder = passiveAlwaysGroup && !liftedCardActive ? 30 : 50;
         group.position.set(0, 0, 0);
-        var bindToCover = shelfAlwaysVisible() && particles && particles.rotation && !(contentList && contentList.isOpen());
+        var bindToCover = alwaysVisible && particles && particles.rotation && !contentOpen;
         if (bindToCover) {
           group.rotation.x += ((particles.rotation.x - py * 0.010) - group.rotation.x) * 0.075;
           group.rotation.y += ((particles.rotation.y + px * 0.018) - group.rotation.y) * 0.075;
