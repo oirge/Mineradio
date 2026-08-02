@@ -2999,7 +2999,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.72';
+var APP_VERSION = '1.2.73';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -15323,12 +15323,17 @@ var shelfLayoutProfileCache = {
     rowScale: 1
   }
 };
-function shelfLayoutProfile() {
+/**
+ * 计算歌单架当前布局，并复用本帧已经生成的设置快照。
+ * @param {object=} shelfCtl 本帧的歌单架设置；省略时由函数自行读取。
+ * @returns {object} 可供卡片和详情面板使用的布局缓存。
+ */
+function shelfLayoutProfile(shelfCtl) {
   var portrait = isPortraitShelfViewport();
   var narrow = !portrait && innerWidth < 980;
   var skullShelf = shouldUseSkullSafeShelfCamera();
   var detailScale = portrait ? clampRange(innerWidth / 820, 0.70, 0.86) : (narrow ? 0.92 : 1.04);
-  var shelfCtl = shelfSettings();
+  shelfCtl = shelfCtl || shelfSettings();
   var cache = shelfLayoutProfileCache;
   var detail = cache.detail;
   cache.portrait = portrait;
@@ -16313,8 +16318,8 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         group.rotation.y = px * 0.025;
         group.rotation.x = -py * 0.012;
       }
-      var frameLayout = shelfLayoutProfile();
       var frameShelfLook = shelfSettings();
+      var frameLayout = shelfLayoutProfile(frameShelfLook);
       cardFramePose.wallpaper = shouldUseWallpaperSafeShelfCamera();
       cardFramePose.skull = shouldUseSkullSafeShelfCamera();
       for (var i = 0; i < cards.length; i++) {

@@ -1,5 +1,15 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.73 3D 歌单架帧设置快照复用低卡顿优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.73`。
+- 歌单架更新帧复用同一份 `shelfSettings()` 快照，布局计算不再重复归一化设置和解析颜色；保持布局、视觉输出、UI 和交互语义不变。
+- 新增 `tests/frame-hot-path.test.js` 设置快照复用断言；全量 `node --test` 共 `163/163` 通过，主进程与 preload 语法检查、`git diff --check` 通过。
+- 发布资产：`Mineradio-1.2.73-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.72→1.2.73.patch.json`、ASCII 文件名补丁别名、`Mineradio-1.2.73-SHA256SUMS.txt` 和 Portable ZIP。
+- 安装器大小：`104759712` 字节；Portable ZIP 大小：`146495548` 字节；快速补丁大小：`2307612` 字节；校验值以 `Mineradio-1.2.73-SHA256SUMS.txt` 为准。
+- 安装器 SHA256：`55b6451d13fb2a1fcd88d3fbe29ddaed4344471c9d346f17787e65b7ccc4a988`；blockmap：`0af5ce2f548968021323961dd18bf9ee029404355646fcc59a4040747713f4d2`；快速补丁：`93ded123ff60284a3bcca938e6acb292ac45db2ccc347828f5924f511dd96e5d`；`latest.yml`：`127709895f25a3ea77ff2a88978ab949195ebf9c3bc98846aeed409f488d6934`。
+- Release 标题使用 `Mineradio v1.2.73 3D 歌单架帧设置快照复用低卡顿优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.72 相机投影矩阵低卡顿优化
 
 - 普通镜头和自由镜头复用投影参数缓存，`fov` 漂移不超过 `0.0005` 度时跳过重复矩阵重建；窗口尺寸变化和显式强制同步仍立即刷新。
