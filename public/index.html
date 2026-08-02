@@ -2695,6 +2695,20 @@ var FFT_SIZE = 2048;
 var AUDIO_ANALYSIS_TARGET_FPS = 60;
 var frequencyData = new Uint8Array(FFT_SIZE / 2);
 var timeDomainData = new Uint8Array(FFT_SIZE);
+var AUDIO_FREQUENCY_SCALE = 1 / 255;
+/**
+ * 创建时域采样平方查找表，避免播放分析帧重复执行相同的减法、除法和乘法。
+ * @returns {Float64Array} 以 8 位采样值为索引的归一化平方值表。
+ */
+function createAudioTimeDomainSquareLut() {
+  var lut = new Float64Array(256);
+  for (var i = 0; i < lut.length; i += 1) {
+    var centered = (i - 128) / 128;
+    lut[i] = centered * centered;
+  }
+  return lut;
+}
+var audioTimeDomainSquareLut = createAudioTimeDomainSquareLut();
 var BEAT_FFT_SIZE = 2048;
 var beatFrequencyData = new Uint8Array(BEAT_FFT_SIZE / 2);
 var beatTimeDomainData = new Uint8Array(BEAT_FFT_SIZE);
@@ -2999,7 +3013,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.74';
+var APP_VERSION = '1.2.75';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -32729,18 +32743,17 @@ function animate() {
     var midEnd   = Math.min(len, 280);         // 3-6 kHz, 中高乐器
     // 累积
     var bKick = 0, mInst = 0, tHigh = 0, voc = 0, rms = 0;
-    for (var i = 0; i < kickEnd; i++) bKick += frequencyData[i] / 255;
-    for (var i = kickEnd; i < vocalEnd; i++) voc += frequencyData[i] / 255;
-    for (var i = vocalEnd; i < midEnd; i++) mInst += frequencyData[i] / 255;
-    for (var i = midEnd; i < len; i++) tHigh += frequencyData[i] / 255;
+    for (var i = 0; i < kickEnd; i++) bKick += frequencyData[i];
+    for (var i = kickEnd; i < vocalEnd; i++) voc += frequencyData[i];
+    for (var i = vocalEnd; i < midEnd; i++) mInst += frequencyData[i];
+    for (var i = midEnd; i < len; i++) tHigh += frequencyData[i];
     for (var j = 0; j < timeDomainData.length; j++) {
-      var tv = (timeDomainData[j] - 128) / 128;
-      rms += tv * tv;
+      rms += audioTimeDomainSquareLut[timeDomainData[j]];
     }
-    bKick /= kickEnd;
-    voc /= (vocalEnd - kickEnd);
-    mInst /= Math.max(1, midEnd - vocalEnd);
-    tHigh /= Math.max(1, len - midEnd);
+    bKick *= AUDIO_FREQUENCY_SCALE / kickEnd;
+    voc *= AUDIO_FREQUENCY_SCALE / (vocalEnd - kickEnd);
+    mInst *= AUDIO_FREQUENCY_SCALE / Math.max(1, midEnd - vocalEnd);
+    tHigh *= AUDIO_FREQUENCY_SCALE / Math.max(1, len - midEnd);
     rms = Math.sqrt(rms / timeDomainData.length);
 
     // 动态峰值跟踪

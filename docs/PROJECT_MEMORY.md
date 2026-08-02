@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.74`；GitHub Release 已发布并设为 Latest。
+- 当前源码检查点：`v1.2.75`；GitHub Release 已发布并设为 Latest。
 - 当前工作分支：`codex/release-1.2.60`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -32,6 +32,9 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.75`（2026-08-02）继续优化音频分析帧热路径：频谱四段先累加整数采样值再统一乘归一化因子，时域 RMS 复用 256 项 `Float64Array` 平方查找表，避免每个分析帧对约 2048 个采样重复做减法、除法和乘法。频段边界、RMS、节拍判断、视觉响应、UI、布局、播放控制和交互语义保持不变。新增 `tests/audio-analysis-hot-path.test.js` 旧算法数值等价断言。
+- `v1.2.75` 本地资产：安装器 `104760018` 字节 / SHA256 `0ae19211860e9401dfff7b7f065bc134196d741e47bf32aaeff23bf0dbb9b4bf`；blockmap `111991` 字节 / `36c7074677f18e5f21aea1eb058bd323249176585d2ea5261967d48533a4cc1c`；`latest.yml` `350` 字节 / `35050b1a26dfcbec30af4e5548a7a1c57988125779bc5aea192836de0d9319c7`；快速补丁 `2309504` 字节 / `77c84eb36dcb34ccdc9259acdc42b4c777bda1fd424584948578effe1c41e246`；Portable ZIP `146496136` 字节 / `5a03824c4e7f9e13983c04243275b19577460586fd6e8de39646bc4a74f0bfe8`。Release 资产待上传并核对。
 
 - `v1.2.74`（2026-08-02）继续优化 3D 歌单详情帧热路径：`shelfManager.update()` 将本帧已经计算的 `frameLayout` 与 `frameShelfLook` 传给详情列表；详情 `update()` 仅在独立调用且未传入快照时回退读取，面板透明度和可见行定位复用同一快照。布局、透明度、滚动、UI、视觉质感和交互语义保持不变。新增 `tests/frame-hot-path.test.js` 详情快照复用断言。
 - `v1.2.74` 本地资产：安装器 `104759961` 字节 / SHA256 `3c11d15719378bb5cc107b09f018abe80cd2f4af3eb7b6d3eb38b2e60a4f052e`；blockmap `112032` 字节 / `cf9d6855bb557edceb145deb88ce7bf4ee399fd26bf3caba73a069a2db9fa076`；`latest.yml` `350` 字节 / `1fd89047de91fe8e6fa98c0fd0ee6e4ba6491fa0ec1e96aec32afeedf94252a2`；快速补丁 `2308740` 字节 / `eef06d17cab0fd856a9c2f45644ec10b0d4ad7ad59fa616d6c4cfd4fa6f596c10`；Portable ZIP `146495871` 字节 / `76a08fbf4d6d3dbbd5d9f2be7a3941df704867f09c05142c3f290c52b93a40a2`。Release 资产共 6 个，远端大小与 SHA-256 已核对一致。

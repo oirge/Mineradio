@@ -94,6 +94,66 @@ function testRealtimeRmsReuse() {
 }
 
 /**
+ * 验证音频分析的频谱累加和时域 RMS 与旧版逐样本算法数值等价。
+ * @returns {void}
+ */
+function testAudioAnalysisAccumulationHotPath() {
+  const source = readRendererSource();
+  const analysisSource = readSourceBetween(source, 'var len = frequencyData.length;', '// 动态峰值跟踪');
+  assert.match(source, /var AUDIO_FREQUENCY_SCALE = 1 \/ 255;/);
+  assert.match(source, /rms \+= audioTimeDomainSquareLut\[timeDomainData\[j\]\];/);
+  assert.doesNotMatch(analysisSource, /frequencyData\[i\] \/ 255/);
+  assert.doesNotMatch(analysisSource, /var tv =/);
+
+  function runOptimized(frequencyData, timeDomainData) {
+    const audioTimeDomainSquareLut = new Float64Array(256);
+    for (let i = 0; i < audioTimeDomainSquareLut.length; i += 1) {
+      const centered = (i - 128) / 128;
+      audioTimeDomainSquareLut[i] = centered * centered;
+    }
+    const context = {
+      Math,
+      frequencyData,
+      timeDomainData,
+      AUDIO_FREQUENCY_SCALE: 1 / 255,
+      audioTimeDomainSquareLut,
+    };
+    vm.runInNewContext(`${analysisSource}\nthis.result = { bKick, voc, mInst, tHigh, rms };`, context);
+    return context.result;
+  }
+
+  const frequencyData = new Uint8Array(1024);
+  const timeDomainData = new Uint8Array(2048);
+  for (let i = 0; i < frequencyData.length; i += 1) frequencyData[i] = (i * 37 + 19) & 255;
+  for (let i = 0; i < timeDomainData.length; i += 1) timeDomainData[i] = (i * 53 + 7) & 255;
+
+  let bKick = 0;
+  let voc = 0;
+  let mInst = 0;
+  let tHigh = 0;
+  for (let i = 0; i < 7; i += 1) bKick += frequencyData[i] / 255;
+  for (let i = 7; i < 140; i += 1) voc += frequencyData[i] / 255;
+  for (let i = 140; i < 280; i += 1) mInst += frequencyData[i] / 255;
+  for (let i = 280; i < frequencyData.length; i += 1) tHigh += frequencyData[i] / 255;
+  let rms = 0;
+  for (let i = 0; i < timeDomainData.length; i += 1) {
+    const centered = (timeDomainData[i] - 128) / 128;
+    rms += centered * centered;
+  }
+  const expected = {
+    bKick: bKick / 7,
+    voc: voc / 133,
+    mInst: mInst / 140,
+    tHigh: tHigh / 744,
+    rms: Math.sqrt(rms / timeDomainData.length),
+  };
+  const actual = runOptimized(frequencyData, timeDomainData);
+  for (const key of Object.keys(expected)) {
+    assert.ok(Math.abs(actual[key] - expected[key]) < 1e-12, `${key} 数值发生变化`);
+  }
+}
+
+/**
  * 验证空 Home 波形先执行时间节流，再查询 DOM 节点。
  * @returns {void}
  */
@@ -106,4 +166,5 @@ function testHomeWaveThrottleBeforeDomLookup() {
 
 test('实时节拍频段边界复用旧版采样桶', testBeatBandRangeCache);
 test('实时节拍分析复用主分析器 RMS', testRealtimeRmsReuse);
+test('音频分析频谱累加和 RMS 热循环保持数值等价', testAudioAnalysisAccumulationHotPath);
 test('空 Home 波形先节流再查询 DOM', testHomeWaveThrottleBeforeDomLookup);

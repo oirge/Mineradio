@@ -1,5 +1,15 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.75 音频分析热循环低卡顿优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.75`。
+- 频谱分析先累加 8 位采样值再统一归一化，时域 RMS 使用 256 项平方查找表，减少播放分析帧的重复除法和乘法；频段、RMS、节拍判断、视觉输出和交互语义保持不变。
+- 新增 `tests/audio-analysis-hot-path.test.js` 数值等价断言；全量 Node 回归、主进程/桌面脚本语法检查、前端内联脚本解析和 `git diff --check` 均通过后构建发布。
+- 发布资产：`Mineradio-1.2.75-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.74→1.2.75.patch.json`、`Mineradio-1.2.75-SHA256SUMS.txt` 和 Portable ZIP；本地另保留 ASCII 文件名补丁别名。
+- 安装器大小：`104760018` 字节；Portable ZIP 大小：`146496136` 字节；快速补丁大小：`2309504` 字节；校验值以 `Mineradio-1.2.75-SHA256SUMS.txt` 为准。
+- 安装器 SHA256：`0ae19211860e9401dfff7b7f065bc134196d741e47bf32aaeff23bf0dbb9b4bf`；blockmap：`36c7074677f18e5f21aea1eb058bd323249176585d2ea5261967d48533a4cc1c`；快速补丁：`77c84eb36dcb34ccdc9259acdc42b4c777bda1fd424584948578effe1c41e246`；`latest.yml`：`35050b1a26dfcbec30af4e5548a7a1c57988125779bc5aea192836de0d9319c7`；Portable ZIP：`5a03824c4e7f9e13983c04243275b19577460586fd6e8de39646bc4a74f0bfe8`。
+- Release 标题使用 `Mineradio v1.2.75 音频分析热循环低卡顿优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.73 3D 歌单架帧设置快照复用低卡顿优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.73`。

@@ -337,6 +337,7 @@
 - 实时节拍分析调用方必须把主频谱分析已经计算的时域 RMS 传给 `processRealtimeBeatEngine(analysisDt, rms)`，这样持续播放时不再重复扫描第二份 `2048` 点时域数组；保留省略该参数时的 `beatTimeDomainData` 回退路径，供直接调用和未来独立分析入口使用。
 - `beatBandRms()` 接收 `start/end` 频谱桶边界，边界由 `ensureBeatBandRanges()` 按采样率、FFT 尺寸和数组长度缓存；不要在每个分析帧重新执行同一组 Hz 到桶的 `floor/ceil` 换算。`tests/audio-analysis-hot-path.test.js` 必须锁定采样桶和 RMS 数值等价。
 - `updateHomeAudioVisual()` 先命中已有时间节流，再查找 `home-wave-track` DOM 节点；空 Home 波形的显示和刷新间隔语义保持不变。
+- 主音频分析的四个频谱段应先累加 `Uint8Array` 原始采样值，再按段统一乘 `1 / 255` 和平均因子；时域 RMS 可复用 256 项 `Float64Array` 平方查找表，避免每个采样重复执行相同的减法、除法和乘法。必须用旧版逐采样算法锁定四个频段和 RMS 的数值等价，避免浮点累加顺序变化影响节拍阈值。
 
 ## Reference
 
