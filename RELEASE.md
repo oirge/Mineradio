@@ -203,6 +203,16 @@ Mineradio v1.1.0 绾噣瀹夎鐗?```
 - 安装器 SHA256：`e346de8c5d9ae8bd6b959de8a84160ba590ee9cc126e5c6612aa7d7a238a4a6b`；blockmap：`4da7eda9e19d2a27dc05e7f4013425bb51491b8f8ae77e272108ab46a7148e8f`；快速补丁：`59b5c10bac8c910eb2d143f1db72434c922ff765bae29ee29312b609445f7597`；`latest.yml`：`b68d92e67641a1baf96379eaa7e7e223d32d3b9dcc8680c3b451c421f8a71497`。
 - Release 标题使用 `Mineradio v1.2.67 舞台歌词与歌单架帧更新低开销优化版`，目标为 GitHub Latest Release。
 
+## v1.2.70 队列可见行快照复用低卡顿优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.70`。
+- 队列面板与底部迷你队列复用同一轮可见行快照，避免签名和 HTML 生成重复读取副标题、封面、喜欢状态等字段；保持排序、当前高亮、懒加载、文案与交互语义不变。
+- 新增 `tests/queue-render-hot-path.test.js`；完整 Node 回归测试、前端内联脚本解析和 `git diff --check` 在构建前执行。
+- 发布资产：`Mineradio-1.2.70-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.69→1.2.70.patch.json` 和 `Mineradio-1.2.70-SHA256SUMS.txt`；Portable ZIP 按既有发布流程跳过。
+- 安装器大小：`104758713` 字节；快速补丁大小：`2302429` 字节；校验值以 `Mineradio-1.2.70-SHA256SUMS.txt` 为准。
+- 安装器 SHA256：`1883a7f74c592af9f74372154466ae216e7e48e2c6eaa61f1c983293ac0e7af5`；blockmap：`3ab785de3acec0d8f3dc7f45b236893aecac67b96826008b65b88ccb66fab971`；快速补丁：`50b1e86806d57b537e238d4730eecfa5eedeaf47ab4f17df021cc5fc1eabfa33`；`latest.yml`：`8c01f7b36989dc3bda1a036305cfed47f31d8f2cbfb1aa4b468e3b6f749a0ef6`。
+- Release 标题使用 `Mineradio v1.2.70 队列可见行快照复用低卡顿优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.69 Home 首屏快照复用低分配优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.69`。
