@@ -202,3 +202,13 @@ Mineradio v1.1.0 绾噣瀹夎鐗?```
 - 安装器大小：`104841092` 字节；快速补丁大小：`2299088` 字节；校验值以 `Mineradio-1.2.67-SHA256SUMS.txt` 为准。
 - 安装器 SHA256：`e346de8c5d9ae8bd6b959de8a84160ba590ee9cc126e5c6612aa7d7a238a4a6b`；blockmap：`4da7eda9e19d2a27dc05e7f4013425bb51491b8f8ae77e272108ab46a7148e8f`；快速补丁：`59b5c10bac8c910eb2d143f1db72434c922ff765bae29ee29312b609445f7597`；`latest.yml`：`b68d92e67641a1baf96379eaa7e7e223d32d3b9dcc8680c3b451c421f8a71497`。
 - Release 标题使用 `Mineradio v1.2.67 舞台歌词与歌单架帧更新低开销优化版`，目标为 GitHub Latest Release。
+
+## v1.2.68 3D 歌单架卡片帧状态复用优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.68`。
+- `placeCard()` 直接复用 `shelfManager.update()` 帧头缓存的内容打开状态和常驻显示状态，减少可见卡片循环中的重复状态查询；保持卡片布局、层级、透明度、详情遮罩、UI 和交互语义不变。
+- 新增/扩展 `tests/frame-hot-path.test.js`，锁定歌单架帧状态只查询一次且卡片布局函数不再重复查询。
+- 发布资产：`Mineradio-1.2.68-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.67→1.2.68.patch.json` 和 `Mineradio-1.2.68-SHA256SUMS.txt`；Portable ZIP 按既有发布流程跳过。
+- 安装器大小：`104841201` 字节；快速补丁大小：`2299236` 字节；校验值以 `Mineradio-1.2.68-SHA256SUMS.txt` 为准。
+- 安装器 SHA256：`213e23771c5e8cec0892fb5131809f019a2f9b31ee51ce3753d50f71624f45f3`；blockmap：`67dd719758cef577034bd7281341d4074753f9e12179e8a6b216d9c1ed497a76`；快速补丁：`656e1d7d5a3cbfc0e32a4fb5950470e58a633924b5211771145e2a298807f9cb`；`latest.yml`：`3b1bf61c6ef116d70fc344d2bd5b236fee8019d1ea2c8c90dd797d8118b82fae`。
+- Release 标题使用 `Mineradio v1.2.68 3D 歌单架卡片帧状态复用优化版`，目标为 GitHub Latest Release。

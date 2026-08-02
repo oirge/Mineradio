@@ -2984,7 +2984,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.67';
+var APP_VERSION = '1.2.68';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -15793,7 +15793,7 @@ function makeShelfManager() {
   //  PSP 弧形布局: 以 centerSmooth 为基准, 卡片绕弧排列
   //  i 距离 center 越远 → 越靠后, 越小, 越淡
   // ====================================================
-  function placeCard(card, i, totalCards, modeIs, frameLayout, frameShelfLook, framePose) {
+  function placeCard(card, i, totalCards, modeIs, frameLayout, frameShelfLook, framePose, frameContentOpen, frameAlwaysVisible) {
     var delta = card.index - centerSmooth;     // 正=下方, 负=上方
     var absD = Math.abs(delta);
     // 隐藏太远的卡 (>4 全隐藏)
@@ -15816,10 +15816,10 @@ function makeShelfManager() {
 
     if (modeIs === 'side') {
       // 右侧 3D 架: 恢复更靠近、更斜切的打开姿态，让卡片有真正的前后层次。
-      var detailOpenSide = contentList && contentList.isOpen();
+      var detailOpenSide = frameContentOpen;
       var nowT = uniforms.uTime.value;
       var hoverBreath = (!shelfPinnedOpen && !detailOpenSide) ? shelfVisibility : 0;
-      var passiveAlways = shelfAlwaysVisible() && !shelfPinnedOpen && !detailOpenSide;
+      var passiveAlways = frameAlwaysVisible && !shelfPinnedOpen && !detailOpenSide;
       var liftTarget = card.selected && !detailOpenSide ? 1 : 0;
       var liftRate = liftTarget > (card.floatMix || 0) ? 0.20 : 0.13;
       card.floatMix = (card.floatMix || 0) + (liftTarget - (card.floatMix || 0)) * liftRate;
@@ -15899,7 +15899,7 @@ function makeShelfManager() {
       card.mesh.rotation.y = -delta * 0.22 + parX * 0.050 * parWeight;
       card.mesh.rotation.x = 0.10 - absD * 0.04 - parY * 0.028 * parWeight;
       card.mesh.scale.setScalar(scaleS);
-      var disabledStage = contentList && contentList.isOpen();
+      var disabledStage = frameContentOpen;
       var opS = absD < 0.5 ? 1.0 : Math.max(0.18, 1.0 - absD * 0.32);
       if (disabledStage) {
         opS *= card.index === openCardIdx ? 0.16 : 0.08;
@@ -16228,7 +16228,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       cardFramePose.wallpaper = shouldUseWallpaperSafeShelfCamera();
       cardFramePose.skull = shouldUseSkullSafeShelfCamera();
       for (var i = 0; i < cards.length; i++) {
-        placeCard(cards[i], i, cards.length, mode, frameLayout, frameShelfLook, cardFramePose);
+        placeCard(cards[i], i, cards.length, mode, frameLayout, frameShelfLook, cardFramePose, contentOpen, alwaysVisible);
       }
       // 内容更新 (节流)
       if (uniforms.uTime.value - lastUpdate > 0.8) {

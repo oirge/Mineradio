@@ -56,10 +56,18 @@ function testShelfFrameStateCache() {
   const source = readRendererSource();
   const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
   const updateSource = readSourceBetween(managerSource, '    update: function(dt) {', '\n    onCoverChange: function()');
+  const placeCardSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
   assert.match(updateSource, /var contentOpen = !!\(contentList && contentList\.isOpen\(\)\);/);
   assert.match(updateSource, /var alwaysVisible = shelfAlwaysVisible\(\);/);
   assert.equal((updateSource.match(/contentList\.isOpen\(\)/g) || []).length, 1);
   assert.equal((updateSource.match(/shelfAlwaysVisible\(\)/g) || []).length, 1);
+  assert.match(placeCardSource, /frameContentOpen, frameAlwaysVisible/);
+  assert.match(placeCardSource, /var detailOpenSide = frameContentOpen;/);
+  assert.match(placeCardSource, /var passiveAlways = frameAlwaysVisible/);
+  assert.match(placeCardSource, /var disabledStage = frameContentOpen;/);
+  assert.doesNotMatch(placeCardSource, /contentList\.isOpen\(\)/);
+  assert.doesNotMatch(placeCardSource, /shelfAlwaysVisible\(\)/);
+  assert.match(updateSource, /placeCard\(cards\[i\], i, cards\.length, mode, frameLayout, frameShelfLook, cardFramePose, contentOpen, alwaysVisible\);/);
 }
 
 test('歌词光粒循环复用帧级状态', testLyricParticleFrameCache);
