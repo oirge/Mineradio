@@ -2984,7 +2984,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.69';
+var APP_VERSION = '1.2.70';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -22747,6 +22747,11 @@ function openPlaylistPanelTab(tab, preserve) {
   switchPlaylistTab(tab);
   setPeek(panel, true, 'pl');
 }
+/**
+ * 渲染底部迷你队列，并在同一轮复用主队列传入的可见行快照。
+ * @param {object=} opts 渲染选项，可携带动画、定位和可见行快照。
+ * @returns {void}
+ */
 function renderMiniQueuePanel(opts) {
   opts = opts || {};
   var $list = document.getElementById('mini-queue-list');
@@ -22763,10 +22768,11 @@ function renderMiniQueuePanel(opts) {
   }
   miniQueueRenderLimit = normalizedQueueRenderLimit(miniQueueRenderLimit, miniQueueInitialRenderLimit(), miniQueueBatchSize(), total);
   var renderLimit = Math.min(total, miniQueueRenderLimit);
-  var domSignature = queueVisibleDomSignature(renderLimit, true);
+  var visibleRows = queueVisibleRows(renderLimit, opts.visibleRows);
+  var domSignature = queueVisibleDomSignature(renderLimit, true, visibleRows);
   if (domSignature === miniQueueLastDomSignature && !opts.animate && !opts.scrollCurrent) return;
   miniQueueLastDomSignature = domSignature;
-  $list.innerHTML = queueItemsHtml(renderLimit, true);
+  $list.innerHTML = queueItemsHtml(renderLimit, true, visibleRows);
   var currentHint = hiddenCurrentQueueHintHtml(renderLimit, true);
   if (currentHint) $list.insertAdjacentHTML('beforeend', currentHint);
   if (total > renderLimit) {
@@ -22834,45 +22840,86 @@ function queueRenderFingerprint() {
   return signature;
 }
 /**
+ * 生成本轮队列可见行快照，签名和 HTML 渲染共享其中已读取的字段与封面结果。
+ * @param {number} renderLimit 当前可见渲染上限。
+ * @param {Array<object>=} seedRows 已由同一轮渲染生成的行快照，可用于扩展更大的迷你队列窗口。
+ * @returns {Array<object>} 可见歌曲行快照。
+ */
+function queueVisibleRows(renderLimit, seedRows) {
+  var limit = Math.min(playQueue.length, Math.max(0, renderLimit || 0));
+  var rows = seedRows && seedRows.length >= limit ? seedRows : new Array(limit);
+  var start = seedRows ? Math.min(seedRows.length, limit) : 0;
+  for (var i = start; i < limit; i++) {
+    var song = playQueue[i] || {};
+    var artist = song.type === 'local' ? '' : songArtistText(song);
+    rows[i] = {
+      index: i,
+      song: song,
+      itemKey: queueItemKey(song),
+      signatureName: song.name || song.title || '',
+      name: song.name,
+      subtitle: songDisplaySubtitle(song),
+      artist: artist,
+      album: song.album,
+      albumSignature: song.album || '',
+      coverSignature: songCoverSignature(song),
+      thumb: songCoverSrc(song, 60),
+      liked: isSongLiked(song),
+      current: i === currentIdx
+    };
+  }
+  return rows;
+}
+/**
  * 生成队列可见 DOM 的签名。签名未变化时跳过 innerHTML 重建，降低封面/歌词连续完成时的抖动。
  * @param {number} renderLimit 当前可见渲染上限。
  * @param {boolean} mini 是否为底部迷你队列。
+ * @param {Array<object>=} visibleRows 已计算的可见行快照。
  * @returns {string} 可见队列内容签名。
  */
-function queueVisibleDomSignature(renderLimit, mini) {
+function queueVisibleDomSignature(renderLimit, mini, visibleRows) {
   var limit = Math.min(playQueue.length, Math.max(0, renderLimit || 0));
+  visibleRows = visibleRows || queueVisibleRows(limit);
   var signature = (mini ? 'mini' : 'panel') + '|' + playQueue.length + '|' + limit + '|' + currentIdx + '|' + (LOCAL_ONLY_MODE ? 1 : 0);
   for (var i = 0; i < limit; i++) {
-    var song = playQueue[i] || {};
+    var row = visibleRows[i];
     signature += '|' +
       i + '~' +
-      queueItemKey(song) + '~' +
-      (song.name || song.title || '') + '~' +
-      songDisplaySubtitle(song) + '~' +
-      (song.album || '') + '~' +
-      songCoverSignature(song) + '~' +
-      (isSongLiked(song) ? 1 : 0);
+      row.itemKey + '~' +
+      row.signatureName + '~' +
+      row.subtitle + '~' +
+      row.albumSignature + '~' +
+      row.coverSignature + '~' +
+      (row.liked ? 1 : 0);
   }
   if (currentIdx >= limit && currentIdx < playQueue.length) signature += '|hidden:' + currentIdx;
   return signature;
 }
-function queueItemsHtml(renderLimit, mini) {
+/**
+ * 使用可见行快照生成队列 HTML，避免签名阶段之后再次读取歌曲元数据和封面字段。
+ * @param {number} renderLimit 当前可见渲染上限。
+ * @param {boolean} mini 是否为底部迷你队列。
+ * @param {Array<object>=} visibleRows 已计算的可见行快照。
+ * @returns {string} 队列 HTML。
+ */
+function queueItemsHtml(renderLimit, mini, visibleRows) {
   var limit = Math.min(playQueue.length, Math.max(0, renderLimit || 0));
+  visibleRows = visibleRows || queueVisibleRows(limit);
   var html = '';
   for (var i = 0; i < limit; i++) {
+    var row = visibleRows[i];
+    var song = row.song;
     if (mini) {
-      var song = playQueue[i] || {};
-      var thumb = songCoverSrc(song, 60);
+      var thumb = row.thumb;
       var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="mini-queue-cover"></div>';
-      var sub = songDisplaySubtitle(song);
-      html += '<div class="mini-queue-item' + (i === currentIdx ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
+      html += '<div class="mini-queue-item' + (row.current ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
         imgTag +
-        '<div class="mini-queue-info"><div class="mini-queue-name">' + escHtml(song.name) + '</div><div class="mini-queue-sub">' + escHtml(sub) + '</div></div>' +
+        '<div class="mini-queue-info"><div class="mini-queue-name">' + escHtml(row.name) + '</div><div class="mini-queue-sub">' + escHtml(row.subtitle) + '</div></div>' +
         '<button class="mini-queue-remove mini-queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
         '<button class="mini-queue-remove" onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
       '</div>';
     } else {
-      html += queueItemHtml(playQueue[i], i);
+      html += queueItemHtml(row);
     }
   }
   return html;
@@ -22901,28 +22948,33 @@ function hiddenCurrentQueueHintHtml(renderLimit, mini) {
   var attr = mini ? 'data-mini-queue-jump-current="1"' : 'data-queue-jump-current="1"';
   return '<button type="button" class="fx-mini-btn ghost queue-load-more queue-current-hint" ' + attr + '>' + label + ' · 定位</button>';
 }
-function queueItemHtml(song, i) {
-  var thumb = songCoverSrc(song, 60);
+/**
+ * 使用单行快照生成普通队列项，避免在 HTML 拼接阶段重新读取歌曲状态。
+ * @param {object} row 队列可见行快照。
+ * @returns {string} 普通队列项 HTML。
+ */
+function queueItemHtml(row) {
+  var song = row.song;
+  var i = row.index;
+  var thumb = row.thumb;
   var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div style="width:38px;height:38px;border-radius:6px;background:rgba(255,255,255,.06);flex-shrink:0"></div>';
-  var artist = songArtistText(song);
-  var sub = songDisplaySubtitle(song);
   var subHtml = song.type === 'local'
-    ? escHtml(sub)
-    : '<button class="queue-artist-link" type="button" onclick="event.stopPropagation();openQueueArtist(' + i + ')">' + escHtml(artist || '未知歌手') + '</button>' + (song.album ? (' · ' + escHtml(song.album)) : '');
+    ? escHtml(row.subtitle)
+    : '<button class="queue-artist-link" type="button" onclick="event.stopPropagation();openQueueArtist(' + i + ')">' + escHtml(row.artist || '未知歌手') + '</button>' + (row.album ? (' · ' + escHtml(row.album)) : '');
   var actionsHtml = LOCAL_ONLY_MODE
     ? '<div class="qi-act">' +
       '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
       '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
       '</div>'
     : '<div class="qi-act">' +
-      '<button class="' + (isSongLiked(song) ? 'liked' : '') + '" onclick="event.stopPropagation();toggleLikeQueueIndex(' + i + ')" title="' + (isSongLiked(song) ? '取消红心' : '红心喜欢') + '">' + heartIconSvg() + '</button>' +
+      '<button class="' + (row.liked ? 'liked' : '') + '" onclick="event.stopPropagation();toggleLikeQueueIndex(' + i + ')" title="' + (row.liked ? '取消红心' : '红心喜欢') + '">' + heartIconSvg() + '</button>' +
       '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
       '<button onclick="event.stopPropagation();collectQueueIndex(' + i + ')" title="收藏到歌单">' + playlistPlusIconSvg() + '</button>' +
       '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
       '</div>';
-  return '<div class="queue-item' + (i === currentIdx ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
+  return '<div class="queue-item' + (row.current ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
     imgTag +
-    '<div class="qi-info"><div class="qi-name">' + escHtml(song.name) + '</div><div class="qi-sub">' + subHtml + '</div></div>' +
+    '<div class="qi-info"><div class="qi-name">' + escHtml(row.name) + '</div><div class="qi-sub">' + subHtml + '</div></div>' +
     actionsHtml +
   '</div>';
 }
@@ -23017,6 +23069,11 @@ function bindMiniQueueLazyRender() {
     growMiniQueueRenderLimit();
   });
 }
+/**
+ * 渲染主播放队列，并把本轮已计算的可见行传给迷你队列。
+ * @param {object=} opts 渲染选项。
+ * @returns {void}
+ */
 function renderQueuePanel(opts) {
   opts = opts || {};
   var $ql = document.getElementById('queue-list');
@@ -23036,10 +23093,11 @@ function renderQueuePanel(opts) {
   }
   queuePanelRenderLimit = normalizedQueueRenderLimit(queuePanelRenderLimit, queuePanelInitialRenderLimit(), queuePanelBatchSize(), playQueue.length);
   var renderLimit = Math.min(playQueue.length, queuePanelRenderLimit);
-  var domSignature = queueVisibleDomSignature(renderLimit, false);
+  var visibleRows = queueVisibleRows(renderLimit);
+  var domSignature = queueVisibleDomSignature(renderLimit, false, visibleRows);
   if (domSignature !== queuePanelLastDomSignature || opts.animate || opts.scrollCurrent) {
     queuePanelLastDomSignature = domSignature;
-  $ql.innerHTML = queueItemsHtml(renderLimit, false);
+  $ql.innerHTML = queueItemsHtml(renderLimit, false, visibleRows);
   var currentHint = hiddenCurrentQueueHintHtml(renderLimit, false);
   if (currentHint) $ql.insertAdjacentHTML('beforeend', currentHint);
   if (playQueue.length > renderLimit) {
@@ -23049,7 +23107,7 @@ function renderQueuePanel(opts) {
   if (opts.animate && seq === queueRenderSeq) {
     animateVisiblePanelList($ql, '.queue-item', document.getElementById('playlist-panel'), '.queue-item.now', { scrollActive: opts.scrollCurrent !== false });
   }
-  renderMiniQueuePanel({ scrollCurrent: miniQueueOpen });
+  renderMiniQueuePanel({ scrollCurrent: miniQueueOpen, visibleRows: visibleRows });
 }
 async function refreshUserPlaylists(force) {
   if (force) resetPlaylistPanelRenderLimit();
