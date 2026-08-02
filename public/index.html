@@ -2841,8 +2841,10 @@ function hasSavedLyricLayout() {
 syncPersistentUiStateBackup();
 var LOCAL_ASSET_CACHE_DB_NAME = 'mineradio-local-assets-v1';
 var LOCAL_ASSET_CACHE_STORE = 'assets';
+var LOCAL_LYRICS_CACHE_STORE = 'lyrics';
 var LOCAL_LIBRARY_CACHE_STORE = 'library';
-var LOCAL_ASSET_CACHE_SCHEMA = 1;
+var LOCAL_ASSET_CACHE_SCHEMA = 2;
+var LOCAL_LYRICS_CACHE_SCHEMA = 1;
 var LOCAL_LIBRARY_CACHE_SCHEMA = 1;
 var LOCAL_COVER_THUMB_MAX_SIZE = 512;
 var LOCAL_COVER_THUMB_QUALITY = 0.82;
@@ -2887,6 +2889,7 @@ var localAssetUiRefreshReason = '';
 var localLibraryAssetUiBatchState = { progressAt: 0, refreshAt: 0 };
 var localAssetCacheWriteTimers = {};
 var localAssetCacheWriteRecords = {};
+var localLyricCacheWriteRecords = {};
 var localLibraryPersistentMemory = {};
 var localLibraryPersistentFolderPath = '';
 var localLibraryPersistentGeneration = 0;
@@ -2981,7 +2984,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.63';
+var APP_VERSION = '1.2.64';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -8637,14 +8640,51 @@ async function getCustomBackgroundBlob(id) {
     tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB get aborted')); };
   });
 }
+/**
+ * 打开本地资产数据库并执行 v2 到 v3 的逐条歌词迁移。
+ * @returns {Promise<IDBDatabase>} 当前版本的本地资产数据库连接。
+ */
 function openLocalAssetCacheDb() {
   return new Promise(function(resolve, reject){
     if (!window.indexedDB) { reject(new Error('indexedDB unavailable')); return; }
-    var req = indexedDB.open(LOCAL_ASSET_CACHE_DB_NAME, 2);
-    req.onupgradeneeded = function(){
+    var req = indexedDB.open(LOCAL_ASSET_CACHE_DB_NAME, 3);
+    req.onupgradeneeded = function(event){
       var db = req.result;
+      var oldVersion = Number(event && event.oldVersion) || 0;
       if (!db.objectStoreNames.contains(LOCAL_ASSET_CACHE_STORE)) db.createObjectStore(LOCAL_ASSET_CACHE_STORE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(LOCAL_LYRICS_CACHE_STORE)) db.createObjectStore(LOCAL_LYRICS_CACHE_STORE, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(LOCAL_LIBRARY_CACHE_STORE)) db.createObjectStore(LOCAL_LIBRARY_CACHE_STORE, { keyPath: 'id' });
+      if (oldVersion < 3 && db.objectStoreNames.contains(LOCAL_ASSET_CACHE_STORE)) {
+        var upgradeTx = req.transaction;
+        var assetStore = upgradeTx.objectStore(LOCAL_ASSET_CACHE_STORE);
+        var lyricStore = upgradeTx.objectStore(LOCAL_LYRICS_CACHE_STORE);
+        var lyricKeys = [
+          'localLyricText', 'localLyricLoaded', 'localLyricLightScanned',
+          'localLyricFileName', 'localLyricTagName', 'localLyricFileSignature', 'localLyricSource'
+        ];
+        assetStore.openCursor().onsuccess = function(cursorEvent){
+          var cursor = cursorEvent.target.result;
+          if (!cursor) return;
+          var sourceRecord = cursor.value || {};
+          var lyricRecord = { id: String(sourceRecord.id || cursor.key || ''), schema: LOCAL_LYRICS_CACHE_SCHEMA };
+          var hasLyricPayload = false;
+          for (var lyricIdx = 0; lyricIdx < lyricKeys.length; lyricIdx++) {
+            var lyricKey = lyricKeys[lyricIdx];
+            if (!Object.prototype.hasOwnProperty.call(sourceRecord, lyricKey)) continue;
+            lyricRecord[lyricKey] = sourceRecord[lyricKey];
+            if (sourceRecord[lyricKey]) hasLyricPayload = true;
+          }
+          if (lyricRecord.id && hasLyricPayload) lyricStore.put(lyricRecord);
+          var nextRecord = {};
+          for (var recordKey in sourceRecord) {
+            if (!Object.prototype.hasOwnProperty.call(sourceRecord, recordKey)) continue;
+            if (lyricKeys.indexOf(recordKey) >= 0) continue;
+            nextRecord[recordKey] = sourceRecord[recordKey];
+          }
+          cursor.update(nextRecord);
+          cursor.continue();
+        };
+      }
     };
     req.onsuccess = function(){ resolve(req.result); };
     req.onerror = function(){ reject(req.error || new Error('indexedDB open failed')); };
@@ -8707,9 +8747,11 @@ async function trimLocalIndexedDbCaches(reason) {
     dropped += await new Promise(function(resolve, reject){
       var now = Date.now();
       var assetEntries = [];
+      var lyricEntries = [];
       var libraryEntries = [];
-      var tx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readonly');
+      var tx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LYRICS_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readonly');
       var assetStore = tx.objectStore(LOCAL_ASSET_CACHE_STORE);
+      var lyricStore = tx.objectStore(LOCAL_LYRICS_CACHE_STORE);
       var libraryStore = tx.objectStore(LOCAL_LIBRARY_CACHE_STORE);
       assetStore.openCursor().onsuccess = function(event){
         var cursor = event.target.result;
@@ -8718,6 +8760,16 @@ async function trimLocalIndexedDbCaches(reason) {
         var id = String(record.id || cursor.key || '');
         var savedAt = Number(record.savedAt) || 0;
         assetEntries.push({ id:id, savedAt:savedAt, bytes:estimateLocalAssetRecordBytes(record) });
+        cursor.continue();
+      };
+      lyricStore.openCursor().onsuccess = function(event){
+        var cursor = event.target.result;
+        if (!cursor) return;
+        var record = cursor.value || {};
+        lyricEntries.push({
+          id: String(record.id || cursor.key || ''),
+          bytes: estimateLocalLyricRecordBytes(record)
+        });
         cursor.continue();
       };
       libraryStore.openCursor().onsuccess = function(event){
@@ -8733,6 +8785,18 @@ async function trimLocalIndexedDbCaches(reason) {
       };
       tx.oncomplete = function(){
         var totalBytes = 0;
+        var assetIdSet = Object.create(null);
+        var lyricById = Object.create(null);
+        for (var lyricEntryIdx = 0; lyricEntryIdx < lyricEntries.length; lyricEntryIdx++) {
+          var lyricEntry = lyricEntries[lyricEntryIdx];
+          if (lyricEntry.id) lyricById[lyricEntry.id] = lyricEntry;
+        }
+        for (var assetIdIdx = 0; assetIdIdx < assetEntries.length; assetIdIdx++) {
+          var assetIdEntry = assetEntries[assetIdIdx];
+          if (!assetIdEntry.id) continue;
+          assetIdSet[assetIdEntry.id] = true;
+          if (lyricById[assetIdEntry.id]) assetIdEntry.bytes += lyricById[assetIdEntry.id].bytes || 0;
+        }
         var dropSet = Object.create(null);
         var ids = [];
         var dropCount = 0;
@@ -8790,22 +8854,31 @@ async function trimLocalIndexedDbCaches(reason) {
           var dropLibraryEntry = libraryEntries[dropLibraryIdx];
           if (dropLibraryEntry.folderPath && !keepFolders[dropLibraryEntry.folderPath]) markLibraryDrop(dropLibraryEntry.id);
         }
-        if (!ids.length && !libraryIds.length) {
+        var orphanLyricIds = [];
+        for (var orphanLyricIdx = 0; orphanLyricIdx < lyricEntries.length; orphanLyricIdx++) {
+          var orphanLyric = lyricEntries[orphanLyricIdx];
+          if (orphanLyric.id && !assetIdSet[orphanLyric.id]) orphanLyricIds.push(orphanLyric.id);
+        }
+        if (!ids.length && !libraryIds.length && !orphanLyricIds.length) {
           db.close();
           resolve(0);
           return;
         }
-        var deleteTx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readwrite');
+        var deleteTx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LYRICS_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readwrite');
         for (var deleteAssetIdx = 0; deleteAssetIdx < ids.length; deleteAssetIdx++) {
           var id = ids[deleteAssetIdx];
           deleteTx.objectStore(LOCAL_ASSET_CACHE_STORE).delete(id);
+          deleteTx.objectStore(LOCAL_LYRICS_CACHE_STORE).delete(id);
+        }
+        for (var deleteOrphanLyricIdx = 0; deleteOrphanLyricIdx < orphanLyricIds.length; deleteOrphanLyricIdx++) {
+          deleteTx.objectStore(LOCAL_LYRICS_CACHE_STORE).delete(orphanLyricIds[deleteOrphanLyricIdx]);
         }
         for (var deleteLibraryIdx = 0; deleteLibraryIdx < libraryIds.length; deleteLibraryIdx++) {
           var libraryId = libraryIds[deleteLibraryIdx];
           delete localLibraryPersistentMemory[libraryId];
           deleteTx.objectStore(LOCAL_LIBRARY_CACHE_STORE).delete(libraryId);
         }
-        deleteTx.oncomplete = function(){ db.close(); resolve(ids.length + libraryIds.length); };
+        deleteTx.oncomplete = function(){ db.close(); resolve(ids.length + orphanLyricIds.length + libraryIds.length); };
         deleteTx.onerror = function(){ db.close(); reject(deleteTx.error || new Error('indexedDB trim delete failed')); };
         deleteTx.onabort = function(){ db.close(); reject(deleteTx.error || new Error('indexedDB trim delete aborted')); };
       };
@@ -9003,6 +9076,7 @@ async function openLocalCoverImageSource(coverSource) {
     }
     img.onload = handleImageLoad;
     img.onerror = handleImageError;
+    if (/^https?:\/\//i.test(String(coverSource || ''))) img.crossOrigin = 'anonymous';
     img.src = String(coverSource || '');
   }
   return new Promise(openImageElement);
@@ -9033,9 +9107,22 @@ function estimateLocalAssetRecordBytes(record) {
     + estimateTextBytes(record.name)
     + estimateTextBytes(record.artist)
     + estimateTextBytes(record.album)
-    + estimateTextBytes(record.localLyricText)
     + estimateDataUrlBytes(record.localCoverThumbDataUrl)
     + estimateDataUrlBytes(record.localCoverDataUrl);
+}
+/**
+ * 估算独立歌词记录的内存占用，供 IndexedDB 清理按真实重载荷裁剪。
+ * @param {object} record 歌词缓存记录。
+ * @returns {number} 估算字节数。
+ */
+function estimateLocalLyricRecordBytes(record) {
+  if (!record) return 0;
+  return 128
+    + estimateTextBytes(record.localLyricText)
+    + estimateTextBytes(record.localLyricFileName)
+    + estimateTextBytes(record.localLyricTagName)
+    + estimateTextBytes(record.localLyricFileSignature)
+    + estimateTextBytes(record.localLyricSource);
 }
 function localCoverThumbResultActiveCount() {
   return Math.max(0, localCoverThumbResultOrder.length - (localCoverThumbResultOrderHead || 0));
@@ -9122,7 +9209,7 @@ function rememberLocalCoverThumbResult(key, value) {
 }
 /**
  * 生成本地封面缩略图 data URL。成功结果会短期复用，避免队列、搜索和歌单架重复 decode 与 canvas 缩放。
- * @param {string|Blob} coverSource 原始封面 data URL 或短生命周期 Blob。
+ * @param {string|Blob} coverSource 原始封面 data URL、本地流 URL 或短生命周期 Blob。
  * @param {{maxSide?:number,background?:boolean,quality?:number,cacheKey?:string}=} opts 缩略图尺寸、后台模式、编码质量和稳定缓存键。
  * @returns {Promise<string>} 缩略图 data URL，无法生成时返回空字符串。
  */
@@ -9130,7 +9217,7 @@ async function createLocalCoverThumbnailDataUrl(coverSource, opts) {
   opts = opts || {};
   var dataUrl = typeof coverSource === 'string' ? String(coverSource || '') : '';
   var blobSource = coverSource instanceof Blob ? coverSource : null;
-  if (!blobSource && !/^data:image\//i.test(dataUrl)) return '';
+  if (!blobSource && !(/^(?:data:image\/|https?:\/\/|blob:|file:)/i.test(dataUrl))) return '';
   var pressureLevel = (typeof getRuntimeFramePressureLevel === 'function') ? getRuntimeFramePressureLevel() : 0;
   var requestedMaxSide = opts.maxSide || (opts.background ? (pressureLevel >= 1 ? 192 : 224) : LOCAL_COVER_THUMB_MAX_SIZE);
   var maxSide = Math.max(64, Math.min(LOCAL_COVER_THUMB_MAX_SIZE || 512, requestedMaxSide || 512));
@@ -9198,14 +9285,15 @@ async function createLocalCoverThumbnailDataUrl(coverSource, opts) {
 /**
  * 为歌曲生成本地封面缩略图，并仅在歌曲仍为当前播放对象时生成和保留完整 data URL。
  * @param {object} song 接收封面资产的歌曲对象。
- * @param {string|Blob} coverSource 原始完整封面 data URL 或短生命周期 Blob。
+ * @param {string|Blob} coverSource 原始完整封面 data URL、本地流 URL 或短生命周期 Blob。
  * @param {{thumbnailOnly?:boolean,cacheKey?:string}=} opts 缩略图生成是否使用后台轻量参数及稳定缓存键。
  * @returns {Promise<boolean>} 是否成功生成并写入封面资产。
  */
 async function assignLocalCoverSource(song, coverSource, opts) {
   opts = opts || {};
   if (!song || !coverSource) return false;
-  var dataUrl = typeof coverSource === 'string' ? coverSource : '';
+  var sourceUrl = typeof coverSource === 'string' ? String(coverSource || '') : '';
+  var dataUrl = /^data:image\//i.test(sourceUrl) ? sourceUrl : '';
   var thumb = await createLocalCoverThumbnailDataUrl(coverSource, {
     background: !!opts.thumbnailOnly,
     maxSide: opts.thumbnailOnly ? 0 : LOCAL_COVER_THUMB_MAX_SIZE,
@@ -9215,7 +9303,8 @@ async function assignLocalCoverSource(song, coverSource, opts) {
   if (thumb) song.localCoverThumbDataUrl = thumb;
   else if (song.localCoverThumbDataUrl === dataUrl) song.localCoverThumbDataUrl = '';
   var retainFullCover = shouldRetainLocalFullCoverData(song);
-  if (retainFullCover && !dataUrl) dataUrl = await readFileAsDataUrl(coverSource);
+  var isBlobSource = typeof Blob !== 'undefined' ? coverSource instanceof Blob : typeof coverSource !== 'string';
+  if (retainFullCover && !dataUrl && isBlobSource) dataUrl = await readFileAsDataUrl(coverSource);
   // Blob 转换期间可能已经切歌；完整图写回前必须重新确认对象仍拥有当前播放租约。
   retainFullCover = !!dataUrl && shouldRetainLocalFullCoverData(song);
   song.localCoverDataUrl = retainFullCover ? dataUrl : '';
@@ -9250,13 +9339,6 @@ function localAssetCacheSnapshot(song) {
     localLibraryPathKey: localLibraryPathKeyFromSong(song),
     localLibraryFileSignature: localLibraryFileSignatureFromSong(song),
     localBitrateKbps: Number(song.localBitrateKbps) || 0,
-    localLyricFileName: song.localLyricFileName || '',
-    localLyricTagName: song.localLyricTagName || '',
-    localLyricText: song.localLyricText || '',
-    localLyricLoaded: !!song.localLyricLoaded,
-    localLyricLightScanned: !!song.localLyricLightScanned,
-    localLyricFileSignature: localAssetFileSignature(song.localLyricFile),
-    localLyricSource: song.localLyricFile ? 'file' : (song.localLyricTagName ? 'embedded' : (song.localLyricLoaded ? 'none' : '')),
     localCoverFileName: song.localCoverFileName || '',
     localCoverThumbDataUrl: song.localCoverThumbDataUrl || '',
     localCoverDataUrl: '',
@@ -9264,6 +9346,29 @@ function localAssetCacheSnapshot(song) {
     localCoverLightScanned: !!song.localCoverLightScanned,
     localCoverFileSignature: localAssetFileSignature(song.localCoverFile),
     localCoverSource: song.localCoverFile ? 'file' : ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? 'embedded' : (song.localCoverLoaded ? 'none' : ''))
+  };
+}
+/**
+ * 生成独立歌词持久化快照；歌词原文只进入 lyrics store，不再复制到 assets store。
+ * @param {object} song 待持久化的本地歌曲。
+ * @returns {object|null} 可写入 IndexedDB 的歌词记录。
+ */
+function localLyricCacheSnapshot(song) {
+  var key = localAssetCacheKey(song);
+  if (!key) return null;
+  var hasLyricState = !!(song.localLyricText || song.localLyricLoaded || song.localLyricLightScanned || song.localLyricFile || song.localLyricFileName || song.localLyricTagName);
+  if (!hasLyricState) return null;
+  return {
+    id: key,
+    schema: LOCAL_LYRICS_CACHE_SCHEMA,
+    savedAt: Date.now(),
+    localLyricText: song.localLyricText || '',
+    localLyricLoaded: !!song.localLyricLoaded,
+    localLyricLightScanned: !!song.localLyricLightScanned,
+    localLyricFileName: song.localLyricFileName || '',
+    localLyricTagName: song.localLyricTagName || '',
+    localLyricFileSignature: localAssetFileSignature(song.localLyricFile),
+    localLyricSource: song.localLyricFile ? 'file' : (song.localLyricTagName ? 'embedded' : (song.localLyricLoaded ? 'none' : ''))
   };
 }
 /**
@@ -9297,6 +9402,37 @@ async function readLocalAssetCacheRecords(keys) {
     tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB read aborted')); };
   });
 }
+/**
+ * 批量读取独立歌词缓存记录；只在当前播放或显式歌词请求时调用。
+ * @param {Array<string>} keys 需要读取的歌曲缓存键。
+ * @returns {Promise<object>} 以歌曲缓存键为索引的歌词记录表。
+ */
+async function readLocalLyricCacheRecords(keys) {
+  var rawKeys = keys || [];
+  var compactKeys = [];
+  for (var i = 0; i < rawKeys.length; i++) {
+    if (rawKeys[i]) compactKeys.push(rawKeys[i]);
+  }
+  keys = compactKeys;
+  if (!keys.length) return {};
+  var db = await openLocalAssetCacheDb();
+  return new Promise(function(resolve, reject){
+    var out = {};
+    var tx = db.transaction(LOCAL_LYRICS_CACHE_STORE, 'readonly');
+    var store = tx.objectStore(LOCAL_LYRICS_CACHE_STORE);
+    for (var keyIdx = 0; keyIdx < keys.length; keyIdx++) {
+      var key = keys[keyIdx];
+      var req = store.get(key);
+      req.onsuccess = function(event){
+        var result = event && event.target ? event.target.result : null;
+        if (result && result.id) out[result.id] = result;
+      };
+    }
+    tx.oncomplete = function(){ db.close(); resolve(out); };
+    tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexeddb lyric read failed')); };
+    tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexeddb lyric read aborted')); };
+  });
+}
 async function putLocalAssetCacheRecord(record) {
   if (!record || !record.id) return false;
   var db = await openLocalAssetCacheDb();
@@ -9310,6 +9446,26 @@ async function putLocalAssetCacheRecord(record) {
     };
     tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB put failed')); };
     tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB put aborted')); };
+  });
+}
+/**
+ * 写入独立歌词缓存记录，并保持 IndexedDB 事务三路结算。
+ * @param {object} record 歌词缓存记录。
+ * @returns {Promise<boolean>} 是否完成写入。
+ */
+async function putLocalLyricCacheRecord(record) {
+  if (!record || !record.id) return false;
+  var db = await openLocalAssetCacheDb();
+  return new Promise(function(resolve, reject){
+    var tx = db.transaction(LOCAL_LYRICS_CACHE_STORE, 'readwrite');
+    tx.objectStore(LOCAL_LYRICS_CACHE_STORE).put(record);
+    tx.oncomplete = function(){
+      db.close();
+      scheduleLocalIndexedDbTrim('lyric-write', 5200);
+      resolve(true);
+    };
+    tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexeddb lyric put failed')); };
+    tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexeddb lyric put aborted')); };
   });
 }
 /**
@@ -9336,6 +9492,11 @@ function applyLocalAssetCacheToSong(song, record, opts) {
   opts = opts || {};
   var includeLyrics = opts.includeLyrics !== false;
   var includeCover = opts.includeCover !== false;
+  var lyricRecord = opts.lyricRecord || null;
+  // 仅兼容 v2 读取夹具和未完成升级的旧对象；v3 新记录始终从独立 lyrics store 提供歌词字段。
+  if (!lyricRecord && (Object.prototype.hasOwnProperty.call(record, 'localLyricText') || Object.prototype.hasOwnProperty.call(record, 'localLyricLoaded'))) {
+    lyricRecord = record;
+  }
   var changed = false;
   if (canUseCachedLocalMetadata(song, record)) {
     for (var textIdx = 0; textIdx < LOCAL_METADATA_TEXT_FIELDS.length; textIdx++) {
@@ -9356,16 +9517,16 @@ function applyLocalAssetCacheToSong(song, record, opts) {
     }
   }
   var lyricFileSig = localAssetFileSignature(song.localLyricFile);
-  var canUseLyricCache = song.localLyricFile
-    ? (record.localLyricFileSignature && record.localLyricFileSignature === lyricFileSig)
-    : record.localLyricSource !== 'file';
-  if (includeLyrics && canUseLyricCache && (record.localLyricText || record.localLyricLoaded)) {
-    if (Object.prototype.hasOwnProperty.call(record, 'localLyricText')) song.localLyricText = record.localLyricText || '';
-    song.localLyricLoaded = !!record.localLyricLoaded;
+  var canUseLyricCache = lyricRecord && (song.localLyricFile
+    ? (lyricRecord.localLyricFileSignature && lyricRecord.localLyricFileSignature === lyricFileSig)
+    : lyricRecord.localLyricSource !== 'file');
+  if (includeLyrics && lyricRecord && canUseLyricCache && (lyricRecord.localLyricText || lyricRecord.localLyricLoaded)) {
+    if (Object.prototype.hasOwnProperty.call(lyricRecord, 'localLyricText')) song.localLyricText = lyricRecord.localLyricText || '';
+    song.localLyricLoaded = !!lyricRecord.localLyricLoaded;
     if (song.localLyricText) song.localLyricResidencyReleased = false;
-    song.localLyricLightScanned = !!record.localLyricLightScanned;
-    song.localLyricFileName = record.localLyricFileName || song.localLyricFileName || '';
-    song.localLyricTagName = record.localLyricTagName || song.localLyricTagName || '';
+    song.localLyricLightScanned = !!lyricRecord.localLyricLightScanned;
+    song.localLyricFileName = lyricRecord.localLyricFileName || song.localLyricFileName || '';
+    song.localLyricTagName = lyricRecord.localLyricTagName || song.localLyricTagName || '';
     changed = true;
   }
   var coverFileSig = localAssetFileSignature(song.localCoverFile);
@@ -9415,7 +9576,13 @@ async function hydrateLocalAssetCacheForSongRange(songs, start, end, opts) {
   }
   if (!keys.length) return 0;
   try {
-    var records = await readLocalAssetCacheRecords(keys);
+    var assetRecordsPromise = readLocalAssetCacheRecords(keys);
+    var lyricRecordsPromise = opts.includeLyrics !== false && typeof readLocalLyricCacheRecords === 'function'
+      ? readLocalLyricCacheRecords(keys)
+      : Promise.resolve({});
+    var recordPair = await Promise.all([assetRecordsPromise, lyricRecordsPromise]);
+    var records = recordPair[0] || {};
+    var lyricRecords = recordPair[1] || {};
     var count = 0;
     for (var j = start; j < end; j++) {
       var song = songs[j];
@@ -9425,7 +9592,7 @@ async function hydrateLocalAssetCacheForSongRange(songs, start, end, opts) {
         song.localAssetCacheHydrated = true;
         song.localAssetCacheMiss = !record;
       }
-      if (record && applyLocalAssetCacheToSong(song, record, opts)) count++;
+      if (record && applyLocalAssetCacheToSong(song, record, Object.assign({}, opts, { lyricRecord: lyricRecords[key] || null }))) count++;
       if (song && opts.includeLyrics !== false) song.localLyricCacheHydrated = !song.localLyricResidencyReleased;
     }
     return count;
@@ -9483,6 +9650,26 @@ function copyLocalLyricCachePayload(sourceRecord, targetRecord) {
   targetRecord.localLyricSource = sourceRecord.localLyricSource || '';
 }
 /**
+ * 把歌词快照写入独立 lyrics store；释放原文后的轻量更新会先合并已落盘歌词。
+ * @param {object} record 歌词持久化快照。
+ * @param {string=} songName 仅用于失败日志的歌曲名。
+ * @returns {Promise<boolean>} 是否成功写入持久缓存。
+ */
+async function writeLocalLyricCacheRecord(record, songName) {
+  if (!record) return false;
+  try {
+    if (record._preserveLocalLyricPayload) {
+      delete record._preserveLocalLyricPayload;
+      var records = await readLocalLyricCacheRecords([record.id]);
+      if (records && records[record.id]) copyLocalLyricCachePayload(records[record.id], record);
+    }
+    return await putLocalLyricCacheRecord(record);
+  } catch (e) {
+    console.warn('[LocalLyricCacheWrite]', songName || record.id || '', e);
+    return false;
+  }
+}
+/**
  * 把已捕获的单曲资产快照写入 IndexedDB；已释放歌词的轻量更新会先合并既有原文。
  * @param {object} record 不再依赖歌曲对象后续字段的持久化快照。
  * @param {string=} songName 仅用于失败日志的歌曲名。
@@ -9509,7 +9696,12 @@ async function writeLocalAssetCacheRecord(record, songName) {
  * @returns {Promise<boolean>} 是否成功写入持久缓存。
  */
 async function writeLocalAssetCacheForSong(song) {
-  return writeLocalAssetCacheRecord(localAssetCacheSnapshot(song), song && song.name);
+  var assetWrite = writeLocalAssetCacheRecord(localAssetCacheSnapshot(song), song && song.name);
+  var lyricRecord = typeof localLyricCacheSnapshot === 'function' ? localLyricCacheSnapshot(song) : null;
+  var lyricWrite = lyricRecord && typeof writeLocalLyricCacheRecord === 'function'
+    ? writeLocalLyricCacheRecord(lyricRecord, song && song.name)
+    : Promise.resolve(true);
+  return Promise.all([assetWrite, lyricWrite]).then(function(results){ return !!(results[0] && results[1]); });
 }
 /**
  * 延迟写入单曲资产；调度时捕获快照，避免切歌释放重载荷后把空字段写入 IndexedDB。
@@ -9520,10 +9712,18 @@ function scheduleLocalAssetCacheWrite(song) {
   var record = localAssetCacheSnapshot(song);
   if (!record) return;
   var key = record.id;
+  var lyricRecord = typeof localLyricCacheSnapshot === 'function' ? localLyricCacheSnapshot(song) : null;
+  var pendingLyricRecord = typeof localLyricCacheWriteRecords !== 'undefined' ? localLyricCacheWriteRecords[key] : null;
   var pendingRecord = localAssetCacheWriteRecords[key];
   // 同 key debounce 若仍持有完整快照就直接复用；否则在真正写入前从 IndexedDB 合并。
-  if (song.localLyricResidencyReleased && song.localIndexedLyricStatus === 'ready' && !record.localLyricText) {
-    if (pendingRecord && (pendingRecord.localLyricText || pendingRecord.localLyricLoaded)) {
+  if (song.localLyricResidencyReleased && song.localIndexedLyricStatus === 'ready' && !(lyricRecord && lyricRecord.localLyricText) && !record.localLyricText) {
+    if (lyricRecord) {
+      if (pendingLyricRecord && (pendingLyricRecord.localLyricText || pendingLyricRecord.localLyricLoaded)) {
+        copyLocalLyricCachePayload(pendingLyricRecord, lyricRecord);
+      } else if (typeof localLyricCacheWriteRecords !== 'undefined') {
+        lyricRecord._preserveLocalLyricPayload = true;
+      }
+    } else if (pendingRecord && (pendingRecord.localLyricText || pendingRecord.localLyricLoaded)) {
       copyLocalLyricCachePayload(pendingRecord, record);
     } else {
       record._preserveLocalLyricPayload = true;
@@ -9531,6 +9731,7 @@ function scheduleLocalAssetCacheWrite(song) {
   }
   if (localAssetCacheWriteTimers[key]) clearTimeout(localAssetCacheWriteTimers[key]);
   localAssetCacheWriteRecords[key] = record;
+  if (typeof localLyricCacheWriteRecords !== 'undefined' && lyricRecord) localLyricCacheWriteRecords[key] = lyricRecord;
   /**
    * 写入本轮最后一次调度捕获的快照，并延后同步曲库索引。
    * @returns {void}
@@ -9540,11 +9741,15 @@ function scheduleLocalAssetCacheWrite(song) {
     delete localAssetCacheWriteTimers[key];
     var ownedRecord = localAssetCacheWriteRecords[key];
     if (ownedRecord === record) delete localAssetCacheWriteRecords[key];
+    var ownedLyricRecord = typeof localLyricCacheWriteRecords !== 'undefined' ? localLyricCacheWriteRecords[key] : null;
+    if (typeof localLyricCacheWriteRecords !== 'undefined' && ownedLyricRecord === lyricRecord) delete localLyricCacheWriteRecords[key];
     /** @returns {void} 资产落盘后安排轻量曲库索引同步。 */
     function scheduleIndexAfterAssetWrite() {
       scheduleLocalLibraryIndexSave(savedLocalLibraryFolderPath(), localLibrarySongs || [], 650);
     }
-    writeLocalAssetCacheRecord(ownedRecord || record, record.name).finally(scheduleIndexAfterAssetWrite);
+    var writes = [writeLocalAssetCacheRecord(ownedRecord || record, record.name)];
+    if (ownedLyricRecord && typeof writeLocalLyricCacheRecord === 'function') writes.push(writeLocalLyricCacheRecord(ownedLyricRecord, record.name));
+    Promise.all(writes).finally(scheduleIndexAfterAssetWrite);
   }
   var timer = setTimeout(flushLocalAssetCacheWrite, 160);
   localAssetCacheWriteTimers[key] = timer;
@@ -14101,8 +14306,9 @@ function refreshLocalSongAssetUi(song, reason) {
       applyLocalOriginalLyricsState(song);
       updateCustomLyricControls();
     }
-    if (song.localCoverDataUrl) {
-      applyCoverDataUrl(song.localCoverDataUrl, {
+    var coverSource = song.localCoverDataUrl || ensureLocalCoverPreviewUrl(song);
+    if (coverSource) {
+      applyCoverDataUrl(coverSource, {
         trackToken: trackSwitchToken,
         deferHeavy: false,
         delay: 0,
@@ -14124,8 +14330,9 @@ function scheduleLocalAssetUiRefresh(song, reason) {
       applyLocalOriginalLyricsState(song);
       updateCustomLyricControls();
     }
-    if (song.localCoverDataUrl) {
-      applyCoverDataUrl(song.localCoverDataUrl, {
+    var coverSource = song.localCoverDataUrl || ensureLocalCoverPreviewUrl(song);
+    if (coverSource) {
+      applyCoverDataUrl(coverSource, {
         trackToken: trackSwitchToken,
         deferHeavy: false,
         delay: 0,
@@ -14754,16 +14961,25 @@ function coverCanvasToDataUrl(cv) {
   return cv.toDataURL('image/jpeg', 0.88);
 }
 
+/**
+ * 解码并应用当前封面；data URL 与授权本地流 URL 共用同一张 canvas 纹理。
+ * @param {string} dataUrl 封面 data URL 或 HTTP 本地流 URL。
+ * @param {object=} opts 当前播放令牌和视觉应用选项。
+ * @returns {void}
+ */
 function applyCoverDataUrl(dataUrl, opts) {
   opts = opts || {};
   if (!dataUrl) return;
+  dataUrl = String(dataUrl);
+  var isDataUrl = /^data:image\//i.test(dataUrl);
   var img = new Image();
   img.decoding = 'async';
+  if (!isDataUrl && /^https?:\/\//i.test(dataUrl)) img.crossOrigin = 'anonymous';
   img.onload = function() {
     if (!coverApplyStillCurrent(opts)) return;
     var cv = makeSquareCoverCanvas(img, coverTextureSizeForResolution(fx.coverResolution));
     setAlbumBackground(dataUrl);
-    applyCoverCanvas(cv, dataUrl, Object.assign({}, opts, { coverSourceKind: 'data', coverSource: dataUrl }));
+    applyCoverCanvas(cv, dataUrl, Object.assign({}, opts, { coverSourceKind: isDataUrl ? 'data' : 'url', coverSource: dataUrl }));
   };
   img.onerror = function() {
     // data URL 解码失败时保留现有封面，不强行清空，只记录以便排查损坏的本地封面缓存。
@@ -24737,13 +24953,20 @@ function schedulePlaybackMetadataRefresh(song) {
   if (!song || song.type !== 'local' || song.localMetadataLoaded) return;
   ensureLocalMetadataForSong(song, { background:true, applyCurrent:true });
 }
+/**
+ * 在歌曲仍拥有当前播放所有权时应用封面，优先使用完整图或本地流 URL。
+ * @param {object} song 待应用封面的歌曲。
+ * @param {object=} opts 当前播放令牌和封面应用选项。
+ * @returns {void}
+ */
 function maybeApplyLocalCoverForSong(song, opts) {
   opts = opts || {};
   if (!opts.applyCurrent) return;
   if (opts.token != null && opts.token !== trackSwitchToken) return;
-  if (!song || !song.localCoverDataUrl || !isCurrentLocalQueueSong(song)) return;
+  var coverSource = song && (song.localCoverDataUrl || ensureLocalCoverPreviewUrl(song));
+  if (!song || !coverSource || !isCurrentLocalQueueSong(song)) return;
   var coverOpts = Object.assign({}, opts.coverOpts || {}, { trackToken: trackSwitchToken });
-  applyCoverDataUrl(song.localCoverDataUrl, coverOpts);
+  applyCoverDataUrl(coverSource, coverOpts);
   updateControlTrackInfo(song);
   safeRenderQueuePanel('local-cover-ready', { scrollCurrent: miniQueueOpen });
   scheduleShelfRebuild('local-cover-ready', true);
@@ -24757,6 +24980,9 @@ function maybeApplyLocalCoverForSong(song, opts) {
 function ensureLocalCoverForSong(song, opts) {
   opts = opts || {};
   if (!song) return Promise.resolve(false);
+  var previewUrl = song.localCoverFile && typeof ensureLocalCoverPreviewUrl === 'function'
+    ? ensureLocalCoverPreviewUrl(song)
+    : '';
   if (song.localCoverDataUrl) {
     // 当前完整封面可即时显示，但没有缩略图时仍需保留后续可重试状态。
     song.localCoverLoaded = !!song.localCoverThumbDataUrl;
@@ -24773,6 +24999,10 @@ function ensureLocalCoverForSong(song, opts) {
     maybeApplyLocalCoverForSong(song, opts);
     return Promise.resolve(true);
   }
+  if (previewUrl && song.localCoverLoaded) {
+    maybeApplyLocalCoverForSong(song, opts);
+    return Promise.resolve(true);
+  }
   if (song.localCoverLoaded && !(opts.applyCurrent && song.localCoverThumbDataUrl)) return Promise.resolve(!!song.localCoverThumbDataUrl);
   if (song.localCoverPromise) {
     return song.localCoverPromise.then(function(ok){
@@ -24785,7 +25015,9 @@ function ensureLocalCoverForSong(song, opts) {
   }
   song.localCoverLoading = true;
   song.localCoverPromise = (async function(){
-    var coverSource = song.localCoverFile ? await readFileAsDataUrl(song.localCoverFile) : null;
+    var coverSource = song.localCoverFile
+      ? (previewUrl || await readFileAsDataUrl(song.localCoverFile))
+      : null;
     var embeddedSource = !coverSource;
     if (!coverSource) coverSource = await extractEmbeddedCoverSource(song.localFile, { light: !!opts.background });
     if (!coverSource) {

@@ -168,4 +168,12 @@ Mineradio v1.1.0 绾噣瀹夎鐗?```
   }
 }
 ```
+## v1.2.64 本地资产缓存与封面流式读取优化
 
+- IndexedDB 从 v2 升级到 v3，新增独立 `lyrics` store。升级过程使用 cursor 逐条迁移旧 `assets` 记录，并移除旧记录中的歌词字段，避免一次性载入全部歌词原文。
+- 资产缓存写入、按需歌词水合、释放后原文合并和 IndexedDB 裁剪均按资产与歌词双 store 处理；两个 store 共用当前歌曲保护键和容量裁剪，所有事务保留完成、错误、中止结算。
+- 桌面本地曲库的外置封面优先复用 `/api/local-file` 授权流 URL。URL 图片解码前设置跨源属性，缩略图和当前封面应用不再调用主进程整图 base64 读取；普通浏览器 File 仍使用原有回退路径。
+- 本轮验证：全量 `node --test --test-concurrency=1` 共 `150/150` 通过；`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查通过；`git diff --check` 通过。
+- 发布资产：`Mineradio-1.2.64-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.60→1.2.64.patch.json`、`Mineradio-1.2.61→1.2.64.patch.json`、`Mineradio-1.2.62→1.2.64.patch.json`、`Mineradio-1.2.63→1.2.64.patch.json` 和 `Mineradio-1.2.64-SHA256SUMS.txt`；Portable ZIP 按既有发布流程跳过。
+- 安装器大小：`104840914` 字节；补丁大小依次为 `2546840`、`2394486`、`2394486`、`2297783` 字节；校验值以 `Mineradio-1.2.64-SHA256SUMS.txt` 为准。
+- Release 标题使用 `Mineradio v1.2.64 本地资产缓存与封面流式读取优化版`，目标为 GitHub Latest Release。

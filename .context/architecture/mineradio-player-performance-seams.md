@@ -321,6 +321,13 @@
 - `renderQualityProfile()` 只返回冻结档位常量；`applyRendererPowerMode()` 必须就地更新 `renderPowerState` 字段，不得每次新建状态对象。
 
 - 主进程本地曲库增量扫描（`scanLocalMusicFolderIncremental`）必须处理本次遍历自身截断：`collectLocalLibraryFolderEntries` 在 `visited > LOCAL_LIBRARY_SCAN_VISIT_LIMIT`（60000）时提前 break，`listed.files/listed.directories` 与磁盘现状不一致。若上次快照完整（`previous.truncated=false`）而本次 `listed.truncated=true`，不能继续走增量合并；否则 `changedDirs`/`filesByRel` 对比会把截断丢失的项误判为删除，导致当前会话丢歌，并经 `saveLocalLibrarySnapshot` 把残缺结果写回持久快照。正确做法：`listed.truncated` 为真时以全量语义返回已遍历结果（复用同一次 `listed`，不重复磁盘 IO），设 `scanMode:'full'` 与 `truncated:true`，与 `previous.truncated` 回退分支同源。回归测试：`tests/local-library-incremental-truncation.test.js`。
+
+- 本地资产 IndexedDB 当前使用数据库版本 3，并把 `assets` 与 `lyrics` 分开存储。v2 到 v3 升级必须从 `assets.openCursor()` 逐条提取歌词字段到 `lyrics`，随后用同一游标更新去除歌词字段的资产记录，不能先 `getAll()` 把整库歌词一次性搬入内存。
+- `localAssetCacheSnapshot()` 只生成元数据、封面缩略图和扫描状态；`localLyricCacheSnapshot()` 承载歌词原文及其文件签名。资产补水需要并行读取两个 store，但仅在 `includeLyrics` 开启时读取歌词 store；释放后的延迟写入必须把 `_preserveLocalLyricPayload` 放在歌词记录上，并从 `lyrics` 合并旧原文。
+- IndexedDB 清理要把同一歌曲的 asset/lyric 记录一起裁剪，并清理没有对应 asset 的孤立 lyric 记录；新增读写路径均保留 `complete`、`error`、`abort` 三路结算和连接关闭。
+- 桌面持久曲库的外置封面优先复用 `localCoverFile.url` 的 `/api/local-file` 流地址。缩略图与当前封面 `Image` 解码前需设置 `crossOrigin='anonymous'`；仅浏览器拖放的普通 `File` 继续走 data URL 回退，不能重新对桌面外置封面调用整图 `readLocalFileDataUrl`。
+- 相关回归测试：`tests/local-asset-cache-v3.test.js`。
+
 ## Reference
 
 - 相关实现：`public/index.html`、`desktop/main.js`、`desktop/desktop-overlay-state-cache.js`、`desktop/mini-player-recovery-session.js`、`desktop/mini-player-state-cache.js`、`server.js`、`scripts/test-mini-player-memory.ps1`、`tests/desktop-lyrics-ipc-ownership.test.js`、`tests/desktop-lyrics-mouse-poller.test.js`、`tests/desktop-overlay-state-cache.test.js`、`tests/desktop-overlay-disabled-ipc.test.js`、`tests/desktop-overlay-main-update.test.js`、`tests/desktop-overlay-window-ownership.test.js`、`tests/local-asset-cache-ownership.test.js`、`tests/local-beat-cache-residency.test.js`、`tests/local-cover-thumb-promise-ownership.test.js`、`tests/local-file-range-memory.test.js`、`tests/local-library-persistent-memory.test.js`、`tests/local-library-background-refresh.test.js`、`tests/local-library-background-cancellation.test.js`、`tests/local-library-incremental-truncation.test.js`、`tests/local-lyric-cache-residency.test.js`、`tests/local-media-object-url-residency.test.js`、`tests/playlist-cover-cache-residency.test.js`、`tests/mini-player-main-gates.test.js`、`tests/mini-player-recovery-session.test.js`、`tests/mini-player-state-cache.test.js`
