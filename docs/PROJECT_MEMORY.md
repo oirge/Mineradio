@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.75`；GitHub Release 已发布并设为 Latest。
+- 当前源码检查点：`v1.2.76`；GitHub Release 待本轮发布并设为 Latest。
 - 当前工作分支：`codex/release-1.2.60`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -32,6 +32,9 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.76`（2026-08-02）继续优化 3D 歌单架卡片帧热路径：`shelfManager.update()` 将本帧 `frameShelfLook` 传给卡片绘制，卡片签名、DOF 重绘、中心状态重绘和周期重绘复用同一份外观快照，避免重复归一化设置与解析强调色。非帧入口保留回退读取；卡片颜色、透明度、布局、UI、视觉质感和交互语义保持不变。新增 `tests/frame-hot-path.test.js` 卡片绘制快照复用断言。
+- `v1.2.76` 本地资产：安装器 `104760392` 字节 / SHA256 `6dbd1deca240f7b0b7eba146ad48562843ca7daa144bf798c26e473df4fd0fe1`；blockmap `111887` 字节 / `a41f2d343411d57c2eb2aae6195e0d6b86ae5c2cdc2133c6b2528490bfc79086`；`latest.yml` `350` 字节 / `1914d101561618b5b56823e8cfde6af893e7f2a084ab9ac907361915c8d7e2be`；快速补丁 `2311400` 字节 / `e22bef36c63559e1a1c6871555a60945f98ec75f58153b19242e1f1a04a3d3ba`；Portable ZIP `146496579` 字节 / `1b5b8d90d43f0b94b394ae3061461037c0f81ef9337d4fcc8f71c5d80177c990`。本地资产已生成，GitHub Release 待上传。
 
 - `v1.2.75`（2026-08-02）继续优化音频分析帧热路径：频谱四段先累加整数采样值再统一乘归一化因子，时域 RMS 复用 256 项 `Float64Array` 平方查找表，避免每个分析帧对约 2048 个采样重复做减法、除法和乘法。频段边界、RMS、节拍判断、视觉响应、UI、布局、播放控制和交互语义保持不变。新增 `tests/audio-analysis-hot-path.test.js` 旧算法数值等价断言。
 - `v1.2.75` 本地资产：安装器 `104760018` 字节 / SHA256 `0ae19211860e9401dfff7b7f065bc134196d741e47bf32aaeff23bf0dbb9b4bf`；blockmap `111991` 字节 / `36c7074677f18e5f21aea1eb058bd323249176585d2ea5261967d48533a4cc1c`；`latest.yml` `350` 字节 / `35050b1a26dfcbec30af4e5548a7a1c57988125779bc5aea192836de0d9319c7`；快速补丁 `2309504` 字节 / `77c84eb36dcb34ccdc9259acdc42b4c777bda1fd424584948578effe1c41e246`；Portable ZIP `146496136` 字节 / `5a03824c4e7f9e13983c04243275b19577460586fd6e8de39646bc4a74f0bfe8`。Release 已发布为 Latest，远端 6 个资产大小与 SHA-256 已核对一致。

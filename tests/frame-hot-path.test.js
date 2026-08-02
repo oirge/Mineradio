@@ -105,6 +105,30 @@ function testShelfContentFrameSnapshotReuse() {
 }
 
 /**
+ * 验证卡片纹理签名和绘制复用同一帧外观快照，避免可见卡片重复解析颜色与透明度。
+ * @returns {void}
+ */
+function testShelfCardFrameSnapshotReuse() {
+  const source = readRendererSource();
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const signatureSource = readSourceBetween(managerSource, 'function cardDrawSignature(', '\n\n  /**\n   * 绘制歌单架卡片纹理');
+  const drawSource = readSourceBetween(managerSource, 'function drawCard(', '\n\n  function buildOneCard');
+  const placeSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
+  const updateSource = readSourceBetween(managerSource, '    update: function(dt) {', '\n    onCoverChange: function()');
+
+  assert.match(signatureSource, /function cardDrawSignature\(card, item, frameShelfLook\)/);
+  assert.match(signatureSource, /var shelfLook = frameShelfLook \|\| shelfSettings\(\);/);
+  assert.match(signatureSource, /shelfLook\.accent \+ '\\|' \+\s*shelfLook\.bgOpacity/);
+  assert.match(drawSource, /function drawCard\(card, item, frameShelfLook\)/);
+  assert.match(drawSource, /var shelfLook = frameShelfLook \|\| shelfSettings\(\);/);
+  assert.match(drawSource, /cardDrawSignature\(card, item, shelfLook\)/);
+  assert.doesNotMatch(drawSource, /shelfAccentHex\(\)/);
+  assert.match(placeSource, /drawCard\(card, card\.item, shelfLook\);/);
+  assert.match(placeSource, /setCardCenter\(card, absD < 0\.5, shelfLook\);/);
+  assert.match(updateSource, /drawCard\(c, c\.item, frameShelfLook\);/);
+}
+
+/**
  * 验证 Home 刷新把同一轮已计算的本地歌曲池和听歌统计传给卡片渲染，避免重复扫描。
  * @returns {void}
  */
@@ -124,4 +148,5 @@ test('歌词光粒循环复用帧级状态', testLyricParticleFrameCache);
 test('歌单架更新复用帧级可见状态', testShelfFrameStateCache);
 test('歌单架布局复用帧级设置快照', testShelfFrameSettingsReuse);
 test('歌单详情复用帧级布局与外观快照', testShelfContentFrameSnapshotReuse);
+test('歌单卡片绘制复用帧级外观快照', testShelfCardFrameSnapshotReuse);
 test('Home 刷新复用本地歌曲池与听歌统计快照', testHomeRenderSnapshotReuse);

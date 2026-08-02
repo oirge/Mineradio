@@ -303,7 +303,7 @@
 - 歌词光粒位置循环和 `position.needsUpdate` 只在 `data.sparks.visible` 时执行；旋转状态仍须逐帧维护，重新可见的首帧必须按 base position 与当前绝对时间全量覆盖坐标后再上传。
 - `tickStageLyricMesh()` 的光粒循环必须复用当前调用的 `lyricParticlesEnabled`、`particleBeat`、`particleDrift` 和 `particleCount`；不要在每个粒子上重复读取 `fx.lyricGlowParticles`、`stageLyrics.beatGlow` 或 `arr.length / 3`，坐标计算语义保持不变。
 - `shelfManager.update()` 每帧必须缓存 `contentList.isOpen()` 与 `shelfAlwaysVisible()` 的结果，再用于可见性、层级和封面绑定判断；这些状态在单次更新内不得重复查询。
-- `shelfManager.update()` 每帧先生成一次 `shelfSettings()` 快照，再传给 `shelfLayoutProfile(shelfCtl)`；布局计算不得在已经有设置快照时再次归一化偏好或解析颜色。
+- `shelfManager.update()` 每帧先生成一次 `shelfSettings()` 快照，再传给 `shelfLayoutProfile(shelfCtl)`、详情列表和卡片绘制；布局、详情行与 `cardDrawSignature()` / `drawCard()` 不得在已经有设置快照时再次归一化偏好或解析颜色。异步封面回调、主题刷新等非帧入口可以回退读取。
 - 帧级 scratch 返回对象只允许当前唯一同步调用者立即读取，不得跨下一次调用保存引用；安魂姿态只在主相机已经更新投影后运行，不能独立承担 FOV/aspect/near/far 同步。
 - MediaPipe 手势帧复用 `handPalmScratch`、`HAND_OPENNESS_TIPS` 和 `HAND_SKELETON_TIPS`；`processHandFrame()` 单次计算掌心并传给张开度与骨架绘制。`palmCenter(lm, out)` 无 `out` 时仍保留返回新对象的兼容语义，scratch 引用不得跨帧保存。
 - 缓存安装包复用通过 `installerReusePromises` 合并相同验证身份；key 使用规范化文件路径、版本、有限正大小与摘要的 JSON tuple，成功、失败和空结果都必须用 Promise 身份检查在 `finally` 清理。

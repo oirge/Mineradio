@@ -1,5 +1,16 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.76 3D 歌单架卡片绘制低卡顿优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.76`。
+- 歌单架每帧复用同一份 `frameShelfLook` 外观快照，卡片绘制签名、DOF 重绘、中心状态重绘和周期重绘不再重复归一化设置、解析颜色；非帧入口保留原有回退读取。
+- 保持卡片颜色、透明度、布局、UI、视觉质感和交互语义不变；新增 `tests/frame-hot-path.test.js` 卡片绘制快照复用断言。
+- 全量 Node 回归 `166/166`、59 个 JavaScript 文件语法检查、前端内联脚本解析和 `git diff --check` 均通过后构建发布。
+- 发布资产：`Mineradio-1.2.76-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.75→1.2.76.patch.json`、ASCII 文件名补丁别名、`Mineradio-1.2.76-SHA256SUMS.txt` 和 Portable ZIP。
+- 安装器大小：`104760392` 字节；Portable ZIP 大小：`146496579` 字节；快速补丁大小：`2311400` 字节；校验值以 `Mineradio-1.2.76-SHA256SUMS.txt` 为准。
+- 安装器 SHA256：`6dbd1deca240f7b0b7eba146ad48562843ca7daa144bf798c26e473df4fd0fe1`；blockmap：`a41f2d343411d57c2eb2aae6195e0d6b86ae5c2cdc2133c6b2528490bfc79086`；快速补丁：`e22bef36c63559e1a1c6871555a60945f98ec75f58153b19242e1f1a04a3d3ba`；`latest.yml`：`1914d101561618b5b56823e8cfde6af893e7f2a084ab9ac907361915c8d7e2be`；Portable ZIP：`1b5b8d90d43f0b94b394ae3061461037c0f81ef9337d4fcc8f71c5d80177c990`。
+- Release 标题使用 `Mineradio v1.2.76 3D 歌单架卡片绘制低卡顿优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.75 音频分析热循环低卡顿优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.75`。

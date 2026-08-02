@@ -3013,7 +3013,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.75';
+var APP_VERSION = '1.2.76';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -8496,8 +8496,15 @@ function shouldUseShelfDynamicCamera(type) {
 function shelfAccentHex() {
   return normalizeHexColor((fx && fx.shelfAccentColor) || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor);
 }
-function shelfAccentRgba(alpha, fallback) {
-  var rgb = hexToRgb(shelfAccentHex());
+/**
+ * 将歌单架强调色转换为带透明度的 CSS 颜色，可复用当前帧已解析的颜色。
+ * @param {number} alpha 透明度。
+ * @param {string=} fallback 颜色解析失败时的回退颜色。
+ * @param {string=} accentHex 当前帧的强调色十六进制值。
+ * @returns {string} 可直接用于 Canvas 或 CSS 的 RGBA 颜色。
+ */
+function shelfAccentRgba(alpha, fallback, accentHex) {
+  var rgb = hexToRgb(accentHex || shelfAccentHex());
   if (!rgb) return fallback || 'rgba(244,210,138,' + alpha + ')';
   return 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + alpha + ')';
 }
@@ -15616,8 +15623,16 @@ function makeShelfManager() {
     if (line && lines.length < maxLines) lines.push(line);
     for (var j = 0; j < lines.length; j++) ctx.fillText(lines[j], x, y + j * lineHeight);
   }
-  function cardDrawSignature(card, item) {
+  /**
+   * 生成卡片纹理的重绘签名，外观设置优先复用当前帧快照。
+   * @param {Object} card 卡片运行时状态。
+   * @param {Object} item 卡片显示数据。
+   * @param {Object=} frameShelfLook 当前帧的歌单架外观快照。
+   * @returns {string} 卡片当前应使用的绘制签名。
+   */
+  function cardDrawSignature(card, item, frameShelfLook) {
     item = item || {};
+    var shelfLook = frameShelfLook || shelfSettings();
     var rec = item.cover ? playlistCoverCache[item.cover] : null;
     var coverState = item.cover ? (rec && rec.loaded ? 'ready' : (rec && rec.failed ? 'fail' : 'wait')) : 'none';
     var pulseBucket = card && card.isCenter ? Math.round((bass + beatPulse * 0.85) * 6) : 0;
@@ -15634,13 +15649,22 @@ function makeShelfManager() {
       (card && card.selected ? 1 : 0) + '|' +
       (card && card.dofBucket == null ? -1 : card.dofBucket) + '|' +
       pulseBucket + '|' +
-      shelfAccentHex() + '|' +
-      shelfSettings().bgOpacity;
+      shelfLook.accent + '|' +
+      shelfLook.bgOpacity;
   }
 
-  function drawCard(card, item) {
+  /**
+   * 绘制歌单架卡片纹理，保证同一帧的外观读取只发生一次。
+   * @param {Object} card 卡片运行时状态。
+   * @param {Object} item 卡片显示数据。
+   * @param {Object=} frameShelfLook 当前帧的歌单架外观快照。
+   * @returns {void} 绘制结果写入卡片 Canvas 纹理。
+   */
+  function drawCard(card, item, frameShelfLook) {
     item = item || card.item || {};
-    var nextDrawKey = cardDrawSignature(card, item);
+    var shelfLook = frameShelfLook || shelfSettings();
+    var accentHex = shelfLook.accent;
+    var nextDrawKey = cardDrawSignature(card, item, shelfLook);
     if (card.drawKey === nextDrawKey) return;
     card.drawKey = nextDrawKey;
     var cv = card.canvas, ctx = card.ctx;
@@ -15648,7 +15672,6 @@ function makeShelfManager() {
     ctx.clearRect(0, 0, W, H);
     var pad = 18;
     var isNow = item.type === 'queue' && item.tag === '正在播放';
-    var shelfLook = shelfSettings();
 
     // 卡片底
     makeRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 32);
@@ -15659,7 +15682,7 @@ function makeShelfManager() {
     ctx.fillStyle = grad; ctx.fill();
 
     if (isNow) {
-      ctx.strokeStyle = shelfAccentRgba(0.72);
+      ctx.strokeStyle = shelfAccentRgba(0.72, null, accentHex);
       ctx.lineWidth = 1.8 + Math.sin(uniforms.uTime.value * 3) * 0.28 + bass * 1.2;
     } else {
       ctx.strokeStyle = 'rgba(255,255,255,0.14)';
@@ -15670,9 +15693,9 @@ function makeShelfManager() {
     if (card.selected) {
       ctx.save();
       makeRoundRect(ctx, pad + 2, pad + 2, W - pad*2 - 4, H - pad*2 - 4, 30);
-      ctx.shadowColor = shelfAccentRgba(0.58);
+      ctx.shadowColor = shelfAccentRgba(0.58, null, accentHex);
       ctx.shadowBlur = 18;
-      ctx.strokeStyle = shelfAccentRgba(0.72);
+      ctx.strokeStyle = shelfAccentRgba(0.72, null, accentHex);
       ctx.lineWidth = 2.2;
       ctx.stroke();
       ctx.restore();
@@ -15696,7 +15719,7 @@ function makeShelfManager() {
     // 文本区
     var tx = pad + coverSize + 32;
     ctx.font = '700 17px Inter, Arial';
-    ctx.fillStyle = isNow ? shelfAccentRgba(0.92) : 'rgba(255,255,255,0.92)';
+    ctx.fillStyle = isNow ? shelfAccentRgba(0.92, null, accentHex) : 'rgba(255,255,255,0.92)';
     ctx.fillText(item.tag || '', tx, pad + 36);
 
     ctx.font = '700 30px Inter, Arial';
@@ -15708,7 +15731,7 @@ function makeShelfManager() {
     wrapText(ctx, item.sub || '', tx, pad + 156, W - tx - pad - 14, 24, 2);
 
     // 律动进度条
-    ctx.strokeStyle = isNow ? shelfAccentRgba(0.90) : 'rgba(255,255,255,0.30)';
+    ctx.strokeStyle = isNow ? shelfAccentRgba(0.90, null, accentHex) : 'rgba(255,255,255,0.30)';
     ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.moveTo(tx, H - pad - 22);
@@ -15721,13 +15744,13 @@ function makeShelfManager() {
         makeRoundRect(ctx, tx, actionY, 138, 38, 18);
         var playGrad = ctx.createLinearGradient(tx, actionY, tx + 138, actionY + 38);
         playGrad.addColorStop(0, 'rgba(255,255,255,0.88)');
-        playGrad.addColorStop(0.55, shelfAccentRgba(0.94));
-        playGrad.addColorStop(1, shelfAccentRgba(0.58));
+        playGrad.addColorStop(0.55, shelfAccentRgba(0.94, null, accentHex));
+        playGrad.addColorStop(1, shelfAccentRgba(0.58, null, accentHex));
         ctx.fillStyle = playGrad; ctx.fill();
-        ctx.strokeStyle = shelfAccentRgba(0.44);
+        ctx.strokeStyle = shelfAccentRgba(0.44, null, accentHex);
         ctx.lineWidth = 1.1; ctx.stroke();
         ctx.font = '800 14px Inter, "Microsoft YaHei", Arial';
-        ctx.fillStyle = readableInkForHex(shelfAccentHex());
+        ctx.fillStyle = readableInkForHex(accentHex);
         ctx.fillText('▶ 播放歌单', tx + 25, actionY + 24);
 
         makeRoundRect(ctx, tx + 150, actionY, 104, 38, 18);
@@ -15739,7 +15762,7 @@ function makeShelfManager() {
         ctx.fillText('详情', tx + 184, actionY + 24);
       } else if (item.type === 'queue') {
         ctx.font = '600 14px Inter, "Microsoft YaHei", Arial';
-        ctx.fillStyle = shelfAccentRgba(0.84);
+        ctx.fillStyle = shelfAccentRgba(0.84, null, accentHex);
         ctx.fillText('点击播放', tx, actionY + 25);
       }
     }
@@ -15920,7 +15943,7 @@ function makeShelfManager() {
     if (card.dofBucket !== nextDofBucket) {
       card.dofBucket = nextDofBucket;
       card.dofBlur = nextDof;
-      drawCard(card, card.item);
+      drawCard(card, card.item, shelfLook);
     }
 
     if (modeIs === 'side') {
@@ -15990,7 +16013,7 @@ function makeShelfManager() {
       }
       // v8: 自动隐藏 — shelf 不在 focus 区时整体淡化
       card.mesh.material.opacity = Math.min(1, opacity * (shelfVisibility != null ? shelfVisibility : 1) * reveal * (1 - paneEase * 0.24) + pulse * 0.10 * reveal + breathPulse * 0.035) * shelfLook.opacity;
-      setCardCenter(card, absD < 0.5);
+      setCardCenter(card, absD < 0.5, shelfLook);
     } else {
       // 舞台 PSP: 水平展开 + center 突出, dock 在底部
       var pxStage = (layout.stageX || 0) + delta * layout.stageXStep;
@@ -16017,14 +16040,14 @@ function makeShelfManager() {
         card.mesh.material.color.setScalar(1);
       }
       card.mesh.material.opacity = Math.min(1, opS * (shelfVisibility != null ? shelfVisibility : 1) * (1 - paneEaseS * 0.24) + pulse * 0.10) * shelfLook.opacity;
-      setCardCenter(card, absD < 0.5);
+      setCardCenter(card, absD < 0.5, shelfLook);
     }
   }
 
-  function setCardCenter(card, isCenter) {
+  function setCardCenter(card, isCenter, frameShelfLook) {
     if (card.isCenter !== isCenter) {
       card.isCenter = isCenter;
-      drawCard(card, card.item);
+      drawCard(card, card.item, frameShelfLook);
     } else {
       card.isCenter = isCenter;
     }
@@ -16358,7 +16381,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
             cards.forEach(function(c){
               c.item = shelfItemAt(c.index) || c.item;
               c.isCenter = Math.abs(c.index - centerSmooth) < 0.5;
-              if (c.isCenter || c.dofBucket <= 1 || c.index === currentIdx) drawCard(c, c.item);
+              if (c.isCenter || c.dofBucket <= 1 || c.index === currentIdx) drawCard(c, c.item, frameShelfLook);
             });
           }
         }
