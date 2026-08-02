@@ -2984,7 +2984,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.64';
+var APP_VERSION = '1.2.65';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -20176,6 +20176,10 @@ function simpleSearchNorm(text) {
     .replace(/[（(【\[].*?[）)】\]]/g, '')
     .replace(/[\s·・,，。.!！?？'"“”‘’|\-_/]+/g, '');
 }
+/**
+ * 获取本地搜索候选池，并把同一份已筛选数组交给预热任务。
+ * @returns {Array<object>} 当前曲库或播放队列中的本地歌曲。
+ */
 function localSearchPool() {
   var sourceList = localLibrarySongs && localLibrarySongs.length ? localLibrarySongs : playQueue;
   var signature = sourceList === localLibrarySongs
@@ -20310,13 +20314,13 @@ function localSearchWarmupSource(songs) {
 }
 /**
  * 在空闲切片里预热本地搜索归一化索引，减少第一次冷门词搜索时的同步扫库开销。
- * @param {Array<object>} songs 本地歌曲列表。
+ * @param {Array<object>} songs 已经过滤的本地歌曲列表。
  * @param {{signature?: string, delay?: number}} opts 调度选项。
  * @returns {void}
  */
 function scheduleLocalSearchIndexWarmup(songs, opts) {
   opts = opts || {};
-  songs = localSearchWarmupSource(songs);
+  songs = Array.isArray(songs) ? songs : [];
   var signature = opts.signature || ('library:' + songs.length);
   if (!songs.length) {
     cancelLocalSearchIndexWarmup();
@@ -20378,10 +20382,23 @@ function searchResultsDomSignature(songs, key) {
 function searchLocalSongs(q) {
   var pool = localSearchPool();
   q = String(q || '').trim();
-  if (!q) return localSearchDefaultResults(pool);
   var nq = simpleSearchNorm(q);
-  if (!nq) return localSearchDefaultResults(pool);
   var sourceSignature = localSearchPoolCache.signature || '';
+  if (!nq) {
+    if (localSearchResultCache.signature === sourceSignature
+      && localSearchResultCache.normalizedQuery === ''
+      && Array.isArray(localSearchResultCache.results)) {
+      return localSearchResultCache.results;
+    }
+    var defaultResults = localSearchDefaultResults(pool);
+    localSearchResultCache = {
+      signature: sourceSignature,
+      normalizedQuery: '',
+      results: defaultResults,
+      exhaustive: defaultResults.length >= pool.length
+    };
+    return defaultResults;
+  }
   if (localSearchResultCache.signature === sourceSignature && localSearchResultCache.normalizedQuery === nq) {
     return localSearchResultCache.results;
   }

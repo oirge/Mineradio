@@ -327,6 +327,7 @@
 - IndexedDB 清理要把同一歌曲的 asset/lyric 记录一起裁剪，并清理没有对应 asset 的孤立 lyric 记录；新增读写路径均保留 `complete`、`error`、`abort` 三路结算和连接关闭。
 - 桌面持久曲库的外置封面优先复用 `localCoverFile.url` 的 `/api/local-file` 流地址。缩略图与当前封面 `Image` 解码前需设置 `crossOrigin='anonymous'`；仅浏览器拖放的普通 `File` 继续走 data URL 回退，不能重新对桌面外置封面调用整图 `readLocalFileDataUrl`。
 - 相关回归测试：`tests/local-asset-cache-v3.test.js`。
+- `localSearchPool()` 构建本地候选池后，`scheduleLocalSearchIndexWarmup()` 必须直接接收已经过滤的数组，不得再次调用 `localSearchWarmupSource()`；混合队列仍需保留首个非本地项之前的本地歌曲。空查询结果可按 `localSearchPoolCache.signature` 复用数组身份，调用方不得原地修改该缓存数组。
 
 ## Reference
 
