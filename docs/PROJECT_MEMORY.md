@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.68`；本轮最终提交将创建并推送 tag `v1.2.68`。
+- 当前源码检查点：`v1.2.69`；本轮最终提交将创建并推送 tag `v1.2.69`。
 - 当前工作分支：`codex/release-1.2.60`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -38,6 +38,9 @@
 
 - `v1.2.68`（2026-08-02）继续优化 3D 歌单架卡片帧热路径：`placeCard()` 复用 `shelfManager.update()` 已计算的内容打开状态和常驻显示状态，避免每张可见卡片重复查询；卡片布局、透明度、层级、详情遮罩、UI、视觉质感和交互语义保持不变。帧级契约测试扩展覆盖参数传递与卡片循环零重复查询。
 - `v1.2.68` 本地资产：安装包 `104841201` 字节 / SHA256 `213e23771c5e8cec0892fb5131809f019a2f9b31ee51ce3753d50f71624f45f3`；blockmap `112027` 字节 / `67dd719758cef577034bd7281341d4074753f9e12179e8a6b216d9c1ed497a76`；`latest.yml` SHA256 `3b1bf61c6ef116d70fc344d2bd5b236fee8019d1ea2c8c90dd797d8118b82fae`；快速补丁 `2299236` 字节 / `656e1d7d5a3cbfc0e32a4fb5950470e58a633924b5211771145e2a298807f9cb`。Portable ZIP 本轮不上传。
+
+- `v1.2.69`（2026-08-02）继续优化 Home 首屏列表刷新：`renderHomeDiscover()` 将同一轮已计算的本地歌曲池和听歌统计摘要传给 `renderHomeTiles()`，避免重复扫描曲库和统计对象；Home 卡片顺序、封面、文案、UI、视觉质感和交互语义保持不变。新增帧热点契约测试，全量测试 `157/157` 通过。
+- `v1.2.69` 本地资产：安装包 `104841228` 字节 / SHA256 `9f7fc7b532dc267fac165ea02936314d100a9433cfcb1470648ba56e7ce9de13`；blockmap `111982` 字节 / `053644d4779bd3453fdb7dc6e4d859137c3ad248fac22e60cf0af602b1077a2e`；`latest.yml` SHA256 `6e60ef5b8e479eacf5ea3caf146e02894de7c1caaa83f59b70cf164faf837bad`；快速补丁 `2299420` 字节 / `00326da00858ac1b7e2596832daf4ae6b22de9e077430de064b944728b42ed2e`。Portable ZIP 本轮不上传。
 
 - `v1.2.60`（2026-08-01）已正式发布到 GitHub：https://github.com/oirge/Mineradio/releases/tag/v1.2.60；tag 指向提交 `3bd5657`，Release 为 Latest、非 draft/prerelease，4 个资产全部 uploaded 且远端下载后 SHA-256 与本地一致。桌面歌词解锁后支持滚轮按 `0.05` 缩放，范围统一为 `0.20–1.55`；最小档约 `12px`，超长歌词可自适应至约 `8px`。工具条在 `− / +` 之间显示实时百分比，拖动/悬停/中键热区余量随实际字号缩放，`12px` 时每侧约 `3px × 2px`，固定工具条不并入主进程热区。不要再把下限抬回 `0.35/0.72`，也不要恢复小字号固定 `10px × 6px` 余量。
 - `v1.2.60` 资产：安装包 `104753811` 字节 / SHA256 `c2f36d64b91480edfa6331cfd8c19d976e00ef93e5f577d337fdb6db5a7bc99e`；blockmap `111920` 字节 / `fcee44800a4eafdc582c7bb11663be18f8347f9f44cf550a9ffafd89c05eb517`；`latest.yml` `350` 字节 / `76edc3dd11766bfdac83a8b925c752fa579a1db203769d53c383071ac7123f90`；快速补丁 `2499947` 字节 / `2f56e6108dd97c6b098157fadc957f84b17c5ce4922a03e02359acb451850b3a`。

@@ -203,6 +203,16 @@ Mineradio v1.1.0 绾噣瀹夎鐗?```
 - 安装器 SHA256：`e346de8c5d9ae8bd6b959de8a84160ba590ee9cc126e5c6612aa7d7a238a4a6b`；blockmap：`4da7eda9e19d2a27dc05e7f4013425bb51491b8f8ae77e272108ab46a7148e8f`；快速补丁：`59b5c10bac8c910eb2d143f1db72434c922ff765bae29ee29312b609445f7597`；`latest.yml`：`b68d92e67641a1baf96379eaa7e7e223d32d3b9dcc8680c3b451c421f8a71497`。
 - Release 标题使用 `Mineradio v1.2.67 舞台歌词与歌单架帧更新低开销优化版`，目标为 GitHub Latest Release。
 
+## v1.2.69 Home 首屏快照复用低分配优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.69`。
+- `renderHomeDiscover()` 将同一轮已计算的本地歌曲池和听歌统计摘要传给 `renderHomeTiles()`，避免 Home 卡片渲染重复扫描曲库与统计记录；保持卡片顺序、封面、文案、布局和交互语义不变。
+- 新增/扩展 `tests/frame-hot-path.test.js`，锁定 Home 刷新只计算一次歌曲池和听歌统计摘要。
+- 发布资产：`Mineradio-1.2.69-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.68→1.2.69.patch.json` 和 `Mineradio-1.2.69-SHA256SUMS.txt`；Portable ZIP 按既有发布流程跳过。
+- 安装器大小：`104841228` 字节；快速补丁大小：`2299420` 字节；校验值以 `Mineradio-1.2.69-SHA256SUMS.txt` 为准。
+- 安装器 SHA256：`9f7fc7b532dc267fac165ea02936314d100a9433cfcb1470648ba56e7ce9de13`；blockmap：`053644d4779bd3453fdb7dc6e4d859137c3ad248fac22e60cf0af602b1077a2e`；快速补丁：`00326da00858ac1b7e2596832daf4ae6b22de9e077430de064b944728b42ed2e`；`latest.yml`：`6e60ef5b8e479eacf5ea3caf146e02894de7c1caaa83f59b70cf164faf837bad`。
+- Release 标题使用 `Mineradio v1.2.69 Home 首屏快照复用低分配优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.68 3D 歌单架卡片帧状态复用优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.68`。

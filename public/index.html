@@ -2984,7 +2984,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.68';
+var APP_VERSION = '1.2.69';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -18405,16 +18405,16 @@ function renderHomeMosaic(items) {
 }
 /**
  * 渲染 Home 首屏本地音乐卡片。首屏路径只取少量卡片，显式循环避免启动后反复创建中间数组。
+ * @param {Array<object>} localPool 当前 Home 刷新已准备好的本地歌曲池。
+ * @param {object} summary 当前 Home 刷新已准备好的听歌统计摘要。
  * @returns {void}
  */
-function renderHomeTiles() {
+function renderHomeTiles(localPool, summary) {
   var row = document.getElementById('home-tile-row');
   var title = document.getElementById('home-rail-title');
   var note = document.getElementById('home-rail-note');
   if (!row) return;
   var tiles = [];
-  var localPool = localSearchPool();
-  var summary = homeListenSummary();
   if (summary.recent && tiles.length < 5) {
     tiles.push({ kind: 'recent', title: summary.recent.name || '继续听', sub: summary.recent.artist || summary.recent.source || '', cover: summary.recent.cover, record: summary.recent });
   }
@@ -18500,7 +18500,7 @@ function renderHomeDiscover() {
   setHomeArt('home-continue-art', localSummary.recent && localSummary.recent.cover || firstLocal && songCoverSrc(firstLocal, 280), 280);
   setHomeArt('home-profile-art', localSummary.topSong && localSummary.topSong.cover || firstLocal && songCoverSrc(firstLocal, 280), 280);
   setHomeArt('home-library-art', thirdLocal && songCoverSrc(thirdLocal, 280) || secondLocal && songCoverSrc(secondLocal, 280), 280);
-  renderHomeTiles();
+  renderHomeTiles(localSongs, localSummary);
 }
 async function loadHomeDiscover(force) {
   homeDiscoverState.loading = false;
