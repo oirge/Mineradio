@@ -70,5 +70,22 @@ function testShelfFrameStateCache() {
   assert.match(updateSource, /placeCard\(cards\[i\], i, cards\.length, mode, frameLayout, frameShelfLook, cardFramePose, contentOpen, alwaysVisible\);/);
 }
 
+/**
+ * 验证 Home 刷新把同一轮已计算的本地歌曲池和听歌统计传给卡片渲染，避免重复扫描。
+ * @returns {void}
+ */
+function testHomeRenderSnapshotReuse() {
+  const source = readRendererSource();
+  const tileSource = readSourceBetween(source, 'function renderHomeTiles(', '\nfunction renderHomeDiscover()');
+  const discoverSource = readSourceBetween(source, 'function renderHomeDiscover()', '\nasync function loadHomeDiscover');
+  assert.match(tileSource, /function renderHomeTiles\(localPool, summary\)/);
+  assert.doesNotMatch(tileSource, /localSearchPool\(\)/);
+  assert.doesNotMatch(tileSource, /homeListenSummary\(\)/);
+  assert.equal((discoverSource.match(/localSearchPool\(\)/g) || []).length, 1);
+  assert.equal((discoverSource.match(/homeListenSummary\(\)/g) || []).length, 1);
+  assert.match(discoverSource, /renderHomeTiles\(localSongs, localSummary\);/);
+}
+
 test('歌词光粒循环复用帧级状态', testLyricParticleFrameCache);
 test('歌单架更新复用帧级可见状态', testShelfFrameStateCache);
+test('Home 刷新复用本地歌曲池与听歌统计快照', testHomeRenderSnapshotReuse);
