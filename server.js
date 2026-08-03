@@ -21,14 +21,23 @@ const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
  */
 let localFileAuthorizer = null;
 
-function resolveRuntimeAppRoot() {
+function resolveRuntimeAppRoots() {
+  const sourceRoot = __dirname;
   const unpacked = process.resourcesPath
     ? path.join(process.resourcesPath, 'app.asar.unpacked')
     : '';
-  if (unpacked && fs.existsSync(path.join(unpacked, 'public', 'index.html'))) return unpacked;
-  return __dirname;
+  const asar = process.resourcesPath
+    ? path.join(process.resourcesPath, 'app.asar')
+    : '';
+  const writableRoot = unpacked && fs.existsSync(path.join(unpacked, 'server.js'))
+    ? unpacked
+    : sourceRoot;
+  const resourceRoot = [writableRoot, asar, sourceRoot]
+    .find(root => root && fs.existsSync(path.join(root, 'public', 'index.html')))
+    || writableRoot;
+  return { writableRoot, resourceRoot };
 }
-const APP_ROOT = resolveRuntimeAppRoot();
+const { writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT } = resolveRuntimeAppRoots();
 
 /**
  * 注入本地文件代理的授权校验函数（跨进程契约：与主进程 resolveAuthorizedLocalFile 对齐）。
@@ -40,7 +49,7 @@ function setLocalFileAuthorizer(authorizer) {
   if (typeof authorizer !== 'function') throw new TypeError('LOCAL_FILE_AUTHORIZER_INVALID');
   localFileAuthorizer = authorizer;
 }
-const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(__dirname, 'updates');
+const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(APP_ROOT, 'updates');
 const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.join(UPDATE_WORK_DIR, 'downloads');
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
 const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || 'D:\\MineradioCache\\beatmaps';
@@ -1953,12 +1962,12 @@ const server = http.createServer(async (req, res) => {
 
   // ---------- 静态资源 ----------
   if (pn === '/favicon.ico') {
-    serveStatic(res, path.join(APP_ROOT, 'build', 'icon.ico'));
+    serveStatic(res, path.join(RESOURCE_ROOT, 'build', 'icon.ico'));
     return;
   }
 
   let filePath = pn === '/' ? '/index.html' : pn;
-  filePath = path.join(APP_ROOT, 'public', filePath);
+  filePath = path.join(RESOURCE_ROOT, 'public', filePath);
   serveStatic(res, filePath);
 });
 

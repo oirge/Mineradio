@@ -1,3 +1,10 @@
+## v1.2.80 asar 资源归档与运行根拆分优化
+
+- 收窄 `asarUnpack` 到可写的 `server.js` 和 `package.json`；`public`、`build` 和桌面脚本回到 `app.asar`，减少解包文件与启动 I/O。
+- 主进程和本地服务器拆分“可写运行根”和“静态资源根”：补丁仍只写 `app.asar.unpacked`，静态页面、字体、图标从 `app.asar` 读取。
+- 兼容 `v1.2.79` 已安装的旧解包布局，旧客户端应用快速补丁后仍可正常启动，不要求手动迁移文件。
+- 实际 Electron 隔离启动验证首页、CSS、JS、字体和图标资源均返回 `200`；UI、布局、玻璃质感、电影视觉、播放控制和交互语义不变。
+
 ## v1.2.79 全量启动与后台资源优化
 
 - `asar` 开启为 `true`，将 `public`、`server.js`、`package.json` 和 `build` 放入 `app.asar.unpacked`；主进程、本地服务器和快速补丁统一使用可写运行根，保留原有更新链路。

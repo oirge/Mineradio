@@ -1,5 +1,14 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.80 asar 资源归档与运行根拆分优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.80`。
+- `asarUnpack` 收窄到 `server.js`、`package.json`；`public`、`build` 和桌面脚本回到 `app.asar`，减少解包文件与启动 I/O。
+- 主进程、本地服务器和补丁链路拆分可写运行根与静态资源根；补丁继续写 `app.asar.unpacked`，静态页面、字体和图标从 `app.asar` 读取。
+- 兼容 `v1.2.79` 的旧解包布局；从 `v1.2.79` 到 `v1.2.80` 可使用快速补丁，不需要手动迁移文件。
+- 构建前需通过全量 Node 回归、全量 JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
+- Release 标题使用 `Mineradio v1.2.80 asar 资源归档与运行根拆分优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.79 全量启动与后台资源优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.79`。

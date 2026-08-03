@@ -9,14 +9,23 @@ const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache } = require('./mini-player-state-cache');
 
-function resolveRuntimeAppRoot() {
+function resolveRuntimeAppRoots() {
+  const sourceRoot = path.join(__dirname, '..');
   const unpacked = process.resourcesPath
     ? path.join(process.resourcesPath, 'app.asar.unpacked')
     : '';
-  if (unpacked && fs.existsSync(path.join(unpacked, 'public', 'index.html'))) return unpacked;
-  return path.join(__dirname, '..');
+  const asar = process.resourcesPath
+    ? path.join(process.resourcesPath, 'app.asar')
+    : '';
+  const writableRoot = unpacked && fs.existsSync(path.join(unpacked, 'server.js'))
+    ? unpacked
+    : sourceRoot;
+  const resourceRoot = [writableRoot, asar, sourceRoot]
+    .find(root => root && fs.existsSync(path.join(root, 'public', 'index.html')))
+    || writableRoot;
+  return { writableRoot, resourceRoot };
 }
-const APP_ROOT = resolveRuntimeAppRoot();
+const { writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT } = resolveRuntimeAppRoots();
 
 let mainWindow = null;
 let localServer = null;
@@ -81,7 +90,7 @@ const MINI_PLAYER_MARGIN = 14;
 const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
 const APP_NAME = 'Mineradio';
 const APP_USER_MODEL_ID = 'com.mineradio.desktop';
-const APP_ICON_ICO = path.join(APP_ROOT, 'build', 'icon.ico');
+const APP_ICON_ICO = path.join(RESOURCE_ROOT, 'build', 'icon.ico');
 const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell-settings.json';
 const DESKTOP_UI_STATE_FILE = 'desktop-ui-state.json';

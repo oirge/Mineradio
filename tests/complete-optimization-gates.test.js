@@ -21,16 +21,17 @@ function functionBody(source, name) {
 test('asar 打包使用可写 app.asar.unpacked 运行根', () => {
   assert.equal(packageJson.build.asar, true);
   assert.deepEqual(packageJson.build.asarUnpack, [
-    'public/**/*',
     'server.js',
-    'package.json',
-    'build/**/*'
+    'package.json'
   ]);
-  assert.match(serverSource, /function resolveRuntimeAppRoot\(\)/);
-  assert.match(serverSource, /const APP_ROOT = resolveRuntimeAppRoot\(\)/);
+  assert.match(serverSource, /function resolveRuntimeAppRoots\(\)/);
+  assert.match(serverSource, /const \{ writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT \} = resolveRuntimeAppRoots\(\)/);
   assert.match(serverSource, /path\.resolve\(APP_ROOT, safeRel\)/);
-  assert.match(serverSource, /path\.join\(APP_ROOT, 'public', filePath\)/);
-  assert.match(mainSource, /const APP_ROOT = resolveRuntimeAppRoot\(\)/);
+  assert.match(serverSource, /path\.join\(RESOURCE_ROOT, 'public', filePath\)/);
+  assert.match(serverSource, /path\.join\(RESOURCE_ROOT, 'build', 'icon\.ico'\)/);
+  assert.match(mainSource, /function resolveRuntimeAppRoots\(\)/);
+  assert.match(mainSource, /const \{ writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT \} = resolveRuntimeAppRoots\(\)/);
+  assert.match(mainSource, /path\.join\(RESOURCE_ROOT, 'build', 'icon\.ico'\)/);
   assert.match(mainSource, /require\(path\.join\(APP_ROOT, 'server\.js'\)\)/);
 });
 

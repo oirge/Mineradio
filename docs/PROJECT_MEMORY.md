@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.76`；GitHub Release 待本轮发布并设为 Latest。
-- 当前工作分支：`codex/release-1.2.60`。
+- 当前源码检查点：`v1.2.80`；GitHub Release 待本轮发布并设为 Latest。
+- 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -32,6 +32,8 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.80`（2026-08-03）收窄 `asarUnpack` 到 `server.js` 与 `package.json`，将 `public`、`build` 和桌面脚本归档回 `app.asar`；主进程与本地服务器拆分可写运行根和静态资源根，兼容 `v1.2.79` 的旧解包布局。实际 Electron 隔离启动验证首页、`app.js`、`app.css`、字体和图标均返回 200；本轮不改 UI、布局、玻璃质感、电影视觉、播放控制和交互语义。
 
 - `v1.2.76`（2026-08-02）继续优化 3D 歌单架卡片帧热路径：`shelfManager.update()` 将本帧 `frameShelfLook` 传给卡片绘制，卡片签名、DOF 重绘、中心状态重绘和周期重绘复用同一份外观快照，避免重复归一化设置与解析强调色。非帧入口保留回退读取；卡片颜色、透明度、布局、UI、视觉质感和交互语义保持不变。新增 `tests/frame-hot-path.test.js` 卡片绘制快照复用断言。
 - `v1.2.76` 本地资产：安装器 `104760392` 字节 / SHA256 `6dbd1deca240f7b0b7eba146ad48562843ca7daa144bf798c26e473df4fd0fe1`；blockmap `111887` 字节 / `a41f2d343411d57c2eb2aae6195e0d6b86ae5c2cdc2133c6b2528490bfc79086`；`latest.yml` `350` 字节 / `1914d101561618b5b56823e8cfde6af893e7f2a084ab9ac907361915c8d7e2be`；快速补丁 `2311400` 字节 / `e22bef36c63559e1a1c6871555a60945f98ec75f58153b19242e1f1a04a3d3ba`；Portable ZIP `146496579` 字节 / `1b5b8d90d43f0b94b394ae3061461037c0f81ef9337d4fcc8f71c5d80177c990`。本地资产已生成，GitHub Release 待上传。
