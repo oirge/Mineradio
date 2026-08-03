@@ -47,6 +47,7 @@ test('desktop lyrics restores manual bounds before applying the initial renderer
   assert.match(main, /const resetManualBounds = yChanged && desktopLyricsWindow && !desktopLyricsWindow\.isDestroyed\(\);/);
   assert.match(main, /positionDesktopLyricsWindow\(state, \{ force: !!resetManualBounds \|\| !desktopLyricsUserBounds \}\)/);
   assert.match(main, /win\.on\('close', rememberOwnedDesktopLyricsBounds\)/);
+  assert.match(renderer, /桌面歌词的外层调度必须跟随 FPS/);
 });
 
 test('desktop lyrics flowing glow is rendered on the overlay canvas', () => {

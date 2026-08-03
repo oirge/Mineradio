@@ -6,7 +6,8 @@
 - 更新下载/快速补丁状态轮询由固定 `setInterval` 改为单飞请求；上一轮未完成时不叠加请求，减少慢线路下的网络、JSON 解析和 DOM 刷新压力。
 - 增加轮询代际与任务 ID 校验，旧任务迟到响应不能覆盖新任务；完成、失败和切换任务时统一释放轮询定时器与在途状态。
 - 桌面歌词提示顶部空间不足时自动翻到歌词下方；手动拖动后的窗口 bounds 在重启后优先恢复，关闭时补存一次。
-- 新增更新轮询和桌面歌词布局回归测试；构建前需通过全量 Node 回归 `180/180`、JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
+- 修复桌面歌词外层同步调度固定 `320ms` 导致的歌词慢半拍；启用桌面歌词时跟随 `desktopLyricsFps` 推送，30 FPS 约 `33ms`、60 FPS 约 `16.7ms`，后台压力/隐藏窗口仍保留降载保护。
+- 新增更新轮询、桌面歌词布局和同步频率回归测试；构建前需通过全量 Node 回归 `182/182`、JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
 - 本版本不生成快速补丁，使用完整安装器或 Portable ZIP。
 - Release 标题使用 `Mineradio v1.2.83 更新状态轮询单飞优化版`，目标为 GitHub Latest Release。
 - 发布资产：`Mineradio-1.2.83-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.83-SHA256SUMS.txt` 和 `Mineradio-1.2.83-Portable-win-x64.zip`。

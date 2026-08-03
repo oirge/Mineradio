@@ -29568,10 +29568,18 @@ function notifyDesktopLyricsBeatMapReady() {
   } catch (e) {}
 }
 function desktopOverlaySyncDelay() {
-  if (typeof isHiddenForBackgroundOptimization === 'function' && isHiddenForBackgroundOptimization()) return 900;
-  var level = typeof getRuntimeFramePressureLevel === 'function' ? getRuntimeFramePressureLevel() : 0;
-  if (level >= 2) return 620;
-  if (level >= 1) return 420;
+  var lyricsActive = !!(fx && fx.desktopLyrics);
+  var wallpaperActive = !!(fx && fx.wallpaperMode);
+  if (lyricsActive) {
+    // 桌面歌词的外层调度必须跟随 FPS；固定 320ms 会让歌词明显落后音频。
+    var lyricDelay = desktopLyricsPushInterval();
+    if (wallpaperActive) return Math.min(lyricDelay, 260);
+    return lyricDelay;
+  }
+  if (wallpaperActive) {
+    if (typeof isHiddenForBackgroundOptimization === 'function' && isHiddenForBackgroundOptimization()) return 900;
+    return 260;
+  }
   return 320;
 }
 function desktopLyricsPushInterval() {

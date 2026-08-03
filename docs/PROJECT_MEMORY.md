@@ -660,3 +660,11 @@
 - 关键参数/实现：本地文件 HTTP 代理 `/api/local-file` 之前只校验随机令牌、未限制授权曲库根目录，可越权读任意文件（含 `..` 穿越）。修复给 `server.js` 增加可注入授权钩子 `setLocalFileAuthorizer`，缺省 Fail-Closed（未注入即拒绝）；`desktop/main.js` 在 `require` 后注入 `resolveAuthorizedLocalFile`，与 IPC 授权模型对齐。
 - 发布产物：GitHub Release `v1.2.45`（Latest），含 `Mineradio-1.2.45-Setup.exe`、`.blockmap`、`latest.yml` 和快速补丁 `Mineradio-1.2.44-to-1.2.45.patch.json`；已逐字节确认 `win-unpacked` 打包源码含授权门，安装包 SHA256 与本地一致。
 - 禁止回退或改坏的点：不要把 `/api/local-file` 改回只验令牌不验授权根目录；不要把授权钩子缺省改成 no-op（fail-open）；不要绕过 `resolveAuthorizedLocalFile` 直接 `statSync`/`createReadStream` 请求方 path。
+
+### 2026-08-03 - v1.2.83 桌面歌词同步延迟修复
+
+- 用户反馈：桌面歌词显示比实际演唱慢，要求修复且不能影响正常电脑使用。
+- 涉及文件：`public/app.js`、`tests/desktop-lyrics-sync-rate.test.js`、`tests/desktop-lyrics-stable.test.js`、`CHANGELOG.md`、`RELEASE.md`。
+- 关键参数/实现：`desktopOverlaySyncDelay()` 在桌面歌词启用时改用 `desktopLyricsPushInterval()`，不再固定 `320ms`；30 FPS 约 `33ms`、60 FPS 约 `16.7ms`，`desktopLyricsPushInterval()` 仍保留 `8–42ms`、运行时压力和隐藏窗口降载边界。修复只收紧歌词状态 IPC 调度，不改音频 `currentTime` 时钟，不启动新窗口、不接管鼠标键盘。
+- 验证：全量 Node 回归 `182/182` 通过；主进程、桌面歌词 renderer 和前端语法检查通过；`git diff --check` 通过。
+- 禁止回退或改坏的点：不要把桌面歌词外层调度恢复为固定 `320ms`；不要为追求同步关闭隐藏/后台降载保护；不要让桌面歌词窗口重新捕获鼠标导致遮挡用户操作。
