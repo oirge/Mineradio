@@ -445,7 +445,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.83';
+var APP_VERSION = '1.2.84';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -30599,7 +30599,6 @@ function animate() {
   }
   updateSkullParticleLayer(dt);
   updateStageLyrics3D(dt);
-  syncDesktopOverlayState();
 
   renderer.render(scene, camera);
 }

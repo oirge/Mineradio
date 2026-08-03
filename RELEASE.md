@@ -1,5 +1,15 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.84 桌面覆盖层帧热路径优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.84`。
+- 移除主渲染 `animate()` 对 `syncDesktopOverlayState()` 的重复调用；桌面歌词/壁纸继续由独立自调度计时器驱动，避免每个视觉帧重复做时间检查、载荷判重和状态分支。
+- 保持桌面歌词 FPS 同步、壁纸节奏、后台/隐藏窗口降载、UI、布局、玻璃质感、电影视觉、播放控制和鼠标操作不变。
+- 新增 `tests/desktop-overlay-scheduler.test.js`；构建前需通过全量 Node 回归 `183/183`、JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
+- 本版本不生成快速补丁，使用完整安装器或 Portable ZIP。
+- Release 标题使用 `Mineradio v1.2.84 桌面覆盖层帧热路径优化版`，目标为 GitHub Latest Release。
+- 发布资产：`Mineradio-1.2.84-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.84-SHA256SUMS.txt` 和 `Mineradio-1.2.84-Portable-win-x64.zip`。
+
 ## v1.2.83 更新状态轮询与桌面歌词同步优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.83`。

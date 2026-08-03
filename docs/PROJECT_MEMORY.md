@@ -668,3 +668,10 @@
 - 关键参数/实现：`desktopOverlaySyncDelay()` 在桌面歌词启用时改用 `desktopLyricsPushInterval()`，不再固定 `320ms`；30 FPS 约 `33ms`、60 FPS 约 `16.7ms`，`desktopLyricsPushInterval()` 仍保留 `8–42ms`、运行时压力和隐藏窗口降载边界。修复只收紧歌词状态 IPC 调度，不改音频 `currentTime` 时钟，不启动新窗口、不接管鼠标键盘。
 - 验证：全量 Node 回归 `182/182` 通过；主进程、桌面歌词 renderer 和前端语法检查通过；`git diff --check` 通过。
 - 禁止回退或改坏的点：不要把桌面歌词外层调度恢复为固定 `320ms`；不要为追求同步关闭隐藏/后台降载保护；不要让桌面歌词窗口重新捕获鼠标导致遮挡用户操作。
+
+### 2026-08-03 - v1.2.84 桌面覆盖层帧热路径优化
+
+- 优化目标：桌面歌词和壁纸已有独立自调度同步循环后，主渲染 `animate()` 不应每帧再次调用同步函数，避免重复时间检查、载荷判重和状态分支。
+- 涉及文件：`public/app.js`、`tests/desktop-overlay-scheduler.test.js`、`package.json`、`package-lock.json`、`CHANGELOG.md`、`RELEASE.md`。
+- 关键边界：只移除渲染帧重复入口，保留 `scheduleDesktopOverlaySync()` 的独立定时器、桌面歌词 FPS、壁纸 260ms 节奏、后台/隐藏窗口降载和开关即时同步；不改 UI、布局、视觉质感、音频时钟或鼠标行为。
+- 禁止回退或改坏的点：不要把桌面覆盖层同步重新塞回主渲染帧；不要为了省一次调用取消独立自调度，否则主窗口停止 RAF 时桌面歌词/壁纸会失去更新。
