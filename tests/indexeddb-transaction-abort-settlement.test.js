@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的自定义背景缓存源码。
  */
 function readCustomBackgroundIdbSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function openCustomBackgroundDb()');
   const end = source.indexOf('function openLocalAssetCacheDb()', start);
   assert.ok(start >= 0 && end > start, '未找到自定义背景 IndexedDB 实现');

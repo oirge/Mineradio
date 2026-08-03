@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的缩略图缓存源码。
  */
 function readLocalCoverThumbPromiseSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function localCoverThumbResultActiveCount(');
   const end = source.indexOf('/**\n * 为歌曲生成本地封面缩略图', start);
   assert.ok(start >= 0 && end > start, '未找到本地封面缩略图并发缓存实现');
@@ -23,7 +23,7 @@ function readLocalCoverThumbPromiseSource() {
  * @returns {string} 可在隔离上下文执行的图片来源源码。
  */
 function readLocalCoverImageSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('async function openLocalCoverImageSource(');
   const end = source.indexOf('function localCoverThumbCacheKey(', start);
   assert.ok(start >= 0 && end > start, '未找到本地封面图片租约实现');

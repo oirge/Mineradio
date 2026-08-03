@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的回收源码。
  */
 function readRevokeSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function revokeDiscardedLocalSongObjectUrls(');
   const end = source.indexOf('/**\n * 解析本地歌词并标记来源。', start);
   assert.ok(start >= 0 && end > start, '未找到 Object URL 回收实现');

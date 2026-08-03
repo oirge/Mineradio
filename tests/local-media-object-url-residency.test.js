@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的封面源码。
  */
 function readLocalCoverUrlSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function songCustomCoverKey(');
   const end = source.indexOf('function songCoverSignature(', start);
   assert.ok(start >= 0 && end > start, '未找到本地封面 URL 实现');
@@ -23,7 +23,7 @@ function readLocalCoverUrlSource() {
  * @returns {string} 可在隔离上下文执行的本地音频源码。
  */
 function readLocalAudioUrlSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const syncStart = source.indexOf('function shouldRetainLocalLyricText(');
   const syncEnd = source.indexOf('async function readLocalBeatCacheForSong(', syncStart);
   const urlStart = source.indexOf('function assignLocalSongUrl(');

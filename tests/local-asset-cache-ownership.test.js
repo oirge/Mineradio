@@ -10,7 +10,7 @@ const path = require('node:path');
  * @returns {void}
  */
 function testLocalAssetRecordsHaveSingleRuntimeOwner() {
-  const file = path.join(__dirname, '..', 'public', 'index.html');
+  const file = path.join(__dirname, '..', 'public', 'app.js');
   const source = fs.readFileSync(file, 'utf8');
   const recordWriteStart = source.indexOf('async function writeLocalAssetCacheRecord(');
   const writeStart = source.indexOf('async function writeLocalAssetCacheForSong(');

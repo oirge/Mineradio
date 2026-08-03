@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的歌单封面缓存源码。
  */
 function readPlaylistCoverCacheSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function settlePlaylistCoverImage(');
   const end = source.indexOf('// ============================================================\n//  3D 卡片交互', start);
   assert.ok(start >= 0 && end > start, '未找到歌单封面缓存实现');

@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离 VM 中执行的生产源码。
  */
 function readLocalBeatCacheSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function packLocalBeatCache(');
   const end = source.indexOf('function setLocalBeatStatus(', start + 1);
   assert.ok(start >= 0 && end > start, '未找到本地节奏缓存接缝');

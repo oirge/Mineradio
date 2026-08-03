@@ -51,7 +51,7 @@ function scheduleDesktopOverlaySync() {}
  * @returns {void}
  */
 function testDisabledDesktopLyricsSkipsHeavyPayload() {
-  const file = path.join(__dirname, '..', 'public', 'index.html');
+  const file = path.join(__dirname, '..', 'public', 'app.js');
   const source = fs.readFileSync(file, 'utf8');
   const calls = { builds: 0, updates: 0, enabledPayload: null };
 
@@ -137,7 +137,7 @@ function testDisabledDesktopLyricsSkipsHeavyPayload() {
  * @returns {void}
  */
 function testDisabledWallpaperSkipsHeavyPayload() {
-  const file = path.join(__dirname, '..', 'public', 'index.html');
+  const file = path.join(__dirname, '..', 'public', 'app.js');
   const source = fs.readFileSync(file, 'utf8');
   const calls = { builds: 0, updates: 0, enabledPayload: null };
 

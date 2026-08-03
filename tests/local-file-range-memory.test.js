@@ -23,7 +23,7 @@ function readLocalFileRangeSource() {
  * @returns {string} 可在隔离上下文执行的分块解码源码。
  */
 function readLocalFileDecoderSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function base64ChunksToBytes(');
   const end = source.indexOf('async function readLocalFileBytes(', start);
   assert.ok(start >= 0 && end > start, '未找到本地文件分块解码实现');
@@ -35,7 +35,7 @@ function readLocalFileDecoderSource() {
  * @returns {{decode:string,read:string}} 两段可隔离执行的源码。
  */
 function readLocalTextSources() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const decodeStart = source.indexOf('function decodeLocalTextBuffer(');
   const readStart = source.indexOf('async function readLocalTextFile(', decodeStart);
   const readEnd = source.indexOf('function readFileAsDataUrl(', readStart);

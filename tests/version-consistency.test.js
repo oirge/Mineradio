@@ -8,7 +8,7 @@ const path = require('node:path');
 function testFrontendVersionMatchesPackage() {
   const root = path.join(__dirname, '..');
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
   const matches = Array.from(html.matchAll(/\bvar APP_VERSION = '([^']+)';/g));
 
   assert.equal(matches.length, 1, '前端必须且只能声明一个 APP_VERSION');

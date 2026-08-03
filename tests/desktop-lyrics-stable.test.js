@@ -10,7 +10,7 @@ const overlay = fs.readFileSync(
   'utf8',
 );
 const renderer = fs.readFileSync(
-  path.join(__dirname, '..', 'public', 'index.html'),
+  path.join(__dirname, '..', 'public', 'app.js'),
   'utf8',
 );
 const main = fs.readFileSync(

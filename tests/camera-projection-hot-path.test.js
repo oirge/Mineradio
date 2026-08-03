@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 相机投影缓存源码。
  */
 function readProjectionSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('var cameraProjectionSyncState = {');
   const end = source.indexOf('function applyFreeCameraToCamera() {', start);
   assert.ok(start >= 0 && end > start, '未找到相机投影缓存实现');

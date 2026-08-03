@@ -10,7 +10,7 @@ const path = require('node:path');
  * @returns {string} 主渲染页面源码。
  */
 function readRendererSource() {
-  return fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  return fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
 }
 
 /**

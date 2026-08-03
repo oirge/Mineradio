@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的真实源码。
  */
 function readLocalTagRangeSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function base64ChunksToBytes(');
   const end = source.indexOf('function applyLocalMetadataTags(', start);
   assert.ok(start >= 0 && end > start, '未找到本地标签范围读取实现');
@@ -23,7 +23,7 @@ function readLocalTagRangeSource() {
  * @returns {string} 可在隔离上下文执行的预载源码。
  */
 function readLocalAssetPreloadSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('async function preloadLocalSongAssets(');
   const end = source.indexOf('function savedLocalLibraryFolderPath(', start);
   assert.ok(start >= 0 && end > start, '未找到本地单曲资产预载实现');
@@ -35,7 +35,7 @@ function readLocalAssetPreloadSource() {
  * @returns {string} 可在隔离上下文执行的真实源码。
  */
 function readLocalMetadataEnsureSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function ensureLocalMetadataForSong(');
   const end = source.indexOf('/**\n * 后台补齐当前播放歌曲元数据', start);
   assert.ok(start >= 0 && end > start, '未找到本地元数据加载状态机');

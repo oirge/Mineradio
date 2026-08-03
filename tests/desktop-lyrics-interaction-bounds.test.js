@@ -107,7 +107,7 @@ test('desktop lyric hot bounds are sampled after the current scroll transform', 
 
 test('desktop lyric size requests persist through the main renderer settings source', () => {
   const preload = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'preload.js'), 'utf8');
-  const mainRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const mainRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(preload, /mineradio-desktop-lyrics-size-request/);
   const start = mainRenderer.indexOf('api.onDesktopLyricsSizeRequest(function(payload)');
   const end = mainRenderer.indexOf('\n  }\n\n  api.onStateChange', start);
@@ -166,13 +166,14 @@ test('desktop lyric wheel resizes only the unlocked visible interaction region',
 
 test('desktop lyric size minimum is consistently lowered to 0.20', () => {
   const mainSource = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.js'), 'utf8');
-  const mainRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const mainRenderer = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const mainMarkup = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   assert.match(source, /var DESKTOP_LYRICS_SIZE_MIN = \.20;/);
   assert.match(source, /var minSize = Math\.max\(8, Math\.min\(32, baseFontSize \* \.55\)\);/);
   assert.doesNotMatch(source, /Math\.max\(24, Math\.min\(32, baseFontSize \* \.55\)\)/);
   assert.match(mainSource, /const DESKTOP_LYRICS_SIZE_MIN = 0\.20;/);
   assert.match(mainRenderer, /var DESKTOP_LYRICS_SIZE_MIN = 0\.20;/);
-  assert.match(mainRenderer, /id="fx-desktoplyricssize"[^>]*min="0\.20"/);
+  assert.match(mainMarkup, /id="fx-desktoplyricssize"[^>]*min="0\.20"/);
 });
 
 test('desktop lyric toolbar shows the current size percentage without changing hot bounds', () => {

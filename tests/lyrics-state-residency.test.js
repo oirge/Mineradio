@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的歌词状态源码。
  */
 function readLyricsStateSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const currentSongStart = source.indexOf('function currentLyricSong()');
   const currentSongEnd = source.indexOf('function getCustomLyricEntry(', currentSongStart);
   const stateStart = source.indexOf('function cloneLyricLine(');

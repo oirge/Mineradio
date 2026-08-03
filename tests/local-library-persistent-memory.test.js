@@ -35,7 +35,7 @@ function extractLocalLibraryIndexSync(source) {
  * @returns {void}
  */
 function testPersistentMemoryFollowsActiveLibrary() {
-  const file = path.join(__dirname, '..', 'public', 'index.html');
+  const file = path.join(__dirname, '..', 'public', 'app.js');
   const source = fs.readFileSync(file, 'utf8');
   const context = {};
   vm.runInNewContext(
@@ -97,7 +97,7 @@ function testPersistentMemoryFollowsActiveLibrary() {
  * @returns {void}
  */
 function testIndexSyncReleasesPreviousRecords() {
-  const file = path.join(__dirname, '..', 'public', 'index.html');
+  const file = path.join(__dirname, '..', 'public', 'app.js');
   const source = fs.readFileSync(file, 'utf8');
   const previousRecord = { key: 'song-key', pathKey: 'song.mp3' };
 

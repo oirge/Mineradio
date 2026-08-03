@@ -1,7 +1,7 @@
 {
   "name": "mineradio",
   "productName": "Mineradio",
-  "version": "1.2.77",
+  "version": "1.2.78",
   "description": "Mineradio 二改本地音乐播放器，支持 MP3/FLAC、本地封面和歌词",
   "author": "Mineradio",
   "main": "desktop/main.js",
@@ -86,10 +86,6 @@
         "https://gh-proxy.com/"
       ]
     }
-  },
-  "dependencies": {
-    "gsap": "^3.15.0",
-    "mpg123-decoder": "^1.0.3"
   },
   "devDependencies": {
     "electron": "^42.4.1",

@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离 VM 中执行的函数源码。
  */
 function readBackgroundRefreshSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function refreshSavedLocalMusicFolderInBackground(');
   const end = source.indexOf('/**\n * 将导入或恢复的本地文件转换为播放队列', start + 1);
   assert.ok(start >= 0 && end > start, '未找到本地曲库后台刷新函数');

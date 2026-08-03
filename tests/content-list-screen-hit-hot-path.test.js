@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 function readRendererSource() {
-  return fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  return fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
 }
 
 function readSourceBetween(source, startMarker, endMarker) {

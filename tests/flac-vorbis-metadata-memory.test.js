@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的真实解析源码。
  */
 function readFlacMetadataParserSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function asciiFromBytes(');
   const end = source.indexOf('function findZero(', start);
   assert.ok(start >= 0 && end > start, '未找到 FLAC 元数据解析实现');

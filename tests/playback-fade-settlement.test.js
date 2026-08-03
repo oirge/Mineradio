@@ -11,7 +11,7 @@ const vm = require('node:vm');
  * @returns {string} 可在隔离上下文执行的淡出结算源码。
  */
 function readPlaybackFadeSource() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function clearAudioFadeTimers()');
   const end = source.indexOf('function applyVolumeToAudio(', start);
   assert.ok(start >= 0 && end > start, '未找到音频淡出结算实现');

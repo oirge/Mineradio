@@ -1,5 +1,18 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.78 启动资源本地化与渲染器缓存优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.78`。
+- 主渲染页面拆出 `public/app.css` 与 `public/app.js`，`index.html` 从约 `1.6MB` 降至约 `55KB`；同步更新 Node 回归测试的 renderer 源码入口，静态页面标记仍由 `index.html` 单独校验。
+- 移除 Google Fonts 启动网络依赖，加入本地 Inter Latin woff2；中文使用 Windows 本地字体回退，避免为动态歌曲名/歌词打包全量 Noto Sans SC。
+- 逐字歌词进度增加独立运行时游标，连续播放从上次扫描位置继续，跳播自动重置；歌词高亮、Canvas/DOM 输出和交互语义保持不变。
+- 删除未使用的 `gsap`、`mpg123-decoder` npm 依赖及 lockfile 记录；保留 `asar:false`，避免破坏现有快速补丁对 `__dirname` 资源的原地替换链路。
+- 新增 `tests/local-renderer-assets.test.js` 与 `tests/lyric-progress-cursor.test.js`；构建前需通过全量 Node 回归、主进程/renderer 语法检查和 `git diff --check`。
+- 发布资产：`Mineradio-1.2.78-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.77→1.2.78.patch.json`、ASCII 补丁别名、`Mineradio-1.2.78-SHA256SUMS.txt` 和 Portable ZIP。
+- 安装器大小：`103068307` 字节；Portable ZIP 大小：`144652122` 字节；快速补丁大小：`2382082` 字节；SHA256 清单大小：`376` 字节。
+- 安装器 SHA256：`dc6be53ca62cb1155256b712d616c407d3ac407d1176e8331dcdd845529f99a1`；blockmap：`0cfe60bc754c47e63237e15112e6779804ce9a92b3962381df8535b1528ccf7b`；快速补丁：`84c2e4dd6a7552ed4c5ed40bafcb73a5063be02a800c02cfbee6f51f09c53fcf`；`latest.yml`：`eca74cfe0ca6ce1dfe6215e8c746446d1ff2b7ab858580c8f1f4953ee98c7670`；Portable ZIP：`d9832dc170a589a168c2708c8a98e0a10f2697fe5f1af14a038775344d2b0cb6`；SHA256 清单：`f871ec61611c6302adfe798683ba7c35103bcf7a326d3b24498587989e726edb`。
+- Release 标题使用 `Mineradio v1.2.78 启动资源本地化与渲染器缓存优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.77 3D 歌单详情屏幕命中低分配优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.77`。
