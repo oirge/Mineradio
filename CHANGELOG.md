@@ -1,3 +1,9 @@
+## v1.2.81 本地静态资源条件缓存优化
+
+- 本地服务器为 HTML、CSS、JS、字体和图标增加 ETag/Last-Modified 条件缓存；重复启动命中缓存时返回 `304`，不再重新传输大型 renderer 资源。
+- 保持更新后的资源可及时生效，使用 `Cache-Control: no-cache` 校验而不是长时间强缓存；页面、UI、布局、玻璃质感、电影视觉、播放控制和交互语义不变。
+- 新增真实 HTTP 200/304 回归测试，完整回归共 `174/174` 通过。
+
 ## v1.2.80 asar 资源归档与运行根拆分优化
 
 - 收窄 `asarUnpack` 到可写的 `server.js` 和 `package.json`；`public`、`build` 和桌面脚本回到 `app.asar`，减少解包文件与启动 I/O。

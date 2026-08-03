@@ -1,5 +1,13 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.81 本地静态资源条件缓存优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.81`。
+- 本地服务器为 HTML、CSS、JS、字体和图标增加 ETag/Last-Modified 条件缓存；重复启动命中缓存时返回 `304`，避免重新传输大型 renderer 资源。
+- 使用 `Cache-Control: no-cache` 保证补丁或完整更新后的资源立即重新校验，不使用可能造成旧脚本残留的长时间强缓存。
+- 新增真实 HTTP 200/304 回归测试；构建前需通过全量 Node 回归、全量 JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
+- Release 标题使用 `Mineradio v1.2.81 本地静态资源条件缓存优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.80 asar 资源归档与运行根拆分优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.80`。

@@ -125,12 +125,29 @@ function localContentTypeForPath(filePath) {
 }
 
 // ---------- 工具 ----------
-function serveStatic(res, filePath) {
+function serveStatic(req, res, filePath) {
   const ext = path.extname(filePath);
-  fs.readFile(filePath, (err, data) => {
-    if (err) { res.writeHead(404); res.end('Not Found'); return; }
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'text/plain' });
-    res.end(data);
+  fs.stat(filePath, (statErr, stat) => {
+    if (statErr || !stat.isFile()) { res.writeHead(404); res.end('Not Found'); return; }
+    const etag = '"' + stat.size.toString(16) + '-' + Math.floor(Number(stat.mtimeMs) || 0).toString(16) + '"';
+    const headers = {
+      'Content-Type': MIME[ext] || 'text/plain',
+      'Cache-Control': 'no-cache',
+      'ETag': etag,
+      'Last-Modified': stat.mtime.toUTCString(),
+    };
+    const ifNoneMatch = String(req && req.headers && req.headers['if-none-match'] || '');
+    if (ifNoneMatch === '*' || ifNoneMatch.split(',').some(value => value.trim() === etag)) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+    fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); res.end('Not Found'); return; }
+      headers['Content-Length'] = String(data.length);
+      res.writeHead(200, headers);
+      res.end(data);
+    });
   });
 }
 function sendJSON(res, data, status) {
@@ -1962,13 +1979,13 @@ const server = http.createServer(async (req, res) => {
 
   // ---------- 静态资源 ----------
   if (pn === '/favicon.ico') {
-    serveStatic(res, path.join(RESOURCE_ROOT, 'build', 'icon.ico'));
+    serveStatic(req, res, path.join(RESOURCE_ROOT, 'build', 'icon.ico'));
     return;
   }
 
   let filePath = pn === '/' ? '/index.html' : pn;
   filePath = path.join(RESOURCE_ROOT, 'public', filePath);
-  serveStatic(res, filePath);
+  serveStatic(req, res, filePath);
 });
 
 server.listen(PORT, HOST, () => {
