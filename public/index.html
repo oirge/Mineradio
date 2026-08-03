@@ -3013,7 +3013,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.76';
+var APP_VERSION = '1.2.77';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -16630,6 +16630,8 @@ function makeContentListManager() {
   var panelRaycastHits = [];
   var panelScreenCorners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   var panelScreenBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  var rowScreenCorners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  var rowScreenBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   /**
    * 读取歌单详情布局，并优先复用当前帧已经归一化的歌单架设置。
    * @param {object=} shelfCtl 当前帧的歌单架设置快照；省略时自行读取。
@@ -16661,6 +16663,38 @@ function makeContentListManager() {
       panelScreenBounds.maxY = Math.max(panelScreenBounds.maxY, y);
     }
     return panelScreenBounds;
+  }
+
+  /**
+   * 计算详情行的屏幕包围盒，复用固定四角和结果对象，避免点击兜底路径反复分配。
+   * @param {object} row 详情行运行时对象。
+   * @returns {object|null} 当前行的屏幕包围盒。
+   */
+  function measureRowScreenBounds(row) {
+    if (!row || !row.mesh || !row.mesh.visible) return null;
+    var params = row.mesh.geometry && row.mesh.geometry.parameters || {};
+    var hw = (params.width || 2.50) / 2;
+    var hh = (params.height || 0.36) / 2;
+    rowScreenCorners[0].set(-hw, -hh, 0);
+    rowScreenCorners[1].set(hw, -hh, 0);
+    rowScreenCorners[2].set(hw, hh, 0);
+    rowScreenCorners[3].set(-hw, hh, 0);
+    rowScreenBounds.minX = Infinity;
+    rowScreenBounds.minY = Infinity;
+    rowScreenBounds.maxX = -Infinity;
+    rowScreenBounds.maxY = -Infinity;
+    row.mesh.updateMatrixWorld(true);
+    for (var pi = 0; pi < rowScreenCorners.length; pi++) {
+      var point = rowScreenCorners[pi];
+      point.applyMatrix4(row.mesh.matrixWorld).project(camera);
+      var x = (point.x + 1) * innerWidth / 2;
+      var y = (1 - point.y) * innerHeight / 2;
+      rowScreenBounds.minX = Math.min(rowScreenBounds.minX, x);
+      rowScreenBounds.maxX = Math.max(rowScreenBounds.maxX, x);
+      rowScreenBounds.minY = Math.min(rowScreenBounds.minY, y);
+      rowScreenBounds.maxY = Math.max(rowScreenBounds.maxY, y);
+    }
+    return rowScreenBounds;
   }
 
   function makeRoundRect(ctx, x, y, w, h, r) {
@@ -17325,36 +17359,24 @@ function makeContentListManager() {
     },
     pickRowAtScreen: function(sx, sy) {
       if (!rows.length || !open) return null;
-      var ordered = rows.filter(function(r){ return r.mesh && r.mesh.visible; }).sort(function(a, b){
-        return (b.mesh.renderOrder || 0) - (a.mesh.renderOrder || 0);
-      });
-      for (var ri = 0; ri < ordered.length; ri++) {
-        var row = ordered[ri];
-        var params = row.mesh.geometry && row.mesh.geometry.parameters || {};
-        var hw = (params.width || 2.50) / 2;
-        var hh = (params.height || 0.36) / 2;
-        var pts = [
-          new THREE.Vector3(-hw, -hh, 0),
-          new THREE.Vector3( hw, -hh, 0),
-          new THREE.Vector3( hw,  hh, 0),
-          new THREE.Vector3(-hw,  hh, 0),
-        ];
-        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        row.mesh.updateMatrixWorld(true);
-        for (var pi = 0; pi < pts.length; pi++) {
-          pts[pi].applyMatrix4(row.mesh.matrixWorld).project(camera);
-          var x = (pts[pi].x + 1) * innerWidth / 2;
-          var y = (1 - pts[pi].y) * innerHeight / 2;
-          minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-        }
+      var bestRow = null;
+      var bestOrder = -Infinity;
+      var bestU = 0;
+      var bestV = 0;
+      for (var ri = 0; ri < rows.length; ri++) {
+        var row = rows[ri];
+        var order = row && row.mesh ? (row.mesh.renderOrder || 0) : 0;
+        if (!row || order <= bestOrder) continue;
+        var bounds = measureRowScreenBounds(row);
+        if (!bounds) continue;
         var padX = 24, padY = 16;
-        if (sx < minX - padX || sx > maxX + padX || sy < minY - padY || sy > maxY + padY) continue;
-        var u = clampRange((sx - minX) / Math.max(1, maxX - minX), 0, 1);
-        var v = 1 - clampRange((sy - minY) / Math.max(1, maxY - minY), 0, 1);
-        return { row: row, uv: { x: u, y: v }, screenPick: true };
+        if (sx < bounds.minX - padX || sx > bounds.maxX + padX || sy < bounds.minY - padY || sy > bounds.maxY + padY) continue;
+        bestRow = row;
+        bestOrder = order;
+        bestU = clampRange((sx - bounds.minX) / Math.max(1, bounds.maxX - bounds.minX), 0, 1);
+        bestV = 1 - clampRange((sy - bounds.minY) / Math.max(1, bounds.maxY - bounds.minY), 0, 1);
       }
-      return null;
+      return bestRow ? { row: bestRow, uv: { x: bestU, y: bestV }, screenPick: true } : null;
     },
     raycastPanel: function(rc) {
       if (!panel || !panel.mesh) return null;
@@ -17374,28 +17396,10 @@ function makeContentListManager() {
       var song = row.song || {};
       var isCenter = Math.abs(row.index - Math.round(centerSmooth)) < 0.5;
       if (!isCenter || !(isShelfContentPlayableSong(song) || song.type === 'podcast-radio')) return null;
-      var params = row.mesh.geometry && row.mesh.geometry.parameters || {};
-      var hw = (params.width || 2.50) / 2;
-      var hh = (params.height || 0.36) / 2;
-      var corners = [
-        new THREE.Vector3(-hw, -hh, 0),
-        new THREE.Vector3( hw, -hh, 0),
-        new THREE.Vector3( hw,  hh, 0),
-        new THREE.Vector3(-hw,  hh, 0),
-      ];
-      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      row.mesh.updateMatrixWorld(true);
-      for (var i = 0; i < corners.length; i++) {
-        corners[i].applyMatrix4(row.mesh.matrixWorld).project(camera);
-        var x = (corners[i].x + 1) * innerWidth / 2;
-        var y = (1 - corners[i].y) * innerHeight / 2;
-        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-      }
-      var w = Math.max(1, maxX - minX);
-      var h = Math.max(1, maxY - minY);
-      var u = clampRange((sx - minX) / w, 0, 1);
-      var v = clampRange((sy - minY) / h, 0, 1);
+      var bounds = measureRowScreenBounds(row);
+      if (!bounds) return null;
+      var u = clampRange((sx - bounds.minX) / Math.max(1, bounds.maxX - bounds.minX), 0, 1);
+      var v = clampRange((sy - bounds.minY) / Math.max(1, bounds.maxY - bounds.minY), 0, 1);
       if (!LOCAL_ONLY_MODE && u > 0.60 && u < 0.68 && v > 0.12 && v < 0.88) return 'like';
       if (!LOCAL_ONLY_MODE && u >= 0.68 && u < 0.75 && v > 0.12 && v < 0.88) return 'collect';
       if (u >= 0.75 && u < 0.82 && v > 0.12 && v < 0.88) return 'next';
