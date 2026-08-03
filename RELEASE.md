@@ -10,6 +10,7 @@
 - 发布资产：`Mineradio-1.2.85-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.2.85-SHA256SUMS.txt`；本版本不生成快速补丁，Portable ZIP 视上传稳定性决定。
 - 安装器大小：`103331095` 字节；Portable ZIP 大小：`144915220` 字节；blockmap 大小：`110099` 字节；`latest.yml` 大小：`350` 字节。
 - 安装器 SHA256：`8a374750d968c0347cbfde6199761bbe64e3746290a4e6c3568911071c67c06b`；blockmap：`ab72899b9b912cb8b27397fc5a7613ac39e86cea80c29a80f89d3e853c0cf69e`；`latest.yml`：`5bf1beab7fb36cae8f1cee1585b773a0ea1a1400ad37d425e7d86207d0509c0c`；Portable ZIP：`70b6c2d97ce04f6d866930ca8f1458225c9e0df7b19ba3f532755b29205ed69c`。
+- Portable ZIP 本地构建成功但因约 `145MB` 大文件上传超时未上传 GitHub；不影响安装器自动更新链路。
 
 ## v1.2.84 桌面覆盖层帧热路径优化
 
