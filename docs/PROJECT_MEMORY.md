@@ -34,6 +34,7 @@
 ## Release Memory
 
 - `v1.2.83`（2026-08-03）更新下载和快速补丁状态轮询改为单飞请求：上一轮未完成时不叠加请求；通过轮询代际和任务 ID 校验拒绝旧任务迟到响应，完成/失败/切换时释放定时器与在途标记。桌面歌词提示顶部空间不足时自动移到歌词下方；手动拖动后的窗口 bounds 在重启后优先恢复，关闭时补存一次。新增更新轮询和桌面歌词布局回归测试，当前全量回归 `180/180` 通过。
+- `v1.2.83` 本地资产：安装器 `103329984` 字节 / SHA256 `78e3f30204efc22fabde17805d6013c2346879c9d6b8523d9cb2d4a4598f2eab`；blockmap `110296` 字节 / `aa76ad11a4bae1458a0cf003496687e0e6c94e0adaf3e8a158d3736964b494d2`；`latest.yml` `350` 字节 / `fc5157969533940f17dd6e9bb247b6b9ea08fc45bb78904689b46ac5319a6b8f`；Portable ZIP `144914741` 字节 / `db5f34525aae5a28ef2d8a71b7dc8635c70d389b31fb1fdb6c8906d959949bc7`。本地资产已生成，GitHub Release 待上传。
 
 - `v1.2.82`（2026-08-03）本地服务器静态资源 `200` 响应改用 `fs.createReadStream()` 流式发送，避免先复制完整 HTML/CSS/JS/字体/图标 Buffer；保留 ETag/Last-Modified、`Cache-Control: no-cache` 和 `304` 条件请求语义。新增流式响应回归测试，当前全量回归 `175/175` 通过；不改 UI、布局、玻璃质感、电影视觉、播放控制和交互语义。
 - `v1.2.82` 本地资产：安装器 `103329187` 字节 / SHA256 `f2d07ed3c1e7413e6517f4f2e3c31a50b051970cb4bb4f8bbc9564211f5d71ed`；blockmap `110449` 字节 / `ad20226f20e129d2b4316f9eded3bbeeb746a2158f4a37b3d713d681bbf103a2`；`latest.yml` `350` 字节 / `ae91bffeb0be8baef0dd78ab719874ffdbb67afcbc26465709563dd169669296`；Portable ZIP `144914189` 字节 / `8e1da8e90e78c3df05cee82697505604678e639c2f8322ec1c10051ef35843b1`。GitHub Release 已发布为 Latest，远端 5 个资产大小与 SHA-256 已核对一致。
