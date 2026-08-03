@@ -6,11 +6,11 @@
 - 移除主渲染 `animate()` 对 `syncDesktopOverlayState()` 的重复调用；桌面歌词/壁纸继续由独立自调度计时器驱动，避免每个视觉帧重复做时间检查、载荷判重和状态分支。
 - 保持桌面歌词 FPS 同步、壁纸节奏、后台/隐藏窗口降载、UI、布局、玻璃质感、电影视觉、播放控制和鼠标操作不变。
 - 新增 `tests/desktop-overlay-scheduler.test.js`；构建前需通过全量 Node 回归 `183/183`、JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
-- 本版本不生成快速补丁，使用完整安装器或 Portable ZIP。
+- 本版本不生成快速补丁；GitHub 更新链路使用完整安装器，Portable ZIP 已本地构建并校验，但当前代理上传大文件超时未上传。
 - Release 标题使用 `Mineradio v1.2.84 桌面覆盖层帧热路径优化版`，目标为 GitHub Latest Release。
-- 发布资产：`Mineradio-1.2.84-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.84-SHA256SUMS.txt` 和 `Mineradio-1.2.84-Portable-win-x64.zip`。
-- 安装器大小：`103330195` 字节；Portable ZIP 大小：`144971458` 字节；blockmap 大小：`110266` 字节；SHA256 清单大小：`380` 字节。
-- 安装器 SHA256：`e30243b084e91b59a6913fc07f44a2381a115438b24dfba3bd39d2bc55fee717`；blockmap：`50ea6f55d788701b3cc5f2ec819e4848621ace104182322a5fe71ad92d63e93f`；`latest.yml`：`2ceed2a4583dca9d53e88eb2538a3f73d250b8251916daa4eb7c03f9c710faa0`；Portable ZIP：`4bae1c0e1c929c3567bf6673c554db44a9783625bf9cfb606c6c188934807d0f`。
+- 发布资产：`Mineradio-1.2.84-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.2.84-SHA256SUMS.txt`。
+- 安装器大小：`103330195` 字节；Portable ZIP 本地大小：`144971458` 字节；blockmap 大小：`110266` 字节；远端 SHA256 清单大小：`275` 字节。
+- 安装器 SHA256：`e30243b084e91b59a6913fc07f44a2381a115438b24dfba3bd39d2bc55fee717`；blockmap：`50ea6f55d788701b3cc5f2ec819e4848621ace104182322a5fe71ad92d63e93f`；`latest.yml`：`2ceed2a4583dca9d53e88eb2538a3f73d250b8251916daa4eb7c03f9c710faa0`；Portable ZIP 本地 SHA256：`4bae1c0e1c929c3567bf6673c554db44a9783625bf9cfb606c6c188934807d0f`。
 
 ## v1.2.83 更新状态轮询与桌面歌词同步优化
 

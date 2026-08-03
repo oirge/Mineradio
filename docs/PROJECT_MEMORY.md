@@ -675,4 +675,4 @@
 - 涉及文件：`public/app.js`、`tests/desktop-overlay-scheduler.test.js`、`package.json`、`package-lock.json`、`CHANGELOG.md`、`RELEASE.md`。
 - 关键边界：只移除渲染帧重复入口，保留 `scheduleDesktopOverlaySync()` 的独立定时器、桌面歌词 FPS、壁纸 260ms 节奏、后台/隐藏窗口降载和开关即时同步；不改 UI、布局、视觉质感、音频时钟或鼠标行为。
 - 禁止回退或改坏的点：不要把桌面覆盖层同步重新塞回主渲染帧；不要为了省一次调用取消独立自调度，否则主窗口停止 RAF 时桌面歌词/壁纸会失去更新。
-- 发布资产：GitHub Latest `v1.2.84`，含安装器 `103330195` 字节、Portable ZIP `144971458` 字节、blockmap `110266` 字节、`latest.yml` 和 SHA256 清单；远端资产发布后按大小与 SHA256 复核。
+- 发布资产：GitHub Latest `v1.2.84`，远端上传安装器 `103330195` 字节、blockmap `110266` 字节、`latest.yml` 和 275 字节 SHA256 清单，均按大小与 SHA256 复核；Portable ZIP 已本地生成 `144971458` 字节、SHA256 `4bae1c0e1c929c3567bf6673c554db44a9783625bf9cfb606c6c188934807d0f`，因当前代理上传大文件超时未上传。
