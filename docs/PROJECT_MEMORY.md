@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.85`；本轮已修复桌面歌词调整栏顶部裁切并完成 GitHub Latest 修复重发。
-- 当前工作分支：`codex/complete-v1.2.79`。
+- 当前源码检查点：`v1.2.86`；本轮将桌面歌词修复从同版本重发提升为可自动发现的新版本。
+- 当前工作分支：`codex/release-v1.2.86`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -685,3 +685,10 @@
 - 验证：全量 Node 回归 `189/189` 通过；`desktop/main.js`、`desktop/overlay-preload.js`、`server.js` 语法检查和 `git diff --check` 通过。
 - 修复重发资产：`Mineradio-1.2.85-Setup.exe` `103330816` 字节 / SHA256 `409e36493bbf4738fdf80d6fe3a27d7235e9302d014bcbaeeeb188443d520650`；blockmap `110399` 字节 / `ff93aa3b112348a4b34ed9c5dfbd9514d855e8d7c95ff25d91d1d54a309d7e10`；`latest.yml` `350` 字节 / `b2e7cc153b778a2b3055c0024a075352e0e4ef8376eb59724081d433ef12ba1a`；Portable ZIP `144915590` 字节 / `a05c2f02b0dbbba64dbfcdfb8bb48831792e8e462f7e97bedd13da3cbce41a6c`。
 - GitHub Release 已覆盖安装器、blockmap、`latest.yml` 和 SHA256 清单共 4 项；Portable ZIP 因大文件上传超时未放入远端，保留本地产物，不影响自动更新链路。
+
+### 2026-08-03 - v1.2.86 桌面歌词修复正式发布
+
+- 将 `v1.2.85` 同版本修复重发提升为 `v1.2.86`，确保已安装旧 `1.2.85` 的客户端满足 `latestVersion > APP_VERSION`，能够发现更新。
+- 构建同时产出 NSIS 安装器和 Portable ZIP；发布清单必须只列实际存在的四个载荷文件，不得保留失效的 Portable 条目。
+- 本地验证：全量 Node 回归 `189/189`；`server.js`、`desktop/main.js`、`desktop/preload.js`、`public/app.js` 语法检查和 `git diff --check` 通过。
+- 本地资产：安装器 `103335487` 字节 / SHA256 `d488629a31b84e77c497d6562e3f26cdfd9304b67288ab924d15e508131a64b7`；Portable ZIP `144915482` 字节 / `e8d5571cc5e828e44ad6cd832f24e06e6eb3ef0d5ca0881545408e012229d19b`；blockmap `110161` 字节 / `aa0fe7a0382b5840293e15a6a8ea30f2edc805e4738ae1ac4856cf6da5643f63`；`latest.yml` `350` 字节 / `e7ddf3d324462fa6c6a1bb1ec5b3b3f42513afbab2629f1e89c7aa82f672696d`。

@@ -1,5 +1,16 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.86 桌面歌词修复正式版
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.86`；这是对 `1.2.85` 修复重发的正式版本升级。
+- 保留桌面歌词顶部裁切修复；旧版 `1.2.85` 客户端会因版本号变大而进入自动更新链路。
+- Release 必须上传：`Mineradio-1.2.86-Setup.exe`、`Mineradio-1.2.86-Setup.exe.blockmap`、`Mineradio-1.2.86-Portable-win-x64.zip`、`latest.yml` 和 `Mineradio-1.2.86-SHA256SUMS.txt`。
+- 不生成同版本补丁；完整安装器负责覆盖 `1.2.85`，Portable ZIP 单独供便携模式下载。
+- 发布前执行全量 Node 回归 `189/189`、主进程/桌面歌词/服务器语法检查、`git diff --check`，并通过 GitHub Release API 复核全部五个上传资产。
+- 构建产物：安装器 `103335487` 字节；Portable ZIP `144915482` 字节；blockmap `110161` 字节；`latest.yml` `350` 字节；SHA256 清单 `380` 字节。
+- SHA256：安装器 `d488629a31b84e77c497d6562e3f26cdfd9304b67288ab924d15e508131a64b7`；Portable ZIP `e8d5571cc5e828e44ad6cd832f24e06e6eb3ef0d5ca0881545408e012229d19b`；blockmap `aa0fe7a0382b5840293e15a6a8ea30f2edc805e4738ae1ac4856cf6da5643f63`；`latest.yml` `e7ddf3d324462fa6c6a1bb1ec5b3b3f42513afbab2629f1e89c7aa82f672696d`。
+- `latest.yml` 的 Setup SHA512：`umRLeEfsq7xgLwfNNhMpJUKc9Qb6w3utJx0ZtCOpjYOL4sqiZ6RsbgXgcE0fSsGPEkf+LnCuU+C/0MadnQoCXw==`。
+
 ## v1.2.85 桌面歌词调整栏自动避让修复重发
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.85`。
