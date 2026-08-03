@@ -7,7 +7,7 @@
 - 保留 ETag、Last-Modified、`Cache-Control: no-cache` 和 `304` 条件缓存语义；页面、UI、布局、玻璃质感、电影视觉、播放控制和交互语义不变。
 - 新增流式静态资源回归测试；构建前需通过全量 Node 回归 `175/175`、JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
 - 由于本版本仅更新 `server.js` 静态资源服务逻辑，且 `server.js` 位于 `app.asar.unpacked`，不生成快速补丁；使用完整安装器或 Portable ZIP。
-- Release 标题使用 `Mineradio v1.2.82 静态资源流式传输优化版`，目标为 GitHub Latest Release。
+- Release 标题使用 `Mineradio v1.2.82 静态资源流式传输优化版`，已发布为 GitHub Latest Release。
 - 发布资产：`Mineradio-1.2.82-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.82-SHA256SUMS.txt` 和 `Mineradio-1.2.82-Portable-win-x64.zip`。
 - 安装器大小：`103329187` 字节；Portable ZIP 大小：`144914189` 字节；blockmap 大小：`110449` 字节；SHA256 清单大小：`380` 字节。
 - 安装器 SHA256：`f2d07ed3c1e7413e6517f4f2e3c31a50b051970cb4bb4f8bbc9564211f5d71ed`；blockmap：`ad20226f20e129d2b4316f9eded3bbeeb746a2158f4a37b3d713d681bbf103a2`；`latest.yml`：`ae91bffeb0be8baef0dd78ab719874ffdbb67afcbc26465709563dd169669296`；Portable ZIP：`8e1da8e90e78c3df05cee82697505604678e639c2f8322ec1c10051ef35843b1`。
