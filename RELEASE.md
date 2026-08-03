@@ -5,7 +5,10 @@
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.80`。
 - `asarUnpack` 收窄到 `server.js`、`package.json`；`public`、`build` 和桌面脚本回到 `app.asar`，减少解包文件与启动 I/O。
 - 主进程、本地服务器和补丁链路拆分可写运行根与静态资源根；补丁继续写 `app.asar.unpacked`，静态页面、字体和图标从 `app.asar` 读取。
-- 兼容 `v1.2.79` 的旧解包布局；从 `v1.2.79` 到 `v1.2.80` 可使用快速补丁，不需要手动迁移文件。
+- 兼容 `v1.2.79` 的旧解包布局；由于旧版真正加载的 `desktop/main.js` 位于 `app.asar` 内，本版不上传快速补丁，避免补丁只改写未加载的副本；请使用完整安装器或 Portable ZIP。
+- 发布资产：`Mineradio-1.2.80-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.80-SHA256SUMS.txt` 和 `Mineradio-1.2.80-Portable-win-x64.zip`。
+- 安装器大小：`103328894` 字节；Portable ZIP 大小：`144913870` 字节；blockmap 大小：`110210` 字节；SHA256 清单大小：`376` 字节。
+- 安装器 SHA256：`30e611c5098a0e8792f3968bbb2347585b658bb89e45bc35ec53a3b700557c74`；blockmap：`e77da9ceb032fa9e7e4f3a558f1801025718c3632f018ca2af5d93053eb2fdb1`；`latest.yml`：`94c9f7230f51210854e3ee2fd14caec7623fd3bd6c5eb9a2cd98cb9d79f724fc`；Portable ZIP：`017ac1cd57760b560ef6bdc90095e8017bf4596ad21ee69f19cb23fb66d331ce`。
 - 构建前需通过全量 Node 回归、全量 JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
 - Release 标题使用 `Mineradio v1.2.80 asar 资源归档与运行根拆分优化版`，目标为 GitHub Latest Release。
 
