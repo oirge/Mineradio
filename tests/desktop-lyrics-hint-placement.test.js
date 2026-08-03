@@ -23,10 +23,12 @@ function readFunction(name) {
   throw new Error(`unterminated ${name}`);
 }
 
-function positionHint(lineRect, innerHeight = 300) {
+function positionHint(lineRect, innerHeight = 300, topInset = 0, bottomInset = 0) {
   const classChanges = [];
   const context = {
     innerHeight,
+    desktopLyricsWindowTopInset: topInset,
+    desktopLyricsWindowBottomInset: bottomInset,
     classChanges,
     stage: {
       offsetHeight: 200,
@@ -42,6 +44,12 @@ function positionHint(lineRect, innerHeight = 300) {
     result = (function(){ positionInteractionHint(); return { top: lockHint.style.top, classChanges: classChanges }; })();`, context);
   return context.result;
 }
+
+test('physical top clipping flips the hint below the lyric', () => {
+  const result = positionHint({ top: 30, bottom: 80, height: 50 }, 190, 50, 0);
+  assert.equal(result.top, '88px');
+  assert.deepEqual(result.classChanges, [{ name: 'hint-below', value: true }]);
+});
 
 test('歌词提示在顶部放不下时自动移动到歌词下方', () => {
   const result = positionHint({ top: 20, bottom: 70, height: 50 });

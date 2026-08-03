@@ -43,6 +43,7 @@ let desktopLyricsMousePoller = null;
 let desktopLyricsMousePollerBuffer = '';
 let desktopLyricsHotBounds = null;
 let desktopLyricsLastMiddleAt = 0;
+let desktopLyricsWindowGeometrySignature = '';
 const DESKTOP_LYRICS_SIZE_MIN = 0.20;
 const DESKTOP_LYRICS_SIZE_MAX = 1.55;
 const DESKTOP_LYRICS_GLOW_MIN = 0;
@@ -1194,6 +1195,55 @@ function desktopLyricsHotBoundsOnScreen() {
   };
 }
 
+/**
+ * 计算桌面歌词窗口相对当前显示器的物理裁切量。
+ * renderer 只能看到窗口内部坐标，窗口如果被拖到屏幕顶部之外，必须把这段裁切量告知 renderer。
+ * @returns {{windowY:number,screenTop:number,topInset:number,bottomInset:number}|null} 窗口几何信息。
+ */
+function desktopLyricsWindowGeometry() {
+  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return null;
+  const bounds = desktopLyricsWindow.getBounds();
+  let display = null;
+  try {
+    display = screen.getDisplayMatching(bounds);
+  } catch (_error) {}
+  const displayBounds = display && display.bounds ? display.bounds : null;
+  const windowY = Number.isFinite(Number(bounds.y)) ? Number(bounds.y) : 0;
+  const windowHeight = Number.isFinite(Number(bounds.height)) ? Number(bounds.height) : 0;
+  const screenTop = displayBounds && Number.isFinite(Number(displayBounds.y))
+    ? Number(displayBounds.y)
+    : 0;
+  const screenHeight = displayBounds && Number.isFinite(Number(displayBounds.height))
+    ? Number(displayBounds.height)
+    : 0;
+  return {
+    windowY: Math.round(windowY),
+    screenTop: Math.round(screenTop),
+    topInset: Math.max(0, Math.round(screenTop - windowY)),
+    bottomInset: Math.max(0, Math.round(windowY + windowHeight - (screenTop + screenHeight))),
+  };
+}
+
+/**
+ * 只向桌面歌词 renderer 发送轻量窗口几何，不混入带 beatMap 的完整歌词状态。
+ * @param {boolean} force 是否忽略签名判重。
+ * @returns {void}
+ */
+function sendDesktopLyricsWindowGeometry(force = false) {
+  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
+  const geometry = desktopLyricsWindowGeometry();
+  if (!geometry) return;
+  const signature = [
+    geometry.windowY,
+    geometry.screenTop,
+    geometry.topInset,
+    geometry.bottomInset,
+  ].join('|');
+  if (!force && signature === desktopLyricsWindowGeometrySignature) return;
+  desktopLyricsWindowGeometrySignature = signature;
+  desktopLyricsWindow.webContents.send('mineradio-desktop-lyrics-window-geometry', geometry);
+}
+
 function pointInBounds(point, bounds) {
   if (!point || !bounds) return false;
   return point.x >= bounds.x
@@ -1485,6 +1535,7 @@ function createDesktopLyricsWindow(payload = {}) {
     },
   });
   desktopLyricsWindow = win;
+  desktopLyricsWindowGeometrySignature = '';
   desktopLyricsHotBounds = null;
   try {
     win.setAlwaysOnTop(true, 'screen-saver');
@@ -1503,6 +1554,7 @@ function createDesktopLyricsWindow(payload = {}) {
   function showOwnedDesktopLyricsWindow() {
     if (desktopLyricsWindow !== win || win.isDestroyed()) return;
     win.showInactive();
+    sendDesktopLyricsWindowGeometry(true);
     sendDesktopLyricsState(true);
   }
 
@@ -1512,6 +1564,7 @@ function createDesktopLyricsWindow(payload = {}) {
    */
   function sendOwnedDesktopLyricsState() {
     if (desktopLyricsWindow !== win || win.isDestroyed()) return;
+    sendDesktopLyricsWindowGeometry(true);
     sendDesktopLyricsState(true);
   }
 
@@ -1528,6 +1581,7 @@ function createDesktopLyricsWindow(payload = {}) {
     desktopLyricsLastStateSignature = '';
     desktopLyricsLastOpacity = null;
     desktopLyricsHotBounds = null;
+    desktopLyricsWindowGeometrySignature = '';
   }
 
   function resetOwnedDesktopLyricsHotBounds() {
@@ -1558,7 +1612,10 @@ function createDesktopLyricsWindow(payload = {}) {
   win.webContents.once('did-finish-load', sendOwnedDesktopLyricsState);
   win.on('close', rememberOwnedDesktopLyricsBounds);
   win.on('closed', releaseOwnedDesktopLyricsWindow);
-  win.on('moved', rememberOwnedDesktopLyricsBounds);
+  win.on('moved', () => {
+    sendDesktopLyricsWindowGeometry();
+    rememberOwnedDesktopLyricsBounds();
+  });
   win.loadURL(overlayUrl('desktop-lyrics.html')).catch(reportDesktopLyricsLoadFailure);
   return win;
 }
@@ -1574,6 +1631,7 @@ function closeDesktopLyricsWindow() {
   desktopLyricsLastStateSignature = '';
   desktopLyricsLastOpacity = null;
   desktopLyricsHotBounds = null;
+  desktopLyricsWindowGeometrySignature = '';
   stopDesktopLyricsMousePoller();
   if (desktopLyricsWindow && !desktopLyricsWindow.isDestroyed()) {
     sendDesktopLyricsState();
@@ -2694,6 +2752,7 @@ async function handleDesktopLyricsMoveBy(event, dx, dy) {
       y: Math.round(bounds.y + clampNumber(dy, -160, 160, 0)),
     };
     desktopLyricsWindow.setBounds(next, false);
+    sendDesktopLyricsWindowGeometry(true);
     rememberDesktopLyricsBounds();
     return { ok: true };
   } catch (e) {
@@ -2879,17 +2938,20 @@ if (!gotSingleInstanceLock) {
     applySavedDesktopShellSettings();
     screen.on('display-metrics-changed', () => {
       positionDesktopLyricsWindow();
+      sendDesktopLyricsWindowGeometry(true);
       positionWallpaperWindow();
       positionMiniPlayerWindow();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-added', () => {
+      sendDesktopLyricsWindowGeometry(true);
       positionMiniPlayerWindow();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-removed', () => {
+      sendDesktopLyricsWindowGeometry(true);
       positionMiniPlayerWindow();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);

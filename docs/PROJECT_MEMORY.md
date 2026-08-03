@@ -679,9 +679,9 @@
 ### 2026-08-03 - v1.2.85 桌面歌词调整栏自动避让
 
 - 用户反馈：歌词靠近屏幕顶部时，上方的锁定、字号和光效调整栏会被屏幕上沿裁切，要求自动移动到歌词下方。
-- 涉及文件：`public/desktop-lyrics.html`、`tests/desktop-lyrics-hint-placement.test.js`、`package.json`、`package-lock.json`、`public/app.js`、`CHANGELOG.md`、`RELEASE.md`。
-- 关键实现：`positionInteractionHint()` 使用上下候选位置的实际可见高度决定 `hint-below`；桌面歌词绘制循环在舞台浮动、歌词滚动和入场动画期间以约 `32ms` 节流重新测量，保证调整栏不会卡在旧坐标。
+- 涉及文件：`desktop/main.js`、`desktop/overlay-preload.js`、`public/desktop-lyrics.html`、`tests/desktop-lyrics-hint-placement.test.js`、`tests/desktop-lyrics-window-geometry.test.js`、`CHANGELOG.md`、`RELEASE.md`。
+- 关键实现：`positionInteractionHint()` 使用上下候选位置的实际可见高度决定 `hint-below`；主进程通过 `mineradio-desktop-lyrics-window-geometry` 传递窗口相对显示器的 `topInset/bottomInset`，renderer 将物理裁切量纳入安全边界；绘制循环在舞台浮动、歌词滚动和入场动画期间以约 `32ms` 节流重新测量。
 - 禁止回退或改坏的点：不要恢复只在提示首次出现时定位的旧逻辑；不要改动桌面歌词视觉质感、鼠标穿透、中键锁定、拖动、窗口位置保存或音频时钟。
-- 验证：全量 Node 回归 `185/185` 通过；`desktop/main.js`、`server.js` 语法检查和 `git diff --check` 通过。
-- 发布资产：`Mineradio-1.2.85-Setup.exe` `103331095` 字节 / SHA256 `8a374750d968c0347cbfde6199761bbe64e3746290a4e6c3568911071c67c06b`；blockmap `110099` 字节 / `ab72899b9b912cb8b27397fc5a7613ac39e86cea80c29a80f89d3e853c0cf69e`；`latest.yml` `350` 字节 / `5bf1beab7fb36cae8f1cee1585b773a0ea1a1400ad37d425e7d86207d0509c0c`；Portable ZIP `144915220` 字节 / `70b6c2d97ce04f6d866930ca8f1458225c9e0df7b19ba3f532755b29205ed69c`。
-- GitHub Release 已上传安装器、blockmap、`latest.yml` 和 SHA256 清单共 4 项；Portable ZIP 因约 `145MB` 上传超时未上传，保留本地产物。
+- 验证：全量 Node 回归 `189/189` 通过；`desktop/main.js`、`desktop/overlay-preload.js`、`server.js` 语法检查和 `git diff --check` 通过。
+- 修复重发资产：`Mineradio-1.2.85-Setup.exe` `103330816` 字节 / SHA256 `409e36493bbf4738fdf80d6fe3a27d7235e9302d014bcbaeeeb188443d520650`；blockmap `110399` 字节 / `ff93aa3b112348a4b34ed9c5dfbd9514d855e8d7c95ff25d91d1d54a309d7e10`；`latest.yml` `350` 字节 / `b2e7cc153b778a2b3055c0024a075352e0e4ef8376eb59724081d433ef12ba1a`；Portable ZIP `144915590` 字节 / `a05c2f02b0dbbba64dbfcdfb8bb48831792e8e462f7e97bedd13da3cbce41a6c`。
+- GitHub Release 将覆盖安装器、blockmap、`latest.yml` 和 SHA256 清单共 4 项；Portable ZIP 保留本地产物，上传超时不影响自动更新链路。

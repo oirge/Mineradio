@@ -278,6 +278,8 @@
     var hintVisible = false;
     var hintTimer = 0;
     var lastHintPositionAt = 0;
+    var desktopLyricsWindowTopInset = 0;
+    var desktopLyricsWindowBottomInset = 0;
     var lastPointerEvent = null;
     var sizeRequestSequence = 0;
     var lastSizeWheelAt = 0;
@@ -869,8 +871,8 @@
       if (!textRect || textRect.bottom <= textRect.top) textRect = lyricScroller.getBoundingClientRect();
       var aboveTop = textRect.top - hintHeight - gap;
       var belowTop = textRect.bottom + gap;
-      var safeTop = 8;
-      var safeBottom = Math.max(safeTop + hintHeight, innerHeight - 8);
+      var safeTop = Math.max(8, desktopLyricsWindowTopInset + 8);
+      var safeBottom = Math.max(safeTop + hintHeight, innerHeight - desktopLyricsWindowBottomInset - 8);
       var aboveFits = aboveTop >= safeTop && aboveTop + hintHeight <= safeBottom;
       var belowFits = belowTop >= safeTop && belowTop + hintHeight <= safeBottom;
       var visibleHeight = function(top) {
@@ -1600,6 +1602,13 @@
     })();
     if (window.desktopOverlay && window.desktopOverlay.onLyricsState) {
       window.desktopOverlay.onLyricsState(applyState);
+    }
+    if (window.desktopOverlay && window.desktopOverlay.onLyricsWindowGeometry) {
+      window.desktopOverlay.onLyricsWindowGeometry(function(payload) {
+        desktopLyricsWindowTopInset = Math.max(0, Number(payload.topInset) || 0);
+        desktopLyricsWindowBottomInset = Math.max(0, Number(payload.bottomInset) || 0);
+        if (hintVisible) positionInteractionHint();
+      });
     }
     requestAnimationFrame(draw);
   </script>

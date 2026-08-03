@@ -137,6 +137,7 @@ function testDesktopLyricsWindowOwnership() {
     applyDesktopLyricsMouseBehavior: noop,
     positionDesktopLyricsWindow: noop,
     setDesktopLyricsOpacity: noop,
+    sendDesktopLyricsWindowGeometry: noop,
     sendDesktopLyricsState,
     broadcastDesktopLyricsEnabledState: noop,
     rememberDesktopLyricsBounds: noop,

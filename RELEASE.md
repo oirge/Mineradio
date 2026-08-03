@@ -1,16 +1,16 @@
 ﻿# 鍙戝竷娴佺▼
 
-## v1.2.85 桌面歌词调整栏自动避让
+## v1.2.85 桌面歌词调整栏自动避让修复重发
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.85`。
 - 修复桌面歌词靠近屏幕顶部时，上方调整栏被裁切的问题；上方空间不足自动移动到歌词下方，上下都不完整时选择可见空间更大的一侧。
-- 调整栏跟随歌词舞台浮动、滚动和入场动画按约 `32ms` 节流重新定位，不改变歌词视觉、鼠标穿透、拖动、窗口位置保存或音频时钟。
-- 新增桌面歌词顶部裁切和动态重定位回归测试；全量 Node 回归 `185/185` 通过。
-- Release 标题使用 `Mineradio v1.2.85 桌面歌词调整栏自动避让版`，目标为 GitHub Latest Release。
+- 调整栏跟随歌词舞台浮动、滚动和入场动画按约 `32ms` 节流重新定位；主进程额外同步窗口相对物理显示器的上下裁切量，修复窗口拖到屏幕顶部之外时调整栏仍被裁切的问题。
+- 新增物理窗口几何 IPC、顶部裁切和动态重定位回归测试；全量 Node 回归 `189/189` 通过。
+- Release 标题使用 `Mineradio v1.2.85 桌面歌词调整栏自动避让修复重发版`，目标为 GitHub Latest Release。
 - 发布资产：`Mineradio-1.2.85-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.2.85-SHA256SUMS.txt`；本版本不生成快速补丁，Portable ZIP 视上传稳定性决定。
-- 安装器大小：`103331095` 字节；Portable ZIP 大小：`144915220` 字节；blockmap 大小：`110099` 字节；`latest.yml` 大小：`350` 字节。
-- 安装器 SHA256：`8a374750d968c0347cbfde6199761bbe64e3746290a4e6c3568911071c67c06b`；blockmap：`ab72899b9b912cb8b27397fc5a7613ac39e86cea80c29a80f89d3e853c0cf69e`；`latest.yml`：`5bf1beab7fb36cae8f1cee1585b773a0ea1a1400ad37d425e7d86207d0509c0c`；Portable ZIP：`70b6c2d97ce04f6d866930ca8f1458225c9e0df7b19ba3f532755b29205ed69c`。
-- Portable ZIP 本地构建成功但因约 `145MB` 大文件上传超时未上传 GitHub；不影响安装器自动更新链路。
+- 修复重发构建产物：安装器大小 `103330816` 字节；Portable ZIP 大小 `144915590` 字节；blockmap 大小 `110399` 字节；`latest.yml` 大小 `350` 字节。
+- 安装器 SHA256：`409e36493bbf4738fdf80d6fe3a27d7235e9302d014bcbaeeeb188443d520650`；blockmap：`ff93aa3b112348a4b34ed9c5dfbd9514d855e8d7c95ff25d91d1d54a309d7e10`；`latest.yml`：`b2e7cc153b778a2b3055c0024a075352e0e4ef8376eb59724081d433ef12ba1a`；Portable ZIP：`a05c2f02b0dbbba64dbfcdfb8bb48831792e8e462f7e97bedd13da3cbce41a6c`。
+- Portable ZIP 如再次上传超时不影响安装器自动更新链路；本轮正式覆盖安装器、blockmap、`latest.yml` 和 SHA256 清单。
 
 ## v1.2.84 桌面覆盖层帧热路径优化
 
