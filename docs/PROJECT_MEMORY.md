@@ -34,6 +34,7 @@
 ## Release Memory
 
 - `v1.2.81`（2026-08-03）本地静态资源服务增加 ETag/Last-Modified 条件缓存，重复启动对 HTML、CSS、JS、字体和图标返回 304，使用 `Cache-Control: no-cache` 保证更新后立即重新校验；新增真实 HTTP 200/304 回归测试，不改 UI、布局、玻璃质感、电影视觉、播放控制和交互语义。
+- `v1.2.81` 本地资产：安装器 `103328676` 字节 / SHA256 `4f1e96791494cd4a1f0efd2eafa1cff9ec131039707c96b6ca97c0070e090449`；blockmap `110244` 字节 / `5612cbf828697b5297ec79743b199009c8e23b0dfc61139a7a40f15bce64cad4`；`latest.yml` `350` 字节 / `b7d623d1b06645e043786bd4035b268d53ac74939a39749dfc0ce7a5235caac1`；Portable ZIP `144914153` 字节 / `c935f85b7ee33d897f6380a533f9e74b8926ac73c7aa1c8760062063695dd6ff`。本地资产已生成，GitHub Release 待上传。
 
 - `v1.2.80`（2026-08-03）收窄 `asarUnpack` 到 `server.js` 与 `package.json`，将 `public`、`build` 和桌面脚本归档回 `app.asar`；主进程与本地服务器拆分可写运行根和静态资源根，兼容 `v1.2.79` 的旧解包布局。实际 Electron 隔离启动验证首页、`app.js`、`app.css`、字体和图标均返回 200；本轮不改 UI、布局、玻璃质感、电影视觉、播放控制和交互语义。
 
