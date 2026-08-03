@@ -1,5 +1,16 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.77 3D 歌单详情屏幕命中低分配优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.77`。
+- 详情歌单屏幕点击兜底改为单次扫描可见行，按 `renderOrder` 保持原命中优先级；详情行屏幕投影复用固定四角向量和 bounds scratch，移除每次点击的 `filter().sort()` 与临时 `THREE.Vector3` 分配。
+- 保持详情列表布局、命中范围、按钮区域、播放/收藏/下一首动作、UI、玻璃质感和 3D 歌单架交互语义不变；新增 `tests/content-list-screen-hit-hot-path.test.js`。
+- 全量 Node 回归 `167/167`、主进程与桌面脚本语法检查、4 个前端内联脚本解析和 `git diff --check` 均通过。
+- 发布资产：`Mineradio-1.2.77-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.76→1.2.77.patch.json`、`Mineradio-1.2.77-SHA256SUMS.txt` 和 Portable ZIP。
+- 安装器大小：`104760630` 字节；Portable ZIP 大小：`146496635` 字节；快速补丁大小：`2311620` 字节；SHA256 清单大小：`376` 字节。
+- 安装器 SHA256：`0e5368d7cac27219cb3963cc174f3f2080f421e26ad86a80d549471869a27245`；blockmap：`7e52a0835e6971bc65e8d5711cb3ad483e72a011840982e5825bd631909f89b4`；快速补丁：`6a70ee5e3863dac302bc3e4c9673cfaabec0c891cd89a8cc01ee529761276b2e`；`latest.yml`：`136cb111133749105dfb69643aebcafab8cd30dc134c728f7e45d188df13f28a`；Portable ZIP：`9fb9f8b4ae14fd0f3aef99784da1a937d7884fdc0b88467a33a26a6834ff901c`；SHA256 清单：`d7df8fecd0ad08573968b355bbf7b591ae1f47b2a2a67f7f6846fd6f6a597b2d`。
+- Release 标题使用 `Mineradio v1.2.77 3D 歌单详情屏幕命中低分配优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.76 3D 歌单架卡片绘制低卡顿优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.76`。
