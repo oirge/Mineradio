@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.85`；本轮修复桌面歌词调整栏顶部裁切并准备发布 GitHub Latest。
+- 当前源码检查点：`v1.2.85`；本轮已修复桌面歌词调整栏顶部裁切并完成 GitHub Latest 修复重发。
 - 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -684,4 +684,4 @@
 - 禁止回退或改坏的点：不要恢复只在提示首次出现时定位的旧逻辑；不要改动桌面歌词视觉质感、鼠标穿透、中键锁定、拖动、窗口位置保存或音频时钟。
 - 验证：全量 Node 回归 `189/189` 通过；`desktop/main.js`、`desktop/overlay-preload.js`、`server.js` 语法检查和 `git diff --check` 通过。
 - 修复重发资产：`Mineradio-1.2.85-Setup.exe` `103330816` 字节 / SHA256 `409e36493bbf4738fdf80d6fe3a27d7235e9302d014bcbaeeeb188443d520650`；blockmap `110399` 字节 / `ff93aa3b112348a4b34ed9c5dfbd9514d855e8d7c95ff25d91d1d54a309d7e10`；`latest.yml` `350` 字节 / `b2e7cc153b778a2b3055c0024a075352e0e4ef8376eb59724081d433ef12ba1a`；Portable ZIP `144915590` 字节 / `a05c2f02b0dbbba64dbfcdfb8bb48831792e8e462f7e97bedd13da3cbce41a6c`。
-- GitHub Release 将覆盖安装器、blockmap、`latest.yml` 和 SHA256 清单共 4 项；Portable ZIP 保留本地产物，上传超时不影响自动更新链路。
+- GitHub Release 已覆盖安装器、blockmap、`latest.yml` 和 SHA256 清单共 4 项；Portable ZIP 因大文件上传超时未放入远端，保留本地产物，不影响自动更新链路。
