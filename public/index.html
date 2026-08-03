@@ -6,6 +6,7 @@
 <title>Mineradio</title>
 <meta name="referrer" content="no-referrer">
 <link rel="preload" href="vendor/fonts/Inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/fonts/NotoSansSC-ui.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="vendor/fonts.css">
 <script src="vendor/three.r128.min.js"></script>
 <script src="vendor/gsap.min.js"></script>
@@ -17,6 +18,7 @@ try {
 }
 if (document.fonts && document.fonts.load) {
   document.fonts.load('600 16px Inter').catch(function(){});
+  document.fonts.load('500 16px "Noto Sans SC"').catch(function(){});
 }
 </script>
 <link rel="stylesheet" href="app.css">

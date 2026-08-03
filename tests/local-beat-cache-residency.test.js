@@ -52,7 +52,7 @@ function testLocalBeatMemoryCacheIsBounded() {
    * @returns {void}
    */
   function rememberPersistedCache(key, value) {
-    if (key === 'beat-cache') persisted = value;
+    if (value && typeof value === 'object') persisted = JSON.stringify(value);
   }
 
   const context = {
@@ -60,11 +60,12 @@ function testLocalBeatMemoryCacheIsBounded() {
     ensureLocalBeatPrefsCache,
     packLocalBeatMap,
     saveLocalBeatPrefs: noop,
+    scheduleLocalUserStateWrite: rememberPersistedCache,
     writeBeatDiskCache: noop,
     beatMapCache,
     djBeatMapCache,
-    LOCAL_BEATMAP_STORE_KEY: 'beat-cache',
-    localStorage: { setItem: rememberPersistedCache },
+    LOCAL_USER_STATE_LOCAL_BEATMAPS: 'local-beatmaps',
+    LOCAL_BEATMAP_STORE_KEY: 'legacy-beat-cache',
     Date: { now: currentTime },
   };
   vm.runInNewContext(

@@ -1,0 +1,6 @@
+Noto Sans SC UI subset
+
+This file is a subset of Noto Sans SC, Copyright 2014-2025 Google LLC.
+The font is licensed under the SIL Open Font License, Version 1.1.
+See https://scripts.sil.org/OFL for the complete license text and
+https://github.com/notofonts/noto-cjk for the upstream project.

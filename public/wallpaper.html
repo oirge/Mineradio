@@ -22,6 +22,7 @@
     };
     var coverImg = null, coverSrc = '';
     var particles = [];
+    var overlayRenderPaused = document.hidden === true;
     function hexToRgb(hex, fallback){
       hex = String(hex || fallback || '#9cffdf').trim();
       if (/^#[0-9a-f]{3}$/i.test(hex)) hex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
@@ -82,6 +83,7 @@
       ctx.restore();
     }
     function draw(nowMs){
+      if (overlayRenderPaused) return;
       var now = nowMs * .001;
       ensureParticles();
       var opacity = Math.max(.35, Math.min(1, state.opacity || 1));
@@ -131,6 +133,13 @@
       ctx.restore();
       requestAnimationFrame(draw);
     }
+    function setOverlayRenderPaused(paused){
+      paused = !!paused;
+      if (overlayRenderPaused === paused) return;
+      overlayRenderPaused = paused;
+      if (!paused) requestAnimationFrame(draw);
+    }
+    document.addEventListener('visibilitychange', function(){ setOverlayRenderPaused(document.hidden); });
     window.addEventListener('resize', resize);
     resize();
     if (window.desktopOverlay && window.desktopOverlay.onWallpaperState) {

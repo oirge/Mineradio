@@ -1,5 +1,16 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.79 全量启动与后台资源优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.79`。
+- `asar:true` 配合 `app.asar.unpacked` 可写运行根；`server.js`、主进程和快速补丁均不再假定打包资源位于可写的 `__dirname`。
+- 自定义封面/歌词/歌词偏好、本地节奏图、听歌统计和用户视觉存档改由独立 IndexedDB 持久化；旧 `localStorage` 自动迁移，失败才回退。
+- 桌面歌词与壁纸窗口启用后台节流并在隐藏时暂停 RAF；移除全局禁用后台节流开关。
+- 本地 Inter WOFF2 与 Noto Sans SC UI 子集全部自托管，动态中文未命中时回退 Windows 本地字体。
+- 由于 `v1.2.78` 使用 `asar:false`，本次打包布局发生迁移，不生成 `v1.2.78 → v1.2.79` 快速补丁；请使用完整安装器或 Portable ZIP。
+- 构建前需通过全量 Node 回归、全量 JavaScript 语法检查、资源/asar/后台节流/localStorage 门禁和 `git diff --check`。
+- Release 标题使用 `Mineradio v1.2.79 全量启动与后台资源优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.78 启动资源本地化与渲染器缓存优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.78`。

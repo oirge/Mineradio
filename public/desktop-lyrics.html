@@ -285,6 +285,7 @@
     var lastStageFilter = '';
     var lastBeatGlowVar = '';
     var lastScrollX = '';
+    var overlayRenderPaused = document.hidden === true;
     var lastLineRect = null;
     var lastLineRectKey = '';
     var glyphWidthCache = Object.create(null);
@@ -1263,6 +1264,7 @@
       ctx.restore();
     }
     function draw(nowMs){
+      if (overlayRenderPaused) return;
       if (state.enabled) {
         var interval = frameIntervalMs();
         if (interval > 0 && lastDrawAt && nowMs - lastDrawAt < Math.max(4, interval - 1.25)) {
@@ -1302,6 +1304,7 @@
       scheduleNextDraw();
     }
     function scheduleNextDraw() {
+      if (overlayRenderPaused) return;
       if (!state.enabled) {
         setTimeout(function(){ requestAnimationFrame(draw); }, 250);
         return;
@@ -1501,6 +1504,16 @@
         setHintVisible(true);
       });
     }
+    function setOverlayRenderPaused(paused) {
+      paused = !!paused;
+      if (overlayRenderPaused === paused) return;
+      overlayRenderPaused = paused;
+      if (!paused) {
+        lastDrawAt = 0;
+        requestAnimationFrame(draw);
+      }
+    }
+    document.addEventListener('visibilitychange', function(){ setOverlayRenderPaused(document.hidden); });
     if (glowDownBtn) {
       glowDownBtn.addEventListener('click', function(evt){
         evt.preventDefault();

@@ -9,6 +9,7 @@ Mineradio 使用了以下第三方项目或服务。各项目版权归其原作�
 - GSAP
 - music-tempo
 - NeteaseCloudMusicApi
+- Noto Sans SC UI 字体子集（SIL Open Font License 1.1，来源说明见 `public/vendor/fonts/NotoSansSC-OFL.txt`）
 
 ## Third-party Services
 

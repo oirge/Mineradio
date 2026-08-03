@@ -115,7 +115,6 @@ var PERSISTENT_UI_STATE_KEYS = [
   FREE_CAMERA_STORE_KEY,
   LOCAL_LIBRARY_FOLDER_STORE_KEY,
   PLAYBACK_SESSION_STORE_KEY,
-  'mineradio-user-fx-archives-v1',
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
   UPLOAD_TIP_STORE_KEY
@@ -185,6 +184,122 @@ function hasSavedLyricLayout() {
   try { return localStorage.getItem(LYRIC_LAYOUT_STORE_KEY) != null; } catch (e) { return false; }
 }
 syncPersistentUiStateBackup();
+var LOCAL_USER_STATE_DB_NAME = 'mineradio-user-state-v1';
+var LOCAL_USER_STATE_STORE = 'state';
+var LOCAL_USER_STATE_CUSTOM_COVERS = 'custom-covers';
+var LOCAL_USER_STATE_CUSTOM_LYRICS = 'custom-lyrics';
+var LOCAL_USER_STATE_CUSTOM_LYRIC_PREFS = 'custom-lyric-prefs';
+var LOCAL_USER_STATE_LOCAL_BEATMAPS = 'local-beatmaps';
+var LOCAL_USER_STATE_LOCAL_BEAT_PREFS = 'local-beat-prefs';
+var LOCAL_USER_STATE_LISTEN_STATS = 'listen-stats';
+var LOCAL_USER_STATE_FX_ARCHIVES = 'user-fx-archives';
+var localUserStateWriteTimers = Object.create(null);
+var localUserStateWriteTokens = Object.create(null);
+var localUserStateHydrationStarted = false;
+function openLocalUserStateDb() {
+  return new Promise(function(resolve, reject){
+    if (!window.indexedDB) { reject(new Error('indexedDB unavailable')); return; }
+    var req = indexedDB.open(LOCAL_USER_STATE_DB_NAME, 1);
+    req.onupgradeneeded = function(){
+      var db = req.result;
+      if (!db.objectStoreNames.contains(LOCAL_USER_STATE_STORE)) db.createObjectStore(LOCAL_USER_STATE_STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror = function(){ reject(req.error || new Error('indexedDB user state open failed')); };
+  });
+}
+function readLocalUserStateRecord(id) {
+  return openLocalUserStateDb().then(function(db){
+    return new Promise(function(resolve, reject){
+      var tx = db.transaction(LOCAL_USER_STATE_STORE, 'readonly');
+      var req = tx.objectStore(LOCAL_USER_STATE_STORE).get(String(id || ''));
+      var settled = false;
+      var record = null;
+      function finish(fn, value) {
+        if (settled) return;
+        settled = true;
+        try { db.close(); } catch (e) {}
+        fn(value);
+      }
+      req.onsuccess = function(){ record = req.result || null; };
+      req.onerror = function(){ finish(reject, req.error || new Error('indexedDB user state read failed')); };
+      tx.oncomplete = function(){ finish(resolve, record); };
+      tx.onerror = function(){ finish(reject, tx.error || new Error('indexedDB user state transaction failed')); };
+      tx.onabort = function(){ finish(reject, tx.error || new Error('indexedDB user state transaction aborted')); };
+    });
+  });
+}
+function writeLocalUserStateRecord(id, value) {
+  return openLocalUserStateDb().then(function(db){
+    return new Promise(function(resolve, reject){
+      var tx = db.transaction(LOCAL_USER_STATE_STORE, 'readwrite');
+      tx.objectStore(LOCAL_USER_STATE_STORE).put({ id:String(id || ''), schema:1, savedAt:Date.now(), value:value });
+      var settled = false;
+      function finish(fn, result) {
+        if (settled) return;
+        settled = true;
+        try { db.close(); } catch (e) {}
+        fn(result);
+      }
+      tx.oncomplete = function(){ finish(resolve, true); };
+      tx.onerror = function(){ finish(reject, tx.error || new Error('indexedDB user state write failed')); };
+      tx.onabort = function(){ finish(reject, tx.error || new Error('indexedDB user state write aborted')); };
+    });
+  });
+}
+function hasLegacyLocalUserState(key) {
+  try { return localStorage.getItem(key) != null; } catch (e) { return false; }
+}
+function removeLegacyLocalUserState(key) {
+  if (!key) return;
+  try { localStorage.removeItem(key); } catch (e) {}
+  if (key === 'mineradio-user-fx-archives-v1') {
+    var patch = {};
+    patch[key] = null;
+    backupPersistentUiState(patch);
+  }
+}
+function scheduleLocalUserStateWrite(id, value, legacyKey) {
+  id = String(id || '');
+  if (!id) return;
+  var token = (localUserStateWriteTokens[id] || 0) + 1;
+  localUserStateWriteTokens[id] = token;
+  if (localUserStateWriteTimers[id]) clearTimeout(localUserStateWriteTimers[id]);
+  localUserStateWriteTimers[id] = setTimeout(function(){
+    localUserStateWriteTimers[id] = 0;
+    writeLocalUserStateRecord(id, value).then(function(){
+      if (localUserStateWriteTokens[id] !== token) return;
+      removeLegacyLocalUserState(legacyKey);
+    }).catch(function(){
+      if (localUserStateWriteTokens[id] !== token || !legacyKey) return;
+      try { localStorage.setItem(legacyKey, JSON.stringify(value)); } catch (e) {}
+      if (legacyKey === 'mineradio-user-fx-archives-v1') {
+        var patch = {};
+        patch[legacyKey] = JSON.stringify(value);
+        backupPersistentUiState(patch);
+      }
+    });
+  }, 120);
+}
+function hydrateLocalUserStateRecord(spec) {
+  if (!spec || !spec.id || typeof spec.apply !== 'function') return Promise.resolve();
+  return readLocalUserStateRecord(spec.id).then(function(record){
+    if ((localUserStateWriteTokens[spec.id] || 0) > 0) return;
+    if (record && Object.prototype.hasOwnProperty.call(record, 'value')) {
+      spec.apply(record.value, false);
+      return;
+    }
+    if (!spec.legacyKey || !hasLegacyLocalUserState(spec.legacyKey)) {
+      spec.apply(null, false);
+      return;
+    }
+    var value = typeof spec.readLegacy === 'function' ? spec.readLegacy() : null;
+    spec.apply(value, true);
+    if (value != null) scheduleLocalUserStateWrite(spec.id, value, spec.legacyKey);
+  }).catch(function(){
+    // IndexedDB 不可用时保留现有 localStorage 回退路径。
+  });
+}
 var LOCAL_ASSET_CACHE_DB_NAME = 'mineradio-local-assets-v1';
 var LOCAL_ASSET_CACHE_STORE = 'assets';
 var LOCAL_LYRICS_CACHE_STORE = 'lyrics';
@@ -330,7 +445,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.78';
+var APP_VERSION = '1.2.79';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -6418,6 +6533,11 @@ async function writeLocalLibraryPersistentRecord(folderPath, kind, data) {
       tx.objectStore(LOCAL_LIBRARY_CACHE_STORE).put(record);
       tx.oncomplete = function(){
         db.close();
+        if (kind === 'snapshot') {
+          try { localStorage.removeItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY); } catch (e) {}
+        } else if (kind === 'index') {
+          try { localStorage.removeItem(LOCAL_LIBRARY_INDEX_STORE_KEY); } catch (e) {}
+        }
         scheduleLocalIndexedDbTrim('library-write', 4800);
         resolve(true);
       };
@@ -11378,23 +11498,27 @@ function readLocalBeatPrefs() {
 }
 function saveLocalBeatPrefs() {
   ensureLocalBeatPrefsCache();
-  try { localStorage.setItem(LOCAL_BEAT_PREF_STORE_KEY, JSON.stringify(localBeatMapPrefs || {})); } catch (e) {}
+  scheduleLocalUserStateWrite(LOCAL_USER_STATE_LOCAL_BEAT_PREFS, localBeatMapPrefs || {}, LOCAL_BEAT_PREF_STORE_KEY);
 }
-function readLocalBeatMapCache() {
+function decodeLocalBeatMapCachePayload(raw) {
   var out = {};
-  try {
-    var raw = JSON.parse(localStorage.getItem(LOCAL_BEATMAP_STORE_KEY) || '{}') || {};
-    for (var key in raw) {
-      if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
-      var entry = raw[key] || {};
-      out[key] = { updatedAt: entry.updatedAt || 0 };
-      if (entry.mr) out[key].mr = unpackLocalBeatMap(entry.mr);
-      if (entry.dj) out[key].dj = unpackLocalBeatMap(entry.dj);
-    }
-  } catch (e) {
-    out = {};
+  raw = raw && typeof raw === 'object' ? raw : {};
+  for (var key in raw) {
+    if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
+    var entry = raw[key] || {};
+    out[key] = { updatedAt: entry.updatedAt || 0 };
+    if (entry.mr) out[key].mr = unpackLocalBeatMap(entry.mr);
+    if (entry.dj) out[key].dj = unpackLocalBeatMap(entry.dj);
   }
   return out;
+}
+function readLocalBeatMapCache() {
+  try {
+    var raw = JSON.parse(localStorage.getItem(LOCAL_BEATMAP_STORE_KEY) || '{}') || {};
+    return decodeLocalBeatMapCachePayload(raw);
+  } catch (e) {
+    return {};
+  }
 }
 /**
  * 按需读取本地节奏偏好。启动阶段不主动解析节奏缓存，避免首屏前同步 localStorage 开销。
@@ -11479,7 +11603,7 @@ function saveLocalBeatMapCache() {
   var attempts = [12, 8, 5, 3];
   for (var i = 0; i < attempts.length; i++) {
     try {
-      localStorage.setItem(LOCAL_BEATMAP_STORE_KEY, JSON.stringify(packLocalBeatCache(attempts[i])));
+      scheduleLocalUserStateWrite(LOCAL_USER_STATE_LOCAL_BEATMAPS, packLocalBeatCache(attempts[i]), LOCAL_BEATMAP_STORE_KEY);
       return true;
     } catch (e) {}
   }
@@ -15444,14 +15568,22 @@ function isTypingTarget(target) {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
   return !!(target.isContentEditable || (target.closest && target.closest('[contenteditable="true"]')));
 }
-function readCustomCoverMap() {
-  try {
-    var raw = localStorage.getItem(CUSTOM_COVER_STORE_KEY);
-    var parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch (e) {
-    return {};
+function normalizeCustomCoverMapValue(value) {
+  var parsed = value;
+  if (typeof parsed === 'string') {
+    try { parsed = parsed ? JSON.parse(parsed) : {}; } catch (e) { parsed = {}; }
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  var out = {};
+  for (var key in parsed) {
+    if (!Object.prototype.hasOwnProperty.call(parsed, key)) continue;
+    if (typeof parsed[key] === 'string' && parsed[key]) out[key] = parsed[key];
+  }
+  return out;
+}
+function readCustomCoverMap() {
+  try { return normalizeCustomCoverMapValue(localStorage.getItem(CUSTOM_COVER_STORE_KEY) || '{}'); }
+  catch (e) { return {}; }
 }
 function ensureCustomCoverMap() {
   if (!customCoverMapHydrated) {
@@ -15462,13 +15594,8 @@ function ensureCustomCoverMap() {
 }
 function saveCustomCoverMap() {
   ensureCustomCoverMap();
-  try {
-    localStorage.setItem(CUSTOM_COVER_STORE_KEY, JSON.stringify(customCoverMap || {}));
-    return true;
-  } catch (e) {
-    console.warn('custom cover save failed:', e);
-    return false;
-  }
+  scheduleLocalUserStateWrite(LOCAL_USER_STATE_CUSTOM_COVERS, customCoverMap || {}, CUSTOM_COVER_STORE_KEY);
+  return true;
 }
 function isInlineCoverSrc(src) {
   return typeof src === 'string' && (/^data:image\//i.test(src) || /^blob:/i.test(src));
@@ -15627,17 +15754,24 @@ function compactHomeCount(n) {
 function createEmptyListenStatsState() {
   return { history: [], songs: {}, artists: {}, updatedAt: 0 };
 }
+function normalizeListenStatsState(value) {
+  var data = value;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data || '{}') || {}; } catch (e) { data = {}; }
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return createEmptyListenStatsState();
+  return {
+    history: Array.isArray(data.history) ? compactListenStatsHistory(null, data.history, 180) : [],
+    songs: data.songs && typeof data.songs === 'object' && !Array.isArray(data.songs) ? data.songs : {},
+    artists: data.artists && typeof data.artists === 'object' && !Array.isArray(data.artists) ? data.artists : {},
+    updatedAt: Number(data.updatedAt) || 0,
+  };
+}
 function loadListenStatsState() {
   try {
     var raw = localStorage.getItem(HOME_LISTEN_STATS_KEY);
     if (!raw) return createEmptyListenStatsState();
-    var data = JSON.parse(raw);
-    return {
-      history: Array.isArray(data.history) ? compactListenStatsHistory(null, data.history, 180) : [],
-      songs: data.songs && typeof data.songs === 'object' ? data.songs : {},
-      artists: data.artists && typeof data.artists === 'object' ? data.artists : {},
-      updatedAt: Number(data.updatedAt) || 0,
-    };
+    return normalizeListenStatsState(raw);
   } catch (e) {
     return createEmptyListenStatsState();
   }
@@ -15659,10 +15793,8 @@ function compareListenStatRank(a, b) {
 }
 function saveListenStatsState() {
   ensureListenStatsState();
-  try {
-    listenStatsState.updatedAt = Date.now();
-    localStorage.setItem(HOME_LISTEN_STATS_KEY, JSON.stringify(listenStatsState));
-  } catch (e) {}
+  listenStatsState.updatedAt = Date.now();
+  scheduleLocalUserStateWrite(LOCAL_USER_STATE_LISTEN_STATS, listenStatsState, HOME_LISTEN_STATS_KEY);
 }
 /**
  * 合并最近听歌历史。每次有效播放结束都会调用，单次循环完成去重和限量，避免 concat/filter/slice 连续分配。
@@ -16920,19 +17052,24 @@ function clearCustomCoverForCurrent() {
   updateCustomCoverButton();
   showToast('已恢复默认封面');
 }
-function readCustomLyricMap() {
-  try {
-    var raw = JSON.parse(localStorage.getItem(CUSTOM_LYRIC_STORE_KEY) || '{}') || {};
-    var out = {};
-    Object.keys(raw).forEach(function(key){
-      var item = raw[key];
-      if (typeof item === 'string') out[key] = { text: item, updatedAt: 0 };
-      else if (item && typeof item.text === 'string') out[key] = { text: item.text, updatedAt: item.updatedAt || 0 };
-    });
-    return out;
-  } catch (e) {
-    return {};
+function normalizeCustomLyricMapValue(value) {
+  var raw = value;
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw || '{}') || {}; } catch (e) { raw = {}; }
   }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  var out = {};
+  for (var key in raw) {
+    if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
+    var item = raw[key];
+    if (typeof item === 'string' && item) out[key] = { text:item, updatedAt:0 };
+    else if (item && typeof item.text === 'string' && item.text) out[key] = { text:item.text, updatedAt:Number(item.updatedAt) || 0 };
+  }
+  return out;
+}
+function readCustomLyricMap() {
+  try { return normalizeCustomLyricMapValue(localStorage.getItem(CUSTOM_LYRIC_STORE_KEY) || '{}'); }
+  catch (e) { return {}; }
 }
 function ensureCustomLyricMap() {
   if (!customLyricMapHydrated) {
@@ -16943,13 +17080,8 @@ function ensureCustomLyricMap() {
 }
 function saveCustomLyricMap() {
   ensureCustomLyricMap();
-  try {
-    localStorage.setItem(CUSTOM_LYRIC_STORE_KEY, JSON.stringify(customLyricMap || {}));
-    return true;
-  } catch (e) {
-    console.warn('custom lyric save failed:', e);
-    return false;
-  }
+  scheduleLocalUserStateWrite(LOCAL_USER_STATE_CUSTOM_LYRICS, customLyricMap || {}, CUSTOM_LYRIC_STORE_KEY);
+  return true;
 }
 function readCustomLyricPrefs() {
   try { return JSON.parse(localStorage.getItem(CUSTOM_LYRIC_PREF_STORE_KEY) || '{}') || {}; }
@@ -16964,7 +17096,7 @@ function ensureCustomLyricPrefs() {
 }
 function saveCustomLyricPrefs() {
   ensureCustomLyricPrefs();
-  try { localStorage.setItem(CUSTOM_LYRIC_PREF_STORE_KEY, JSON.stringify(customLyricPrefs || {})); } catch (e) {}
+  scheduleLocalUserStateWrite(LOCAL_USER_STATE_CUSTOM_LYRIC_PREFS, customLyricPrefs || {}, CUSTOM_LYRIC_PREF_STORE_KEY);
 }
 function songCustomLyricKey(song) {
   return songCustomCoverKey(song);
@@ -23600,12 +23732,10 @@ function normalizeFxArchiveSnapshot(raw) {
     cam: archiveMode(raw, 'cam', /^(off|gesture)$/, fxDefaults.cam)
   };
 }
-function readUserFxArchives() {
-  var raw = [];
-  try {
-    raw = JSON.parse(localStorage.getItem(USER_FX_ARCHIVE_STORE_KEY) || '[]') || [];
-  } catch (e) {
-    raw = [];
+function normalizeUserFxArchives(value) {
+  var raw = value;
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw || '[]') || []; } catch (e) { raw = []; }
   }
   if (!Array.isArray(raw)) raw = [];
   return raw.map(function(slot, index){
@@ -23621,13 +23751,13 @@ function readUserFxArchives() {
     return !!(slot.snapshot || slot.savedAt || slot.createdAt);
   });
 }
+function readUserFxArchives() {
+  try { return normalizeUserFxArchives(localStorage.getItem(USER_FX_ARCHIVE_STORE_KEY) || '[]'); }
+  catch (e) { return []; }
+}
 function saveUserFxArchives() {
   if (!userFxArchivesHydrated) ensureUserFxArchives();
-  try {
-    setPersistentLocalStorageItem(USER_FX_ARCHIVE_STORE_KEY, JSON.stringify(userFxArchives));
-  } catch (e) {
-    showToast('用户存档保存失败，本地存储空间可能不足');
-  }
+  scheduleLocalUserStateWrite(LOCAL_USER_STATE_FX_ARCHIVES, userFxArchives || [], USER_FX_ARCHIVE_STORE_KEY);
 }
 function hasStoredUserFxArchives() {
   try {
@@ -23708,7 +23838,7 @@ function ensureUserFxArchives() {
   userFxArchivesHydrated = true;
   if (!hadStored) {
     userFxArchives = [createPackagedDefaultUserFxArchiveSlot()];
-    saveUserFxArchives();
+    if (!localUserStateHydrationStarted) saveUserFxArchives();
   }
   return userFxArchives;
 }
@@ -29913,6 +30043,96 @@ function handleDesktopMiniPlayerCommand(payload) {
 // ============================================================
 //  启动
 // ============================================================
+function startLocalUserStateHydration() {
+  if (localUserStateHydrationStarted) return;
+  localUserStateHydrationStarted = true;
+  var specs = [
+    {
+      id: LOCAL_USER_STATE_CUSTOM_COVERS,
+      legacyKey: CUSTOM_COVER_STORE_KEY,
+      readLegacy: readCustomCoverMap,
+      apply: function(value, migrated){
+        customCoverMap = normalizeCustomCoverMapValue(value || {});
+        customCoverMapHydrated = true;
+        if (currentLocalSong) hydrateCustomCover(currentLocalSong);
+        updateCustomCoverButton();
+        if (typeof safeRenderQueuePanel === 'function') safeRenderQueuePanel(migrated ? 'custom-cover-migrated' : 'custom-cover-hydrated', { scrollCurrent:false });
+        if (typeof safeShelfRebuild === 'function') safeShelfRebuild(migrated ? 'custom-cover-migrated' : 'custom-cover-hydrated');
+      }
+    },
+    {
+      id: LOCAL_USER_STATE_CUSTOM_LYRICS,
+      legacyKey: CUSTOM_LYRIC_STORE_KEY,
+      readLegacy: readCustomLyricMap,
+      apply: function(value){
+        customLyricMap = normalizeCustomLyricMapValue(value || {});
+        customLyricMapHydrated = true;
+        if (typeof updateCustomLyricControls === 'function') updateCustomLyricControls();
+        var song = typeof currentLyricSong === 'function' ? currentLyricSong() : null;
+        if (song && typeof applyCustomLyricState === 'function') applyCustomLyricState(song, false);
+      }
+    },
+    {
+      id: LOCAL_USER_STATE_CUSTOM_LYRIC_PREFS,
+      legacyKey: CUSTOM_LYRIC_PREF_STORE_KEY,
+      readLegacy: readCustomLyricPrefs,
+      apply: function(value){
+        var next = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        customLyricPrefs = next;
+        customLyricPrefsHydrated = true;
+        if (typeof updateCustomLyricControls === 'function') updateCustomLyricControls();
+      }
+    },
+    {
+      id: LOCAL_USER_STATE_LOCAL_BEATMAPS,
+      legacyKey: LOCAL_BEATMAP_STORE_KEY,
+      readLegacy: readLocalBeatMapCache,
+      apply: function(value){
+        localBeatMapCache = decodeLocalBeatMapCachePayload(value || {});
+        localBeatMapCacheHydrated = true;
+      }
+    },
+    {
+      id: LOCAL_USER_STATE_LOCAL_BEAT_PREFS,
+      legacyKey: LOCAL_BEAT_PREF_STORE_KEY,
+      readLegacy: readLocalBeatPrefs,
+      apply: function(value){
+        localBeatMapPrefs = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        localBeatPrefsHydrated = true;
+      }
+    },
+    {
+      id: LOCAL_USER_STATE_LISTEN_STATS,
+      legacyKey: HOME_LISTEN_STATS_KEY,
+      readLegacy: loadListenStatsState,
+      apply: function(value){
+        listenStatsState = normalizeListenStatsState(value || {});
+        listenStatsHydrated = true;
+        if (emptyHomeActive && typeof renderHomeDiscover === 'function') renderHomeDiscover();
+      }
+    },
+    {
+      id: LOCAL_USER_STATE_FX_ARCHIVES,
+      legacyKey: USER_FX_ARCHIVE_STORE_KEY,
+      readLegacy: readUserFxArchives,
+      apply: function(value){
+        var next = normalizeUserFxArchives(value || []);
+        if (!next.length && !hasLegacyLocalUserState(USER_FX_ARCHIVE_STORE_KEY)) {
+          next = [createPackagedDefaultUserFxArchiveSlot()];
+          userFxArchives = next;
+          userFxArchivesHydrated = true;
+          saveUserFxArchives();
+        } else {
+          userFxArchives = next;
+          userFxArchivesHydrated = true;
+        }
+        if (isUserFxArchivePanelVisible() && typeof renderUserFxArchives === 'function') renderUserFxArchives();
+      }
+    }
+  ];
+  for (var i = 0; i < specs.length; i++) hydrateLocalUserStateRecord(specs[i]);
+}
+startLocalUserStateHydration();
 applyDiyMode(diyPlayerMode, { save: false });
 bindFxPanel();
 applySavedLyricPaletteState();

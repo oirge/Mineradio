@@ -9,6 +9,15 @@ const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache } = require('./mini-player-state-cache');
 
+function resolveRuntimeAppRoot() {
+  const unpacked = process.resourcesPath
+    ? path.join(process.resourcesPath, 'app.asar.unpacked')
+    : '';
+  if (unpacked && fs.existsSync(path.join(unpacked, 'public', 'index.html'))) return unpacked;
+  return path.join(__dirname, '..');
+}
+const APP_ROOT = resolveRuntimeAppRoot();
+
 let mainWindow = null;
 let localServer = null;
 let mainServerPort = 0;
@@ -72,7 +81,7 @@ const MINI_PLAYER_MARGIN = 14;
 const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
 const APP_NAME = 'Mineradio';
 const APP_USER_MODEL_ID = 'com.mineradio.desktop';
-const APP_ICON_ICO = path.join(__dirname, '..', 'build', 'icon.ico');
+const APP_ICON_ICO = path.join(APP_ROOT, 'build', 'icon.ico');
 const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell-settings.json';
 const DESKTOP_UI_STATE_FILE = 'desktop-ui-state.json';
@@ -101,9 +110,6 @@ const CHROMIUM_PERFORMANCE_SWITCHES = [
   ['enable-oop-rasterization'],
   ['enable-zero-copy'],
   ['enable-accelerated-2d-canvas'],
-  ['disable-background-timer-throttling'],
-  ['disable-renderer-backgrounding'],
-  ['disable-backgrounding-occluded-windows'],
   ['force_high_performance_gpu'],
   ['use-angle', 'd3d11'],
 ];
@@ -1463,7 +1469,7 @@ function createDesktopLyricsWindow(payload = {}) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: false,
+      backgroundThrottling: true,
     },
   });
   desktopLyricsWindow = win;
@@ -1661,7 +1667,7 @@ function createWallpaperWindow(payload = {}) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: false,
+      backgroundThrottling: true,
     },
   });
   wallpaperWindow = win;
@@ -2728,7 +2734,7 @@ async function createWindow() {
   process.env.MINERADIO_UPDATE_DIR = getUpdateDownloadDir();
   process.env.MINERADIO_LOCAL_FILE_TOKEN = LOCAL_FILE_TOKEN;
 
-  localServer = require(path.join(__dirname, '..', 'server.js'));
+  localServer = require(path.join(APP_ROOT, 'server.js'));
   // 注入授权校验：让 HTTP 本地文件代理复用与 IPC 相同的授权根目录约束，堵住越权读取任意文件。
   localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
   await waitForServer(localServer);

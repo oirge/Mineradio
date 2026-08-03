@@ -21,6 +21,15 @@ const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
  */
 let localFileAuthorizer = null;
 
+function resolveRuntimeAppRoot() {
+  const unpacked = process.resourcesPath
+    ? path.join(process.resourcesPath, 'app.asar.unpacked')
+    : '';
+  if (unpacked && fs.existsSync(path.join(unpacked, 'public', 'index.html'))) return unpacked;
+  return __dirname;
+}
+const APP_ROOT = resolveRuntimeAppRoot();
+
 /**
  * 注入本地文件代理的授权校验函数（跨进程契约：与主进程 resolveAuthorizedLocalFile 对齐）。
  * @param {(filePath: string) => string} authorizer 入参为解析后的绝对路径；越权时必须抛错，授权时返回可读绝对路径。
@@ -127,7 +136,7 @@ function sendJSON(res, data, status) {
 }
 function readPackageInfo() {
   try {
-    const raw = fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8');
+    const raw = fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8');
     return JSON.parse(raw);
   } catch (e) {
     return {};
@@ -1386,8 +1395,8 @@ function safePatchRelativePath(value) {
 function patchTargetPath(rel) {
   const safeRel = safePatchRelativePath(rel);
   if (!safeRel) return null;
-  const target = path.resolve(__dirname, safeRel);
-  const root = path.resolve(__dirname);
+  const target = path.resolve(APP_ROOT, safeRel);
+  const root = path.resolve(APP_ROOT);
   if (target !== root && !target.startsWith(root + path.sep)) return null;
   return target;
 }
@@ -1944,12 +1953,12 @@ const server = http.createServer(async (req, res) => {
 
   // ---------- 静态资源 ----------
   if (pn === '/favicon.ico') {
-    serveStatic(res, path.join(__dirname, 'build', 'icon.ico'));
+    serveStatic(res, path.join(APP_ROOT, 'build', 'icon.ico'));
     return;
   }
 
   let filePath = pn === '/' ? '/index.html' : pn;
-  filePath = path.join(__dirname, 'public', filePath);
+  filePath = path.join(APP_ROOT, 'public', filePath);
   serveStatic(res, filePath);
 });
 
