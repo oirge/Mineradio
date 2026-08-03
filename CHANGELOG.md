@@ -1,3 +1,9 @@
+## v1.2.82 静态资源流式传输优化
+
+- 本地服务器对 HTML、CSS、JS、字体和图标的 `200` 响应改用 `fs.createReadStream()` 流式发送，避免先把整份 renderer 资源复制成 Buffer，降低启动和重复加载时的瞬时内存峰值。
+- 保留 `ETag`、`Last-Modified`、`Cache-Control: no-cache` 和 `304` 条件请求语义；页面、UI、布局、玻璃质感、电影视觉、播放控制和交互语义不变。
+- 新增静态资源流式响应回归测试；当前全量 Node 回归 `175/175` 通过。
+
 ## v1.2.81 本地静态资源条件缓存优化
 
 - 本地服务器为 HTML、CSS、JS、字体和图标增加 ETag/Last-Modified 条件缓存；重复启动命中缓存时返回 `304`，不再重新传输大型 renderer 资源。

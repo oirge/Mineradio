@@ -1,5 +1,14 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.82 静态资源流式传输优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.82`。
+- 本地服务器对静态资源 `200` 响应改用 `fs.createReadStream()` 流式发送，避免 `fs.readFile()` 先复制完整 renderer 文件，降低启动和重复加载时的瞬时内存峰值。
+- 保留 ETag、Last-Modified、`Cache-Control: no-cache` 和 `304` 条件缓存语义；页面、UI、布局、玻璃质感、电影视觉、播放控制和交互语义不变。
+- 新增流式静态资源回归测试；构建前需通过全量 Node 回归 `175/175`、JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
+- 由于本版本仅更新 `server.js` 静态资源服务逻辑，且 `server.js` 位于 `app.asar.unpacked`，不生成快速补丁；使用完整安装器或 Portable ZIP。
+- Release 标题使用 `Mineradio v1.2.82 静态资源流式传输优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.81 本地静态资源条件缓存优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.81`。

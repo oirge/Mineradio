@@ -142,12 +142,18 @@ function serveStatic(req, res, filePath) {
       res.end();
       return;
     }
-    fs.readFile(filePath, (err, data) => {
-      if (err) { res.writeHead(404); res.end('Not Found'); return; }
-      headers['Content-Length'] = String(data.length);
-      res.writeHead(200, headers);
-      res.end(data);
+    headers['Content-Length'] = String(stat.size);
+    res.writeHead(200, headers);
+    const stream = fs.createReadStream(filePath);
+    stream.once('error', (err) => {
+      if (!res.headersSent) {
+        res.writeHead(404);
+        res.end('Not Found');
+        return;
+      }
+      res.destroy(err);
     });
+    stream.pipe(res);
   });
 }
 function sendJSON(res, data, status) {

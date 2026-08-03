@@ -8,7 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function loadServeStatic() {
+function loadServeStatic(fsImpl = fs) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   const start = source.indexOf('function serveStatic(req, res, filePath) {');
   assert.ok(start >= 0, 'serveStatic implementation missing');
@@ -23,7 +23,7 @@ function loadServeStatic() {
     }
   }
   assert.ok(end > start, 'serveStatic function is unbalanced');
-  const context = { fs, path, MIME: {
+  const context = { fs: fsImpl, path, MIME: {
     '.html': 'text/html; charset=utf-8',
     '.js': 'application/javascript',
     '.css': 'text/css',
@@ -70,6 +70,43 @@ test('静态 renderer 资源支持 ETag 条件请求并返回 304', async () => 
     assert.equal(second.status, 304);
     assert.equal(second.body.length, 0);
     assert.equal(second.headers.etag, first.headers.etag);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('静态 renderer 资源 200 响应使用流式读取，不复制整文件 Buffer', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mineradio-static-stream-'));
+  const asset = path.join(tempDir, 'asset.js');
+  const body = Buffer.alloc(256 * 1024, 0x61);
+  fs.writeFileSync(asset, body);
+  let readFileCalls = 0;
+  let streamCalls = 0;
+  const streamFs = {
+    stat: fs.stat.bind(fs),
+    createReadStream(filePath) {
+      streamCalls++;
+      return fs.createReadStream(filePath);
+    },
+    readFile() {
+      readFileCalls++;
+      throw new Error('serveStatic must not use fs.readFile for 200 responses');
+    },
+  };
+  const serveStatic = loadServeStatic(streamFs);
+  const server = http.createServer((req, res) => serveStatic(req, res, asset));
+  try {
+    await new Promise((resolve, reject) => {
+      server.listen(0, '127.0.0.1', resolve);
+      server.once('error', reject);
+    });
+    const response = await request(server.address().port);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.length, body.length);
+    assert.equal(response.headers['content-length'], String(body.length));
+    assert.equal(streamCalls, 1);
+    assert.equal(readFileCalls, 0);
   } finally {
     await new Promise(resolve => server.close(resolve));
     fs.rmSync(tempDir, { recursive: true, force: true });
