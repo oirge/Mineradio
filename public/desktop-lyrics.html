@@ -277,6 +277,7 @@
     var hoverInside = false;
     var hintVisible = false;
     var hintTimer = 0;
+    var lastHintPositionAt = 0;
     var lastPointerEvent = null;
     var sizeRequestSequence = 0;
     var lastSizeWheelAt = 0;
@@ -870,8 +871,17 @@
       var belowTop = textRect.bottom + gap;
       var safeTop = 8;
       var safeBottom = Math.max(safeTop + hintHeight, innerHeight - 8);
-      var placeBelow = aboveTop < safeTop && belowTop + hintHeight <= safeBottom;
+      var aboveFits = aboveTop >= safeTop && aboveTop + hintHeight <= safeBottom;
+      var belowFits = belowTop >= safeTop && belowTop + hintHeight <= safeBottom;
+      var visibleHeight = function(top) {
+        return Math.max(0, Math.min(safeBottom, top + hintHeight) - Math.max(safeTop, top));
+      };
+      var aboveVisible = visibleHeight(aboveTop);
+      var belowVisible = visibleHeight(belowTop);
+      // 上方放不下时优先翻到歌词下面；上下都放不完整时，选择屏幕上露出更多的一侧。
+      var placeBelow = !aboveFits && (belowFits || belowVisible > aboveVisible);
       var screenTop = placeBelow ? belowTop : Math.max(safeTop, aboveTop);
+      if (!isFinite(screenTop)) screenTop = safeTop;
       var stageScaleY = stage.offsetHeight && stageRect.height ? stageRect.height / stage.offsetHeight : 1;
       var localTop = (screenTop - stageRect.top) / (stageScaleY || 1);
       lockHint.style.top = Math.round(localTop) + 'px';
@@ -1300,6 +1310,10 @@
         var motion = updateMotion(now, offlineMotion);
         applyStageMotion(now);
         updateLyricScroll(nowMs, progress);
+        if (hintVisible && (!lastHintPositionAt || nowMs - lastHintPositionAt >= 32)) {
+          lastHintPositionAt = nowMs;
+          positionInteractionHint();
+        }
         var rectKey = layoutKey + '|' + lastStageTransform + '|' + lastScrollX;
         var rect = (lastLineRect && rectKey === lastLineRectKey) ? lastLineRect : (lastLineRectKey = rectKey, lastLineRect = line.getBoundingClientRect());
         if (canvas.width && canvas.height) {
@@ -1352,7 +1366,12 @@
     }
     function setHintVisible(visible) {
       hintVisible = !!visible;
-      if (hintVisible) positionInteractionHint();
+      if (hintVisible) {
+        positionInteractionHint();
+        lastHintPositionAt = performance.now();
+      } else {
+        lastHintPositionAt = 0;
+      }
       stage.classList.toggle('hint-visible', hintVisible);
       setPointerCapture(!isLocked() && (hintVisible || dragging) && hoverInside);
     }

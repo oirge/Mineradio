@@ -1,5 +1,14 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.85 桌面歌词调整栏自动避让
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.85`。
+- 修复桌面歌词靠近屏幕顶部时，上方调整栏被裁切的问题；上方空间不足自动移动到歌词下方，上下都不完整时选择可见空间更大的一侧。
+- 调整栏跟随歌词舞台浮动、滚动和入场动画按约 `32ms` 节流重新定位，不改变歌词视觉、鼠标穿透、拖动、窗口位置保存或音频时钟。
+- 新增桌面歌词顶部裁切和动态重定位回归测试；全量 Node 回归 `185/185` 通过。
+- Release 标题使用 `Mineradio v1.2.85 桌面歌词调整栏自动避让版`，目标为 GitHub Latest Release。
+- 发布资产：`Mineradio-1.2.85-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.2.85-SHA256SUMS.txt`；本版本不生成快速补丁，Portable ZIP 视上传稳定性决定。
+
 ## v1.2.84 桌面覆盖层帧热路径优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.84`。

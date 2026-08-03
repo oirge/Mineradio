@@ -54,3 +54,16 @@ test('歌词提示上方有空间时保持原来的上方位置', () => {
   assert.equal(result.top, '122px');
   assert.deepEqual(result.classChanges, [{ name: 'hint-below', value: false }]);
 });
+
+test('歌词接近窗口顶部导致提示栏被裁切时移动到歌词下方', () => {
+  const result = positionHint({ top: -4, bottom: 46, height: 50 }, 190);
+  assert.equal(result.top, '54px');
+  assert.deepEqual(result.classChanges, [{ name: 'hint-below', value: true }]);
+});
+
+test('歌词舞台浮动后会重新计算提示栏位置', () => {
+  assert.match(
+    source,
+    /applyStageMotion\(now\);\s*updateLyricScroll\(nowMs, progress\);\s*if \(hintVisible[\s\S]{0,220}positionInteractionHint\(\);/,
+  );
+});

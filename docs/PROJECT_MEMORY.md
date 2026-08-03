@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.83`；GitHub Release 待本轮发布并设为 Latest。
+- 当前源码检查点：`v1.2.85`；本轮修复桌面歌词调整栏顶部裁切并准备发布 GitHub Latest。
 - 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -676,3 +676,10 @@
 - 关键边界：只移除渲染帧重复入口，保留 `scheduleDesktopOverlaySync()` 的独立定时器、桌面歌词 FPS、壁纸 260ms 节奏、后台/隐藏窗口降载和开关即时同步；不改 UI、布局、视觉质感、音频时钟或鼠标行为。
 - 禁止回退或改坏的点：不要把桌面覆盖层同步重新塞回主渲染帧；不要为了省一次调用取消独立自调度，否则主窗口停止 RAF 时桌面歌词/壁纸会失去更新。
 - 发布资产：GitHub Latest `v1.2.84`，远端上传安装器 `103330195` 字节、blockmap `110266` 字节、`latest.yml` 和 275 字节 SHA256 清单，均按大小与 SHA256 复核；Portable ZIP 已本地生成 `144971458` 字节、SHA256 `4bae1c0e1c929c3567bf6673c554db44a9783625bf9cfb606c6c188934807d0f`，因当前代理上传大文件超时未上传。
+### 2026-08-03 - v1.2.85 桌面歌词调整栏自动避让
+
+- 用户反馈：歌词靠近屏幕顶部时，上方的锁定、字号和光效调整栏会被屏幕上沿裁切，要求自动移动到歌词下方。
+- 涉及文件：`public/desktop-lyrics.html`、`tests/desktop-lyrics-hint-placement.test.js`、`package.json`、`package-lock.json`、`public/app.js`、`CHANGELOG.md`、`RELEASE.md`。
+- 关键实现：`positionInteractionHint()` 使用上下候选位置的实际可见高度决定 `hint-below`；桌面歌词绘制循环在舞台浮动、歌词滚动和入场动画期间以约 `32ms` 节流重新测量，保证调整栏不会卡在旧坐标。
+- 禁止回退或改坏的点：不要恢复只在提示首次出现时定位的旧逻辑；不要改动桌面歌词视觉质感、鼠标穿透、中键锁定、拖动、窗口位置保存或音频时钟。
+- 验证：全量 Node 回归 `185/185` 通过；`desktop/main.js`、`server.js` 语法检查和 `git diff --check` 通过。
