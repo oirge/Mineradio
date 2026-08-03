@@ -445,7 +445,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.82';
+var APP_VERSION = '1.2.83';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -453,6 +453,8 @@ var updatePreviewState = {
   progress: 0,
   timer: null,
   pollTimer: null,
+  pollInFlight: null,
+  pollGeneration: 0,
   downloadJobId: '',
   patchJobId: '',
   mode: 'installer',
@@ -26451,6 +26453,32 @@ function animateUpdatePanelContents() {
   }
 }
 
+function clearUpdateJobPolling() {
+  if (updatePreviewState.pollTimer) clearTimeout(updatePreviewState.pollTimer);
+  updatePreviewState.pollTimer = null;
+  updatePreviewState.pollGeneration += 1;
+  updatePreviewState.pollInFlight = null;
+}
+
+function scheduleUpdateJobPoll(id, mode, delay) {
+  if (!id || updatePreviewState.pollTimer || updatePreviewState.pollInFlight) return;
+  var generation = updatePreviewState.pollGeneration;
+  updatePreviewState.pollTimer = setTimeout(function(){
+    updatePreviewState.pollTimer = null;
+    if (generation !== updatePreviewState.pollGeneration) return;
+    if (mode === 'patch') pollUpdatePatchJob(id, generation);
+    else pollUpdateDownloadJob(id, generation);
+  }, Math.max(80, Number(delay) || 0));
+}
+
+function isCurrentUpdateJobPoll(token) {
+  if (!token) return false;
+  if (token.generation !== updatePreviewState.pollGeneration) return false;
+  if (token.mode !== updatePreviewState.mode) return false;
+  var activeId = token.mode === 'patch' ? updatePreviewState.patchJobId : updatePreviewState.downloadJobId;
+  return activeId === token.id;
+}
+
 async function startRealUpdateDownload() {
   if (updatePreviewState.status === 'downloading' || updatePreviewState.status === 'opening') return;
   if (updatePreviewState.status === 'ready' && updatePreviewState.installerPath) {
@@ -26458,7 +26486,7 @@ async function startRealUpdateDownload() {
     return;
   }
   if (updatePreviewState.timer) clearInterval(updatePreviewState.timer);
-  if (updatePreviewState.pollTimer) clearInterval(updatePreviewState.pollTimer);
+  clearUpdateJobPolling();
   updatePreviewState.status = 'downloading';
   updatePreviewState.progress = 0;
   updatePreviewState.mode = 'installer';
@@ -26483,9 +26511,7 @@ async function startRealUpdateDownload() {
     if (!job || job.ok === false || !job.id) throw new Error((job && job.error) || 'UPDATE_DOWNLOAD_START_FAILED');
     updatePreviewState.downloadJobId = job.id;
     applyUpdateDownloadJob(job);
-    updatePreviewState.pollTimer = setInterval(function(){
-      pollUpdateDownloadJob(job.id);
-    }, 360);
+    if (updatePreviewState.status === 'downloading') scheduleUpdateJobPoll(job.id, 'installer', 360);
   } catch (e) {
     updatePreviewState.status = 'error';
     updatePreviewState.errorReason = (e && e.message) || '更新下载启动失败';
@@ -26502,7 +26528,7 @@ async function startRealUpdatePatch() {
     return;
   }
   if (updatePreviewState.timer) clearInterval(updatePreviewState.timer);
-  if (updatePreviewState.pollTimer) clearInterval(updatePreviewState.pollTimer);
+  clearUpdateJobPolling();
   updatePreviewState.status = 'downloading';
   updatePreviewState.mode = 'patch';
   updatePreviewState.progress = 0;
@@ -26528,9 +26554,7 @@ async function startRealUpdatePatch() {
     if (!job || job.ok === false || !job.id) throw new Error((job && job.error) || 'UPDATE_PATCH_START_FAILED');
     updatePreviewState.patchJobId = job.id;
     applyUpdateDownloadJob(job);
-    updatePreviewState.pollTimer = setInterval(function(){
-      pollUpdatePatchJob(job.id);
-    }, 320);
+    if (updatePreviewState.status === 'downloading') scheduleUpdateJobPoll(job.id, 'patch', 320);
   } catch (e) {
     updatePreviewState.status = 'error';
     updatePreviewState.errorReason = (e && e.message) || '快速补丁不可用';
@@ -26542,43 +26566,66 @@ async function startRealUpdatePatch() {
   }
 }
 
-async function pollUpdateDownloadJob(id) {
-  if (!id) return;
+async function pollUpdateDownloadJob(id, generation) {
+  if (!id || updatePreviewState.mode !== 'installer') return;
+  if (generation == null) generation = updatePreviewState.pollGeneration;
+  if (generation !== updatePreviewState.pollGeneration || updatePreviewState.pollInFlight) return;
+  var token = { id: id, mode: 'installer', generation: generation };
+  updatePreviewState.pollInFlight = token;
   try {
     var job = await apiJson('/api/update/download/status?id=' + encodeURIComponent(id) + '&t=' + Date.now());
+    if (updatePreviewState.pollInFlight !== token || !isCurrentUpdateJobPoll(token)) return;
     applyUpdateDownloadJob(job);
   } catch (e) {
-    if (updatePreviewState.pollTimer) clearInterval(updatePreviewState.pollTimer);
-    updatePreviewState.pollTimer = null;
+    if (updatePreviewState.pollInFlight !== token || !isCurrentUpdateJobPoll(token)) return;
+    clearUpdateJobPolling();
     updatePreviewState.status = 'error';
     updatePreviewState.errorReason = '更新下载状态读取失败';
     updatePreviewState.errorDetail = (e && e.message) || updatePreviewState.errorReason;
     updatePreviewState.message = updatePreviewState.errorReason;
     updateUpdatePreviewProgress(updatePreviewState.progress || 0);
     showToast('更新下载状态读取失败');
+  } finally {
+    if (updatePreviewState.pollInFlight === token) {
+      updatePreviewState.pollInFlight = null;
+      if (isCurrentUpdateJobPoll({ id: id, mode: 'installer', generation: generation }) && updatePreviewState.status === 'downloading') {
+        scheduleUpdateJobPoll(id, 'installer', 360);
+      }
+    }
   }
 }
-async function pollUpdatePatchJob(id) {
-  if (!id) return;
+async function pollUpdatePatchJob(id, generation) {
+  if (!id || updatePreviewState.mode !== 'patch') return;
+  if (generation == null) generation = updatePreviewState.pollGeneration;
+  if (generation !== updatePreviewState.pollGeneration || updatePreviewState.pollInFlight) return;
+  var token = { id: id, mode: 'patch', generation: generation };
+  updatePreviewState.pollInFlight = token;
   try {
     var job = await apiJson('/api/update/patch/status?id=' + encodeURIComponent(id) + '&t=' + Date.now());
+    if (updatePreviewState.pollInFlight !== token || !isCurrentUpdateJobPoll(token)) return;
     applyUpdateDownloadJob(job);
   } catch (e) {
-    if (updatePreviewState.pollTimer) clearInterval(updatePreviewState.pollTimer);
-    updatePreviewState.pollTimer = null;
+    if (updatePreviewState.pollInFlight !== token || !isCurrentUpdateJobPoll(token)) return;
+    clearUpdateJobPolling();
     updatePreviewState.status = 'error';
     updatePreviewState.errorReason = '快速补丁状态读取失败';
     updatePreviewState.errorDetail = (e && e.message) || updatePreviewState.errorReason;
     updatePreviewState.message = updatePreviewState.errorReason;
     updateUpdatePreviewProgress(updatePreviewState.progress || 0);
     showToast('快速补丁状态读取失败');
+  } finally {
+    if (updatePreviewState.pollInFlight === token) {
+      updatePreviewState.pollInFlight = null;
+      if (isCurrentUpdateJobPoll({ id: id, mode: 'patch', generation: generation }) && updatePreviewState.status === 'downloading') {
+        scheduleUpdateJobPoll(id, 'patch', 320);
+      }
+    }
   }
 }
 
 function applyUpdateDownloadJob(job) {
   if (!job || job.ok === false || job.status === 'error') {
-    if (updatePreviewState.pollTimer) clearInterval(updatePreviewState.pollTimer);
-    updatePreviewState.pollTimer = null;
+    clearUpdateJobPolling();
     updatePreviewState.mode = (job && job.mode) || updatePreviewState.mode || 'installer';
     updatePreviewState.received = Number(job && job.received || 0);
     updatePreviewState.total = Number(job && job.total || 0);
@@ -26623,8 +26670,7 @@ function applyUpdateDownloadJob(job) {
     return;
   }
   if (job.status === 'ready') {
-    if (updatePreviewState.pollTimer) clearInterval(updatePreviewState.pollTimer);
-    updatePreviewState.pollTimer = null;
+    clearUpdateJobPolling();
     updatePreviewState.status = 'ready';
     updatePreviewState.installerPath = job.filePath || '';
     updateUpdatePreviewProgress(100);

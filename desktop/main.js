@@ -1448,10 +1448,13 @@ function createDesktopLyricsWindow(payload = {}) {
   const yChanged = hasY && Number.isFinite(Number(previousY)) && Math.abs(nextY - clampNumber(previousY, 0.08, 0.92, 0.76)) > 0.001;
   const opacityChanged = Object.prototype.hasOwnProperty.call(payload || {}, 'opacity')
     && Math.abs(clampNumber(state.opacity, 0.28, 1, 0.92) - clampNumber(previousOpacity, 0.28, 1, 0.92)) > 0.001;
-  if (yChanged) desktopLyricsUserBounds = null;
+  // 首次启动时 renderer 会重新发送保存的 y 偏好；它不应覆盖已经从磁盘恢复的手动窗口坐标。
+  // 只有现存窗口收到用户的 y 调整时，才清除手动 bounds 并切回比例定位。
+  const resetManualBounds = yChanged && desktopLyricsWindow && !desktopLyricsWindow.isDestroyed();
+  if (resetManualBounds) desktopLyricsUserBounds = null;
   if (desktopLyricsWindow && !desktopLyricsWindow.isDestroyed()) {
-    if (yChanged) {
-      positionDesktopLyricsWindow(state, { force: yChanged });
+    if (resetManualBounds) {
+      positionDesktopLyricsWindow(state, { force: true });
     } else if (opacityChanged) {
       setDesktopLyricsOpacity(state.opacity);
     }
@@ -1491,7 +1494,7 @@ function createDesktopLyricsWindow(payload = {}) {
   }
   startDesktopLyricsMousePoller();
   applyDesktopLyricsMouseBehavior();
-  positionDesktopLyricsWindow(state, { force: yChanged || !desktopLyricsUserBounds });
+  positionDesktopLyricsWindow(state, { force: !!resetManualBounds || !desktopLyricsUserBounds });
 
   /**
    * 仅显示仍持有全局槽位的歌词窗口，隔离旧实例迟到的 ready 事件。
@@ -1553,6 +1556,7 @@ function createDesktopLyricsWindow(payload = {}) {
   win.once('ready-to-show', showOwnedDesktopLyricsWindow);
   win.webContents.on('did-start-loading', resetOwnedDesktopLyricsHotBounds);
   win.webContents.once('did-finish-load', sendOwnedDesktopLyricsState);
+  win.on('close', rememberOwnedDesktopLyricsBounds);
   win.on('closed', releaseOwnedDesktopLyricsWindow);
   win.on('moved', rememberOwnedDesktopLyricsBounds);
   win.loadURL(overlayUrl('desktop-lyrics.html')).catch(reportDesktopLyricsLoadFailure);

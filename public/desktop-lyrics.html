@@ -221,6 +221,8 @@
     body.locked .lyrics-lock-toggle{display:flex}
     body.unlocked .stage.hint-visible .lock-hint,body.locked .stage.hint-visible .lock-hint{pointer-events:auto;-webkit-app-region:no-drag}
     .stage.hint-visible .lock-hint{opacity:.94;transform:translateX(-50%) translateY(0) scale(1)}
+    .stage.hint-below .lock-hint{transform:translateX(-50%) translateY(8px) scale(.92)}
+    .stage.hint-below.hint-visible .lock-hint{transform:translateX(-50%) translateY(0) scale(1)}
     @keyframes lyr-in{
       0%{opacity:0;transform:translate3d(0,32px,-120px) rotateX(24deg) rotateY(-18deg) scale(.78);filter:blur(12px)}
       58%{opacity:1;filter:blur(0)}
@@ -859,9 +861,21 @@
     }
     function positionInteractionHint() {
       if (!lockHint || !lyricViewport || !lyricScroller) return;
-      var localTop = lyricViewport.offsetTop + lyricScroller.offsetTop;
       var hintHeight = lockHint.offsetHeight || 30;
-      lockHint.style.top = Math.max(8, Math.round(localTop - hintHeight - 8)) + 'px';
+      var gap = 8;
+      var stageRect = stage.getBoundingClientRect();
+      var textRect = line && line.getBoundingClientRect ? line.getBoundingClientRect() : null;
+      if (!textRect || textRect.bottom <= textRect.top) textRect = lyricScroller.getBoundingClientRect();
+      var aboveTop = textRect.top - hintHeight - gap;
+      var belowTop = textRect.bottom + gap;
+      var safeTop = 8;
+      var safeBottom = Math.max(safeTop + hintHeight, innerHeight - 8);
+      var placeBelow = aboveTop < safeTop && belowTop + hintHeight <= safeBottom;
+      var screenTop = placeBelow ? belowTop : Math.max(safeTop, aboveTop);
+      var stageScaleY = stage.offsetHeight && stageRect.height ? stageRect.height / stage.offsetHeight : 1;
+      var localTop = (screenTop - stageRect.top) / (stageScaleY || 1);
+      lockHint.style.top = Math.round(localTop) + 'px';
+      stage.classList.toggle('hint-below', placeBelow);
     }
     function sendHotBounds(force) {
       if (!window.desktopOverlay || !window.desktopOverlay.setLyricsHotBounds) return;
@@ -1338,6 +1352,7 @@
     }
     function setHintVisible(visible) {
       hintVisible = !!visible;
+      if (hintVisible) positionInteractionHint();
       stage.classList.toggle('hint-visible', hintVisible);
       setPointerCapture(!isLocked() && (hintVisible || dragging) && hoverInside);
     }

@@ -43,6 +43,12 @@ test('stable desktop lyrics mode is wired through the renderer payload', () => {
   assert.match(main, /mineradio-desktop-lyrics-set-glow-strength/);
 });
 
+test('desktop lyrics restores manual bounds before applying the initial renderer y preference', () => {
+  assert.match(main, /const resetManualBounds = yChanged && desktopLyricsWindow && !desktopLyricsWindow\.isDestroyed\(\);/);
+  assert.match(main, /positionDesktopLyricsWindow\(state, \{ force: !!resetManualBounds \|\| !desktopLyricsUserBounds \}\)/);
+  assert.match(main, /win\.on\('close', rememberOwnedDesktopLyricsBounds\)/);
+});
+
 test('desktop lyrics flowing glow is rendered on the overlay canvas', () => {
   assert.match(overlay, /canvas\{position:fixed/);
   assert.match(overlay, /drawAura\(rect, motion\)/);

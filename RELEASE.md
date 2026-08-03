@@ -1,5 +1,15 @@
 ﻿# 鍙戝竷娴佺▼
 
+## v1.2.83 更新状态轮询单飞优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.83`。
+- 更新下载/快速补丁状态轮询由固定 `setInterval` 改为单飞请求；上一轮未完成时不叠加请求，减少慢线路下的网络、JSON 解析和 DOM 刷新压力。
+- 增加轮询代际与任务 ID 校验，旧任务迟到响应不能覆盖新任务；完成、失败和切换任务时统一释放轮询定时器与在途状态。
+- 桌面歌词提示顶部空间不足时自动翻到歌词下方；手动拖动后的窗口 bounds 在重启后优先恢复，关闭时补存一次。
+- 新增更新轮询和桌面歌词布局回归测试；构建前需通过全量 Node 回归 `180/180`、JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
+- 本版本不生成快速补丁，使用完整安装器或 Portable ZIP。
+- Release 标题使用 `Mineradio v1.2.83 更新状态轮询单飞优化版`，目标为 GitHub Latest Release。
+
 ## v1.2.82 静态资源流式传输优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.82`。

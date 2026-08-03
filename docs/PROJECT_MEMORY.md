@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.82`；GitHub Release 已发布并设为 Latest。
+- 当前源码检查点：`v1.2.83`；GitHub Release 待本轮发布并设为 Latest。
 - 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -32,6 +32,8 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.83`（2026-08-03）更新下载和快速补丁状态轮询改为单飞请求：上一轮未完成时不叠加请求；通过轮询代际和任务 ID 校验拒绝旧任务迟到响应，完成/失败/切换时释放定时器与在途标记。桌面歌词提示顶部空间不足时自动移到歌词下方；手动拖动后的窗口 bounds 在重启后优先恢复，关闭时补存一次。新增更新轮询和桌面歌词布局回归测试，当前全量回归 `180/180` 通过。
 
 - `v1.2.82`（2026-08-03）本地服务器静态资源 `200` 响应改用 `fs.createReadStream()` 流式发送，避免先复制完整 HTML/CSS/JS/字体/图标 Buffer；保留 ETag/Last-Modified、`Cache-Control: no-cache` 和 `304` 条件请求语义。新增流式响应回归测试，当前全量回归 `175/175` 通过；不改 UI、布局、玻璃质感、电影视觉、播放控制和交互语义。
 - `v1.2.82` 本地资产：安装器 `103329187` 字节 / SHA256 `f2d07ed3c1e7413e6517f4f2e3c31a50b051970cb4bb4f8bbc9564211f5d71ed`；blockmap `110449` 字节 / `ad20226f20e129d2b4316f9eded3bbeeb746a2158f4a37b3d713d681bbf103a2`；`latest.yml` `350` 字节 / `ae91bffeb0be8baef0dd78ab719874ffdbb67afcbc26465709563dd169669296`；Portable ZIP `144914189` 字节 / `8e1da8e90e78c3df05cee82697505604678e639c2f8322ec1c10051ef35843b1`。GitHub Release 已发布为 Latest，远端 5 个资产大小与 SHA-256 已核对一致。
