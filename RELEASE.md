@@ -1,6 +1,6 @@
 ﻿# 鍙戝竷娴佺▼
 
-## v1.2.83 更新状态轮询单飞优化
+## v1.2.83 更新状态轮询与桌面歌词同步优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.83`。
 - 更新下载/快速补丁状态轮询由固定 `setInterval` 改为单飞请求；上一轮未完成时不叠加请求，减少慢线路下的网络、JSON 解析和 DOM 刷新压力。
@@ -9,10 +9,10 @@
 - 修复桌面歌词外层同步调度固定 `320ms` 导致的歌词慢半拍；启用桌面歌词时跟随 `desktopLyricsFps` 推送，30 FPS 约 `33ms`、60 FPS 约 `16.7ms`，后台压力/隐藏窗口仍保留降载保护。
 - 新增更新轮询、桌面歌词布局和同步频率回归测试；构建前需通过全量 Node 回归 `182/182`、JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
 - 本版本不生成快速补丁，使用完整安装器或 Portable ZIP。
-- Release 标题使用 `Mineradio v1.2.83 更新状态轮询单飞优化版`，目标为 GitHub Latest Release。
+- Release 标题使用 `Mineradio v1.2.83 更新状态轮询与桌面歌词同步优化版`，目标为 GitHub Latest Release。
 - 发布资产：`Mineradio-1.2.83-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.83-SHA256SUMS.txt` 和 `Mineradio-1.2.83-Portable-win-x64.zip`。
-- 安装器大小：`103329984` 字节；Portable ZIP 大小：`144914741` 字节；blockmap 大小：`110296` 字节；SHA256 清单大小：`380` 字节。
-- 安装器 SHA256：`78e3f30204efc22fabde17805d6013c2346879c9d6b8523d9cb2d4a4598f2eab`；blockmap：`aa76ad11a4bae1458a0cf003496687e0e6c94e0adaf3e8a158d3736964b494d2`；`latest.yml`：`fc5157969533940f17dd6e9bb247b6b9ea08fc45bb78904689b46ac5319a6b8f`；Portable ZIP：`db5f34525aae5a28ef2d8a71b7dc8635c70d389b31fb1fdb6c8906d959949bc7`。
+- 安装器大小：`103329920` 字节；Portable ZIP 大小：`144971481` 字节；blockmap 大小：`110335` 字节；SHA256 清单大小：`380` 字节。
+- 安装器 SHA256：`cba10d843d5e059adec4c8cdabbf36ee0a60c503fdd82e7fa6b218675abafa40`；blockmap：`b0501cb861e5626a92f86f3883dd16354500f2058aa100a6000768c45faec0da`；`latest.yml`：`f7ca491b44b9412c70ce07362f9332645321480b36684c9a9447a561cf431f57`；Portable ZIP：`47635da05b0d323a337aae4db304dbc9969837e7f940efbcf36eec55013ce0e8`。
 
 ## v1.2.82 静态资源流式传输优化
 
