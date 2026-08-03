@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.81`；GitHub Release 待本轮发布并设为 Latest。
+- 当前源码检查点：`v1.2.81`；GitHub Release 已发布并设为 Latest。
 - 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -34,7 +34,7 @@
 ## Release Memory
 
 - `v1.2.81`（2026-08-03）本地静态资源服务增加 ETag/Last-Modified 条件缓存，重复启动对 HTML、CSS、JS、字体和图标返回 304，使用 `Cache-Control: no-cache` 保证更新后立即重新校验；新增真实 HTTP 200/304 回归测试，不改 UI、布局、玻璃质感、电影视觉、播放控制和交互语义。
-- `v1.2.81` 本地资产：安装器 `103328676` 字节 / SHA256 `4f1e96791494cd4a1f0efd2eafa1cff9ec131039707c96b6ca97c0070e090449`；blockmap `110244` 字节 / `5612cbf828697b5297ec79743b199009c8e23b0dfc61139a7a40f15bce64cad4`；`latest.yml` `350` 字节 / `b7d623d1b06645e043786bd4035b268d53ac74939a39749dfc0ce7a5235caac1`；Portable ZIP `144914153` 字节 / `c935f85b7ee33d897f6380a533f9e74b8926ac73c7aa1c8760062063695dd6ff`。本地资产已生成，GitHub Release 待上传。
+- `v1.2.81` 本地资产：安装器 `103328676` 字节 / SHA256 `4f1e96791494cd4a1f0efd2eafa1cff9ec131039707c96b6ca97c0070e090449`；blockmap `110244` 字节 / `5612cbf828697b5297ec79743b199009c8e23b0dfc61139a7a40f15bce64cad4`；`latest.yml` `350` 字节 / `b7d623d1b06645e043786bd4035b268d53ac74939a39749dfc0ce7a5235caac1`；Portable ZIP `144914153` 字节 / `c935f85b7ee33d897f6380a533f9e74b8926ac73c7aa1c8760062063695dd6ff`。GitHub Release 已发布为 Latest，远端 5 个资产大小与 SHA-256 已核对一致。
 
 - `v1.2.80`（2026-08-03）收窄 `asarUnpack` 到 `server.js` 与 `package.json`，将 `public`、`build` 和桌面脚本归档回 `app.asar`；主进程与本地服务器拆分可写运行根和静态资源根，兼容 `v1.2.79` 的旧解包布局。实际 Electron 隔离启动验证首页、`app.js`、`app.css`、字体和图标均返回 200；本轮不改 UI、布局、玻璃质感、电影视觉、播放控制和交互语义。
 

@@ -6,7 +6,7 @@
 - 本地服务器为 HTML、CSS、JS、字体和图标增加 ETag/Last-Modified 条件缓存；重复启动命中缓存时返回 `304`，避免重新传输大型 renderer 资源。
 - 使用 `Cache-Control: no-cache` 保证补丁或完整更新后的资源立即重新校验，不使用可能造成旧脚本残留的长时间强缓存。
 - 新增真实 HTTP 200/304 回归测试；构建前需通过全量 Node 回归、全量 JavaScript 语法检查、实际 Electron 资源访问验证和 `git diff --check`。
-- Release 标题使用 `Mineradio v1.2.81 本地静态资源条件缓存优化版`，目标为 GitHub Latest Release。
+- Release 标题使用 `Mineradio v1.2.81 本地静态资源条件缓存优化版`，已发布为 GitHub Latest Release。
 - 由于本版本仅更新 `server.js` 的静态资源服务逻辑，且 `server.js` 位于 `app.asar.unpacked`，不生成快速补丁；使用完整安装器或 Portable ZIP。
 - 发布资产：`Mineradio-1.2.81-Setup.exe`、对应 `.blockmap`、`latest.yml`、`Mineradio-1.2.81-SHA256SUMS.txt` 和 `Mineradio-1.2.81-Portable-win-x64.zip`。
 - 安装器大小：`103328676` 字节；Portable ZIP 大小：`144914153` 字节；blockmap 大小：`110244` 字节；SHA256 清单大小：`380` 字节。
