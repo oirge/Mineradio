@@ -30,4 +30,5 @@ jobs:
           node --check desktop/main.js
           node --check desktop/overlay-preload.js
           node --check server.js
+          node --check public/app.js
           git diff --check

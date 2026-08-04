@@ -279,6 +279,7 @@
 - 播放图标、控制栏节点、控制区歌曲信息和 Media Session 元数据使用节点/内容签名缓存；相同播放状态事件只同步必要的系统位置节流任务。
 - `currentDesktopSongMeta()` 复用歌曲元数据对象，桌面歌词签名使用固定缓冲区，节奏图字段直接写入最终 IPC payload；字段顺序、量化精度和发送语义必须保持不变。
 - 桌面覆盖层同步使用固定 scratch payload：`desktopLyricSnapshotCache`、`desktopLyricsMotionPayloadCache`、`desktopLyricsPlaybackPayloadCache`、`desktopOverlayColorsCache`、`desktopLyricsPayloadCache` 与 `wallpaperPayloadCache`；preload IPC 调用会立即序列化，调用方不得跨帧保存这些引用，序列化后必须释放缓存中的 `beatMap` 与壁纸 `cover` 重型字段。
+- 桌面歌词 renderer 使用 `normalizeDesktopStateText()` 按“原始文本 + 单/双行模式”缓存最终显示文本；相同 IPC 不得重复拆行、过滤和拼接。`drawCanvasText()` 的字形缓存必须同时持有 Unicode code point 数组和字宽，描边/填充及后续帧复用同一份字形，不得在绘制热路径恢复 `Array.from(text)`。
 - `applyDesktopLyricsBeatMapPayload()` 在复用 payload 上必须显式删除不再发送的 `beatMap` 字段，保持签名中的 `map/nomap` 判重和旧载荷结构一致。
 - `songCoverSrc()` / `songCoverSignature()` 的缓存键直接拼接，并在同一轮读取中复用自定义封面映射；封面优先级和缓存失效字段必须保持不变。
 - 歌曲副标题缓存键、本地音质缓存键、3D 歌单架 `cardDrawSignature`/`queueSampleSig`、队列 `queueRenderFingerprint`、本地曲库面板签名和本地快照/记录签名统一改为直接字符串拼接，不要恢复数组 `join`。

@@ -295,6 +295,9 @@
     var lastLineRectKey = '';
     var glyphWidthCache = Object.create(null);
     var glyphWidthCacheKeys = [];
+    var normalizedDesktopTextSource = null;
+    var normalizedDesktopTextRows = '';
+    var normalizedDesktopTextValue = 'Mineradio';
     var GLOW_TEXT_LAYERS = [
       { filter:'blur(10px)', alpha:.94, minStroke:9, strokeFactor:.09 },
       { filter:'blur(24px)', alpha:.74, minStroke:15, strokeFactor:.15 },
@@ -344,6 +347,26 @@
     }
     function normalizeRows(value) {
       return String(value || '') === 'single' ? 'single' : 'double';
+    }
+    function normalizeDesktopStateText(value, rows) {
+      var source = String(value || 'Mineradio');
+      var mode = normalizeRows(rows);
+      if (source === normalizedDesktopTextSource && mode === normalizedDesktopTextRows) return normalizedDesktopTextValue;
+      var maxLines = mode === 'single' ? 1 : 2;
+      var lines = [];
+      var start = 0;
+      for (var i = 0; i <= source.length && lines.length < maxLines; i++) {
+        var code = i < source.length ? source.charCodeAt(i) : 10;
+        if (code !== 10 && code !== 13) continue;
+        var text = source.slice(start, i).replace(/[ \t]+/g, ' ').trim();
+        if (text) lines.push(text);
+        if (code === 13 && source.charCodeAt(i + 1) === 10) i++;
+        start = i + 1;
+      }
+      normalizedDesktopTextSource = source;
+      normalizedDesktopTextRows = mode;
+      normalizedDesktopTextValue = lines.join('\n') || 'Mineradio';
+      return normalizedDesktopTextValue;
     }
     function normalizeAlign(value) {
       var align = String(value || '');
@@ -989,13 +1012,7 @@
       if (motion.beatGlow != null) state.beatGlow = motion.beatGlow;
       if (motion.beatPulse != null) state.beatPulse = motion.beatPulse;
       if (motion.bass != null) state.bass = motion.bass;
-      var text = String(state.text || 'Mineradio')
-        .replace(/\r/g, '\n')
-        .split('\n')
-        .map(function(line){ return line.replace(/[ \t]+/g, ' ').trim(); })
-        .filter(Boolean)
-        .slice(0, normalizeRows(state.rows) === 'single' ? 1 : 2)
-        .join('\n') || 'Mineradio';
+      var text = normalizeDesktopStateText(state.text, state.rows);
       baseFontSize = Math.round(58 * clamp(state.size, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, 1));
       state.progress = clamp(state.progress, 0, 1, 0);
       state.progressSpan = clamp(state.progressSpan, .75, 18, 4.8);
@@ -1091,9 +1108,23 @@
       }
       return clamp(target, 0, 1, target);
     }
+    function canvasTextGlyphs(text) {
+      var glyphs = [];
+      for (var i = 0; i < text.length;) {
+        var next = i + 1;
+        var code = text.charCodeAt(i);
+        if (code >= 0xd800 && code <= 0xdbff && next < text.length) {
+          var low = text.charCodeAt(next);
+          if (low >= 0xdc00 && low <= 0xdfff) next++;
+        }
+        glyphs.push(text.slice(i, next));
+        i = next;
+      }
+      return glyphs;
+    }
     function drawCanvasText(text, x, y, fontSize, spacing, stroke) {
-      var chars = Array.from(text || '');
-      if (!spacing || chars.length < 2) {
+      text = String(text || '');
+      if (!spacing || text.length < 2) {
         if (stroke) ctx.strokeText(text, x, y);
         else ctx.fillText(text, x, y);
         return;
@@ -1105,15 +1136,17 @@
           glyphWidthCache = Object.create(null);
           glyphWidthCacheKeys.length = 0;
         }
-        entry = { widths:new Array(chars.length), total:0 };
-        for (var i = 0; i < chars.length; i++) {
-          entry.widths[i] = ctx.measureText(chars[i]).width;
+        var glyphs = canvasTextGlyphs(text);
+        entry = { glyphs:glyphs, widths:new Array(glyphs.length), total:0 };
+        for (var i = 0; i < glyphs.length; i++) {
+          entry.widths[i] = ctx.measureText(glyphs[i]).width;
           entry.total += entry.widths[i];
-          if (i < chars.length - 1) entry.total += spacing;
+          if (i < glyphs.length - 1) entry.total += spacing;
         }
         glyphWidthCacheKeys.push(key);
         glyphWidthCache[key] = entry;
       }
+      var chars = entry.glyphs;
       var cursor = x - entry.total / 2;
       ctx.textAlign = 'left';
       for (var c = 0; c < chars.length; c++) {

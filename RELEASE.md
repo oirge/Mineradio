@@ -1,4 +1,17 @@
-﻿# 鍙戝竷娴佺▼
+﻿# 发布流程
+
+## v1.2.87 桌面歌词 60 FPS 少分配优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.87`。
+- 桌面歌词 renderer 缓存相同输入文本的归一化结果，并把 Unicode 字形数组与字宽放入同一缓存；减少 30/60 FPS 播放期间的短命数组与字符串分配。
+- 保持歌词内容、行数语义、代理对字符、字距、居中位置、光效、播放时钟和桌面操作不变。
+- 新增 `tests/desktop-lyrics-render-hot-path.test.js` 和 `tests/frontend-html-script-syntax.test.js`；CI 增加 `node --check public/app.js`。
+- Release 标题使用 `Mineradio v1.2.87 桌面歌词 60 FPS 少分配优化版`，目标为 GitHub Latest Release。
+- 发布资产只上传安装器、blockmap、`latest.yml` 和 UTF-8 SHA256 清单；Portable ZIP 仅本地保留。中文 Release 正文必须通过 UTF-8 文件配合 `gh release --notes-file` 上传，禁止再从 PowerShell 字符串管道传入。
+- 构建验证：全量 Node 回归 `193/193` 通过，关键 JavaScript 语法、全部发布页面内联脚本和 `git diff --check` 通过；打包后的 asar 已确认包含 `1.2.87`、文本归一化缓存和 Unicode 字形数组缓存。
+- 产物大小：安装器 `103333797` 字节；blockmap `110198` 字节；`latest.yml` `350` 字节；本地 Portable ZIP `144915948` 字节。
+- SHA256：安装器 `91b8dc27601a4c71c9ef7d4b1c6bcee5f8e5fa5ae6183a92fde875782ceee8b8`；blockmap `6ba77e9954e0a5d584af0ffd9040e13b888c995653267234dc3c72bbd2541561`；`latest.yml` `8fa7703d64797fddb4d39549251fb21dacb063aea091543589f58ccdfce93413`；本地 Portable ZIP `91c33495ede6c78dd4aabe0c0b1b61cdbd002cd41b504428d2cdd30aac1d2252`。
+- `latest.yml` 的 Setup SHA512：`3qWkchuUQ0exNYmqTa8Wn176UOcYhCvYtQlih73vHhBtDWLsOEumVF8L1uLxhxa+cMbwiMtI7zohvxmZbHZ79A==`。
 
 ## v1.2.86 桌面歌词修复与发布链路完善
 
