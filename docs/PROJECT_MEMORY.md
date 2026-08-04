@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.85`；本轮已修复桌面歌词调整栏顶部裁切并完成 GitHub Latest 修复重发。
+- 当前源码检查点：`v1.2.86`；本轮将完整源码推进默认 `main`、新增 GitHub Actions CI，并准备重新发布 GitHub Latest。
 - 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,7 @@
 
 ## Release Memory
 
+- `v1.2.86`（2026-08-04）修复 GitHub 发布链路：将完整源码推进默认 `main`，新增 Windows GitHub Actions CI（安装依赖、全量 Node 测试、语法检查、空白检查），并修正 Release 对 Portable ZIP 远端状态的错误描述。安装器内已复核 `APP_VERSION = 1.2.86` 和桌面歌词物理屏幕裁切修复；全量回归 `190/190` 通过。正式远端资产仅上传 Setup.exe、blockmap、`latest.yml` 和 SHA256 清单；Portable ZIP 仅保留本地。安装器 `103331153` 字节 / SHA256 `18971d4a85a2e3f186534205b980e5bb85b2ba28576dce9348dd45ed106eaed1`。
 - `v1.2.83`（2026-08-03）更新下载和快速补丁状态轮询改为单飞请求：上一轮未完成时不叠加请求；通过轮询代际和任务 ID 校验拒绝旧任务迟到响应，完成/失败/切换时释放定时器与在途标记。桌面歌词提示顶部空间不足时自动移到歌词下方；手动拖动后的窗口 bounds 在重启后优先恢复，关闭时补存一次。新增更新轮询和桌面歌词布局回归测试，当前全量回归 `180/180` 通过。
 - `v1.2.83` 本地资产：安装器 `103329984` 字节 / SHA256 `78e3f30204efc22fabde17805d6013c2346879c9d6b8523d9cb2d4a4598f2eab`；blockmap `110296` 字节 / `aa76ad11a4bae1458a0cf003496687e0e6c94e0adaf3e8a158d3736964b494d2`；`latest.yml` `350` 字节 / `fc5157969533940f17dd6e9bb247b6b9ea08fc45bb78904689b46ac5319a6b8f`；Portable ZIP `144914741` 字节 / `db5f34525aae5a28ef2d8a71b7dc8635c70d389b31fb1fdb6c8906d959949bc7`。本地资产已生成，GitHub Release 待上传。
 

@@ -1,0 +1,33 @@
+name: Verify
+
+on:
+  push:
+    branches:
+      - main
+      - 'codex/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node --test --test-concurrency=1
+      - run: |
+          node --check desktop/main.js
+          node --check desktop/overlay-preload.js
+          node --check server.js
+          git diff --check
