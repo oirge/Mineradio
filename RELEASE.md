@@ -11,6 +11,7 @@
 - 构建验证：`node --check`、`git diff --check` 和打包后 `app.asar` 内容核对通过；安装器 `103331885` 字节，blockmap `110197` 字节，`latest.yml` `350` 字节，本地 Portable ZIP `144916097` 字节。
 - SHA256：安装器 `107d6731c11bd504c5dfd48c9bb186f48eda41d484e27bea638df093be8b3ae8`；blockmap `899cff581d698256b198d872aa1911608bf4f36366384f624b3cc363a316656d`；`latest.yml` `a7553b3974490c4fa3ef41fa17d42af73b152be98c23fb23bab55dd407c5d37d`；本地 Portable ZIP `a2790f1a5a74c26e917c249fd9391f82499ee909cc59274f9c9df5a7f8624ab8`。
 - `latest.yml` 的 Setup SHA512：`TC9d1O9UzZf2PtVQK0v9d9r2TzMuFfxN5TGA5GRGLVwYPh7S/qRgHT9iB5g+KeS4Hr9cUnQ467tiuOad/6ep5g==`。
+- GitHub Release 已标记 Latest；远端 API 返回的三个自动更新资产 SHA256 与本地一致，`main` CI run `30875753697` 成功。
 
 ## v1.2.87 桌面歌词 60 FPS 少分配优化
 
