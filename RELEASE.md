@@ -1,5 +1,17 @@
 ﻿# 发布流程
 
+## v1.2.88 Home 空库波形热路径优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.88`。
+- Home 空库波形缓存 24 个频谱柱的频谱桶索引；只在频谱长度变化时重新计算，保持原有取样曲线和刷新节奏。
+- 新增 `tests/home-wave-hot-path.test.js`；全量 Node 回归 `194/194` 通过。
+- 不改变 UI、布局、玻璃质感、播放控制、歌词、桌面歌词、壁纸或 3D 歌单架语义。
+- Release 标题使用 `Mineradio v1.2.88 Home 空库波形热路径优化版`，目标为 GitHub Latest Release。
+- 发布资产只上传安装器、blockmap、`latest.yml` 和 UTF-8 SHA256 清单；Portable ZIP 仅本地保留。
+- 构建验证：`node --check`、`git diff --check` 和打包后 `app.asar` 内容核对通过；安装器 `103331885` 字节，blockmap `110197` 字节，`latest.yml` `350` 字节，本地 Portable ZIP `144916097` 字节。
+- SHA256：安装器 `107d6731c11bd504c5dfd48c9bb186f48eda41d484e27bea638df093be8b3ae8`；blockmap `899cff581d698256b198d872aa1911608bf4f36366384f624b3cc363a316656d`；`latest.yml` `a7553b3974490c4fa3ef41fa17d42af73b152be98c23fb23bab55dd407c5d37d`；本地 Portable ZIP `a2790f1a5a74c26e917c249fd9391f82499ee909cc59274f9c9df5a7f8624ab8`。
+- `latest.yml` 的 Setup SHA512：`TC9d1O9UzZf2PtVQK0v9d9r2TzMuFfxN5TGA5GRGLVwYPh7S/qRgHT9iB5g+KeS4Hr9cUnQ467tiuOad/6ep5g==`。
+
 ## v1.2.87 桌面歌词 60 FPS 少分配优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.87`。

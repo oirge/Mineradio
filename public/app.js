@@ -445,7 +445,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.87';
+var APP_VERSION = '1.2.88';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -24780,14 +24780,30 @@ function syncFxUniforms() {
   if (uniforms.uTintStrength) uniforms.uTintStrength.value = fx.visualTintMode === 'custom' ? 0.42 : 0;
   syncSkullParticleColors();
 }
-var homeWaveTrackState = { bars: 0, smooth: [] };
+var homeWaveTrackState = { bars: 0, smooth: [], frequencyLength: -1, binIndices: [] };
 function ensureHomeWaveTrackBars(el) {
   if (!el) return;
   var count = 24;
   if (homeWaveTrackState.bars === count && el.children.length === count) return;
   homeWaveTrackState.bars = count;
   homeWaveTrackState.smooth = new Array(count).fill(0);
+  homeWaveTrackState.frequencyLength = -1;
+  homeWaveTrackState.binIndices = [];
   el.innerHTML = new Array(count + 1).join('<span></span>');
+}
+function ensureHomeWaveTrackBinIndices(dataLength, count) {
+  var state = homeWaveTrackState;
+  if (state.frequencyLength === dataLength && state.binIndices.length === count) return state.binIndices;
+  state.frequencyLength = dataLength;
+  state.binIndices = new Array(count);
+  if (!dataLength) return state.binIndices;
+  var lastBin = dataLength - 1;
+  var ratioDenominator = Math.max(1, count - 1);
+  for (var i = 0; i < count; i++) {
+    var ratio = i / ratioDenominator;
+    state.binIndices[i] = Math.min(lastBin, Math.floor(Math.pow(ratio, 1.2) * lastBin));
+  }
+  return state.binIndices;
 }
 function updateHomeAudioVisual(dt) {
   if (!emptyHomeActive) return;
@@ -24799,12 +24815,13 @@ function updateHomeAudioVisual(dt) {
   homeWaveTrackState.lastAt = nowMs;
   ensureHomeWaveTrackBars(wave);
   var bars = wave.children;
+  var dataLength = frequencyData && frequencyData.length || 0;
+  var binIndices = ensureHomeWaveTrackBinIndices(dataLength, bars.length);
   var nowT = uniforms && uniforms.uTime ? uniforms.uTime.value : performance.now() / 1000;
   for (var i = 0; i < bars.length; i++) {
-    var ratio = bars.length > 1 ? i / (bars.length - 1) : 0;
     var bin = 0;
-    if (frequencyData && frequencyData.length) {
-      bin = (frequencyData[Math.min(frequencyData.length - 1, Math.floor(Math.pow(ratio, 1.2) * (frequencyData.length - 1)))] || 0) / 255;
+    if (dataLength) {
+      bin = (frequencyData[binIndices[i]] || 0) / 255;
     } else {
       bin = 0.16 + Math.sin(nowT * 1.4 + i * 0.34) * 0.06;
     }
