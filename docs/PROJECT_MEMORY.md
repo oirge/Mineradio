@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.87`；在 `v1.2.86` 已发布修复基础上，继续优化桌面歌词 30/60 FPS renderer 的文本归一化和 Unicode 绘字短命分配，并补齐完整 HTML 内联脚本语法门禁。
+- 当前源码检查点：`v1.2.87`；桌面歌词 30/60 FPS renderer 的文本归一化和 Unicode 绘字少分配优化已作为 GitHub Latest 正式发布，并补齐完整 HTML 内联脚本语法门禁。
 - 当前工作分支：`codex/complete-v1.2.79`。
-- 最近正式安装包 Release 基线：`v1.2.86`（2026-08-04，默认 `main` 与 tag 指向同一发布提交，GitHub Releases 已标记 Latest，4 个上传资产齐全：Setup.exe、.blockmap、`latest.yml`、SHA256 清单；Portable ZIP 只保留本地，不在远端下载列表）。
+- 最近正式安装包 Release 基线：`v1.2.87`（2026-08-04，tag 构建源码提交 `ca16329`，GitHub Releases 已标记 Latest，4 个上传资产齐全：Setup.exe、.blockmap、`latest.yml`、SHA256 清单；Portable ZIP 只保留本地，不在远端下载列表）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,7 +33,7 @@
 
 ## Release Memory
 
-- `v1.2.87`（2026-08-04）继续优化桌面歌词 30/60 FPS 热路径：相同“原始文本 + 单/双行模式”复用归一化结果；光效画布将 Unicode 字形数组与字宽一起缓存，描边和填充复用同一份字形，不再每帧 `Array.from()`。新增热路径回归、全部发布页面内联脚本完整解析门禁，并让 GitHub Actions 直接检查 `public/app.js`。歌词文本、位置、颜色、光效、播放时钟、鼠标穿透和顶部自动避让语义保持不变；全量 Node 回归 `193/193` 通过。安装器 `103333797` 字节 / SHA256 `91b8dc27601a4c71c9ef7d4b1c6bcee5f8e5fa5ae6183a92fde875782ceee8b8`；blockmap `110198` 字节 / `6ba77e9954e0a5d584af0ffd9040e13b888c995653267234dc3c72bbd2541561`；`latest.yml` `350` 字节 / `8fa7703d64797fddb4d39549251fb21dacb063aea091543589f58ccdfce93413`；本地 Portable ZIP `144915948` 字节 / `91c33495ede6c78dd4aabe0c0b1b61cdbd002cd41b504428d2cdd30aac1d2252`。
+- `v1.2.87`（2026-08-04）继续优化桌面歌词 30/60 FPS 热路径：相同“原始文本 + 单/双行模式”复用归一化结果；光效画布将 Unicode 字形数组与字宽一起缓存，描边和填充复用同一份字形，不再每帧 `Array.from()`。新增热路径回归、全部发布页面内联脚本完整解析门禁，并让 GitHub Actions 直接检查 `public/app.js`。歌词文本、位置、颜色、光效、播放时钟、鼠标穿透和顶部自动避让语义保持不变；全量 Node 回归 `193/193` 通过，CI run `30872687807` 成功。GitHub Latest 已正式发布，中文正文 UTF-8 回读正常，四个远端上传资产的大小与 SHA256 均与本地一致。安装器 `103333797` 字节 / SHA256 `91b8dc27601a4c71c9ef7d4b1c6bcee5f8e5fa5ae6183a92fde875782ceee8b8`；blockmap `110198` 字节 / `6ba77e9954e0a5d584af0ffd9040e13b888c995653267234dc3c72bbd2541561`；`latest.yml` `350` 字节 / `8fa7703d64797fddb4d39549251fb21dacb063aea091543589f58ccdfce93413`；本地 Portable ZIP `144915948` 字节 / `91c33495ede6c78dd4aabe0c0b1b61cdbd002cd41b504428d2cdd30aac1d2252`。
 - `v1.2.86`（2026-08-04）修复 GitHub 发布链路：将完整源码推进默认 `main`，新增 Windows GitHub Actions CI（安装依赖、全量 Node 测试、语法检查、空白检查），并修正 Release 对 Portable ZIP 远端状态的错误描述。安装器内已复核 `APP_VERSION = 1.2.86` 和桌面歌词物理屏幕裁切修复；全量回归 `190/190` 通过。GitHub Latest 已正式发布，`main` 和 tag 指向同一发布提交，CI 成功。正式远端资产仅上传 Setup.exe、blockmap、`latest.yml` 和 SHA256 清单；Portable ZIP 仅保留本地。安装器 `103331153` 字节 / SHA256 `18971d4a85a2e3f186534205b980e5bb85b2ba28576dce9348dd45ed106eaed1`。
 - `v1.2.83`（2026-08-03）更新下载和快速补丁状态轮询改为单飞请求：上一轮未完成时不叠加请求；通过轮询代际和任务 ID 校验拒绝旧任务迟到响应，完成/失败/切换时释放定时器与在途标记。桌面歌词提示顶部空间不足时自动移到歌词下方；手动拖动后的窗口 bounds 在重启后优先恢复，关闭时补存一次。新增更新轮询和桌面歌词布局回归测试，当前全量回归 `180/180` 通过。
 - `v1.2.83` 本地资产：安装器 `103329984` 字节 / SHA256 `78e3f30204efc22fabde17805d6013c2346879c9d6b8523d9cb2d4a4598f2eab`；blockmap `110296` 字节 / `aa76ad11a4bae1458a0cf003496687e0e6c94e0adaf3e8a158d3736964b494d2`；`latest.yml` `350` 字节 / `fc5157969533940f17dd6e9bb247b6b9ea08fc45bb78904689b46ac5319a6b8f`；Portable ZIP `144914741` 字节 / `db5f34525aae5a28ef2d8a71b7dc8635c70d389b31fb1fdb6c8906d959949bc7`。本地资产已生成，GitHub Release 待上传。
