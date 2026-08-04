@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.86`；本轮将完整源码推进默认 `main`、新增 GitHub Actions CI，并准备重新发布 GitHub Latest。
+- 当前源码检查点：`v1.2.86`；桌面歌词物理裁切修复已升级为可自动发现的新版本，完整源码与 GitHub 默认 `main` 同步，并新增 GitHub Actions CI。
 - 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.57`（tag 提交 `c01dbe9`，GitHub Releases 已标记 Latest，4 资产齐全：Setup.exe/.blockmap/latest.yml/`1.2.56 -> 1.2.57` 快速补丁；补丁仅含 `public/index.html` 与 `package.json` / `package-lock.json` 版本元数据，不含门禁、测试或脚本）；远端 `main` 不是本轮发布基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -686,3 +686,12 @@
 - 验证：全量 Node 回归 `189/189` 通过；`desktop/main.js`、`desktop/overlay-preload.js`、`server.js` 语法检查和 `git diff --check` 通过。
 - 修复重发资产：`Mineradio-1.2.85-Setup.exe` `103330816` 字节 / SHA256 `409e36493bbf4738fdf80d6fe3a27d7235e9302d014bcbaeeeb188443d520650`；blockmap `110399` 字节 / `ff93aa3b112348a4b34ed9c5dfbd9514d855e8d7c95ff25d91d1d54a309d7e10`；`latest.yml` `350` 字节 / `b2e7cc153b778a2b3055c0024a075352e0e4ef8376eb59724081d433ef12ba1a`；Portable ZIP `144915590` 字节 / `a05c2f02b0dbbba64dbfcdfb8bb48831792e8e462f7e97bedd13da3cbce41a6c`。
 - GitHub Release 已覆盖安装器、blockmap、`latest.yml` 和 SHA256 清单共 4 项；Portable ZIP 因大文件上传超时未放入远端，保留本地产物，不影响自动更新链路。
+
+### 2026-08-04 - v1.2.86 桌面歌词修复与 GitHub 发布链路完善
+
+- 将 `v1.2.85` 同版本修复重发提升为 `v1.2.86`，确保已安装旧 `1.2.85` 的客户端满足 `latestVersion > APP_VERSION`，能够发现更新。
+- 保留 `positionInteractionHint()` 的上下候选可见高度比较，以及主进程 `mineradio-desktop-lyrics-window-geometry` 传递的 `topInset/bottomInset`；窗口拖到物理显示器上沿外时，歌词调整栏仍会转到实际可见的一侧。
+- 当前完整源码同步到 GitHub 默认 `main`，并新增 Windows GitHub Actions CI：`npm ci --ignore-scripts`、全量 Node 测试、主进程/预加载/服务端语法检查和空白检查。
+- 本地验证：全量 Node 回归 `190/190`；`server.js`、`desktop/main.js`、`desktop/overlay-preload.js`、`public/app.js` 语法检查和 `git diff --check` 通过；打包后的 asar 含 `APP_VERSION = '1.2.86'` 和桌面歌词物理裁切修复。
+- 发布清单只列实际远端存在的四个资产：安装器、blockmap、`latest.yml` 和 SHA256 清单；Portable ZIP 只保留本地，不得在 Release 正文写成可远端下载。
+- 本地资产：安装器 `103331153` 字节 / SHA256 `18971d4a85a2e3f186534205b980e5bb85b2ba28576dce9348dd45ed106eaed1`；blockmap `110176` 字节 / `d69b25649d685243a389b7bb417ac4e4fc698781a8300234051157dc5c6178c3`；`latest.yml` `350` 字节 / `c4eb389b66b9e846f3075e2ca98f9024674f2e823d03e529b690d9a94c959245`；本地 Portable ZIP `144915599` 字节 / `bc6e68aed9ae3ef85d7cc3e0f24196434cb0e9c31baf93672693ccb1a81ded4b`。

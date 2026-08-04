@@ -1,8 +1,11 @@
-## v1.2.86 GitHub 发布链路修复
+## v1.2.86 桌面歌词修复与发布链路完善
 
+- 将 `v1.2.85` 的桌面歌词修复提升为新版本；已安装 `1.2.85` 的客户端可通过版本比较正常发现更新。
+- 保留窗口被拖到物理屏幕顶部之外时的裁切量同步，歌词调整栏会自动移动到实际可见区域。
 - 将当前完整源码推进 GitHub 默认 `main`，仓库首页、clone 源码与安装包版本恢复一致。
 - 新增 GitHub Actions Windows CI：依赖安装、全量 Node 回归、主进程/预加载/服务端语法检查和 `git diff --check` 都会在 push、PR 时自动执行。
-- 修正上一版 Release 对 Portable ZIP 的错误描述；正式发布资产只保留安装器、blockmap、`latest.yml` 和 SHA256 清单，避免用户下载到不一致的旧包。
+- 正式发布资产只保留安装器、blockmap、`latest.yml` 和 SHA256 清单；Portable ZIP 只保留本地产物，避免 Release 正文错误声称远端可下载。
+- 发布前全量 Node 回归 `190/190` 通过，安装器、blockmap、`latest.yml` 和本地 Portable ZIP 均已生成并校验。
 
 ## v1.2.85 桌面歌词调整栏自动避让修复重发
 

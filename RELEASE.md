@@ -1,15 +1,17 @@
 ﻿# 鍙戝竷娴佺▼
 
-## v1.2.86 GitHub 发布链路修复
+## v1.2.86 桌面歌词修复与发布链路完善
 
-- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.86`。
-- 将包含桌面歌词物理屏幕裁切修复的当前源码同步到默认 `main`，使 GitHub 仓库首页和发布包保持同一提交链。
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.86`；这是对 `1.2.85` 修复重发的正式版本升级。
+- 保留桌面歌词顶部物理裁切修复；旧版 `1.2.85` 客户端会因版本号变大而进入自动更新链路。
+- 将包含修复的当前源码同步到默认 `main`，使 GitHub 仓库首页和发布包保持同一提交链。
 - 新增 `.github/workflows/verify.yml`：Windows CI 在 `main`、`codex/**` push、向 `main` 的 PR 和手动触发时执行 `npm ci --ignore-scripts`、全量 Node 测试、JavaScript 语法检查和空白检查。
-- Release 标题使用 `Mineradio v1.2.86 GitHub 发布链路修复版`，目标为 GitHub Latest Release。
+- Release 标题使用 `Mineradio v1.2.86 桌面歌词修复与发布链路完善版`，目标为 GitHub Latest Release。
 - 发布资产：`Mineradio-1.2.86-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.2.86-SHA256SUMS.txt`；Portable ZIP 只保留本地产物，未上传时不得在 Release 正文写成已保留远端。
 - 构建验证：全量 Node 回归 `190/190` 通过，`desktop/main.js`、`desktop/overlay-preload.js`、`server.js` 与 `public/app.js` 语法检查通过，`git diff --check` 通过；打包后的 asar 已确认含 `1.2.86` 和桌面歌词物理屏幕裁切修复。
 - 产物大小：安装器 `103331153` 字节；blockmap `110176` 字节；`latest.yml` `350` 字节；本地 Portable ZIP `144915599` 字节。
 - SHA256：安装器 `18971d4a85a2e3f186534205b980e5bb85b2ba28576dce9348dd45ed106eaed1`；blockmap `d69b25649d685243a389b7bb417ac4e4fc698781a8300234051157dc5c6178c3`；`latest.yml` `c4eb389b66b9e846f3075e2ca98f9024674f2e823d03e529b690d9a94c959245`；本地 Portable ZIP `bc6e68aed9ae3ef85d7cc3e0f24196434cb0e9c31baf93672693ccb1a81ded4b`。
+- `latest.yml` 的 Setup SHA512：`+EEqobVskpxNt/xESC/s8IujlubFCh+kSq24vhXZBlKRAoL2rSi7W/dYZg2d2aeDwbxxvV/KgsdpoPZKk6QO/A==`。
 
 ## v1.2.85 桌面歌词调整栏自动避让修复重发
 
