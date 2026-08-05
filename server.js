@@ -563,7 +563,7 @@ function normalizeManifestUpdateInfo(data) {
 async function readUpdateManifest(ref) {
   const value = String(ref || '').trim();
   if (!value) throw new Error('UPDATE_MANIFEST_MISSING');
-  if (/^https?:\/\//i.test(value)) {
+  if (/^https:\/\//i.test(value)) {
     const resp = await fetch(value, {
       headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
     });
