@@ -13,6 +13,8 @@
 - SHA256：安装器 `61bc45e9b966acf426f0fabdcab201f1bc0893a61c8f7a85d068344d5ce62d9d`；blockmap `4d1a008ee6c301d7e3e5ce747fa39bb79209e269c8a645b1feafc1a5d1ad68f9`；`latest.yml` `a1f989ac17bbe839157a94d8423b63cd99ca7b5a85f802a0bee816bc787a41ed`；本地 Portable ZIP `8bc8a341f5c6cc134862fdb9bfb9328dd6ca637d219f1c451fa45d8c2e1f6ff8`。
 - `latest.yml` 的 Setup SHA512：`BarG1GWE8LV8lDZIQhZMykqfJi/GNRM+9RkSvUyRvMe3xbtkDvNJFN6Fp6UxkVFOmGByG31fIOiK/kb9cHtZ2w==`。
 - 安装器沿用现有 `signAndEditExecutable: false` 配置，`Get-AuthenticodeSignature` 返回 `NotSigned`。
+- GitHub 重发验证：`main` CI run `30994715092` 成功；annotated tag `v1.2.91` 已强制更新并解引用到源码提交 `4294b856f7239d54c89c79adc88a6ae0b37fce77`；Release `https://github.com/oirge/Mineradio/releases/tag/v1.2.91` 继续标记 Latest，且不是 draft 或 prerelease。
+- 远端资产回读验证：现有四个 Release 资产均已覆盖；Setup、blockmap、`latest.yml` 和 SHA256 清单重新下载后的文件大小与 SHA256 均与本地重发产物完全一致，Release 正文不包含 Unicode replacement character。
 
 ## v1.2.90 更新介绍清洗与乱码防护
 
