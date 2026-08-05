@@ -445,7 +445,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.88';
+var APP_VERSION = '1.2.89';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -26703,6 +26703,7 @@ async function restartForAppliedPatch() {
   if (!updatePreviewState.restartRequired) return;
   try {
     if (window.desktopWindow && typeof window.desktopWindow.restartApp === 'function') {
+      flushPersistentVisualState();
       await window.desktopWindow.restartApp();
       return;
     }

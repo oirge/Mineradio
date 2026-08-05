@@ -1153,8 +1153,14 @@ function setDesktopLyricsBounds(bounds) {
   }, 120);
 }
 
-function rememberDesktopLyricsBounds() {
-  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed() || desktopLyricsProgrammaticMove) return;
+/**
+ * 保存桌面歌词用户坐标；force 用于拖动结束或退出时绕过短暂的程序定位保护。
+ * @param {{force?: boolean}=} options 保存选项。
+ * @returns {void}
+ */
+function rememberDesktopLyricsBounds(options = {}) {
+  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
+  if (desktopLyricsProgrammaticMove && options.force !== true) return;
   desktopLyricsUserBounds = constrainDesktopLyricsBounds(desktopLyricsWindow.getBounds());
   const signature = desktopLyricsBoundsSignature(desktopLyricsUserBounds);
   if (signature === desktopLyricsSavedBoundsSignature) return;
@@ -1622,9 +1628,11 @@ function createDesktopLyricsWindow(payload = {}) {
 
 /**
  * 关闭桌面歌词窗口和轮询进程，并释放歌词及节奏图状态。
+ * @param {{broadcast?: boolean}=} options 是否向主 renderer 广播关闭状态。
  * @returns {void}
  */
-function closeDesktopLyricsWindow() {
+function closeDesktopLyricsWindow(options = {}) {
+  const broadcast = options.broadcast !== false;
   desktopLyricsStateCache.setEnabled(false);
   desktopLyricsPointerCapture = false;
   desktopLyricsMouseIgnored = null;
@@ -1634,11 +1642,12 @@ function closeDesktopLyricsWindow() {
   desktopLyricsWindowGeometrySignature = '';
   stopDesktopLyricsMousePoller();
   if (desktopLyricsWindow && !desktopLyricsWindow.isDestroyed()) {
+    rememberDesktopLyricsBounds({ force: true });
     sendDesktopLyricsState();
     desktopLyricsWindow.close();
   }
   desktopLyricsWindow = null;
-  broadcastDesktopLyricsEnabledState(false);
+  if (broadcast) broadcastDesktopLyricsEnabledState(false);
 }
 
 function nativeWindowHandleDecimal(win) {
@@ -2308,7 +2317,7 @@ function setMiniPlayerMode(mode) {
 
 function closeOverlayWindows() {
   miniPlayerActive = false;
-  closeDesktopLyricsWindow();
+  closeDesktopLyricsWindow({ broadcast: false });
   closeWallpaperWindow();
   closeMiniPlayerWindow();
 }
@@ -2525,6 +2534,7 @@ ipcMain.handle('mineradio-open-update-installer', async (_event, filePath) => {
 
 ipcMain.handle('mineradio-restart-app', async () => {
   try {
+    closeOverlayWindows();
     app.relaunch();
     app.exit(0);
     return { ok: true };
@@ -2753,7 +2763,7 @@ async function handleDesktopLyricsMoveBy(event, dx, dy) {
     };
     desktopLyricsWindow.setBounds(next, false);
     sendDesktopLyricsWindowGeometry(true);
-    rememberDesktopLyricsBounds();
+    rememberDesktopLyricsBounds({ force: true });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message || 'DESKTOP_LYRICS_MOVE_FAILED' };

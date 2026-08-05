@@ -1,5 +1,18 @@
 ﻿# 发布流程
 
+## v1.2.89 桌面歌词状态与位置持久化修复
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.89`。
+- 软件退出、主窗口销毁和更新重启仅拆卸桌面歌词覆盖层，不再把系统拆卸误写成用户关闭偏好；用户主动关闭仍会同步保存关闭状态。
+- 桌面歌词拖动与关闭时强制保存最终窗口 bounds；快速补丁立即重启前同步保存视觉配置，避免直接退出跳过 renderer 卸载保存。
+- 新增 `tests/desktop-lyrics-persistence.test.js`；全量 Node 回归 `196/196` 通过。
+- 不改变 UI、布局、玻璃质感、歌词文本、字号、颜色、光效、播放时钟、鼠标穿透或桌面歌词交互语义。
+- Release 标题使用 `Mineradio v1.2.89 桌面歌词状态与位置持久化修复版`，目标为 GitHub Latest Release。
+- 发布资产只上传安装器、blockmap、`latest.yml` 和 UTF-8 SHA256 清单；Portable ZIP 仅本地保留。
+- 构建验证：全量 Node 回归 `196/196`、关键 JavaScript 语法、`git diff --check` 和打包后 `app.asar` 内容核对通过；安装器 `103333863` 字节，blockmap `110281` 字节，`latest.yml` `350` 字节，本地 Portable ZIP `144916275` 字节。
+- SHA256：安装器 `031958f60adc4bab756f39f19df6a5186deb320bd9926ced834f67699e9de67a`；blockmap `cddcccb4d10f947608dde514475a3de7e419e3a3cb6f1537dbf1230908589c88`；`latest.yml` `4adf2244632814142a82c40a35240c77b765e80c0bdf6265d488147fb4dc2a5d`；本地 Portable ZIP `8881e2ee5990d526a604e6fe3e87dc6aca1ea65e3cb72be47d30508ad39ca88d`。
+- `latest.yml` 的 Setup SHA512：`xs4kgBz3NNm64LOcN6TMtUo2v9TFJyW6fj9EEDfbcEi/iRBh35/gbuCgnxkScO0ugA0wjZJlkS/DwKlokY3igw==`。
+
 ## v1.2.88 Home 空库波形热路径优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.88`。
