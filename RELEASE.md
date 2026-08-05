@@ -1,5 +1,13 @@
 ﻿# 发布流程
 
+## v1.2.91 桌面歌词位置持久化修复
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.91`。
+- 修复桌面歌词纵向位置偏好与旧手动 `desktopLyricsBounds` 并存时，重启由旧像素坐标覆盖新偏好的问题；调整位置时清除旧坐标，拖动位置仍正常持久化。
+- 新增桌面歌词持久化回归断言；全量 Node 回归 `201/201` 通过，关键 JavaScript 语法和 `git diff --check` 通过。
+- 不改变桌面歌词 UI、布局、字号、透明度、光效、播放时钟、鼠标穿透或交互入口。
+- Release 标题使用 `Mineradio v1.2.91 桌面歌词位置持久化修复版`，目标为 GitHub Latest Release。
+
 ## v1.2.90 更新介绍清洗与乱码防护
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.90`。

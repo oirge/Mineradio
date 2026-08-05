@@ -209,6 +209,7 @@
 - 桌面歌词窗口的 `closed` 释放口 `releaseOwnedDesktopLyricsWindow` 必须调用 `stopDesktopLyricsMousePoller()`，让中键轮询子进程随窗口意外关闭（崩溃/系统销毁）一同终止；正常关闭路径已先停轮询，此调用幂等。回归测试断言该函数体包含 `stopDesktopLyricsMousePoller()`。
 - 桌面歌词和壁纸主进程状态统一由 `DesktopOverlayStateCache` 管理；`setEnabled(false)` 必须替换为最小关闭状态，禁用期间 `apply()` 返回 false。renderer 的禁用路径只发送最小关闭状态，启用后再发送当前完整载荷。
 - 覆盖层 BrowserWindow 的事件回调必须捕获局部 `win` 并验证仍持有全局槽位；状态补丁应由 `createDesktopLyricsWindow(payload)` / `createWallpaperWindow(payload)` 一次完成缓存和窗口副作用。
+- `createDesktopLyricsWindow()` 首次接收 renderer 恢复的 `y` 偏好时必须保留已恢复的手动 bounds；现存窗口收到用户纵向位置调整时，必须同时清除内存和磁盘中的旧 `desktopLyricsBounds`，避免旧像素坐标在重启时覆盖新的比例偏好。
 - 桌面歌词 IPC 必须区分角色：启用和状态更新只接受当前主 renderer；关闭允许主 renderer 或当前歌词 renderer；移动、热区、指针和锁定只接受当前歌词 renderer，旧 sender 返回 ignored。
 - renderer 关闭桌面歌词时立即清空歌词时间、签名、节奏签名和歌词行快照；关闭壁纸时立即清空壁纸时间与封面签名，不能依赖 `cancelDesktopOverlaySync()`。
 - 本地曲库 IndexedDB 可持久保留多个文件夹，但 renderer 内存只缓存当前文件夹的 index；snapshot 由恢复入口按需读取即用即放。切库递增 generation，异步回填必须同时匹配 folderPath 和 generation。

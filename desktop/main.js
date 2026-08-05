@@ -1154,6 +1154,17 @@ function setDesktopLyricsBounds(bounds) {
 }
 
 /**
+ * 清除手动桌面歌词坐标，避免旧 bounds 在重启后覆盖新的纵向比例偏好。
+ * @returns {void}
+ */
+function clearDesktopLyricsUserBounds() {
+  const shouldPersist = desktopLyricsUserBounds !== null || desktopLyricsSavedBoundsSignature !== '';
+  desktopLyricsUserBounds = null;
+  desktopLyricsSavedBoundsSignature = '';
+  if (shouldPersist) writeDesktopShellSettings({ desktopLyricsBounds: null });
+}
+
+/**
  * 保存桌面歌词用户坐标；force 用于拖动结束或退出时绕过短暂的程序定位保护。
  * @param {{force?: boolean}=} options 保存选项。
  * @returns {void}
@@ -1507,7 +1518,7 @@ function createDesktopLyricsWindow(payload = {}) {
   // 首次启动时 renderer 会重新发送保存的 y 偏好；它不应覆盖已经从磁盘恢复的手动窗口坐标。
   // 只有现存窗口收到用户的 y 调整时，才清除手动 bounds 并切回比例定位。
   const resetManualBounds = yChanged && desktopLyricsWindow && !desktopLyricsWindow.isDestroyed();
-  if (resetManualBounds) desktopLyricsUserBounds = null;
+  if (resetManualBounds) clearDesktopLyricsUserBounds();
   if (desktopLyricsWindow && !desktopLyricsWindow.isDestroyed()) {
     if (resetManualBounds) {
       positionDesktopLyricsWindow(state, { force: true });

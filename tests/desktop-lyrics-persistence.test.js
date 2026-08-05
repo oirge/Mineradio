@@ -83,3 +83,30 @@ test('desktop lyrics user movement can force the final bounds to disk', () => {
   assert.match(moveHandlerSource, /rememberDesktopLyricsBounds\(\{ force: true \}\);/);
   assert.match(readFunction('closeDesktopLyricsWindow'), /rememberDesktopLyricsBounds\(\{ force: true \}\);/);
 });
+
+test('desktop lyrics y preference clears restored manual bounds from memory and disk', () => {
+  const writes = [];
+  const context = {
+    desktopLyricsUserBounds: { x: 365, y: 0, width: 1382, height: 410 },
+    desktopLyricsSavedBoundsSignature: '365|0|1382|410',
+    writeDesktopShellSettings: (patch) => writes.push(patch),
+  };
+
+  vm.runInNewContext(
+    readFunction('clearDesktopLyricsUserBounds')
+      + '\nthis.clearDesktopLyricsUserBounds = clearDesktopLyricsUserBounds;',
+    context,
+  );
+
+  context.clearDesktopLyricsUserBounds();
+  assert.equal(context.desktopLyricsUserBounds, null);
+  assert.equal(context.desktopLyricsSavedBoundsSignature, '');
+  assert.deepEqual(JSON.parse(JSON.stringify(writes)), [{ desktopLyricsBounds: null }]);
+
+  context.clearDesktopLyricsUserBounds();
+  assert.equal(writes.length, 1);
+
+  const createSource = readFunction('createDesktopLyricsWindow');
+  assert.match(createSource, /if \(resetManualBounds\) clearDesktopLyricsUserBounds\(\);/);
+  assert.doesNotMatch(createSource, /if \(resetManualBounds\) desktopLyricsUserBounds = null;/);
+});
