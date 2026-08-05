@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.90`；更新介绍章节过滤、Markdown 清洗、BOM/Latin-1 乱码防护已加入，桌面歌词持久化与既有性能优化继续保留。
+- 当前源码检查点：`v1.2.91`；桌面歌词纵向位置调整会清除旧手动 bounds，避免重启后旧坐标覆盖新偏好，更新介绍清洗与既有性能优化继续保留。
 - 当前工作分支：`codex/complete-v1.2.79`。
-- 最近正式安装包 Release 基线：`v1.2.90`（2026-08-05，tag 构建源码提交 `c38a46e`，GitHub Releases 已标记 Latest，4 个上传资产齐全：Setup.exe、.blockmap、`latest.yml`、SHA256 清单；Portable ZIP 只保留本地，不在远端下载列表）。
+- 最近正式安装包 Release 基线：`v1.2.91`（2026-08-05，tag 构建源码提交 `63e27ad`，GitHub Releases 已标记 Latest，4 个上传资产齐全：Setup.exe、.blockmap、`latest.yml`、SHA256 清单；Portable ZIP 只保留本地，不在远端下载列表）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,8 @@
 
 ## Release Memory
 
+- `v1.2.91`（2026-08-05）修复桌面歌词位置重启恢复：renderer 调整纵向位置时，主进程除清空内存中的手动 bounds 外，还会把磁盘 `desktop-shell-settings.json` 的旧 `desktopLyricsBounds` 置空，避免旧像素坐标在下次启动覆盖新的 `desktopLyricsY` 比例偏好；首次启动恢复手动位置和直接拖动保存语义保持不变。新增旧坐标清理与重复写入防抖回归，全量 Node 回归 `201/201` 通过。安装器 `103332941` 字节 / SHA256 `46095770a4963a1369a85a0ec208aa0aebab5cfe56df82e7d7a6f5a62e4b18ed`；blockmap `110292` 字节 / `dbeda02e77d7dd4e0b6152e027cbe1cb61c8f3467a9f857e195dcceeeb17b508`；`latest.yml` `350` 字节 / `249149210730ade31a032fdaf3348a1fd59c349f267c3a0f54e179f78dd610eb`；本地 Portable ZIP `144917127` 字节 / `f9e2e7fcd2b716f81d9a12bc0557f14bbc83709bc58254528544a8d02b8b05fc`。打包后的 `app.asar` 已确认包含版本 `1.2.91` 与 `clearDesktopLyricsUserBounds` 修复。
+- `v1.2.91` 已完成 GitHub 正式发布：Release `https://github.com/oirge/Mineradio/releases/tag/v1.2.91` 已标记 Latest，annotated tag 解引用到源码提交 `63e27ad09b55af2dac6ca959bc2ffc0062d51ddb`，`main` CI run `30987353934` 成功；远端仅保留四个自动更新资产，重新下载后的文件大小与 SHA256 均和本地一致，Release 正文无 replacement character。
 - `v1.2.90`（2026-08-05）修复更新介绍提取链路：GitHub Release 和自定义 manifest 不再把“修复内容 / 验证 / 下载”等章节标题当摘要，验证、下载、安装与校验段落不再混入更新条目；统一清理 Markdown 链接、图片、重复项和 SHA 摘要，并恢复 UTF-8 BOM 与常见 Latin-1 乱码。真实 `/api/update/latest` 已确认摘要取首条修复内容；新增 `tests/update-release-notes.test.js`，全量 Node 回归 `200/200` 通过。安装器 `103332320` 字节 / SHA256 `761fae6bb44d05e1b363b21500dac24b7fd297df88071cfe454f6646b5fd02fc`；blockmap `110211` 字节 / `3eebf96f1ff581faae08dcee59bba3f125cebb74dae073a759e49c8a45b72f86`；`latest.yml` `350` 字节 / `d3b66834134a6c8e3575d96bd03a6b30025cdd658bd06fbf39b79892635412e5`；本地 Portable ZIP `144917024` 字节 / `0fe0cac83b0fa80ab9cd93bbfeabd5beb4dff1347d8757fd0dda315e87f937e1`。打包后的 `app.asar` 已确认包含版本 `1.2.90`、章节过滤、乱码恢复与 manifest 共用归一化链路。
 - `v1.2.90` 已完成 GitHub 正式发布：Release `https://github.com/oirge/Mineradio/releases/tag/v1.2.90` 已标记 Latest，annotated tag 解引用到源码提交 `c38a46ea1284bb5075652eb332889cd12cea17e1`，`main` CI run `30972509285` 成功；远端仅保留四个自动更新资产，重新下载后的文件大小与 SHA256 均和本地一致，Release 正文无 replacement character。GitHub Issue `#11` 已回填修复说明并关闭。
 - `v1.2.89`（2026-08-05）修复桌面歌词重启持久化：软件退出、主窗口销毁和更新重启只拆卸覆盖层，不再向主 renderer 反写关闭偏好；用户主动关闭仍保存为关闭。拖动、窗口关闭和立即重启前强制保存最终 bounds 与视觉配置，避免程序定位保护或 `app.exit()` 吞掉最后状态。新增 `tests/desktop-lyrics-persistence.test.js`，全量 Node 回归 `196/196` 通过；UI、布局、歌词样式、播放时钟和桌面歌词交互保持不变。安装器 `103333863` 字节 / SHA256 `031958f60adc4bab756f39f19df6a5186deb320bd9926ced834f67699e9de67a`；blockmap `110281` 字节 / `cddcccb4d10f947608dde514475a3de7e419e3a3cb6f1537dbf1230908589c88`；`latest.yml` `350` 字节 / `4adf2244632814142a82c40a35240c77b765e80c0bdf6265d488147fb4dc2a5d`；本地 Portable ZIP `144916275` 字节 / `8881e2ee5990d526a604e6fe3e87dc6aca1ea65e3cb72be47d30508ad39ca88d`。打包后的 `app.asar` 已确认包含版本 `1.2.89`、退出不反写关闭、最终 bounds 强制保存和更新重启前状态 flush。

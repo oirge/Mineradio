@@ -7,6 +7,12 @@
 - 新增桌面歌词持久化回归断言；全量 Node 回归 `201/201` 通过，关键 JavaScript 语法和 `git diff --check` 通过。
 - 不改变桌面歌词 UI、布局、字号、透明度、光效、播放时钟、鼠标穿透或交互入口。
 - Release 标题使用 `Mineradio v1.2.91 桌面歌词位置持久化修复版`，目标为 GitHub Latest Release。
+- 构建验证：打包后的 `app.asar` 已确认包含版本 `1.2.91` 与 `clearDesktopLyricsUserBounds` 修复；安装器 `103332941` 字节，blockmap `110292` 字节，`latest.yml` `350` 字节，本地 Portable ZIP `144917127` 字节。
+- SHA256：安装器 `46095770a4963a1369a85a0ec208aa0aebab5cfe56df82e7d7a6f5a62e4b18ed`；blockmap `dbeda02e77d7dd4e0b6152e027cbe1cb61c8f3467a9f857e195dcceeeb17b508`；`latest.yml` `249149210730ade31a032fdaf3348a1fd59c349f267c3a0f54e179f78dd610eb`；本地 Portable ZIP `f9e2e7fcd2b716f81d9a12bc0557f14bbc83709bc58254528544a8d02b8b05fc`。
+- `latest.yml` 的 Setup SHA512：`4pGPBOJpkSoDQFKpbmZWcqRNZ232vm4EACy8FSr3HOFFe5CAFnrkJ4gEWbY5vKhAa8BaKCI0bb1pRF0oyc3G6A==`。
+- 安装器沿用现有 `signAndEditExecutable: false` 配置，`Get-AuthenticodeSignature` 返回 `NotSigned`。
+- GitHub 发布验证：`main` CI run `30987353934` 成功；annotated tag `v1.2.91` 解引用到源码提交 `63e27ad09b55af2dac6ca959bc2ffc0062d51ddb`；Release `https://github.com/oirge/Mineradio/releases/tag/v1.2.91` 已标记 Latest，且不是 draft 或 prerelease。
+- 远端资产回读验证：Release 仅包含 Setup、blockmap、`latest.yml` 和 SHA256 清单四个资产；重新下载后文件大小和 SHA256 均与本地发布产物完全一致，Release 正文不包含 Unicode replacement character。
 
 ## v1.2.90 更新介绍清洗与乱码防护
 
