@@ -110,3 +110,54 @@ test('desktop lyrics y preference clears restored manual bounds from memory and 
   assert.match(createSource, /if \(resetManualBounds\) clearDesktopLyricsUserBounds\(\);/);
   assert.doesNotMatch(createSource, /if \(resetManualBounds\) desktopLyricsUserBounds = null;/);
 });
+
+test('desktop lyrics preserves a reachable partially offscreen drag position across restart', () => {
+  const writes = [];
+  const dragged = { x: 323, y: -171, width: 1382, height: 410 };
+  const context = {
+    screen: {
+      getDisplayMatching: () => ({ bounds: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    },
+    clampNumber: (value, min, max, fallback) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+    },
+    desktopLyricsWindow: {
+      isDestroyed: () => false,
+      getBounds: () => ({ ...dragged }),
+    },
+    desktopLyricsProgrammaticMove: false,
+    desktopLyricsUserBounds: null,
+    desktopLyricsSavedBoundsSignature: '',
+    writeDesktopShellSettings: (patch) => writes.push(patch),
+  };
+
+  vm.runInNewContext(
+    readFunction('desktopLyricsBoundsHasReachableArea')
+      + '\n' + readFunction('constrainDesktopLyricsBounds')
+      + '\n' + readFunction('desktopLyricsBoundsSignature')
+      + '\n' + readFunction('rememberDesktopLyricsBounds')
+      + '\nthis.constrainDesktopLyricsBounds = constrainDesktopLyricsBounds;'
+      + '\nthis.rememberDesktopLyricsBounds = rememberDesktopLyricsBounds;',
+    context,
+  );
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.constrainDesktopLyricsBounds(dragged, { allowPartial: true }))),
+    dragged,
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.constrainDesktopLyricsBounds(dragged))),
+    { x: 323, y: 0, width: 1382, height: 410 },
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.constrainDesktopLyricsBounds({ ...dragged, y: -380 }, { allowPartial: true }))),
+    { x: 323, y: 0, width: 1382, height: 410 },
+  );
+
+  context.rememberDesktopLyricsBounds({ force: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(writes)), [{ desktopLyricsBounds: dragged }]);
+
+  assert.match(readFunction('savedDesktopLyricsBounds'), /\}, \{ allowPartial: true \}\);/);
+  assert.match(readFunction('positionDesktopLyricsWindow'), /\{ allowPartial: !!shouldUseManualBounds \}/);
+});

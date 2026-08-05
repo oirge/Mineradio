@@ -1,18 +1,18 @@
 ﻿# 发布流程
 
-## v1.2.91 桌面歌词位置持久化修复
+## v1.2.91 桌面歌词手动位置持久化修复重发
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.91`。
-- 修复桌面歌词纵向位置偏好与旧手动 `desktopLyricsBounds` 并存时，重启由旧像素坐标覆盖新偏好的问题；调整位置时清除旧坐标，拖动位置仍正常持久化。
-- 新增桌面歌词持久化回归断言；全量 Node 回归 `201/201` 通过，关键 JavaScript 语法和 `git diff --check` 通过。
+- 现场确认运行版窗口实际位于 `y=-171`，但 `desktop-shell-settings.json` 被写成 `y=0`；根因是手动 bounds 在保存和恢复时复用了只允许完整位于屏幕内的夹紧逻辑。
+- 保存、恢复和重新定位手动 bounds 时允许保留仍有可操作区域可见的部分越界坐标；完全不可达的位置或显示器变化仍安全回到当前屏幕。
+- 保留纵向位置偏好清除旧手动 bounds 的修复；新增真实负坐标保存链路回归，全量 Node 回归 `202/202` 通过，关键 JavaScript 语法和 `git diff --check` 通过。
 - 不改变桌面歌词 UI、布局、字号、透明度、光效、播放时钟、鼠标穿透或交互入口。
-- Release 标题使用 `Mineradio v1.2.91 桌面歌词位置持久化修复版`，目标为 GitHub Latest Release。
-- 构建验证：打包后的 `app.asar` 已确认包含版本 `1.2.91` 与 `clearDesktopLyricsUserBounds` 修复；安装器 `103332941` 字节，blockmap `110292` 字节，`latest.yml` `350` 字节，本地 Portable ZIP `144917127` 字节。
-- SHA256：安装器 `46095770a4963a1369a85a0ec208aa0aebab5cfe56df82e7d7a6f5a62e4b18ed`；blockmap `dbeda02e77d7dd4e0b6152e027cbe1cb61c8f3467a9f857e195dcceeeb17b508`；`latest.yml` `249149210730ade31a032fdaf3348a1fd59c349f267c3a0f54e179f78dd610eb`；本地 Portable ZIP `f9e2e7fcd2b716f81d9a12bc0557f14bbc83709bc58254528544a8d02b8b05fc`。
-- `latest.yml` 的 Setup SHA512：`4pGPBOJpkSoDQFKpbmZWcqRNZ232vm4EACy8FSr3HOFFe5CAFnrkJ4gEWbY5vKhAa8BaKCI0bb1pRF0oyc3G6A==`。
+- Release 标题使用 `Mineradio v1.2.91 桌面歌词手动位置持久化修复重发版`，覆盖现有 GitHub Latest Release。
+- 同版本客户端不会触发版本号升级提示；已经安装旧 `1.2.91` 的设备需要手动覆盖安装重发安装包。
+- 构建验证：打包后的 `app.asar` 已确认包含版本 `1.2.91`、`desktopLyricsBoundsHasReachableArea()` 与手动 bounds 的 `allowPartial` 保存/恢复路径；安装器 `103334349` 字节，blockmap `110394` 字节，`latest.yml` `350` 字节，本地 Portable ZIP `144917458` 字节。
+- SHA256：安装器 `61bc45e9b966acf426f0fabdcab201f1bc0893a61c8f7a85d068344d5ce62d9d`；blockmap `4d1a008ee6c301d7e3e5ce747fa39bb79209e269c8a645b1feafc1a5d1ad68f9`；`latest.yml` `a1f989ac17bbe839157a94d8423b63cd99ca7b5a85f802a0bee816bc787a41ed`；本地 Portable ZIP `8bc8a341f5c6cc134862fdb9bfb9328dd6ca637d219f1c451fa45d8c2e1f6ff8`。
+- `latest.yml` 的 Setup SHA512：`BarG1GWE8LV8lDZIQhZMykqfJi/GNRM+9RkSvUyRvMe3xbtkDvNJFN6Fp6UxkVFOmGByG31fIOiK/kb9cHtZ2w==`。
 - 安装器沿用现有 `signAndEditExecutable: false` 配置，`Get-AuthenticodeSignature` 返回 `NotSigned`。
-- GitHub 发布验证：`main` CI run `30987353934` 成功；annotated tag `v1.2.91` 解引用到源码提交 `63e27ad09b55af2dac6ca959bc2ffc0062d51ddb`；Release `https://github.com/oirge/Mineradio/releases/tag/v1.2.91` 已标记 Latest，且不是 draft 或 prerelease。
-- 远端资产回读验证：Release 仅包含 Setup、blockmap、`latest.yml` 和 SHA256 清单四个资产；重新下载后文件大小和 SHA256 均与本地发布产物完全一致，Release 正文不包含 Unicode replacement character。
 
 ## v1.2.90 更新介绍清洗与乱码防护
 

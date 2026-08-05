@@ -1107,6 +1107,18 @@ function desktopLyricsBoundsSignature(bounds) {
   return `${Math.round(bounds.x)}|${Math.round(bounds.y)}|${Math.round(bounds.width)}|${Math.round(bounds.height)}`;
 }
 
+function desktopLyricsBoundsHasReachableArea(bounds, area) {
+  if (!bounds || !area) return false;
+  const left = Number(bounds.x);
+  const top = Number(bounds.y);
+  const width = Number(bounds.width);
+  const height = Number(bounds.height);
+  if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
+  const visibleWidth = Math.max(0, Math.min(left + width, area.x + area.width) - Math.max(left, area.x));
+  const visibleHeight = Math.max(0, Math.min(top + height, area.y + area.height) - Math.max(top, area.y));
+  return visibleWidth >= Math.min(width, 160) && visibleHeight >= Math.min(height, 96);
+}
+
 function savedDesktopLyricsBounds(value) {
   if (!value || typeof value !== 'object') return null;
   if (!Number.isFinite(Number(value.x)) || !Number.isFinite(Number(value.y))) return null;
@@ -1116,10 +1128,10 @@ function savedDesktopLyricsBounds(value) {
     y: Number(value.y),
     width: Number.isFinite(Number(value.width)) ? Number(value.width) : fallback.width,
     height: Number.isFinite(Number(value.height)) ? Number(value.height) : fallback.height,
-  });
+  }, { allowPartial: true });
 }
 
-function constrainDesktopLyricsBounds(bounds) {
+function constrainDesktopLyricsBounds(bounds, options = {}) {
   const display = screen.getDisplayMatching(bounds);
   const area = display.bounds;
   const next = {
@@ -1127,6 +1139,11 @@ function constrainDesktopLyricsBounds(bounds) {
     width: Math.round(Math.min(Math.max(320, bounds.width), area.width)),
     height: Math.round(Math.min(Math.max(180, bounds.height), area.height)),
   };
+  if (options.allowPartial === true && desktopLyricsBoundsHasReachableArea(next, area)) {
+    next.x = Math.round(next.x);
+    next.y = Math.round(next.y);
+    return next;
+  }
   const maxX = area.x + Math.max(0, area.width - next.width);
   const maxY = area.y + Math.max(0, area.height - next.height);
   next.x = Math.round(clampNumber(next.x, area.x, maxX, area.x));
@@ -1134,9 +1151,9 @@ function constrainDesktopLyricsBounds(bounds) {
   return next;
 }
 
-function setDesktopLyricsBounds(bounds) {
+function setDesktopLyricsBounds(bounds, options = {}) {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
-  const nextBounds = constrainDesktopLyricsBounds(bounds);
+  const nextBounds = constrainDesktopLyricsBounds(bounds, options);
   const currentBounds = desktopLyricsWindow.getBounds();
   if (
     currentBounds.x === nextBounds.x
@@ -1172,7 +1189,7 @@ function clearDesktopLyricsUserBounds() {
 function rememberDesktopLyricsBounds(options = {}) {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
   if (desktopLyricsProgrammaticMove && options.force !== true) return;
-  desktopLyricsUserBounds = constrainDesktopLyricsBounds(desktopLyricsWindow.getBounds());
+  desktopLyricsUserBounds = constrainDesktopLyricsBounds(desktopLyricsWindow.getBounds(), { allowPartial: true });
   const signature = desktopLyricsBoundsSignature(desktopLyricsUserBounds);
   if (signature === desktopLyricsSavedBoundsSignature) return;
   writeDesktopShellSettings({
@@ -1420,7 +1437,10 @@ function sendDesktopLyricsSizeState(size) {
 function positionDesktopLyricsWindow(payload = desktopLyricsStateCache.value, options = {}) {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
   const shouldUseManualBounds = desktopLyricsUserBounds && !options.force;
-  setDesktopLyricsBounds(shouldUseManualBounds ? desktopLyricsUserBounds : desktopLyricsDefaultBounds(payload));
+  setDesktopLyricsBounds(
+    shouldUseManualBounds ? desktopLyricsUserBounds : desktopLyricsDefaultBounds(payload),
+    { allowPartial: !!shouldUseManualBounds },
+  );
   setDesktopLyricsOpacity(payload.opacity);
 }
 
