@@ -1,5 +1,19 @@
 ﻿# 发布流程
 
+## v1.2.90 更新介绍清洗与乱码防护
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.90`。
+- GitHub Release 正文不再把“修复内容 / 验证 / 下载”等章节标题当作摘要或更新条目；验证、下载、安装和校验信息不会混入用户可见更新介绍。
+- 更新介绍统一处理 Markdown 链接、图片、重复项、SHA 摘要、UTF-8 BOM 和常见 Latin-1 乱码；不可恢复的替换字符或控制字符会被丢弃并回退到安全文案。
+- 自定义更新 manifest 的 `summary` / `notes` 与 GitHub Release 正文复用同一归一化链路。
+- 新增 `tests/update-release-notes.test.js`；真实 `/api/update/latest` 已确认摘要取首条修复内容，全量 Node 回归 `200/200` 通过。
+- 不改变更新面板布局、下载线路、快速补丁策略、安装器校验、UI、歌词、播放或视觉效果。
+- Release 标题使用 `Mineradio v1.2.90 更新介绍清洗与乱码防护版`，目标为 GitHub Latest Release。
+- 构建验证：关键 JavaScript 语法、`git diff --check`、全量 Node 回归 `200/200` 和打包后 `app.asar` 内容核对通过；安装器 `103332320` 字节，blockmap `110211` 字节，`latest.yml` `350` 字节，本地 Portable ZIP `144917024` 字节。
+- SHA256：安装器 `761fae6bb44d05e1b363b21500dac24b7fd297df88071cfe454f6646b5fd02fc`；blockmap `3eebf96f1ff581faae08dcee59bba3f125cebb74dae073a759e49c8a45b72f86`；`latest.yml` `d3b66834134a6c8e3575d96bd03a6b30025cdd658bd06fbf39b79892635412e5`；本地 Portable ZIP `0fe0cac83b0fa80ab9cd93bbfeabd5beb4dff1347d8757fd0dda315e87f937e1`。
+- `latest.yml` 的 Setup SHA512：`u6HQwjgFUsZG6I3TPp5IGxPqNeIw1yaFHUleIdYsbaSrXQ75J+dRMjDtOk20dAqSWupHyTN3L4onb57kuDVPGQ==`。
+- 安装器沿用现有 `signAndEditExecutable: false` 配置，`Get-AuthenticodeSignature` 返回 `NotSigned`。
+
 ## v1.2.89 桌面歌词状态与位置持久化修复
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.89`。

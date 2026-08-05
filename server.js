@@ -366,26 +366,71 @@ function compareVersions(a, b) {
   }
   return 0;
 }
+function releaseLineEncodingPenalty(value) {
+  let penalty = 0;
+  for (const char of String(value || '')) {
+    const code = char.charCodeAt(0);
+    if (code === 0xfffd) return Number.MAX_SAFE_INTEGER;
+    if (code >= 0x80 && code <= 0x9f) penalty += 2;
+  }
+  return penalty;
+}
+function repairReleaseLineEncoding(line) {
+  const text = String(line || '').replace(/^(?:\uFEFF|ï»¿)+/, '');
+  if (!text || !/^[\u0000-\u00ff]*$/.test(text) || !/[\u0080-\u00ff]/.test(text)) return text;
+  const repaired = Buffer.from(text, 'latin1').toString('utf8');
+  if (!repaired || repaired.includes('\uFFFD')) return text;
+  const originalCjk = (text.match(/[\u3400-\u9fff]/g) || []).length;
+  const repairedCjk = (repaired.match(/[\u3400-\u9fff]/g) || []).length;
+  return releaseLineEncodingPenalty(repaired) < releaseLineEncodingPenalty(text) || repairedCjk > originalCjk
+    ? repaired
+    : text;
+}
 function cleanReleaseLine(line) {
-  return String(line || '')
+  return repairReleaseLineEncoding(line)
     .replace(/^\s*#{1,6}\s*/, '')
     .replace(/^\s*[-*]\s+/, '')
     .replace(/^\s*\d+[.)]\s+/, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/<[^>]+>/g, ' ')
     .replace(/\*\*/g, '')
     .replace(/`/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
-function extractReleaseNotes(body) {
+function releaseSectionAction(text) {
+  const heading = String(text || '').replace(/[：:]+$/, '').trim();
+  if (/^(?:what'?s changed|changes|changelog|full changelog|release notes?|highlights?|更新日志|更新内容|本次更新|主要更新|重点更新|修复内容|问题修复|新增功能|功能更新|优化内容)$/i.test(heading)) return 'skip';
+  if (/^(?:verification|validation|tests?|downloads?|installation|assets?|checksums?|验证|测试|下载|安装|发布资产|校验|哈希)$/i.test(heading)) return 'stop';
+  return '';
+}
+function normalizeReleaseNotes(lines) {
   const notes = [];
-  String(body || '').split(/\r?\n/).forEach(line => {
-    const text = cleanReleaseLine(line);
-    if (!text) return;
-    if (/^(what'?s changed|changes|changelog|full changelog|更新日志)$/i.test(text)) return;
-    if (/^https?:\/\//i.test(text)) return;
-    if (text.length > 72) return;
+  const seen = new Set();
+  const source = Array.isArray(lines) ? lines : [lines];
+  for (const line of source) {
+    const raw = String(line || '').trim();
+    if (!raw || /^(?:```|~~~)/.test(raw) || /^!\[/.test(raw)) continue;
+    const text = cleanReleaseLine(raw);
+    if (!text) continue;
+    const sectionAction = releaseSectionAction(text);
+    if (sectionAction === 'stop' && notes.length) break;
+    if (sectionAction) continue;
+    if (/^https?:\/\//i.test(text) || /^[-=_]{3,}$/.test(text)) continue;
+    if (/[\uFFFD\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(text)) continue;
+    if (/\bsha(?:256|512)\b/i.test(text) || /^[a-f0-9]{32,}\s+/i.test(text)) continue;
+    if (text.length > 96) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     notes.push(text);
-  });
-  return notes.slice(0, 4);
+    if (notes.length >= 4) break;
+  }
+  return notes;
+}
+function extractReleaseNotes(body) {
+  return normalizeReleaseNotes(String(body || '').split(/\r?\n/));
 }
 function pickReleaseAsset(assets) {
   const list = Array.isArray(assets) ? assets : [];
@@ -477,9 +522,12 @@ function normalizeManifestUpdateInfo(data) {
     sha256: normalizeDigest(patch.sha256 || '', 'sha256').toLowerCase(),
     sha512: normalizeDigest(patch.sha512 || '', 'sha512'),
   } : null;
-  const notes = Array.isArray(release.notes) && release.notes.length
-    ? release.notes.slice(0, 4).map(cleanReleaseLine).filter(Boolean)
-    : (extractReleaseNotes(release.body || data.body).length ? extractReleaseNotes(release.body || data.body) : UPDATE_FALLBACK_NOTES);
+  const explicitNotes = Array.isArray(release.notes) && release.notes.length
+    ? normalizeReleaseNotes(release.notes)
+    : [];
+  const bodyNotes = explicitNotes.length ? [] : extractReleaseNotes(release.body || data.body);
+  const notes = explicitNotes.length ? explicitNotes : (bodyNotes.length ? bodyNotes : UPDATE_FALLBACK_NOTES);
+  const summaryNotes = normalizeReleaseNotes([release.summary || data.summary || '']);
   const assetInfo = downloadUrl ? {
     name: asset.name || updateAssetNameFromUrl(downloadUrl) || `Mineradio-${latestVersion}-Setup.exe`,
     size: Number(asset.size || 0) || 0,
@@ -506,7 +554,7 @@ function normalizeManifestUpdateInfo(data) {
       asset: assetInfo,
       patch: patchInfo,
       patchAvailable: !!(patchInfo && patchInfo.downloadUrl && compareVersions(latestVersion, APP_VERSION) > 0),
-      summary: release.summary || data.summary || notes[0] || '发现新版本，建议更新。',
+      summary: summaryNotes[0] || notes[0] || '发现新版本，建议更新。',
       notes,
     },
     source: 'manifest',
@@ -835,7 +883,8 @@ async function fetchLatestUpdateInfoUncached() {
     const latestVersion = normalizeVersion(data.tag_name || data.name || APP_VERSION) || APP_VERSION;
     const asset = pickReleaseAsset(data.assets);
     const patch = pickPatchAsset(data.assets, APP_VERSION, latestVersion);
-    const notes = extractReleaseNotes(data.body).length ? extractReleaseNotes(data.body) : UPDATE_FALLBACK_NOTES;
+    const extractedNotes = extractReleaseNotes(data.body);
+    const notes = extractedNotes.length ? extractedNotes : UPDATE_FALLBACK_NOTES;
     return {
       configured: true,
       preview: false,
