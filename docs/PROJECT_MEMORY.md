@@ -10,7 +10,7 @@
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.2.89`；桌面歌词开启偏好、手动位置和更新重启前状态保存已修复，Home 空库波形与桌面歌词 30/60 FPS 少分配优化继续保留。
 - 当前工作分支：`codex/complete-v1.2.79`。
-- 最近正式安装包 Release 基线：`v1.2.88`（2026-08-04，tag 构建源码提交 `484657f`，GitHub Releases 已标记 Latest，4 个上传资产齐全：Setup.exe、.blockmap、`latest.yml`、SHA256 清单；Portable ZIP 只保留本地，不在远端下载列表）。
+- 最近正式安装包 Release 基线：`v1.2.89`（2026-08-05，tag 构建源码提交 `dfd9314`，GitHub Releases 已标记 Latest，4 个上传资产齐全：Setup.exe、.blockmap、`latest.yml`、SHA256 清单；Portable ZIP 只保留本地，不在远端下载列表）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -34,6 +34,7 @@
 ## Release Memory
 
 - `v1.2.89`（2026-08-05）修复桌面歌词重启持久化：软件退出、主窗口销毁和更新重启只拆卸覆盖层，不再向主 renderer 反写关闭偏好；用户主动关闭仍保存为关闭。拖动、窗口关闭和立即重启前强制保存最终 bounds 与视觉配置，避免程序定位保护或 `app.exit()` 吞掉最后状态。新增 `tests/desktop-lyrics-persistence.test.js`，全量 Node 回归 `196/196` 通过；UI、布局、歌词样式、播放时钟和桌面歌词交互保持不变。安装器 `103333863` 字节 / SHA256 `031958f60adc4bab756f39f19df6a5186deb320bd9926ced834f67699e9de67a`；blockmap `110281` 字节 / `cddcccb4d10f947608dde514475a3de7e419e3a3cb6f1537dbf1230908589c88`；`latest.yml` `350` 字节 / `4adf2244632814142a82c40a35240c77b765e80c0bdf6265d488147fb4dc2a5d`；本地 Portable ZIP `144916275` 字节 / `8881e2ee5990d526a604e6fe3e87dc6aca1ea65e3cb72be47d30508ad39ca88d`。打包后的 `app.asar` 已确认包含版本 `1.2.89`、退出不反写关闭、最终 bounds 强制保存和更新重启前状态 flush。
+- `v1.2.89` 已完成 GitHub 正式发布：Release `https://github.com/oirge/Mineradio/releases/tag/v1.2.89` 已标记 Latest，annotated tag 解引用到源码提交 `dfd93143a7c8e47ddc9fca3b8b141533de332eb8`，`main` CI run `30968545148` 成功；远端仅保留四个自动更新资产，重新下载后的文件大小与 SHA256 均和本地一致。
 - `v1.2.88`（2026-08-04）继续优化 Home 空库波形刷新：24 个频谱柱对应的频谱桶索引只在频谱长度变化时计算，刷新帧不再重复执行幂运算和边界计算；频谱取样顺序、刷新间隔、平滑、柱高、透明度和节拍驱动保持不变。新增 `tests/home-wave-hot-path.test.js`，全量 Node 回归 `194/194` 通过；安装器 `103331885` 字节 / SHA256 `107d6731c11bd504c5dfd48c9bb186f48eda41d484e27bea638df093be8b3ae8`；blockmap `110197` 字节 / `899cff581d698256b198d872aa1911608bf4f36366384f624b3cc363a316656d`；`latest.yml` `350` 字节 / `a7553b3974490c4fa3ef41fa17d42af73b152be98c23fb23bab55dd407c5d37d`；本地 Portable ZIP `144916097` 字节 / `a2790f1a5a74c26e917c249fd9391f82499ee909cc59274f9c9df5a7f8624ab8`。安装包 `app.asar` 已反查确认 `APP_VERSION=1.2.88`、Home 波形缓存、桌面歌词物理几何/帧率/文本缓存和迷你播放器位置恢复均在包内。
 - `v1.2.88` 已完成 GitHub 正式发布：Release 标记 Latest，远端仅保留四个自动更新资产，GitHub API 返回的 Setup、blockmap、`latest.yml` SHA256 与本地一致；`main` CI run `30875753697` 成功。
 - `v1.2.87`（2026-08-04）继续优化桌面歌词 30/60 FPS 热路径：相同“原始文本 + 单/双行模式”复用归一化结果；光效画布将 Unicode 字形数组与字宽一起缓存，描边和填充复用同一份字形，不再每帧 `Array.from()`。新增热路径回归、全部发布页面内联脚本完整解析门禁，并让 GitHub Actions 直接检查 `public/app.js`。歌词文本、位置、颜色、光效、播放时钟、鼠标穿透和顶部自动避让语义保持不变；全量 Node 回归 `193/193` 通过，CI run `30872687807` 成功。GitHub Latest 已正式发布，中文正文 UTF-8 回读正常，四个远端上传资产的大小与 SHA256 均与本地一致。安装器 `103333797` 字节 / SHA256 `91b8dc27601a4c71c9ef7d4b1c6bcee5f8e5fa5ae6183a92fde875782ceee8b8`；blockmap `110198` 字节 / `6ba77e9954e0a5d584af0ffd9040e13b888c995653267234dc3c72bbd2541561`；`latest.yml` `350` 字节 / `8fa7703d64797fddb4d39549251fb21dacb063aea091543589f58ccdfce93413`；本地 Portable ZIP `144915948` 字节 / `91c33495ede6c78dd4aabe0c0b1b61cdbd002cd41b504428d2cdd30aac1d2252`。

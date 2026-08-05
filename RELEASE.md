@@ -12,6 +12,8 @@
 - 构建验证：全量 Node 回归 `196/196`、关键 JavaScript 语法、`git diff --check` 和打包后 `app.asar` 内容核对通过；安装器 `103333863` 字节，blockmap `110281` 字节，`latest.yml` `350` 字节，本地 Portable ZIP `144916275` 字节。
 - SHA256：安装器 `031958f60adc4bab756f39f19df6a5186deb320bd9926ced834f67699e9de67a`；blockmap `cddcccb4d10f947608dde514475a3de7e419e3a3cb6f1537dbf1230908589c88`；`latest.yml` `4adf2244632814142a82c40a35240c77b765e80c0bdf6265d488147fb4dc2a5d`；本地 Portable ZIP `8881e2ee5990d526a604e6fe3e87dc6aca1ea65e3cb72be47d30508ad39ca88d`。
 - `latest.yml` 的 Setup SHA512：`xs4kgBz3NNm64LOcN6TMtUo2v9TFJyW6fj9EEDfbcEi/iRBh35/gbuCgnxkScO0ugA0wjZJlkS/DwKlokY3igw==`。
+- GitHub 发布验证：`main` CI run `30968545148` 成功；annotated tag `v1.2.89` 解引用到源码提交 `dfd93143a7c8e47ddc9fca3b8b141533de332eb8`；Release `https://github.com/oirge/Mineradio/releases/tag/v1.2.89` 已标记 Latest，且不是 draft 或 prerelease。
+- 远端资产回读验证：Release 仅包含 Setup、blockmap、`latest.yml` 和 SHA256 清单四个资产；重新下载后文件大小和 SHA256 均与本地发布产物完全一致。
 
 ## v1.2.88 Home 空库波形热路径优化
 
