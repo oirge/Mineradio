@@ -11,7 +11,9 @@
 - SHA256：安装器 `9118b7b01ca145fa87a3276efe556768c0368292d0c62497e1201f0bf575f331`；blockmap `5c85a0eae90c28c56ac0b4e9ae446aab0b2a1e1f1870a9c8ffcd060b74587d7d`；`latest.yml` `51164bba294675bbd0ff519665c70a3e1ea5dbf6664cf1343f9148cc1a2ceed4`；本地 Portable ZIP `6bf136c29beeb27631de3a82f6fa0933c652a7cb68dc1781e526d3996af48132`。
 - `latest.yml` 的 Setup SHA512：`JuK5un9KS0CoB1BjRmrqpntB/scEMSPhaQlwU2RcIOR1gbL0RfCqGBIl0zce6utCbnDYz8p1QvGhofgCCK9w9Q==`。
 - 正式远端资产只上传安装器、blockmap、`latest.yml` 和 SHA256 清单；Portable ZIP 只保留本地。
-- GitHub Release 和 CI 回读结果在上传完成后补齐。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.2.94`，已标记 Latest，且不是 draft 或 prerelease；tag 目标为 `main`。
+- 远端资产回读：四个 Release 资产大小与本地一致；Setup、blockmap、`latest.yml` 和 SHA256 清单重新下载后的 SHA256 均与本地一致。
+- `main` CI run `31152609456` 成功，提交为 `8917c2bb5e7e0574a369439f74ca14bd551feeea`。
 
 ## v1.2.93 桌面歌词调节按钮视觉优化版
 

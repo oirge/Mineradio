@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.94` 发布准备中；桌面歌词字号和光效调节改为两组独立设置胶囊，包含图标、标签、数值和加减键，上一首、播放/暂停、下一首、`×` 关闭和手动 bounds 持久化继续保留。
+- 当前源码检查点：`v1.2.94` 已发布；桌面歌词字号和光效调节改为两组独立设置胶囊，包含图标、标签、数值和加减键，上一首、播放/暂停、下一首、`×` 关闭和手动 bounds 持久化继续保留。
 - 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.92`（2026-08-07，桌面歌词播放控制栏版；tag 源码提交 `43f4c22`，GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单回读校验一致，Portable ZIP 只保留本地）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -32,6 +32,8 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.94`（2026-08-07）完成桌面歌词调节控件重排：字号和光效改为两组独立设置胶囊，保留步进、锁定、播放控制、关闭和位置持久化语义；全量 Node 回归 `204/204` 通过。安装器 `103333819` 字节 / SHA256 `9118b7b01ca145fa87a3276efe556768c0368292d0c62497e1201f0bf575f331`；blockmap `110223` 字节 / `5c85a0eae90c28c56ac0b4e9ae446aab0b2a1e1f1870a9c8ffcd060b74587d7d`；`latest.yml` `350` 字节 / `51164bba294675bbd0ff519665c70a3e1ea5dbf6664cf1343f9148cc1a2ceed4`；本地 Portable ZIP `144918530` 字节 / `6bf136c29beeb27631de3a82f6fa0933c652a7cb68dc1781e526d3996af48132`。GitHub Release `v1.2.94` 已标记 Latest，远端四个资产回读一致，`main` CI run `31152609456` 成功，源码提交 `8917c2b`。
 
 - `v1.2.91` 重发版（2026-08-05）修复桌面歌词手动位置重启恢复：现场运行版 BrowserWindow 为 `x=323, y=-171, width=1382, height=410`，但旧保存链路复用完整屏幕夹紧后把设置写成 `y=0`。现在保存、恢复和重新定位手动 bounds 时，当前显示器仍保留至少 `160 × 96` 可操作区域就保留真实负坐标；完全不可达或显示器变化时才安全拉回屏幕。保留纵向位置偏好清理旧 bounds 的修复，新增真实负坐标落盘和回退回归，全量 Node 回归 `202/202` 通过。安装器 `103334349` 字节 / SHA256 `61bc45e9b966acf426f0fabdcab201f1bc0893a61c8f7a85d068344d5ce62d9d`；blockmap `110394` 字节 / `4d1a008ee6c301d7e3e5ce747fa39bb79209e269c8a645b1feafc1a5d1ad68f9`；`latest.yml` `350` 字节 / `a1f989ac17bbe839157a94d8423b63cd99ca7b5a85f802a0bee816bc787a41ed`；本地 Portable ZIP `144917458` 字节 / `8bc8a341f5c6cc134862fdb9bfb9328dd6ca637d219f1c451fa45d8c2e1f6ff8`。打包后的 `app.asar` 已确认包含 `desktopLyricsBoundsHasReachableArea()` 与手动 bounds 的 `allowPartial` 保存/恢复路径。
 - `v1.2.91` 已按同版本完成覆盖重发：Release `https://github.com/oirge/Mineradio/releases/tag/v1.2.91` 继续标记 Latest，annotated tag 解引用到源码提交 `4294b856f7239d54c89c79adc88a6ae0b37fce77`，`main` CI run `30994715092` 成功；四个远端资产重新下载后的文件大小与 SHA256 均和本地重发产物一致，Release 正文无 replacement character。旧 `1.2.91` 客户端需手动覆盖安装。
