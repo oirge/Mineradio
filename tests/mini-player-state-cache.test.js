@@ -47,6 +47,7 @@ function testDisabledCacheReleasesAndRejectsState() {
     cover: '',
     playing: false,
     hasTrack: false,
+    desktopLyrics: false,
     metaSignature: '',
   });
   assert.equal(cache.apply({

@@ -42,3 +42,22 @@ test('桌面歌词播放命令经过 preload 和主进程白名单转发', () =>
   assert.match(main, /\['toggle-play', 'previous', 'next'\]\.includes\(command\)/);
   assert.match(main, /mainWindow\.webContents\.send\('mineradio-mini-player-command', \{ action: command \}\)/);
 });
+
+test('两套迷你播放器包含单按钮桌面歌词开关并同步状态', () => {
+  const standard = read('public/mini-player.html');
+  const compact = read('public/mini-player-compact.html');
+  const renderer = read('public/app.js');
+  const main = read('desktop/main.js');
+
+  for (const html of [standard, compact]) {
+    assert.match(html, /id="desktop-lyrics"[^>]*aria-pressed="false"/);
+    assert.match(html, /desktopLyricsButton\.addEventListener\('click', function\(\)\{ sendCommand\('toggle-desktop-lyrics'\); \}\)/);
+    assert.match(html, /desktopLyricsButton\.classList\.toggle\('active', desktopLyricsEnabled\)/);
+    assert.match(html, /关闭桌面歌词/);
+    assert.match(html, /开启桌面歌词/);
+  }
+  assert.match(renderer, /action === 'toggle-desktop-lyrics'\) toggleFx\('desktopLyrics'\)/);
+  assert.match(renderer, /patch\.desktopLyrics = desktopLyricsEnabled/);
+  assert.match(main, /\['toggle-play', 'previous', 'next', 'toggle-desktop-lyrics'\]\.includes\(command\)/);
+  assert.match(main, /next\.desktopLyrics !== previous\.desktopLyrics/);
+});

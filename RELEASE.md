@@ -1,5 +1,19 @@
 +﻿# 发布流程
 
+## v1.2.95 迷你播放器桌面歌词开关版
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.95`。
+- 标准迷你播放器与极简迷你播放器各增加一个独立桌面歌词按钮，点击即可显示/关闭桌面歌词。
+- 按钮状态由主 renderer 的 `fx.desktopLyrics` 同步，复用既有开关、保存和窗口生命周期逻辑。
+- 保留原有上一首、播放/暂停、下一首、返回主界面、桌面歌词位置持久化和控制栏布局。
+- 全量 Node 回归 `205/205`、关键 JavaScript 语法、`git diff --check` 和打包后 `app.asar` 内容核对通过。
+- 发布资产：`Mineradio-1.2.95-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 SHA256 清单；Portable ZIP 只保留本地。
+- 产物大小：安装器 `103334394` 字节；blockmap `110314` 字节；`latest.yml` `350` 字节；本地 Portable ZIP `144919265` 字节。
+- SHA256：安装器 `b0888f0ded838bc6ee0c3ef088e31e6c9efb992a8d306454eb75f282b7fcf4cb`；blockmap `dc622dd7d32580d1e47350297d1644775a2ae82bf14b983c75e593770bf69b93`；`latest.yml` `bee463f3695a4ef0a0101cecbf5dd7b0f502c6d6e1b6159543b28d57f0950b38`；本地 Portable ZIP `229f15c7488d2be261a616cdb67fc3934fbe1e7f59c086ed4a6443dcbd4a2a47`。
+- `latest.yml` 的 Setup SHA512：`5PNSNRac4sXkZp1d8Kl5XToINJ95qdJiY4FbujX045wx6dXeJubkRyEKKOECTf+U474nj5ou8qq6umnyydCnBQ==`。
+- 正式远端资产仅上传安装器、blockmap、`latest.yml` 和 SHA256 清单；Portable ZIP 只保留本地。
+- GitHub Release 与 CI 回读信息在上传完成后补齐。
+
 ## v1.2.94 桌面歌词调节控件重排版
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.94`。

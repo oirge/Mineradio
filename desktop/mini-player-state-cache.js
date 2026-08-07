@@ -4,7 +4,7 @@ const MAX_MINI_PLAYER_COVER_LENGTH = 8 * 1024 * 1024;
 
 /**
  * 创建不持有歌曲或封面引用的迷你播放器初始状态。
- * @returns {{title:string, artist:string, cover:string, playing:boolean, hasTrack:boolean, metaSignature:string}} 空状态。
+ * @returns {{title:string, artist:string, cover:string, playing:boolean, hasTrack:boolean, desktopLyrics:boolean, metaSignature:string}} 空状态。
  */
 function createEmptyMiniPlayerState() {
   return {
@@ -13,6 +13,7 @@ function createEmptyMiniPlayerState() {
     cover: '',
     playing: false,
     hasTrack: false,
+    desktopLyrics: false,
     metaSignature: '',
   };
 }
@@ -71,6 +72,7 @@ class MiniPlayerStateCache {
     }
     if (Object.prototype.hasOwnProperty.call(source, 'playing')) next.playing = !!source.playing;
     if (Object.prototype.hasOwnProperty.call(source, 'hasTrack')) next.hasTrack = !!source.hasTrack;
+    if (Object.prototype.hasOwnProperty.call(source, 'desktopLyrics')) next.desktopLyrics = source.desktopLyrics === true;
     if (Object.prototype.hasOwnProperty.call(source, 'metaSignature')) next.metaSignature = String(source.metaSignature || '').slice(0, 240);
     this.value = next;
     return true;

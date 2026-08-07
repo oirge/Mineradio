@@ -1977,6 +1977,7 @@ function sendMiniPlayerState(force = false) {
     artist: state.artist || '',
     playing: !!state.playing,
     hasTrack: !!state.hasTrack,
+    desktopLyrics: state.desktopLyrics === true,
     metaSignature: state.metaSignature || '',
   };
   if (includeCover) next.cover = state.cover || '';
@@ -2000,6 +2001,10 @@ function sendMiniPlayerState(force = false) {
   }
   if (force || !previous || next.hasTrack !== previous.hasTrack) {
     patch.hasTrack = next.hasTrack;
+    changed = true;
+  }
+  if (force || !previous || next.desktopLyrics !== previous.desktopLyrics) {
+    patch.desktopLyrics = next.desktopLyrics;
     changed = true;
   }
   if (!changed) return;
@@ -2433,7 +2438,7 @@ ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   }
   const command = String(action || '');
   if (command === 'restore') return { ok: focusMainWindow() };
-  if (!['toggle-play', 'previous', 'next'].includes(command)) return { ok: false, error: 'MINI_PLAYER_INVALID_COMMAND' };
+  if (!['toggle-play', 'previous', 'next', 'toggle-desktop-lyrics'].includes(command)) return { ok: false, error: 'MINI_PLAYER_INVALID_COMMAND' };
   if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'MAIN_WINDOW_UNAVAILABLE' };
   mainWindow.webContents.send('mineradio-mini-player-command', { action: command });
   return { ok: true };

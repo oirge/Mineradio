@@ -445,7 +445,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.94';
+var APP_VERSION = '1.2.95';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -21174,7 +21174,8 @@ function pushMiniPlayerState(force, playbackOnly) {
     song: null,
     metaSignature: '',
     playing: null,
-    hasTrack: null
+    hasTrack: null,
+    desktopLyrics: null
   });
   var resolveMetadata = !!(hasTrack && (force || !playbackOnly || state.song !== song || !state.metaSignature));
   var meta = resolveMetadata ? currentDesktopSongMeta() : null;
@@ -21202,6 +21203,12 @@ function pushMiniPlayerState(force, playbackOnly) {
   if (force || state.hasTrack !== hasTrack) {
     state.hasTrack = hasTrack;
     patch.hasTrack = hasTrack;
+    changed = true;
+  }
+  var desktopLyricsEnabled = !!fx.desktopLyrics && !isDevelopmentLockedFx('desktopLyrics');
+  if (force || state.desktopLyrics !== desktopLyricsEnabled) {
+    state.desktopLyrics = desktopLyricsEnabled;
+    patch.desktopLyrics = desktopLyricsEnabled;
     changed = true;
   }
   if (!changed) return;
@@ -25905,7 +25912,10 @@ function toggleFx(key) {
   syncFxUniforms();
   if (key === 'lyricCameraLock' || key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles' || key === 'bloom' || key === 'edge' || key === 'cinema' || key === 'desktopLyrics' || key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsStable' || key === 'desktopLyricsHighlight' || key === 'wallpaperMode' || key === 'shelfShowPodcasts' || key === 'shelfMergeCollections' || key === 'liveBackgroundKeep') saveLyricLayout();
   if (key === 'floatLayer') { if (fx.floatLayer) createFloatLayer(); else destroyFloatLayer(); }
-  if (key === 'desktopLyrics') applyDesktopLyricsState(true);
+  if (key === 'desktopLyrics') {
+    applyDesktopLyricsState(true);
+    pushMiniPlayerState(true);
+  }
   if (key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsStable' || key === 'desktopLyricsHighlight') pushDesktopLyricsState(true);
   if (key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles') pushDesktopLyricsState(true);
   if (key === 'wallpaperMode') applyWallpaperModeState(true);
@@ -29972,6 +29982,7 @@ function handleDesktopMiniPlayerCommand(payload) {
   else if (action === 'toggle-play') togglePlay();
   else if (action === 'previous') prevTrack();
   else if (action === 'next') nextTrack();
+  else if (action === 'toggle-desktop-lyrics') toggleFx('desktopLyrics');
 }
 
 (function initDesktopWindowShell(){
@@ -30053,6 +30064,7 @@ function handleDesktopMiniPlayerCommand(payload) {
       fx.desktopLyrics = enabled;
       updateFxInputs();
       saveLyricLayout();
+      pushMiniPlayerState(true);
       showToast(enabled ? '桌面歌词已开启' : '桌面歌词已关闭');
     });
   }
