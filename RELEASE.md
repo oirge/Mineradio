@@ -12,6 +12,8 @@
 - SHA256：安装器 `25065fda977f8be87d2c99565301f16a6a08d22819db1995842e2d707d195eb9`；blockmap `de15e5ac66d3f07c31eeab0077955974ed7b6afc2cb8bb3adb55f5382cb44ac6`；`latest.yml` `c38b16bbb35bf074a76f72af55b9e47ff4bbe64af5f394f18a0d1bf20f077bb2`；本地 Portable ZIP `e6fc16d9b28ec80f15053c2fa94bc563f8825398b49b3029980cbb81f0e2f8de`。
 - `latest.yml` 的 Setup SHA512：`Vymrn9UQiPUbnvIcpmTQD4FLi+tWuBKczqoYGqGInChb+d+m63uPS68X3s9MgQbT+US50aLKegP7P/pabK/GXw==`。
 - Release 标题使用 `Mineradio v1.2.92 桌面歌词播放控制栏版`；正式远端资产仅上传安装器、blockmap、`latest.yml` 和 SHA256 清单。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.2.92`，已标记 Latest，且不是 draft 或 prerelease；tag 目标为 `main`。
+- 远端资产回读验证：四个 Release 资产均已上传；安装器、blockmap 和 `latest.yml` 重新下载后的文件大小与 SHA256 均与本地构建产物一致；`main` CI run `31139738647` 成功。
 
 ## v1.2.91 桌面歌词手动位置持久化修复重发
 
