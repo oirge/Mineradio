@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.92` 发布完成；桌面歌词新增上一首、播放/暂停、下一首控制，关闭按钮使用 `×`，并继续保留手动 bounds 的部分越界真实坐标保存、恢复和定位修复。
+- 当前源码检查点：`v1.2.94` 发布准备中；桌面歌词字号和光效调节改为两组独立设置胶囊，包含图标、标签、数值和加减键，上一首、播放/暂停、下一首、`×` 关闭和手动 bounds 持久化继续保留。
 - 当前工作分支：`codex/complete-v1.2.79`。
 - 最近正式安装包 Release 基线：`v1.2.92`（2026-08-07，桌面歌词播放控制栏版；tag 源码提交 `43f4c22`，GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单回读校验一致，Portable ZIP 只保留本地）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。

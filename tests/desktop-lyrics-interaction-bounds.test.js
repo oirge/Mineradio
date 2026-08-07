@@ -181,7 +181,7 @@ test('desktop lyric toolbar shows the current size percentage without changing h
   const sendHotBounds = readFunction('sendHotBounds');
   assert.match(source, /id="sizeValue" class="lyrics-size-value" aria-live="polite">100%<\/span>/);
   assert.match(source, /var sizeValue = document\.getElementById\('sizeValue'\);/);
-  assert.match(source, /\.lyrics-size-value\{[\s\S]*?width:34px;[\s\S]*?font:800 10px\/1[\s\S]*?font-variant-numeric:tabular-nums;/);
+  assert.match(source, /\.lyrics-size-value,.lyrics-glow-value\{[\s\S]*?min-width:38px;[\s\S]*?font-variant-numeric:tabular-nums;/);
   assert.match(syncSizeButtons, /sizeValue\.textContent = Math\.round\(size \* 100\) \+ '%';/);
   assert.match(sendHotBounds, /lyricInteractionBounds\(\)/);
   assert.doesNotMatch(sendHotBounds, /lockHint/);

@@ -1,4 +1,24 @@
-﻿# 发布流程
++﻿# 发布流程
+
+## v1.2.94 桌面歌词调节控件重排版
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.94`。
+- 桌面歌词字号与光效调整改为两组独立设置胶囊，包含图标、标签、数值和加减键；去掉散落的圆形/方块按钮。
+- 保留原有调节步进、锁定、播放控制、`×` 关闭、位置持久化和鼠标穿透语义。
+- 发布资产：`Mineradio-1.2.94-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 SHA256 清单；Portable ZIP 只保留本地。
+- 构建验证：全量 Node 回归 `204/204`、关键 JavaScript 语法、`git diff --check` 和打包后 `app.asar` 内容核对通过。
+- 产物大小：安装器 `103333819` 字节；blockmap `110223` 字节；`latest.yml` `350` 字节；本地 Portable ZIP `144918530` 字节。
+- SHA256：安装器 `9118b7b01ca145fa87a3276efe556768c0368292d0c62497e1201f0bf575f331`；blockmap `5c85a0eae90c28c56ac0b4e9ae446aab0b2a1e1f1870a9c8ffcd060b74587d7d`；`latest.yml` `51164bba294675bbd0ff519665c70a3e1ea5dbf6664cf1343f9148cc1a2ceed4`；本地 Portable ZIP `6bf136c29beeb27631de3a82f6fa0933c652a7cb68dc1781e526d3996af48132`。
+- `latest.yml` 的 Setup SHA512：`JuK5un9KS0CoB1BjRmrqpntB/scEMSPhaQlwU2RcIOR1gbL0RfCqGBIl0zce6utCbnDYz8p1QvGhofgCCK9w9Q==`。
+- 正式远端资产只上传安装器、blockmap、`latest.yml` 和 SHA256 清单；Portable ZIP 只保留本地。
+- GitHub Release 和 CI 回读结果在上传完成后补齐。
+
+## v1.2.93 桌面歌词调节按钮视觉优化版
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.93`。
+- 重做桌面歌词字号、光效调节按钮：加入独立加减图标、细边框胶囊样式、百分比数值徽章和悬停/按下/禁用反馈。
+- 保持原有调节步长、持久化、锁定逻辑、播放控制和桌面歌词布局不变。
+- 定向桌面歌词回归和全部发布页面内联脚本解析通过；正式产物与远端回读信息在构建发布完成后补齐。
 
 ## v1.2.92 桌面歌词播放控制栏版
 

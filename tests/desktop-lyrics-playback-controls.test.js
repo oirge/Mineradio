@@ -18,6 +18,14 @@ test('桌面歌词工具栏包含播放控制和符号关闭按钮', () => {
   assert.match(html, /id="playPauseBtn"[^>]*播放/);
   assert.match(html, /id="nextTrackBtn"[^>]*下一首/);
   assert.match(html, /id="closeLyricsBtn"[^>]*>×<\/button>/);
+  assert.match(html, /id="sizeDownBtn"[^>]*lyrics-adjust-btn/);
+  assert.match(html, /id="sizeUpBtn"[^>]*lyrics-adjust-btn[^>]*plus/);
+  assert.match(html, /id="glowDownBtn"[^>]*lyrics-adjust-btn/);
+  assert.match(html, /id="glowUpBtn"[^>]*lyrics-adjust-btn[^>]*plus/);
+  assert.match(html, /class="lyrics-setting lyrics-size-setting"/);
+  assert.match(html, /class="lyrics-setting lyrics-glow-setting"/);
+  assert.match(html, /lyrics-setting-label">字号/);
+  assert.match(html, /lyrics-setting-label">光效/);
   assert.match(html, /state\.playing === true/);
   assert.match(html, /requestPlaybackCommand\('toggle-play'\)/);
   assert.match(html, /requestPlaybackCommand\('previous'\)/);

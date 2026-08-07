@@ -178,16 +178,58 @@
     }
     .lyrics-tool-btn:hover{color:#fff}
     .lyrics-tool-btn:disabled{opacity:.34;cursor:default}
-    .lyrics-size-step{
-      width:23px;
-      margin-right:-4px;
-      padding:0 0 1px;
-      font:900 16px/1 Arial,sans-serif;
+    .lyrics-setting{
+      display:none;
+      align-items:center;
+      min-height:26px;
+      margin-left:2px;
+      padding:2px 3px 2px 4px;
+      border:1px solid rgba(168,246,255,.22);
+      border-radius:9px;
+      background:rgba(168,246,255,.055);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+      -webkit-app-region:no-drag;
     }
+    .lyrics-setting + .lyrics-setting{margin-left:4px}
+    body.unlocked .lyrics-setting{display:flex}
+    .lyrics-setting-mark{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:16px;
+      height:16px;
+      margin-right:4px;
+      border-radius:5px;
+      background:rgba(168,246,255,.14);
+      color:rgba(226,252,255,.86);
+      font:900 10px/1 Arial,sans-serif;
+    }
+    .lyrics-setting-label{margin-right:4px;color:rgba(220,252,255,.62);font:800 10px/1 "Microsoft YaHei",sans-serif;white-space:nowrap}
+    .lyrics-glow-setting{border-color:rgba(156,255,223,.24);background:rgba(156,255,223,.055)}
+    .lyrics-glow-setting .lyrics-setting-mark{background:rgba(156,255,223,.14);color:rgba(220,255,245,.9)}
+    .lyrics-glow-setting .lyrics-setting-label{color:rgba(220,255,245,.66)}
+    .lyrics-setting .lyrics-adjust-btn{
+      display:flex;
+      flex:0 0 20px;
+      width:20px;
+      height:20px;
+      margin:0;
+      padding:0;
+      border:0;
+      border-radius:6px;
+      background:transparent;
+      color:rgba(226,252,255,.7);
+      font:800 16px/1 Arial,sans-serif;
+      text-shadow:none;
+      transition:background .16s ease,color .16s ease,transform .16s ease;
+    }
+    .lyrics-setting .lyrics-adjust-btn:hover{background:rgba(168,246,255,.16);color:#fff}
+    .lyrics-setting .lyrics-adjust-btn:active:not(:disabled){transform:translateY(1px);background:rgba(168,246,255,.22)}
+    .lyrics-glow-setting .lyrics-adjust-btn{color:rgba(220,255,245,.76)}
+    .lyrics-glow-setting .lyrics-adjust-btn:hover{background:rgba(156,255,223,.16);color:#fff}
     .lyrics-stable-toggle{display:flex;min-width:36px}
     .lyrics-stable-toggle.active{color:var(--lyric-highlight);text-shadow:0 0 14px var(--lyric-glow)}
-    .lyrics-tool-label{display:flex;align-items:center;height:22px;margin:0 -2px 0 1px;color:rgba(255,255,255,.58);font:800 10px/1 "Microsoft YaHei",sans-serif;white-space:nowrap}
-    .lyrics-glow-step{display:flex;width:20px;margin-right:-4px;padding:0 0 1px;font:900 15px/1 Arial,sans-serif}
+    .lyrics-tool-label{display:none}
     .lyrics-playback-btn{display:none;width:22px;height:22px;margin-right:-4px;padding:0 0 1px;border-left:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.82);font:900 14px/1 Arial,sans-serif}
     .lyrics-playback-btn svg{width:14px;height:14px;pointer-events:none}
     .lyrics-playback-btn.play-toggle{width:26px;height:26px;padding:0;border:1px solid color-mix(in srgb,var(--lyric-glow) 42%,rgba(255,255,255,.22));border-radius:50%;background:rgba(18,30,31,.72);color:var(--lyric-glow)}
@@ -196,34 +238,23 @@
     .lyrics-playback-btn.is-playing .play-icon{display:none}
     .lyrics-playback-btn.is-playing .pause-icon{display:block}
     .lyrics-close{min-width:22px;margin-left:1px;padding:0;border-left:1px solid rgba(255,255,255,.14);font-size:19px;line-height:1}
-    .lyrics-size-value{
+    .lyrics-size-value,.lyrics-glow-value{
       display:none;
       align-items:center;
-      justify-content:flex-end;
-      width:34px;
-      height:22px;
-      margin:0 -4px;
-      color:rgba(255,255,255,.52);
+      justify-content:center;
+      min-width:38px;
+      height:20px;
+      margin:0 2px;
+      padding:0 3px;
+      box-sizing:border-box;
+      color:rgba(224,252,255,.78);
       font:800 10px/1 "Microsoft YaHei",sans-serif;
       font-variant-numeric:tabular-nums;
-      text-align:right;
+      text-align:center;
       white-space:nowrap;
       pointer-events:none;
     }
-    .lyrics-glow-value{
-      display:flex;
-      align-items:center;
-      justify-content:flex-end;
-      width:34px;
-      height:22px;
-      margin:0 -4px;
-      color:rgba(255,255,255,.64);
-      font:800 10px/1 "Microsoft YaHei",sans-serif;
-      font-variant-numeric:tabular-nums;
-      text-align:right;
-      white-space:nowrap;
-      pointer-events:none;
-    }
+    .lyrics-glow-value{display:flex;color:rgba(220,255,245,.8)}
     body.unlocked .lyrics-tool-btn{display:flex}
     body.unlocked .lyrics-playback-btn{display:flex}
     body.unlocked .lyrics-size-value{display:flex}
@@ -248,7 +279,7 @@
   <div class="wrap">
     <div id="stage" class="stage">
       <div id="lyricViewport" class="lyric-viewport"><div id="lyricScroller" class="lyric-scroll"><div id="line" class="line" data-text="Mineradio">Mineradio</div></div></div>
-      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="&#32553;&#23567;&#26700;&#38754;&#27468;&#35789;">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-size-step" type="button" aria-label="Enlarge desktop lyrics" title="&#25918;&#22823;&#26700;&#38754;&#27468;&#35789;">+</button><span class="lyrics-tool-label">光效</span><button id="glowDownBtn" class="lyrics-tool-btn lyrics-glow-step" type="button" aria-label="Reduce lyric glow" title="减弱歌词光效">&#8722;</button><span id="glowValue" class="lyrics-glow-value" aria-live="polite">35%</span><button id="glowUpBtn" class="lyrics-tool-btn lyrics-glow-step" type="button" aria-label="Increase lyric glow" title="增强歌词光效">+</button><button id="previousTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button><button id="playPauseBtn" class="lyrics-tool-btn lyrics-playback-btn play-toggle" type="button" aria-label="播放" title="播放"><svg class="play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg></button><button id="nextTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m6 18 8.5-6L6 6v12zM16 6v12h2V6z"/></svg></button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="关闭桌面歌词" title="关闭桌面歌词">×</button></div>
+      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><span class="lyrics-setting lyrics-size-setting" aria-label="桌面歌词字号"><span class="lyrics-setting-mark" aria-hidden="true">A</span><span class="lyrics-setting-label">字号</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="缩小桌面歌词">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-size-step plus" type="button" aria-label="Enlarge desktop lyrics" title="放大桌面歌词">+</button></span><span class="lyrics-setting lyrics-glow-setting" aria-label="歌词光效"><span class="lyrics-setting-mark" aria-hidden="true">&#10022;</span><span class="lyrics-setting-label">光效</span><button id="glowDownBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-glow-step" type="button" aria-label="Reduce lyric glow" title="减弱歌词光效">&#8722;</button><span id="glowValue" class="lyrics-glow-value" aria-live="polite">35%</span><button id="glowUpBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-glow-step plus" type="button" aria-label="Increase lyric glow" title="增强歌词光效">+</button></span><button id="previousTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button><button id="playPauseBtn" class="lyrics-tool-btn lyrics-playback-btn play-toggle" type="button" aria-label="播放" title="播放"><svg class="play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg></button><button id="nextTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m6 18 8.5 6L6 6v12zM16 6v12h2V6z"/></svg></button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="关闭桌面歌词" title="关闭桌面歌词">×</button></div>
     </div>
   </div>
   <script>
