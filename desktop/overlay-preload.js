@@ -19,5 +19,6 @@ contextBridge.exposeInMainWorld('desktopOverlay', {
   setLyricsGlowStrength: (strength) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-glow-strength', Number(strength)),
   setLyricsSize: (size) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-size', Number(size)),
   moveLyricsBy: (dx, dy) => ipcRenderer.invoke('mineradio-desktop-lyrics-move-by', Number(dx) || 0, Number(dy) || 0),
+  playbackCommand: (action) => ipcRenderer.invoke('mineradio-desktop-lyrics-playback-command', String(action || '')),
   closeLyrics: () => ipcRenderer.invoke('mineradio-desktop-lyrics-set-enabled', false, {}),
 });

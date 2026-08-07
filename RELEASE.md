@@ -1,5 +1,18 @@
 ﻿# 发布流程
 
+## v1.2.92 桌面歌词播放控制栏版
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.92`。
+- 桌面歌词工具栏新增上一首、播放/暂停、下一首按钮；命令经过当前桌面歌词窗口 sender 校验后转发到主 renderer，复用既有 `togglePlay()`、`prevTrack()` 和 `nextTrack()`。
+- 关闭桌面歌词按钮改为 `×` 符号，保持现有窗口关闭与状态持久化链路不变。
+- 新增桌面歌词播放控制栏回归门禁，覆盖按钮、preload IPC channel、主进程命令白名单和播放状态图标切换。
+- 全量 Node 回归 `204/204`、关键 JavaScript 语法、`git diff --check` 和打包后 `app.asar` 内容核对通过；`app.asar` 已确认包含三个控制按钮、`×` 关闭符号、播放 IPC 和 `APP_VERSION = 1.2.92`。
+- 发布资产：`Mineradio-1.2.92-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.2.92-SHA256SUMS.txt`；Portable ZIP 只保留本地。
+- 产物大小：安装器 `103334479` 字节；blockmap `110126` 字节；`latest.yml` `350` 字节；本地 Portable ZIP `144918411` 字节。
+- SHA256：安装器 `25065fda977f8be87d2c99565301f16a6a08d22819db1995842e2d707d195eb9`；blockmap `de15e5ac66d3f07c31eeab0077955974ed7b6afc2cb8bb3adb55f5382cb44ac6`；`latest.yml` `c38b16bbb35bf074a76f72af55b9e47ff4bbe64af5f394f18a0d1bf20f077bb2`；本地 Portable ZIP `e6fc16d9b28ec80f15053c2fa94bc563f8825398b49b3029980cbb81f0e2f8de`。
+- `latest.yml` 的 Setup SHA512：`Vymrn9UQiPUbnvIcpmTQD4FLi+tWuBKczqoYGqGInChb+d+m63uPS68X3s9MgQbT+US50aLKegP7P/pabK/GXw==`。
+- Release 标题使用 `Mineradio v1.2.92 桌面歌词播放控制栏版`；正式远端资产仅上传安装器、blockmap、`latest.yml` 和 SHA256 清单。
+
 ## v1.2.91 桌面歌词手动位置持久化修复重发
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.91`。

@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.91` 重发完成；桌面歌词手动 bounds 保存、恢复和定位会保留仍可操作的部分越界真实坐标，避免 `y=-171` 被夹成 `y=0`，纵向位置偏好清理旧 bounds 与既有优化继续保留。
+- 当前源码检查点：`v1.2.92` 发布完成；桌面歌词新增上一首、播放/暂停、下一首控制，关闭按钮使用 `×`，并继续保留手动 bounds 的部分越界真实坐标保存、恢复和定位修复。
 - 当前工作分支：`codex/complete-v1.2.79`。
-- 最近正式安装包 Release 基线：`v1.2.91` 重发版（2026-08-05，tag 构建源码提交 `4294b85`，GitHub Releases 已标记 Latest，4 个远端资产已覆盖并回下载验证；Portable ZIP 只保留本地）。
+- 最近正式安装包 Release 基线：`v1.2.92`（2026-08-07，桌面歌词播放控制栏版；安装器、blockmap、`latest.yml` 和 SHA256 清单按发布流程上传，Portable ZIP 只保留本地）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。

@@ -2733,6 +2733,32 @@ async function handleDesktopLyricsStableState(event, stable) {
 
 ipcMain.handle('mineradio-desktop-lyrics-set-stable-state', handleDesktopLyricsStableState);
 
+/**
+ * 将桌面歌词工具栏的播放命令转发给主 renderer，避免覆盖层维护第二套播放逻辑。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {string} action 播放命令。
+ * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 转发结果。
+ */
+async function handleDesktopLyricsPlaybackCommand(event, action) {
+  try {
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
+    const command = String(action || '');
+    if (!['toggle-play', 'previous', 'next'].includes(command)) {
+      return { ok: false, error: 'DESKTOP_LYRICS_INVALID_PLAYBACK_COMMAND' };
+    }
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.webContents
+      || (typeof mainWindow.webContents.isDestroyed === 'function' && mainWindow.webContents.isDestroyed())) {
+      return { ok: false, error: 'MAIN_WINDOW_UNAVAILABLE' };
+    }
+    mainWindow.webContents.send('mineradio-mini-player-command', { action: command });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message || 'DESKTOP_LYRICS_PLAYBACK_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-desktop-lyrics-playback-command', handleDesktopLyricsPlaybackCommand);
+
 async function handleDesktopLyricsGlowStrengthRequest(event, strength) {
   try {
     if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
