@@ -1,5 +1,19 @@
 +﻿# 发布流程
 
+## v1.2.97 Portable ZIP 构建彻底移除
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.97`。
+- Windows `build.win.target` 只保留 x64 NSIS；移除 ZIP target 及其 Portable 默认产物命名。
+- `npm run build:win` 以后只生成 `Mineradio-1.2.97-Setup.exe`、对应 `.blockmap` 和 `latest.yml`；本地 `dist` 不再生成 Portable ZIP。
+- GitHub Release 只上传安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，禁止上传 Portable ZIP。
+- 本版本不改动播放器 UI、播放逻辑、桌面歌词状态或位置持久化。
+- 新增 `tests/windows-build-targets.test.js`，锁定 Windows 发布目标只能是 x64 NSIS，且不得恢复 Portable 专用 `artifactName`。
+- 构建验证：全量 Node 回归 `206/206`、关键 JavaScript 语法和 `git diff --check` 通过；打包后 `app.asar` 已确认 `APP_VERSION = '1.2.97'`；`dist` 中不存在任何 `1.2.97` Portable ZIP。
+- 产物大小：安装器 `103336006` 字节；blockmap `110190` 字节；`latest.yml` `350` 字节。
+- SHA256：安装器 `a479846120a72837267fbff3c51cbc17ea5a59ed6daac11cbe362845709c8101`；blockmap `82b183169ef45a26b3319e2d6d2f0492a01023eee8edaf3c8634ad09fc78abff`；`latest.yml` `ad355a90bef4d6eb35bf4935356fa25d050ea843fb3d6a0bdf1f4d76435f03f5`。
+- `latest.yml` 的 Setup SHA512：`9E7XAgxye/rTrUuk+oLWyXwIT6t8N6ykDI9hCD1j8BmbXlzH3s+NKmAPUa3wJJrSEPoMfkk1hPV2k2FAz9XQsA==`。
+- GitHub Release 与 CI 回读信息在上传完成后补齐。
+
 ## v1.2.96 迷你播放器桌面歌词按钮细化版
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.96`。
