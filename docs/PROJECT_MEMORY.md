@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.100` 已发布；随机模式上一首改为真实播放历史导航，后退后的下一首先沿历史前进，UI、歌词、音质和视觉质感保持不变。
+- 当前源码检查点：`v1.3.0` 已发布；进入随机模式时整队只洗牌一次，上一首/下一首沿固定乱序前后循环，当前正在播放的歌曲和进度保持不变。
 - 当前工作分支：`codex/complete-v1.2.79`。
-- 最近正式安装包 Release 基线：`v1.2.100`（2026-08-08，随机播放上一首修复版；tag 源码提交 `e475393`，GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单校验一致，不生成 Portable ZIP）。
+- 最近正式安装包 Release 基线：`v1.3.0`（2026-08-08，固定乱序播放版；tag 源码提交 `b9be5a1`，GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单校验一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,8 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.3.0`（2026-08-08）按用户指定重做随机播放：进入随机模式时对整个队列执行一次 Fisher-Yates 洗牌，之后上一首/下一首只沿固定乱序前后循环，不再逐次随机。洗牌按当前歌曲对象重新定位 `currentIdx`，保持声音、进度和歌曲不跳；随机会话恢复及随机模式新队列首次播放前也只洗牌一次。使用 `WeakSet` 保存队列弱身份，移除 v1.2.100 的 96 条历史 ID/key 和歌曲 WeakMap，旧队列可正常回收。全量 Node 回归 `224/224` 通过；安装器 `103336921` 字节 / SHA256 `840753c5fc4647389907f8b15ac0463bb0ea1e095db5d92c8460a1caecf1a2d3`；blockmap `110180` 字节 / `3fa5ef65c5519b91a62bf624cbe40df97accaf794f91accb15fbc24f1b38122b`；`latest.yml` `347` 字节 / `248ad71583c4819a03fc63599aa16a8d7962b128f8e31a8b832391f0dea4ebc8`。GitHub Release 已标记 Latest，tag 指向 `b9be5a1e45298904f4301157300dca5de410d3c5`，远端四资产校验一致，`main` CI run `31250009229` 成功。
 
 - `v1.2.100`（2026-08-08）修复随机播放“上一首”错误：旧逻辑在随机下一首后只做队列索引减一，无法返回真实上一曲；现在成功播放后提交最多 96 条轻量导航历史，上一首沿历史后退，后退后的下一首先沿历史前进，历史末尾再生成排除当前曲目的随机目标。历史只保存数字 ID 和歌曲键，对象身份使用 `WeakMap`，不强引用歌词、封面或完整歌曲对象，清空队列同步释放。主界面、方向键、系统 Media Session、迷你播放器和桌面歌词共用同一入口。全量 Node 回归 `224/224` 通过；安装器 `103337026` 字节 / SHA256 `e9032c3989b89fc39033a7d25077f560a06f66836bf15a81f306e3891c9c0c83`；blockmap `110384` 字节 / `8ee6bc6def143b1d0c66634593d862970ebdc9cf69cf96605051464dccf3c29e`；`latest.yml` `353` 字节 / `a16d604b422c6099455886d1db2e184a5a934ae98e6095933d337783a6099098`。GitHub Release 已标记 Latest，tag 指向 `e47539352806bb1af4e5f13494d9604ece563c60`，远端四资产校验一致，`main` CI run `31249331807` 成功。
 

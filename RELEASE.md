@@ -16,6 +16,9 @@
 - 产物大小：安装器 `103336921` 字节；blockmap `110180` 字节；`latest.yml` `347` 字节。
 - SHA256：安装器 `840753c5fc4647389907f8b15ac0463bb0ea1e095db5d92c8460a1caecf1a2d3`；blockmap `3fa5ef65c5519b91a62bf624cbe40df97accaf794f91accb15fbc24f1b38122b`；`latest.yml` `248ad71583c4819a03fc63599aa16a8d7962b128f8e31a8b832391f0dea4ebc8`。
 - `latest.yml` 的 Setup SHA512：`WdhKIPd4mNuZf7FdlR3yzzElVUkMqWnpuLjFanCngcduGDom5rm0ZiDtfbIibL8i/qgO2rqs3Z5JvjCPidi9uA==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.0`，已标记 Latest，且不是 draft 或 prerelease；tag 指向功能提交 `b9be5a1e45298904f4301157300dca5de410d3c5`。
+- 正式远端资产仅包含安装器、blockmap、`latest.yml` 和 SHA256 清单，没有 Portable ZIP；GitHub 返回的四个资产大小与 SHA256 均和本地一致。
+- `main` CI run `31250009229` 成功，全量测试、语法和发布门禁均通过。
 
 ## v1.2.100 随机播放历史导航修复
 
