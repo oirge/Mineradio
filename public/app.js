@@ -446,7 +446,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.99';
+var APP_VERSION = '1.2.100';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -19236,6 +19236,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
     showToast(opts.manual ? '本地音乐启动失败，请重新选择文件' : '歌曲已载入，点击播放按钮继续播放');
     return;
   }
+  commitPlaybackHistory(song);
   forcePlaybackControlsInteractive();
   markPlayPhase('session-begin');
   safePlaybackStep('listen-session-begin', function(){ beginListenSession(song, opts.context || null); });
@@ -19376,7 +19377,8 @@ async function togglePlay() {
     }
     if (!audio) return;
     if (audio.paused || audio.ended) {
-      await attemptAudioPlay({ manual: true });
+      var resumed = await attemptAudioPlay({ manual: true });
+      if (resumed) commitPlaybackHistory(playQueue[currentIdx]);
     } else {
       await fadeOutAndPauseAudio();
       playing = false;
@@ -19411,19 +19413,113 @@ function setPlayIcon(p) {
     : '<path d="M8 5v14l11-7z"/>';
   state.playing = p;
 }
+
+var PLAYBACK_HISTORY_LIMIT = 96;
+var playbackHistoryIds = [];
+var playbackHistoryKeys = [];
+var playbackHistoryCursor = -1;
+var playbackHistorySongIds = new WeakMap();
+var playbackHistoryNextSongId = 1;
+
+/**
+ * 为队列对象分配仅存于 WeakMap 的轻量导航 ID，不把歌词或封面对象挂进历史数组。
+ * @param {object} song 队列歌曲对象。
+ * @returns {number} 当前进程内稳定的导航 ID。
+ */
+function playbackHistorySongId(song) {
+  if (!song || (typeof song !== 'object' && typeof song !== 'function')) return 0;
+  var id = playbackHistorySongIds.get(song);
+  if (id) return id;
+  id = playbackHistoryNextSongId++;
+  playbackHistorySongIds.set(song, id);
+  return id;
+}
+
+function commitPlaybackHistory(song) {
+  var id = playbackHistorySongId(song);
+  if (!id) return false;
+  var key = queueItemKey(song);
+  if (playbackHistoryCursor >= 0 &&
+    (playbackHistoryIds[playbackHistoryCursor] === id || (key && playbackHistoryKeys[playbackHistoryCursor] === key))) return false;
+  if (playbackHistoryCursor < playbackHistoryIds.length - 1) {
+    playbackHistoryIds.length = playbackHistoryCursor + 1;
+    playbackHistoryKeys.length = playbackHistoryCursor + 1;
+  }
+  playbackHistoryIds.push(id);
+  playbackHistoryKeys.push(key);
+  if (playbackHistoryIds.length > PLAYBACK_HISTORY_LIMIT) {
+    var trimCount = playbackHistoryIds.length - PLAYBACK_HISTORY_LIMIT;
+    playbackHistoryIds.splice(0, trimCount);
+    playbackHistoryKeys.splice(0, trimCount);
+  }
+  playbackHistoryCursor = playbackHistoryIds.length - 1;
+  return true;
+}
+
+function resetPlaybackHistory() {
+  playbackHistoryIds.length = 0;
+  playbackHistoryKeys.length = 0;
+  playbackHistoryCursor = -1;
+  playbackHistorySongIds = new WeakMap();
+  playbackHistoryNextSongId = 1;
+}
+
+function resolvePlaybackHistoryQueueIndex(id, key) {
+  for (var i = 0; i < playQueue.length; i++) {
+    if (playQueue[i] && playbackHistorySongIds.get(playQueue[i]) === id) return i;
+  }
+  if (key) {
+    for (var j = 0; j < playQueue.length; j++) {
+      if (queueItemKey(playQueue[j]) === key) return j;
+    }
+  }
+  return -1;
+}
+
+function navigatePlaybackHistory(direction) {
+  direction = direction < 0 ? -1 : 1;
+  if (currentIdx >= 0 && currentIdx < playQueue.length) commitPlaybackHistory(playQueue[currentIdx]);
+  var cursor = playbackHistoryCursor + direction;
+  while (cursor >= 0 && cursor < playbackHistoryIds.length) {
+    var idx = resolvePlaybackHistoryQueueIndex(playbackHistoryIds[cursor], playbackHistoryKeys[cursor]);
+    if (idx >= 0) {
+      playbackHistoryCursor = cursor;
+      return idx;
+    }
+    cursor += direction;
+  }
+  return -1;
+}
+
+function randomShuffleQueueIndex() {
+  if (playQueue.length <= 1) return playQueue.length ? 0 : -1;
+  if (currentIdx < 0 || currentIdx >= playQueue.length) return Math.floor(Math.random() * playQueue.length);
+  var idx = Math.floor(Math.random() * (playQueue.length - 1));
+  return idx >= currentIdx ? idx + 1 : idx;
+}
+
 function nextTrack() {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
-  if (playMode === 'shuffle') currentIdx = Math.floor(Math.random() * playQueue.length);
-  else currentIdx = (currentIdx + 1) % playQueue.length;
+  if (playMode === 'shuffle') {
+    var forwardIdx = navigatePlaybackHistory(1);
+    currentIdx = forwardIdx >= 0 ? forwardIdx : randomShuffleQueueIndex();
+  } else currentIdx = (currentIdx + 1) % playQueue.length;
   Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
 }
 function prevTrack() {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
-  currentIdx = (currentIdx - 1 + playQueue.length) % playQueue.length;
+  if (playMode === 'shuffle') {
+    var previousIdx = navigatePlaybackHistory(-1);
+    if (previousIdx < 0) {
+      showToast('没有更早的播放记录');
+      return;
+    }
+    currentIdx = previousIdx;
+  } else currentIdx = (currentIdx - 1 + playQueue.length) % playQueue.length;
   Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
 }
 function shuffleQueue() {
@@ -19444,6 +19540,7 @@ function clearQueue() {
   handoffLocalLyricText(currentLocalSong, null);
   playQueue = []; currentIdx = -1;
   releaseLocalFullCoverData(currentLocalSong);
+  resetPlaybackHistory();
   markQueueContentChanged();
   clearPlaybackSession();
   safeRenderQueuePanel('clear-queue');

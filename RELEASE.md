@@ -1,5 +1,22 @@
 +﻿# 发布流程
 
+## v1.2.100 随机播放历史导航修复
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.100`。
+- 根因修复：旧随机模式只为“下一首”随机改写 `currentIdx`，“上一首”仍用队列索引减一，无法知道用户实际刚听过哪首；现在由成功播放事件提交真实导航历史。
+- 随机模式“上一首”沿历史后退，“下一首”优先沿历史前进，历史末尾才生成新的随机目标；新随机目标会排除当前歌曲。
+- 历史上限为 96 条，仅保存数字 ID 和轻量歌曲键；对象身份放在 `WeakMap`，不会因为导航历史长期强引用歌词、封面或完整歌曲对象。队列清空时完整释放历史。
+- 队列重排后按对象身份恢复，歌曲对象被曲库刷新替换后按歌曲键回退；被删除的历史项会安全跳过。
+- 主界面按钮、方向键、全局快捷键、系统 Media Session、迷你播放器和桌面歌词均复用 `prevTrack()` / `nextTrack()`，不需要各自维护重复状态。
+- 新增 `tests/playback-navigation-history.test.js`，覆盖随机前进/后退、历史前进、队列重排/克隆、空历史、固定内存上限和清空释放。
+- Windows 构建继续只生成 x64 NSIS、blockmap 和 `latest.yml`，不生成 Portable ZIP。
+- 本版本不改动播放器 UI、视觉质感、歌词、桌面覆盖层、音质或用户设置。
+- 全量 Node 回归 `224/224`、四个关键 JavaScript 语法检查和 `git diff --check` 通过；验证与构建没有启动 Mineradio GUI。
+- 打包后 `app.asar` 已确认包含 `APP_VERSION = '1.2.100'`、96 条轻量历史上限、`WeakMap` 对象身份、真实上一首导航和随机下一首排除当前歌曲。
+- 产物大小：安装器 `103337026` 字节；blockmap `110384` 字节；`latest.yml` `353` 字节。
+- SHA256：安装器 `e9032c3989b89fc39033a7d25077f560a06f66836bf15a81f306e3891c9c0c83`；blockmap `8ee6bc6def143b1d0c66634593d862970ebdc9cf69cf96605051464dccf3c29e`；`latest.yml` `a16d604b422c6099455886d1db2e184a5a934ae98e6095933d337783a6099098`。
+- `latest.yml` 的 Setup SHA512：`TmHrklIWFhLKctQbP/DHbLvMiVTVQ2vfn+SXtznuH3pRcm38k4NTwxY5TbF3kSzBH8VnZm01uYQQljo16fAvvA==`。
+
 ## v1.2.99 更新动画与下载轮询状态租约
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.99`。
