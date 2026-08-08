@@ -1,5 +1,21 @@
 +﻿# 发布流程
 
+## v1.2.98 空闲 Canvas 与提示音资源按需释放
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.98`。
+- `IDLE_GUIDE_BACKGROUND_ENABLED=false` 时，`initIdleGuideCanvas()` 只保留 DOM 引用并把 backing store 设为 `1 × 1`，不再取得全屏 2D context、不绑定 resize、不启动 140ms 轮询。
+- 视觉引导进入歌单架步骤时由 `ensureIdleGuideCanvasActive()` 按需恢复；完全淡出后由 `releaseIdleGuideCanvasResources()` 取消 RAF/定时器/监听、清空粒子和轨迹并释放全屏 backing store。
+- 歌单架选择提示音在空闲 5 秒后通过 `releaseUiSfxContext()` 关闭独立 AudioContext，同时释放该 context 的 6 个 noise buffer；定时器使用 context 所有权校验，不会关闭替代实例。
+- Windows 构建继续只生成 x64 NSIS、blockmap 和 `latest.yml`，不生成 Portable ZIP。
+- 本版本不改动播放器 UI、视觉质感、播放控制、歌词内容或用户设置。
+- 新增 `tests/idle-runtime-resource-release.test.js`；全量 Node 回归 `213/213`、关键 JavaScript 语法和 `git diff --check` 通过。
+- 真 Electron 独立实例验证：默认空场 Canvas 为 `1 × 1`、仅 `4` 字节颜色 backing store，context/resize/RAF/140ms timer 均未创建；视觉引导激活时恢复到 `1440 × 810`，释放后重新回到 `1 × 1`，粒子、轨迹、监听与调度全部归零。UI SFX 实例的 6 个 noise buffer 与 AudioContext 均可按所有权释放。
+- 打包后 `app.asar` 已确认包含空场 Canvas 租约、UI SFX 空闲释放与 `APP_VERSION = '1.2.98'`；测试用独立 Mineradio/Electron 进程已全部关闭，没有残留后台进程。
+- 产物大小：安装器 `103335796` 字节；blockmap `110374` 字节；`latest.yml` `350` 字节。
+- SHA256：安装器 `30f2c43a7c008ce737b32ff0c7999976f69322bbed8ce981852c7f222639cc43`；blockmap `b4e5cd46f1fdbdbd6f1e9fd61ee70b2453ce2518c78229669fcb3cf46355c037`；`latest.yml` `50a13a8fc749c9177ab4087abeb3a40b31c2e53c65f714ba2d24e2fbf2f9fb5d`。
+- `latest.yml` 的 Setup SHA512：`u8TfOml0W8pXEefkVinRhsA8V1X2Qqpw5H33oAdlPWrGOUqx1Sje0z3k9+rc+doSxv+i19Z0/QSa0Bg6uToNjA==`。
+- GitHub Release、tag、远端资产回读和 CI 信息在源码提交后补齐。
+
 ## v1.2.97 CPU 与运行内存释放优化重发
 
 - 保持 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.97`，覆盖重发同版本安装包。

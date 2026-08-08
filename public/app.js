@@ -5,8 +5,9 @@
 //  Global State
 // ============================================================
 var audio = null, audioCtx = null, source = null, analyser = null, beatAnalyser = null, gainNode = null, audioReady = false;
-var uiSfxCtx = null, lastShelfSelectSfxAt = 0;
+var uiSfxCtx = null, lastShelfSelectSfxAt = 0, uiSfxCloseTimer = 0;
 var UI_SFX_NOISE_VARIANTS = 6;
+var UI_SFX_IDLE_RELEASE_MS = 5000;
 var uiSfxNoiseBuffers = null, uiSfxNoiseCtx = null, uiSfxNoiseSampleRate = 0, uiSfxNoiseCursor = 0;
 var FFT_SIZE = 2048;
 var AUDIO_ANALYSIS_TARGET_FPS = 60;
@@ -445,7 +446,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.97';
+var APP_VERSION = '1.2.98';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -12928,6 +12929,7 @@ function setShelfGuideCueActive(on) {
     shelfHoverCue.x = c.x;
     shelfHoverCue.y = c.y;
     shelfHoverCue.lastAt = performance.now();
+    ensureIdleGuideCanvasActive();
   } else {
     shelfHoverCue.target = 0;
   }
@@ -18232,6 +18234,30 @@ function ensureUiSfxContext() {
   return uiSfxCtx;
 }
 
+function releaseUiSfxContext(ctx) {
+  if (!ctx || uiSfxCtx !== ctx) return false;
+  uiSfxCtx = null;
+  if (uiSfxNoiseCtx === ctx) {
+    uiSfxNoiseBuffers = null;
+    uiSfxNoiseCtx = null;
+    uiSfxNoiseSampleRate = 0;
+    uiSfxNoiseCursor = 0;
+  }
+  try {
+    var closed = ctx.close && ctx.close();
+    if (closed && closed.catch) closed.catch(function(){});
+  } catch (e) {}
+  return true;
+}
+
+function scheduleUiSfxContextRelease(ctx) {
+  if (uiSfxCloseTimer) clearTimeout(uiSfxCloseTimer);
+  uiSfxCloseTimer = setTimeout(function(){
+    uiSfxCloseTimer = 0;
+    releaseUiSfxContext(ctx);
+  }, UI_SFX_IDLE_RELEASE_MS);
+}
+
 function playShelfSelectTick(direction, variant) {
   var nowMs = performance.now();
   var minGap = variant === 'row' ? 36 : 42;
@@ -18292,6 +18318,7 @@ function playShelfSelectTick(direction, variant) {
   setTimeout(function(){
     try { out.disconnect(); } catch (_) {}
   }, 160);
+  scheduleUiSfxContextRelease(ctx);
 }
 
 function clearAudioFadeTimers() {
@@ -27103,6 +27130,9 @@ var idleGuideStartedAt = performance.now();
 var idleGuideVisible = false;
 var idleGuideLastFrameAt = performance.now();
 var idleGuideDelayTimer = null;
+var idleGuideFrameId = 0;
+var idleGuideCanvasActive = false;
+var idleGuideResizeBound = false;
 // Keep Wallpaper as the only startup idle background.
 var IDLE_GUIDE_BACKGROUND_ENABLED = false;
 var idleGuideInteraction = {
@@ -27220,7 +27250,7 @@ function idleGuideWheel(e) {
   return true;
 }
 function resizeIdleGuideCanvas() {
-  if (!idleGuideCanvas) return;
+  if (!idleGuideCanvas || !idleGuideCtx || !idleGuideCanvasActive) return;
   idleGuideDpr = Math.min(window.devicePixelRatio || 1, 1.6);
   idleGuideW = window.innerWidth;
   idleGuideH = window.innerHeight;
@@ -27261,6 +27291,55 @@ function resizeIdleGuideCanvas() {
       ring: ring
     });
   }
+}
+
+function releaseIdleGuideCanvasResources() {
+  if (idleGuideDelayTimer) {
+    clearTimeout(idleGuideDelayTimer);
+    idleGuideDelayTimer = null;
+  }
+  if (idleGuideFrameId) {
+    cancelAnimationFrame(idleGuideFrameId);
+    idleGuideFrameId = 0;
+  }
+  if (idleGuideResizeBound) {
+    window.removeEventListener('resize', resizeIdleGuideCanvas);
+    idleGuideResizeBound = false;
+  }
+  if (idleGuideCtx && idleGuideW > 0 && idleGuideH > 0) {
+    try { idleGuideCtx.clearRect(0, 0, idleGuideW, idleGuideH); } catch (e) {}
+  }
+  idleGuideCtx = null;
+  idleGuideCanvasActive = false;
+  idleGuideParticles.length = 0;
+  resetIdleGuideTrails();
+  idleGuideW = 0;
+  idleGuideH = 0;
+  idleGuideDpr = 1;
+  if (idleGuideCanvas) {
+    idleGuideCanvas.width = 1;
+    idleGuideCanvas.height = 1;
+  }
+  setIdleGuideVisible(false, false);
+}
+
+function ensureIdleGuideCanvasActive() {
+  if (!idleGuideCanvas) idleGuideCanvas = document.getElementById('idle-guide-canvas');
+  if (!idleGuideCanvas) return false;
+  if (!idleGuideCtx) idleGuideCtx = idleGuideCanvas.getContext('2d');
+  if (!idleGuideCtx) return false;
+  if (!idleGuideResizeBound) {
+    window.addEventListener('resize', resizeIdleGuideCanvas);
+    idleGuideResizeBound = true;
+  }
+  if (!idleGuideCanvasActive) {
+    idleGuideCanvasActive = true;
+    idleGuideStartedAt = performance.now();
+    idleGuideLastFrameAt = idleGuideStartedAt;
+    resizeIdleGuideCanvas();
+  }
+  scheduleIdleGuideFrame(0);
+  return true;
 }
 function projectIdleGuidePoint(x, y, z, rot, cx, cy, depth) {
   var x1 = x * rot.cy + z * rot.sy;
@@ -27318,21 +27397,25 @@ function drawIdleGuideTrail(ctx, trail, now, alpha, energy) {
   ctx.restore();
 }
 function scheduleIdleGuideFrame(delay) {
+  if (!idleGuideCanvasActive || !idleGuideCtx) return;
   if (idleGuideDelayTimer) {
     clearTimeout(idleGuideDelayTimer);
     idleGuideDelayTimer = null;
   }
+  if (idleGuideFrameId) return;
   if (delay && delay > 0) {
     idleGuideDelayTimer = setTimeout(function(){
       idleGuideDelayTimer = null;
-      requestAnimationFrame(drawIdleGuideFrame);
+      if (!idleGuideCanvasActive || idleGuideFrameId) return;
+      idleGuideFrameId = requestAnimationFrame(drawIdleGuideFrame);
     }, delay);
   } else {
-    requestAnimationFrame(drawIdleGuideFrame);
+    idleGuideFrameId = requestAnimationFrame(drawIdleGuideFrame);
   }
 }
 function drawIdleGuideFrame() {
-  if (!idleGuideCanvas || !idleGuideCtx) return;
+  idleGuideFrameId = 0;
+  if (!idleGuideCanvas || !idleGuideCtx || !idleGuideCanvasActive) return;
   var ctx = idleGuideCtx;
   var nowFrame = performance.now();
   var dtFrame = Math.max(1 / 120, Math.min(0.05, (nowFrame - idleGuideLastFrameAt) / 1000 || 1 / 60));
@@ -27345,6 +27428,10 @@ function drawIdleGuideFrame() {
   if (!show) {
     idleGuideCtx.clearRect(0, 0, idleGuideW, idleGuideH);
     resetIdleGuideTrails();
+    if (!IDLE_GUIDE_BACKGROUND_ENABLED && !shelfHoverCue.guide && !shelfHoverCue.zoneActive && !shelfHoverCue.target && !shelfHoverCue.value) {
+      releaseIdleGuideCanvasResources();
+      return;
+    }
     scheduleIdleGuideFrame(140);
     return;
   }
@@ -27566,12 +27653,12 @@ function drawShelfGuideCue(ctx, t, strength) {
 function initIdleGuideCanvas() {
   idleGuideCanvas = document.getElementById('idle-guide-canvas');
   if (!idleGuideCanvas) return;
-  idleGuideCtx = idleGuideCanvas.getContext('2d');
-  if (!idleGuideCtx) return;
-  idleGuideStartedAt = performance.now();
-  resizeIdleGuideCanvas();
-  window.addEventListener('resize', resizeIdleGuideCanvas);
-  drawIdleGuideFrame();
+  if (IDLE_GUIDE_BACKGROUND_ENABLED) {
+    ensureIdleGuideCanvasActive();
+  } else {
+    idleGuideCanvas.width = 1;
+    idleGuideCanvas.height = 1;
+  }
 }
 
 // ============================================================
