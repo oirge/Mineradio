@@ -14,7 +14,9 @@
 - 产物大小：安装器 `103335796` 字节；blockmap `110374` 字节；`latest.yml` `350` 字节。
 - SHA256：安装器 `30f2c43a7c008ce737b32ff0c7999976f69322bbed8ce981852c7f222639cc43`；blockmap `b4e5cd46f1fdbdbd6f1e9fd61ee70b2453ce2518c78229669fcb3cf46355c037`；`latest.yml` `50a13a8fc749c9177ab4087abeb3a40b31c2e53c65f714ba2d24e2fbf2f9fb5d`。
 - `latest.yml` 的 Setup SHA512：`u8TfOml0W8pXEefkVinRhsA8V1X2Qqpw5H33oAdlPWrGOUqx1Sje0z3k9+rc+doSxv+i19Z0/QSa0Bg6uToNjA==`。
-- GitHub Release、tag、远端资产回读和 CI 信息在源码提交后补齐。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.2.98`，已标记 Latest，且不是 draft 或 prerelease；tag 指向性能提交 `24fb38b3ba2d51887b0b86e7b43fb5c6893d9d88`。
+- 正式远端资产仅包含安装器、blockmap、`latest.yml` 和 SHA256 清单，没有 Portable ZIP；四个资产的大小与 SHA256 均与本地产物一致。
+- `main` CI run `31245966288` 成功，全量测试、语法和发布门禁均通过。
 
 ## v1.2.97 CPU 与运行内存释放优化重发
 
