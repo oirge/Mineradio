@@ -14,6 +14,9 @@
 - 产物大小：安装器 `103336027` 字节；blockmap `110284` 字节；`latest.yml` `350` 字节。
 - SHA256：安装器 `e3207c1f82f995a47d2cd786848ba705c453ea6cf7e1db4fd58410e2e2279b1f`；blockmap `64fb90cd5e7255da964ca1b10077be1b290803420c8491f789ff681feb17c56c`；`latest.yml` `7463ddabfafec811c7ccaf9b3637994c71cad96ea3cc68cede098db5f46dc359`。
 - `latest.yml` 的 Setup SHA512：`DHUhn7WkPgKiKOeO6i6mymQIbTKpd8nrwsPhfWsIQ1Ea5JMz8xsIYlhNpKmW6sOdh6wZguh7K9/P0D2LyqjweA==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.2.99`，已标记 Latest，且不是 draft 或 prerelease；tag 指向性能提交 `c3a5bb9ed38653983fc75c6f19d851fefe7f0fc4`。
+- 正式远端资产仅包含安装器、blockmap、`latest.yml` 和 SHA256 清单，没有 Portable ZIP；GitHub 返回的四个资产大小与 SHA256 均和本地一致。
+- `main` CI run `31246505555` 成功，全量测试、语法和发布门禁均通过。
 
 ## v1.2.98 空闲 Canvas 与提示音资源按需释放
 

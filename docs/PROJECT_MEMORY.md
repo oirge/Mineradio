@@ -4,13 +4,13 @@
 
 ## Stable Project Facts
 
-- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
+- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.2.94` 已发布；桌面歌词字号和光效调节改为两组独立设置胶囊，包含图标、标签、数值和加减键，上一首、播放/暂停、下一首、`×` 关闭和手动 bounds 持久化继续保留。
+- 当前源码检查点：`v1.2.99` 已发布；更新入口无限动画和下载状态轮询均改为可见性/前后台状态租约，播放、歌词、桌面覆盖层和 UI 质感保持不变。
 - 当前工作分支：`codex/complete-v1.2.79`。
-- 最近正式安装包 Release 基线：`v1.2.92`（2026-08-07，桌面歌词播放控制栏版；tag 源码提交 `43f4c22`，GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单回读校验一致，Portable ZIP 只保留本地）。
+- 最近正式安装包 Release 基线：`v1.2.99`（2026-08-08，更新后台占用优化版；tag 源码提交 `c3a5bb9`，GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单校验一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -19,9 +19,10 @@
 
 ## Workspace Organization
 
-2026-07-26 当前交接工作区：
+2026-08-08 当前交接工作区：
 
-- 当前 Git 仓库为 `C:\Users\oirg\Desktop\mok\Mineradio-sync`；后续代码、文档和发布操作都在此目录进行。
+- 当前 Git 仓库为 `C:\Users\Administrator\Desktop\Mineradio-main`；后续代码、文档和发布操作都在此目录进行。
+- 规则中记录的旧仓库 `C:\Users\oirg\Desktop\mok\Mineradio-sync` 在当前环境不存在，不要把它当作本机可写路径。
 - `E:\桌面\播放器软件\Mineradio` 及其 `resources\app` 是历史工作区记录，本环境不存在；不要把新修改写回该路径。
 
 2026-06-18 历史工作区整理记录：
@@ -32,6 +33,8 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+- `v1.2.99`（2026-08-08）继续降低更新界面后台占用：无更新时不再启动更新入口两条 GSAP 无限呼吸动画，窗口最小化/隐藏/深后台时释放 tween 和延迟 timer；下载面板打开保持 320–360ms 状态刷新，关闭降到 1.5 秒，深后台降到 5 秒，重新打开立即刷新，服务端下载任务不暂停；预览进度在面板关闭或后台时取消。新增/扩展更新生命周期测试，全量 Node 回归 `218/218` 通过；未启动 Mineradio GUI。安装器 `103336027` 字节 / SHA256 `e3207c1f82f995a47d2cd786848ba705c453ea6cf7e1db4fd58410e2e2279b1f`；blockmap `110284` 字节 / `64fb90cd5e7255da964ca1b10077be1b290803420c8491f789ff681feb17c56c`；`latest.yml` `350` 字节 / `7463ddabfafec811c7ccaf9b3637994c71cad96ea3cc68cede098db5f46dc359`。GitHub Release 已标记 Latest，tag 指向 `c3a5bb9ed38653983fc75c6f19d851fefe7f0fc4`，远端四个资产校验一致，`main` CI run `31246505555` 成功。
 
 - `v1.2.94`（2026-08-07）完成桌面歌词调节控件重排：字号和光效改为两组独立设置胶囊，保留步进、锁定、播放控制、关闭和位置持久化语义；全量 Node 回归 `204/204` 通过。安装器 `103333819` 字节 / SHA256 `9118b7b01ca145fa87a3276efe556768c0368292d0c62497e1201f0bf575f331`；blockmap `110223` 字节 / `5c85a0eae90c28c56ac0b4e9ae446aab0b2a1e1f1870a9c8ffcd060b74587d7d`；`latest.yml` `350` 字节 / `51164bba294675bbd0ff519665c70a3e1ea5dbf6664cf1343f9148cc1a2ceed4`；本地 Portable ZIP `144918530` 字节 / `6bf136c29beeb27631de3a82f6fa0933c652a7cb68dc1781e526d3996af48132`。GitHub Release `v1.2.94` 已标记 Latest，远端四个资产回读一致，`main` CI run `31152609456` 成功，源码提交 `8917c2b`。
 
