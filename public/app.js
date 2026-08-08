@@ -446,7 +446,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.100';
+var APP_VERSION = '1.3.0';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -18718,8 +18718,12 @@ function restorePlaybackSessionForLocalLibrary(songs, folderPath) {
   var idx = findPlaybackSessionIndex(songs, session);
   if (idx < 0) return false;
   currentIdx = idx;
-  pendingPlaybackSessionResume = { idx:idx, time:Math.max(0, Number(session.currentTime) || 0) };
   playMode = /^(loop|shuffle|single)$/.test(session.playMode || '') ? session.playMode : playMode;
+  if (playMode === 'shuffle') {
+    shufflePlayQueueOnce({ toast: false, reason: 'playback-session-restore' });
+    idx = currentIdx;
+  }
+  pendingPlaybackSessionResume = { idx:idx, time:Math.max(0, Number(session.currentTime) || 0) };
   updatePlayModeButton(false);
   try { updateControlTrackInfo(songs[idx]); } catch (e) {}
   playing = false;
@@ -19236,7 +19240,6 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
     showToast(opts.manual ? '本地音乐启动失败，请重新选择文件' : '歌曲已载入，点击播放按钮继续播放');
     return;
   }
-  commitPlaybackHistory(song);
   forcePlaybackControlsInteractive();
   markPlayPhase('session-begin');
   safePlaybackStep('listen-session-begin', function(){ beginListenSession(song, opts.context || null); });
@@ -19248,6 +19251,11 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
 async function playQueueAt(idx, opts) {
   opts = opts || {};
   if (idx < 0 || idx >= playQueue.length) return;
+  if (playMode === 'shuffle' && !shuffledPlayQueueArrays.has(playQueue)) {
+    currentIdx = idx;
+    shufflePlayQueueOnce({ toast: false, reason: 'shuffle-new-queue' });
+    idx = currentIdx;
+  }
   clearLocalLibraryPassiveQueue();
   markRenderInteraction('track-switch', 1500);
   var playPhase = 'start';
@@ -19377,8 +19385,7 @@ async function togglePlay() {
     }
     if (!audio) return;
     if (audio.paused || audio.ended) {
-      var resumed = await attemptAudioPlay({ manual: true });
-      if (resumed) commitPlaybackHistory(playQueue[currentIdx]);
+      await attemptAudioPlay({ manual: true });
     } else {
       await fadeOutAndPauseAudio();
       playing = false;
@@ -19414,123 +19421,48 @@ function setPlayIcon(p) {
   state.playing = p;
 }
 
-var PLAYBACK_HISTORY_LIMIT = 96;
-var playbackHistoryIds = [];
-var playbackHistoryKeys = [];
-var playbackHistoryCursor = -1;
-var playbackHistorySongIds = new WeakMap();
-var playbackHistoryNextSongId = 1;
+var shuffledPlayQueueArrays = new WeakSet();
 
 /**
- * 为队列对象分配仅存于 WeakMap 的轻量导航 ID，不把歌词或封面对象挂进历史数组。
- * @param {object} song 队列歌曲对象。
- * @returns {number} 当前进程内稳定的导航 ID。
+ * 对当前队列执行一次 Fisher-Yates 洗牌，并在重排后继续指向同一首当前歌曲。
+ * WeakSet 仅保存数组的弱身份，不会让已经被替换的旧队列继续驻留内存。
+ * @param {{toast?: boolean, reason?: string}=} opts 渲染与提示选项。
+ * @returns {boolean} 是否执行了至少两首歌曲的重排。
  */
-function playbackHistorySongId(song) {
-  if (!song || (typeof song !== 'object' && typeof song !== 'function')) return 0;
-  var id = playbackHistorySongIds.get(song);
-  if (id) return id;
-  id = playbackHistoryNextSongId++;
-  playbackHistorySongIds.set(song, id);
-  return id;
-}
-
-function commitPlaybackHistory(song) {
-  var id = playbackHistorySongId(song);
-  if (!id) return false;
-  var key = queueItemKey(song);
-  if (playbackHistoryCursor >= 0 &&
-    (playbackHistoryIds[playbackHistoryCursor] === id || (key && playbackHistoryKeys[playbackHistoryCursor] === key))) return false;
-  if (playbackHistoryCursor < playbackHistoryIds.length - 1) {
-    playbackHistoryIds.length = playbackHistoryCursor + 1;
-    playbackHistoryKeys.length = playbackHistoryCursor + 1;
+function shufflePlayQueueOnce(opts) {
+  opts = opts || {};
+  if (!Array.isArray(playQueue)) return false;
+  var currentSong = currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
+  for (var i = playQueue.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = playQueue[i]; playQueue[i] = playQueue[j]; playQueue[j] = tmp;
   }
-  playbackHistoryIds.push(id);
-  playbackHistoryKeys.push(key);
-  if (playbackHistoryIds.length > PLAYBACK_HISTORY_LIMIT) {
-    var trimCount = playbackHistoryIds.length - PLAYBACK_HISTORY_LIMIT;
-    playbackHistoryIds.splice(0, trimCount);
-    playbackHistoryKeys.splice(0, trimCount);
-  }
-  playbackHistoryCursor = playbackHistoryIds.length - 1;
-  return true;
-}
-
-function resetPlaybackHistory() {
-  playbackHistoryIds.length = 0;
-  playbackHistoryKeys.length = 0;
-  playbackHistoryCursor = -1;
-  playbackHistorySongIds = new WeakMap();
-  playbackHistoryNextSongId = 1;
-}
-
-function resolvePlaybackHistoryQueueIndex(id, key) {
-  for (var i = 0; i < playQueue.length; i++) {
-    if (playQueue[i] && playbackHistorySongIds.get(playQueue[i]) === id) return i;
-  }
-  if (key) {
-    for (var j = 0; j < playQueue.length; j++) {
-      if (queueItemKey(playQueue[j]) === key) return j;
-    }
-  }
-  return -1;
-}
-
-function navigatePlaybackHistory(direction) {
-  direction = direction < 0 ? -1 : 1;
-  if (currentIdx >= 0 && currentIdx < playQueue.length) commitPlaybackHistory(playQueue[currentIdx]);
-  var cursor = playbackHistoryCursor + direction;
-  while (cursor >= 0 && cursor < playbackHistoryIds.length) {
-    var idx = resolvePlaybackHistoryQueueIndex(playbackHistoryIds[cursor], playbackHistoryKeys[cursor]);
-    if (idx >= 0) {
-      playbackHistoryCursor = cursor;
-      return idx;
-    }
-    cursor += direction;
-  }
-  return -1;
-}
-
-function randomShuffleQueueIndex() {
-  if (playQueue.length <= 1) return playQueue.length ? 0 : -1;
-  if (currentIdx < 0 || currentIdx >= playQueue.length) return Math.floor(Math.random() * playQueue.length);
-  var idx = Math.floor(Math.random() * (playQueue.length - 1));
-  return idx >= currentIdx ? idx + 1 : idx;
+  shuffledPlayQueueArrays.add(playQueue);
+  if (currentSong) currentIdx = playQueue.indexOf(currentSong);
+  else currentIdx = playQueue.length ? 0 : -1;
+  markQueueContentChanged();
+  safeRenderQueuePanel(opts.reason || 'shuffle-queue', { scrollCurrent: miniQueueOpen });
+  safeShelfRebuild(opts.reason || 'shuffle-queue');
+  if (opts.toast !== false) showToast('队列已随机');
+  return playQueue.length > 1;
 }
 
 function nextTrack() {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
-  if (playMode === 'shuffle') {
-    var forwardIdx = navigatePlaybackHistory(1);
-    currentIdx = forwardIdx >= 0 ? forwardIdx : randomShuffleQueueIndex();
-  } else currentIdx = (currentIdx + 1) % playQueue.length;
+  currentIdx = (currentIdx + 1) % playQueue.length;
   Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
 }
 function prevTrack() {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
-  if (playMode === 'shuffle') {
-    var previousIdx = navigatePlaybackHistory(-1);
-    if (previousIdx < 0) {
-      showToast('没有更早的播放记录');
-      return;
-    }
-    currentIdx = previousIdx;
-  } else currentIdx = (currentIdx - 1 + playQueue.length) % playQueue.length;
+  currentIdx = (currentIdx - 1 + playQueue.length) % playQueue.length;
   Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
 }
 function shuffleQueue() {
-  for (var i = playQueue.length - 1; i > 0; i--) {
-    var j = Math.floor(Math.random() * (i + 1));
-    var tmp = playQueue[i]; playQueue[i] = playQueue[j]; playQueue[j] = tmp;
-  }
-  markQueueContentChanged();
-  currentIdx = 0; safeRenderQueuePanel('shuffle-queue');
-  showToast('队列已随机');
-  safeShelfRebuild('shuffle-queue');
+  shufflePlayQueueOnce({ toast: true, reason: 'shuffle-queue' });
 }
 /**
  * 清空播放队列和恢复会话，并释放已失去队列所有权的完整本地封面。
@@ -19540,7 +19472,6 @@ function clearQueue() {
   handoffLocalLyricText(currentLocalSong, null);
   playQueue = []; currentIdx = -1;
   releaseLocalFullCoverData(currentLocalSong);
-  resetPlaybackHistory();
   markQueueContentChanged();
   clearPlaybackSession();
   safeRenderQueuePanel('clear-queue');
@@ -19613,6 +19544,7 @@ function cyclePlayMode() {
   var modes = ['loop', 'shuffle', 'single'];
   var idx = modes.indexOf(playMode);
   playMode = modes[(idx + 1) % modes.length];
+  if (playMode === 'shuffle') shufflePlayQueueOnce({ toast: false, reason: 'shuffle-mode' });
   updatePlayModeButton(true);
   savePlaybackSession(true);
   showToast('播放模式: ' + playModeLabel(playMode));

@@ -1,5 +1,22 @@
 +﻿# 发布流程
 
+## v1.3.0 固定乱序播放队列
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.0`。
+- 进入随机播放模式时对整个 `playQueue` 执行一次 Fisher-Yates 洗牌；自动播完、手动上一首和手动下一首都只沿这份固定乱序前后移动并首尾循环，不再逐次随机索引。
+- 洗牌前捕获当前歌曲对象，重排后重新定位 `currentIdx`，保证切换播放模式和手动随机队列时当前声音、进度与歌曲都不跳。
+- 随机模式恢复上次会话时先定位恢复歌曲再洗牌，并同步修正待恢复进度使用的新索引；随机模式换入新数组队列时在首次播放前只洗牌一次。
+- 使用 `WeakSet` 记录已洗牌数组身份，旧队列被替换后可直接回收；移除 v1.2.100 的 96 条播放历史 ID/key 数组和歌曲 `WeakMap`，不再维护额外导航状态。
+- 主界面按钮、方向键、全局快捷键、系统 Media Session、迷你播放器和桌面歌词均复用顺序前后导航，不需要额外状态同步。
+- 用 `tests/playback-shuffle-order.test.js` 替换播放历史测试，覆盖单次整队洗牌、当前歌曲保持、固定乱序往返、手动洗牌、新队列首次洗牌、会话恢复和弱引用所有权。
+- Windows 构建继续只生成 x64 NSIS、blockmap 和 `latest.yml`，不生成 Portable ZIP。
+- 本版本不改动播放器 UI、视觉质感、歌词、桌面覆盖层、音质或用户设置。
+- 全量 Node 回归 `224/224`、四个关键 JavaScript 语法检查和 `git diff --check` 通过；验证与构建没有启动 Mineradio GUI。
+- 打包后 `app.asar` 已确认包含 `APP_VERSION = '1.3.0'`、Fisher-Yates 单次洗牌、当前歌曲保持、`WeakSet` 队列身份、固定乱序前后循环，且旧播放历史实现已经移除。
+- 产物大小：安装器 `103336921` 字节；blockmap `110180` 字节；`latest.yml` `347` 字节。
+- SHA256：安装器 `840753c5fc4647389907f8b15ac0463bb0ea1e095db5d92c8460a1caecf1a2d3`；blockmap `3fa5ef65c5519b91a62bf624cbe40df97accaf794f91accb15fbc24f1b38122b`；`latest.yml` `248ad71583c4819a03fc63599aa16a8d7962b128f8e31a8b832391f0dea4ebc8`。
+- `latest.yml` 的 Setup SHA512：`WdhKIPd4mNuZf7FdlR3yzzElVUkMqWnpuLjFanCngcduGDom5rm0ZiDtfbIibL8i/qgO2rqs3Z5JvjCPidi9uA==`。
+
 ## v1.2.100 随机播放历史导航修复
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.100`。
