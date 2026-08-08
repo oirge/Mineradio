@@ -13,6 +13,7 @@ function loadUpdatePollingHarness() {
   assert.ok(start >= 0 && end > start, '更新轮询接缝缺失');
 
   const state = {
+    open: true,
     status: 'downloading',
     mode: 'installer',
     pollTimer: null,
@@ -26,9 +27,12 @@ function loadUpdatePollingHarness() {
   const timers = [];
   const applied = [];
   let apiCalls = 0;
+  let deepBackground = false;
 
   const context = {
     updatePreviewState: state,
+    document: { hidden: false },
+    isDeepBackgroundMode() { return deepBackground; },
     apiJson(url) {
       apiCalls++;
       return new Promise((resolve, reject) => pending.push({ url, resolve, reject }));
@@ -55,7 +59,15 @@ function loadUpdatePollingHarness() {
     encodeURIComponent,
   };
   vm.runInNewContext(source.slice(start, end), context);
-  return { context, state, pending, timers, applied, getApiCalls: () => apiCalls };
+  return {
+    context,
+    state,
+    pending,
+    timers,
+    applied,
+    getApiCalls: () => apiCalls,
+    setDeepBackground(value) { deepBackground = !!value; },
+  };
 }
 
 test('更新状态轮询同一时刻只保留一个在途请求', async () => {
@@ -95,4 +107,35 @@ test('旧更新任务响应不能覆盖新任务状态', async () => {
   assert.equal(harness.applied.length, 1);
   assert.equal(harness.applied[0].id, 'job-2');
   assert.equal(harness.state.progress, 12);
+});
+
+test('更新面板关闭和深后台时降低状态轮询频率', async () => {
+  const closed = loadUpdatePollingHarness();
+  closed.state.open = false;
+  const closedPoll = closed.context.pollUpdateDownloadJob('job-1');
+  closed.pending[0].resolve({ id: 'job-1', mode: 'installer', status: 'downloading', progress: 8 });
+  await closedPoll;
+  assert.equal(closed.timers.at(-1).delay, 1500);
+
+  const background = loadUpdatePollingHarness();
+  background.context.document.hidden = true;
+  background.setDeepBackground(true);
+  const backgroundPoll = background.context.pollUpdateDownloadJob('job-1');
+  background.pending[0].resolve({ id: 'job-1', mode: 'installer', status: 'downloading', progress: 9 });
+  await backgroundPoll;
+  assert.equal(background.timers.at(-1).delay, 5000);
+});
+
+test('更新面板可见性变化会重排唯一轮询定时器', () => {
+  const harness = loadUpdatePollingHarness();
+  harness.context.scheduleUpdateJobPoll('job-1', 'installer');
+  assert.equal(harness.timers.length, 1);
+  assert.equal(harness.timers[0].delay, 360);
+
+  harness.state.open = false;
+  harness.context.rescheduleUpdateJobPolling(false);
+  assert.equal(harness.timers[0].cleared, true);
+  assert.equal(harness.timers.length, 2);
+  assert.equal(harness.timers[1].delay, 1500);
+  assert.equal(harness.state.pollTimer, harness.timers[1]);
 });

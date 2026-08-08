@@ -446,13 +446,15 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.2.98';
+var APP_VERSION = '1.2.99';
 var updatePreviewState = {
   visible: false,
   open: false,
   status: 'idle',
   progress: 0,
   timer: null,
+  iconBreathing: false,
+  iconBreathingTimer: null,
   pollTimer: null,
   pollInFlight: null,
   pollGeneration: 0,
@@ -1501,6 +1503,7 @@ function updateDesktopRuntimeState(state) {
   desktopRuntimeState.fullscreen = !!(state.isFullScreen || state.isNativeFullScreen || state.isHtmlFullScreen || state.isWindowFullScreen);
   updateRenderPowerClasses();
   applyRendererPowerMode();
+  syncUpdateRuntimeActivity();
   if (fx && (fx.desktopLyrics || fx.wallpaperMode)) scheduleDesktopOverlaySync(0);
   if (wasDeep && !isDeepBackgroundMode()) recoverVisualsAfterBackground('desktop-runtime-state');
   if (desktopRuntimeState.fullscreen !== wasFullscreen) scheduleMainRendererViewportRefresh('desktop-runtime-state');
@@ -1510,6 +1513,7 @@ function installRenderPowerHooks() {
   document.addEventListener('visibilitychange', function(){
     updateRenderPowerClasses();
     applyRendererPowerMode();
+    syncUpdateRuntimeActivity();
     if (!isDeepBackgroundMode()) recoverVisualsAfterBackground('visibilitychange');
   });
   window.addEventListener('focus', function(){
@@ -26244,25 +26248,31 @@ function initUpdatePreview() {
   renderUpdatePreviewPanel();
   setUpdatePreviewVisible(true);
   checkLatestUpdate();
-  setTimeout(startUpdateIconBreathing, 760);
 }
 
 function setUpdatePreviewVisible(visible) {
   updatePreviewState.visible = !!visible;
   var entry = document.getElementById('update-entry');
-  if (!entry) return;
-  entry.classList.toggle('available', updatePreviewState.visible);
-  if (!updatePreviewState.visible && window.gsap) {
-    window.gsap.killTweensOf(entry);
-    window.gsap.set(entry, { autoAlpha: 0, y: 0, clearProps: 'boxShadow,filter,scale' });
+  if (!entry) {
+    stopUpdateIconBreathing(false);
     return;
   }
-  if (updatePreviewState.visible && window.gsap) {
+  entry.classList.toggle('available', updatePreviewState.visible);
+  stopUpdateIconBreathing(true);
+  if (!updatePreviewState.visible) {
+    if (window.gsap) {
+      window.gsap.killTweensOf(entry);
+      window.gsap.set(entry, { autoAlpha: 0, y: 0, clearProps: 'boxShadow,filter,scale' });
+    }
+    return;
+  }
+  if (window.gsap) {
     window.gsap.fromTo(entry,
       { autoAlpha: 0, y: -6, scale: 0.92, filter: 'blur(6px)' },
       { autoAlpha: 1, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.62, delay: 0.18, ease: 'expo.out', overwrite: true }
     );
   }
+  syncUpdateIconBreathing(760);
 }
 
 /**
@@ -26307,13 +26317,42 @@ function applyLatestUpdateInfo(data) {
   setUpdatePreviewVisible(updatePreviewState.updateAvailable || updatePreviewState.preview);
 }
 
-function startUpdateIconBreathing() {
+function canRunUpdateIconBreathing() {
+  return !!(updatePreviewState.visible &&
+    updatePreviewState.updateAvailable &&
+    !document.hidden &&
+    !isDeepBackgroundMode());
+}
+
+function stopUpdateIconBreathing(resetVisual) {
+  if (updatePreviewState.iconBreathingTimer) clearTimeout(updatePreviewState.iconBreathingTimer);
+  updatePreviewState.iconBreathingTimer = null;
+  updatePreviewState.iconBreathing = false;
   var entry = document.getElementById('update-entry');
   if (!entry || !window.gsap) return;
   var ring = entry.querySelector('.update-ring');
   window.gsap.killTweensOf(entry, 'y,boxShadow');
+  if (ring) window.gsap.killTweensOf(ring, 'rotate');
+  if (resetVisual !== false) {
+    window.gsap.set(entry, { y: 0, clearProps: 'boxShadow' });
+    if (ring) window.gsap.set(ring, { rotate: 0, clearProps: 'transform' });
+  }
+}
+
+function startUpdateIconBreathing() {
+  updatePreviewState.iconBreathingTimer = null;
+  if (!canRunUpdateIconBreathing()) {
+    stopUpdateIconBreathing(true);
+    return;
+  }
+  if (updatePreviewState.iconBreathing) return;
+  var entry = document.getElementById('update-entry');
+  if (!entry || !window.gsap) return;
+  var ring = entry.querySelector('.update-ring');
+  updatePreviewState.iconBreathing = true;
+  window.gsap.killTweensOf(entry, 'y,boxShadow');
   window.gsap.set(entry, { autoAlpha: 1 });
-  if (ring) window.gsap.killTweensOf(ring);
+  if (ring) window.gsap.killTweensOf(ring, 'rotate');
   window.gsap.to(entry, {
     y: -1.4,
     boxShadow: '0 16px 44px rgba(0,0,0,.32),0 0 24px rgba(244,210,138,.18),0 0 13px rgba(157,184,207,.06),inset 0 1px 0 rgba(255,255,255,.11)',
@@ -26332,6 +26371,15 @@ function startUpdateIconBreathing() {
       transformOrigin: '50% 50%'
     });
   }
+}
+
+function syncUpdateIconBreathing(delay) {
+  if (!canRunUpdateIconBreathing()) {
+    stopUpdateIconBreathing(true);
+    return;
+  }
+  if (updatePreviewState.iconBreathing || updatePreviewState.iconBreathingTimer) return;
+  updatePreviewState.iconBreathingTimer = setTimeout(startUpdateIconBreathing, Math.max(0, Number(delay) || 0));
 }
 
 function updatePreviewContentSignature() {
@@ -26465,20 +26513,25 @@ function openUpdatePanel() {
   var mask = document.getElementById('update-modal');
   var entry = document.getElementById('update-entry');
   if (!mask) return;
+  updatePreviewState.open = true;
   renderUpdatePreviewPanel();
   if (entry && window.gsap) {
     window.gsap.fromTo(entry, { scale: 0.93 }, { scale: 1, duration: 0.42, ease: 'back.out(1.7)', overwrite: 'auto' });
   }
   if (updatePreviewState.status !== 'downloading' && updatePreviewState.status !== 'opening') checkLatestUpdate({ force: true });
   openGsapModal(mask);
-  updatePreviewState.open = true;
+  rescheduleUpdateJobPolling(true);
   animateUpdatePanelContents();
 }
 
 function closeUpdatePanel() {
-  closeGsapModal(document.getElementById('update-modal'), function(){
-    updatePreviewState.open = false;
-  });
+  updatePreviewState.open = false;
+  if (updatePreviewState.timer) {
+    stopUpdatePreviewSimulation(true);
+    renderUpdatePreviewPanel();
+  }
+  rescheduleUpdateJobPolling(false);
+  closeGsapModal(document.getElementById('update-modal'));
 }
 
 function animateUpdatePanelContents() {
@@ -26519,6 +26572,15 @@ function clearUpdateJobPolling() {
   updatePreviewState.pollInFlight = null;
 }
 
+var UPDATE_JOB_POLL_CLOSED_MS = 1500;
+var UPDATE_JOB_POLL_BACKGROUND_MS = 5000;
+
+function updateJobPollDelay(mode) {
+  if (document.hidden || isDeepBackgroundMode()) return UPDATE_JOB_POLL_BACKGROUND_MS;
+  if (!updatePreviewState.open) return UPDATE_JOB_POLL_CLOSED_MS;
+  return mode === 'patch' ? 320 : 360;
+}
+
 function scheduleUpdateJobPoll(id, mode, delay) {
   if (!id || updatePreviewState.pollTimer || updatePreviewState.pollInFlight) return;
   var generation = updatePreviewState.pollGeneration;
@@ -26527,7 +26589,36 @@ function scheduleUpdateJobPoll(id, mode, delay) {
     if (generation !== updatePreviewState.pollGeneration) return;
     if (mode === 'patch') pollUpdatePatchJob(id, generation);
     else pollUpdateDownloadJob(id, generation);
-  }, Math.max(80, Number(delay) || 0));
+  }, Math.max(80, delay == null ? updateJobPollDelay(mode) : (Number(delay) || 0)));
+}
+
+function rescheduleUpdateJobPolling(immediate) {
+  if (updatePreviewState.status !== 'downloading' || updatePreviewState.pollInFlight) return;
+  var mode = updatePreviewState.mode === 'patch' ? 'patch' : 'installer';
+  var id = mode === 'patch' ? updatePreviewState.patchJobId : updatePreviewState.downloadJobId;
+  if (!id) return;
+  if (updatePreviewState.pollTimer) clearTimeout(updatePreviewState.pollTimer);
+  updatePreviewState.pollTimer = null;
+  scheduleUpdateJobPoll(id, mode, immediate ? 0 : updateJobPollDelay(mode));
+}
+
+function stopUpdatePreviewSimulation(resetState) {
+  if (updatePreviewState.timer) clearInterval(updatePreviewState.timer);
+  updatePreviewState.timer = null;
+  if (!resetState) return;
+  updatePreviewState.status = 'idle';
+  updatePreviewState.progress = 0;
+  updatePreviewState.lastProgressSignature = '';
+}
+
+function syncUpdateRuntimeActivity() {
+  var sleeping = document.hidden || isDeepBackgroundMode();
+  syncUpdateIconBreathing(sleeping ? 0 : 180);
+  if (sleeping && updatePreviewState.timer) {
+    stopUpdatePreviewSimulation(true);
+    renderUpdatePreviewPanel();
+  }
+  rescheduleUpdateJobPolling(!sleeping && updatePreviewState.open);
 }
 
 function isCurrentUpdateJobPoll(token) {
@@ -26544,7 +26635,7 @@ async function startRealUpdateDownload() {
     openDownloadedUpdateInstaller(updatePreviewState.installerPath);
     return;
   }
-  if (updatePreviewState.timer) clearInterval(updatePreviewState.timer);
+  stopUpdatePreviewSimulation(false);
   clearUpdateJobPolling();
   updatePreviewState.status = 'downloading';
   updatePreviewState.progress = 0;
@@ -26570,7 +26661,7 @@ async function startRealUpdateDownload() {
     if (!job || job.ok === false || !job.id) throw new Error((job && job.error) || 'UPDATE_DOWNLOAD_START_FAILED');
     updatePreviewState.downloadJobId = job.id;
     applyUpdateDownloadJob(job);
-    if (updatePreviewState.status === 'downloading') scheduleUpdateJobPoll(job.id, 'installer', 360);
+    if (updatePreviewState.status === 'downloading') scheduleUpdateJobPoll(job.id, 'installer');
   } catch (e) {
     updatePreviewState.status = 'error';
     updatePreviewState.errorReason = (e && e.message) || '更新下载启动失败';
@@ -26586,7 +26677,7 @@ async function startRealUpdatePatch() {
     restartForAppliedPatch();
     return;
   }
-  if (updatePreviewState.timer) clearInterval(updatePreviewState.timer);
+  stopUpdatePreviewSimulation(false);
   clearUpdateJobPolling();
   updatePreviewState.status = 'downloading';
   updatePreviewState.mode = 'patch';
@@ -26613,7 +26704,7 @@ async function startRealUpdatePatch() {
     if (!job || job.ok === false || !job.id) throw new Error((job && job.error) || 'UPDATE_PATCH_START_FAILED');
     updatePreviewState.patchJobId = job.id;
     applyUpdateDownloadJob(job);
-    if (updatePreviewState.status === 'downloading') scheduleUpdateJobPoll(job.id, 'patch', 320);
+    if (updatePreviewState.status === 'downloading') scheduleUpdateJobPoll(job.id, 'patch');
   } catch (e) {
     updatePreviewState.status = 'error';
     updatePreviewState.errorReason = (e && e.message) || '快速补丁不可用';
@@ -26648,7 +26739,7 @@ async function pollUpdateDownloadJob(id, generation) {
     if (updatePreviewState.pollInFlight === token) {
       updatePreviewState.pollInFlight = null;
       if (isCurrentUpdateJobPoll({ id: id, mode: 'installer', generation: generation }) && updatePreviewState.status === 'downloading') {
-        scheduleUpdateJobPoll(id, 'installer', 360);
+        scheduleUpdateJobPoll(id, 'installer');
       }
     }
   }
@@ -26676,7 +26767,7 @@ async function pollUpdatePatchJob(id, generation) {
     if (updatePreviewState.pollInFlight === token) {
       updatePreviewState.pollInFlight = null;
       if (isCurrentUpdateJobPoll({ id: id, mode: 'patch', generation: generation }) && updatePreviewState.status === 'downloading') {
-        scheduleUpdateJobPoll(id, 'patch', 320);
+        scheduleUpdateJobPoll(id, 'patch');
       }
     }
   }
@@ -26805,7 +26896,7 @@ function startUpdatePreviewDownload() {
     return;
   }
   if (updatePreviewState.status === 'downloading') return;
-  if (updatePreviewState.timer) clearInterval(updatePreviewState.timer);
+  stopUpdatePreviewSimulation(false);
   updatePreviewState.status = 'downloading';
   updateUpdatePreviewProgress(0);
   var btn = document.getElementById('update-primary-btn');
@@ -26813,8 +26904,7 @@ function startUpdatePreviewDownload() {
   updatePreviewState.timer = setInterval(function(){
     var next = updatePreviewState.progress + 3.2 + Math.random() * 7.5;
     if (next >= 100) {
-      clearInterval(updatePreviewState.timer);
-      updatePreviewState.timer = null;
+      stopUpdatePreviewSimulation(false);
       updatePreviewState.status = 'ready';
       updateUpdatePreviewProgress(100);
       pulseUpdateReady();
@@ -26827,7 +26917,7 @@ function startUpdatePreviewDownload() {
 function pulseUpdateReady() {
   var entry = document.getElementById('update-entry');
   var btn = document.getElementById('update-primary-btn');
-  if (!window.gsap) return;
+  if (!window.gsap || document.hidden || isDeepBackgroundMode()) return;
   if (entry) {
     window.gsap.fromTo(entry,
       { scale: 0.96, filter: 'drop-shadow(0 0 0 rgba(244,210,138,0))' },

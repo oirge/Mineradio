@@ -1,5 +1,20 @@
 +﻿# 发布流程
 
+## v1.2.99 更新动画与下载轮询状态租约
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.99`。
+- 更新入口的 GSAP 呼吸动画改为状态租约：仅在入口可见、确有更新且窗口前台时运行；无更新、入口隐藏、窗口最小化或后台时取消两条无限 tween 并清空延迟启动定时器。
+- 完整安装包与快速补丁的状态轮询改为自适应节奏：面板打开保持 360ms / 320ms，面板关闭降到 1.5 秒，窗口后台降到 5 秒；面板重新打开会立即排入一次刷新，服务端下载任务继续运行。
+- 预览进度 `setInterval` 在面板关闭或窗口后台时取消并置空句柄，避免隐藏界面继续做随机进度计算与 DOM 更新。
+- 新增 `tests/update-runtime-lifecycle.test.js`，并扩展 `tests/update-poll-single-flight.test.js` 覆盖动画释放、预览定时器释放、轮询降频和单飞重排。
+- Windows 构建继续只生成 x64 NSIS、blockmap 和 `latest.yml`，不生成 Portable ZIP。
+- 本版本不改动播放器 UI、视觉质感、播放控制、歌词内容、桌面覆盖层或用户设置。
+- 全量 Node 回归 `218/218`、四个关键 JavaScript 语法检查和 `git diff --check` 通过；整个验证与构建过程未启动 Mineradio GUI。
+- 打包后 `app.asar` 已确认包含 `APP_VERSION = '1.2.99'`、更新入口动画租约、1.5/5 秒自适应轮询与预览定时器释放。
+- 产物大小：安装器 `103336027` 字节；blockmap `110284` 字节；`latest.yml` `350` 字节。
+- SHA256：安装器 `e3207c1f82f995a47d2cd786848ba705c453ea6cf7e1db4fd58410e2e2279b1f`；blockmap `64fb90cd5e7255da964ca1b10077be1b290803420c8491f789ff681feb17c56c`；`latest.yml` `7463ddabfafec811c7ccaf9b3637994c71cad96ea3cc68cede098db5f46dc359`。
+- `latest.yml` 的 Setup SHA512：`DHUhn7WkPgKiKOeO6i6mymQIbTKpd8nrwsPhfWsIQ1Ea5JMz8xsIYlhNpKmW6sOdh6wZguh7K9/P0D2LyqjweA==`。
+
 ## v1.2.98 空闲 Canvas 与提示音资源按需释放
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.98`。
