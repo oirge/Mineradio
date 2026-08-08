@@ -1,20 +1,20 @@
 +﻿# 发布流程
 
-## v1.2.97 Portable ZIP 构建彻底移除
+## v1.2.97 CPU 与运行内存释放优化重发
 
-- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.97`。
-- Windows `build.win.target` 只保留 x64 NSIS；移除 ZIP target 及其 Portable 默认产物命名。
-- `npm run build:win` 以后只生成 `Mineradio-1.2.97-Setup.exe`、对应 `.blockmap` 和 `latest.yml`；本地 `dist` 不再生成 Portable ZIP。
-- GitHub Release 只上传安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，禁止上传 Portable ZIP。
-- 本版本不改动播放器 UI、播放逻辑、桌面歌词状态或位置持久化。
-- 新增 `tests/windows-build-targets.test.js`，锁定 Windows 发布目标只能是 x64 NSIS，且不得恢复 Portable 专用 `artifactName`。
-- 构建验证：全量 Node 回归 `206/206`、关键 JavaScript 语法和 `git diff --check` 通过；打包后 `app.asar` 已确认 `APP_VERSION = '1.2.97'`；`dist` 中不存在任何 `1.2.97` Portable ZIP。
-- 产物大小：安装器 `103336006` 字节；blockmap `110190` 字节；`latest.yml` `350` 字节。
-- SHA256：安装器 `a479846120a72837267fbff3c51cbc17ea5a59ed6daac11cbe362845709c8101`；blockmap `82b183169ef45a26b3319e2d6d2f0492a01023eee8edaf3c8634ad09fc78abff`；`latest.yml` `ad355a90bef4d6eb35bf4935356fa25d050ea843fb3d6a0bdf1f4d76435f03f5`。
-- `latest.yml` 的 Setup SHA512：`9E7XAgxye/rTrUuk+oLWyXwIT6t8N6ykDI9hCD1j8BmbXlzH3s+NKmAPUa3wJJrSEPoMfkk1hPV2k2FAz9XQsA==`。
-- 正式远端资产仅包含安装器、blockmap、`latest.yml` 和 SHA256 清单，没有 Portable ZIP；四个资产的大小与 SHA256 均与本地一致。
-- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.2.97`，已标记 Latest，且不是 draft 或 prerelease；tag 指向发布提交 `c5a5f03f8db19a6d0c02a5d5a6a930c49d81aaa2`。
-- `main` CI run `31238406204` 成功，全量测试和发布门禁均通过。
+- 保持 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.97`，覆盖重发同版本安装包。
+- 启动页退出后调用 `releaseMineradioSplashResources()`：移除 resize 监听，删除 WebGL buffer/program，主动释放 context，把隐藏 Canvas 缩到 `1 × 1`，并清空启动粒子数组。
+- 启动音效最后一个节点结束后关闭独立 `splashAudioCtx`，释放音频线程、节点图和约 2.45 秒 Float32 噪声缓冲。
+- 主 3D 渲染改为 `scheduleMainRenderFrame()` 单入口；深后台由 `suspendMainRenderLoop()` 取消 RAF，恢复可见时由 `resumeMainRenderLoop()` 重置时间并继续。播放 tick、桌面歌词和壁纸独立调度保持不变。
+- Windows 构建仍只生成 x64 NSIS、blockmap 和 `latest.yml`，不生成 Portable ZIP。
+- 本版本不改动播放器 UI、视觉质感、播放控制、歌词内容或用户设置。
+- 新增 `tests/runtime-resource-release.test.js`，使用假 WebGL/RAF 环境执行释放、暂停和恢复函数；全量 Node 回归 `209/209`、关键 JavaScript 语法与 `git diff --check` 通过。
+- 真 Electron 独立实例验证：启动页 Canvas 为 `1440 × 810`，单颜色 backing store 至少 `4665600` 字节；退出后 Canvas、WebGL、三组粒子数组和 resize 监听全部释放。模拟最小化后 `mainRenderFrameId=0` 且模式为 `suspended`，恢复后只排入一个新 RAF。
+- 打包后 `app.asar` 已确认包含 `releaseMineradioSplashResources()`、主 RAF 暂停/恢复、`AudioContext.close()` 与 `APP_VERSION = '1.2.97'`；`dist` 中不存在 `1.2.97` Portable ZIP。
+- 产物大小：安装器 `103335120` 字节；blockmap `110106` 字节；`latest.yml` `350` 字节。
+- SHA256：安装器 `c44f99cb848a2f88717bee3000548c37a75940365a7a9c6fd31ed454abf66ce6`；blockmap `a4112bbd942ba9179eaa58a9379a5c5f6e83e7fca484573362fe7882a2e1a432`；`latest.yml` `028bafb3d4238582b5de7e27487d79f1a39c32466a3c08579fc0dba2bd96f8fd`。
+- `latest.yml` 的 Setup SHA512：`vpNzpddzCaOqmn+qs9QZe0oKM9DGF0rAw7LYEJoII0eV3JXgfUg98cw3v9GGyeJZsaF6sv+nTvJL/iXX5b+Pug==`。
+- GitHub Release 覆盖上传、tag、远端资产回读和 CI 信息在源码提交后补齐。
 
 ## v1.2.96 迷你播放器桌面歌词按钮细化版
 

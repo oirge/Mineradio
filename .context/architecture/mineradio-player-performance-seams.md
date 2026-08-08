@@ -95,6 +95,8 @@
 - 迷你播放器 5 秒可见性恢复和 120ms 崩溃重建只在用户可见会话中有意义；仅清除已有定时器不够，锁屏后的 renderer/display 事件仍会重新安排任务。`lock-screen` 与 `suspend` 还可能重叠，不能用单一布尔值在第一个恢复事件到达时提前放行。
 - 迷你播放器渲染进程连续崩溃不能无限调用 `webContents.reload()`；同一窗口在一次成功 `did-finish-load` 之前只允许一次重载，后续失败必须升级为窗口重建。
 - 主窗口恢复后如果只对迷你 BrowserWindow 调用 `hide()`，独立渲染进程和已解码封面仍会常驻；独立临时用户目录实测会多保留 1 个 Electron 进程和约 100 MiB 工作集。
+- 启动页隐藏后必须释放独立全屏 Canvas/WebGL backing store、shader/buffer、粒子数组和 resize 监听；启动音效的独立 `AudioContext` 在最后一个节点结束后关闭。否则隐藏启动页会长期保留 GPU/音频资源，后续窗口缩放还会反复重建不可见粒子数组。
+- 主窗口进入 `document.hidden`、最小化或不可见状态时，主 3D `requestAnimationFrame` 循环必须取消且不再以 1 FPS 空唤醒；播放 tick、桌面歌词和壁纸使用各自调度器继续工作。恢复可见或切到后台保持模式时重置渲染时间并单次重启 RAF，避免积累巨型 `dt`。
 - 音量滑块 `input` 会在拖动期间连续触发；不要在每次输入中同步写 `localStorage`、重建音量 SVG 或重复写未变化的百分比/class。
 - 播放进度刷新处于 RAF/`timeupdate` 热路径；本地播放会话的 JSON 与 `localStorage` 写入不要直接占用进度 UI 动画帧，清空队列时也必须取消待执行保存。
 - `play` / `playing` / `pause` 等音频事件可能连续到达；不要为相同状态重复重建播放图标、恢复全部控制节点、创建 `MediaMetadata` 或强制写系统播放位置。
@@ -275,6 +277,7 @@
 - 主进程电源事件通过 `MiniPlayerRecoverySession` 按 `screen` / `suspend` 原因暂停：进入任一原因时同时取消周期恢复和崩溃重建，`shouldShowMiniPlayer()` 与崩溃恢复入口在暂停期间拒绝新任务；只有最后一个原因解除后才调用 `scheduleMiniPlayerRecovery(180)`。
 - 迷你窗口重载额度使用 `miniPlayerRendererReloadWindows` 按窗口跟踪；首次崩溃加入集合并重载，`did-finish-load` 或窗口销毁时删除，集合已命中时直接走 `destroyMiniPlayerWindowInstance()` 和现有重建路径。
 - 主窗口恢复或重新显示时必须销毁不再需要的迷你 BrowserWindow，而不是仅隐藏；下次最小化/关闭到托盘时由现有状态重新创建。使用 `scripts/test-mini-player-memory.ps1` 验证创建、释放、再次创建和再次释放四段生命周期。
+- `releaseMineradioSplashResources()` 必须移除启动页 resize 监听、删除 WebGL buffer/program、主动丢失独立 context、把 Canvas 缩到 `1 × 1` 并清空启动粒子数组；`splashAudioCtx` 由 5.6 秒收尾定时器关闭。`scheduleMainRenderFrame()` 是主 3D RAF 的唯一入口，深后台由 `suspendMainRenderLoop()` 取消，`recoverVisualsAfterBackground()` 负责恢复。
 - 音量偏好通过 `scheduleVolumePreference()` 合并写入，`flushVolumePreference()` 在 change/blur/退出时落盘；音量百分比、静音 class 和 SVG 图标按状态签名更新。
 - 播放会话常规保存通过空闲回调执行，退出时强制保存，`clearPlaybackSession()` 必须先取消待执行任务，避免清空后旧会话被重新写回。
 - 播放图标、控制栏节点、控制区歌曲信息和 Media Session 元数据使用节点/内容签名缓存；相同播放状态事件只同步必要的系统位置节流任务。

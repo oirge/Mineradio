@@ -1472,7 +1472,10 @@ function applyRendererPowerMode() {
   var height = deep ? 4 : Math.max(1, innerHeight);
   var pixelRatio = getRenderPixelRatio();
   var mode = deep ? 'sleep' : 'active';
-  if (renderPowerState.mode === mode && renderPowerState.width === width && renderPowerState.height === height && Math.abs(renderPowerState.pixelRatio - pixelRatio) < 0.001) return;
+  if (renderPowerState.mode === mode && renderPowerState.width === width && renderPowerState.height === height && Math.abs(renderPowerState.pixelRatio - pixelRatio) < 0.001) {
+    syncMainRenderLoopPowerState('renderer-power-mode-stable');
+    return;
+  }
   renderPowerState.mode = mode;
   renderPowerState.width = width;
   renderPowerState.height = height;
@@ -1484,6 +1487,7 @@ function applyRendererPowerMode() {
     if (renderer.renderLists && renderer.renderLists.dispose) renderer.renderLists.dispose();
     scheduleBackgroundCacheTrim();
   }
+  syncMainRenderLoopPowerState('renderer-power-mode');
 }
 function updateDesktopRuntimeState(state) {
   state = state || {};
@@ -9221,6 +9225,7 @@ function forceLoadingSettled(reason) {
   if (reason && window.__mineradioDebugLoading) console.log('[LoadingSettled]', reason);
 }
 function recoverVisualsAfterBackground(reason) {
+  resumeMainRenderLoop(reason || 'restore');
   applyRendererPowerMode();
   if (typeof scheduleMainRendererViewportRefresh === 'function') scheduleMainRendererViewportRefresh(reason || 'restore');
   if (audio && audio.src && !audio.paused && ((uniforms.uLoading.value || 0) > 0.015 || loadingTween || loadingHideTimer)) {
@@ -28688,6 +28693,7 @@ document.body.classList.add('splash-active');
 var splashAnimating = true;
 var splashCanvas = null, splashCtx = null;
 var splashGl = null, splashGlProgram = null, splashGlBuffer = null, splashGlUniforms = null;
+var splashResizeHandler = null;
 var splashW = 0, splashH = 0;
 var splashDust = [];
 var splashStreaks = [];
@@ -28696,6 +28702,7 @@ var splashPixelRatio = 1;
 var splashStartedAt = performance.now();
 var splashSoundPlayed = false;
 var splashAudioCtx = null;
+var splashAudioCloseTimer = 0;
 var splashSoundFallbackArmed = false;
 var splashTimer = null;
 var splashAutoEnterTimer = null;
@@ -28897,6 +28904,37 @@ function drawMineradioSplashWebgl(elapsed) {
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
+function releaseMineradioSplashResources() {
+  if (splashResizeHandler) {
+    window.removeEventListener('resize', splashResizeHandler);
+    splashResizeHandler = null;
+  }
+  if (splashGl) {
+    try { if (splashGlBuffer) splashGl.deleteBuffer(splashGlBuffer); } catch (e) {}
+    try { if (splashGlProgram) splashGl.deleteProgram(splashGlProgram); } catch (e) {}
+    try {
+      var loseContext = splashGl.getExtension && splashGl.getExtension('WEBGL_lose_context');
+      if (loseContext && loseContext.loseContext) loseContext.loseContext();
+    } catch (e) {}
+  }
+  splashGlBuffer = null;
+  splashGlProgram = null;
+  splashGlUniforms = null;
+  splashGl = null;
+  splashCtx = null;
+  splashDust.length = 0;
+  splashStreaks.length = 0;
+  splashShards.length = 0;
+  splashW = 0;
+  splashH = 0;
+  splashPixelRatio = 1;
+  if (splashCanvas) {
+    splashCanvas.width = 1;
+    splashCanvas.height = 1;
+  }
+  splashCanvas = null;
+}
+
 (function initMineradioSplashCanvas() {
   splashCanvas = document.getElementById('splash-canvas');
   if (!splashCanvas) return;
@@ -28966,7 +29004,8 @@ function drawMineradioSplashWebgl(elapsed) {
     }
   }
   resize();
-  window.addEventListener('resize', resize);
+  splashResizeHandler = resize;
+  window.addEventListener('resize', splashResizeHandler);
   drawMineradioSplash();
 })();
 
@@ -29207,6 +29246,16 @@ function playMineradioIntroSound() {
     softTone('triangle', 1180, 1760, 2.72, 0.52, 0.010);
     softTone('triangle', 660, 1180, 3.32, 0.82, 0.014);
     softTone('sine', 1760, 1040, 3.64, 0.46, 0.010);
+    if (splashAudioCloseTimer) clearTimeout(splashAudioCloseTimer);
+    splashAudioCloseTimer = setTimeout(function(){
+      splashAudioCloseTimer = 0;
+      if (splashAudioCtx !== ctx) return;
+      splashAudioCtx = null;
+      try {
+        var closed = ctx.close && ctx.close();
+        if (closed && closed.catch) closed.catch(function(){});
+      } catch (e) {}
+    }, 5600);
   } catch (e) {}
 }
 function armSplashSoundFallback() {
@@ -29246,6 +29295,7 @@ function dismissSplash() {
   setTimeout(function() {
     s.classList.add('hide');
     splashAnimating = false;
+    releaseMineradioSplashResources();
     document.body.classList.remove('splash-active');
     document.body.classList.remove('splash-revealing');
     if (shouldPrimeHomeWallpaper && typeof activateHomeWallpaperPreview === 'function') activateHomeWallpaperPreview({ instant: true });
@@ -30301,6 +30351,40 @@ var renderPerfState = {
   lastSampleAt: performance.now()
 };
 window.__mineradioPerf = renderPerfState;
+var mainRenderFrameId = 0;
+var mainRenderLoopSuspended = false;
+function scheduleMainRenderFrame() {
+  if (mainRenderFrameId || mainRenderLoopSuspended || isDeepBackgroundMode()) return false;
+  mainRenderFrameId = requestAnimationFrame(animate);
+  return true;
+}
+function suspendMainRenderLoop(reason) {
+  mainRenderLoopSuspended = true;
+  if (mainRenderFrameId) {
+    cancelAnimationFrame(mainRenderFrameId);
+    mainRenderFrameId = 0;
+  }
+  renderPerfState.mode = 'suspended';
+  renderPerfState.lastRenderAt = 0;
+  if (reason && window.__mineradioDebugRenderPower) console.log('[RenderSuspended]', reason);
+}
+function resumeMainRenderLoop(reason) {
+  if (isDeepBackgroundMode()) return false;
+  var wasSuspended = mainRenderLoopSuspended;
+  mainRenderLoopSuspended = false;
+  if (wasSuspended || !mainRenderFrameId) {
+    prevTime = performance.now();
+    renderPerfState.lastRenderAt = 0;
+  }
+  var scheduled = scheduleMainRenderFrame();
+  if (scheduled && reason && window.__mineradioDebugRenderPower) console.log('[RenderResumed]', reason);
+  return scheduled;
+}
+function syncMainRenderLoopPowerState(reason) {
+  if (typeof renderPerfState === 'undefined' || !renderPerfState) return;
+  if (isDeepBackgroundMode()) suspendMainRenderLoop(reason || 'deep-background');
+  else resumeMainRenderLoop(reason || 'foreground');
+}
 var splashWarmRenderLast = 0;
 function isMainSceneCoveredBySplash() {
   return document.body.classList.contains('splash-active') && !document.body.classList.contains('splash-revealing');
@@ -30383,7 +30467,12 @@ function consumeAudioAnalysisDelta(now, fallbackDt) {
   return Math.min(elapsed / 1000, 0.08);
 }
 function animate() {
-  requestAnimationFrame(animate);
+  mainRenderFrameId = 0;
+  if (isDeepBackgroundMode()) {
+    suspendMainRenderLoop('deep-background-frame');
+    return;
+  }
+  scheduleMainRenderFrame();
   var now = performance.now();
   if (shouldSkipAdaptiveRenderFrame(now)) return;
   var dt = Math.min((now - prevTime) / 1000, 0.05);
@@ -30632,4 +30721,4 @@ function animate() {
 
   renderer.render(scene, camera);
 }
-animate();
+resumeMainRenderLoop('startup');

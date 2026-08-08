@@ -1,8 +1,9 @@
-## v1.2.97 发布产物策略收紧
-- Windows 发布构建只生成 NSIS 安装包、`.blockmap` 和 `latest.yml`。
-- 移除 Portable ZIP 构建目标；以后本地 `dist` 也不再生成 Portable ZIP，GitHub Release 同样不上传。
-- 新增 Windows 构建目标回归门禁，防止 Portable ZIP 配置被误恢复。
-- 不改动播放器界面、播放逻辑、桌面歌词和用户设置。
+## v1.2.97 CPU 与运行内存释放优化重发
+- 启动页退出后立即释放全屏 Canvas/WebGL context、shader、buffer、粒子数组和 resize 监听，不再让隐藏启动页长期占用 GPU/内存或在窗口缩放时做无效重建。
+- 启动音效结束后主动关闭独立 AudioContext，释放音频线程、节点图和临时噪声缓冲。
+- 主窗口最小化、隐藏或不可见时彻底暂停主 3D RAF；恢复可见时无损续帧，播放、桌面歌词和壁纸的独立调度不受影响。
+- Windows 发布继续只生成 NSIS 安装包、`.blockmap` 和 `latest.yml`，不再生成 Portable ZIP。
+- 不改动播放器布局、视觉质感、播放逻辑、歌词内容和用户设置。
 
 ## v1.2.96 迷你播放器桌面歌词按钮细化
 - 桌面歌词按钮改为右下角小号“词”字，移除复杂显示器图标和方框，不挤占播放控制栏空间。
