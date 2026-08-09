@@ -322,6 +322,8 @@
 - `shelfManager.update()` 每帧必须缓存 `contentList.isOpen()` 与 `shelfAlwaysVisible()` 的结果，再用于可见性、层级和封面绑定判断；这些状态在单次更新内不得重复查询。
 - `shelfManager.update()` 每帧先生成一次 `shelfSettings()` 快照，再传给 `shelfLayoutProfile(shelfCtl)`、详情列表和卡片绘制；布局、详情行与 `cardDrawSignature()` / `drawCard()` 不得在已经有设置快照时再次归一化偏好或解析颜色。异步封面回调、主题刷新等非帧入口可以回退读取。
 - 主循环已经取得的 `performance.now()` 时间戳必须传给 `shelfManager.update()`、`updateHomeAudioVisual()`、`updateFreeCamera()`、`tickGestureRotation()` 和空闲引导；这些入口省略参数时才允许自行读取时钟。`refreshShelfRenderFrameState()` 每帧就地刷新唯一的 `shelfRenderFrameState`，只读取一次 `shelfManager.getMode()`、`hasOpenContent()` 和侧栏模式下的 `shelfAlwaysVisible()`，并把 `contentOpen`、`alwaysVisible`、`side` 与 Skull 组合状态传给歌单架、壁纸压暗、Skull 相机、Skull 粒子和 `updateStageLyrics3D()`。下游在主循环调用链中不得恢复重复 getter；非帧入口保留省略快照时的回退读取。回归测试：`tests/frame-hot-path.test.js`。
+- `sampleRenderPerf()` 只在一秒级性能采样边界调用 `maybeTrimRuntimeCaches(now)`；活动态 `45000ms`、后台 `7000/3600ms` 和启动前 `30000ms` 的回收门槛保持不变，避免稳定渲染帧重复检查后台状态和时钟间隔。
+- `animate()` 每次调度只读取一次 `performance.now()` 和 `getAdaptiveRenderFps(now)`，并把同一 `frameFps` 传给 `scheduleMainRenderFrame()` 与 `shouldSkipAdaptiveRenderFrame()`；事件入口省略参数时保留原有回退路径，不能恢复同帧重复的自适应帧率计算。回归测试：`tests/render-scheduler-hot-path.test.js`、`tests/runtime-resource-release.test.js`。
 - 帧级 scratch 返回对象只允许当前唯一同步调用者立即读取，不得跨下一次调用保存引用；安魂姿态只在主相机已经更新投影后运行，不能独立承担 FOV/aspect/near/far 同步。
 - `cameraPoseNeedsRefresh()` 以 `0.00005` 阈值缓存普通相机位置、观察点和节拍滚转；`invalidateCameraPoseSyncState()` 覆盖自由镜头、Skull 相机和显式重置入口。
 - `tickShelfHoverCue()` 只更新 `shelfHoverPointerScratch` 字段；`updateRipples()` 使用 `usedMask` 标记 3×3 区域，保持随机尝试次数和去重语义不变。

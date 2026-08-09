@@ -1,5 +1,16 @@
 +﻿# 发布流程
 
+## v1.3.9 主渲染缓存回收与帧调度热路径优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.9`。
+- 运行时缓存回收只在 `sampleRenderPerf()` 的一秒级采样边界检查，保留活动态 `45` 秒、后台 `7000/3600` 毫秒的原有回收门槛，减少稳定帧中的重复判断。
+- `animate()` 复用本帧 `performance.now()` 和 `getAdaptiveRenderFps(now)` 结果，并传给下一次调度与节流判断；事件入口省略参数时保留原有回退读取。
+- 更新主渲染热路径测试对可选 FPS 参数的契约；不改变播放器布局、视觉、播放、歌词、桌面覆盖层或用户设置。
+- 全量 Node 回归 `250/250`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过；Windows x64 NSIS 构建通过。
+- 发布资产：`Mineradio-1.3.9-Setup.exe` `103342529` 字节；`Mineradio-1.3.9-Setup.exe.blockmap` `110415` 字节；`latest.yml` `347` 字节；`Mineradio-1.3.9-SHA256SUMS.txt` `270` 字节；不生成 Portable ZIP。
+- SHA256：安装器 `8ED04BCB4F0590D74E40A92B09C8F3046C1B4A03259C348F291AA4F7C3059198`；blockmap `4D19A18933596ADFA1C9475BC65A4056DE95A6A44303AD8C675A9061F7CEED6B`；`latest.yml` `AC33E2C59F7557F8111265CCE48693CFEF7F5152D27D7EC8F629E8191526DAA0`；SHA256 清单 `1B1CEBB6369C007A95861F3F0912C18C6C52C066C96EA105230B3360C79CCD3A`。
+- `latest.yml` 的 Setup SHA512：`9YHcwTyQ32Unw18bbnAB6P5Rhv+pUONNp52Rggv2QwvhTeJizGrlKsACrpSzUDqwSIji7fBAUIgMW0e/+AQsNw==`。
+
 ## v1.3.8 主循环状态快照与时间戳复用
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.8`。

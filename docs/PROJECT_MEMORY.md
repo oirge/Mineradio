@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.7` 已发布；主循环复用帧时间戳，舞台歌词复用歌单状态快照，3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，详情面板与可见行绘制复用帧级外观快照，不改变播放、视觉和交互语义。
+- 当前源码检查点：`v1.3.9` 已完成本地验证；主循环复用帧时间戳与自适应 FPS，运行时缓存回收只在一秒级采样边界检查，舞台歌词复用歌单状态快照，3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，详情面板与可见行绘制复用帧级外观快照，不改变播放、视觉和交互语义。
 - 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.7`，并保留本地安装器安全修复。
-- 最近正式安装包 Release 基线：`v1.3.7`（2026-08-09，主渲染帧时间戳与歌词歌单状态复用；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。
+- 最近正式安装包 Release 基线：`v1.3.8`（2026-08-09，主循环状态快照与时间戳复用；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。`v1.3.9` 已完成本地 NSIS 构建，待 GitHub 发布后更新为正式基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,14 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.3.9 主渲染缓存回收与帧调度热路径优化
+
+- `sampleRenderPerf()` 只在一秒级采样边界调用 `maybeTrimRuntimeCaches(now)`，活动态、后台和深后台回收门槛不变，避免稳定渲染帧重复读取后台状态与时间间隔。
+- `animate()` 复用本帧唯一的 `performance.now()` 与自适应目标 FPS，并传给调度和跳帧判断；事件入口仍可省略参数并回退到原有状态读取。
+- 涉及文件：`public/app.js`、`tests/render-scheduler-hot-path.test.js`、`tests/runtime-resource-release.test.js`、`CHANGELOG.md`、`RELEASE.md`、`.context/architecture/mineradio-player-performance-seams.md`、`AGENTS.md`；2026-08-09 全量 Node 回归 `250/250` 通过，四个关键 JavaScript 文件语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS：安装器 `103342529` 字节 / SHA256 `8ED04BCB4F0590D74E40A92B09C8F3046C1B4A03259C348F291AA4F7C3059198`；blockmap `110415` 字节 / SHA256 `4D19A18933596ADFA1C9475BC65A4056DE95A6A44303AD8C675A9061F7CEED6B`；`latest.yml` `347` 字节 / SHA256 `AC33E2C59F7557F8111265CCE48693CFEF7F5152D27D7EC8F629E8191526DAA0`；SHA256 清单 `270` 字节。
+- `latest.yml` 的 Setup SHA512：`9YHcwTyQ32Unw18bbnAB6P5Rhv+pUONNp52Rggv2QwvhTeJizGrlKsACrpSzUDqwSIji7fBAUIgMW0e/+AQsNw==`；GitHub Release 与远端资产校验待发布后补录。
 
 ## v1.3.7 主渲染帧时间戳与歌词歌单状态复用
 

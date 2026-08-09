@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.8';
+var APP_VERSION = '1.3.9';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -31165,19 +31165,21 @@ function cancelMainRenderFrame() {
 }
 /**
  * 根据当前渲染状态选择调度类型；可见无播放空闲态用定时器避免每个显示器刷新周期都进入 JS 回调。
+ * @param {number} [frameFps] 当前帧已计算的目标帧率；省略时从当前运行状态回退计算。
  * @returns {string} 当前应使用的调度类型。
  */
-function mainRenderScheduleKindForState() {
-  var fps = typeof getAdaptiveRenderFps === 'function' ? getAdaptiveRenderFps() : 0;
+function mainRenderScheduleKindForState(frameFps) {
+  var fps = frameFps == null && typeof getAdaptiveRenderFps === 'function' ? getAdaptiveRenderFps() : frameFps;
   return fps === RENDER_IDLE_FPS ? 'idle-timeout' : 'raf';
 }
 /**
  * 调度下一次主场景更新。空闲态按目标帧率唤醒，播放或交互态恢复 RAF。
+ * @param {number} [frameFps] 当前帧已计算的目标帧率；省略时保留事件入口的回退读取。
  * @returns {boolean} 是否创建了新的调度句柄。
  */
-function scheduleMainRenderFrame() {
+function scheduleMainRenderFrame(frameFps) {
   if (mainRenderLoopSuspended || isDeepBackgroundMode()) return false;
-  var scheduleKind = mainRenderScheduleKindForState();
+  var scheduleKind = mainRenderScheduleKindForState(frameFps);
   if (mainRenderFrameId && mainRenderScheduleKind === scheduleKind) return false;
   if (mainRenderFrameId) cancelMainRenderFrame();
   mainRenderScheduleKind = scheduleKind;
@@ -31231,10 +31233,15 @@ function isMainSceneCoveredBySplash() {
 function isContinuousPlaybackRenderActive() {
   return !!(audio && audio.src && !audio.paused && !audio.ended);
 }
-function getAdaptiveRenderFps() {
+/**
+ * 根据当前渲染压力、交互状态和后台状态选择主场景目标帧率。
+ * @param {number} [frameNow] 当前帧时间戳；省略时由交互状态入口自行读取时钟。
+ * @returns {number} 目标帧率；零表示跟随显示器 RAF。
+ */
+function getAdaptiveRenderFps(frameNow) {
   if (isDeepBackgroundMode()) return 1;
   var pressureLevel = (typeof getRuntimeFramePressureLevel === 'function') ? getRuntimeFramePressureLevel() : 0;
-  var interactionActive = typeof isRenderInteractionActive === 'function' && isRenderInteractionActive();
+  var interactionActive = typeof isRenderInteractionActive === 'function' && isRenderInteractionActive(frameNow);
   if (RENDER_VISIBLE_VSYNC) {
     if (pressureLevel >= 2) return interactionActive ? 60 : 48;
     if (pressureLevel >= 1 && !interactionActive) return 60;
@@ -31251,8 +31258,14 @@ function getAdaptiveRenderFps() {
   if (tier >= 1) return RENDER_LARGE_FPS;
   return RENDER_ACTIVE_FPS;
 }
-function shouldSkipAdaptiveRenderFrame(now) {
-  var fps = getAdaptiveRenderFps();
+/**
+ * 判断当前调度回调是否早于目标帧率，并同步下一帧的节流状态。
+ * @param {number} now 当前调度回调的 performance.now() 时间戳。
+ * @param {number} [frameFps] 当前帧已计算的目标帧率；省略时回退计算。
+ * @returns {boolean} 当前回调无需执行完整渲染时返回 true。
+ */
+function shouldSkipAdaptiveRenderFrame(now, frameFps) {
+  var fps = frameFps == null ? getAdaptiveRenderFps(now) : frameFps;
   renderPerfState.mode = fps ? (fps + 'fps') : 'vsync';
   if (!fps) {
     renderPerfState.lastRenderAt = now;
@@ -31266,6 +31279,12 @@ function shouldSkipAdaptiveRenderFrame(now) {
   renderPerfState.lastRenderAt = now;
   return false;
 }
+/**
+ * 累计一秒级渲染性能样本，并在采样边界执行低频运行时缓存回收。
+ * @param {number} now 当前渲染帧时间戳。
+ * @param {number} dt 当前有效渲染帧间隔，单位为秒。
+ * @returns {void} 仅更新渲染性能状态和低频缓存回收副作用。
+ */
 function sampleRenderPerf(now, dt) {
   renderPerfState.frames += 1;
   var frameMs = dt * 1000;
@@ -31290,8 +31309,9 @@ function sampleRenderPerf(now, dt) {
     renderPerfState.sampleLongFrames = 0;
     renderPerfState.sampleWorstFrameMs = 0;
     renderPerfState.lastSampleAt = now;
+    // 缓存回收本身按秒级门槛运行，无需让每个渲染帧重复检查后台状态和时间间隔。
+    maybeTrimRuntimeCaches(now);
   }
-  maybeTrimRuntimeCaches(now);
 }
 /**
  * 消费一次音频分析时间片。渲染可以跟随高刷屏运行，但频谱分析限制在固定帧率，避免高刷屏重复计算同一段音频。
@@ -31310,6 +31330,10 @@ function consumeAudioAnalysisDelta(now, fallbackDt) {
   audioAnalysisLastAt = now;
   return Math.min(elapsed / 1000, 0.08);
 }
+/**
+ * 执行一次主场景调度回调，并复用本帧时间戳和目标帧率减少热路径重复计算。
+ * @returns {void} 通过全局渲染器、场景和动画状态产生渲染副作用。
+ */
 function animate() {
   mainRenderFrameId = 0;
   mainRenderScheduleKind = '';
@@ -31317,9 +31341,10 @@ function animate() {
     suspendMainRenderLoop('deep-background-frame');
     return;
   }
-  scheduleMainRenderFrame();
   var now = performance.now();
-  if (shouldSkipAdaptiveRenderFrame(now)) return;
+  var frameFps = getAdaptiveRenderFps(now);
+  scheduleMainRenderFrame(frameFps);
+  if (shouldSkipAdaptiveRenderFrame(now, frameFps)) return;
   var dt = Math.min((now - prevTime) / 1000, 0.05);
   prevTime = now;
   sampleRenderPerf(now, dt);

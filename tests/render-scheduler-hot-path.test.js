@@ -28,6 +28,30 @@ function readWallpaperSource() {
   return fs.readFileSync(path.join(root, 'public', 'wallpaper.html'), 'utf8');
 }
 
+/**
+ * 读取性能采样函数，验证缓存回收检查只随秒级采样执行。
+ * @returns {string} 性能采样源码。
+ */
+function readRenderPerfSource() {
+  const source = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
+  const start = source.indexOf('function sampleRenderPerf(now, dt) {');
+  const end = source.indexOf('\nfunction consumeAudioAnalysisDelta', start);
+  assert.ok(start >= 0 && end > start, '未找到性能采样实现');
+  return source.slice(start, end);
+}
+
+/**
+ * 读取主循环帧入口，验证同一帧只计算一次自适应目标帧率。
+ * @returns {string} 主循环帧入口源码。
+ */
+function readAnimateSource() {
+  const source = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
+  const start = source.indexOf('function animate() {');
+  const end = source.indexOf("\nresumeMainRenderLoop('startup');", start);
+  assert.ok(start >= 0 && end > start, '未找到主循环实现');
+  return source.slice(start, end);
+}
+
 test('主渲染器空闲态使用定时器，交互态切回 RAF', () => {
   const timers = [];
   const rafs = [];
@@ -59,6 +83,21 @@ test('主渲染器空闲态使用定时器，交互态切回 RAF', () => {
   assert.equal(context.mainRenderScheduleKind, 'raf');
   assert.equal(timers[0], null, '切回 RAF 前应取消尚未到期的空闲定时器');
   assert.equal(rafs.length, 1);
+});
+
+test('运行时缓存回收检查只在秒级性能采样时执行', () => {
+  const source = readRenderPerfSource();
+  assert.equal((source.match(/maybeTrimRuntimeCaches\(now\);/g) || []).length, 1);
+  assert.match(source, /if \(now - renderPerfState\.lastSampleAt >= 1000\) \{[\s\S]*maybeTrimRuntimeCaches\(now\);/);
+});
+
+test('主循环复用当前帧自适应 FPS 和时间戳', () => {
+  const source = readAnimateSource();
+  assert.match(source, /var now = performance\.now\(\);\s*var frameFps = getAdaptiveRenderFps\(now\);/);
+  assert.match(source, /scheduleMainRenderFrame\(frameFps\);/);
+  assert.match(source, /shouldSkipAdaptiveRenderFrame\(now, frameFps\)/);
+  assert.doesNotMatch(source, /scheduleMainRenderFrame\(\);/);
+  assert.doesNotMatch(source, /shouldSkipAdaptiveRenderFrame\(now\);/);
 });
 
 test('壁纸覆盖层关闭时释放封面和粒子，并在未播放时限频', () => {

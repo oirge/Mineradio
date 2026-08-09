@@ -92,8 +92,8 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
   const schedulerSource = extractFunction('scheduleMainRenderFrame');
   const animationRequests = schedulerSource.match(/requestAnimationFrame\(function\(\)\s*\{/g) || [];
   assert.equal(animationRequests.length, 1, '主 3D RAF 只能由 scheduleMainRenderFrame 调度');
-  assert.match(appSource, /function scheduleMainRenderFrame\(\)[\s\S]*mainRenderFrameId = requestAnimationFrame\(function\(\)\s*\{/);
-  assert.match(appSource, /function scheduleMainRenderFrame\(\)[\s\S]*mainRenderFrameId = setTimeout\(function\(\)/);
+  assert.match(appSource, /function scheduleMainRenderFrame\([^)]*\)[\s\S]*mainRenderFrameId = requestAnimationFrame\(function\(\)\s*\{/);
+  assert.match(appSource, /function scheduleMainRenderFrame\([^)]*\)[\s\S]*mainRenderFrameId = setTimeout\(function\(\)/);
   assert.match(appSource, /function suspendMainRenderLoop\(reason\)[\s\S]*cancelMainRenderFrame\(\);/);
   assert.match(appSource, /function animate\(\) \{\s*mainRenderFrameId = 0;\s*mainRenderScheduleKind = '';\s*if \(isDeepBackgroundMode\(\)\) \{\s*suspendMainRenderLoop\('deep-background-frame'\);\s*return;/);
   assert.match(appSource, /function recoverVisualsAfterBackground\(reason\) \{\s*resumeMainRenderLoop\(reason \|\| 'restore'\);/);
