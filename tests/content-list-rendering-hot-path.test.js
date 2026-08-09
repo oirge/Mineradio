@@ -20,7 +20,7 @@ function readRendererSource() {
  * @returns {string} 可在隔离上下文执行的函数源码。
  */
 function readSyncRenderedRowsSource(source) {
-  const start = source.indexOf('  function syncRenderedRows(force) {');
+  const start = source.indexOf('  function syncRenderedRows(force, frameShelfLook) {');
   const end = source.indexOf('\n\n  return {', start);
   assert.ok(start >= 0 && end > start, '未找到歌词可见行同步函数');
   return source.slice(start, end);
@@ -58,13 +58,13 @@ function testVisibleRowReuseContract() {
   };
   vm.runInNewContext(`${source}\nthis.sync = syncRenderedRows;`, context);
 
-  context.sync(false);
+  context.sync(false, { bgOpacity: 0.78, accent: '#f7c66a' });
   assert.deepEqual(drawCalls.map((call) => call.song.name), ['新歌一', '新歌二']);
   assert.equal(context.rowsDirty, false);
   assert.equal(context.rowDrawAt, 12);
 
   const drawCount = drawCalls.length;
-  context.sync(false);
+  context.sync(false, { bgOpacity: 0.78, accent: '#f7c66a' });
   assert.equal(drawCalls.length, drawCount, '无脏状态且无加载动画时不得重复绘制');
 }
 

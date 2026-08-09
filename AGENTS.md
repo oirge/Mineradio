@@ -131,4 +131,5 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `主 3D 空闲 30 FPS`、`isContinuousPlaybackRenderActive`、`隐藏歌单架短路`、`targetVis === 0`、`频谱桶单次扫描`、`getStageLyricLockBounds`、`歌词边界闭包`、`暂停镜头空闲短路` 或 `frequencyValue` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `实时节拍频谱 30 FPS`、`BEAT_ANALYSIS_TARGET_FPS`、`beatAnalysisElapsed`、`consumeRealtimeBeatSpectrumSlot`、`beatBandValueCache` 或 `节拍 FFT 限频` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `主渲染空闲定时器`、`mainRenderScheduleKind`、`idle-timeout`、`wallpaperDrawHandle`、`壁纸覆盖层未播放限频` 或 `覆盖层封面释放` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `frameShelfLook`、`drawPanel` 外观快照、`drawRow` 外观快照、`syncRenderedRows` 重复读取 `shelfSettings`、`详情面板颜色解析` 或 `详情绘制帧快照` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `cameraPoseSyncState`、`cameraPoseNeedsRefresh`、`cameraPoseOverrideActive`、`shelfHoverPointerScratch`、`updateRipples`、`usedMask` 或 `普通相机姿态缓存` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。

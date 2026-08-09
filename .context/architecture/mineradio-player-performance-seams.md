@@ -1,4 +1,4 @@
-# Mineradio Player Performance Seams
+﻿# Mineradio Player Performance Seams
 
 ## Context
 
@@ -369,6 +369,7 @@
 - `public/wallpaper.html` 的覆盖层关闭或未播放时不得持续满速 RAF；启用播放态可用 RAF，启用但未播放限为 `WALLPAPER_IDLE_FPS`，关闭态使用更长定时器并清空封面图与粒子数组。状态切换和可见性恢复必须取消旧句柄后重新调度，避免同时留下 RAF 与 timeout。
 - 3D 歌单架 `placeCard()` 的卡片位置、缩放、旋转、相机姿态、可见性、渲染顺序、材质颜色和透明度必须通过卡片级稳定值缓存写入；动画目标仍按帧计算，但相同目标值不得重复触发 Three.js setter。普通欧拉姿态切换时若未显式传入 `z`，必须保留当前 `rotation.z`，避免从相机四元数姿态切回时改变滚转。回归测试：`tests/frame-hot-path.test.js`。
 - 3D 歌单详情的可见行位置、缩放、旋转、可见性、渲染顺序和材质透明度，以及详情组位置/缩放/普通欧拉姿态和面板透明度，都必须通过运行时稳定值缓存写入；动画目标仍按帧计算，相同目标值不得重复触发 Three.js setter。相机四元数分支必须使详情组欧拉缓存失效，切回普通姿态时重新写入当前目标。回归测试：`tests/frame-hot-path.test.js`。
+- 3D 歌单详情的 `syncRenderedRows()` 每次同步必须只读取一次 `shelfSettings()`，并把同一 `frameShelfLook` 传给 `drawPanelIfNeeded()`、`drawPanel()` 与所有 `drawRow()`；面板和详情行统一复用该快照的 `bgOpacity` 与 `accent`，避免同一帧重复归一化偏好和解析颜色。异步封面回调、主题刷新等非帧入口可省略快照回退读取；快照不得跨帧保存或修改。回归测试：`tests/frame-hot-path.test.js`、`tests/content-list-rendering-hot-path.test.js`。
 
 ## Reference
 
