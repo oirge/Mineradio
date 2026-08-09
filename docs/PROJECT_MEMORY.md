@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.4` 已发布；3D 歌单架卡片稳定属性只在目标值变化时写入，普通相机、hover 与涟漪继续复用低分配状态，不改变播放、视觉和交互语义。
+- 当前源码检查点：`v1.3.5` 已完成构建；3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，普通相机、hover 与涟漪继续复用低分配状态，不改变播放、视觉和交互语义。
 - 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.4`，并保留本地安装器安全修复。
 - 最近正式安装包 Release 基线：`v1.3.4`（2026-08-09，3D 歌单架卡片属性低写入优化；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,14 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.3.5 3D 歌单详情属性低写入优化
+
+- 详情可见行的位置、缩放、旋转、可见性、渲染顺序和透明度，以及详情组位置/缩放/普通欧拉姿态和面板透明度使用稳定值缓存；相同目标值跳过 Three.js setter，动画目标公式保持不变。
+- 相机四元数姿态分支会使详情组欧拉缓存失效，切回普通姿态时重新提交目标值；不改变布局、动画、播放、交互或视觉语义。
+- 新增 `tests/frame-hot-path.test.js` 详情行和详情组属性缓存回归测试；全量 Node 回归 `245/245` 通过。
+- 2026-08-09，涉及 `public/app.js`、`tests/frame-hot-path.test.js`、`.context/architecture/mineradio-player-performance-seams.md`、`AGENTS.md`。
+- Windows x64 NSIS：安装器 `103424049` 字节，SHA256 `A9B2692AEF19B32CD73F6C01A8FCB1CC6F86E5FAE21BB95B1EA53F177330D835`；blockmap `110328` 字节，SHA256 `C76E185C1B79631527DF0409BF94A1DF8C179368E23FABC1CF86E3B0C01CDE20`；`latest.yml` SHA256 `5C5F58B7AF3E1F56638F98F12CC6202EDA420FDA467534AFD62A67BDE9D7A397`。
 
 ## v1.3.4 3D 歌单架卡片属性低写入优化
 

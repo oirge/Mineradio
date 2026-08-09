@@ -1,5 +1,16 @@
 +﻿# 发布流程
 
+## v1.3.5 3D 歌单详情属性低写入优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.5`。
+- 3D 歌单详情可见行的位置、缩放、旋转、可见性、渲染顺序和材质透明度通过稳定值缓存写入；详情组的位置、缩放、普通欧拉姿态和面板透明度同样跳过相同目标值的重复 setter。
+- 相机四元数姿态分支会使详情组欧拉缓存失效，切回普通姿态时重新提交当前目标；不改变详情布局、动画、播放或交互语义。
+- 新增 `tests/frame-hot-path.test.js` 详情行与详情组属性写入回归；全量 Node 回归 `245/245` 通过，主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过后构建 Windows x64 NSIS 安装器。
+- 发布资产：`Mineradio-1.3.5-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.3.5-SHA256SUMS.txt`；不生成 Portable ZIP。
+- 安装器 `103424049` 字节；blockmap `110328` 字节；`latest.yml` `347` 字节。
+- SHA256：安装器 `A9B2692AEF19B32CD73F6C01A8FCB1CC6F86E5FAE21BB95B1EA53F177330D835`；blockmap `C76E185C1B79631527DF0409BF94A1DF8C179368E23FABC1CF86E3B0C01CDE20`；`latest.yml` `5C5F58B7AF3E1F56638F98F12CC6202EDA420FDA467534AFD62A67BDE9D7A397`。
+- `latest.yml` 的 Setup SHA512：`oBrjDL6+7ndLTObzG7hFQqDoL4drZRQXNFcXITfxSgaHC3yuwVKP2WekX4HVZn5BlSmBZvXu24lkDyE0XHDI2g==`。
+
 ## v1.3.4 3D 歌单架卡片属性低写入优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.4`。
