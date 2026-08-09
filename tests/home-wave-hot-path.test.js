@@ -52,10 +52,11 @@ test('Home 空库波形缓存频谱桶索引，不在每次刷新重复幂运算
 
   const wave = createWave();
   let now = 100;
+  let performanceNowCalls = 0;
   const context = {
     Array,
     Math,
-    performance: { now: () => now },
+    performance: { now: () => { performanceNowCalls += 1; return now; } },
     document: { getElementById: () => wave },
     emptyHomeActive: true,
     frequencyData: Uint8Array.from({ length: 8 }, (_, index) => index * 20),
@@ -73,7 +74,8 @@ test('Home 空库波形缓存频谱桶索引，不在每次刷新重复幂运算
     context
   );
 
-  context.update(0.016);
+  context.update(0.016, now);
+  assert.equal(performanceNowCalls, 0, '主循环传入时间戳时不得重复读取 performance.now()');
   const firstIndices = context.state.binIndices;
   assert.equal(firstIndices.length, 24);
   assert.equal(firstIndices[0], 0);
@@ -82,12 +84,12 @@ test('Home 空库波形缓存频谱桶索引，不在每次刷新重复幂运算
 
   now = 200;
   context.frequencyData[7] = 255;
-  context.update(0.016);
+  context.update(0.016, now);
   assert.strictEqual(context.state.binIndices, firstIndices);
 
   now = 300;
   context.frequencyData = new Uint8Array(16);
-  context.update(0.016);
+  context.update(0.016, now);
   assert.notStrictEqual(context.state.binIndices, firstIndices);
   assert.equal(context.state.binIndices[23], 15);
 });

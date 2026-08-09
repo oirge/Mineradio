@@ -198,7 +198,7 @@ function testAudioAnalysisAccumulationHotPath() {
  */
 function testHomeWaveThrottleBeforeDomLookup() {
   const source = readRendererSource();
-  const functionSource = readSourceBetween(source, 'function updateHomeAudioVisual(dt) {', 'function setRange(');
+  const functionSource = readSourceBetween(source, 'function updateHomeAudioVisual(dt, frameNow) {', 'function setRange(');
   assert.ok(functionSource.indexOf('var minGap =') < functionSource.indexOf("document.getElementById('home-wave-track')"));
   assert.match(functionSource, /if \(homeWaveTrackState\.lastAt && nowMs - homeWaveTrackState\.lastAt < minGap\) return;/);
 }
