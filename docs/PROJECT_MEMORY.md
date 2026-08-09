@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.6` 已发布；3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，详情面板与可见行绘制复用帧级外观快照，普通相机、hover 与涟漪继续复用低分配状态，不改变播放、视觉和交互语义。
-- 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.6`，并保留本地安装器安全修复。
-- 最近正式安装包 Release 基线：`v1.3.6`（2026-08-09，3D 歌单详情绘制快路径复用；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。
+- 当前源码检查点：`v1.3.7` 已发布；主循环复用帧时间戳，舞台歌词复用歌单状态快照，3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，详情面板与可见行绘制复用帧级外观快照，不改变播放、视觉和交互语义。
+- 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.7`，并保留本地安装器安全修复。
+- 最近正式安装包 Release 基线：`v1.3.7`（2026-08-09，主渲染帧时间戳与歌词歌单状态复用；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,15 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.3.7 主渲染帧时间戳与歌词歌单状态复用
+
+- 主循环取得的 `performance.now()` 时间戳传给歌单架 hover 提示、Home 空库波形、空闲引导和 `shelfManager.update()`；省略参数时保留原有时钟回退语义。
+- `updateStageLyrics3D()` 每帧只读取一次 `shelfManager.getMode()`、`hasOpenContent()` 与 `shelfAlwaysVisible()`，歌单避让、壁纸安全布局和详情偏移共用局部状态；布局、相机、歌词光晕、播放和交互语义保持不变。
+- 涉及文件：`public/app.js`、`tests/audio-analysis-hot-path.test.js`、`tests/frame-hot-path.test.js`、`tests/home-wave-hot-path.test.js`、`CHANGELOG.md`、`RELEASE.md`、`.context/architecture/mineradio-player-performance-seams.md`、`AGENTS.md`；2026-08-09 全量 Node 回归 `247/247` 通过，四个关键 JavaScript 文件语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS：安装器 `103424395` 字节 / SHA256 `1E90B84AA7C73F33372C1760559CC0E7D1E4B4943156F865F468491EE7D27A9A`；blockmap `110266` 字节 / SHA256 `555EAFDA125DAD424A9C5A05A8CBC5B284A9D7C128ABA8618EA9FA96444D9FFC`；`latest.yml` `347` 字节 / SHA256 `F57EE42E7D02E43B13B1C2CB4535503D850B1708761055D4317D4980295F9784`；SHA256 清单 `270` 字节 / SHA256 `117604E08965651FD7283C893D6D274500D2000AFDCB62C8F8B9F50761B107D5`。
+- `latest.yml` 的 Setup SHA512：`ddJSeGhFY9oR/NPz9j8aq49itWT4upH3nk3GQ0Yxh05nGlDC9s5OkhNl6PF0YpNOnNjDTvmbKRhxwMt1rf18qQ==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.7` 已标记 Latest；`main` 提交 `b677f6159c5d65bcde84b7a862fe60afce03f600`，annotated tag 对象 `a67c4ce6a27b7e27a02f3ebd7b1013513d2162d6`；远端四个资产大小与 SHA256 均和本地一致。
 
 ## v1.3.6 3D 歌单详情绘制快路径复用
 

@@ -6,7 +6,11 @@
 - 主循环将同一帧时间戳传给歌单架 hover 提示、Home 空库波形和空闲引导；省略参数时保留原有 `performance.now()` 回退语义。
 - `updateStageLyrics3D()` 每帧只读取一次歌单模式、详情状态和常驻状态，避免重复调用 `getMode()`、`hasOpenContent()` 与 `shelfAlwaysVisible()`；布局、相机、歌词光晕和详情偏移语义保持不变。
 - 新增/扩展 `tests/frame-hot-path.test.js`、`tests/home-wave-hot-path.test.js`、`tests/audio-analysis-hot-path.test.js` 的时间戳和状态快照断言；全量 Node 回归 `247/247` 通过。
-- 发布前继续执行 `public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查、`git diff --check` 和 Windows x64 NSIS 构建。
+- `public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查、`git diff --check` 和 Windows x64 NSIS 构建通过。
+- 发布资产：`Mineradio-1.3.7-Setup.exe` `103424395` 字节；`Mineradio-1.3.7-Setup.exe.blockmap` `110266` 字节；`latest.yml` `347` 字节；`Mineradio-1.3.7-SHA256SUMS.txt` `270` 字节；不生成 Portable ZIP。
+- SHA256：安装器 `1E90B84AA7C73F33372C1760559CC0E7D1E4B4943156F865F468491EE7D27A9A`；blockmap `555EAFDA125DAD424A9C5A05A8CBC5B284A9D7C128ABA8618EA9FA96444D9FFC`；`latest.yml` `F57EE42E7D02E43B13B1C2CB4535503D850B1708761055D4317D4980295F9784`；SHA256 清单 `117604E08965651FD7283C893D6D274500D2000AFDCB62C8F8B9F50761B107D5`。
+- `latest.yml` 的 Setup SHA512：`ddJSeGhFY9oR/NPz9j8aq49itWT4upH3nk3GQ0Yxh05nGlDC9s5OkhNl6PF0YpNOnNjDTvmbKRhxwMt1rf18qQ==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.7` 已标记 Latest；`main` 提交 `b677f6159c5d65bcde84b7a862fe60afce03f600`，annotated tag 对象 `a67c4ce6a27b7e27a02f3ebd7b1013513d2162d6`；远端四个资产大小与 SHA256 均和本地一致。
 
 ## v1.3.6 3D 歌单详情绘制快路径复用
 
