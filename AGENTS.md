@@ -133,4 +133,4 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `主渲染空闲定时器`、`mainRenderScheduleKind`、`idle-timeout`、`wallpaperDrawHandle`、`壁纸覆盖层未播放限频` 或 `覆盖层封面释放` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `frameShelfLook`、`drawPanel` 外观快照、`drawRow` 外观快照、`syncRenderedRows` 重复读取 `shelfSettings`、`详情面板颜色解析` 或 `详情绘制帧快照` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `cameraPoseSyncState`、`cameraPoseNeedsRefresh`、`cameraPoseOverrideActive`、`shelfHoverPointerScratch`、`updateRipples`、`usedMask` 或 `普通相机姿态缓存` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
-- 遇到 `主循环 performance.now 时间戳复用`、`updateStageLyrics3D 歌单状态快照`、`shelfManager.getMode 同帧重复`、`hasOpenContent 同帧重复`、`shelfAlwaysVisible 同帧重复` 或 `空 Home 波形时间戳` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `主循环 performance.now 时间戳复用`、`refreshShelfRenderFrameState`、`frameShelfState`、`updateStageLyrics3D 歌单状态快照`、`shelfManager.getMode 同帧重复`、`hasOpenContent 同帧重复`、`shelfAlwaysVisible 同帧重复` 或 `空 Home 波形时间戳` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。

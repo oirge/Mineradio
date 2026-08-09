@@ -787,3 +787,11 @@
 
 - `build/installer.nsh` 直接读取 Windows 原始命令行中的 `/D=`，避免 `${GetParameters}` 过滤该参数后误判为未指定目录。
 - 保留专用安装目录归一化、`.mineradio-install-root` 标记和卸载安全门禁；`tests/installer-command-line-path.test.js` 覆盖原始命令行解析和安全检查。
+
+### 2026-08-09 - v1.3.8 主循环状态快照与时间戳复用
+
+- 优化目标：继续降低主渲染帧的 CPU 与短命对象压力，不改变 UI、布局、视觉质感、播放、歌词或歌单交互语义。
+- `animate()` 只取得一次 `performance.now()`，并把该时间戳传给自由镜头、手势活跃度衰减、歌单架更新、Home 波形和空闲引导；省略参数的非帧入口保留原有回退读取。
+- `refreshShelfRenderFrameState()` 使用模块级对象就地刷新当前帧状态；主渲染链路只读取一次歌单模式、详情打开状态和侧栏常驻状态，Skull 相机、Skull 粒子、壁纸压暗和舞台歌词均消费同一快照。快照不得跨帧保存或由下游修改结构。
+- 回归：`tests/frame-hot-path.test.js` 锁定 getter 单次读取与快照传递；全量 Node 回归 `248/248`，`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查、`git diff --check` 和 Windows x64 NSIS 构建通过。
+- 发布产物：`Mineradio-1.3.8-Setup.exe` 103342250 字节，SHA256 为 `0F1B395B4A50A1148796C9CE04B7DBCDB65AD61EC2045F658B6C1537CB55F58E`；blockmap 110214 字节，SHA256 为 `F4A1BD6003760CC4110B3050EA7063239B696BBBCA45AD883B0F22EFB0CA7FD0`；`latest.yml` 347 字节，SHA256 为 `2CD0423032E81EB013A8A89217B7374B353881E81E0F3BBA190AAE1AEA3984EF`；不生成 Portable ZIP。

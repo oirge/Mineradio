@@ -1,5 +1,16 @@
 +﻿# 发布流程
 
+## v1.3.8 主循环状态快照与时间戳复用
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.8`。
+- 主循环将同一帧时间戳传给自由镜头、手势活跃度衰减、歌单架更新、Home 空库波形和空闲引导；省略参数时保留原有时钟回退语义。
+- `refreshShelfRenderFrameState()` 就地复用歌单状态快照，在主渲染链路中只读取一次 `getMode()`、`hasOpenContent()` 和侧栏模式下的 `shelfAlwaysVisible()`，并传给歌单架、壁纸压暗、Skull 相机、Skull 粒子和舞台歌词。
+- 新增 `tests/frame-hot-path.test.js` 的快照 getter 复用断言；不改变播放器布局、视觉、播放、歌词、桌面覆盖层或用户设置。
+- 全量 Node 回归 `248/248`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过；Windows x64 NSIS 构建通过。
+- 发布资产：`Mineradio-1.3.8-Setup.exe` `103342250` 字节；`Mineradio-1.3.8-Setup.exe.blockmap` `110214` 字节；`latest.yml` `347` 字节；`Mineradio-1.3.8-SHA256SUMS.txt` `270` 字节；不生成 Portable ZIP。
+- SHA256：安装器 `0F1B395B4A50A1148796C9CE04B7DBCDB65AD61EC2045F658B6C1537CB55F58E`；blockmap `F4A1BD6003760CC4110B3050EA7063239B696BBBCA45AD883B0F22EFB0CA7FD0`；`latest.yml` `2CD0423032E81EB013A8A89217B7374B353881E81E0F3BBA190AAE1AEA3984EF`；SHA256 清单 `01CC8B9E8EBA59744336EF1E31EFEDDBD352E8E468DA3168ED6FEEC9FE08615E`。
+- `latest.yml` 的 Setup SHA512：`5OjxMFAw/xK4D4hukU7+IbOhpnk6+W68nzHcW4Nr+pZBMK23K+dLpR7b2we6/6pC+yz5y3I/1NQn3T9hSEouKg==`。
+
 ## v1.3.7 主渲染帧时间戳与歌词歌单状态复用
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.7`。

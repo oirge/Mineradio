@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.7';
+var APP_VERSION = '1.3.8';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -2072,11 +2072,18 @@ function toggleFreeCamera() {
   }
   showToast('自由镜头: WASD 移动 · 鼠标转向 · K 回正');
 }
-function updateFreeCamera(dt) {
+/**
+ * 推进自由镜头回正或移动状态，并复用主循环已经取得的当前帧时间。
+ * @param {number} dt 当前帧秒数。
+ * @param {number=} frameNow 当前帧的 performance.now() 毫秒时间；省略时在回正动画中自行读取。
+ * @returns {void}
+ */
+function updateFreeCamera(dt, frameNow) {
   if (!freeCamera) return;
   if (freeCamera.resetTween) {
     var tw = freeCamera.resetTween;
-    var t = easeOutCubic01((performance.now() - tw.start) / Math.max(1, tw.duration || 620));
+    var now = frameNow == null ? performance.now() : frameNow;
+    var t = easeOutCubic01((now - tw.start) / Math.max(1, tw.duration || 620));
     freeCamera.position.copy(tw.from.position).lerp(tw.to.position, t);
     freeCamera.yaw = tw.from.yaw + shortestAngleDelta(tw.from.yaw, tw.to.yaw) * t;
     freeCamera.pitch = tw.from.pitch + (tw.to.pitch - tw.from.pitch) * t;
@@ -3284,10 +3291,19 @@ function requestStageLyricCameraSnap(frames) {
   if (typeof stageLyrics === 'undefined' || !stageLyrics) return;
   stageLyrics.snapCameraLockFrames = Math.max(stageLyrics.snapCameraLockFrames || 0, frames || 8);
 }
-function shouldDimWallpaperForShelf() {
+/**
+ * 判断壁纸安全镜头是否需要为侧栏歌单压暗背景。
+ * @param {object=} frameShelfState 当前渲染帧的歌单状态快照；省略时自行读取。
+ * @returns {boolean} 是否启用歌单压暗。
+ */
+function shouldDimWallpaperForShelf(frameShelfState) {
   if (!shouldUseWallpaperSafeShelfCamera()) return false;
-  if (!shelfManager || !shelfManager.getMode || shelfManager.getMode() !== 'side') return false;
+  var shelfSideMode = frameShelfState
+    ? frameShelfState.side
+    : !!(shelfManager && shelfManager.getMode && shelfManager.getMode() === 'side');
+  if (!shelfSideMode) return false;
   if (shelfPinnedOpen) return true;
+  if (frameShelfState) return !!frameShelfState.contentOpen;
   return !!(shelfManager.hasOpenContent && shelfManager.hasOpenContent());
 }
 function shouldOffsetLyricsForShelfDetail() {
@@ -5184,7 +5200,13 @@ function setSkullCameraTargetVectors(pos, look, portrait, shelfComposition, zoom
   pos.set(0.00, portrait ? -2.38 : -2.52, (portrait ? 4.92 : 4.98) + zoom);
   look.set(0.00, portrait ? -0.28 : -0.20, 0.02);
 }
-function applySkullCameraPose(dt) {
+/**
+ * 推进 Skull 预设相机姿态，并复用当前帧的歌单组合状态。
+ * @param {number} dt 当前帧秒数。
+ * @param {object=} frameShelfState 当前帧的歌单状态快照。
+ * @returns {void}
+ */
+function applySkullCameraPose(dt, frameShelfState) {
   if (freeCamera && (freeCamera.active || freeCamera.locked || freeCamera.resetTween)) {
     syncCameraPoseOverrideState(false);
     return;
@@ -5195,7 +5217,7 @@ function applySkullCameraPose(dt) {
   if (skullCameraBlend < 0.002) return;
   skullWheelZoom += (skullWheelZoomTarget - skullWheelZoom) * Math.min(1, dt * 8.0);
   var portrait = innerHeight > innerWidth * 1.08;
-  var shelfComposition = isSkullShelfCompositionActive();
+  var shelfComposition = frameShelfState ? frameShelfState.skullComposition : isSkullShelfCompositionActive();
   var shelfMixTarget = shelfComposition ? 1 : 0;
   skullShelfCameraMix += (shelfMixTarget - skullShelfCameraMix) * Math.min(1, dt * (shelfMixTarget > skullShelfCameraMix ? 4.6 : 5.8));
   if (Math.abs(skullShelfCameraMix - shelfMixTarget) < 0.002) skullShelfCameraMix = shelfMixTarget;
@@ -5207,7 +5229,13 @@ function applySkullCameraPose(dt) {
   skullCameraMixedLook.set(orbit.lookAt.x, orbit.lookAt.y, orbit.lookAt.z).lerp(skullCameraTargetLook, skullCameraBlend);
   camera.lookAt(skullCameraMixedLook);
 }
-function updateSkullParticleLayer(dt) {
+/**
+ * 更新 Skull 粒子层动画，并复用当前帧的歌单组合状态。
+ * @param {number} dt 当前帧秒数。
+ * @param {object=} frameShelfState 当前帧的歌单状态快照。
+ * @returns {void}
+ */
+function updateSkullParticleLayer(dt, frameShelfState) {
   var active = fx && fx.preset === SKULL_PRESET_INDEX;
   if (active && !skullParticleAsset.data && !skullParticleAsset.failed) {
     loadSkullParticleAsset();
@@ -5231,7 +5259,7 @@ function updateSkullParticleLayer(dt) {
   var jawTarget = clampRange(0.60 + (0.5 + 0.5 * Math.sin(uniforms.uTime.value * 0.50)) * 0.050 + bass * 0.060 + skullBeatFlash * 0.090, 0.52, 0.88);
   skullJawOpen += (jawTarget - skullJawOpen) * Math.min(1, dt * (jawTarget > skullJawOpen ? 7.8 : 3.4));
   if (skullParticleGroup.material.uniforms.uJawOpen) skullParticleGroup.material.uniforms.uJawOpen.value = skullJawOpen;
-  var shelfComposition = isSkullShelfCompositionActive();
+  var shelfComposition = frameShelfState ? frameShelfState.skullComposition : isSkullShelfCompositionActive();
   var shelfMix = clampRange(skullShelfCameraMix || (shelfComposition ? 1 : 0), 0, 1);
   var drift = skullBreathOffset(uniforms.uTime.value, shelfComposition);
   var ampTarget = clampRange(bass * 0.006 + mid * 0.004 + skullBeatFlash * 0.070, 0, 0.090);
@@ -8667,9 +8695,10 @@ function tickStageLyricMesh(mesh, isCurrent) {
 /**
  * 更新舞台歌词的光晕、布局和逐帧网格状态。
  * @param {number} dt 当前帧秒数。
+ * @param {object=} frameShelfState 当前帧的歌单状态快照；省略时自行读取。
  * @returns {void}
  */
-function updateStageLyrics3D(dt) {
+function updateStageLyrics3D(dt, frameShelfState) {
   if (!stageLyrics.group) return;
   if (!fx.particleLyrics && !stageLyrics.current && (!stageLyrics.outgoing || !stageLyrics.outgoing.length)) return;
   if (!isFinite(stageLyrics.highBloom)) stageLyrics.highBloom = 0;
@@ -8713,10 +8742,11 @@ function updateStageLyrics3D(dt) {
   var layoutTiltX = clampRange(Number(fx.lyricTiltX) || 0, -42, 42);
   var layoutTiltY = clampRange(Number(fx.lyricTiltY) || 0, -42, 42);
   var skullMouthLyrics = !!(camera && fx && fx.preset === SKULL_PRESET_INDEX && skullParticleGroup && skullParticleGroup.visible);
-  var shelfMode = shelfManager && shelfManager.getMode ? shelfManager.getMode() : null;
-  var shelfSideMode = shelfMode === 'side';
-  var shelfDetailOpen = !!(shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent());
-  var shelfAlwaysOn = shelfSideMode && shelfAlwaysVisible();
+  frameShelfState = frameShelfState || refreshShelfRenderFrameState();
+  var shelfMode = frameShelfState.mode;
+  var shelfSideMode = frameShelfState.side;
+  var shelfDetailOpen = frameShelfState.contentOpen;
+  var shelfAlwaysOn = frameShelfState.alwaysVisible;
   var skullShelfDetailOpen = !!(fx && fx.preset === SKULL_PRESET_INDEX && shelfDetailOpen);
   var normalShelfDetailOpen = !!(shelfDetailOpen && !skullShelfDetailOpen);
   stageLyrics.group.renderOrder = shelfDetailOpen ? 24 : 38;
@@ -13012,6 +13042,29 @@ var shelfOpenAnimAt = -10;
 var shelfHoverCue = { target: 0, value: 0, x: 0, y: 0, lastAt: 0, enteredAt: 0, zoneActive: false, guide: false };
 var shelfHoverPointerScratch = { clientX: 0, clientY: 0 };
 var shelfVisibility = 0;  // 0..1, 侧栏自动隐藏的整体透明度系数
+var shelfRenderFrameState = {
+  mode: null,
+  side: false,
+  contentOpen: false,
+  alwaysVisible: false,
+  skullComposition: false
+};
+/**
+ * 刷新主渲染帧共用的歌单状态快照，避免多个视觉子系统重复调用歌单 getter。
+ * @returns {object} 当前帧唯一复用的歌单状态对象。
+ */
+function refreshShelfRenderFrameState() {
+  var manager = shelfManager;
+  var mode = manager && manager.getMode ? manager.getMode() : null;
+  var side = mode === 'side';
+  var contentOpen = !!(manager && manager.hasOpenContent && manager.hasOpenContent());
+  shelfRenderFrameState.mode = mode;
+  shelfRenderFrameState.side = side;
+  shelfRenderFrameState.contentOpen = contentOpen;
+  shelfRenderFrameState.alwaysVisible = side && shelfAlwaysVisible();
+  shelfRenderFrameState.skullComposition = !!(fx && fx.preset === SKULL_PRESET_INDEX && side && (shelfPinnedOpen || shelfVisibility > 0.18 || contentOpen));
+  return shelfRenderFrameState;
+}
 function isPortraitShelfViewport() {
   return innerHeight > innerWidth * 1.08;
 }
@@ -14123,15 +14176,22 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       rebuild(asyncCards);
     },
     getMode: function(){ return mode; },
-    update: function(dt, frameNow) {
+    /**
+     * 更新歌单架动画，并复用主渲染帧已经读取的歌单状态和时间戳。
+     * @param {number} dt 当前帧秒数。
+     * @param {number=} frameNow 当前帧的 performance.now() 毫秒时间。
+     * @param {object=} frameShelfState 当前帧的歌单状态快照。
+     * @returns {void}
+     */
+    update: function(dt, frameNow, frameShelfState) {
       if (!group) return;
       // PSP 滚动平滑
       centerSmooth += (centerTarget - centerSmooth) * 0.16;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       var px = pointerParallax.x, py = pointerParallax.y;
       var appRevealed = !document.body.classList.contains('splash-active');
-      var contentOpen = !!(contentList && contentList.isOpen());
-      var alwaysVisible = shelfAlwaysVisible();
+      var contentOpen = frameShelfState ? frameShelfState.contentOpen : !!(contentList && contentList.isOpen());
+      var alwaysVisible = frameShelfState ? frameShelfState.alwaysVisible : shelfAlwaysVisible();
       var cueVis = appRevealed ? tickShelfHoverCue(dt, frameNow) : 0;
       // v8: shelf 自动可见度 — 启动页期间不显示；侧栏只在右侧停留时淡入。
       var targetVis;
@@ -28992,8 +29052,13 @@ function drawHandSkeleton(lm, isPinch, openness, isFist, palm) {
   ctx.restore();
 }
 
-// 每帧调用 — 应用惯性旋转 + handActive 衰减
-function tickGestureRotation(dt) {
+/**
+ * 推进手势惯性旋转和手部活跃度衰减，并复用主循环当前帧时间。
+ * @param {number} dt 当前帧秒数。
+ * @param {number=} frameNow 当前帧的 performance.now() 毫秒时间；省略时在手势衰减路径自行读取。
+ * @returns {void}
+ */
+function tickGestureRotation(dt, frameNow) {
   if (Math.abs(particleSpin.vx) > 0.0001 || Math.abs(particleSpin.vy) > 0.0001) {
     var rx = particleSpin.vx * dt;
     var ry = particleSpin.vy * dt;
@@ -29008,11 +29073,14 @@ function tickGestureRotation(dt) {
   gestureGrip.value += (gestureGrip.target - gestureGrip.value) * (gestureGrip.target > gestureGrip.value ? 0.18 : 0.10);
   gestureGrip.pulse *= Math.pow(0.84, dt * 60);
   if (uniforms.uGestureGrip) uniforms.uGestureGrip.value = clampRange(gestureGrip.value + gestureGrip.pulse * 0.16, 0, 1);
-  // hand active 自然衰减 (无手时)
-  if (gestureActive && handLmSmooth && performance.now() - handLmLastSeen > 200) {
-    uniforms.uHandActive.value *= 0.94;
-    gestureGrip.target *= 0.92;
-    if (uniforms.uHandActive.value < 0.02) uniforms.uHandActive.value = 0;
+  // 只有手部追踪超过 200 毫秒没有新结果时才衰减活跃度，避免正常追踪被误判为无手。
+  if (gestureActive && handLmSmooth) {
+    var now = frameNow == null ? performance.now() : frameNow;
+    if (now - handLmLastSeen > 200) {
+      uniforms.uHandActive.value *= 0.94;
+      gestureGrip.target *= 0.92;
+      if (uniforms.uHandActive.value < 0.02) uniforms.uHandActive.value = 0;
+    }
   }
 }
 
@@ -31456,28 +31524,30 @@ function animate() {
   uniforms.uEnergy.value = audioEnergy;
   uniforms.uMouseXY.value.set(mouseWorld.x, mouseWorld.y);
   uniforms.uMouseActive.value = mouseActive ? 1 : 0;
-  var skullBackdropDim = fx && fx.preset === SKULL_PRESET_INDEX ? 0.58 : 1;
-  var shelfDimTarget = shouldDimWallpaperForShelf() ? 0.48 : skullBackdropDim;
-  var shelfDimEase = shelfDimTarget < uniforms.uParticleDim.value ? 0.18 : 0.10;
-  uniforms.uParticleDim.value += (shelfDimTarget - uniforms.uParticleDim.value) * Math.min(1, shelfDimEase * Math.max(1, dt * 60));
-
   // 通用转场脉冲: 只作为切换预设时的短促提亮。
   uniforms.uBurstAmt.value *= 0.90;
   tickPresetTransition();
 
   updateRipples(dt);
-  if (shelfManager) shelfManager.update(dt, now);
+  var frameShelfState = refreshShelfRenderFrameState();
+  if (shelfManager) shelfManager.update(dt, now, frameShelfState);
+  // 歌单架更新会推进可见度；组合状态复用同一份 getter 快照，只重新计算依赖可见度的布尔值。
+  frameShelfState.skullComposition = !!(fx && fx.preset === SKULL_PRESET_INDEX && frameShelfState.side && (shelfPinnedOpen || shelfVisibility > 0.18 || frameShelfState.contentOpen));
+  var skullBackdropDim = fx && fx.preset === SKULL_PRESET_INDEX ? 0.58 : 1;
+  var shelfDimTarget = shouldDimWallpaperForShelf(frameShelfState) ? 0.48 : skullBackdropDim;
+  var shelfDimEase = shelfDimTarget < uniforms.uParticleDim.value ? 0.18 : 0.10;
+  uniforms.uParticleDim.value += (shelfDimTarget - uniforms.uParticleDim.value) * Math.min(1, shelfDimEase * Math.max(1, dt * 60));
   tickLyricsParticles();
   updateHomeAudioVisual(dt, now);
 
   // 电影镜头
   updateCinema(dt);
-  updateFreeCamera(dt);
+  updateFreeCamera(dt, now);
   updateCamera();
-  applySkullCameraPose(dt);
+  applySkullCameraPose(dt, frameShelfState);
 
   // v7.2 旋转 = 头部+眼球追踪 + 鼠标/手势拖动 + 惯性
-  tickGestureRotation(dt);
+  tickGestureRotation(dt, now);
   var skullPresetActive = fx && fx.preset === SKULL_PRESET_INDEX;
   particles.visible = !skullPresetActive;
   if (bloomParticles) bloomParticles.visible = !skullPresetActive && fx.bloom && fx.bloomStrength > 0.01;
@@ -31497,8 +31567,8 @@ function animate() {
   if (backCoverGroup) {
     backCoverGroup.rotation.copy(particles.rotation);
   }
-  updateSkullParticleLayer(dt);
-  updateStageLyrics3D(dt);
+  updateSkullParticleLayer(dt, frameShelfState);
+  updateStageLyrics3D(dt, frameShelfState);
 
   renderer.render(scene, camera);
 }
