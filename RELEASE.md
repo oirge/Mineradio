@@ -1,5 +1,18 @@
 +﻿# 发布流程
 
+## v1.3.4 3D 歌单架卡片属性低写入优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.4`。
+- 3D 歌单架卡片的位置、缩放、旋转、相机姿态、可见性、渲染顺序、材质颜色和透明度通过卡片级稳定值缓存写入；相同目标值不重复触发 Three.js setter，动画目标仍按帧计算。
+- 普通欧拉姿态未显式传入 `z` 时保留当前 `rotation.z`，避免从 Skull 相机四元数姿态切回普通姿态时改变滚转。
+- 新增 `tests/frame-hot-path.test.js` 歌单架卡片属性写入缓存回归；不改变 UI、视觉、播放、歌词、桌面覆盖层或用户设置。
+- 全量 Node 回归 `243/243` 通过；主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过后构建 Windows x64 NSIS 安装器。
+- 发布资产：`Mineradio-1.3.4-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.3.4-SHA256SUMS.txt`；不生成 Portable ZIP。
+- 安装器 `103341011` 字节；blockmap `110354` 字节；`latest.yml` `347` 字节。
+- SHA256：安装器 `D850FAADCCC7622224BAE1F992F0C167EEB924980770DABDB9B4EA60BD877B0C`；blockmap `F3C333AF42B69E4AC1AEFE8C8AE5077FCC1C6D3D907AD52867F22504032C4EFA`；`latest.yml` `8B1A212FC671E6325167717A7AF787911AFD56F8E6971D1C1C41BAEC9B7A48C1`。
+- `latest.yml` 的 Setup SHA512：`f9sdiF/SyMUpWnzGSWrXqDooniuXbYhs4ns+cjzeIzUHLyz7hrCiS+XQQM5l0AlIZvL0E3t5NUYgaL8IMEdVlw==`。
+- GitHub Release、tag 和 CI 校验在推送完成后补录。
+
 ## v1.3.3 相机与交互热路径低分配优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.3`。

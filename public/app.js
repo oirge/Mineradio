@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.3';
+var APP_VERSION = '1.3.4';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -13489,8 +13489,124 @@ function makeShelfManager() {
         ? { kind:'loadPlaylist', playlistId: 'podcast:' + item.podcastKey, title: item.title }
         : (item.type === 'queue' ? { kind:'playQueue', index: item.queueIndex } : { kind:'empty' }));
     group.add(mesh);
-    var card = { canvas: cv, ctx: ctx, texture: tx, mesh: mesh, item: item, index: i, isCenter: false, selected: i === selectedIdx, floatMix: 0, fxPulse: 0, dofBlur: 0, dofBucket: -1, drawKey: '' };
+    var card = { canvas: cv, ctx: ctx, texture: tx, mesh: mesh, item: item, index: i, isCenter: false, selected: i === selectedIdx, floatMix: 0, fxPulse: 0, dofBlur: 0, dofBucket: -1, drawKey: '', poseMode: '', positionX: NaN, positionY: NaN, positionZ: NaN, scaleValue: NaN, opacityValue: NaN, colorTone: NaN, visibleValue: null, renderOrderValue: NaN };
     return card;
+  }
+
+  /**
+   * 仅在位置发生变化时写入卡片坐标，避免稳定帧重复触发 Three.js 变更通知。
+   * @param {Object} card 卡片运行时状态。
+   * @param {number} x 卡片横坐标。
+   * @param {number} y 卡片纵坐标。
+   * @param {number} z 卡片纵深坐标。
+   * @returns {void}
+   */
+  function setShelfCardPosition(card, x, y, z) {
+    if (card.positionX === x && card.positionY === y && card.positionZ === z) return;
+    card.mesh.position.set(x, y, z);
+    card.positionX = x;
+    card.positionY = y;
+    card.positionZ = z;
+  }
+
+  /**
+   * 仅在缩放发生变化时写入卡片比例，避免稳定帧重复更新矩阵。
+   * @param {Object} card 卡片运行时状态。
+   * @param {number} scale 卡片统一缩放值。
+   * @returns {void}
+   */
+  function setShelfCardScale(card, scale) {
+    if (card.scaleValue === scale) return;
+    card.mesh.scale.setScalar(scale);
+    card.scaleValue = scale;
+  }
+
+  /**
+   * 仅在欧拉角发生变化或姿态分支切换时写入卡片旋转。
+   * @param {Object} card 卡片运行时状态。
+   * @param {number} x 绕 X 轴旋转角。
+   * @param {number} y 绕 Y 轴旋转角。
+   * @param {number} z 绕 Z 轴旋转角。
+   * @returns {void}
+   */
+  function setShelfCardRotation(card, x, y, z) {
+    var nextZ = z == null ? card.mesh.rotation.z : z;
+    if (card.poseMode === 'rotation' && card.rotationX === x && card.rotationY === y && card.rotationZ === nextZ) return;
+    card.mesh.rotation.set(x, y, nextZ);
+    card.poseMode = 'rotation';
+    card.rotationX = x;
+    card.rotationY = y;
+    card.rotationZ = nextZ;
+  }
+
+  /**
+   * 仅在相机四元数或局部偏转变化时重建卡片相机姿态。
+   * @param {Object} card 卡片运行时状态。
+   * @param {Object} quaternion 当前相机四元数。
+   * @param {number} rx 卡片局部 X 轴偏转角。
+   * @param {number} ry 卡片局部 Y 轴偏转角。
+   * @returns {void}
+   */
+  function setShelfCardCameraPose(card, quaternion, rx, ry) {
+    if (card.poseMode === 'camera' && card.cameraQx === quaternion.x && card.cameraQy === quaternion.y && card.cameraQz === quaternion.z && card.cameraQw === quaternion.w && card.cameraRx === rx && card.cameraRy === ry) return;
+    card.mesh.quaternion.copy(quaternion);
+    card.mesh.rotateX(rx);
+    card.mesh.rotateY(ry);
+    card.poseMode = 'camera';
+    card.cameraQx = quaternion.x;
+    card.cameraQy = quaternion.y;
+    card.cameraQz = quaternion.z;
+    card.cameraQw = quaternion.w;
+    card.cameraRx = rx;
+    card.cameraRy = ry;
+  }
+
+  /**
+   * 仅在透明度发生变化时更新卡片材质，避免重复写入 WebGL 材质状态。
+   * @param {Object} card 卡片运行时状态。
+   * @param {number} opacity 目标透明度。
+   * @returns {void}
+   */
+  function setShelfCardOpacity(card, opacity) {
+    if (card.opacityValue === opacity) return;
+    card.mesh.material.opacity = opacity;
+    card.opacityValue = opacity;
+  }
+
+  /**
+   * 仅在灰度色调发生变化时更新卡片材质颜色。
+   * @param {Object} card 卡片运行时状态。
+   * @param {number} tone 材质灰度系数。
+   * @returns {void}
+   */
+  function setShelfCardColor(card, tone) {
+    if (card.colorTone === tone) return;
+    card.mesh.material.color.setScalar(tone);
+    card.colorTone = tone;
+  }
+
+  /**
+   * 仅在可见性发生变化时更新卡片节点，避免重复触发场景遍历状态变更。
+   * @param {Object} card 卡片运行时状态。
+   * @param {boolean} visible 是否显示卡片。
+   * @returns {void}
+   */
+  function setShelfCardVisibility(card, visible) {
+    if (card.visibleValue === visible) return;
+    card.mesh.visible = visible;
+    card.visibleValue = visible;
+  }
+
+  /**
+   * 仅在渲染顺序发生变化时更新卡片节点。
+   * @param {Object} card 卡片运行时状态。
+   * @param {number} renderOrder Three.js 渲染顺序。
+   * @returns {void}
+   */
+  function setShelfCardRenderOrder(card, renderOrder) {
+    if (card.renderOrderValue === renderOrder) return;
+    card.mesh.renderOrder = renderOrder;
+    card.renderOrderValue = renderOrder;
   }
 
   function warmTextureUpload(tex) {
@@ -13624,9 +13740,9 @@ function makeShelfManager() {
     var delta = card.index - centerSmooth;     // 正=下方, 负=上方
     var absD = Math.abs(delta);
     // 隐藏太远的卡 (>4 全隐藏)
-    if (absD > SHELF_VISIBLE_RADIUS + 0.5) { card.mesh.visible = false; return; }
-    card.mesh.visible = true;
-    card.mesh.renderOrder = 60 + Math.round((SHELF_VISIBLE_RADIUS + 1 - Math.min(absD, SHELF_VISIBLE_RADIUS + 1)) * 10);
+    if (absD > SHELF_VISIBLE_RADIUS + 0.5) { setShelfCardVisibility(card, false); return; }
+    setShelfCardVisibility(card, true);
+    setShelfCardRenderOrder(card, 60 + Math.round((SHELF_VISIBLE_RADIUS + 1 - Math.min(absD, SHELF_VISIBLE_RADIUS + 1)) * 10));
     var parX = pointerParallax.x || 0;
     var parY = pointerParallax.y || 0;
     var parWeight = Math.max(0, 1 - absD * 0.16);
@@ -13653,9 +13769,9 @@ function makeShelfManager() {
       if (!liftTarget && card.floatMix < 0.004) card.floatMix = 0;
       var lift = card.floatMix || 0;
       var sideLayer = Math.max(0, SHELF_VISIBLE_RADIUS + 1 - Math.min(absD, SHELF_VISIBLE_RADIUS + 1));
-      card.mesh.renderOrder = passiveAlways
+      setShelfCardRenderOrder(card, passiveAlways
         ? (30 + Math.round(sideLayer * 1.1) + Math.round(lift * 96))
-        : (60 + Math.round(sideLayer * 10) + Math.round(lift * 70));
+        : (60 + Math.round(sideLayer * 10) + Math.round(lift * 70)));
       var breathPulse = hoverBreath * (0.5 + 0.5 * Math.sin(nowT * 1.22 + card.index * 0.74));
       var revealRaw = Math.max(0, Math.min(1, (nowT - shelfOpenAnimAt - absD * 0.035) / 0.62));
       var reveal = revealRaw * revealRaw * (3 - 2 * revealRaw);
@@ -13684,30 +13800,29 @@ function makeShelfManager() {
       var scale = (absD < 0.5 ? 1.12 : Math.max(0.55, 1.04 - absD * 0.14)) * (0.88 + reveal * 0.12) * (1 + pulse * 0.056 + breathPulse * 0.026 + lift * (skullShelfPose ? 0.045 : 0.075)) * layout.sideScale;
       if (wallpaperShelfPose) scale *= 1.22;
       else if (skullShelfPose) scale *= 1.04;
-      card.mesh.position.set(px, py, pz);
+      setShelfCardPosition(card, px, py, pz);
       if (skullShelfPose && camera) {
-        card.mesh.quaternion.copy(camera.quaternion);
-        card.mesh.rotateX(layout.sideRotX - delta * 0.008 - parY * 0.004 * parWeight);
-        card.mesh.rotateY(layout.sideRotY + (1 - reveal) * 0.012 + parX * 0.006 * parWeight);
+        setShelfCardCameraPose(card, camera.quaternion, layout.sideRotX - delta * 0.008 - parY * 0.004 * parWeight, layout.sideRotY + (1 - reveal) * 0.012 + parX * 0.006 * parWeight);
       } else {
         var safeRotY = wallpaperShelfPose ? 0.12 : layout.sideRotY;
         var safeEntryRotY = wallpaperShelfPose ? 0.05 : 0.16;
-        card.mesh.rotation.y = (safeShelfPose ? safeRotY : layout.sideRotY) + (1 - reveal) * safeEntryRotY + parX * (safeShelfPose ? 0.014 : 0.038) * parWeight;
+        var rotationY = (safeShelfPose ? safeRotY : layout.sideRotY) + (1 - reveal) * safeEntryRotY + parX * (safeShelfPose ? 0.014 : 0.038) * parWeight;
         var safeRotX = wallpaperShelfPose ? 0.020 : layout.sideRotX;
-        card.mesh.rotation.x = -delta * (safeShelfPose ? safeRotX : layout.sideRotX) - parY * (safeShelfPose ? 0.010 : 0.024) * parWeight;
+        var rotationX = -delta * (safeShelfPose ? safeRotX : layout.sideRotX) - parY * (safeShelfPose ? 0.010 : 0.024) * parWeight;
+        setShelfCardRotation(card, rotationX, rotationY);
       }
-      card.mesh.scale.setScalar(scale);
+      setShelfCardScale(card, scale);
       var disabledByDetail = detailOpenSide;
       var opacity = absD < 0.5 ? 1.0 : Math.max(0.22, 1.0 - absD * 0.30);
       if (disabledByDetail) {
         opacity *= card.index === openCardIdx ? 0.16 : 0.08;
-        card.mesh.material.color.setScalar(card.index === openCardIdx ? 0.42 : 0.25);
+        setShelfCardColor(card, card.index === openCardIdx ? 0.42 : 0.25);
       } else {
         if (passiveAlways) opacity *= 0.92 + lift * 0.08;
-        card.mesh.material.color.setScalar(passiveAlways ? (0.96 + lift * 0.04) : 1);
+        setShelfCardColor(card, passiveAlways ? (0.96 + lift * 0.04) : 1);
       }
       // v8: 自动隐藏 — shelf 不在 focus 区时整体淡化
-      card.mesh.material.opacity = Math.min(1, opacity * (shelfVisibility != null ? shelfVisibility : 1) * reveal * (1 - paneEase * 0.24) + pulse * 0.10 * reveal + breathPulse * 0.035) * shelfLook.opacity;
+      setShelfCardOpacity(card, Math.min(1, opacity * (shelfVisibility != null ? shelfVisibility : 1) * reveal * (1 - paneEase * 0.24) + pulse * 0.10 * reveal + breathPulse * 0.035) * shelfLook.opacity);
       setCardCenter(card, absD < 0.5, shelfLook);
     } else {
       // 舞台 PSP: 水平展开 + center 突出, dock 在底部
@@ -13722,19 +13837,18 @@ function makeShelfManager() {
       pyStage += parY * 0.060 * parWeight;
       pzStage += (parY * 0.040 - parX * 0.035) * parWeight;
       var scaleS = (absD < 0.5 ? 1.20 : Math.max(0.45, 1.0 - absD * 0.22)) * (1 + pulse * 0.060) * layout.stageScale;
-      card.mesh.position.set(pxStage, pyStage, pzStage);
-      card.mesh.rotation.y = -delta * 0.22 + parX * 0.050 * parWeight;
-      card.mesh.rotation.x = 0.10 - absD * 0.04 - parY * 0.028 * parWeight;
-      card.mesh.scale.setScalar(scaleS);
+      setShelfCardPosition(card, pxStage, pyStage, pzStage);
+      setShelfCardRotation(card, 0.10 - absD * 0.04 - parY * 0.028 * parWeight, -delta * 0.22 + parX * 0.050 * parWeight);
+      setShelfCardScale(card, scaleS);
       var disabledStage = frameContentOpen;
       var opS = absD < 0.5 ? 1.0 : Math.max(0.18, 1.0 - absD * 0.32);
       if (disabledStage) {
         opS *= card.index === openCardIdx ? 0.16 : 0.08;
-        card.mesh.material.color.setScalar(card.index === openCardIdx ? 0.42 : 0.25);
+        setShelfCardColor(card, card.index === openCardIdx ? 0.42 : 0.25);
       } else {
-        card.mesh.material.color.setScalar(1);
+        setShelfCardColor(card, 1);
       }
-      card.mesh.material.opacity = Math.min(1, opS * (shelfVisibility != null ? shelfVisibility : 1) * (1 - paneEaseS * 0.24) + pulse * 0.10) * shelfLook.opacity;
+      setShelfCardOpacity(card, Math.min(1, opS * (shelfVisibility != null ? shelfVisibility : 1) * (1 - paneEaseS * 0.24) + pulse * 0.10) * shelfLook.opacity);
       setCardCenter(card, absD < 0.5, shelfLook);
     }
   }
