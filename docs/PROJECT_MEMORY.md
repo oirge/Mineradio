@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.0` 已发布；进入随机模式时整队只洗牌一次，上一首/下一首沿固定乱序前后循环，当前正在播放的歌曲和进度保持不变。
-- 当前工作分支：`codex/complete-v1.2.79`。
-- 最近正式安装包 Release 基线：`v1.3.0`（2026-08-08，固定乱序播放版；tag 源码提交 `b9be5a1`，GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单校验一致，不生成 Portable ZIP）。
+- 当前源码检查点：`v1.3.1` 已发布；进入随机模式时整队只洗牌一次，上一首/下一首沿固定乱序前后循环，当前正在播放的歌曲和进度保持不变。
+- 当前工作分支：`codex/release-v1.2.87`，当前代码已快进到 GitHub `origin/main` 的 `v1.3.1`，并保留本地安装器安全修复。
+- 最近正式安装包 Release 基线：`v1.3.1`（2026-08-09，CPU/运行内存优化版；GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单校验一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -705,6 +705,20 @@
 - 修复重发资产：`Mineradio-1.2.85-Setup.exe` `103330816` 字节 / SHA256 `409e36493bbf4738fdf80d6fe3a27d7235e9302d014bcbaeeeb188443d520650`；blockmap `110399` 字节 / `ff93aa3b112348a4b34ed9c5dfbd9514d855e8d7c95ff25d91d1d54a309d7e10`；`latest.yml` `350` 字节 / `b2e7cc153b778a2b3055c0024a075352e0e4ef8376eb59724081d433ef12ba1a`；Portable ZIP `144915590` 字节 / `a05c2f02b0dbbba64dbfcdfb8bb48831792e8e462f7e97bedd13da3cbce41a6c`。
 - GitHub Release 已覆盖安装器、blockmap、`latest.yml` 和 SHA256 清单共 4 项；Portable ZIP 因大文件上传超时未放入远端，保留本地产物，不影响自动更新链路。
 
+### 2026-08-09 - v1.3.1 CPU 与运行内存优化
+
+- 当前代码基于 GitHub `origin/main` 的 `v1.3.0`，本轮发布版本升级为 `v1.3.1`，并已推送 GitHub Latest。
+- `public/app.js` 可见空闲场景在无音频、无交互时将主 3D 渲染目标限制为 30 FPS；播放、交互、后台和帧压力量级继续走原有策略。桌面歌词与壁纸仍由独立调度器运行。
+- `shelfManager.update()` 在启动页或完全隐藏且无详情内容时直接结束，避免继续更新不可见卡片的变换和透明度。
+- 主实时频谱 `kick/vocal/mid/treble` 改为单次 `frequencyData` 扫描；独立节拍频谱只在 30 FPS 采样时隙刷新并复用 `beatBandValueCache`，节拍状态机仍按主分析时间片推进。
+- `sortLocalAssetPreloadQueue()` 将 rank 和原始索引压成数字排序键，避免大曲库后台预载为每首候选歌曲创建 `{song,index,rank}` 临时对象。
+- `trimLocalIndexedDbCaches()` 串行扫描三个对象仓库，仅保留资产轻量元数据和必要 ID 映射；删除阶段使用游标逐条删除，避免资产、歌词、曲库三套全量记录数组同时驻留。
+- 歌词特效关闭或暂停镜头无残留冲击时直接跳过无效帧工作；`getStageLyricLockBounds()` 不再每帧创建 `take()` 闭包。
+- 安装器 `build/installer.nsh` 直接读取原始 Windows 命令行中的 `/D=`，同时保留安装目录归一化和卸载安全门禁。
+- 新增 `tests/idle-render-hot-path.test.js`、`tests/local-cache-memory-hot-path.test.js`，并扩展 `tests/audio-analysis-hot-path.test.js`、`tests/frame-hot-path.test.js`；全量 Node 回归 `237/237` 通过，主进程与渲染器语法检查通过。
+- 安装器 `103337852` 字节，SHA256 `d7be6b7cc50bc8db7c45a915c0cbe759cac18b5025d8087ee29ad07d44e0ee43`；blockmap `110078` 字节，SHA256 `2e64d7e430b514626bf64c6e272472dda28380ab5f513329e0f2f5e24fa95e9e`；`latest.yml` `347` 字节，SHA256 `e7479f08f9e5abf78d2d1e6cc64c42036d8b7d2d9c254756c6ac72125a286a48`；SHA256 清单 `273` 字节，SHA256 `aab32ee89249681a646efcf974f863a8d2c730611f828721ca7ff1247c82cfbe`。
+- 不得回退：播放或交互期间不能强制降到空闲帧率；桌面歌词/壁纸不能重新塞回主渲染帧；歌单详情打开时不能跳过必要的行更新。
+
 ### 2026-08-04 - v1.2.86 桌面歌词修复与 GitHub 发布链路完善
 
 - 将 `v1.2.85` 同版本修复重发提升为 `v1.2.86`，确保已安装旧 `1.2.85` 的客户端满足 `latestVersion > APP_VERSION`，能够发现更新。
@@ -713,3 +727,7 @@
 - 本地验证：全量 Node 回归 `190/190`；`server.js`、`desktop/main.js`、`desktop/overlay-preload.js`、`public/app.js` 语法检查和 `git diff --check` 通过；打包后的 asar 含 `APP_VERSION = '1.2.86'` 和桌面歌词物理裁切修复。
 - 发布清单只列实际远端存在的四个资产：安装器、blockmap、`latest.yml` 和 SHA256 清单；Portable ZIP 只保留本地，不得在 Release 正文写成可远端下载。
 - 远端 Release 已以 Latest 正式发布，资产仅含安装器、blockmap、`latest.yml` 和 SHA256 清单；GitHub API 的资产大小与 SHA256 均与本地一致。安装器 `103331153` 字节 / SHA256 `18971d4a85a2e3f186534205b980e5bb85b2ba28576dce9348dd45ed106eaed1`；blockmap `110176` 字节 / `d69b25649d685243a389b7bb417ac4e4fc698781a8300234051157dc5c6178c3`；`latest.yml` `350` 字节 / `c4eb389b66b9e846f3075e2ca98f9024674f2e823d03e529b690d9a94c959245`；本地 Portable ZIP `144915599` 字节 / `bc6e68aed9ae3ef85d7cc3e0f24196434cb0e9c31baf93672693ccb1a81ded4b`。
+### 2026-08-09 - 待发布安装器安全修复
+
+- `build/installer.nsh` 直接读取 Windows 原始命令行中的 `/D=`，避免 `${GetParameters}` 过滤该参数后误判为未指定目录。
+- 保留专用安装目录归一化、`.mineradio-install-root` 标记和卸载安全门禁；`tests/installer-command-line-path.test.js` 覆盖原始命令行解析和安全检查。

@@ -59,6 +59,8 @@ function testShelfFrameStateCache() {
   const placeCardSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
   assert.match(updateSource, /var contentOpen = !!\(contentList && contentList\.isOpen\(\)\);/);
   assert.match(updateSource, /var alwaysVisible = shelfAlwaysVisible\(\);/);
+  assert.match(updateSource, /var cueVis = appRevealed \? tickShelfHoverCue\(dt\) : 0;/);
+  assert.match(updateSource, /if \(!appRevealed \|\| \(!group\.visible && targetVis === 0\)\) return;/);
   assert.equal((updateSource.match(/contentList\.isOpen\(\)/g) || []).length, 1);
   assert.equal((updateSource.match(/shelfAlwaysVisible\(\)/g) || []).length, 1);
   assert.match(placeCardSource, /frameContentOpen, frameAlwaysVisible/);
@@ -144,9 +146,44 @@ function testHomeRenderSnapshotReuse() {
   assert.match(discoverSource, /renderHomeTiles\(localSongs, localSummary\);/);
 }
 
+/**
+ * 验证歌词特效关闭且没有残留网格时不重复进入清理路径。
+ * @returns {void}
+ */
+function testLyricsParticleIdleShortCircuit() {
+  const source = readRendererSource();
+  const tickSource = readSourceBetween(source, 'function tickLyricsParticles() {', '\n\nfunction disposeLyricsParticles()');
+  assert.match(tickSource, /if \(!fx\.particleLyrics\) \{\s*if \(!stageLyrics\.current && !stageLyrics\.currentText && \(!stageLyrics\.outgoing \|\| !stageLyrics\.outgoing\.length\)\) return;/);
+}
+
+/**
+ * 验证暂停状态下没有残留镜头冲击时不重复衰减和清空事件队列。
+ * @returns {void}
+ */
+function testBeatCameraPausedIdleShortCircuit() {
+  const source = readRendererSource();
+  const cameraSource = readSourceBetween(source, 'function updateBeatCamera(dt) {', '\n\nfunction unlockCenteredView()');
+  assert.match(cameraSource, /if \(!audio \|\| audio\.paused\) \{[\s\S]*if \(!beatCam\.events\.length && Math\.abs\(beatCam\.punch\) < 0\.0001/);
+}
+
+/**
+ * 验证歌词镜头边界计算不在每帧创建临时闭包。
+ * @returns {void}
+ */
+function testLyricBoundsAvoidsFrameClosure() {
+  const source = readRendererSource();
+  const boundsSource = readSourceBetween(source, 'function getStageLyricLockBounds()', 'function lyricCameraLockFit(');
+  assert.doesNotMatch(boundsSource, /function take\(/);
+  assert.match(boundsSource, /stageLyrics\.current/);
+  assert.match(boundsSource, /for \(var i = 0; i < stageLyrics\.outgoing\.length; i\+\+\)/);
+}
+
 test('歌词光粒循环复用帧级状态', testLyricParticleFrameCache);
 test('歌单架更新复用帧级可见状态', testShelfFrameStateCache);
 test('歌单架布局复用帧级设置快照', testShelfFrameSettingsReuse);
 test('歌单详情复用帧级布局与外观快照', testShelfContentFrameSnapshotReuse);
 test('歌单卡片绘制复用帧级外观快照', testShelfCardFrameSnapshotReuse);
 test('Home 刷新复用本地歌曲池与听歌统计快照', testHomeRenderSnapshotReuse);
+test('歌词特效空闲帧提前结束清理路径', testLyricsParticleIdleShortCircuit);
+test('暂停镜头无残留事件时提前结束', testBeatCameraPausedIdleShortCircuit);
+test('歌词镜头边界计算不创建帧级闭包', testLyricBoundsAvoidsFrameClosure);

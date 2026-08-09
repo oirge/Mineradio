@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.2.76`
+- 当前源码版本：`v1.3.0`；本地分支同时保留待发布的安装器安全修复。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -125,5 +125,8 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `readRequestBody`、`请求体超限`、`REQUEST_BODY_TOO_LARGE`、`req.destroy 不触发 end`、`promise 永不结算`、`处理器挂起`、`POST 请求体解析`、`8MB 上限`、`客户端中断 socket 泄漏` 或 `单次结算门` 时，必须优先读取 `.context/pitfalls/mineradio-request-body-settlement.md`。
 - 遇到 `mineradio-import-json-file`、`存档导入`、`导入 JSON`、`IMPORT_FILE_TOO_LARGE`、`IMPORT_NOT_A_FILE`、`导入文件大小上限`、`readFileSync 无上限`、`主进程 OOM`、`外部文件读取上限` 或 `导入对话框超大文件` 时，必须优先读取 `.context/pitfalls/mineradio-import-file-size-limit.md`。
 - 遇到 `IndexedDB 事务 abort`、`onabort`、`事务中止 promise 永挂`、`trimLocalIndexedDbCaches`、`localIndexedDbTrimRunning 锁泄漏`、`IndexedDB 连接泄漏`、`QuotaExceededError`、`versionchange 中止`、`putCustomBackgroundBlob`、`getCustomBackgroundBlob`、`putLocalAssetCacheRecord` 或 `writeLocalLibraryPersistentRecord` 时，必须优先读取 `.context/pitfalls/mineradio-indexeddb-transaction-abort.md`。
+- 遇到 `资产预载排序数字键`、`sortLocalAssetPreloadQueue`、`清理阶段全量记录数组`、`游标增量删除` 或 `IndexedDB 清理内存峰值` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `播放器性能优化`、`UI 不动`、`播放启动速度`、`点歌到出声`、`启动恢复`、`迷你播放器`、`迷你播放器恢复`、`迷你播放器内存释放`、`隐藏窗口渲染进程`、`队列渲染`、`Home 首屏`、`听歌统计`、`搜索历史`、`搜索结果缓存`、`搜索玻璃贴图`、`HTML 转义`、`副标题缓存`、`空搜索`、`本地曲库导入`、`FileList 转数组`、`本地曲库缓存`、`本地资产缓存补水`、`元数据字段套用`、`本地歌词加载`、`本地文本解码`、`无歌词占位`、`LRC 解析`、`YRC 解析`、`歌词 source 转换`、`本地节奏缓存`、`3D 歌单详情`、`主进程本地曲库扫描`、`增量扫描截断`、`扫描回退全量`、`scanLocalMusicFolderIncremental`、`listed.truncated`、`LOCAL_LIBRARY_SCAN_VISIT_LIMIT`、`曲库丢歌`、`残缺快照覆盖`、`IndexedDB 缓存清理`、`IndexedDB`、`封面缩略图`、`重复函数声明` 或 `requestAnimationFrame 调度` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `localSearchWarmupSource`、`scheduleLocalSearchIndexWarmup` 二次筛选、`空查询结果数组复用` 或 `localSearchResultCache` 空查询身份时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `主 3D 空闲 30 FPS`、`isContinuousPlaybackRenderActive`、`隐藏歌单架短路`、`targetVis === 0`、`频谱桶单次扫描`、`getStageLyricLockBounds`、`歌词边界闭包`、`暂停镜头空闲短路` 或 `frequencyValue` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `实时节拍频谱 30 FPS`、`BEAT_ANALYSIS_TARGET_FPS`、`beatAnalysisElapsed`、`consumeRealtimeBeatSpectrumSlot`、`beatBandValueCache` 或 `节拍 FFT 限频` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。

@@ -159,6 +159,10 @@
 - 同一缓存安装包的并发下载请求会同时进入完整校验；只在校验结束后复查 active job 不能阻止 N 路重复读盘、哈希和坏缓存移动。
 - 实时节拍引擎跟随音频分析帧持续执行；在 `processRealtimeBeatEngine()` 内声明 helper 或直接返回对象字面量会在播放期间反复创建闭包与短命对象。
 - MediaPipe 手势帧会同时计算粒子位置、张开度和 Canvas 骨架；不要重复计算掌心，也不要在帧内新建 tips 数组或掌心对象。
+- 主窗口可见但没有音频播放或用户交互时，主 3D RAF 如果继续跟随高刷新屏会持续占用 CPU；桌面歌词和壁纸必须保持独立调度，不能用主窗口降频替代覆盖层同步。
+- 3D 歌单架完全隐藏或启动页遮挡时，卡片位置、旋转、透明度和详情行更新没有可见消费者；继续执行会放大高刷屏下的数学热循环。
+- 主分析器的 kick、人声、中频和高频桶是连续互斥范围；用四个循环扫描同一 TypedArray 会重复承担边界和索引开销。实时节拍分析的五个频段存在重叠，不能为了表面上的“单次扫描”引入更慢的多重边界判断。
+- `getStageLyricLockBounds()` 位于歌词镜头帧热路径，必须直接处理当前网格和 outgoing 网格，不能在每次调用中创建 `take()` 闭包。
 
 ## Solution / Convention
 
@@ -340,15 +344,23 @@
 - 本地资产 IndexedDB 当前使用数据库版本 3，并把 `assets` 与 `lyrics` 分开存储。v2 到 v3 升级必须从 `assets.openCursor()` 逐条提取歌词字段到 `lyrics`，随后用同一游标更新去除歌词字段的资产记录，不能先 `getAll()` 把整库歌词一次性搬入内存。
 - `localAssetCacheSnapshot()` 只生成元数据、封面缩略图和扫描状态；`localLyricCacheSnapshot()` 承载歌词原文及其文件签名。资产补水需要并行读取两个 store，但仅在 `includeLyrics` 开启时读取歌词 store；释放后的延迟写入必须把 `_preserveLocalLyricPayload` 放在歌词记录上，并从 `lyrics` 合并旧原文。
 - IndexedDB 清理要把同一歌曲的 asset/lyric 记录一起裁剪，并清理没有对应 asset 的孤立 lyric 记录；新增读写路径均保留 `complete`、`error`、`abort` 三路结算和连接关闭。
+- `trimLocalIndexedDbCaches()` 扫描时必须串行推进 `assets -> lyrics -> library` 游标，只保留资产 ID、时间、字节数和索引映射；不要恢复 `assetEntries`、`lyricEntries`、`libraryEntries` 三套全量对象数组。裁剪决策完成后使用删除游标逐条 `cursor.delete()`，释放排序数组和已完成的 ID 索引；资产数量/字节数、保护窗口、过期规则、曲库文件夹保留规则和孤儿歌词语义必须保持不变。
+- `sortLocalAssetPreloadQueue()` 使用 `rank * (songs.length + 1) + index` 数字键排序，再解码原始索引；不要为每首候选歌曲创建 `{song,index,rank}` 装饰对象。数字键必须保留当前歌曲优先、播放邻近度优先和同 rank 的原始顺序。
 - 桌面持久曲库的外置封面优先复用 `localCoverFile.url` 的 `/api/local-file` 流地址。缩略图与当前封面 `Image` 解码前需设置 `crossOrigin='anonymous'`；仅浏览器拖放的普通 `File` 继续走 data URL 回退，不能重新对桌面外置封面调用整图 `readLocalFileDataUrl`。
-- 相关回归测试：`tests/local-asset-cache-v3.test.js`。
+- 相关回归测试：`tests/local-asset-cache-v3.test.js`、`tests/local-cache-memory-hot-path.test.js`。
 - `localSearchPool()` 构建本地候选池后，`scheduleLocalSearchIndexWarmup()` 必须直接接收已经过滤的数组，不得再次调用 `localSearchWarmupSource()`；混合队列仍需保留首个非本地项之前的本地歌曲。空查询结果可按 `localSearchPoolCache.signature` 复用数组身份，调用方不得原地修改该缓存数组。
 - 3D 歌单详情页的 `syncRenderedRows()` 在可见窗口未变化时必须用单次索引循环同时更新歌曲引用和按需重绘，避免恢复为两个 `forEach` 遍历；`rowsDirty` / 加载动画刷新、中心行判定和绘制顺序必须保持原语义。
 
 - 实时节拍分析调用方必须把主频谱分析已经计算的时域 RMS 传给 `processRealtimeBeatEngine(analysisDt, rms)`，这样持续播放时不再重复扫描第二份 `2048` 点时域数组；保留省略该参数时的 `beatTimeDomainData` 回退路径，供直接调用和未来独立分析入口使用。
+- 主渲染器通过 `isContinuousPlaybackRenderActive()` 区分播放/交互与可见空闲：空闲目标为 30 FPS，播放或交互返回显示器刷新率，帧压力和深后台仍优先走原有 60/48/1 FPS 策略。
+- `shelfManager.update()` 先更新可见性状态；启动页或 `targetVis === 0` 且 `group.visible === false` 时直接结束，详情打开或可见过渡期间仍完整更新卡片和行。
+- 实时频谱在一次 `for (i < len)` 中按边界把样本分配到四个桶，再分别归一化；不要恢复四段独立扫描或改变原有桶边界。
 - `beatBandRms()` 接收 `start/end` 频谱桶边界，边界由 `ensureBeatBandRanges()` 按采样率、FFT 尺寸和数组长度缓存；不要在每个分析帧重新执行同一组 Hz 到桶的 `floor/ceil` 换算。`tests/audio-analysis-hot-path.test.js` 必须锁定采样桶和 RMS 数值等价。
+- `processRealtimeBeatEngine()` 只在 `consumeRealtimeBeatSpectrumSlot(dt)` 允许的新采样时隙调用五次 `beatBandRms()` 并写入 `beatBandValueCache`；间隔内复用五个标量，但节拍状态机仍按每个主分析时间片推进。重置引擎时必须清空该缓存，避免切歌后读取旧曲频谱。
+- `tickLyricsParticles()` 在歌词特效关闭且当前/退场歌词均为空时直接返回；`updateBeatCamera()` 在暂停且无事件、冲击量已归零时直接返回。两处短路只跳过无可见消费者的清理或衰减，不得跳过有效播放、歌词退场或镜头回落。
 - `updateHomeAudioVisual()` 先命中已有时间节流，再查找 `home-wave-track` DOM 节点；空 Home 波形的显示和刷新间隔语义保持不变。
 - 主音频分析的四个频谱段应先累加 `Uint8Array` 原始采样值，再按段统一乘 `1 / 255` 和平均因子；时域 RMS 可复用 256 项 `Float64Array` 平方查找表，避免每个采样重复执行相同的减法、除法和乘法。必须用旧版逐采样算法锁定四个频段和 RMS 的数值等价，避免浮点累加顺序变化影响节拍阈值。
+- 实时节拍分析器独立于主视觉分析器；主分析仍按 60 FPS 提供视觉数据，节拍频谱只需按 30 FPS 刷新，间隔内复用上一份 `beatFrequencyData` 和五个频段标量，节拍状态机继续按主分析时间片推进。重置实时节拍引擎时必须重置采样时隙和频段缓存，保证切歌后的首个分析片立即刷新频谱。
 
 ## Reference
 

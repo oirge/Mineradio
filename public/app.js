@@ -11,6 +11,8 @@ var UI_SFX_IDLE_RELEASE_MS = 5000;
 var uiSfxNoiseBuffers = null, uiSfxNoiseCtx = null, uiSfxNoiseSampleRate = 0, uiSfxNoiseCursor = 0;
 var FFT_SIZE = 2048;
 var AUDIO_ANALYSIS_TARGET_FPS = 60;
+// 节拍识别不需要跟随高刷渲染；降低独立 FFT 取样频率可以减少播放期间的音频分析 CPU 占用。
+var BEAT_ANALYSIS_TARGET_FPS = 30;
 var frequencyData = new Uint8Array(FFT_SIZE / 2);
 var timeDomainData = new Uint8Array(FFT_SIZE);
 var AUDIO_FREQUENCY_SCALE = 1 / 255;
@@ -45,11 +47,20 @@ var beatBandRangeCache = {
   snapStart: 0,
   snapEnd: -1
 };
+var beatBandValueCache = {
+  valid: false,
+  sub: 0,
+  kick: 0,
+  body: 0,
+  vocal: 0,
+  snap: 0
+};
 var bass = 0, mid = 0, treble = 0, audioEnergy = 0, beatPulse = 0, prevEnergy = 0;
 var lyricSunEnergy = 0, lyricSunTarget = 0, lyricSunHold = 0, lyricSunAvg = 0, lyricSunPeak = 0.55;
 var smoothBass = 0, smoothMid = 0, smoothTreb = 0, smoothEnergy = 0;
 var bassPeak = 0.12, midPeak = 0.10, treblePeak = 0.08, energyPeak = 0.10;
 var audioAnalysisLastAt = 0;
+var beatAnalysisElapsed = 1 / BEAT_ANALYSIS_TARGET_FPS;
 var beatOnsetFlag = false;        // beat 上升沿瞬时标志,每帧消费一次
 var lastStrongDrop = 0;           // 用于 burst 预设的强 drop 时刻
 
@@ -446,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.0';
+var APP_VERSION = '1.3.1';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -1544,8 +1555,9 @@ var camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100)
 var RENDER_DPR_CAP = 1.35;
 var RENDER_PIXEL_BUDGET = 5200000;
 var RENDER_MIN_DPR = 0.72;
-// 0 = display vsync. Keep visible playback high-refresh capable instead of capping 120Hz+ screens to 60/72.
+// 播放中和交互期间保留显示器刷新率；无音频、无交互的可见空闲场景降频，避免高刷屏持续空转。
 var RENDER_VISIBLE_VSYNC = true;
+var RENDER_IDLE_FPS = 30;
 var RENDER_ACTIVE_FPS = 0;
 var RENDER_LARGE_FPS = 0;
 var RENDER_HUGE_FPS = 0;
@@ -2247,6 +2259,13 @@ function resetRealtimeBeatEngine() {
   rtBeat.stats.assisted = 0;
   rtBeat.stats.strong = 0;
   rtBeat.stats.rejected = 0;
+  beatBandValueCache.valid = false;
+  beatBandValueCache.sub = 0;
+  beatBandValueCache.kick = 0;
+  beatBandValueCache.body = 0;
+  beatBandValueCache.vocal = 0;
+  beatBandValueCache.snap = 0;
+  beatAnalysisElapsed = 1 / BEAT_ANALYSIS_TARGET_FPS;
 }
 
 function resetAudioVisualState() {
@@ -2446,7 +2465,21 @@ function beatFollow(cur, next, dt, upTau, downTau) {
 }
 
 /**
+ * 为实时节拍频谱分配一次采样时隙，避免独立分析器在每个主分析帧重复执行 FFT。
+ * @param {number} dt 本次主音频分析时间片，单位为秒。
+ * @returns {boolean} 到达节拍频谱采样间隔时返回 true。
+ */
+function consumeRealtimeBeatSpectrumSlot(dt) {
+  var minGap = 1 / BEAT_ANALYSIS_TARGET_FPS;
+  beatAnalysisElapsed = Math.min(minGap, beatAnalysisElapsed + dt);
+  if (beatAnalysisElapsed < minGap) return false;
+  beatAnalysisElapsed = 0;
+  return true;
+}
+
+/**
  * 处理一次实时节拍分析；优先复用主频谱分析已经计算出的 RMS，避免同一帧再次扫描 2048 个时域采样点。
+ * 节拍频谱按固定较低频率刷新，未到采样时隙时继续使用上一份 TypedArray 数据。
  * @param {number} dt 本次音频分析时间片，单位为秒。
  * @param {number=} rmsSample 主分析器计算出的时域均方根值；缺失时走兼容回退扫描。
  * @returns {object|null} 可复用的命中或未命中结果对象。
@@ -2455,13 +2488,21 @@ function processRealtimeBeatEngine(dt, rmsSample) {
   if (!beatAnalyser || !audioCtx || !audio || audio.paused) return null;
   dt = Math.max(0.001, Math.min(0.080, dt || 0.016));
   var dj = djMode.active;
-  beatAnalyser.getByteFrequencyData(beatFrequencyData);
   var ranges = ensureBeatBandRanges();
-  var sub = beatBandRms(beatFrequencyData, ranges.subStart, ranges.subEnd);
-  var kick = beatBandRms(beatFrequencyData, ranges.kickStart, ranges.kickEnd);
-  var body = beatBandRms(beatFrequencyData, ranges.bodyStart, ranges.bodyEnd);
-  var vocal = beatBandRms(beatFrequencyData, ranges.vocalStart, ranges.vocalEnd);
-  var snap = beatBandRms(beatFrequencyData, ranges.snapStart, ranges.snapEnd);
+  if (consumeRealtimeBeatSpectrumSlot(dt)) {
+    beatAnalyser.getByteFrequencyData(beatFrequencyData);
+    beatBandValueCache.sub = beatBandRms(beatFrequencyData, ranges.subStart, ranges.subEnd);
+    beatBandValueCache.kick = beatBandRms(beatFrequencyData, ranges.kickStart, ranges.kickEnd);
+    beatBandValueCache.body = beatBandRms(beatFrequencyData, ranges.bodyStart, ranges.bodyEnd);
+    beatBandValueCache.vocal = beatBandRms(beatFrequencyData, ranges.vocalStart, ranges.vocalEnd);
+    beatBandValueCache.snap = beatBandRms(beatFrequencyData, ranges.snapStart, ranges.snapEnd);
+    beatBandValueCache.valid = true;
+  }
+  var sub = beatBandValueCache.valid ? beatBandValueCache.sub : 0;
+  var kick = beatBandValueCache.valid ? beatBandValueCache.kick : 0;
+  var body = beatBandValueCache.valid ? beatBandValueCache.body : 0;
+  var vocal = beatBandValueCache.valid ? beatBandValueCache.vocal : 0;
+  var snap = beatBandValueCache.valid ? beatBandValueCache.snap : 0;
   var low = Math.min(1, kick * 0.86 + sub * 0.42);
   var hasRmsSample = typeof rmsSample === 'number' && isFinite(rmsSample);
   var rms = hasRmsSample ? rmsSample : 0;
@@ -2964,6 +3005,12 @@ function scheduleBeatCamera(beat, source) {
 function updateBeatCamera(dt) {
   var t = audio ? audio.currentTime : uniforms.uTime.value;
   if (!audio || audio.paused) {
+    if (!beatCam.events.length && Math.abs(beatCam.punch) < 0.0001 &&
+        Math.abs(beatCam.thetaKick) < 0.0001 && Math.abs(beatCam.phiKick) < 0.0001 &&
+        Math.abs(beatCam.radiusKick) < 0.0001 && Math.abs(beatCam.rollKick) < 0.0001) {
+      beatCam.prevAudioTime = t;
+      return;
+    }
     beatCam.punch *= Math.pow(0.08, dt);
     beatCam.thetaKick *= Math.pow(0.05, dt);
     beatCam.phiKick *= Math.pow(0.05, dt);
@@ -5399,17 +5446,27 @@ function stageLyricTargetQuaternion(baseQuat, tiltX, tiltY) {
   return lyricTargetQuat.copy(baseQuat || lyricBaseQuat).multiply(lyricTiltQuat);
 }
 var stageLyricLockBoundsScratch = { w:0, h:0 };
+/**
+ * 计算当前和退场歌词的最大可视边界，供镜头锁定缩放复用。
+ * @returns {{w:number,h:number}} 可复用的歌词边界对象。
+ */
 function getStageLyricLockBounds() {
   var maxW = 0, maxH = 0;
-  function take(mesh) {
-    if (!mesh || !mesh.userData || !mesh.userData.lyric) return;
+  var mesh = stageLyrics.current;
+  if (mesh && mesh.userData && mesh.userData.lyric) {
     var d = mesh.userData.lyric;
     var meshScale = Math.max(mesh.scale && isFinite(mesh.scale.x) ? mesh.scale.x : 1, mesh.scale && isFinite(mesh.scale.y) ? mesh.scale.y : 1);
     maxW = Math.max(maxW, (d.textWorldW || d.worldW || 6.1) * meshScale);
     maxH = Math.max(maxH, (d.textWorldH || d.worldH || 1.0) * meshScale);
   }
-  take(stageLyrics.current);
-  for (var i = 0; i < stageLyrics.outgoing.length; i++) take(stageLyrics.outgoing[i]);
+  for (var i = 0; i < stageLyrics.outgoing.length; i++) {
+    mesh = stageLyrics.outgoing[i];
+    if (!mesh || !mesh.userData || !mesh.userData.lyric) continue;
+    var outgoingData = mesh.userData.lyric;
+    var outgoingScale = Math.max(mesh.scale && isFinite(mesh.scale.x) ? mesh.scale.x : 1, mesh.scale && isFinite(mesh.scale.y) ? mesh.scale.y : 1);
+    maxW = Math.max(maxW, (outgoingData.textWorldW || outgoingData.worldW || 6.1) * outgoingScale);
+    maxH = Math.max(maxH, (outgoingData.textWorldH || outgoingData.worldH || 1.0) * outgoingScale);
+  }
   stageLyricLockBoundsScratch.w = maxW || 5.4;
   stageLyricLockBoundsScratch.h = maxH || 0.78;
   return stageLyricLockBoundsScratch;
@@ -6300,139 +6357,214 @@ async function trimLocalIndexedDbCaches(reason) {
     var db = await openLocalAssetCacheDb();
     dropped += await new Promise(function(resolve, reject){
       var now = Date.now();
-      var assetEntries = [];
-      var lyricEntries = [];
-      var libraryEntries = [];
+      var assetIds = [];
+      var assetSavedAt = [];
+      var assetBytes = [];
+      var assetOrder = [];
+      var assetIndexById = Object.create(null);
+      var orphanLyricCount = 0;
+      var libraryHasExpired = false;
+      var libraryHasFolderPath = false;
       var tx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LYRICS_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readonly');
       var assetStore = tx.objectStore(LOCAL_ASSET_CACHE_STORE);
       var lyricStore = tx.objectStore(LOCAL_LYRICS_CACHE_STORE);
       var libraryStore = tx.objectStore(LOCAL_LIBRARY_CACHE_STORE);
-      assetStore.openCursor().onsuccess = function(event){
+
+      /**
+       * 顺序扫描资产元数据；只保留排序和容量裁剪所需的轻量数组。
+       * @param {Event} event IndexedDB 游标事件。
+       * @returns {void}
+       */
+      function scanAssetCursor(event){
         var cursor = event.target.result;
-        if (!cursor) return;
+        if (!cursor) {
+          lyricStore.openCursor().onsuccess = scanLyricCursor;
+          return;
+        }
         var record = cursor.value || {};
         var id = String(record.id || cursor.key || '');
         var savedAt = Number(record.savedAt) || 0;
-        assetEntries.push({ id:id, savedAt:savedAt, bytes:estimateLocalAssetRecordBytes(record) });
+        var assetIndex = assetIds.length;
+        assetIds[assetIndex] = id;
+        assetSavedAt[assetIndex] = savedAt;
+        assetBytes[assetIndex] = estimateLocalAssetRecordBytes(record);
+        assetOrder.push(assetIndex);
+        if (id) assetIndexById[id] = assetIndex;
         cursor.continue();
-      };
-      lyricStore.openCursor().onsuccess = function(event){
+      }
+
+      /**
+       * 顺序扫描独立歌词并直接并入资产字节统计，同时记录孤儿歌词数量。
+       * @param {Event} event IndexedDB 游标事件。
+       * @returns {void}
+       */
+      function scanLyricCursor(event){
+        var cursor = event.target.result;
+        if (!cursor) {
+          libraryStore.openCursor().onsuccess = scanLibraryCursor;
+          return;
+        }
+        var record = cursor.value || {};
+        var id = String(record.id || cursor.key || '');
+        var assetIndex = id ? assetIndexById[id] : null;
+        if (assetIndex != null) assetBytes[assetIndex] += estimateLocalLyricRecordBytes(record);
+        else if (id) orphanLyricCount++;
+        cursor.continue();
+      }
+
+      /**
+       * 顺序扫描曲库持久化记录，只聚合文件夹最新时间，避免把大快照数据复制到内存数组。
+       * @param {Event} event IndexedDB 游标事件。
+       * @returns {void}
+       */
+      function scanLibraryCursor(event){
         var cursor = event.target.result;
         if (!cursor) return;
         var record = cursor.value || {};
-        lyricEntries.push({
-          id: String(record.id || cursor.key || ''),
-          bytes: estimateLocalLyricRecordBytes(record)
-        });
+        var savedAt = Number(record.savedAt || (record.data && record.data.savedAt)) || 0;
+        if (savedAt && now - savedAt > LOCAL_LIBRARY_CACHE_MAX_AGE_MS) libraryHasExpired = true;
+        var folderPath = String(record.folderPath || (record.data && record.data.folderPath) || '');
+        if (folderPath) libraryHasFolderPath = true;
+        var folder = folderPath || String(record.id || cursor.key || '');
+        var folderSavedAt = folderStats[folder];
+        if (folder && (folderSavedAt == null || savedAt > folderSavedAt)) folderStats[folder] = savedAt;
         cursor.continue();
-      };
-      libraryStore.openCursor().onsuccess = function(event){
-        var cursor = event.target.result;
-        if (!cursor) return;
-        var record = cursor.value || {};
-        libraryEntries.push({
-          id: String(record.id || cursor.key || ''),
-          savedAt: Number(record.savedAt || (record.data && record.data.savedAt)) || 0,
-          folderPath: String(record.folderPath || (record.data && record.data.folderPath) || '')
-        });
-        cursor.continue();
-      };
+      }
+
+      var folderStats = Object.create(null);
+      assetStore.openCursor().onsuccess = scanAssetCursor;
       tx.oncomplete = function(){
         var totalBytes = 0;
-        var assetIdSet = Object.create(null);
-        var lyricById = Object.create(null);
-        for (var lyricEntryIdx = 0; lyricEntryIdx < lyricEntries.length; lyricEntryIdx++) {
-          var lyricEntry = lyricEntries[lyricEntryIdx];
-          if (lyricEntry.id) lyricById[lyricEntry.id] = lyricEntry;
-        }
-        for (var assetIdIdx = 0; assetIdIdx < assetEntries.length; assetIdIdx++) {
-          var assetIdEntry = assetEntries[assetIdIdx];
-          if (!assetIdEntry.id) continue;
-          assetIdSet[assetIdEntry.id] = true;
-          if (lyricById[assetIdEntry.id]) assetIdEntry.bytes += lyricById[assetIdEntry.id].bytes || 0;
-        }
         var dropSet = Object.create(null);
-        var ids = [];
         var dropCount = 0;
+
+        /**
+         * 标记需要删除的资产键，并同步记录数量和总字节数裁剪状态。
+         * @param {string} id 本地资产缓存键。
+         * @returns {boolean} 本次是否首次标记该键。
+         */
         function markAssetDrop(id) {
           if (!id || dropSet[id]) return false;
           dropSet[id] = true;
-          ids.push(id);
           dropCount++;
           return true;
         }
-        assetEntries.sort(function(a, b){ return (a.savedAt || 0) - (b.savedAt || 0); });
-        for (var assetIdx = 0; assetIdx < assetEntries.length; assetIdx++) {
-          totalBytes += assetEntries[assetIdx].bytes || 0;
+
+        assetOrder.sort(function(a, b){
+          return (assetSavedAt[a] || 0) - (assetSavedAt[b] || 0) || (a - b);
+        });
+        for (var assetIdx = 0; assetIdx < assetBytes.length; assetIdx++) {
+          totalBytes += assetBytes[assetIdx] || 0;
         }
-        for (var staleIdx = 0; staleIdx < assetEntries.length; staleIdx++) {
-          var staleEntry = assetEntries[staleIdx];
-          if (!staleEntry.id || keep[staleEntry.id]) continue;
-          if (staleEntry.savedAt && now - staleEntry.savedAt > LOCAL_ASSET_CACHE_MAX_AGE_MS) markAssetDrop(staleEntry.id);
+        for (var staleIdx = 0; staleIdx < assetOrder.length; staleIdx++) {
+          var staleAssetIndex = assetOrder[staleIdx];
+          var staleId = assetIds[staleAssetIndex];
+          if (!staleId || keep[staleId]) continue;
+          if (assetSavedAt[staleAssetIndex] && now - assetSavedAt[staleAssetIndex] > LOCAL_ASSET_CACHE_MAX_AGE_MS) markAssetDrop(staleId);
         }
-        for (var sizeIdx = 0; sizeIdx < assetEntries.length; sizeIdx++) {
-          if (assetEntries.length - dropCount <= LOCAL_ASSET_CACHE_MAX_RECORDS && totalBytes <= LOCAL_ASSET_CACHE_MAX_BYTES) break;
-          var sizeEntry = assetEntries[sizeIdx];
-          if (!sizeEntry.id || keep[sizeEntry.id] || dropSet[sizeEntry.id]) continue;
-          if (markAssetDrop(sizeEntry.id)) totalBytes = Math.max(0, totalBytes - (sizeEntry.bytes || 0));
-        }
-        var libraryDropSet = Object.create(null);
-        var libraryIds = [];
-        function markLibraryDrop(id) {
-          if (!id || libraryDropSet[id]) return;
-          libraryDropSet[id] = true;
-          libraryIds.push(id);
-        }
-        var folderStats = Object.create(null);
-        for (var libraryIdx = 0; libraryIdx < libraryEntries.length; libraryIdx++) {
-          var libraryEntry = libraryEntries[libraryIdx];
-          if (!libraryEntry.id) continue;
-          if (libraryEntry.savedAt && now - libraryEntry.savedAt > LOCAL_LIBRARY_CACHE_MAX_AGE_MS) markLibraryDrop(libraryEntry.id);
-          var folder = libraryEntry.folderPath || libraryEntry.id;
-          var stat = folderStats[folder];
-          if (!stat) stat = folderStats[folder] = { savedAt: 0 };
-          stat.savedAt = Math.max(stat.savedAt, Number(libraryEntry.savedAt) || 0);
+        for (var sizeIdx = 0; sizeIdx < assetOrder.length; sizeIdx++) {
+          if (assetIds.length - dropCount <= LOCAL_ASSET_CACHE_MAX_RECORDS && totalBytes <= LOCAL_ASSET_CACHE_MAX_BYTES) break;
+          var sizeAssetIndex = assetOrder[sizeIdx];
+          var sizeId = assetIds[sizeAssetIndex];
+          if (!sizeId || keep[sizeId] || dropSet[sizeId]) continue;
+          if (markAssetDrop(sizeId)) totalBytes = Math.max(0, totalBytes - (assetBytes[sizeAssetIndex] || 0));
         }
         var folders = [];
         for (var folderKey in folderStats) {
           if (Object.prototype.hasOwnProperty.call(folderStats, folderKey)) folders.push(folderKey);
         }
         folders.sort(function(a, b){
-          return (folderStats[b].savedAt || 0) - (folderStats[a].savedAt || 0);
+          return (folderStats[b] || 0) - (folderStats[a] || 0);
         });
         var keepFolders = Object.create(null);
         for (var folderIdx = 0; folderIdx < folders.length && folderIdx < LOCAL_LIBRARY_CACHE_MAX_RECORDS; folderIdx++) {
           keepFolders[folders[folderIdx]] = true;
         }
-        for (var dropLibraryIdx = 0; dropLibraryIdx < libraryEntries.length; dropLibraryIdx++) {
-          var dropLibraryEntry = libraryEntries[dropLibraryIdx];
-          if (dropLibraryEntry.folderPath && !keepFolders[dropLibraryEntry.folderPath]) markLibraryDrop(dropLibraryEntry.id);
-        }
-        var orphanLyricIds = [];
-        for (var orphanLyricIdx = 0; orphanLyricIdx < lyricEntries.length; orphanLyricIdx++) {
-          var orphanLyric = lyricEntries[orphanLyricIdx];
-          if (orphanLyric.id && !assetIdSet[orphanLyric.id]) orphanLyricIds.push(orphanLyric.id);
-        }
-        if (!ids.length && !libraryIds.length && !orphanLyricIds.length) {
+        var libraryNeedsScan = libraryHasExpired || (libraryHasFolderPath && folders.length > LOCAL_LIBRARY_CACHE_MAX_RECORDS);
+        if (!dropCount && !orphanLyricCount && !libraryNeedsScan) {
           db.close();
           resolve(0);
           return;
         }
+
+        // 裁剪决策完成后释放排序数组；删除阶段只保留必要的键集合。
+        assetIds = null;
+        assetSavedAt = null;
+        assetBytes = null;
+        assetOrder = null;
+        folderStats = null;
+        folders = null;
+        var deletedCount = 0;
         var deleteTx = db.transaction([LOCAL_ASSET_CACHE_STORE, LOCAL_LYRICS_CACHE_STORE, LOCAL_LIBRARY_CACHE_STORE], 'readwrite');
-        for (var deleteAssetIdx = 0; deleteAssetIdx < ids.length; deleteAssetIdx++) {
-          var id = ids[deleteAssetIdx];
-          deleteTx.objectStore(LOCAL_ASSET_CACHE_STORE).delete(id);
-          deleteTx.objectStore(LOCAL_LYRICS_CACHE_STORE).delete(id);
+
+        /**
+         * 删除已选中的资产记录；完成后串行进入歌词游标，避免同时保留多组游标记录。
+         * @param {Event} event IndexedDB 游标事件。
+         * @returns {void}
+         */
+        function scanDeleteAssetCursor(event){
+          var cursor = event.target.result;
+          if (!cursor) {
+            deleteLyricStore.openCursor().onsuccess = scanDeleteLyricCursor;
+            return;
+          }
+          var record = cursor.value || {};
+          var id = String(record.id || cursor.key || '');
+          if (id && dropSet[id]) {
+            cursor.delete();
+            deletedCount++;
+          }
+          cursor.continue();
         }
-        for (var deleteOrphanLyricIdx = 0; deleteOrphanLyricIdx < orphanLyricIds.length; deleteOrphanLyricIdx++) {
-          deleteTx.objectStore(LOCAL_LYRICS_CACHE_STORE).delete(orphanLyricIds[deleteOrphanLyricIdx]);
+
+        /**
+         * 删除被淘汰资产对应的歌词及无资产的孤儿歌词，然后释放资产键索引。
+         * @param {Event} event IndexedDB 游标事件。
+         * @returns {void}
+         */
+        function scanDeleteLyricCursor(event){
+          var cursor = event.target.result;
+          if (!cursor) {
+            dropSet = null;
+            assetIndexById = null;
+            deleteLibraryStore.openCursor().onsuccess = scanDeleteLibraryCursor;
+            return;
+          }
+          var record = cursor.value || {};
+          var id = String(record.id || cursor.key || '');
+          if (id && ((dropSet && dropSet[id]) || assetIndexById[id] == null)) {
+            cursor.delete();
+            deletedCount++;
+          }
+          cursor.continue();
         }
-        for (var deleteLibraryIdx = 0; deleteLibraryIdx < libraryIds.length; deleteLibraryIdx++) {
-          var libraryId = libraryIds[deleteLibraryIdx];
-          delete localLibraryPersistentMemory[libraryId];
-          deleteTx.objectStore(LOCAL_LIBRARY_CACHE_STORE).delete(libraryId);
+
+        /**
+         * 删除过期或不在保留文件夹中的曲库持久化记录，并释放对应内存镜像。
+         * @param {Event} event IndexedDB 游标事件。
+         * @returns {void}
+         */
+        function scanDeleteLibraryCursor(event){
+          var cursor = event.target.result;
+          if (!cursor) return;
+          var record = cursor.value || {};
+          var id = String(record.id || cursor.key || '');
+          var savedAt = Number(record.savedAt || (record.data && record.data.savedAt)) || 0;
+          var folderPath = String(record.folderPath || (record.data && record.data.folderPath) || '');
+          var expired = savedAt && now - savedAt > LOCAL_LIBRARY_CACHE_MAX_AGE_MS;
+          if (id && (expired || (folderPath && !keepFolders[folderPath]))) {
+            delete localLibraryPersistentMemory[id];
+            cursor.delete();
+            deletedCount++;
+          }
+          cursor.continue();
         }
-        deleteTx.oncomplete = function(){ db.close(); resolve(ids.length + orphanLyricIds.length + libraryIds.length); };
+
+        var deleteAssetStore = deleteTx.objectStore(LOCAL_ASSET_CACHE_STORE);
+        var deleteLyricStore = deleteTx.objectStore(LOCAL_LYRICS_CACHE_STORE);
+        var deleteLibraryStore = deleteTx.objectStore(LOCAL_LIBRARY_CACHE_STORE);
+        deleteAssetStore.openCursor().onsuccess = scanDeleteAssetCursor;
+        deleteTx.oncomplete = function(){ db.close(); resolve(deletedCount); };
         deleteTx.onerror = function(){ db.close(); reject(deleteTx.error || new Error('indexedDB trim delete failed')); };
         deleteTx.onabort = function(){ db.close(); reject(deleteTx.error || new Error('indexedDB trim delete aborted')); };
       };
@@ -8709,7 +8841,8 @@ function findStageLyricIndex(lines, time) {
 
 function tickLyricsParticles() {
   if (!fx.particleLyrics) {
-    if (stageLyrics.current || stageLyrics.currentText || (stageLyrics.outgoing && stageLyrics.outgoing.length)) clearStageLyrics();
+    if (!stageLyrics.current && !stageLyrics.currentText && (!stageLyrics.outgoing || !stageLyrics.outgoing.length)) return;
+    clearStageLyrics();
     return;
   }
   if (!playing || !audio || !lyricsLines.length) {
@@ -12066,12 +12199,19 @@ function localAssetQueuePositionMap() {
   }
   return positions;
 }
+/**
+ * 按当前播放位置排序待补水的本地资产；使用数字排序键降低大曲库导入时的对象分配和 GC 峰值。
+ * @param {Array<object>} songs 候选本地歌曲列表。
+ * @returns {Array<object>} 按处理优先级排列的本地歌曲列表。
+ */
 function sortLocalAssetPreloadQueue(songs) {
   var positions = localAssetQueuePositionMap();
   var active = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
   var activeKey = active && active.localKey ? active.localKey : '';
-  var ranked = [];
   songs = songs || [];
+  var rankStride = songs.length + 1;
+  var ranked = [];
+  var rankedCount = 0;
   for (var index = 0; index < songs.length; index++) {
     var song = songs[index];
     if (!localSongNeedsAssetPreload(song)) continue;
@@ -12080,13 +12220,15 @@ function sortLocalAssetPreloadQueue(songs) {
     if (song && song.localKey && activeKey && song.localKey === activeKey) rank = 0;
     else if (pos != null && currentIdx >= 0) rank = 10 + Math.abs(pos - currentIdx);
     else if (pos != null) rank = 50000 + pos;
-    ranked.push({ song:song, index:index, rank:rank });
+    // 把 rank 和原始索引压进一个数字，避免每首候选歌曲创建临时装饰对象。
+    ranked.push(rank * rankStride + index);
+    rankedCount++;
   }
   ranked.sort(function(a, b){
-    return (a.rank - b.rank) || (a.index - b.index);
+    return a - b;
   });
-  var sorted = new Array(ranked.length);
-  for (var i = 0; i < ranked.length; i++) sorted[i] = ranked[i].song;
+  var sorted = new Array(rankedCount);
+  for (var i = 0; i < rankedCount; i++) sorted[i] = songs[ranked[i] % rankStride];
   return sorted;
 }
 function promoteCurrentLocalAssetInQueue(queue, start) {
@@ -13791,7 +13933,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       var appRevealed = !document.body.classList.contains('splash-active');
       var contentOpen = !!(contentList && contentList.isOpen());
       var alwaysVisible = shelfAlwaysVisible();
-      var cueVis = tickShelfHoverCue(dt);
+      var cueVis = appRevealed ? tickShelfHoverCue(dt) : 0;
       // v8: shelf 自动可见度 — 启动页期间不显示；侧栏只在右侧停留时淡入。
       var targetVis;
       if (!appRevealed) {
@@ -13807,6 +13949,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       group.visible = appRevealed && (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || contentOpen);
       if (connectorParticles) connectorParticles.visible = group.visible && mode === 'stage';
       if (floorMirror) floorMirror.visible = group.visible && mode === 'stage';
+      if (!appRevealed || (!group.visible && targetVis === 0)) return;
       if (mode === 'side') {
         var passiveAlwaysGroup = alwaysVisible && !shelfPinnedOpen && !contentOpen;
         var liftedCardActive = false;
@@ -30595,16 +30738,25 @@ var splashWarmRenderLast = 0;
 function isMainSceneCoveredBySplash() {
   return document.body.classList.contains('splash-active') && !document.body.classList.contains('splash-revealing');
 }
+/**
+ * 判断当前是否存在需要高刷新率跟随的连续播放会话。
+ * @returns {boolean} 音频正在输出且未结束时返回 true。
+ */
+function isContinuousPlaybackRenderActive() {
+  return !!(audio && audio.src && !audio.paused && !audio.ended);
+}
 function getAdaptiveRenderFps() {
   if (isDeepBackgroundMode()) return 1;
   var pressureLevel = (typeof getRuntimeFramePressureLevel === 'function') ? getRuntimeFramePressureLevel() : 0;
+  var interactionActive = typeof isRenderInteractionActive === 'function' && isRenderInteractionActive();
   if (RENDER_VISIBLE_VSYNC) {
-    if (pressureLevel >= 2) return (typeof isRenderInteractionActive === 'function' && isRenderInteractionActive()) ? 60 : 48;
-    if (pressureLevel >= 1 && !(typeof isRenderInteractionActive === 'function' && isRenderInteractionActive())) return 60;
+    if (pressureLevel >= 2) return interactionActive ? 60 : 48;
+    if (pressureLevel >= 1 && !interactionActive) return 60;
+    if (!interactionActive && !isContinuousPlaybackRenderActive()) return RENDER_IDLE_FPS;
     return 0;
   }
   var tier = (typeof getRenderLoadTier === 'function') ? getRenderLoadTier() : 0;
-  if (typeof isRenderInteractionActive === 'function' && isRenderInteractionActive()) {
+  if (interactionActive) {
     if (tier >= 2) return RENDER_INTERACTION_HUGE_FPS;
     if (tier >= 1) return RENDER_INTERACTION_LARGE_FPS;
     return RENDER_INTERACTION_FPS;
@@ -30715,10 +30867,14 @@ function animate() {
     var midEnd   = Math.min(len, 280);         // 3-6 kHz, 中高乐器
     // 累积
     var bKick = 0, mInst = 0, tHigh = 0, voc = 0, rms = 0;
-    for (var i = 0; i < kickEnd; i++) bKick += frequencyData[i];
-    for (var i = kickEnd; i < vocalEnd; i++) voc += frequencyData[i];
-    for (var i = vocalEnd; i < midEnd; i++) mInst += frequencyData[i];
-    for (var i = midEnd; i < len; i++) tHigh += frequencyData[i];
+    // 频谱桶连续且互斥，单次扫描可减少循环边界、TypedArray 索引和分支初始化开销。
+    for (var i = 0; i < len; i++) {
+      var frequencyValue = frequencyData[i];
+      if (i < kickEnd) bKick += frequencyValue;
+      else if (i < vocalEnd) voc += frequencyValue;
+      else if (i < midEnd) mInst += frequencyValue;
+      else tHigh += frequencyValue;
+    }
     for (var j = 0; j < timeDomainData.length; j++) {
       rms += audioTimeDomainSquareLut[timeDomainData[j]];
     }

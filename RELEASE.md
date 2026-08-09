@@ -20,6 +20,22 @@
 - 正式远端资产仅包含安装器、blockmap、`latest.yml` 和 SHA256 清单，没有 Portable ZIP；GitHub 返回的四个资产大小与 SHA256 均和本地一致。
 - `main` CI run `31250009229` 成功，全量测试、语法和发布门禁均通过。
 
+## v1.3.1 CPU 与运行内存优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.1`。
+- 可见但未播放且没有交互时，主 3D 渲染降至 30 FPS；播放、交互、后台和帧压力状态保持原有调度语义。
+- 3D 歌单架在启动页或完全隐藏时跳过卡片位置、旋转、透明度和详情更新。
+- 主实时频谱四段累加改为单次 TypedArray 扫描；独立节拍频谱按 30 FPS 刷新并复用五个频段标量，保持音频分析结果不变。
+- 本地资产后台预载改用数字排序键，减少大曲库导入期间的临时对象和 GC 压力。
+- IndexedDB 清理改为串行游标扫描与逐条删除，降低长期缓存维护时的运行内存峰值。
+- 歌词特效关闭、暂停镜头无残留冲击时直接跳过无效帧工作；歌词镜头边界计算移除每帧临时闭包。
+- `build/installer.nsh` 从原始 Windows 命令行读取 `/D=`，保留专用安装目录归一化、`.mineradio-install-root` 标记和卸载安全门禁。
+- 全量 Node 回归 `237/237`、主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过。
+- 产物大小：安装器 `103337852` 字节；blockmap `110078` 字节；`latest.yml` `347` 字节；SHA256 清单 `273` 字节。
+- SHA256：安装器 `d7be6b7cc50bc8db7c45a915c0cbe759cac18b5025d8087ee29ad07d44e0ee43`；blockmap `2e64d7e430b514626bf64c6e272472dda28380ab5f513329e0f2f5e24fa95e9e`；`latest.yml` `e7479f08f9e5abf78d2d1e6cc64c42036d8b7d2d9c254756c6ac72125a286a48`；SHA256 清单 `aab32ee89249681a646efcf974f863a8d2c730611f828721ca7ff1247c82cfbe`。
+- `latest.yml` 的 Setup SHA512：`N5ya4x+cji9kNxJMjSZIdbzT7tAd3xYPwcKkYYzVDVX2OLFwz0fEK42uMBwk/ZDXuSoz/FQcGM0+yEtI+AQi/g==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.1`，正式资产仅包含安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成 Portable ZIP。
+
 ## v1.2.100 随机播放历史导航修复
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.2.100`。
@@ -249,6 +265,10 @@
 - 产物大小：安装器 `103331153` 字节；blockmap `110176` 字节；`latest.yml` `350` 字节；本地 Portable ZIP `144915599` 字节。
 - SHA256：安装器 `18971d4a85a2e3f186534205b980e5bb85b2ba28576dce9348dd45ed106eaed1`；blockmap `d69b25649d685243a389b7bb417ac4e4fc698781a8300234051157dc5c6178c3`；`latest.yml` `c4eb389b66b9e846f3075e2ca98f9024674f2e823d03e529b690d9a94c959245`；本地 Portable ZIP `bc6e68aed9ae3ef85d7cc3e0f24196434cb0e9c31baf93672693ccb1a81ded4b`。
 - `latest.yml` 的 Setup SHA512：`+EEqobVskpxNt/xESC/s8IujlubFCh+kSq24vhXZBlKRAoL2rSi7W/dYZg2d2aeDwbxxvV/KgsdpoPZKk6QO/A==`。
+## 2026-08-09 待发布安装器安全修复
+
+- `build/installer.nsh` 直接读取 Windows 原始命令行中的 `/D=`，继续执行安装目录归一化，避免显式目录被默认路径覆盖。
+- 发布前必须执行安装器命令行回归，确认 `/S /D=目标目录` 只写入目标目录下的 `Mineradio` 子目录，并保留卸载安全门禁。
 
 ## v1.2.85 桌面歌词调整栏自动避让修复重发
 

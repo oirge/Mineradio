@@ -208,9 +208,10 @@ Function MineradioTintCommonControls
 FunctionEnd
 
 Function MineradioUsePreferredInstallDir
-  ${GetParameters} $R0
+  ; NSIS 会过滤特殊 /D= 参数，因此直接读取 Windows 原始命令行，避免显式安装目录被默认路径覆盖。
+  System::Call 'kernel32::GetCommandLine() t .r0'
   ClearErrors
-  ${GetOptions} $R0 "/D=" $R1
+  ${GetOptions} $0 "/D=" $R1
   ${IfNot} ${Errors}
   ${AndIf} $R1 != ""
     Push "$R1"

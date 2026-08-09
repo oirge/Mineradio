@@ -79,6 +79,19 @@ function testBeatBandRangeCache() {
 }
 
 /**
+ * 验证五个实时节拍频段只在新频谱采样时刷新，非采样帧复用标量缓存。
+ * @returns {void}
+ */
+function testBeatBandCacheRefreshContract() {
+  const source = readRendererSource();
+  const engineSource = readSourceBetween(source, 'function processRealtimeBeatEngine(', 'function mergeRealtimeBeatCamera(');
+  const refreshSource = readSourceBetween(engineSource, 'if (consumeRealtimeBeatSpectrumSlot(dt)) {', '  }\n  var sub');
+  assert.equal((refreshSource.match(/beatBandValueCache\.[a-z]+ = beatBandRms\(/g) || []).length, 5);
+  assert.match(engineSource, /var kick = beatBandValueCache\.valid \? beatBandValueCache\.kick : 0;/);
+  assert.match(engineSource, /var snap = beatBandValueCache\.valid \? beatBandValueCache\.snap : 0;/);
+}
+
+/**
  * 验证实时节拍引擎优先使用主分析器 RMS，且直接调用仍保留兼容回退。
  * @returns {void}
  */
@@ -89,8 +102,32 @@ function testRealtimeRmsReuse() {
   assert.match(engineSource, /var hasRmsSample = typeof rmsSample === 'number' && isFinite\(rmsSample\);/);
   assert.match(engineSource, /var rms = hasRmsSample \? rmsSample : 0;/);
   assert.equal((engineSource.match(/beatAnalyser\.getByteTimeDomainData\(beatTimeDomainData\)/g) || []).length, 1);
+  assert.match(source, /var BEAT_ANALYSIS_TARGET_FPS = 30;/);
+  assert.match(source, /function consumeRealtimeBeatSpectrumSlot\(dt\)/);
+  assert.match(engineSource, /if \(consumeRealtimeBeatSpectrumSlot\(dt\)\) \{[\s\S]*beatAnalyser\.getByteFrequencyData\(beatFrequencyData\);/);
+  assert.match(engineSource, /if \(consumeRealtimeBeatSpectrumSlot\(dt\)\) \{[\s\S]*beatBandValueCache\.valid = true;/);
+  assert.equal((engineSource.match(/\bbeatBandRms\(/g) || []).length, 5);
+  assert.match(engineSource, /var sub = beatBandValueCache\.valid \? beatBandValueCache\.sub : 0;/);
   assert.doesNotMatch(engineSource, /var phaseErr\s*=/);
   assert.match(source, /processRealtimeBeatEngine\(analysisDt, rms\)/);
+}
+
+/**
+ * 验证实时节拍频谱采样不会超过设定频率，同时首个分析时间片立即取样。
+ * @returns {void}
+ */
+function testRealtimeBeatSpectrumCadence() {
+  const source = readRendererSource();
+  const helperSource = readSourceBetween(source, 'function consumeRealtimeBeatSpectrumSlot(', 'function processRealtimeBeatEngine(');
+  const context = {
+    BEAT_ANALYSIS_TARGET_FPS: 30,
+    beatAnalysisElapsed: 1 / 30,
+    Math,
+    Number,
+  };
+  vm.runInNewContext(`${helperSource}\nthis.samples = []; for (var i = 0; i < 60; i++) this.samples.push(consumeRealtimeBeatSpectrumSlot(1 / 60));`, context);
+  assert.equal(context.samples.filter(Boolean).length, 30);
+  assert.equal(context.samples[0], true);
 }
 
 /**
@@ -102,6 +139,8 @@ function testAudioAnalysisAccumulationHotPath() {
   const analysisSource = readSourceBetween(source, 'var len = frequencyData.length;', '// 动态峰值跟踪');
   assert.match(source, /var AUDIO_FREQUENCY_SCALE = 1 \/ 255;/);
   assert.match(source, /rms \+= audioTimeDomainSquareLut\[timeDomainData\[j\]\];/);
+  assert.match(analysisSource, /for \(var i = 0; i < len; i\+\+\) \{[\s\S]*if \(i < kickEnd\) bKick \+= frequencyValue;[\s\S]*else tHigh \+= frequencyValue;/);
+  assert.equal((analysisSource.match(/for \(var i = 0; i < len; i\+\+\)/g) || []).length, 1);
   assert.doesNotMatch(analysisSource, /frequencyData\[i\] \/ 255/);
   assert.doesNotMatch(analysisSource, /var tv =/);
 
@@ -165,6 +204,8 @@ function testHomeWaveThrottleBeforeDomLookup() {
 }
 
 test('实时节拍频段边界复用旧版采样桶', testBeatBandRangeCache);
+test('实时节拍频谱按采样时隙刷新缓存', testBeatBandCacheRefreshContract);
 test('实时节拍分析复用主分析器 RMS', testRealtimeRmsReuse);
+test('实时节拍频谱按 30 FPS 限频采样', testRealtimeBeatSpectrumCadence);
 test('音频分析频谱累加和 RMS 热循环保持数值等价', testAudioAnalysisAccumulationHotPath);
 test('空 Home 波形先节流再查询 DOM', testHomeWaveThrottleBeforeDomLookup);
