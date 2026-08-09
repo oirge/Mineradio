@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.5';
+var APP_VERSION = '1.3.6';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -14519,8 +14519,8 @@ function makeContentListManager() {
     while (out.length > 1 && ctx.measureText(out + '...').width > maxWidth) out = out.slice(0, -1);
     return out + '...';
   }
-  function canvasAccent(alpha, fallback) {
-    return shelfAccentRgba(alpha, fallback);
+  function canvasAccent(alpha, fallback, accentHex) {
+    return shelfAccentRgba(alpha, fallback, accentHex);
   }
 
   function ensurePanel() {
@@ -14539,15 +14539,17 @@ function makeContentListManager() {
     panel = { canvas:cv, texture:tx, mesh:mesh, opacityValue:0.86 };
   }
 
-  function drawPanel() {
+  function drawPanel(frameShelfLook) {
     ensurePanel();
     if (!panel) return;
+    var shelfLook = frameShelfLook || shelfSettings();
+    var accentHex = shelfLook.accent;
     var ctx = panel.canvas.getContext('2d');
     var W = panel.canvas.width, H = panel.canvas.height;
     ctx.clearRect(0, 0, W, H);
     makeRoundRect(ctx, 24, 28, W - 48, H - 56, 34);
     var bg = ctx.createLinearGradient(0, 0, W, H);
-    var panelBgAlpha = shelfSettings().bgOpacity;
+    var panelBgAlpha = shelfLook.bgOpacity;
     bg.addColorStop(0, 'rgba(0,0,0,' + Math.min(0.98, panelBgAlpha + 0.02).toFixed(3) + ')');
     bg.addColorStop(0.42, 'rgba(0,0,0,' + panelBgAlpha.toFixed(3) + ')');
     bg.addColorStop(1, 'rgba(0,0,0,' + Math.max(0.20, panelBgAlpha - 0.04).toFixed(3) + ')');
@@ -14559,7 +14561,7 @@ function makeContentListManager() {
     ctx.fillStyle = 'rgba(255,246,220,0.94)';
     ctx.fillText(ellipsize(ctx, playlistTitle || '歌单详情', W - 310), 72, 92);
     ctx.font = '500 18px Inter, "Microsoft YaHei", Arial';
-    ctx.fillStyle = canvasAccent(0.62);
+    ctx.fillStyle = canvasAccent(0.62, null, accentHex);
     var playableCount = 0;
     for (var countIdx = 0; countIdx < allTracks.length; countIdx++) {
       if (isShelfContentPlayableSong(allTracks[countIdx])) playableCount++;
@@ -14586,10 +14588,10 @@ function makeContentListManager() {
     }
     var sweep = (Math.sin((uniforms.uTime.value || 0) * 1.7) + 1) * 0.5;
     var shine = ctx.createLinearGradient(70, 154, W - 80, 154);
-    shine.addColorStop(0, canvasAccent(0));
-    shine.addColorStop(Math.max(0.01, sweep * 0.72), canvasAccent(0.14));
-    shine.addColorStop(Math.min(0.99, sweep * 0.72 + 0.14), canvasAccent(0.56));
-    shine.addColorStop(1, canvasAccent(0));
+    shine.addColorStop(0, canvasAccent(0, null, accentHex));
+    shine.addColorStop(Math.max(0.01, sweep * 0.72), canvasAccent(0.14, null, accentHex));
+    shine.addColorStop(Math.min(0.99, sweep * 0.72 + 0.14), canvasAccent(0.56, null, accentHex));
+    shine.addColorStop(1, canvasAccent(0, null, accentHex));
     ctx.fillStyle = shine;
     ctx.fillRect(72, 154, W - 144, 2);
     panel.texture.needsUpdate = true;
@@ -14616,15 +14618,17 @@ function makeContentListManager() {
     return allTracks.length === 1 && isLoadingLabel(allTracks[0] && allTracks[0].name);
   }
 
-  function drawPanelIfNeeded(force, nowT) {
+  function drawPanelIfNeeded(force, nowT, frameShelfLook) {
     nowT = nowT == null ? (uniforms.uTime.value || 0) : nowT;
     if (!force && !panelDirty && (!isLoadingContent() || nowT - panelDrawAt < LOADING_ANIM_INTERVAL)) return;
-    drawPanel();
+    drawPanel(frameShelfLook);
     panelDirty = false;
     panelDrawAt = nowT;
   }
 
-  function drawRow(row, song, isCenter) {
+  function drawRow(row, song, isCenter, frameShelfLook) {
+    var shelfLook = frameShelfLook || shelfSettings();
+    var accentHex = shelfLook.accent;
     var cv = row.canvas, ctx = cv.getContext('2d');
     var W = cv.width, H = cv.height;
     var isPodcastRadio = !!(song && song.type === 'podcast-radio');
@@ -14633,7 +14637,7 @@ function makeContentListManager() {
     ctx.clearRect(0, 0, W, H);
     makeRoundRect(ctx, 14, 10, W - 28, H - 20, 22);
     var rowGrad = ctx.createLinearGradient(0, 0, W, H);
-    var rowBgAlpha = shelfSettings().bgOpacity;
+    var rowBgAlpha = shelfLook.bgOpacity;
     var centerRowBgAlpha = isCenter ? Math.max(rowBgAlpha, 0.92) : rowBgAlpha;
     if (isCenter) {
       rowGrad.addColorStop(0, 'rgba(8,14,24,' + Math.min(0.985, centerRowBgAlpha + 0.040).toFixed(3) + ')');
@@ -14644,17 +14648,17 @@ function makeContentListManager() {
       rowGrad.addColorStop(1, 'rgba(0,0,0,' + Math.max(0.20, rowBgAlpha - 0.04).toFixed(3) + ')');
     }
     if (isCenter) {
-      ctx.shadowColor = canvasAccent(0.20);
+      ctx.shadowColor = canvasAccent(0.20, null, accentHex);
       ctx.shadowBlur = 18;
     }
     ctx.fillStyle = rowGrad;
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = isCenter ? canvasAccent(0.48) : 'rgba(255,255,255,0.10)';
+    ctx.strokeStyle = isCenter ? canvasAccent(0.48, null, accentHex) : 'rgba(255,255,255,0.10)';
     ctx.lineWidth = isCenter ? 1.6 : 1;
     ctx.stroke();
     ctx.font = '700 18px Inter, Arial';
-    ctx.fillStyle = isCenter ? canvasAccent(0.95) : 'rgba(255,255,255,0.34)';
+    ctx.fillStyle = isCenter ? canvasAccent(0.95, null, accentHex) : 'rgba(255,255,255,0.34)';
     var n = String(row.index + 1);
     if (n.length < 2) n = '0' + n;
     ctx.fillText(n, 32, 52);
@@ -14665,7 +14669,7 @@ function makeContentListManager() {
     var hasSongCover = !!songCover;
     if (actionReady || hasSongCover) {
       makeRoundRect(ctx, coverX, coverY, coverSize, coverSize, 13);
-      ctx.fillStyle = isCenter ? canvasAccent(0.12) : 'rgba(255,255,255,0.07)';
+      ctx.fillStyle = isCenter ? canvasAccent(0.12, null, accentHex) : 'rgba(255,255,255,0.07)';
       ctx.fill();
       if (hasSongCover) {
         var songCoverRec = playlistCoverCache[songCover];
@@ -14702,8 +14706,8 @@ function makeContentListManager() {
         var skGrad = ctx.createLinearGradient(textX, barY, textX + barW, barY);
         var hot = (phase + sk * 0.14) % 1;
         skGrad.addColorStop(0, 'rgba(255,255,255,0.08)');
-        skGrad.addColorStop(Math.max(0, hot - 0.18), canvasAccent(0.10));
-        skGrad.addColorStop(Math.min(0.99, hot), canvasAccent(0.34));
+        skGrad.addColorStop(Math.max(0, hot - 0.18), canvasAccent(0.10, null, accentHex));
+        skGrad.addColorStop(Math.min(0.99, hot), canvasAccent(0.34, null, accentHex));
         skGrad.addColorStop(1, 'rgba(255,255,255,0.08)');
         ctx.fillStyle = skGrad; ctx.fill();
       }
@@ -14732,15 +14736,15 @@ function makeContentListManager() {
         makeRoundRect(ctx, collectX, btnY + 2, miniBtn, btnH - 4, 15);
         var collectGrad = ctx.createLinearGradient(collectX, btnY + 2, collectX + miniBtn, btnY + btnH);
         collectGrad.addColorStop(0, 'rgba(255,255,255,0.080)');
-        collectGrad.addColorStop(1, canvasAccent(0.075));
+        collectGrad.addColorStop(1, canvasAccent(0.075, null, accentHex));
         ctx.fillStyle = collectGrad;
         ctx.fill();
-        ctx.strokeStyle = canvasAccent(0.22);
+        ctx.strokeStyle = canvasAccent(0.22, null, accentHex);
         ctx.lineWidth = 1.1;
         ctx.stroke();
         var collectCx = collectX + miniBtn / 2;
         var collectCy = btnY + btnH / 2;
-        ctx.strokeStyle = canvasAccent(0.72);
+        ctx.strokeStyle = canvasAccent(0.72, null, accentHex);
         ctx.lineWidth = 2.35;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -14762,10 +14766,10 @@ function makeContentListManager() {
       var nextGrad = ctx.createLinearGradient(nextX, btnY + 2, nextX + miniBtn, btnY + btnH);
       nextGrad.addColorStop(0, 'rgba(255,255,255,0.082)');
       nextGrad.addColorStop(0.62, 'rgba(255,255,255,0.045)');
-      nextGrad.addColorStop(1, canvasAccent(0.055));
+      nextGrad.addColorStop(1, canvasAccent(0.055, null, accentHex));
       ctx.fillStyle = nextGrad;
       ctx.fill();
-      ctx.strokeStyle = canvasAccent(0.24);
+      ctx.strokeStyle = canvasAccent(0.24, null, accentHex);
       ctx.lineWidth = 1.1;
       ctx.stroke();
       var nextCx = nextX + miniBtn / 2;
@@ -14784,10 +14788,10 @@ function makeContentListManager() {
       makeRoundRect(ctx, btnX, btnY, btnW, btnH, 18);
       var btnGrad = ctx.createLinearGradient(btnX, btnY, btnX + btnW, btnY + btnH);
       btnGrad.addColorStop(0, 'rgba(255,255,255,0.88)');
-      btnGrad.addColorStop(0.56, canvasAccent(0.94));
-      btnGrad.addColorStop(1, canvasAccent(0.58));
+      btnGrad.addColorStop(0.56, canvasAccent(0.94, null, accentHex));
+      btnGrad.addColorStop(1, canvasAccent(0.58, null, accentHex));
       ctx.fillStyle = btnGrad; ctx.fill();
-      ctx.strokeStyle = canvasAccent(0.42);
+      ctx.strokeStyle = canvasAccent(0.42, null, accentHex);
       ctx.lineWidth = 1.2;
       ctx.stroke();
       ctx.font = '700 15px Inter, Arial';
@@ -15032,13 +15036,15 @@ function makeContentListManager() {
   /**
    * 同步歌单详情页的可见歌曲行，复用窗口并合并数据更新与绘制循环。
    * @param {boolean} force 是否强制重建可见行。
+   * @param {object=} frameShelfLook 当前帧的歌单架外观快照；省略时自行读取。
    * @returns {void}
    */
-  function syncRenderedRows(force) {
+  function syncRenderedRows(force, frameShelfLook) {
     if (!group) return;
     var nowT = uniforms.uTime.value || 0;
     var refreshLoading = isLoadingContent() && nowT - rowDrawAt >= LOADING_ANIM_INTERVAL;
-    drawPanelIfNeeded(force || refreshLoading, nowT);
+    var shelfLook = frameShelfLook || shelfSettings();
+    drawPanelIfNeeded(force || refreshLoading, nowT, shelfLook);
     var total = allTracks.length;
     if (!total) { disposeRows(); return; }
     var center = Math.round(centerTarget);
@@ -15052,7 +15058,7 @@ function makeContentListManager() {
         row.song = allTracks[row.index] || row.song;
         if (shouldRedraw) {
           var isCenter = Math.abs(row.index - centerSmooth) < 0.5;
-          drawRow(row, row.song, isCenter);
+          drawRow(row, row.song, isCenter, shelfLook);
           row.lastCenter = isCenter;
         }
       }
@@ -15067,7 +15073,7 @@ function makeContentListManager() {
     for (var idx = start; idx <= end; idx++) {
       var row = makeRow(allTracks[idx], idx);
       rows.push(row);
-      drawRow(row, row.song, idx === Math.round(centerSmooth));
+      drawRow(row, row.song, idx === Math.round(centerSmooth), shelfLook);
       row.lastCenter = idx === Math.round(centerSmooth);
     }
     rowsDirty = false;
@@ -15080,8 +15086,7 @@ function makeContentListManager() {
       panelDirty = true;
       rowsDirty = true;
       if (!open || !group) return;
-      drawPanelIfNeeded(true);
-      syncRenderedRows(true);
+      syncRenderedRows(true, shelfSettings());
     },
     open: async function(playlistId, title, fromCard) {
       open = true;
@@ -15253,7 +15258,7 @@ function makeContentListManager() {
       setContentGroupScale(layout.scale * (1 - intro * (skullDetail ? 0.020 : 0.035)));
       centerSmooth += (centerTarget - centerSmooth) * 0.18;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
-      syncRenderedRows(false);
+      syncRenderedRows(false, shelfLook);
       if (panel && panel.mesh) {
         var pr = Math.max(0, Math.min(1, (uniforms.uTime.value - openAnimAt) / 0.72));
         pr = pr * pr * (3 - 2 * pr);
@@ -15264,7 +15269,7 @@ function makeContentListManager() {
         var isC = Math.abs(rows[i].index - centerSmooth) < 0.5;
         if (rows[i].lastCenter !== isC) {
           rows[i].lastCenter = isC;
-          drawRow(rows[i], rows[i].song, isC);
+          drawRow(rows[i], rows[i].song, isC, shelfLook);
         }
       }
     },

@@ -96,6 +96,9 @@ function testShelfContentFrameSnapshotReuse() {
   const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
   const contentSource = readSourceBetween(source, 'function makeContentListManager() {', '\nfunction compactCount');
   const updateSource = readSourceBetween(contentSource, '    update: function(dt, frameLayout, frameShelfLook) {', '\n    next: function()');
+  const panelSource = readSourceBetween(contentSource, '  function drawPanel(', '\n\n  function disposePanelObject');
+  const rowSource = readSourceBetween(contentSource, '  function drawRow(', '\n\n  /**\n   * 仅在详情行位置目标');
+  const syncSource = readSourceBetween(contentSource, '  function syncRenderedRows(', '\n\n  return {');
   const placeSource = readSourceBetween(contentSource, '  function place(', '\n\n  function disposeRowList');
   assert.match(managerSource, /contentList\.update\(dt, frameLayout, frameShelfLook\);/);
   assert.match(contentSource, /function detailLayout\(shelfCtl\)/);
@@ -104,6 +107,17 @@ function testShelfContentFrameSnapshotReuse() {
   assert.match(updateSource, /place\(rows\[i\], i, layout, shelfLook\);/);
   assert.match(placeSource, /function place\(row, i, layout, shelfLook\)/);
   assert.doesNotMatch(placeSource, /detailLayout\(\)|shelfSettings\(\)/);
+  assert.match(panelSource, /function drawPanel\(frameShelfLook\)/);
+  assert.match(panelSource, /var shelfLook = frameShelfLook \|\| shelfSettings\(\);/);
+  assert.match(rowSource, /function drawRow\(row, song, isCenter, frameShelfLook\)/);
+  assert.match(rowSource, /var shelfLook = frameShelfLook \|\| shelfSettings\(\);/);
+  assert.match(rowSource, /shelfLook\.accent/);
+  assert.match(syncSource, /function syncRenderedRows\(force, frameShelfLook\)/);
+  assert.match(syncSource, /var shelfLook = frameShelfLook \|\| shelfSettings\(\);/);
+  assert.match(syncSource, /drawPanelIfNeeded\(force \|\| refreshLoading, nowT, shelfLook\);/);
+  assert.match(syncSource, /drawRow\(row, row\.song, isCenter, shelfLook\);/);
+  assert.match(updateSource, /syncRenderedRows\(false, shelfLook\);/);
+  assert.match(updateSource, /drawRow\(rows\[i\], rows\[i\]\.song, isC, shelfLook\);/);
 }
 
 /**

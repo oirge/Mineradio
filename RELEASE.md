@@ -1,5 +1,18 @@
 +﻿# 发布流程
 
+## v1.3.6 3D 歌单详情绘制快路径复用
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.6`。
+- 详情页每次同步可见歌曲行时只读取一次歌单架外观设置，并将同一帧快照传给面板、可见行和中心行重绘；异步封面回调、主题刷新等非帧入口保留按需读取。
+- 面板与详情行绘制复用当前帧强调色和背景透明度，减少滚动、加载动画和主题刷新期间的重复偏好归一化与颜色解析。
+- 新增帧快照复用回归断言，并更新可见行热路径测试对新函数签名的定位；不改变播放器布局、视觉、播放、歌词、桌面覆盖层或用户设置。
+- 全量 Node 回归、主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过后构建 Windows x64 NSIS 安装器。
+- 发布资产：`Mineradio-1.3.6-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.3.6-SHA256SUMS.txt`；不生成 Portable ZIP。
+- 安装器 `103424549` 字节；blockmap `110427` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `4ED229AAC3B84FBDEC0E718D758CE6D827555EBE57364380ED9CD83C90D1B3B3`；blockmap `EE81E37985159BE9A47B75498C65CA2ACEB2FE2F779F45F4EB80F3F45A14CC66`；`latest.yml` `341C54F5BC5284AD4E10A932ACEE155C78C3FEDFAB317419E831BABD71ED851B`。
+- `latest.yml` 的 Setup SHA512：`HabqEJ8tw9KmCoSDHMKl9DdcSjjnU8shRWEyeLYIsD8lyp2w6RZkuTS72MjuBKGoAPhZ6JivNDbPTKfMkQqypg==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.6` 已标记 Latest；`main` 提交 `2482ab84d8164d1e0930d55dd6ad3b3c563218a4`，annotated tag 对象 `f963238be92012e6a152b637abfcc38bacc477f0`；远端四个资产大小与本地一致。
+
 ## v1.3.5 3D 歌单详情属性低写入优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.5`。
