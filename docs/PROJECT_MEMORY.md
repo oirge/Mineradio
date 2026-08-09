@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.6` 已进入发布流程；3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，详情面板与可见行绘制复用帧级外观快照，普通相机、hover 与涟漪继续复用低分配状态，不改变播放、视觉和交互语义。
+- 当前源码检查点：`v1.3.6` 已发布；3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，详情面板与可见行绘制复用帧级外观快照，普通相机、hover 与涟漪继续复用低分配状态，不改变播放、视觉和交互语义。
 - 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.5`，并保留本地安装器安全修复。
 - 最近正式安装包 Release 基线：`v1.3.5`（2026-08-09，3D 歌单详情属性低写入优化；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -41,6 +41,7 @@
 - 异步封面回调等非帧入口可以省略快照并回退读取；帧级快照只允许当前同步调用立即消费，不得跨帧保存或修改。
 - 新增/扩展 `tests/frame-hot-path.test.js` 与 `tests/content-list-rendering-hot-path.test.js` 断言；2026-08-09，涉及 `public/app.js`、测试、性能架构记忆和 `AGENTS.md`。
 - 本地 Windows x64 NSIS 已构建：安装器 `103424549` 字节 / SHA256 `4ED229AAC3B84FBDEC0E718D758CE6D827555EBE57364380ED9CD83C90D1B3B3`；blockmap `110427` 字节 / SHA256 `EE81E37985159BE9A47B75498C65CA2ACEB2FE2F779F45F4EB80F3F45A14CC66`；`latest.yml` `347` 字节 / SHA256 `341C54F5BC5284AD4E10A932ACEE155C78C3FEDFAB317419E831BABD71ED851B`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.6` 已标记 Latest；`main` 提交 `2482ab84d8164d1e0930d55dd6ad3b3c563218a4`，annotated tag 对象 `f963238be92012e6a152b637abfcc38bacc477f0`；远端四个资产大小与本地一致。
 
 ## v1.3.5 3D 歌单详情属性低写入优化
 

@@ -11,6 +11,7 @@
 - 安装器 `103424549` 字节；blockmap `110427` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
 - SHA256：安装器 `4ED229AAC3B84FBDEC0E718D758CE6D827555EBE57364380ED9CD83C90D1B3B3`；blockmap `EE81E37985159BE9A47B75498C65CA2ACEB2FE2F779F45F4EB80F3F45A14CC66`；`latest.yml` `341C54F5BC5284AD4E10A932ACEE155C78C3FEDFAB317419E831BABD71ED851B`。
 - `latest.yml` 的 Setup SHA512：`HabqEJ8tw9KmCoSDHMKl9DdcSjjnU8shRWEyeLYIsD8lyp2w6RZkuTS72MjuBKGoAPhZ6JivNDbPTKfMkQqypg==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.6` 已标记 Latest；`main` 提交 `2482ab84d8164d1e0930d55dd6ad3b3c563218a4`，annotated tag 对象 `f963238be92012e6a152b637abfcc38bacc477f0`；远端四个资产大小与本地一致。
 
 ## v1.3.5 3D 歌单详情属性低写入优化
 
