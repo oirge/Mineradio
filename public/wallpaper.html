@@ -23,6 +23,10 @@
     var coverImg = null, coverSrc = '';
     var particles = [];
     var overlayRenderPaused = document.hidden === true;
+    var wallpaperDrawHandle = 0;
+    var wallpaperDrawKind = '';
+    var WALLPAPER_IDLE_FPS = 30;
+    var WALLPAPER_DISABLED_DELAY = 1000;
     function hexToRgb(hex, fallback){
       hex = String(hex || fallback || '#9cffdf').trim();
       if (/^#[0-9a-f]{3}$/i.test(hex)) hex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
@@ -64,9 +68,17 @@
       img.src = src;
     }
     function applyState(next){
+      next = next || {};
       state = Object.assign({}, state, next || {});
       state.colors = Object.assign({}, state.colors, next && next.colors || {});
+      if (!state.enabled) {
+        // 关闭状态不再需要封面解码对象和粒子数组，避免覆盖层关闭前继续保留大对象。
+        state.cover = '';
+        particles.length = 0;
+      }
       setCover(state.cover || '');
+      cancelScheduledDraw();
+      scheduleNextDraw();
     }
     function drawCover(now){
       if (!coverImg) return;
@@ -82,8 +94,38 @@
       ctx.drawImage(coverImg, x, y, side, side);
       ctx.restore();
     }
+    function cancelScheduledDraw(){
+      if (!wallpaperDrawHandle) return;
+      if (wallpaperDrawKind === 'timeout') clearTimeout(wallpaperDrawHandle);
+      else cancelAnimationFrame(wallpaperDrawHandle);
+      wallpaperDrawHandle = 0;
+      wallpaperDrawKind = '';
+    }
+    function scheduleNextDraw(){
+      if (overlayRenderPaused || wallpaperDrawHandle) return;
+      if (state.enabled && state.playing) {
+        wallpaperDrawKind = 'raf';
+        wallpaperDrawHandle = requestAnimationFrame(function(nowMs){
+          wallpaperDrawHandle = 0;
+          wallpaperDrawKind = '';
+          draw(nowMs);
+        });
+        return;
+      }
+      wallpaperDrawKind = 'timeout';
+      wallpaperDrawHandle = setTimeout(function(){
+        wallpaperDrawHandle = 0;
+        wallpaperDrawKind = '';
+        draw(performance.now());
+      }, state.enabled ? Math.max(16, Math.round(1000 / WALLPAPER_IDLE_FPS)) : WALLPAPER_DISABLED_DELAY);
+    }
     function draw(nowMs){
       if (overlayRenderPaused) return;
+      if (!state.enabled) {
+        if (canvas.width && canvas.height) ctx.clearRect(0, 0, innerWidth, innerHeight);
+        scheduleNextDraw();
+        return;
+      }
       var now = nowMs * .001;
       ensureParticles();
       var opacity = Math.max(.35, Math.min(1, state.opacity || 1));
@@ -131,13 +173,14 @@
       ctx.fillStyle = aura;
       ctx.fillRect(0,0,innerWidth,innerHeight);
       ctx.restore();
-      requestAnimationFrame(draw);
+      scheduleNextDraw();
     }
     function setOverlayRenderPaused(paused){
       paused = !!paused;
       if (overlayRenderPaused === paused) return;
       overlayRenderPaused = paused;
-      if (!paused) requestAnimationFrame(draw);
+      cancelScheduledDraw();
+      if (!paused) scheduleNextDraw();
     }
     document.addEventListener('visibilitychange', function(){ setOverlayRenderPaused(document.hidden); });
     window.addEventListener('resize', resize);
@@ -145,7 +188,7 @@
     if (window.desktopOverlay && window.desktopOverlay.onWallpaperState) {
       window.desktopOverlay.onWallpaperState(applyState);
     }
-    requestAnimationFrame(draw);
+    scheduleNextDraw();
   </script>
 </body>
 </html>

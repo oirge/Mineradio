@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.1` 已发布；进入随机模式时整队只洗牌一次，上一首/下一首沿固定乱序前后循环，当前正在播放的歌曲和进度保持不变。
+- 当前源码检查点：`v1.3.2` 待发布；进入随机模式时整队只洗牌一次，上一首/下一首沿固定乱序前后循环，当前正在播放的歌曲和进度保持不变。
 - 当前工作分支：`codex/release-v1.2.87`，当前代码已快进到 GitHub `origin/main` 的 `v1.3.1`，并保留本地安装器安全修复。
 - 最近正式安装包 Release 基线：`v1.3.1`（2026-08-09，CPU/运行内存优化版；GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单校验一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,15 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.3.2 主渲染器与壁纸覆盖层低占用优化
+
+- 可见空闲态的主渲染器按 30 FPS 定时唤醒，播放或交互开始时立即切回 RAF，避免高刷新率屏幕上的无效 RAF 回调。
+- 壁纸覆盖层播放时使用 RAF，未播放限为 30 FPS，关闭时使用 1 秒低频调度，并释放封面图引用和粒子数组。
+- 状态切换与可见性恢复会取消旧调度句柄，避免 RAF 和定时器并存。
+- 新增 `tests/render-scheduler-hot-path.test.js`，扩展 `tests/runtime-resource-release.test.js`；不改变 UI、视觉、播放、歌词或桌面覆盖层交互语义。
+- 全量 Node 回归 `239/239` 通过；安装器 `103340590` 字节 / SHA256 `23a91ceb5496e6f9c990fa7c480a6ed56ab5305b26177cdcd017d21c5b2d9114`；blockmap `110189` 字节 / SHA256 `c24ce02afc9bb275ef8a26fb105941bade65aa596215765e9af01e719aabde62`；`latest.yml` `347` 字节 / SHA256 `dd15632d9cdb6f9b8f47f506baa318693ae3095ce307da96c3dbb5153c4490a0`。
+
 
 - `v1.3.0`（2026-08-08）按用户指定重做随机播放：进入随机模式时对整个队列执行一次 Fisher-Yates 洗牌，之后上一首/下一首只沿固定乱序前后循环，不再逐次随机。洗牌按当前歌曲对象重新定位 `currentIdx`，保持声音、进度和歌曲不跳；随机会话恢复及随机模式新队列首次播放前也只洗牌一次。使用 `WeakSet` 保存队列弱身份，移除 v1.2.100 的 96 条历史 ID/key 和歌曲 WeakMap，旧队列可正常回收。全量 Node 回归 `224/224` 通过；安装器 `103336921` 字节 / SHA256 `840753c5fc4647389907f8b15ac0463bb0ea1e095db5d92c8460a1caecf1a2d3`；blockmap `110180` 字节 / `3fa5ef65c5519b91a62bf624cbe40df97accaf794f91accb15fbc24f1b38122b`；`latest.yml` `347` 字节 / `248ad71583c4819a03fc63599aa16a8d7962b128f8e31a8b832391f0dea4ebc8`。GitHub Release 已标记 Latest，tag 指向 `b9be5a1e45298904f4301157300dca5de410d3c5`，远端四资产校验一致，`main` CI run `31250009229` 成功。
 

@@ -1,5 +1,18 @@
 +﻿# 发布流程
 
+## v1.3.2 主渲染器与壁纸覆盖层低占用优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.2`。
+- 可见空闲态的主渲染器按 30 FPS 定时唤醒，播放或交互开始时立即切回 RAF，避免高刷新率屏幕上的无效 RAF 回调。
+- 壁纸覆盖层播放时使用 RAF，未播放限为 30 FPS，关闭时使用 1 秒低频调度，并释放封面图引用和粒子数组。
+- 状态切换与可见性恢复会取消旧调度句柄，避免 RAF 和定时器并存。
+- 新增 `tests/render-scheduler-hot-path.test.js`，扩展 `tests/runtime-resource-release.test.js`；保留 UI、视觉、播放、歌词和桌面覆盖层交互语义。
+- 全量 Node 回归、主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过后构建 Windows x64 NSIS 安装器。
+- 发布资产：`Mineradio-1.3.2-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.3.2-SHA256SUMS.txt`；不生成 Portable ZIP。
+- 全量 Node 回归 `239/239` 通过；安装器 `103340590` 字节，blockmap `110189` 字节，`latest.yml` `347` 字节。
+- SHA256：安装器 `23a91ceb5496e6f9c990fa7c480a6ed56ab5305b26177cdcd017d21c5b2d9114`；blockmap `c24ce02afc9bb275ef8a26fb105941bade65aa596215765e9af01e719aabde62`；`latest.yml` `dd15632d9cdb6f9b8f47f506baa318693ae3095ce307da96c3dbb5153c4490a0`。
+- `latest.yml` 的 Setup SHA512：`6RyYxzZihi49UmI8DN0AgJxclrtiBY6mn+pstYkn01zL8263LSixwnDQSKyPAz04NsEwSSKSjwO+bbX9t5w6/w==`。
+
 ## v1.3.0 固定乱序播放队列
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.0`。

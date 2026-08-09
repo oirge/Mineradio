@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.1';
+var APP_VERSION = '1.3.2';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -1728,6 +1728,10 @@ function markRenderInteraction(reason, holdMs) {
   renderInteractionBoostUntil = Math.max(renderInteractionBoostUntil, now + (holdMs || RENDER_INTERACTION_HOLD_MS));
   renderInteractionReason = reason || renderInteractionReason || 'interaction';
   if (typeof renderPerfState !== 'undefined' && renderPerfState) renderPerfState.lastRenderAt = 0;
+  // 空闲定时器尚未到期时立刻切回 RAF，避免用户操作要等到下一次 30 FPS 唤醒才响应。
+  if (typeof mainRenderScheduleKind !== 'undefined' && mainRenderScheduleKind === 'idle-timeout' && typeof scheduleMainRenderFrame === 'function') {
+    scheduleMainRenderFrame();
+  }
 }
 function isRenderInteractionActive(now) {
   return (now || performance.now()) < renderInteractionBoostUntil;
@@ -30701,18 +30705,55 @@ var renderPerfState = {
 };
 window.__mineradioPerf = renderPerfState;
 var mainRenderFrameId = 0;
+var mainRenderScheduleKind = '';
 var mainRenderLoopSuspended = false;
+/**
+ * 取消主场景当前的调度句柄，兼容空闲定时器和交互态 RAF 两种调度方式。
+ * @returns {void}
+ */
+function cancelMainRenderFrame() {
+  if (!mainRenderFrameId) return;
+  if (mainRenderScheduleKind === 'idle-timeout') clearTimeout(mainRenderFrameId);
+  else cancelAnimationFrame(mainRenderFrameId);
+  mainRenderFrameId = 0;
+  mainRenderScheduleKind = '';
+}
+/**
+ * 根据当前渲染状态选择调度类型；可见无播放空闲态用定时器避免每个显示器刷新周期都进入 JS 回调。
+ * @returns {string} 当前应使用的调度类型。
+ */
+function mainRenderScheduleKindForState() {
+  var fps = typeof getAdaptiveRenderFps === 'function' ? getAdaptiveRenderFps() : 0;
+  return fps === RENDER_IDLE_FPS ? 'idle-timeout' : 'raf';
+}
+/**
+ * 调度下一次主场景更新。空闲态按目标帧率唤醒，播放或交互态恢复 RAF。
+ * @returns {boolean} 是否创建了新的调度句柄。
+ */
 function scheduleMainRenderFrame() {
-  if (mainRenderFrameId || mainRenderLoopSuspended || isDeepBackgroundMode()) return false;
-  mainRenderFrameId = requestAnimationFrame(animate);
+  if (mainRenderLoopSuspended || isDeepBackgroundMode()) return false;
+  var scheduleKind = mainRenderScheduleKindForState();
+  if (mainRenderFrameId && mainRenderScheduleKind === scheduleKind) return false;
+  if (mainRenderFrameId) cancelMainRenderFrame();
+  mainRenderScheduleKind = scheduleKind;
+  if (scheduleKind === 'idle-timeout') {
+    mainRenderFrameId = setTimeout(function() {
+      mainRenderFrameId = 0;
+      mainRenderScheduleKind = '';
+      animate();
+    }, Math.max(16, Math.round(1000 / RENDER_IDLE_FPS)));
+  } else {
+    mainRenderFrameId = requestAnimationFrame(function() {
+      mainRenderFrameId = 0;
+      mainRenderScheduleKind = '';
+      animate();
+    });
+  }
   return true;
 }
 function suspendMainRenderLoop(reason) {
   mainRenderLoopSuspended = true;
-  if (mainRenderFrameId) {
-    cancelAnimationFrame(mainRenderFrameId);
-    mainRenderFrameId = 0;
-  }
+  cancelMainRenderFrame();
   renderPerfState.mode = 'suspended';
   renderPerfState.lastRenderAt = 0;
   if (reason && window.__mineradioDebugRenderPower) console.log('[RenderSuspended]', reason);
@@ -30826,6 +30867,7 @@ function consumeAudioAnalysisDelta(now, fallbackDt) {
 }
 function animate() {
   mainRenderFrameId = 0;
+  mainRenderScheduleKind = '';
   if (isDeepBackgroundMode()) {
     suspendMainRenderLoop('deep-background-frame');
     return;

@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.3.0`；本地分支同时保留待发布的安装器安全修复。
+- 当前源码版本：`v1.3.2`；本地分支包含主渲染器与壁纸覆盖层的 CPU/运行内存优化。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -130,3 +130,4 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `localSearchWarmupSource`、`scheduleLocalSearchIndexWarmup` 二次筛选、`空查询结果数组复用` 或 `localSearchResultCache` 空查询身份时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `主 3D 空闲 30 FPS`、`isContinuousPlaybackRenderActive`、`隐藏歌单架短路`、`targetVis === 0`、`频谱桶单次扫描`、`getStageLyricLockBounds`、`歌词边界闭包`、`暂停镜头空闲短路` 或 `frequencyValue` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `实时节拍频谱 30 FPS`、`BEAT_ANALYSIS_TARGET_FPS`、`beatAnalysisElapsed`、`consumeRealtimeBeatSpectrumSlot`、`beatBandValueCache` 或 `节拍 FFT 限频` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `主渲染空闲定时器`、`mainRenderScheduleKind`、`idle-timeout`、`wallpaperDrawHandle`、`壁纸覆盖层未播放限频` 或 `覆盖层封面释放` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。

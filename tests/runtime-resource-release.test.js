@@ -89,11 +89,13 @@ test('启动音效结束后关闭独立 AudioContext', () => {
 });
 
 test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
-  const animationRequests = appSource.match(/requestAnimationFrame\(animate\)/g) || [];
+  const schedulerSource = extractFunction('scheduleMainRenderFrame');
+  const animationRequests = schedulerSource.match(/requestAnimationFrame\(function\(\)\s*\{/g) || [];
   assert.equal(animationRequests.length, 1, '主 3D RAF 只能由 scheduleMainRenderFrame 调度');
-  assert.match(appSource, /function scheduleMainRenderFrame\(\)[\s\S]*mainRenderFrameId = requestAnimationFrame\(animate\);/);
-  assert.match(appSource, /function suspendMainRenderLoop\(reason\)[\s\S]*cancelAnimationFrame\(mainRenderFrameId\);/);
-  assert.match(appSource, /function animate\(\) \{\s*mainRenderFrameId = 0;\s*if \(isDeepBackgroundMode\(\)\) \{\s*suspendMainRenderLoop\('deep-background-frame'\);\s*return;/);
+  assert.match(appSource, /function scheduleMainRenderFrame\(\)[\s\S]*mainRenderFrameId = requestAnimationFrame\(function\(\)\s*\{/);
+  assert.match(appSource, /function scheduleMainRenderFrame\(\)[\s\S]*mainRenderFrameId = setTimeout\(function\(\)/);
+  assert.match(appSource, /function suspendMainRenderLoop\(reason\)[\s\S]*cancelMainRenderFrame\(\);/);
+  assert.match(appSource, /function animate\(\) \{\s*mainRenderFrameId = 0;\s*mainRenderScheduleKind = '';\s*if \(isDeepBackgroundMode\(\)\) \{\s*suspendMainRenderLoop\('deep-background-frame'\);\s*return;/);
   assert.match(appSource, /function recoverVisualsAfterBackground\(reason\) \{\s*resumeMainRenderLoop\(reason \|\| 'restore'\);/);
   assert.match(appSource, /resumeMainRenderLoop\('startup'\);/);
   assert.match(appSource, /function scheduleDesktopOverlaySync\(/, '桌面覆盖层继续保留独立调度器');
@@ -103,9 +105,12 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
   const cancelled = [];
   const context = {
     mainRenderFrameId: 0,
+    mainRenderScheduleKind: '',
     mainRenderLoopSuspended: false,
     renderPerfState: { mode: 'vsync', lastRenderAt: 55 },
     prevTime: 0,
+    RENDER_IDLE_FPS: 30,
+    getAdaptiveRenderFps() { return 0; },
     animate() {},
     requestAnimationFrame(callback) {
       requested.push(callback);
@@ -114,9 +119,12 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
     cancelAnimationFrame(id) { cancelled.push(id); },
     isDeepBackgroundMode() { return deep; },
     performance: { now() { return 1234; } },
-    window: {}
+    window: {},
+    clearTimeout() {}
   };
   vm.runInNewContext([
+    extractFunction('cancelMainRenderFrame'),
+    extractFunction('mainRenderScheduleKindForState'),
     extractFunction('scheduleMainRenderFrame'),
     extractFunction('suspendMainRenderLoop'),
     extractFunction('resumeMainRenderLoop'),
