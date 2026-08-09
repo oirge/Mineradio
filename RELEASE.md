@@ -1,5 +1,13 @@
 +﻿# 发布流程
 
+## v1.3.7 主渲染帧时间戳与歌词歌单状态复用
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.7`。
+- 主循环将同一帧时间戳传给歌单架 hover 提示、Home 空库波形和空闲引导；省略参数时保留原有 `performance.now()` 回退语义。
+- `updateStageLyrics3D()` 每帧只读取一次歌单模式、详情状态和常驻状态，避免重复调用 `getMode()`、`hasOpenContent()` 与 `shelfAlwaysVisible()`；布局、相机、歌词光晕和详情偏移语义保持不变。
+- 新增/扩展 `tests/frame-hot-path.test.js`、`tests/home-wave-hot-path.test.js`、`tests/audio-analysis-hot-path.test.js` 的时间戳和状态快照断言；全量 Node 回归 `247/247` 通过。
+- 发布前继续执行 `public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查、`git diff --check` 和 Windows x64 NSIS 构建。
+
 ## v1.3.6 3D 歌单详情绘制快路径复用
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.6`。

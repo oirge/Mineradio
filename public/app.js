@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.6';
+var APP_VERSION = '1.3.7';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -8664,6 +8664,11 @@ function tickStageLyricMesh(mesh, isCurrent) {
   return a < 1;
 }
 
+/**
+ * 更新舞台歌词的光晕、布局和逐帧网格状态。
+ * @param {number} dt 当前帧秒数。
+ * @returns {void}
+ */
 function updateStageLyrics3D(dt) {
   if (!stageLyrics.group) return;
   if (!fx.particleLyrics && !stageLyrics.current && (!stageLyrics.outgoing || !stageLyrics.outgoing.length)) return;
@@ -8708,16 +8713,19 @@ function updateStageLyrics3D(dt) {
   var layoutTiltX = clampRange(Number(fx.lyricTiltX) || 0, -42, 42);
   var layoutTiltY = clampRange(Number(fx.lyricTiltY) || 0, -42, 42);
   var skullMouthLyrics = !!(camera && fx && fx.preset === SKULL_PRESET_INDEX && skullParticleGroup && skullParticleGroup.visible);
+  var shelfMode = shelfManager && shelfManager.getMode ? shelfManager.getMode() : null;
+  var shelfSideMode = shelfMode === 'side';
   var shelfDetailOpen = !!(shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent());
+  var shelfAlwaysOn = shelfSideMode && shelfAlwaysVisible();
   var skullShelfDetailOpen = !!(fx && fx.preset === SKULL_PRESET_INDEX && shelfDetailOpen);
   var normalShelfDetailOpen = !!(shelfDetailOpen && !skullShelfDetailOpen);
   stageLyrics.group.renderOrder = shelfDetailOpen ? 24 : 38;
   var shelfDetailLyricProfile = shelfDetailOpen
     ? (skullShelfDetailOpen ? STAGE_LYRIC_PROFILE_SKULL_DETAIL : STAGE_LYRIC_PROFILE_DETAIL)
     : STAGE_LYRIC_PROFILE_DEFAULT;
-  var shelfLyricAvoid = shouldAvoidStageLyricsForShelf();
+  var shelfLyricAvoid = shelfSideMode && (shelfAlwaysOn || shelfPinnedOpen || shelfDetailOpen || (shelfVisibility > 0.24 || (shelfHoverCue && shelfHoverCue.value > 0.28)));
   var wallpaperLyricLock = shouldUseWallpaperLyricCameraLock();
-  var wallpaperShelfLyrics = wallpaperLyricLock && shouldDimWallpaperForShelf();
+  var wallpaperShelfLyrics = wallpaperLyricLock && shouldUseWallpaperSafeShelfCamera() && shelfSideMode && (shelfPinnedOpen || shelfDetailOpen);
   if (wallpaperLyricLock) {
     layoutScale *= wallpaperShelfLyrics ? 0.60 : 0.84;
     layoutX = clampRange(layoutX + (wallpaperShelfLyrics ? -1.34 : 0), -2.0, 2.0);
@@ -8728,7 +8736,7 @@ function updateStageLyrics3D(dt) {
     layoutX = clampRange(layoutX - 1.36, -2.0, 2.0);
     layoutY = clampRange(layoutY + 0.06, -1.2, 1.35);
     layoutZ = clampRange(layoutZ + 0.72, -1.6, 1.6);
-  } else if (!skullMouthLyrics && shouldOffsetLyricsForShelfDetail()) {
+  } else if (!skullMouthLyrics && shelfSideMode && shelfDetailOpen) {
     layoutScale *= normalShelfDetailOpen ? 0.56 : 0.70;
     layoutX = clampRange(layoutX - (normalShelfDetailOpen ? 1.78 : 1.58), -2.0, 2.0);
     layoutY = clampRange(layoutY + (normalShelfDetailOpen ? 0.18 : 0.08), -1.2, 1.35);
@@ -13171,19 +13179,26 @@ function updateShelfHoverCueFromPointer(e) {
   shelfHoverCue.y = e.clientY;
   shelfHoverCue.lastAt = performance.now();
 }
-function tickShelfHoverCue(dt) {
+/**
+ * 更新歌单 hover 提示的惯性状态，并复用调用方已经取得的当前帧时间。
+ * @param {number} dt 当前帧秒数。
+ * @param {number=} frameNow 当前帧的 performance.now() 毫秒时间；省略时自行读取。
+ * @returns {number} 当前 hover 提示可见度。
+ */
+function tickShelfHoverCue(dt, frameNow) {
+  var now = frameNow == null ? performance.now() : frameNow;
   if (!shelfHoverCue.guide && shelfHoverCue.zoneActive) {
     shelfHoverPointerScratch.clientX = shelfHoverCue.x;
     shelfHoverPointerScratch.clientY = shelfHoverCue.y;
     if (canShowShelfHoverCueAt(shelfHoverPointerScratch)) {
-      if (performance.now() - shelfHoverCue.enteredAt > 260) shelfHoverCue.target = 1;
+      if (now - shelfHoverCue.enteredAt > 260) shelfHoverCue.target = 1;
     } else {
       shelfHoverCue.zoneActive = false;
       shelfHoverCue.enteredAt = 0;
       shelfHoverCue.target = 0;
     }
   }
-  if (!shelfHoverCue.guide && !shelfHoverCue.zoneActive && performance.now() - shelfHoverCue.lastAt > 650) shelfHoverCue.target = 0;
+  if (!shelfHoverCue.guide && !shelfHoverCue.zoneActive && now - shelfHoverCue.lastAt > 650) shelfHoverCue.target = 0;
   var target = shelfHoverCue.guide ? 1 : shelfHoverCue.target;
   var rate = target > shelfHoverCue.value ? 0.12 : 0.10;
   shelfHoverCue.value += (target - shelfHoverCue.value) * Math.min(1, rate * Math.max(1, dt * 60));
@@ -14108,7 +14123,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       rebuild(asyncCards);
     },
     getMode: function(){ return mode; },
-    update: function(dt) {
+    update: function(dt, frameNow) {
       if (!group) return;
       // PSP 滚动平滑
       centerSmooth += (centerTarget - centerSmooth) * 0.16;
@@ -14117,7 +14132,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       var appRevealed = !document.body.classList.contains('splash-active');
       var contentOpen = !!(contentList && contentList.isOpen());
       var alwaysVisible = shelfAlwaysVisible();
-      var cueVis = appRevealed ? tickShelfHoverCue(dt) : 0;
+      var cueVis = appRevealed ? tickShelfHoverCue(dt, frameNow) : 0;
       // v8: shelf 自动可见度 — 启动页期间不显示；侧栏只在右侧停留时淡入。
       var targetVis;
       if (!appRevealed) {
@@ -25380,9 +25395,15 @@ function ensureHomeWaveTrackBinIndices(dataLength, count) {
   }
   return state.binIndices;
 }
-function updateHomeAudioVisual(dt) {
+/**
+ * 以固定间隔刷新 Home 空库波形，并复用主循环已经取得的当前帧时间。
+ * @param {number} dt 当前帧秒数。
+ * @param {number=} frameNow 当前帧的 performance.now() 毫秒时间；省略时自行读取。
+ * @returns {void}
+ */
+function updateHomeAudioVisual(dt, frameNow) {
   if (!emptyHomeActive) return;
-  var nowMs = performance.now();
+  var nowMs = frameNow == null ? performance.now() : frameNow;
   var minGap = (typeof isRuntimeFramePressureActive === 'function' && isRuntimeFramePressureActive(nowMs)) ? 150 : 80;
   if (homeWaveTrackState.lastAt && nowMs - homeWaveTrackState.lastAt < minGap) return;
   var wave = document.getElementById('home-wave-track');
@@ -25392,7 +25413,7 @@ function updateHomeAudioVisual(dt) {
   var bars = wave.children;
   var dataLength = frequencyData && frequencyData.length || 0;
   var binIndices = ensureHomeWaveTrackBinIndices(dataLength, bars.length);
-  var nowT = uniforms && uniforms.uTime ? uniforms.uTime.value : performance.now() / 1000;
+  var nowT = uniforms && uniforms.uTime ? uniforms.uTime.value : nowMs / 1000;
   for (var i = 0; i < bars.length; i++) {
     var bin = 0;
     if (dataLength) {
@@ -28043,7 +28064,7 @@ function drawIdleGuideFrame() {
   var dtFrame = Math.max(1 / 120, Math.min(0.05, (nowFrame - idleGuideLastFrameAt) / 1000 || 1 / 60));
   idleGuideLastFrameAt = nowFrame;
   var idleShow = shouldShowIdleGuide();
-  var shelfCueValue = tickShelfHoverCue(dtFrame);
+  var shelfCueValue = tickShelfHoverCue(dtFrame, nowFrame);
   var shelfCueShow = shouldShowShelfHoverCue(shelfCueValue);
   var show = idleShow || shelfCueShow;
   setIdleGuideVisible(show, idleShow);
@@ -31445,9 +31466,9 @@ function animate() {
   tickPresetTransition();
 
   updateRipples(dt);
-  if (shelfManager) shelfManager.update(dt);
+  if (shelfManager) shelfManager.update(dt, now);
   tickLyricsParticles();
-  updateHomeAudioVisual(dt);
+  updateHomeAudioVisual(dt, now);
 
   // 电影镜头
   updateCinema(dt);
