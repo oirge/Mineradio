@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.2` 已发布；进入随机模式时整队只洗牌一次，上一首/下一首沿固定乱序前后循环，当前正在播放的歌曲和进度保持不变。
+- 当前源码检查点：`v1.3.3` 已发布；普通相机稳定帧跳过重复姿态重建，歌单架 hover 与涟漪触发复用低分配状态，不改变播放、视觉和交互语义。
 - 当前工作分支：`codex/release-v1.2.87`，当前代码已快进到 GitHub `origin/main` 的 `v1.3.2`，并保留本地安装器安全修复。
 - 最近正式安装包 Release 基线：`v1.3.2`（2026-08-09，主渲染器与壁纸覆盖层低占用优化；GitHub Releases 已标记 Latest，远端安装器、blockmap、`latest.yml` 和 SHA256 清单校验一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,13 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.3.3 相机与交互热路径低分配优化
+
+- 普通相机缓存位置、观察点和节拍滚转；稳定帧跳过重复 `position.set()`、`lookAt()` 与滚转重建。自由镜头、Skull 覆盖相机和直接重置姿态的入口会显式失效缓存。
+- `tickShelfHoverCue()` 复用 `shelfHoverPointerScratch`；`updateRipples()` 用 3×3 九宫格整数位掩码去重，不在热路径创建临时指针对象或去重对象。
+- 新增 `tests/camera-pose-hot-path.test.js` 与 `tests/ripple-hot-path.test.js`；不改变 UI、视觉、播放、歌词、桌面覆盖层或用户设置。
+- 2026-08-09，涉及 `public/app.js`、`tests/camera-pose-hot-path.test.js`、`tests/ripple-hot-path.test.js`。
 
 ## v1.3.2 主渲染器与壁纸覆盖层低占用优化
 

@@ -1,5 +1,17 @@
 +﻿# 发布流程
 
+## v1.3.3 相机与交互热路径低分配优化
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.3`。
+- 普通相机姿态使用位置、观察点和节拍滚转缓存；稳定帧跳过重复 `position.set()`、`lookAt()` 和滚转重建，自由镜头与 Skull 覆盖相机切换时显式失效缓存。
+- 歌单架 hover 检测复用固定指针 scratch，涟漪九宫格去重使用整数位掩码，减少稳定播放和交互期间的短命对象。
+- 新增 `tests/camera-pose-hot-path.test.js` 和 `tests/ripple-hot-path.test.js`；不改变 UI、视觉、播放、歌词、桌面覆盖层或用户设置。
+- 全量 Node 回归、主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过后构建 Windows x64 NSIS 安装器。
+- 发布资产：`Mineradio-1.3.3-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-1.3.3-SHA256SUMS.txt`；不生成 Portable ZIP。
+- 全量 Node 回归 `242/242` 通过；安装器 `103339186` 字节，blockmap `110304` 字节，`latest.yml` `347` 字节。
+- SHA256：安装器 `6683a8ac07fa2df8bb07b142850480490d9f6d7543267fa1627c94aec044eda9`；blockmap `cc90ceb7bf47df24cad01b7fbc1187fbb682f98d9e8e9822af7f4785f528970e`；`latest.yml` `2a3bd7d21e5d7f0c6c0cf3459831667f0046fa214ead8087efb079862e2b31eb`。
+- `latest.yml` 的 Setup SHA512：`AkIwLl87y1+kt4yNLC6/mmKMpJzBf1lyMXx1d0UoyDediFbPal5zdX1tAly98IX2CdKFdeXVUPnc+CK6AVL68g==`。
+
 ## v1.3.2 主渲染器与壁纸覆盖层低占用优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.2`。

@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.2';
+var APP_VERSION = '1.3.3';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -1901,6 +1901,59 @@ var cameraProjectionSyncState = {
   filmOffset: NaN
 };
 var CAMERA_PROJECTION_FOV_EPSILON = 0.0005;
+var cameraPoseSyncState = {
+  valid: false,
+  px: 0, py: 0, pz: 0,
+  lx: 0, ly: 0, lz: 0,
+  roll: 0
+};
+var CAMERA_POSE_EPSILON = 0.00005;
+var cameraPoseOverrideActive = false;
+/**
+ * 使普通相机姿态缓存失效，供自由镜头和 Skull 覆盖相机切换时重新同步。
+ * @returns {void}
+ */
+function invalidateCameraPoseSyncState() {
+  cameraPoseSyncState.valid = false;
+}
+/**
+ * 判断普通相机的位置、观察点和滚转是否发生了足以重建姿态的变化。
+ * @param {number} px 相机位置 X。
+ * @param {number} py 相机位置 Y。
+ * @param {number} pz 相机位置 Z。
+ * @param {number} lx 观察点 X。
+ * @param {number} ly 观察点 Y。
+ * @param {number} lz 观察点 Z。
+ * @param {number} roll 当前节拍滚转量。
+ * @returns {boolean} 首次同步或变化超过阈值时返回 true。
+ */
+function cameraPoseNeedsRefresh(px, py, pz, lx, ly, lz, roll) {
+  var state = cameraPoseSyncState;
+  if (state.valid &&
+      Math.abs(state.px - px) <= CAMERA_POSE_EPSILON &&
+      Math.abs(state.py - py) <= CAMERA_POSE_EPSILON &&
+      Math.abs(state.pz - pz) <= CAMERA_POSE_EPSILON &&
+      Math.abs(state.lx - lx) <= CAMERA_POSE_EPSILON &&
+      Math.abs(state.ly - ly) <= CAMERA_POSE_EPSILON &&
+      Math.abs(state.lz - lz) <= CAMERA_POSE_EPSILON &&
+      Math.abs(state.roll - roll) <= CAMERA_POSE_EPSILON) return false;
+  state.valid = true;
+  state.px = px; state.py = py; state.pz = pz;
+  state.lx = lx; state.ly = ly; state.lz = lz;
+  state.roll = roll;
+  return true;
+}
+/**
+ * 记录 Skull 是否正在接管普通相机；接管状态切换时强制普通姿态下一帧重建。
+ * @param {boolean} active Skull 覆盖相机是否有效。
+ * @returns {void}
+ */
+function syncCameraPoseOverrideState(active) {
+  active = !!active;
+  if (cameraPoseOverrideActive === active) return;
+  cameraPoseOverrideActive = active;
+  invalidateCameraPoseSyncState();
+}
 /**
  * 仅在透视投影参数变化时重建相机投影矩阵，减少稳定播放帧中的重复矩阵计算。
  * @param {boolean=} force 是否强制重建并刷新缓存。
@@ -3143,7 +3196,10 @@ function clearCenteredViewOffsets() {
 }
 
 function updateCamera() {
-  if (applyFreeCameraToCamera()) return;
+  if (applyFreeCameraToCamera()) {
+    invalidateCameraPoseSyncState();
+    return;
+  }
   if (orbit.recentering) {
     orbit.userTheta  += (orbit.baselineTheta - orbit.userTheta)  * 0.04;
     orbit.userPhi    += (orbit.baselinePhi   - orbit.userPhi)    * 0.04;
@@ -3193,14 +3249,17 @@ function updateCamera() {
 
   var cy = Math.cos(orbit.phi), sy = Math.sin(orbit.phi);
   var ct = Math.cos(orbit.theta), st = Math.sin(orbit.theta);
-  camera.position.set(
-    orbit.lookAt.x + orbit.radius * cy * st,
-    orbit.lookAt.y + orbit.radius * sy,
-    orbit.lookAt.z + orbit.radius * cy * ct
-  );
-  camera.lookAt(orbit.lookAt);
   var cameraShake = clampRange(Number(fx.cinemaShake) || 0, 0, 1.8);
-  camera.rotation.z += beatCam.rollKick * cameraShake;
+  var cameraX = orbit.lookAt.x + orbit.radius * cy * st;
+  var cameraY = orbit.lookAt.y + orbit.radius * sy;
+  var cameraZ = orbit.lookAt.z + orbit.radius * cy * ct;
+  var cameraRoll = beatCam.rollKick * cameraShake;
+  // 稳定播放帧只更新相机 FOV，不重复执行 lookAt 的四元数重建。
+  if (cameraPoseNeedsRefresh(cameraX, cameraY, cameraZ, orbit.lookAt.x, orbit.lookAt.y, orbit.lookAt.z, cameraRoll)) {
+    camera.position.set(cameraX, cameraY, cameraZ);
+    camera.lookAt(orbit.lookAt);
+    camera.rotation.z += cameraRoll;
+  }
 
   var cameraPunch = Math.max(camPunch * 0.55, beatCam.punch * 0.54 + beatCam.radiusKick * 0.16) * cameraShake;
   var targetFOV = BASE_FOV - cameraPunch * (djMode.active ? 2.62 : 2.35);
@@ -5104,6 +5163,7 @@ function resetSkullPresetView(immediate, opts) {
     skullCameraMixedLook.copy(skullCameraTargetLook);
     camera.lookAt(skullCameraMixedLook);
     updateCameraProjectionIfNeeded(true);
+    invalidateCameraPoseSyncState();
   }
 }
 var skullBreathOffsetScratch = { x:0, y:0, z:0 };
@@ -5125,9 +5185,13 @@ function setSkullCameraTargetVectors(pos, look, portrait, shelfComposition, zoom
   look.set(0.00, portrait ? -0.28 : -0.20, 0.02);
 }
 function applySkullCameraPose(dt) {
-  if (freeCamera && (freeCamera.active || freeCamera.locked || freeCamera.resetTween)) return;
+  if (freeCamera && (freeCamera.active || freeCamera.locked || freeCamera.resetTween)) {
+    syncCameraPoseOverrideState(false);
+    return;
+  }
   var active = fx && fx.preset === SKULL_PRESET_INDEX;
   skullCameraBlend += ((active ? 1 : 0) - skullCameraBlend) * Math.min(1, dt * (active ? 4.8 : 7.2));
+  syncCameraPoseOverrideState(skullCameraBlend >= 0.002);
   if (skullCameraBlend < 0.002) return;
   skullWheelZoom += (skullWheelZoomTarget - skullWheelZoom) * Math.min(1, dt * 8.0);
   var portrait = innerHeight > innerWidth * 1.08;
@@ -8945,11 +9009,11 @@ function updateRipples(dt) {
   if (isBassHit && (now - lastRippleAt) > RIPPLE_COOLDOWN) {
     lastRippleAt = now;
     var count = 2 + (Math.random() < 0.5 ? 0 : 1);
-    var used = {};
+    var usedMask = 0;
     for (var k = 0; k < count; k++) {
       var idx, tries = 0;
-      do { idx = Math.floor(Math.random() * 9); tries++; } while (used[idx] && tries < 12);
-      used[idx] = true;
+      do { idx = Math.floor(Math.random() * 9); tries++; } while ((usedMask & (1 << idx)) && tries < 12);
+      usedMask |= 1 << idx;
       var reg = regions[idx];
       var jx = reg.x + (Math.random() - 0.5) * 0.7;
       var jy = reg.y + (Math.random() - 0.5) * 0.7;
@@ -12938,6 +13002,7 @@ var shelfPinnedOpen = false;
 var shelfManager = null;
 var shelfOpenAnimAt = -10;
 var shelfHoverCue = { target: 0, value: 0, x: 0, y: 0, lastAt: 0, enteredAt: 0, zoneActive: false, guide: false };
+var shelfHoverPointerScratch = { clientX: 0, clientY: 0 };
 var shelfVisibility = 0;  // 0..1, 侧栏自动隐藏的整体透明度系数
 function isPortraitShelfViewport() {
   return innerHeight > innerWidth * 1.08;
@@ -13108,8 +13173,9 @@ function updateShelfHoverCueFromPointer(e) {
 }
 function tickShelfHoverCue(dt) {
   if (!shelfHoverCue.guide && shelfHoverCue.zoneActive) {
-    var heldPointer = { clientX: shelfHoverCue.x, clientY: shelfHoverCue.y };
-    if (canShowShelfHoverCueAt(heldPointer)) {
+    shelfHoverPointerScratch.clientX = shelfHoverCue.x;
+    shelfHoverPointerScratch.clientY = shelfHoverCue.y;
+    if (canShowShelfHoverCueAt(shelfHoverPointerScratch)) {
       if (performance.now() - shelfHoverCue.enteredAt > 260) shelfHoverCue.target = 1;
     } else {
       shelfHoverCue.zoneActive = false;

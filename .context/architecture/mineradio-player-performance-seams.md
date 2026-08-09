@@ -163,6 +163,8 @@
 - 3D 歌单架完全隐藏或启动页遮挡时，卡片位置、旋转、透明度和详情行更新没有可见消费者；继续执行会放大高刷屏下的数学热循环。
 - 主分析器的 kick、人声、中频和高频桶是连续互斥范围；用四个循环扫描同一 TypedArray 会重复承担边界和索引开销。实时节拍分析的五个频段存在重叠，不能为了表面上的“单次扫描”引入更慢的多重边界判断。
 - `getStageLyricLockBounds()` 位于歌词镜头帧热路径，必须直接处理当前网格和 outgoing 网格，不能在每次调用中创建 `take()` 闭包。
+- 普通相机稳定帧不应重复执行 `camera.position.set()`、`camera.lookAt()` 和滚转重建；自由镜头、Skull 覆盖相机或直接重置姿态时必须显式失效姿态缓存，避免覆盖相机退出后沿用旧姿态。
+- 歌单架 hover 的保留指针坐标和涟漪九宫格去重都属于低频但可重复触发的短命对象来源；应分别复用固定 scratch 对象和整数位掩码。
 
 ## Solution / Convention
 
@@ -320,6 +322,8 @@
 - `shelfManager.update()` 每帧必须缓存 `contentList.isOpen()` 与 `shelfAlwaysVisible()` 的结果，再用于可见性、层级和封面绑定判断；这些状态在单次更新内不得重复查询。
 - `shelfManager.update()` 每帧先生成一次 `shelfSettings()` 快照，再传给 `shelfLayoutProfile(shelfCtl)`、详情列表和卡片绘制；布局、详情行与 `cardDrawSignature()` / `drawCard()` 不得在已经有设置快照时再次归一化偏好或解析颜色。异步封面回调、主题刷新等非帧入口可以回退读取。
 - 帧级 scratch 返回对象只允许当前唯一同步调用者立即读取，不得跨下一次调用保存引用；安魂姿态只在主相机已经更新投影后运行，不能独立承担 FOV/aspect/near/far 同步。
+- `cameraPoseNeedsRefresh()` 以 `0.00005` 阈值缓存普通相机位置、观察点和节拍滚转；`invalidateCameraPoseSyncState()` 覆盖自由镜头、Skull 相机和显式重置入口。
+- `tickShelfHoverCue()` 只更新 `shelfHoverPointerScratch` 字段；`updateRipples()` 使用 `usedMask` 标记 3×3 区域，保持随机尝试次数和去重语义不变。
 - MediaPipe 手势帧复用 `handPalmScratch`、`HAND_OPENNESS_TIPS` 和 `HAND_SKELETON_TIPS`；`processHandFrame()` 单次计算掌心并传给张开度与骨架绘制。`palmCenter(lm, out)` 无 `out` 时仍保留返回新对象的兼容语义，scratch 引用不得跨帧保存。
 - 缓存安装包复用通过 `installerReusePromises` 合并相同验证身份；key 使用规范化文件路径、版本、有限正大小与摘要的 JSON tuple，成功、失败和空结果都必须用 Promise 身份检查在 `finally` 清理。
 - `processRealtimeBeatEngine()` 使用模块级 `beatFollow()`，命中/未命中分别复用 `realtimeBeatHitResult` 与 `realtimeBeatMissResult`；两种对象的字段结构必须保持原样，调用方只能在当前同步帧立即读取，不得跨调用保存引用。
