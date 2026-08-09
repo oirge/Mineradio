@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.5` 已完成构建；3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，普通相机、hover 与涟漪继续复用低分配状态，不改变播放、视觉和交互语义。
-- 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.4`，并保留本地安装器安全修复。
-- 最近正式安装包 Release 基线：`v1.3.4`（2026-08-09，3D 歌单架卡片属性低写入优化；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。
+- 当前源码检查点：`v1.3.5` 已发布；3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，普通相机、hover 与涟漪继续复用低分配状态，不改变播放、视觉和交互语义。
+- 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.5`，并保留本地安装器安全修复。
+- 最近正式安装包 Release 基线：`v1.3.5`（2026-08-09，3D 歌单详情属性低写入优化；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -41,6 +41,7 @@
 - 新增 `tests/frame-hot-path.test.js` 详情行和详情组属性缓存回归测试；全量 Node 回归 `245/245` 通过。
 - 2026-08-09，涉及 `public/app.js`、`tests/frame-hot-path.test.js`、`.context/architecture/mineradio-player-performance-seams.md`、`AGENTS.md`。
 - Windows x64 NSIS：安装器 `103424049` 字节，SHA256 `A9B2692AEF19B32CD73F6C01A8FCB1CC6F86E5FAE21BB95B1EA53F177330D835`；blockmap `110328` 字节，SHA256 `C76E185C1B79631527DF0409BF94A1DF8C179368E23FABC1CF86E3B0C01CDE20`；`latest.yml` SHA256 `5C5F58B7AF3E1F56638F98F12CC6202EDA420FDA467534AFD62A67BDE9D7A397`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.5` 已标记 Latest；`main` 提交 `e4d9248df94c53b2245e87fbc17d148cb3781bbb`，annotated tag 对象 `1822e1f51b3329cdf31f8b7a693c47bb151841c2`；Verify run `31314090176`、`31314089225` 成功。
 
 ## v1.3.4 3D 歌单架卡片属性低写入优化
 
