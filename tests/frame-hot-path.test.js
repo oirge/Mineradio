@@ -35,7 +35,7 @@ function testLyricParticleFrameCache() {
   const source = readSourceBetween(
     readRendererSource(),
     'function tickStageLyricMesh(mesh, isCurrent) {',
-    '\nfunction updateStageLyrics3D(dt) {'
+    '\nfunction updateStageLyrics3D(dt, frameShelfState) {'
   );
   const loopStart = source.indexOf('for (var si = 0; si < particleCount; si++) {');
   const loopEnd = source.indexOf('\n        }\n        pos.needsUpdate', loopStart);
@@ -55,10 +55,10 @@ function testLyricParticleFrameCache() {
 function testShelfFrameStateCache() {
   const source = readRendererSource();
   const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
-  const updateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow) {', '\n    onCoverChange: function()');
+  const updateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow, frameShelfState) {', '\n    onCoverChange: function()');
   const placeCardSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
-  assert.match(updateSource, /var contentOpen = !!\(contentList && contentList\.isOpen\(\)\);/);
-  assert.match(updateSource, /var alwaysVisible = shelfAlwaysVisible\(\);/);
+  assert.match(updateSource, /var contentOpen = frameShelfState \? frameShelfState\.contentOpen : !!\(contentList && contentList\.isOpen\(\)\);/);
+  assert.match(updateSource, /var alwaysVisible = frameShelfState \? frameShelfState\.alwaysVisible : shelfAlwaysVisible\(\);/);
   assert.match(updateSource, /var cueVis = appRevealed \? tickShelfHoverCue\(dt, frameNow\) : 0;/);
   assert.match(updateSource, /if \(!appRevealed \|\| \(!group\.visible && targetVis === 0\)\) return;/);
   assert.equal((updateSource.match(/contentList\.isOpen\(\)/g) || []).length, 1);
@@ -81,13 +81,50 @@ function testFrameTimestampForwarding() {
   const animateSource = readSourceBetween(source, 'function animate() {', "\nresumeMainRenderLoop('startup');");
   const hoverSource = readSourceBetween(source, 'function tickShelfHoverCue(', '\nfunction setShelfPinnedOpen');
   const homeWaveSource = readSourceBetween(source, 'function updateHomeAudioVisual(', '\nfunction setRange(');
-  assert.match(animateSource, /shelfManager\.update\(dt, now\);/);
+  assert.match(animateSource, /var frameShelfState = refreshShelfRenderFrameState\(\);/);
+  assert.match(animateSource, /shelfManager\.update\(dt, now, frameShelfState\);/);
+  assert.match(animateSource, /var shelfDimTarget = shouldDimWallpaperForShelf\(frameShelfState\) \? 0\.48 : skullBackdropDim;/);
+  assert.match(animateSource, /applySkullCameraPose\(dt, frameShelfState\);/);
+  assert.match(animateSource, /updateSkullParticleLayer\(dt, frameShelfState\);/);
+  assert.match(animateSource, /updateStageLyrics3D\(dt, frameShelfState\);/);
   assert.match(animateSource, /updateHomeAudioVisual\(dt, now\);/);
+  assert.match(animateSource, /updateFreeCamera\(dt, now\);/);
+  assert.match(animateSource, /tickGestureRotation\(dt, now\);/);
   assert.match(hoverSource, /function tickShelfHoverCue\(dt, frameNow\)/);
   assert.match(hoverSource, /var now = frameNow == null \? performance\.now\(\) : frameNow;/);
   assert.match(homeWaveSource, /function updateHomeAudioVisual\(dt, frameNow\)/);
   assert.match(homeWaveSource, /var nowMs = frameNow == null \? performance\.now\(\) : frameNow;/);
   assert.doesNotMatch(homeWaveSource, /uniforms && uniforms\.uTime \? uniforms\.uTime\.value : performance\.now\(\) \/ 1000/);
+  const freeCameraSource = readSourceBetween(source, 'function updateFreeCamera(dt, frameNow) {', '\nfunction flushPersistentVisualState');
+  const gestureSource = readSourceBetween(source, 'function tickGestureRotation(dt, frameNow) {', '\nfunction showGestureHUD');
+  assert.match(freeCameraSource, /var now = frameNow == null \? performance\.now\(\) : frameNow;/);
+  assert.match(gestureSource, /var now = frameNow == null \? performance\.now\(\) : frameNow;/);
+  assert.doesNotMatch(freeCameraSource, /performance\.now\(\) - tw\.start/);
+  assert.doesNotMatch(gestureSource, /performance\.now\(\) - handLmLastSeen/);
+}
+
+/**
+ * 验证主渲染帧只读取一次歌单 getter，并让 Skull、歌词和歌单架消费同一份快照。
+ * @returns {void}
+ */
+function testShelfRenderFrameSnapshotGetterReuse() {
+  const source = readRendererSource();
+  const snapshotSource = readSourceBetween(source, 'function refreshShelfRenderFrameState() {', '\nfunction isPortraitShelfViewport');
+  const animateSource = readSourceBetween(source, 'function animate() {', "\nresumeMainRenderLoop('startup');");
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const managerUpdateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow, frameShelfState) {', '\n    onCoverChange: function()');
+  const skullCameraSource = readSourceBetween(source, 'function applySkullCameraPose(dt, frameShelfState) {', '\nfunction updateSkullParticleLayer');
+  const skullParticleSource = readSourceBetween(source, 'function updateSkullParticleLayer(dt, frameShelfState) {', '\nvar BACK_COVER_COUNT = 3000;');
+  const stageSource = readSourceBetween(source, 'function updateStageLyrics3D(dt, frameShelfState) {', '\nvar lyricWordProgressCursor =');
+
+  assert.equal((snapshotSource.match(/manager\.getMode\(\)/g) || []).length, 1);
+  assert.equal((snapshotSource.match(/manager\.hasOpenContent\(\)/g) || []).length, 1);
+  assert.equal((snapshotSource.match(/shelfAlwaysVisible\(\)/g) || []).length, 1);
+  assert.doesNotMatch(animateSource, /shelfManager\.getMode\(\)|shelfManager\.hasOpenContent\(\)|shelfAlwaysVisible\(\)/);
+  assert.doesNotMatch(managerUpdateSource, /shelfManager\.getMode\(\)|shelfManager\.hasOpenContent\(\)/);
+  assert.doesNotMatch(skullCameraSource, /shelfManager\.getMode\(\)|shelfManager\.hasOpenContent\(\)|shelfAlwaysVisible\(\)/);
+  assert.doesNotMatch(skullParticleSource, /shelfManager\.getMode\(\)|shelfManager\.hasOpenContent\(\)|shelfAlwaysVisible\(\)/);
+  assert.doesNotMatch(stageSource, /shelfManager\.getMode\(\)|shelfManager\.hasOpenContent\(\)|shelfAlwaysVisible\(\)/);
 }
 
 /**
@@ -96,13 +133,12 @@ function testFrameTimestampForwarding() {
  */
 function testStageLyricsShelfStateReuse() {
   const source = readRendererSource();
-  const stageSource = readSourceBetween(source, 'function updateStageLyrics3D(dt) {', '\nvar lyricWordProgressCursor =');
-  assert.match(stageSource, /var shelfMode = shelfManager && shelfManager\.getMode \? shelfManager\.getMode\(\) : null;/);
-  assert.match(stageSource, /var shelfDetailOpen = !!\(shelfManager && shelfManager\.hasOpenContent && shelfManager\.hasOpenContent\(\)\);/);
-  assert.match(stageSource, /var shelfAlwaysOn = shelfSideMode && shelfAlwaysVisible\(\);/);
-  assert.equal((stageSource.match(/shelfManager\.getMode\(\)/g) || []).length, 1);
-  assert.equal((stageSource.match(/shelfManager\.hasOpenContent\(\)/g) || []).length, 1);
-  assert.equal((stageSource.match(/shelfAlwaysVisible\(\)/g) || []).length, 1);
+  const stageSource = readSourceBetween(source, 'function updateStageLyrics3D(dt, frameShelfState) {', '\nvar lyricWordProgressCursor =');
+  assert.match(stageSource, /frameShelfState = frameShelfState \|\| refreshShelfRenderFrameState\(\);/);
+  assert.match(stageSource, /var shelfMode = frameShelfState\.mode;/);
+  assert.match(stageSource, /var shelfDetailOpen = frameShelfState\.contentOpen;/);
+  assert.match(stageSource, /var shelfAlwaysOn = frameShelfState\.alwaysVisible;/);
+  assert.doesNotMatch(stageSource, /shelfManager\.getMode\(\)|shelfManager\.hasOpenContent\(\)|shelfAlwaysVisible\(\)/);
   assert.doesNotMatch(stageSource, /shouldAvoidStageLyricsForShelf\(\)|shouldDimWallpaperForShelf\(\)|shouldOffsetLyricsForShelfDetail\(\)/);
 }
 
@@ -113,7 +149,7 @@ function testStageLyricsShelfStateReuse() {
 function testShelfFrameSettingsReuse() {
   const source = readRendererSource();
   const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
-  const updateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow) {', '\n    onCoverChange: function()');
+  const updateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow, frameShelfState) {', '\n    onCoverChange: function()');
   const layoutSource = readSourceBetween(source, 'function shelfLayoutProfile(', '\nfunction shelfHotZoneWidth()');
   assert.match(layoutSource, /function shelfLayoutProfile\(shelfCtl\)/);
   assert.match(layoutSource, /shelfCtl = shelfCtl \|\| shelfSettings\(\);/);
@@ -164,7 +200,7 @@ function testShelfCardFrameSnapshotReuse() {
   const signatureSource = readSourceBetween(managerSource, 'function cardDrawSignature(', '\n\n  /**\n   * 绘制歌单架卡片纹理');
   const drawSource = readSourceBetween(managerSource, 'function drawCard(', '\n\n  function buildOneCard');
   const placeSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
-  const updateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow) {', '\n    onCoverChange: function()');
+  const updateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow, frameShelfState) {', '\n    onCoverChange: function()');
 
   assert.match(signatureSource, /function cardDrawSignature\(card, item, frameShelfLook\)/);
   assert.match(signatureSource, /var shelfLook = frameShelfLook \|\| shelfSettings\(\);/);
@@ -294,6 +330,7 @@ function testLyricBoundsAvoidsFrameClosure() {
 test('歌词光粒循环复用帧级状态', testLyricParticleFrameCache);
 test('歌单架更新复用帧级可见状态', testShelfFrameStateCache);
 test('主循环时间戳复用到 hover 和 Home 波形', testFrameTimestampForwarding);
+test('歌单渲染帧快照只读取一次 getter', testShelfRenderFrameSnapshotGetterReuse);
 test('舞台歌词复用歌单状态快照', testStageLyricsShelfStateReuse);
 test('歌单架布局复用帧级设置快照', testShelfFrameSettingsReuse);
 test('歌单详情复用帧级布局与外观快照', testShelfContentFrameSnapshotReuse);
