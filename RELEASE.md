@@ -11,7 +11,7 @@
 - 安装器 `103341011` 字节；blockmap `110354` 字节；`latest.yml` `347` 字节。
 - SHA256：安装器 `D850FAADCCC7622224BAE1F992F0C167EEB924980770DABDB9B4EA60BD877B0C`；blockmap `F3C333AF42B69E4AC1AEFE8C8AE5077FCC1C6D3D907AD52867F22504032C4EFA`；`latest.yml` `8B1A212FC671E6325167717A7AF787911AFD56F8E6971D1C1C41BAEC9B7A48C1`。
 - `latest.yml` 的 Setup SHA512：`f9sdiF/SyMUpWnzGSWrXqDooniuXbYhs4ns+cjzeIzUHLyz7hrCiS+XQQM5l0AlIZvL0E3t5NUYgaL8IMEdVlw==`。
-- GitHub Release、tag 和 CI 校验在推送完成后补录。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.4` 已标记 Latest；tag 指向提交 `1f8304672e9cdc44c595f9237b3e9dd1bd859b75`，`main` Verify run `31311580320` 成功；远端四个资产大小与 SHA256 均和本地一致。
 
 ## v1.3.3 相机与交互热路径低分配优化
 
