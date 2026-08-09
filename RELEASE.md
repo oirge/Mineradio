@@ -11,6 +11,7 @@
 - 全量 Node 回归 `242/242` 通过；安装器 `103339186` 字节，blockmap `110304` 字节，`latest.yml` `347` 字节。
 - SHA256：安装器 `6683a8ac07fa2df8bb07b142850480490d9f6d7543267fa1627c94aec044eda9`；blockmap `cc90ceb7bf47df24cad01b7fbc1187fbb682f98d9e8e9822af7f4785f528970e`；`latest.yml` `2a3bd7d21e5d7f0c6c0cf3459831667f0046fa214ead8087efb079862e2b31eb`。
 - `latest.yml` 的 Setup SHA512：`AkIwLl87y1+kt4yNLC6/mmKMpJzBf1lyMXx1d0UoyDediFbPal5zdX1tAly98IX2CdKFdeXVUPnc+CK6AVL68g==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.3` 已标记 Latest；annotated tag 解引用到提交 `30d41a141c98e81da7c438ef4efb4a49516502ac`，远端四个资产大小与 SHA256 均和本地一致；`codex/release-v1.2.87` Verify run `31308926719`、`main` Verify run `31309010672` 成功。
 
 ## v1.3.2 主渲染器与壁纸覆盖层低占用优化
 
