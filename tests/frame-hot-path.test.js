@@ -131,6 +131,29 @@ function testShelfCardFrameSnapshotReuse() {
 }
 
 /**
+ * 验证歌单架卡片稳定属性只在目标值变化时写入，避免每帧触发 Three.js 对象更新。
+ * @returns {void}
+ */
+function testShelfCardPropertyWriteCache() {
+  const source = readRendererSource();
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const placeCardSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
+
+  assert.match(managerSource, /function setShelfCardPosition\(card, x, y, z\)/);
+  assert.match(managerSource, /function setShelfCardScale\(card, scale\)/);
+  assert.match(managerSource, /function setShelfCardOpacity\(card, opacity\)/);
+  assert.match(managerSource, /function setShelfCardColor\(card, tone\)/);
+  assert.match(managerSource, /function setShelfCardRotation\(card, x, y, z\)/);
+  assert.match(managerSource, /var nextZ = z == null \? card\.mesh\.rotation\.z : z;/);
+  assert.match(managerSource, /function setShelfCardCameraPose\(card, quaternion, rx, ry\)/);
+  assert.doesNotMatch(placeCardSource, /card\.mesh\.position\.set\(/);
+  assert.doesNotMatch(placeCardSource, /card\.mesh\.scale\.setScalar\(/);
+  assert.doesNotMatch(placeCardSource, /card\.mesh\.material\.opacity\s*=/);
+  assert.doesNotMatch(placeCardSource, /card\.mesh\.material\.color\.setScalar\(/);
+  assert.doesNotMatch(placeCardSource, /card\.mesh\.rotation\.[xyz]\s*=/);
+}
+
+/**
  * 验证 Home 刷新把同一轮已计算的本地歌曲池和听歌统计传给卡片渲染，避免重复扫描。
  * @returns {void}
  */
@@ -183,6 +206,7 @@ test('歌单架更新复用帧级可见状态', testShelfFrameStateCache);
 test('歌单架布局复用帧级设置快照', testShelfFrameSettingsReuse);
 test('歌单详情复用帧级布局与外观快照', testShelfContentFrameSnapshotReuse);
 test('歌单卡片绘制复用帧级外观快照', testShelfCardFrameSnapshotReuse);
+test('歌单卡片属性写入复用稳定值缓存', testShelfCardPropertyWriteCache);
 test('Home 刷新复用本地歌曲池与听歌统计快照', testHomeRenderSnapshotReuse);
 test('歌词特效空闲帧提前结束清理路径', testLyricsParticleIdleShortCircuit);
 test('暂停镜头无残留事件时提前结束', testBeatCameraPausedIdleShortCircuit);
