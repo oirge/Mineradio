@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.4';
+var APP_VERSION = '1.3.5';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -14536,7 +14536,7 @@ function makeContentListManager() {
     mesh.position.set(-0.02, 0.0, 0.20);
     mesh.renderOrder = 232;
     group.add(mesh);
-    panel = { canvas:cv, texture:tx, mesh:mesh };
+    panel = { canvas:cv, texture:tx, mesh:mesh, opacityValue:0.86 };
   }
 
   function drawPanel() {
@@ -14798,6 +14798,152 @@ function makeContentListManager() {
   }
 
   /**
+   * 仅在详情行位置目标发生变化时写入 Three.js，避免稳定帧重复触发矩阵更新。
+   * @param {object} row 详情行运行时对象。
+   * @param {number} x 位置横坐标。
+   * @param {number} y 位置纵坐标。
+   * @param {number} z 位置深度坐标。
+   * @returns {void}
+   */
+  function setContentRowPosition(row, x, y, z) {
+    if (row.positionX === x && row.positionY === y && row.positionZ === z) return;
+    row.mesh.position.set(x, y, z);
+    row.positionX = x;
+    row.positionY = y;
+    row.positionZ = z;
+  }
+
+  /**
+   * 仅在详情行缩放目标发生变化时写入 Three.js，减少稳定帧的对象写入。
+   * @param {object} row 详情行运行时对象。
+   * @param {number} scale 统一缩放值。
+   * @returns {void}
+   */
+  function setContentRowScale(row, scale) {
+    if (row.scaleValue === scale) return;
+    row.mesh.scale.setScalar(scale);
+    row.scaleValue = scale;
+  }
+
+  /**
+   * 仅在详情行材质透明度目标发生变化时写入材质，避免重复标记渲染状态。
+   * @param {object} row 详情行运行时对象。
+   * @param {number} opacity 材质透明度。
+   * @returns {void}
+   */
+  function setContentRowOpacity(row, opacity) {
+    if (row.opacityValue === opacity) return;
+    row.mesh.material.opacity = opacity;
+    row.opacityValue = opacity;
+  }
+
+  /**
+   * 仅在详情行可见性发生变化时更新节点，避免重复修改场景遍历状态。
+   * @param {object} row 详情行运行时对象。
+   * @param {boolean} visible 是否显示详情行。
+   * @returns {void}
+   */
+  function setContentRowVisibility(row, visible) {
+    if (row.visibleValue === visible) return;
+    row.mesh.visible = visible;
+    row.visibleValue = visible;
+  }
+
+  /**
+   * 仅在详情行渲染顺序发生变化时更新节点。
+   * @param {object} row 详情行运行时对象。
+   * @param {number} renderOrder Three.js 渲染顺序。
+   * @returns {void}
+   */
+  function setContentRowRenderOrder(row, renderOrder) {
+    if (row.renderOrderValue === renderOrder) return;
+    row.mesh.renderOrder = renderOrder;
+    row.renderOrderValue = renderOrder;
+  }
+
+  /**
+   * 仅在详情行欧拉旋转目标发生变化时写入 x/y，保留未参与详情动画的 z 轴状态。
+   * @param {object} row 详情行运行时对象。
+   * @param {number} x x 轴旋转值。
+   * @param {number} y y 轴旋转值。
+   * @returns {void}
+   */
+  function setContentRowRotation(row, x, y) {
+    if (row.rotationX === x && row.rotationY === y) return;
+    row.mesh.rotation.x = x;
+    row.mesh.rotation.y = y;
+    row.rotationX = x;
+    row.rotationY = y;
+  }
+
+  /**
+   * 仅在详情组位置目标发生变化时写入 Three.js，避免稳定帧重复标记矩阵更新。
+   * @param {number} x 位置横坐标。
+   * @param {number} y 位置纵坐标。
+   * @param {number} z 位置深度坐标。
+   * @returns {void}
+   */
+  function setContentGroupPosition(x, y, z) {
+    var state = group && group.userData;
+    if (!state || (state.detailPositionX === x && state.detailPositionY === y && state.detailPositionZ === z)) return;
+    group.position.set(x, y, z);
+    state.detailPositionX = x;
+    state.detailPositionY = y;
+    state.detailPositionZ = z;
+  }
+
+  /**
+   * 仅在详情组缩放目标发生变化时写入 Three.js，减少稳定帧的对象更新。
+   * @param {number} scale 详情组统一缩放值。
+   * @returns {void}
+   */
+  function setContentGroupScale(scale) {
+    var state = group && group.userData;
+    if (!state || state.detailScaleValue === scale) return;
+    group.scale.setScalar(scale);
+    state.detailScaleValue = scale;
+  }
+
+  /**
+   * 仅在详情组普通欧拉姿态目标发生变化时写入，保留相机姿态分支的四元数语义。
+   * @param {number} x x 轴旋转值。
+   * @param {number} y y 轴旋转值。
+   * @param {number} z z 轴旋转值。
+   * @returns {void}
+   */
+  function setContentGroupRotation(x, y, z) {
+    var state = group && group.userData;
+    if (!state || (state.detailRotationX === x && state.detailRotationY === y && state.detailRotationZ === z)) return;
+    group.rotation.set(x, y, z);
+    state.detailRotationX = x;
+    state.detailRotationY = y;
+    state.detailRotationZ = z;
+  }
+
+  /**
+   * 使相机四元数姿态切回普通欧拉姿态时强制重新写入目标值。
+   * @returns {void}
+   */
+  function invalidateContentGroupRotationCache() {
+    if (!group || !group.userData) return;
+    group.userData.detailRotationX = null;
+    group.userData.detailRotationY = null;
+    group.userData.detailRotationZ = null;
+  }
+
+  /**
+   * 仅在详情面板透明度目标发生变化时更新材质，避免稳定帧重复写入。
+   * @param {object} targetPanel 详情面板运行时对象。
+   * @param {number} opacity 面板材质透明度。
+   * @returns {void}
+   */
+  function setContentPanelOpacity(targetPanel, opacity) {
+    if (!targetPanel || !targetPanel.mesh || targetPanel.opacityValue === opacity) return;
+    targetPanel.mesh.material.opacity = opacity;
+    targetPanel.opacityValue = opacity;
+  }
+
+  /**
    * 根据当前帧快照放置一个详情歌曲行，避免可见行循环重复读取布局和外观设置。
    * @param {object} row 详情歌曲行对象。
    * @param {number} i 当前可见行序号。
@@ -14808,9 +14954,9 @@ function makeContentListManager() {
   function place(row, i, layout, shelfLook) {
     var delta = row.index - centerSmooth;
     var absD = Math.abs(delta);
-    if (absD > CONTENT_VISIBLE_RADIUS + 0.5) { row.mesh.visible = false; return; }
-    row.mesh.visible = true;
-    row.mesh.renderOrder = 240 + Math.round((CONTENT_VISIBLE_RADIUS + 1 - Math.min(absD, CONTENT_VISIBLE_RADIUS + 1)) * 14);
+    if (absD > CONTENT_VISIBLE_RADIUS + 0.5) { setContentRowVisibility(row, false); return; }
+    setContentRowVisibility(row, true);
+    setContentRowRenderOrder(row, 240 + Math.round((CONTENT_VISIBLE_RADIUS + 1 - Math.min(absD, CONTENT_VISIBLE_RADIUS + 1)) * 14));
     var nowT = uniforms.uTime.value;
     var revealRaw = Math.max(0, Math.min(1, (nowT - rowAnimAt - absD * 0.040) / 0.72));
     var reveal = revealRaw * revealRaw * (3 - 2 * revealRaw);
@@ -14836,13 +14982,14 @@ function makeContentListManager() {
     py += parY * (skullDetail ? 0.024 : 0.036) * parWeight;
     pz += (parY * (skullDetail ? 0.014 : 0.024) - parX * (skullDetail ? 0.010 : 0.020)) * parWeight;
     var scale = (absD < 0.5 ? 1.00 : Math.max(0.66, 0.94 - absD * 0.070)) * (0.90 + reveal * 0.10) * (1 + pulse * 0.052) * (1 - settle * 0.025) * layout.rowScale;
-    row.mesh.position.set(px, py, pz);
-    row.mesh.scale.setScalar(scale);
+    setContentRowPosition(row, px, py, pz);
+    setContentRowScale(row, scale);
     var rowOpacityBase = Math.min(1, (absD < 0.5 ? 1.0 : Math.max(0.34, 1.0 - absD * 0.12)) * reveal + pulse * 0.14);
     var rowOpacityScale = absD < 0.5 ? Math.max(0.94, shelfLook.opacity) : shelfLook.opacity;
-    row.mesh.material.opacity = Math.min(1, rowOpacityBase * rowOpacityScale);
-    row.mesh.rotation.y = (skullDetail ? -0.070 : 0.10) + (1 - reveal) * (skullDetail ? 0.018 : 0.052) + parX * (skullDetail ? 0.010 : 0.018) * parWeight;
-    row.mesh.rotation.x = (skullDetail ? 0.010 : 0) - delta * (skullDetail ? 0.010 : 0.022) - parY * (skullDetail ? 0.006 : 0.014) * parWeight;
+    setContentRowOpacity(row, Math.min(1, rowOpacityBase * rowOpacityScale));
+    var rotationY = (skullDetail ? -0.070 : 0.10) + (1 - reveal) * (skullDetail ? 0.018 : 0.052) + parX * (skullDetail ? 0.010 : 0.018) * parWeight;
+    var rotationX = (skullDetail ? 0.010 : 0) - delta * (skullDetail ? 0.010 : 0.022) - parY * (skullDetail ? 0.006 : 0.014) * parWeight;
+    setContentRowRotation(row, rotationX, rotationY);
   }
 
   function disposeRowList(rowList) {
@@ -14953,6 +15100,11 @@ function makeContentListManager() {
         group = new THREE.Group();
         scene.add(group);
       }
+      group.userData.detailPositionX = null;
+      group.userData.detailPositionY = null;
+      group.userData.detailPositionZ = null;
+      group.userData.detailScaleValue = null;
+      invalidateContentGroupRotationCache();
       var openLayout = detailLayout();
       var openSkullDetail = shouldUseSkullSafeShelfCamera();
       var openDynamicDetail = !openSkullDetail && shouldUseShelfDynamicCamera('shelf-detail') && camera;
@@ -15074,7 +15226,7 @@ function makeContentListManager() {
       var coverBindX = coverBoundDetail ? particles.rotation.y * 0.18 : 0;
       var coverBindY = coverBoundDetail ? particles.rotation.x * -0.16 : 0;
       var coverBindZ = coverBoundDetail ? Math.abs(particles.rotation.y) * 0.030 : 0;
-      group.position.set(
+      setContentGroupPosition(
         layout.x + coverBindX + intro * (skullDetail ? 0.10 : 0.16) + parX * (skullDetail ? 0.024 : 0.030),
         layout.y + coverBindY - intro * (skullDetail ? 0.02 : 0.024) + parY * (skullDetail ? 0.026 : 0.026),
         layout.z + coverBindZ - intro * (skullDetail ? 0.05 : 0.070) + parY * (skullDetail ? 0.014 : 0.016) - parX * (skullDetail ? 0.010 : 0.010)
@@ -15083,26 +15235,29 @@ function makeContentListManager() {
         group.quaternion.copy(camera.quaternion);
         group.rotateX(layout.rx - parY * 0.004);
         group.rotateY(layout.ry + intro * 0.004 + parX * 0.004);
+        invalidateContentGroupRotationCache();
       } else if (dynamicDetail) {
         group.quaternion.copy(camera.quaternion);
         group.rotateX(layout.rx - parY * 0.006);
         group.rotateY(layout.ry + intro * 0.012 + parX * 0.008);
+        invalidateContentGroupRotationCache();
       } else {
         var coverRx = particles && particles.rotation ? particles.rotation.x : 0;
         var coverRy = particles && particles.rotation ? particles.rotation.y : 0;
         var coverRz = particles && particles.rotation ? particles.rotation.z : 0;
-        group.rotation.x += ((coverRx * 0.72 + layout.rx - parY * 0.010) - group.rotation.x) * 0.16;
-        group.rotation.y += ((coverRy * 0.82 + layout.ry + intro * 0.018 + parX * 0.014) - group.rotation.y) * 0.16;
-        group.rotation.z += ((coverRz * 0.70) - group.rotation.z) * 0.14;
+        var nextRotationX = group.rotation.x + ((coverRx * 0.72 + layout.rx - parY * 0.010) - group.rotation.x) * 0.16;
+        var nextRotationY = group.rotation.y + ((coverRy * 0.82 + layout.ry + intro * 0.018 + parX * 0.014) - group.rotation.y) * 0.16;
+        var nextRotationZ = group.rotation.z + ((coverRz * 0.70) - group.rotation.z) * 0.14;
+        setContentGroupRotation(nextRotationX, nextRotationY, nextRotationZ);
       }
-      group.scale.setScalar(layout.scale * (1 - intro * (skullDetail ? 0.020 : 0.035)));
+      setContentGroupScale(layout.scale * (1 - intro * (skullDetail ? 0.020 : 0.035)));
       centerSmooth += (centerTarget - centerSmooth) * 0.18;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       syncRenderedRows(false);
       if (panel && panel.mesh) {
         var pr = Math.max(0, Math.min(1, (uniforms.uTime.value - openAnimAt) / 0.72));
         pr = pr * pr * (3 - 2 * pr);
-        panel.mesh.material.opacity = 0.86 * pr * shelfLook.opacity;
+        setContentPanelOpacity(panel, 0.86 * pr * shelfLook.opacity);
       }
       for (var i = 0; i < rows.length; i++) {
         place(rows[i], i, layout, shelfLook);
@@ -15263,7 +15418,23 @@ function makeContentListManager() {
       var mesh = new THREE.Mesh(geo, mat);
     mesh.renderOrder = 240 + i;
       group.add(mesh);
-      return { canvas: cv, texture: tx, mesh: mesh, song: song, index: i, fxPulse: 0 };
+      return {
+        canvas: cv,
+        texture: tx,
+        mesh: mesh,
+        song: song,
+        index: i,
+        fxPulse: 0,
+        positionX: 0,
+        positionY: 0,
+        positionZ: 0,
+        scaleValue: 1,
+        opacityValue: 0.96,
+        visibleValue: true,
+        renderOrderValue: 240 + i,
+        rotationX: 0,
+        rotationY: 0
+      };
     }
 }
 

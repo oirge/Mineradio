@@ -154,6 +154,48 @@ function testShelfCardPropertyWriteCache() {
 }
 
 /**
+ * 验证歌单详情行稳定属性只在目标值变化时写入，避免每帧重复触发 Three.js 对象更新。
+ * @returns {void}
+ */
+function testShelfContentRowPropertyWriteCache() {
+  const source = readRendererSource();
+  const contentSource = readSourceBetween(source, 'function makeContentListManager() {', '\nfunction compactCount');
+  const placeSource = readSourceBetween(contentSource, '  function place(', '\n\n  function disposeRowList');
+
+  assert.match(contentSource, /function setContentRowPosition\(row, x, y, z\)/);
+  assert.match(contentSource, /function setContentRowScale\(row, scale\)/);
+  assert.match(contentSource, /function setContentRowOpacity\(row, opacity\)/);
+  assert.match(contentSource, /function setContentRowVisibility\(row, visible\)/);
+  assert.match(contentSource, /function setContentRowRenderOrder\(row, renderOrder\)/);
+  assert.match(contentSource, /function setContentRowRotation\(row, x, y\)/);
+  assert.doesNotMatch(placeSource, /row\.mesh\.position\.set\(/);
+  assert.doesNotMatch(placeSource, /row\.mesh\.scale\.setScalar\(/);
+  assert.doesNotMatch(placeSource, /row\.mesh\.material\.opacity\s*=/);
+  assert.doesNotMatch(placeSource, /row\.mesh\.visible\s*=/);
+  assert.doesNotMatch(placeSource, /row\.mesh\.renderOrder\s*=/);
+  assert.doesNotMatch(placeSource, /row\.mesh\.rotation\.[xy]\s*=/);
+}
+
+/**
+ * 验证歌单详情组和面板的稳定属性只在目标值变化时写入，减少持续渲染期间的状态更新。
+ * @returns {void}
+ */
+function testShelfContentGroupPropertyWriteCache() {
+  const source = readRendererSource();
+  const contentSource = readSourceBetween(source, 'function makeContentListManager() {', '\nfunction compactCount');
+  const updateSource = readSourceBetween(contentSource, '    update: function(dt, frameLayout, frameShelfLook) {', '\n    next: function()');
+
+  assert.match(contentSource, /function setContentGroupPosition\(x, y, z\)/);
+  assert.match(contentSource, /function setContentGroupScale\(scale\)/);
+  assert.match(contentSource, /function setContentGroupRotation\(x, y, z\)/);
+  assert.match(contentSource, /function setContentPanelOpacity\(targetPanel, opacity\)/);
+  assert.doesNotMatch(updateSource, /group\.position\.set\(/);
+  assert.doesNotMatch(updateSource, /group\.scale\.setScalar\(/);
+  assert.doesNotMatch(updateSource, /group\.rotation\.[xyz]\s*\+=/);
+  assert.doesNotMatch(updateSource, /panel\.mesh\.material\.opacity\s*=/);
+}
+
+/**
  * 验证 Home 刷新把同一轮已计算的本地歌曲池和听歌统计传给卡片渲染，避免重复扫描。
  * @returns {void}
  */
@@ -207,6 +249,8 @@ test('歌单架布局复用帧级设置快照', testShelfFrameSettingsReuse);
 test('歌单详情复用帧级布局与外观快照', testShelfContentFrameSnapshotReuse);
 test('歌单卡片绘制复用帧级外观快照', testShelfCardFrameSnapshotReuse);
 test('歌单卡片属性写入复用稳定值缓存', testShelfCardPropertyWriteCache);
+test('歌单详情行属性写入复用稳定值缓存', testShelfContentRowPropertyWriteCache);
+test('歌单详情组属性写入复用稳定值缓存', testShelfContentGroupPropertyWriteCache);
 test('Home 刷新复用本地歌曲池与听歌统计快照', testHomeRenderSnapshotReuse);
 test('歌词特效空闲帧提前结束清理路径', testLyricsParticleIdleShortCircuit);
 test('暂停镜头无残留事件时提前结束', testBeatCameraPausedIdleShortCircuit);
