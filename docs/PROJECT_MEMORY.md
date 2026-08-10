@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.9` 已完成本地验证；主循环复用帧时间戳与自适应 FPS，运行时缓存回收只在一秒级采样边界检查，舞台歌词复用歌单状态快照，3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，详情面板与可见行绘制复用帧级外观快照，不改变播放、视觉和交互语义。
+- 当前源码检查点：`v1.3.10` 已完成本地与 GitHub 发布验证；本地搜索按歌名、歌手、文件名依次优先且不匹配专辑名，新增轻量持久化并支持路径恢复的“特别喜欢”歌单，同时保留主渲染、壁纸覆盖层与 3D 歌单架的 CPU/运行内存优化。
 - 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.7`，并保留本地安装器安全修复。
-- 最近正式安装包 Release 基线：`v1.3.8`（2026-08-09，主循环状态快照与时间戳复用；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。`v1.3.9` 已完成本地 NSIS 构建，待 GitHub 发布后更新为正式基线。
+- 最近正式安装包 Release 基线：`v1.3.10`（2026-08-10，搜索排序与特别喜欢歌单；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成或上传 Portable ZIP）。`v1.3.9` 保留为未公开草稿，不再作为正式基线。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,16 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.3.10 搜索排序与特别喜欢歌单
+
+- 本地搜索仅匹配歌名、歌手和音频文件名，匹配与排序优先级为歌名、歌手、文件名；专辑名不再参与搜索。
+- “特别喜欢”使用 `mineradio-special-liked-playlist-v1` 保存轻量歌曲引用，优先按 `localKey`、回退按本地路径恢复，不持久化完整歌曲、封面、歌词、File 或 Promise。
+- 搜索结果、播放队列、本地曲库和主播放控制栏可添加或移除歌曲；选择歌单后点击歌曲或“播放全部”会把播放队列限制为该歌单内容。
+- 本地模式恢复“歌单”标签、歌单面板和红心入口，并修复特别喜欢播放按钮被内联事件拦截的问题；重新导入曲库时返回全部音乐视图。
+- 2026-08-10，涉及 `public/app.js`、`public/app.css`、`public/index.html`、`tests/local-search-cache.test.js`、`tests/special-liked-playlist.test.js`、版本与发布文档；全量 Node 回归 `256/256`、四个关键 JavaScript 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS：安装器 `103345037` 字节 / SHA256 `F767367E9687054F4F144A969F000A4A1CEFAB5CFF68640879A7EEA6DCE69AEA`；blockmap `110396` 字节 / SHA256 `D90D0AC1442E791B0A890C776A7E46B65F12D723CA774347B871A1BDFE83CE60`；`latest.yml` `350` 字节 / SHA256 `F4D9BAA8B16FAA167A4774D098B226046B3181B82EEC5E503BB783140E4E31AA`；SHA256 清单 `272` 字节 / SHA256 `DE344DE18C78B4EC80E8C89031D705B017BA5E558273DF69FD1886F4BC5D5787`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.10` 已标记 Latest；`main` 提交 `8be60c5b3834b51bfc747690430358bcf43c6bc9`，annotated tag 对象 `ca6164b3bf90bd8bc7c423aac3354ddd46890613`；Verify run `31366148876` 成功，远端四个资产大小与 SHA256 均和本地一致。
 
 ## v1.3.9 主渲染缓存回收与帧调度热路径优化
 
