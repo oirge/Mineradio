@@ -575,6 +575,11 @@ body.home-controls-locked #bottom-bar{opacity:0!important;pointer-events:none!im
 .ctrl-btn.active{color:rgba(210,244,241,.90);text-shadow:0 0 12px rgba(0,245,212,.16)}
 .ctrl-btn.liked{color:#ff7a90;text-shadow:0 0 18px rgba(255,122,144,.36)}
 .ctrl-btn.busy{opacity:.55;pointer-events:none}
+#playlist-source-btn.playlist-source-btn{width:auto;min-width:56px;padding:0 9px;gap:5px;border-radius:13px;background:rgba(255,255,255,.035);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);font-family:inherit;font-size:10.5px;font-weight:780;letter-spacing:.15px;color:rgba(255,255,255,.64)}
+#playlist-source-btn .playlist-source-icon{font-size:14px;font-weight:800;line-height:1;color:rgba(255,255,255,.52);transform:translateY(-.5px)}
+#bottom-bar #playlist-source-btn.special{color:#ff9aac!important;background:rgba(255,122,144,.095)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 0 18px rgba(255,122,144,.10)!important;text-shadow:0 0 12px rgba(255,122,144,.24)}
+#bottom-bar #playlist-source-btn.special:hover{color:#ffdbe2!important;background:rgba(255,122,144,.145)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 8px 24px rgba(0,0,0,.16),0 0 22px rgba(255,122,144,.16)!important}
+#playlist-source-btn.special .playlist-source-icon{color:#ff7a90;text-shadow:0 0 12px rgba(255,122,144,.36)}
 #play-mode-btn[data-mode="loop"]{color:rgba(255,255,255,.70)}
 #play-mode-btn[data-mode="shuffle"],#play-mode-btn[data-mode="single"]{color:rgba(210,244,241,.90);text-shadow:0 0 12px rgba(0,245,212,.15)}
 #play-mode-btn.mode-switching #play-mode-icon{animation:play-mode-pop .42s cubic-bezier(.16,1,.3,1)}
@@ -635,6 +640,7 @@ body.diy-mode #bottom-bar{width:min(1160px,calc(100vw - 148px));left:calc(50% - 
 body.diy-mode #bottom-bar.stage-mode{width:min(1160px,calc(100vw - 148px));bottom:18px}
 @media (max-width: 1180px){body.diy-mode #bottom-bar,body.diy-mode #bottom-bar.stage-mode{width:calc(100vw - 142px);padding:9px 14px 12px;left:calc(50% - 34px)}body.diy-mode #controls{grid-template-columns:minmax(240px,1fr) minmax(214px,auto) minmax(260px,auto);gap:8px}.control-cluster{gap:8px}.control-cover{width:44px;height:44px}.control-meta{max-width:138px}.ctrl-btn{width:32px;height:32px}.ctrl-btn svg{width:19px;height:19px}body.diy-mode #play-btn{width:54px;height:54px}body.diy-mode #time-display{min-width:72px;font-size:11px}}
 @media (max-width: 920px){#bottom-bar,#bottom-bar.stage-mode{width:calc(100vw - 28px);padding:9px 14px 12px}#controls{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px}.control-cluster{gap:8px;height:56px}.control-cover{width:44px;height:44px}.control-meta{max-width:170px}.control-title{font-size:12.5px}.control-artist{font-size:11px}.ctrl-btn{width:32px;height:32px}.ctrl-btn svg{width:19px;height:19px}.volume-popover,.quality-popover{bottom:42px}#play-btn{width:54px;height:54px}#time-display{display:none}}
+@media (max-width:920px){#playlist-source-btn.playlist-source-btn{min-width:52px;padding:0 8px}}
 @media (max-width: 620px){#bottom-bar,#bottom-bar.stage-mode{width:calc(100vw - 20px)}#controls{grid-template-columns:1fr}.control-cluster{grid-column:1!important;justify-content:center}.control-cluster.transport{order:1}.control-cluster.actions{order:2}.control-cluster.modes{order:3}.control-track{display:none}.heart-svg{width:19px;height:19px}}
 /* ---------- 控制栏自适应实验：中轴固定 + 左右等宽弹性 ---------- */
 #bottom-bar,
@@ -768,6 +774,7 @@ body.immersive-mode #collect-btn,
 body.immersive-mode #play-mode-btn,
 body.immersive-mode .lyrics-toggle-btn,
 body.immersive-mode #mini-queue-btn,
+body.immersive-mode #playlist-source-btn,
 body.immersive-mode #quality-control,
 body.immersive-mode #volume-control,
 body.immersive-mode #controls-hide-btn,

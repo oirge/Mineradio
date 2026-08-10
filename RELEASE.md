@@ -1,5 +1,18 @@
 +﻿# 发布流程
 
+## v1.3.11 主播放栏歌单切换按钮
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.11`。
+- 主播放控制栏在当前队列按钮后新增“普通 / 喜欢”双态按钮，可直接在全部本地音乐和“特别喜欢”之间切换播放来源。
+- 切换后立即按目标歌单重建队列并从第一首开始播放；“特别喜欢”为空时保留当前队列并提示，不产生空队列或错误状态。
+- 歌单面板浏览状态与实际播放来源使用独立状态，打开“特别喜欢”页面不会误显示为正在播放该歌单。
+- 喜欢状态使用克制的粉色文字、图标和光晕，并提高状态规则优先级，避免通用玻璃悬停覆盖双态反馈。
+- 全量 Node 回归 `257/257`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布继续只生成安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.3.11-Setup.exe` `103345079` 字节；`Mineradio-1.3.11-Setup.exe.blockmap` `110091` 字节；`latest.yml` `350` 字节；`Mineradio-1.3.11-SHA256SUMS.txt` `272` 字节。
+- SHA256：安装器 `31115F258B651281FC5D7057B3C7B8F865F748FA15B30D7B0DC35DB4E876B6D4`；blockmap `1BBDFC3EE593814BC050A40A46A141DFC8E8A7D0CAF32A6B7022927421409EB2`；`latest.yml` `0E3C55ABBB2AA9A7B0B31B338A2F6035E1A3CEB8B06E1BDF1BA8EBE76488F375`；SHA256 清单 `812AB2BC782AC0F0273DB06FA199FF13F0E79B903D14396B944FB1EA53569222`。
+- `latest.yml` 的 Setup SHA512：`BqjdfI8LxlaJ47uU0euyibyqveMjN5Xlf7LF0cQcZ4EIo58Akukg4nVn8KXA0FiPv8ZTWapPXO2CITBSmWhxfw==`。
+
 ## v1.3.10 搜索排序与特别喜欢歌单
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.10`。
