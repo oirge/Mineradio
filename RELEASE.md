@@ -1,5 +1,18 @@
 +﻿# 发布流程
 
+## v1.3.10 搜索排序与特别喜欢歌单
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.10`。
+- 本地搜索范围收紧为歌名、歌手和音频文件名，并按歌名、歌手、文件名的优先级稳定排序，专辑名不再参与匹配。
+- 新增持久化的“特别喜欢”本地歌单，搜索结果、播放队列、本地曲库和主播放控制栏均可添加或移除；保存轻量引用并按本地路径回退恢复。
+- 选择“特别喜欢”后，点击歌曲或“播放全部”会将播放队列替换为该歌单歌曲，上一首和下一首只在其中导航。
+- 本地模式恢复歌单标签、歌单面板和红心按钮，修复特别喜欢播放按钮的事件委托；重新导入曲库时安全返回全部音乐视图。
+- 全量 Node 回归 `256/256`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布继续只生成安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.3.10-Setup.exe` `103345037` 字节；`Mineradio-1.3.10-Setup.exe.blockmap` `110396` 字节；`latest.yml` `350` 字节；`Mineradio-1.3.10-SHA256SUMS.txt` `272` 字节。
+- SHA256：安装器 `F767367E9687054F4F144A969F000A4A1CEFAB5CFF68640879A7EEA6DCE69AEA`；blockmap `D90D0AC1442E791B0A890C776A7E46B65F12D723CA774347B871A1BDFE83CE60`；`latest.yml` `F4D9BAA8B16FAA167A4774D098B226046B3181B82EEC5E503BB783140E4E31AA`；SHA256 清单 `DE344DE18C78B4EC80E8C89031D705B017BA5E558273DF69FD1886F4BC5D5787`。
+- `latest.yml` 的 Setup SHA512：`yMLzhZLwIUM38dikrKNmWCqe3wnp7qAS98ONnwt2nrQaM+CiqvUEe2GQQ1aYyIIzCAQbYPrb0eDexuECBnQ/Hg==`。
+
 ## v1.3.9 主渲染缓存回收与帧调度热路径优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.9`。

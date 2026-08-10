@@ -90,6 +90,9 @@ var AUDIO_FADE_IN_MS = 460;
 var AUDIO_FADE_OUT_MS = 420;
 var AUDIO_SILENCE_GAIN = 0.0001;
 var userPlaylists = [], playlistCoverCache = {}, playlistCoverCacheCount = 0;
+var SPECIAL_LIKED_PLAYLIST_ID = 'special-liked';
+var specialLikedSongRefs = null;
+var localLibraryPlaylistSelection = 'library';
 var CUSTOM_COVER_STORE_KEY = 'mineradio-custom-covers';
 var CUSTOM_LYRIC_STORE_KEY = 'mineradio-custom-lyrics-v1';
 var CUSTOM_LYRIC_PREF_STORE_KEY = 'mineradio-custom-lyric-prefs-v1';
@@ -99,6 +102,7 @@ var PLAYBACK_QUALITY_STORE_KEY = 'mineradio-playback-quality-v1';
 var UPLOAD_TIP_STORE_KEY = 'mineradio-upload-tip-seen';
 var DIY_MODE_STORE_KEY = 'mineradio-diy-player-mode-v1';
 var PLAYLIST_PANEL_PIN_STORE_KEY = 'mineradio-playlist-panel-pinned-v1';
+var SPECIAL_LIKED_PLAYLIST_STORE_KEY = 'mineradio-special-liked-playlist-v1';
 var USER_CAPSULE_AUTO_HIDE_STORE_KEY = 'mineradio-user-capsule-auto-hide-v1';
 var FX_FAB_AUTO_HIDE_STORE_KEY = 'mineradio-fx-fab-auto-hide-v1';
 var CONTROLS_AUTO_HIDE_STORE_KEY = 'mineradio-controls-auto-hide-v1';
@@ -121,6 +125,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   PLAYBACK_QUALITY_STORE_KEY,
   DIY_MODE_STORE_KEY,
   PLAYLIST_PANEL_PIN_STORE_KEY,
+  SPECIAL_LIKED_PLAYLIST_STORE_KEY,
   USER_CAPSULE_AUTO_HIDE_STORE_KEY,
   FX_FAB_AUTO_HIDE_STORE_KEY,
   CONTROLS_AUTO_HIDE_STORE_KEY,
@@ -457,7 +462,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.9';
+var APP_VERSION = '1.3.10';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -16921,7 +16926,29 @@ async function waitForHomeDiscoverIdle(timeout) {
   }
 }
 function localLibraryPlaybackSongs() {
-  return localSearchPool();
+  return localLibraryPlaylistSelection === SPECIAL_LIKED_PLAYLIST_ID ? getSpecialLikedSongs() : localSearchPool();
+}
+function selectLocalPlaylist(kind) {
+  localLibraryPlaylistSelection = kind === SPECIAL_LIKED_PLAYLIST_ID ? SPECIAL_LIKED_PLAYLIST_ID : 'library';
+  resetPlaylistPanelRenderLimit();
+  var panel = document.getElementById('playlist-panel');
+  if (panel) panel.scrollTop = 0;
+  renderLocalLibraryPlaylistPanel({ animate: true });
+  safeSwitchPlaylistTab('playlists', 'local-playlist-select');
+}
+function openSpecialLikedPlaylist() {
+  selectLocalPlaylist(SPECIAL_LIKED_PLAYLIST_ID);
+}
+function openAllLocalLibraryPlaylist() {
+  selectLocalPlaylist('library');
+}
+function playSelectedLocalPlaylist() {
+  var songs = localLibraryPlaybackSongs();
+  if (!songs.length) {
+    showToast(localLibraryPlaylistSelection === SPECIAL_LIKED_PLAYLIST_ID ? '特别喜欢歌单还是空的' : '还没有本地音乐');
+    return;
+  }
+  playLocalLibrarySong(0);
 }
 function openLocalLibraryQueue() {
   clearLocalLibraryPassiveQueue();
@@ -17976,7 +18003,117 @@ function deleteCustomLyricForCurrent() {
 function isCloudSong(song) {
   return false;
 }
+function specialLikedSongPath(song) {
+  if (!song) return '';
+  return String(song.localFilePathAbsolute || song.localPath || (song.localFile && song.localFile.name) || '')
+    .replace(/\\/g, '/').toLowerCase();
+}
+function specialLikedSongKey(song) {
+  if (!song) return '';
+  if (song.localKey) return 'local-key:' + String(song.localKey);
+  var path = specialLikedSongPath(song);
+  if (path) return 'local-path:' + path;
+  return 'local-meta:' + String(song.name || song.title || '') + '|' + String(song.artist || song.albumArtist || '');
+}
+function specialLikedSongRef(song) {
+  return {
+    key: specialLikedSongKey(song),
+    path: specialLikedSongPath(song),
+    name: String(song && (song.name || song.title) || ''),
+    artist: String(song && (song.artist || song.albumArtist) || '')
+  };
+}
+function compactSpecialLikedSongRefs(source) {
+  var refs = [];
+  var seen = Object.create(null);
+  source = Array.isArray(source) ? source : [];
+  for (var i = 0; i < source.length; i++) {
+    var item = source[i];
+    var ref = typeof item === 'string' ? { key: item } : item;
+    if (!ref || typeof ref !== 'object') continue;
+    var key = String(ref.key || '').trim();
+    if (!key || seen[key]) continue;
+    seen[key] = true;
+    refs.push({
+      key: key,
+      path: String(ref.path || '').replace(/\\/g, '/').toLowerCase(),
+      name: String(ref.name || ''),
+      artist: String(ref.artist || '')
+    });
+  }
+  return refs;
+}
+function readSpecialLikedSongRefs() {
+  if (specialLikedSongRefs) return specialLikedSongRefs;
+  try {
+    specialLikedSongRefs = compactSpecialLikedSongRefs(JSON.parse(localStorage.getItem(SPECIAL_LIKED_PLAYLIST_STORE_KEY) || '[]'));
+  } catch (e) {
+    specialLikedSongRefs = [];
+  }
+  return specialLikedSongRefs;
+}
+function writeSpecialLikedSongRefs(refs) {
+  specialLikedSongRefs = compactSpecialLikedSongRefs(refs);
+  setPersistentLocalStorageItem(SPECIAL_LIKED_PLAYLIST_STORE_KEY, JSON.stringify(specialLikedSongRefs));
+}
+function specialLikedRefMatchesSong(ref, song) {
+  if (!ref || !song) return false;
+  if (String(ref.key || '') === specialLikedSongKey(song)) return true;
+  var path = specialLikedSongPath(song);
+  return !!(path && ref.path && path === ref.path);
+}
+function specialLikedSongRefIndex(song) {
+  var refs = readSpecialLikedSongRefs();
+  for (var i = 0; i < refs.length; i++) {
+    if (specialLikedRefMatchesSong(refs[i], song)) return i;
+  }
+  return -1;
+}
+function getSpecialLikedSongs() {
+  var refs = readSpecialLikedSongRefs();
+  var source = localLibrarySongs && localLibrarySongs.length ? localLibrarySongs : (playQueue || []);
+  var lookup = Object.create(null);
+  var pathLookup = Object.create(null);
+  var matched = Object.create(null);
+  var songs = [];
+  for (var i = 0; i < source.length; i++) {
+    var song = source[i];
+    if (!song || song.type !== 'local') continue;
+    lookup[specialLikedSongKey(song)] = song;
+    var path = specialLikedSongPath(song);
+    if (path) pathLookup[path] = song;
+  }
+  for (var refIndex = 0; refIndex < refs.length; refIndex++) {
+    var ref = refs[refIndex];
+    var match = lookup[ref.key] || (ref.path ? pathLookup[ref.path] : null);
+    if (!match) continue;
+    var matchKey = specialLikedSongKey(match);
+    if (matched[matchKey]) continue;
+    matched[matchKey] = true;
+    songs.push(match);
+  }
+  return songs;
+}
+function toggleSpecialLikedSong(song) {
+  if (!song || song.type !== 'local') {
+    showToast('特别喜欢歌单只支持本地音乐');
+    return false;
+  }
+  var refs = readSpecialLikedSongRefs();
+  var index = specialLikedSongRefIndex(song);
+  if (index >= 0) {
+    refs.splice(index, 1);
+    writeSpecialLikedSongRefs(refs);
+    showToast('已移出特别喜欢');
+    return false;
+  }
+  refs.push(specialLikedSongRef(song));
+  writeSpecialLikedSongRefs(refs);
+  showToast('已加入特别喜欢');
+  return true;
+}
 function isSongLiked(song) {
+  if (song && song.type === 'local') return specialLikedSongRefIndex(song) >= 0;
   return !!(song && song.id && likedSongMap[String(song.id)]);
 }
 function ensureLoggedInForAction() {
@@ -17986,12 +18123,12 @@ function ensureLoggedInForAction() {
 function updateLikeButtons(song) {
   song = song || currentCoverSong();
   var liked = isSongLiked(song);
-  var busy = !!(song && song.id && likeBusyMap[String(song.id)]);
+  var busy = !!(song && song.type !== 'local' && song.id && likeBusyMap[String(song.id)]);
   var btn = document.getElementById('heart-btn');
   if (btn) {
     btn.classList.toggle('liked', liked);
     btn.classList.toggle('busy', busy);
-    btn.title = liked ? '取消红心' : '红心喜欢';
+    btn.title = song && song.type === 'local' ? (liked ? '移出特别喜欢' : '加入特别喜欢') : (liked ? '取消红心' : '红心喜欢');
   }
   var collectBtn = document.getElementById('collect-btn');
   if (collectBtn) collectBtn.classList.toggle('busy', collectBusy);
@@ -18011,7 +18148,7 @@ function artistNextPlusIconSvg() {
 function songActionHtml(kind, source, index, song) {
   var liked = isSongLiked(song);
   if (kind === 'like') {
-    return '<button class="song-action-btn' + (liked ? ' liked' : '') + '" title="' + (liked ? '取消红心' : '红心喜欢') + '" onclick="event.stopPropagation();toggleLike' + source + '(' + index + ')">' + heartIconSvg() + '</button>';
+    return '<button class="song-action-btn' + (liked ? ' liked' : '') + '" data-like-index="' + index + '" title="' + (liked ? '移出特别喜欢' : '加入特别喜欢') + '" onclick="event.stopPropagation();toggleLike' + source + '(' + index + ')">' + heartIconSvg() + '</button>';
   }
   return '<button class="song-action-btn" title="收藏到歌单" onclick="event.stopPropagation();collect' + source + '(' + index + ')">' + playlistPlusIconSvg() + '</button>';
 }
@@ -18044,10 +18181,18 @@ function refreshSearchResultActionStates() {
     var song = playlist[i];
     var liked = isSongLiked(song);
     btn.classList.toggle('liked', liked);
-    btn.title = liked ? '取消红心' : '红心喜欢';
+    btn.title = liked ? '移出特别喜欢' : '加入特别喜欢';
   });
 }
 async function toggleLikeSong(song) {
+  if (song && song.type === 'local') {
+    toggleSpecialLikedSong(song);
+    updateLikeButtons(song);
+    refreshSearchResultActionStates();
+    safeRenderQueuePanel('special-liked-toggle', { scrollCurrent: miniQueueOpen });
+    if (queueViewTab === 'playlists') refreshUserPlaylists(true);
+    return;
+  }
   showToast('本地模式不使用红心同步');
 }
 function toggleLikeCurrent() { toggleLikeSong(currentCoverSong()); }
@@ -18423,42 +18568,57 @@ function localSearchPool() {
   scheduleLocalSearchIndexWarmup(localSearchPoolCache.items, { signature: signature, delay: 120 });
   return localSearchPoolCache.items;
 }
+function localSongSearchFileName(song) {
+  if (!song) return '';
+  var value = song.localFileName || song.fileName || (song.localFile && song.localFile.name) ||
+    song.localPath || song.localFilePathAbsolute || song.filePath || song.path || '';
+  value = String(value || '');
+  var slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+  return slash >= 0 ? value.slice(slash + 1) : value;
+}
 /**
- * 拼接本地搜索索引文本。搜索热路径避免创建字段数组和 filter 回调，降低大曲库输入时的短命对象分配。
+ * 拼接本地搜索索引文本，只保留歌名、歌手和音频文件名。
  * @param {object} song 本地歌曲对象。
  * @returns {string} 未归一化的搜索字段文本。
  */
 function localSongSearchText(song) {
   if (!song) return '';
   var text = '';
-  var value = song.name;
+  var value = song.name || song.title;
   if (value) text = String(value);
-  value = song.artist;
+  value = song.artist || song.albumArtist;
   if (value) text += (text ? ' ' : '') + value;
-  value = song.albumArtist;
-  if (value) text += (text ? ' ' : '') + value;
-  value = song.album;
-  if (value) text += (text ? ' ' : '') + value;
-  value = song.localPath;
-  if (value) text += (text ? ' ' : '') + value;
-  value = song.localLyricFileName;
-  if (value) text += (text ? ' ' : '') + value;
-  value = song.localCoverFileName;
+  value = localSongSearchFileName(song);
   if (value) text += (text ? ' ' : '') + value;
   return text;
 }
+function cachedLocalSongSearchFields(song) {
+  if (!song) return { name: '', artist: '', fileName: '' };
+  var key = localSongSearchText(song);
+  if (song._mineradioSearchFieldsKey === key && song._mineradioSearchFields) return song._mineradioSearchFields;
+  var fields = {
+    name: simpleSearchNorm(song.name || song.title),
+    artist: simpleSearchNorm(song.artist || song.albumArtist),
+    fileName: simpleSearchNorm(localSongSearchFileName(song))
+  };
+  song._mineradioSearchFieldsKey = key;
+  song._mineradioSearchFields = fields;
+  return fields;
+}
 /**
- * 读取本地歌曲的归一化搜索文本。该函数会缓存结果，避免输入每个字时重复拼接路径并执行正则归一化。
+ * 读取本地歌曲的归一化搜索文本。该函数会缓存结果，供索引预热兼容使用。
  * @param {object} song 本地歌曲对象。
  * @returns {string} 用于本地搜索匹配的归一化文本。
  */
 function cachedLocalSongSearchText(song) {
-  if (!song) return '';
-  var key = localSongSearchText(song);
-  if (song._mineradioSearchTextKey === key && typeof song._mineradioSearchTextNorm === 'string') return song._mineradioSearchTextNorm;
-  song._mineradioSearchTextKey = key;
-  song._mineradioSearchTextNorm = simpleSearchNorm(key);
-  return song._mineradioSearchTextNorm;
+  var fields = cachedLocalSongSearchFields(song);
+  return fields.name + ' ' + fields.artist + ' ' + fields.fileName;
+}
+function localSearchFieldRank(value, query) {
+  if (!value || !query) return -1;
+  if (value === query) return 0;
+  if (value.indexOf(query) === 0) return 1;
+  return value.indexOf(query) >= 0 ? 2 : -1;
 }
 /**
  * 返回本地搜索默认展示列表。空查询也会频繁触发，显式限量循环可避免通用 slice 额外处理。
@@ -18606,7 +18766,7 @@ function searchResultsDomSignature(songs, key) {
   return signature;
 }
 /**
- * 搜索本地歌曲；命中数量达到界面展示上限后立即停止扫描，缓存命中时直接复用结果数组。
+ * 搜索本地歌曲；按歌名、歌手、文件名的顺序合并精确、前缀和包含命中。
  * @param {string} q 搜索关键词。
  * @returns {Array<object>} 最多 LOCAL_SEARCH_RESULT_LIMIT 条搜索结果。
  */
@@ -18640,15 +18800,32 @@ function searchLocalSongs(q) {
     && nq.indexOf(previous.normalizedQuery) === 0
     && Array.isArray(previous.results);
   var scanPool = canNarrowPrevious ? previous.results : pool;
-  var results = [];
+  var buckets = [[], [], [], [], [], [], [], [], []];
   var scannedAll = true;
   for (var i = 0; i < scanPool.length; i++) {
-    if (cachedLocalSongSearchText(scanPool[i]).indexOf(nq) >= 0) {
-      results.push(scanPool[i]);
-      if (results.length >= LOCAL_SEARCH_RESULT_LIMIT) {
+    var fields = cachedLocalSongSearchFields(scanPool[i]);
+    var rank = localSearchFieldRank(fields.name, nq);
+    if (rank < 0) {
+      rank = localSearchFieldRank(fields.artist, nq);
+      if (rank >= 0) rank += 3;
+    }
+    if (rank < 0) {
+      rank = localSearchFieldRank(fields.fileName, nq);
+      if (rank >= 0) rank += 6;
+    }
+    if (rank >= 0 && buckets[rank].length < LOCAL_SEARCH_RESULT_LIMIT) {
+      buckets[rank].push(scanPool[i]);
+      if (buckets[0].length >= LOCAL_SEARCH_RESULT_LIMIT) {
         scannedAll = i >= scanPool.length - 1;
         break;
       }
+    }
+  }
+  var results = [];
+  for (var bucketIndex = 0; bucketIndex < buckets.length && results.length < LOCAL_SEARCH_RESULT_LIMIT; bucketIndex++) {
+    var bucket = buckets[bucketIndex];
+    for (var bucketItemIndex = 0; bucketItemIndex < bucket.length && results.length < LOCAL_SEARCH_RESULT_LIMIT; bucketItemIndex++) {
+      results.push(bucket[bucketItemIndex]);
     }
   }
   localSearchResultCache = {
@@ -18716,6 +18893,7 @@ function renderSongSearchResults(songs) {
           '<div class="search-result-meta">' + searchResultMetaHtml(s, i) + '</div>' +
         '</div>' +
       '</div>' +
+      songActionHtml('like', 'SearchResult', i, s) +
       '<button class="add-btn" title="下一首播放" onclick="event.stopPropagation();queueSearchResult(' + i + ')">+</button>' +
     '</div>';
   }
@@ -21235,6 +21413,7 @@ function queueItemHtml(row) {
     : '<button class="queue-artist-link" type="button" onclick="event.stopPropagation();openQueueArtist(' + i + ')">' + escHtml(row.artist || '未知歌手') + '</button>' + (row.album ? (' · ' + escHtml(row.album)) : '');
   var actionsHtml = LOCAL_ONLY_MODE
     ? '<div class="qi-act">' +
+      '<button class="' + (row.liked ? 'liked' : '') + '" onclick="event.stopPropagation();toggleLikeQueueIndex(' + i + ')" title="' + (row.liked ? '移出特别喜欢' : '加入特别喜欢') + '">' + heartIconSvg() + '</button>' +
       '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
       '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
       '</div>'
@@ -21518,13 +21697,16 @@ function localLibraryPlaylistDomSignature(songs, renderLimit) {
       queueItemKey(song) + '~' +
       (song.name || song.title || '') + '~' +
       songDisplaySubtitle(song) + '~' +
-      songCoverSignature(song);
+      songCoverSignature(song) + '~' +
+      (isSongLiked(song) ? 1 : 0);
   }
   if (songs.length > renderLimit) signature += '|more:' + songs.length;
   return signature;
 }
 function growPlaylistPanelRenderLimit() {
-  var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
+  var total = LOCAL_ONLY_MODE
+    ? (localLibraryPlaylistSelection === SPECIAL_LIKED_PLAYLIST_ID ? getSpecialLikedSongs() : (localLibrarySongs || [])).length
+    : userPlaylists.length;
   if (!total) return;
   var batch = playlistPanelBatchSize();
   var next = Math.min(total, (playlistPanelRenderLimit || batch) + batch);
@@ -21543,9 +21725,12 @@ function renderLocalLibraryPlaylistPanel(opts) {
   opts = opts || {};
   var $pl = document.getElementById('pl-list');
   if (!$pl) return;
-  var songs = localLibraryPlaybackSongs();
+  var selectedSpecial = localLibraryPlaylistSelection === SPECIAL_LIKED_PLAYLIST_ID;
+  var specialSongs = getSpecialLikedSongs();
+  var songs = selectedSpecial ? specialSongs : localSearchPool();
   var seq = ++playlistRenderSeq;
-  if (!songs.length) {
+  var selectionSignature = selectedSpecial ? 'special-liked' : 'library';
+  if (!songs.length && !localLibrarySongs.length && !selectedSpecial) {
     if (playlistPanelLastDomSignature === 'empty') return;
     playlistPanelLastDomSignature = 'empty';
     $pl.innerHTML = '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">还没有本地音乐<br><button class="fx-mini-btn ghost" type="button" onclick="openLocalFolderImport()" style="margin-top:10px">导入文件夹</button></div>';
@@ -21554,10 +21739,24 @@ function renderLocalLibraryPlaylistPanel(opts) {
   var panelBatch = playlistPanelBatchSize();
   playlistPanelRenderLimit = Math.max(panelBatch, Math.min(songs.length, playlistPanelRenderLimit || panelBatch));
   var visibleLength = Math.min(songs.length, playlistPanelRenderLimit);
-  var domSignature = localLibraryPlaylistDomSignature(songs, visibleLength);
+  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + localLibraryPlaylistDomSignature(songs, visibleLength);
   if (domSignature === playlistPanelLastDomSignature) return;
   playlistPanelLastDomSignature = domSignature;
-  var html = '<div class="pl-section-label">本地音乐库 · ' + songs.length + ' 首</div>';
+  var html = '';
+  if (!selectedSpecial) {
+    var specialCover = specialSongs.length ? songCoverSrc(specialSongs[0], 88) : '';
+    html += '<div class="pl-card" data-special-liked-playlist="1">' +
+      (specialCover ? '<img src="' + specialCover + '" alt="" loading="lazy" decoding="async">' : '<div style="width:44px;height:44px;border-radius:8px;background:rgba(255,122,144,.10);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#ff7a90;font-size:20px">♥</div>') +
+      '<div style="flex:1;min-width:0"><div class="pl-name">特别喜欢</div><div class="pl-sub">' + specialSongs.length + ' 首 · 点击进入歌单</div></div>' +
+      '<button class="song-action-btn" type="button" data-special-liked-play="1" title="播放特别喜欢">▶</button>' +
+    '</div>' +
+    '<div class="pl-section-label">本地音乐库 · ' + songs.length + ' 首</div>';
+  } else {
+    html += '<div class="queue-toolbar"><div class="queue-chip">特别喜欢 · ' + songs.length + ' 首</div><div style="display:flex;gap:6px"><button class="fx-mini-btn ghost" type="button" onclick="playSelectedLocalPlaylist()" style="height:26px;padding:0 10px;font-size:11px">播放全部</button><button class="fx-mini-btn ghost" type="button" onclick="openAllLocalLibraryPlaylist()" style="height:26px;padding:0 10px;font-size:11px">全部音乐</button></div></div>';
+  }
+  if (!songs.length) {
+    html += '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">特别喜欢歌单还是空的<br><span style="display:inline-block;margin-top:8px;font-size:10.5px">在搜索结果、队列或底部红心按钮添加歌曲</span></div>';
+  }
   for (var i = 0; i < visibleLength; i++) {
     var song = songs[i] || {};
     var thumb = songCoverSrc(song, 88);
@@ -21565,6 +21764,7 @@ function renderLocalLibraryPlaylistPanel(opts) {
     html += '<div class="pl-card" data-local-library-index="' + i + '">' +
       imgTag +
       '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(song.name || '本地音乐') + '</div><div class="pl-sub">' + escHtml(songDisplaySubtitle(song) || '本地文件') + '</div></div>' +
+      '<button class="song-action-btn' + (isSongLiked(song) ? ' liked' : '') + '" type="button" data-local-like-index="' + i + '" title="' + (isSongLiked(song) ? '移出特别喜欢' : '加入特别喜欢') + '" onclick="event.stopPropagation();toggleLocalLibraryLike(' + i + ')">' + heartIconSvg() + '</button>' +
     '</div>';
   }
   if (songs.length > visibleLength) {
@@ -21573,6 +21773,10 @@ function renderLocalLibraryPlaylistPanel(opts) {
   $pl.innerHTML = html;
   if (opts.animate && seq === playlistRenderSeq) animateVisiblePanelList($pl, '.pl-card', document.getElementById('playlist-panel'));
 }
+function toggleLocalLibraryLike(index) {
+  var songs = localLibraryPlaybackSongs();
+  if (songs[index]) toggleLikeSong(songs[index]);
+}
 function renderUserPlaylistsList(opts) {
   renderLocalLibraryPlaylistPanel(opts || {});
 }
@@ -21580,6 +21784,21 @@ function renderMyPodcastCollections(opts) {
   renderLocalLibraryPlaylistPanel(opts || {});
 }
 document.getElementById('pl-list').addEventListener('click', function(e){
+  var specialPlay = e.target && e.target.closest ? e.target.closest('[data-special-liked-play]') : null;
+  if (specialPlay) {
+    e.preventDefault();
+    e.stopPropagation();
+    openSpecialLikedPlaylist();
+    playSelectedLocalPlaylist();
+    return;
+  }
+  var specialPlaylist = e.target && e.target.closest ? e.target.closest('[data-special-liked-playlist]') : null;
+  if (specialPlaylist) {
+    e.preventDefault();
+    e.stopPropagation();
+    openSpecialLikedPlaylist();
+    return;
+  }
   var localCard = e.target && e.target.closest ? e.target.closest('[data-local-library-index]') : null;
   if (localCard) {
     e.preventDefault();
@@ -24107,6 +24326,8 @@ async function handleLocalFolderFiles(files, opts) {
   finalizeListenSession(false);
   revokeDiscardedLocalSongObjectUrls(localLibrarySongs, [songs, playlist]);
   localLibrarySongs = songs;
+  localLibraryPlaylistSelection = 'library';
+  resetPlaylistPanelRenderLimit();
   playQueue = songs;
   resetSearchRenderCache();
   currentIdx = 0;
@@ -24210,6 +24431,8 @@ async function handleFiles(files) {
     finalizeListenSession(false);
     revokeDiscardedLocalSongObjectUrls(localLibrarySongs, [[singleSong], playlist]);
     localLibrarySongs = [singleSong];
+    localLibraryPlaylistSelection = 'library';
+    resetPlaylistPanelRenderLimit();
     playQueue = [singleSong];
     resetSearchRenderCache();
     currentIdx = 0;

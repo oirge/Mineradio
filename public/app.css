@@ -154,20 +154,15 @@ body.splash-active.splash-revealing #top-right{opacity:1;transition:opacity 1100
 body.local-only-mode #user-btn,
 body.local-only-mode #user-capsule-hide-btn,
 body.local-only-mode #search-mode-tabs,
-body.local-only-mode #tab-pl,
 body.local-only-mode #tab-podcast,
-body.local-only-mode #pl-pane,
 body.local-only-mode #podcast-pane,
-body.local-only-mode #heart-btn,
 body.local-only-mode #collect-btn,
 body.local-only-mode #quality-control,
 body.local-only-mode #trial-banner,
 body.local-only-mode #login-modal,
 body.local-only-mode #user-modal,
 body.local-only-mode #login-guide-canvas,
-body.local-only-mode .login-link,
-body.local-only-mode #search-results .song-action-btn{display:none!important}
-body.local-only-mode #queue-pane{display:block!important}
+body.local-only-mode .login-link{display:none!important}
 body.local-only-mode .tag-source.local{color:#e6edf3;border-color:rgba(157,184,207,.34);background:rgba(157,184,207,.12)}
 body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs{display:none}
 #search-results{margin-top:8px;background:rgba(12,12,18,0.55);border:1px solid rgba(255,255,255,0.06);border-radius:14px;max-height:360px;overflow-y:auto;overscroll-behavior:contain;backdrop-filter:blur(40px) saturate(1.4);-webkit-backdrop-filter:blur(40px) saturate(1.4);display:none}
