@@ -1,5 +1,14 @@
 +﻿# 发布流程
 
+## v1.3.12 播放来源持久化与喜欢队列稳定性
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.12`。
+- 普通 / 喜欢播放来源写入独立持久化键，重启软件和恢复本地曲库后继续使用上次选择。
+- 恢复曲库时按当前来源重建播放队列；特别喜欢为空时自动安全回退普通歌单。
+- 移除当前喜欢歌曲后同步重建队列，并在播放中自动衔接下一首；打开队列时校验来源一致性。
+- 全量 Node 回归 `259/259`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+
 ## v1.3.11 主播放栏歌单切换按钮
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.11`。

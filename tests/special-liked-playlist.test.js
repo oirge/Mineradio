@@ -116,8 +116,24 @@ test('选择特别喜欢后播放范围只使用该歌单', () => {
   assert.strictEqual(context.playbackSongs(), librarySongs);
 });
 
+test('播放来源选择会持久化，并在本地曲库恢复时优先读取', () => {
+  const appSource = readFile('public/app.js');
+
+  assert.match(appSource, /var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';/);
+  assert.match(appSource, /LOCAL_PLAYBACK_SOURCE_STORE_KEY,\n/);
+  assert.match(appSource, /function readSavedLocalPlaybackPlaylistSelection\(\)/);
+  assert.match(appSource, /setPersistentLocalStorageItem\(LOCAL_PLAYBACK_SOURCE_STORE_KEY, localLibraryPlaybackSelection\)/);
+  assert.match(appSource, /var playbackSource = opts\.restored \? readSavedLocalPlaybackPlaylistSelection\(\) : 'library';/);
+  assert.match(appSource, /restorePlaybackSessionForLocalLibrary\(playQueue,/);
+});
+
 test('控制栏按钮在普通歌单和特别喜欢之间切换', () => {
   const source = readFile('public/app.js');
+  const helperSource = readFunctionSource(
+    source,
+    'function localSongIndexByKey(songs, key)',
+    'function localPlaybackQueueMatchesSongs(songs)',
+  );
   const toggleSource = readFunctionSource(
     source,
     'function toggleLocalPlaybackPlaylistSource()',
@@ -127,11 +143,13 @@ test('控制栏按钮在普通歌单和特别喜欢之间切换', () => {
   const context = {
     SPECIAL_LIKED_PLAYLIST_ID: 'special-liked',
     localLibraryPlaybackSelection: 'library',
+    currentCoverSong: () => ({ localKey: 'current' }),
+    queueItemKey: (song) => song && song.localKey ? `local:${song.localKey}` : '',
     localPlaylistSongs: (kind) => kind === 'special-liked' ? [{ name: '喜欢一' }] : [{ name: '普通一' }],
     playLocalLibrarySong: (index, kind) => { calls.push([index, kind]); return true; },
     showToast: () => {},
   };
-  vm.runInNewContext(`${toggleSource}\nthis.toggleSource = toggleLocalPlaybackPlaylistSource;`, context);
+  vm.runInNewContext(`${helperSource}\n${toggleSource}\nthis.toggleSource = toggleLocalPlaybackPlaylistSource;`, context);
 
   context.toggleSource();
   context.localLibraryPlaybackSelection = 'special-liked';
@@ -143,6 +161,56 @@ test('控制栏按钮在普通歌单和特别喜欢之间切换', () => {
   context.localPlaylistSongs = () => [];
   context.toggleSource();
   assert.deepEqual(calls, [[0, 'special-liked'], [0, 'library']]);
+});
+
+test('喜欢来源移除当前歌曲后重建队列并继续下一首', async () => {
+  const source = readFile('public/app.js');
+  const helperSource = readFunctionSource(
+    source,
+    'function localSongIndexByKey(songs, key)',
+    'function localPlaybackQueueMatchesSongs(songs)',
+  );
+  const toggleSource = readFunctionSource(
+    source,
+    'async function toggleLikeSong(song)',
+    'function toggleLikeCurrent()',
+  );
+  const current = { type: 'local', localKey: 'current', name: '当前' };
+  const next = { type: 'local', localKey: 'next', name: '下一首' };
+  const calls = [];
+  const context = {
+    SPECIAL_LIKED_PLAYLIST_ID: 'special-liked',
+    localLibraryPlaybackSelection: 'special-liked',
+    currentIdx: 0,
+    playing: true,
+    playQueue: [current],
+    currentCoverSong: () => context.playQueue[context.currentIdx],
+    queueItemKey: (song) => song && song.localKey ? `local:${song.localKey}` : '',
+    isSongLiked: () => true,
+    toggleSpecialLikedSong: () => { context.likedSongs = [next]; },
+    localPlaylistSongs: () => context.likedSongs || [],
+    setLocalPlaybackPlaylistSelection: (kind) => { context.localLibraryPlaybackSelection = kind; },
+    cloneSongList: (songs) => songs.slice(),
+    markQueueContentChanged: () => {},
+    playQueueAt: (index, opts) => { calls.push([index, opts]); return Promise.resolve(); },
+    updateControlTrackInfo: () => {},
+    updateLikeButtons: () => {},
+    refreshSearchResultActionStates: () => {},
+    safeRenderQueuePanel: () => {},
+    queueViewTab: 'queue',
+    refreshUserPlaylists: () => {},
+    miniQueueOpen: false,
+    showToast: () => {},
+  };
+  vm.runInNewContext(`${helperSource}\n${toggleSource}\nthis.toggle = toggleLikeSong;`, context);
+
+  await context.toggle(current);
+
+  assert.deepEqual(context.playQueue, [next]);
+  assert.equal(context.currentIdx, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 0);
+  assert.equal(calls[0][1].manual, true);
 });
 
 test('本地模式显示歌单与红心入口并绑定特别喜欢事件', () => {
