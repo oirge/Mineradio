@@ -11,9 +11,9 @@
 - 新增 `tests/local-m4a-support.test.js` 与 M4A 缓存回归；合并 WAV/OGG、本地曲库和特别喜欢功能后全量 Node 回归 `266/266`，关键 JavaScript 语法检查和 `git diff --check` 通过。
 - 说明：M4A 容器标签解析成功不代表其中每一种音频编码都能由 Electron/Chromium 解码；AAC/MPEG-4 与 ALAC 等编码需要按实际运行环境验证。
 - Windows x64 NSIS 构建使用 Electron `43.4.0` 完成；安装器 `101394836` 字节，blockmap `105865` 字节，`latest.yml` `347` 字节。
-- SHA256：安装器 `0DB344D41221BEDA912E29DE4BD20EC4B6FB6E5E7E167C5A344BEF674FFF6651`；blockmap `041AA61E579AD981DE6D5F2DFDA7EC4FAB9F71AD22D6C0D050965F6F0DEB3D11`；`latest.yml` `491786B9F04E6B8E53D3D901D51FBC77A3DB28FD9B40C2CE86D23698047E326F`；SHA256 清单随发布资产上传。
+- SHA256：安装器 `0DB344D41221BEDA912E29DE4BD20EC4B6FB6E5E7E167C5A344BEF674FFF6651`；blockmap `041AA61E579AD981DE6D5F2DFDA7EC4FAB9F71AD22D6C0D050965F6F0DEB3D11`；`latest.yml` `491786B9F04E6B8E53D3D901D51FBC77A3DB28FD9B40C2CE86D23698047E326F`；SHA256 清单 `3E3E1A6DD13AA3E291C2E76790C1597BE0B22208991995C9225FD0DBE97F6C43`。
 - `latest.yml` 的 Setup SHA512：`IPTyVH4I6OeHhKHh5GOHgGPe+XBqlQ4VyyA6mOhVOvjlWj1KTyG2eLSFEbWvvhY5089ng48D9DySt1/jwXKRNQ==`。
-- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.4.2`，正式 Latest；远端资产大小与 SHA256 已复核一致。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.4.2`，正式 Latest；四个远端资产已重新下载，大小与 SHA256 均和本地产物一致。`.github/workflows/release.yml` 已改为仅手动触发，避免发布事件自动重建并覆盖已验证资产。
 
 ## v1.3.13 本地曲库空状态与播放来源恢复稳定性
 
