@@ -1,0 +1,62 @@
+name: 🐛 Bug Report
+description: 报告一个问题
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你报告问题！请填写以下信息帮助我们定位问题。
+        
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 详细描述遇到的问题
+      placeholder: 发生了什么？
+    validations:
+      required: true
+      
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重现步骤
+      description: 如何重现这个问题？
+      placeholder: |
+        1. 打开应用
+        2. 点击...
+        3. 看到错误...
+    validations:
+      required: true
+      
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你期望发生什么？
+    validations:
+      required: true
+      
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 应用版本号（在关于页面查看）
+      placeholder: v1.4.0
+    validations:
+      required: true
+      
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      placeholder: Windows 11 22H2
+    validations:
+      required: true
+      
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 如有相关日志或截图，请粘贴在这里
+      placeholder: 将截图拖放到这里
