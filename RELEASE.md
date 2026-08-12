@@ -13,6 +13,7 @@
 - Windows x64 NSIS 构建使用 Electron `43.4.0` 完成；安装器 `101394836` 字节，blockmap `105865` 字节，`latest.yml` `347` 字节。
 - SHA256：安装器 `0DB344D41221BEDA912E29DE4BD20EC4B6FB6E5E7E167C5A344BEF674FFF6651`；blockmap `041AA61E579AD981DE6D5F2DFDA7EC4FAB9F71AD22D6C0D050965F6F0DEB3D11`；`latest.yml` `491786B9F04E6B8E53D3D901D51FBC77A3DB28FD9B40C2CE86D23698047E326F`；SHA256 清单随发布资产上传。
 - `latest.yml` 的 Setup SHA512：`IPTyVH4I6OeHhKHh5GOHgGPe+XBqlQ4VyyA6mOhVOvjlWj1KTyG2eLSFEbWvvhY5089ng48D9DySt1/jwXKRNQ==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.4.2`，正式 Latest；远端资产大小与 SHA256 已复核一致。
 
 ## v1.3.13 本地曲库空状态与播放来源恢复稳定性
 

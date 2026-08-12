@@ -10,7 +10,7 @@
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.4.2` 已完成合并验证，修复标准 M4A 标签、封面、后置 `moov`、旧缓存失效和本地文件夹过滤，同时保留 WAV/OGG、特别喜欢歌单、播放来源切换、空曲库恢复和 CPU/运行内存优化。
 - 当前工作分支：`codex/release-v1.2.87`，待本次发布后同步到 GitHub `origin/main` 的 `v1.4.2`。
-- 最近正式安装包 Release 基线：`v1.3.13`；`v1.4.2` 已完成本地安装器构建，待 GitHub 发布后补录远端资产校验。
+- 最近正式安装包 Release 基线：`v1.4.2`（2026-08-12，GitHub Latest；四个远端资产大小与 SHA256 均已和本地一致）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -43,6 +43,7 @@
 - 全量 Node 回归 `266/266` 通过；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/overlay-preload.js` 语法检查和 `git diff --check` 通过。
 - Windows x64 NSIS：安装器 `101394836` 字节 / SHA256 `0db344d41221beda912e29de4bd20ec4b6fb6e5e7e167c5a344bef674fff6651`；blockmap `105865` 字节 / SHA256 `041aa61e579ad981de6d5f2dfda7ec4fab9f71ad22d6c0d050965f6f0deb3d11`；`latest.yml` `347` 字节 / SHA256 `491786b9f04e6b8e53d3d901d51fbc77a3db28fd9b40c2ce86d23698047e326f`。
 - `latest.yml` 的 Setup SHA512：`IPTyVH4I6OeHhKHh5GOHgGPe+XBqlQ4VyyA6mOhVOvjlWj1KTyG2eLSFEbWvvhY5089ng48D9DySt1/jwXKRNQ==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.4.2` 已标记为正式 Latest；`main` 提交 `3eb4faad47492626341de3d5a77b3e6e31cd7010`，远端资产大小和 SHA256 已通过 GitHub API 复核。
 
 ## v1.3.13 本地曲库空状态与播放来源恢复稳定性
 
