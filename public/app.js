@@ -114,7 +114,7 @@ var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
-var LOCAL_METADATA_TAG_SCHEMA = 1;
+var LOCAL_METADATA_TAG_SCHEMA = 2;
 var PERSISTENT_UI_STATE_KEYS = [
   VOLUME_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
@@ -457,7 +457,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.3.9';
+var APP_VERSION = '1.4.2';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -7264,7 +7264,7 @@ async function putLocalLyricCacheRecord(record) {
 function canUseCachedLocalMetadata(song, record) {
   if (!record || !record.localMetadataLoaded) return false;
   var fileName = String(song && (song.localPath || song.localFilePathAbsolute || (song.localFile && song.localFile.name) || '') || '');
-  if (!/\.flac$/i.test(fileName)) return true;
+  if (!/\.(flac|m4a)$/i.test(fileName)) return true;
   return Number(record.localMetadataTagSchema) === LOCAL_METADATA_TAG_SCHEMA;
 }
 /**
@@ -16576,7 +16576,7 @@ function homeListenSummary() {
 }
 function fallbackHomeTiles() {
   return [
-    { kind: 'local', title: '导入本地音乐', sub: 'MP3 / FLAC 文件夹' },
+    { kind: 'local', title: '导入本地音乐', sub: 'MP3 / FLAC / M4A 文件夹' },
     { kind: 'search', title: '搜索本地库', sub: '歌名 / 歌手 / 文件名', query: '' },
     { kind: 'local', title: '匹配歌词', sub: '同名 LRC / TXT' },
     { kind: 'local', title: '匹配封面', sub: '同名图片或内嵌封面' },
@@ -16678,12 +16678,12 @@ function renderHomeDiscover() {
   if (weatherTitle) weatherTitle.textContent = '本地音乐库';
   if (weatherKicker) weatherKicker.textContent = 'Mineradio · Local Player';
   if (sub) sub.textContent = localSongs.length
-    ? '已导入本地音乐，支持 MP3 / FLAC、同名 LRC/TXT 歌词和封面图片。'
+    ? '已导入本地音乐，支持 MP3 / FLAC / M4A、同名 LRC/TXT 歌词和封面图片。'
     : '导入音乐文件夹后即可本地播放，不需要登录任何账号。';
   if (weatherMeta) {
     var localMeta = [
       localSongs.length ? ('已导入 ' + localSongs.length + ' 首') : '尚未导入',
-      'MP3 / FLAC',
+      'MP3 / FLAC / M4A',
       'LRC / TXT 歌词'
     ];
     weatherMeta.innerHTML = localMeta.map(function(text){ return '<span class="home-weather-pill">' + escHtml(text) + '</span>'; }).join('');
@@ -16701,7 +16701,7 @@ function renderHomeDiscover() {
   var localSearchTitle = document.getElementById('home-library-title');
   var localSearchSub = document.getElementById('home-library-sub');
   if (localImportTitle) localImportTitle.textContent = '导入文件夹';
-  if (localImportSub) localImportSub.textContent = '选择包含 MP3 / FLAC 的目录';
+  if (localImportSub) localImportSub.textContent = '选择包含 MP3 / FLAC / M4A 的目录';
   if (localDailyTitle) localDailyTitle.textContent = firstLocal ? firstLocal.name : '播放本地音乐';
   if (localDailySub) localDailySub.textContent = firstLocal ? songDisplaySubtitle(firstLocal) : '导入后从第一首开始播放';
   if (localQueueTitle) localQueueTitle.textContent = secondLocal ? secondLocal.name : '本地队列';
@@ -19607,8 +19607,16 @@ function canReadEmbeddedFlacLyrics(song) {
 function canReadEmbeddedFlacCover(song) {
   return !!(song && song.localFile && /\.flac$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
 }
+/**
+ * 判断歌曲是否可能包含 M4A 内嵌封面，供后台轻量扫描失败后保留前台重试状态。
+ * @param {object} song 本地歌曲对象。
+ * @returns {boolean} 文件是否为 M4A。
+ */
+function canReadEmbeddedM4aCover(song) {
+  return !!(song && song.localFile && /\.m4a$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
+}
 function canReadEmbeddedCover(song) {
-  return !!(song && song.localFile && /\.(mp3|flac)$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
+  return !!(song && song.localFile && /\.(mp3|flac|m4a)$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
 }
 function maybeApplyLocalLyricsForSong(song, opts) {
   opts = opts || {};
@@ -22067,7 +22075,7 @@ document.addEventListener('visibilitychange', function(){
 //  文件拖放
 // ============================================================
 var LOCAL_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a)$/i;
-var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac)$/i;
+var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac|m4a)$/i;
 var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt)$/i;
 var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|png|webp)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
@@ -22949,12 +22957,243 @@ async function extractFlacLocalMetadata(file, opts) {
   tags._mineradioScanComplete = !payloadIncomplete && (commentResolved || session.reachedLastBlock || session.fullyRead);
   return tags;
 }
+var M4A_MAX_ATOM_HEADERS = 4096;
+var M4A_MAX_TEXT_BYTES = 1024 * 1024;
+var M4A_MAX_COVER_BYTES = 64 * 1024 * 1024;
+var localM4aMetadataSessionBatches = [];
+/**
+ * 读取 MP4/M4A atom 头，支持普通尺寸、扩展尺寸和延伸到父容器末尾的零尺寸。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {number} offset atom 起始绝对偏移。
+ * @param {number} parentEnd 父容器结束偏移，不含该位置。
+ * @returns {Promise<object|null>} atom 描述；短读或越界时返回 null。
+ */
+async function readM4aAtomHeader(file, offset, parentEnd) {
+  var head = await readLocalFileBytes(file, offset, Math.min(parentEnd, offset + 16));
+  if (head.length < 8) return null;
+  var size32 = uint32BE(head, 0);
+  var type = asciiFromBytes(head, 4, 4);
+  var headerSize = 8;
+  var size = size32;
+  if (size32 === 1) {
+    if (head.length < 16) return null;
+    var high = uint32BE(head, 8);
+    var low = uint32BE(head, 12);
+    size = high * 0x100000000 + low;
+    headerSize = 16;
+  } else if (size32 === 0) {
+    size = parentEnd - offset;
+  }
+  if (!type || !Number.isSafeInteger(size) || size < headerSize || offset + size > parentEnd) return null;
+  return { type: type, offset: offset, headerSize: headerSize, size: size, end: offset + size };
+}
+/**
+ * 查找 M4A 顶层 moov atom；扫描只读取各顶层 atom 头，不读取 mdat 音频数据。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制后台轻量扫描范围。
+ * @returns {Promise<object>} moov 描述及扫描完成状态。
+ */
+async function readM4aMoovDescriptor(file, opts) {
+  opts = opts || {};
+  var fileSize = localFileSize(file) || 0;
+  var scanLimit = opts.light ? Math.min(fileSize, LOCAL_ASSET_LIGHT_SCAN_BYTES) : fileSize;
+  var pos = 0;
+  var count = 0;
+  while (pos + 8 <= fileSize && pos < scanLimit && count++ < M4A_MAX_ATOM_HEADERS) {
+    var atom = await readM4aAtomHeader(file, pos, fileSize);
+    if (!atom) return { moov: null, complete: false };
+    if (atom.type === 'moov') {
+      // 轻量范围只覆盖到 moov 头时不进入容器，避免后台一次性读取完整 metadata。
+      if (atom.end > scanLimit) return { moov: null, complete: false };
+      return { moov: atom, complete: atom.end <= scanLimit };
+    }
+    pos = atom.end;
+    if (pos > scanLimit) return { moov: null, complete: false };
+  }
+  return { moov: null, complete: pos >= fileSize };
+}
+/**
+ * 在 moov/udta/meta 容器路径中定位 ilst，跳过不包含展示标签的音频轨道 atom。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {object} container 当前容器 atom。
+ * @param {number} depth 当前递归层级。
+ * @returns {Promise<object|null>} ilst atom 描述；未找到时返回 null。
+ */
+async function findM4aIlstAtom(file, container, depth) {
+  if (!container || depth > 4) return null;
+  var childStart = container.offset + container.headerSize + (container.type === 'meta' ? 4 : 0);
+  var childCount = 0;
+  while (childStart + 8 <= container.end && childCount++ < M4A_MAX_ATOM_HEADERS) {
+    var child = await readM4aAtomHeader(file, childStart, container.end);
+    if (!child) return null;
+    if (child.type === 'ilst') return child;
+    if (child.type === 'moov' || child.type === 'udta' || child.type === 'meta') {
+      var nested = await findM4aIlstAtom(file, child, depth + 1);
+      if (nested) return nested;
+    }
+    childStart = child.end;
+  }
+  return null;
+}
+/**
+ * 读取并缓存一次 M4A metadata 目录描述，合并同一文件的并发元数据和封面请求。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制后台轻量扫描范围。
+ * @returns {Promise<object>} ilst 描述与是否完成扫描。
+ */
+function readM4aMetadataSession(file, opts) {
+  opts = opts || {};
+  var fullPath = localFullPath(file);
+  var light = !!opts.light;
+  for (var i = 0; i < localM4aMetadataSessionBatches.length; i++) {
+    var cached = localM4aMetadataSessionBatches[i];
+    if (cached.file !== file && (!fullPath || cached.fullPath !== fullPath)) continue;
+    // 前台完整解析不能复用后台轻量批次，否则 moov 跨范围时会把空结果误当成最终结果。
+    if (light || !cached.light) return cached.promise;
+  }
+  var batch = {
+    file: file,
+    fullPath: fullPath,
+    light: light,
+    complete: false,
+    promise: null
+  };
+  batch.promise = (async function(){
+    var descriptor = await readM4aMoovDescriptor(file, { light: light });
+    if (!descriptor.moov) return { ilst: null, complete: descriptor.complete };
+    var ilst = await findM4aIlstAtom(file, descriptor.moov, 0);
+    return { ilst: ilst, complete: descriptor.complete };
+  })().finally(function(){
+    var index = localM4aMetadataSessionBatches.indexOf(batch);
+    if (index >= 0) localM4aMetadataSessionBatches.splice(index, 1);
+  });
+  localM4aMetadataSessionBatches.push(batch);
+  return batch.promise;
+}
+/**
+ * 读取 M4A ilst 项中的 data 子 atom。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {object} item ilst 项 atom。
+ * @returns {Promise<object|null>} data atom 描述及数据起止偏移。
+ */
+async function readM4aItemDataAtom(file, item) {
+  var pos = item.offset + item.headerSize;
+  while (pos + 8 <= item.end) {
+    var child = await readM4aAtomHeader(file, pos, item.end);
+    if (!child) return null;
+    if (child.type === 'data') {
+      // 标准 data atom 的类型指示器和区域指示器各占 4 字节，值从 payload 第 8 字节开始。
+      var dataStart = child.offset + child.headerSize + 8;
+      if (dataStart > child.end) return null;
+      var dataTypeBytes = await readLocalFileBytes(file, child.offset + child.headerSize, child.offset + child.headerSize + 4);
+      var dataType = dataTypeBytes.length === 4 ? uint24BE(dataTypeBytes, 1) : 0;
+      return { atom: child, dataStart: dataStart, dataEnd: child.end, dataType: dataType };
+    }
+    pos = child.end;
+  }
+  return null;
+}
+/**
+ * 把 M4A data atom 的文本字节解码为播放器展示值。
+ * @param {Uint8Array} bytes 文本 payload。
+ * @param {number} dataType iTunes data 类型。
+ * @returns {string} 归一化文本。
+ */
+function decodeM4aText(bytes, dataType) {
+  var value = dataType === 2 ? decodeBytesWithEncoding(bytes, 'utf-16be') : utf8FromBytes(bytes, 0, bytes.length);
+  return normalizeLocalMetadataValue(value);
+}
+/**
+ * 将 M4A ilst 项类型映射为播放器字段。
+ * @param {string} type ilst 项类型。
+ * @returns {string} 展示字段名；不支持的项返回空字符串。
+ */
+function m4aMetadataKey(type) {
+  if (type === '\u00a9nam') return 'title';
+  if (type === '\u00a9ART') return 'artist';
+  if (type === '\u00a9alb') return 'album';
+  if (type === 'aART') return 'albumArtist';
+  if (type === '\u00a9day') return 'year';
+  if (type === 'trkn') return 'track';
+  return '';
+}
+/**
+ * 解析 M4A ilst 中的展示标签和内嵌封面。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {object} ilst ilst atom 描述。
+ * @param {{tags?:object,cover?:boolean}} result 消费者结果对象。
+ * @returns {Promise<void>} 解析完成 Promise。
+ */
+async function parseM4aIlst(file, ilst, result) {
+  var pos = ilst.offset + ilst.headerSize;
+  var count = 0;
+  while (pos + 8 <= ilst.end && count++ < M4A_MAX_ATOM_HEADERS) {
+    var item = await readM4aAtomHeader(file, pos, ilst.end);
+    if (!item) break;
+    var data = await readM4aItemDataAtom(file, item);
+    if (data) {
+      var type = data.atom.type;
+      if (item.type === 'covr' && result.cover !== undefined) {
+        var coverLength = data.dataEnd - data.dataStart;
+        if (coverLength > 0 && coverLength <= M4A_MAX_COVER_BYTES) {
+          var coverBytes = await readLocalFileBytes(file, data.dataStart, data.dataEnd);
+          if (coverBytes.length === coverLength) {
+            var mime = data.dataType === 13 ? 'image/jpeg' : (data.dataType === 14 ? 'image/png' : '');
+            if (!mime) mime = coverBytes[0] === 0x89 && coverBytes[1] === 0x50 ? 'image/png' : 'image/jpeg';
+            result.cover = blobBytesToCoverBlob(coverBytes, mime);
+          }
+        }
+      } else if (result.tags) {
+        var key = m4aMetadataKey(item.type);
+        var payloadLength = data.dataEnd - data.dataStart;
+        if (key && payloadLength > 0 && payloadLength <= M4A_MAX_TEXT_BYTES) {
+          var payload = await readLocalFileBytes(file, data.dataStart, data.dataEnd);
+          if (payload.length === payloadLength) {
+            if (key === 'track') {
+              if (payload.length >= 4) putLocalMetadataTag(result.tags, key, String((payload[2] << 8) | payload[3]));
+            } else {
+              putLocalMetadataTag(result.tags, key, decodeM4aText(payload, data.dataType || 1));
+            }
+          }
+        }
+      }
+    }
+    pos = item.end;
+  }
+}
+/**
+ * 解析 M4A iTunes 标签，并在轻量目录未覆盖 moov 时标记为可重试。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制后台轻量扫描范围。
+ * @returns {Promise<object>} 播放器展示标签。
+ */
+async function extractM4aLocalMetadata(file, opts) {
+  var session = await readM4aMetadataSession(file, opts);
+  var tags = {};
+  if (session.ilst) await parseM4aIlst(file, session.ilst, { tags: tags });
+  tags._mineradioScanComplete = !!session.complete;
+  return tags;
+}
+/**
+ * 解析 M4A covr 封面并返回短生命周期 Blob，避免先构造完整 data URL。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制后台轻量扫描范围。
+ * @returns {Promise<Blob|null>} 封面 Blob；没有封面时返回 null。
+ */
+async function extractM4aEmbeddedCoverSource(file, opts) {
+  var session = await readM4aMetadataSession(file, opts);
+  if (!session.ilst) return null;
+  var result = { cover: null };
+  await parseM4aIlst(file, session.ilst, result);
+  return result.cover || null;
+}
 async function extractLocalMetadataTags(file, opts) {
   if (!file) return {};
   var name = String(file.name || '').toLowerCase();
   try {
     if (/\.mp3$/i.test(name)) return await extractMp3LocalMetadata(file);
     if (/\.flac$/i.test(name)) return await extractFlacLocalMetadata(file, opts);
+    if (/\.m4a$/i.test(name)) return await extractM4aLocalMetadata(file, opts);
   } catch (e) {
     console.warn('[LocalMetadata]', file && file.name, e);
   }
@@ -23223,6 +23462,7 @@ async function extractEmbeddedCoverSource(file, opts) {
   try {
     if (/\.mp3$/i.test(name)) return await extractMp3EmbeddedCoverSource(file);
     if (/\.flac$/i.test(name)) return await extractFlacEmbeddedCoverSource(file, opts);
+    if (/\.m4a$/i.test(name)) return await extractM4aEmbeddedCoverSource(file, opts);
   } catch (e) {
     console.warn('[LocalEmbeddedCover]', file && file.name, e);
   }
@@ -23388,7 +23628,7 @@ function ensureLocalCoverForSong(song, opts) {
     var embeddedSource = !coverSource;
     if (!coverSource) coverSource = await extractEmbeddedCoverSource(song.localFile, { light: !!opts.background });
     if (!coverSource) {
-      if (opts.background && !song.localCoverFile && canReadEmbeddedFlacCover(song)) {
+      if (opts.background && !song.localCoverFile && (canReadEmbeddedFlacCover(song) || canReadEmbeddedM4aCover(song))) {
         song.localCoverLightScanned = true;
       } else {
         song.localCoverLoaded = true;
@@ -23422,7 +23662,7 @@ function ensureLocalCoverForSong(song, opts) {
     return true;
   })().catch(function(err){
     console.warn('[LocalCover]', song && song.name, err);
-    if (opts.background && !song.localCoverFile && canReadEmbeddedFlacCover(song)) song.localCoverLightScanned = true;
+    if (opts.background && !song.localCoverFile && (canReadEmbeddedFlacCover(song) || canReadEmbeddedM4aCover(song))) song.localCoverLightScanned = true;
     else song.localCoverLoaded = true;
     syncLocalSongAssetFields(song);
     if (song.localCoverLoaded) scheduleLocalAssetCacheWrite(song);
@@ -24086,7 +24326,7 @@ async function handleLocalFolderFiles(files, opts) {
   opts = opts || {};
   var songs = createLocalSongsFromFiles(files, { folderOnly: !!opts.folderOnly });
   if (!songs.length) {
-    showToast(opts.folderOnly ? '文件夹里没有找到 MP3 / FLAC 音乐' : '没有找到可播放的本地音乐');
+    showToast(opts.folderOnly ? '文件夹里没有找到 MP3 / FLAC / M4A 音乐' : '没有找到可播放的本地音乐');
     return;
   }
   var libraryFolderPath = opts.folderPath || savedLocalLibraryFolderPath();

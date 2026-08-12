@@ -135,3 +135,4 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `cameraPoseSyncState`、`cameraPoseNeedsRefresh`、`cameraPoseOverrideActive`、`shelfHoverPointerScratch`、`updateRipples`、`usedMask` 或 `普通相机姿态缓存` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `主循环 performance.now 时间戳复用`、`refreshShelfRenderFrameState`、`frameShelfState`、`updateStageLyrics3D 歌单状态快照`、`shelfManager.getMode 同帧重复`、`hasOpenContent 同帧重复`、`shelfAlwaysVisible 同帧重复` 或 `空 Home 波形时间戳` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `sampleRenderPerf 缓存回收`、`maybeTrimRuntimeCaches 采样边界`、`主循环复用自适应 FPS`、`frameFps` 或 `shouldSkipAdaptiveRenderFrame 时间戳复用` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `M4A 播放失败`、`m4a 元数据`、`moov`、`ilst`、`data atom`、`covr`、`audio/mp4`、`M4A 封面`、`M4A 标签缓存` 或 `ALAC 编码兼容` 时，必须优先读取 `.context/pitfalls/mineradio-m4a-metadata-playback.md`。

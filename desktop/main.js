@@ -162,10 +162,11 @@ function waitForServer(server) {
   });
 }
 
-const LOCAL_LIBRARY_EXTS = new Set(['.mp3', '.flac', '.lrc', '.txt', '.jpg', '.jpeg', '.png', '.webp']);
+const LOCAL_LIBRARY_EXTS = new Set(['.mp3', '.flac', '.m4a', '.lrc', '.txt', '.jpg', '.jpeg', '.png', '.webp']);
 const LOCAL_LIBRARY_MIME = {
   '.mp3': 'audio/mpeg',
   '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
   '.lrc': 'text/plain',
   '.txt': 'text/plain',
   '.jpg': 'image/jpeg',

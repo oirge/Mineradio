@@ -1,5 +1,17 @@
 +﻿# 发布流程
 
+## v1.4.2 M4A 播放与元数据修复
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.2`。
+- 桌面曲库、文件夹导入、本地文件代理和文件选择器统一支持 `.m4a` / `audio/mp4`。
+- 新增 M4A MP4 atom 解析：后置 `moov`、`udta/meta/ilst`、标准 8 字节 `data` 值头、UTF-8/UTF-16 标签、`trkn`、JPEG/PNG `covr`。
+- 修复旧实现把标准 `data` atom 当作 12 字节值头的问题；该错误会让真实 M4A 的所有标签和封面同时错位。
+- 后台轻量读取不进入超出范围的 `moov`，当前播放前台路径会执行完整重试；不读取 `mdat` 音频内容。
+- M4A 标签缓存 schema 从 `1` 升为 `2`，旧测试版错误元数据会自动重新解析，时长、文件大小和独立封面缩略图仍可复用。
+- 新增 `tests/local-m4a-support.test.js` 与 M4A 缓存回归；全量 Node 回归 `254/254`，关键 JavaScript 语法检查和 `git diff --check` 通过。
+- 说明：M4A 容器标签解析成功不代表其中每一种音频编码都能由 Electron/Chromium 解码；AAC/MPEG-4 与 ALAC 等编码需要按实际运行环境验证。
+- Windows x64 NSIS 构建完成后补录安装器、blockmap、`latest.yml` 和 SHA256 校验值。
+
 ## v1.3.9 主渲染缓存回收与帧调度热路径优化
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.9`。

@@ -162,6 +162,44 @@ function testOldFlacLibraryIndexForcesMetadataReparse() {
 }
 
 /**
+ * 验证 M4A 标签解析 schema 变化后不会继续复用错误测试版元数据。
+ * @returns {void}
+ */
+function testOldM4aAssetCacheForcesMetadataReparse() {
+  const source = readRendererSource();
+  const context = {
+    LOCAL_METADATA_TAG_SCHEMA: 2,
+    LOCAL_METADATA_TEXT_FIELDS: ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'],
+    LOCAL_METADATA_VALUE_FIELDS: ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'],
+    Object,
+    String,
+    invalidateSongCoverCache() {},
+    localAssetFileSignature() { return ''; },
+    syncLocalSongAssetFields() {},
+  };
+  vm.runInNewContext(
+    readMetadataCacheGateSource(source)
+      + readAssetCacheApplySource(source)
+      + '\nthis.applyRecord = applyLocalAssetCacheToSong;',
+    context,
+  );
+
+  const song = { type: 'local', localKey: 'song-a', localFile: { name: 'song.m4a' } };
+  const record = {
+    id: 'song-a',
+    localMetadataLoaded: true,
+    localMetadataTagSchema: 1,
+    title: '错误测试版标题',
+    duration: 180,
+  };
+  context.applyRecord(song, record, {});
+
+  assert.equal(song.localMetadataLoaded || false, false);
+  assert.equal(song.name || '', '');
+  assert.equal(song.duration, 180, 'M4A 时长等轻量字段仍应复用');
+}
+
+/**
  * 验证被轻量范围截断的 FLAC 元数据不会写成已完成 schema。
  * @returns {Promise<void>} 测试完成 Promise。
  */
@@ -215,4 +253,5 @@ async function testTruncatedFlacMetadataRemainsRetryable() {
 
 test('旧 FLAC 资产缓存强制重新解析元数据', testOldFlacAssetCacheForcesMetadataReparse);
 test('旧 FLAC 曲库索引强制重新解析元数据', testOldFlacLibraryIndexForcesMetadataReparse);
+test('旧 M4A 资产缓存强制重新解析元数据', testOldM4aAssetCacheForcesMetadataReparse);
 test('FLAC 轻量元数据截断保持可重试', testTruncatedFlacMetadataRemainsRetryable);
