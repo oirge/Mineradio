@@ -1,5 +1,7 @@
 # Mineradio Local Player
 
+中文 · [English](./README_EN.md)
+
 这是基于 Mineradio 二次修改的本地音乐播放器版本，已改为纯本地播放使用。
 
 原项目地址：[XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
