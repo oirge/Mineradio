@@ -488,7 +488,7 @@ if (document.fonts && document.fonts.load) {
   </div>
   <div class="panel-tabs">
     <button id="tab-queue" class="panel-tab active" onclick="switchPlaylistTab('queue')">当前队列</button>
-    <button id="tab-pl" class="panel-tab" onclick="switchPlaylistTab('playlists')">本地库</button>
+    <button id="tab-pl" class="panel-tab" onclick="switchPlaylistTab('playlists')">歌单</button>
   </div>
   <div id="queue-pane">
     <div class="queue-toolbar">
@@ -644,6 +644,7 @@ if (document.fonts && document.fonts.load) {
     <button id="play-btn" class="ctrl-btn" onclick="togglePlay()" title="播放/暂停"><svg id="play-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
     <button id="next-btn" class="ctrl-btn" onclick="nextTrack()" title="下一首"><svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
     <button id="mini-queue-btn" class="ctrl-btn" onclick="toggleMiniQueue(event)" title="当前队列"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></button>
+    <button id="playlist-source-btn" class="ctrl-btn playlist-source-btn" onclick="toggleLocalPlaybackPlaylistSource()" title="当前：普通歌单，点击切换到特别喜欢" aria-label="当前：普通歌单，点击切换到特别喜欢" aria-pressed="false"><span id="playlist-source-icon" class="playlist-source-icon" aria-hidden="true">≡</span><span id="playlist-source-label">普通</span></button>
     </div>
     <div class="control-cluster modes">
     <button class="ctrl-btn lyrics-toggle-btn" onclick="toggleLyricsPanel()" title="歌词"><span class="lyrics-word-icon">词</span></button>
@@ -664,7 +665,7 @@ if (document.fonts && document.fonts.load) {
 </div>
 
 <input type="file" id="file-input" accept=".mp3,.flac,.wav,.ogg,.m4a,.lrc,.txt,.jpg,.jpeg,.png,.webp" multiple style="display:none">
-<input type="file" id="local-folder-input" accept=".mp3,.flac,.lrc,.txt,.jpg,.jpeg,.png,.webp" webkitdirectory directory multiple style="display:none">
+<input type="file" id="local-folder-input" accept=".mp3,.flac,.m4a,.wav,.ogg,.lrc,.txt,.jpg,.jpeg,.png,.webp" webkitdirectory directory multiple style="display:none">
 <input type="file" id="background-image-input" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.mov,image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" style="display:none">
 <div id="drop-overlay"><div class="drop-text">拖放音乐或封面</div></div>
 <div id="free-camera-hint"><b>自由镜头</b> R 固定/退出 · WASD 移动 · 鼠标转向 · Shift 加速 · Space/Ctrl 升降 · Q/E 轻微旋转 · 滚轮景深 · K 回正</div>

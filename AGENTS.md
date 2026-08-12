@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.3.9`；本地分支包含主渲染器、壁纸覆盖层与 3D 歌单架的 CPU/运行内存优化。
+- 当前源码版本：`v1.4.2`；包含 MP3/FLAC/M4A/WAV/OGG 本地播放、标准 M4A 标签与封面解析、搜索排序、特别喜欢歌单、主播放栏歌单来源切换，以及主渲染器、壁纸覆盖层与 3D 歌单架的 CPU/运行内存优化。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -50,7 +50,7 @@ npm run build:win:dir
 npm run build:win
 ```
 
-前端主逻辑在 `public/index.html`。当前环境以 `C:\Users\oirg\Desktop\mok\Mineradio-sync` 为可写源码仓库；旧 `E:\桌面\播放器软件\Mineradio\resources\app` 在本环境不存在。没有独立 npm test，改动后至少做：
+前端主逻辑在 `public/index.html`。当前环境以 `C:\Users\oirg\Desktop\mok\Mineradio-sync` 为可写源码仓库；旧 `E:\桌面\播放器软件\Mineradio\resources\app` 在本环境不存在。改动后至少做：
 
 注意：运行版 `node_modules` 可能只包含运行依赖。如果发布打包时缺少 `electron-builder`，先在当前源码仓库执行 `npm install`，再执行 `npm run build:win`。
 

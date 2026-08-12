@@ -1,0 +1,82 @@
+name: Build and Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.4.0)'
+        required: true
+        default: 'v1.4.0'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Build Windows installer
+        run: npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get version from package.json
+        id: package_version
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+      
+      - name: Get release tag
+        id: get_tag
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            echo "TAG=${{ github.event.inputs.tag }}" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "TAG=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+      
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          $version = "${{ steps.package_version.outputs.VERSION }}"
+          $setupFile = "Mineradio-$version-Setup.exe"
+          $hash = (Get-FileHash $setupFile -Algorithm SHA256).Hash.ToLower()
+          "$hash  $setupFile" | Out-File -FilePath "Mineradio-$version-SHA256SUMS.txt" -Encoding utf8
+        shell: pwsh
+      
+      - name: Upload release assets
+        run: |
+          $tag = "${{ steps.get_tag.outputs.TAG }}"
+          $version = "${{ steps.package_version.outputs.VERSION }}"
+          
+          Write-Host "Uploading assets to release $tag..."
+          
+          gh release upload $tag `
+            "dist/Mineradio-$version-Setup.exe" `
+            "dist/Mineradio-$version-Setup.exe.blockmap" `
+            "dist/latest.yml" `
+            "dist/Mineradio-$version-SHA256SUMS.txt" `
+            --clobber
+          
+          Write-Host "✅ All assets uploaded successfully!"
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

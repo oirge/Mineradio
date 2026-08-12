@@ -132,6 +132,43 @@ function testEmptyLocalSearchResultsReuseIdentity() {
   assert.equal(third.length, 80);
 }
 
+function testLocalSearchPrioritizesSongArtistAndFileName() {
+  const source = readRendererSource();
+  const indexSource = readFunctionSource(
+    source,
+    'function localSongSearchFileName(song)',
+    'function localSearchDefaultResults(pool)',
+  );
+  const searchSource = readFunctionSource(
+    source,
+    'function cachedLocalSongSearchFields(song)',
+    'function renderLocalLibraryResults',
+  );
+  const songs = [
+    { type: 'local', name: '普通歌曲', artist: '目标词', localPath: 'D:\\music\\artist.mp3' },
+    { type: 'local', name: '目标词', artist: '普通歌手', localPath: 'D:\\music\\title.mp3' },
+    { type: 'local', name: '另一首歌', artist: '普通歌手', localPath: 'D:\\music\\目标词.mp3' },
+    { type: 'local', name: '专辑之外', artist: '其他歌手', album: '目标词', localPath: 'D:\\music\\album.mp3' },
+  ];
+  const context = {
+    Array,
+    Math,
+    String,
+    LOCAL_SEARCH_RESULT_LIMIT: 80,
+    localSearchPoolCache: { signature: 'library:4' },
+    localSearchResultCache: { signature: '', normalizedQuery: '', results: [], exhaustive: false },
+    localSearchPool: () => songs,
+    simpleSearchNorm: (value) => String(value || '').toLowerCase().replace(/[\s·・,，。.!！?？'"“”‘’|\-_/]+/g, ''),
+  };
+  vm.runInNewContext(`${indexSource}\n${searchSource}\nthis.search = searchLocalSongs;`, context);
+
+  const results = context.search('目标词');
+
+  assert.deepEqual(Array.from(results, (song) => song.name), ['目标词', '普通歌曲', '另一首歌']);
+  assert.equal(results.some((song) => song.album === '目标词'), false);
+}
+
 test('混合本地搜索池筛选保留本地歌曲', testLocalSearchWarmupSourcePreservesMixedQueue);
 test('本地搜索池把同一筛选数组交给预热任务', testLocalSearchPoolReusesFilteredArrayForWarmup);
 test('空查询搜索结果按曲库签名复用数组', testEmptyLocalSearchResultsReuseIdentity);
+test('local search prioritizes song artist and file name', testLocalSearchPrioritizesSongArtistAndFileName);

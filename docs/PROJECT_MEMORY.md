@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.9` 已完成本地验证；主循环复用帧时间戳与自适应 FPS，运行时缓存回收只在一秒级采样边界检查，舞台歌词复用歌单状态快照，3D 歌单架卡片与详情行/详情组稳定属性只在目标值变化时写入，详情面板与可见行绘制复用帧级外观快照，不改变播放、视觉和交互语义。
-- 当前工作分支：`codex/release-v1.2.87`，代码已同步到 GitHub `origin/main` 的 `v1.3.7`，并保留本地安装器安全修复。
-- 最近正式安装包 Release 基线：`v1.3.8`（2026-08-09，主循环状态快照与时间戳复用；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成 Portable ZIP）。`v1.3.9` 已完成本地 NSIS 构建，待 GitHub 发布后更新为正式基线。
+- 当前源码检查点：`v1.4.2` 已完成合并验证，修复标准 M4A 标签、封面、后置 `moov`、旧缓存失效和本地文件夹过滤，同时保留 WAV/OGG、特别喜欢歌单、播放来源切换、空曲库恢复和 CPU/运行内存优化。
+- 当前工作分支：`codex/release-v1.2.87`，待本次发布后同步到 GitHub `origin/main` 的 `v1.4.2`。
+- 最近正式安装包 Release 基线：`v1.3.13`；`v1.4.2` 已完成本地安装器构建，待 GitHub 发布后补录远端资产校验。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,42 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.4.2 M4A 播放与元数据修复
+
+- 2026-08-12，合并远端 `v1.4.1` 基线后发布准备；涉及 `desktop/main.js`、`public/app.js`、`public/index.html`、`server.js`、`package.json`、`package-lock.json`、M4A 回归测试和发布文档。
+- M4A 按 MP4 atom 读取 `moov/udta/meta/ilst`，修复标准 `data` atom 值从第 8 字节开始的偏移；支持 UTF-8/UTF-16 标签、`trkn`、JPEG/PNG `covr` 和后置 `moov`。
+- M4A 后台轻量扫描只读 atom 目录与目标范围，不读 `mdat`；轻量范围未覆盖文件尾时保留前台完整重试。标签缓存 schema 升为 `2`，旧错误缓存强制重新解析。
+- 合并保留远端 Electron `43.4.0`、WAV/OGG、本地搜索、特别喜欢歌单和空曲库恢复修复；文件夹音频过滤器统一覆盖 MP3/FLAC/WAV/OGG/M4A。
+- 全量 Node 回归 `266/266` 通过；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/overlay-preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS：安装器 `101394836` 字节 / SHA256 `0db344d41221beda912e29de4bd20ec4b6fb6e5e7e167c5a344bef674fff6651`；blockmap `105865` 字节 / SHA256 `041aa61e579ad981de6d5f2dfda7ec4fab9f71ad22d6c0d050965f6f0deb3d11`；`latest.yml` `347` 字节 / SHA256 `491786b9f04e6b8e53d3d901d51fbc77a3db28fd9b40c2ce86d23698047e326f`。
+- `latest.yml` 的 Setup SHA512：`IPTyVH4I6OeHhKHh5GOHgGPe+XBqlQ4VyyA6mOhVOvjlWj1KTyG2eLSFEbWvvhY5089ng48D9DySt1/jwXKRNQ==`。
+
+## v1.3.13 本地曲库空状态与播放来源恢复稳定性
+
+- 2026-08-12，涉及 `public/app.js`、`tests/special-liked-playlist.test.js`、`CHANGELOG.md`、`RELEASE.md`、`package.json`、`package-lock.json` 和本文件。
+- 修复本地曲库扫描为空时旧曲库快照、索引、队列、当前歌曲、歌词、封面和播放会话继续恢复的问题；曲库初始化完成前不清理特别喜欢引用，完成后自动移除失效引用。
+- 播放来源队列改为严格顺序校验，普通 / 喜欢切换保留当前进度，并避免来源混排；新增回归后全量 Node 测试 `262/262` 通过，关键 JavaScript 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 产物：`Mineradio-1.3.13-Setup.exe` 103346750 字节 / SHA256 `3f29b162094f9465cbde9eaad1b6aa15301735a954e48fbb886a23eddaa61256`；blockmap 110115 字节 / SHA256 `71d7dc42e5b8fde75102aaaf600ddce615ce8cb6648e66927fe38714d8153c7d`；`latest.yml` 350 字节 / SHA256 `f79f1db461a523578dfc47881098f656f21946de5e2014e1e27bfa6e69677617`；SHA256 清单不含 Portable ZIP。
+
+## v1.3.11 主播放栏歌单切换按钮
+
+- 主播放控制栏新增“普通 / 喜欢”双态按钮；切换后立即按目标来源重建队列并从第一首开始播放，“特别喜欢”为空时保留当前队列并提示。
+- 歌单面板浏览状态与实际播放来源独立，查看“特别喜欢”不会误改控制栏播放状态；喜欢态 hover 仍保持粉色反馈。
+- 2026-08-10，涉及 `AGENTS.md`、`CHANGELOG.md`、`RELEASE.md`、`package.json`、`package-lock.json`、`public/app.js`、`public/app.css`、`public/index.html` 和 `tests/special-liked-playlist.test.js`；全量 Node 回归 `257/257`、关键 JavaScript 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS：安装器 `103345079` 字节 / SHA256 `31115F258B651281FC5D7057B3C7B8F865F748FA15B30D7B0DC35DB4E876B6D4`；blockmap `110091` 字节 / SHA256 `1BBDFC3EE593814BC050A40A46A141DFC8E8A7D0CAF32A6B7022927421409EB2`；`latest.yml` `350` 字节 / SHA256 `0E3C55ABBB2AA9A7B0B31B338A2F6035E1A3CEB8B06E1BDF1BA8EBE76488F375`；SHA256 清单 `272` 字节 / SHA256 `812AB2BC782AC0F0273DB06FA199FF13F0E79B903D14396B944FB1EA53569222`。
+- `latest.yml` 的 Setup SHA512：`BqjdfI8LxlaJ47uU0euyibyqveMjN5Xlf7LF0cQcZ4EIo58Akukg4nVn8KXA0FiPv8ZTWapPXO2CITBSmWhxfw==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.11` 已标记 Latest；源码提交 `4e8863db3496e5352c3a568e1d65c687fe802151`，annotated tag 对象 `728ea41bd9f4ab5531b0bde9bace77955abb28e5`，`main` Verify run `31369515624` 成功；远端四个资产下载回读后的大小与 SHA256 均和本地一致。
+
+## v1.3.10 搜索排序与特别喜欢歌单
+
+- 本地搜索仅匹配歌名、歌手和音频文件名，匹配与排序优先级为歌名、歌手、文件名；专辑名不再参与搜索。
+- “特别喜欢”使用 `mineradio-special-liked-playlist-v1` 保存轻量歌曲引用，优先按 `localKey`、回退按本地路径恢复，不持久化完整歌曲、封面、歌词、File 或 Promise。
+- 搜索结果、播放队列、本地曲库和主播放控制栏可添加或移除歌曲；选择歌单后点击歌曲或“播放全部”会把播放队列限制为该歌单内容。
+- 本地模式恢复“歌单”标签、歌单面板和红心入口，并修复特别喜欢播放按钮被内联事件拦截的问题；重新导入曲库时返回全部音乐视图。
+- 2026-08-10，涉及 `public/app.js`、`public/app.css`、`public/index.html`、`tests/local-search-cache.test.js`、`tests/special-liked-playlist.test.js`、版本与发布文档；全量 Node 回归 `256/256`、四个关键 JavaScript 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS：安装器 `103345037` 字节 / SHA256 `F767367E9687054F4F144A969F000A4A1CEFAB5CFF68640879A7EEA6DCE69AEA`；blockmap `110396` 字节 / SHA256 `D90D0AC1442E791B0A890C776A7E46B65F12D723CA774347B871A1BDFE83CE60`；`latest.yml` `350` 字节 / SHA256 `F4D9BAA8B16FAA167A4774D098B226046B3181B82EEC5E503BB783140E4E31AA`；SHA256 清单 `272` 字节 / SHA256 `DE344DE18C78B4EC80E8C89031D705B017BA5E558273DF69FD1886F4BC5D5787`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.10` 已标记 Latest；`main` 提交 `8be60c5b3834b51bfc747690430358bcf43c6bc9`，annotated tag 对象 `ca6164b3bf90bd8bc7c423aac3354ddd46890613`；Verify run `31366148876` 成功，远端四个资产大小与 SHA256 均和本地一致。
 
 ## v1.3.9 主渲染缓存回收与帧调度热路径优化
 

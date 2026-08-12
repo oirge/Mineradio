@@ -228,6 +228,8 @@ async function testM4aFolderImportAndScan() {
     context,
   );
   assert.equal(context.isLocalAudio({ name: 'track.m4a', type: '' }, true), true);
+  assert.equal(context.isLocalAudio({ name: 'track.wav', type: '' }, true), true);
+  assert.equal(context.isLocalAudio({ name: 'track.ogg', type: '' }, true), true);
 
   const indexSource = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   assert.match(indexSource, /accept="[^"]*\.m4a/);

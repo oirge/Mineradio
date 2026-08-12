@@ -8,9 +8,56 @@
 - 修复旧实现把标准 `data` atom 当作 12 字节值头的问题；该错误会让真实 M4A 的所有标签和封面同时错位。
 - 后台轻量读取不进入超出范围的 `moov`，当前播放前台路径会执行完整重试；不读取 `mdat` 音频内容。
 - M4A 标签缓存 schema 从 `1` 升为 `2`，旧测试版错误元数据会自动重新解析，时长、文件大小和独立封面缩略图仍可复用。
-- 新增 `tests/local-m4a-support.test.js` 与 M4A 缓存回归；全量 Node 回归 `254/254`，关键 JavaScript 语法检查和 `git diff --check` 通过。
+- 新增 `tests/local-m4a-support.test.js` 与 M4A 缓存回归；合并 WAV/OGG、本地曲库和特别喜欢功能后全量 Node 回归 `266/266`，关键 JavaScript 语法检查和 `git diff --check` 通过。
 - 说明：M4A 容器标签解析成功不代表其中每一种音频编码都能由 Electron/Chromium 解码；AAC/MPEG-4 与 ALAC 等编码需要按实际运行环境验证。
-- Windows x64 NSIS 构建完成后补录安装器、blockmap、`latest.yml` 和 SHA256 校验值。
+- Windows x64 NSIS 构建使用 Electron `43.4.0` 完成；安装器 `101394836` 字节，blockmap `105865` 字节，`latest.yml` `347` 字节。
+- SHA256：安装器 `0DB344D41221BEDA912E29DE4BD20EC4B6FB6E5E7E167C5A344BEF674FFF6651`；blockmap `041AA61E579AD981DE6D5F2DFDA7EC4FAB9F71AD22D6C0D050965F6F0DEB3D11`；`latest.yml` `491786B9F04E6B8E53D3D901D51FBC77A3DB28FD9B40C2CE86D23698047E326F`；SHA256 清单随发布资产上传。
+- `latest.yml` 的 Setup SHA512：`IPTyVH4I6OeHhKHh5GOHgGPe+XBqlQ4VyyA6mOhVOvjlWj1KTyG2eLSFEbWvvhY5089ng48D9DySt1/jwXKRNQ==`。
+
+## v1.3.13 本地曲库空状态与播放来源恢复稳定性
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.13`。
+- 本地扫描结果为空时清理旧曲库快照、索引、播放队列、当前歌曲、歌词、封面和播放会话，避免重启后恢复已经不存在的歌曲。
+- 曲库初始化完成前不清理特别喜欢引用；初始化完成后自动移除失效引用，避免启动阶段误删用户歌单。
+- 普通 / 喜欢播放来源严格校验队列顺序，来源切换时保留当前播放进度，避免两个来源歌曲混排。
+- 全量 Node 回归 `262/262`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+
+## v1.3.12 播放来源持久化与喜欢队列稳定性
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.12`。
+- 普通 / 喜欢播放来源写入独立持久化键，重启软件和恢复本地曲库后继续使用上次选择。
+- 恢复曲库时按当前来源重建播放队列；特别喜欢为空时自动安全回退普通歌单。
+- 移除当前喜欢歌曲后同步重建队列，并在播放中自动衔接下一首；打开队列时校验来源一致性。
+- 全量 Node 回归 `259/259`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+
+## v1.3.11 主播放栏歌单切换按钮
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.11`。
+- 主播放控制栏在当前队列按钮后新增“普通 / 喜欢”双态按钮，可直接在全部本地音乐和“特别喜欢”之间切换播放来源。
+- 切换后立即按目标歌单重建队列并从第一首开始播放；“特别喜欢”为空时保留当前队列并提示，不产生空队列或错误状态。
+- 歌单面板浏览状态与实际播放来源使用独立状态，打开“特别喜欢”页面不会误显示为正在播放该歌单。
+- 喜欢状态使用克制的粉色文字、图标和光晕，并提高状态规则优先级，避免通用玻璃悬停覆盖双态反馈。
+- 全量 Node 回归 `257/257`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布继续只生成安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.3.11-Setup.exe` `103345079` 字节；`Mineradio-1.3.11-Setup.exe.blockmap` `110091` 字节；`latest.yml` `350` 字节；`Mineradio-1.3.11-SHA256SUMS.txt` `272` 字节。
+- SHA256：安装器 `31115F258B651281FC5D7057B3C7B8F865F748FA15B30D7B0DC35DB4E876B6D4`；blockmap `1BBDFC3EE593814BC050A40A46A141DFC8E8A7D0CAF32A6B7022927421409EB2`；`latest.yml` `0E3C55ABBB2AA9A7B0B31B338A2F6035E1A3CEB8B06E1BDF1BA8EBE76488F375`；SHA256 清单 `812AB2BC782AC0F0273DB06FA199FF13F0E79B903D14396B944FB1EA53569222`。
+- `latest.yml` 的 Setup SHA512：`BqjdfI8LxlaJ47uU0euyibyqveMjN5Xlf7LF0cQcZ4EIo58Akukg4nVn8KXA0FiPv8ZTWapPXO2CITBSmWhxfw==`。
+
+## v1.3.10 搜索排序与特别喜欢歌单
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.10`。
+- 本地搜索范围收紧为歌名、歌手和音频文件名，并按歌名、歌手、文件名的优先级稳定排序，专辑名不再参与匹配。
+- 新增持久化的“特别喜欢”本地歌单，搜索结果、播放队列、本地曲库和主播放控制栏均可添加或移除；保存轻量引用并按本地路径回退恢复。
+- 选择“特别喜欢”后，点击歌曲或“播放全部”会将播放队列替换为该歌单歌曲，上一首和下一首只在其中导航。
+- 本地模式恢复歌单标签、歌单面板和红心按钮，修复特别喜欢播放按钮的事件委托；重新导入曲库时安全返回全部音乐视图。
+- 全量 Node 回归 `256/256`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布继续只生成安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.3.10-Setup.exe` `103345037` 字节；`Mineradio-1.3.10-Setup.exe.blockmap` `110396` 字节；`latest.yml` `350` 字节；`Mineradio-1.3.10-SHA256SUMS.txt` `272` 字节。
+- SHA256：安装器 `F767367E9687054F4F144A969F000A4A1CEFAB5CFF68640879A7EEA6DCE69AEA`；blockmap `D90D0AC1442E791B0A890C776A7E46B65F12D723CA774347B871A1BDFE83CE60`；`latest.yml` `F4D9BAA8B16FAA167A4774D098B226046B3181B82EEC5E503BB783140E4E31AA`；SHA256 清单 `DE344DE18C78B4EC80E8C89031D705B017BA5E558273DF69FD1886F4BC5D5787`。
+- `latest.yml` 的 Setup SHA512：`yMLzhZLwIUM38dikrKNmWCqe3wnp7qAS98ONnwt2nrQaM+CiqvUEe2GQQ1aYyIIzCAQbYPrb0eDexuECBnQ/Hg==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.3.10` 已标记 Latest；`main` 提交 `8be60c5b3834b51bfc747690430358bcf43c6bc9`，annotated tag 对象 `ca6164b3bf90bd8bc7c423aac3354ddd46890613`；Verify run `31366148876` 成功，远端四个资产大小与 SHA256 均和本地一致。
 
 ## v1.3.9 主渲染缓存回收与帧调度热路径优化
 
