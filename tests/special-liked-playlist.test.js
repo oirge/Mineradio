@@ -31,6 +31,7 @@ function createSpecialLikedContext(initialStorage = '[]') {
     String,
     SPECIAL_LIKED_PLAYLIST_STORE_KEY: 'mineradio-special-liked-playlist-v1',
     specialLikedSongRefs: null,
+    localLibraryReady: false,
     localLibrarySongs: [],
     playQueue: [],
     localStorage: {
@@ -83,6 +84,7 @@ test('特别喜欢按保存引用顺序生成播放列表', () => {
   const { context } = createSpecialLikedContext(refs);
   const songA = { type: 'local', localKey: 'a', localPath: 'D:\\Music\\A.mp3', name: 'A' };
   const songB = { type: 'local', localKey: 'b', localPath: 'D:\\Music\\B.mp3', name: 'B' };
+  context.localLibraryReady = true;
   context.localLibrarySongs = [songA, songB];
 
   const songs = context.api.getSpecialLikedSongs();
@@ -144,9 +146,10 @@ test('控制栏按钮在普通歌单和特别喜欢之间切换', () => {
     SPECIAL_LIKED_PLAYLIST_ID: 'special-liked',
     localLibraryPlaybackSelection: 'library',
     currentCoverSong: () => ({ localKey: 'current' }),
+    audio: { currentTime: 18.25 },
     queueItemKey: (song) => song && song.localKey ? `local:${song.localKey}` : '',
-    localPlaylistSongs: (kind) => kind === 'special-liked' ? [{ name: '喜欢一' }] : [{ name: '普通一' }],
-    playLocalLibrarySong: (index, kind) => { calls.push([index, kind]); return true; },
+    localPlaylistSongs: (kind) => kind === 'special-liked' ? [{ name: '喜欢一' }] : [{ name: '普通一', localKey: 'current' }],
+    playLocalLibrarySong: (index, kind, opts) => { calls.push([index, kind, opts]); return true; },
     showToast: () => {},
   };
   vm.runInNewContext(`${helperSource}\n${toggleSource}\nthis.toggleSource = toggleLocalPlaybackPlaylistSource;`, context);
@@ -155,12 +158,84 @@ test('控制栏按钮在普通歌单和特别喜欢之间切换', () => {
   context.localLibraryPlaybackSelection = 'special-liked';
   context.toggleSource();
 
-  assert.deepEqual(calls, [[0, 'special-liked'], [0, 'library']]);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][0], 0);
+  assert.equal(calls[0][1], 'special-liked');
+  assert.equal(calls[0][2].resumeAt, 0);
+  assert.equal(calls[1][0], 0);
+  assert.equal(calls[1][1], 'library');
+  assert.equal(calls[1][2].resumeAt, 18.25);
 
   context.localLibraryPlaybackSelection = 'library';
   context.localPlaylistSongs = () => [];
   context.toggleSource();
-  assert.deepEqual(calls, [[0, 'special-liked'], [0, 'library']]);
+  assert.equal(calls.length, 2);
+});
+
+test('播放队列顺序变化会判定为不一致', () => {
+  const source = readFile('public/app.js');
+  const helperSource = readFunctionSource(
+    source,
+    'function localSongIndexByKey(songs, key)',
+    'function toggleLocalPlaybackPlaylistSource()',
+  );
+  const context = {
+    playQueue: [{ localKey: 'a' }, { localKey: 'b' }],
+    queueItemKey: (song) => song && song.localKey ? `local:${song.localKey}` : '',
+  };
+  vm.runInNewContext(`${helperSource}\nthis.matches = localPlaybackQueueMatchesSongs;`, context);
+
+  assert.equal(context.matches([{ localKey: 'a' }, { localKey: 'b' }]), true);
+  assert.equal(context.matches([{ localKey: 'b' }, { localKey: 'a' }]), false);
+});
+
+test('播放来源未变化时不会重复持久化', () => {
+  const source = readFile('public/app.js');
+  const selectionSource = readFunctionSource(
+    source,
+    'function setLocalPlaybackPlaylistSelection(kind)',
+    'function localSongIndexByKey(songs, key)',
+  );
+  const writes = [];
+  const context = {
+    localLibraryPlaybackSelection: 'library',
+    normalizeLocalPlaylistKind: (kind) => kind === 'special-liked' ? 'special-liked' : 'library',
+    setPersistentLocalStorageItem: (key, value) => writes.push([key, value]),
+    updateLocalPlaybackPlaylistSourceButton: () => {},
+    LOCAL_PLAYBACK_SOURCE_STORE_KEY: 'playback-source',
+  };
+  vm.runInNewContext(`${selectionSource}\nthis.select = setLocalPlaybackPlaylistSelection;`, context);
+
+  context.select('library');
+  context.select('library');
+  context.select('special-liked');
+
+  assert.deepEqual(writes, [['playback-source', 'special-liked']]);
+});
+
+test('失效喜欢引用会清理，曲库未加载时不会误清理', () => {
+  const refs = JSON.stringify([
+    { key: 'local-key:valid', path: 'd:/music/valid.mp3' },
+    { key: 'local-key:stale', path: 'd:/music/stale.mp3' },
+  ]);
+  const { context, storage } = createSpecialLikedContext(refs);
+  const valid = { type: 'local', localKey: 'valid', localPath: 'D:\\Music\\Valid.mp3', name: 'Valid' };
+  context.localLibraryReady = true;
+  context.localLibrarySongs = [valid];
+
+  const restored = context.api.getSpecialLikedSongs();
+  assert.equal(restored.length, 1);
+  assert.equal(restored[0].localKey, 'valid');
+  const cleanedRefs = JSON.parse(storage.get('mineradio-special-liked-playlist-v1'));
+  assert.equal(cleanedRefs.length, 1);
+  assert.equal(cleanedRefs[0].key, 'local-key:valid');
+  assert.equal(cleanedRefs[0].path, 'd:/music/valid.mp3');
+
+  const unloaded = createSpecialLikedContext(refs);
+  unloaded.context.localLibrarySongs = [];
+  unloaded.context.playQueue = [];
+  assert.equal(unloaded.context.api.getSpecialLikedSongs().length, 0);
+  assert.equal(unloaded.storage.get('mineradio-special-liked-playlist-v1'), refs);
 });
 
 test('喜欢来源移除当前歌曲后重建队列并继续下一首', async () => {

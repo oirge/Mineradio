@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.3.11` 已完成本地与 GitHub 发布验证；本地搜索按歌名、歌手、文件名依次优先且不匹配专辑名，新增轻量持久化并支持路径恢复的“特别喜欢”歌单，以及主播放栏普通/喜欢来源切换，同时保留主渲染、壁纸覆盖层与 3D 歌单架的 CPU/运行内存优化。
-- 当前工作分支：`codex/complete-v1.2.79`，代码已同步到 GitHub `origin/main` 的 `v1.3.11`。
-- 最近正式安装包 Release 基线：`v1.3.11`（2026-08-10，主播放栏歌单来源切换；GitHub Releases 已标记 Latest，远端四个资产大小与 SHA256 均和本地一致，不生成或上传 Portable ZIP）。`v1.3.9` 保留为未公开草稿，不再作为正式基线。
+- 当前源码检查点：`v1.3.13` 已完成本地构建验证，修复空本地曲库恢复旧歌曲、播放来源队列混排和特别喜欢引用启动阶段误清理问题；保留本地搜索、特别喜欢歌单、主播放栏来源切换，以及主渲染、壁纸覆盖层与 3D 歌单架的 CPU/运行内存优化。
+- 当前工作分支：`codex/complete-v1.2.79`，待本次发布后同步到 GitHub `origin/main` 的 `v1.3.13`。
+- 最近正式安装包 Release 基线：`v1.3.13`（2026-08-12，本地曲库空状态与播放来源恢复稳定性；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,13 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.3.13 本地曲库空状态与播放来源恢复稳定性
+
+- 2026-08-12，涉及 `public/app.js`、`tests/special-liked-playlist.test.js`、`CHANGELOG.md`、`RELEASE.md`、`package.json`、`package-lock.json` 和本文件。
+- 修复本地曲库扫描为空时旧曲库快照、索引、队列、当前歌曲、歌词、封面和播放会话继续恢复的问题；曲库初始化完成前不清理特别喜欢引用，完成后自动移除失效引用。
+- 播放来源队列改为严格顺序校验，普通 / 喜欢切换保留当前进度，并避免来源混排；新增回归后全量 Node 测试 `262/262` 通过，关键 JavaScript 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 产物：`Mineradio-1.3.13-Setup.exe` 103346750 字节 / SHA256 `3f29b162094f9465cbde9eaad1b6aa15301735a954e48fbb886a23eddaa61256`；blockmap 110115 字节 / SHA256 `71d7dc42e5b8fde75102aaaf600ddce615ce8cb6648e66927fe38714d8153c7d`；`latest.yml` 350 字节 / SHA256 `f79f1db461a523578dfc47881098f656f21946de5e2014e1e27bfa6e69677617`；SHA256 清单不含 Portable ZIP。
 
 ## v1.3.11 主播放栏歌单切换按钮
 

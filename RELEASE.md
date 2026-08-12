@@ -1,5 +1,14 @@
 +﻿# 发布流程
 
+## v1.3.13 本地曲库空状态与播放来源恢复稳定性
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.13`。
+- 本地扫描结果为空时清理旧曲库快照、索引、播放队列、当前歌曲、歌词、封面和播放会话，避免重启后恢复已经不存在的歌曲。
+- 曲库初始化完成前不清理特别喜欢引用；初始化完成后自动移除失效引用，避免启动阶段误删用户歌单。
+- 普通 / 喜欢播放来源严格校验队列顺序，来源切换时保留当前播放进度，避免两个来源歌曲混排。
+- 全量 Node 回归 `262/262`；`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+
 ## v1.3.12 播放来源持久化与喜欢队列稳定性
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.3.12`。
