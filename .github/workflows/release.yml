@@ -16,22 +16,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        run: npm install
       
       - name: Build Windows installer
         run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Get release info
-        id: release_info
+      - name: Get version from package.json
+        id: package_version
         run: |
-          echo "upload_url=${{ github.event.release.upload_url }}" >> $GITHUB_OUTPUT
-          echo "tag_name=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
       
       - name: Upload Setup.exe
         uses: actions/upload-release-asset@v1
@@ -39,8 +40,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./dist/Mineradio-${{ github.event.release.tag_name }}-Setup.exe
-          asset_name: Mineradio-${{ github.event.release.tag_name }}-Setup.exe
+          asset_path: ./dist/Mineradio-${{ steps.package_version.outputs.VERSION }}-Setup.exe
+          asset_name: Mineradio-${{ steps.package_version.outputs.VERSION }}-Setup.exe
           asset_content_type: application/octet-stream
       
       - name: Upload Setup.exe.blockmap
@@ -49,8 +50,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./dist/Mineradio-${{ github.event.release.tag_name }}-Setup.exe.blockmap
-          asset_name: Mineradio-${{ github.event.release.tag_name }}-Setup.exe.blockmap
+          asset_path: ./dist/Mineradio-${{ steps.package_version.outputs.VERSION }}-Setup.exe.blockmap
+          asset_name: Mineradio-${{ steps.package_version.outputs.VERSION }}-Setup.exe.blockmap
           asset_content_type: application/octet-stream
       
       - name: Upload latest.yml
@@ -66,7 +67,7 @@ jobs:
       - name: Generate SHA256 checksums
         run: |
           cd dist
-          $version = "${{ github.event.release.tag_name }}"
+          $version = "${{ steps.package_version.outputs.VERSION }}"
           $setupFile = "Mineradio-$version-Setup.exe"
           $hash = (Get-FileHash $setupFile -Algorithm SHA256).Hash.ToLower()
           "$hash  $setupFile" | Out-File -FilePath "Mineradio-$version-SHA256SUMS.txt" -Encoding utf8
@@ -78,6 +79,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./dist/Mineradio-${{ github.event.release.tag_name }}-SHA256SUMS.txt
-          asset_name: Mineradio-${{ github.event.release.tag_name }}-SHA256SUMS.txt
+          asset_path: ./dist/Mineradio-${{ steps.package_version.outputs.VERSION }}-SHA256SUMS.txt
+          asset_name: Mineradio-${{ steps.package_version.outputs.VERSION }}-SHA256SUMS.txt
           asset_content_type: text/plain
