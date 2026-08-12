@@ -13,6 +13,8 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout code
@@ -41,49 +43,15 @@ jobs:
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
         shell: pwsh
       
-      - name: Get release upload URL
-        id: get_release
+      - name: Get release tag
+        id: get_tag
         run: |
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $tag = "${{ github.event.inputs.tag }}"
-            $release = gh api repos/${{ github.repository }}/releases/tags/$tag | ConvertFrom-Json
-            echo "UPLOAD_URL=$($release.upload_url)" >> $env:GITHUB_OUTPUT
+            echo "TAG=${{ github.event.inputs.tag }}" >> $env:GITHUB_OUTPUT
           } else {
-            echo "UPLOAD_URL=${{ github.event.release.upload_url }}" >> $env:GITHUB_OUTPUT
+            echo "TAG=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
           }
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Upload Setup.exe
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.UPLOAD_URL }}
-          asset_path: ./dist/Mineradio-${{ steps.package_version.outputs.VERSION }}-Setup.exe
-          asset_name: Mineradio-${{ steps.package_version.outputs.VERSION }}-Setup.exe
-          asset_content_type: application/octet-stream
-      
-      - name: Upload Setup.exe.blockmap
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.UPLOAD_URL }}
-          asset_path: ./dist/Mineradio-${{ steps.package_version.outputs.VERSION }}-Setup.exe.blockmap
-          asset_name: Mineradio-${{ steps.package_version.outputs.VERSION }}-Setup.exe.blockmap
-          asset_content_type: application/octet-stream
-      
-      - name: Upload latest.yml
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.UPLOAD_URL }}
-          asset_path: ./dist/latest.yml
-          asset_name: latest.yml
-          asset_content_type: text/yaml
       
       - name: Generate SHA256 checksums
         run: |
@@ -94,12 +62,21 @@ jobs:
           "$hash  $setupFile" | Out-File -FilePath "Mineradio-$version-SHA256SUMS.txt" -Encoding utf8
         shell: pwsh
       
-      - name: Upload SHA256SUMS
-        uses: actions/upload-release-asset@v1
+      - name: Upload release assets
+        run: |
+          $tag = "${{ steps.get_tag.outputs.TAG }}"
+          $version = "${{ steps.package_version.outputs.VERSION }}"
+          
+          Write-Host "Uploading assets to release $tag..."
+          
+          gh release upload $tag `
+            "dist/Mineradio-$version-Setup.exe" `
+            "dist/Mineradio-$version-Setup.exe.blockmap" `
+            "dist/latest.yml" `
+            "dist/Mineradio-$version-SHA256SUMS.txt" `
+            --clobber
+          
+          Write-Host "✅ All assets uploaded successfully!"
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.UPLOAD_URL }}
-          asset_path: ./dist/Mineradio-${{ steps.package_version.outputs.VERSION }}-SHA256SUMS.txt
-          asset_name: Mineradio-${{ steps.package_version.outputs.VERSION }}-SHA256SUMS.txt
-          asset_content_type: text/plain
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
