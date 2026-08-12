@@ -1,0 +1,83 @@
+name: Build and Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build Windows installer
+        run: npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get release info
+        id: release_info
+        run: |
+          echo "upload_url=${{ github.event.release.upload_url }}" >> $GITHUB_OUTPUT
+          echo "tag_name=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+      
+      - name: Upload Setup.exe
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./dist/Mineradio-${{ github.event.release.tag_name }}-Setup.exe
+          asset_name: Mineradio-${{ github.event.release.tag_name }}-Setup.exe
+          asset_content_type: application/octet-stream
+      
+      - name: Upload Setup.exe.blockmap
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./dist/Mineradio-${{ github.event.release.tag_name }}-Setup.exe.blockmap
+          asset_name: Mineradio-${{ github.event.release.tag_name }}-Setup.exe.blockmap
+          asset_content_type: application/octet-stream
+      
+      - name: Upload latest.yml
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./dist/latest.yml
+          asset_name: latest.yml
+          asset_content_type: text/yaml
+      
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          $version = "${{ github.event.release.tag_name }}"
+          $setupFile = "Mineradio-$version-Setup.exe"
+          $hash = (Get-FileHash $setupFile -Algorithm SHA256).Hash.ToLower()
+          "$hash  $setupFile" | Out-File -FilePath "Mineradio-$version-SHA256SUMS.txt" -Encoding utf8
+        shell: pwsh
+      
+      - name: Upload SHA256SUMS
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./dist/Mineradio-${{ github.event.release.tag_name }}-SHA256SUMS.txt
+          asset_name: Mineradio-${{ github.event.release.tag_name }}-SHA256SUMS.txt
+          asset_content_type: text/plain
