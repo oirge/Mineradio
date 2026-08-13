@@ -1,4 +1,13 @@
-+﻿# 发布流程
+﻿# 发布流程
+
+## v1.4.3 Wallpaper Engine 壁纸背景
+
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.3`。
+- 基于 `v1.4.2` 接入 Wallpaper Engine 壁纸背景：本机库识别、手动导入、Video/图片直播、Scene 原生引擎运行。
+- 视觉控制台新增识别、导入、收藏、隐藏和恢复原背景入口；Scene 自动静音壁纸音频。
+- 新增 `desktop/wallpaper-engine-library.js`、`desktop/wallpaper-engine-runtime.js`、`desktop/wallpaper-engine-bridge.js` 与前端 `public/wallpaper-engine.js` / `public/wallpaper-engine.css`。
+- 新增 `tests/wallpaper-engine-library.test.js`；主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
 
 ## v1.4.2 M4A 播放与元数据修复
 

@@ -22,6 +22,7 @@ if (document.fonts && document.fonts.load) {
 }
 </script>
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="wallpaper-engine.css">
 </head>
 <body>
 <div id="desktop-window-shell">
@@ -57,6 +58,14 @@ if (document.fonts && document.fonts.load) {
   <button id="fullscreen-diy-btn" class="desktop-mode-btn" type="button" onclick="toggleDiyMode()" title="DIY" aria-label="DIY" aria-pressed="false">DIY</button>
 </div>
 <div id="custom-bg"><video id="custom-bg-video" muted loop playsinline preload="metadata"></video></div>
+<div id="wallpaper-engine-layer" aria-hidden="true">
+  <img id="wallpaper-engine-image" alt="">
+  <canvas id="wallpaper-engine-freeze" aria-hidden="true"></canvas>
+  <video id="wallpaper-engine-video" muted loop playsinline preload="metadata"></video>
+</div>
+<div id="wallpaper-engine-glass-sampler" aria-hidden="true">
+  <video id="wallpaper-engine-glass-sampler-video" muted playsinline preload="none"></video>
+</div>
 <div id="album-bg"></div>
 <div id="canvas-container"></div>
 <canvas id="idle-guide-canvas" aria-hidden="true"></canvas>
@@ -266,6 +275,14 @@ if (document.fonts && document.fonts.load) {
     <button class="fx-mini-btn ghost" type="button" onclick="document.getElementById('background-image-input').click()">选择</button>
     <div class="fx-color-row-label">背景媒体<small id="bg-image-value">未设置</small></div>
     <button class="fx-mini-btn ghost" type="button" onclick="clearCustomBackgroundImage()">清除</button>
+  </div>
+  <div class="lyric-color-row image-pick-row wallpaper-engine-row">
+    <div class="wallpaper-engine-mark" aria-hidden="true">WE</div>
+    <div class="fx-color-row-label">Wallpaper Engine<small id="wallpaper-engine-value">未启用 · 原背景保留</small></div>
+    <div class="wallpaper-engine-actions">
+      <button class="fx-mini-btn ghost" type="button" onclick="openWallpaperEngineLibrary()">识别 / 导入</button>
+      <button class="fx-mini-btn ghost" id="wallpaper-engine-restore-btn" type="button" onclick="deactivateWallpaperEngineBackground()" disabled>恢复原背景</button>
+    </div>
   </div>
   <div class="fx-slider"><label>背景透明度</label><input id="fx-bgopacity" type="range" min="0" max="1" step="0.01"><output></output></div>
   <div class="fx-slider"><label>控制台玻璃色差</label><input id="fx-glassaberration" type="range" min="0" max="140" step="1"><output></output></div>
@@ -699,6 +716,47 @@ if (document.fonts && document.fonts.load) {
   </div>
 </div>
 
+<div id="wallpaper-engine-modal" class="modal-mask" role="dialog" aria-modal="true" aria-labelledby="wallpaper-engine-modal-title" onclick="if(event.target===this)closeWallpaperEngineLibrary()">
+  <div class="modal wallpaper-engine-library-modal">
+    <div class="wallpaper-engine-library-head">
+      <div>
+        <div class="wallpaper-engine-kicker">LOCAL WALLPAPER LIBRARY</div>
+        <h2 id="wallpaper-engine-modal-title">Wallpaper Engine 壁纸导入</h2>
+        <p>只建立本地索引，不复制大型项目；Video 直接播放，Scene 项目与有效 PKGV 场景包由本机 Wallpaper Engine 原生引擎实时运行。</p>
+      </div>
+      <button class="wallpaper-engine-close" type="button" onclick="closeWallpaperEngineLibrary()" aria-label="关闭">×</button>
+    </div>
+    <div class="wallpaper-engine-toolbar">
+      <input id="wallpaper-engine-search" type="search" placeholder="搜索壁纸名称" autocomplete="off" oninput="scheduleWallpaperEngineLibraryRender()">
+      <button class="fx-mini-btn ghost" type="button" onclick="chooseWallpaperEngineProjectFile()">导入项目 / 场景包</button>
+      <button class="fx-mini-btn ghost" type="button" onclick="chooseWallpaperEngineDirectory()">导入目录</button>
+      <button class="fx-mini-btn ghost" type="button" onclick="refreshWallpaperEngineLibrary()">刷新识别</button>
+      <button class="fx-mini-btn ghost" type="button" onclick="restoreHiddenWallpaperEngineItems()">恢复隐藏</button>
+    </div>
+    <div id="wallpaper-engine-library-status" class="wallpaper-engine-library-status">等待识别本机 Wallpaper Engine 库</div>
+    <div id="wallpaper-engine-manual-roots" class="wallpaper-engine-manual-roots"></div>
+    <div id="wallpaper-engine-grid" class="wallpaper-engine-grid" aria-live="polite"></div>
+    <div id="wallpaper-engine-details-drawer" class="wallpaper-engine-details-drawer" aria-hidden="true" onclick="if(event.target===this)closeWallpaperEngineProjectDetails()">
+      <section class="wallpaper-engine-details-panel" aria-labelledby="wallpaper-engine-details-title">
+        <div class="wallpaper-engine-details-head">
+          <div>
+            <div class="wallpaper-engine-kicker">PROJECT PROPERTIES</div>
+            <h3 id="wallpaper-engine-details-title">项目设置</h3>
+          </div>
+          <button class="wallpaper-engine-close" type="button" onclick="closeWallpaperEngineProjectDetails()" aria-label="关闭项目设置">×</button>
+        </div>
+        <p id="wallpaper-engine-details-summary" class="wallpaper-engine-details-summary"></p>
+        <div id="wallpaper-engine-details-properties" class="wallpaper-engine-details-properties"></div>
+        <div class="wallpaper-engine-details-actions">
+          <button id="wallpaper-engine-details-we" class="fx-mini-btn" type="button" onclick="launchWallpaperEngineProjectDetails('we')">在 WE 中打开设置（实验）</button>
+          <button id="wallpaper-engine-details-workshop" class="fx-mini-btn ghost" type="button" onclick="launchWallpaperEngineProjectDetails('workshop')">创意工坊详情</button>
+        </div>
+        <small class="wallpaper-engine-details-note">每次载入自动应用静音值（音量 0 / 静音开启 / 音频关闭）；Scene 包只处理缓存副本，原文件不变。其他视觉设置仍由 Wallpaper Engine 管理。</small>
+      </section>
+    </div>
+  </div>
+</div>
+
 <!-- 收藏到歌单模态 -->
 <div id="collect-modal" class="modal-mask">
   <div class="modal collect-modal">
@@ -822,5 +880,6 @@ if (document.fonts && document.fonts.load) {
 </div>
 
 <script src="app.js"></script>
+<script src="wallpaper-engine.js"></script>
 </body>
 </html>

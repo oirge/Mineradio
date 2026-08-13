@@ -1,4 +1,4 @@
-﻿# Mineradio Project Memory
+# Mineradio Project Memory
 
 这个文件用于解决新开 Codex 对话时“失忆”的问题。每次用户明确说“保留”“喜欢”“这个很好”“记住”“保存一下”等表达时，要把关键结论追加到这里。
 
@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.4.2` 已完成合并验证，修复标准 M4A 标签、封面、后置 `moov`、旧缓存失效和本地文件夹过滤，同时保留 WAV/OGG、特别喜欢歌单、播放来源切换、空曲库恢复和 CPU/运行内存优化。
-- 当前工作分支：`codex/release-v1.2.87`，当前提交 `442c87c` 已同步到 GitHub `origin/main`；`v1.4.2` 标签仍指向发布提交 `3eb4faa`。
-- 最近正式安装包 Release 基线：`v1.4.2`（2026-08-12，GitHub Latest；四个远端资产大小与 SHA256 均已和本地一致）。
+- 当前源码检查点：`v1.4.3` 已接入 Wallpaper Engine 壁纸背景，并保留 v1.4.2 的 M4A/WAV/OGG 播放与元数据修复、特别喜欢歌单、播放来源切换、空曲库恢复和 CPU/运行内存优化。
+- 当前工作分支：`codex/complete-v1.2.79`，待本次发布后同步到 GitHub `origin/main` 的 `v1.4.3`。
+- 最近正式安装包 Release 基线：`v1.4.3`（2026-08-13，Wallpaper Engine 壁纸背景；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,14 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.4.3 Wallpaper Engine 壁纸背景
+
+- 日期：2026-08-13
+- 涉及文件：`desktop/wallpaper-engine-library.js`、`desktop/wallpaper-engine-runtime.js`、`desktop/wallpaper-engine-bridge.js`、`desktop/main.js`、`desktop/preload.js`、`public/wallpaper-engine.js`、`public/wallpaper-engine.css`、`public/index.html`、`tests/wallpaper-engine-library.test.js`
+- 关键边界：不改现有玻璃 SVG 质感、电影视觉、3D 歌单架交互和桌面歌词；WE 启用时只隐藏自定义背景/封面背景，不重写粒子或歌词舞台。
+- Scene 走本机 Wallpaper Engine 原生引擎 + DWM 缩略图；Video/图片走 `mineradio-wallpaper` 协议直读项目文件，不复制大型素材。
+- 不要把 Wallpaper Engine 入口做成一次性渲染全部项目卡片；列表继续按批次渲染并懒加载预览。
 
 ## v1.4.2 M4A 播放与元数据修复
 

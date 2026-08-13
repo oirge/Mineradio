@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, globalShortcut, dialog, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, globalShortcut, dialog, Tray, Menu, protocol, session, desktopCapturer } = require('electron');
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
@@ -8,6 +8,8 @@ const { execFile, spawn } = require('child_process');
 const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache } = require('./mini-player-state-cache');
+const { createWallpaperEngineBridge, registerWallpaperEngineScheme } = require('./wallpaper-engine-bridge');
+registerWallpaperEngineScheme(protocol);
 
 function resolveRuntimeAppRoots() {
   const sourceRoot = path.join(__dirname, '..');
@@ -26,6 +28,20 @@ function resolveRuntimeAppRoots() {
   return { writableRoot, resourceRoot };
 }
 const { writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT } = resolveRuntimeAppRoots();
+const wallpaperEngineNativeTempPath = path.join(app.getPath('userData'), 'native');
+fs.mkdirSync(wallpaperEngineNativeTempPath, { recursive: true });
+const wallpaperEngineBridge = createWallpaperEngineBridge({
+  getMainWindow: () => mainWindow,
+  getMainServerPort: () => mainServerPort,
+  isAppQuitting: () => appQuitting,
+  isWindowFullscreen: () => windowFullscreenActive,
+  isHtmlFullscreen: () => htmlFullscreenActive,
+  userDataPath: app.getPath('userData'),
+  nativeTempPath: wallpaperEngineNativeTempPath,
+  desktopCapturer,
+});
+wallpaperEngineBridge.registerIpc();
+
 
 let mainWindow = null;
 let localServer = null;
@@ -3011,6 +3027,8 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     applySavedDesktopShellSettings();
+    wallpaperEngineBridge.configureSessionPermissions();
+    await wallpaperEngineBridge.installProtocol(protocol);
     screen.on('display-metrics-changed', () => {
       positionDesktopLyricsWindow();
       sendDesktopLyricsWindowGeometry(true);
@@ -3036,6 +3054,7 @@ if (!gotSingleInstanceLock) {
     powerMonitor.on('resume', handleMiniPlayerSystemResume);
     powerMonitor.on('unlock-screen', handleMiniPlayerScreenUnlock);
     await createWindow();
+    wallpaperEngineBridge.attachWindow(mainWindow);
     createTray();
   });
 
@@ -3052,6 +3071,7 @@ if (!gotSingleInstanceLock) {
     appQuitting = true;
     unregisterMineradioGlobalHotkeys();
     closeOverlayWindows();
+    wallpaperEngineBridge.dispose();
     if (localServer && localServer.close) localServer.close();
   });
 }
