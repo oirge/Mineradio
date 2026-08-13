@@ -239,6 +239,14 @@
       transition: opacity 190ms ease, transform 240ms cubic-bezier(.22,.8,.24,1), flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1), background-color 140ms ease, border-color 140ms ease, color 140ms ease;
     }
     .restore svg { width: 13px; height: 13px; }
+    .mini-shell[data-instant="true"],
+    .mini-shell[data-instant="true"] .cover,
+    .mini-shell[data-instant="true"] .cover::after,
+    .mini-shell[data-instant="true"] .cover img,
+    .mini-shell[data-instant="true"] .meta,
+    .mini-shell[data-instant="true"] .transport,
+    .mini-shell[data-instant="true"] .restore,
+    .mini-shell[data-instant="true"] button { transition: none !important; }
     @media (prefers-reduced-motion: reduce) {
       .mini-shell, .cover, .cover::after, .cover img, .meta, .transport, .restore, button { transition: none; }
     }
@@ -246,7 +254,7 @@
 </head>
 <body data-playing="false">
   <main class="mini-shell" id="mini-shell" data-collapsed="true" data-has-track="false" data-glow="true" aria-label="Mineradio 迷你播放器">
-    <div class="cover" id="cover-wrap" role="button" tabindex="0" aria-label="展开迷你播放器">
+    <div class="cover" id="cover-wrap" role="button" tabindex="0" aria-label="展开迷你播放器" aria-expanded="false">
       <span class="cover-fallback">M</span>
       <img id="cover" alt="">
     </div>
@@ -287,31 +295,59 @@
     var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false, pulse:0, visual:{ pulseEnabled:true, pulseStrength:0.78, glowEnabled:true, hoverExpand:true, radius:12 } };
     var renderedPlaying = null;
     var renderedHasTrack = null;
-    var expanded = true;
+    var renderedHoverExpand = null;
     var hoverTimer = 0;
+    var receivedExternalState = false;
 
     function sendCommand(action) {
       if (!window.miniPlayer || typeof window.miniPlayer.command !== 'function') return;
       window.miniPlayer.command(action).catch(function(){});
     }
 
+    function hoverExpandEnabled() {
+      return !miniState.visual || miniState.visual.hoverExpand !== false;
+    }
+
+    function clearCollapseTimer() {
+      if (hoverTimer) clearTimeout(hoverTimer);
+      hoverTimer = 0;
+    }
+
+    function expansionInteractionActive() {
+      return coverWrap.matches(':hover') || miniShell.matches(':focus-within');
+    }
+
     function setExpanded(next, immediate) {
-      var visual = miniState.visual || {};
-      if (visual.hoverExpand === false && !next) return;
-      expanded = !!next;
-      if (immediate) miniShell.style.transition = 'none';
-      miniShell.setAttribute('data-collapsed', expanded ? 'false' : 'true');
-      coverWrap.setAttribute('aria-label', expanded ? '收起迷你播放器' : '展开迷你播放器');
+      if (!hoverExpandEnabled()) next = true;
+      next = !!next;
+      if (immediate) miniShell.setAttribute('data-instant', 'true');
+      miniShell.setAttribute('data-collapsed', next ? 'false' : 'true');
+      coverWrap.setAttribute('aria-expanded', next ? 'true' : 'false');
+      coverWrap.setAttribute('aria-label', hoverExpandEnabled()
+        ? (next ? '迷你播放器已展开' : '展开迷你播放器')
+        : '完整迷你播放器');
       if (immediate) {
-        window.requestAnimationFrame(function(){ miniShell.style.transition = ''; });
+        window.requestAnimationFrame(function(){ miniShell.removeAttribute('data-instant'); });
       }
     }
 
+    function syncHoverExpandMode(immediate) {
+      clearCollapseTimer();
+      miniShell.setAttribute('data-hover-expand', hoverExpandEnabled() ? 'true' : 'false');
+      setExpanded(hoverExpandEnabled() ? expansionInteractionActive() : true, immediate);
+    }
+
+    function expandFromInteraction() {
+      clearCollapseTimer();
+      if (hoverExpandEnabled()) setExpanded(true);
+    }
+
     function scheduleCollapse() {
-      if (hoverTimer) clearTimeout(hoverTimer);
+      clearCollapseTimer();
+      if (!hoverExpandEnabled()) return;
       hoverTimer = setTimeout(function(){
         hoverTimer = 0;
-        if (!coverWrap.matches(':hover') && !miniShell.matches(':focus-within')) setExpanded(false);
+        if (!expansionInteractionActive()) setExpanded(false);
       }, 420);
     }
 
@@ -327,7 +363,7 @@
       cover.src = src;
     }
 
-    function applyState(patch) {
+    function applyState(patch, immediate) {
       patch = patch || {};
       miniState = Object.assign({}, miniState, patch);
       var next = miniState;
@@ -361,8 +397,17 @@
       miniShell.style.setProperty('--mini-pulse', pulse.toFixed(3));
       miniShell.style.setProperty('--mini-radius', Math.max(4, Math.min(22, Number(visual.radius) || 12)) + 'px');
       miniShell.setAttribute('data-glow', visual.glowEnabled === false ? 'false' : 'true');
-      if (visual.hoverExpand === false) setExpanded(true, true);
+      var hoverExpand = visual.hoverExpand !== false;
+      if (renderedHoverExpand !== hoverExpand) {
+        renderedHoverExpand = hoverExpand;
+        syncHoverExpandMode(immediate === true);
+      }
       setCover(hasTrack ? next.cover : '');
+    }
+
+    function receiveState(patch) {
+      applyState(patch, !receivedExternalState);
+      receivedExternalState = true;
     }
 
     cover.addEventListener('load', function(){
@@ -377,27 +422,25 @@
       }
     });
     coverWrap.addEventListener('mouseenter', function(){
-      if (hoverTimer) clearTimeout(hoverTimer);
-      hoverTimer = 0;
-      setExpanded(true);
+      expandFromInteraction();
     });
     coverWrap.addEventListener('mouseleave', function(){
       if (!miniShell.matches(':hover')) scheduleCollapse();
     });
-    coverWrap.addEventListener('focus', function(){ setExpanded(true); });
-    coverWrap.addEventListener('blur', scheduleCollapse);
-    coverWrap.addEventListener('click', function(){ setExpanded(true); });
+    coverWrap.addEventListener('focus', expandFromInteraction);
+    coverWrap.addEventListener('click', expandFromInteraction);
     coverWrap.addEventListener('keydown', function(event){
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        setExpanded(!expanded);
+        expandFromInteraction();
       }
     });
     miniShell.addEventListener('mouseleave', scheduleCollapse);
     miniShell.addEventListener('mouseenter', function(){
-      if (hoverTimer) clearTimeout(hoverTimer);
-      hoverTimer = 0;
+      clearCollapseTimer();
     });
+    miniShell.addEventListener('focusin', expandFromInteraction);
+    miniShell.addEventListener('focusout', scheduleCollapse);
     document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });
     playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
     document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });
@@ -406,9 +449,8 @@
     document.getElementById('mini-shell').addEventListener('dblclick', function(event){
       if (!event.target.closest('button')) sendCommand('restore');
     });
-    if (window.miniPlayer && typeof window.miniPlayer.onState === 'function') window.miniPlayer.onState(applyState);
-    applyState({});
-    setExpanded(miniState.visual && miniState.visual.hoverExpand === false, true);
+    if (window.miniPlayer && typeof window.miniPlayer.onState === 'function') window.miniPlayer.onState(receiveState);
+    applyState({}, true);
   </script>
 </body>
 </html>

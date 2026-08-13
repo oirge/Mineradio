@@ -606,15 +606,16 @@ function updateFxFabAutoHideFromPointer(x, y) {
 function layoutFullscreenDiyZone() {
   var width = innerWidth < 720 ? 202 : (innerWidth < 820 ? 216 : 224);
   var height = innerWidth < 720 ? 48 : 52;
-  var left = innerWidth - 510;
-  var top = 24;
-  var anchor = document.querySelector('#top-right .top-account-pill') || document.getElementById('user-btn') || document.getElementById('top-right');
+  var gap = innerWidth < 720 ? 8 : 10;
+  var rightInset = innerWidth < 720 ? 12 : 24;
+  var left = innerWidth - rightInset - 44 - gap - width;
+  var top = innerWidth < 720 ? 22 : 20;
+  var anchor = document.getElementById('home-btn') || document.getElementById('top-right');
   if (anchor) {
     var rect = anchor.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-      var gap = innerWidth < 820 ? 8 : 12;
-      left = rect.left + rect.width / 2 - width / 2;
-      top = rect.bottom + gap;
+      left = rect.left - width - gap;
+      top = rect.top + (rect.height - height) / 2;
     }
   }
   left = Math.max(12, Math.min(innerWidth - width - 12, left));
@@ -638,7 +639,7 @@ function updateFullscreenDiyPeekFromPointer(x, y) {
     return;
   }
   var rect = layoutFullscreenDiyZone();
-  var anchor = document.querySelector('#top-right .top-account-pill') || document.getElementById('user-btn') || document.getElementById('top-right');
+  var anchor = document.getElementById('home-btn') || document.getElementById('top-right');
   var anchorRect = anchor ? anchor.getBoundingClientRect() : rect;
   var hitLeft = Math.min(rect.left, anchorRect.left) - 26;
   var hitRight = Math.max(rect.left + rect.width, anchorRect.right) + 26;

@@ -10,22 +10,51 @@ const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache } = require('./mini-player-state-cache');
 const { createWallpaperEngineBridge, registerWallpaperEngineScheme } = require('./wallpaper-engine-bridge');
 const {
-  resolveInstanceId,
-  resolveInstanceUserDataPath,
-  resolveInstanceAppUserModelId,
+  resolveInstanceProfile,
+  resolveLegacySharedProfile,
+  discoverLegacyPathProfiles,
+  resolvePreferredServerPort,
   resolveDesktopShortcutName,
 } = require('./instance-isolation');
+const {
+  cleanupProfileSessionStaging,
+  discoverLocalStorageOrigins,
+  isProfileMigrationMarkerCurrent,
+  mergePersistentUiValues,
+  profileModifiedAt,
+  readProfileUiState,
+  readSessionLocalStorage,
+  stageProfileSessionData,
+  writeSessionLocalStorage,
+} = require('./profile-state-migration');
 registerWallpaperEngineScheme(protocol);
 
 const APP_NAME = 'Mineradio';
 const BASE_APP_USER_MODEL_ID = 'com.mineradio.desktop';
-const INSTANCE_ID = resolveInstanceId({
+const PRIMARY_PROFILE_ID = 'oirge';
+const APP_DATA_PATH = app.getPath('appData');
+const INSTANCE_PROFILE = resolveInstanceProfile({
   instanceId: process.env.MINERADIO_INSTANCE_ID,
   execPath: process.execPath,
   appRoot: __dirname,
+  appDataPath: APP_DATA_PATH,
+  appName: APP_NAME,
+  baseAppUserModelId: BASE_APP_USER_MODEL_ID,
+  primaryProfileId: PRIMARY_PROFILE_ID,
+  isPackaged: app.isPackaged,
 });
-const INSTANCE_APP_NAME = `${APP_NAME}-${INSTANCE_ID}`;
-const APP_USER_MODEL_ID = resolveInstanceAppUserModelId(BASE_APP_USER_MODEL_ID, INSTANCE_ID);
+const INSTANCE_ID = INSTANCE_PROFILE.instanceId;
+const INSTANCE_APP_NAME = INSTANCE_PROFILE.appName;
+const APP_USER_MODEL_ID = INSTANCE_PROFILE.appUserModelId;
+const LEGACY_SHARED_PROFILE = INSTANCE_PROFILE.primary
+  ? resolveLegacySharedProfile({
+      appDataPath: APP_DATA_PATH,
+      appName: APP_NAME,
+    })
+  : null;
+const LEGACY_PATH_PROFILES = INSTANCE_PROFILE.primary
+  ? discoverLegacyPathProfiles({ appDataPath: APP_DATA_PATH, appName: APP_NAME })
+  : [];
 const DESKTOP_SHORTCUT_NAME = resolveDesktopShortcutName({
   shortcutName: process.env.MINERADIO_SHORTCUT_NAME,
   execPath: process.execPath,
@@ -33,8 +62,8 @@ const DESKTOP_SHORTCUT_NAME = resolveDesktopShortcutName({
 });
 
 app.setName(INSTANCE_APP_NAME);
-app.setPath('userData', resolveInstanceUserDataPath(app.getPath('appData'), INSTANCE_ID, APP_NAME));
-app.setPath('sessionData', path.join(app.getPath('userData'), 'session'));
+app.setPath('userData', INSTANCE_PROFILE.userDataPath);
+app.setPath('sessionData', INSTANCE_PROFILE.sessionDataPath);
 
 function resolveRuntimeAppRoots() {
   const sourceRoot = path.join(__dirname, '..');
@@ -69,6 +98,7 @@ wallpaperEngineBridge.registerIpc();
 
 
 let mainWindow = null;
+let mainWindowLifecycleStarted = false;
 let localServer = null;
 let mainServerPort = 0;
 let desktopLyricsWindow = null;
@@ -134,6 +164,12 @@ const APP_ICON_ICO = path.join(RESOURCE_ROOT, 'build', 'icon.ico');
 const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell-settings.json';
 const DESKTOP_UI_STATE_FILE = 'desktop-ui-state.json';
+const PROFILE_STATE_MIGRATION_FILE = 'profile-state-migration-v2.json';
+const PROFILE_STATE_MIGRATION_STAGING_ROOT = path.join(
+  app.getPath('temp'),
+  'Mineradio-profile-migration-staging',
+  INSTANCE_ID,
+);
 const DESKTOP_UI_STATE_KEYS = new Set([
   'apex-player-volume',
   'mineradio-lyric-layout-v1',
@@ -146,6 +182,9 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-free-camera-v1',
   'mineradio-local-library-folder-v1',
   'mineradio-playback-session-v1',
+  'mineradio-special-liked-playlist-v1',
+  'mineradio-local-playlists-v1',
+  'mineradio-local-playback-source-v1',
   'mineradio-user-fx-archives-v1',
   'mineradio-hotkey-settings-v1',
   'mineradio-visual-guide-seen-v2',
@@ -797,6 +836,88 @@ function writeDesktopShellSettings(patch) {
   return next;
 }
 
+function readDesktopShellSettingsFrom(userDataPath) {
+  try {
+    const file = path.join(String(userDataPath || ''), DESKTOP_SHELL_SETTINGS_FILE);
+    if (!fs.existsSync(file)) return {};
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch (_e) {
+    return {};
+  }
+}
+
+function desktopShellSettingsModifiedAt(userDataPath) {
+  try {
+    return Number(fs.statSync(path.join(String(userDataPath || ''), DESKTOP_SHELL_SETTINGS_FILE)).mtimeMs) || 0;
+  } catch (_e) {
+    return 0;
+  }
+}
+
+function profileStateMigrationPath() {
+  return path.join(app.getPath('userData'), PROFILE_STATE_MIGRATION_FILE);
+}
+
+function hasCompletedLegacyProfileMigration() {
+  try {
+    const data = JSON.parse(fs.readFileSync(profileStateMigrationPath(), 'utf8'));
+    return isProfileMigrationMarkerCurrent(data, legacyProfilesForMigration());
+  } catch (_e) {
+    return false;
+  }
+}
+
+function writeLegacyProfileMigrationMarker(profiles) {
+  const file = profileStateMigrationPath();
+  const tempFile = `${file}.tmp`;
+  const sources = [];
+  for (const profile of profiles || []) {
+    sources.push({
+      instanceId: String(profile.instanceId || ''),
+      userDataPath: String(profile.userDataPath || ''),
+      modifiedAt: profileModifiedAt(profile.userDataPath, profile.sessionDataPath),
+    });
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(tempFile, JSON.stringify({ schema: 2, completedAt: Date.now(), sources }, null, 2), 'utf8');
+  fs.renameSync(tempFile, file);
+}
+
+function legacyProfilesForMigration() {
+  if (!INSTANCE_PROFILE.primary) return [];
+  const result = [];
+  const seen = new Set([path.resolve(INSTANCE_PROFILE.userDataPath).toLowerCase()]);
+  for (const profile of [LEGACY_SHARED_PROFILE].concat(LEGACY_PATH_PROFILES)) {
+    if (!profile || !profile.userDataPath || !profile.sessionDataPath) continue;
+    const identity = path.resolve(profile.userDataPath).toLowerCase();
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    if (!fs.existsSync(profile.userDataPath) || !fs.existsSync(profile.sessionDataPath)) continue;
+    result.push(profile);
+  }
+  return result;
+}
+
+function migratePrimaryDesktopShellSettings() {
+  if (hasCompletedLegacyProfileMigration()) return false;
+  const profiles = legacyProfilesForMigration();
+  if (!profiles.length) return false;
+  let merged = readDesktopShellSettings();
+  let selectedModifiedAt = desktopShellSettingsModifiedAt(INSTANCE_PROFILE.userDataPath);
+  let changed = false;
+  for (const profile of profiles) {
+    const source = readDesktopShellSettingsFrom(profile.userDataPath);
+    if (!Object.keys(source).length) continue;
+    const sourceModifiedAt = desktopShellSettingsModifiedAt(profile.userDataPath);
+    merged = sourceModifiedAt >= selectedModifiedAt ? { ...merged, ...source } : { ...source, ...merged };
+    selectedModifiedAt = Math.max(selectedModifiedAt, sourceModifiedAt);
+    changed = true;
+  }
+  if (changed) writeDesktopShellSettings(merged);
+  return changed;
+}
+
 function desktopUiStatePath() {
   return path.join(app.getPath('userData'), DESKTOP_UI_STATE_FILE);
 }
@@ -837,6 +958,117 @@ function writeDesktopUiStatePatch(patch) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(next, null, 2), 'utf8');
   return next;
+}
+
+function orderedProfileOrigins(origins, preferredOrigin) {
+  const preferred = String(preferredOrigin || '');
+  const result = [];
+  const seen = new Set();
+  if (preferred) {
+    result.push(preferred);
+    seen.add(preferred);
+  }
+  const source = Array.isArray(origins) ? origins : [];
+  for (const origin of source) {
+    const value = String(origin || '');
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
+}
+
+function mergeProfileStorageRecords(records) {
+  let values = {};
+  const source = Array.isArray(records) ? records : [];
+  for (const record of source) {
+    values = mergePersistentUiValues(values, record && record.values, { preferCandidate: false });
+  }
+  return values;
+}
+
+async function readProfilePersistentValues(profile, profileSession, preferredOrigin, storageSessionDataPath) {
+  if (!profile || !profileSession) return { values: {}, modifiedAt: 0, storageReadOk: false };
+  const modifiedAt = profileModifiedAt(profile.userDataPath, profile.sessionDataPath);
+  const storagePath = storageSessionDataPath || profile.sessionDataPath;
+  const persistentKeys = Array.from(DESKTOP_UI_STATE_KEYS);
+  const origins = orderedProfileOrigins(discoverLocalStorageOrigins(storagePath), preferredOrigin);
+  let values = {};
+  let storageReadOk = true;
+  if (origins.length) {
+    const records = await readSessionLocalStorage({
+      session: profileSession,
+      BrowserWindow,
+      origins,
+      keys: persistentKeys,
+    });
+    storageReadOk = records.length === origins.length;
+    values = mergeProfileStorageRecords(records);
+  }
+  const uiState = readProfileUiState(profile.userDataPath);
+  values = mergePersistentUiValues(values, uiState.values, { preferCandidate: true });
+  return {
+    values,
+    modifiedAt: Object.keys(values).length ? modifiedAt : 0,
+    storageReadOk,
+  };
+}
+
+async function migratePrimaryProfileState(port) {
+  if (!INSTANCE_PROFILE.primary) return { ok: true, skipped: true };
+  const currentOrigin = `http://127.0.0.1:${Number(port) || 3000}`;
+  const destination = await readProfilePersistentValues(INSTANCE_PROFILE, session.defaultSession, currentOrigin);
+  let mergedValues = destination.values;
+  let selectedModifiedAt = destination.modifiedAt;
+  const legacyProfiles = hasCompletedLegacyProfileMigration() ? [] : legacyProfilesForMigration();
+  let legacyStorageReadOk = true;
+  for (const legacyProfile of legacyProfiles) {
+    try {
+      const stagedSessionDataPath = stageProfileSessionData(
+        legacyProfile.sessionDataPath,
+        PROFILE_STATE_MIGRATION_STAGING_ROOT,
+        legacyProfile.instanceId,
+      );
+      const sourceSession = session.fromPath(stagedSessionDataPath);
+      const source = await readProfilePersistentValues(
+        legacyProfile,
+        sourceSession,
+        'http://127.0.0.1:3000',
+        stagedSessionDataPath,
+      );
+      legacyStorageReadOk = legacyStorageReadOk && source.storageReadOk;
+      mergedValues = mergePersistentUiValues(mergedValues, source.values, {
+        preferCandidate: source.modifiedAt >= selectedModifiedAt,
+      });
+      selectedModifiedAt = Math.max(selectedModifiedAt, source.modifiedAt);
+    } catch (e) {
+      console.warn('Legacy profile storage migration unavailable:', e.message);
+      legacyStorageReadOk = false;
+      const sourceUiState = readProfileUiState(legacyProfile.userDataPath);
+      const sourceModifiedAt = profileModifiedAt(legacyProfile.userDataPath, legacyProfile.sessionDataPath);
+      mergedValues = mergePersistentUiValues(mergedValues, sourceUiState.values, {
+        preferCandidate: sourceModifiedAt >= selectedModifiedAt,
+      });
+      selectedModifiedAt = Math.max(selectedModifiedAt, sourceModifiedAt);
+    }
+  }
+
+  if (Object.keys(mergedValues).length) {
+    await writeSessionLocalStorage({
+      session: session.defaultSession,
+      BrowserWindow,
+      origin: currentOrigin,
+      values: mergedValues,
+    });
+    writeDesktopUiStatePatch(mergedValues);
+  }
+  if (legacyProfiles.length && legacyStorageReadOk) writeLegacyProfileMigrationMarker(legacyProfiles);
+  return {
+    ok: true,
+    migrated: legacyProfiles.length > 0,
+    legacyStorageReadOk,
+    destinationModifiedAt: destination.modifiedAt,
+  };
 }
 
 /**
@@ -2966,7 +3198,11 @@ ipcMain.handle('mineradio-wallpaper-update', handleWallpaperStateUpdate);
 async function createWindow() {
   htmlFullscreenActive = false;
   windowFullscreenActive = false;
-  const port = await findOpenPort(3000);
+  const preferredPort = resolvePreferredServerPort({
+    instanceId: INSTANCE_ID,
+    port: process.env.MINERADIO_PORT,
+  });
+  const port = await findOpenPort(preferredPort);
   mainServerPort = port;
 
   process.env.HOST = '127.0.0.1';
@@ -2978,6 +3214,11 @@ async function createWindow() {
   // 注入授权校验：让 HTTP 本地文件代理复用与 IPC 相同的授权根目录约束，堵住越权读取任意文件。
   localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
   await waitForServer(localServer);
+  try {
+    await migratePrimaryProfileState(port);
+  } catch (e) {
+    console.warn('Profile state migration unavailable:', e.message);
+  }
 
   const initialDisplay = screen.getPrimaryDisplay();
   const initialMinimum = windowedMinimumSize(initialDisplay);
@@ -3004,6 +3245,7 @@ async function createWindow() {
       backgroundThrottling: false,
     },
   });
+  mainWindowLifecycleStarted = true;
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     openAllowedExternalUrl(url);
@@ -3112,6 +3354,8 @@ if (!gotSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
+    cleanupProfileSessionStaging(PROFILE_STATE_MIGRATION_STAGING_ROOT);
+    migratePrimaryDesktopShellSettings();
     applySavedDesktopShellSettings();
     wallpaperEngineBridge.configureSessionPermissions();
     await wallpaperEngineBridge.installProtocol(protocol);
@@ -3151,6 +3395,7 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on('window-all-closed', () => {
+    if (!mainWindowLifecycleStarted) return;
     if (process.platform !== 'darwin') app.quit();
   });
 

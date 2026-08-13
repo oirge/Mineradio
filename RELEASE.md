@@ -1,11 +1,19 @@
 ﻿# 发布流程
 
-## v1.4.5 迷你播放器可选启用
-- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.5`。
-- 迷你播放器增加独立启用开关，视觉控制台和系统托盘均可切换；关闭后最小化、关闭到托盘和后台隐藏不会拉起迷你窗口。
-- 修复最小化事件无条件显示迷你播放器的问题；关闭时同步释放迷你播放器状态、封面和 renderer 资源，重新开启时补齐当前播放状态。
-- 保留 `1.4.4` 的标准/极简样式与封面动效设置。
-- 全量 Node 回归、关键 JavaScript 语法检查和 `git diff --check` 通过后再构建 Windows x64 NSIS 安装器。
+## v1.4.5 综合修复重发
+- 版本保持 `1.4.5`，以修复后的提交重新指向 `v1.4.5` tag，并重新生成和上传全部 Windows 自动更新资产。
+- 迷你播放器提供独立启用开关；标准模式默认显示圆角封面，鼠标悬停或键盘聚焦时展开完整控制栏，也可关闭悬停展开并保持完整面板；关闭迷你播放器后同步释放窗口、状态和封面资源。
+- 全屏模式的 DIY 与“退出全屏”固定在 Home 房子按钮左侧，退出入口常驻，修复与导入歌曲及账号区域重叠。
+- 新增多个独立本地歌单的持久化、恢复、播放来源切换和跨 profile 合并；保留特别喜欢与普通曲库来源。
+- 主窗口按当前显示器工作区动态设置最小尺寸并校正边界，修复副屏或小尺寸屏幕显示不全。
+- 二创正式版固定使用 `%APPDATA%\\Mineradio-oirge` 与稳定高位端口，和原版的进程锁、端口、托盘、Chromium profile 分离；关闭行为不再互相覆盖。
+- 首次启动从旧 `%APPDATA%\\Mineradio` 及全部 `Mineradio-path-*` 自动合并音乐文件夹、播放会话、红心和独立歌单；旧 profile 更新或出现新迁移源时标记自动失效并再次合并。
+- 旧 Chromium Local Storage 先复制到临时 session 再读取，避免锁住仍在运行的原版；迁移隐藏窗口不会再误触发主程序退出。
+- 保留 WAV 本地播放支持并增加媒体预加载与错误诊断。
+- 发布前全量 Node 回归 `301/301`、关键 JavaScript 语法检查与 `git diff --check` 通过；Windows x64 NSIS 使用 Electron `43.4.0` 构建成功。
+- 发布资产：`Mineradio-1.4.5-Setup.exe` `101469628` 字节；`.blockmap` `105712` 字节；`latest.yml` `347` 字节；SHA256 清单仅记录这三个自动更新资产，不上传 Portable ZIP。
+- SHA256：安装器 `C8E006AC8AC3E58B04D6BE3E80040C1B3337D06AA64A66D8D0A08FD8D66E5C21`；`.blockmap` `4DD97E299CC5429619EEA9B5F017C9922F69680EB01264A6A8F3AA0DCF834C7F`；`latest.yml` `4915FA9ABE8797A14569D81F05F5A69244EE3609F466545D130B9DD77D6EF2BD`。
+- `latest.yml` 的 Setup SHA512：`fHgoan4fKjXHFljK46di9B6VR/bRrrKVjQDl18ERBlZlKtxK/M0ySVsPIbxc9ZAOGPyPotmPYhxZzqC1T94aSA==`。
 
 ## v1.4.4 迷你播放器封面动效
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.4`。
