@@ -8,6 +8,9 @@
 - 新增 `desktop/wallpaper-engine-library.js`、`desktop/wallpaper-engine-runtime.js`、`desktop/wallpaper-engine-bridge.js` 与前端 `public/wallpaper-engine.js` / `public/wallpaper-engine.css`。
 - 新增 `tests/wallpaper-engine-library.test.js`；主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过。
 - Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- Windows x64 NSIS 构建使用 Electron `43.4.0` 完成；安装器 `101541604` 字节，blockmap `105933` 字节，`latest.yml` `347` 字节。
+- SHA256：安装器 `8BCE0D803FDE0FB7AA68268E7A53377D11B65F26D805DFB58F2B0D6529D65D58`；blockmap `E649781B921B092AD6AF04807F1AB6C9466B7B56B911EB4038248F28994EAB95`；`latest.yml` `C5ADA7354418A50BF6774593F1266B8D7E93DFE10AB4B06C1AD7E6928356F9C5`；SHA256 清单 `ABC85BD3C0A610E3EBF2156DB911C4414171766D5344791EC052B01DD2B39775`。
+- `latest.yml` 的 Setup SHA512：`pyKnR41wSE+/vNHFuW6C/+24YbGmsV1U0vIWWMh63Onah5xnxeoZzCI4v/AzFnxxmMDCCQBWnh3LoCNLTIo6+A==`。
 
 ## v1.4.2 M4A 播放与元数据修复
 
