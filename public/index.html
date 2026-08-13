@@ -280,6 +280,7 @@ if (document.fonts && document.fonts.load) {
     <div class="wallpaper-engine-mark" aria-hidden="true">WE</div>
     <div class="fx-color-row-label">Wallpaper Engine<small id="wallpaper-engine-value">未启用 · 原背景保留</small></div>
     <div class="wallpaper-engine-actions">
+      <button class="fx-mini-btn ghost" id="wallpaper-engine-toggle-btn" type="button" onclick="toggleWallpaperEngineBackground()" aria-pressed="false">启用</button>
       <button class="fx-mini-btn ghost" type="button" onclick="openWallpaperEngineLibrary()">识别 / 导入</button>
       <button class="fx-mini-btn ghost" id="wallpaper-engine-restore-btn" type="button" onclick="deactivateWallpaperEngineBackground()" disabled>恢复原背景</button>
     </div>

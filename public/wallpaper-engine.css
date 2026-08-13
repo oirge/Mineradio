@@ -173,9 +173,9 @@ body.custom-bg-glass-active #custom-bg::after {
 
 .wallpaper-engine-actions {
   display: grid;
-  grid-template-columns: minmax(74px, 1fr) minmax(82px, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
-  width: clamp(172px, 39vw, 224px)
+  width: clamp(226px, 44vw, 286px)
 }
 
 .wallpaper-engine-actions .fx-mini-btn {
@@ -190,6 +190,13 @@ body.custom-bg-glass-active #custom-bg::after {
 .wallpaper-engine-actions .fx-mini-btn:disabled {
   opacity: .34;
   cursor: default
+}
+
+.wallpaper-engine-actions .fx-mini-btn.on {
+  color: rgba(236, 250, 255, .98);
+  border-color: rgba(113, 211, 255, .46);
+  background: rgba(48, 153, 224, .2);
+  box-shadow: inset 0 0 0 1px rgba(131, 220, 255, .12), 0 0 18px rgba(35, 145, 220, .16)
 }
 
 .wallpaper-engine-library-modal {
@@ -664,4 +671,3 @@ body.custom-bg-glass-active #custom-bg::after {
   line-height: 1.5;
   flex: 0 0 auto
 }
-

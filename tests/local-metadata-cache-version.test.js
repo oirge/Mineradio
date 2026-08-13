@@ -19,7 +19,7 @@ function readRendererSource() {
  * @param {string} source 完整 renderer 源码。
  * @returns {string} 缓存版本判断源码。
  */
-function readMetadataCacheGateSource(source) {
+function readMetadataCacheGateSourceLegacy(source) {
   const start = source.indexOf('function canUseCachedLocalMetadata(');
   if (start < 0) return '';
   const end = source.indexOf('/**\n * 将本地资产缓存记录套用到歌曲对象', start);
@@ -32,7 +32,7 @@ function readMetadataCacheGateSource(source) {
  * @param {string} source 完整 renderer 源码。
  * @returns {string} 资产缓存补水源码。
  */
-function readAssetCacheApplySource(source) {
+function readAssetCacheApplySourceLegacy(source) {
   const start = source.indexOf('function applyLocalAssetCacheToSong(');
   const end = source.indexOf('/**\n * 按歌曲范围读取 IndexedDB 资产', start);
   assert.ok(start >= 0 && end > start, '未找到本地资产缓存补水函数');
@@ -44,7 +44,7 @@ function readAssetCacheApplySource(source) {
  * @param {string} source 完整 renderer 源码。
  * @returns {string} 曲库索引补水源码。
  */
-function readLibraryIndexApplySource(source) {
+function readLibraryIndexApplySourceLegacy(source) {
   const start = source.indexOf('function applyLocalLibraryIndexToSong(');
   const end = source.indexOf('/**\n * 同步曲库索引与当前歌曲列表', start);
   assert.ok(start >= 0 && end > start, '未找到本地曲库索引补水函数');
@@ -56,7 +56,7 @@ function readLibraryIndexApplySource(source) {
  * @param {string} source 完整 renderer 源码。
  * @returns {string} 元数据加载状态机源码。
  */
-function readMetadataEnsureSource(source) {
+function readMetadataEnsureSourceLegacy(source) {
   const start = source.indexOf('function ensureLocalMetadataForSong(');
   const end = source.indexOf('/**\n * 后台补齐当前播放歌曲元数据', start);
   assert.ok(start >= 0 && end > start, '未找到本地元数据加载状态机');
@@ -76,6 +76,34 @@ function invalidateSongCoverCache() {}
  * 验证旧 FLAC 资产缓存只复用轻量资产，不恢复可能被排序字段污染的元数据。
  * @returns {void}
  */
+function readMetadataCacheGateSource(source) {
+  const start = source.indexOf('function canUseCachedLocalMetadata(');
+  const end = source.indexOf('function applyLocalAssetCacheToSong(', start);
+  assert.ok(start >= 0 && end > start, '未找到元数据缓存版本判断');
+  return source.slice(start, end);
+}
+
+function readAssetCacheApplySource(source) {
+  const start = source.indexOf('function applyLocalAssetCacheToSong(');
+  const end = source.indexOf('\n/**', start);
+  assert.ok(start >= 0 && end > start, '未找到本地资产缓存补水函数');
+  return source.slice(start, end);
+}
+
+function readLibraryIndexApplySource(source) {
+  const start = source.indexOf('function applyLocalLibraryIndexToSong(');
+  const end = source.indexOf('function syncLocalLibraryIndexWithSongs(', start);
+  assert.ok(start >= 0 && end > start, '未找到本地曲库索引补水函数');
+  return source.slice(start, end);
+}
+
+function readMetadataEnsureSource(source) {
+  const start = source.indexOf('function ensureLocalMetadataForSong(');
+  const end = source.indexOf('function schedulePlaybackMetadataRefresh(', start);
+  assert.ok(start >= 0 && end > start, '未找到本地元数据加载状态机');
+  return source.slice(start, end);
+}
+
 function testOldFlacAssetCacheForcesMetadataReparse() {
   const source = readRendererSource();
   const context = {

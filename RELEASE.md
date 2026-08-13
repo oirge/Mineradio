@@ -1,17 +1,20 @@
 ﻿# 发布流程
 
 ## v1.4.3 Wallpaper Engine 壁纸背景
+- 新增独立 Wallpaper Engine 启用开关，默认关闭；选择项目不会自动接管背景，停用后保留上次选择，可随时恢复。
 
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.3`。
 - 基于 `v1.4.2` 接入 Wallpaper Engine 壁纸背景：本机库识别、手动导入、Video/图片直播、Scene 原生引擎运行。
 - 视觉控制台新增识别、导入、收藏、隐藏和恢复原背景入口；Scene 自动静音壁纸音频。
 - 新增 `desktop/wallpaper-engine-library.js`、`desktop/wallpaper-engine-runtime.js`、`desktop/wallpaper-engine-bridge.js` 与前端 `public/wallpaper-engine.js` / `public/wallpaper-engine.css`。
 - 新增 `tests/wallpaper-engine-library.test.js`；主进程/预加载/服务端/渲染器语法检查和 `git diff --check` 通过。
+- 修复部分下载器写入 FLAC 的 `kuwo` / `酷我` 等来源占位标签覆盖文件名歌曲信息；元数据缓存 schema 升为 `3`，旧错误缓存会自动重新解析。
+- 本地曲库确认支持 D 盘三级及更深目录递归扫描；新增三级目录 FLAC 回归和来源占位标签回归，定向 Node 回归 `25/25` 通过。
 - Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
-- Windows x64 NSIS 构建使用 Electron `43.4.0` 完成；安装器 `101541604` 字节，blockmap `105933` 字节，`latest.yml` `347` 字节。
-- SHA256：安装器 `8BCE0D803FDE0FB7AA68268E7A53377D11B65F26D805DFB58F2B0D6529D65D58`；blockmap `E649781B921B092AD6AF04807F1AB6C9466B7B56B911EB4038248F28994EAB95`；`latest.yml` `C5ADA7354418A50BF6774593F1266B8D7E93DFE10AB4B06C1AD7E6928356F9C5`；SHA256 清单 `ABC85BD3C0A610E3EBF2156DB911C4414171766D5344791EC052B01DD2B39775`。
-- `latest.yml` 的 Setup SHA512：`pyKnR41wSE+/vNHFuW6C/+24YbGmsV1U0vIWWMh63Onah5xnxeoZzCI4v/AzFnxxmMDCCQBWnh3LoCNLTIo6+A==`。
-- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.4.3`，正式 Latest；四个远端资产大小与 SHA256 均和本地产物一致。
+- Windows x64 NSIS 构建使用 Electron `43.4.0` 完成；本次重打安装器 `101541957` 字节，blockmap `105957` 字节，`latest.yml` `347` 字节。
+- SHA256：安装器 `6DE4175B768EC0D79337C309D7814F2784B462982952D7A51F10DF199B12B830`；blockmap `82FCB857DB678D2060BBB80E3442FECF8B439B0158C02D40A2C1109C08875CD3`；`latest.yml` `80165724A4A5CAB7B058C564F56339F7F2B6B5E6F6B016B8866D796E4B30ED65`；SHA256 清单 `EB572A2771FAB4B4FB07A6119EB896BFDE4810EC3EA4B4787B4CCE169CAE2EFF`。
+- `latest.yml` 的 Setup SHA512：`zUP28omYhcuktRnf1D2sn1gVvJVCJ27VrxoHQ6vN5fWiaKoQPou/WPoVPOmg7wbHATqyXJ+DBsCj29/pHwKdjw==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.4.3`；本地已重建并验证包含 FLAC 来源占位标签修复，发布资产使用本次验证过的安装包。
 
 ## v1.4.2 M4A 播放与元数据修复
 

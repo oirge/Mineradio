@@ -10,12 +10,14 @@
   }
 })();
 var WALLPAPER_ENGINE_SELECTION_STORE_KEY = 'mineradio-wallpaper-engine-selection-v1';
+var WALLPAPER_ENGINE_ENABLED_STORE_KEY = 'mineradio-wallpaper-engine-enabled-v1';
 var WALLPAPER_ENGINE_HIDDEN_STORE_KEY = 'mineradio-wallpaper-engine-hidden-v1';
 var WALLPAPER_ENGINE_FAVORITE_STORE_KEY = 'mineradio-wallpaper-engine-favorites-v1';
 var wallpaperEngineProjects = [];
 var wallpaperEngineLibrarySnapshot = null;
 var wallpaperEngineMediaToken = '';
 var wallpaperEngineLibraryBusy = false;
+var wallpaperEngineLibraryLoadPromise = null;
 var wallpaperEngineLayerToken = 0;
 var wallpaperEnginePreviewObserver = null;
 var wallpaperEngineSearchRenderTimer = 0;
@@ -75,7 +77,7 @@ function wallpaperEnginePointerActivityReady() {
   // browser fallback still resolves to document.hidden.
   if (!wallpaperEngineDesktopHostIsVisible()
     || wallpaperEngineHostBoundsPreparing
-    || !wallpaperEngineSelection.active
+    || !wallpaperEngineBackgroundActive()
     || wallpaperEngineSelection.kind !== 'engine'
     || !/^[a-f0-9]{24}$/i.test(String(wallpaperEngineNativeSessionId || ''))
     || !wallpaperEngineCaptureStream) return false;
@@ -175,6 +177,24 @@ function readWallpaperEngineSelection() {
 }
 
 var wallpaperEngineSelection = readWallpaperEngineSelection();
+var wallpaperEngineEnabled = readWallpaperEngineEnabled();
+
+function readWallpaperEngineEnabled() {
+  try {
+    var raw = localStorage.getItem(WALLPAPER_ENGINE_ENABLED_STORE_KEY);
+    return raw === '1' || raw === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+function saveWallpaperEngineEnabled() {
+  try { localStorage.setItem(WALLPAPER_ENGINE_ENABLED_STORE_KEY, wallpaperEngineEnabled ? '1' : '0'); } catch (e) { }
+}
+
+function wallpaperEngineBackgroundActive() {
+  return wallpaperEngineEnabled && !!wallpaperEngineSelection.active;
+}
 
 function saveWallpaperEngineSelection() {
   try { localStorage.setItem(WALLPAPER_ENGINE_SELECTION_STORE_KEY, JSON.stringify(normalizeWallpaperEngineSelection(wallpaperEngineSelection))); }
@@ -255,8 +275,10 @@ function wallpaperEngineProjectLabel(item) {
 
 function updateWallpaperEngineEntryUi(message) {
   var value = document.getElementById('wallpaper-engine-value');
+  var toggle = document.getElementById('wallpaper-engine-toggle-btn');
   var restore = document.getElementById('wallpaper-engine-restore-btn');
-  var active = !!wallpaperEngineSelection.active;
+  var active = wallpaperEngineBackgroundActive();
+  var selected = !!wallpaperEngineSelection.active;
   if (value) {
     if (message) value.textContent = message;
     else if (active && wallpaperEngineRuntimeError) value.textContent = wallpaperEngineRuntimeError + ' · 已显示原背景';
@@ -267,6 +289,16 @@ function updateWallpaperEngineEntryUi(message) {
     else if (active && wallpaperEngineSelection.kind === 'engine') value.textContent = (wallpaperEngineSelection.title || '已选择') + ' · WE 引擎实时运行';
     else if (active) value.textContent = (wallpaperEngineSelection.title || '已选择') + ' · 原背景保留';
     else value.textContent = '未启用 · 原背景保留';
+  }
+  if (value && !message && selected && !active) {
+    value.textContent = (wallpaperEngineSelection.title || '已选择') + ' · 未启用';
+  }
+  if (toggle) {
+    toggle.disabled = !wallpaperEngineEnabled && wallpaperEngineLibraryBusy;
+    toggle.classList.toggle('on', wallpaperEngineEnabled);
+    toggle.textContent = wallpaperEngineEnabled ? '停用' : '启用';
+    toggle.title = wallpaperEngineEnabled ? '停用 Wallpaper Engine，恢复原背景' : (selected ? '启用已选择的 Wallpaper Engine 壁纸' : '先选择 Wallpaper Engine 壁纸');
+    toggle.setAttribute('aria-pressed', wallpaperEngineEnabled ? 'true' : 'false');
   }
   if (restore) restore.disabled = !active;
 }
@@ -742,7 +774,7 @@ window.__mineradioPrepareWallpaperEngineGlassCapture = async function (sessionId
 window.__mineradioPrepareWallpaperEngineHostBoundsChange = function (sessionId, reason) {
   sessionId = String(sessionId || '');
   reason = String(reason || '').slice(0, 80);
-  if (!wallpaperEngineSelection.active || wallpaperEngineSelection.kind !== 'engine') {
+  if (!wallpaperEngineBackgroundActive() || wallpaperEngineSelection.kind !== 'engine') {
     return { ok: true, frozen: false, skipped: true };
   }
   // A Promise.race timeout in main cannot cancel executeJavaScript. Requiring an
@@ -803,7 +835,7 @@ window.__mineradioPrepareWallpaperEngineHostBoundsChange = function (sessionId, 
 window.__mineradioPrepareWallpaperEngineDesktopPreview = function (sessionId, reason) {
   sessionId = String(sessionId || '');
   reason = String(reason || 'full-desktop-passive').slice(0, 80);
-  if (!wallpaperEngineSelection.active || wallpaperEngineSelection.kind !== 'engine') {
+  if (!wallpaperEngineBackgroundActive() || wallpaperEngineSelection.kind !== 'engine') {
     return Promise.resolve({ ok: true, preview: false, selectedEngine: false, skipped: true });
   }
   if (sessionId && sessionId !== String(wallpaperEngineNativeSessionId || '')) {
@@ -896,7 +928,7 @@ window.__mineradioPrepareWallpaperEngineDesktopPreview = function (sessionId, re
     }
     image.onload = function () {
       if (token !== wallpaperEngineLayerToken
-        || !wallpaperEngineSelection.active
+        || !wallpaperEngineBackgroundActive()
         || wallpaperEngineSelection.kind !== 'engine'
         || wallpaperEngineSelection.id !== item.id) {
         finish({
@@ -1005,7 +1037,7 @@ function waitForWallpaperEngineVideoFirstFrame(video, item, token, sessionId, ru
 
 function wallpaperEngineNativeStartIsCurrent(item, token) {
   return token === wallpaperEngineLayerToken
-    && wallpaperEngineSelection.active
+    && wallpaperEngineBackgroundActive()
     && wallpaperEngineSelection.id === item.id
     && !wallpaperEngineNativeHostUnavailable();
 }
@@ -1014,7 +1046,7 @@ function wallpaperEngineGlassSamplerIsCurrent(sessionId, layerToken, captureToke
   return captureToken === wallpaperEngineGlassCaptureToken
     && layerToken === wallpaperEngineLayerToken
     && String(wallpaperEngineNativeSessionId || '') === String(sessionId || '')
-    && wallpaperEngineSelection.active
+    && wallpaperEngineBackgroundActive()
     && wallpaperEngineSelection.kind === 'engine'
     && wallpaperEngineCaptureMode === 'dwm-thumbnail'
     && document.body.classList.contains('wallpaper-engine-dwm-active');
@@ -1361,7 +1393,7 @@ function wallpaperEngineRuntimeErrorText(error) {
 
 function requestWallpaperEngineVideoPlayback(video, item, kind, token, revealLayer, attempt) {
   cancelWallpaperEngineVideoRetry();
-  if (!video || token !== wallpaperEngineLayerToken || !wallpaperEngineSelection.active) return;
+  if (!video || token !== wallpaperEngineLayerToken || !wallpaperEngineBackgroundActive()) return;
   var hostUnavailable = kind === 'engine' ? wallpaperEngineNativeHostUnavailable() : document.hidden;
   if (hostUnavailable) {
     try { video.pause(); } catch (e) { }
@@ -1380,7 +1412,7 @@ function requestWallpaperEngineVideoPlayback(video, item, kind, token, revealLay
     return;
   }
   promise.then(function () {
-    if (token !== wallpaperEngineLayerToken || !wallpaperEngineSelection.active) return;
+    if (token !== wallpaperEngineLayerToken || !wallpaperEngineBackgroundActive()) return;
     if (revealLayer) wallpaperEngineLayerReady('video', token);
   }).catch(function (error) {
     handleWallpaperEngineVideoPlayFailure(error, video, item, kind, token, revealLayer, attempt);
@@ -1388,7 +1420,7 @@ function requestWallpaperEngineVideoPlayback(video, item, kind, token, revealLay
 }
 
 function handleWallpaperEngineVideoPlayFailure(error, video, item, kind, token, revealLayer, attempt) {
-  if (token !== wallpaperEngineLayerToken || !wallpaperEngineSelection.active) return;
+  if (token !== wallpaperEngineLayerToken || !wallpaperEngineBackgroundActive()) return;
   var hostUnavailable = kind === 'engine' ? wallpaperEngineNativeHostUnavailable() : document.hidden;
   var interrupted = hostUnavailable || wallpaperEnginePlayWasInterrupted(error);
   if (!interrupted) {
@@ -1455,7 +1487,7 @@ function suspendOriginalBackgroundForWallpaperEngine() {
 }
 
 function wallpaperEngineLayerReady(kind, token) {
-  if (token !== wallpaperEngineLayerToken || !wallpaperEngineSelection.active) return;
+  if (token !== wallpaperEngineLayerToken || !wallpaperEngineBackgroundActive()) return;
   cancelWallpaperEngineHostRecovery(true);
   var layer = document.getElementById('wallpaper-engine-layer');
   if (!layer) return;
@@ -1502,7 +1534,7 @@ function wallpaperEngineLayerFailed(item, attemptedKind, token) {
         wallpaperEngineHostRecoveryRetryTimer = setTimeout(function () {
           wallpaperEngineHostRecoveryRetryTimer = 0;
           if (!wallpaperEngineHostRecoveryInFlight
-            || !wallpaperEngineSelection.active
+            || !wallpaperEngineBackgroundActive()
             || wallpaperEngineSelection.kind !== 'engine'
             || !wallpaperEngineDesktopHostIsVisible()) return;
           wallpaperEngineHostBoundsPreparing = false;
@@ -1529,7 +1561,7 @@ function wallpaperEngineLayerFailed(item, attemptedKind, token) {
 
 function applyWallpaperEngineBackground(item, quiet) {
   item = item || wallpaperEngineProjectById(wallpaperEngineSelection.id);
-  if (!item || !wallpaperEngineSelection.active) {
+  if (!item || !wallpaperEngineBackgroundActive()) {
     wallpaperEngineRuntimeError = item ? '' : '项目离线';
     restoreOriginalBackgroundAfterWallpaperEngine();
     clearWallpaperEngineLayerMedia(0);
@@ -1555,7 +1587,7 @@ function applyWallpaperEngineBackground(item, quiet) {
   updateWallpaperEngineEntryUi('正在加载 ' + (item.title || '壁纸') + '…');
 
   function beginWallpaperEngineMediaLoad() {
-    if (token !== wallpaperEngineLayerToken || !wallpaperEngineSelection.active || wallpaperEngineSelection.id !== item.id) return;
+    if (token !== wallpaperEngineLayerToken || !wallpaperEngineBackgroundActive() || wallpaperEngineSelection.id !== item.id) return;
     if (kind === 'engine' && wallpaperEngineNativeHostUnavailable()) return;
     clearWallpaperEngineLayerMedia(0);
     if (kind === 'engine') {
@@ -1622,15 +1654,60 @@ function activateWallpaperEngineItem(id) {
   cancelWallpaperEngineHostRecovery(true);
   saveWallpaperEngineSelection();
   wallpaperEngineRuntimeError = '';
-  applyWallpaperEngineBackground(item, false);
+  if (wallpaperEngineEnabled) {
+    applyWallpaperEngineBackground(item, false);
+  } else {
+    updateWallpaperEngineEntryUi();
+    showToast('已选择 Wallpaper Engine 壁纸，请点击启用');
+  }
   closeWallpaperEngineLibrary();
+}
+
+function toggleWallpaperEngineBackground() {
+  if (wallpaperEngineEnabled) {
+    deactivateWallpaperEngineBackground();
+    return;
+  }
+  if (wallpaperEngineLibraryBusy) {
+    updateWallpaperEngineEntryUi();
+    showToast('Wallpaper Engine 库正在更新，请稍后再启用');
+    return;
+  }
+  if (!wallpaperEngineSelection.active || !wallpaperEngineSelection.id) {
+    updateWallpaperEngineEntryUi();
+    showToast('请先识别并选择 Wallpaper Engine 壁纸');
+    openWallpaperEngineLibrary();
+    return;
+  }
+  wallpaperEngineEnabled = true;
+  saveWallpaperEngineEnabled();
+  wallpaperEngineRuntimeError = '';
+  updateWallpaperEngineEntryUi();
+  var item = wallpaperEngineProjectById(wallpaperEngineSelection.id);
+  if (item) {
+    applyWallpaperEngineBackground(item, false);
+    return;
+  }
+  loadWallpaperEngineLibrary(false, false).then(function () {
+    var selected = wallpaperEngineProjectById(wallpaperEngineSelection.id);
+    if (selected) {
+      applyWallpaperEngineBackground(selected, false);
+      return;
+    }
+    wallpaperEngineEnabled = false;
+    saveWallpaperEngineEnabled();
+    wallpaperEngineRuntimeError = '项目离线';
+    updateWallpaperEngineEntryUi();
+    showToast('未找到已选择的 Wallpaper Engine 项目');
+  });
 }
 
 function deactivateWallpaperEngineBackground(quiet) {
   cancelWallpaperEngineHostRecovery(true);
   wallpaperEngineDesktopPreviewActive = false;
   wallpaperEngineDesktopPreviewUsesAsset = false;
-  wallpaperEngineSelection.active = false;
+  wallpaperEngineEnabled = false;
+  saveWallpaperEngineEnabled();
   if (wallpaperEngineHostBoundsRestartTimer) {
     clearTimeout(wallpaperEngineHostBoundsRestartTimer);
     wallpaperEngineHostBoundsRestartTimer = 0;
@@ -1653,7 +1730,7 @@ function deactivateWallpaperEngineBackground(quiet) {
 }
 
 function restartWallpaperEngineAfterHostBoundsChange() {
-  if (!wallpaperEngineSelection.active || wallpaperEngineSelection.kind !== 'engine' || wallpaperEngineNativeHostUnavailable()) return;
+  if (!wallpaperEngineBackgroundActive() || wallpaperEngineSelection.kind !== 'engine' || wallpaperEngineNativeHostUnavailable()) return;
   var item = wallpaperEngineProjectById(wallpaperEngineSelection.id);
   if (!item || !item.enginePlayable) {
     clearWallpaperEngineFreezeFrame(false);
@@ -2033,36 +2110,45 @@ function consumeWallpaperEngineSnapshot(snapshot) {
   }
 }
 
-async function loadWallpaperEngineLibrary(force, showNotice) {
+function loadWallpaperEngineLibrary(force, showNotice) {
   var api = wallpaperEngineDesktopApi();
   if (!api || typeof api.listWallpaperEngineProjects !== 'function') {
     updateWallpaperEngineLibraryStatus(null, '仅桌面版支持本地壁纸识别');
     if (showNotice) showToast('当前环境不支持 Wallpaper Engine 本地识别');
-    return [];
+    return Promise.resolve([]);
   }
-  if (wallpaperEngineLibraryBusy) return wallpaperEngineProjects;
+  if (wallpaperEngineLibraryBusy) return wallpaperEngineLibraryLoadPromise || Promise.resolve(wallpaperEngineProjects);
   wallpaperEngineLibraryBusy = true;
-  var failure = '';
-  updateWallpaperEngineLibraryStatus(null, '');
-  renderWallpaperEngineLibrary();
-  try {
-    var snapshot = await api.listWallpaperEngineProjects({ force: force === true });
-    if (!snapshot || snapshot.ok === false) throw new Error(snapshot && snapshot.error || '扫描失败');
-    consumeWallpaperEngineSnapshot(snapshot);
-    if (showNotice) showToast(snapshot.count ? ('已识别 ' + snapshot.count + ' 个 Wallpaper Engine 项目') : '没有识别到 Wallpaper Engine 项目');
-    return wallpaperEngineProjects;
-  } catch (e) {
-    failure = e.message || '扫描失败';
-    wallpaperEngineProjects = [];
-    wallpaperEngineLibrarySnapshot = null;
-    wallpaperEngineMediaToken = '';
-    if (showNotice) showToast('Wallpaper Engine 识别失败');
-    return [];
-  } finally {
-    wallpaperEngineLibraryBusy = false;
-    updateWallpaperEngineLibraryStatus(wallpaperEngineLibrarySnapshot, failure);
+  var loadPromise = (async function () {
+    var failure = '';
+    updateWallpaperEngineLibraryStatus(null, '');
     renderWallpaperEngineLibrary();
-  }
+    try {
+      var snapshot = await api.listWallpaperEngineProjects({ force: force === true });
+      if (!snapshot || snapshot.ok === false) throw new Error(snapshot && snapshot.error || '扫描失败');
+      consumeWallpaperEngineSnapshot(snapshot);
+      if (showNotice) showToast(snapshot.count ? ('已识别 ' + snapshot.count + ' 个 Wallpaper Engine 项目') : '没有识别到 Wallpaper Engine 项目');
+      return wallpaperEngineProjects;
+    } catch (e) {
+      failure = e.message || '扫描失败';
+      wallpaperEngineProjects = [];
+      wallpaperEngineLibrarySnapshot = null;
+      wallpaperEngineMediaToken = '';
+      if (showNotice) showToast('Wallpaper Engine 识别失败');
+      return [];
+    } finally {
+      wallpaperEngineLibraryBusy = false;
+      updateWallpaperEngineLibraryStatus(wallpaperEngineLibrarySnapshot, failure);
+      renderWallpaperEngineLibrary();
+    }
+  })();
+  wallpaperEngineLibraryLoadPromise = loadPromise;
+  loadPromise.then(function () {
+    if (wallpaperEngineLibraryLoadPromise === loadPromise) wallpaperEngineLibraryLoadPromise = null;
+  }, function () {
+    if (wallpaperEngineLibraryLoadPromise === loadPromise) wallpaperEngineLibraryLoadPromise = null;
+  });
+  return loadPromise;
 }
 
 async function openWallpaperEngineLibrary() {
@@ -2254,7 +2340,7 @@ function bindWallpaperEngineLibraryEvents() {
     });
     document.addEventListener('visibilitychange', function () {
       var video = document.getElementById('wallpaper-engine-video');
-      if (!wallpaperEngineSelection.active) return;
+      if (!wallpaperEngineBackgroundActive()) return;
       var item = wallpaperEngineProjectById(wallpaperEngineSelection.id);
       if (wallpaperEngineSelection.kind === 'engine') {
         if (wallpaperEngineDesktopPreviewActive) return;
@@ -2314,7 +2400,7 @@ function bindWallpaperEngineLibraryEvents() {
 function initializeWallpaperEngineLibrary() {
   bindWallpaperEngineLibraryEvents();
   updateWallpaperEngineEntryUi();
-  if (!wallpaperEngineSelection.active) return;
+  if (!wallpaperEngineBackgroundActive()) return;
   setTimeout(function () {
     loadWallpaperEngineLibrary(false, false).then(function () {
       var item = wallpaperEngineProjectById(wallpaperEngineSelection.id);

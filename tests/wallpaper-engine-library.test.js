@@ -98,6 +98,7 @@ test('桌面壳与主界面接入 Wallpaper Engine 入口', () => {
   const renderer = fs.readFileSync(path.join(root, 'public', 'wallpaper-engine.js'), 'utf8');
   assert.match(mainSource, /createWallpaperEngineBridge/);
   assert.match(mainSource, /registerWallpaperEngineScheme\(protocol\)/);
+  assert.match(fs.readFileSync(path.join(root, 'desktop', 'wallpaper-engine-bridge.js'), 'utf8'), /registerScheme:\s*registerWallpaperEngineScheme/);
   assert.match(mainSource, /wallpaperEngineBridge\.installProtocol\(protocol\)/);
   assert.match(mainSource, /wallpaperEngineBridge\.attachWindow\(mainWindow\)/);
   assert.match(preloadSource, /listWallpaperEngineProjects/);
@@ -105,8 +106,17 @@ test('桌面壳与主界面接入 Wallpaper Engine 入口', () => {
   assert.match(preloadSource, /onWallpaperEngineHostBoundsChanged/);
   assert.match(html, /id="wallpaper-engine-layer"/);
   assert.match(html, /id="wallpaper-engine-modal"/);
+  assert.match(html, /id="wallpaper-engine-toggle-btn"/);
   assert.match(html, /wallpaper-engine\.js/);
   assert.match(html, /wallpaper-engine\.css/);
   assert.match(renderer, /function applyWallpaperEngineBackground/);
+  assert.match(renderer, /WALLPAPER_ENGINE_ENABLED_STORE_KEY/);
+  assert.match(renderer, /raw === '1' \|\| raw === 'true'/);
+  assert.match(renderer, /function toggleWallpaperEngineBackground/);
+  assert.match(renderer, /wallpaperEngineLibraryLoadPromise/);
+  assert.match(renderer, /if \(wallpaperEngineLibraryBusy\) return wallpaperEngineLibraryLoadPromise/);
+  assert.match(renderer, /toggle\.disabled = !wallpaperEngineEnabled && wallpaperEngineLibraryBusy/);
+  assert.match(renderer, /if \(wallpaperEngineLibraryBusy\) \{/);
+  assert.match(renderer, /if \(!wallpaperEngineBackgroundActive\(\)\) return;/);
   assert.match(renderer, /function initializeWallpaperEngineLibrary/);
 });

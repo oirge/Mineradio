@@ -809,7 +809,7 @@ function createWallpaperEngineBridge(options = {}) {
   return {
     library,
     runtime,
-    registerScheme,
+    registerScheme: registerWallpaperEngineScheme,
     registerIpc,
     configureSessionPermissions,
     attachWindow,

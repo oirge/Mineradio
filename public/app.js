@@ -121,7 +121,7 @@ var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
 var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
-var LOCAL_METADATA_TAG_SCHEMA = 2;
+var LOCAL_METADATA_TAG_SCHEMA = 3;
 var PERSISTENT_UI_STATE_KEYS = [
   VOLUME_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
@@ -23124,6 +23124,22 @@ function normalizeLocalMetadataValue(value) {
     .replace(/\s+\/\s+/g, ' / ')
     .trim();
 }
+function isLocalSourcePlaceholderMetadata(value) {
+  var normalized = String(value || '')
+    .toLowerCase()
+    .replace(/[\s._\-]+/g, '')
+    .replace(/[（(【\[]/g, '')
+    .replace(/[）)】\]]/g, '');
+  return normalized === 'kuwo'
+    || normalized === '酷我'
+    || normalized === '酷我音乐'
+    || normalized === 'kugou'
+    || normalized === '酷狗'
+    || normalized === 'qqmusic'
+    || normalized === 'qq音乐'
+    || normalized === 'netease'
+    || normalized === '网易云音乐';
+}
 function putLocalMetadataTag(tags, key, value) {
   value = normalizeLocalMetadataValue(value);
   if (!value) return;
@@ -23800,10 +23816,10 @@ async function extractEmbeddedCoverSource(file, opts) {
 function applyLocalMetadataTags(song, tags) {
   if (!song || !tags) return false;
   var changed = false;
-  if (tags.title && song.name !== tags.title) { song.name = tags.title; changed = true; }
-  if (tags.artist && song.artist !== tags.artist) { song.artist = tags.artist; changed = true; }
-  if (tags.album && song.album !== tags.album) { song.album = tags.album; changed = true; }
-  if (tags.albumArtist && song.albumArtist !== tags.albumArtist) { song.albumArtist = tags.albumArtist; changed = true; }
+  if (tags.title && !isLocalSourcePlaceholderMetadata(tags.title) && song.name !== tags.title) { song.name = tags.title; changed = true; }
+  if (tags.artist && !isLocalSourcePlaceholderMetadata(tags.artist) && song.artist !== tags.artist) { song.artist = tags.artist; changed = true; }
+  if (tags.album && !isLocalSourcePlaceholderMetadata(tags.album) && song.album !== tags.album) { song.album = tags.album; changed = true; }
+  if (tags.albumArtist && !isLocalSourcePlaceholderMetadata(tags.albumArtist) && song.albumArtist !== tags.albumArtist) { song.albumArtist = tags.albumArtist; changed = true; }
   if (tags.track && song.trackNumber !== tags.track) { song.trackNumber = tags.track; changed = true; }
   if (tags.year && song.year !== tags.year) { song.year = tags.year; changed = true; }
   updateLocalAudioQualityInfo(song);
