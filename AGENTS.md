@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.4.2`；包含 MP3/FLAC/M4A/WAV/OGG 本地播放、标准 M4A 标签与封面解析、搜索排序、特别喜欢歌单、主播放栏歌单来源切换，以及主渲染器、壁纸覆盖层与 3D 歌单架的 CPU/运行内存优化。
+- 当前源码版本：`v1.4.6`；包含 MP3/FLAC/M4A/WAV/OGG 本地播放、标准 M4A 标签与封面解析、搜索排序、特别喜欢歌单、主播放栏歌单来源切换，以及主渲染器、壁纸覆盖层、3D 歌单架和透明窗口全屏修复。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -136,3 +136,4 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `主循环 performance.now 时间戳复用`、`refreshShelfRenderFrameState`、`frameShelfState`、`updateStageLyrics3D 歌单状态快照`、`shelfManager.getMode 同帧重复`、`hasOpenContent 同帧重复`、`shelfAlwaysVisible 同帧重复` 或 `空 Home 波形时间戳` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `sampleRenderPerf 缓存回收`、`maybeTrimRuntimeCaches 采样边界`、`主循环复用自适应 FPS`、`frameFps` 或 `shouldSkipAdaptiveRenderFrame 时间戳复用` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `M4A 播放失败`、`m4a 元数据`、`moov`、`ilst`、`data atom`、`covr`、`audio/mp4`、`M4A 封面`、`M4A 标签缓存` 或 `ALAC 编码兼容` 时，必须优先读取 `.context/pitfalls/mineradio-m4a-metadata-playback.md`。
+- 遇到 `Electron 透明无边框全屏`、`setFullScreen`、`isFullScreen 返回 false`、`windowFullscreenActive`、`htmlFullscreenActive`、`全屏窗口被缩回`、`display.bounds`、`workArea` 或 `WS_THICKFRAME` 时，必须优先读取 `.context/pitfalls/mineradio-electron-transparent-fullscreen.md`。

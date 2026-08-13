@@ -1,5 +1,18 @@
 ﻿# 发布流程
 
+## v1.4.6 透明窗口全屏修复
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.6`。
+- 修复 Windows 透明无边框主窗口调用 `setFullScreen(true)` 后，`move` 事件把完整显示器边界误判为超出工作区并缩回普通窗口的问题。
+- 普通窗口边界校正同时识别 Electron 原生全屏、应用窗口全屏和 HTML 全屏状态；普通超大窗口仍会按当前显示器工作区恢复。
+- 退出全屏和主进程 `Esc` 处理不再只依赖 `BrowserWindow.isFullScreen()`；HTML 全屏时保留 Chromium 的默认退出流程，避免 DOM 全屏状态残留。
+- 新增 `tests/fullscreen-window-behavior.test.js`；相关全屏回归 `8/8`，全量 Node 回归 `307/307`，关键 JavaScript 语法检查与 `git diff --check` 通过。
+- Windows 实机验证：主窗口从 `1376x774` 进入 `1920x1080`，覆盖任务栏区域，退出后恢复 `1376x774`。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.4.6-Setup.exe` `101467438` 字节；`.blockmap` `105952` 字节；`latest.yml` `347` 字节；SHA256 清单记录这三个自动更新资产，不上传 Portable ZIP。
+- SHA256：安装器 `3107a8b7b6c998a2897de6b75cb723da5576e555402b5e63f0050752a17789e6`；`.blockmap` `87b130f4ffd3779969d85462df6a09605217905977f0c498da37b5b8fb4d95d8`；`latest.yml` `b2e434ed99f35964c1d674847dcd344ac9cc79563a4c4ac6a3f2198876653b6b`。
+- `latest.yml` 的 Setup SHA512：`pLdDEoH1eVecge5NuGIZFH98uW6rc5Co/tYLzuxdcItwCOuW9acv1mQYVNi2OGSmUuxE2WMKtZ36r4TjQSCnJg==`。
+- Release 标题使用 `Mineradio v1.4.6 全屏修复版`。
+
 ## v1.4.5 综合修复重发
 - 版本保持 `1.4.5`，以修复后的提交重新指向 `v1.4.5` tag，并重新生成和上传全部 Windows 自动更新资产。
 - 迷你播放器提供独立启用开关；标准模式默认显示圆角封面，鼠标悬停或键盘聚焦时展开完整控制栏，也可关闭悬停展开并保持完整面板；关闭迷你播放器后同步释放窗口、状态和封面资源。

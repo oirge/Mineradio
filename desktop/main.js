@@ -1324,8 +1324,17 @@ function applyWindowedBounds(win) {
   sendWindowState(win);
 }
 
+/**
+ * 将普通主窗口限制在当前显示器工作区内，但不干预正在切换或已经进入的全屏窗口。
+ * Windows 的透明无边框窗口在 Electron 43 中可能已经覆盖显示器，isFullScreen() 仍返回 false，
+ * 因此必须同时使用应用维护的窗口全屏和 HTML 全屏状态，避免 move 事件把窗口重新缩回工作区。
+ * @param {Electron.BrowserWindow} win 当前主窗口。
+ * @returns {void}
+ * @see https://www.electronjs.org/docs/latest/api/browser-window#winsetfullscreenflag
+ */
 function keepMainWindowInsideDisplay(win) {
-  if (!win || win.isDestroyed() || win.isFullScreen() || win.isMaximized()) return;
+  if (!win || win.isDestroyed() || win.isFullScreen()
+    || windowFullscreenActive || htmlFullscreenActive || win.isMaximized()) return;
   const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
   const area = displayWorkArea(display);
   const minimum = windowedMinimumSize(display);
@@ -1336,11 +1345,17 @@ function keepMainWindowInsideDisplay(win) {
   }
 }
 
+/**
+ * 退出主窗口全屏并恢复居中的普通窗口尺寸。
+ * @param {Electron.BrowserWindow} win 当前主窗口。
+ * @returns {void}
+ */
 function exitFullscreenToWindow(win) {
   if (!win || win.isDestroyed()) return;
+  const wasFullscreen = win.isFullScreen() || windowFullscreenActive;
   windowFullscreenActive = false;
 
-  if (!win.isFullScreen()) {
+  if (!wasFullscreen) {
     applyWindowedBounds(win);
     return;
   }
@@ -1357,6 +1372,11 @@ function exitFullscreenToWindow(win) {
   setTimeout(applyOnce, 500);
 }
 
+/**
+ * 在原生全屏与普通窗口之间切换主窗口。
+ * @param {Electron.BrowserWindow} win 当前主窗口。
+ * @returns {void}
+ */
 function toggleFullscreen(win) {
   if (!win || win.isDestroyed()) return;
   if (win.isFullScreen() || windowFullscreenActive) {
@@ -1366,6 +1386,21 @@ function toggleFullscreen(win) {
   windowFullscreenActive = true;
   win.setFullScreen(true);
   sendWindowState(win);
+}
+
+/**
+ * 判断主进程是否应接管 Esc 并退出窗口全屏。
+ * HTML 全屏必须交给 Chromium 退出，否则 Windows 上可能只恢复窗口边界而留下 DOM 全屏状态。
+ * @param {Electron.Input} input 当前键盘输入。
+ * @param {Electron.BrowserWindow} win 当前主窗口。
+ * @returns {boolean} 是否应阻止默认输入并退出窗口全屏。
+ * @see https://github.com/electron/electron/blob/v43.4.0/shell/browser/api/electron_api_web_contents.cc#L4610-L4662
+ */
+function shouldExitWindowFullscreenFromInput(input, win) {
+  return input.type === 'keyDown'
+    && (input.key === 'Escape' || input.code === 'Escape')
+    && !htmlFullscreenActive
+    && (win.isFullScreen() || windowFullscreenActive);
 }
 
 function overlayUrl(page) {
@@ -3257,7 +3292,7 @@ async function createWindow() {
   });
 
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.type === 'keyDown' && (input.key === 'Escape' || input.code === 'Escape') && mainWindow.isFullScreen()) {
+    if (shouldExitWindowFullscreenFromInput(input, mainWindow)) {
       event.preventDefault();
       exitFullscreenToWindow(mainWindow);
     }
