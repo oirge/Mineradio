@@ -15,6 +15,8 @@ test('安装器从原始命令行读取 /D= 并继续归一化目录', () => {
   assert.ok(preferredStart >= 0, '缺少 MineradioUsePreferredInstallDir');
   assert.match(preferredSource, /System::Call 'kernel32::GetCommandLine\(\) t \.r0'/);
   assert.match(preferredSource, /\$\{GetOptions\} \$0 "\/D=" \$R1/);
+  assert.match(preferredSource, /IfFileExists "\$INSTDIR\\\$\{MINERADIO_INSTALL_MARKER\}" preserveExistingInstall 0/);
+  assert.ok(preferredSource.indexOf('${GetOptions}') < preferredSource.indexOf('preserveExistingInstall'), '显式 /D= 必须优先于现有安装目录保留分支');
   assert.doesNotMatch(preferredSource, /\$\{GetParameters\}/);
   assert.doesNotMatch(preferredSource, /StdUtils::GetAllParameters|\$\{StdUtils\.GetAllParameters\}/);
   assert.match(preferredSource, /Push "\$R1"[\s\S]*Call MineradioNormalizeInstallDir[\s\S]*Pop \$INSTDIR/);

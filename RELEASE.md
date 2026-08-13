@@ -5,15 +5,15 @@
 - 修复 Windows 透明无边框主窗口调用 `setFullScreen(true)` 后，`move` 事件把完整显示器边界误判为超出工作区并缩回普通窗口的问题。
 - 普通窗口边界校正同时识别 Electron 原生全屏、应用窗口全屏和 HTML 全屏状态；普通超大窗口仍会按当前显示器工作区恢复。
 - 退出全屏和主进程 `Esc` 处理不再只依赖 `BrowserWindow.isFullScreen()`；HTML 全屏时保留 Chromium 的默认退出流程，避免 DOM 全屏状态残留。
-- 应用内更新安装器通过独立子进程启动，确认启动成功后主动退出 Electron 后台进程；NSIS 进程检查只关闭当前 `$INSTDIR`、当前 Session 内的 `Mineradio.exe`。
+- 应用内更新安装器通过独立子进程启动，确认启动成功后主动退出 Electron 后台进程；NSIS 保留注册表恢复且带安全标记的原安装目录，并只关闭当前 `$INSTDIR`、当前 Session 内的 `Mineradio.exe`。
 - 标准迷你播放器完整控制栏右上角增加收起按钮，只执行控制栏折叠；永久完整模式隐藏该按钮，极简模式不增加按钮。
 - 新增 `tests/update-installer-process-close.test.js` 并扩展 `tests/mini-player-visual.test.js`；全量 Node 回归 `312/312`，关键 JavaScript 语法检查与 `git diff --check` 通过。
 - Windows 实机验证：主窗口从 `1376x774` 进入 `1920x1080`，覆盖任务栏区域，退出后恢复 `1376x774`。
 - 标准迷你播放器在 `360×84` 实际 Electron 窗口中验证：收起、返回主界面和桌面歌词按钮互不重叠，点击收起后立即回到封面态，永久完整模式下收起按钮隐藏。
 - Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
-- 发布资产：`Mineradio-1.4.6-Setup.exe` `101465209` 字节；`.blockmap` `105760` 字节；`latest.yml` `347` 字节；SHA256 清单记录这三个自动更新资产，不上传 Portable ZIP。
-- SHA256：安装器 `728055bbcee857ab8ce6bb61a048afc33127d95482c6559482c6204b25bab61c`；`.blockmap` `61fa462aafe473ea25216a62fb95c139ded0505da6d7e68a2441005a22d19572`；`latest.yml` `d50a90871b4da178e5761b0d1a8ff1d7eaefdaebbeacf07d922f59bd1884d519`。
-- `latest.yml` 的 Setup SHA512：`TpkpzqobtvCAdSrehOXlQDf9YqunaN4Nti76hQcZRMy2SYnsoZx/3DEWoYYA1t2vZieeIioa2BjmvJw1wIpVwQ==`。
+- 发布资产：`Mineradio-1.4.6-Setup.exe` `101465672` 字节；`.blockmap` `105830` 字节；`latest.yml` `347` 字节；SHA256 清单记录这三个自动更新资产，不上传 Portable ZIP。
+- SHA256：安装器 `1e194e75c82d2b9f85e6fdbff958d0b9af3db8922cc3b5f4f4051d872dca35fb`；`.blockmap` `a56be86fdc67d0da35c192c4b97cfabe918604645d1dd839c0187825926b1a4f`；`latest.yml` `ac2290ce7d367007cc528749c40a2ce412b0e3421664365963176e1da3f42665`。
+- `latest.yml` 的 Setup SHA512：`Ks9xoTn1XXpJoCd6EJjq8kZF3gvTJpHtMfB8/Y6O0CNV3DaRNGcxwCN7RBcPeprucyyF8Ll3FbQqyTlDrs3Lbg==`。
 - 本次为同版本修复重发；版本比较不会把新版 `1.4.6` 推送给已安装旧版 `1.4.6` 的用户，Release 正文必须提示手动下载安装覆盖。
 - Release 标题使用 `Mineradio v1.4.6 全屏与更新安装修复版`。
 

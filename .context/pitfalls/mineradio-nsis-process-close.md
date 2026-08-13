@@ -14,6 +14,7 @@
 ## Solution / Convention
 
 - 应用内启动更新安装器时使用独立子进程；确认安装器创建成功后设置 `appQuitting = true` 并调用 `app.quit()`，避免关闭到托盘拦截退出。
+- `initMultiUser` 从注册表恢复现有安装目录后，`MineradioUsePreferredInstallDir` 必须在该目录存在 `.mineradio-install-root` 时保留 `$INSTDIR`，不得再次回落到 `D:\Mineradio`，否则自定义目录覆盖安装会被迁移到错误位置。
 - NSIS 自定义进程检查必须只筛选：
   - 进程名为 `Mineradio.exe`；
   - `ExecutablePath` 位于当前 `$INSTDIR` 内；

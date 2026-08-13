@@ -260,9 +260,14 @@ Function MineradioUsePreferredInstallDir
     Call MineradioNormalizeInstallDir
     Pop $INSTDIR
   ${Else}
+    ; initMultiUser 恢复出的安全安装根必须原位保留，避免自定义目录覆盖安装回落到默认盘。
+    IfFileExists "$INSTDIR\${MINERADIO_INSTALL_MARKER}" preserveExistingInstall 0
     IfFileExists "D:\*.*" 0 +2
     StrCpy $INSTDIR "D:\Mineradio"
   ${EndIf}
+  Return
+
+preserveExistingInstall:
 FunctionEnd
 
 Function MineradioNormalizeInstallDir
