@@ -59,6 +59,7 @@ function createMiniPlayerHarness() {
       hover: false,
       focusWithin: false,
       src: '',
+      blur() { node.focusWithin = false; },
       addEventListener(type, handler) {
         const handlers = listeners.get(node) || {};
         (handlers[type] || (handlers[type] = [])).push(handler);
@@ -90,6 +91,7 @@ function createMiniPlayerHarness() {
     play: createNode('play'),
     next: createNode('next'),
     'desktop-lyrics': createNode('desktop-lyrics'),
+    collapse: createNode('collapse'),
     restore: createNode('restore'),
   };
   nodes['mini-shell'].setAttribute('data-collapsed', 'true');
@@ -142,6 +144,9 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   assert.match(html, /miniShell\.addEventListener\('focusout'/);
   assert.match(html, /aria-expanded/);
   assert.match(html, /data-hover-expand/);
+  assert.match(html, /class="window-actions"/);
+  assert.match(html, /id="collapse"[^>]+title="收起完整控制栏"[^>]+aria-label="收起完整控制栏"/);
+  assert.match(html, /data-hover-expand="false"\] \.collapse \{ visibility: hidden; pointer-events: none; \}/);
 });
 
 test('悬停展开开关控制初始态、悬停态和键盘聚焦态', () => {
@@ -195,6 +200,27 @@ test('关闭悬停展开后始终保持完整迷你播放器', () => {
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
 });
 
+test('标准迷你播放器收起按钮只折叠悬停展开的完整控制栏', () => {
+  const harness = createMiniPlayerHarness();
+  const shell = harness.nodes['mini-shell'];
+  const coverWrap = harness.nodes['cover-wrap'];
+  const collapseButton = harness.nodes.collapse;
+
+  coverWrap.hover = true;
+  coverWrap.dispatch('mouseenter');
+  assert.equal(shell.getAttribute('data-collapsed'), 'false');
+
+  coverWrap.hover = false;
+  collapseButton.focusWithin = true;
+  collapseButton.dispatch('click');
+  assert.equal(shell.getAttribute('data-collapsed'), 'true');
+  assert.equal(coverWrap.getAttribute('aria-expanded'), 'false');
+
+  harness.applyState({ visual: { pulseEnabled: true, pulseStrength: 0.78, glowEnabled: true, hoverExpand: false, radius: 12 } });
+  collapseButton.dispatch('click');
+  assert.equal(shell.getAttribute('data-collapsed'), 'false');
+});
+
 test('悬停展开设置独立持久化并立即同步到迷你窗口', () => {
   const index = read('public/index.html');
   const renderer = read('public/app.js');
@@ -227,6 +253,7 @@ test('极简迷你播放器继续保持无封面结构', () => {
 
   assert.doesNotMatch(html, /id="cover-wrap"/);
   assert.doesNotMatch(html, /class="cover"/);
+  assert.doesNotMatch(html, /id="collapse"/);
 });
 
 test('迷你播放器律动通过低频采样和增量状态同步', () => {

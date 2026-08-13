@@ -8,6 +8,7 @@ const { execFile, spawn } = require('child_process');
 const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache } = require('./mini-player-state-cache');
+const { launchUpdateInstaller } = require('./update-installer-launcher');
 const { createWallpaperEngineBridge, registerWallpaperEngineScheme } = require('./wallpaper-engine-bridge');
 const {
   resolveInstanceProfile,
@@ -2924,8 +2925,10 @@ ipcMain.handle('mineradio-open-update-installer', async (_event, filePath) => {
       return { ok: false, error: 'INVALID_UPDATE_PATH' };
     }
     if (!fs.existsSync(target)) return { ok: false, error: 'UPDATE_FILE_MISSING' };
-    const error = await shell.openPath(target);
-    return error ? { ok: false, error } : { ok: true };
+    await launchUpdateInstaller(target);
+    appQuitting = true;
+    app.quit();
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message || 'OPEN_UPDATE_FAILED' };
   }

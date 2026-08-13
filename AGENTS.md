@@ -137,3 +137,5 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `sampleRenderPerf 缓存回收`、`maybeTrimRuntimeCaches 采样边界`、`主循环复用自适应 FPS`、`frameFps` 或 `shouldSkipAdaptiveRenderFrame 时间戳复用` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `M4A 播放失败`、`m4a 元数据`、`moov`、`ilst`、`data atom`、`covr`、`audio/mp4`、`M4A 封面`、`M4A 标签缓存` 或 `ALAC 编码兼容` 时，必须优先读取 `.context/pitfalls/mineradio-m4a-metadata-playback.md`。
 - 遇到 `Electron 透明无边框全屏`、`setFullScreen`、`isFullScreen 返回 false`、`windowFullscreenActive`、`htmlFullscreenActive`、`全屏窗口被缩回`、`display.bounds`、`workArea` 或 `WS_THICKFRAME` 时，必须优先读取 `.context/pitfalls/mineradio-electron-transparent-fullscreen.md`。
+- 遇到 `安装器无法关闭 Mineradio`、`Failed to uninstall old application files`、`customCheckAppRunning`、`CloseMainWindow`、`SessionId`、`ProcessId = $PID`、`更新安装器启动后退出播放器` 或 `覆盖安装误杀其它实例` 时，必须优先读取 `.context/pitfalls/mineradio-nsis-process-close.md`。
+- 遇到 `标准迷你播放器收起按钮`、`完整控制栏右上角 ×`、`封面悬停展开`、`collapseExpandedControls`、`收起按钮误改为关闭窗口` 或 `极简模式收起按钮` 时，必须优先读取 `.context/conventions/mineradio-mini-player-collapse.md`。

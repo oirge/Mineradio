@@ -47,7 +47,7 @@
     }
     .mini-shell[data-collapsed="true"] .meta,
     .mini-shell[data-collapsed="true"] .transport,
-    .mini-shell[data-collapsed="true"] .restore {
+    .mini-shell[data-collapsed="true"] .window-actions {
       opacity: 0;
       pointer-events: none;
       transform: translateX(10px) scale(0.94);
@@ -61,7 +61,7 @@
       overflow: hidden;
       gap: 0;
     }
-    .mini-shell[data-collapsed="true"] .restore {
+    .mini-shell[data-collapsed="true"] .window-actions {
       flex-basis: 0;
       width: 0;
       overflow: hidden;
@@ -227,17 +227,27 @@
     .pause-icon { display: none; }
     body[data-playing="true"] .play-icon { display: none; }
     body[data-playing="true"] .pause-icon { display: block; }
-    .restore {
+    .window-actions {
       flex: 0 0 24px;
       width: 24px;
-      height: 24px;
-      align-self: flex-start;
-      margin: -1px -1px 0 0;
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      -webkit-app-region: no-drag;
+      transition: opacity 190ms ease, transform 240ms cubic-bezier(.22,.8,.24,1), flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1);
+    }
+    .window-actions button {
+      width: 20px;
+      height: 20px;
       border-color: transparent;
       background: transparent;
       color: rgba(225, 232, 235, 0.48);
-      transition: opacity 190ms ease, transform 240ms cubic-bezier(.22,.8,.24,1), flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1), background-color 140ms ease, border-color 140ms ease, color 140ms ease;
     }
+    .collapse:hover:not(:disabled) { color: #ff8d96; background: rgba(255, 91, 105, 0.1); border-color: transparent; }
+    .mini-shell[data-hover-expand="false"] .collapse { visibility: hidden; pointer-events: none; }
+    .collapse svg,
     .restore svg { width: 13px; height: 13px; }
     .mini-shell[data-instant="true"],
     .mini-shell[data-instant="true"] .cover,
@@ -245,10 +255,10 @@
     .mini-shell[data-instant="true"] .cover img,
     .mini-shell[data-instant="true"] .meta,
     .mini-shell[data-instant="true"] .transport,
-    .mini-shell[data-instant="true"] .restore,
+    .mini-shell[data-instant="true"] .window-actions,
     .mini-shell[data-instant="true"] button { transition: none !important; }
     @media (prefers-reduced-motion: reduce) {
-      .mini-shell, .cover, .cover::after, .cover img, .meta, .transport, .restore, button { transition: none; }
+      .mini-shell, .cover, .cover::after, .cover img, .meta, .transport, .window-actions, button { transition: none; }
     }
   </style>
 </head>
@@ -277,9 +287,14 @@
         <span class="desktop-lyrics-glyph" aria-hidden="true">词</span>
       </button>
     </div>
-    <button id="restore" class="restore" type="button" title="返回主界面" aria-label="返回主界面">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
-    </button>
+    <div class="window-actions">
+      <button id="collapse" class="collapse" type="button" title="收起完整控制栏" aria-label="收起完整控制栏">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <button id="restore" class="restore" type="button" title="返回主界面" aria-label="返回主界面">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+      </button>
+    </div>
   </main>
   <script>
     'use strict';
@@ -290,6 +305,7 @@
     var artist = document.getElementById('artist');
     var playButton = document.getElementById('play');
     var desktopLyricsButton = document.getElementById('desktop-lyrics');
+    var collapseButton = document.getElementById('collapse');
     var controls = [document.getElementById('previous'), playButton, document.getElementById('next')];
     var lastCover = '';
     var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false, pulse:0, visual:{ pulseEnabled:true, pulseStrength:0.78, glowEnabled:true, hoverExpand:true, radius:12 } };
@@ -349,6 +365,17 @@
         hoverTimer = 0;
         if (!expansionInteractionActive()) setExpanded(false);
       }, 420);
+    }
+
+    /**
+     * 收起由封面悬停或键盘聚焦展开的完整控制栏；永久完整模式不改变布局。
+     * @returns {void}
+     */
+    function collapseExpandedControls() {
+      if (!hoverExpandEnabled()) return;
+      clearCollapseTimer();
+      collapseButton.blur();
+      setExpanded(false);
     }
 
     function setCover(src) {
@@ -445,6 +472,7 @@
     playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
     document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });
     desktopLyricsButton.addEventListener('click', function(){ sendCommand('toggle-desktop-lyrics'); });
+    collapseButton.addEventListener('click', collapseExpandedControls);
     document.getElementById('restore').addEventListener('click', function(){ sendCommand('restore'); });
     document.getElementById('mini-shell').addEventListener('dblclick', function(event){
       if (!event.target.closest('button')) sendCommand('restore');

@@ -37,6 +37,48 @@
 !include WinMessages.nsh
 
 !define MINERADIO_INSTALL_MARKER ".mineradio-install-root"
+!define MINERADIO_PROCESS_ROOT_ENV "MINERADIO_INSTALL_ROOT"
+
+; electron-builder 26.15.3 允许通过 customCheckAppRunning 覆盖安装和升级卸载阶段的进程检查。
+; 默认实现可能退回按进程名终止；这里固定按当前安装目录、当前会话和 Mineradio.exe 精确筛选。
+; 来源：https://github.com/electron-userland/electron-builder/blob/master/packages/app-builder-lib/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
+!macro customCheckAppRunning
+  !ifdef BUILD_UNINSTALLER
+    Call un.MineradioCloseInstalledProcesses
+  !else
+    Call MineradioCloseInstalledProcesses
+  !endif
+!macroend
+
+; 定义安装器和卸载器共用的进程关闭函数：先请求窗口退出，等待后只强制结束同目录同会话的残留进程。
+!macro MineradioDefineCloseInstalledProcesses _PREFIX
+Function ${_PREFIX}MineradioCloseInstalledProcesses
+retry:
+  DetailPrint "$(appClosing)"
+  System::Call 'kernel32::SetEnvironmentVariable(t "${MINERADIO_PROCESS_ROOT_ENV}", t "$INSTDIR") i .r0'
+  ${If} $0 == 0
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY retry
+    Quit
+  ${EndIf}
+
+  nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; try { $$root = [IO.Path]::GetFullPath($$env:${MINERADIO_PROCESS_ROOT_ENV}).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar; $$sessionId = [Diagnostics.Process]::GetCurrentProcess().SessionId; $$select = { @(Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.Name -eq 'Mineradio.exe' -and $$_.ExecutablePath -and $$_.SessionId -eq $$sessionId -and [IO.Path]::GetFullPath($$_.ExecutablePath).StartsWith($$root, [StringComparison]::OrdinalIgnoreCase) }) }; $$processes = @(& $$select); foreach ($$process in $$processes) { try { $$native = Get-Process -Id $$process.ProcessId -ErrorAction Stop; if ($$native.MainWindowHandle -ne 0) { [void]$$native.CloseMainWindow() } } catch {} }; if ($$processes.Count -gt 0) { Start-Sleep -Milliseconds 1200 }; @(& $$select) | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500; if ((@(& $$select)).Count -gt 0) { exit 1 }; exit 0 } catch { exit 1 }"`
+  Pop $0
+  System::Call 'kernel32::SetEnvironmentVariable(t "${MINERADIO_PROCESS_ROOT_ENV}", p 0)'
+
+  ${If} $0 == 0
+    Return
+  ${EndIf}
+
+  MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY retry
+  Quit
+FunctionEnd
+!macroend
+
+!ifdef BUILD_UNINSTALLER
+  !insertmacro MineradioDefineCloseInstalledProcesses "un."
+!else
+  !insertmacro MineradioDefineCloseInstalledProcesses ""
+!endif
 
 !ifndef BUILD_UNINSTALLER
   Var MineradioWelcomePage
