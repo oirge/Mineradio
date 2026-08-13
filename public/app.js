@@ -466,7 +466,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.4.3';
+var APP_VERSION = '1.4.4';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -1025,6 +1025,11 @@ var fxDefaults = {
   desktopLyricsFps: 60,
   desktopLyricsRows: 'double',
   desktopLyricsAlign: 'center',
+  miniPlayerPulseEnabled: true,
+  miniPlayerPulseStrength: 0.78,
+  miniPlayerGlowEnabled: true,
+  miniPlayerHoverExpand: true,
+  miniPlayerRadius: 12,
   wallpaperMode: false,
   wallpaperOpacity: 1,
   floatLayer: false, cinema: true, edge: false, aiDepth: false, bloom: false, lyricGlow: true,
@@ -1525,6 +1530,7 @@ function updateDesktopRuntimeState(state) {
   applyRendererPowerMode();
   syncUpdateRuntimeActivity();
   if (fx && (fx.desktopLyrics || fx.wallpaperMode)) scheduleDesktopOverlaySync(0);
+  syncMiniPlayerPulseTimer();
   if (wasDeep && !isDeepBackgroundMode()) recoverVisualsAfterBackground('desktop-runtime-state');
   if (desktopRuntimeState.fullscreen !== wasFullscreen) scheduleMainRendererViewportRefresh('desktop-runtime-state');
 }
@@ -5892,6 +5898,11 @@ function readSavedLyricLayout() {
       desktopLyricsFps: desktopLyricsSchemaReady ? normalizeDesktopLyricsFps(raw.desktopLyricsFps) : fxDefaults.desktopLyricsFps,
       desktopLyricsRows: desktopLyricsSchemaReady ? normalizeDesktopLyricsRows(raw.desktopLyricsRows) : fxDefaults.desktopLyricsRows,
       desktopLyricsAlign: desktopLyricsSchemaReady ? normalizeDesktopLyricsAlign(raw.desktopLyricsAlign) : fxDefaults.desktopLyricsAlign,
+      miniPlayerPulseEnabled: raw.miniPlayerPulseEnabled !== false,
+      miniPlayerPulseStrength: clampRange(raw.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(raw.miniPlayerPulseStrength), 0, 1.5),
+      miniPlayerGlowEnabled: raw.miniPlayerGlowEnabled !== false,
+      miniPlayerHoverExpand: raw.miniPlayerHoverExpand !== false,
+      miniPlayerRadius: clampRange(raw.miniPlayerRadius == null ? fxDefaults.miniPlayerRadius : Number(raw.miniPlayerRadius), 4, 22),
       performanceBackground: normalizePerformanceBackgroundMode(raw.performanceBackground, raw.liveBackgroundKeep === true),
       performanceQuality: normalizePerformanceQuality(raw.performanceQuality),
       liveBackgroundKeep: normalizePerformanceBackgroundMode(raw.performanceBackground, raw.liveBackgroundKeep === true) === 'keep',
@@ -5985,6 +5996,11 @@ function saveLyricLayout() {
       desktopLyricsFps: normalizeDesktopLyricsFps(fx.desktopLyricsFps),
       desktopLyricsRows: normalizeDesktopLyricsRows(fx.desktopLyricsRows),
       desktopLyricsAlign: normalizeDesktopLyricsAlign(fx.desktopLyricsAlign),
+      miniPlayerPulseEnabled: fx.miniPlayerPulseEnabled !== false,
+      miniPlayerPulseStrength: clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, 1.5),
+      miniPlayerGlowEnabled: fx.miniPlayerGlowEnabled !== false,
+      miniPlayerHoverExpand: fx.miniPlayerHoverExpand !== false,
+      miniPlayerRadius: clampRange(fx.miniPlayerRadius == null ? fxDefaults.miniPlayerRadius : Number(fx.miniPlayerRadius), 4, 22),
       performanceBackground: normalizePerformanceBackgroundMode(fx.performanceBackground, fx.liveBackgroundKeep === true),
       performanceQuality: normalizePerformanceQuality(fx.performanceQuality),
       liveBackgroundKeep: normalizePerformanceBackgroundMode(fx.performanceBackground, fx.liveBackgroundKeep === true) === 'keep',
@@ -19748,6 +19764,7 @@ function syncPlaybackStateFromAudioEvent(reason) {
   var isPlaying = !!(audio && audio.src && !audio.paused && !audio.ended);
   playing = isPlaying;
   syncPlaybackTickTimer(isPlaying);
+  syncMiniPlayerPulseTimer();
   setPlayIcon(isPlaying);
   if (!isPlaying) hideLoading();
   if (reason === 'play' || reason === 'playing') switchPlaybackVisualToEmily();
@@ -22117,6 +22134,73 @@ function systemMediaSessionArtwork(meta) {
 var systemMediaSessionPositionState = { lastAt: 0 };
 var systemMediaSessionState = { metadataSignature: '', playbackState: '' };
 var miniPlayerSyncState = null;
+var miniPlayerPulseLastAt = 0;
+var miniPlayerPulseTimer = 0;
+var miniPlayerPulseSample = 0;
+
+function miniPlayerVisualPayload() {
+  return {
+    pulseEnabled: fx.miniPlayerPulseEnabled !== false,
+    pulseStrength: clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, 1.5),
+    glowEnabled: fx.miniPlayerGlowEnabled !== false,
+    hoverExpand: fx.miniPlayerHoverExpand !== false,
+    radius: clampRange(fx.miniPlayerRadius == null ? fxDefaults.miniPlayerRadius : Number(fx.miniPlayerRadius), 4, 22),
+  };
+}
+
+function miniPlayerPulseValue() {
+  if (!playing || !audio || audio.paused || audio.ended) return 0;
+  var runtimeHidden = typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState
+    && (desktopRuntimeState.minimized || desktopRuntimeState.visible === false);
+  if (runtimeHidden) return clampRange(miniPlayerPulseSample, 0, 1);
+  return clampRange(Math.max(miniPlayerPulseSample, beatPulse * 1.05, smoothBass * 0.58 + smoothEnergy * 0.24), 0, 1);
+}
+
+function stopMiniPlayerPulseTimer() {
+  if (miniPlayerPulseTimer) clearTimeout(miniPlayerPulseTimer);
+  miniPlayerPulseTimer = 0;
+}
+
+function miniPlayerPulseTimerActive() {
+  var runtimeHidden = typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState
+    && (desktopRuntimeState.minimized || desktopRuntimeState.visible === false);
+  return !!(window.desktopWindow && window.desktopWindow.isDesktop && runtimeHidden &&
+    desktopShellSettings && desktopShellSettings.miniPlayer &&
+    audio && audio.src && !audio.paused && !audio.ended);
+}
+
+function runMiniPlayerPulseTimer() {
+  miniPlayerPulseTimer = 0;
+  if (!miniPlayerPulseTimerActive()) {
+    miniPlayerPulseSample *= 0.72;
+    return;
+  }
+  var target = 0;
+  try {
+    if (analyser && frequencyData && frequencyData.length) {
+      analyser.getByteFrequencyData(frequencyData);
+      var low = 0;
+      var energy = 0;
+      var lowEnd = Math.min(10, frequencyData.length);
+      var energyEnd = Math.min(96, frequencyData.length);
+      for (var i = 0; i < lowEnd; i++) low += frequencyData[i];
+      for (var j = 0; j < energyEnd; j++) energy += frequencyData[j];
+      target = clampRange((low / Math.max(1, lowEnd)) / 255 * 1.12 + (energy / Math.max(1, energyEnd)) / 255 * 0.26, 0, 1);
+    }
+  } catch (e) {}
+  miniPlayerPulseSample += (target - miniPlayerPulseSample) * (target > miniPlayerPulseSample ? 0.42 : 0.20);
+  pushMiniPlayerState(false, true);
+  miniPlayerPulseTimer = setTimeout(runMiniPlayerPulseTimer, 80);
+}
+
+function syncMiniPlayerPulseTimer() {
+  if (!miniPlayerPulseTimerActive()) {
+    stopMiniPlayerPulseTimer();
+    miniPlayerPulseSample *= 0.82;
+    return;
+  }
+  if (!miniPlayerPulseTimer) miniPlayerPulseTimer = setTimeout(runMiniPlayerPulseTimer, 0);
+}
 
 /**
  * 按失败补丁字段失效迷你播放器同步缓存。旧请求失败也必须保留下一次重发机会。
@@ -22135,6 +22219,8 @@ function invalidateMiniPlayerSyncPatch(patch) {
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'playing')) state.playing = null;
   if (Object.prototype.hasOwnProperty.call(patch, 'hasTrack')) state.hasTrack = null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'pulse')) state.pulse = null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'visual')) state.visualSignature = '';
 }
 
 /**
@@ -22155,7 +22241,9 @@ function pushMiniPlayerState(force, playbackOnly) {
     metaSignature: '',
     playing: null,
     hasTrack: null,
-    desktopLyrics: null
+    desktopLyrics: null,
+    pulse: null,
+    visualSignature: ''
   });
   var resolveMetadata = !!(hasTrack && (force || !playbackOnly || state.song !== song || !state.metaSignature));
   var meta = resolveMetadata ? currentDesktopSongMeta() : null;
@@ -22191,12 +22279,56 @@ function pushMiniPlayerState(force, playbackOnly) {
     patch.desktopLyrics = desktopLyricsEnabled;
     changed = true;
   }
+  var visual = miniPlayerVisualPayload();
+  var visualSignature = JSON.stringify(visual);
+  var now = performance.now();
+  var pulse = miniPlayerPulseValue();
+  var pulseChanged = state.pulse == null || Math.abs(state.pulse - pulse) >= 0.035;
+  if (force || (now - miniPlayerPulseLastAt >= 74 && pulseChanged)) {
+    state.pulse = pulse;
+    miniPlayerPulseLastAt = now;
+    patch.pulse = pulse;
+    changed = true;
+  }
+  if (force || state.visualSignature !== visualSignature) {
+    state.visualSignature = visualSignature;
+    patch.visual = visual;
+    changed = true;
+  }
   if (!changed) return;
   api.updateMiniPlayer(patch).then(function(result){
     if (!result || result.ok !== true) invalidateMiniPlayerSyncPatch(patch);
   }, function(){
     invalidateMiniPlayerSyncPatch(patch);
   });
+}
+
+function applyMiniPlayerVisualControls() {
+  var pulse = document.getElementById('fx-miniplayerpulse');
+  var radius = document.getElementById('fx-miniplayerradius');
+  if (pulse) pulse.value = clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, 1.5);
+  if (radius) radius.value = clampRange(fx.miniPlayerRadius == null ? fxDefaults.miniPlayerRadius : Number(fx.miniPlayerRadius), 4, 22);
+  var pulseOut = pulse && pulse.parentElement && pulse.parentElement.querySelector('output');
+  var radiusOut = radius && radius.parentElement && radius.parentElement.querySelector('output');
+  if (pulseOut) pulseOut.textContent = Number(pulse.value).toFixed(2);
+  if (radiusOut) radiusOut.textContent = Math.round(Number(radius.value)) + 'px';
+  var toggleMap = [
+    ['t-miniPlayerPulse', fx.miniPlayerPulseEnabled !== false],
+    ['t-miniPlayerGlow', fx.miniPlayerGlowEnabled !== false],
+    ['t-miniPlayerHover', fx.miniPlayerHoverExpand !== false]
+  ];
+  toggleMap.forEach(function(item){
+    var button = document.getElementById(item[0]);
+    if (button) button.classList.toggle('on', item[1]);
+  });
+}
+
+function toggleMiniPlayerVisual(key) {
+  if (!Object.prototype.hasOwnProperty.call({ pulseEnabled: 1, glowEnabled: 1, hoverExpand: 1 }, key)) return;
+  fx['miniPlayer' + key.charAt(0).toUpperCase() + key.slice(1)] = !fx['miniPlayer' + key.charAt(0).toUpperCase() + key.slice(1)];
+  applyMiniPlayerVisualControls();
+  saveLyricLayout();
+  pushMiniPlayerState(true);
 }
 /**
  * 同步系统媒体控制元数据，供 Windows 音量浮窗、键盘媒体键和蓝牙耳机控制显示。
@@ -26317,6 +26449,7 @@ function updateFxInputs() {
   setRange('fx-bloom', fx.bloomStrength);
   setRange('fx-scatter', fx.scatter);
   setRange('fx-bgfade', fx.bgFade);
+  applyMiniPlayerVisualControls();
   updateLyricGlowControls();
   // 同步开关
   document.getElementById('t-float').classList.toggle('on', fx.floatLayer);
@@ -27002,6 +27135,7 @@ function bindFxPanel() {
   var ids = [
     ['fx-intensity','intensity'],['fx-depth','depth'],['fx-coverres','coverResolution'],['fx-cineshake','cinemaShake'],['fx-lyricglow','lyricGlowStrength'],['fx-bgopacity','backgroundOpacity'],['fx-glassaberration','controlGlassChromaticOffset'],
     ['fx-desktoplyricssize','desktopLyricsSize'],['fx-desktoplyricsopacity','desktopLyricsOpacity'],['fx-desktoplyricsy','desktopLyricsY'],['fx-wallpaperopacity','wallpaperOpacity'],
+    ['fx-miniplayerpulse','miniPlayerPulseStrength'],['fx-miniplayerradius','miniPlayerRadius'],
     ['fx-shelfsize','shelfSize'],['fx-shelfx','shelfOffsetX'],['fx-shelfy','shelfOffsetY'],['fx-shelfz','shelfOffsetZ'],['fx-shelfangle','shelfAngleY'],['fx-shelfopacity','shelfOpacity'],['fx-shelfbgalpha','shelfBgOpacity'],
     ['fx-lyricspacing','lyricLetterSpacing'],['fx-lyriclineheight','lyricLineHeight'],['fx-lyricweight','lyricWeight'],
     ['fx-lyricscale','lyricScale'],['fx-lyricx','lyricOffsetX'],['fx-lyricy','lyricOffsetY'],['fx-lyricz','lyricOffsetZ'],['fx-lyrictiltx','lyricTiltX'],['fx-lyrictilty','lyricTiltY'],
@@ -27034,6 +27168,9 @@ function bindFxPanel() {
       if (pair[1] === 'desktopLyricsOpacity') fx.desktopLyricsOpacity = clampRange(fx.desktopLyricsOpacity, 0.28, 1);
       if (pair[1] === 'desktopLyricsY') fx.desktopLyricsY = clampRange(fx.desktopLyricsY, 0.08, 0.92);
       if (pair[1] === 'wallpaperOpacity') fx.wallpaperOpacity = clampRange(fx.wallpaperOpacity, 0.35, 1);
+      if (pair[1] === 'miniPlayerPulseStrength') fx.miniPlayerPulseStrength = clampRange(fx.miniPlayerPulseStrength, 0, 1.5);
+      if (pair[1] === 'miniPlayerRadius') fx.miniPlayerRadius = clampRange(fx.miniPlayerRadius, 4, 22);
+      if (pair[1] === 'miniPlayerPulseStrength' || pair[1] === 'miniPlayerRadius') applyMiniPlayerVisualControls();
       if (pair[1] === 'shelfSize') fx.shelfSize = clampRange(fx.shelfSize, 0.65, 1.45);
       if (pair[1] === 'shelfOffsetX') fx.shelfOffsetX = clampRange(fx.shelfOffsetX, -1.2, 1.2);
       if (pair[1] === 'shelfOffsetY') fx.shelfOffsetY = clampRange(fx.shelfOffsetY, -0.9, 0.9);
@@ -27047,13 +27184,16 @@ function bindFxPanel() {
       if (pair[1] === 'lyricTiltX' || pair[1] === 'lyricTiltY') fx[pair[1]] = Math.round(clampRange(fx[pair[1]], -42, 42));
       if (out) out.textContent = pair[1] === 'coverResolution'
         ? coverParticleCountLabel(fx.coverResolution)
-        : (pair[1] === 'lyricWeight' || pair[1] === 'controlGlassChromaticOffset' || pair[1] === 'lyricTiltX' || pair[1] === 'lyricTiltY' || pair[1] === 'shelfAngleY' ? String(Math.round(fx[pair[1]])) : Number(el.value).toFixed(pair[1] === 'lyricLetterSpacing' ? 3 : 2));
+        : (pair[1] === 'miniPlayerRadius'
+          ? String(Math.round(fx.miniPlayerRadius)) + 'px'
+          : (pair[1] === 'lyricWeight' || pair[1] === 'controlGlassChromaticOffset' || pair[1] === 'lyricTiltX' || pair[1] === 'lyricTiltY' || pair[1] === 'shelfAngleY' ? String(Math.round(fx[pair[1]])) : Number(el.value).toFixed(pair[1] === 'lyricLetterSpacing' ? 3 : 2)));
       syncFxUniforms();
       if (/^shelf(Size|OffsetX|OffsetY|OffsetZ|AngleY|Opacity|BgOpacity)$/.test(pair[1]) && shelfManager && shelfManager.refreshTheme) shelfManager.refreshTheme();
       if (pair[1] === 'lyricLetterSpacing' || pair[1] === 'lyricLineHeight' || pair[1] === 'lyricWeight') refreshCurrentLyricStyle();
       if (pair[1] === 'lyricLetterSpacing' || pair[1] === 'lyricLineHeight' || pair[1] === 'lyricWeight' || pair[1] === 'lyricScale' || pair[1] === 'lyricGlowStrength') pushDesktopLyricsState(true);
       if (/^(desktopLyricsSize|desktopLyricsOpacity|desktopLyricsY)$/.test(pair[1])) pushDesktopLyricsState(true);
       if (pair[1] === 'wallpaperOpacity') pushWallpaperState(true);
+      if (pair[1] === 'miniPlayerPulseStrength' || pair[1] === 'miniPlayerRadius') pushMiniPlayerState(true);
       saveLyricLayout();
     });
   });
@@ -31436,6 +31576,7 @@ function applyDesktopShellSettings(next) {
   document.querySelectorAll('#mini-player-mode-seg [data-mini-player-mode]').forEach(function(button){
     button.classList.toggle('active', button.getAttribute('data-mini-player-mode') === desktopShellSettings.miniPlayerMode);
   });
+  syncMiniPlayerPulseTimer();
 }
 
 /**
@@ -31529,6 +31670,7 @@ function handleDesktopMiniPlayerCommand(payload) {
   syncCursorAutoHideMode();
   refreshDesktopShellSettings();
   pushMiniPlayerState(true);
+  syncMiniPlayerPulseTimer();
 
   document.querySelectorAll('#mini-player-mode-seg [data-mini-player-mode]').forEach(function(button){
     button.addEventListener('click', function(){

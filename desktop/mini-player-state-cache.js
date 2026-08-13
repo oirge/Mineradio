@@ -2,6 +2,33 @@
 
 const MAX_MINI_PLAYER_COVER_LENGTH = 8 * 1024 * 1024;
 
+function createDefaultMiniPlayerVisual() {
+  return {
+    pulseEnabled: true,
+    pulseStrength: 0.78,
+    glowEnabled: true,
+    hoverExpand: true,
+    radius: 12,
+  };
+}
+
+function normalizeMiniPlayerVisual(source, fallback) {
+  const next = { ...(fallback || createDefaultMiniPlayerVisual()) };
+  if (!source || typeof source !== 'object') return next;
+  if (Object.prototype.hasOwnProperty.call(source, 'pulseEnabled')) next.pulseEnabled = source.pulseEnabled === true;
+  if (Object.prototype.hasOwnProperty.call(source, 'pulseStrength')) {
+    const strength = Number(source.pulseStrength);
+    if (Number.isFinite(strength)) next.pulseStrength = Math.max(0, Math.min(1.5, strength));
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'glowEnabled')) next.glowEnabled = source.glowEnabled === true;
+  if (Object.prototype.hasOwnProperty.call(source, 'hoverExpand')) next.hoverExpand = source.hoverExpand !== false;
+  if (Object.prototype.hasOwnProperty.call(source, 'radius')) {
+    const radius = Number(source.radius);
+    if (Number.isFinite(radius)) next.radius = Math.max(4, Math.min(22, radius));
+  }
+  return next;
+}
+
 /**
  * 创建不持有歌曲或封面引用的迷你播放器初始状态。
  * @returns {{title:string, artist:string, cover:string, playing:boolean, hasTrack:boolean, desktopLyrics:boolean, metaSignature:string}} 空状态。
@@ -14,6 +41,8 @@ function createEmptyMiniPlayerState() {
     playing: false,
     hasTrack: false,
     desktopLyrics: false,
+    pulse: 0,
+    visual: createDefaultMiniPlayerVisual(),
     metaSignature: '',
   };
 }
@@ -73,6 +102,11 @@ class MiniPlayerStateCache {
     if (Object.prototype.hasOwnProperty.call(source, 'playing')) next.playing = !!source.playing;
     if (Object.prototype.hasOwnProperty.call(source, 'hasTrack')) next.hasTrack = !!source.hasTrack;
     if (Object.prototype.hasOwnProperty.call(source, 'desktopLyrics')) next.desktopLyrics = source.desktopLyrics === true;
+    if (Object.prototype.hasOwnProperty.call(source, 'pulse')) {
+      const pulse = Number(source.pulse);
+      next.pulse = Number.isFinite(pulse) ? Math.max(0, Math.min(1, pulse)) : 0;
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'visual')) next.visual = normalizeMiniPlayerVisual(source.visual, next.visual);
     if (Object.prototype.hasOwnProperty.call(source, 'metaSignature')) next.metaSignature = String(source.metaSignature || '').slice(0, 240);
     this.value = next;
     return true;

@@ -48,6 +48,14 @@ function testDisabledCacheReleasesAndRejectsState() {
     playing: false,
     hasTrack: false,
     desktopLyrics: false,
+    pulse: 0,
+    visual: {
+      pulseEnabled: true,
+      pulseStrength: 0.78,
+      glowEnabled: true,
+      hoverExpand: true,
+      radius: 12,
+    },
     metaSignature: '',
   });
   assert.equal(cache.apply({

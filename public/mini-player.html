@@ -34,6 +34,50 @@
       background: rgba(9, 12, 15, 0.96);
       box-shadow: 0 14px 38px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
       -webkit-app-region: drag;
+      --mini-pulse: 0;
+      --mini-radius: 12px;
+      transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease, padding 240ms cubic-bezier(.22,.8,.24,1);
+    }
+    .mini-shell[data-collapsed="true"] {
+      gap: 0;
+      padding: 0;
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
+    }
+    .mini-shell[data-collapsed="true"] .meta,
+    .mini-shell[data-collapsed="true"] .transport,
+    .mini-shell[data-collapsed="true"] .restore {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(10px) scale(0.94);
+      flex-basis: 0;
+      width: 0;
+      min-width: 0;
+    }
+    .mini-shell[data-collapsed="true"] .transport {
+      flex-basis: 0;
+      width: 0;
+      overflow: hidden;
+      gap: 0;
+    }
+    .mini-shell[data-collapsed="true"] .restore {
+      flex-basis: 0;
+      width: 0;
+      overflow: hidden;
+      margin: 0;
+    }
+    .mini-shell[data-has-track="false"] .cover {
+      opacity: 0.56;
+      transform: scale(0.92);
+    }
+    .mini-shell[data-collapsed="true"] .cover {
+      flex-basis: 54px;
+      width: 54px;
+      height: 54px;
+      margin: 0 auto;
+      border-radius: var(--mini-radius);
+      transform: scale(calc(1 + var(--mini-pulse) * 0.045));
     }
     .cover {
       position: relative;
@@ -42,10 +86,27 @@
       height: 54px;
       overflow: hidden;
       border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 6px;
+      border-radius: var(--mini-radius);
       background: #151b20;
       box-shadow: inset 0 0 0 1px rgba(110, 231, 216, 0.04);
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      transform-origin: center;
+      transform: scale(calc(1 + var(--mini-pulse) * 0.025));
+      transition: flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1), height 240ms cubic-bezier(.22,.8,.24,1), margin 240ms cubic-bezier(.22,.8,.24,1), border-radius 240ms ease, opacity 180ms ease, transform 120ms ease, box-shadow 180ms ease;
     }
+    .cover::after {
+      content: "";
+      position: absolute;
+      inset: -4px;
+      border: 1px solid rgba(110, 231, 216, calc(0.08 + var(--mini-pulse) * 0.42));
+      border-radius: inherit;
+      opacity: var(--mini-glow-opacity, 1);
+      transform: scale(calc(1 + var(--mini-pulse) * 0.08));
+      transition: transform 120ms ease, border-color 120ms ease, opacity 180ms ease;
+      pointer-events: none;
+    }
+    .mini-shell[data-glow="false"] .cover::after { opacity: 0; }
     .cover img {
       position: absolute;
       inset: 0;
@@ -75,6 +136,7 @@
       justify-content: center;
       gap: 4px;
       overflow: hidden;
+      transition: opacity 190ms ease, transform 240ms cubic-bezier(.22,.8,.24,1), flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1), min-width 240ms cubic-bezier(.22,.8,.24,1);
     }
     .title, .artist {
       overflow: hidden;
@@ -100,6 +162,7 @@
       align-items: center;
       gap: 4px;
       -webkit-app-region: no-drag;
+      transition: opacity 190ms ease, transform 240ms cubic-bezier(.22,.8,.24,1), flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1);
     }
     button {
       display: grid;
@@ -173,16 +236,17 @@
       border-color: transparent;
       background: transparent;
       color: rgba(225, 232, 235, 0.48);
+      transition: opacity 190ms ease, transform 240ms cubic-bezier(.22,.8,.24,1), flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1), background-color 140ms ease, border-color 140ms ease, color 140ms ease;
     }
     .restore svg { width: 13px; height: 13px; }
     @media (prefers-reduced-motion: reduce) {
-      .cover img, button { transition: none; }
+      .mini-shell, .cover, .cover::after, .cover img, .meta, .transport, .restore, button { transition: none; }
     }
   </style>
 </head>
 <body data-playing="false">
-  <main class="mini-shell" id="mini-shell" aria-label="Mineradio 迷你播放器">
-    <div class="cover" id="cover-wrap" aria-hidden="true">
+  <main class="mini-shell" id="mini-shell" data-collapsed="true" data-has-track="false" data-glow="true" aria-label="Mineradio 迷你播放器">
+    <div class="cover" id="cover-wrap" role="button" tabindex="0" aria-label="展开迷你播放器">
       <span class="cover-fallback">M</span>
       <img id="cover" alt="">
     </div>
@@ -211,6 +275,7 @@
   </main>
   <script>
     'use strict';
+    var miniShell = document.getElementById('mini-shell');
     var coverWrap = document.getElementById('cover-wrap');
     var cover = document.getElementById('cover');
     var title = document.getElementById('title');
@@ -219,13 +284,35 @@
     var desktopLyricsButton = document.getElementById('desktop-lyrics');
     var controls = [document.getElementById('previous'), playButton, document.getElementById('next')];
     var lastCover = '';
-    var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false };
+    var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false, pulse:0, visual:{ pulseEnabled:true, pulseStrength:0.78, glowEnabled:true, hoverExpand:true, radius:12 } };
     var renderedPlaying = null;
     var renderedHasTrack = null;
+    var expanded = true;
+    var hoverTimer = 0;
 
     function sendCommand(action) {
       if (!window.miniPlayer || typeof window.miniPlayer.command !== 'function') return;
       window.miniPlayer.command(action).catch(function(){});
+    }
+
+    function setExpanded(next, immediate) {
+      var visual = miniState.visual || {};
+      if (visual.hoverExpand === false && !next) return;
+      expanded = !!next;
+      if (immediate) miniShell.style.transition = 'none';
+      miniShell.setAttribute('data-collapsed', expanded ? 'false' : 'true');
+      coverWrap.setAttribute('aria-label', expanded ? '收起迷你播放器' : '展开迷你播放器');
+      if (immediate) {
+        window.requestAnimationFrame(function(){ miniShell.style.transition = ''; });
+      }
+    }
+
+    function scheduleCollapse() {
+      if (hoverTimer) clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(function(){
+        hoverTimer = 0;
+        if (!coverWrap.matches(':hover') && !miniShell.matches(':focus-within')) setExpanded(false);
+      }, 420);
     }
 
     function setCover(src) {
@@ -246,6 +333,8 @@
       var next = miniState;
       var hasTrack = next.hasTrack === true;
       var playing = hasTrack && next.playing === true;
+      miniShell.setAttribute('data-has-track', hasTrack ? 'true' : 'false');
+      coverWrap.setAttribute('aria-hidden', hasTrack ? 'false' : 'true');
       var nextTitle = hasTrack ? String(next.title || '未知歌曲') : 'Mineradio';
       var nextArtist = hasTrack ? String(next.artist || '本地音乐') : '等待播放';
       if (title.textContent !== nextTitle) title.textContent = nextTitle;
@@ -267,6 +356,12 @@
       desktopLyricsButton.setAttribute('aria-pressed', desktopLyricsEnabled ? 'true' : 'false');
       desktopLyricsButton.title = desktopLyricsEnabled ? '关闭桌面歌词' : '开启桌面歌词';
       desktopLyricsButton.setAttribute('aria-label', desktopLyricsButton.title);
+      var visual = next.visual || {};
+      var pulse = visual.pulseEnabled === false ? 0 : Math.max(0, Math.min(1, Number(next.pulse) || 0)) * Math.max(0, Math.min(1.5, Number(visual.pulseStrength) || 0.78));
+      miniShell.style.setProperty('--mini-pulse', pulse.toFixed(3));
+      miniShell.style.setProperty('--mini-radius', Math.max(4, Math.min(22, Number(visual.radius) || 12)) + 'px');
+      miniShell.setAttribute('data-glow', visual.glowEnabled === false ? 'false' : 'true');
+      if (visual.hoverExpand === false) setExpanded(true, true);
       setCover(hasTrack ? next.cover : '');
     }
 
@@ -281,6 +376,28 @@
         cover.removeAttribute('src');
       }
     });
+    coverWrap.addEventListener('mouseenter', function(){
+      if (hoverTimer) clearTimeout(hoverTimer);
+      hoverTimer = 0;
+      setExpanded(true);
+    });
+    coverWrap.addEventListener('mouseleave', function(){
+      if (!miniShell.matches(':hover')) scheduleCollapse();
+    });
+    coverWrap.addEventListener('focus', function(){ setExpanded(true); });
+    coverWrap.addEventListener('blur', scheduleCollapse);
+    coverWrap.addEventListener('click', function(){ setExpanded(true); });
+    coverWrap.addEventListener('keydown', function(event){
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        setExpanded(!expanded);
+      }
+    });
+    miniShell.addEventListener('mouseleave', scheduleCollapse);
+    miniShell.addEventListener('mouseenter', function(){
+      if (hoverTimer) clearTimeout(hoverTimer);
+      hoverTimer = 0;
+    });
     document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });
     playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
     document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });
@@ -291,6 +408,7 @@
     });
     if (window.miniPlayer && typeof window.miniPlayer.onState === 'function') window.miniPlayer.onState(applyState);
     applyState({});
+    setExpanded(miniState.visual && miniState.visual.hoverExpand === false, true);
   </script>
 </body>
 </html>

@@ -1991,6 +1991,8 @@ function sendMiniPlayerState(force = false) {
   if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
   const includeCover = miniPlayerModeForWindow(win) === 'standard';
   const state = miniPlayerStateCache.value;
+  const visual = state.visual || {};
+  const visualSignature = JSON.stringify(visual);
   const next = {
     title: state.title || 'Mineradio',
     artist: state.artist || '',
@@ -1999,7 +2001,12 @@ function sendMiniPlayerState(force = false) {
     desktopLyrics: state.desktopLyrics === true,
     metaSignature: state.metaSignature || '',
   };
-  if (includeCover) next.cover = state.cover || '';
+  if (includeCover) {
+    next.cover = state.cover || '';
+    next.pulse = Number.isFinite(state.pulse) ? state.pulse : 0;
+    next.visual = visual;
+    next.visualSignature = visualSignature;
+  }
   const previous = miniPlayerLastSentState;
   const patch = {};
   let changed = false;
@@ -2024,6 +2031,14 @@ function sendMiniPlayerState(force = false) {
   }
   if (force || !previous || next.desktopLyrics !== previous.desktopLyrics) {
     patch.desktopLyrics = next.desktopLyrics;
+    changed = true;
+  }
+  if (includeCover && (force || !previous || next.pulse !== previous.pulse)) {
+    patch.pulse = next.pulse;
+    changed = true;
+  }
+  if (includeCover && (force || !previous || next.visualSignature !== previous.visualSignature)) {
+    patch.visual = next.visual;
     changed = true;
   }
   if (!changed) return;

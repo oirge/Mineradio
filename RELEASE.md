@@ -1,5 +1,17 @@
 ﻿# 发布流程
 
+## v1.4.4 迷你播放器封面动效
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.4`。
+- 标准迷你播放器默认显示当前歌曲封面圆角矩形图标；悬停或键盘聚焦时展开完整迷你播放器，离开后平滑收起。
+- 新增封面出现/消失、展开/收起、律动缩放和光晕过渡动画；无歌曲时显示 Mineradio 占位图标。
+- 视觉控制台新增封面律动、律动强度、封面光晕、悬停展开和封面圆角 DIY 设置；极简模式保持无封面。
+- 律动通过低频音频采样和增量 IPC 同步，避免每帧跨进程通信。
+- 新增迷你播放器视觉回归测试；定向 Node 测试 `14/14` 通过。
+- Windows x64 NSIS 发布包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- Windows x64 NSIS 构建使用 Electron `43.4.0` 完成；安装器 `101462613` 字节，`.blockmap` `105900` 字节，`latest.yml` `347` 字节。
+- SHA256：安装器 `B7DAEBDEC91667617894C5C9BCD5ED834C7C02E2BC31E8478650C4E1E79AD6D7`；`.blockmap` `7DC8E18718DFDA558B3B41B0351B90B4F9E009850A81D99EEBF08C7B95671821`；`latest.yml` `7E9E33F597BB49AF7A07D3FF119594A02C1FEE4FF49320549AEF1C02AAE9F8D8`。
+- `latest.yml` 的 Setup SHA512：`iXpovEiBl76ltXNZ79QEEBkWszXWyQaGXH6X4yRLlrxGWUZxb9Zp48VVrfVAaIwMzU1DtOzNMi9beQAS6/2Rcw==`。
+
 ## v1.4.3 Wallpaper Engine 壁纸背景
 - 新增独立 Wallpaper Engine 启用开关，默认关闭；选择项目不会自动接管背景，停用后保留上次选择，可随时恢复。
 
