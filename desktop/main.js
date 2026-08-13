@@ -9,7 +9,32 @@ const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache } = require('./mini-player-state-cache');
 const { createWallpaperEngineBridge, registerWallpaperEngineScheme } = require('./wallpaper-engine-bridge');
+const {
+  resolveInstanceId,
+  resolveInstanceUserDataPath,
+  resolveInstanceAppUserModelId,
+  resolveDesktopShortcutName,
+} = require('./instance-isolation');
 registerWallpaperEngineScheme(protocol);
+
+const APP_NAME = 'Mineradio';
+const BASE_APP_USER_MODEL_ID = 'com.mineradio.desktop';
+const INSTANCE_ID = resolveInstanceId({
+  instanceId: process.env.MINERADIO_INSTANCE_ID,
+  execPath: process.execPath,
+  appRoot: __dirname,
+});
+const INSTANCE_APP_NAME = `${APP_NAME}-${INSTANCE_ID}`;
+const APP_USER_MODEL_ID = resolveInstanceAppUserModelId(BASE_APP_USER_MODEL_ID, INSTANCE_ID);
+const DESKTOP_SHORTCUT_NAME = resolveDesktopShortcutName({
+  shortcutName: process.env.MINERADIO_SHORTCUT_NAME,
+  execPath: process.execPath,
+  defaultName: APP_NAME,
+});
+
+app.setName(INSTANCE_APP_NAME);
+app.setPath('userData', resolveInstanceUserDataPath(app.getPath('appData'), INSTANCE_ID, APP_NAME));
+app.setPath('sessionData', path.join(app.getPath('userData'), 'session'));
 
 function resolveRuntimeAppRoots() {
   const sourceRoot = path.join(__dirname, '..');
@@ -105,8 +130,6 @@ const COMPACT_MINI_PLAYER_WIDTH = 268;
 const COMPACT_MINI_PLAYER_HEIGHT = 58;
 const MINI_PLAYER_MARGIN = 14;
 const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
-const APP_NAME = 'Mineradio';
-const APP_USER_MODEL_ID = 'com.mineradio.desktop';
 const APP_ICON_ICO = path.join(RESOURCE_ROOT, 'build', 'icon.ico');
 const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell-settings.json';
@@ -940,12 +963,18 @@ function refreshTrayMenu() {
  */
 function createTray() {
   if (tray || process.platform !== 'win32') return;
-  const icon = fs.existsSync(APP_ICON_ICO) ? APP_ICON_ICO : process.execPath;
-  tray = new Tray(icon);
-  tray.setToolTip(APP_NAME);
-  tray.on('click', focusMainWindow);
-  tray.on('double-click', focusMainWindow);
-  refreshTrayMenu();
+  try {
+    const icon = fs.existsSync(APP_ICON_ICO) ? APP_ICON_ICO : process.execPath;
+    const nextTray = new Tray(icon);
+    nextTray.setToolTip(APP_NAME);
+    nextTray.on('click', focusMainWindow);
+    nextTray.on('double-click', focusMainWindow);
+    tray = nextTray;
+    refreshTrayMenu();
+  } catch (e) {
+    tray = null;
+    console.warn('System tray unavailable:', e.message);
+  }
 }
 
 function getUpdateDownloadDir() {
@@ -961,7 +990,7 @@ function shouldEnsureDesktopShortcut() {
 function ensureDesktopShortcut() {
   if (!shouldEnsureDesktopShortcut()) return { ok: false, skipped: true };
   try {
-    const shortcutPath = path.join(app.getPath('desktop'), `${APP_NAME}.lnk`);
+    const shortcutPath = path.join(app.getPath('desktop'), `${DESKTOP_SHORTCUT_NAME}.lnk`);
     const target = process.execPath;
     const shortcut = {
       target,
@@ -991,27 +1020,46 @@ function ensureDesktopShortcut() {
   }
 }
 
+function displayWorkArea(display) {
+  const source = display && (display.workArea || display.bounds);
+  if (!source) return { x: 0, y: 0, width: 1280, height: 720 };
+  return {
+    x: Number(source.x) || 0,
+    y: Number(source.y) || 0,
+    width: Math.max(1, Number(source.width) || 1),
+    height: Math.max(1, Number(source.height) || 1),
+  };
+}
+
+function windowedMinimumSize(display) {
+  const area = displayWorkArea(display);
+  return {
+    width: Math.max(480, Math.min(MIN_WINDOWED_WIDTH, Math.floor(area.width - WINDOWED_MARGIN))),
+    height: Math.max(270, Math.min(MIN_WINDOWED_HEIGHT, Math.floor(area.height - WINDOWED_MARGIN))),
+  };
+}
+
 function getWindowedBounds(win) {
   const display = win && !win.isDestroyed()
     ? screen.getDisplayMatching(win.getBounds())
     : screen.getPrimaryDisplay();
-  const area = display.workArea;
-  const basis = display.bounds || area;
-  const maxWidth = Math.max(640, area.width - WINDOWED_MARGIN);
-  const maxHeight = Math.max(360, area.height - WINDOWED_MARGIN);
+  const area = displayWorkArea(display);
+  const minimum = windowedMinimumSize(display);
+  const maxWidth = Math.max(minimum.width, Math.floor(area.width - WINDOWED_MARGIN));
+  const maxHeight = Math.max(minimum.height, Math.floor(area.height - WINDOWED_MARGIN));
 
-  let width = Math.round(basis.width * WINDOWED_SCALE);
+  let width = Math.round(area.width * WINDOWED_SCALE);
   let height = Math.round(width / WINDOWED_ASPECT);
-  const scaledHeight = Math.round(basis.height * WINDOWED_SCALE);
+  const scaledHeight = Math.round(area.height * WINDOWED_SCALE);
 
   if (height > scaledHeight) {
     height = scaledHeight;
     width = Math.round(height * WINDOWED_ASPECT);
   }
 
-  if (width < MIN_WINDOWED_WIDTH && maxWidth >= MIN_WINDOWED_WIDTH && maxHeight >= MIN_WINDOWED_HEIGHT) {
-    width = MIN_WINDOWED_WIDTH;
-    height = MIN_WINDOWED_HEIGHT;
+  if (width < minimum.width && maxWidth >= minimum.width && maxHeight >= minimum.height) {
+    width = minimum.width;
+    height = minimum.height;
   }
 
   if (width > maxWidth) {
@@ -1037,9 +1085,23 @@ function getWindowedBounds(win) {
 function applyWindowedBounds(win) {
   if (!win || win.isDestroyed()) return;
   if (win.isMaximized()) win.unmaximize();
-  win.setMinimumSize(MIN_WINDOWED_WIDTH, MIN_WINDOWED_HEIGHT);
+  const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
+  const minimum = windowedMinimumSize(display);
+  win.setMinimumSize(minimum.width, minimum.height);
   win.setBounds(getWindowedBounds(win), false);
   sendWindowState(win);
+}
+
+function keepMainWindowInsideDisplay(win) {
+  if (!win || win.isDestroyed() || win.isFullScreen() || win.isMaximized()) return;
+  const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
+  const area = displayWorkArea(display);
+  const minimum = windowedMinimumSize(display);
+  win.setMinimumSize(minimum.width, minimum.height);
+  const bounds = win.getBounds();
+  if (bounds.width > area.width || bounds.height > area.height) {
+    win.setBounds(getWindowedBounds(win), false);
+  }
 }
 
 function exitFullscreenToWindow(win) {
@@ -2917,12 +2979,14 @@ async function createWindow() {
   localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
   await waitForServer(localServer);
 
+  const initialDisplay = screen.getPrimaryDisplay();
+  const initialMinimum = windowedMinimumSize(initialDisplay);
   const initialBounds = getWindowedBounds();
 
   mainWindow = new BrowserWindow({
     ...initialBounds,
-    minWidth: 960,
-    minHeight: 540,
+    minWidth: initialMinimum.width,
+    minHeight: initialMinimum.height,
     show: false,
     frame: false,
     fullscreen: false,
@@ -2965,9 +3029,10 @@ async function createWindow() {
   mainWindow.on('maximize', () => sendWindowState(mainWindow));
   mainWindow.on('unmaximize', () => sendWindowState(mainWindow));
   mainWindow.on('minimize', () => {
-    miniPlayerActive = true;
+    miniPlayerActive = !!miniPlayerEnabled;
     sendWindowState(mainWindow);
-    showMiniPlayerWindow();
+    if (miniPlayerActive) showMiniPlayerWindow();
+    else hideMiniPlayerWindow();
   });
   mainWindow.on('restore', () => {
     miniPlayerActive = false;
@@ -2982,22 +3047,29 @@ async function createWindow() {
     sendWindowState(mainWindow);
   });
   mainWindow.on('hide', () => {
-    if (miniPlayerActive) showMiniPlayerWindow();
+    if (miniPlayerActive && miniPlayerEnabled) showMiniPlayerWindow();
     else hideMiniPlayerWindow();
     sendWindowState(mainWindow);
   });
   mainWindow.on('focus', () => sendWindowState(mainWindow));
   mainWindow.on('blur', () => sendWindowState(mainWindow));
-  mainWindow.on('move', () => scheduleWindowStateSend(mainWindow));
+  mainWindow.on('move', () => {
+    keepMainWindowInsideDisplay(mainWindow);
+    scheduleWindowStateSend(mainWindow);
+  });
   mainWindow.on('resize', () => scheduleWindowStateSend(mainWindow));
   mainWindow.on('close', (event) => {
-    if (!appQuitting && (closeToTrayEnabled || miniPlayerEnabled)) {
+    const canKeepRunning = !appQuitting && closeToTrayEnabled && !!tray;
+    if (canKeepRunning) {
       event.preventDefault();
-      miniPlayerActive = miniPlayerEnabled;
+      miniPlayerActive = !!miniPlayerEnabled;
       mainWindow.hide();
       if (miniPlayerActive) showMiniPlayerWindow();
       sendWindowState(mainWindow);
+      return;
     }
+    miniPlayerActive = false;
+    hideMiniPlayerWindow();
   });
   mainWindow.on('closed', () => {
     if (mainWindowStateTimer) {
@@ -3028,7 +3100,6 @@ async function createWindow() {
   await mainWindow.loadURL(`http://127.0.0.1:${port}`);
 }
 
-app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
 
 if (!gotSingleInstanceLock) {
@@ -3045,6 +3116,7 @@ if (!gotSingleInstanceLock) {
     wallpaperEngineBridge.configureSessionPermissions();
     await wallpaperEngineBridge.installProtocol(protocol);
     screen.on('display-metrics-changed', () => {
+      keepMainWindowInsideDisplay(mainWindow);
       positionDesktopLyricsWindow();
       sendDesktopLyricsWindowGeometry(true);
       positionWallpaperWindow();
@@ -3068,9 +3140,9 @@ if (!gotSingleInstanceLock) {
     powerMonitor.on('lock-screen', handleMiniPlayerScreenLock);
     powerMonitor.on('resume', handleMiniPlayerSystemResume);
     powerMonitor.on('unlock-screen', handleMiniPlayerScreenUnlock);
+    createTray();
     await createWindow();
     wallpaperEngineBridge.attachWindow(mainWindow);
-    createTray();
   });
 
   app.on('activate', () => {
@@ -3079,7 +3151,7 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin' && (appQuitting || !closeToTrayEnabled)) app.quit();
+    if (process.platform !== 'darwin') app.quit();
   });
 
   app.on('before-quit', () => {

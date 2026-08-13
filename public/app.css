@@ -52,8 +52,10 @@ body.desktop-shell #trial-banner{top:112px}
 body.desktop-shell #ai-depth-chip{top:112px}
 body.desktop-shell #beat-chip{top:154px}
 body.desktop-shell #toast{top:60px}
-#fullscreen-diy-zone{display:none;position:fixed;z-index:520;top:var(--fullscreen-diy-top,24px);left:var(--fullscreen-diy-left,calc(100vw - 510px));width:var(--fullscreen-diy-width,128px);height:52px;align-items:center;justify-content:center;pointer-events:none;-webkit-app-region:no-drag}
-#fullscreen-diy-btn{min-width:108px;height:34px;opacity:0;pointer-events:none;transform:translateY(-18px) scale(.96);transition:opacity .2s cubic-bezier(.16,1,.3,1),transform .2s cubic-bezier(.16,1,.3,1),background .18s,color .18s,border-color .18s,box-shadow .18s}
+#fullscreen-diy-zone{display:none;position:fixed;z-index:520;top:var(--fullscreen-diy-top,24px);left:var(--fullscreen-diy-left,calc(100vw - 510px));width:var(--fullscreen-diy-width,224px);height:52px;align-items:center;justify-content:center;gap:8px;pointer-events:none;-webkit-app-region:no-drag}
+#fullscreen-diy-btn,#fullscreen-exit-btn{height:34px;transition:opacity .2s cubic-bezier(.16,1,.3,1),transform .2s cubic-bezier(.16,1,.3,1),background .18s,color .18s,border-color .18s,box-shadow .18s}
+#fullscreen-diy-btn{min-width:108px;opacity:0;pointer-events:none;transform:translateY(-18px) scale(.96)}
+#fullscreen-exit-btn{min-width:108px;opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}
 body.visual-guide-active #fullscreen-diy-zone{opacity:0;pointer-events:none!important;transition:opacity .18s cubic-bezier(.16,1,.3,1)}
 body.visual-guide-active #fullscreen-diy-btn{opacity:0!important;pointer-events:none!important;transform:translateY(-18px) scale(.96)!important}
 body.desktop-shell.desktop-fullscreen #desktop-titlebar,html:fullscreen body.desktop-shell #desktop-titlebar{display:none!important}
@@ -63,7 +65,7 @@ body.fullscreen-diy-peek #fullscreen-diy-btn,#fullscreen-diy-zone:hover #fullscr
 body.desktop-shell.desktop-fullscreen #search-area.peek{top:24px}
 body.desktop-shell.desktop-fullscreen #top-right{top:24px}
 @media (max-width:720px){body.desktop-shell #top-right{right:12px;top:58px}body.desktop-shell #search-area.peek{top:58px}}
-@media (max-width:720px){#fullscreen-diy-zone{height:48px}#fullscreen-diy-btn{min-width:96px;height:32px}}
+@media (max-width:720px){#fullscreen-diy-zone{width:202px;height:48px;gap:6px}#fullscreen-diy-btn,#fullscreen-exit-btn{min-width:96px;height:32px}}
 
 /* ---------- 背景 ---------- */
 #custom-bg{position:fixed;inset:0;z-index:0;background:var(--custom-bg-color,#000);overflow:hidden;transition:background .35s ease}

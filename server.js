@@ -124,6 +124,27 @@ function localContentTypeForPath(filePath) {
   return LOCAL_FILE_MIME[path.extname(String(filePath || '')).toLowerCase()] || 'application/octet-stream';
 }
 
+function parseLocalFileRange(rangeHeader, total) {
+  if (!rangeHeader) return null;
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(String(rangeHeader).trim());
+  if (!match || total <= 0 || (!match[1] && !match[2])) return { invalid: true };
+  let start;
+  let end;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return { invalid: true };
+    start = Math.max(0, total - suffixLength);
+    end = total - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : total - 1;
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start > end || start >= total) {
+    return { invalid: true };
+  }
+  return { start, end: Math.min(end, total - 1) };
+}
+
 // ---------- 工具 ----------
 function serveStatic(req, res, filePath) {
   const ext = path.extname(filePath);
@@ -1990,21 +2011,18 @@ const server = http.createServer(async (req, res) => {
       let start = 0;
       let end = Math.max(0, total - 1);
       let status = 200;
-      const range = req.headers.range || '';
-      const match = /^bytes=(\d*)-(\d*)$/i.exec(range);
-      if (match) {
-        const parsedStart = match[1] ? Number(match[1]) : 0;
-        const parsedEnd = match[2] ? Number(match[2]) : end;
-        if (!Number.isFinite(parsedStart) || !Number.isFinite(parsedEnd) || parsedStart > parsedEnd || parsedStart >= total) {
+      const parsedRange = parseLocalFileRange(req.headers.range, total);
+      if (parsedRange && parsedRange.invalid) {
           res.writeHead(416, {
             'Access-Control-Allow-Origin': '*',
             'Content-Range': `bytes */${total}`,
           });
           res.end();
           return;
-        }
-        start = Math.max(0, parsedStart);
-        end = Math.min(end, parsedEnd);
+      }
+      if (parsedRange) {
+        start = parsedRange.start;
+        end = parsedRange.end;
         status = 206;
       }
       const headers = {

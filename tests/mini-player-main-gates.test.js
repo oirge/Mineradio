@@ -76,6 +76,9 @@ function testPausedRecoverySessionBlocksMiniPlayerVisibility() {
   assert.equal(context.shouldShow(), false);
   context.miniPlayerRecoverySession.paused = false;
   assert.equal(context.shouldShow(), true);
+
+  context.miniPlayerEnabled = false;
+  assert.equal(context.shouldShow(), false);
 }
 
 /**
