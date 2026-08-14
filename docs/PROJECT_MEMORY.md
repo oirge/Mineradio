@@ -9,8 +9,8 @@
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.5.1` 基于 GitHub `v1.5.0`，已完成软件内更新线路并行测速、最快线路自动选择和失败线路兜底，并保留桌面歌词拖动、迷你封面动效、多歌单、全屏过渡、Wallpaper Engine、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`codex/release-v1.5.1-fastest-update`；发布时同步到 GitHub `origin/main` 和 tag `v1.5.1`。
-- 最近正式安装包 Release 基线：`v1.4.9`（2026-08-14，迷你播放器与更新检测；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
+- 当前工作分支：`codex/release-v1.5.1-fastest-update`；已同步到 GitHub `origin/main` 和 tag `v1.5.1`。
+- 最近正式安装包 Release 基线：`v1.5.1`（2026-08-14，软件内更新自动选择最快线路；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
