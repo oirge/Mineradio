@@ -17,6 +17,8 @@ test('桌面歌词工具栏包含播放控制和符号关闭按钮', () => {
   assert.match(html, /id="previousTrackBtn"[^>]*上一首/);
   assert.match(html, /id="playPauseBtn"[^>]*播放/);
   assert.match(html, /id="nextTrackBtn"[^>]*下一首/);
+  assert.match(html, /id="nextTrackBtn"[\s\S]*?<path d="M14\.5 12 6 18V6zM16 6v12h2V6z"\/>/);
+  assert.doesNotMatch(html, /<path d="m6 18 8\.5 6L6 6v12zM16 6v12h2V6z"\/>/);
   assert.match(html, /id="closeLyricsBtn"[^>]*>×<\/button>/);
   assert.match(html, /id="sizeDownBtn"[^>]*lyrics-adjust-btn/);
   assert.match(html, /id="sizeUpBtn"[^>]*lyrics-adjust-btn[^>]*plus/);

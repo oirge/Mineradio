@@ -100,6 +100,8 @@ wallpaperEngineBridge.registerIpc();
 
 let mainWindow = null;
 let mainWindowLifecycleStarted = false;
+let mainWindowMoveActive = false;
+let mainWindowMoveReleaseTimer = null;
 let localServer = null;
 let mainServerPort = 0;
 let desktopLyricsWindow = null;
@@ -120,6 +122,7 @@ const DESKTOP_LYRICS_SIZE_MIN = 0.20;
 const DESKTOP_LYRICS_SIZE_MAX = 1.55;
 const DESKTOP_LYRICS_GLOW_MIN = 0;
 const DESKTOP_LYRICS_GLOW_MAX = 0.85;
+const MAIN_WINDOW_MOVE_RELEASE_DELAY_MS = 80;
 let wallpaperWindow = null;
 const wallpaperStateCache = new DesktopOverlayStateCache();
 let miniPlayerWindow = null;
@@ -1573,10 +1576,41 @@ function rememberDesktopLyricsBounds(options = {}) {
 function applyDesktopLyricsMouseBehavior() {
   if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
   const locked = desktopLyricsStateCache.value.clickThrough !== false;
-  const shouldIgnore = locked || !desktopLyricsPointerCapture;
+  const shouldIgnore = mainWindowMoveActive || locked || !desktopLyricsPointerCapture;
   if (desktopLyricsMouseIgnored === shouldIgnore) return;
   desktopLyricsMouseIgnored = shouldIgnore;
   desktopLyricsWindow.setIgnoreMouseEvents(shouldIgnore, { forward: true });
+}
+
+function clearMainWindowMoveReleaseTimer() {
+  if (!mainWindowMoveReleaseTimer) return;
+  clearTimeout(mainWindowMoveReleaseTimer);
+  mainWindowMoveReleaseTimer = null;
+}
+
+function beginMainWindowUserMove() {
+  clearMainWindowMoveReleaseTimer();
+  if (mainWindowMoveActive) return;
+  mainWindowMoveActive = true;
+  applyDesktopLyricsMouseBehavior();
+}
+
+function scheduleMainWindowMoveRelease() {
+  if (!mainWindowMoveActive) return;
+  clearMainWindowMoveReleaseTimer();
+  mainWindowMoveReleaseTimer = setTimeout(() => {
+    mainWindowMoveReleaseTimer = null;
+    if (!mainWindowMoveActive) return;
+    mainWindowMoveActive = false;
+    applyDesktopLyricsMouseBehavior();
+  }, MAIN_WINDOW_MOVE_RELEASE_DELAY_MS);
+}
+
+function resetMainWindowMoveState() {
+  clearMainWindowMoveReleaseTimer();
+  if (!mainWindowMoveActive) return;
+  mainWindowMoveActive = false;
+  applyDesktopLyricsMouseBehavior();
 }
 
 function desktopLyricsHotBoundsOnScreen() {
@@ -3320,15 +3354,20 @@ async function createWindow() {
     sendWindowState(mainWindow);
   });
 
-  mainWindow.on('maximize', () => sendWindowState(mainWindow));
+  mainWindow.on('maximize', () => {
+    scheduleMainWindowMoveRelease();
+    sendWindowState(mainWindow);
+  });
   mainWindow.on('unmaximize', () => sendWindowState(mainWindow));
   mainWindow.on('minimize', () => {
+    resetMainWindowMoveState();
     miniPlayerActive = !!miniPlayerEnabled;
     sendWindowState(mainWindow);
     if (miniPlayerActive) showMiniPlayerWindow();
     else hideMiniPlayerWindow();
   });
   mainWindow.on('restore', () => {
+    resetMainWindowMoveState();
     miniPlayerActive = false;
     hideMiniPlayerWindow();
     sendWindowState(mainWindow);
@@ -3341,21 +3380,27 @@ async function createWindow() {
     sendWindowState(mainWindow);
   });
   mainWindow.on('hide', () => {
+    resetMainWindowMoveState();
     if (miniPlayerActive && miniPlayerEnabled) showMiniPlayerWindow();
     else hideMiniPlayerWindow();
     sendWindowState(mainWindow);
   });
   mainWindow.on('focus', () => sendWindowState(mainWindow));
   mainWindow.on('blur', () => sendWindowState(mainWindow));
+  mainWindow.on('will-move', () => {
+    beginMainWindowUserMove();
+  });
   mainWindow.on('move', () => {
     scheduleWindowStateSend(mainWindow);
   });
   mainWindow.on('moved', () => {
     keepMainWindowInsideDisplay(mainWindow);
+    scheduleMainWindowMoveRelease();
     scheduleWindowStateSend(mainWindow);
   });
   mainWindow.on('resize', () => scheduleWindowStateSend(mainWindow));
   mainWindow.on('close', (event) => {
+    resetMainWindowMoveState();
     const canKeepRunning = !appQuitting && closeToTrayEnabled && !!tray;
     if (canKeepRunning) {
       event.preventDefault();
@@ -3369,6 +3414,7 @@ async function createWindow() {
     hideMiniPlayerWindow();
   });
   mainWindow.on('closed', () => {
+    resetMainWindowMoveState();
     if (mainWindowStateTimer) {
       clearTimeout(mainWindowStateTimer);
       mainWindowStateTimer = null;

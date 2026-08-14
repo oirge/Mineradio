@@ -1,5 +1,20 @@
 ﻿# 发布流程
 
+## v1.5.0 桌面歌词拖动与迷你封面动效修复
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.0`。
+- 主窗口进入用户拖动时，桌面歌词窗口强制保持鼠标穿透；`moved` 后延迟 `80ms` 恢复原锁定/热区状态，避免歌词置顶窗口抢走本次鼠标释放并造成窗口跳位。
+- 桌面歌词 renderer 在检测到外部左键拖动时主动撤销 hover 捕获，歌词自身拖动仍保留完整指针捕获；“下一首”按钮同步修复为正确的右向三角形和竖线图标。
+- 标准迷你播放器降低低频脉冲同步阈值，并用非线性映射增强低能量段；封面态和完整态采用不同缩放幅度，保持节拍明显且不过度跳动。
+- 封面光晕改为不会被 `overflow:hidden` 裁掉的外层双层光晕与内沿描边；关闭光晕后只保留基础内边框，强度设为 `0` 时律动严格归零。
+- 极简迷你播放器仍不创建封面结构；标准/极简样式、自动收回、圆角和既有用户设置继续兼容。
+- 升级继续使用 `%APPDATA%\Mineradio-oirge` 与既有曲库、播放会话、特别喜欢、自建歌单和 DIY 设置，不执行破坏性清空或强制重新导入。
+- 全量 Node 回归 `334/334`、关键 JavaScript 语法检查与 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.5.0-Setup.exe` `101473799` 字节；`.blockmap` `105756` 字节；`latest.yml` `347` 字节；SHA256 清单 `273` 字节。
+- SHA256：安装器 `5992c04e662232cd71bfea4dc17dfe6f472b5534e9224019584684a828136514`；`.blockmap` `f9109d799eeb7e27d30cd589609d20ced394891df6dec3fcce10ad9fb3248550`；`latest.yml` `10b9c50075fc07eac8495fd1fb7f0295d42d41959637a565dbf09f6d27fe3187`；SHA256 清单 `20f1e2e843d292c96b4116205f4fca834fdb1b2e4864fc26d37230cf0fb7e4b3`。
+- `latest.yml` 的 Setup SHA512：`kEr+xTSvx/BEFbP+scKbU8Z9cccnONpEgrlM9KTF68x8tYp7hqI4hkaj1dkSGZNQ0RGnRZc1VseVJcsGHG126Q==`。
+- Release 标题使用 `Mineradio v1.5.0`。
+
 ## v1.4.11 更新圆环与窗口拖动修复
 - 同版本修复重发：检测更新圆环不再使用 GSAP/CSS 几何 `transform`，改用 `stroke-dashoffset` 做描边动画；下载进度环改用 SVG 坐标中的固定旋转，彻底避开 Electron SVG 轴心偏移。
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.11`。

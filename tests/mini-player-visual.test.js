@@ -141,6 +141,11 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   assert.match(html, /data-collapsed="true"/);
   assert.match(html, /data-glow="true"/);
   assert.match(html, /--mini-pulse/);
+  assert.match(html, /var\(--mini-pulse\) \* 0\.085/);
+  assert.match(html, /var\(--mini-pulse\) \* 0\.055/);
+  assert.match(html, /0 0 calc\(6px \+ var\(--mini-pulse\) \* 9px\)/);
+  assert.match(html, /\.mini-shell\[data-glow="false"\] \.cover \{ box-shadow:/);
+  assert.doesNotMatch(html, /\.cover::after \{[\s\S]*?inset: -4px;/);
   assert.match(html, /setExpanded\(true\)/);
   assert.match(html, /prefers-reduced-motion/);
   assert.match(html, /coverWrap\.addEventListener\('mouseenter'/);
@@ -154,6 +159,29 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   assert.match(html, /id="restore"[^>]+title="返回主界面"/);
   assert.match(html, /\.restore \{[\s\S]*?align-self: flex-start;[\s\S]*?margin: -1px -1px 0 0;/);
   assert.match(html, /id="desktop-lyrics"[^>]+title="开启桌面歌词"/);
+});
+
+test('标准迷你播放器把低频脉冲映射为可见封面缩放和光晕', () => {
+  const harness = createMiniPlayerHarness();
+  const shell = harness.nodes['mini-shell'];
+
+  harness.applyState({
+    hasTrack: true,
+    playing: true,
+    pulse: 0.25,
+    visual: { pulseEnabled: true, pulseStrength: 0.78, glowEnabled: true, hoverExpand: true, radius: 16 },
+  });
+  const visiblePulse = Number(shell.style.values['--mini-pulse']);
+  assert.ok(visiblePulse > 0.25 * 0.78);
+  assert.equal(shell.style.values['--mini-radius'], '16px');
+  assert.equal(shell.getAttribute('data-glow'), 'true');
+
+  harness.applyState({
+    pulse: 0.9,
+    visual: { pulseEnabled: true, pulseStrength: 0, glowEnabled: false, hoverExpand: true, radius: 16 },
+  });
+  assert.equal(shell.style.values['--mini-pulse'], '0.000');
+  assert.equal(shell.getAttribute('data-glow'), 'false');
 });
 
 test('悬停展开开关控制初始态、悬停态和键盘聚焦态', () => {
@@ -260,7 +288,7 @@ test('迷你播放器律动通过低频采样和增量状态同步', () => {
 
   assert.match(renderer, /miniPlayerPulseTimer/);
   assert.match(renderer, /setTimeout\(runMiniPlayerPulseTimer, 80\)/);
-  assert.match(renderer, /Math\.abs\(state\.pulse - pulse\) >= 0\.035/);
+  assert.match(renderer, /Math\.abs\(state\.pulse - pulse\) >= 0\.012/);
   assert.match(renderer, /miniPlayerPulseStrength/);
   assert.match(main, /next\.pulse !== previous\.pulse/);
   assert.match(main, /next\.visualSignature !== previous\.visualSignature/);

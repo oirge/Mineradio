@@ -98,6 +98,46 @@ test('drag hit testing no longer falls back to the padded stage rectangle', () =
   assert.doesNotMatch(pointerDown, /pointInStage\(evt\)/);
 });
 
+function runHoverUpdate({ dragging = false, buttons = 0 } = {}) {
+  const calls = { captures: [], hidden: 0, hitTests: 0, scheduled: 0, toggles: [] };
+  const context = {
+    dragging,
+    state: { enabled: true },
+    hoverInside: false,
+    lastPointerEvent: null,
+    pointInStage: () => {
+      calls.hitTests += 1;
+      return true;
+    },
+    stage: {
+      classList: {
+        toggle: (...args) => calls.toggles.push(args),
+      },
+    },
+    isLocked: () => false,
+    scheduleInteractionHint: () => { calls.scheduled += 1; },
+    hideInteractionHint: () => { calls.hidden += 1; },
+    setPointerCapture: (active) => calls.captures.push(active),
+    evt: { buttons },
+  };
+  vm.runInNewContext(`${readFunction('updateHover')}\nresult = updateHover(evt);`, context);
+  return { calls, result: context.result };
+}
+
+test('external primary-button dragging stays click-through without blocking lyric dragging', () => {
+  const externalDrag = runHoverUpdate({ dragging: false, buttons: 1 });
+  assert.equal(externalDrag.result, false);
+  assert.equal(externalDrag.calls.hidden, 1);
+  assert.equal(externalDrag.calls.hitTests, 0);
+  assert.deepEqual(externalDrag.calls.captures, [false]);
+
+  const lyricDrag = runHoverUpdate({ dragging: true, buttons: 1 });
+  assert.equal(lyricDrag.result, true);
+  assert.equal(lyricDrag.calls.hidden, 0);
+  assert.equal(lyricDrag.calls.hitTests, 1);
+  assert.deepEqual(lyricDrag.calls.captures, [true]);
+});
+
 test('desktop lyric hot bounds are sampled after the current scroll transform', () => {
   const draw = readFunction('draw');
   const scrollUpdate = draw.indexOf('updateLyricScroll(nowMs, progress);');

@@ -173,15 +173,82 @@ test('副屏工作区越界时夹回窗口位置而不强制居中', () => {
 
 test('主窗口拖动过程中不重设边界，拖动结束后再纠偏', () => {
   const source = readMainSource();
+  const willMoveHandler = source.match(/mainWindow\.on\('will-move', \(\) => \{([\s\S]*?)\n  \}\);/);
   const moveHandler = source.match(/mainWindow\.on\('move', \(\) => \{([\s\S]*?)\n  \}\);/);
   const movedHandler = source.match(/mainWindow\.on\('moved', \(\) => \{([\s\S]*?)\n  \}\);/);
 
+  assert.ok(willMoveHandler, '缺少主窗口 will-move 事件');
   assert.ok(moveHandler, '缺少主窗口 move 事件');
   assert.ok(movedHandler, '缺少主窗口 moved 事件');
+  assert.match(willMoveHandler[1], /beginMainWindowUserMove\(\)/);
   assert.doesNotMatch(moveHandler[1], /keepMainWindowInsideDisplay/);
   assert.match(moveHandler[1], /scheduleWindowStateSend\(mainWindow\)/);
   assert.match(movedHandler[1], /keepMainWindowInsideDisplay\(mainWindow\)/);
+  assert.match(movedHandler[1], /scheduleMainWindowMoveRelease\(\)/);
   assert.match(movedHandler[1], /scheduleWindowStateSend\(mainWindow\)/);
+});
+
+test('主窗口拖动期间桌面歌词强制穿透并在结束后延迟恢复', () => {
+  const source = readMainSource();
+  const ignoredStates = [];
+  const mouseScope = {
+    desktopLyricsWindow: {
+      isDestroyed: () => false,
+      setIgnoreMouseEvents: (ignored, options) => ignoredStates.push({ ignored, options }),
+    },
+    desktopLyricsStateCache: { value: { clickThrough: false } },
+    desktopLyricsPointerCapture: true,
+    desktopLyricsMouseIgnored: null,
+    mainWindowMoveActive: true,
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'applyDesktopLyricsMouseBehavior', 'clearMainWindowMoveReleaseTimer')
+      + '\nthis.applyMouseBehavior = applyDesktopLyricsMouseBehavior;',
+    mouseScope,
+  );
+
+  mouseScope.applyMouseBehavior();
+  assert.equal(ignoredStates.length, 1);
+  assert.equal(ignoredStates[0].ignored, true);
+  assert.equal(ignoredStates[0].options.forward, true);
+  mouseScope.mainWindowMoveActive = false;
+  mouseScope.desktopLyricsMouseIgnored = null;
+  mouseScope.applyMouseBehavior();
+  assert.equal(ignoredStates[1].ignored, false);
+  assert.equal(ignoredStates[1].options.forward, true);
+
+  const timers = [];
+  const moveStates = [];
+  const moveScope = {
+    mainWindowMoveActive: false,
+    mainWindowMoveReleaseTimer: null,
+    MAIN_WINDOW_MOVE_RELEASE_DELAY_MS: 80,
+    clearTimeout: (id) => {
+      if (timers[id - 1]) timers[id - 1].cleared = true;
+    },
+    setTimeout: (handler, delay) => {
+      timers.push({ handler, delay, cleared: false });
+      return timers.length;
+    },
+    applyDesktopLyricsMouseBehavior: () => moveStates.push(moveScope.mainWindowMoveActive),
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'clearMainWindowMoveReleaseTimer', 'desktopLyricsHotBoundsOnScreen')
+      + '\nthis.beginMove = beginMainWindowUserMove;'
+      + '\nthis.scheduleRelease = scheduleMainWindowMoveRelease;',
+    moveScope,
+  );
+
+  moveScope.beginMove();
+  assert.equal(moveScope.mainWindowMoveActive, true);
+  assert.deepEqual(moveStates, [true]);
+  moveScope.scheduleRelease();
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 80);
+  assert.equal(moveScope.mainWindowMoveActive, true);
+  timers[0].handler();
+  assert.equal(moveScope.mainWindowMoveActive, false);
+  assert.deepEqual(moveStates, [true, false]);
 });
 
 test('透明窗口退出逻辑全屏时仍调用原生退出 API', () => {

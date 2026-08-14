@@ -477,7 +477,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.4.11';
+var APP_VERSION = '1.5.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -22967,7 +22967,7 @@ function pushMiniPlayerState(force, playbackOnly) {
   var visualSignature = JSON.stringify(visual);
   var now = performance.now();
   var pulse = miniPlayerPulseValue();
-  var pulseChanged = state.pulse == null || Math.abs(state.pulse - pulse) >= 0.035;
+  var pulseChanged = state.pulse == null || Math.abs(state.pulse - pulse) >= 0.012;
   if (force || (now - miniPlayerPulseLastAt >= 74 && pulseChanged)) {
     state.pulse = pulse;
     miniPlayerPulseLastAt = now;
