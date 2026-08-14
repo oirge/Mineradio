@@ -477,7 +477,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.4.9';
+var APP_VERSION = '1.4.10';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -8790,6 +8790,7 @@ function updateStageLyrics3D(dt, frameShelfState) {
   var shelfAlwaysOn = frameShelfState.alwaysVisible;
   var skullShelfDetailOpen = !!(fx && fx.preset === SKULL_PRESET_INDEX && shelfDetailOpen);
   var normalShelfDetailOpen = !!(shelfDetailOpen && !skullShelfDetailOpen);
+  stageLyrics.group.visible = !normalShelfDetailOpen;
   stageLyrics.group.renderOrder = shelfDetailOpen ? 24 : 38;
   var shelfDetailLyricProfile = shelfDetailOpen
     ? (skullShelfDetailOpen ? STAGE_LYRIC_PROFILE_SKULL_DETAIL : STAGE_LYRIC_PROFILE_DETAIL)
@@ -14338,7 +14339,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         }
       }
       // 二级内容框 update
-      if (contentList) contentList.update(dt, frameLayout, frameShelfLook);
+      if (contentList) contentList.update(dt, frameLayout.detail, frameShelfLook);
     },
     onCoverChange: function() {
       if (group && mode !== 'off' && uniforms.uTime.value - lastUpdate > 0.2) {
@@ -27249,7 +27250,7 @@ function ensureFxSliderResetButton(id, key) {
 }
 var fxPanelTab = 'presets';
 function setFxPanelTab(tab) {
-  var allowed = { presets:1, appearance:1, lyrics:1, motion:1, advanced:1 };
+  var allowed = { presets:1, appearance:1, lyrics:1, motion:1, mini:1, advanced:1 };
   fxPanelTab = allowed[tab] ? tab : 'presets';
   var panel = document.getElementById('fx-panel');
   if (panel) panel.setAttribute('data-active-tab', fxPanelTab);
@@ -27271,6 +27272,7 @@ function fxPanelTargetForNode(node, current) {
   var inputId = fxPanelInputId(node);
   if (id === 'preset-grid' || id === 'user-archive-grid') return 'presets';
   if (id === 'fx-lyric-fold') return 'lyrics';
+  if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
   if (id === 'fx-advanced' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
@@ -27292,6 +27294,7 @@ function organizeFxPanel() {
     ['appearance', '\u5916\u89c2'],
     ['lyrics', '\u6b4c\u8bcd'],
     ['motion', '\u52a8\u6001'],
+    ['mini', '\u8ff7\u4f60'],
     ['advanced', '\u9ad8\u7ea7']
   ];
   var tabs = document.createElement('div');
@@ -28402,8 +28405,8 @@ function setUpdatePreviewVisible(visible) {
   }
   if (window.gsap) {
     window.gsap.fromTo(entry,
-      { autoAlpha: 0, y: -6, scale: 0.92, filter: 'blur(6px)' },
-      { autoAlpha: 1, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.62, delay: 0.18, ease: 'expo.out', overwrite: true }
+      { autoAlpha: 0, scale: 0.92, filter: 'blur(6px)' },
+      { autoAlpha: 1, scale: 1, filter: 'blur(0px)', duration: 0.62, delay: 0.18, ease: 'expo.out', overwrite: true }
     );
   }
   syncUpdateIconBreathing(760);
@@ -28526,11 +28529,10 @@ function startUpdateIconBreathing() {
   if (!entry || !window.gsap) return;
   var ring = entry.querySelector('.update-ring');
   updatePreviewState.iconBreathing = true;
-  window.gsap.killTweensOf(entry, 'y,boxShadow');
-  window.gsap.set(entry, { autoAlpha: 1 });
+  window.gsap.killTweensOf(entry, 'boxShadow');
+  window.gsap.set(entry, { autoAlpha: 1, y: 0 });
   if (ring) window.gsap.killTweensOf(ring, 'rotate');
   window.gsap.to(entry, {
-    y: -1.4,
     boxShadow: '0 16px 44px rgba(0,0,0,.32),0 0 24px rgba(244,210,138,.18),0 0 13px rgba(157,184,207,.06),inset 0 1px 0 rgba(255,255,255,.11)',
     duration: 2.6,
     repeat: -1,

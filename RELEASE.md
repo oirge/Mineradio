@@ -1,5 +1,19 @@
 ﻿# 发布流程
 
+## v1.4.10 界面布局与 3D 歌单详情修复
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.10`。
+- DIY 控制台新增独立“迷你”页，集中迷你播放器总开关、样式、封面律动、光晕、悬停展开、圆角和 `× 自动收回` 设置。
+- 修复顶栏“检测更新”按钮上偏、DIY 底部按钮重叠，以及全屏状态下 Home、DIY、退出全屏按钮中心线错位。
+- 修复 3D 歌单详情把错误布局对象传入绘制流程导致坐标与缩放为 `NaN`、详情界面异常拉伸的问题。
+- 普通详情态立即隐藏舞台歌词，避免动态镜头下巨型歌词遮挡详情；关闭详情后恢复原有歌词状态。
+- 升级继续使用 `%APPDATA%\\Mineradio-oirge` 与既有曲库、播放会话、特别喜欢、自建歌单和 DIY 设置，不执行破坏性清空或强制重新导入。
+- 全量 Node 回归 `328/328`、关键 JavaScript 语法检查与 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.4.10-Setup.exe` `101472152` 字节；`.blockmap` `105866` 字节；`latest.yml` `350` 字节；SHA256 清单 `272` 字节。
+- SHA256：安装器 `62dac19065ee44762546bd12a33b28bd3acbfbe294bae7a30dcba2a890a60ff3`；`.blockmap` `6f82c9f1ad3abc03efc2d9c10381f67f43cdd083538bb5e03e15336078d683f6`；`latest.yml` `b96254d510f98da6f8bf210ecc585f939026c88bd400b5ce3ab3ae0d2f3e30a5`；SHA256 清单 `71d161bb80d5bcc0e1821fc44c5c5eecc6cdedee6633430bbce3f30e250e0562`。
+- `latest.yml` 的 Setup SHA512：`larz2ROa3ZeCkzzVDJvHzfLZUo/xY1UlKsMe63m8KxrlAzIVSTLrOXsSUCeJ7MBSyvUAFo8u1Dy1TAzND/HvGQ==`。
+- Release 标题使用 `Mineradio v1.4.10 界面布局与 3D 歌单详情修复`。
+
 ## v1.4.9 迷你播放器与更新检测
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.9`。
 - 标准迷你播放器本体不再放置一次性 `×`；四角“返回主界面”按钮恢复到右上角原位，桌面歌词和播放控制保持不变。

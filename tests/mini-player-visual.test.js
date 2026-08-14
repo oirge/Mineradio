@@ -230,9 +230,14 @@ test('自动收回设置常驻样式选择区并支持双向持久化', () => {
   context.toggle('hoverExpand');
   assert.equal(context.fx.miniPlayerHoverExpand, true);
   assert.deepEqual(calls, { controls: 2, saves: 2, pushes: 2 });
+  assert.match(index, /id="fx-mini-player-settings"[\s\S]*?id="t-miniPlayer"[\s\S]*?id="mini-player-mode-seg"/);
   assert.match(index, /id="mini-player-mode-seg"[\s\S]*?id="t-miniPlayerHover"[^>]+toggleMiniPlayerVisual\('hoverExpand'\)/);
   assert.match(index, /mini-player-collapse-glyph"[^>]*>×<\/em><strong>自动收回<\/strong>/);
   assert.match(index, /id="mini-player-collapse-state">开启/);
+  assert.match(index, /开启后移开鼠标会回到封面；关闭后保持完整迷你播放器/);
+  assert.match(renderer, /var allowed = \{[^}]*mini:1/);
+  assert.match(renderer, /id === 'fx-mini-player-settings'\) return 'mini'/);
+  assert.ok(renderer.includes("['mini', '\\u8ff7\\u4f60']"));
   assert.match(renderer, /hoverButton\.setAttribute\('aria-pressed'/);
   assert.match(renderer, /hoverState\.textContent = hoverExpandEnabled \? '开启' : '关闭'/);
   assert.match(renderer, /miniPlayerHoverExpand:\s*raw\.miniPlayerHoverExpand !== false/);

@@ -37,3 +37,9 @@ Mineradio v1.4.5 的 `keepMainWindowInsideDisplay()` 只依据 `isFullScreen()` 
 - 过渡必须在 IPC 前同步提交首帧样式，不能依赖可能被重负载延迟的 `requestAnimationFrame`。
 - 过渡只负责视觉遮罩，不得替代或延迟 `windowFullscreenActive`、`htmlFullscreenActive`、`setFullScreen()` 和普通窗口边界恢复逻辑。
 - 必须保留超时回收，避免 Electron 未发送预期状态事件时遮罩永久停留。
+
+## Fullscreen control alignment
+
+- 全屏 `DIY` 与“退出全屏”必须作为同一 `#fullscreen-diy-zone` 内的常驻控件，与 Home 按钮共享垂直中心线。
+- 不得给全屏 `DIY` 保留 `translateY(-18px)` 的自动收起初始位；淡出过程中截帧会让按钮看起来永久偏上，并且 GSAP 缩放可能固化该位移。
+- 全屏控制区仍通过 `layoutFullscreenDiyZone()` 锚定 Home 左侧，视觉引导打开时可以整体隐藏，但普通全屏状态不能依赖鼠标悬停才完成对齐。

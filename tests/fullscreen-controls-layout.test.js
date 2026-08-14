@@ -7,6 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.join(__dirname, '..');
+const cssSource = read('public/app.css');
 
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -81,4 +82,9 @@ test('窄屏下仍保留 Home 与全屏按钮间距', () => {
   assert.equal(result.width, 202);
   assert.equal(result.left + result.width, homeRect.left - 8);
   assert.equal(result.top + result.height / 2, homeRect.top + homeRect.height / 2);
+});
+
+test('全屏 DIY 按钮常驻并与退出全屏按钮同一基线', () => {
+  assert.match(cssSource, /#fullscreen-diy-zone\{[^}]*pointer-events:auto/);
+  assert.match(cssSource, /#fullscreen-diy-btn\{[^}]*opacity:1[^}]*pointer-events:auto[^}]*translateY\(0\) scale\(1\)/);
 });

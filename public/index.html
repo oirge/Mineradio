@@ -379,23 +379,8 @@ if (document.fonts && document.fonts.load) {
       <div class="fx-section-label">桌面 / 壁纸</div>
       <div class="fx-toggle-grid">
         <div class="fx-toggle" id="t-closeToTray" onclick="toggleDesktopShellSetting('closeToTray')" title="点击窗口关闭按钮时隐藏到系统托盘"><span>关闭到托盘</span><span class="dot"></span></div>
-        <div class="fx-toggle" id="t-miniPlayer" onclick="toggleDesktopShellSetting('miniPlayer')" title="主窗口最小化或关闭到托盘时显示歌曲信息和播放控制"><span>最小化迷你播放器</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-startupLaunch" onclick="toggleDesktopShellSetting('startupLaunch')" title="登录 Windows 后自动启动 Mineradio"><span>开机启动</span><span class="dot"></span></div>
       </div>
-      <div class="fx-section-label">迷你播放器样式</div>
-      <div class="fx-seg" id="mini-player-mode-seg">
-        <button type="button" data-mini-player-mode="standard" title="使用带封面的标准迷你播放器">标准</button>
-        <button type="button" data-mini-player-mode="compact" title="使用无封面的极简迷你播放器">极简</button>
-      </div>
-      <button type="button" class="fx-toggle mini-player-collapse-setting" id="t-miniPlayerHover" onclick="toggleMiniPlayerVisual('hoverExpand')" title="自动收回已开启：离开完整面板后回到封面；点击可保持完整迷你播放器" aria-pressed="true">
-        <span class="mini-player-collapse-copy"><em class="mini-player-collapse-glyph" aria-hidden="true">×</em><strong>自动收回</strong><small id="mini-player-collapse-state">开启</small></span><span class="dot"></span>
-      </button>
-      <div class="fx-toggle-grid mini-player-diy-grid">
-        <div class="fx-toggle" id="t-miniPlayerPulse" onclick="toggleMiniPlayerVisual('pulseEnabled')" title="让标准迷你播放器封面跟随音乐能量轻微缩放"><span>封面律动</span><span class="dot"></span></div>
-        <div class="fx-toggle" id="t-miniPlayerGlow" onclick="toggleMiniPlayerVisual('glowEnabled')" title="显示封面外沿的柔和律动光晕"><span>封面光晕</span><span class="dot"></span></div>
-      </div>
-      <div class="fx-slider"><label>封面律动强度</label><input id="fx-miniplayerpulse" type="range" min="0" max="1.5" step="0.01"><output></output></div>
-      <div class="fx-slider"><label>封面圆角</label><input id="fx-miniplayerradius" type="range" min="4" max="22" step="1"><output></output></div>
       <div class="fx-slider"><label>桌面歌词大小</label><input id="fx-desktoplyricssize" type="range" min="0.20" max="1.55" step="0.01"><output></output></div>
       <div class="fx-slider"><label>桌面歌词透明</label><input id="fx-desktoplyricsopacity" type="range" min="0.28" max="1" step="0.01"><output></output></div>
       <div class="fx-slider"><label>桌面歌词高度</label><input id="fx-desktoplyricsy" type="range" min="0.08" max="0.92" step="0.01"><output></output></div>
@@ -419,6 +404,30 @@ if (document.fonts && document.fonts.load) {
       </div>
       <div class="fx-slider dev-locked"><label>壁纸透明度</label><input id="fx-wallpaperopacity" type="range" min="0.35" max="1" step="0.01" disabled><output></output></div>
     </div>
+  </div>
+
+  <div class="fx-mini-player-settings" id="fx-mini-player-settings">
+    <div class="fx-mini-player-settings-head">
+      <span><strong>迷你播放器</strong><small>开关、样式与悬停展开</small></span>
+      <em>MINI</em>
+    </div>
+    <div class="fx-toggle mini-player-enable-setting" id="t-miniPlayer" onclick="toggleDesktopShellSetting('miniPlayer')" title="主窗口最小化或关闭到托盘时显示歌曲信息和播放控制"><span>最小化迷你播放器</span><span class="dot"></span></div>
+    <div class="fx-section-label">迷你播放器样式</div>
+    <div class="fx-seg" id="mini-player-mode-seg">
+      <button type="button" data-mini-player-mode="standard" title="使用带封面的标准迷你播放器">标准</button>
+      <button type="button" data-mini-player-mode="compact" title="使用无封面的极简迷你播放器">极简</button>
+    </div>
+    <button type="button" class="fx-toggle mini-player-collapse-setting" id="t-miniPlayerHover" onclick="toggleMiniPlayerVisual('hoverExpand')" title="自动收回已开启：离开完整面板后回到封面；点击可保持完整迷你播放器" aria-pressed="true">
+      <span class="mini-player-collapse-copy"><em class="mini-player-collapse-glyph" aria-hidden="true">×</em><strong>自动收回</strong><small id="mini-player-collapse-state">开启</small></span><span class="dot"></span>
+    </button>
+    <div class="mini-player-collapse-hint">开启后移开鼠标会回到封面；关闭后保持完整迷你播放器。</div>
+    <div class="fx-section-label">封面效果</div>
+    <div class="fx-toggle-grid mini-player-diy-grid">
+      <div class="fx-toggle" id="t-miniPlayerPulse" onclick="toggleMiniPlayerVisual('pulseEnabled')" title="让标准迷你播放器封面跟随音乐能量轻微缩放"><span>封面律动</span><span class="dot"></span></div>
+      <div class="fx-toggle" id="t-miniPlayerGlow" onclick="toggleMiniPlayerVisual('glowEnabled')" title="显示封面外沿的柔和律动光晕"><span>封面光晕</span><span class="dot"></span></div>
+    </div>
+    <div class="fx-slider"><label>封面律动强度</label><input id="fx-miniplayerpulse" type="range" min="0" max="1.5" step="0.01"><output></output></div>
+    <div class="fx-slider"><label>封面圆角</label><input id="fx-miniplayerradius" type="range" min="4" max="22" step="1"><output></output></div>
   </div>
 
   <div class="fx-fold" id="fx-stage-fold">

@@ -66,6 +66,16 @@ test('更新入口常驻并提供独立检测按钮', () => {
   assert.match(appSource, /openUpdatePanel\(\)[\s\S]*?checkLatestUpdate\(\{ force: true, announce: true \}\)/);
 });
 
+test('标题栏更新按钮只做光效呼吸，不再上下漂移', () => {
+  const start = appSource.indexOf('function setUpdatePreviewVisible(visible) {');
+  const end = appSource.indexOf('function syncUpdateIconBreathing(delay) {', start);
+  const alignmentSource = appSource.slice(start, end);
+
+  assert.ok(start >= 0 && end > start, '更新按钮动画接缝缺失');
+  assert.doesNotMatch(alignmentSource, /\by:\s*-/);
+  assert.match(cssSource, /#desktop-titlebar #update-entry\{[^}]*align-self:center[^}]*transform-origin:50% 50%/);
+});
+
 test('连续点击检测更新只发送一个在途请求', async () => {
   const harness = loadUpdateCheckHarness();
   const first = harness.context.checkLatestUpdate({ force: true, announce: true });

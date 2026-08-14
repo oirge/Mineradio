@@ -138,6 +138,7 @@ function testStageLyricsShelfStateReuse() {
   assert.match(stageSource, /var shelfMode = frameShelfState\.mode;/);
   assert.match(stageSource, /var shelfDetailOpen = frameShelfState\.contentOpen;/);
   assert.match(stageSource, /var shelfAlwaysOn = frameShelfState\.alwaysVisible;/);
+  assert.match(stageSource, /stageLyrics\.group\.visible = !normalShelfDetailOpen;/);
   assert.doesNotMatch(stageSource, /shelfManager\.getMode\(\)|shelfManager\.hasOpenContent\(\)|shelfAlwaysVisible\(\)/);
   assert.doesNotMatch(stageSource, /shouldAvoidStageLyricsForShelf\(\)|shouldDimWallpaperForShelf\(\)|shouldOffsetLyricsForShelfDetail\(\)/);
 }
@@ -170,7 +171,8 @@ function testShelfContentFrameSnapshotReuse() {
   const rowSource = readSourceBetween(contentSource, '  function drawRow(', '\n\n  /**\n   * 仅在详情行位置目标');
   const syncSource = readSourceBetween(contentSource, '  function syncRenderedRows(', '\n\n  return {');
   const placeSource = readSourceBetween(contentSource, '  function place(', '\n\n  function disposeRowList');
-  assert.match(managerSource, /contentList\.update\(dt, frameLayout, frameShelfLook\);/);
+  assert.match(managerSource, /contentList\.update\(dt, frameLayout\.detail, frameShelfLook\);/);
+  assert.doesNotMatch(managerSource, /contentList\.update\(dt, frameLayout, frameShelfLook\);/);
   assert.match(contentSource, /function detailLayout\(shelfCtl\)/);
   assert.match(updateSource, /var shelfLook = frameShelfLook \|\| shelfSettings\(\);/);
   assert.match(updateSource, /var layout = frameLayout \|\| detailLayout\(shelfLook\);/);
