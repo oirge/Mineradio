@@ -528,8 +528,11 @@ if (document.fonts && document.fonts.load) {
   </div>
   <div id="pl-pane" style="display:none">
     <div class="queue-toolbar">
-      <div class="queue-chip">本地音乐文件夹</div>
-      <button class="fx-mini-btn ghost" onclick="openLocalFolderImport()" style="height:26px;padding:0 10px;font-size:11px">导入</button>
+      <div class="queue-chip">本地音乐与独立歌单</div>
+      <div style="display:flex;gap:6px">
+        <button class="fx-mini-btn ghost" onclick="openCreateLocalPlaylistModal()" style="height:26px;padding:0 10px;font-size:11px">新建</button>
+        <button class="fx-mini-btn ghost" onclick="openLocalFolderImport()" style="height:26px;padding:0 10px;font-size:11px">导入</button>
+      </div>
     </div>
     <div id="pl-list" style="margin-top:6px"></div>
   </div>
@@ -670,7 +673,14 @@ if (document.fonts && document.fonts.load) {
     <button id="play-btn" class="ctrl-btn" onclick="togglePlay()" title="播放/暂停"><svg id="play-icon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
     <button id="next-btn" class="ctrl-btn" onclick="nextTrack()" title="下一首"><svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
     <button id="mini-queue-btn" class="ctrl-btn" onclick="toggleMiniQueue(event)" title="当前队列"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></button>
-    <button id="playlist-source-btn" class="ctrl-btn playlist-source-btn" onclick="toggleLocalPlaybackPlaylistSource()" title="当前：普通歌单，点击切换到特别喜欢" aria-label="当前：普通歌单，点击切换到特别喜欢" aria-pressed="false"><span id="playlist-source-icon" class="playlist-source-icon" aria-hidden="true">≡</span><span id="playlist-source-label">普通</span></button>
+    <div id="playlist-source-control" class="playlist-source-control">
+      <button id="playlist-source-btn" class="ctrl-btn playlist-source-btn" onclick="toggleLocalPlaybackPlaylistSource(event)" title="当前：全部音乐，点击选择播放歌单" aria-label="当前：全部音乐，点击选择播放歌单" aria-haspopup="listbox" aria-expanded="false"><span id="playlist-source-icon" class="playlist-source-icon" aria-hidden="true">≡</span><span id="playlist-source-label">全部</span><span class="playlist-source-caret" aria-hidden="true">⌃</span></button>
+      <div id="playlist-source-popover" class="playlist-source-popover" role="dialog" aria-label="选择播放歌单" onclick="event.stopPropagation()">
+        <div class="playlist-source-head"><div><b>选择播放歌单</b><span id="playlist-source-count">0 个独立歌单</span></div><button type="button" onclick="closeLocalPlaybackPlaylistPicker()" title="关闭">×</button></div>
+        <div id="playlist-source-list" class="playlist-source-list" role="listbox"></div>
+        <button type="button" class="playlist-source-manage" onclick="openLocalPlaybackPlaylistManager()">管理 / 新建歌单</button>
+      </div>
+    </div>
     </div>
     <div class="control-cluster modes">
     <button class="ctrl-btn lyrics-toggle-btn" onclick="toggleLyricsPanel()" title="歌词"><span class="lyrics-word-icon">词</span></button>
@@ -769,7 +779,7 @@ if (document.fonts && document.fonts.load) {
 <!-- 收藏到歌单模态 -->
 <div id="collect-modal" class="modal-mask">
   <div class="modal collect-modal">
-    <h2>收藏到歌单</h2>
+    <h2 id="collect-modal-title">收藏到歌单</h2>
     <div id="collect-current" class="collect-current"></div>
     <div class="collect-create">
       <input id="collect-new-name" type="text" placeholder="新建歌单名称" autocomplete="off" maxlength="40">

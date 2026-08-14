@@ -288,7 +288,7 @@
       </button>
     </div>
     <div class="window-actions">
-      <button id="collapse" class="collapse" type="button" title="收起完整控制栏" aria-label="收起完整控制栏">
+      <button id="collapse" class="collapse" type="button" title="关闭自动收回" aria-label="关闭自动收回">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
       <button id="restore" class="restore" type="button" title="返回主界面" aria-label="返回主界面">
@@ -368,14 +368,17 @@
     }
 
     /**
-     * 收起由封面悬停或键盘聚焦展开的完整控制栏；永久完整模式不改变布局。
+     * 关闭封面悬停展开的自动收回，并立即保持完整控制栏。
      * @returns {void}
      */
-    function collapseExpandedControls() {
+    function disableAutomaticCollapse() {
       if (!hoverExpandEnabled()) return;
       clearCollapseTimer();
       collapseButton.blur();
-      setExpanded(false);
+      miniState.visual = Object.assign({}, miniState.visual || {}, { hoverExpand: false });
+      renderedHoverExpand = false;
+      syncHoverExpandMode(false);
+      sendCommand('disable-auto-collapse');
     }
 
     function setCover(src) {
@@ -472,7 +475,7 @@
     playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
     document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });
     desktopLyricsButton.addEventListener('click', function(){ sendCommand('toggle-desktop-lyrics'); });
-    collapseButton.addEventListener('click', collapseExpandedControls);
+    collapseButton.addEventListener('click', disableAutomaticCollapse);
     document.getElementById('restore').addEventListener('click', function(){ sendCommand('restore'); });
     document.getElementById('mini-shell').addEventListener('dblclick', function(event){
       if (!event.target.closest('button')) sendCommand('restore');

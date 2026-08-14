@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.4.6`；包含 MP3/FLAC/M4A/WAV/OGG 本地播放、标准 M4A 标签与封面解析、搜索排序、特别喜欢歌单、主播放栏歌单来源切换，以及主渲染器、壁纸覆盖层、3D 歌单架和透明窗口全屏修复。
+- 当前源码版本：`v1.4.7`；包含 MP3/FLAC/M4A/WAV/OGG 本地播放、标准 M4A 标签与封面解析、多个独立歌单、任意歌单播放来源选择，以及主渲染器、壁纸覆盖层、3D 歌单架、迷你播放器和透明窗口全屏修复。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -138,4 +138,4 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `M4A 播放失败`、`m4a 元数据`、`moov`、`ilst`、`data atom`、`covr`、`audio/mp4`、`M4A 封面`、`M4A 标签缓存` 或 `ALAC 编码兼容` 时，必须优先读取 `.context/pitfalls/mineradio-m4a-metadata-playback.md`。
 - 遇到 `Electron 透明无边框全屏`、`setFullScreen`、`isFullScreen 返回 false`、`windowFullscreenActive`、`htmlFullscreenActive`、`全屏窗口被缩回`、`display.bounds`、`workArea` 或 `WS_THICKFRAME` 时，必须优先读取 `.context/pitfalls/mineradio-electron-transparent-fullscreen.md`。
 - 遇到 `安装器无法关闭 Mineradio`、`Failed to uninstall old application files`、`customCheckAppRunning`、`CloseMainWindow`、`SessionId`、`ProcessId = $PID`、`更新安装器启动后退出播放器` 或 `覆盖安装误杀其它实例` 时，必须优先读取 `.context/pitfalls/mineradio-nsis-process-close.md`。
-- 遇到 `标准迷你播放器收起按钮`、`完整控制栏右上角 ×`、`封面悬停展开`、`collapseExpandedControls`、`收起按钮误改为关闭窗口` 或 `极简模式收起按钮` 时，必须优先读取 `.context/conventions/mineradio-mini-player-collapse.md`。
+- 遇到 `标准迷你播放器自动收回按钮`、`完整控制栏右上角 ×`、`封面悬停展开`、`disableAutomaticCollapse`、`叉号误改为关闭窗口` 或 `极简模式叉号` 时，必须优先读取 `.context/conventions/mineradio-mini-player-collapse.md`。

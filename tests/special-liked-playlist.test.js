@@ -129,47 +129,60 @@ test('播放来源选择会持久化，并在本地曲库恢复时优先读取',
   assert.match(appSource, /restorePlaybackSessionForLocalLibrary\(playQueue,/);
 });
 
-test('控制栏按钮在普通歌单和特别喜欢之间切换', () => {
+test('控制栏可选择全部音乐、特别喜欢和任意独立歌单', () => {
   const source = readFile('public/app.js');
   const helperSource = readFunctionSource(
     source,
     'function localSongIndexByKey(songs, key)',
-    'function localPlaybackQueueMatchesSongs(songs)',
+    'function setLocalPlaybackPlaylistPickerOpen(open)',
   );
-  const toggleSource = readFunctionSource(
+  const selectSource = readFunctionSource(
     source,
-    'function toggleLocalPlaybackPlaylistSource()',
-    'function selectLocalPlaylist(kind)',
+    'function selectLocalPlaybackPlaylistSource(kind)',
+    'function openLocalPlaybackPlaylistManager()',
   );
   const calls = [];
   const context = {
     SPECIAL_LIKED_PLAYLIST_ID: 'special-liked',
     localLibraryPlaybackSelection: 'library',
+    playQueue: [],
     currentCoverSong: () => ({ localKey: 'current' }),
     audio: { currentTime: 18.25 },
     queueItemKey: (song) => song && song.localKey ? `local:${song.localKey}` : '',
-    localPlaylistSongs: (kind) => kind === 'special-liked' ? [{ name: '喜欢一' }] : [{ name: '普通一', localKey: 'current' }],
+    normalizeLocalPlaylistKind: (kind) => kind || 'library',
+    localPlaylistById: (kind) => kind === 'local-playlist:focus' ? { id: kind, name: 'Focus' } : null,
+    localPlaylistSongs: (kind) => ({
+      library: [{ name: 'All', localKey: 'current' }],
+      'special-liked': [{ name: 'Liked', localKey: 'liked' }],
+      'local-playlist:focus': [{ name: 'First', localKey: 'first' }, { name: 'Current', localKey: 'current' }],
+    }[kind] || []),
     playLocalLibrarySong: (index, kind, opts) => { calls.push([index, kind, opts]); return true; },
     showToast: () => {},
+    renderLocalPlaybackPlaylistPicker: () => {},
+    closeLocalPlaybackPlaylistPicker: () => {},
+    localPlaybackPlaylistSourceName: (kind) => kind,
   };
-  vm.runInNewContext(`${helperSource}\n${toggleSource}\nthis.toggleSource = toggleLocalPlaybackPlaylistSource;`, context);
+  vm.runInNewContext(`${helperSource}\n${selectSource}\nthis.selectSource = selectLocalPlaybackPlaylistSource;`, context);
 
-  context.toggleSource();
-  context.localLibraryPlaybackSelection = 'special-liked';
-  context.toggleSource();
+  assert.equal(context.selectSource('special-liked'), true);
+  assert.equal(context.selectSource('local-playlist:focus'), true);
+  assert.equal(context.selectSource('library'), true);
 
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.equal(calls[0][0], 0);
   assert.equal(calls[0][1], 'special-liked');
   assert.equal(calls[0][2].resumeAt, 0);
-  assert.equal(calls[1][0], 0);
-  assert.equal(calls[1][1], 'library');
+  assert.equal(calls[1][0], 1);
+  assert.equal(calls[1][1], 'local-playlist:focus');
   assert.equal(calls[1][2].resumeAt, 18.25);
+  assert.equal(calls[2][0], 0);
+  assert.equal(calls[2][1], 'library');
+  assert.equal(calls[2][2].resumeAt, 18.25);
 
-  context.localLibraryPlaybackSelection = 'library';
   context.localPlaylistSongs = () => [];
-  context.toggleSource();
-  assert.equal(calls.length, 2);
+  assert.equal(context.selectSource('special-liked'), false);
+  assert.equal(context.selectSource('local-playlist:missing'), false);
+  assert.equal(calls.length, 3);
 });
 
 test('播放队列顺序变化会判定为不一致', () => {
@@ -177,7 +190,7 @@ test('播放队列顺序变化会判定为不一致', () => {
   const helperSource = readFunctionSource(
     source,
     'function localSongIndexByKey(songs, key)',
-    'function toggleLocalPlaybackPlaylistSource()',
+    'function setLocalPlaybackPlaylistPickerOpen(open)',
   );
   const context = {
     playQueue: [{ localKey: 'a' }, { localKey: 'b' }],
@@ -299,11 +312,15 @@ test('本地模式显示歌单与红心入口并绑定特别喜欢事件', () =>
   );
 
   assert.match(html, /id="tab-pl"[^>]*>歌单<\/button>/);
-  assert.match(html, /id="playlist-source-btn"[^>]*onclick="toggleLocalPlaybackPlaylistSource\(\)"/);
-  assert.match(html, /id="playlist-source-label">普通<\/span>/);
+  assert.match(html, /id="playlist-source-btn"[^>]*onclick="toggleLocalPlaybackPlaylistSource\(event\)"/);
+  assert.match(html, /id="playlist-source-label">全部<\/span>/);
+  assert.match(html, /id="playlist-source-popover"/);
+  assert.match(appSource, /data-playback-playlist-kind=/);
   assert.doesNotMatch(localModeRule, /#tab-pl|#pl-pane|#heart-btn|#search-results \.song-action-btn|#queue-pane/);
   assert.match(css, /#bottom-bar #playlist-source-btn\.special\{/);
   assert.match(css, /#bottom-bar #playlist-source-btn\.special:hover\{/);
+  assert.match(css, /#bottom-bar #playlist-source-btn\.custom\{/);
+  assert.match(css, /\.playlist-source-popover\{/);
   assert.match(appSource, /closest\('\[data-special-liked-play\]'\)/);
   assert.match(appSource, /closest\('\[data-special-liked-playlist\]'\)/);
   assert.doesNotMatch(appSource, /data-special-liked-play="1"[^>]*onclick="event\.stopPropagation\(\)"/);

@@ -33,6 +33,7 @@ function createMiniPlayerHarness() {
   const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
   const timers = new Map();
   const listeners = new Map();
+  const commands = [];
   let nextTimerId = 1;
 
   function createNode(id) {
@@ -105,7 +106,10 @@ function createMiniPlayerHarness() {
     window: {
       requestAnimationFrame(callback) { callback(); },
       miniPlayer: {
-        command() { return Promise.resolve({ ok: true }); },
+        command(action) {
+          commands.push(action);
+          return Promise.resolve({ ok: true });
+        },
         onState(callback) { stateHandler = callback; },
       },
     },
@@ -121,6 +125,7 @@ function createMiniPlayerHarness() {
 
   return {
     nodes,
+    commands,
     applyState(patch) { stateHandler(patch); },
     flushTimers() {
       const pending = [...timers.values()];
@@ -145,8 +150,10 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   assert.match(html, /aria-expanded/);
   assert.match(html, /data-hover-expand/);
   assert.match(html, /class="window-actions"/);
-  assert.match(html, /id="collapse"[^>]+title="收起完整控制栏"[^>]+aria-label="收起完整控制栏"/);
+  assert.match(html, /id="collapse"[^>]+title="关闭自动收回"[^>]+aria-label="关闭自动收回"/);
   assert.match(html, /data-hover-expand="false"\] \.collapse \{ visibility: hidden; pointer-events: none; \}/);
+  assert.match(html, /id="restore"[^>]+title="返回主界面"/);
+  assert.match(html, /id="desktop-lyrics"[^>]+title="开启桌面歌词"/);
 });
 
 test('悬停展开开关控制初始态、悬停态和键盘聚焦态', () => {
@@ -200,7 +207,7 @@ test('关闭悬停展开后始终保持完整迷你播放器', () => {
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
 });
 
-test('标准迷你播放器收起按钮只折叠悬停展开的完整控制栏', () => {
+test('标准迷你播放器叉号关闭自动收回并保持完整控制栏', () => {
   const harness = createMiniPlayerHarness();
   const shell = harness.nodes['mini-shell'];
   const coverWrap = harness.nodes['cover-wrap'];
@@ -213,12 +220,45 @@ test('标准迷你播放器收起按钮只折叠悬停展开的完整控制栏',
   coverWrap.hover = false;
   collapseButton.focusWithin = true;
   collapseButton.dispatch('click');
-  assert.equal(shell.getAttribute('data-collapsed'), 'true');
-  assert.equal(coverWrap.getAttribute('aria-expanded'), 'false');
-
-  harness.applyState({ visual: { pulseEnabled: true, pulseStrength: 0.78, glowEnabled: true, hoverExpand: false, radius: 12 } });
-  collapseButton.dispatch('click');
+  assert.equal(shell.getAttribute('data-hover-expand'), 'false');
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
+  assert.equal(coverWrap.getAttribute('aria-expanded'), 'true');
+  assert.deepEqual(harness.commands, ['disable-auto-collapse']);
+
+  shell.hover = false;
+  shell.focusWithin = false;
+  shell.dispatch('mouseleave');
+  shell.dispatch('focusout');
+  harness.flushTimers();
+  assert.equal(shell.getAttribute('data-collapsed'), 'false');
+});
+
+test('叉号命令经主进程持久关闭悬停展开开关', () => {
+  const renderer = read('public/app.js');
+  const main = read('desktop/main.js');
+  const calls = [];
+  const context = {
+    fx: { miniPlayerHoverExpand: true },
+    pushMiniPlayerState() {},
+    togglePlay() {},
+    prevTrack() {},
+    nextTrack() {},
+    toggleFx() {},
+    toggleMiniPlayerVisual(key) {
+      calls.push(key);
+      context.fx.miniPlayerHoverExpand = false;
+    },
+  };
+
+  vm.runInNewContext(
+    extractFunction(renderer, 'handleDesktopMiniPlayerCommand') + '\nthis.handle = handleDesktopMiniPlayerCommand;',
+    context,
+  );
+  context.handle({ action: 'disable-auto-collapse' });
+  context.handle({ action: 'disable-auto-collapse' });
+
+  assert.deepEqual(calls, ['hoverExpand']);
+  assert.match(main, /\['toggle-play', 'previous', 'next', 'toggle-desktop-lyrics', 'disable-auto-collapse'\]\.includes\(command\)/);
 });
 
 test('悬停展开设置独立持久化并立即同步到迷你窗口', () => {

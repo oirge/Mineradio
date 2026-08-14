@@ -1,5 +1,20 @@
 ﻿# 发布流程
 
+## v1.4.7 多歌单与播放来源选择器
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.7`。
+- 新增多个独立本地歌单的完整 CRUD；收藏弹窗、左侧歌单页和 3D 歌单架统一读取同一份轻量歌曲引用。
+- 未解析歌曲引用继续保留，用户重新导入原音乐目录后可按本地键或规范化路径自动恢复；编辑歌单不改当前播放队列。
+- 主播放栏来源按钮改为暗色玻璃歌单选择器，支持全部音乐、特别喜欢和任意自建歌单，提供当前态、歌曲数量、待重新定位数量和管理入口。
+- 来源切换优先保留当前歌曲及进度；当前歌曲不存在时从第一首开始，空歌单和已删除歌单保持当前队列并给出提示。
+- 标准迷你播放器 `×` 现在关闭并持久化“封面悬停展开”，使完整控制栏保持展开；不会关闭迷你窗口、迷你播放器总开关或桌面歌词入口。
+- 升级继续使用 `%APPDATA%\\Mineradio-oirge` 与既有曲库、播放会话、特别喜欢和设置存储，不执行破坏性清空或强制重新导入。
+- 浏览器真实交互验证三类来源切换、队列和 Local Storage 持久化均正确且无运行错误；全量 Node 回归 `317/317`，关键 JavaScript 语法检查和 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.4.7-Setup.exe` `101469963` 字节；`.blockmap` `105780` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `c057a4c6700aa9c4641b1aa4c35577dc0d4d901846113933a316edfbcae858b8`；`.blockmap` `1559259940d9ac14802e690b3cbaf45be3457b019105a3caea3e9afa97c997ec`；`latest.yml` `60b1926a65e9cc0c03313f83ee2b5a916d6efdcdcbb2551c57e88e5bf2d3a538`。
+- `latest.yml` 的 Setup SHA512：`UrWQ75sRJcOHuN4k1uoE+c1EL4dEiL+RHX5fZ15NLpoRRaAPUOkBr8J3OTNdwK8TWBpGxQPqF+rGF0glBdYVuw==`。
+- Release 标题使用 `Mineradio v1.4.7 多歌单与播放来源选择器`。
+
 ## v1.4.6 全屏、更新安装与迷你播放器修复重发
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.6`。
 - 修复 Windows 透明无边框主窗口调用 `setFullScreen(true)` 后，`move` 事件把完整显示器边界误判为超出工作区并缩回普通窗口的问题。

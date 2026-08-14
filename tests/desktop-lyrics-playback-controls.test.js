@@ -58,6 +58,6 @@ test('两套迷你播放器包含单按钮桌面歌词开关并同步状态', ()
   }
   assert.match(renderer, /action === 'toggle-desktop-lyrics'\) toggleFx\('desktopLyrics'\)/);
   assert.match(renderer, /patch\.desktopLyrics = desktopLyricsEnabled/);
-  assert.match(main, /\['toggle-play', 'previous', 'next', 'toggle-desktop-lyrics'\]\.includes\(command\)/);
+  assert.match(main, /\['toggle-play', 'previous', 'next', 'toggle-desktop-lyrics', 'disable-auto-collapse'\]\.includes\(command\)/);
   assert.match(main, /next\.desktopLyrics !== previous\.desktopLyrics/);
 });
