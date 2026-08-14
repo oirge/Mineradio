@@ -1341,8 +1341,22 @@ function keepMainWindowInsideDisplay(win) {
   const minimum = windowedMinimumSize(display);
   win.setMinimumSize(minimum.width, minimum.height);
   const bounds = win.getBounds();
-  if (bounds.width > area.width || bounds.height > area.height) {
-    win.setBounds(getWindowedBounds(win), false);
+  const needsSizeCorrection = bounds.width > area.width || bounds.height > area.height;
+  const needsPositionCorrection = bounds.x < area.x
+    || bounds.y < area.y
+    || bounds.x + bounds.width > area.x + area.width
+    || bounds.y + bounds.height > area.y + area.height;
+  if (!needsSizeCorrection && !needsPositionCorrection) return;
+
+  const nextBounds = needsSizeCorrection ? getWindowedBounds(win) : { ...bounds };
+  const maxX = Math.max(area.x, area.x + area.width - nextBounds.width);
+  const maxY = Math.max(area.y, area.y + area.height - nextBounds.height);
+  nextBounds.x = Math.round(Math.min(Math.max(bounds.x, area.x), maxX));
+  nextBounds.y = Math.round(Math.min(Math.max(bounds.y, area.y), maxY));
+
+  if (nextBounds.x !== bounds.x || nextBounds.y !== bounds.y
+    || nextBounds.width !== bounds.width || nextBounds.height !== bounds.height) {
+    win.setBounds(nextBounds, false);
   }
 }
 
@@ -3334,6 +3348,9 @@ async function createWindow() {
   mainWindow.on('focus', () => sendWindowState(mainWindow));
   mainWindow.on('blur', () => sendWindowState(mainWindow));
   mainWindow.on('move', () => {
+    scheduleWindowStateSend(mainWindow);
+  });
+  mainWindow.on('moved', () => {
     keepMainWindowInsideDisplay(mainWindow);
     scheduleWindowStateSend(mainWindow);
   });

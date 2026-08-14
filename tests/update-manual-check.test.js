@@ -76,6 +76,12 @@ test('标题栏更新按钮只做光效呼吸，不再上下漂移', () => {
   assert.match(cssSource, /#desktop-titlebar #update-entry\{[^}]*align-self:center[^}]*transform-origin:50% 50%/);
 });
 
+test('标题栏更新圆环始终围绕 SVG 中心旋转', () => {
+  assert.match(cssSource, /\.update-ring\{[^}]*transform-box:view-box[^}]*transform-origin:50% 50%/);
+  assert.match(cssSource, /\.update-progress-ring\{[^}]*transform-box:view-box[^}]*transform-origin:50% 50%/);
+  assert.doesNotMatch(cssSource, /\.update-(?:progress-)?ring\{[^}]*transform-origin:12px 12px/);
+});
+
 test('连续点击检测更新只发送一个在途请求', async () => {
   const harness = loadUpdateCheckHarness();
   const first = harness.context.checkLatestUpdate({ force: true, announce: true });

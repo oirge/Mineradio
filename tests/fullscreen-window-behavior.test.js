@@ -133,6 +133,57 @@ test('普通超大窗口仍会被校正到当前显示器工作区', () => {
   assert.equal(context.calls.setBounds, 1);
 });
 
+test('副屏工作区越界时夹回窗口位置而不强制居中', () => {
+  const source = readMainSource();
+  const bounds = { x: -140, y: 80, width: 960, height: 540 };
+  const display = {
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1032 },
+  };
+  const applied = [];
+  const win = {
+    isDestroyed: () => false,
+    isFullScreen: () => false,
+    isMaximized: () => false,
+    getBounds: () => ({ ...bounds }),
+    setMinimumSize: () => {},
+    setBounds: (next) => applied.push({ ...next }),
+  };
+  const scope = {
+    screen: {
+      getDisplayMatching: () => display,
+      getPrimaryDisplay: () => display,
+    },
+    displayWorkArea: (value) => value.workArea,
+    windowedMinimumSize: () => ({ width: 960, height: 540 }),
+    getWindowedBounds: () => ({ x: 480, y: 246, width: 960, height: 540 }),
+    windowFullscreenActive: false,
+    htmlFullscreenActive: false,
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'keepMainWindowInsideDisplay', 'exitFullscreenToWindow')
+      + '\nthis.keep = keepMainWindowInsideDisplay;',
+    scope,
+  );
+
+  scope.keep(win);
+
+  assert.deepEqual(applied, [{ x: 0, y: 80, width: 960, height: 540 }]);
+});
+
+test('主窗口拖动过程中不重设边界，拖动结束后再纠偏', () => {
+  const source = readMainSource();
+  const moveHandler = source.match(/mainWindow\.on\('move', \(\) => \{([\s\S]*?)\n  \}\);/);
+  const movedHandler = source.match(/mainWindow\.on\('moved', \(\) => \{([\s\S]*?)\n  \}\);/);
+
+  assert.ok(moveHandler, '缺少主窗口 move 事件');
+  assert.ok(movedHandler, '缺少主窗口 moved 事件');
+  assert.doesNotMatch(moveHandler[1], /keepMainWindowInsideDisplay/);
+  assert.match(moveHandler[1], /scheduleWindowStateSend\(mainWindow\)/);
+  assert.match(movedHandler[1], /keepMainWindowInsideDisplay\(mainWindow\)/);
+  assert.match(movedHandler[1], /scheduleWindowStateSend\(mainWindow\)/);
+});
+
 test('透明窗口退出逻辑全屏时仍调用原生退出 API', () => {
   const source = readMainSource();
   const context = createTransparentFullscreenWindow();

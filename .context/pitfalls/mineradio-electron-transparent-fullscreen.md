@@ -43,3 +43,9 @@ Mineradio v1.4.5 的 `keepMainWindowInsideDisplay()` 只依据 `isFullScreen()` 
 - 全屏 `DIY` 与“退出全屏”必须作为同一 `#fullscreen-diy-zone` 内的常驻控件，与 Home 按钮共享垂直中心线。
 - 不得给全屏 `DIY` 保留 `translateY(-18px)` 的自动收起初始位；淡出过程中截帧会让按钮看起来永久偏上，并且 GSAP 缩放可能固化该位移。
 - 全屏控制区仍通过 `layoutFullscreenDiyZone()` 锚定 Home 左侧，视觉引导打开时可以整体隐藏，但普通全屏状态不能依赖鼠标悬停才完成对齐。
+
+## Window drag correction
+
+- Windows 原生拖动期间会连续触发 `move`；禁止在这个高频事件内调用可能执行 `setBounds()` 的 `keepMainWindowInsideDisplay()`，否则会打断系统拖动并让主窗口瞬间跳位。
+- `move` 只负责合并发送窗口状态；用户松开鼠标后由 Windows 的 `moved` 事件单次执行显示器工作区纠偏。
+- 显示器参数变化不是用户拖动，`display-metrics-changed` 仍可立即调用 `keepMainWindowInsideDisplay()`，全屏状态门禁继续生效。

@@ -1,5 +1,18 @@
 ﻿# 发布流程
 
+## v1.4.11 更新圆环与窗口拖动修复
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.11`。
+- 标题栏检测更新圆环和下载进度圆环改用 SVG `view-box` 中心作为旋转轴，修复桌面壳 `18px` 图标下圆环偏心、转到按钮外侧的问题。
+- 主窗口连续 `move` 事件不再执行显示器边界 `setBounds()`；用户松开鼠标后的 `moved` 事件才单次纠偏，修复拖动过程中窗口突然跳位。
+- 保留显示器参数变化和全屏状态门禁；副屏或较小工作区中尺寸过大时自动缩放，窗口位置越界时按当前坐标夹回可见区域而不强制居中。
+- 升级继续使用 `%APPDATA%\\Mineradio-oirge` 与既有曲库、播放会话、特别喜欢、自建歌单和 DIY 设置，不执行破坏性清空或强制重新导入。
+- 全量 Node 回归 `331/331`、关键 JavaScript 语法检查与 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.4.11-Setup.exe` `101473935` 字节；`.blockmap` `106022` 字节；`latest.yml` `350` 字节；SHA256 清单 `272` 字节。
+- SHA256：安装器 `dadc22c3c67acf3ca4ebcb23c8ac714d281454eae7fadcb1e791ff68323a66e7`；`.blockmap` `5bc29e58bf13885965e2e540310f6b7de9ff0cb3273e5cdb0323d276ae7c3455`；`latest.yml` `0e46c314889ec63ff757c1904fd51b3a4056a6f04c6a6c29492d060220ea8b99`；SHA256 清单 `a194d42eb32aa33b0621a353a1eaa3524b9ffa99c4acb4945d417eca105983b9`。
+- `latest.yml` 的 Setup SHA512：`Z9OL6lbhOzzUzNIWrh/Rq8lAITr0+sZBlmQ2/hSYCXoB4gdyUfEtSC9Pwe9HlxbFoNbFkt5Aj4SVjYxX3bfsHg==`。
+- Release 标题使用 `Mineradio v1.4.11 更新圆环与窗口拖动修复`。
+
 ## v1.4.10 界面布局与 3D 歌单详情修复
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.10`。
 - DIY 控制台新增独立“迷你”页，集中迷你播放器总开关、样式、封面律动、光晕、悬停展开、圆角和 `× 自动收回` 设置。
