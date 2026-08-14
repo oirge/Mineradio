@@ -28511,10 +28511,17 @@ function stopUpdateIconBreathing(resetVisual) {
   if (!entry || !window.gsap) return;
   var ring = entry.querySelector('.update-ring');
   window.gsap.killTweensOf(entry, 'y,boxShadow');
-  if (ring) window.gsap.killTweensOf(ring, 'rotate');
+  if (ring) window.gsap.killTweensOf(ring);
   if (resetVisual !== false) {
     window.gsap.set(entry, { y: 0, clearProps: 'boxShadow' });
-    if (ring) window.gsap.set(ring, { rotate: 0, clearProps: 'transform' });
+    if (ring) {
+      if (ring.style) {
+        ring.style.strokeDashoffset = '0';
+        ring.style.removeProperty('transform');
+        ring.style.removeProperty('transform-origin');
+      }
+      if (typeof ring.removeAttribute === 'function') ring.removeAttribute('data-svg-origin');
+    }
   }
 }
 
@@ -28531,7 +28538,15 @@ function startUpdateIconBreathing() {
   updatePreviewState.iconBreathing = true;
   window.gsap.killTweensOf(entry, 'boxShadow');
   window.gsap.set(entry, { autoAlpha: 1, y: 0 });
-  if (ring) window.gsap.killTweensOf(ring, 'rotate');
+  if (ring) {
+    window.gsap.killTweensOf(ring);
+    if (ring.style) {
+      ring.style.strokeDashoffset = '0';
+      ring.style.removeProperty('transform');
+      ring.style.removeProperty('transform-origin');
+    }
+    if (typeof ring.removeAttribute === 'function') ring.removeAttribute('data-svg-origin');
+  }
   window.gsap.to(entry, {
     boxShadow: '0 16px 44px rgba(0,0,0,.32),0 0 24px rgba(244,210,138,.18),0 0 13px rgba(157,184,207,.06),inset 0 1px 0 rgba(255,255,255,.11)',
     duration: 2.6,
@@ -28541,12 +28556,11 @@ function startUpdateIconBreathing() {
   });
   if (ring) {
     window.gsap.to(ring, {
-      rotate: 18,
+      strokeDashoffset: -5,
       duration: 3.8,
       repeat: -1,
       yoyo: true,
-      ease: 'sine.inOut',
-      transformOrigin: '50% 50%'
+      ease: 'sine.inOut'
     });
   }
 }

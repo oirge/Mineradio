@@ -485,17 +485,17 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home{bottom:126px}
 .update-entry.available{display:flex}
 .update-entry:hover{color:#fff8df;border-color:rgba(244,210,138,.58);background:radial-gradient(circle at 50% 34%,rgba(244,210,138,.22),rgba(255,255,255,.045) 58%,rgba(157,184,207,.028));box-shadow:0 16px 44px rgba(0,0,0,.34),0 0 26px rgba(244,210,138,.18),0 0 18px rgba(157,184,207,.08),inset 0 1px 0 rgba(255,255,255,.13)}
 .update-entry svg{width:23px;height:23px;display:block;overflow:visible}
-.update-ring{stroke:rgba(255,226,162,.84);stroke-width:1.65;fill:none;stroke-linecap:round;stroke-dasharray:48 18;transform-box:view-box;transform-origin:50% 50%;filter:drop-shadow(0 0 5px rgba(244,210,138,.18))}
+.update-ring{stroke:rgba(255,226,162,.84);stroke-width:1.65;fill:none;stroke-linecap:round;stroke-dasharray:48 18;stroke-dashoffset:0;transform:none;filter:drop-shadow(0 0 5px rgba(244,210,138,.18))}
 .update-arrow{stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .update-entry::before{content:'';position:absolute;inset:-6px;border-radius:50%;border:1px solid rgba(244,210,138,.15);opacity:.70;filter:blur(.2px);pointer-events:none}
 .update-entry::after{content:'';position:absolute;right:5px;top:6px;width:6px;height:6px;border-radius:50%;background:rgba(255,236,184,.96);box-shadow:0 0 12px rgba(244,210,138,.76),0 0 24px rgba(244,210,138,.34);opacity:0;pointer-events:none}
 .update-entry.has-update::after{opacity:1}
 .update-entry.downloading::after{opacity:.42}
 .update-entry.ready::after{background:rgba(244,210,138,.95);box-shadow:0 0 12px rgba(244,210,138,.58),0 0 26px rgba(244,210,138,.22)}
-.update-progress-ring{opacity:0;stroke:rgba(255,228,170,.92);stroke-width:1.95;fill:none;stroke-linecap:round;stroke-dasharray:55.29;stroke-dashoffset:55.29;transform:rotate(-90deg);transform-box:view-box;transform-origin:50% 50%;transition:opacity .2s;filter:drop-shadow(0 0 5px rgba(244,210,138,.22))}
+.update-progress-ring{opacity:0;stroke:rgba(255,228,170,.92);stroke-width:1.95;fill:none;stroke-linecap:round;stroke-dasharray:55.29;stroke-dashoffset:55.29;transition:opacity .2s;filter:drop-shadow(0 0 5px rgba(244,210,138,.22))}
 .update-entry.downloading .update-progress-ring{opacity:1}
 .update-entry.downloading .update-ring{opacity:.28}
-.update-entry.checking .update-ring{animation:update-check-spin .9s linear infinite}
+.update-entry.checking .update-ring{animation:update-ring-dash-flow .9s linear infinite}
 .update-entry.checking .update-arrow{opacity:.46}
 #update-modal.modal-mask{background:rgba(0,0,0,.74);backdrop-filter:blur(12px) saturate(1.08);-webkit-backdrop-filter:blur(12px) saturate(1.08)}
 .modal.update-modal{width:min(408px,92vw);max-width:min(408px,92vw);padding:0;text-align:left;border-radius:18px;overflow:hidden;background:rgba(8,8,9,.965);border-color:rgba(255,255,255,.10);box-shadow:0 32px 96px rgba(0,0,0,.66),0 0 0 1px rgba(244,210,138,.055),inset 0 1px 0 rgba(255,255,255,.08)}
@@ -511,6 +511,7 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home{bottom:126px}
 .update-check-btn:disabled{cursor:default;transform:none;color:rgba(255,255,255,.42);border-color:rgba(255,255,255,.075);background:rgba(255,255,255,.025)}
 .update-check-btn.checking svg{animation:update-check-spin .9s linear infinite}
 @keyframes update-check-spin{to{transform:rotate(360deg)}}
+@keyframes update-ring-dash-flow{from{stroke-dashoffset:0}to{stroke-dashoffset:-66}}
 @media (prefers-reduced-motion:reduce){.update-entry.checking .update-ring,.update-check-btn.checking svg{animation-duration:1.8s}}
 .update-hero{position:relative;margin:0 0 10px;padding:0 0 15px;border-bottom:1px solid rgba(255,255,255,.065)}
 .update-hero-main{max-width:none;font-size:13.5px;font-weight:560;color:rgba(255,244,218,.82);line-height:1.55;letter-spacing:0}

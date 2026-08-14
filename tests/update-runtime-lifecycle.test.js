@@ -77,7 +77,7 @@ test('更新入口只在前台可见时持有动画并在后台释放', () => {
   harness.context.syncUpdateIconBreathing(0);
   assert.equal(harness.state.iconBreathing, false);
   assert.ok(harness.calls.kill.some((call) => call.props === 'y,boxShadow'));
-  assert.ok(harness.calls.kill.some((call) => call.props === 'rotate'));
+  assert.ok(harness.calls.kill.some((call) => call.target === harness.context.document.getElementById('update-entry').querySelector('.update-ring') && call.props === undefined));
 });
 
 test('预览进度定时器在关闭面板和进入后台时显式释放', () => {

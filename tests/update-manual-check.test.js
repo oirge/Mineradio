@@ -76,10 +76,19 @@ test('标题栏更新按钮只做光效呼吸，不再上下漂移', () => {
   assert.match(cssSource, /#desktop-titlebar #update-entry\{[^}]*align-self:center[^}]*transform-origin:50% 50%/);
 });
 
-test('标题栏更新圆环始终围绕 SVG 中心旋转', () => {
-  assert.match(cssSource, /\.update-ring\{[^}]*transform-box:view-box[^}]*transform-origin:50% 50%/);
-  assert.match(cssSource, /\.update-progress-ring\{[^}]*transform-box:view-box[^}]*transform-origin:50% 50%/);
-  assert.doesNotMatch(cssSource, /\.update-(?:progress-)?ring\{[^}]*transform-origin:12px 12px/);
+test('标题栏更新圆环只移动描边，不再变换 SVG 几何轴心', () => {
+  assert.match(htmlSource, /id="update-progress-ring"[^>]*transform="rotate\(-90 12 12\)"/);
+  assert.match(cssSource, /\.update-ring\{[^}]*stroke-dashoffset:0[^}]*transform:none/);
+  assert.match(cssSource, /\.update-progress-ring\{[^}]*stroke-dashoffset:55\.29/);
+  assert.match(cssSource, /\.update-entry\.checking \.update-ring\{animation:update-ring-dash-flow/);
+  assert.match(cssSource, /@keyframes update-ring-dash-flow\{from\{stroke-dashoffset:0\}to\{stroke-dashoffset:-66\}\}/);
+  const breathingStart = appSource.indexOf('function stopUpdateIconBreathing(resetVisual) {');
+  const breathingEnd = appSource.indexOf('function syncUpdateIconBreathing(delay) {', breathingStart);
+  assert.ok(breathingStart >= 0 && breathingEnd > breathingStart, '更新圆环动画接缝缺失');
+  const breathingSource = appSource.slice(breathingStart, breathingEnd);
+  assert.match(breathingSource, /strokeDashoffset:\s*-5/);
+  assert.doesNotMatch(breathingSource, /ring[\s\S]*\brotate:/);
+  assert.doesNotMatch(cssSource, /\.update-(?:progress-)?ring\{[^}]*transform-(?:box|origin):/);
 });
 
 test('连续点击检测更新只发送一个在途请求', async () => {
