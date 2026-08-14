@@ -1,5 +1,20 @@
 ﻿# 发布流程
 
+## v1.5.1 软件内更新自动选择最快线路
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.1`，确保已安装 `1.5.0` 的客户端能够发现新版。
+- 完整安装包和快速补丁在正式下载前共用后端并行测速：每条候选线路最多读取 `128 KiB`，统一等待窗口为 `4 秒`，按包含连接耗时的实测吞吐量降序选择。
+- 测速窗口结束前已收到的部分字节仍作为有效样本；完全失败的线路保持原顺序放在队尾，正式下载失败后继续使用既有自动换线流程。
+- 镜像测速继续执行 SHA-256/SHA-512 摘要门禁，不能绕过安装包校验；正式下载仍执行大小上限、流式摘要校验和正文空闲超时。
+- 前端不新增线路选择控件；测速阶段显示“正在测速更新线路 · 自动测速”，选线后沿用当前线路、速度、进度和剩余时间反馈。
+- 新增 `tests/update-fastest-route.test.js`，覆盖最快排序、失败兜底、全失败原序、范围流量上限、部分样本超时、镜像摘要门禁以及完整包/补丁双入口。
+- 全量 Node 回归 `341/341`、关键 JavaScript 语法检查与 `git diff --check` 通过。
+- Windows x64 NSIS 发布继续只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.5.1-Setup.exe` `101472841` 字节；`.blockmap` `105974` 字节；`latest.yml` `347` 字节；SHA256 清单 `273` 字节。
+- SHA256：安装器 `b6d3cd88b20ac5e0d6da86d77ca7a86793b0b2003cc9c8a9daaa33a9196b3803`；`.blockmap` `5d8fc5e2f0685f09707eb8b661eb95f6aafbec88cf202f514eb7d80539e5a660`；`latest.yml` `7449c07b148a5b69e3dd8b4ebffab7df68650b8f6c4ef2cf40fd4f281970a0f1`；SHA256 清单 `444f1da527f96d38389be620322f56823f4ed4a90621563897b28c54be36a4ef`。
+- `latest.yml` 的 Setup SHA512：`NvScakaOo1zWvZccwnqPFKoW9JadqUxxrpfbKo+1NE+CWYKVDoKXC2FYapof8BpmWGrfJZugINo5ofQAr1MGGQ==`。
+- 打包后的 `app.asar.unpacked/server.js` 与源码 SHA256 一致，并包含 `UPDATE_ROUTE_PROBE_BYTES`、`rankUpdateDownloadCandidates()` 及完整包/补丁双入口；`app.asar` 内包版本和前端版本均为 `1.5.1`。
+- Release 标题使用 `Mineradio v1.5.1 更新自动选择最快线路`。
+
 ## v1.5.0 桌面歌词拖动与迷你封面动效修复
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.0`。
 - 主窗口进入用户拖动时，桌面歌词窗口强制保持鼠标穿透；`moved` 后延迟 `80ms` 恢复原锁定/热区状态，避免歌词置顶窗口抢走本次鼠标释放并造成窗口跳位。

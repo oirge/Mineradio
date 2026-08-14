@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.4.9` 已完成迷你播放器自动收回开关重排、歌单删除玻璃确认弹层和常驻手动检测更新入口，并保留多歌单、全屏过渡、Wallpaper Engine、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`codex/complete-v1.2.79`，发布时同步到 GitHub `origin/main` 和 tag `v1.4.9`。
+- 当前源码检查点：`v1.5.1` 基于 GitHub `v1.5.0`，已完成软件内更新线路并行测速、最快线路自动选择和失败线路兜底，并保留桌面歌词拖动、迷你封面动效、多歌单、全屏过渡、Wallpaper Engine、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`codex/release-v1.5.1-fastest-update`；发布时同步到 GitHub `origin/main` 和 tag `v1.5.1`。
 - 最近正式安装包 Release 基线：`v1.4.9`（2026-08-14，迷你播放器与更新检测；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -33,6 +33,16 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.5.1 软件内更新自动选择最快线路
+
+- 日期：2026-08-14。
+- 涉及文件：`server.js`、`tests/update-fastest-route.test.js`、`public/app.js`、`package.json`、`package-lock.json`、`CHANGELOG.md`、`RELEASE.md`、`.context/architecture/mineradio-update-route-selection.md` 和 `AGENTS.md`。
+- 点击更新后由服务端并行探测全部候选线路；每条最多读取 `128 KiB`，统一测速窗口 `4 秒`，按包含连接耗时的实际吞吐量选择首选线路。
+- 测速超时前已收到的部分样本仍参与排序；完全失败线路按原顺序放在队尾，正式下载失败后继续走既有自动换线。
+- 完整安装包和快速补丁共用选线函数；镜像 SHA-256/SHA-512 门禁、安装包流式校验、大小上限和空闲超时不得绕过。
+- 前端不新增线路控件，沿用现有任务轮询与进度展示；全量 Node 回归 `341/341` 通过。
+- Windows x64 NSIS：安装器 `101472841` 字节 / SHA256 `b6d3cd88b20ac5e0d6da86d77ca7a86793b0b2003cc9c8a9daaa33a9196b3803`；blockmap `105974` 字节 / `5d8fc5e2f0685f09707eb8b661eb95f6aafbec88cf202f514eb7d80539e5a660`；`latest.yml` `347` 字节 / `7449c07b148a5b69e3dd8b4ebffab7df68650b8f6c4ef2cf40fd4f281970a0f1`；SHA256 清单 `273` 字节 / `444f1da527f96d38389be620322f56823f4ed4a90621563897b28c54be36a4ef`。
 
 ## v1.4.9 迷你播放器与更新检测
 

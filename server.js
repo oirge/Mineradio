@@ -60,6 +60,8 @@ const PATCH_MAX_BYTES = 12 * 1024 * 1024;
 const UPDATE_INSTALLER_MAX_BYTES = 512 * 1024 * 1024;
 const UPDATE_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
 const UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS = 30 * 1000;
+const UPDATE_ROUTE_PROBE_BYTES = 128 * 1024;
+const UPDATE_ROUTE_PROBE_TIMEOUT_MS = 4 * 1000;
 const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
@@ -1284,12 +1286,158 @@ function ensureMirrorCanBeVerified(job, candidate) {
   if (job.sha256 || job.sha512) return;
   throw updateError('MIRROR_HASH_MISSING', 'Mirror download skipped because no digest is available');
 }
+/**
+ * 把更新任务切换到线路测速状态，前端轮询时可明确显示自动选线进度。
+ * @param {object} job 当前更新任务。
+ * @param {number} total 候选线路总数。
+ * @returns {void} 直接修改任务状态。
+ */
+function prepareUpdateRouteSelection(job, total) {
+  job.status = 'downloading';
+  job.sourceLabel = '自动测速';
+  job.attempt = 0;
+  job.attempts = total;
+  job.received = 0;
+  job.progress = 0;
+  job.speedBps = 0;
+  job.etaSeconds = 0;
+  job.error = '';
+  job.errorReason = '';
+  job.errorDetail = '';
+  job.message = '正在测速更新线路';
+  job.updatedAt = Date.now();
+}
+/**
+ * 生成成功的线路测速结果，使完整样本与超时前部分样本使用同一计算口径。
+ * @param {object} candidate 已完成测速的候选线路。
+ * @param {number} index 候选在原始顺序中的位置。
+ * @param {number} received 测速窗口内收到的字节数。
+ * @param {number} startedAt 测速开始时间戳。
+ * @returns {object} 可参与线路排序的测速结果。
+ */
+function successfulUpdateRouteProbe(candidate, index, received, startedAt) {
+  const elapsedMs = Math.max(1, Date.now() - startedAt);
+  return {
+    candidate,
+    index,
+    ok: true,
+    speedBps: Math.round((received * 1000) / elapsedMs),
+    elapsedMs,
+  };
+}
+/**
+ * 比较两条成功线路的测速结果，优先吞吐量，其次耗时，最后保持原始稳定顺序。
+ * @param {object} left 左侧测速结果。
+ * @param {object} right 右侧测速结果。
+ * @returns {number} Array.sort 使用的比较值。
+ */
+function compareUpdateRouteProbeResults(left, right) {
+  return right.speedBps - left.speedBps
+    || left.elapsedMs - right.elapsedMs
+    || left.index - right.index;
+}
+/**
+ * 读取候选线路的固定首段并计算包含连接耗时的实际吞吐量。
+ * @param {object} job 当前更新任务，用于执行镜像摘要门禁。
+ * @param {object} candidate 待测速的下载候选。
+ * @param {number} index 候选在原始顺序中的位置。
+ * @returns {Promise<object>} 包含成功状态、实测速率和原始位置的测速结果。
+ */
+async function probeUpdateDownloadCandidate(job, candidate, index) {
+  const startedAt = Date.now();
+  let controller = null;
+  let timer = null;
+  let reader = null;
+  let received = 0;
+  let probeTimedOut = false;
+  try {
+    ensureMirrorCanBeVerified(job, candidate);
+    controller = new AbortController();
+    /**
+     * 结束超过统一测速窗口的请求；已收到的样本仍由外层按实测速率保留。
+     * @returns {void} 中止当前候选线路请求。
+     */
+    function abortSlowUpdateRouteProbe() {
+      probeTimedOut = true;
+      controller.abort();
+    }
+    timer = setTimeout(abortSlowUpdateRouteProbe, UPDATE_ROUTE_PROBE_TIMEOUT_MS);
+    const resp = await fetch(candidate.url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': `Mineradio/${APP_VERSION}`,
+        Range: `bytes=0-${UPDATE_ROUTE_PROBE_BYTES - 1}`,
+      },
+    });
+    if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
+    if (!resp.body || typeof resp.body.getReader !== 'function') {
+      throw updateError('UPDATE_EMPTY_RESPONSE', 'Update route probe has no readable body');
+    }
+    reader = resp.body.getReader();
+    while (received < UPDATE_ROUTE_PROBE_BYTES) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      const chunkBytes = Number(chunk.value && chunk.value.byteLength || 0);
+      received += Math.min(chunkBytes, UPDATE_ROUTE_PROBE_BYTES - received);
+    }
+    if (!received) throw updateError('UPDATE_EMPTY_RESPONSE', 'Update route probe returned no bytes');
+    return successfulUpdateRouteProbe(candidate, index, received, startedAt);
+  } catch (err) {
+    if (probeTimedOut && received > 0) {
+      return successfulUpdateRouteProbe(candidate, index, received, startedAt);
+    }
+    const info = classifyUpdateError(err);
+    return {
+      candidate,
+      index,
+      ok: false,
+      speedBps: 0,
+      elapsedMs: Math.max(1, Date.now() - startedAt),
+      error: info,
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (reader) {
+      try { await reader.cancel(); } catch (_) {}
+    }
+    if (controller) controller.abort();
+  }
+}
+/**
+ * 并行测速全部候选线路，把实测最快线路放在首位，并保留失败线路作为后续兜底。
+ * @param {object} job 当前更新任务。
+ * @param {object[]} candidates 原始候选线路。
+ * @returns {Promise<object[]>} 按实测速度排序后的候选线路。
+ */
+async function rankUpdateDownloadCandidates(job, candidates) {
+  const list = Array.isArray(candidates) ? candidates.slice() : [];
+  if (list.length < 2) return list;
+  prepareUpdateRouteSelection(job, list.length);
+  const probePromises = [];
+  for (let i = 0; i < list.length; i++) {
+    probePromises.push(probeUpdateDownloadCandidate(job, list[i], i));
+  }
+  const results = await Promise.all(probePromises);
+  const successful = [];
+  const failed = [];
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].ok) successful.push(results[i]);
+    else failed.push(results[i]);
+  }
+  if (!successful.length) return list;
+  successful.sort(compareUpdateRouteProbeResults);
+  const ordered = [];
+  for (let i = 0; i < successful.length; i++) ordered.push(successful[i].candidate);
+  for (let i = 0; i < failed.length; i++) ordered.push(failed[i].candidate);
+  return ordered;
+}
 async function downloadUpdateAssetWithMirrors(job) {
   const tmpPath = job.filePath + '.download';
-  const candidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
+  const rawCandidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
     ? job.downloadCandidates
     : uniqueDownloadCandidates(job.downloadUrl || '');
-  if (!candidates.length) throw updateError('UPDATE_ASSET_MISSING', 'No usable installer download candidate');
+  if (!rawCandidates.length) throw updateError('UPDATE_ASSET_MISSING', 'No usable installer download candidate');
+  const candidates = await rankUpdateDownloadCandidates(job, rawCandidates);
   const failures = [];
   fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
   for (let i = 0; i < candidates.length; i++) {
@@ -1713,10 +1861,11 @@ async function downloadPatchBufferFromCandidate(job, candidate, index, total) {
   }
 }
 async function downloadAndApplyPatchWithMirrors(job) {
-  const candidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
+  const rawCandidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
     ? job.downloadCandidates
     : uniqueDownloadCandidates(job.downloadUrl || '');
-  if (!candidates.length) throw updateError('PATCH_ASSET_MISSING', 'No usable patch download candidate');
+  if (!rawCandidates.length) throw updateError('PATCH_ASSET_MISSING', 'No usable patch download candidate');
+  const candidates = await rankUpdateDownloadCandidates(job, rawCandidates);
   const failures = [];
   fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
   for (let i = 0; i < candidates.length; i++) {
