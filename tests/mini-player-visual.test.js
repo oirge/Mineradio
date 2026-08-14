@@ -92,7 +92,6 @@ function createMiniPlayerHarness() {
     play: createNode('play'),
     next: createNode('next'),
     'desktop-lyrics': createNode('desktop-lyrics'),
-    collapse: createNode('collapse'),
     restore: createNode('restore'),
   };
   nodes['mini-shell'].setAttribute('data-collapsed', 'true');
@@ -149,10 +148,11 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   assert.match(html, /miniShell\.addEventListener\('focusout'/);
   assert.match(html, /aria-expanded/);
   assert.match(html, /data-hover-expand/);
-  assert.match(html, /class="window-actions"/);
-  assert.match(html, /id="collapse"[^>]+title="关闭自动收回"[^>]+aria-label="关闭自动收回"/);
-  assert.match(html, /data-hover-expand="false"\] \.collapse \{ visibility: hidden; pointer-events: none; \}/);
+  assert.doesNotMatch(html, /class="window-actions"/);
+  assert.doesNotMatch(html, /id="collapse"/);
+  assert.doesNotMatch(html, /disableAutomaticCollapse|disable-auto-collapse/);
   assert.match(html, /id="restore"[^>]+title="返回主界面"/);
+  assert.match(html, /\.restore \{[\s\S]*?align-self: flex-start;[\s\S]*?margin: -1px -1px 0 0;/);
   assert.match(html, /id="desktop-lyrics"[^>]+title="开启桌面歌词"/);
 });
 
@@ -207,63 +207,10 @@ test('关闭悬停展开后始终保持完整迷你播放器', () => {
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
 });
 
-test('标准迷你播放器叉号关闭自动收回并保持完整控制栏', () => {
-  const harness = createMiniPlayerHarness();
-  const shell = harness.nodes['mini-shell'];
-  const coverWrap = harness.nodes['cover-wrap'];
-  const collapseButton = harness.nodes.collapse;
-
-  coverWrap.hover = true;
-  coverWrap.dispatch('mouseenter');
-  assert.equal(shell.getAttribute('data-collapsed'), 'false');
-
-  coverWrap.hover = false;
-  collapseButton.focusWithin = true;
-  collapseButton.dispatch('click');
-  assert.equal(shell.getAttribute('data-hover-expand'), 'false');
-  assert.equal(shell.getAttribute('data-collapsed'), 'false');
-  assert.equal(coverWrap.getAttribute('aria-expanded'), 'true');
-  assert.deepEqual(harness.commands, ['disable-auto-collapse']);
-
-  shell.hover = false;
-  shell.focusWithin = false;
-  shell.dispatch('mouseleave');
-  shell.dispatch('focusout');
-  harness.flushTimers();
-  assert.equal(shell.getAttribute('data-collapsed'), 'false');
-});
-
-test('叉号命令经主进程持久关闭悬停展开开关', () => {
-  const renderer = read('public/app.js');
-  const main = read('desktop/main.js');
-  const calls = [];
-  const context = {
-    fx: { miniPlayerHoverExpand: true },
-    pushMiniPlayerState() {},
-    togglePlay() {},
-    prevTrack() {},
-    nextTrack() {},
-    toggleFx() {},
-    toggleMiniPlayerVisual(key) {
-      calls.push(key);
-      context.fx.miniPlayerHoverExpand = false;
-    },
-  };
-
-  vm.runInNewContext(
-    extractFunction(renderer, 'handleDesktopMiniPlayerCommand') + '\nthis.handle = handleDesktopMiniPlayerCommand;',
-    context,
-  );
-  context.handle({ action: 'disable-auto-collapse' });
-  context.handle({ action: 'disable-auto-collapse' });
-
-  assert.deepEqual(calls, ['hoverExpand']);
-  assert.match(main, /\['toggle-play', 'previous', 'next', 'toggle-desktop-lyrics', 'disable-auto-collapse'\]\.includes\(command\)/);
-});
-
-test('悬停展开设置独立持久化并立即同步到迷你窗口', () => {
+test('自动收回设置常驻样式选择区并支持双向持久化', () => {
   const index = read('public/index.html');
   const renderer = read('public/app.js');
+  const main = read('desktop/main.js');
   const calls = { controls: 0, saves: 0, pushes: 0 };
   const context = {
     fx: { miniPlayerHoverExpand: true },
@@ -280,12 +227,18 @@ test('悬停展开设置独立持久化并立即同步到迷你窗口', () => {
 
   assert.equal(context.fx.miniPlayerHoverExpand, false);
   assert.deepEqual(calls, { controls: 1, saves: 1, pushes: 1 });
-  assert.match(index, /id="t-miniPlayerHover"[^>]+toggleMiniPlayerVisual\('hoverExpand'\)/);
-  assert.match(index, /鼠标悬停或键盘聚焦/);
-  assert.match(index, /关闭后始终显示完整面板/);
+  context.toggle('hoverExpand');
+  assert.equal(context.fx.miniPlayerHoverExpand, true);
+  assert.deepEqual(calls, { controls: 2, saves: 2, pushes: 2 });
+  assert.match(index, /id="mini-player-mode-seg"[\s\S]*?id="t-miniPlayerHover"[^>]+toggleMiniPlayerVisual\('hoverExpand'\)/);
+  assert.match(index, /mini-player-collapse-glyph"[^>]*>×<\/em><strong>自动收回<\/strong>/);
+  assert.match(index, /id="mini-player-collapse-state">开启/);
+  assert.match(renderer, /hoverButton\.setAttribute\('aria-pressed'/);
+  assert.match(renderer, /hoverState\.textContent = hoverExpandEnabled \? '开启' : '关闭'/);
   assert.match(renderer, /miniPlayerHoverExpand:\s*raw\.miniPlayerHoverExpand !== false/);
   assert.match(renderer, /miniPlayerHoverExpand:\s*fx\.miniPlayerHoverExpand !== false/);
   assert.match(renderer, /hoverExpand:\s*fx\.miniPlayerHoverExpand !== false/);
+  assert.doesNotMatch(main, /disable-auto-collapse/);
 });
 
 test('极简迷你播放器继续保持无封面结构', () => {

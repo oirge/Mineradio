@@ -477,11 +477,15 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.4.8';
+var APP_VERSION = '1.4.9';
 var updatePreviewState = {
-  visible: false,
+  visible: true,
   open: false,
   status: 'idle',
+  checking: false,
+  checkPromise: null,
+  checkAnnounce: false,
+  checkError: '',
   progress: 0,
   timer: null,
   iconBreathing: false,
@@ -22455,6 +22459,38 @@ function collectLocalLibrarySong(index) {
   var songs = localLibraryPlaylistSongs();
   if (songs[index]) openCollectModal(songs[index]);
 }
+var pendingLocalPlaylistDeleteId = '';
+function openLocalPlaylistDeleteModal(playlist) {
+  if (!playlist) return;
+  pendingLocalPlaylistDeleteId = String(playlist.id || '');
+  var name = document.getElementById('local-playlist-delete-name');
+  var meta = document.getElementById('local-playlist-delete-meta');
+  if (name) name.textContent = '「' + String(playlist.name || '未命名歌单') + '」';
+  if (meta) meta.textContent = Math.max(0, Number(playlist.songRefs && playlist.songRefs.length) || 0) + ' 首歌曲 · 本地文件会保留';
+  openGsapModal(document.getElementById('local-playlist-delete-modal'));
+  setTimeout(function(){
+    var cancel = document.getElementById('local-playlist-delete-cancel');
+    if (cancel) cancel.focus();
+  }, 120);
+}
+function closeLocalPlaylistDeleteModal(afterClose) {
+  closeGsapModal(document.getElementById('local-playlist-delete-modal'), function(){
+    pendingLocalPlaylistDeleteId = '';
+    if (afterClose) afterClose();
+  });
+}
+function confirmLocalPlaylistDelete() {
+  var playlist = localPlaylistById(pendingLocalPlaylistDeleteId);
+  if (!playlist) {
+    closeLocalPlaylistDeleteModal();
+    return;
+  }
+  var playlistName = playlist.name;
+  var deleted = deleteLocalPlaylist(playlist.id);
+  closeLocalPlaylistDeleteModal(function(){
+    showToast(deleted ? '已删除歌单「' + playlistName + '」' : '歌单删除失败');
+  });
+}
 function renameSelectedLocalPlaylist() {
   var playlist = localPlaylistById(localLibraryPlaylistSelection);
   if (!playlist || typeof window === 'undefined' || typeof window.prompt !== 'function') return;
@@ -22469,8 +22505,7 @@ function renameSelectedLocalPlaylist() {
 function deleteSelectedLocalPlaylist() {
   var playlist = localPlaylistById(localLibraryPlaylistSelection);
   if (!playlist) return;
-  if (typeof window !== 'undefined' && typeof window.confirm === 'function' && !window.confirm('删除歌单「' + playlist.name + '」？\n不会删除任何音乐文件。')) return;
-  if (deleteLocalPlaylist(playlist.id)) showToast('已删除歌单「' + playlist.name + '」');
+  openLocalPlaylistDeleteModal(playlist);
 }
 function removeSelectedLocalPlaylistSong(index) {
   var playlist = localPlaylistById(localLibraryPlaylistSelection);
@@ -22969,6 +23004,16 @@ function applyMiniPlayerVisualControls() {
     var button = document.getElementById(item[0]);
     if (button) button.classList.toggle('on', item[1]);
   });
+  var hoverExpandEnabled = fx.miniPlayerHoverExpand !== false;
+  var hoverButton = document.getElementById('t-miniPlayerHover');
+  var hoverState = document.getElementById('mini-player-collapse-state');
+  if (hoverButton) {
+    hoverButton.setAttribute('aria-pressed', hoverExpandEnabled ? 'true' : 'false');
+    hoverButton.title = hoverExpandEnabled
+      ? '自动收回已开启：离开完整面板后回到封面；点击可保持完整迷你播放器'
+      : '自动收回已关闭：迷你播放器保持完整面板；点击可恢复封面自动收回';
+  }
+  if (hoverState) hoverState.textContent = hoverExpandEnabled ? '开启' : '关闭';
 }
 
 function toggleMiniPlayerVisual(key) {
@@ -28369,24 +28414,58 @@ function setUpdatePreviewVisible(visible) {
  * @param {{force?: boolean}=} opts force 为 true 时要求后端跳过已有检测缓存。
  * @returns {Promise<void>} 更新预览状态写入全局 updatePreviewState，无直接返回值。
  */
-async function checkLatestUpdate(opts) {
+function updateCheckFailureReason(data) {
+  data = data || {};
+  if (data.error) return String(data.error);
+  if (data.reason && data.configured && !data.preview && !data.source) return String(data.reason);
+  return '';
+}
+
+function checkLatestUpdate(opts) {
   opts = opts || {};
-  try {
-    var query = opts.force ? '?force=1&t=' + Date.now() : '?t=' + Date.now();
-    var data = await apiJson('/api/update/latest' + query);
+  if (updatePreviewState.checkPromise) {
+    if (opts.announce) updatePreviewState.checkAnnounce = true;
+    return updatePreviewState.checkPromise;
+  }
+  updatePreviewState.checking = true;
+  updatePreviewState.checkAnnounce = !!opts.announce;
+  updatePreviewState.checkError = '';
+  stopUpdateIconBreathing(true);
+  syncUpdatePreviewStateClass();
+  var query = opts.force ? '?force=1&t=' + Date.now() : '?t=' + Date.now();
+  var request = apiJson('/api/update/latest' + query, { timeoutMs: 20000 }).then(function(data){
     applyLatestUpdateInfo(data);
-  } catch (e) {
-    updatePreviewState.preview = true;
+    if (updatePreviewState.checkAnnounce) {
+      if (updatePreviewState.checkError) showToast('检测更新失败，请检查网络或代理后重试');
+      else if (updatePreviewState.updateAvailable) showToast('发现新版本 v' + updatePreviewState.version);
+      else showToast('当前已是最新版本 v' + updatePreviewState.currentVersion);
+    }
+    return data;
+  }).catch(function(e){
+    var detail = e && e.name === 'AbortError' ? '连接更新服务超时' : String(e && e.message || '无法连接更新服务');
+    updatePreviewState.checkError = detail;
     updatePreviewState.updateAvailable = false;
-    updatePreviewState.hero = '当前版本，更新检测已就绪。';
+    updatePreviewState.version = updatePreviewState.currentVersion || APP_VERSION;
+    updatePreviewState.hero = '暂时无法完成更新检测。';
+    updatePreviewState.notes = ['请检查网络或代理设置后再次检测。'];
     renderUpdatePreviewPanel();
     setUpdatePreviewVisible(true);
-  }
+    if (updatePreviewState.checkAnnounce) showToast('检测更新失败，请检查网络或代理后重试');
+  }).finally(function(){
+    updatePreviewState.checking = false;
+    updatePreviewState.checkPromise = null;
+    updatePreviewState.checkAnnounce = false;
+    syncUpdatePreviewStateClass();
+    syncUpdateIconBreathing(280);
+  });
+  updatePreviewState.checkPromise = request;
+  return request;
 }
 
 function applyLatestUpdateInfo(data) {
   data = data || {};
   var release = data.release || {};
+  var checkError = updateCheckFailureReason(data);
   updatePreviewState.currentVersion = data.currentVersion || updatePreviewState.currentVersion;
   var latestVersion = data.latestVersion || release.version || updatePreviewState.currentVersion;
   updatePreviewState.version = data.updateAvailable ? latestVersion : updatePreviewState.currentVersion;
@@ -28398,17 +28477,25 @@ function applyLatestUpdateInfo(data) {
   updatePreviewState.patchAvailable = !!(release.patchAvailable && release.patch && release.patch.downloadUrl);
   updatePreviewState.patchUrl = updatePreviewState.patchAvailable ? release.patch.downloadUrl : '';
   updatePreviewState.patchFallbackTried = false;
-  updatePreviewState.hero = release.summary || (updatePreviewState.updateAvailable ? '发现新版本，建议更新。' : '当前版本，更新检测已就绪。');
-  if (Array.isArray(release.notes) && release.notes.length) {
+  updatePreviewState.checkError = checkError;
+  updatePreviewState.hero = checkError
+    ? '暂时无法完成更新检测。'
+    : (updatePreviewState.updateAvailable ? (release.summary || '发现新版本，建议更新。') : '当前版本已是最新。');
+  if (checkError) {
+    updatePreviewState.notes = ['请检查网络或代理设置后再次检测。'];
+  } else if (Array.isArray(release.notes) && release.notes.length) {
     updatePreviewState.notes = release.notes.slice(0, 4);
+  } else {
+    updatePreviewState.notes = [updatePreviewState.updateAvailable ? '发现可用的新版本' : '当前版本已是最新'];
   }
   renderUpdatePreviewPanel();
-  setUpdatePreviewVisible(updatePreviewState.updateAvailable || updatePreviewState.preview);
+  setUpdatePreviewVisible(true);
 }
 
 function canRunUpdateIconBreathing() {
   return !!(updatePreviewState.visible &&
     updatePreviewState.updateAvailable &&
+    !updatePreviewState.checking &&
     !document.hidden &&
     !isDeepBackgroundMode());
 }
@@ -28484,6 +28571,9 @@ function updatePreviewContentSignature() {
 
 function updatePreviewClassSignature() {
   return String(updatePreviewState.status || '') + '\u001f' +
+    (updatePreviewState.checking ? 1 : 0) + '\u001f' +
+    String(updatePreviewState.checkError || '') + '\u001f' +
+    String(updatePreviewState.version || '') + '\u001f' +
     String(updatePreviewState.mode || '') + '\u001f' +
     Math.round(Number(updatePreviewState.progress) || 0) + '\u001f' +
     (updatePreviewState.configured ? 1 : 0) + '\u001f' +
@@ -28539,15 +28629,30 @@ function syncUpdatePreviewStateClass() {
   var isReady = updatePreviewState.status === 'ready';
   var isError = updatePreviewState.status === 'error';
   var isOpening = updatePreviewState.status === 'opening';
+  var isChecking = updatePreviewState.checking;
   var isPatch = updatePreviewState.mode === 'patch';
   if (entry) {
     entry.classList.toggle('downloading', isDownloading || isOpening);
     entry.classList.toggle('ready', isReady);
+    entry.classList.toggle('checking', isChecking);
+    entry.classList.toggle('has-update', updatePreviewState.updateAvailable);
+    entry.setAttribute('aria-busy', isChecking ? 'true' : 'false');
+    entry.title = isChecking ? '正在检测更新…' : (updatePreviewState.updateAvailable ? '发现新版本 v' + updatePreviewState.version : '检测更新');
+    entry.setAttribute('aria-label', entry.title);
   }
   if (modal) {
     modal.classList.toggle('ready', isReady);
     modal.classList.toggle('error', isError);
+    modal.classList.toggle('checking', isChecking);
   }
+  var checkBtn = document.getElementById('update-check-btn');
+  var checkLabel = document.getElementById('update-check-label');
+  if (checkBtn) {
+    checkBtn.disabled = isChecking || isDownloading || isOpening;
+    checkBtn.classList.toggle('checking', isChecking);
+    checkBtn.setAttribute('aria-busy', isChecking ? 'true' : 'false');
+  }
+  if (checkLabel) checkLabel.textContent = isChecking ? '检测中…' : '检测更新';
   var label = document.getElementById('update-btn-label');
   var btn = document.getElementById('update-primary-btn');
   var canDownloadUpdate = updatePreviewState.configured && updatePreviewState.updateAvailable && updatePreviewState.downloadUrl;
@@ -28562,17 +28667,21 @@ function syncUpdatePreviewStateClass() {
     else if (isReady && updatePreviewState.installerOpened) label.textContent = '安装包已打开';
     else if (isReady && updatePreviewState.installerPath) label.textContent = updatePreviewState.cached ? '打开已下载安装包' : '打开安装包';
     else if (isReady) label.textContent = updatePreviewState.configured ? '打开安装包' : '预览完成';
+    else if (updatePreviewState.checkError) label.textContent = '暂无可用更新';
+    else if (updatePreviewState.configured && !updatePreviewState.preview && !updatePreviewState.updateAvailable) label.textContent = '已是最新';
     else label.textContent = updatePreviewState.patchAvailable ? '安装快速补丁' : ((canDownloadUpdate || canOpenRelease) ? '下载完整安装包' : '立即更新');
   }
-  if (btn) btn.disabled = false;
+  if (btn) btn.disabled = isChecking || !!updatePreviewState.checkError || (updatePreviewState.configured && !updatePreviewState.preview && !updatePreviewState.updateAvailable);
   var foot = document.getElementById('update-footnote');
   if (foot) {
-    if (isDownloading) foot.textContent = (updatePreviewState.message || (isPatch ? '正在下载快速补丁' : '正在下载完整安装包')) + (updateProgressDetailText() ? ' · ' + updateProgressDetailText() : '');
+    if (isChecking) foot.textContent = '正在连接更新服务并核对最新版本…';
+    else if (updatePreviewState.checkError) foot.textContent = '检测失败：' + updatePreviewState.checkError;
+    else if (isDownloading) foot.textContent = (updatePreviewState.message || (isPatch ? '正在下载快速补丁' : '正在下载完整安装包')) + (updateProgressDetailText() ? ' · ' + updateProgressDetailText() : '');
     else if (isError) foot.textContent = '下载失败：' + (updatePreviewState.errorReason || updatePreviewState.errorDetail || updatePreviewState.message || '请稍后重试') + (updatePreviewState.failedAttempts && updatePreviewState.failedAttempts.length ? ' · 已尝试 ' + updatePreviewState.failedAttempts.length + ' 条线路' : '');
     else if (isReady && isPatch) foot.textContent = updatePreviewState.restartRequired ? '快速补丁已应用，重启 Mineradio 后生效。' : '快速补丁已应用。';
     else if (isReady) foot.textContent = updatePreviewState.cached ? '已复用上次校验通过的安装包，不会重复下载。' : '安装包已准备好，点击按钮后再打开安装。';
     else if (updatePreviewState.patchAvailable) foot.textContent = '优先使用轻量补丁，只更新缺失或变更的资源文件；不适用时可下载完整安装包。';
-    else foot.textContent = updatePreviewState.updateAvailable ? '没有可用快速补丁时会下载完整安装包。' : '当前版本已是最新。';
+    else foot.textContent = updatePreviewState.updateAvailable ? '没有可用快速补丁时会下载完整安装包。' : '当前版本 v' + updatePreviewState.currentVersion + ' 已是最新。';
   }
 }
 
@@ -28607,7 +28716,7 @@ function openUpdatePanel() {
   if (entry && window.gsap) {
     window.gsap.fromTo(entry, { scale: 0.93 }, { scale: 1, duration: 0.42, ease: 'back.out(1.7)', overwrite: 'auto' });
   }
-  if (updatePreviewState.status !== 'downloading' && updatePreviewState.status !== 'opening') checkLatestUpdate({ force: true });
+  if (updatePreviewState.status !== 'downloading' && updatePreviewState.status !== 'opening') checkLatestUpdate({ force: true, announce: true });
   openGsapModal(mask);
   rescheduleUpdateJobPolling(true);
   animateUpdatePanelContents();
@@ -29082,6 +29191,7 @@ function bindModalBackdropClose() {
     ['track-detail-modal', closeTrackDetailModal],
     ['login-modal', closeLoginModal],
     ['user-modal', closeUserModal],
+    ['local-playlist-delete-modal', closeLocalPlaylistDeleteModal],
     ['custom-lyric-modal', closeCustomLyricModal],
     ['update-modal', closeUpdatePanel]
   ].forEach(function(pair){
@@ -30612,6 +30722,12 @@ document.addEventListener('keydown', function(e){
   else if (e.code === 'ArrowRight') nextTrack();
   else if (e.code === 'ArrowLeft')  prevTrack();
   else if (e.code === 'Escape')     {
+    var playlistDeleteModal = document.getElementById('local-playlist-delete-modal');
+    if (playlistDeleteModal && playlistDeleteModal.classList.contains('show')) {
+      e.preventDefault();
+      closeLocalPlaylistDeleteModal();
+      return;
+    }
     if (immersiveMode) {
       e.preventDefault();
       setImmersiveMode(false);
@@ -32419,7 +32535,6 @@ function handleDesktopMiniPlayerCommand(payload) {
   else if (action === 'previous') prevTrack();
   else if (action === 'next') nextTrack();
   else if (action === 'toggle-desktop-lyrics') toggleFx('desktopLyrics');
-  else if (action === 'disable-auto-collapse' && fx.miniPlayerHoverExpand !== false) toggleMiniPlayerVisual('hoverExpand');
 }
 
 (function initDesktopWindowShell(){

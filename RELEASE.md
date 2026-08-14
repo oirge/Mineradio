@@ -1,5 +1,20 @@
 ﻿# 发布流程
 
+## v1.4.9 迷你播放器与更新检测
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.9`。
+- 标准迷你播放器本体不再放置一次性 `×`；四角“返回主界面”按钮恢复到右上角原位，桌面歌词和播放控制保持不变。
+- DIY“迷你播放器样式”区域新增永久可见的 `× 自动收回` 双向开关；开启后悬停或键盘聚焦展开并在离开后收回，关闭后保持完整面板。
+- 歌单删除改为播放器内暗色玻璃确认弹层，明确显示目标歌单、歌曲数量和本地文件保留提示，并支持遮罩与 `Esc` 关闭。
+- 顶栏更新入口常驻显示，更新面板新增独立“检测更新”按钮；检测请求复用单一在途 Promise，并提供检测中、最新版、新版本和网络失败状态。
+- 当前已是最新版或检测失败时禁用无效下载入口；发现新版本后继续使用现有轻量补丁、完整安装包、校验和安装流程。
+- 升级继续使用 `%APPDATA%\\Mineradio-oirge` 与既有曲库、播放会话、特别喜欢、自建歌单和 DIY 设置，不执行破坏性清空或强制重新导入。
+- 新增手动更新检测回归，扩展迷你播放器和歌单删除测试；全量 Node 回归 `325/325`，关键 JavaScript 语法检查与 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.4.9-Setup.exe` `101471651` 字节；`.blockmap` `105745` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `72da914f9561be28b27e0abe5b2e76fccc65e1471a07ba1c452b72abb304378b`；`.blockmap` `f722090d6b7e4f87ba8be38969f49b0bf4f5042c70202681e5b519f01e3f1617`；`latest.yml` `d21ed265e377ae8db48787f32be35d09bb2bac01d425258712f0db92ad0b9a92`；SHA256 清单 `9cf2ffa3b168326e0424e7b47fdca50b28b3e26c791bd2662cbbd610f2d3caae`。
+- `latest.yml` 的 Setup SHA512：`WLMWFQgiy7/C0I4vlaZJH6eOUT88l2lpgAL3sODGlOqDECiKg28qBL8q4VgcC4Sg3cPTa1VBDbEa5tCk4k2dkw==`。
+- Release 标题使用 `Mineradio v1.4.9 迷你播放器与更新检测`。
+
 ## v1.4.8 歌单定向收藏与全屏过渡
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.8`。
 - 当前播放队列、主曲库、歌手详情和自建歌单详情统一支持选择收藏到任意自建歌单；同一首歌曲可加入多个歌单，并明确显示目标歌单与已收藏状态。

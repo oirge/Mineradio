@@ -2802,7 +2802,7 @@ ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   }
   const command = String(action || '');
   if (command === 'restore') return { ok: focusMainWindow() };
-  if (!['toggle-play', 'previous', 'next', 'toggle-desktop-lyrics', 'disable-auto-collapse'].includes(command)) return { ok: false, error: 'MINI_PLAYER_INVALID_COMMAND' };
+  if (!['toggle-play', 'previous', 'next', 'toggle-desktop-lyrics'].includes(command)) return { ok: false, error: 'MINI_PLAYER_INVALID_COMMAND' };
   if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'MAIN_WINDOW_UNAVAILABLE' };
   mainWindow.webContents.send('mineradio-mini-player-command', { action: command });
   return { ok: true };

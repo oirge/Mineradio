@@ -33,7 +33,7 @@ if (document.fonts && document.fonts.load) {
   </div>
   <div class="desktop-window-controls">
     <button id="visual-guide-btn" class="icon-btn" type="button" onclick="startVisualGuide({ manual: true })" title="查看使用引导" aria-label="查看使用引导">?</button>
-    <button id="update-entry" class="update-entry" type="button" onclick="openUpdatePanel()" title="发现新版本" aria-label="发现新版本">
+    <button id="update-entry" class="update-entry available" type="button" onclick="openUpdatePanel()" title="检测更新" aria-label="检测更新" aria-busy="false">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle class="update-ring" cx="12" cy="12" r="8.8"></circle>
         <circle id="update-progress-ring" class="update-progress-ring" cx="12" cy="12" r="8.8"></circle>
@@ -387,10 +387,12 @@ if (document.fonts && document.fonts.load) {
         <button type="button" data-mini-player-mode="standard" title="使用带封面的标准迷你播放器">标准</button>
         <button type="button" data-mini-player-mode="compact" title="使用无封面的极简迷你播放器">极简</button>
       </div>
+      <button type="button" class="fx-toggle mini-player-collapse-setting" id="t-miniPlayerHover" onclick="toggleMiniPlayerVisual('hoverExpand')" title="自动收回已开启：离开完整面板后回到封面；点击可保持完整迷你播放器" aria-pressed="true">
+        <span class="mini-player-collapse-copy"><em class="mini-player-collapse-glyph" aria-hidden="true">×</em><strong>自动收回</strong><small id="mini-player-collapse-state">开启</small></span><span class="dot"></span>
+      </button>
       <div class="fx-toggle-grid mini-player-diy-grid">
         <div class="fx-toggle" id="t-miniPlayerPulse" onclick="toggleMiniPlayerVisual('pulseEnabled')" title="让标准迷你播放器封面跟随音乐能量轻微缩放"><span>封面律动</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-miniPlayerGlow" onclick="toggleMiniPlayerVisual('glowEnabled')" title="显示封面外沿的柔和律动光晕"><span>封面光晕</span><span class="dot"></span></div>
-        <div class="fx-toggle" id="t-miniPlayerHover" onclick="toggleMiniPlayerVisual('hoverExpand')" title="开启后默认仅显示封面，鼠标悬停或键盘聚焦时展开完整迷你播放器；关闭后始终显示完整面板"><span>封面悬停展开</span><span class="dot"></span></div>
       </div>
       <div class="fx-slider"><label>封面律动强度</label><input id="fx-miniplayerpulse" type="range" min="0" max="1.5" step="0.01"><output></output></div>
       <div class="fx-slider"><label>封面圆角</label><input id="fx-miniplayerradius" type="range" min="4" max="22" step="1"><output></output></div>
@@ -792,6 +794,31 @@ if (document.fonts && document.fonts.load) {
   </div>
 </div>
 
+<!-- 删除本地歌单确认 -->
+<div id="local-playlist-delete-modal" class="modal-mask" role="dialog" aria-modal="true" aria-labelledby="local-playlist-delete-title">
+  <div class="modal playlist-delete-modal">
+    <div class="playlist-delete-icon" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7h16"></path>
+        <path d="M9 7V4h6v3"></path>
+        <path d="m6.5 7 .7 13h9.6l.7-13"></path>
+        <path d="M10 11v5M14 11v5"></path>
+      </svg>
+    </div>
+    <div class="playlist-delete-kicker">PLAYLIST MANAGEMENT</div>
+    <h2 id="local-playlist-delete-title">删除这个歌单？</h2>
+    <div class="playlist-delete-target">
+      <div id="local-playlist-delete-name" class="playlist-delete-name">未命名歌单</div>
+      <div id="local-playlist-delete-meta" class="playlist-delete-meta">0 首歌曲</div>
+    </div>
+    <p class="playlist-delete-note">只会删除歌单列表，不会删除本地音乐文件。</p>
+    <div class="btn-row playlist-delete-actions">
+      <button id="local-playlist-delete-cancel" class="modal-btn" type="button" onclick="closeLocalPlaylistDeleteModal()">取消</button>
+      <button id="local-playlist-delete-confirm" class="modal-btn danger" type="button" onclick="confirmLocalPlaylistDelete()">删除歌单</button>
+    </div>
+  </div>
+</div>
+
 <div id="local-beat-modal" class="modal-mask">
   <div class="modal local-beat-modal">
     <h2>本地节奏分析</h2>
@@ -853,6 +880,15 @@ if (document.fonts && document.fonts.load) {
           <div id="update-modal-title" class="update-title">New release</div>
           <div id="update-modal-version" class="update-version"></div>
         </div>
+        <button id="update-check-btn" class="update-check-btn" type="button" onclick="checkLatestUpdate({ force: true, announce: true })" title="检测更新" aria-label="检测更新" aria-busy="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 11a8 8 0 0 0-14.8-4.2L4 9"></path>
+            <path d="M4 4v5h5"></path>
+            <path d="M4 13a8 8 0 0 0 14.8 4.2L20 15"></path>
+            <path d="M20 20v-5h-5"></path>
+          </svg>
+          <span id="update-check-label">检测更新</span>
+        </button>
       </div>
       <div class="update-hero">
         <div id="update-hero-main" class="update-hero-main">电影镜头更稳，音源兜底更顺。</div>

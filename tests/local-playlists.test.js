@@ -205,6 +205,29 @@ test('歌单管理入口使用自动隐藏态而不是永久 show 状态', () =>
   assert.equal(calls[0][2], 'pl');
 });
 
+test('删除歌单使用播放器内玻璃确认弹层而不是系统 confirm', () => {
+  const source = readAppSource();
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.css'), 'utf8');
+  const flow = readFunctionBlock(
+    source,
+    'var pendingLocalPlaylistDeleteId',
+    'function removeSelectedLocalPlaylistSong(index)',
+  );
+
+  assert.doesNotMatch(flow, /window\.confirm/);
+  assert.match(flow, /openLocalPlaylistDeleteModal\(playlist\)/);
+  assert.match(flow, /closeLocalPlaylistDeleteModal\(function\(\)/);
+  assert.match(source, /\['local-playlist-delete-modal', closeLocalPlaylistDeleteModal\]/);
+  assert.match(source, /playlistDeleteModal\.classList\.contains\('show'\)/);
+  assert.match(html, /id="local-playlist-delete-modal"[^>]*role="dialog"/);
+  assert.match(html, /class="modal playlist-delete-modal"/);
+  assert.match(html, /id="local-playlist-delete-confirm"[^>]*class="modal-btn danger"/);
+  assert.match(css, /\.playlist-delete-modal\{/);
+  assert.match(css, /\.modal-btn\.danger\{/);
+  assert.match(css, /#local-playlist-delete-confirm\.modal-btn\.danger\{/);
+});
+
 test('本地当前队列可像特别喜欢一样收藏到独立歌单', () => {
   const source = readAppSource();
   const renderer = readFunctionBlock(

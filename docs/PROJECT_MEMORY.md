@@ -4,13 +4,13 @@
 
 ## Stable Project Facts
 
-- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
+- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.4.3` 已接入 Wallpaper Engine 壁纸背景，并保留 v1.4.2 的 M4A/WAV/OGG 播放与元数据修复、特别喜欢歌单、播放来源切换、空曲库恢复和 CPU/运行内存优化。
-- 当前工作分支：`codex/complete-v1.2.79`，待本次发布后同步到 GitHub `origin/main` 的 `v1.4.3`。
-- 最近正式安装包 Release 基线：`v1.4.3`（2026-08-13，Wallpaper Engine 壁纸背景；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
+- 当前源码检查点：`v1.4.9` 已完成迷你播放器自动收回开关重排、歌单删除玻璃确认弹层和常驻手动检测更新入口，并保留多歌单、全屏过渡、Wallpaper Engine、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`codex/complete-v1.2.79`，发布时同步到 GitHub `origin/main` 和 tag `v1.4.9`。
+- 最近正式安装包 Release 基线：`v1.4.9`（2026-08-14，迷你播放器与更新检测；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,14 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.4.9 迷你播放器与更新检测
+
+- 标准迷你播放器本体移除一次性 `×`，返回主界面按钮恢复右上角；`× 自动收回` 改为主界面 DIY“迷你播放器样式”区域永久可见的双向开关。
+- 歌单删除使用播放器内暗色玻璃确认弹层；顶栏和更新面板均提供手动检测更新入口，检测请求单飞并显示检测中、最新版、新版本和失败状态。
+- 升级继续使用 `%APPDATA%\\Mineradio-oirge` 与现有本地曲库、播放会话、特别喜欢、自建歌单和 DIY 设置，不要求重新导入。
+- 全量 Node 回归 `325/325`，关键 JavaScript 语法检查与 `git diff --check` 通过；发布资产摘要见 `RELEASE.md`。
+- Windows x64 NSIS：安装器 `101471651` 字节 / SHA256 `72da914f9561be28b27e0abe5b2e76fccc65e1471a07ba1c452b72abb304378b`；blockmap `105745` 字节 / `f722090d6b7e4f87ba8be38969f49b0bf4f5042c70202681e5b519f01e3f1617`；`latest.yml` `347` 字节 / `d21ed265e377ae8db48787f32be35d09bb2bac01d425258712f0db92ad0b9a92`；SHA256 清单 `270` 字节 / `9cf2ffa3b168326e0424e7b47fdca50b28b3e26c791bd2662cbbd610f2d3caae`。
 
 ## v1.4.3 Wallpaper Engine 壁纸背景
 
