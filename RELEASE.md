@@ -9,7 +9,7 @@
 - 升级继续使用 `%APPDATA%\\Mineradio-oirge` 与既有曲库、播放会话、特别喜欢、自建歌单和 DIY 设置，不执行破坏性清空或强制重新导入。
 - 全量 Node 回归 `331/331`、关键 JavaScript 语法检查与 `git diff --check` 通过。
 - Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
-- 发布资产：`Mineradio-1.4.11-Setup.exe` `101474035` 字节；`.blockmap` `105866` 字节；`latest.yml` `350` 字节；SHA256 清单 `272` 字节。
+- 发布资产：`Mineradio-1.4.11-Setup.exe` `101474035` 字节；`.blockmap` `105866` 字节；`latest.yml` `350` 字节；SHA256 清单 `271` 字节。
 - SHA256：安装器 `5bd7d90d31d530f04465390e007ccc75faccd6b07058aecc3bf6be04d4a19e82`；`.blockmap` `e2993b41ee75bea87a1384285aa1c7939027eef0e3e24947e141bf905668086b`；`latest.yml` `7cfe66cf2ee88e5862c9346ec68a6e5ab5f98be9fa4b82237198d885a1213f0a`；SHA256 清单 `aaf8b7d85be0ece8d9060708d581074137259abb58e3e7e4e27f977754a6fac5`。
 - `latest.yml` 的 Setup SHA512：`kZH9qZviP1plVzwLS8S+hZ+0oM6aD1touiHN2D3ihcT5vC739ghXAnQU5bFt2iN+RFFdWwPFrPBnY45tH7vmzw==`。
 - Release 标题使用 `Mineradio v1.4.11 更新圆环与窗口拖动修复`。
