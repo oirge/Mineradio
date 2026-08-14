@@ -20,6 +20,14 @@ body::after,#desktop-window-shell::after{content:none}
 body.desktop-shell{background:transparent}
 body.desktop-shell #desktop-window-shell{display:block;position:fixed;inset:0;overflow:hidden;border-radius:34px;clip-path:inset(0 round 34px);background:transparent;box-shadow:0 24px 80px rgba(0,0,0,.46);transform:translateZ(0)}
 body.desktop-shell.desktop-maximized #desktop-window-shell,body.desktop-shell.desktop-fullscreen #desktop-window-shell,html:fullscreen body.desktop-shell #desktop-window-shell{border-radius:0!important;clip-path:none!important;box-shadow:none!important}
+#fullscreen-transition-layer{position:fixed;inset:0;z-index:2000;pointer-events:none;opacity:0;visibility:hidden;background:rgba(0,0,0,.78);transition:opacity .18s cubic-bezier(.4,0,.2,1),visibility 0s linear .24s}
+body.fullscreen-transitioning #fullscreen-transition-layer{visibility:visible;transition:opacity .18s cubic-bezier(.4,0,.2,1),visibility 0s}
+body.fullscreen-transition-covered #fullscreen-transition-layer{opacity:1}
+body.fullscreen-transitioning #desktop-window-shell{transition:transform .22s cubic-bezier(.16,1,.3,1),filter .18s ease;will-change:transform,filter}
+body.fullscreen-transitioning.fullscreen-transition-enter:not(.fullscreen-transition-revealing) #desktop-window-shell{transform:translateZ(0) scale(.988);filter:brightness(.74) saturate(.9)}
+body.fullscreen-transitioning.fullscreen-transition-exit:not(.fullscreen-transition-revealing) #desktop-window-shell{transform:translateZ(0) scale(1.012);filter:brightness(.74) saturate(.9)}
+body.fullscreen-transitioning.fullscreen-transition-revealing #desktop-window-shell{transform:translateZ(0) scale(1);filter:none}
+@media (prefers-reduced-motion:reduce){#fullscreen-transition-layer,body.fullscreen-transitioning #desktop-window-shell{transition-duration:.06s!important}}
 body.desktop-shell #desktop-titlebar{position:fixed;z-index:500;top:0;left:0;right:0;height:44px;padding:0 12px 0 18px;display:flex;align-items:center;justify-content:space-between;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;-webkit-app-region:drag;pointer-events:none}
 body.desktop-shell #desktop-titlebar::after{content:none}
 .desktop-drag-region{height:100%;flex:1;display:flex;align-items:center;gap:9px;min-width:0;color:rgba(224,250,255,.74);font-size:12px;font-weight:600;letter-spacing:0;text-transform:uppercase;-webkit-app-region:drag;pointer-events:auto}
@@ -1427,14 +1435,14 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1080px,cal
 body.empty-home-active #home-btn{border-color:rgba(var(--fc-accent-rgb),.42)!important;background:rgba(var(--fc-accent-rgb),.14)!important}
 
 /* Unified saved glass: keep panels in the same texture as the player bar. */
-#search-box,#search-results,.search-mode-tabs,#fx-panel,#playlist-panel,#upload-tip,#trial-banner,#toast,#source-fallback-notice,#ai-depth-chip,#beat-chip,.modal,.modal.update-modal,.track-detail-modal,.cover-color-pop,.color-lab-pop,.visual-guide-card,.volume-popover,.quality-popover,.playlist-source-popover,.mini-queue-popover,.home-hero,.home-card,.home-tile,.home-mosaic-cell,.pl-inline-detail,.local-beat-track,.custom-lyric-track,.cover-crop-stage,#drop-overlay .drop-text{
+#search-box,#search-results,.search-mode-tabs,#fx-panel,#playlist-panel,#upload-tip,#trial-banner,#toast,#source-fallback-notice,#ai-depth-chip,#beat-chip,.modal,.modal.update-modal,.track-detail-modal,.cover-color-pop,.color-lab-pop,.visual-guide-card,.volume-popover,.quality-popover,.mini-queue-popover,.home-hero,.home-card,.home-tile,.home-mosaic-cell,.pl-inline-detail,.local-beat-track,.custom-lyric-track,.cover-crop-stage,#drop-overlay .drop-text{
   background:var(--saved-panel-glass-bg)!important;
   border-color:transparent!important;
   box-shadow:var(--saved-panel-glass-shadow)!important;
   backdrop-filter:var(--saved-panel-glass-filter)!important;
   -webkit-backdrop-filter:var(--saved-panel-glass-filter)!important;
 }
-html.control-glass-svg-ok #search-box,html.control-glass-svg-ok #search-results,html.control-glass-svg-ok .search-mode-tabs,html.control-glass-svg-ok #fx-panel,html.control-glass-svg-ok #playlist-panel,html.control-glass-svg-ok #upload-tip,html.control-glass-svg-ok #trial-banner,html.control-glass-svg-ok #toast,html.control-glass-svg-ok #source-fallback-notice,html.control-glass-svg-ok #ai-depth-chip,html.control-glass-svg-ok #beat-chip,html.control-glass-svg-ok .modal,html.control-glass-svg-ok .modal.update-modal,html.control-glass-svg-ok .track-detail-modal,html.control-glass-svg-ok .cover-color-pop,html.control-glass-svg-ok .color-lab-pop,html.control-glass-svg-ok .visual-guide-card,html.control-glass-svg-ok .volume-popover,html.control-glass-svg-ok .quality-popover,html.control-glass-svg-ok .playlist-source-popover,html.control-glass-svg-ok .mini-queue-popover,html.control-glass-svg-ok .home-hero,html.control-glass-svg-ok .home-card,html.control-glass-svg-ok .home-tile,html.control-glass-svg-ok .home-mosaic-cell,html.control-glass-svg-ok .pl-inline-detail,html.control-glass-svg-ok .local-beat-track,html.control-glass-svg-ok .custom-lyric-track,html.control-glass-svg-ok .cover-crop-stage,html.control-glass-svg-ok #drop-overlay .drop-text{
+html.control-glass-svg-ok #search-box,html.control-glass-svg-ok #search-results,html.control-glass-svg-ok .search-mode-tabs,html.control-glass-svg-ok #fx-panel,html.control-glass-svg-ok #playlist-panel,html.control-glass-svg-ok #upload-tip,html.control-glass-svg-ok #trial-banner,html.control-glass-svg-ok #toast,html.control-glass-svg-ok #source-fallback-notice,html.control-glass-svg-ok #ai-depth-chip,html.control-glass-svg-ok #beat-chip,html.control-glass-svg-ok .modal,html.control-glass-svg-ok .modal.update-modal,html.control-glass-svg-ok .track-detail-modal,html.control-glass-svg-ok .cover-color-pop,html.control-glass-svg-ok .color-lab-pop,html.control-glass-svg-ok .visual-guide-card,html.control-glass-svg-ok .volume-popover,html.control-glass-svg-ok .quality-popover,html.control-glass-svg-ok .mini-queue-popover,html.control-glass-svg-ok .home-hero,html.control-glass-svg-ok .home-card,html.control-glass-svg-ok .home-tile,html.control-glass-svg-ok .home-mosaic-cell,html.control-glass-svg-ok .pl-inline-detail,html.control-glass-svg-ok .local-beat-track,html.control-glass-svg-ok .custom-lyric-track,html.control-glass-svg-ok .cover-crop-stage,html.control-glass-svg-ok #drop-overlay .drop-text{
   backdrop-filter:var(--saved-panel-glass-svg-filter)!important;
   -webkit-backdrop-filter:var(--saved-panel-glass-svg-filter)!important;
 }
@@ -1733,6 +1741,29 @@ html.control-glass-svg-ok .pl-inline-detail{
   backdrop-filter:blur(22px) saturate(1.16)!important;
   -webkit-backdrop-filter:blur(22px) saturate(1.16)!important;
 }
+/* The playback-source picker must stay readable over dense particle scenes. */
+.playlist-source-popover{
+  isolation:isolate;
+  background:rgba(6,7,11,.965)!important;
+  border-color:rgba(255,255,255,.14)!important;
+  box-shadow:0 28px 84px rgba(0,0,0,.78),0 0 0 1px rgba(0,0,0,.52),inset 0 1px 0 rgba(255,255,255,.10)!important;
+  backdrop-filter:blur(30px) saturate(1.06) brightness(.52)!important;
+  -webkit-backdrop-filter:blur(30px) saturate(1.06) brightness(.52)!important;
+}
+html.control-glass-svg-ok .playlist-source-popover{
+  backdrop-filter:blur(30px) saturate(1.06) brightness(.52)!important;
+  -webkit-backdrop-filter:blur(30px) saturate(1.06) brightness(.52)!important;
+}
+.playlist-source-head{border-bottom-color:rgba(255,255,255,.11)}
+.playlist-source-head b{color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.72)}
+.playlist-source-head span{color:rgba(255,255,255,.62)}
+.playlist-source-option{background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+.playlist-source-option:hover{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.17)}
+.playlist-source-option.active{background:rgba(var(--fc-accent-rgb),.15);border-color:rgba(var(--fc-accent-rgb),.42);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 24px rgba(var(--fc-accent-rgb),.07)}
+.playlist-source-option.empty{opacity:.72}
+.playlist-source-option-name{color:rgba(255,255,255,.96);text-shadow:0 1px 8px rgba(0,0,0,.68)}
+.playlist-source-option-sub{color:rgba(255,255,255,.58)}
+.playlist-source-manage{color:rgba(255,255,255,.72);background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.11)}
 html.control-glass-svg-ok #home-btn,
 html.control-glass-svg-ok #upload-btn,
 html.control-glass-svg-ok #visual-guide-btn,

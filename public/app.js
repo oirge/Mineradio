@@ -477,7 +477,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.4.7';
+var APP_VERSION = '1.4.8';
 var updatePreviewState = {
   visible: false,
   open: false,
@@ -17344,6 +17344,13 @@ function toggleLocalPlaybackPlaylistSource(e) {
 function closeLocalPlaybackPlaylistPicker() {
   setLocalPlaybackPlaylistPickerOpen(false);
 }
+function showLocalPlaylistPanelAutoHide() {
+  var panel = document.getElementById('playlist-panel');
+  if (!panel) return;
+  panel.dataset.preserveTabOnOpen = '1';
+  panel.classList.remove('show');
+  setPeek(panel, true, 'pl');
+}
 function selectLocalPlaybackPlaylistSource(kind) {
   var next = normalizeLocalPlaylistKind(kind);
   if (next.indexOf('local-playlist:') === 0 && !localPlaylistById(next)) {
@@ -17375,7 +17382,7 @@ function selectLocalPlaybackPlaylistSource(kind) {
 function openLocalPlaybackPlaylistManager() {
   closeLocalPlaybackPlaylistPicker();
   openAllLocalLibraryPlaylist();
-  togglePlaylistPanel(true);
+  showLocalPlaylistPanelAutoHide();
 }
 function bindLocalPlaybackPlaylistPicker() {
   var control = document.getElementById('playlist-source-control');
@@ -17405,6 +17412,7 @@ function selectLocalPlaylist(kind) {
   if (panel) panel.scrollTop = 0;
   renderLocalLibraryPlaylistPanel({ animate: true });
   safeSwitchPlaylistTab('playlists', 'local-playlist-select');
+  if (panel && panel.classList.contains('show') && !playlistPanelPinned) showLocalPlaylistPanelAutoHide();
 }
 function openSpecialLikedPlaylist() {
   selectLocalPlaylist(SPECIAL_LIKED_PLAYLIST_ID);
@@ -17944,7 +17952,7 @@ function renderArtistSongList(songs) {
     var cover = songCoverSrc(s, 80);
     var coverHtml = cover ? '<img class="artist-song-cover" src="' + escHtml(cover) + '" alt="" onerror="this.style.opacity=0.18">' : '<div class="artist-song-cover"></div>';
     var actionsHtml = '<div class="artist-song-actions">' +
-      '<button class="artist-song-action collect" type="button" title="收藏到歌单" aria-label="收藏到歌单" onclick="event.stopPropagation();collectArtistDetailSong(' + i + ')">' + artistCollectTrayIconSvg() + '</button>' +
+      '<button class="artist-song-action collect" type="button" title="选择收藏到任意歌单" aria-label="选择收藏到任意歌单" onclick="event.stopPropagation();collectArtistDetailSong(' + i + ')">' + artistCollectTrayIconSvg() + '</button>' +
       '<button class="artist-song-action next" type="button" title="下一首播放" aria-label="下一首播放" onclick="event.stopPropagation();queueArtistDetailSongNext(' + i + ')">' + artistNextPlusIconSvg() + '</button>' +
     '</div>';
     return '<div class="artist-song-item" onclick="playArtistDetailSong(' + i + ')">' +
@@ -18635,7 +18643,7 @@ function songActionHtml(kind, source, index, song) {
   if (kind === 'like') {
     return '<button class="song-action-btn' + (liked ? ' liked' : '') + '" data-like-index="' + index + '" title="' + (liked ? '移出特别喜欢' : '加入特别喜欢') + '" onclick="event.stopPropagation();toggleLike' + source + '(' + index + ')">' + heartIconSvg() + '</button>';
   }
-  return '<button class="song-action-btn" title="收藏到歌单" onclick="event.stopPropagation();collect' + source + '(' + index + ')">' + playlistPlusIconSvg() + '</button>';
+  return '<button class="song-action-btn" title="选择收藏到任意歌单" onclick="event.stopPropagation();collect' + source + '(' + index + ')">' + playlistPlusIconSvg() + '</button>';
 }
 function syncLikeStatusForSongs(songs) {
   return;
@@ -18737,6 +18745,11 @@ function closeCollectModal() {
     if (input) input.value = '';
   });
 }
+function collectPlaylistActionTitle(playlist, song, contained) {
+  var name = String(playlist && playlist.name || '未命名歌单');
+  if (!song) return name;
+  return (contained ? '已收藏到「' : '收藏到「') + name + '」';
+}
 function renderCollectModal() {
   var title = document.getElementById('collect-modal-title');
   var current = document.getElementById('collect-current');
@@ -18744,8 +18757,8 @@ function renderCollectModal() {
   var input = document.getElementById('collect-new-name');
   if (!current || !list) return;
   var song = collectTargetSong;
-  if (title) title.textContent = song ? '收藏到本地歌单' : '新建本地歌单';
-  if (input) input.placeholder = song ? '新建歌单并收藏当前歌曲' : '新建歌单名称';
+  if (title) title.textContent = song ? '选择收藏到任意歌单' : '新建本地歌单';
+  if (input) input.placeholder = song ? '新建歌单并收藏到该歌单' : '新建歌单名称';
   current.style.display = song ? '' : 'none';
   if (song) {
     var cover = songCoverSrc(song, 80);
@@ -18765,9 +18778,10 @@ function renderCollectModal() {
     var resolvedSongs = getLocalPlaylistSongsById(pl.id);
     var thumb = resolvedSongs.length ? songCoverSrc(resolvedSongs[0], 80) : '';
     var contained = !!(song && localPlaylistHasSong(pl.id, song));
+    var actionTitle = collectPlaylistActionTitle(pl, song, contained);
     html += '<div class="collect-item' + (contained ? ' added' : '') + '" data-collect-pid="' + escHtml(String(pl.id || '')) + '" onclick="addCollectTargetToPlaylist(this.getAttribute(\'data-collect-pid\'))">' +
       (thumb ? '<img src="' + escHtml(thumb) + '" alt="">' : '<div class="cover-placeholder"></div>') +
-      '<div style="min-width:0;flex:1"><div class="collect-title">' + escHtml(pl.name || '') + '</div><div class="collect-sub">' + pl.songRefs.length + ' 首' + (contained ? ' · 已收藏' : (song ? ' · 点击添加' : ' · 点击打开')) + '</div></div>' +
+      '<div style="min-width:0;flex:1"><div class="collect-title">' + escHtml(actionTitle) + '</div><div class="collect-sub">' + pl.songRefs.length + ' 首' + (contained ? ' · 已在此歌单' : (song ? ' · 点击收藏' : ' · 点击打开')) + '</div></div>' +
       (contained ? '<span class="collect-added-mark">✓</span>' : '') +
     '</div>';
   }
@@ -18800,12 +18814,12 @@ async function createPlaylistFromCollect() {
     return;
   }
   if (input) input.value = '';
-  showToast(collectTargetSong ? '已创建歌单并收藏歌曲' : '已创建歌单「' + playlist.name + '」');
+  showToast(collectTargetSong ? '已创建「' + playlist.name + '」并收藏歌曲' : '已创建歌单「' + playlist.name + '」');
   if (collectTargetSong) closeCollectModal();
   else renderCollectModal();
 }
 function collectResultMessage(r) {
-  return r ? '已加入歌单' : '歌曲已在歌单中';
+  return r ? '已收藏到歌单' : '歌曲已在歌单中';
 }
 async function verifySongInPlaylist(pid, songId) {
   return !!(collectTargetSong && localPlaylistHasSong(pid, collectTargetSong));
@@ -18820,12 +18834,12 @@ async function addCollectTargetToPlaylist(pid) {
   if (!collectTargetSong) {
     closeCollectModal();
     selectLocalPlaylist(pid);
-    togglePlaylistPanel(true);
+    showLocalPlaylistPanelAutoHide();
     return;
   }
   if (collectBusy) return;
   if (localPlaylistHasSong(pid, collectTargetSong)) {
-    showToast('歌曲已在「' + playlist.name + '」中');
+    showToast('已收藏到「' + playlist.name + '」');
     return;
   }
   collectBusy = true;
@@ -18836,7 +18850,7 @@ async function addCollectTargetToPlaylist(pid) {
   setCollectBusyPid(pid, false);
   updateLikeButtons();
   renderCollectModal();
-  showToast(added ? '已加入「' + playlist.name + '」' : '歌曲已在歌单中');
+  showToast(added ? '已收藏到「' + playlist.name + '」' : '歌曲已在歌单中');
 }
 /**
  * 克隆歌曲对象并套用自定义封面。入队路径会批量调用，单首逻辑保持集中，避免各入口重复拼字段。
@@ -22012,13 +22026,14 @@ function queueItemHtml(row) {
   var actionsHtml = LOCAL_ONLY_MODE
     ? '<div class="qi-act">' +
       '<button class="' + (row.liked ? 'liked' : '') + '" onclick="event.stopPropagation();toggleLikeQueueIndex(' + i + ')" title="' + (row.liked ? '移出特别喜欢' : '加入特别喜欢') + '">' + heartIconSvg() + '</button>' +
+      '<button onclick="event.stopPropagation();collectQueueIndex(' + i + ')" title="选择收藏到任意歌单">' + playlistPlusIconSvg() + '</button>' +
       '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
       '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
       '</div>'
     : '<div class="qi-act">' +
       '<button class="' + (row.liked ? 'liked' : '') + '" onclick="event.stopPropagation();toggleLikeQueueIndex(' + i + ')" title="' + (row.liked ? '取消红心' : '红心喜欢') + '">' + heartIconSvg() + '</button>' +
       '<button class="queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
-      '<button onclick="event.stopPropagation();collectQueueIndex(' + i + ')" title="收藏到歌单">' + playlistPlusIconSvg() + '</button>' +
+      '<button onclick="event.stopPropagation();collectQueueIndex(' + i + ')" title="选择收藏到任意歌单">' + playlistPlusIconSvg() + '</button>' +
       '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
       '</div>';
   return '<div class="queue-item' + (row.current ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
@@ -22413,10 +22428,10 @@ function renderLocalLibraryPlaylistPanel(opts) {
     var imgTag = thumb ? '<img src="' + escHtml(thumb) + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="pl-cover-placeholder">♪</div>';
     var rowActions = '';
     if (selectedCustom) {
-      rowActions = '<div class="pl-card-actions"><button class="song-action-btn" type="button" data-local-collect-index="' + i + '" title="收藏到其他歌单">' + playlistPlusIconSvg() + '</button><button class="song-action-btn remove" type="button" data-local-playlist-remove-index="' + i + '" title="从当前歌单移除">×</button></div>';
+      rowActions = '<div class="pl-card-actions"><button class="song-action-btn" type="button" data-local-collect-index="' + i + '" title="收藏到其他任意歌单">' + playlistPlusIconSvg() + '</button><button class="song-action-btn remove" type="button" data-local-playlist-remove-index="' + i + '" title="从当前歌单移除">×</button></div>';
     } else {
       rowActions = '<div class="pl-card-actions">' +
-        '<button class="song-action-btn" type="button" data-local-collect-index="' + i + '" title="收藏到歌单">' + playlistPlusIconSvg() + '</button>' +
+        '<button class="song-action-btn" type="button" data-local-collect-index="' + i + '" title="选择收藏到任意歌单">' + playlistPlusIconSvg() + '</button>' +
         '<button class="song-action-btn' + (isSongLiked(song) ? ' liked' : '') + '" type="button" data-local-like-index="' + i + '" title="' + (isSongLiked(song) ? '移出特别喜欢' : '加入特别喜欢') + '">' + heartIconSvg() + '</button>' +
       '</div>';
     }
@@ -30579,7 +30594,9 @@ function scheduleMainRendererViewportRefresh(reason) {
 }
 window.addEventListener('resize', function(){
   scheduleMainRendererViewportRefresh('resize');
-  if (desktopRuntimeState.fullscreen || desktopFullscreenActive || document.fullscreenElement || document.body.classList.contains('desktop-fullscreen')) layoutFullscreenDiyZone();
+  var isFullscreen = !!(desktopRuntimeState.fullscreen || desktopFullscreenActive || document.fullscreenElement || document.body.classList.contains('desktop-fullscreen'));
+  if (isFullscreen) layoutFullscreenDiyZone();
+  if (typeof scheduleFullscreenTransitionReveal === 'function') scheduleFullscreenTransitionReveal(isFullscreen, 'resize');
 });
 document.addEventListener('keydown', function(e){
   if (isTypingTarget(e.target)) return;
@@ -32155,32 +32172,143 @@ scheduleDesktopOverlaySync(320);
 var desktopFullscreenActive = false;
 var documentFullscreenActive = false;
 var desktopWindowState = {};
+var fullscreenTransitionState = {
+  active: false,
+  token: 0,
+  expected: false,
+  startWidth: 0,
+  startHeight: 0,
+  actionTimer: 0,
+  revealTimer: 0,
+  cleanupTimer: 0
+};
+
+function prefersReducedFullscreenMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+function clearFullscreenTransitionTimer(name) {
+  var timer = fullscreenTransitionState[name];
+  if (timer) clearTimeout(timer);
+  fullscreenTransitionState[name] = 0;
+}
+function cleanupFullscreenTransition(token) {
+  if (token !== fullscreenTransitionState.token) return;
+  clearFullscreenTransitionTimer('actionTimer');
+  clearFullscreenTransitionTimer('revealTimer');
+  clearFullscreenTransitionTimer('cleanupTimer');
+  fullscreenTransitionState.active = false;
+  document.body.classList.remove(
+    'fullscreen-transitioning',
+    'fullscreen-transition-covered',
+    'fullscreen-transition-revealing',
+    'fullscreen-transition-enter',
+    'fullscreen-transition-exit'
+  );
+}
+function revealFullscreenTransition(token) {
+  if (!fullscreenTransitionState.active || token !== fullscreenTransitionState.token) return;
+  clearFullscreenTransitionTimer('revealTimer');
+  document.body.classList.add('fullscreen-transition-revealing');
+  document.body.classList.remove('fullscreen-transition-covered');
+  fullscreenTransitionState.cleanupTimer = setTimeout(function(){
+    cleanupFullscreenTransition(token);
+  }, prefersReducedFullscreenMotion() ? 80 : 240);
+}
+function scheduleFullscreenTransitionReveal(isFullscreen, reason) {
+  if (!fullscreenTransitionState.active || fullscreenTransitionState.expected !== !!isFullscreen) return;
+  var viewportChanged = Math.abs(innerWidth - fullscreenTransitionState.startWidth) > 2
+    || Math.abs(innerHeight - fullscreenTransitionState.startHeight) > 2;
+  clearFullscreenTransitionTimer('revealTimer');
+  fullscreenTransitionState.revealTimer = setTimeout(function(){
+    revealFullscreenTransition(fullscreenTransitionState.token);
+  }, prefersReducedFullscreenMotion() ? 30 : ((reason === 'resize' || viewportChanged) ? 70 : 150));
+}
+function beginFullscreenTransition(expectedFullscreen, action) {
+  if (fullscreenTransitionState.active || typeof action !== 'function') return false;
+  var token = ++fullscreenTransitionState.token;
+  fullscreenTransitionState.active = true;
+  fullscreenTransitionState.expected = !!expectedFullscreen;
+  fullscreenTransitionState.startWidth = innerWidth;
+  fullscreenTransitionState.startHeight = innerHeight;
+  document.body.classList.remove('fullscreen-transition-covered', 'fullscreen-transition-revealing', 'fullscreen-transition-enter', 'fullscreen-transition-exit');
+  document.body.classList.add('fullscreen-transitioning');
+  var transitionLayer = document.getElementById('fullscreen-transition-layer');
+  if (transitionLayer) void transitionLayer.offsetWidth;
+  else void document.body.offsetWidth;
+  document.body.classList.add(expectedFullscreen ? 'fullscreen-transition-enter' : 'fullscreen-transition-exit', 'fullscreen-transition-covered');
+  fullscreenTransitionState.actionTimer = setTimeout(function(){
+    fullscreenTransitionState.actionTimer = 0;
+    var result;
+    try {
+      result = action();
+    } catch (error) {
+      showToast('全屏切换失败');
+      revealFullscreenTransition(token);
+      return;
+    }
+    if (result && typeof result.catch === 'function') {
+      result.catch(function(){
+        showToast('全屏切换失败');
+        revealFullscreenTransition(token);
+      });
+    }
+    clearFullscreenTransitionTimer('revealTimer');
+    fullscreenTransitionState.revealTimer = setTimeout(function(){
+      revealFullscreenTransition(token);
+    }, prefersReducedFullscreenMotion() ? 90 : 480);
+  }, prefersReducedFullscreenMotion() ? 20 : 115);
+  return true;
+}
+function isFullscreenUiActive() {
+  return !!(desktopFullscreenActive
+    || document.fullscreenElement
+    || desktopWindowState.isFullScreen
+    || desktopWindowState.isNativeFullScreen
+    || desktopWindowState.isHtmlFullScreen
+    || desktopWindowState.isWindowFullScreen
+    || document.body.classList.contains('desktop-fullscreen'));
+}
 
 function toggleFullscreen() {
+  if (fullscreenTransitionState.active) return;
   var api = window.desktopWindow;
   if (api && api.isDesktop && typeof api.toggleFullscreen === 'function') {
     if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(function(){});
-      scheduleMainRendererViewportRefresh('document-fullscreen-exit');
+      beginFullscreenTransition(false, function(){
+        var result = document.exitFullscreen();
+        scheduleMainRendererViewportRefresh('document-fullscreen-exit');
+        return result;
+      });
       return;
     }
-    api.toggleFullscreen();
-    scheduleMainRendererViewportRefresh('desktop-fullscreen-toggle');
+    beginFullscreenTransition(!isFullscreenUiActive(), function(){
+      var result = api.toggleFullscreen();
+      scheduleMainRendererViewportRefresh('desktop-fullscreen-toggle');
+      return result;
+    });
     return;
   }
   if (api && api.isDesktop && desktopFullscreenActive && !document.fullscreenElement && typeof api.exitFullscreenWindowed === 'function') {
-    api.exitFullscreenWindowed();
-    scheduleMainRendererViewportRefresh('desktop-fullscreen-exit');
+    beginFullscreenTransition(false, function(){
+      var result = api.exitFullscreenWindowed();
+      scheduleMainRendererViewportRefresh('desktop-fullscreen-exit');
+      return result;
+    });
     return;
   }
   if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(function(){
-      if (api && api.isDesktop && typeof api.toggleFullscreen === 'function') api.toggleFullscreen();
-      else showToast('全屏被浏览器拒绝');
+    beginFullscreenTransition(true, function(){
+      return document.documentElement.requestFullscreen().catch(function(){
+        if (api && api.isDesktop && typeof api.toggleFullscreen === 'function') return api.toggleFullscreen();
+        throw new Error('FULLSCREEN_REJECTED');
+      });
     });
   } else {
-    document.exitFullscreen();
-    scheduleMainRendererViewportRefresh('document-fullscreen-exit');
+    beginFullscreenTransition(false, function(){
+      var result = document.exitFullscreen();
+      scheduleMainRendererViewportRefresh('document-fullscreen-exit');
+      return result;
+    });
   }
 }
 
@@ -32333,6 +32461,7 @@ function handleDesktopMiniPlayerCommand(payload) {
         setTimeout(function(){ clearPlayerControlFocusState('desktop-fullscreen-exit'); }, 80);
       }
     }
+    scheduleFullscreenTransitionReveal(isFullScreen, 'state');
     syncCursorAutoHideMode();
     if (maxBtn) {
       maxBtn.title = isFullScreen ? '退出全屏' : '全屏';

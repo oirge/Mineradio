@@ -1,5 +1,19 @@
 ﻿# 发布流程
 
+## v1.4.8 歌单定向收藏与全屏过渡
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.8`。
+- 当前播放队列、主曲库、歌手详情和自建歌单详情统一支持选择收藏到任意自建歌单；同一首歌曲可加入多个歌单，并明确显示目标歌单与已收藏状态。
+- 新建歌单时可直接把本次歌曲收藏进去；选择播放来源或收藏目标后，左侧歌单面板恢复自动隐藏，不再保持永久展开。
+- 歌单选择弹层使用独立深色玻璃背景与高对比文字，避免粒子背景穿透造成标题、数量和操作项看不清。
+- 全屏进入与退出增加暗场、轻缩放、状态/resize 稳定后回亮的过渡；系统启用“减少动态效果”时自动缩短动画。
+- 保留透明无边框窗口全屏边界保护、全屏退出入口、DIY 布局和 `%APPDATA%\\Mineradio-oirge` 用户数据，不清空音乐文件夹、歌单、播放会话或已有设置。
+- 新增全屏过渡回归并扩展歌单收藏测试；全量 Node 回归 `323/323`，关键 JavaScript 语法检查与 `git diff --check` 通过。
+- Windows x64 NSIS 发布只包含安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.4.8-Setup.exe` `101470154` 字节；`.blockmap` `105922` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `3c9166b116e1e37b81163fda6a902d98d25f6125b7be33c37c75666613cafb44`；`.blockmap` `7eecde29cacd54b9360ef5196e082b780e40bedf2901a8801bc6828b04b1d5ff`；`latest.yml` `ad884333d2e9656413835b15d8610cae35bd80ed2ee925359936ea7cdb943416`。
+- `latest.yml` 的 Setup SHA512：`EkF7Uh166g2QwhxQ8TY/rUu33sAfxB9BE8pc7VvDvSeOBAGq1zLjJaxRJr8zwPWjpXem3SZp4RknXIcuvQk+3w==`。
+- Release 标题使用 `Mineradio v1.4.8 歌单收藏与全屏过渡`。
+
 ## v1.4.7 多歌单与播放来源选择器
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.4.7`。
 - 新增多个独立本地歌单的完整 CRUD；收藏弹窗、左侧歌单页和 3D 歌单架统一读取同一份轻量歌曲引用。

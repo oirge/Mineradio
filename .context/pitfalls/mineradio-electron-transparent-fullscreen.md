@@ -29,3 +29,11 @@ Mineradio v1.4.5 的 `keepMainWindowInsideDisplay()` 只依据 `isFullScreen()` 
 
 - Electron BrowserWindow 官方文档：<https://www.electronjs.org/docs/latest/api/browser-window#winsetfullscreenflag>
 - Electron 43.4.0 Windows 实现：`electron/electron` 仓库 `shell/browser/native_window_views.cc`，`SetFullScreen()` 附近的无 `WS_THICKFRAME` 分支：<https://github.com/electron/electron/blob/v43.4.0/shell/browser/native_window_views.cc>
+
+## Smooth transition convention
+
+- Windows 透明无边框窗口的原生 `setFullScreen()` 边界变化无法可靠使用系统动画，直接调用会产生明显瞬移。
+- renderer 使用 `#fullscreen-transition-layer` 和 `fullscreen-transition-*` 状态：先淡暗并轻微缩放，再调用 IPC；收到窗口状态或 `resize` 后回亮。
+- 过渡必须在 IPC 前同步提交首帧样式，不能依赖可能被重负载延迟的 `requestAnimationFrame`。
+- 过渡只负责视觉遮罩，不得替代或延迟 `windowFullscreenActive`、`htmlFullscreenActive`、`setFullScreen()` 和普通窗口边界恢复逻辑。
+- 必须保留超时回收，避免 Electron 未发送预期状态事件时遮罩永久停留。

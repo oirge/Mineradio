@@ -310,6 +310,11 @@ test('本地模式显示歌单与红心入口并绑定特别喜欢事件', () =>
     'body.local-only-mode #user-btn,',
     'body.local-only-mode .tag-source.local',
   );
+  const sharedGlassRule = readFunctionSource(
+    css,
+    '/* Unified saved glass: keep panels in the same texture as the player bar. */',
+    '.icon-btn,#fx-fab,',
+  );
 
   assert.match(html, /id="tab-pl"[^>]*>歌单<\/button>/);
   assert.match(html, /id="playlist-source-btn"[^>]*onclick="toggleLocalPlaybackPlaylistSource\(event\)"/);
@@ -321,6 +326,10 @@ test('本地模式显示歌单与红心入口并绑定特别喜欢事件', () =>
   assert.match(css, /#bottom-bar #playlist-source-btn\.special:hover\{/);
   assert.match(css, /#bottom-bar #playlist-source-btn\.custom\{/);
   assert.match(css, /\.playlist-source-popover\{/);
+  assert.doesNotMatch(sharedGlassRule, /\.playlist-source-popover/);
+  assert.match(css, /\.playlist-source-popover\{[^}]*background:rgba\(6,7,11,\.965\)!important;/s);
+  assert.match(css, /html\.control-glass-svg-ok \.playlist-source-popover\{[^}]*brightness\(\.52\)!important;/s);
+  assert.match(css, /\.playlist-source-option-name\{color:rgba\(255,255,255,\.96\)/);
   assert.match(appSource, /closest\('\[data-special-liked-play\]'\)/);
   assert.match(appSource, /closest\('\[data-special-liked-playlist\]'\)/);
   assert.doesNotMatch(appSource, /data-special-liked-play="1"[^>]*onclick="event\.stopPropagation\(\)"/);

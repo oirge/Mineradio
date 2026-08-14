@@ -167,6 +167,99 @@ test('收藏弹窗、左侧歌单页和 3D 歌单架都接入独立歌单', () =
   assert.match(source, /appendOption\(SPECIAL_LIKED_PLAYLIST_ID, '特别喜欢'/);
   assert.match(source, /appendOption\(playlist\.id, playlist\.name/);
   assert.match(source, /selectLocalPlaybackPlaylistSource\(option\.getAttribute\('data-playback-playlist-kind'\)\)/);
+  assert.match(source, /function showLocalPlaylistPanelAutoHide\(\)/);
+  assert.match(source, /openAllLocalLibraryPlaylist\(\);\s*showLocalPlaylistPanelAutoHide\(\);/);
+  assert.match(source, /panel\.classList\.contains\('show'\) && !playlistPanelPinned\) showLocalPlaylistPanelAutoHide\(\);/);
   assert.match(html, /id="playlist-source-popover"/);
   assert.match(html, /id="playlist-source-list"[^>]*role="listbox"/);
+});
+
+test('歌单管理入口使用自动隐藏态而不是永久 show 状态', () => {
+  const source = readAppSource();
+  const helper = readFunctionBlock(
+    source,
+    'function showLocalPlaylistPanelAutoHide()',
+    'function selectLocalPlaybackPlaylistSource(kind)',
+  );
+  const classes = new Set(['show']);
+  const panel = {
+    dataset: {},
+    classList: {
+      remove: (name) => classes.delete(name),
+    },
+  };
+  const calls = [];
+  const context = {
+    document: { getElementById: (id) => id === 'playlist-panel' ? panel : null },
+    setPeek: (element, open, key) => calls.push([element, open, key]),
+  };
+
+  vm.runInNewContext(`${helper}\nthis.openAutoHide = showLocalPlaylistPanelAutoHide;`, context);
+  context.openAutoHide();
+
+  assert.equal(classes.has('show'), false);
+  assert.equal(panel.dataset.preserveTabOnOpen, '1');
+  assert.equal(calls.length, 1);
+  assert.strictEqual(calls[0][0], panel);
+  assert.equal(calls[0][1], true);
+  assert.equal(calls[0][2], 'pl');
+});
+
+test('本地当前队列可像特别喜欢一样收藏到独立歌单', () => {
+  const source = readAppSource();
+  const renderer = readFunctionBlock(
+    source,
+    'function queueItemHtml(row)',
+    'function growQueuePanelRenderLimit(amount)',
+  );
+  const context = {
+    LOCAL_ONLY_MODE: true,
+    escHtml: (value) => String(value || ''),
+    heartIconSvg: () => '<heart></heart>',
+    playlistPlusIconSvg: () => '<playlist-plus></playlist-plus>',
+  };
+
+  vm.runInNewContext(`${renderer}\nthis.renderQueueItem = queueItemHtml;`, context);
+  const html = context.renderQueueItem({
+    song: { type: 'local' },
+    index: 3,
+    thumb: '',
+    subtitle: '本地文件',
+    artist: '',
+    album: '',
+    liked: false,
+    current: false,
+    name: '测试歌曲',
+  });
+
+  assert.match(html, /toggleLikeQueueIndex\(3\)/);
+  assert.match(html, /collectQueueIndex\(3\)/);
+  assert.ok(html.indexOf('toggleLikeQueueIndex(3)') < html.indexOf('collectQueueIndex(3)'));
+});
+
+test('同一首歌曲可自定义收藏到任意多个独立歌单', () => {
+  const { context } = createContext();
+  const song = { type: 'local', localKey: 'shared', localPath: 'D:\\Music\\Shared.flac', name: 'Shared' };
+  context.localLibrarySongs = [song];
+  const playlistA = context.api.createLocalPlaylist('夜路');
+  const playlistB = context.api.createLocalPlaylist('专注');
+
+  assert.equal(context.api.addSongToLocalPlaylist(playlistA.id, song), true);
+  assert.equal(context.api.addSongToLocalPlaylist(playlistB.id, song), true);
+  assert.equal(context.api.localPlaylistHasSong(playlistA.id, song), true);
+  assert.equal(context.api.localPlaylistHasSong(playlistB.id, song), true);
+});
+
+test('收藏目标明确显示具体歌单名称', () => {
+  const source = readAppSource();
+  const helper = readFunctionBlock(
+    source,
+    'function collectPlaylistActionTitle(playlist, song, contained)',
+    'function renderCollectModal()',
+  );
+  const context = { String };
+
+  vm.runInNewContext(`${helper}\nthis.actionTitle = collectPlaylistActionTitle;`, context);
+  assert.equal(context.actionTitle({ name: '夜路专注' }, { type: 'local' }, false), '收藏到「夜路专注」');
+  assert.equal(context.actionTitle({ name: '夜路专注' }, { type: 'local' }, true), '已收藏到「夜路专注」');
 });
