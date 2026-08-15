@@ -1,5 +1,18 @@
 ﻿# 发布流程
 
+## v1.5.4 Wallpaper Engine 生命周期与窗口重建修复
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.4`，确保已安装 `1.5.3` 的客户端能够发现新版。
+- 每次主窗口成功创建后集中调用 `wallpaperEngineBridge.attachWindow(mainWindow)`，旧窗口关闭后新窗口继续具备 Wallpaper Engine 的最小化、隐藏、恢复、移动、缩放、全屏和关闭 hook。
+- 主窗口 renderer 崩溃、主 frame 导航、主 frame 不可恢复加载失败和窗口关闭都会停止当前原生 Scene，并清理 DWM helper、指针中继、静音重申定时器和捕获授权。
+- `pagehide` 对离开前持有的 session 发定向最佳努力停止请求；刷新成功时等待旧 renderer 清理完成，避免误停新 session 或重复启动 Scene。
+- 新增 renderer 崩溃、导航、刷新失败、窗口关闭、旧窗口所有权、并发清理和窗口重建 hook 生命周期测试。
+- 全量 Node 回归 `360/360`；主进程、Wallpaper Engine bridge、runtime、前端脚本和 `server.js` 语法检查，以及 `git diff --check` 均通过。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.5.4-Setup.exe` `101475967` 字节；`.blockmap` `105818` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `7ce4620340c14ac96ca537fa4bf5023cf1d9d31dcbe50e350b3ecbff4a726d2c`；`.blockmap` `3c432a017a74fae34b8187a074d438f98683e03a13f9b576416bc248f3b73bd1`；`latest.yml` `8c8876435329edd40c0b89782e59db574ca64c9c4aa70f51a947949b366efa29`。
+- `latest.yml` 的 Setup SHA512：`ZLpOOjFbwM41VNb9iX3By5PDbVoOBk45nk8aOWBiJva1CdDuyEzgHY9PmMuakjd8VZPk20atsVmm8wxEeU+TZQ==`。
+- 发布标题使用 `Mineradio v1.5.4 Wallpaper Engine 生命周期与窗口重建修复`。
+
 ## v1.5.3 桌面歌词拖动原生竞态修复
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.3`，确保已安装 `1.5.2` 的客户端能够发现新版。
 - 在实际运行的 `D:\Mineradio\Mineradio.exe` v1.5.2 上启用桌面歌词并采集鼠标、主窗口和歌词窗口原生坐标；确认主窗口拖动期间相对鼠标存在最高约 `410px` 的单帧突变。

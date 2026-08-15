@@ -3590,6 +3590,7 @@ async function createWindow() {
     setTimeout(() => applyWindowedBounds(mainWindow), 50);
   });
 
+  wallpaperEngineBridge.attachWindow(mainWindow);
   await mainWindow.loadURL(`http://127.0.0.1:${port}`);
 }
 
@@ -3639,7 +3640,6 @@ if (!gotSingleInstanceLock) {
     powerMonitor.on('unlock-screen', handleMiniPlayerScreenUnlock);
     createTray();
     await createWindow();
-    wallpaperEngineBridge.attachWindow(mainWindow);
   });
 
   app.on('activate', () => {

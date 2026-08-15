@@ -40,6 +40,8 @@ function createWallpaperEngineBridge(options = {}) {
   let hostVisibilityOperation = 0;
   let hostVisibilityStopPromise = null;
   let windowHooksInstalled = false;
+  let attachedWindow = null;
+  let rendererCleanupPromise = null;
   let ipcInstalled = false;
 
   function mainWindow() {
@@ -249,14 +251,41 @@ function createWallpaperEngineBridge(options = {}) {
     hostBoundsOperation += 1;
   }
 
-  function stopRuntimeForRenderer(reason = '') {
+  function stopRuntimeForRenderer(reason = '', options = {}) {
+    const rendererLifecycle = options && options.rendererLifecycle === true;
     captureOperation += 1;
+    if (rendererLifecycle) {
+      glassCaptureOperation += 1;
+      capturePreparationOperation = 0;
+    }
     cancelHostBoundsRestart();
     clearCaptureGrant();
-    return runtime.stop().catch((error) => {
-      console.warn('[Wallpaper Engine] renderer cleanup failed:', reason || 'renderer-reset', error && error.message || error);
-      return { ok: false, stopped: false, error: String(error && (error.message || error.name) || error || 'WALLPAPER_ENGINE_STOP_FAILED') };
-    });
+    if (rendererCleanupPromise) return rendererCleanupPromise;
+    if (rendererLifecycle) {
+      if (hostVisibilityResumeTimer) clearTimeout(hostVisibilityResumeTimer);
+      hostVisibilityResumeTimer = null;
+      hostVisibilitySuspended = false;
+      hostVisibilityResumePending = false;
+      hostVisibilityOperation += 1;
+    }
+    const cleanup = Promise.resolve()
+      .then(() => rendererLifecycle ? runtime.stop({ forceHelperCleanup: true }) : runtime.stop())
+      .then((result) => {
+        if (rendererLifecycle && result && result.stopped !== true && (result.active || runtime.pending)) {
+          return runtime.stop({ forceHelperCleanup: true });
+        }
+        return result;
+      })
+      .catch((error) => {
+        console.warn('[Wallpaper Engine] renderer cleanup failed:', reason || 'renderer-reset', error && error.message || error);
+        return { ok: false, stopped: false, error: String(error && (error.message || error.name) || error || 'WALLPAPER_ENGINE_STOP_FAILED') };
+      })
+      .finally(() => {
+        if (rendererLifecycle && rendererCleanupPromise === cleanup) rendererCleanupPromise = null;
+        if (rendererLifecycle) hostVisibilityStopPromise = null;
+      });
+    if (rendererLifecycle) rendererCleanupPromise = cleanup;
+    return cleanup;
   }
 
   function finishVisibleHostResume(win) {
@@ -499,6 +528,9 @@ function createWallpaperEngineBridge(options = {}) {
       let startedSessionId = '';
       try {
         if (!isTrustedIpc(event)) return { ok: false, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
+        const pendingRendererCleanup = rendererCleanupPromise;
+        if (pendingRendererCleanup) await pendingRendererCleanup;
+        if (!isTrustedIpc(event)) return { ok: false, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
         operation = ++captureOperation;
         if (hostVisibilitySuspended) return { ok: false, error: 'WALLPAPER_ENGINE_HOST_SUSPENDED' };
         const win = mainWindow();
@@ -695,12 +727,33 @@ function createWallpaperEngineBridge(options = {}) {
         if (!isTrustedIpc(event)) return { ok: false, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
         const sessionId = String(payload && payload.sessionId || '');
         const stopAll = payload && payload.all === true || !sessionId;
+        const rendererLifecycle = payload && payload.rendererLifecycle === true;
+        const runtimeStatus = runtime.getStatus();
+        const pendingLifecycleSession = rendererLifecycle && sessionId
+          && !!(runtime.pending && runtime.pending.sessionId === sessionId);
+        const activeLifecycleSession = rendererLifecycle && sessionId
+          && !!(runtimeStatus && runtimeStatus.active === true && runtimeStatus.sessionId === sessionId);
+        const currentLifecycleSession = pendingLifecycleSession || activeLifecycleSession;
+        const differentPendingSession = !!(runtime.pending && runtime.pending.sessionId !== sessionId);
+        if (rendererLifecycle && captureGrant && captureGrant.sessionId === sessionId) clearCaptureGrant(sessionId);
         if (stopAll) {
           captureOperation += 1;
+          glassCaptureOperation += 1;
+          capturePreparationOperation = 0;
           cancelHostBoundsRestart();
           clearCaptureGrant();
+        } else if (currentLifecycleSession) {
+          if (pendingLifecycleSession || !differentPendingSession) {
+            captureOperation += 1;
+            glassCaptureOperation += 1;
+            capturePreparationOperation = 0;
+            cancelHostBoundsRestart();
+          }
         }
-        const result = await runtime.stop(stopAll ? '' : sessionId);
+        const stopOptions = { forceHelperCleanup: rendererLifecycle };
+        const result = stopAll
+          ? await runtime.stop(stopOptions)
+          : await runtime.stop({ ...stopOptions, sessionId });
         const current = runtime.getStatus();
         if (!stopAll && (!current.active || (captureGrant && captureGrant.sessionId === sessionId))) {
           clearCaptureGrant(sessionId);
@@ -713,8 +766,61 @@ function createWallpaperEngineBridge(options = {}) {
   }
 
   function attachWindow(win) {
-    if (!win || win.isDestroyed() || windowHooksInstalled) return;
+    if (!win || win.isDestroyed() || attachedWindow === win) return;
+    if (attachedWindow && !attachedWindow.isDestroyed()) return;
+    if (attachedWindow && attachedWindow.isDestroyed()) {
+      Promise.resolve(stopRuntimeForRenderer('window-replaced', { rendererLifecycle: true })).catch(() => {});
+    }
+    attachedWindow = win;
     windowHooksInstalled = true;
+    const isCurrentWindow = () => attachedWindow === win && !win.isDestroyed();
+    let mainFrameNavigationSerial = 0;
+    let cleanedNavigationSerial = -1;
+    const requestRendererCleanup = (reason) => {
+      if (!isCurrentWindow()) return;
+      Promise.resolve(stopRuntimeForRenderer(reason, { rendererLifecycle: true })).catch(() => {});
+    };
+    const requestMainFrameNavigationCleanup = (url) => {
+      if (cleanedNavigationSerial === mainFrameNavigationSerial) return;
+      cleanedNavigationSerial = mainFrameNavigationSerial;
+      requestRendererCleanup(`main-frame-navigate:${String(url || '').slice(0, 160)}`);
+    };
+    if (win.webContents && typeof win.webContents.on === 'function') {
+      win.webContents.on('render-process-gone', (_event, details = {}) => {
+        requestRendererCleanup(`renderer-gone:${details && details.reason || 'unknown'}`);
+      });
+      win.webContents.on('did-start-navigation', (_event, urlOrDetails, _isInPlace, isMainFrame) => {
+        const details = urlOrDetails && typeof urlOrDetails === 'object' ? urlOrDetails : null;
+        const fromMainFrame = details && Object.prototype.hasOwnProperty.call(details, 'isMainFrame')
+          ? details.isMainFrame === true
+          : isMainFrame !== false;
+        if (fromMainFrame) mainFrameNavigationSerial += 1;
+      });
+      win.webContents.on('did-navigate', (_event, url) => {
+        requestMainFrameNavigationCleanup(url);
+      });
+      win.webContents.on('did-frame-navigate', (_event, urlOrDetails, _httpResponseCode, _httpStatusText, isMainFrame) => {
+        const details = urlOrDetails && typeof urlOrDetails === 'object' ? urlOrDetails : null;
+        const fromMainFrame = details && Object.prototype.hasOwnProperty.call(details, 'isMainFrame')
+          ? details.isMainFrame === true
+          : isMainFrame !== false;
+        if (!fromMainFrame) return;
+        const url = details ? details.url : urlOrDetails;
+        requestMainFrameNavigationCleanup(url);
+      });
+      win.webContents.on('did-fail-load', (_event, errorCodeOrDetails, errorDescription, _validatedURL, isMainFrame) => {
+        const details = errorCodeOrDetails && typeof errorCodeOrDetails === 'object' ? errorCodeOrDetails : null;
+        const errorCode = details ? details.errorCode : errorCodeOrDetails;
+        const fromMainFrame = details && Object.prototype.hasOwnProperty.call(details, 'isMainFrame')
+          ? details.isMainFrame === true
+          : isMainFrame !== false;
+        if (!fromMainFrame || Number(errorCode) === -3) return;
+        const description = details ? details.errorDescription : errorDescription;
+        if (cleanedNavigationSerial === mainFrameNavigationSerial) return;
+        cleanedNavigationSerial = mainFrameNavigationSerial;
+        requestRendererCleanup(`main-frame-load-failed:${String(errorCode || 'unknown')}:${String(description || '').slice(0, 120)}`);
+      });
+    }
     win.on('minimize', () => suspendForHiddenHost(win, 'minimize'));
     win.on('restore', () => resumeForVisibleHost(win, 'restore'));
     win.on('show', () => resumeForVisibleHost(win, 'show'));
@@ -726,8 +832,11 @@ function createWallpaperEngineBridge(options = {}) {
     win.on('enter-html-full-screen', () => setTimeout(() => scheduleHostBoundsRestart(win, 'enter-html-full-screen'), 40));
     win.on('leave-html-full-screen', () => scheduleHostBoundsRestart(win, 'leave-html-full-screen'));
     win.on('closed', () => {
+      if (attachedWindow !== win) return;
+      const cleanup = stopRuntimeForRenderer('window-closed', { rendererLifecycle: true });
+      attachedWindow = null;
       windowHooksInstalled = false;
-      stopRuntimeForRenderer('window-closed');
+      Promise.resolve(cleanup).catch(() => {});
     });
   }
 
@@ -736,10 +845,8 @@ function createWallpaperEngineBridge(options = {}) {
   }
 
   async function dispose() {
-    cancelHostBoundsRestart();
-    clearCaptureGrant();
     if (typeof library.dispose === 'function') library.dispose();
-    return runtime.stop().catch(() => ({ ok: false }));
+    return stopRuntimeForRenderer('dispose', { rendererLifecycle: true }).catch(() => ({ ok: false }));
   }
 
   function configureSessionPermissions() {
@@ -813,6 +920,7 @@ function createWallpaperEngineBridge(options = {}) {
     registerIpc,
     configureSessionPermissions,
     attachWindow,
+    stopRuntimeForRenderer,
     installProtocol,
     dispose,
     scheduleHostBoundsRestart,

@@ -3939,10 +3939,13 @@ class WallpaperEngineRuntime {
     }
   }
 
-  async stop(expectedSessionId = '') {
+  async stop(expectedSessionId = '', options = {}) {
     if (expectedSessionId && typeof expectedSessionId === 'object') {
+      options = expectedSessionId;
       expectedSessionId = expectedSessionId.sessionId || '';
     }
+    if (!options || typeof options !== 'object') options = {};
+    const forceHelperCleanup = options.forceHelperCleanup === true;
     expectedSessionId = String(expectedSessionId || '');
     const matchesPending = !!(this.pending && this.pending.sessionId === expectedSessionId);
     const matchesActive = !!(this.active && this.active.sessionId === expectedSessionId);
@@ -3973,9 +3976,18 @@ class WallpaperEngineRuntime {
     for (const session of sessions) {
       const closed = await this._closeSession(session);
       const safelyCancelled = !session.launched && !session.initialOpenPromise;
+      if (forceHelperCleanup) {
+        this._stopSessionPointerRelay(session);
+        this._stopSessionDwmSurface(session);
+        await this._waitForSessionDwmSurfaceStop(session);
+        this._clearSessionMuteReassertions(session);
+      }
       if (closed || safelyCancelled) {
         if (this.pending === session) this.pending = null;
         if (this.active === session) this.active = null;
+      } else if (forceHelperCleanup) {
+        allStopped = false;
+        session.stopping = false;
       } else {
         allStopped = false;
         session.stopping = false;

@@ -619,11 +619,15 @@ window.__mineradioSyncWallpaperEngineCaptureFrameRate = syncWallpaperEngineCaptu
 
 function stopWallpaperEngineNativeSession(sessionId) {
   var api = wallpaperEngineDesktopApi();
+  var options = arguments.length > 1 && arguments[1] && typeof arguments[1] === 'object' ? arguments[1] : {};
   var stopAll = arguments.length === 0;
-  var expected = String(sessionId || wallpaperEngineNativeSessionId || '');
+  var expected = String(sessionId || (stopAll ? wallpaperEngineNativeSessionId : '') || '');
+  if (!stopAll && !/^[a-f0-9]{24}$/i.test(expected)) return Promise.resolve({ ok: true, skipped: true });
   if (stopAll || !sessionId || expected === wallpaperEngineNativeSessionId) wallpaperEngineNativeSessionId = '';
   if (!api || typeof api.stopWallpaperEngineScene !== 'function') return Promise.resolve({ ok: true });
-  return Promise.resolve(api.stopWallpaperEngineScene({ sessionId: expected, all: stopAll })).catch(function () {
+  var payload = { sessionId: expected, all: stopAll };
+  if (options.rendererLifecycle === true) payload.rendererLifecycle = true;
+  return Promise.resolve(api.stopWallpaperEngineScene(payload)).catch(function () {
     return { ok: false };
   });
 }
@@ -2382,6 +2386,7 @@ function bindWallpaperEngineLibraryEvents() {
       }
     });
     window.addEventListener('pagehide', function () {
+      var pagehideSessionId = String(wallpaperEngineNativeSessionId || '');
       if (typeof wallpaperEngineHostBoundsUnsubscribe === 'function') {
         try { wallpaperEngineHostBoundsUnsubscribe(); } catch (e) { }
         wallpaperEngineHostBoundsUnsubscribe = null;
@@ -2390,6 +2395,11 @@ function bindWallpaperEngineLibraryEvents() {
       cancelWallpaperEngineVideoRetry();
       cancelWallpaperEngineFirstFrameWait();
       cancelWallpaperEnginePointerActivity();
+      if (/^[a-f0-9]{24}$/i.test(pagehideSessionId)) {
+        try {
+          Promise.resolve(stopWallpaperEngineNativeSession(pagehideSessionId, { rendererLifecycle: true })).catch(function () { });
+        } catch (e2) { }
+      }
       ++wallpaperEngineLayerToken;
       stopWallpaperEngineCaptureStream();
       clearWallpaperEngineFreezeFrame(true);
