@@ -45,6 +45,8 @@
       border-color: transparent;
       background: transparent;
       box-shadow: none;
+      -webkit-app-region: no-drag;
+      pointer-events: none;
     }
     .mini-shell[data-collapsed="true"] .meta,
     .mini-shell[data-collapsed="true"] .transport,
@@ -78,6 +80,8 @@
       height: 54px;
       margin: 0;
       border-radius: var(--mini-radius);
+      pointer-events: auto;
+      -webkit-app-region: no-drag;
       transform: scale(calc(1 + var(--mini-pulse) * 0.085));
     }
     .cover {
@@ -220,6 +224,10 @@
       letter-spacing: 0;
       z-index: 2;
     }
+    .mini-shell[data-expand-direction="left"] .desktop-lyrics-toggle {
+      left: 5px;
+      right: auto;
+    }
     .desktop-lyrics-toggle:hover:not(:disabled) {
       border-color: transparent;
       background: transparent;
@@ -313,6 +321,9 @@
     var suppressCoverClick = false;
     var suppressCoverClickTimer = 0;
     var receivedExternalState = false;
+    var COVER_HOT_REGION_PADDING = 6;
+    var pointerInCoverHotRegion = false;
+    var pointerPassthrough = null;
 
     /**
      * 忽略窗口移动 IPC 失败，避免拖动结束后留下未处理的 rejected promise。
@@ -387,6 +398,73 @@
     }
 
     /**
+     * 判断收回态是否应该让出窗口鼠标事件。收回后只有封面热区需要命中，
+     * 其余透明区域必须交还桌面，不能继续吞掉点击或被误拖动。
+     * @returns {boolean} 需要鼠标穿透时返回 true。
+     */
+    function shouldPassPointerThrough() {
+      if (!hoverExpandEnabled()) return false;
+      if (miniShell.getAttribute('data-collapsed') !== 'true') return false;
+      if (coverDrag) return false;
+      return !pointerInCoverHotRegion;
+    }
+
+    /**
+     * 把窗口鼠标穿透状态同步给主进程，状态未变化时不重复发送 IPC。
+     * @returns {void}
+     */
+    function syncPointerPassthrough() {
+      var next = shouldPassPointerThrough();
+      if (next === pointerPassthrough) return;
+      pointerPassthrough = next;
+      if (!window.miniPlayer || typeof window.miniPlayer.setPointerPassthrough !== 'function') return;
+      window.miniPlayer.setPointerPassthrough(next).catch(ignoreMiniPlayerMoveFailure);
+    }
+
+    /**
+     * 判断转发坐标是否落在封面热区内。穿透期间只有转发的 mousemove 坐标可用，
+     * 不能依赖封面自身的命中测试。
+     * @param {object} event 鼠标或指针事件。
+     * @returns {boolean} 命中封面热区时返回 true。
+     */
+    function pointerInCoverHotRegionAt(event) {
+      if (!event || typeof coverWrap.getBoundingClientRect !== 'function') return false;
+      var x = Number(event.clientX);
+      var y = Number(event.clientY);
+      if (!isFinite(x) || !isFinite(y)) return false;
+      var rect = coverWrap.getBoundingClientRect();
+      if (!rect || rect.right <= rect.left || rect.bottom <= rect.top) return false;
+      return x >= rect.left - COVER_HOT_REGION_PADDING
+        && x <= rect.right + COVER_HOT_REGION_PADDING
+        && y >= rect.top - COVER_HOT_REGION_PADDING
+        && y <= rect.bottom + COVER_HOT_REGION_PADDING;
+    }
+
+    /**
+     * 用转发坐标维护封面热区命中状态：进入热区先恢复窗口交互并展开，离开热区恢复穿透。
+     * @param {object} event 鼠标或指针事件。
+     * @returns {void}
+     */
+    function trackCoverHotRegion(event) {
+      var inside = pointerInCoverHotRegionAt(event);
+      if (inside === pointerInCoverHotRegion) return;
+      pointerInCoverHotRegion = inside;
+      syncPointerPassthrough();
+      if (inside) expandFromInteraction();
+      else if (!coverDrag && !miniShell.matches(':hover')) scheduleCollapse();
+    }
+
+    /**
+     * 指针离开窗口后清除热区标记，收回态立即恢复鼠标穿透。
+     * @returns {void}
+     */
+    function clearCoverHotRegion() {
+      if (!pointerInCoverHotRegion) return;
+      pointerInCoverHotRegion = false;
+      syncPointerPassthrough();
+    }
+
+    /**
      * 切换迷你播放器的完整面板与封面收回态。
      * @param {boolean} next 是否显示完整面板。
      * @param {boolean} immediate 是否跳过本次过渡动画。
@@ -401,6 +479,7 @@
       coverWrap.setAttribute('aria-label', hoverExpandEnabled()
         ? (next ? '迷你播放器已展开' : '展开迷你播放器')
         : '完整迷你播放器');
+      syncPointerPassthrough();
       if (immediate) {
         window.requestAnimationFrame(function(){ miniShell.removeAttribute('data-instant'); });
       }
@@ -475,6 +554,7 @@
         lastY: screenY,
         moved: false,
       };
+      syncPointerPassthrough();
       if (typeof coverWrap.setPointerCapture === 'function' && event.pointerId !== undefined) {
         try { coverWrap.setPointerCapture(event.pointerId); } catch (_error) {}
       }
@@ -521,6 +601,7 @@
         moveMiniPlayerWindowBy(0, 0, true);
         suppressCoverClickOnce();
       }
+      syncPointerPassthrough();
       if (!miniShell.matches(':hover')) scheduleCollapse();
     }
 
@@ -632,6 +713,8 @@
     });
     miniShell.addEventListener('focusin', expandFromInteraction);
     miniShell.addEventListener('focusout', scheduleCollapse);
+    document.addEventListener('mousemove', trackCoverHotRegion);
+    document.addEventListener('mouseleave', clearCoverHotRegion);
     document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });
     playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
     document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });

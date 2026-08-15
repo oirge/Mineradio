@@ -395,6 +395,60 @@ function testMiniPlayerCoverMoveIpcMovesCurrentWindow() {
   assert.deepEqual(calls, { persists: 1, sends: 3 });
 }
 
+/**
+ * 验证收回态鼠标穿透只由当前迷你窗口驱动，且重复上报不重复设置窗口。
+ * @returns {void}
+ */
+function testMiniPlayerPointerPassthroughGate() {
+  const calls = [];
+  const sender = {};
+  const win = {
+    /** @returns {boolean} 假迷你窗口仍有效。 */
+    isDestroyed() { return false; },
+    webContents: sender,
+    /** @param {boolean} ignore 是否让出鼠标事件。 @param {{forward?:boolean}=} options 转发选项。 @returns {void} 记录窗口命中设置。 */
+    setIgnoreMouseEvents(ignore, options) { calls.push({ ignore, forward: options ? options.forward === true : false }); },
+  };
+  const context = {
+    miniPlayerWindow: win,
+    miniPlayerPointerPassthrough: false,
+  };
+  vm.runInNewContext(
+    extractIpcHandler(readMainSource(), 'handleMiniPlayerPointerPassthrough', 'mineradio-mini-player-set-pointer-passthrough')
+      + '\nthis.setPassthrough = handleMiniPlayerPointerPassthrough;'
+      + '\nthis.readPassthrough = function(){ return miniPlayerPointerPassthrough; };',
+    context,
+  );
+
+  assert.equal(context.setPassthrough({ sender }, true).ok, true);
+  assert.deepEqual(calls, [{ ignore: true, forward: true }]);
+  assert.equal(context.readPassthrough(), true);
+
+  assert.equal(context.setPassthrough({ sender }, true).ignored, true);
+  assert.deepEqual(calls, [{ ignore: true, forward: true }]);
+
+  assert.equal(context.setPassthrough({ sender }, false).ok, true);
+  assert.deepEqual(calls, [{ ignore: true, forward: true }, { ignore: false, forward: false }]);
+  assert.equal(context.readPassthrough(), false);
+
+  assert.equal(context.setPassthrough({ sender: {} }, true).ignored, true);
+  assert.equal(calls.length, 2);
+  assert.equal(context.readPassthrough(), false);
+}
+
+/**
+ * 验证迷你播放器穿透通道在 preload 暴露，并随窗口生命周期重置缓存。
+ * @returns {void}
+ */
+function testMiniPlayerPointerPassthroughWiring() {
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'mini-player-preload.js'), 'utf8');
+  const main = readMainSource();
+
+  assert.match(preload, /setPointerPassthrough:[\s\S]*?'mineradio-mini-player-set-pointer-passthrough'/);
+  assert.match(main, /function createMiniPlayerWindow\(\)[\s\S]*?miniPlayerPointerPassthrough = false;/);
+  assert.match(main, /function destroyMiniPlayerWindowInstance\(win\)[\s\S]*?miniPlayerPointerPassthrough = false;/);
+}
+
 test('暂停会话接入迷你播放器显示门禁', testPausedRecoverySessionBlocksMiniPlayerVisibility);
 test('暂停会话阻止迷你 renderer 崩溃恢复任务', testPausedRecoverySessionBlocksCrashRecovery);
 test('禁用状态缓存接入迷你播放器主进程 IPC', testDisabledStateCacheBlocksMainProcessPatch);
@@ -402,3 +456,5 @@ test('销毁迷你窗口同步释放主进程封面缓存', testDestroyingMiniPl
 test('创建迷你窗口后补齐状态且旧关闭事件不越权', testCreatingMiniPlayerWindowStartsFreshResidency);
 test('标准迷你播放器按临近屏幕边缘切换展开方向', testMiniPlayerExpansionDirectionFollowsNearbyScreenEdge);
 test('封面拖动 IPC 仅在结束时保存当前窗口坐标', testMiniPlayerCoverMoveIpcMovesCurrentWindow);
+test('收回态鼠标穿透 IPC 只服务当前迷你窗口', testMiniPlayerPointerPassthroughGate);
+test('鼠标穿透通道在 preload 暴露并随窗口生命周期重置', testMiniPlayerPointerPassthroughWiring);

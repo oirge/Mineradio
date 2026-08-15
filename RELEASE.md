@@ -1,5 +1,18 @@
 ﻿# 发布流程
 
+## v1.5.6 标准迷你播放器收回态穿透与桌面歌词按钮镜像修复
+- 正式发布版本从 `1.5.5` 提升为 `1.5.6`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.5` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
+- 标准迷你播放器收回态改用 `setIgnoreMouseEvents(true, { forward: true })` 把鼠标事件交还桌面；CSS `pointer-events` 管不住透明窗口命中，原完整面板位置不再吞掉桌面点击与拖动。
+- 穿透期间 renderer 依靠转发的 `mousemove` 与 `coverWrap` 矩形（外扩 `6px`）判定封面热区；指针回到热区立即通过 `mineradio-mini-player-set-pointer-passthrough` 收回鼠标事件并展开完整面板。
+- 穿透通道只接受当前迷你窗口 sender 并对重复值去重；封面拖动期间和关闭“自动收回”时强制保持窗口交互，窗口创建 / 销毁 / 关闭都重置主进程穿透缓存。标准 BrowserWindow 继续固定 `360 × 84`，不通过缩放窗口实现收回。
+- 桌面歌词 `词` 按钮随展开方向镜像：向左展开时用 `left: 5px; right: auto;` 移动到左下角，与返回按钮镜像方式一致。
+- 全量 Node 回归 `372/372`；新增收回态穿透、封面热区恢复、穿透 IPC sender 门禁与生命周期重置、桌面歌词按钮镜像测试，版本一致性、发布工作流标签与资产清单测试，以及关键 JavaScript 语法检查与 `git diff --check` 均通过。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.5.6-Setup.exe` `101477362` 字节；`.blockmap` `105997` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `022fe2a36b410f315f7f0da3437e80e25ebfc3b140c8ef3756d31581c9d3ef19`；`.blockmap` `b0da61626594e2c9d3ab8059888b2ee4ce2fb2defd0c94fbe644871b136dde53`；`latest.yml` `8ac4d639ed432e263ed11aae91ef7db869bd7f0fa3a8922ed517a2102d985fa3`；SHA256 清单 `6ce17fbe9162952b293f6f5d1341da38f68240f8884827400fbf86e76dc8bd1d`。
+- `latest.yml` 的 Setup SHA512：`rM/11nPqX2g2CucOyW4YmRhw+3qGg3gEjdjkV8Zc6cHPtdfif5cpNlg0U63lLm9tP0bzY3vZIkOEIcDkwLeeQA==`。
+- 发布标题使用 `Mineradio v1.5.6 标准迷你播放器收回态穿透与桌面歌词按钮镜像修复`。
+
 ## v1.5.5 迷你播放器封面律动、贴边展开与拖动修复
 - 正式发布版本从 `1.5.4` 提升为 `1.5.5`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.4` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
 - 标准迷你播放器封面律动恢复挂起的 `AudioContext` 音频分析，优先使用低平滑 `beatAnalyser`，并加入短期能量基线与峰谷对比；隐藏主窗口播放时仍由迷你播放器独立采样，低能量音乐不再长期显示固定脉冲。

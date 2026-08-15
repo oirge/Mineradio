@@ -15,6 +15,15 @@ contextBridge.exposeInMainWorld('miniPlayer', {
     Number(dy) || 0,
     commit === true,
   ),
+  /**
+   * 请求主进程在收回态让出窗口鼠标事件，只保留封面热区参与命中。
+   * @param {boolean} passthrough 是否让出窗口鼠标事件。
+   * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 主进程处理结果。
+   */
+  setPointerPassthrough: (passthrough) => ipcRenderer.invoke(
+    'mineradio-mini-player-set-pointer-passthrough',
+    passthrough === true,
+  ),
   onState: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload || {});

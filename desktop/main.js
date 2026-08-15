@@ -133,6 +133,7 @@ let miniPlayerEnabled = true;
 let miniPlayerActive = false;
 let miniPlayerMode = 'standard';
 let miniPlayerUserMovePending = false;
+let miniPlayerPointerPassthrough = false;
 let miniPlayerLastSentState = null;
 let miniPlayerRecoveryTimer = null;
 let miniPlayerRecreateTimer = null;
@@ -2572,6 +2573,7 @@ function destroyMiniPlayerWindowInstance(win) {
   if (miniPlayerWindow === win) {
     miniPlayerWindow = null;
     miniPlayerUserMovePending = false;
+    miniPlayerPointerPassthrough = false;
     miniPlayerStateCache.setResident(false);
   }
   miniPlayerLastSentState = null;
@@ -2654,6 +2656,8 @@ function createMiniPlayerWindow() {
   if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) return miniPlayerWindow;
   miniPlayerWindow = null;
   miniPlayerUserMovePending = false;
+  // 新窗口默认参与命中，穿透缓存必须重置，否则新 renderer 的首次上报会被当成重复请求丢掉。
+  miniPlayerPointerPassthrough = false;
   miniPlayerStateCache.setResident(false);
   const mode = normalizeMiniPlayerMode(miniPlayerMode);
   const bounds = clampMiniPlayerBounds(miniPlayerUserBoundsByMode[mode] || miniPlayerDefaultBounds(mode), mode);
@@ -2740,6 +2744,7 @@ function createMiniPlayerWindow() {
     if (wasCurrent) {
       miniPlayerWindow = null;
       miniPlayerUserMovePending = false;
+      miniPlayerPointerPassthrough = false;
       miniPlayerLastSentState = null;
       miniPlayerStateCache.setResident(false);
     }
@@ -2957,6 +2962,33 @@ function handleMiniPlayerMoveBy(event, dx, dy, commit) {
 }
 
 ipcMain.handle('mineradio-mini-player-move-by', handleMiniPlayerMoveBy);
+
+/**
+ * 按标准迷你播放器收回态让出窗口鼠标事件。收回后窗口仍是固定的 360 × 84 透明窗口，
+ * 只有封面热区需要参与命中；其余透明区域必须交还桌面，不能吞掉点击或被误拖动。
+ * 只有当前迷你播放器 renderer 可以调用，旧窗口或伪造 sender 直接忽略。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {boolean} passthrough 是否让出窗口鼠标事件。
+ * @returns {{ok:boolean,ignored?:boolean,error?:string}} 穿透设置结果。
+ */
+function handleMiniPlayerPointerPassthrough(event, passthrough) {
+  if (!event || !miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {
+    return { ok: true, ignored: true };
+  }
+  const next = passthrough === true;
+  if (miniPlayerPointerPassthrough === next) return { ok: true, ignored: true };
+  try {
+    // forward 保留鼠标移动转发，穿透期间 renderer 仍能靠转发坐标发现指针回到封面热区。
+    if (next) miniPlayerWindow.setIgnoreMouseEvents(true, { forward: true });
+    else miniPlayerWindow.setIgnoreMouseEvents(false);
+    miniPlayerPointerPassthrough = next;
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message || 'MINI_PLAYER_PASSTHROUGH_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-mini-player-set-pointer-passthrough', handleMiniPlayerPointerPassthrough);
 
 ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {

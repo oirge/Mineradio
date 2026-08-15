@@ -41,7 +41,7 @@ function extractFunction(source, name) {
 
 /**
  * 构造标准迷你播放器的无界面 DOM 与 IPC 测试环境。
- * @returns {{nodes:Record<string, object>, commands:string[], moves:Array<{dx:number,dy:number,commit:boolean}>, applyState:Function, flushTimers:Function}} 可驱动的渲染器测试环境。
+ * @returns {{nodes:Record<string, object>, commands:string[], moves:Array<{dx:number,dy:number,commit:boolean}>, passthroughs:boolean[], document:object, applyState:Function, flushTimers:Function}} 可驱动的渲染器测试环境。
  */
 function createMiniPlayerHarness() {
   const html = read('public/mini-player.html');
@@ -50,6 +50,7 @@ function createMiniPlayerHarness() {
   const listeners = new Map();
   const commands = [];
   const moves = [];
+  const passthroughs = [];
   let nextTimerId = 1;
 
   /**
@@ -81,7 +82,10 @@ function createMiniPlayerHarness() {
       hover: false,
       focusWithin: false,
       src: '',
+      rect: { left: 0, top: 0, right: 0, bottom: 0 },
       blur() { node.focusWithin = false; },
+      /** @returns {{left:number, top:number, right:number, bottom:number}} 当前假节点的视口矩形。 */
+      getBoundingClientRect() { return node.rect; },
       /** @returns {void} 假节点不需要真实指针捕获。 */
       setPointerCapture() {},
       /** @returns {void} 假节点不需要真实指针捕获释放。 */
@@ -120,12 +124,16 @@ function createMiniPlayerHarness() {
     restore: createNode('restore'),
   };
   nodes['mini-shell'].setAttribute('data-collapsed', 'true');
+  // 收回态标准窗口为 360 × 84，封面停在右端并留出 6px 窗体内边距。
+  nodes['cover-wrap'].rect = { left: 300, top: 15, right: 354, bottom: 69 };
 
+  const documentNode = createNode('document');
   let stateHandler = null;
   const context = {
     document: {
       body: createNode('body'),
       getElementById(id) { return nodes[id]; },
+      addEventListener: documentNode.addEventListener,
     },
     window: {
       requestAnimationFrame(callback) { callback(); },
@@ -136,6 +144,10 @@ function createMiniPlayerHarness() {
         },
         moveBy(dx, dy, commit) {
           moves.push({ dx, dy, commit: commit === true });
+          return Promise.resolve({ ok: true });
+        },
+        setPointerPassthrough(passthrough) {
+          passthroughs.push(passthrough === true);
           return Promise.resolve({ ok: true });
         },
         onState(callback) { stateHandler = callback; },
@@ -155,6 +167,8 @@ function createMiniPlayerHarness() {
     nodes,
     commands,
     moves,
+    passthroughs,
+    document: documentNode,
     applyState(patch) { stateHandler(patch); },
     flushTimers() {
       const pending = [...timers.values()];
@@ -191,6 +205,12 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   assert.match(html, /id="restore"[^>]+title="返回主界面"/);
   assert.match(html, /\.restore \{[\s\S]*?align-self: flex-start;[\s\S]*?margin: -1px -1px 0 0;/);
   assert.match(html, /id="desktop-lyrics"[^>]+title="开启桌面歌词"/);
+  assert.match(html, /\.mini-shell\[data-collapsed="true"\]\s*\{[\s\S]*?-webkit-app-region:\s*no-drag;[\s\S]*?pointer-events:\s*none;/);
+  assert.match(html, /\.mini-shell\[data-collapsed="true"\]\s+\.cover\s*\{[\s\S]*?pointer-events:\s*auto;[\s\S]*?-webkit-app-region:\s*no-drag;/);
+  assert.match(html, /\.mini-shell\[data-expand-direction="left"\]\s+\.desktop-lyrics-toggle\s*\{[\s\S]*?left:\s*5px;[\s\S]*?right:\s*auto;/);
+  assert.match(html, /document\.addEventListener\('mousemove', trackCoverHotRegion\)/);
+  assert.match(html, /document\.addEventListener\('mouseleave', clearCoverHotRegion\)/);
+  assert.match(html, /window\.miniPlayer\.setPointerPassthrough\(next\)/);
 });
 
 test('标准迷你播放器把低频脉冲映射为可见封面缩放和光晕', () => {
@@ -295,6 +315,58 @@ test('歌曲封面拖动移动窗口，短按仍保持展开行为', () => {
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
   coverWrap.dispatch('click', { preventDefault() { prevented += 1; } });
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
+});
+
+test('收回态把窗口鼠标事件交还桌面，指针回到封面热区立即恢复交互', () => {
+  const harness = createMiniPlayerHarness();
+  const shell = harness.nodes['mini-shell'];
+  const coverWrap = harness.nodes['cover-wrap'];
+
+  assert.equal(shell.getAttribute('data-collapsed'), 'true');
+  assert.deepEqual(harness.passthroughs, [true]);
+
+  // 收回后的空白区域不再参与命中：坐标落在完整面板旧位置也保持穿透。
+  harness.document.dispatch('mousemove', { clientX: 40, clientY: 40 });
+  assert.deepEqual(harness.passthroughs, [true]);
+  assert.equal(shell.getAttribute('data-collapsed'), 'true');
+
+  harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
+  assert.deepEqual(harness.passthroughs, [true, false]);
+  assert.equal(shell.getAttribute('data-collapsed'), 'false');
+
+  // 展开后整块面板都要参与命中，指针移到控制区不能重新穿透。
+  shell.hover = true;
+  harness.document.dispatch('mousemove', { clientX: 40, clientY: 40 });
+  assert.deepEqual(harness.passthroughs, [true, false]);
+  assert.equal(shell.getAttribute('data-collapsed'), 'false');
+
+  shell.hover = false;
+  coverWrap.hover = false;
+  shell.dispatch('mouseleave');
+  harness.flushTimers();
+  assert.equal(shell.getAttribute('data-collapsed'), 'true');
+  assert.deepEqual(harness.passthroughs, [true, false, true]);
+
+  // 指针整体离开窗口后热区标记必须清零，收回态继续保持穿透。
+  harness.document.dispatch('mouseleave', {});
+  assert.deepEqual(harness.passthroughs, [true, false, true]);
+});
+
+test('封面拖动期间保持窗口交互，拖动结束后按热区恢复穿透', () => {
+  const harness = createMiniPlayerHarness();
+  const coverWrap = harness.nodes['cover-wrap'];
+
+  harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
+  assert.deepEqual(harness.passthroughs, [true, false]);
+
+  coverWrap.dispatch('pointerdown', { button: 0, pointerId: 3, screenX: 200, screenY: 200 });
+  // 拖动时窗口跟随指针移动，热区坐标短暂失配也不能让出鼠标事件。
+  harness.document.dispatch('mousemove', { clientX: 10, clientY: 10 });
+  assert.deepEqual(harness.passthroughs, [true, false]);
+
+  coverWrap.dispatch('pointerup', { pointerId: 3 });
+  harness.flushTimers();
+  assert.deepEqual(harness.passthroughs, [true, false, true]);
 });
 
 test('关闭悬停展开后始终保持完整迷你播放器', () => {

@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.5.5` 基于 GitHub `v1.5.4`，已修复标准迷你播放器封面律动、显示器边缘展开和封面拖动，并保留 Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.5`。
+- 当前源码检查点：`v1.5.6` 基于 GitHub `v1.5.5`，已修复标准迷你播放器收回态鼠标穿透和桌面歌词按钮左下角镜像，并保留封面律动、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.6`。
 - 最近正式安装包 Release 基线：`v1.5.4`（2026-08-15，Wallpaper Engine 生命周期与窗口重建及迷你播放器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -33,6 +33,20 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.5.6 标准迷你播放器收回态穿透与桌面歌词按钮镜像修复
+
+- 日期：2026-08-16。
+- 正式发布版本从 `1.5.5` 提升为 `1.5.6`；已安装 `1.5.5` 及更早版本的客户端可通过 `latest.yml` 自动发现更新。
+- 涉及文件：`public/mini-player.html`、`desktop/mini-player-preload.js`、`desktop/main.js`、`.context/conventions/mineradio-mini-player-collapse.md`、`tests/mini-player-visual.test.js`、`tests/mini-player-main-gates.test.js`、`tests/main-window-navigation-ipc-trust.test.js`。
+- 关键结论：透明无边框窗口的收回态穿透只能靠 `setIgnoreMouseEvents(true, { forward: true })`，CSS `pointer-events: none` 只影响页面内命中，窗口本身仍会吞掉桌面点击。保留 `forward` 是为了让 renderer 在穿透期间仍能收到 `mousemove`，靠坐标判断指针是否回到封面热区。
+- 热区判定用 `coverWrap.getBoundingClientRect()` 外扩 `6px`；`6px` 是给 IPC 往返留出的余量，缩小会在快速移入时丢第一次点击。
+- 不要再改坏的边界：封面拖动期间必须强制关闭穿透（窗口跟着指针移动，热区坐标会瞬时失配）；关闭“自动收回”后面板常展开，也不能穿透；窗口创建 / 销毁 / 关闭必须重置 `miniPlayerPointerPassthrough`，否则新 renderer 的首次上报会被去重吃掉。
+- 穿透通道 `mineradio-mini-player-set-pointer-passthrough` 属于迷你窗口自持通道，已加入 `tests/main-window-navigation-ipc-trust.test.js` 的 `overlayOwnedChannels` 清单，靠 `event.sender !== miniPlayerWindow.webContents` 自校验，不走 `trustedMainFrameHandler`。
+- 桌面歌词 `词` 按钮向左展开时用 `left: 5px; right: auto;` 镜像到左下角。
+- 全量 Node 回归 `372/372`；`node --check` 与 `git diff --check` 通过。
+- `v1.5.6` Windows x64 NSIS 资产：安装器 `101477362` 字节 / SHA256 `022fe2a36b410f315f7f0da3437e80e25ebfc3b140c8ef3756d31581c9d3ef19`；blockmap `105997` 字节 / `b0da61626594e2c9d3ab8059888b2ee4ce2fb2defd0c94fbe644871b136dde53`；`latest.yml` `347` 字节 / `8ac4d639ed432e263ed11aae91ef7db869bd7f0fa3a8922ed517a2102d985fa3`；SHA256 清单 `270` 字节 / `6ce17fbe9162952b293f6f5d1341da38f68240f8884827400fbf86e76dc8bd1d`。
+- `latest.yml` 的 Setup SHA512：`rM/11nPqX2g2CucOyW4YmRhw+3qGg3gEjdjkV8Zc6cHPtdfif5cpNlg0U63lLm9tP0bzY3vZIkOEIcDkwLeeQA==`。
 
 ## v1.5.5 迷你播放器封面律动、贴边展开与封面拖动修复
 
