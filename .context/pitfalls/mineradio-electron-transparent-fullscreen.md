@@ -49,3 +49,5 @@ Mineradio v1.4.5 的 `keepMainWindowInsideDisplay()` 只依据 `isFullScreen()` 
 - Windows 原生拖动期间会连续触发 `move`；禁止在这个高频事件内调用可能执行 `setBounds()` 的 `keepMainWindowInsideDisplay()`，否则会打断系统拖动并让主窗口瞬间跳位。
 - `move` 只负责合并发送窗口状态；用户松开鼠标后由 Windows 的 `moved` 事件单次执行显示器工作区纠偏。
 - 显示器参数变化不是用户拖动，`display-metrics-changed` 仍可立即调用 `keepMainWindowInsideDisplay()`，全屏状态门禁继续生效。
+- 用户拖动结束的 `moved` 纠偏必须保留释放位置：`keepMainWindowInsideDisplay(win, { allowPartial: true })` 仅在窗口在当前工作区几乎完全不可见（可见宽度 < `min(width,160)` 或可见高度 < `min(height,96)`，与桌面歌词 `boundsHasReachableArea` 同一规则）时才夹回位置；贴边、跨屏、任务栏遮挡等常见释放位置不得在松手瞬间被 `setBounds` 拉回跳位。
+- 显示器参数变化（`display-metrics-changed`）与显示器插拔（`display-added` / `display-removed`）不是用户拖动，仍调用不带 `allowPartial` 的全量 `keepMainWindowInsideDisplay(mainWindow)`，把窗口夹回新工作区。

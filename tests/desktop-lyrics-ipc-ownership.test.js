@@ -77,7 +77,7 @@ function clampNumber(value, _min, _max, fallback) {
  * @returns {Promise<void>}
  */
 async function testDesktopLyricsIpcSenderOwnership() {
-  const mainSender = {};
+  const mainSender = { getURL: () => 'http://127.0.0.1:3000/index.html' };
   const currentSender = {};
   const staleSender = {};
   const mainWindow = new FakeWindow(mainSender);
@@ -117,6 +117,8 @@ async function testDesktopLyricsIpcSenderOwnership() {
     ipcMain,
     mainWindow,
     desktopLyricsWindow,
+    URL,
+    mainServerPort: 3000,
     desktopLyricsStateCache: stateCache,
     desktopLyricsPointerCapture: false,
     desktopLyricsHotBounds: null,

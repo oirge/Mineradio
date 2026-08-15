@@ -171,6 +171,127 @@ test('副屏工作区越界时夹回窗口位置而不强制居中', () => {
   assert.deepEqual(applied, [{ x: 0, y: 80, width: 960, height: 540 }]);
 });
 
+test('主窗口拖动结束时允许窗口部分越出工作区，不再夹回跳位', () => {
+  const source = readMainSource();
+  const display = {
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1032 },
+  };
+  const applied = [];
+  const win = {
+    isDestroyed: () => false,
+    isFullScreen: () => false,
+    isMaximized: () => false,
+    getBounds: () => ({ x: 480, y: 560, width: 960, height: 540 }),
+    setMinimumSize: () => {},
+    setBounds: (next) => applied.push({ ...next }),
+  };
+  const scope = {
+    screen: {
+      getDisplayMatching: () => display,
+      getPrimaryDisplay: () => display,
+    },
+    displayWorkArea: (value) => value.workArea,
+    windowedMinimumSize: () => ({ width: 960, height: 540 }),
+    getWindowedBounds: () => ({ x: 480, y: 246, width: 960, height: 540 }),
+    windowFullscreenActive: false,
+    htmlFullscreenActive: false,
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'boundsHasReachableArea', 'windowedMinimumSize')
+      + extractFunction(source, 'keepMainWindowInsideDisplay', 'exitFullscreenToWindow')
+      + '\nthis.keep = keepMainWindowInsideDisplay;',
+    scope,
+  );
+
+  // 底部 32px 压到任务栏上方工作区之外，仍有足够可见面积：松手后不得 setBounds。
+  scope.keep(win, { allowPartial: true });
+  assert.deepEqual(applied, []);
+
+  // 相同越界量但未开启宽容模式（显示器参数变化路径）仍会夹回。
+  scope.keep(win, {});
+  assert.deepEqual(applied, [{ x: 480, y: 492, width: 960, height: 540 }]);
+});
+
+test('主窗口拖动结束时几乎完全不可见仍会夹回可见区域', () => {
+  const source = readMainSource();
+  const display = {
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1032 },
+  };
+  const applied = [];
+  const win = {
+    isDestroyed: () => false,
+    isFullScreen: () => false,
+    isMaximized: () => false,
+    getBounds: () => ({ x: 2000, y: 1200, width: 960, height: 540 }),
+    setMinimumSize: () => {},
+    setBounds: (next) => applied.push({ ...next }),
+  };
+  const scope = {
+    screen: {
+      getDisplayMatching: () => display,
+      getPrimaryDisplay: () => display,
+    },
+    displayWorkArea: (value) => value.workArea,
+    windowedMinimumSize: () => ({ width: 960, height: 540 }),
+    getWindowedBounds: () => ({ x: 480, y: 246, width: 960, height: 540 }),
+    windowFullscreenActive: false,
+    htmlFullscreenActive: false,
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'boundsHasReachableArea', 'windowedMinimumSize')
+      + extractFunction(source, 'keepMainWindowInsideDisplay', 'exitFullscreenToWindow')
+      + '\nthis.keep = keepMainWindowInsideDisplay;',
+    scope,
+  );
+
+  scope.keep(win, { allowPartial: true });
+
+  assert.deepEqual(applied, [{ x: 960, y: 492, width: 960, height: 540 }]);
+});
+
+test('主窗口拖动结束时超大窗口仍会按工作区缩放校正', () => {
+  const source = readMainSource();
+  const context = createTransparentFullscreenWindow();
+  const scope = {
+    screen: {
+      getDisplayMatching: () => context.display,
+      getPrimaryDisplay: () => context.display,
+    },
+    displayWorkArea: (value) => value.workArea,
+    windowedMinimumSize: () => ({ width: 960, height: 540 }),
+    getWindowedBounds: () => ({ x: 480, y: 246, width: 960, height: 540 }),
+    windowFullscreenActive: false,
+    htmlFullscreenActive: false,
+    console,
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'boundsHasReachableArea', 'windowedMinimumSize')
+      + extractFunction(source, 'keepMainWindowInsideDisplay', 'exitFullscreenToWindow')
+      + '\nthis.keep = keepMainWindowInsideDisplay;',
+    scope,
+  );
+
+  scope.keep(context.win, { allowPartial: true });
+
+  assert.equal(context.calls.setMinimumSize, 1);
+  assert.equal(context.calls.setBounds, 1);
+});
+
+test('显示器参数变化与拔出显示器仍执行全量纠偏', () => {
+  const source = readMainSource();
+  const metricsHandler = source.match(/screen\.on\('display-metrics-changed', \(\) => \{([\s\S]*?)\n    \}\);/);
+  const addedHandler = source.match(/screen\.on\('display-added', \(\) => \{([\s\S]*?)\n    \}\);/);
+  const removedHandler = source.match(/screen\.on\('display-removed', \(\) => \{([\s\S]*?)\n    \}\);/);
+  assert.ok(metricsHandler, '缺少 display-metrics-changed 事件');
+  assert.ok(addedHandler, '缺少 display-added 事件');
+  assert.ok(removedHandler, '缺少 display-removed 事件');
+  assert.match(metricsHandler[1], /keepMainWindowInsideDisplay\(mainWindow\)/);
+  assert.match(addedHandler[1], /keepMainWindowInsideDisplay\(mainWindow\)/);
+  assert.match(removedHandler[1], /keepMainWindowInsideDisplay\(mainWindow\)/);
+});
+
 test('主窗口拖动过程中不重设边界，拖动结束后再纠偏', () => {
   const source = readMainSource();
   const willMoveHandler = source.match(/mainWindow\.on\('will-move', \(\) => \{([\s\S]*?)\n  \}\);/);
@@ -183,7 +304,7 @@ test('主窗口拖动过程中不重设边界，拖动结束后再纠偏', () =>
   assert.match(willMoveHandler[1], /beginMainWindowUserMove\(\)/);
   assert.doesNotMatch(moveHandler[1], /keepMainWindowInsideDisplay/);
   assert.match(moveHandler[1], /scheduleWindowStateSend\(mainWindow\)/);
-  assert.match(movedHandler[1], /keepMainWindowInsideDisplay\(mainWindow\)/);
+  assert.match(movedHandler[1], /keepMainWindowInsideDisplay\(mainWindow, \{ allowPartial: true \}\)/);
   assert.match(movedHandler[1], /scheduleMainWindowMoveRelease\(\)/);
   assert.match(movedHandler[1], /scheduleWindowStateSend\(mainWindow\)/);
 });

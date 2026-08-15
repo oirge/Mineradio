@@ -36,7 +36,7 @@ test('desktop lyrics teardown does not overwrite the saved enabled preference', 
   assert.match(enabledHandlerSource, /else \{\s*closeDesktopLyricsWindow\(\);\s*\}/);
 
   const restartHandlerStart = mainSource.indexOf("ipcMain.handle('mineradio-restart-app'");
-  const restartHandlerEnd = mainSource.indexOf('\n});', restartHandlerStart) + 4;
+  const restartHandlerEnd = mainSource.indexOf('\n}));', restartHandlerStart) + 5;
   const restartHandlerSource = mainSource.slice(restartHandlerStart, restartHandlerEnd);
   assert.match(restartHandlerSource, /closeOverlayWindows\(\);[\s\S]*app\.relaunch\(\);[\s\S]*app\.exit\(0\);/);
 
@@ -134,6 +134,7 @@ test('desktop lyrics preserves a reachable partially offscreen drag position acr
 
   vm.runInNewContext(
     readFunction('desktopLyricsBoundsHasReachableArea')
+      + '\n' + readFunction('boundsHasReachableArea')
       + '\n' + readFunction('constrainDesktopLyricsBounds')
       + '\n' + readFunction('desktopLyricsBoundsSignature')
       + '\n' + readFunction('rememberDesktopLyricsBounds')

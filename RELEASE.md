@@ -1,5 +1,17 @@
 ﻿# 发布流程
 
+## v1.5.2 本地文件授权与窗口拖动修复
+- 更新 package.json、package-lock.json 和前端 APP_VERSION 为 1.5.2，确保已安装 1.5.1 的客户端能够发现新版。
+- 主窗口导航与 IPC 信任边界加固：统一可信主 frame 校验，外部页面、非可信 frame 与非法 sender 全部拒绝；本地曲库授权由主进程维护并保留重启恢复能力。
+- 修复开启桌面歌词后拖动主窗口松手瞬间被工作区边界拉回跳位：拖动结束宽容纠偏，只有窗口几乎完全不可见才夹回，显示器参数变化与插拔仍全量纠偏。
+- 升级继续使用 %APPDATA%\Mineradio-oirge 与既有曲库、播放会话、特别喜欢、自建歌单和 DIY 设置，不执行破坏性清空或强制重新导入。
+- 全量 Node 回归 345/345、关键 JavaScript 语法检查与 git diff --check 通过。
+- Windows x64 NSIS 发布继续只包含安装器、.blockmap、latest.yml 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：Mineradio-1.5.2-Setup.exe 101475712 字节；.blockmap 105928 字节；latest.yml 347 字节；SHA256 清单 273 字节。
+- SHA256：安装器 907f3f45f2a26cf2344666e8df14d68d1d712e8f8d11f5b1d07c2d121756fe7a；.blockmap ccb059c3bb744e4c9964f2592922b8f1ecd12fe695fe8576fa7e5a35170fb226；latest.yml 7129e5cce239c5a7902052f1156676ecc81ce41c4f5775984cb3eab101c8f9e9；SHA256 清单 ba47def9ac8bc21f5a34615db69abca921e24ed026d86135a690bddd6121ade0。
+- latest.yml 的 Setup SHA512：QYv376lguIqpVOnVx4zjku0uJ7WLSpdN4UYoh6b5r2JmWJ3YI50NPn48u0HwxOqoWkUc+w0CMnDxQBZQJ9Ih1w==。
+- Release 标题使用 Mineradio v1.5.2 本地文件授权与窗口拖动修复。
+
 ## v1.5.1 软件内更新自动选择最快线路
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.1`，确保已安装 `1.5.0` 的客户端能够发现新版。
 - 完整安装包和快速补丁在正式下载前共用后端并行测速：每条候选线路最多读取 `128 KiB`，统一等待窗口为 `4 秒`，按包含连接耗时的实测吞吐量降序选择。

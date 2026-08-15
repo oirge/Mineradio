@@ -1267,6 +1267,26 @@ function displayWorkArea(display) {
   };
 }
 
+/**
+ * 判断窗口边界是否在当前显示器区域内保留了足够的可见面积。
+ * 用户拖动结束时允许窗口部分留在工作区外（贴边、跨屏、任务栏遮挡），
+ * 只有几乎完全不可见时才需要把窗口夹回可见区域。
+ * @param {{x:number,y:number,width:number,height:number}} bounds 窗口边界。
+ * @param {{x:number,y:number,width:number,height:number}} area 显示器可见区域。
+ * @returns {boolean} 是否仍有可交互的可见面积。
+ */
+function boundsHasReachableArea(bounds, area) {
+  if (!bounds || !area) return false;
+  const left = Number(bounds.x);
+  const top = Number(bounds.y);
+  const width = Number(bounds.width);
+  const height = Number(bounds.height);
+  if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
+  const visibleWidth = Math.max(0, Math.min(left + width, area.x + area.width) - Math.max(left, area.x));
+  const visibleHeight = Math.max(0, Math.min(top + height, area.y + area.height) - Math.max(top, area.y));
+  return visibleWidth >= Math.min(width, 160) && visibleHeight >= Math.min(height, 96);
+}
+
 function windowedMinimumSize(display) {
   const area = displayWorkArea(display);
   return {
@@ -1336,7 +1356,7 @@ function applyWindowedBounds(win) {
  * @returns {void}
  * @see https://www.electronjs.org/docs/latest/api/browser-window#winsetfullscreenflag
  */
-function keepMainWindowInsideDisplay(win) {
+function keepMainWindowInsideDisplay(win, options = {}) {
   if (!win || win.isDestroyed() || win.isFullScreen()
     || windowFullscreenActive || htmlFullscreenActive || win.isMaximized()) return;
   const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
@@ -1350,6 +1370,10 @@ function keepMainWindowInsideDisplay(win) {
     || bounds.x + bounds.width > area.x + area.width
     || bounds.y + bounds.height > area.y + area.height;
   if (!needsSizeCorrection && !needsPositionCorrection) return;
+  // 用户拖动结束时保留贴边、跨屏或任务栏遮挡的释放位置，不再在松手瞬间夹回导致跳位；
+  // 仅当窗口在当前工作区几乎完全不可见时才夹回位置；显示器参数变化仍走全量纠偏。
+  if (needsPositionCorrection && !needsSizeCorrection && options.allowPartial === true
+    && boundsHasReachableArea(bounds, area)) return;
 
   const nextBounds = needsSizeCorrection ? getWindowedBounds(win) : { ...bounds };
   const maxX = Math.max(area.x, area.x + area.width - nextBounds.width);
@@ -1474,15 +1498,7 @@ function desktopLyricsBoundsSignature(bounds) {
 }
 
 function desktopLyricsBoundsHasReachableArea(bounds, area) {
-  if (!bounds || !area) return false;
-  const left = Number(bounds.x);
-  const top = Number(bounds.y);
-  const width = Number(bounds.width);
-  const height = Number(bounds.height);
-  if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
-  const visibleWidth = Math.max(0, Math.min(left + width, area.x + area.width) - Math.max(left, area.x));
-  const visibleHeight = Math.max(0, Math.min(top + height, area.y + area.height) - Math.max(top, area.y));
-  return visibleWidth >= Math.min(width, 160) && visibleHeight >= Math.min(height, 96);
+  return boundsHasReachableArea(bounds, area);
 }
 
 function savedDesktopLyricsBounds(value) {
@@ -2770,31 +2786,31 @@ function closeOverlayWindows() {
   closeMiniPlayerWindow();
 }
 
-ipcMain.handle('desktop-window-minimize', (event) => {
+ipcMain.handle('desktop-window-minimize', trustedMainFrameHandler((event) => {
   getSenderWindow(event)?.minimize();
-});
+}));
 
-ipcMain.handle('desktop-window-toggle-maximize', (event) => {
+ipcMain.handle('desktop-window-toggle-maximize', trustedMainFrameHandler((event) => {
   toggleFullscreen(getSenderWindow(event));
-});
+}));
 
-ipcMain.handle('desktop-window-toggle-fullscreen', (event) => {
+ipcMain.handle('desktop-window-toggle-fullscreen', trustedMainFrameHandler((event) => {
   toggleFullscreen(getSenderWindow(event));
-});
+}));
 
-ipcMain.handle('desktop-window-exit-fullscreen-windowed', (event) => {
+ipcMain.handle('desktop-window-exit-fullscreen-windowed', trustedMainFrameHandler((event) => {
   exitFullscreenToWindow(getSenderWindow(event));
-});
+}));
 
-ipcMain.handle('desktop-window-get-state', (event) => {
+ipcMain.handle('desktop-window-get-state', trustedMainFrameHandler((event) => {
   return getWindowState(getSenderWindow(event));
-});
+}));
 
-ipcMain.handle('desktop-window-close', (event) => {
+ipcMain.handle('desktop-window-close', trustedMainFrameHandler((event) => {
   getSenderWindow(event)?.close();
-});
+}));
 
-ipcMain.handle('mineradio-tray-get-settings', () => {
+ipcMain.handle('mineradio-tray-get-settings', trustedMainFrameHandler(() => {
   return {
     ok: true,
     closeToTray: closeToTrayEnabled,
@@ -2804,28 +2820,28 @@ ipcMain.handle('mineradio-tray-get-settings', () => {
     startup: isStartupEnabled(),
     startupEnabled: isStartupEnabled(),
   };
-});
+}));
 
-ipcMain.handle('mineradio-tray-set-close-to-tray', (_event, enabled) => {
+ipcMain.handle('mineradio-tray-set-close-to-tray', trustedMainFrameHandler((_event, enabled) => {
   closeToTrayEnabled = !!enabled;
   writeDesktopShellSettings({ closeToTray: closeToTrayEnabled });
   refreshTrayMenu();
   return { ok: true, closeToTray: closeToTrayEnabled };
-});
+}));
 
-ipcMain.handle('mineradio-startup-set-enabled', (_event, enabled) => {
+ipcMain.handle('mineradio-startup-set-enabled', trustedMainFrameHandler((_event, enabled) => {
   const result = setStartupEnabled(!!enabled);
   refreshTrayMenu();
   return result;
-});
+}));
 
-ipcMain.handle('mineradio-mini-player-set-enabled', (_event, enabled) => {
+ipcMain.handle('mineradio-mini-player-set-enabled', trustedMainFrameHandler((_event, enabled) => {
   return setMiniPlayerEnabled(enabled);
-});
+}));
 
-ipcMain.handle('mineradio-mini-player-set-mode', (_event, mode) => {
+ipcMain.handle('mineradio-mini-player-set-mode', trustedMainFrameHandler((_event, mode) => {
   return setMiniPlayerMode(mode);
-});
+}));
 
 /**
  * 接收主 renderer 的迷你播放器状态补丁；禁用期间确认但不保留补丁。
@@ -2842,7 +2858,7 @@ function handleMiniPlayerStateUpdate(event, payload) {
   return { ok: true };
 }
 
-ipcMain.handle('mineradio-mini-player-update', handleMiniPlayerStateUpdate);
+ipcMain.handle('mineradio-mini-player-update', trustedMainFrameHandler(handleMiniPlayerStateUpdate));
 
 ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {
@@ -2856,11 +2872,11 @@ ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   return { ok: true };
 });
 
-ipcMain.handle('mineradio-hotkeys-configure-global', (_event, bindings) => {
+ipcMain.handle('mineradio-hotkeys-configure-global', trustedMainFrameHandler((_event, bindings) => {
   return configureMineradioGlobalHotkeys(bindings);
-});
+}));
 
-ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
+ipcMain.handle('mineradio-export-json-file', trustedMainFrameHandler(async (event, payload = {}) => {
   try {
     const owner = getSenderWindow(event);
     const defaultName = String(payload.defaultName || 'mineradio-export.json').replace(/[\\/:*?"<>|]+/g, '-');
@@ -2876,7 +2892,7 @@ ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
   } catch (e) {
     return { ok: false, error: e.message || 'EXPORT_FAILED' };
   }
-});
+}));
 
 /**
  * 导入 Mineradio 存档 JSON 文本。与本地文件/图片/请求体等读取路径一致，先校验大小上限，
@@ -2884,7 +2900,7 @@ ipcMain.handle('mineradio-export-json-file', async (event, payload = {}) => {
  * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件，用于定位对话框宿主窗口。
  * @returns {Promise<{ok:boolean, filePath?:string, text?:string, canceled?:boolean, error?:string}>} 导入结果。
  */
-ipcMain.handle('mineradio-import-json-file', async (event) => {
+ipcMain.handle('mineradio-import-json-file', trustedMainFrameHandler(async (event) => {
   try {
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
@@ -2902,22 +2918,26 @@ ipcMain.handle('mineradio-import-json-file', async (event) => {
   } catch (e) {
     return { ok: false, error: e.message || 'IMPORT_FAILED' };
   }
-});
+}));
 
 ipcMain.on('mineradio-ui-state-read-sync', (event) => {
+  if (!isTrustedMainFrameSender(event)) {
+    event.returnValue = {};
+    return;
+  }
   event.returnValue = readDesktopUiState().values || {};
 });
 
-ipcMain.handle('mineradio-ui-state-write', async (_event, patch) => {
+ipcMain.handle('mineradio-ui-state-write', trustedMainFrameHandler(async (_event, patch) => {
   try {
     const state = writeDesktopUiStatePatch(patch || {});
     return { ok: true, updatedAt: state.updatedAt };
   } catch (e) {
     return { ok: false, error: e.message || 'UI_STATE_WRITE_FAILED' };
   }
-});
+}));
 
-ipcMain.handle('mineradio-local-music-choose-folder', async (event) => {
+ipcMain.handle('mineradio-local-music-choose-folder', trustedMainFrameHandler(async (event) => {
   try {
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
@@ -2929,43 +2949,43 @@ ipcMain.handle('mineradio-local-music-choose-folder', async (event) => {
   } catch (e) {
     return { ok: false, error: e.message || 'LOCAL_LIBRARY_CHOOSE_FAILED' };
   }
-});
+}));
 
-ipcMain.handle('mineradio-local-music-scan-folder', async (_event, folderPath, options) => {
+ipcMain.handle('mineradio-local-music-scan-folder', trustedMainFrameHandler(async (_event, folderPath, options) => {
   try {
     if (!folderPath) return { ok: false, error: 'LOCAL_LIBRARY_PATH_EMPTY' };
     return await scanLocalMusicFolder(folderPath, options || {});
   } catch (e) {
     return { ok: false, error: e.message || 'LOCAL_LIBRARY_SCAN_FAILED' };
   }
-});
+}));
 
-ipcMain.handle('mineradio-local-music-refresh-entries', async (_event, folderPath, files) => {
+ipcMain.handle('mineradio-local-music-refresh-entries', trustedMainFrameHandler(async (_event, folderPath, files) => {
   try {
     if (!folderPath) return { ok: false, error: 'LOCAL_LIBRARY_PATH_EMPTY' };
     return await refreshLocalMusicFileEntries(folderPath, files);
   } catch (e) {
     return { ok: false, error: e.message || 'LOCAL_LIBRARY_REFRESH_FAILED' };
   }
-});
+}));
 
-ipcMain.handle('mineradio-local-file-read-range', async (_event, filePath, start, end) => {
+ipcMain.handle('mineradio-local-file-read-range', trustedMainFrameHandler(async (_event, filePath, start, end) => {
   try {
     return await readAuthorizedLocalFileRange(filePath, start, end);
   } catch (e) {
     return { ok: false, error: e.message || 'LOCAL_FILE_READ_FAILED' };
   }
-});
+}));
 
-ipcMain.handle('mineradio-local-file-read-data-url', async (_event, filePath) => {
+ipcMain.handle('mineradio-local-file-read-data-url', trustedMainFrameHandler(async (_event, filePath) => {
   try {
     return await readAuthorizedLocalFileDataUrl(filePath);
   } catch (e) {
     return { ok: false, error: e.message || 'LOCAL_FILE_READ_FAILED' };
   }
-});
+}));
 
-ipcMain.handle('mineradio-open-update-installer', async (_event, filePath) => {
+ipcMain.handle('mineradio-open-update-installer', trustedMainFrameHandler(async (_event, filePath) => {
   try {
     const target = path.resolve(String(filePath || ''));
     const updateDir = path.resolve(getUpdateDownloadDir());
@@ -2980,9 +3000,9 @@ ipcMain.handle('mineradio-open-update-installer', async (_event, filePath) => {
   } catch (e) {
     return { ok: false, error: e.message || 'OPEN_UPDATE_FAILED' };
   }
-});
+}));
 
-ipcMain.handle('mineradio-restart-app', async () => {
+ipcMain.handle('mineradio-restart-app', trustedMainFrameHandler(async () => {
   try {
     closeOverlayWindows();
     app.relaunch();
@@ -2991,16 +3011,102 @@ ipcMain.handle('mineradio-restart-app', async () => {
   } catch (e) {
     return { ok: false, error: e.message || 'RESTART_FAILED' };
   }
-});
+}));
 
 /**
- * 判断 IPC 是否来自当前主 renderer，阻止覆盖层伪造状态更新。
+ * 判断 IPC 是否来自当前可信主 frame，阻止覆盖层与外部导航页面伪造状态更新。
  * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
- * @returns {boolean} sender 属于当前主窗口时返回 true。
+ * @returns {boolean} sender 属于当前可信主 frame 时返回 true。
  */
 function isCurrentMainWindowSender(event) {
-  return !!(event && mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents);
+  return isTrustedMainFrameSender(event);
 }
+
+/**
+ * 可信主文档 URL：仅放行当前 127.0.0.1 本地服务的 / 或 /index.html。
+ * 主窗口导航与高权限 IPC 共用这一信任边界，外部页面、错误端口与其它路径一律拒绝。
+ * @param {string} value 待校验的 URL。
+ * @returns {boolean} 属于可信主文档时返回 true。
+ */
+function isTrustedMainDocumentUrl(value) {
+  try {
+    const parsed = new URL(String(value || ''));
+    if (parsed.protocol !== 'http:') return false;
+    if (parsed.hostname !== '127.0.0.1') return false;
+    const expectedPort = Number(mainServerPort || 3000);
+    if (!expectedPort || Number(parsed.port || 0) !== expectedPort) return false;
+    const pathname = String(parsed.pathname || '/').replace(/\/+$/, '') || '/';
+    return pathname === '/' || pathname === '/index.html';
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * 统一可信主 frame IPC 校验：sender 必须是当前主窗口 webContents 的主 frame，
+ * 且当前文档只能是可信主文档（127.0.0.1 本地服务的 / 或 /index.html）。
+ * 所有高权限 IPC handler 必须先过这一道门，防止主窗口被导航到外部页面后继续调用特权 API。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @returns {boolean} 来自可信主 frame 时返回 true。
+ */
+function isTrustedMainFrameSender(event) {
+  try {
+    if (!event || !event.sender || !mainWindow || mainWindow.isDestroyed()) return false;
+    if (event.sender !== mainWindow.webContents) return false;
+    if (typeof event.sender.isDestroyed === 'function' && event.sender.isDestroyed()) return false;
+    const frame = event.senderFrame || null;
+    if (frame) {
+      if (frame.parent) return false;
+      if (typeof frame.url === 'string' && !isTrustedMainDocumentUrl(frame.url)) return false;
+      return true;
+    }
+    const url = typeof event.sender.getURL === 'function' ? event.sender.getURL() : '';
+    return isTrustedMainDocumentUrl(url);
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * 高权限 IPC 包装器：先过可信主 frame 门，未过直接拒绝。
+ * @param {Function} handler 业务处理函数。
+ * @returns {Function} 带可信主 frame 校验的 IPC handler。
+ */
+function trustedMainFrameHandler(handler) {
+  return (event, ...args) => {
+    if (!isTrustedMainFrameSender(event)) return { ok: false, error: 'IPC_FORBIDDEN' };
+    return handler(event, ...args);
+  };
+}
+
+/**
+ * 安装主窗口导航守卫：主 frame 只允许停留在当前 127.0.0.1 服务的 / 或 /index.html，
+ * 其余主 frame 导航与一切子 frame 导航一律拦截，配合可信主 frame IPC 校验形成完整信任边界。
+ * @param {Electron.BrowserWindow} win 主窗口。
+ * @returns {void}
+ */
+function installMainWindowNavigationGuard(win) {
+  if (!win || !win.webContents || typeof win.webContents.on !== 'function') return;
+  win.webContents.on('will-navigate', (event, details, _url, _isInPlace, isMainFrame) => {
+    const url = details && typeof details === 'object' ? details.url : String(details || '');
+    const fromMainFrame = details && typeof details === 'object' && 'isMainFrame' in details
+      ? details.isMainFrame
+      : isMainFrame !== false;
+    if (fromMainFrame && isTrustedMainDocumentUrl(url)) return;
+    event.preventDefault();
+  });
+  win.webContents.on('will-frame-navigate', (event, details) => {
+    const url = details && typeof details === 'object' ? details.url : String(details || '');
+    const frame = details && typeof details === 'object' ? (details.frame || null) : null;
+    if (frame && typeof frame.parent !== 'undefined' && frame.parent) {
+      event.preventDefault();
+      return;
+    }
+    if (details && typeof details === 'object' && details.isMainFrame === true && isTrustedMainDocumentUrl(url)) return;
+    event.preventDefault();
+  });
+}
+
 
 /**
  * 判断 IPC 是否来自当前桌面歌词 renderer，旧窗口迟到命令必须被拒绝。
@@ -3248,7 +3354,7 @@ async function handleDesktopLyricsMoveBy(event, dx, dy) {
 
 ipcMain.handle('mineradio-desktop-lyrics-move-by', handleDesktopLyricsMoveBy);
 
-ipcMain.handle('mineradio-wallpaper-set-enabled', async (_event, enabled, payload) => {
+ipcMain.handle('mineradio-wallpaper-set-enabled', trustedMainFrameHandler(async (_event, enabled, payload) => {
   try {
     if (enabled) createWallpaperWindow(payload || {});
     else closeWallpaperWindow();
@@ -3256,7 +3362,7 @@ ipcMain.handle('mineradio-wallpaper-set-enabled', async (_event, enabled, payloa
   } catch (e) {
     return { ok: false, error: e.message || 'WALLPAPER_FAILED' };
   }
-});
+}));
 
 /**
  * 接收壁纸状态；窗口关闭后确认但拒绝封面等重载荷补丁。
@@ -3279,7 +3385,7 @@ async function handleWallpaperStateUpdate(_event, payload) {
   }
 }
 
-ipcMain.handle('mineradio-wallpaper-update', handleWallpaperStateUpdate);
+ipcMain.handle('mineradio-wallpaper-update', trustedMainFrameHandler(handleWallpaperStateUpdate));
 
 async function createWindow() {
   htmlFullscreenActive = false;
@@ -3338,6 +3444,8 @@ async function createWindow() {
     return { action: 'deny' };
   });
 
+  installMainWindowNavigationGuard(mainWindow);
+
   mainWindow.webContents.once('did-finish-load', () => {
     sendWindowState(mainWindow);
   });
@@ -3394,7 +3502,7 @@ async function createWindow() {
     scheduleWindowStateSend(mainWindow);
   });
   mainWindow.on('moved', () => {
-    keepMainWindowInsideDisplay(mainWindow);
+    keepMainWindowInsideDisplay(mainWindow, { allowPartial: true });
     scheduleMainWindowMoveRelease();
     scheduleWindowStateSend(mainWindow);
   });
@@ -3470,12 +3578,14 @@ if (!gotSingleInstanceLock) {
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-added', () => {
+      keepMainWindowInsideDisplay(mainWindow);
       sendDesktopLyricsWindowGeometry(true);
       positionMiniPlayerWindow();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-removed', () => {
+      keepMainWindowInsideDisplay(mainWindow);
       sendDesktopLyricsWindowGeometry(true);
       positionMiniPlayerWindow();
       scheduleMiniPlayerRecovery(80);

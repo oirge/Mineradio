@@ -25,6 +25,20 @@ class FakeIpcMain {
   on() {}
 }
 
+const TRUSTED_MAIN_URL = 'http://127.0.0.1:3000/index.html';
+
+/**
+ * 截取可信主 frame 校验核心，作为高权限 IPC 处理器的前置门。
+ * @returns {string} 可在隔离 VM 中执行的信任核心源码。
+ */
+function readTrustCore() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.js'), 'utf8');
+  const start = source.indexOf('function isTrustedMainDocumentUrl(');
+  const end = source.indexOf('function isCurrentDesktopLyricsWindowSender(', start + 1);
+  assert.ok(start >= 0 && end > start, '未找到可信主 frame 校验接缝');
+  return source.slice(start, end);
+}
+
 /**
  * 截取导入 JSON 处理器源码，连同随后的同步读取处理器作为稳定结束锚点。
  * @returns {string} 可在隔离 VM 中执行的处理器注册源码。
@@ -34,7 +48,26 @@ function readImportHandlerSource() {
   const start = source.indexOf("ipcMain.handle('mineradio-import-json-file'");
   const end = source.indexOf("ipcMain.on('mineradio-ui-state-read-sync'", start + 1);
   assert.ok(start >= 0 && end > start, '未找到导入 JSON 处理器接缝');
-  return source.slice(start, end);
+  return readTrustCore() + '\n' + source.slice(start, end);
+}
+
+/** 与主进程 fake webContents 相同引用的可信主 frame sender。 */
+const trustedMainSender = {
+  /** @returns {string} 返回可信主文档地址。 */
+  getURL() { return TRUSTED_MAIN_URL; },
+  /** @returns {boolean} 假 sender 始终可用。 */
+  isDestroyed() { return false; },
+};
+
+/**
+ * 构造可信主 frame IPC 事件。
+ * @returns {object} 带可信主 frame 的调用事件。
+ */
+function trustedMainEvent() {
+  return {
+    sender: trustedMainSender,
+    senderFrame: { parent: null, url: TRUSTED_MAIN_URL },
+  };
 }
 
 /**
@@ -55,6 +88,9 @@ function loadImportHandler(dialogResult) {
     ipcMain,
     dialog,
     fs,
+    URL,
+    mainServerPort: 3000,
+    mainWindow: { isDestroyed: () => false, webContents: trustedMainSender },
     /** @returns {null} 测试不需要真实父窗口。 */
     getSenderWindow() { return null; },
   };
@@ -78,15 +114,19 @@ async function testImportJsonFileSizeLimit() {
     const oversize = 16 * 1024 * 1024 + 1024;
     fs.writeFileSync(bigPath, Buffer.alloc(oversize, 0x20));
 
-    const smallResult = await loadImportHandler({ filePath: smallPath })({});
+    const smallResult = await loadImportHandler({ filePath: smallPath })(trustedMainEvent());
     assert.equal(smallResult.ok, true, '正常大小文件应被接受');
     assert.equal(smallResult.text, '{"ok":true}');
 
-    const bigResult = await loadImportHandler({ filePath: bigPath })({});
+    const forbiddenResult = await loadImportHandler({ filePath: smallPath })({});
+    assert.equal(forbiddenResult.ok, false, '非法 sender 必须被拒绝');
+    assert.equal(forbiddenResult.error, 'IPC_FORBIDDEN');
+
+    const bigResult = await loadImportHandler({ filePath: bigPath })(trustedMainEvent());
     assert.equal(bigResult.ok, false, '超大文件必须被拒绝');
     assert.equal(bigResult.error, 'IMPORT_FILE_TOO_LARGE');
 
-    const canceledResult = await loadImportHandler({ filePath: null })({});
+    const canceledResult = await loadImportHandler({ filePath: null })(trustedMainEvent());
     assert.equal(canceledResult.canceled, true, '未选择文件应返回取消');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
