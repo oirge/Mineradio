@@ -4,10 +4,10 @@
 
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
-- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
+- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.5.1`；基于 `v1.5.0` 的桌面歌词拖动与迷你封面动效修复，新增软件内更新线路并行测速和最快线路自动选择，并保留 MP3/FLAC/M4A/WAV/OGG、本地歌单、Wallpaper Engine、全屏与用户数据迁移能力。
+- 当前源码版本：`v1.5.3`；在 `v1.5.2` 主窗口导航/IPC 信任边界与本地文件授权加固基础上，修复桌面歌词置顶透明层与 Windows 原生主窗口拖动的鼠标转发竞态，并保留 MP3/FLAC/M4A/WAV/OGG、本地歌单、Wallpaper Engine、全屏与用户数据迁移能力。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -15,7 +15,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 新对话开始处理 Mineradio 前，必须先确认当前目录是：
 
 ```powershell
-C:\Users\oirg\Desktop\mok\Mineradio-sync
+C:\Users\Administrator\Desktop\Mineradio-main
 ```
 
 然后读这些文件：

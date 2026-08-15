@@ -221,6 +221,7 @@
 - 桌面歌词窗口的 `closed` 释放口 `releaseOwnedDesktopLyricsWindow` 必须调用 `stopDesktopLyricsMousePoller()`，让中键轮询子进程随窗口意外关闭（崩溃/系统销毁）一同终止；正常关闭路径已先停轮询，此调用幂等。回归测试断言该函数体包含 `stopDesktopLyricsMousePoller()`。
 - 桌面歌词和壁纸主进程状态统一由 `DesktopOverlayStateCache` 管理；`setEnabled(false)` 必须替换为最小关闭状态，禁用期间 `apply()` 返回 false。renderer 的禁用路径只发送最小关闭状态，启用后再发送当前完整载荷。
 - 覆盖层 BrowserWindow 的事件回调必须捕获局部 `win` 并验证仍持有全局槽位；状态补丁应由 `createDesktopLyricsWindow(payload)` / `createWallpaperWindow(payload)` 一次完成缓存和窗口副作用。
+- Windows 透明无边框主窗口进入原生移动循环时，必须在指针跨入置顶桌面歌词窗口前切断歌词鼠标转发：使用 `WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE` 提前维护 `mainWindowMoveActive`，移动期间保持 `setIgnoreMouseEvents(true, { forward:false })`、清除歌词 pointer capture，并拒绝 renderer 重新申请捕获；`will-move` / `move` 只作兜底。用户拖动路径和 `moved` 事件不得调用 `setBounds()`，否则会与 Windows 原生捕获形成往返跳位；显示器参数变化与插拔仍可执行全量纠偏。
 - `createDesktopLyricsWindow()` 首次接收 renderer 恢复的 `y` 偏好时必须保留已恢复的手动 bounds；现存窗口收到用户纵向位置调整时，必须同时清除内存和磁盘中的旧 `desktopLyricsBounds`，避免旧像素坐标在重启时覆盖新的比例偏好。手动拖动允许 BrowserWindow 部分越过屏幕边缘，保存、恢复和重新定位时只要当前显示器仍保留至少 `160 × 96` 可操作区域就必须保留真实负坐标；完全不可达时才夹回屏幕。
 - 桌面歌词 IPC 必须区分角色：启用和状态更新只接受当前主 renderer；关闭允许主 renderer 或当前歌词 renderer；移动、热区、指针和锁定只接受当前歌词 renderer，旧 sender 返回 ignored。
 - renderer 关闭桌面歌词时立即清空歌词时间、签名、节奏签名和歌词行快照；关闭壁纸时立即清空壁纸时间与封面签名，不能依赖 `cancelDesktopOverlaySync()`。

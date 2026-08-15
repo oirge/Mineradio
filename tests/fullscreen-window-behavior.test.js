@@ -292,7 +292,7 @@ test('显示器参数变化与拔出显示器仍执行全量纠偏', () => {
   assert.match(removedHandler[1], /keepMainWindowInsideDisplay\(mainWindow\)/);
 });
 
-test('主窗口拖动过程中不重设边界，拖动结束后再纠偏', () => {
+test('主窗口拖动由原生消息和 Electron 事件共同守护，拖动路径不重设边界', () => {
   const source = readMainSource();
   const willMoveHandler = source.match(/mainWindow\.on\('will-move', \(\) => \{([\s\S]*?)\n  \}\);/);
   const moveHandler = source.match(/mainWindow\.on\('move', \(\) => \{([\s\S]*?)\n  \}\);/);
@@ -303,10 +303,12 @@ test('主窗口拖动过程中不重设边界，拖动结束后再纠偏', () =>
   assert.ok(movedHandler, '缺少主窗口 moved 事件');
   assert.match(willMoveHandler[1], /beginMainWindowUserMove\(\)/);
   assert.doesNotMatch(moveHandler[1], /keepMainWindowInsideDisplay/);
+  assert.match(moveHandler[1], /beginMainWindowUserMove\(\)/);
   assert.match(moveHandler[1], /scheduleWindowStateSend\(mainWindow\)/);
-  assert.match(movedHandler[1], /keepMainWindowInsideDisplay\(mainWindow, \{ allowPartial: true \}\)/);
+  assert.doesNotMatch(movedHandler[1], /keepMainWindowInsideDisplay/);
   assert.match(movedHandler[1], /scheduleMainWindowMoveRelease\(\)/);
   assert.match(movedHandler[1], /scheduleWindowStateSend\(mainWindow\)/);
+  assert.match(source, /installMainWindowNativeMoveGuard\(mainWindow\)/);
 });
 
 test('主窗口拖动期间桌面歌词强制穿透并在结束后延迟恢复', () => {
@@ -320,6 +322,7 @@ test('主窗口拖动期间桌面歌词强制穿透并在结束后延迟恢复',
     desktopLyricsStateCache: { value: { clickThrough: false } },
     desktopLyricsPointerCapture: true,
     desktopLyricsMouseIgnored: null,
+    desktopLyricsMouseForwarded: null,
     mainWindowMoveActive: true,
   };
   vm.runInNewContext(
@@ -331,19 +334,21 @@ test('主窗口拖动期间桌面歌词强制穿透并在结束后延迟恢复',
   mouseScope.applyMouseBehavior();
   assert.equal(ignoredStates.length, 1);
   assert.equal(ignoredStates[0].ignored, true);
-  assert.equal(ignoredStates[0].options.forward, true);
+  assert.equal(ignoredStates[0].options.forward, false);
   mouseScope.mainWindowMoveActive = false;
   mouseScope.desktopLyricsMouseIgnored = null;
+  mouseScope.desktopLyricsMouseForwarded = null;
   mouseScope.applyMouseBehavior();
   assert.equal(ignoredStates[1].ignored, false);
-  assert.equal(ignoredStates[1].options.forward, true);
+  assert.equal(ignoredStates[1].options, undefined);
 
   const timers = [];
   const moveStates = [];
   const moveScope = {
     mainWindowMoveActive: false,
     mainWindowMoveReleaseTimer: null,
-    MAIN_WINDOW_MOVE_RELEASE_DELAY_MS: 80,
+    desktopLyricsPointerCapture: true,
+    MAIN_WINDOW_MOVE_RELEASE_DELAY_MS: 160,
     clearTimeout: (id) => {
       if (timers[id - 1]) timers[id - 1].cleared = true;
     },
@@ -362,14 +367,47 @@ test('主窗口拖动期间桌面歌词强制穿透并在结束后延迟恢复',
 
   moveScope.beginMove();
   assert.equal(moveScope.mainWindowMoveActive, true);
+  assert.equal(moveScope.desktopLyricsPointerCapture, false);
   assert.deepEqual(moveStates, [true]);
   moveScope.scheduleRelease();
   assert.equal(timers.length, 1);
-  assert.equal(timers[0].delay, 80);
+  assert.equal(timers[0].delay, 160);
   assert.equal(moveScope.mainWindowMoveActive, true);
   timers[0].handler();
   assert.equal(moveScope.mainWindowMoveActive, false);
   assert.deepEqual(moveStates, [true, false]);
+});
+
+test('Windows 原生移动循环在跨窗口前切换桌面歌词穿透', () => {
+  const source = readMainSource();
+  const hooks = new Map();
+  const calls = [];
+  const win = {
+    isDestroyed: () => false,
+    hookWindowMessage: (message, handler) => hooks.set(message, handler),
+  };
+  const scope = {
+    process: { platform: 'win32' },
+    WM_ENTERSIZEMOVE: 0x0231,
+    WM_EXITSIZEMOVE: 0x0232,
+    mainWindow: win,
+    beginMainWindowUserMove: () => calls.push('begin'),
+    scheduleMainWindowMoveRelease: () => calls.push('release'),
+    scheduleWindowStateSend: (target) => calls.push(target === win ? 'state' : 'wrong-window'),
+    console,
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'installMainWindowNativeMoveGuard', 'desktopLyricsHotBoundsOnScreen')
+      + '\nthis.installGuard = installMainWindowNativeMoveGuard;',
+    scope,
+  );
+
+  scope.installGuard(win);
+
+  assert.equal(hooks.size, 2);
+  hooks.get(0x0231)();
+  hooks.get(0x0232)();
+  assert.deepEqual(calls, ['begin', 'release', 'state']);
 });
 
 test('透明窗口退出逻辑全屏时仍调用原生退出 API', () => {

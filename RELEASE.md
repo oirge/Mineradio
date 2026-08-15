@@ -1,5 +1,18 @@
 ﻿# 发布流程
 
+## v1.5.3 桌面歌词拖动原生竞态修复
+- 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.3`，确保已安装 `1.5.2` 的客户端能够发现新版。
+- 在实际运行的 `D:\Mineradio\Mineradio.exe` v1.5.2 上启用桌面歌词并采集鼠标、主窗口和歌词窗口原生坐标；确认主窗口拖动期间相对鼠标存在最高约 `410px` 的单帧突变。
+- 主窗口通过 `WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE` 提前标记 Windows 原生移动循环；移动期间桌面歌词强制 `setIgnoreMouseEvents(true, { forward:false })`，并拒绝 renderer 重新申请 pointer capture。
+- Electron `will-move` 与 `move` 继续作为兜底；`moved` 不再执行任何主窗口边界 `setBounds()`，显示器参数变化和显示器插拔仍执行既有全量纠偏。
+- 桌面歌词视觉、位置持久化、中键锁定、歌词自身拖动、播放控制、主界面布局、本地曲库和 `%APPDATA%\Mineradio-oirge` 用户数据保持不变。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 全量 Node 回归 `353/353`，`server.js`、主进程、两份 preload、前端脚本语法和 `git diff --check` 通过；打包后的 `app.asar` 已确认包含 `1.5.3`、原生移动消息门禁、拖动期间 `forward:false` 与 `moved` 无边界重设。
+- 发布资产：`Mineradio-1.5.3-Setup.exe` `101474711` 字节；`.blockmap` `105907` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `a8b9e9591dc2afb2296b391078a86635fa618524c52979183e7bd0659aedbcfe`；`.blockmap` `3b1699a90d2de78098e311caeab7f538c8d8aaa7504c21e91dbced96593fb0e7`；`latest.yml` `815f2f46cffc8518a51fa35b2841bcff4ef418ea08264ca8a9ff3260f2fc2aca`；SHA256 清单 `725962f0d913d357bf8c8606d98ba7badf12ba5a9f5acffaa78e9d04f1804e5b`。
+- `latest.yml` 的 Setup SHA512：`XVMTLQ6t4UAPu2RXccyHG0EGMFfoGLsIh8+3nshJZ1ebIjfjjmMY6/ordgG7ZChJN3dZbzHvuiUOHr2uRNAexQ==`。
+- Release 标题使用 `Mineradio v1.5.3 桌面歌词拖动原生竞态修复`。
+
 ## v1.5.2 本地文件授权与窗口拖动修复
 - 更新 package.json、package-lock.json 和前端 APP_VERSION 为 1.5.2，确保已安装 1.5.1 的客户端能够发现新版。
 - 主窗口导航与 IPC 信任边界加固：统一可信主 frame 校验，外部页面、非可信 frame 与非法 sender 全部拒绝；本地曲库授权由主进程维护并保留重启恢复能力。

@@ -121,6 +121,7 @@ async function testDesktopLyricsIpcSenderOwnership() {
     mainServerPort: 3000,
     desktopLyricsStateCache: stateCache,
     desktopLyricsPointerCapture: false,
+    mainWindowMoveActive: false,
     desktopLyricsHotBounds: null,
     desktopLyricsUserBounds: null,
     createDesktopLyricsWindow,
@@ -163,6 +164,10 @@ async function testDesktopLyricsIpcSenderOwnership() {
 
   assert.equal((await setPointer({ sender: currentSender }, true)).ok, true);
   assert.equal(context.desktopLyricsPointerCapture, true);
+  context.mainWindowMoveActive = true;
+  assert.equal((await setPointer({ sender: currentSender }, true)).ok, true);
+  assert.equal(context.desktopLyricsPointerCapture, false);
+  context.mainWindowMoveActive = false;
   assert.equal((await setSize({ sender: currentSender }, 9)).size, 1.55);
   assert.deepEqual(calls.sizeRequests, [1.55]);
   assert.deepEqual(calls.sizeStates, [1.55]);

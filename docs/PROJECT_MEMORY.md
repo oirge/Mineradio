@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.5.1` 基于 GitHub `v1.5.0`，已完成软件内更新线路并行测速、最快线路自动选择和失败线路兜底，并保留桌面歌词拖动、迷你封面动效、多歌单、全屏过渡、Wallpaper Engine、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`codex/release-v1.5.1-fastest-update`；已同步到 GitHub `origin/main` 和 tag `v1.5.1`。
-- 最近正式安装包 Release 基线：`v1.5.1`（2026-08-14，软件内更新自动选择最快线路；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
+- 当前源码检查点：`v1.5.3` 基于 GitHub `v1.5.2`，已修复桌面歌词置顶透明层与 Windows 原生主窗口拖动的鼠标转发竞态，并保留主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、Wallpaper Engine、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`codex/release-1.5.3`；目标同步到 GitHub `origin/main` 和 tag `v1.5.3`。
+- 最近正式安装包 Release 基线：`v1.5.2`（2026-08-15，本地文件授权与窗口拖动修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,15 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.5.3 桌面歌词拖动原生竞态修复
+
+- 日期：2026-08-15。
+- 现场复现：正在运行的 `D:\Mineradio\Mineradio.exe` 文件版本为 `1.5.2`；桌面歌词窗口 bounds 为 `x=363, y=-155, width=1382, height=410`，覆盖主窗口标题栏。20 秒原生采样中捕获到拖动期间主窗口相对鼠标的单帧偏移突变最高约 `410px`，歌词窗口自身坐标保持不变，确认不是松手后工作区夹紧，而是移动中的鼠标捕获竞态。
+- 涉及文件：`desktop/main.js`、`tests/fullscreen-window-behavior.test.js`、`tests/desktop-lyrics-ipc-ownership.test.js`、`package.json`、`package-lock.json`、`public/app.js`、`CHANGELOG.md`、`RELEASE.md`、`AGENTS.md` 和 `.context/architecture/mineradio-player-performance-seams.md`。
+- 关键实现：主窗口挂接 `WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE`；原生移动期间桌面歌词使用 `setIgnoreMouseEvents(true, { forward:false })`，清除 `desktopLyricsPointerCapture`，并拒绝当前歌词 renderer 重新申请捕获。`will-move` 与 `move` 作为 Electron 兜底，`moved` 不再调用 `keepMainWindowInsideDisplay()`，退出后延迟 `160ms` 恢复歌词交互。
+- 禁止回退：主窗口移动期间不得恢复歌词鼠标 `forward:true`；不得允许歌词 renderer 在 `mainWindowMoveActive` 时重新捕获；不得在用户拖动路径或 `moved` 中执行主窗口 `setBounds()`。显示器参数变化与插拔的全量纠偏必须保留。
+- 用户已在同一 profile 的 `win-unpacked` 修复测试包上确认问题解决；全量 Node 回归 `353/353`、关键脚本语法和 `git diff --check` 通过。Windows x64 NSIS：安装器 `101474711` 字节 / SHA256 `a8b9e9591dc2afb2296b391078a86635fa618524c52979183e7bd0659aedbcfe`；blockmap `105907` 字节 / `3b1699a90d2de78098e311caeab7f538c8d8aaa7504c21e91dbced96593fb0e7`；`latest.yml` `347` 字节 / `815f2f46cffc8518a51fa35b2841bcff4ef418ea08264ca8a9ff3260f2fc2aca`；SHA256 清单 `270` 字节 / `725962f0d913d357bf8c8606d98ba7badf12ba5a9f5acffaa78e9d04f1804e5b`。
 
 ## v1.5.1 软件内更新自动选择最快线路
 
