@@ -88,9 +88,13 @@
 - 迷你播放器进入空队列时必须清空主进程和渲染器中的标题、歌手与封面状态，并跳过当前歌曲封面解析，避免长期保留大 data URL。
 - 迷你播放器功能开关和 BrowserWindow 驻留是两个独立维度。主窗口恢复后功能仍可开启但迷你窗口已经销毁；如果主进程此时继续接受 renderer 补丁，`miniPlayerStateCache.value.cover` 仍可长期强引用最多 8 MiB 的 data URL。只在禁用时清空不够，无窗口期间的下一次切歌会重新填回封面。
 - 迷你播放器封面加载失败后不能永久保留失败地址缓存；应释放当前 `src` 和缓存标记，让后续真实状态同步触发同地址重试。
-- 迷你播放器拖动位置需要跨启动恢复，但不能监听高频 `move` 后同步写设置文件；Windows 上应使用只由手动移动触发的 `will-move` 标记用户操作，并在 `moved` 后单次保存。
+- 迷你播放器拖动位置需要跨启动恢复，但不能监听高频 `move` 后同步写设置文件；Windows 原生拖动使用 `will-move` + `moved` 在结束后保存，封面指针拖动途中只更新内存坐标，收到结束 `commit` 后只落盘一次。
 - `setBounds()` 和显示器工作区校正产生的 `moved` 事件不能覆盖用户位置；程序定位前必须清除手动移动标记，校正后的已有用户坐标只在签名变化时落盘。
 - 标准迷你播放器必须继续使用独立的 `public/mini-player.html` 和 `360 × 84` 尺寸；极简版使用 `public/mini-player-compact.html` 和 `268 × 58` 尺寸，不要通过条件 DOM/CSS 改写标准页面。
+- 标准迷你播放器隐藏采样不能只读取主 `AnalyserNode` 的绝对低频均值。压缩音乐会让原公式长期饱和为固定满值，IPC 即使持续发送也只表现为静态放大；必须保留短期基线与峰值对比，并优先使用低平滑的 `beatAnalyser`。
+- 主窗口隐藏时 `AudioContext` 可能进入 `suspended`；独立 `runMiniPlayerPulseTimer()` 必须调用 `resumeAudioAnalysis()` 后继续定时采样，否则迷你窗口收到的 `pulse` 会长期为零。
+- 封面拖动不能把 `.cover` 直接改为原生 `-webkit-app-region: drag`，否则按钮语义和短按展开事件会丢失。使用指针捕获、屏幕坐标增量和 `5px` 阈值，经当前迷你 renderer 专用 IPC 移动窗口。
+- 右侧展开方向是窗口几何状态，不属于歌曲缓存；主进程按当前显示器左右剩余空间计算 `expandDirection`，仅在方向变化时随迷你状态增量发送。
 - 极简迷你播放器不创建图片/封面节点，主进程向极简窗口发送状态时也不携带 `cover`；歌曲切换仍同步标题、歌手、播放状态和队列状态。
 - `play` / `playing` / `pause` 等音频状态事件不应让迷你播放器重复执行 `currentDesktopSongMeta()` 和封面签名解析；同一事件后续还会同步 Windows Media Session 元数据。
 - 迷你播放器 IPC 使用乐观状态判重时，Promise rejection 和主进程返回 `ok:false` 都代表补丁未确认；旧完整请求晚失败也不能因后续序号变化而被忽略。
@@ -280,9 +284,11 @@
 - 更新产物校验统一通过 `verifyUpdateDigestResult()` 维持大小、SHA-256、SHA-512 和错误码接口；`verifyUpdateBuffer()` 只服务有 12 MiB 上限的快速补丁，`verifyUpdateFile()` 使用固定 1 MiB Buffer 顺序读取完整安装包，并在成功或异常路径关闭文件描述符。不得恢复整安装包 `readFileSync()`。
 - `showMiniPlayerWindow()` 只在窗口隐藏或最小化时调用 `showInactive()` 并强制同步状态；`keepMiniPlayerOnTop()` 仅在置顶状态丢失时重写置顶标记，健康恢复轮询只执行 `moveTop()`。
 - `pushMiniPlayerState()` 必须先判断 `hasTrack`；空队列使用空元数据签名并发送空封面，不能调用 `currentDesktopSongMeta()`。迷你页面封面错误回调需释放失败 `src` 与 `lastCover`。
+- `runMiniPlayerPulseTimer()` 在隐藏播放态优先读取 `beatAnalyser`，按低频均值、低频峰值和前 96 桶能量计算原始强度，再用 `miniPlayerPulseBaseline` 提取短期峰谷；禁用或停止播放时同时衰减样本与基线。回归测试：`tests/mini-player-pulse.test.js`。
+- `mineradio-mini-player-move-by` 只接受当前 `miniPlayerWindow.webContents`；每次增量移动按工作区夹紧、更新内存坐标并调用 `sendMiniPlayerState()`，让跨过显示器中线时的 `expandDirection` 及时更新；只有拖动结束的 `commit` 调用才持久化最终坐标。回归测试：`tests/mini-player-main-gates.test.js`、`tests/mini-player-visual.test.js`。
  - 迷你播放器样式保存在 `desktop-shell-settings.json` 的 `miniPlayerMode`；标准/极简位置分别保存在 `miniPlayerBounds` 和 `miniPlayerCompactBounds`。启动时严格读取数值坐标并按各自尺寸重新夹紧到当前工作区；窗口实例必须捕获创建时的 mode，避免切换期间旧回调污染另一种样式的位置。
  - 主进程迷你状态统一由 `MiniPlayerStateCache` 持有；`apply()` 仅在功能启用且当前迷你 BrowserWindow 驻留时接受补丁。`setEnabled(false)` 或 `setResident(false)` 必须替换为空状态；新窗口取得全局所有权后才 `setResident(true)`，并通过现有 `mineradio-mini-player-command` 通道发送 `sync-state`，由 renderer 调用 `pushMiniPlayerState(true)` 补齐当前状态。旧窗口迟到的 `closed` 事件只能在仍持有全局槽位时释放缓存。
- - 迷你播放器位置保存在 `desktop-shell-settings.json` 的 `miniPlayerBounds`；启动时严格读取数值坐标并重新夹紧到当前工作区。用户位置写入必须由 `will-move` + `moved` 事件对触发，并通过坐标签名跳过重复写入。
+ - 迷你播放器位置保存在 `desktop-shell-settings.json` 的 `miniPlayerBounds`；启动时严格读取数值坐标并重新夹紧到当前工作区。原生用户移动通过 `will-move` + `moved` 事件对保存，封面指针拖动通过结束 `commit` 保存；两条路径均通过坐标签名跳过重复写入。
 - `updateSystemMediaSessionPlaybackState()` 调用迷你同步时使用 playback-only 路径；`pushMiniPlayerState()` 通过当前歌曲对象判断是否仍需补齐元数据，确保首次同步、切歌和空队列不会被状态-only 优化漏掉。
 - 迷你状态补丁失败时使用 `invalidateMiniPlayerSyncPatch()` 按字段失效缓存：元数据字段清空歌曲引用和签名，播放字段只清空对应布尔值。下一次真实状态事件负责重发，不保留错误的“已同步”标记。
 - 主进程电源事件通过 `MiniPlayerRecoverySession` 按 `screen` / `suspend` 原因暂停：进入任一原因时同时取消周期恢复和崩溃重建，`shouldShowMiniPlayer()` 与崩溃恢复入口在暂停期间拒绝新任务；只有最后一个原因解除后才调用 `scheduleMiniPlayerRecovery(180)`。

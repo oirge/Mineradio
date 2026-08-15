@@ -2340,6 +2340,22 @@ function clampMiniPlayerBounds(bounds, mode) {
 }
 
 /**
+ * 根据迷你窗口距离显示器左右工作区边缘的空间决定展开方向。
+ * 右侧可用空间更少时返回 left，让完整控制栏向封面左侧展开；其余位置保持向右展开。
+ * @param {{x:number,y:number,width:number,height:number}} bounds 当前迷你窗口边界。
+ * @returns {'left'|'right'} 标准迷你播放器的展开方向。
+ */
+function miniPlayerExpandDirectionForBounds(bounds) {
+  const source = bounds || miniPlayerDefaultBounds('standard');
+  const display = screen.getDisplayMatching(source) || screen.getPrimaryDisplay();
+  const workArea = display && display.workArea ? display.workArea : { x: 0, width: 0 };
+  const width = Number.isFinite(Number(source.width)) ? Number(source.width) : MINI_PLAYER_WIDTH;
+  const leftSpace = Number(source.x) - Number(workArea.x || 0);
+  const rightSpace = Number(workArea.x || 0) + Number(workArea.width || 0) - (Number(source.x) + width);
+  return rightSpace < leftSpace ? 'left' : 'right';
+}
+
+/**
  * 生成迷你播放器坐标签名，用于区分用户拖动、程序校正和重复持久化。
  * @param {{x:number, y:number}} bounds 窗口坐标。
  * @returns {string} 取整后的坐标签名。
@@ -2401,6 +2417,7 @@ function handleMiniPlayerMoved(win) {
   if (miniPlayerWindow !== win || win.isDestroyed() || !miniPlayerUserMovePending) return;
   miniPlayerUserMovePending = false;
   persistMiniPlayerUserBounds(win.getBounds(), miniPlayerModeForWindow(win));
+  sendMiniPlayerState();
 }
 
 /**
@@ -2414,6 +2431,7 @@ function positionMiniPlayerWindow() {
   miniPlayerUserMovePending = false;
   miniPlayerWindow.setBounds(nextBounds, false);
   if (miniPlayerUserBoundsByMode[mode]) persistMiniPlayerUserBounds(nextBounds, mode);
+  sendMiniPlayerState();
 }
 
 /**
@@ -2441,6 +2459,7 @@ function sendMiniPlayerState(force = false) {
     next.pulse = Number.isFinite(state.pulse) ? state.pulse : 0;
     next.visual = visual;
     next.visualSignature = visualSignature;
+    next.expandDirection = miniPlayerExpandDirectionForBounds(win.getBounds());
   }
   const previous = miniPlayerLastSentState;
   const patch = {};
@@ -2474,6 +2493,10 @@ function sendMiniPlayerState(force = false) {
   }
   if (includeCover && (force || !previous || next.visualSignature !== previous.visualSignature)) {
     patch.visual = next.visual;
+    changed = true;
+  }
+  if (includeCover && (force || !previous || next.expandDirection !== previous.expandDirection)) {
+    patch.expandDirection = next.expandDirection;
     changed = true;
   }
   if (!changed) return;
@@ -2900,6 +2923,40 @@ function handleMiniPlayerStateUpdate(event, payload) {
 }
 
 ipcMain.handle('mineradio-mini-player-update', trustedMainFrameHandler(handleMiniPlayerStateUpdate));
+
+/**
+ * 按标准迷你播放器封面的拖动偏移移动当前窗口，并同步内存坐标与展开方向。
+ * 只有当前迷你播放器 renderer 可以调用，旧窗口或伪造 sender 直接忽略。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {number} dx 水平位移，单次限制在 160 像素内。
+ * @param {number} dy 垂直位移，单次限制在 160 像素内。
+ * @param {boolean} commit 是否为拖动结束；只在结束时把内存坐标写入设置文件。
+ * @returns {{ok:boolean,ignored?:boolean,error?:string}} 移动结果。
+ */
+function handleMiniPlayerMoveBy(event, dx, dy, commit) {
+  if (!event || !miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {
+    return { ok: true, ignored: true };
+  }
+  try {
+    const mode = miniPlayerModeForWindow(miniPlayerWindow);
+    const bounds = miniPlayerWindow.getBounds();
+    const next = clampMiniPlayerBounds({
+      ...bounds,
+      x: Math.round(bounds.x + clampNumber(dx, -160, 160, 0)),
+      y: Math.round(bounds.y + clampNumber(dy, -160, 160, 0)),
+    }, mode);
+    miniPlayerUserMovePending = false;
+    if (next.x !== bounds.x || next.y !== bounds.y) miniPlayerWindow.setBounds(next, false);
+    miniPlayerUserBoundsByMode[mode] = next;
+    if (commit === true) persistMiniPlayerUserBounds(next, mode);
+    sendMiniPlayerState();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message || 'MINI_PLAYER_MOVE_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-mini-player-move-by', handleMiniPlayerMoveBy);
 
 ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {

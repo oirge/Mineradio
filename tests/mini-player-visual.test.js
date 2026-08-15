@@ -9,10 +9,21 @@ const { MiniPlayerStateCache } = require('../desktop/mini-player-state-cache');
 
 const root = path.join(__dirname, '..');
 
+/**
+ * 读取仓库内的测试目标文件。
+ * @param {string} relativePath 相对于仓库根目录的文件路径。
+ * @returns {string} 文件完整文本。
+ */
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
+/**
+ * 从源码中提取指定函数，确保测试运行真实实现。
+ * @param {string} source 待检索的源码文本。
+ * @param {string} name 函数名。
+ * @returns {string} 完整函数源码。
+ */
 function extractFunction(source, name) {
   const start = source.indexOf('function ' + name + '(');
   assert.ok(start >= 0, '未找到函数：' + name);
@@ -28,14 +39,24 @@ function extractFunction(source, name) {
   throw new Error('函数未闭合：' + name);
 }
 
+/**
+ * 构造标准迷你播放器的无界面 DOM 与 IPC 测试环境。
+ * @returns {{nodes:Record<string, object>, commands:string[], moves:Array<{dx:number,dy:number,commit:boolean}>, applyState:Function, flushTimers:Function}} 可驱动的渲染器测试环境。
+ */
 function createMiniPlayerHarness() {
   const html = read('public/mini-player.html');
   const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
   const timers = new Map();
   const listeners = new Map();
   const commands = [];
+  const moves = [];
   let nextTimerId = 1;
 
+  /**
+   * 创建实现本测试所需 DOM 行为的轻量节点。
+   * @param {string} id 节点标识。
+   * @returns {object} 可注册和触发事件的假节点。
+   */
   function createNode(id) {
     const attributes = new Map();
     const classNames = new Set();
@@ -61,6 +82,10 @@ function createMiniPlayerHarness() {
       focusWithin: false,
       src: '',
       blur() { node.focusWithin = false; },
+      /** @returns {void} 假节点不需要真实指针捕获。 */
+      setPointerCapture() {},
+      /** @returns {void} 假节点不需要真实指针捕获释放。 */
+      releasePointerCapture() {},
       addEventListener(type, handler) {
         const handlers = listeners.get(node) || {};
         (handlers[type] || (handlers[type] = [])).push(handler);
@@ -109,6 +134,10 @@ function createMiniPlayerHarness() {
           commands.push(action);
           return Promise.resolve({ ok: true });
         },
+        moveBy(dx, dy, commit) {
+          moves.push({ dx, dy, commit: commit === true });
+          return Promise.resolve({ ok: true });
+        },
         onState(callback) { stateHandler = callback; },
       },
     },
@@ -125,6 +154,7 @@ function createMiniPlayerHarness() {
   return {
     nodes,
     commands,
+    moves,
     applyState(patch) { stateHandler(patch); },
     flushTimers() {
       const pending = [...timers.values()];
@@ -138,6 +168,8 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   const html = read('public/mini-player.html');
 
   assert.match(html, /id="cover-wrap" role="button" tabindex="0"/);
+  assert.match(html, /id="cover"[^>]+draggable="false"/);
+  assert.match(html, /\.cover img \{[\s\S]*?-webkit-user-drag:\s*none;/);
   assert.match(html, /data-collapsed="true"/);
   assert.match(html, /data-glow="true"/);
   assert.match(html, /--mini-pulse/);
@@ -211,6 +243,58 @@ test('悬停展开开关控制初始态、悬停态和键盘聚焦态', () => {
   shell.dispatch('focusout');
   harness.flushTimers();
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
+});
+
+test('标准迷你播放器会根据主进程方向把完整面板翻到封面的左侧', () => {
+  const html = read('public/mini-player.html');
+  const harness = createMiniPlayerHarness();
+  const shell = harness.nodes['mini-shell'];
+
+  harness.applyState({ expandDirection: 'left' });
+
+  assert.equal(shell.getAttribute('data-expand-direction'), 'left');
+  assert.match(html, /data-expand-direction="left"[^}]*\{[^}]*flex-direction:\s*row-reverse/);
+  assert.match(html, /\.mini-shell\[data-collapsed="true"\] \.cover \{[\s\S]*?margin:\s*0;/);
+  assert.match(html, /data-expand-direction="left"\][^}]*\.restore \{[^}]*margin:\s*-1px 0 0 -1px;/);
+});
+
+test('歌曲封面拖动移动窗口，短按仍保持展开行为', () => {
+  const harness = createMiniPlayerHarness();
+  const shell = harness.nodes['mini-shell'];
+  const coverWrap = harness.nodes['cover-wrap'];
+  let prevented = 0;
+
+  coverWrap.dispatch('pointerdown', {
+    button: 0,
+    pointerId: 7,
+    screenX: 100,
+    screenY: 100,
+  });
+  coverWrap.dispatch('pointermove', {
+    pointerId: 7,
+    screenX: 103,
+    screenY: 102,
+    preventDefault() { prevented += 1; },
+  });
+  assert.deepEqual(harness.moves, []);
+
+  coverWrap.dispatch('pointermove', {
+    pointerId: 7,
+    screenX: 110,
+    screenY: 106,
+    preventDefault() { prevented += 1; },
+  });
+  coverWrap.dispatch('pointerup', { pointerId: 7 });
+  assert.deepEqual(harness.moves, [
+    { dx: 10, dy: 6, commit: false },
+    { dx: 0, dy: 0, commit: true },
+  ]);
+  assert.equal(prevented, 1);
+
+  coverWrap.dispatch('click', { preventDefault() { prevented += 1; } });
+  assert.equal(shell.getAttribute('data-collapsed'), 'true');
+  coverWrap.dispatch('click', { preventDefault() { prevented += 1; } });
+  assert.equal(shell.getAttribute('data-collapsed'), 'false');
 });
 
 test('关闭悬停展开后始终保持完整迷你播放器', () => {

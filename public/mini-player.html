@@ -38,6 +38,7 @@
       --mini-radius: 12px;
       transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease, padding 240ms cubic-bezier(.22,.8,.24,1);
     }
+    .mini-shell[data-expand-direction="left"] { flex-direction: row-reverse; }
     .mini-shell[data-collapsed="true"] {
       gap: 0;
       padding: 0;
@@ -75,7 +76,7 @@
       flex-basis: 54px;
       width: 54px;
       height: 54px;
-      margin: 0 auto;
+      margin: 0;
       border-radius: var(--mini-radius);
       transform: scale(calc(1 + var(--mini-pulse) * 0.085));
     }
@@ -92,12 +93,14 @@
         inset 0 0 0 1px rgba(110, 231, 216, 0.06),
         0 0 calc(6px + var(--mini-pulse) * 9px) rgba(110, 231, 216, calc(0.08 + var(--mini-pulse) * 0.28)),
         0 0 calc(12px + var(--mini-pulse) * 16px) rgba(86, 153, 255, calc(0.025 + var(--mini-pulse) * 0.12));
-      cursor: pointer;
+      cursor: grab;
       -webkit-app-region: no-drag;
+      touch-action: none;
       transform-origin: center;
       transform: scale(calc(1 + var(--mini-pulse) * 0.055));
       transition: flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1), height 240ms cubic-bezier(.22,.8,.24,1), margin 240ms cubic-bezier(.22,.8,.24,1), border-radius 240ms ease, opacity 180ms ease, transform 90ms cubic-bezier(.2,.72,.28,1), box-shadow 110ms ease;
     }
+    .cover.dragging { cursor: grabbing; }
     .cover::after {
       content: "";
       position: absolute;
@@ -118,6 +121,7 @@
       height: 100%;
       object-fit: cover;
       opacity: 0;
+      -webkit-user-drag: none;
       transition: opacity 160ms ease;
     }
     .cover.ready img { opacity: 1; }
@@ -243,6 +247,8 @@
       -webkit-app-region: no-drag;
       transition: opacity 190ms ease, transform 240ms cubic-bezier(.22,.8,.24,1), flex-basis 240ms cubic-bezier(.22,.8,.24,1), width 240ms cubic-bezier(.22,.8,.24,1), background-color 140ms ease, border-color 140ms ease, color 140ms ease;
     }
+    .mini-shell[data-expand-direction="left"] .restore { margin: -1px 0 0 -1px; }
+    .mini-shell[data-expand-direction="left"][data-collapsed="true"] .restore { margin: 0; }
     .restore svg { width: 13px; height: 13px; }
     .mini-shell[data-instant="true"],
     .mini-shell[data-instant="true"] .cover,
@@ -258,10 +264,10 @@
   </style>
 </head>
 <body data-playing="false">
-  <main class="mini-shell" id="mini-shell" data-collapsed="true" data-has-track="false" data-glow="true" aria-label="Mineradio 迷你播放器">
+  <main class="mini-shell" id="mini-shell" data-collapsed="true" data-expand-direction="right" data-has-track="false" data-glow="true" aria-label="Mineradio 迷你播放器">
     <div class="cover" id="cover-wrap" role="button" tabindex="0" aria-label="展开迷你播放器" aria-expanded="false">
       <span class="cover-fallback">M</span>
-      <img id="cover" alt="">
+      <img id="cover" alt="" draggable="false">
     </div>
     <div class="meta">
       <div class="title" id="title">Mineradio</div>
@@ -297,12 +303,66 @@
     var desktopLyricsButton = document.getElementById('desktop-lyrics');
     var controls = [document.getElementById('previous'), playButton, document.getElementById('next')];
     var lastCover = '';
-    var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false, pulse:0, visual:{ pulseEnabled:true, pulseStrength:0.78, glowEnabled:true, hoverExpand:true, radius:12 } };
+    var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false, pulse:0, expandDirection:'right', visual:{ pulseEnabled:true, pulseStrength:0.78, glowEnabled:true, hoverExpand:true, radius:12 } };
     var renderedPlaying = null;
     var renderedHasTrack = null;
     var renderedHoverExpand = null;
+    var renderedExpandDirection = null;
     var hoverTimer = 0;
+    var coverDrag = null;
+    var suppressCoverClick = false;
+    var suppressCoverClickTimer = 0;
     var receivedExternalState = false;
+
+    /**
+     * 忽略窗口移动 IPC 失败，避免拖动结束后留下未处理的 rejected promise。
+     * @returns {void}
+     */
+    function ignoreMiniPlayerMoveFailure() {}
+
+    /**
+     * 规范化主进程传来的展开方向。
+     * @param {unknown} value 原始方向值。
+     * @returns {'left'|'right'} 仅允许的展开方向。
+     */
+    function normalizeExpandDirection(value) {
+      return value === 'left' ? 'left' : 'right';
+    }
+
+    /**
+     * 把展开方向写入稳定的 DOM 状态，只有方向变化时才触发布局切换。
+     * @param {unknown} value 主进程传来的方向值。
+     * @returns {void}
+     */
+    function syncExpandDirection(value) {
+      var direction = normalizeExpandDirection(value);
+      if (renderedExpandDirection === direction) return;
+      renderedExpandDirection = direction;
+      miniShell.setAttribute('data-expand-direction', direction);
+    }
+
+    /**
+     * 读取指针的屏幕坐标，拖动窗口时不能使用随窗口变化的本地坐标。
+     * @param {object} event 指针事件。
+     * @param {'screenX'|'screenY'} key 坐标字段名。
+     * @returns {number|null} 有效屏幕坐标，无效时返回 null。
+     */
+    function pointerScreenCoordinate(event, key) {
+      var value = Number(event && event[key]);
+      return isFinite(value) ? value : null;
+    }
+
+    /**
+     * 请求主进程按增量移动迷你播放器窗口。
+     * @param {number} dx 水平位移。
+     * @param {number} dy 垂直位移。
+     * @param {boolean} commit 是否为拖动结束并保存最终坐标。
+     * @returns {void}
+     */
+    function moveMiniPlayerWindowBy(dx, dy, commit) {
+      if (!window.miniPlayer || typeof window.miniPlayer.moveBy !== 'function') return;
+      window.miniPlayer.moveBy(dx, dy, commit === true).catch(ignoreMiniPlayerMoveFailure);
+    }
 
     function sendCommand(action) {
       if (!window.miniPlayer || typeof window.miniPlayer.command !== 'function') return;
@@ -318,10 +378,20 @@
       hoverTimer = 0;
     }
 
+    /**
+     * 判断当前是否仍有悬停、聚焦或封面拖动交互，避免交互中自动收回。
+     * @returns {boolean} 仍在交互中时返回 true。
+     */
     function expansionInteractionActive() {
-      return coverWrap.matches(':hover') || miniShell.matches(':focus-within');
+      return !!coverDrag || coverWrap.matches(':hover') || miniShell.matches(':focus-within');
     }
 
+    /**
+     * 切换迷你播放器的完整面板与封面收回态。
+     * @param {boolean} next 是否显示完整面板。
+     * @param {boolean} immediate 是否跳过本次过渡动画。
+     * @returns {void}
+     */
     function setExpanded(next, immediate) {
       if (!hoverExpandEnabled()) next = true;
       next = !!next;
@@ -368,6 +438,112 @@
       cover.src = src;
     }
 
+    /**
+     * 清除拖动后的单次点击抑制标记，避免浏览器不派发 click 时吞掉下一次正常点击。
+     * @returns {void}
+     */
+    function clearCoverClickSuppression() {
+      suppressCoverClick = false;
+      suppressCoverClickTimer = 0;
+    }
+
+    /**
+     * 在封面发生实际拖动后抑制紧随其后的合成 click 事件。
+     * @returns {void}
+     */
+    function suppressCoverClickOnce() {
+      suppressCoverClick = true;
+      if (suppressCoverClickTimer) clearTimeout(suppressCoverClickTimer);
+      suppressCoverClickTimer = setTimeout(clearCoverClickSuppression, 0);
+    }
+
+    /**
+     * 开始记录封面指针拖动，屏幕坐标用于抵消窗口移动后的本地坐标变化。
+     * @param {object} event 指针按下事件。
+     * @returns {void}
+     */
+    function beginCoverDrag(event) {
+      if (!event || event.button !== 0) return;
+      var screenX = pointerScreenCoordinate(event, 'screenX');
+      var screenY = pointerScreenCoordinate(event, 'screenY');
+      if (screenX === null || screenY === null) return;
+      coverDrag = {
+        pointerId: event.pointerId,
+        startX: screenX,
+        startY: screenY,
+        lastX: screenX,
+        lastY: screenY,
+        moved: false,
+      };
+      if (typeof coverWrap.setPointerCapture === 'function' && event.pointerId !== undefined) {
+        try { coverWrap.setPointerCapture(event.pointerId); } catch (_error) {}
+      }
+    }
+
+    /**
+     * 把超过点击阈值的封面位移按增量发送给主进程。
+     * @param {object} event 指针移动事件。
+     * @returns {void}
+     */
+    function updateCoverDrag(event) {
+      if (!coverDrag || !event || event.pointerId !== coverDrag.pointerId) return;
+      var screenX = pointerScreenCoordinate(event, 'screenX');
+      var screenY = pointerScreenCoordinate(event, 'screenY');
+      if (screenX === null || screenY === null) return;
+      var totalDx = screenX - coverDrag.startX;
+      var totalDy = screenY - coverDrag.startY;
+      if (!coverDrag.moved && Math.max(Math.abs(totalDx), Math.abs(totalDy)) < 5) return;
+      var dx = Math.round(screenX - coverDrag.lastX);
+      var dy = Math.round(screenY - coverDrag.lastY);
+      coverDrag.lastX = screenX;
+      coverDrag.lastY = screenY;
+      coverDrag.moved = true;
+      coverWrap.classList.add('dragging');
+      if (dx || dy) moveMiniPlayerWindowBy(dx, dy);
+      if (event.preventDefault) event.preventDefault();
+    }
+
+    /**
+     * 结束封面拖动并在必要时阻止浏览器把拖动误判为点击。
+     * @param {object} event 指针结束事件。
+     * @returns {void}
+     */
+    function finishCoverDrag(event) {
+      if (!coverDrag || (event && event.pointerId !== undefined && event.pointerId !== coverDrag.pointerId)) return;
+      var moved = coverDrag.moved;
+      var pointerId = coverDrag.pointerId;
+      coverDrag = null;
+      coverWrap.classList.remove('dragging');
+      if (typeof coverWrap.releasePointerCapture === 'function' && pointerId !== undefined) {
+        try { coverWrap.releasePointerCapture(pointerId); } catch (_error) {}
+      }
+      if (moved) {
+        moveMiniPlayerWindowBy(0, 0, true);
+        suppressCoverClickOnce();
+      }
+      if (!miniShell.matches(':hover')) scheduleCollapse();
+    }
+
+    /**
+     * 区分封面短按与拖动后的合成点击，短按仍触发展开。
+     * @param {object} event 点击事件。
+     * @returns {void}
+     */
+    function handleCoverClick(event) {
+      if (suppressCoverClick) {
+        clearCoverClickSuppression();
+        if (event && event.preventDefault) event.preventDefault();
+        return;
+      }
+      expandFromInteraction();
+    }
+
+    /**
+     * 应用主进程发送的歌曲、播放、视觉和展开方向状态。
+     * @param {object} patch 增量状态补丁。
+     * @param {boolean} immediate 是否跳过首次渲染过渡。
+     * @returns {void}
+     */
     function applyState(patch, immediate) {
       patch = patch || {};
       miniState = Object.assign({}, miniState, patch);
@@ -397,6 +573,7 @@
       desktopLyricsButton.setAttribute('aria-pressed', desktopLyricsEnabled ? 'true' : 'false');
       desktopLyricsButton.title = desktopLyricsEnabled ? '关闭桌面歌词' : '开启桌面歌词';
       desktopLyricsButton.setAttribute('aria-label', desktopLyricsButton.title);
+      syncExpandDirection(next.expandDirection);
       var visual = next.visual || {};
       var pulseSignal = Math.max(0, Math.min(1, Number(next.pulse) || 0));
       var pulseStrength = Number(visual.pulseStrength);
@@ -437,7 +614,12 @@
       if (!miniShell.matches(':hover')) scheduleCollapse();
     });
     coverWrap.addEventListener('focus', expandFromInteraction);
-    coverWrap.addEventListener('click', expandFromInteraction);
+    coverWrap.addEventListener('pointerdown', beginCoverDrag);
+    coverWrap.addEventListener('pointermove', updateCoverDrag);
+    coverWrap.addEventListener('pointerup', finishCoverDrag);
+    coverWrap.addEventListener('pointercancel', finishCoverDrag);
+    coverWrap.addEventListener('lostpointercapture', finishCoverDrag);
+    coverWrap.addEventListener('click', handleCoverClick);
     coverWrap.addEventListener('keydown', function(event){
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();

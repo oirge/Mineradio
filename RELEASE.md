@@ -1,17 +1,33 @@
 ﻿# 发布流程
 
-## v1.5.4 Wallpaper Engine 生命周期与窗口重建修复
+## v1.5.5 迷你播放器封面律动、贴边展开与拖动修复
+- 正式发布版本从 `1.5.4` 提升为 `1.5.5`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.4` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
+- 标准迷你播放器封面律动恢复挂起的 `AudioContext` 音频分析，优先使用低平滑 `beatAnalyser`，并加入短期能量基线与峰谷对比；隐藏主窗口播放时仍由迷你播放器独立采样，低能量音乐不再长期显示固定脉冲。
+- 标准迷你播放器根据当前显示器工作区左右余量计算 `expandDirection`：靠右时向左展开，靠左时向右展开；收回态封面保持贴近窗口外侧，避免完整面板伸出屏幕。
+- 歌曲封面支持点击展开与拖动移动：位移小于约 `5px` 保持点击语义，超过阈值通过 `mineradio-mini-player-move-by` 按增量移动当前窗口；主进程校验 sender、夹紧到工作区并持久化坐标，不接管全局鼠标/键盘或主播放器拖动。
+- 全量 Node 回归 `368/368`；迷你播放器方向、封面拖动、脉冲恢复和 IPC sender 门禁、版本一致性、发布工作流标签与资产清单测试，以及关键 JavaScript 语法检查与 `git diff --check` 均通过。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.5.5-Setup.exe` `101476694` 字节；`.blockmap` `105747` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `4af2724118ae0688e02cc0eefb4412ff909c2cf49780c11b051d2cfd5ee4f298`；`.blockmap` `96d6fdbfb86b638bf5083bdde3ca65797ffe27f482b4f2b13e2860425dc7204e`；`latest.yml` `9a61d1b3aaec517742339eb5189db632d87e40f1a5076d8894d3965420440b4b`；SHA256 清单 `b7ee1ae8f992d8390881808cb4d3e4c574d8479db875f6082ed0437b34e68867`。
+- `latest.yml` 的 Setup SHA512：`Z1aNBtqVKPlb9VsvzClDK2fX4ZGHyPMNuU7oBTaNpEEM8uiahDvfOreqmNmQGK7qFJkR11ovKeYsgMSUK4aIMw==`。
+- 发布标题使用 `Mineradio v1.5.5 迷你播放器封面律动、贴边展开与拖动修复`。
+
+## v1.5.4 迷你播放器与 Wallpaper Engine 生命周期修复重发
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.4`，确保已安装 `1.5.3` 的客户端能够发现新版。
+- 本次保持版本号 `1.5.4`，在现有 Wallpaper Engine 生命周期修复上进行同版本迷你播放器修复重发；已安装旧版 `1.5.4` 的客户端不会因版本比较自动发现本次产物，必须手动下载安装器覆盖安装。
+- 标准迷你播放器封面律动恢复挂起的 `AudioContext` 音频分析，优先使用低平滑 `beatAnalyser`，并加入短期能量基线与峰谷对比；隐藏主窗口播放时仍由迷你播放器独立采样，低能量音乐不再长期显示固定脉冲。
+- 标准迷你播放器根据当前显示器工作区左右余量计算 `expandDirection`：靠右时向左展开，靠左时向右展开；收回态封面保持贴近窗口外侧，避免完整面板伸出屏幕。
+- 歌曲封面支持点击展开与拖动移动：位移小于约 `5px` 保持点击语义，超过阈值通过 `mineradio-mini-player-move-by` 按增量移动当前窗口；主进程校验 sender、夹紧到工作区并持久化坐标，不接管全局鼠标/键盘或主播放器拖动。
 - 每次主窗口成功创建后集中调用 `wallpaperEngineBridge.attachWindow(mainWindow)`，旧窗口关闭后新窗口继续具备 Wallpaper Engine 的最小化、隐藏、恢复、移动、缩放、全屏和关闭 hook。
 - 主窗口 renderer 崩溃、主 frame 导航、主 frame 不可恢复加载失败和窗口关闭都会停止当前原生 Scene，并清理 DWM helper、指针中继、静音重申定时器和捕获授权。
 - `pagehide` 对离开前持有的 session 发定向最佳努力停止请求；刷新成功时等待旧 renderer 清理完成，避免误停新 session 或重复启动 Scene。
 - 新增 renderer 崩溃、导航、刷新失败、窗口关闭、旧窗口所有权、并发清理和窗口重建 hook 生命周期测试。
-- 全量 Node 回归 `360/360`；主进程、Wallpaper Engine bridge、runtime、前端脚本和 `server.js` 语法检查，以及 `git diff --check` 均通过。
+- 全量 Node 回归 `366/366`；主进程、Wallpaper Engine bridge、runtime、前端脚本和 `server.js` 语法检查，以及 `git diff --check` 均通过。
 - Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
-- 发布资产：`Mineradio-1.5.4-Setup.exe` `101475967` 字节；`.blockmap` `105818` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
-- SHA256：安装器 `7ce4620340c14ac96ca537fa4bf5023cf1d9d31dcbe50e350b3ecbff4a726d2c`；`.blockmap` `3c432a017a74fae34b8187a074d438f98683e03a13f9b576416bc248f3b73bd1`；`latest.yml` `8c8876435329edd40c0b89782e59db574ca64c9c4aa70f51a947949b366efa29`。
-- `latest.yml` 的 Setup SHA512：`ZLpOOjFbwM41VNb9iX3By5PDbVoOBk45nk8aOWBiJva1CdDuyEzgHY9PmMuakjd8VZPk20atsVmm8wxEeU+TZQ==`。
-- 发布标题使用 `Mineradio v1.5.4 Wallpaper Engine 生命周期与窗口重建修复`。
+- 发布资产：`Mineradio-1.5.4-Setup.exe` `101477224` 字节；`.blockmap` `105771` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `af7fd330a1982fcb368a06720dac8e469c08ad5e2017bcb96a299736056b6793`；`.blockmap` `1bfaf29e6edb5abacff4092d413c18238daff117b4e5a7256243a4f5f716ecb72`；`latest.yml` `f44cf40f65b565ab1a45bee13e2bac86fbd34ab70204a85564397482e72db43d`；SHA256 清单 `8f87957f5ffca3a8c214d87743f1f6e7c971f25642a391d88634c93785f6ba64`。
+- `latest.yml` 的 Setup SHA512：`8o7IoNPMahL9CrjWkeECfMA6WO9B2gGnyhsmGhvG/OmaymWEBmgVSBZbMMtoHO1B/ZMu/a4DmDMEPa4qST4Ocg==`。
+- 发布标题使用 `Mineradio v1.5.4 迷你播放器与 Wallpaper Engine 生命周期修复重发`。
 
 ## v1.5.3 桌面歌词拖动原生竞态修复
 - 更新 `package.json`、`package-lock.json` 和前端 `APP_VERSION` 为 `1.5.3`，确保已安装 `1.5.2` 的客户端能够发现新版。

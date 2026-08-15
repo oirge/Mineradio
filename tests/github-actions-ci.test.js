@@ -7,6 +7,9 @@ const path = require('node:path');
 
 const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'verify.yml');
 const workflow = fs.readFileSync(workflowPath, 'utf8');
+const releaseWorkflowPath = path.join(__dirname, '..', '.github', 'workflows', 'release.yml');
+const releaseWorkflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 
 test('GitHub Actions verifies the release branch and default branch', () => {
   assert.match(workflow, /name: Verify/);
@@ -16,4 +19,21 @@ test('GitHub Actions verifies the release branch and default branch', () => {
   assert.match(workflow, /node --test --test-concurrency=1/);
   assert.match(workflow, /node --check desktop\/main\.js/);
   assert.match(workflow, /git diff --check/);
+});
+
+/**
+ * 验证发布工作流为安装器、blockmap 和 latest.yml 生成同一份校验清单。
+ * @returns {void}
+ */
+test('发布工作流清单覆盖全部自动更新资产', () => {
+  assert.match(releaseWorkflow, /Mineradio-\$version-Setup\.exe\.blockmap/);
+  assert.match(releaseWorkflow, /"latest\.yml"/);
+  assert.match(releaseWorkflow, /\$lines = foreach \(\$file in \$files\)/);
+  assert.match(releaseWorkflow, /"\$hash \*\$file"/);
+});
+
+test('发布工作流默认标签跟随当前 package 版本', () => {
+  const tag = 'v' + packageJson.version;
+  assert.match(releaseWorkflow, new RegExp("description: 'Release tag \\(e\.g\. " + tag + "\\)'"));
+  assert.match(releaseWorkflow, new RegExp("default: '" + tag + "'"));
 });

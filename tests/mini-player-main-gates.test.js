@@ -296,8 +296,109 @@ function testCreatingMiniPlayerWindowStartsFreshResidency() {
   assert.equal(stateCache.apply({ cover: 'late-cover', hasTrack: true }), false);
 }
 
+/**
+ * 验证标准迷你播放器靠近右侧时将完整面板切换为向左展开。
+ * @returns {void}
+ */
+function testMiniPlayerExpansionDirectionFollowsNearbyScreenEdge() {
+  const display = { workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
+  const context = {
+    screen: {
+      /** @returns {object} 返回同一测试显示器。 */
+      getDisplayMatching() { return display; },
+      /** @returns {object} 返回同一测试显示器。 */
+      getPrimaryDisplay() { return display; },
+    },
+  };
+  vm.runInNewContext(
+    extractFunction(readMainSource(), 'miniPlayerExpandDirectionForBounds', 'miniPlayerBoundsSignature')
+      + '\nthis.expandDirection = miniPlayerExpandDirectionForBounds;',
+    context,
+  );
+
+  assert.equal(context.expandDirection({ x: 42, y: 120, width: 360, height: 84 }), 'right');
+  assert.equal(context.expandDirection({ x: 1518, y: 120, width: 360, height: 84 }), 'left');
+}
+
+/**
+ * 验证封面拖动仅移动当前迷你窗口，拖动期间不写盘，结束时只保存一次。
+ * @returns {void}
+ */
+function testMiniPlayerCoverMoveIpcMovesCurrentWindow() {
+  const calls = { persists: 0, sends: 0 };
+  let bounds = { x: 680, y: 240, width: 360, height: 84 };
+  const sender = {};
+  const win = {
+    /** @returns {boolean} 假迷你窗口仍有效。 */
+    isDestroyed() { return false; },
+    webContents: sender,
+    /** @returns {{x:number,y:number,width:number,height:number}} 返回当前假窗口边界。 */
+    getBounds() { return bounds; },
+    /** @param {{x:number,y:number,width:number,height:number}} next 下一窗口边界。 @returns {void} 保存模拟移动结果。 */
+    setBounds(next) { bounds = next; },
+  };
+
+  /** @param {unknown} value 原始数值。 @param {number} min 最小值。 @param {number} max 最大值。 @param {number} fallback 无效值回退。 @returns {number} 已夹紧的数值。 */
+  function clampNumber(value, min, max, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.max(min, Math.min(max, number));
+  }
+
+  /** @param {{x:number,y:number,width:number,height:number}} next 原始窗口边界。 @returns {{x:number,y:number,width:number,height:number}} 工作区内的窗口边界。 */
+  function clampMiniPlayerBounds(next) {
+    return {
+      ...next,
+      x: Math.max(0, Math.min(next.x, 1560)),
+      y: Math.max(0, Math.min(next.y, 996)),
+    };
+  }
+
+  /** @returns {'standard'} 当前测试窗口固定为标准样式。 */
+  function miniPlayerModeForWindow() { return 'standard'; }
+
+  /** @returns {void} 记录坐标持久化。 */
+  function persistMiniPlayerUserBounds() { calls.persists += 1; }
+
+  /** @returns {void} 记录状态同步。 */
+  function sendMiniPlayerState() { calls.sends += 1; }
+
+  const context = {
+    miniPlayerWindow: win,
+    miniPlayerUserMovePending: true,
+    miniPlayerUserBoundsByMode: { standard: null, compact: null },
+    clampNumber,
+    clampMiniPlayerBounds,
+    miniPlayerModeForWindow,
+    persistMiniPlayerUserBounds,
+    sendMiniPlayerState,
+  };
+  vm.runInNewContext(
+    extractIpcHandler(readMainSource(), 'handleMiniPlayerMoveBy', 'mineradio-mini-player-move-by')
+      + '\nthis.moveBy = handleMiniPlayerMoveBy;',
+    context,
+  );
+
+  assert.equal(context.moveBy({ sender }, 12, -8).ok, true);
+  assert.deepEqual(bounds, { x: 692, y: 232, width: 360, height: 84 });
+  assert.equal(context.miniPlayerUserMovePending, false);
+  assert.deepEqual(context.miniPlayerUserBoundsByMode.standard, bounds);
+  assert.deepEqual(calls, { persists: 0, sends: 1 });
+
+  assert.equal(context.moveBy({ sender }, 7, 5).ok, true);
+  assert.deepEqual(bounds, { x: 699, y: 237, width: 360, height: 84 });
+  assert.deepEqual(calls, { persists: 0, sends: 2 });
+
+  assert.equal(context.moveBy({ sender }, 0, 0, true).ok, true);
+  assert.deepEqual(calls, { persists: 1, sends: 3 });
+  assert.equal(context.moveBy({ sender: {} }, 20, 20).ignored, true);
+  assert.deepEqual(calls, { persists: 1, sends: 3 });
+}
+
 test('暂停会话接入迷你播放器显示门禁', testPausedRecoverySessionBlocksMiniPlayerVisibility);
 test('暂停会话阻止迷你 renderer 崩溃恢复任务', testPausedRecoverySessionBlocksCrashRecovery);
 test('禁用状态缓存接入迷你播放器主进程 IPC', testDisabledStateCacheBlocksMainProcessPatch);
 test('销毁迷你窗口同步释放主进程封面缓存', testDestroyingMiniPlayerWindowReleasesCachedState);
 test('创建迷你窗口后补齐状态且旧关闭事件不越权', testCreatingMiniPlayerWindowStartsFreshResidency);
+test('标准迷你播放器按临近屏幕边缘切换展开方向', testMiniPlayerExpansionDirectionFollowsNearbyScreenEdge);
+test('封面拖动 IPC 仅在结束时保存当前窗口坐标', testMiniPlayerCoverMoveIpcMovesCurrentWindow);

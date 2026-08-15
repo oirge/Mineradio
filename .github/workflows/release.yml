@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v1.4.0)'
+        description: 'Release tag (e.g. v1.5.5)'
         required: true
-        default: 'v1.4.0'
+        default: 'v1.5.5'
 
 jobs:
   build-windows:
@@ -55,9 +55,16 @@ jobs:
         run: |
           cd dist
           $version = "${{ steps.package_version.outputs.VERSION }}"
-          $setupFile = "Mineradio-$version-Setup.exe"
-          $hash = (Get-FileHash $setupFile -Algorithm SHA256).Hash.ToLower()
-          "$hash  $setupFile" | Out-File -FilePath "Mineradio-$version-SHA256SUMS.txt" -Encoding utf8
+          $files = @(
+            "Mineradio-$version-Setup.exe",
+            "Mineradio-$version-Setup.exe.blockmap",
+            "latest.yml"
+          )
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            "$hash *$file"
+          }
+          $lines | Out-File -FilePath "Mineradio-$version-SHA256SUMS.txt" -Encoding utf8
         shell: pwsh
       
       - name: Upload release assets

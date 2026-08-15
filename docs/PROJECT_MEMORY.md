@@ -4,13 +4,13 @@
 
 ## Stable Project Facts
 
-- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
+- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-v1.5.4-mini-cover-pulse-fix`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.5.3` 基于 GitHub `v1.5.2`，已修复桌面歌词置顶透明层与 Windows 原生主窗口拖动的鼠标转发竞态，并保留主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、Wallpaper Engine、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`codex/release-1.5.3`；目标同步到 GitHub `origin/main` 和 tag `v1.5.3`。
-- 最近正式安装包 Release 基线：`v1.5.2`（2026-08-15，本地文件授权与窗口拖动修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
+- 当前源码检查点：`v1.5.5` 基于 GitHub `v1.5.4`，已修复标准迷你播放器封面律动、显示器边缘展开和封面拖动，并保留 Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.5`。
+- 最近正式安装包 Release 基线：`v1.5.4`（2026-08-15，Wallpaper Engine 生命周期与窗口重建及迷你播放器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -33,6 +33,29 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.5.5 迷你播放器封面律动、贴边展开与封面拖动修复
+
+- 日期：2026-08-15。
+- 正式发布版本从 `1.5.4` 提升为 `1.5.5`，保留标准迷你播放器封面律动、显示器边缘展开和封面拖动修复；版本号提升后，已安装 `1.5.4` 的客户端可通过 `latest.yml` 自动发现更新。
+- 涉及发布记录：`CHANGELOG.md`、`RELEASE.md` 和本文件；源码行为沿用当前已验证的 `public/app.js`、`public/mini-player.html`、`desktop/main.js` 与 `desktop/mini-player-preload.js` 修复。
+- 封面律动在主窗口隐藏且 `AudioContext` 挂起时先恢复音频分析；采样优先使用低平滑 `beatAnalyser`，通过低频均值、峰值、整体能量和短期基线计算瞬态对比，避免压缩音乐长期饱和为固定缩放值。
+- `miniPlayerExpandDirectionForBounds()` 根据当前显示器工作区左右余量返回 `left` / `right`；标准面板靠近右边缘时向左展开，靠近左边缘时向右展开，收回态封面保持贴边。
+- 封面 pointer 事件以屏幕坐标计算增量；总位移小于约 `5px` 仍触发展开，超过阈值通过 `mineradio-mini-player-move-by` 移动当前迷你窗口。主进程校验 IPC sender、限制单次偏移、按工作区夹紧并持久化坐标；该路径不接管全局输入，也不修改主播放器拖动。
+- 全量 Node 回归 `368/368`，迷你播放器脉冲、方向、拖动和 IPC sender 门禁、版本一致性、发布工作流标签与资产清单测试通过；关键 JavaScript 语法检查与 `git diff --check` 通过。
+- `v1.5.5` Windows x64 NSIS 资产：安装器 `101476694` 字节 / SHA256 `4af2724118ae0688e02cc0eefb4412ff909c2cf49780c11b051d2cfd5ee4f298`；blockmap `105747` 字节 / `96d6fdbfb86b638bf5083bdde3ca65797ffe27f482b4f2b13e2860425dc7204e`；`latest.yml` `347` 字节 / `9a61d1b3aaec517742339eb5189db632d87e40f1a5076d8894d3965420440b4b`；SHA256 清单 `270` 字节 / `b7ee1ae8f992d8390881808cb4d3e4c574d8479db875f6082ed0437b34e68867`。
+- `latest.yml` 的 Setup SHA512：`Z1aNBtqVKPlb9VsvzClDK2fX4ZGHyPMNuU7oBTaNpEEM8uiahDvfOreqmNmQGK7qFJkR11ovKeYsgMSUK4aIMw==`。
+
+## v1.5.4 迷你播放器封面律动、贴边展开与封面拖动修复重发
+
+- 日期：2026-08-15。
+- 本次保持版本号 `1.5.4`，基于现有 Wallpaper Engine 生命周期与窗口重建修复，补齐标准迷你播放器的封面律动、显示器边缘展开和封面拖动能力。
+- 涉及文件：`public/app.js`、`public/mini-player.html`、`desktop/main.js`、`desktop/mini-player-preload.js`、`tests/mini-player-pulse.test.js`、`tests/mini-player-visual.test.js`、`tests/mini-player-main-gates.test.js`、`tests/main-window-navigation-ipc-trust.test.js`、`CHANGELOG.md`、`RELEASE.md` 和本文件。
+- 封面律动在主窗口隐藏且 `AudioContext` 挂起时先恢复音频分析；采样优先使用低平滑 `beatAnalyser`，通过低频均值、峰值、整体能量和短期基线计算瞬态对比，避免压缩音乐长期饱和为固定缩放值。关闭律动或强度为零时仍保持静止，极简迷你播放器继续不创建封面。
+- `miniPlayerExpandDirectionForBounds()` 根据当前显示器工作区左右余量返回 `left` / `right`；标准面板靠近右边缘时向左展开，靠近左边缘时向右展开，收回态封面保持贴边。
+- 封面 pointer 事件以屏幕坐标计算增量；总位移小于约 `5px` 仍触发展开，超过阈值通过 `mineradio-mini-player-move-by` 移动当前迷你窗口。主进程校验 IPC sender、限制单次偏移、按工作区夹紧并持久化坐标；该路径不接管全局输入，也不修改主播放器拖动。
+- 全量 Node 回归 `366/366`，迷你播放器脉冲、方向、拖动和 IPC sender 门禁测试通过；关键 JavaScript 语法检查与 `git diff --check` 通过。
+- 同版本重发不会触发已安装 `1.5.4` 客户端的自动更新，发布说明必须提示手动下载安装器覆盖安装。
 
 ## v1.5.3 桌面歌词拖动原生竞态修复
 

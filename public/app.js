@@ -477,7 +477,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.5.4';
+var APP_VERSION = '1.5.5';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -22821,6 +22821,7 @@ var miniPlayerSyncState = null;
 var miniPlayerPulseLastAt = 0;
 var miniPlayerPulseTimer = 0;
 var miniPlayerPulseSample = 0;
+var miniPlayerPulseBaseline = 0;
 
 function miniPlayerVisualPayload() {
   return {
@@ -22853,23 +22854,47 @@ function miniPlayerPulseTimerActive() {
     audio && audio.src && !audio.paused && !audio.ended);
 }
 
+/**
+ * 在主窗口隐藏时独立采样音频频谱，向标准迷你播放器提供有峰谷的封面律动。
+ * 挂起的 AudioContext 必须先恢复；频谱值使用低频峰值、低频均值和整体能量的短期对比，避免压缩音乐长期饱和为固定满值。
+ * @returns {void}
+ */
 function runMiniPlayerPulseTimer() {
   miniPlayerPulseTimer = 0;
   if (!miniPlayerPulseTimerActive()) {
     miniPlayerPulseSample *= 0.72;
+    miniPlayerPulseBaseline *= 0.82;
     return;
   }
   var target = 0;
   try {
-    if (analyser && frequencyData && frequencyData.length) {
-      analyser.getByteFrequencyData(frequencyData);
+    if (audioCtx && audioCtx.state === 'suspended' && typeof resumeAudioAnalysis === 'function') resumeAudioAnalysis();
+    var pulseAnalyser = analyser;
+    var pulseData = frequencyData;
+    if (beatAnalyser && typeof beatFrequencyData !== 'undefined' && beatFrequencyData && beatFrequencyData.length) {
+      pulseAnalyser = beatAnalyser;
+      pulseData = beatFrequencyData;
+    }
+    if (pulseAnalyser && pulseData && pulseData.length) {
+      pulseAnalyser.getByteFrequencyData(pulseData);
       var low = 0;
+      var lowPeak = 0;
       var energy = 0;
-      var lowEnd = Math.min(10, frequencyData.length);
-      var energyEnd = Math.min(96, frequencyData.length);
-      for (var i = 0; i < lowEnd; i++) low += frequencyData[i];
-      for (var j = 0; j < energyEnd; j++) energy += frequencyData[j];
-      target = clampRange((low / Math.max(1, lowEnd)) / 255 * 1.12 + (energy / Math.max(1, energyEnd)) / 255 * 0.26, 0, 1);
+      var lowEnd = Math.min(10, pulseData.length);
+      var energyEnd = Math.min(96, pulseData.length);
+      for (var i = 0; i < lowEnd; i++) {
+        var lowValue = pulseData[i] / 255;
+        low += lowValue;
+        if (lowValue > lowPeak) lowPeak = lowValue;
+      }
+      for (var j = 0; j < energyEnd; j++) energy += pulseData[j] / 255;
+      var lowMean = low / Math.max(1, lowEnd);
+      var energyMean = energy / Math.max(1, energyEnd);
+      var rawTarget = lowMean * 0.62 + lowPeak * 0.18 + energyMean * 0.20;
+      miniPlayerPulseBaseline += (rawTarget - miniPlayerPulseBaseline) * (rawTarget > miniPlayerPulseBaseline ? 0.10 : 0.024);
+      var contrast = Math.max(0, rawTarget - miniPlayerPulseBaseline);
+      var transient = clampRange(contrast / Math.max(0.08, miniPlayerPulseBaseline * 0.36), 0, 1);
+      target = clampRange(rawTarget * 0.22 + transient * 0.78, 0, 1);
     }
   } catch (e) {}
   miniPlayerPulseSample += (target - miniPlayerPulseSample) * (target > miniPlayerPulseSample ? 0.42 : 0.20);
@@ -22877,10 +22902,15 @@ function runMiniPlayerPulseTimer() {
   miniPlayerPulseTimer = setTimeout(runMiniPlayerPulseTimer, 80);
 }
 
+/**
+ * 根据隐藏窗口和播放状态启停迷你播放器频谱定时器，并衰减短期律动基线。
+ * @returns {void}
+ */
 function syncMiniPlayerPulseTimer() {
   if (!miniPlayerPulseTimerActive()) {
     stopMiniPlayerPulseTimer();
     miniPlayerPulseSample *= 0.82;
+    miniPlayerPulseBaseline *= 0.82;
     return;
   }
   if (!miniPlayerPulseTimer) miniPlayerPulseTimer = setTimeout(runMiniPlayerPulseTimer, 0);
