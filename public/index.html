@@ -478,6 +478,28 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold" id="fx-playback-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-playback-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>自动播放</strong><small>启动继续 / 随机与播放歌单</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-section-label">启动自动播放</div>
+      <div class="fx-seg" id="autoplay-mode-seg" title="控制播放器启动载入本地曲库后是否自动出声">
+        <button type="button" data-autoplay-mode="off" aria-pressed="true" title="启动只恢复上次播放位置，不自动出声">关闭</button>
+        <button type="button" data-autoplay-mode="continue" aria-pressed="false" title="启动后自动接着上次的歌曲和进度继续播放">继续播放</button>
+        <button type="button" data-autoplay-mode="shuffle" aria-pressed="false" title="启动后从播放歌单里随机挑一首开始播放">随机播放</button>
+      </div>
+      <div class="mini-player-collapse-hint" id="autoplay-hint">关闭时启动只恢复上次播放位置，不会自动出声。</div>
+      <div class="fx-section-label">自动播放歌单</div>
+      <div class="lyric-color-row">
+        <span>当前歌单</span>
+        <strong id="autoplay-source-value">全部音乐</strong>
+        <button type="button" class="fx-mini-btn ghost" onclick="openAutoPlaybackPlaylistPicker()" title="打开底部控制栏的播放歌单选择器">选择</button>
+      </div>
+      <div class="mini-player-collapse-hint">自动播放使用底部控制栏选中的播放歌单，切换后下次启动生效。</div>
+    </div>
+  </div>
+
   <div class="fx-advanced" id="fx-advanced">
     <div class="fx-advanced-head" onclick="document.getElementById('fx-advanced').classList.toggle('open')">
       <span>高级参数</span><span class="arrow">▶</span>

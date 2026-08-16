@@ -208,6 +208,18 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   assert.match(html, /\.mini-shell\[data-collapsed="true"\]\s*\{[\s\S]*?-webkit-app-region:\s*no-drag;[\s\S]*?pointer-events:\s*none;/);
   assert.match(html, /\.mini-shell\[data-collapsed="true"\]\s+\.cover\s*\{[\s\S]*?pointer-events:\s*auto;[\s\S]*?-webkit-app-region:\s*no-drag;/);
   assert.match(html, /\.mini-shell\[data-expand-direction="left"\]\s+\.desktop-lyrics-toggle\s*\{[\s\S]*?left:\s*5px;[\s\S]*?right:\s*auto;/);
+  // 桌面歌词按钮是 position:absolute，一旦落在 .transport 里，收回态那份 transform 会把 .transport 变成包含块，
+  // 悬浮展开/收回过程中按钮会被拽到面板中央并被 overflow:hidden 裁切，所以必须挂在 .mini-shell 直属层。
+  const transportBlock = html.slice(html.indexOf('<div class="transport">'), html.indexOf('id="restore"'));
+  assert.ok(transportBlock.length > 0);
+  assert.doesNotMatch(transportBlock.slice(0, transportBlock.indexOf('</div>')), /id="desktop-lyrics"/);
+  assert.match(html, /<\/div>\s*(?:<!--[\s\S]*?-->\s*)?<button id="desktop-lyrics"/);
+  assert.match(html, /\.mini-shell\[data-collapsed="true"\]\s+\.desktop-lyrics-toggle\s*\{[\s\S]*?opacity:\s*0;[\s\S]*?pointer-events:\s*none;/);
+  assert.match(html, /\.desktop-lyrics-toggle \{[\s\S]*?transition:[^;]*opacity 190ms ease/);
+  assert.match(
+    html,
+    /\.mini-shell\[data-expand-direction="left"\]\[data-collapsed="true"\] \.meta,\s*\.mini-shell\[data-expand-direction="left"\]\[data-collapsed="true"\] \.transport,\s*\.mini-shell\[data-expand-direction="left"\]\[data-collapsed="true"\] \.restore \{\s*transform: translateX\(-10px\) scale\(0\.94\);/,
+  );
   assert.match(html, /document\.addEventListener\('mousemove', trackCoverHotRegion\)/);
   assert.match(html, /document\.addEventListener\('mouseleave', clearCoverHotRegion\)/);
   assert.match(html, /window\.miniPlayer\.setPointerPassthrough\(next\)/);

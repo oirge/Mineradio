@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.5.6` 基于 GitHub `v1.5.5`，已修复标准迷你播放器收回态鼠标穿透和桌面歌词按钮左下角镜像，并保留封面律动、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.6`。
+- 当前源码检查点：`v1.5.7` 基于 GitHub `v1.5.6`，新增 `DIY -> 高级 -> 自动播放` 的启动继续 / 随机播放开关，修复迷你播放器悬浮展开收回时桌面歌词按钮错位，并保留收回态鼠标穿透、封面律动、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.7`。
 - 最近正式安装包 Release 基线：`v1.5.4`（2026-08-15，Wallpaper Engine 生命周期与窗口重建及迷你播放器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -33,6 +33,20 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.5.7 自动播放开关与迷你播放器悬浮展开错位修复
+
+- 日期：2026-08-16。
+- 正式发布版本从 `1.5.6` 提升为 `1.5.7`；已安装 `1.5.6` 及更早版本的客户端可通过 `latest.yml` 自动发现更新。
+- 涉及文件：`public/app.js`、`public/index.html`、`public/mini-player.html`、`.context/conventions/mineradio-auto-playback.md`、`.context/conventions/mineradio-mini-player-collapse.md`、`tests/auto-playback-startup.test.js`、`tests/mini-player-visual.test.js`。
+- 自动播放三档状态 `off` / `continue` / `shuffle` 存在 `mineradio-auto-playback-v1`，并登记进 `PERSISTENT_UI_STATE_KEYS`；入口是 `public/index.html` 的 `fx-playback-fold`，归入视觉控制台“高级”页，复用既有 `fx-fold` / `fx-seg` / `lyric-color-row` / `mini-player-collapse-hint` 类，未新增 CSS。
+- 关键结论：`nextTrack()` 本来就按取模环绕，队列播完会自动回到开头，唯一不自动出声的地方是启动——`restorePlaybackSessionForLocalLibrary` 故意只恢复位置并保持暂停。所以自动播放只需挂在 `handleLocalFolderFiles` 的两条启动出口上，不要去改 `nextTrack` 或 `playMode`。
+- 自动播放歌单直接复用 `localLibraryPlaybackSelection` 和 `LOCAL_PLAYBACK_SOURCE_STORE_KEY`，启动时 `playQueue` 已经按这份选择构建，不需要第二套歌单存储。
+- 不要再改坏的边界：`autoPlaybackRestoreHandled` 保证每次启动只起播一次（后台增量扫描会重复走 `handleLocalFolderFiles`）；`audio.src && !audio.paused` 时必须直接退出，不能打断已有播放；关闭态要保留 `pendingPlaybackSessionResume`，否则用户手动点播放就丢了上次进度；`shuffle` 起播前必须清空恢复点，避免随机到的歌从别人的时间点开始。
+- 桌面歌词 `词` 按钮必须是 `.mini-shell` 直属子节点：它是 `position: absolute`，落在 `.transport` 内时收回态那份 `transform` 会把 `.transport` 变成包含块，240ms 悬浮过渡里按钮被拽到面板中央压住播放按钮，并被 `.transport` 的 `overflow: hidden` 裁切。
+- 全量 Node 回归 `385/385`；`node --check` 与 `git diff --check` 通过。
+- `v1.5.7` Windows x64 NSIS 资产：安装器 `101480140` 字节 / SHA256 `09cdaa786f890f2b618f8650d9422faa79fdca73a3ef8bb9cd289bdcce28321d`；blockmap `105940` 字节 / `e51bc8f6b94025b367123001d8ef5398fd6a97503ce177495f0e6a52689e214c`；`latest.yml` `347` 字节 / `3c3f404d19493544ad60043b02c9fcd4dba5a4c3ed098711247791ed085714ba`；SHA256 清单 `270` 字节 / `e561c8da33309dc41eb04a099ce0ec46f5d7bae1d669a8b1ce7f185c0664526a`。
+- `latest.yml` 的 Setup SHA512：`AlNNeuJNbLZ1uMwA87vgHS0M1Z1gk0uAfJoZcZZvJ6cK74WEJfB3zCcNZHdAliYOnMIyfkiPrTjd/vRvu9DObg==`。
 
 ## v1.5.6 标准迷你播放器收回态穿透与桌面歌词按钮镜像修复
 

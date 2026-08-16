@@ -58,6 +58,15 @@
       width: 0;
       min-width: 0;
     }
+    .mini-shell[data-expand-direction="left"][data-collapsed="true"] .meta,
+    .mini-shell[data-expand-direction="left"][data-collapsed="true"] .transport,
+    .mini-shell[data-expand-direction="left"][data-collapsed="true"] .restore {
+      transform: translateX(-10px) scale(0.94);
+    }
+    .mini-shell[data-collapsed="true"] .desktop-lyrics-toggle {
+      opacity: 0;
+      pointer-events: none;
+    }
     .mini-shell[data-collapsed="true"] .transport {
       flex-basis: 0;
       width: 0;
@@ -223,6 +232,7 @@
       line-height: 1;
       letter-spacing: 0;
       z-index: 2;
+      transition: opacity 190ms ease, color 140ms ease;
     }
     .mini-shell[data-expand-direction="left"] .desktop-lyrics-toggle {
       left: 5px;
@@ -292,10 +302,11 @@
       <button id="next" type="button" title="下一首" aria-label="下一首">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m6 18 8.5-6L6 6v12zM16 6v12h2V6z"/></svg>
       </button>
-      <button id="desktop-lyrics" class="desktop-lyrics-toggle" type="button" title="开启桌面歌词" aria-label="开启桌面歌词" aria-pressed="false">
-        <span class="desktop-lyrics-glyph" aria-hidden="true">词</span>
-      </button>
     </div>
+    <!-- 桌面歌词按钮必须挂在 .mini-shell 直属层：.transport 收回时带 transform 会变成绝对定位包含块，把它拽到面板中间并被 overflow 裁切。 -->
+    <button id="desktop-lyrics" class="desktop-lyrics-toggle" type="button" title="开启桌面歌词" aria-label="开启桌面歌词" aria-pressed="false">
+      <span class="desktop-lyrics-glyph" aria-hidden="true">词</span>
+    </button>
     <button id="restore" class="restore" type="button" title="返回主界面" aria-label="返回主界面">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
     </button>

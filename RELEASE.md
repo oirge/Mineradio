@@ -1,5 +1,21 @@
 ﻿# 发布流程
 
+## v1.5.7 自动播放开关与迷你播放器悬浮展开错位修复
+- 正式发布版本从 `1.5.6` 提升为 `1.5.7`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.6` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
+- 新增自动播放开关：状态 `off` / `continue` / `shuffle` 持久化到 `mineradio-auto-playback-v1`，并登记进 `PERSISTENT_UI_STATE_KEYS`，清理运行时缓存时不会被抹掉。
+- 设置区为 `public/index.html` 的 `fx-playback-fold`，复用既有 `fx-fold` / `fx-seg` / `fx-section-label` / `lyric-color-row` / `fx-mini-btn ghost` / `mini-player-collapse-hint` 类，未新增任何 CSS，归入视觉控制台“高级”页并默认展开。
+- `startAutoPlayback('restore')` 挂在 `handleLocalFolderFiles` 的两条启动出口上（会话恢复分支与 `autoPlay === false` 被动队列分支），由 `autoPlaybackRestoreHandled` 保证每次启动只起播一次。
+- `continue` 复用 `pendingPlaybackSessionResume`，仅在恢复点与当前索引一致时带上 `resumeAt`；`shuffle` 切到 `playMode = 'shuffle'`，队列未固定乱序时先 `shufflePlayQueueOnce` 一次，再随机取索引并清空恢复点。
+- 自动播放歌单复用 `localLibraryPlaybackSelection` 与 `LOCAL_PLAYBACK_SOURCE_STORE_KEY`；`setLocalPlaybackPlaylistSelection` 会回调 `updateAutoPlaybackControls`，设置区名称与底部控制栏选择器始终一致。
+- 桌面歌词 `词` 按钮改为 `.mini-shell` 直属子节点（排在 `.transport` 之后保持 Tab 顺序）：它是 `position: absolute`，落在 `.transport` 内时收回态那份 `transform` 会让 `.transport` 成为包含块，240ms 过渡中按钮被拽到面板中央并被 `overflow: hidden` 裁切。收回态改用独立的 `opacity: 0; pointer-events: none;` 淡出。
+- 向左展开的收回态位移镜像为 `translateX(-10px) scale(0.94)`，与向右展开的 `translateX(10px)` 对称。
+- 全量 Node 回归 `385/385`；新增 `tests/auto-playback-startup.test.js` 13 项自动播放测试，扩展 `tests/mini-player-visual.test.js` 的按钮层级与镜像位移断言，版本一致性、发布工作流标签与资产清单测试，以及关键 JavaScript 语法检查与 `git diff --check` 均通过。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.5.7-Setup.exe` `101480140` 字节；`.blockmap` `105940` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `09cdaa786f890f2b618f8650d9422faa79fdca73a3ef8bb9cd289bdcce28321d`；`.blockmap` `e51bc8f6b94025b367123001d8ef5398fd6a97503ce177495f0e6a52689e214c`；`latest.yml` `3c3f404d19493544ad60043b02c9fcd4dba5a4c3ed098711247791ed085714ba`；SHA256 清单 `e561c8da33309dc41eb04a099ce0ec46f5d7bae1d669a8b1ce7f185c0664526a`。
+- `latest.yml` 的 Setup SHA512：`AlNNeuJNbLZ1uMwA87vgHS0M1Z1gk0uAfJoZcZZvJ6cK74WEJfB3zCcNZHdAliYOnMIyfkiPrTjd/vRvu9DObg==`。
+- 发布标题使用 `Mineradio v1.5.7 自动播放开关与迷你播放器悬浮展开错位修复`。
+
 ## v1.5.6 标准迷你播放器收回态穿透与桌面歌词按钮镜像修复
 - 正式发布版本从 `1.5.5` 提升为 `1.5.6`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.5` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
 - 标准迷你播放器收回态改用 `setIgnoreMouseEvents(true, { forward: true })` 把鼠标事件交还桌面；CSS `pointer-events` 管不住透明窗口命中，原完整面板位置不再吞掉桌面点击与拖动。

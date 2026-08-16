@@ -129,6 +129,7 @@ var LOCAL_LIBRARY_SNAPSHOT_STORE_KEY = 'mineradio-local-library-snapshot-v1';
 var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
+var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
 var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
 var LOCAL_METADATA_TAG_SCHEMA = 3;
@@ -147,6 +148,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   LOCAL_LIBRARY_FOLDER_STORE_KEY,
   PLAYBACK_SESSION_STORE_KEY,
   LOCAL_PLAYBACK_SOURCE_STORE_KEY,
+  AUTO_PLAYBACK_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
   UPLOAD_TIP_STORE_KEY
@@ -448,6 +450,7 @@ function installStartupLongTaskObserver() {
 }
 installStartupLongTaskObserver();
 var queueViewTab = 'queue', playMode = 'loop', miniQueueOpen = false, localPlaybackPlaylistPickerOpen = false;
+var autoPlaybackMode = 'off', autoPlaybackRestoreHandled = false;
 var miniQueueRenderSeq = 0, queueRenderSeq = 0, playlistRenderSeq = 0;
 var queuePanelDirty = false;
 var queuePanelPendingRender = { raf: 0, reason: '', opts: null };
@@ -477,7 +480,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.5.6';
+var APP_VERSION = '1.5.7';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -17307,6 +17310,7 @@ function setLocalPlaybackPlaylistSelection(kind) {
     setPersistentLocalStorageItem(LOCAL_PLAYBACK_SOURCE_STORE_KEY, localLibraryPlaybackSelection);
   }
   updateLocalPlaybackPlaylistSourceButton();
+  if (typeof updateAutoPlaybackControls === 'function') updateAutoPlaybackControls();
   return localLibraryPlaybackSelection;
 }
 function localSongIndexByKey(songs, key) {
@@ -20080,9 +20084,166 @@ function restorePlaybackSessionForLocalLibrary(songs, folderPath) {
   playing = false;
   setPlayIcon(false);
   forcePlaybackControlsInteractive();
-  showToast('已恢复上次播放位置');
+  if (normalizeAutoPlaybackMode(autoPlaybackMode) === 'off') showToast('已恢复上次播放位置');
   return true;
 }
+
+var AUTO_PLAYBACK_MODES = ['off', 'continue', 'shuffle'];
+
+/**
+ * 归一化自动播放模式，未知值一律退回关闭，避免旧存档带进无效状态。
+ * @param {*} mode 待归一化的模式值。
+ * @returns {string} `off` / `continue` / `shuffle` 之一。
+ */
+function normalizeAutoPlaybackMode(mode) {
+  var value = String(mode == null ? '' : mode).trim();
+  return value !== 'off' && AUTO_PLAYBACK_MODES.indexOf(value) >= 0 ? value : 'off';
+}
+
+/**
+ * 读取持久化的自动播放模式。
+ * @returns {string} 归一化后的自动播放模式。
+ */
+function readSavedAutoPlaybackMode() {
+  try {
+    return normalizeAutoPlaybackMode(localStorage.getItem(AUTO_PLAYBACK_STORE_KEY));
+  } catch (e) {
+    return 'off';
+  }
+}
+
+/**
+ * 自动播放模式的中文名称。
+ * @param {string} mode 自动播放模式。
+ * @returns {string} 展示用名称。
+ */
+function autoPlaybackModeLabel(mode) {
+  var value = normalizeAutoPlaybackMode(mode);
+  if (value === 'continue') return '继续播放';
+  if (value === 'shuffle') return '随机播放';
+  return '关闭';
+}
+
+/**
+ * 自动播放设置区的说明文案。
+ * @param {string} mode 自动播放模式。
+ * @returns {string} 说明文案。
+ */
+function autoPlaybackHintText(mode) {
+  var value = normalizeAutoPlaybackMode(mode);
+  if (value === 'continue') return '启动后自动接着上次的歌曲和进度继续播放。';
+  if (value === 'shuffle') return '启动后从下方播放歌单里随机挑一首开始播放。';
+  return '关闭时启动只恢复上次播放位置，不会自动出声。';
+}
+
+/**
+ * 同步自动播放设置区的分段按钮、歌单名称和说明文案。
+ * @returns {void}
+ */
+function updateAutoPlaybackControls() {
+  var mode = normalizeAutoPlaybackMode(autoPlaybackMode);
+  var buttons = document.querySelectorAll('#autoplay-mode-seg [data-autoplay-mode]');
+  for (var i = 0; i < buttons.length; i++) {
+    var button = buttons[i];
+    var active = button.getAttribute('data-autoplay-mode') === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  var sourceValue = document.getElementById('autoplay-source-value');
+  if (sourceValue) sourceValue.textContent = localPlaybackPlaylistSourceName(localLibraryPlaybackSelection);
+  var hint = document.getElementById('autoplay-hint');
+  if (hint) hint.textContent = autoPlaybackHintText(mode);
+}
+
+/**
+ * 切换自动播放模式并落盘；打开开关时立刻按新模式起播一次，让开关有即时反馈。
+ * @param {string} mode 目标自动播放模式。
+ * @param {{silent?: boolean, startNow?: boolean}=} opts 提示与起播选项。
+ * @returns {string} 生效后的自动播放模式。
+ */
+function setAutoPlaybackMode(mode, opts) {
+  opts = opts || {};
+  var next = normalizeAutoPlaybackMode(mode);
+  var changed = next !== normalizeAutoPlaybackMode(autoPlaybackMode);
+  autoPlaybackMode = next;
+  if (changed) setPersistentLocalStorageItem(AUTO_PLAYBACK_STORE_KEY, next);
+  updateAutoPlaybackControls();
+  if (changed && opts.silent !== true) showToast('自动播放: ' + autoPlaybackModeLabel(next));
+  if (changed && next !== 'off' && opts.startNow !== false) startAutoPlayback('setting');
+  return autoPlaybackMode;
+}
+
+/**
+ * 按自动播放模式起播：`continue` 接上次歌曲和进度，`shuffle` 从当前播放歌单随机挑一首从头开始。
+ * 已经在出声时不打断；启动恢复路径只允许触发一次，避免后台增量扫描重复起播。
+ * @param {string} reason 触发来源，`restore` 为启动恢复，`setting` 为用户刚打开开关。
+ * @returns {boolean} 是否已经发起播放。
+ */
+function startAutoPlayback(reason) {
+  var mode = normalizeAutoPlaybackMode(autoPlaybackMode);
+  if (mode === 'off') return false;
+  if (!Array.isArray(playQueue) || !playQueue.length) return false;
+  if (audio && audio.src && !audio.paused && !audio.ended) return false;
+  if (reason === 'restore') {
+    if (autoPlaybackRestoreHandled) return false;
+    autoPlaybackRestoreHandled = true;
+  }
+  clearLocalLibraryPassiveQueue();
+  var idx = currentIdx >= 0 && currentIdx < playQueue.length ? currentIdx : 0;
+  var resumeAt = 0;
+  if (mode === 'shuffle') {
+    if (playMode !== 'shuffle') {
+      playMode = 'shuffle';
+      updatePlayModeButton(false);
+    }
+    if (!shuffledPlayQueueArrays.has(playQueue)) {
+      currentIdx = idx;
+      shufflePlayQueueOnce({ toast: false, reason: 'auto-playback-shuffle' });
+    }
+    idx = Math.floor(Math.random() * playQueue.length);
+    if (!(idx >= 0 && idx < playQueue.length)) idx = 0;
+    pendingPlaybackSessionResume = { idx: -1, time: 0 };
+  } else if (pendingPlaybackSessionResume && pendingPlaybackSessionResume.idx === idx) {
+    resumeAt = Math.max(0, Number(pendingPlaybackSessionResume.time) || 0);
+    pendingPlaybackSessionResume = { idx: -1, time: 0 };
+  }
+  playToggleBusy = false;
+  forcePlaybackControlsInteractive();
+  if (reason === 'restore') showToast(mode === 'shuffle' ? '自动随机播放已开始' : '已接着上次继续播放');
+  Promise.resolve(playQueueAt(idx, { manual: true, resumeAt: resumeAt }))
+    .catch(function(e){ console.warn('[AutoPlayback]', e); })
+    .then(forcePlaybackControlsInteractive);
+  return true;
+}
+
+/**
+ * 打开底部控制栏的播放歌单选择器，自动播放歌单与它共用同一份选择。
+ * 视觉控制台会挡住底部控制栏，所以先收起面板再展开选择器。
+ * @returns {void}
+ */
+function openAutoPlaybackPlaylistPicker() {
+  if (typeof toggleFxPanel === 'function') toggleFxPanel(false);
+  setLocalPlaybackPlaylistPickerOpen(true);
+}
+
+/**
+ * 绑定自动播放分段按钮并同步初始状态。
+ * @returns {void}
+ */
+function initAutoPlaybackControls() {
+  autoPlaybackMode = readSavedAutoPlaybackMode();
+  var seg = document.getElementById('autoplay-mode-seg');
+  if (seg) {
+    seg.addEventListener('click', function(e){
+      var button = e.target && e.target.closest ? e.target.closest('[data-autoplay-mode]') : null;
+      if (!button) return;
+      e.preventDefault();
+      setAutoPlaybackMode(button.getAttribute('data-autoplay-mode'));
+    });
+  }
+  updateAutoPlaybackControls();
+}
+
 function queueSong(song, opts) {
   opts = opts || {};
   if (!song) return -1;
@@ -25630,10 +25791,12 @@ async function handleLocalFolderFiles(files, opts) {
   }
   if (opts.restored && restorePlaybackSessionForLocalLibrary(playQueue, opts.folderPath || savedLocalLibraryFolderPath())) {
     safeRenderQueuePanel('playback-session-restore', { scrollCurrent: true });
+    startAutoPlayback('restore');
     return;
   }
   if (opts.autoPlay === false) {
     forcePlaybackControlsInteractive();
+    startAutoPlayback('restore');
     return;
   }
   playQueueAt(0, { manual: true }).catch(function(e){ console.warn('[LocalFolderImportPlay]', e); });
@@ -27304,7 +27467,7 @@ function fxPanelTargetForNode(node, current) {
   if (id === 'fx-lyric-fold') return 'lyrics';
   if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
-  if (id === 'fx-advanced' || node.classList.contains('fx-actions')) return 'advanced';
+  if (id === 'fx-advanced' || id === 'fx-playback-fold' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
   if (inputId === 'fx-bgopacity' || inputId === 'fx-glassaberration') return 'appearance';
   if (inputId === 'fx-lyricglow') return 'lyrics';
@@ -27364,7 +27527,7 @@ function organizeFxPanel() {
     }
     (pages[target] || pages.presets).appendChild(node);
   });
-  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-advanced'].forEach(function(id){
+  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-advanced'].forEach(function(id){
     var fold = document.getElementById(id);
     if (fold) fold.classList.add('open');
   });
@@ -32880,6 +33043,7 @@ updateCustomCoverButton();
 updateCustomLyricControls();
 updateLikeButtons();
 updateLocalPlaybackPlaylistSourceButton();
+initAutoPlaybackControls();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
 
