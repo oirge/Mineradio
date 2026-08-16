@@ -8,9 +8,9 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.6.0` 基于 GitHub `v1.5.9`，修复隐藏播放时低平滑分析器空帧覆盖主分析器导致迷你播放器封面律动与光晕无反应，以及 `document.hidden` 早于窗口状态 IPC 时采样定时器未启动的问题；并保留软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.6.0`。
-- 最近正式安装包 Release 基线：`v1.6.0`（2026-08-16，迷你播放器隐藏播放分析器回退与隐藏态采样定时器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
+- 当前源码检查点：`v1.6.1` 基于 GitHub `v1.6.0`，新增 MP2、M4B、AIF/AIFF/AIFC 本地音频识别、文件夹扫描、文件选择器和本地代理 MIME 支持；并保留隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.6.1`。
+- 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。

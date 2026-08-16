@@ -131,7 +131,7 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
-### 最新版本 v1.4.2 (2026-08-12)
+### 最新版本 v1.6.1 (2026-08-16)
 
 - 支持 MP3/MP2/FLAC/M4A/M4B/WAV/OGG/OGA/AAC/Opus/WebM/WebA/AIFF 多格式播放
 - 支持 LRC/TXT/SRT/VTT/ASS/YRC 外置歌词，以及 JPG/JPEG/JPE/JFIF/PNG/WebP/AVIF/GIF/BMP/SVG 封面

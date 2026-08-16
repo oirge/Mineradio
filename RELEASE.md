@@ -1,5 +1,11 @@
 ﻿# 发布流程
 
+## v1.6.1 扩展本地音乐格式支持
+- 正式发布版本从 `1.6.0` 提升为 `1.6.1`；构建时同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.6.0` 及更早版本的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
+- 新增 `MP2`、`M4B`、`AIF`、`AIFF`、`AIFC` 音频后缀的播放器识别、文件夹扫描、文件选择器和本地代理 MIME 支持。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 全量 Node 回归 `411/411`，关键 JavaScript 语法检查与 `git diff --check` 通过。
+
 ## v1.6.0 修复迷你播放器封面律动与光晕无反应
 - 正式发布版本从 `1.5.9` 提升为 `1.6.0`；构建时同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.9` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
 - 根因是标准迷你播放器隐藏播放时，低平滑 `beatAnalyser` 在后台切换或 `AudioContext` 恢复瞬间可能返回全零频谱；旧逻辑仍把这帧当作有效数据，覆盖了主 `analyser` 的有效频谱，最终 `miniPlayerPulseSample`、封面缩放和光晕都归零。
