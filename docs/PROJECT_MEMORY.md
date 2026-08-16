@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.5.9` 基于 GitHub `v1.5.8`，修复 `本机代理` 线路取消更新无效（下载循环逐块检查取消 + 代理响应跟随取消断连），并保留软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.9`。
+- 当前源码检查点：`v1.6.0` 基于 GitHub `v1.5.9`，修复隐藏播放时低平滑分析器空帧覆盖主分析器导致迷你播放器封面律动与光晕无反应，以及 `document.hidden` 早于窗口状态 IPC 时采样定时器未启动的问题；并保留软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.6.0`。
 - 最近正式安装包 Release 基线：`v1.5.4`（2026-08-15，Wallpaper Engine 生命周期与窗口重建及迷你播放器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -33,6 +33,16 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.6.0 修复迷你播放器封面律动与光晕无反应
+
+- 日期：2026-08-16。
+- 正式发布版本从 `1.5.9` 提升为 `1.6.0`；已安装 `1.5.9` 及更早版本的客户端通过 `latest.yml` 自动发现更新。
+- 用户原话：「最新版本的迷你播放器封面光晕和跳动没反应」并要求「不要影响我使用电脑」「发布1.6.0」。
+- 根因：隐藏播放时 `beatAnalyser` 在后台切换或 `AudioContext` 恢复瞬间可能返回全零频谱，旧逻辑仍把该帧作为有效节拍数据，覆盖主 `analyser` 的有效频谱；同时 `document.hidden` 可能早于 `desktop-window-state` IPC 到达，导致采样定时器未启动。
+- 解决方案：仅当前 96 个低频桶存在信号时优先使用 `beatAnalyser`，否则回退主 `analyser`；`miniPlayerPulseValue()`、`miniPlayerPulseTimerActive()` 和 `visibilitychange` 同时识别页面隐藏态与窗口状态隐藏态。异常只放弃当前低平滑采样，不中断主播放链路。
+- 不改变边界：保留独立律动/光晕开关和 `0.00 ~ 3.00` 强度；不启动 Electron、不关闭 Mineradio、不抢焦点、不发送全局鼠标键盘输入，构建使用 GitHub Actions Windows Runner。
+- 回归覆盖：`tests/mini-player-pulse.test.js` 新增空节拍频谱回退、有效节拍频谱优先、文档隐藏态定时器激活断言；完整测试和远端资产信息待发布完成后补录。
 
 ## v1.5.9 修复本机代理线路无法取消更新
 

@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-v1.5.4-mini-cover-pulse-fix`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.5.9`；在 `v1.5.8` 更新线路手动选择、取消更新与迷你封面律动光晕强度基础上，修复 `本机代理` 线路点击取消更新后任务仍继续下载的问题（下载循环逐块检查取消 + 代理响应跟随取消销毁响应流与 CONNECT 隧道 socket），同时保留软件内更新的手动线路选择（自动测速 / 直连 / 国内加速 / 本机代理）、迷你播放器封面律动与光晕 `0.00 ~ 3.00` 可调强度（`1.00` 标准，`0` 关闭）、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、MP3/FLAC/M4A/WAV/OGG、本地歌单、全屏与用户数据迁移能力。
+- 当前源码版本：`v1.6.0`；修复标准迷你播放器隐藏播放时低平滑分析器空帧把封面律动和光晕覆盖为零，以及页面隐藏事件早于窗口状态 IPC 时采样定时器未启动的问题；保留 `0.00 ~ 3.00` 独立强度、开关、窗口几何上限、软件内更新线路选择与取消更新、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、MP3/FLAC/M4A/WAV/OGG、本地歌单、全屏与用户数据迁移能力。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here

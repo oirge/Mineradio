@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v1.6.0 修复迷你播放器封面律动与光晕无反应
+- 正式发布版本从 `1.5.9` 提升为 `1.6.0`；构建时同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.9` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
+- 根因是标准迷你播放器隐藏播放时，低平滑 `beatAnalyser` 在后台切换或 `AudioContext` 恢复瞬间可能返回全零频谱；旧逻辑仍把这帧当作有效数据，覆盖了主 `analyser` 的有效频谱，最终 `miniPlayerPulseSample`、封面缩放和光晕都归零。
+- 修复逻辑只在前 96 个低频桶检测到有效信号时使用 `beatAnalyser`；没有有效信号时回退到主 `analyser`。`beatAnalyser` 读取异常也只放弃该次低平滑采样，不中断主播放链路。
+- `miniPlayerPulseValue()` 和 `miniPlayerPulseTimerActive()` 同时识别 `document.hidden` 与 `desktop-window-state` 的隐藏信号；`visibilitychange` 立即调用 `syncMiniPlayerPulseTimer()`，解决隐藏事件早于窗口状态 IPC 时定时器未启动的竞态。
+- 回归覆盖：空节拍频谱回退、有效节拍频谱优先、文档隐藏态定时器激活、挂起 `AudioContext` 恢复和稳态/峰值对比；不启动 Electron、不操作真实窗口、不发送全局鼠标键盘输入。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产与 SHA256 待远端 GitHub Actions 构建完成后回填；发布标题使用 `Mineradio v1.6.0 修复迷你播放器封面律动与光晕无反应`。
+
 ## v1.5.9 修复本机代理线路无法取消更新
 - 正式发布版本从 `1.5.8` 提升为 `1.5.9`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.8` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
 - 修复对象是 `v1.5.8` 上线后实测到的真实缺陷：`route=proxy` 下载中调用 `/api/update/cancel` 后，任务状态长期停在 `downloading`，`received` 从 `18169856` 继续涨到 `23149887`，`canceled` 始终为 `false`，安装包被完整拉完。`direct` / `mirror` / `auto` 线路不受影响。

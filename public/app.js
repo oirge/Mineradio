@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.5.9';
+var APP_VERSION = '1.6.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -1570,6 +1570,7 @@ function installRenderPowerHooks() {
     updateRenderPowerClasses();
     applyRendererPowerMode();
     syncUpdateRuntimeActivity();
+    syncMiniPlayerPulseTimer();
     if (!isDeepBackgroundMode()) recoverVisualsAfterBackground('visibilitychange');
   });
   window.addEventListener('focus', function(){
@@ -23010,8 +23011,9 @@ function miniPlayerVisualPayload() {
 
 function miniPlayerPulseValue() {
   if (!playing || !audio || audio.paused || audio.ended) return 0;
-  var runtimeHidden = typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState
-    && (desktopRuntimeState.minimized || desktopRuntimeState.visible === false);
+  var documentHidden = typeof document !== 'undefined' && document.hidden === true;
+  var runtimeHidden = documentHidden || (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState
+    && (desktopRuntimeState.minimized || desktopRuntimeState.visible === false));
   if (runtimeHidden) return clampRange(miniPlayerPulseSample, 0, 1);
   return clampRange(Math.max(miniPlayerPulseSample, beatPulse * 1.05, smoothBass * 0.58 + smoothEnergy * 0.24), 0, 1);
 }
@@ -23022,8 +23024,9 @@ function stopMiniPlayerPulseTimer() {
 }
 
 function miniPlayerPulseTimerActive() {
-  var runtimeHidden = typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState
-    && (desktopRuntimeState.minimized || desktopRuntimeState.visible === false);
+  var documentHidden = typeof document !== 'undefined' && document.hidden === true;
+  var runtimeHidden = documentHidden || (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState
+    && (desktopRuntimeState.minimized || desktopRuntimeState.visible === false));
   return !!(window.desktopWindow && window.desktopWindow.isDesktop && runtimeHidden &&
     desktopShellSettings && desktopShellSettings.miniPlayer &&
     audio && audio.src && !audio.paused && !audio.ended);
@@ -23047,11 +23050,25 @@ function runMiniPlayerPulseTimer() {
     var pulseAnalyser = analyser;
     var pulseData = frequencyData;
     if (beatAnalyser && typeof beatFrequencyData !== 'undefined' && beatFrequencyData && beatFrequencyData.length) {
-      pulseAnalyser = beatAnalyser;
-      pulseData = beatFrequencyData;
+      try {
+        beatAnalyser.getByteFrequencyData(beatFrequencyData);
+        var beatHasSignal = false;
+        // 只把实际参与律动计算的低频窗口作为有效性判断，避免悬空或失步的分析器把主链路覆盖为零。
+        var beatSignalEnd = Math.min(96, beatFrequencyData.length);
+        for (var beatIndex = 0; beatIndex < beatSignalEnd; beatIndex++) {
+          if (beatFrequencyData[beatIndex] > 0) {
+            beatHasSignal = true;
+            break;
+          }
+        }
+        if (beatHasSignal) {
+          pulseAnalyser = beatAnalyser;
+          pulseData = beatFrequencyData;
+        }
+      } catch (e) {}
     }
     if (pulseAnalyser && pulseData && pulseData.length) {
-      pulseAnalyser.getByteFrequencyData(pulseData);
+      if (pulseAnalyser === analyser) analyser.getByteFrequencyData(frequencyData);
       var low = 0;
       var lowPeak = 0;
       var energy = 0;

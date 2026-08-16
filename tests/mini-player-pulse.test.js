@@ -40,13 +40,17 @@ function extractFunction(source, name) {
 /**
  * 构造隐藏播放态的迷你播放器脉冲分析环境。
  * @param {Array<Uint8Array>} frames 按顺序返回的频谱帧。
+ * @param {Array<Uint8Array>=} beatFrames 可选的低平滑节拍频谱帧。
  * @returns {{context:object,run:Function}} 可重复驱动的分析环境。
  */
-function createPulseHarness(frames) {
+function createPulseHarness(frames, beatFrames) {
   const source = readRendererSource();
   const queue = frames.slice();
+  const beatQueue = (beatFrames || []).slice();
+  const hasBeatFrames = Array.isArray(beatFrames) && beatFrames.length > 0;
   const pushed = [];
   const frequencyData = new Uint8Array(96);
+  const beatFrequencyData = new Uint8Array(1024);
   const context = {
     Math,
     Number,
@@ -60,8 +64,15 @@ function createPulseHarness(frames) {
         for (let index = 0; index < target.length; index += 1) target[index] = frame[index] || 0;
       },
     },
-    beatAnalyser: null,
+    beatAnalyser: hasBeatFrames ? {
+      /** @param {Uint8Array} target 供节拍分析器填充的频谱数组。 @returns {void} 写入下一帧测试数据。 */
+      getByteFrequencyData(target) {
+        const frame = beatQueue.shift() || beatFrames[beatFrames.length - 1];
+        for (let index = 0; index < target.length; index += 1) target[index] = frame[index] || 0;
+      },
+    } : null,
     frequencyData,
+    beatFrequencyData,
     miniPlayerPulseSample: 0,
     miniPlayerPulseBaseline: 0,
     miniPlayerPulseTimer: 0,
@@ -146,3 +157,40 @@ function testMiniPlayerPulseKeepsBeatContrastAboveSteadyEnergy() {
 
 test('挂起的音频上下文必须进入迷你律动恢复路径', testSuspendedAudioContextIsResumedForMiniPlayerPulse);
 test('迷你播放器律动保留稳态与峰值之间的对比', testMiniPlayerPulseKeepsBeatContrastAboveSteadyEnergy);
+
+test('低平滑分析器无数据时回退到已接入输出链路的频谱', () => {
+  const mainFrame = new Uint8Array(96).fill(180);
+  const emptyBeatFrame = new Uint8Array(1024);
+  const harness = createPulseHarness([mainFrame], [emptyBeatFrame]);
+
+  harness.run();
+
+  assert.ok(harness.context.miniPlayerPulseSample > 0, '主分析器有音频数据时不能被空的节拍分析器覆盖为零');
+});
+
+test('低平滑分析器有有效频谱时继续优先用于律动', () => {
+  const mainFrame = new Uint8Array(96);
+  const beatFrame = new Uint8Array(1024).fill(210);
+  const harness = createPulseHarness([mainFrame], [beatFrame]);
+
+  harness.run();
+
+  assert.ok(harness.context.miniPlayerPulseSample > 0, '有效的节拍频谱必须进入迷你律动采样');
+});
+
+test('文档隐藏时即使窗口状态 IPC 尚未到达也会启动迷你律动采样', () => {
+  const context = {
+    window: { desktopWindow: { isDesktop: true } },
+    document: { hidden: true },
+    desktopRuntimeState: { minimized: false, visible: true },
+    desktopShellSettings: { miniPlayer: true },
+    audio: { src: 'blob:test', paused: false, ended: false },
+  };
+  vm.runInNewContext(
+    extractFunction(readRendererSource(), 'miniPlayerPulseTimerActive')
+      + '\nthis.isActive = miniPlayerPulseTimerActive;',
+    context,
+  );
+
+  assert.equal(context.isActive(), true);
+});
