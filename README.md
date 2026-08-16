@@ -126,7 +126,8 @@ npm test
 
 ### 最新版本 v1.4.2 (2026-08-12)
 
-- 支持 MP3/FLAC/M4A/WAV/OGG 多格式播放
+- 支持 MP3/FLAC/M4A/WAV/OGG/AAC/Opus/WebM 多格式播放
+- 支持 LRC/TXT/SRT/VTT/ASS 外置歌词，以及 JPG/PNG/WebP/AVIF/GIF/BMP 封面
 - 修复标准 M4A 标签、音轨号、内嵌封面和后置 `moov` 读取
 - 修复旧 M4A 元数据缓存继续复用错误结果
 - 迷你播放器优化和动画效果

@@ -42,9 +42,13 @@ Build artifacts are located in `dist/`.
 - ✅ M4A (MPEG-4 Audio, including AAC and ALAC)
 - ✅ WAV (Waveform Audio File Format)
 - ✅ OGG (Ogg Vorbis)
+- ✅ AAC (Advanced Audio Coding)
+- ✅ Opus (Ogg Opus)
+- ✅ WebM audio
 
 ### Lyrics Features
-- Matching LRC/TXT lyrics files
+- Matching LRC/TXT/SRT/WebVTT/ASS lyrics files
+- Matching JPG/PNG/WebP/AVIF/GIF/BMP cover files
 - FLAC embedded lyrics tags
 - Automatic lyrics translation recognition
 - Desktop lyrics display

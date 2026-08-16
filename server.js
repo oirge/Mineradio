@@ -118,12 +118,21 @@ const LOCAL_FILE_MIME = {
   '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
   '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.opus': 'audio/ogg',
+  '.webm': 'audio/webm',
   '.lrc': 'text/plain; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
+  '.srt': 'application/x-subrip; charset=utf-8',
+  '.vtt': 'text/vtt; charset=utf-8',
+  '.ass': 'text/x-ssa; charset=utf-8',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
 };
 
 function localContentTypeForPath(filePath) {

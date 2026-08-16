@@ -248,19 +248,32 @@ function waitForServer(server) {
   });
 }
 
-const LOCAL_LIBRARY_EXTS = new Set(['.mp3', '.flac', '.m4a', '.wav', '.ogg', '.lrc', '.txt', '.jpg', '.jpeg', '.png', '.webp']);
+const LOCAL_LIBRARY_EXTS = new Set([
+  '.mp3', '.flac', '.m4a', '.wav', '.ogg', '.aac', '.opus', '.webm',
+  '.lrc', '.txt', '.srt', '.vtt', '.ass',
+  '.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.bmp',
+]);
 const LOCAL_LIBRARY_MIME = {
   '.mp3': 'audio/mpeg',
   '.flac': 'audio/flac',
   '.m4a': 'audio/mp4',
   '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
+  '.aac': 'audio/aac',
+  '.opus': 'audio/ogg',
+  '.webm': 'audio/webm',
   '.lrc': 'text/plain',
   '.txt': 'text/plain',
+  '.srt': 'application/x-subrip',
+  '.vtt': 'text/vtt',
+  '.ass': 'text/x-ssa',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
 };
 const LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY = 24;
 const LOCAL_LIBRARY_SCAN_VISIT_LIMIT = 60000;

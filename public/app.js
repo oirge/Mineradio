@@ -16664,9 +16664,9 @@ function homeListenSummary() {
 }
 function fallbackHomeTiles() {
   return [
-    { kind: 'local', title: '导入本地音乐', sub: 'MP3 / FLAC / M4A 文件夹' },
+    { kind: 'local', title: '导入本地音乐', sub: '支持 8 种音频格式' },
     { kind: 'search', title: '搜索本地库', sub: '歌名 / 歌手 / 文件名', query: '' },
-    { kind: 'local', title: '匹配歌词', sub: '同名 LRC / TXT' },
+    { kind: 'local', title: '匹配歌词', sub: 'LRC / TXT / SRT 等' },
     { kind: 'local', title: '匹配封面', sub: '同名图片或内嵌封面' },
     { kind: 'guide', title: '视觉舞台', sub: '粒子 / 歌词 / 封面' },
   ];
@@ -16766,13 +16766,13 @@ function renderHomeDiscover() {
   if (weatherTitle) weatherTitle.textContent = '本地音乐库';
   if (weatherKicker) weatherKicker.textContent = 'Mineradio · Local Player';
   if (sub) sub.textContent = localSongs.length
-    ? '已导入本地音乐，支持 MP3 / FLAC / M4A、同名 LRC/TXT 歌词和封面图片。'
+    ? '已导入本地音乐，支持 8 种音频、5 种外置歌词和常用封面图片。'
     : '导入音乐文件夹后即可本地播放，不需要登录任何账号。';
   if (weatherMeta) {
     var localMeta = [
       localSongs.length ? ('已导入 ' + localSongs.length + ' 首') : '尚未导入',
-      'MP3 / FLAC / M4A',
-      'LRC / TXT 歌词'
+      '8 种音频格式',
+      '5 种歌词格式'
     ];
     weatherMeta.innerHTML = localMeta.map(function(text){ return '<span class="home-weather-pill">' + escHtml(text) + '</span>'; }).join('');
   }
@@ -16789,7 +16789,7 @@ function renderHomeDiscover() {
   var localSearchTitle = document.getElementById('home-library-title');
   var localSearchSub = document.getElementById('home-library-sub');
   if (localImportTitle) localImportTitle.textContent = '导入文件夹';
-  if (localImportSub) localImportSub.textContent = '选择包含 MP3 / FLAC / M4A 的目录';
+  if (localImportSub) localImportSub.textContent = '选择本地音乐目录';
   if (localDailyTitle) localDailyTitle.textContent = firstLocal ? firstLocal.name : '播放本地音乐';
   if (localDailySub) localDailySub.textContent = firstLocal ? songDisplaySubtitle(firstLocal) : '导入后从第一首开始播放';
   if (localQueueTitle) localQueueTitle.textContent = secondLocal ? secondLocal.name : '本地队列';
@@ -18307,27 +18307,28 @@ function applyOriginalLyricsState() {
   applyLyricsState(originalLyricsState.lines, originalLyricsState.hasNativeKaraoke, originalLyricsState.timingSource);
 }
 /**
- * 解析用户或本地纯文本歌词。优先识别 LRC，普通文本按歌曲时长均分，避免链式 map/filter 放大长歌词加载成本。
+ * 解析用户或本地纯文本歌词。优先识别带时间轴格式，普通文本按歌曲时长均分，避免链式 map/filter 放大长歌词加载成本。
  * @param {string} text 歌词原文。
  * @returns {Array<object>} 标准化歌词行。
  */
 function parseCustomLyricText(text) {
   var raw = String(text || '').trim();
   if (!raw) return [];
-  var lrcLines = parseLyricText(raw);
-  if (lrcLines.length) {
+  var timedLines = parseTimedLyricText(raw);
+  if (timedLines.length) {
     var hasLyricText = false;
-    for (var lrcIdx = 0; lrcIdx < lrcLines.length; lrcIdx++) {
-      if (!isNoLyricText(lrcLines[lrcIdx] && lrcLines[lrcIdx].text)) {
+    for (var timedIdx = 0; timedIdx < timedLines.length; timedIdx++) {
+      if (!isNoLyricText(timedLines[timedIdx] && timedLines[timedIdx].text)) {
         hasLyricText = true;
         break;
       }
     }
     if (hasLyricText) {
-      var customLines = new Array(lrcLines.length);
-      for (var copyIdx = 0; copyIdx < lrcLines.length; copyIdx++) {
-        var copy = cloneLyricLine(lrcLines[copyIdx]);
-        copy.source = 'custom-lrc';
+      var customLines = new Array(timedLines.length);
+      for (var copyIdx = 0; copyIdx < timedLines.length; copyIdx++) {
+        var copy = cloneLyricLine(timedLines[copyIdx]);
+        var source = String(copy.source || 'lrc');
+        copy.source = source.indexOf('lrc') === 0 ? 'custom-lrc' : ('custom-' + source);
         customLines[copyIdx] = copy;
       }
       return customLines;
@@ -18366,7 +18367,7 @@ function applyCustomLyricState(song, silent) {
   lyricsHasNativeKaraoke = lyricLinesHaveWordTiming(lines);
   lyricsTimingSource = lyricsHasNativeKaraoke
     ? 'custom-lrc-word'
-    : (lines[0] && lines[0].source === 'custom-lrc' ? 'custom-lrc' : 'custom-text');
+    : (lines[0] && lines[0].source || 'custom-text');
   lyricsLines = withLyricFallback(lines);
   if (lyricsLines.length && lyricsLines[0].fallback) lyricsTimingSource = 'fallback';
   renderLyrics();
@@ -20534,8 +20535,7 @@ function parseLocalLyricText(text) {
   var out = new Array(lines.length);
   for (var i = 0; i < lines.length; i++) {
     var copy = cloneLyricLine(lines[i]);
-    if (copy.source === 'custom-lrc') copy.source = 'local-lrc';
-    else if (copy.source === 'custom-text') copy.source = 'local-text';
+    if (String(copy.source || '').indexOf('custom-') === 0) copy.source = 'local-' + copy.source.slice(7);
     out[i] = copy;
   }
   return out;
@@ -20545,7 +20545,7 @@ function applyLocalOriginalLyricsState(song) {
   var lines = text ? parseLocalLyricText(text) : [];
   var hasNativeKaraoke = lyricLinesHaveWordTiming(lines);
   var timingSource = lines.length
-    ? (hasNativeKaraoke ? 'local-lrc-word' : (lines[0].source === 'local-lrc' ? 'local-lrc' : 'local-text'))
+    ? (hasNativeKaraoke ? 'local-lrc-word' : (lines[0].source || 'local-text'))
     : 'fallback';
   setOriginalLyricsState(withLyricFallback(lines), hasNativeKaraoke, timingSource);
   applyPreferredLyricsForCurrent(true);
@@ -21488,13 +21488,22 @@ function lyricTagTimeToSeconds(min, sec, frac) {
   if (frac) t += (parseInt(frac, 10) || 0) / Math.pow(10, Math.min(3, frac.length));
   return t;
 }
-function finalizeLyricLineDurations(lines) {
+/**
+ * 排序歌词并补齐缺失时长；字幕 cue 的明确时长可选择保持原值。
+ * @param {Array<object>} lines 待整理的歌词行。
+ * @param {boolean=} preserveExplicitDuration 是否保留输入提供的正时长。
+ * @returns {Array<object>} 已按开始时间排序并补齐字段的歌词行。
+ */
+function finalizeLyricLineDurations(lines, preserveExplicitDuration) {
   lines.sort(function(a, b){ return a.t - b.t; });
   for (var i = 0; i < lines.length; i++) {
     var next = lines[i + 1];
     var inferred = next && next.t > lines[i].t ? next.t - lines[i].t : 4.8;
-    if (!isFinite(lines[i].duration) || lines[i].duration <= 0) lines[i].duration = inferred;
-    lines[i].duration = Math.max(0.45, Math.min(12, lines[i].duration));
+    var hasExplicitDuration = isFinite(lines[i].duration) && lines[i].duration > 0;
+    if (!hasExplicitDuration) lines[i].duration = inferred;
+    if (!preserveExplicitDuration || !hasExplicitDuration) {
+      lines[i].duration = Math.max(0.45, Math.min(12, lines[i].duration));
+    }
     lines[i].charCount = Math.max(1, lines[i].charCount || String(lines[i].text || '').length);
   }
   return lines;
@@ -21698,6 +21707,212 @@ function parseLyricText(text) {
     if (line.text && !isNoLyricText(line.text)) lines.push(line);
   }
   return finalizeLyricLineDurations(lines);
+}
+/**
+ * 解析 SRT、WebVTT 和 ASS 共用的字幕时间值。
+ * @param {string} value 字幕时间字段，支持小时可选及逗号或点号小数。
+ * @returns {number} 秒数；格式无效时返回 NaN。
+ */
+function parseSubtitleTimestamp(value) {
+  var match = String(value || '').trim().match(/^(?:(\d{1,3}):)?(\d{1,2}):(\d{2})(?:[,.](\d{1,3}))?$/);
+  if (!match) return NaN;
+  var hours = parseInt(match[1], 10) || 0;
+  var minutes = parseInt(match[2], 10) || 0;
+  var seconds = parseInt(match[3], 10) || 0;
+  var fraction = match[4]
+    ? (parseInt(match[4], 10) || 0) / Math.pow(10, Math.min(3, match[4].length))
+    : 0;
+  return hours * 3600 + minutes * 60 + seconds + fraction;
+}
+/**
+ * 清理字幕格式控制标记，同时保留歌词正文中的显式换行。
+ * @param {string} text 原始字幕正文。
+ * @param {boolean} assSyntax 是否按 ASS 转义规则处理。
+ * @returns {string} 可直接显示的歌词正文。
+ */
+function stripSubtitleCueMarkup(text, assSyntax) {
+  var source = String(text || '').replace(/\r/g, '');
+  if (assSyntax) {
+    source = source
+      .replace(/\{[^}]*\}/g, '')
+      .replace(/\\[Nn]/g, '\n')
+      .replace(/\\h/g, ' ');
+  }
+  source = source
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+  var rows = [];
+  forEachNewlineRow(source, function(rawRow){
+    var row = rawRow.replace(/[ \t]+/g, ' ').trim();
+    if (row) rows.push(row);
+  });
+  return rows.join('\n');
+}
+/**
+ * 解析 SRT 或 WebVTT 的箭头时间行。
+ * @param {string} line 候选时间行。
+ * @returns {{start:number,end:number}|null} 起止秒数；非时间行返回 null。
+ */
+function parseSubtitleCueTimes(line) {
+  var match = /^\s*((?:\d{1,3}:)?\d{1,2}:\d{2}(?:[,.]\d{1,3})?)\s*-->\s*((?:\d{1,3}:)?\d{1,2}:\d{2}(?:[,.]\d{1,3})?)(?:\s+.*)?$/.exec(String(line || ''));
+  if (!match) return null;
+  var start = parseSubtitleTimestamp(match[1]);
+  var end = parseSubtitleTimestamp(match[2]);
+  if (!isFinite(start) || !isFinite(end)) return null;
+  return { start: start, end: end };
+}
+/**
+ * 将单个字幕 cue 写入播放器统一歌词行结构。
+ * @param {Array<object>} lines 目标歌词行数组。
+ * @param {number} start cue 开始秒数。
+ * @param {number} end cue 结束秒数。
+ * @param {string} text 已清理的正文。
+ * @param {string} source 歌词来源标记。
+ * @returns {void}
+ */
+function appendSubtitleCue(lines, start, end, text, source) {
+  if (!text || isNoLyricText(text)) return;
+  lines.push({
+    t: Math.max(0, start),
+    duration: end > start ? end - start : 0,
+    text: text,
+    source: source,
+    charCount: Math.max(1, text.replace(/\n/g, '').length)
+  });
+}
+/**
+ * 解析以箭头时间行为边界的 SRT 或 WebVTT 文本。
+ * @param {string} text 字幕原文。
+ * @param {string} source 输出来源标记。
+ * @param {boolean} webVtt 是否启用 WebVTT 头部和块级指令规则。
+ * @returns {Array<object>} 标准化歌词行。
+ */
+function parseSubtitleCueText(text, source, webVtt) {
+  var lines = [];
+  var cueStart = NaN;
+  var cueEnd = NaN;
+  var cueRows = [];
+  var skipBlock = false;
+
+  /**
+   * 提交当前 cue；新时间行和空行都会触发，保证无空行字幕也不会串行。
+   * @returns {void}
+   */
+  function flushCue() {
+    if (isFinite(cueStart)) {
+      appendSubtitleCue(lines, cueStart, cueEnd, stripSubtitleCueMarkup(cueRows.join('\n'), false), source);
+    }
+    cueStart = NaN;
+    cueEnd = NaN;
+    cueRows.length = 0;
+  }
+
+  forEachNewlineRow(String(text || '').replace(/^\uFEFF/, ''), function(rawRow){
+    var row = rawRow.trim();
+    if (!row) {
+      flushCue();
+      skipBlock = false;
+      return;
+    }
+    if (webVtt && /^WEBVTT(?:\s|$)/i.test(row)) return;
+    if (webVtt && !isFinite(cueStart) && /^(NOTE|STYLE|REGION)(?:\s|$)/i.test(row)) {
+      skipBlock = true;
+      return;
+    }
+    if (skipBlock) return;
+    var times = parseSubtitleCueTimes(row);
+    if (times) {
+      flushCue();
+      cueStart = times.start;
+      cueEnd = times.end;
+      return;
+    }
+    if (isFinite(cueStart)) cueRows.push(rawRow);
+  });
+  flushCue();
+  return finalizeLyricLineDurations(lines, true);
+}
+/**
+ * 按 ASS Format 字段数拆分 Dialogue 行，最后一个字段保留正文中的逗号。
+ * @param {string} value Dialogue 冒号后的内容。
+ * @param {number} fieldCount 当前 Format 的字段数。
+ * @returns {Array<string>|null} 字段数组；字段不足时返回 null。
+ */
+function splitAssDialogueFields(value, fieldCount) {
+  var source = String(value || '');
+  var count = Math.max(1, Number(fieldCount) || 0);
+  var fields = [];
+  var start = 0;
+  for (var i = 1; i < count; i++) {
+    var comma = source.indexOf(',', start);
+    if (comma < 0) return null;
+    fields.push(source.slice(start, comma));
+    start = comma + 1;
+  }
+  fields.push(source.slice(start));
+  return fields;
+}
+/**
+ * 解析 ASS/SSA Events 中的 Dialogue 行，并移除样式覆盖码。
+ * @param {string} text ASS 或 SSA 原文。
+ * @returns {Array<object>} 标准化歌词行。
+ */
+function parseAssLyricText(text) {
+  var lines = [];
+  var defaultFormat = ['layer', 'start', 'end', 'style', 'name', 'marginl', 'marginr', 'marginv', 'effect', 'text'];
+  var format = defaultFormat;
+  var inEvents = false;
+  var sawSection = false;
+  forEachNewlineRow(String(text || '').replace(/^\uFEFF/, ''), function(rawRow){
+    var row = rawRow.trim();
+    var section = /^\[([^\]]+)\]$/.exec(row);
+    if (section) {
+      sawSection = true;
+      inEvents = section[1].trim().toLowerCase() === 'events';
+      return;
+    }
+    if (sawSection && !inEvents) return;
+    var formatMatch = /^Format\s*:\s*(.+)$/i.exec(row);
+    if (formatMatch) {
+      var names = formatMatch[1].split(',');
+      for (var nameIdx = 0; nameIdx < names.length; nameIdx++) names[nameIdx] = names[nameIdx].trim().toLowerCase();
+      if (names.indexOf('start') >= 0 && names.indexOf('end') >= 0 && names.indexOf('text') >= 0) format = names;
+      return;
+    }
+    var dialogue = /^Dialogue\s*:\s*(.*)$/i.exec(row);
+    if (!dialogue) return;
+    var fields = splitAssDialogueFields(dialogue[1], format.length);
+    if (!fields) return;
+    var startIndex = format.indexOf('start');
+    var endIndex = format.indexOf('end');
+    var textIndex = format.indexOf('text');
+    var start = parseSubtitleTimestamp(fields[startIndex]);
+    var end = parseSubtitleTimestamp(fields[endIndex]);
+    if (!isFinite(start) || !isFinite(end)) return;
+    appendSubtitleCue(lines, start, end, stripSubtitleCueMarkup(fields[textIndex], true), 'ass');
+  });
+  return finalizeLyricLineDurations(lines, true);
+}
+/**
+ * 自动识别 LRC、SRT、WebVTT 或 ASS 时间轴歌词。
+ * @param {string} text 待解析歌词原文。
+ * @returns {Array<object>} 标准化歌词行；没有时间轴时返回空数组。
+ */
+function parseTimedLyricText(text) {
+  var raw = String(text || '').trim();
+  if (!raw) return [];
+  var lrcLines = parseLyricText(raw);
+  if (lrcLines.length) return lrcLines;
+  if (/^\uFEFF?WEBVTT(?:\s|$)/i.test(raw)) return parseSubtitleCueText(raw, 'vtt', true);
+  if (/^\s*(?:\[(?:Script Info|Events)\]|Dialogue\s*:)/im.test(raw)) return parseAssLyricText(raw);
+  var subtitleLines = parseSubtitleCueText(raw, 'srt', false);
+  if (subtitleLines.length) return subtitleLines;
+  return parseAssLyricText(raw);
 }
 /**
  * 统计字符串前导空白长度。YRC 逐字对齐只需要长度，避免 match 创建数组。
@@ -23455,10 +23670,10 @@ document.addEventListener('visibilitychange', function(){
 // ============================================================
 //  文件拖放
 // ============================================================
-var LOCAL_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a)$/i;
-var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a)$/i;
-var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt)$/i;
-var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|png|webp)$/i;
+var LOCAL_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a|aac|opus|webm)$/i;
+var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a|aac|opus|webm)$/i;
+var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass)$/i;
+var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|png|webp|avif|gif|bmp)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
 var LOCAL_LIBRARY_NAME_COMPARE = (typeof Intl !== 'undefined' && Intl.Collator)
   ? new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' }).compare
@@ -25726,10 +25941,10 @@ async function handleLocalFolderFiles(files, opts) {
     var confirmedEmptyFolder = !!opts.folderOnly && (opts.folderPath || opts.restored || opts.refreshed || files != null);
     if (confirmedEmptyFolder) {
       clearEmptyLocalLibrary(opts.folderPath || savedLocalLibraryFolderPath(), opts);
-      showToast('文件夹里没有找到 MP3 / FLAC / M4A 音乐，已清空旧曲库');
+      showToast('文件夹里没有找到支持的音乐，已清空旧曲库');
       return;
     }
-    showToast(opts.folderOnly ? '文件夹里没有找到 MP3 / FLAC / M4A 音乐' : '没有找到可播放的本地音乐');
+    showToast(opts.folderOnly ? '文件夹里没有找到支持的音乐' : '没有找到可播放的本地音乐');
     return;
   }
   var libraryFolderPath = opts.folderPath || savedLocalLibraryFolderPath();
@@ -25938,7 +26153,7 @@ async function handleFiles(files) {
       }
       audioFile = f;
     }
-    else if ((f.type && f.type.indexOf('image/') === 0) || /\.(jpg|jpeg|png|webp)$/i.test(f.name || '')) imgFile = f;
+    else if (isLocalCoverFile(f)) imgFile = f;
   }
   if (audioFile) {
     var lyricFile = findLocalLyricFile(audioFile, buildLocalLyricMaps(list));
