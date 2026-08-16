@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.5.8` 基于 GitHub `v1.5.7`，新增软件内更新的手动线路选择与下载中取消更新，把迷你播放器封面律动/光晕改为可调强度，并保留自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.8`。
+- 当前源码检查点：`v1.5.9` 基于 GitHub `v1.5.8`，修复 `本机代理` 线路取消更新无效（下载循环逐块检查取消 + 代理响应跟随取消断连），并保留软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.9`。
 - 最近正式安装包 Release 基线：`v1.5.4`（2026-08-15，Wallpaper Engine 生命周期与窗口重建及迷你播放器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -33,6 +33,19 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.5.9 修复本机代理线路无法取消更新
+
+- 日期：2026-08-16。
+- 正式发布版本从 `1.5.8` 提升为 `1.5.9`；已安装 `1.5.8` 及更早版本的客户端可通过 `latest.yml` 自动发现更新。
+- 用户原话：「改好之后改一下迷你播放器的封面律动和封面光晕效果不够明显增加选项让用户自定义效果更加明显或者关闭改好之后发布新版本」。`v1.5.8` 已交付该需求；本版本是发布后按「修完验证」流程实测发现的回归修复，不是新需求。
+- 缺陷现象（实测，非推测）：`v1.5.8` 上 `POST /api/update/download?route=proxy` 下载中调用 `/api/update/cancel`，取消请求本身返回 `ok`（`canCancel` 立刻转 `false`、`message` 为 `正在取消更新…`），但后续轮询始终是 `status downloading / canceled false`，`received` 从 `18169856` 一路涨到 `23149887`。`direct` / `mirror` / `auto` 线路取消正常。
+- 根因：取消只依赖了传输层信号。`direct` / `mirror` 走 `fetch(url, { signal })`，`abort()` 会连带掐掉响应体；`proxy` 的正文是 `Readable.toWeb(res)`，`Readable` 不认识 `AbortSignal`，而 `fetchThroughUpdateProxy()` 的 `settle()` 在响应头到达时就已经摘掉了 abort 监听，于是没有任何一方能打断这条连接。
+- 结论（写死为约定）：取消必须做两层，缺一层都不完整。第一层是传输无关的 `throwIfUpdateJobCanceled(job)` 逐块检查（安装包循环、补丁循环各在 `reader.read()` 前后一次，测速循环 `if (job && job.canceled) break;`），保证循环一定能停；第二层是 `nodeResponseAsFetchLike(res, signal, socket)` 自己监听 `abort` 并销毁响应流与 `CONNECT` 隧道 socket，保证 TCP 连接真的释放而不是继续灌进没人读的缓冲区。
+- 坑（踩过）：给代理响应绑定取消时用 `res.destroy(updateError(...))` 会让测试进程直接 `uncaughtException`（`Error: Update canceled` … `generated asynchronous activity after the test ended`）。正文可能还没有读取端，带错误销毁会发出无人监听的 `'error'` 事件。改成无参 `res.destroy()` 即可，且是确定性的——下载循环两处 `settle` 分支都在 `classifyUpdateError()` 之前判 `job.canceled`，任意流错误都会收敛成 `canceled` 终态、`error` 为空。
+- 复验（实测通过）：`MINERADIO_VERSION=1.5.7` + `HTTPS_PROXY=http://127.0.0.1:7897` 起服务走真实 GitHub，`route=proxy` 下载到 `received 733339` 后取消，`3` 秒内即为 `status canceled / canceled true / received 766107 / message 更新已取消 / error 空`，之后四次轮询字节不再变化。
+- 本版本只改 `server.js` 与 `tests/update-route-selection.test.js`（`11` 项 → `14` 项），不动前端、CSS、文案与交互入口，符合「能不动 UI 就不动 UI」。全量回归 `403/403`。
+- `v1.5.9` Windows x64 NSIS 资产：安装器 `101488940` 字节 / SHA256 `a8589b51157439d7583148c0ff951892d66347607af85417376564085b037d70`；blockmap `105851` 字节 / `261263ccafd07b3425400fabccf3d41054cc5bd479e12a557df31efa03580966`；`latest.yml` `347` 字节 / `cc39b8727d6a06c7b634d1dcd6ddeb3dc59d0e67fdaafad0c9066e46c3248706`；SHA256 清单 `270` 字节 / `3db99ce0eaf76602a1231baaf2c381aac017ed60ac588fd0a6755330d7e897bf`。
 
 ## v1.5.8 更新线路手动选择、取消更新与迷你封面律动光晕强度
 

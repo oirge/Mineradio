@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { Readable } = require('node:stream');
 
 /**
  * 从本地更新服务截取指定源码片段。
@@ -327,6 +328,102 @@ function testCancelAndProxyErrorsClassifyBeforeTimeout() {
   assert.match(plainTimeout.reason, /连接超时/);
 }
 
+/**
+ * 加载代理响应包装的隔离环境，使用真实的 stream 与 Readable.toWeb。
+ * @returns {object} 包含 nodeResponseAsFetchLike 的测试上下文。
+ */
+function loadProxyResponseHarness() {
+  const context = {
+    String,
+    Number,
+    Array,
+    Object,
+    Buffer,
+    Readable,
+    updateError: createTestUpdateError,
+  };
+  const source = [
+    readServerSourceBetween('function nodeResponseAsFetchLike(res, signal, socket) {', 'async function fetchThroughUpdateProxy('),
+    'this.nodeResponseAsFetchLike = nodeResponseAsFetchLike;',
+  ].join('\n');
+  vm.runInNewContext(source, context);
+  return context;
+}
+
+/**
+ * 验证取消会销毁代理响应流与隧道 socket。
+ * 响应头到达后 settle() 已经摘掉 abort 监听，若正文不再跟随取消，
+ * 取消后 TCP 连接会继续把整个安装包拉完，任务表面停下实际没停。
+ * @returns {Promise<void>} 断言完成。
+ */
+async function testProxyResponseBodyFollowsCancel() {
+  const context = loadProxyResponseHarness();
+  const res = new Readable({ read() {} });
+  res.statusCode = 200;
+  res.headers = { 'content-length': '1024' };
+  let socketDestroyed = false;
+  const socket = { destroy() { socketDestroyed = true; } };
+  const controller = new AbortController();
+
+  const wrapped = context.nodeResponseAsFetchLike(res, controller.signal, socket);
+  assert.equal(wrapped.ok, true);
+  assert.equal(wrapped.headers.get('Content-Length'), '1024');
+  assert.equal(res.destroyed, false, '未取消时不得提前销毁响应流');
+
+  const reader = wrapped.body.getReader();
+  res.push(Buffer.from('first-chunk'));
+  const first = await reader.read();
+  assert.equal(Buffer.from(first.value).toString(), 'first-chunk');
+
+  controller.abort();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(res.destroyed, true, '取消后必须销毁代理响应流');
+  assert.equal(socketDestroyed, true, '取消后必须释放隧道 socket');
+  await reader.read().then(() => {}, () => {});
+}
+
+/**
+ * 验证响应头到达前就已取消时立即销毁，不留下已连接但无人读取的隧道。
+ * @returns {void}
+ */
+function testProxyResponseHonoursPreAbortedSignal() {
+  const context = loadProxyResponseHarness();
+  const res = new Readable({ read() {} });
+  res.statusCode = 200;
+  res.headers = {};
+  let socketDestroyed = false;
+  const socket = { destroy() { socketDestroyed = true; } };
+  const controller = new AbortController();
+  controller.abort();
+
+  context.nodeResponseAsFetchLike(res, controller.signal, socket);
+  assert.equal(res.destroyed, true, '信号已取消时必须立即销毁响应流');
+  assert.equal(socketDestroyed, true, '信号已取消时必须立即释放隧道 socket');
+}
+
+/**
+ * 验证两条下载读取循环都逐块检查取消，不依赖具体传输是否响应 abort 信号。
+ * 代理线路的正文来自 Readable.toWeb，只靠 fetch signal 无法中断正文。
+ * @returns {void}
+ */
+function testDownloadLoopsCheckCancelPerChunk() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const loops = [
+    {
+      name: '完整安装包',
+      body: readServerSourceBetween('fileHandle = await fs.promises.open(tmpPath,', 'if (sha256) sha256.update(buf);'),
+    },
+    {
+      name: '快速补丁',
+      body: readServerSourceBetween('let readComplete = false;\n    try {', 'if (job.received > PATCH_MAX_BYTES)'),
+    },
+  ];
+  for (let i = 0; i < loops.length; i++) {
+    const matches = loops[i].body.match(/throwIfUpdateJobCanceled\(job\);/g) || [];
+    assert.ok(matches.length >= 2, loops[i].name + '读取循环必须在 reader.read() 前后各检查一次取消');
+  }
+  assert.match(source, /nodeResponseAsFetchLike\(response, signal, socket\)/, '代理响应必须把取消信号和隧道 socket 交给正文包装');
+}
 test('自动线路保留全部候选且不改写顺序', testAutoRouteKeepsEveryCandidate);
 test('用户选定线路只按镜像标记过滤候选', testExplicitRouteFiltersByMirrorFlag);
 test('未知线路退回自动测速并共用中文文案', testUnknownRouteFallsBackToAuto);
@@ -338,3 +435,6 @@ test('补丁写盘阶段拒绝取消', testApplyingPatchRefusesCancel);
 test('已完成任务不再受理取消', testFinishedJobIsNotCancelable);
 test('已取消任务离开活跃集合并正确上报可取消状态', testCanceledJobLeavesActiveSetAndReportsCancelAbility);
 test('取消与代理错误分类优先于超时分类', testCancelAndProxyErrorsClassifyBeforeTimeout);
+test('取消会销毁代理响应流与隧道 socket', testProxyResponseBodyFollowsCancel);
+test('信号已取消时代理响应立即释放', testProxyResponseHonoursPreAbortedSignal);
+test('下载读取循环逐块检查取消而不依赖传输信号', testDownloadLoopsCheckCancelPerChunk);

@@ -1608,10 +1608,32 @@ function connectUpdateProxyTunnel(proxy, target, signal) {
 /**
  * 把 Node 响应包装成 fetch 风格结果，让代理线路与直连线路共用同一套下载与校验循环。
  * @param {import('http').IncomingMessage} res Node 响应对象。
+ * @param {AbortSignal=} signal 外部中止信号，取消时销毁响应与隧道 socket。
+ * @param {import('net').Socket=} socket 隧道 socket，取消时一并释放。
  * @returns {object} 具备 ok / status / headers.get / body.getReader 的响应视图。
  */
-function nodeResponseAsFetchLike(res) {
+function nodeResponseAsFetchLike(res, signal, socket) {
   const status = Number(res.statusCode) || 0;
+  // 响应头到达后仍要继续跟随取消：Readable.toWeb 不认识 fetch 的 signal，
+  // 少了这一段，取消后 TCP 连接会继续把整个安装包拉完。
+  if (signal && typeof signal.addEventListener === 'function') {
+    /** @returns {void} 取消时销毁响应流与隧道 socket，让读取端立即结束。 */
+    const onAbort = () => {
+      // 这里不带错误参数销毁：正文可能还没有读取端，带错误会触发无人处理的 'error' 事件。
+      // 终态由下载循环的 job.canceled 判定，不依赖流抛出的具体错误。
+      try { res.destroy(); } catch (_) {}
+      if (socket) {
+        try { socket.destroy(); } catch (_) {}
+      }
+    };
+    if (signal.aborted) onAbort();
+    else {
+      signal.addEventListener('abort', onAbort, { once: true });
+      res.on('close', () => {
+        if (typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', onAbort);
+      });
+    }
+  }
   return {
     ok: status >= 200 && status < 300,
     status,
@@ -1716,7 +1738,7 @@ async function fetchThroughUpdateProxy(proxy, url, options, depth) {
     try { if (socket) socket.destroy(); } catch (_) {}
     return fetchThroughUpdateProxy(proxy, next, options, hops + 1);
   }
-  return nodeResponseAsFetchLike(response);
+  return nodeResponseAsFetchLike(response, signal, socket);
 }
 function ensureMirrorCanBeVerified(job, candidate) {
   if (!candidate || !candidate.mirrored) return;
@@ -1847,6 +1869,8 @@ async function probeUpdateDownloadCandidate(job, candidate, index) {
     }
     reader = resp.body.getReader();
     while (received < UPDATE_ROUTE_PROBE_BYTES) {
+      // 测速样本是有界的，但取消后没必要把剩下的首段读完。
+      if (job && job.canceled) break;
       const chunk = await reader.read();
       if (chunk.done) break;
       const chunkBytes = Number(chunk.value && chunk.value.byteLength || 0);
@@ -1966,12 +1990,16 @@ async function downloadUpdateAssetWithMirrors(job) {
           fileHandle = await fs.promises.open(tmpPath, 'w');
           while (true) {
             idleGuard.touch();
+            // 逐块检查取消，取消必须与传输实现无关：代理线路的响应体来自 Readable.toWeb，
+            // 只依赖 fetch signal 会让取消后正文继续流下去，任务停不下来。
+            throwIfUpdateJobCanceled(job);
             const chunk = await reader.read();
             if (chunk.done) {
               readComplete = true;
               break;
             }
             idleGuard.touch();
+            throwIfUpdateJobCanceled(job);
             const buf = Buffer.from(chunk.value);
             job.received += buf.length;
             if (job.received > maxBytes) {
@@ -2329,12 +2357,15 @@ async function downloadPatchBufferFromCandidate(job, candidate, index, total) {
     try {
       while (true) {
         idleGuard.touch();
+        // 与完整安装包一致：逐块检查取消，不依赖具体传输是否响应 abort 信号。
+        throwIfUpdateJobCanceled(job);
         const chunk = await reader.read();
         if (chunk.done) {
           readComplete = true;
           break;
         }
         idleGuard.touch();
+        throwIfUpdateJobCanceled(job);
         const buf = Buffer.from(chunk.value);
         job.received += buf.length;
         speedWindowBytes += buf.length;

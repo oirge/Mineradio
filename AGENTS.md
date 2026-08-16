@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-v1.5.4-mini-cover-pulse-fix`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.5.8`；在 `v1.5.7` 自动播放开关与迷你播放器悬浮展开错位修复基础上，新增软件内更新的手动线路选择（自动测速 / 直连 / 国内加速 / 本机代理）与下载中取消更新，并把迷你播放器封面律动、封面光晕改为 `0.00 ~ 3.00` 可调强度（`1.00` 标准，`0` 关闭），同时保留 Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、MP3/FLAC/M4A/WAV/OGG、本地歌单、全屏与用户数据迁移能力。
+- 当前源码版本：`v1.5.9`；在 `v1.5.8` 更新线路手动选择、取消更新与迷你封面律动光晕强度基础上，修复 `本机代理` 线路点击取消更新后任务仍继续下载的问题（下载循环逐块检查取消 + 代理响应跟随取消销毁响应流与 CONNECT 隧道 socket），同时保留软件内更新的手动线路选择（自动测速 / 直连 / 国内加速 / 本机代理）、迷你播放器封面律动与光晕 `0.00 ~ 3.00` 可调强度（`1.00` 标准，`0` 关闭）、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、MP3/FLAC/M4A/WAV/OGG、本地歌单、全屏与用户数据迁移能力。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -143,3 +143,4 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `迷你播放器封面律动无效果`、`runMiniPlayerPulseTimer`、`miniPlayerPulseBaseline`、`隐藏窗口 AudioContext suspended` 或 `脉冲长期固定满值` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `封面律动强度`、`封面光晕强度`、`律动光晕不够明显`、`miniPlayerPulseStrength`、`miniPlayerGlowStrength`、`MINI_PLAYER_EFFECT_STRENGTH_MAX`、`MAX_MINI_PLAYER_EFFECT_STRENGTH`、`saturateMiniEffect`、`readMiniEffectStrength`、`--mini-pulse`、`--mini-glow`、`封面放大裁切`、`光晕被窗口裁掉` 或 `360 × 84 几何上限` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `软件内更新线路`、`自动测速`、`最快线路`、`UPDATE_ROUTE_PROBE_BYTES`、`rankUpdateDownloadCandidates`、`测速超时部分样本`、`镜像摘要门禁`、`手动选择更新线路`、`UPDATE_ROUTE_MODES`、`filterUpdateRouteCandidates`、`UPDATE_ROUTE_UNAVAILABLE`、`本机代理下载更新`、`resolveUpdateProxyTarget`、`CONNECT 隧道`、`取消更新`、`cancelUpdateDownloadJob`、`job.applying 拒绝取消` 或 `canceled 终态` 时，必须优先读取 `.context/architecture/mineradio-update-route-selection.md`。
+- 遇到 `代理线路取消无效`、`取消后继续下载`、`Readable.toWeb 不认 signal`、`nodeResponseAsFetchLike`、`逐块 throwIfUpdateJobCanceled`、`隧道 socket 未释放` 或 `res.destroy(err) uncaughtException` 时，必须优先读取 `.context/architecture/mineradio-update-route-selection.md`。

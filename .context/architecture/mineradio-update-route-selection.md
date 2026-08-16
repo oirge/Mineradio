@@ -17,6 +17,8 @@
 - `classifyUpdateError()` 里分类顺序是有语义的：取消会产生 `AbortError`，`UPDATE_PROXY_TIMEOUT` 又包含 `TIMEOUT`，所以取消、线路、代理三类必须排在超时/中止分类之前，否则用户主动取消会被误报成网络超时。
 - 取消是**正常终态**，`publicUpdateJob()` 的 `ok` 仍为 `true`；前端 `applyUpdateDownloadJob()` 必须在 `queued/downloading` 分支之前处理 `status === 'canceled'`，否则会被当成还在下载。
 - 补丁一旦进入写盘或回滚阶段就不能再被打断，否则会留下半套文件；这段时间必须靠 `job.applying` 拒绝取消。
+- 取消不能只依赖传输层的中止信号。直连/镜像走 `fetch(url, { signal })`，`abort()` 会顺带掐掉响应体；代理线路的正文来自 `Readable.toWeb(res)`，它不认识 fetch 的 `AbortSignal`，而 `fetchThroughUpdateProxy()` 的 `settle()` 在响应头到达时就摘掉了 abort 监听。v1.5.8 因此出现过：`本机代理` 线路点取消后任务状态卡在 `downloading`，`received` 继续增长，整包被拉完。
+- 给代理响应绑定取消时不能用 `res.destroy(err)`。正文可能还没有读取端，带错误销毁会发出无人监听的 `'error'` 事件，直接变成 `uncaughtException`。
 - `tests/update-fastest-route.test.js` 用 vm 执行 `server.js` 的源码切片，上下文只注入固定几个全局量。测速路径新增的辅助函数必须落在切片内部（或只在测试不会走到的分支里被调用），否则回归会直接 `ReferenceError`。
 
 ## Solution / Convention
@@ -46,6 +48,10 @@
 - `cancelUpdateDownloadJob()` 是唯一入口：`ready/done/error` 返回 `UPDATE_JOB_NOT_CANCELABLE`，`job.applying` 返回 `UPDATE_JOB_APPLYING`，其余置 `job.canceled = true` 并 `abort()`。
 - `createUpdateDownloadIdleGuard(timeoutMs, cancelSignal)` 必须接入任务级信号，并在单次下载结束时摘掉监听，避免长任务在同一个信号上堆积回调。
 - 下载循环在开始、每次换线前用 `throwIfUpdateJobCanceled()` 检查；每个 `catch` 里 `if (job.canceled) { markUpdateJobCanceled(job); return; }` 必须排在 `setUpdateJobError()` 之前，取消不写失败线路列表、不换线。
+- 取消必须与传输实现无关，两层都要有：
+  1. 安装包和补丁的 `reader.read()` 循环在**每一块**前后各做一次 `throwIfUpdateJobCanceled(job)`，测速循环里做 `if (job && job.canceled) break;`。这一层保证任何传输都能停下来。
+  2. `nodeResponseAsFetchLike(res, signal, socket)` 自己监听 `signal` 的 `abort`，无参 `res.destroy()` 并销毁隧道 socket，`res.on('close')` 时摘监听。这一层保证 TCP 连接真的断开，而不是继续往没人读的缓冲区里灌数据。
+- 只做第 1 层会让连接空转，只做第 2 层则依赖流一定抛错。两处 `settle` 分支都在 `classifyUpdateError()` 之前判 `job.canceled`，所以无参销毁引发的任意流错误都会收敛成 `canceled` 终态、`error` 为空。
 - 终态 `'canceled'` 不在 `isActiveUpdateJob()` 里，用户可以立刻换线路重新下载。
 - `/api/update/cancel?id=` 返回 `publicUpdateJob()` 快照；拒绝取消时返回 409，且 `error` 字段要放在 `Object.assign` 的最后一位，否则会被快照里的空 `error` 覆盖。
 

@@ -1,5 +1,22 @@
 ﻿# 发布流程
 
+## v1.5.9 修复本机代理线路无法取消更新
+- 正式发布版本从 `1.5.8` 提升为 `1.5.9`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.8` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
+- 修复对象是 `v1.5.8` 上线后实测到的真实缺陷：`route=proxy` 下载中调用 `/api/update/cancel` 后，任务状态长期停在 `downloading`，`received` 从 `18169856` 继续涨到 `23149887`，`canceled` 始终为 `false`，安装包被完整拉完。`direct` / `mirror` / `auto` 线路不受影响。
+- 根因有两处：`fetchThroughUpdateProxy()` 的 `settle()` 在响应头到达时就摘掉了 abort 监听；`nodeResponseAsFetchLike()` 用 `Readable.toWeb(res)` 包装正文，而 `Readable` 不认识 `fetch` 的 `AbortSignal`。直连线路能取消只是因为 `fetch(url, { signal })` 会自己掐掉响应体。
+- 第一层修复（传输无关）：安装包读取循环（`server.js` 约 `1969` 行）与补丁读取循环（约 `2332` 行）在每次 `reader.read()` 前后各调用一次 `throwIfUpdateJobCanceled(job)`；测速循环（约 `1850` 行）加 `if (job && job.canceled) break;`。
+- 第二层修复（真正断连）：`nodeResponseAsFetchLike(res, signal, socket)` 自行监听 `signal` 的 `abort`，销毁响应流并销毁 `CONNECT` 隧道 socket，`res.on('close')` 时摘监听；`fetchThroughUpdateProxy()` 末尾改为 `nodeResponseAsFetchLike(response, signal, socket)`。
+- 销毁必须用无参 `res.destroy()`，不能传错误对象：正文可能尚无读取端，带错误销毁会发出无人监听的 `'error'` 事件并升级为 `uncaughtException`（首次实现即因此让测试进程崩溃）。终态由下载循环两处 `settle` 分支中排在 `classifyUpdateError()` 之前的 `job.canceled` 判定收敛，不依赖流抛出的具体错误。
+- 取消语义不变：`canceled` 仍是 `ok: true` 的正常终态，`error` 为空，不写失败线路、不换线，`job.applying` 期间仍然拒绝取消。
+- 实测复验：`MINERADIO_VERSION=1.5.7` + `HTTPS_PROXY=http://127.0.0.1:7897` 起服务，`route=proxy` 下载至 `received 733339` 后取消，`3` 秒内即收敛为 `status canceled / canceled true / received 766107 / message 更新已取消 / error 空`，后续轮询字节不再增长。
+- 本版本不改任何前端、CSS、文案与交互入口，只改 `server.js` 与回归测试。
+- 全量 Node 回归 `403/403`；`tests/update-route-selection.test.js` 从 `11` 项扩到 `14` 项，新增「取消会销毁代理响应流与隧道 socket」「信号已取消时代理响应立即释放」「下载读取循环逐块检查取消而不依赖传输信号」，版本一致性、发布工作流标签与资产清单测试，以及 `node --check` 与 `git diff --check` 均通过。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.5.9-Setup.exe` `101488940` 字节；`.blockmap` `105851` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `a8589b51157439d7583148c0ff951892d66347607af85417376564085b037d70`；`.blockmap` `261263ccafd07b3425400fabccf3d41054cc5bd479e12a557df31efa03580966`；`latest.yml` `cc39b8727d6a06c7b634d1dcd6ddeb3dc59d0e67fdaafad0c9066e46c3248706`；SHA256 清单 `3db99ce0eaf76602a1231baaf2c381aac017ed60ac588fd0a6755330d7e897bf`。
+- `latest.yml` 的 Setup SHA512：`B6pSVPHBxoynYP/W0RrlKyPo5OAJIxc/q9pTWFzM/lDzI37CG/AxvqPCqsLFxVcvUuiEXyntbiyBnuEr9g7Udw==`。
+- 发布标题使用 `Mineradio v1.5.9 修复本机代理线路无法取消更新`。
+
 ## v1.5.8 更新线路手动选择、取消更新与迷你封面律动光晕强度
 - 正式发布版本从 `1.5.7` 提升为 `1.5.8`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.7` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
 - 更新线路模式集中在 `UPDATE_ROUTE_MODES = ['auto', 'direct', 'mirror', 'proxy']`；`normalizeUpdateRouteMode()` 只把已知值放行，未知值一律回落 `auto`。
