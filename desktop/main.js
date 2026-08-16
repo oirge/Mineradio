@@ -249,9 +249,9 @@ function waitForServer(server) {
 }
 
 const LOCAL_LIBRARY_EXTS = new Set([
-  '.mp3', '.flac', '.m4a', '.wav', '.ogg', '.aac', '.opus', '.webm',
-  '.lrc', '.txt', '.srt', '.vtt', '.ass',
-  '.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.bmp',
+  '.mp3', '.flac', '.m4a', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba',
+  '.lrc', '.txt', '.srt', '.vtt', '.ass', '.yrc',
+  '.jpg', '.jpeg', '.jpe', '.jfif', '.png', '.webp', '.avif', '.gif', '.bmp', '.svg',
 ]);
 const LOCAL_LIBRARY_MIME = {
   '.mp3': 'audio/mpeg',
@@ -259,21 +259,27 @@ const LOCAL_LIBRARY_MIME = {
   '.m4a': 'audio/mp4',
   '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
   '.aac': 'audio/aac',
   '.opus': 'audio/ogg',
   '.webm': 'audio/webm',
+  '.weba': 'audio/webm',
   '.lrc': 'text/plain',
   '.txt': 'text/plain',
   '.srt': 'application/x-subrip',
   '.vtt': 'text/vtt',
   '.ass': 'text/x-ssa',
+  '.yrc': 'text/plain',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.jpe': 'image/jpeg',
+  '.jfif': 'image/jpeg',
   '.png': 'image/png',
   '.webp': 'image/webp',
   '.avif': 'image/avif',
   '.gif': 'image/gif',
   '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
 };
 const LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY = 24;
 const LOCAL_LIBRARY_SCAN_VISIT_LIMIT = 60000;

@@ -15,7 +15,7 @@ const vm = require('node:vm');
 function readTimedLyricParserSource() {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function lyricTagTimeToSeconds(');
-  const end = source.indexOf('function parseYrcText(', start);
+  const end = source.indexOf('function renderLyrics(', start);
   assert.ok(start >= 0 && end > start, '未找到歌词时间轴解析实现');
   return source.slice(start, end);
 }
@@ -175,6 +175,10 @@ test('SRT、VTT、ASS 歌词转换为统一时间轴行', () => {
   const localParser = createLocalLyricParser();
   const localVtt = localParser.parseLocalLyricText('WEBVTT\n\n00:01.000 --> 00:03.000\n本地 VTT');
   assert.equal(localVtt[0].source, 'local-vtt');
+
+  const yrc = parser.parseTimedLyricText('[1000,1000](1000,400,0)你(1400,600,0)好');
+  assert.equal(yrc[0].source, 'yrc-word');
+  assert.equal(yrc[0].words.length, 2);
 });
 
 test('本地媒体格式清单包含新增音频、封面和歌词后缀', () => {
@@ -183,13 +187,13 @@ test('本地媒体格式清单包含新增音频、封面和歌词后缀', () =>
   const index = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.js'), 'utf8');
-  for (const ext of ['aac', 'opus', 'webm']) {
+  for (const ext of ['aac', 'opus', 'webm', 'oga', 'weba']) {
     assert.equal(classifier.isLocalAudioFile({ name: `track.${ext}`, type: '' }, true), true);
   }
-  for (const ext of ['srt', 'vtt', 'ass']) {
+  for (const ext of ['srt', 'vtt', 'ass', 'yrc']) {
     assert.equal(classifier.isLocalLyricFile({ name: `track.${ext}`, type: '' }), true);
   }
-  for (const ext of ['avif', 'gif', 'bmp']) {
+  for (const ext of ['avif', 'gif', 'bmp', 'svg', 'jpe', 'jfif']) {
     assert.equal(classifier.isLocalCoverFile({ name: `cover.${ext}`, type: '' }), true);
   }
   assert.match(app, /else if \(isLocalCoverFile\(f\)\) imgFile = f;/, '单文件导入必须复用统一封面分类');
@@ -200,7 +204,7 @@ test('本地媒体格式清单包含新增音频、封面和歌词后缀', () =>
   assert.equal(classifier.findLocalLyricFile(audioFile, classifier.buildLocalLyricMaps([lyricFile])), lyricFile);
   assert.equal(classifier.findLocalCoverFile(audioFile, classifier.buildLocalCoverMaps([coverFile])), coverFile);
 
-  for (const ext of ['aac', 'opus', 'webm', 'srt', 'vtt', 'ass', 'avif', 'gif', 'bmp']) {
+  for (const ext of ['aac', 'opus', 'webm', 'oga', 'weba', 'srt', 'vtt', 'ass', 'yrc', 'avif', 'gif', 'bmp', 'svg', 'jpe', 'jfif']) {
     assert.match(index, new RegExp(`\\.${ext}`));
     assert.match(main, new RegExp(`['"]\\.${ext}['"]`));
     assert.match(server, new RegExp(`['"]\\.${ext}['"]\\s*:`));
@@ -214,12 +218,18 @@ test('桌面扫描和本地文件代理返回新增格式的正确 MIME', async 
     'track.aac': 'audio/aac',
     'track.opus': 'audio/ogg',
     'track.webm': 'audio/webm',
+    'track.oga': 'audio/ogg',
+    'track.weba': 'audio/webm',
     'track.srt': 'application/x-subrip',
     'track.vtt': 'text/vtt',
     'track.ass': 'text/x-ssa',
+    'track.yrc': 'text/plain',
     'cover.avif': 'image/avif',
     'cover.gif': 'image/gif',
     'cover.bmp': 'image/bmp',
+    'cover.svg': 'image/svg+xml',
+    'cover.jpe': 'image/jpeg',
+    'cover.jfif': 'image/jpeg',
   };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mineradio-media-formats-'));
   try {

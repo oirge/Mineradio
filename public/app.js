@@ -16664,7 +16664,7 @@ function homeListenSummary() {
 }
 function fallbackHomeTiles() {
   return [
-    { kind: 'local', title: '导入本地音乐', sub: '支持 8 种音频格式' },
+    { kind: 'local', title: '导入本地音乐', sub: '支持 10 种音频格式' },
     { kind: 'search', title: '搜索本地库', sub: '歌名 / 歌手 / 文件名', query: '' },
     { kind: 'local', title: '匹配歌词', sub: 'LRC / TXT / SRT 等' },
     { kind: 'local', title: '匹配封面', sub: '同名图片或内嵌封面' },
@@ -16766,13 +16766,13 @@ function renderHomeDiscover() {
   if (weatherTitle) weatherTitle.textContent = '本地音乐库';
   if (weatherKicker) weatherKicker.textContent = 'Mineradio · Local Player';
   if (sub) sub.textContent = localSongs.length
-    ? '已导入本地音乐，支持 8 种音频、5 种外置歌词和常用封面图片。'
+    ? '已导入本地音乐，支持 10 种音频、6 种外置歌词和常用封面图片。'
     : '导入音乐文件夹后即可本地播放，不需要登录任何账号。';
   if (weatherMeta) {
     var localMeta = [
       localSongs.length ? ('已导入 ' + localSongs.length + ' 首') : '尚未导入',
-      '8 种音频格式',
-      '5 种歌词格式'
+      '10 种音频格式',
+      '6 种歌词格式'
     ];
     weatherMeta.innerHTML = localMeta.map(function(text){ return '<span class="home-weather-pill">' + escHtml(text) + '</span>'; }).join('');
   }
@@ -21908,6 +21908,9 @@ function parseTimedLyricText(text) {
   if (!raw) return [];
   var lrcLines = parseLyricText(raw);
   if (lrcLines.length) return lrcLines;
+  // 外置 YRC 复用在线歌词的逐字解析器，保持同一套字符时间轴结构。
+  var yrcLines = parseYrcText(raw);
+  if (yrcLines.length) return yrcLines;
   if (/^\uFEFF?WEBVTT(?:\s|$)/i.test(raw)) return parseSubtitleCueText(raw, 'vtt', true);
   if (/^\s*(?:\[(?:Script Info|Events)\]|Dialogue\s*:)/im.test(raw)) return parseAssLyricText(raw);
   var subtitleLines = parseSubtitleCueText(raw, 'srt', false);
@@ -23670,10 +23673,10 @@ document.addEventListener('visibilitychange', function(){
 // ============================================================
 //  文件拖放
 // ============================================================
-var LOCAL_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a|aac|opus|webm)$/i;
-var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a|aac|opus|webm)$/i;
-var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass)$/i;
-var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|png|webp|avif|gif|bmp)$/i;
+var LOCAL_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|oga|m4a|aac|opus|webm|weba)$/i;
+var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|oga|m4a|aac|opus|webm|weba)$/i;
+var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass|yrc)$/i;
+var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|jpe|jfif|png|webp|avif|gif|bmp|svg)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
 var LOCAL_LIBRARY_NAME_COMPARE = (typeof Intl !== 'undefined' && Intl.Collator)
   ? new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' }).compare
