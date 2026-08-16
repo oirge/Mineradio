@@ -10,7 +10,7 @@
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.6.0` 基于 GitHub `v1.5.9`，修复隐藏播放时低平滑分析器空帧覆盖主分析器导致迷你播放器封面律动与光晕无反应，以及 `document.hidden` 早于窗口状态 IPC 时采样定时器未启动的问题；并保留软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
 - 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.6.0`。
-- 最近正式安装包 Release 基线：`v1.5.4`（2026-08-15，Wallpaper Engine 生命周期与窗口重建及迷你播放器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
+- 最近正式安装包 Release 基线：`v1.6.0`（2026-08-16，迷你播放器隐藏播放分析器回退与隐藏态采样定时器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
 - 更新包命名规则：从 `v1.0.10` 起，快速补丁本地文件名和 GitHub Release label 使用 `Mineradio-旧版本→新版本.patch.json` 这种右箭头格式；GitHub 资产底层 `name` 可能会把 `→` 净化成点号，但更新解析仍可识别 from/to 版本。
@@ -42,7 +42,9 @@
 - 根因：隐藏播放时 `beatAnalyser` 在后台切换或 `AudioContext` 恢复瞬间可能返回全零频谱，旧逻辑仍把该帧作为有效节拍数据，覆盖主 `analyser` 的有效频谱；同时 `document.hidden` 可能早于 `desktop-window-state` IPC 到达，导致采样定时器未启动。
 - 解决方案：仅当前 96 个低频桶存在信号时优先使用 `beatAnalyser`，否则回退主 `analyser`；`miniPlayerPulseValue()`、`miniPlayerPulseTimerActive()` 和 `visibilitychange` 同时识别页面隐藏态与窗口状态隐藏态。异常只放弃当前低平滑采样，不中断主播放链路。
 - 不改变边界：保留独立律动/光晕开关和 `0.00 ~ 3.00` 强度；不启动 Electron、不关闭 Mineradio、不抢焦点、不发送全局鼠标键盘输入，构建使用 GitHub Actions Windows Runner。
-- 回归覆盖：`tests/mini-player-pulse.test.js` 新增空节拍频谱回退、有效节拍频谱优先、文档隐藏态定时器激活断言；完整测试和远端资产信息待发布完成后补录。
+- 回归覆盖：`tests/mini-player-pulse.test.js` 新增空节拍频谱回退、有效节拍频谱优先、文档隐藏态定时器激活断言；本地与 GitHub Actions 全量 Node 回归均为 `406/406`，关键 JavaScript 语法检查和 `git diff --check` 通过。
+- `v1.6.0` Windows x64 NSIS 资产：安装器 `101491154` 字节 / SHA256 `e859cc7bbe9a00915c877742a22ef06d6400a673238ab690a1260d82b162d495`；blockmap `105922` 字节 / `b3a301fd1bdc184b3998604ee78914d0effad74cd2f2266835078876b7ce61a5`；`latest.yml` `347` 字节 / `bb1d470d255e9a2ca2bb7d909c3fd434a833c6b70864e7015b34a345a4843bfe`；SHA256 清单 `273` 字节 / `404c94ebe572f4300e23222749557eea855d80c9171f7e0c1b874fa19716f3f1`。
+- `latest.yml` 的 Setup SHA512：`QnigLfj5ETAv+t9C0g0GlLsnf7JEF2itHpykLaffSA4m7gBUktl6RiJvgK3E/b8y7GQnHL36BDEzDn+qqsneIw==`；Release 草稿已上传四项资产，Portable ZIP 未生成或上传。
 
 ## v1.5.9 修复本机代理线路无法取消更新
 

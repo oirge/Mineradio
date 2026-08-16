@@ -7,7 +7,10 @@
 - `miniPlayerPulseValue()` 和 `miniPlayerPulseTimerActive()` 同时识别 `document.hidden` 与 `desktop-window-state` 的隐藏信号；`visibilitychange` 立即调用 `syncMiniPlayerPulseTimer()`，解决隐藏事件早于窗口状态 IPC 时定时器未启动的竞态。
 - 回归覆盖：空节拍频谱回退、有效节拍频谱优先、文档隐藏态定时器激活、挂起 `AudioContext` 恢复和稳态/峰值对比；不启动 Electron、不操作真实窗口、不发送全局鼠标键盘输入。
 - Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
-- 发布资产与 SHA256 待远端 GitHub Actions 构建完成后回填；发布标题使用 `Mineradio v1.6.0 修复迷你播放器封面律动与光晕无反应`。
+- 发布资产：`Mineradio-1.6.0-Setup.exe` `101491154` 字节；`.blockmap` `105922` 字节；`latest.yml` `347` 字节；SHA256 清单 `273` 字节。
+- SHA256：安装器 `e859cc7bbe9a00915c877742a22ef06d6400a673238ab690a1260d82b162d495`；`.blockmap` `b3a301fd1bdc184b3998604ee78914d0effad74cd2f2266835078876b7ce61a5`；`latest.yml` `bb1d470d255e9a2ca2bb7d909c3fd434a833c6b70864e7015b34a345a4843bfe`；SHA256 清单 `404c94ebe572f4300e23222749557eea855d80c9171f7e0c1b874fa19716f3f1`。
+- `latest.yml` 的 Setup SHA512：`QnigLfj5ETAv+t9C0g0GlLsnf7JEF2itHpykLaffSA4m7gBUktl6RiJvgK3E/b8y7GQnHL36BDEzDn+qqsneIw==`。
+- 发布标题使用 `Mineradio v1.6.0 修复迷你播放器封面律动与光晕无反应`；GitHub Release 已上传四项资产，Portable ZIP 未生成或上传。
 
 ## v1.5.9 修复本机代理线路无法取消更新
 - 正式发布版本从 `1.5.8` 提升为 `1.5.9`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.8` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
