@@ -1498,10 +1498,20 @@ function isFatalUpdateLocalError(err) {
   return /^(?:UPDATE_WRITE_FAILED|UPDATE_LOCAL_IO_FAILED|EACCES|EPERM|ENOSPC|EIO|EBUSY|EROFS|EMFILE|ENFILE|ENOTDIR|EISDIR|ENOENT|ENAMETOOLONG|EEXIST|EXDEV|ENOTEMPTY)$/i.test(code)
     || /^(?:UPDATE_WRITE_FAILED|UPDATE_LOCAL_IO_FAILED|EACCES|EPERM|ENOSPC|EIO|EBUSY|EROFS|EMFILE|ENFILE|ENOTDIR|EISDIR|ENOENT|ENAMETOOLONG|EEXIST|EXDEV|ENOTEMPTY)$/i.test(causeCode);
 }
+/**
+ * 生成当前下载尝试的展示名；代理线路必须显式标出传输方式，避免把 GitHub 目标地址误读成绕过代理。
+ * @param {object} job 更新任务，携带已生效的线路标识。
+ * @param {object} candidate 当前候选地址及其原始标签。
+ * @returns {string} 前端进度条使用的下载来源名称。
+ */
+function updateDownloadSourceLabel(job, candidate) {
+  if (job && job.route === 'proxy') return '本机代理访问 GitHub';
+  return candidate && candidate.label || '下载线路';
+}
 function prepareUpdateJobAttempt(job, candidate, index, total) {
   const expectedSize = Number(job.expectedSize);
   job.status = 'downloading';
-  job.sourceLabel = candidate.label || '下载线路';
+  job.sourceLabel = updateDownloadSourceLabel(job, candidate);
   job.attempt = index + 1;
   job.attempts = total;
   job.received = 0;

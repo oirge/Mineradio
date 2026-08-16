@@ -28652,7 +28652,7 @@ function updateRouteHintText() {
   }
   if (route === 'proxy') {
     if (info && !info.proxyLabel) return '没有检测到本机代理，请先在系统里设置代理。';
-    return info && info.proxyLabel ? ('通过本机代理 ' + info.proxyLabel + ' 直连 GitHub。') : '通过本机代理直连 GitHub。';
+    return info && info.proxyLabel ? ('通过本机代理 ' + info.proxyLabel + ' 访问 GitHub 原始地址。') : '通过本机代理访问 GitHub 原始地址。';
   }
   return '自动测速，挑当前最快的线路下载。';
 }

@@ -34,6 +34,13 @@
 
 ## Release Memory
 
+## 2026-08-16 更新线路展示语义
+
+- 用户反馈：选择“本机代理”时，面板提示显示“通过本机代理 `http://127.0.0.1:7897` 直连 GitHub”，下载进度又显示“GitHub 直连”，容易误读为代理没有生效。
+- 事实：`route=proxy` 创建任务时会解析 `proxyTarget`，`openUpdateRouteResponse()` 进入 `fetchThroughUpdateProxy()` 的 CONNECT 隧道；“GitHub 直连”只代表候选目标是 GitHub 原始地址，不代表传输绕过本机代理。
+- 约定：代理线路的提示必须使用“通过本机代理 <地址> 访问 GitHub 原始地址”，下载来源必须使用“本机代理访问 GitHub”；只有 `route=direct` 才使用“GitHub 直连”。
+- 回归：`tests/update-route-hint.test.js` 锁定提示和下载来源标签，避免以后再次把目标地址标签误当成传输线路。
+
 ## v1.6.0 修复迷你播放器封面律动与光晕无反应
 
 - 日期：2026-08-16。
