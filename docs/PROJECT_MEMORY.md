@@ -8,8 +8,8 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.5.7` 基于 GitHub `v1.5.6`，新增 `DIY -> 高级 -> 自动播放` 的启动继续 / 随机播放开关，修复迷你播放器悬浮展开收回时桌面歌词按钮错位，并保留收回态鼠标穿透、封面律动、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
-- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.7`。
+- 当前源码检查点：`v1.5.8` 基于 GitHub `v1.5.7`，新增软件内更新的手动线路选择与下载中取消更新，把迷你播放器封面律动/光晕改为可调强度，并保留自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、更新最快线路、多歌单、全屏过渡、M4A/WAV/OGG 与用户数据迁移修复。
+- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.5.8`。
 - 最近正式安装包 Release 基线：`v1.5.4`（2026-08-15，Wallpaper Engine 生命周期与窗口重建及迷你播放器修复；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -33,6 +33,23 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.5.8 更新线路手动选择、取消更新与迷你封面律动光晕强度
+
+- 日期：2026-08-16。
+- 正式发布版本从 `1.5.7` 提升为 `1.5.8`；已安装 `1.5.7` 及更早版本的客户端可通过 `latest.yml` 自动发现更新。
+- 用户原话诉求两条：更新要“可以取消更新 自己选择更新地址 直连 代理 国内加速”，迷你播放器“封面律动和封面光晕效果不够明显增加选项让用户自定义效果更加明显或者关闭”。
+- 涉及文件：`server.js`、`public/app.js`、`public/app.css`、`public/index.html`、`public/mini-player.html`、`desktop/mini-player-state-cache.js`、`.context/architecture/mineradio-update-route-selection.md`、`.context/architecture/mineradio-player-performance-seams.md`、`tests/update-route-selection.test.js`、`tests/update-fastest-route.test.js`、`tests/mini-player-visual.test.js`、`tests/mini-player-state-cache.test.js`。
+- 关键结论（更新线路）：线路必须在 `rankUpdateDownloadCandidates()` **之前** 用 `filterUpdateRouteCandidates()` 裁剪候选，否则测速排序会把用户排除的线路重新排到前面。选中线路无候选时抛 `UPDATE_ROUTE_UNAVAILABLE`，绝不静默回落——静默回落等于用户的选择没生效。
+- 关键结论（代理）：`server.js` 跑在 Electron 主进程内，所以能用 `session.defaultSession.resolveProxy(url)` 探测系统代理（PAC 返回 `"PROXY host:port"` 或 `"DIRECT"`）。独立 `node server.js` 时 `proxyLabel` 为空是预期行为，不是 bug。代理下载是手写 `CONNECT` 隧道 + `tls.connect` + `http.request({ createConnection })` + `Readable.toWeb`，保持零运行时依赖。
+- 关键结论（取消）：`canceled` 是 `ok: true` 的正常终态，前端必须在 `queued` / `downloading` 分支之前判断它，否则取消后按钮会一直显示“下载中”。`job.applying` 期间必须拒绝取消——补丁应用中途中断会留下混合版本。
+- 关键结论（律动/光晕几何上限）：标准迷你窗口固定 `360 × 84`，`body { padding: 6px }` 后外壳 `348 × 72`，收回态 `54 × 54` 封面上下只剩约 15px、左右只剩约 7px。直接抬高 CSS 缩放/光晕系数会被操作系统窗口裁掉半圈光晕，属于“错位”。正确做法是把饱和曲线放进 JS：`signal = Math.pow(pulse, 0.72)`，再 `saturateMiniEffect(signal * strength) = 1 - Math.exp(-1.15 * level)` 压成 `0 ~ 1` 的 `--mini-pulse` / `--mini-glow`，CSS 系数只承担几何上限（收回态 `0.195`、展开态 `0.125`）。强度拉满 `3.00` 时封面缩放到 `1.195`，实测最坏边距 `1.7px`，两个展开方向都不裁切。
+- 关键结论（开关语义）：光晕不能挂在 `pulseEnabled` 上，否则关掉律动光晕也一起没了；两个开关关闭时要保留用户已选强度，重新打开恢复原档位。标准力度 `1.00` 下典型能量的封面缩放幅度约为旧版（`strength 0.78`）的 `2.5` 倍，外沿光晕透明度从 `0.14` 提到约 `0.29`。
+- 顺手修的真实缺陷：更新面板可能在延迟初始化（9~12 秒）之前被打开，此时线路分段按钮还没绑定，点了没反应。`openUpdatePanel()` 现在会补一次幂等的 `initUpdateRouteControls()`。
+- 环境坑：预览浏览器窗格不显示时 rAF 被节流，更新面板的 GSAP 开场 tween 不推进，`#update-modal` 一直停在 `opacity: 0; visibility: hidden`，真实 `preview_click` 打不到面板内元素，`preview_screenshot` 也会超时。验证这类交互要用合成 `MouseEvent` 加 `getBoundingClientRect` / `getComputedStyle` 数值断言。
+- 全量 Node 回归 `400/400`；`node --check` 与 `git diff --check` 通过。
+- `v1.5.8` Windows x64 NSIS 资产：安装器 `101487553` 字节 / SHA256 `484e70284a1b23263fbf0ad42c494c690519ef2da7a0164f57e73d1ec587b57c`；blockmap `105911` 字节 / `2a42264120479e348c583e33305c917dc31f04bad1577526f9bb88b0b23ff2fd`；`latest.yml` `347` 字节 / `e39fd4c475841b328df549257cf6216c2faf7e4a9f44ac1b2a8189a417436b72`；SHA256 清单 `270` 字节 / `bdab066abae282c73dc027dd46f7b19f71085eec02a9e5913ebf0b676e3fba89`。
+- `latest.yml` 的 Setup SHA512：`psjq0qrcIjuvXa+EoVsN0QUeZodpa8QleEKrC0yecKVM8zD5L485m7qasyIMces85YD7MDnr1u+gGLLwziSKmA==`。
 
 ## v1.5.7 自动播放开关与迷你播放器悬浮展开错位修复
 

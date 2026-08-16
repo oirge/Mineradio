@@ -521,6 +521,16 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home{bottom:126px}
 .update-item-dot{width:auto;height:auto;margin:0;border-radius:0;background:transparent;box-shadow:none;flex-shrink:0;font-size:10px;font-weight:760;letter-spacing:.08em;color:rgba(244,210,138,.58);font-variant-numeric:tabular-nums}
 .update-item-dot::before{content:attr(data-index)}
 .update-item-text{font-size:13px;font-weight:560;line-height:1.45;color:rgba(255,255,255,.76)}
+.update-route{margin:0 0 16px;padding:0 0 16px;border-bottom:1px solid rgba(255,255,255,.055)}
+.update-route-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:9px}
+.update-route-title{font-size:11px;font-weight:700;letter-spacing:.12em;color:rgba(244,210,138,.58);text-transform:uppercase;white-space:nowrap}
+.update-route-hint{flex:1;min-width:0;text-align:right;font-size:11px;line-height:1.4;color:rgba(255,255,255,.42)}
+.update-route-seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.update-route-seg button{height:32px;padding:0 2px;border-radius:10px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.03);color:rgba(255,255,255,.55);font-family:inherit;font-size:11.5px;font-weight:620;letter-spacing:.2px;white-space:nowrap;cursor:pointer;transition:background .18s,border-color .18s,color .18s,box-shadow .18s}
+.update-route-seg button:hover{background:rgba(244,210,138,.085);border-color:rgba(244,210,138,.26);color:rgba(255,244,214,.92)}
+.update-route-seg button.active{background:rgba(244,210,138,.12);border-color:rgba(244,210,138,.42);color:#fff0bf;box-shadow:0 0 18px rgba(244,210,138,.075),inset 0 1px 0 rgba(255,255,255,.09)}
+.update-route-seg button:disabled{cursor:default;background:rgba(255,255,255,.02);border-color:rgba(255,255,255,.06);color:rgba(255,255,255,.30);box-shadow:none}
+.update-route-seg button.active:disabled{background:rgba(244,210,138,.075);border-color:rgba(244,210,138,.20);color:rgba(255,240,191,.62)}
 .update-actions{display:grid;grid-template-columns:1fr 76px;gap:10px;align-items:center;padding-top:0}
 .update-primary-btn{position:relative;height:44px;border-radius:13px;border:1px solid rgba(244,210,138,.34);background:rgba(244,210,138,.105);color:rgba(255,244,214,.96);font-family:inherit;font-size:13px;font-weight:760;letter-spacing:.2px;cursor:pointer;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,.28),0 0 22px rgba(244,210,138,.060),inset 0 1px 0 rgba(255,255,255,.10);transition:background .22s,border-color .22s,transform .22s,color .22s,box-shadow .22s}
 .update-primary-btn:hover{border-color:rgba(244,210,138,.58);background:rgba(244,210,138,.15);box-shadow:0 16px 42px rgba(0,0,0,.30),0 0 28px rgba(244,210,138,.11),inset 0 1px 0 rgba(255,255,255,.12);transform:translateY(-1px)}
@@ -529,6 +539,9 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home{bottom:126px}
 .update-btn-label{position:relative;z-index:1}
 .update-secondary-btn{height:44px;padding:0;border-radius:13px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.035);color:rgba(255,255,255,.55);font-family:inherit;font-size:12px;cursor:pointer;transition:background .18s,border-color .18s,color .18s,transform .18s}
 .update-secondary-btn:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.18);color:rgba(255,255,255,.82);transform:translateY(-1px)}
+.update-secondary-btn.danger{border-color:rgba(255,168,132,.32);background:rgba(255,132,96,.09);color:rgba(255,214,192,.86)}
+.update-secondary-btn.danger:hover{border-color:rgba(255,168,132,.50);background:rgba(255,132,96,.15);color:#ffe3d2}
+.update-secondary-btn:disabled{cursor:default;transform:none;border-color:rgba(255,255,255,.07);background:rgba(255,255,255,.025);color:rgba(255,255,255,.32)}
 .update-footnote{display:block;margin-top:12px;min-height:17px;font-size:11.5px;line-height:1.45;color:rgba(255,244,214,.54)}
 .modal.update-modal.ready .update-primary-btn{border-color:rgba(244,210,138,.46);background:rgba(244,210,138,.13);color:#fff0bf}
 .modal.update-modal.error .update-primary-btn{border-color:rgba(255,190,126,.46);background:rgba(255,158,86,.12);color:#ffe3c2}

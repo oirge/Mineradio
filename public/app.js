@@ -130,6 +130,7 @@ var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
 var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
+var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
 var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
 var LOCAL_METADATA_TAG_SCHEMA = 3;
@@ -149,6 +150,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   PLAYBACK_SESSION_STORE_KEY,
   LOCAL_PLAYBACK_SOURCE_STORE_KEY,
   AUTO_PLAYBACK_STORE_KEY,
+  UPDATE_ROUTE_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
   UPLOAD_TIP_STORE_KEY
@@ -480,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.5.7';
+var APP_VERSION = '1.5.8';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -518,6 +520,12 @@ var updatePreviewState = {
   sourceLabel: '',
   attempt: 0,
   attempts: 0,
+  route: 'auto',
+  routeLabel: '',
+  routeInfo: null,
+  routeInfoPromise: null,
+  canceling: false,
+  canCancel: false,
   errorReason: '',
   errorDetail: '',
   failedAttempts: [],
@@ -995,6 +1003,8 @@ function maybeAnnounceDjMode() {
 // fx 状态: 预设 + 主滑块 + 开关 + 三态
 var DESKTOP_LYRICS_SIZE_MIN = 0.20;
 var DESKTOP_LYRICS_SIZE_MAX = 1.55;
+// 迷你播放器封面律动/光晕强度上限。1.00 是标准力度，往上是用户主动要的“更明显”，0 等于关闭。
+var MINI_PLAYER_EFFECT_STRENGTH_MAX = 3;
 var fxDefaults = {
   preset: 0,            // 0=emily cover, 1=tunnel, 2=orbit, 3=void, 4=vinyl, 5=wallpaper, 6=skull
   intensity: 0.85,
@@ -1045,8 +1055,9 @@ var fxDefaults = {
   desktopLyricsRows: 'double',
   desktopLyricsAlign: 'center',
   miniPlayerPulseEnabled: true,
-  miniPlayerPulseStrength: 0.78,
+  miniPlayerPulseStrength: 1,
   miniPlayerGlowEnabled: true,
+  miniPlayerGlowStrength: 1,
   miniPlayerHoverExpand: true,
   miniPlayerRadius: 12,
   wallpaperMode: false,
@@ -5918,8 +5929,9 @@ function readSavedLyricLayout() {
       desktopLyricsRows: desktopLyricsSchemaReady ? normalizeDesktopLyricsRows(raw.desktopLyricsRows) : fxDefaults.desktopLyricsRows,
       desktopLyricsAlign: desktopLyricsSchemaReady ? normalizeDesktopLyricsAlign(raw.desktopLyricsAlign) : fxDefaults.desktopLyricsAlign,
       miniPlayerPulseEnabled: raw.miniPlayerPulseEnabled !== false,
-      miniPlayerPulseStrength: clampRange(raw.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(raw.miniPlayerPulseStrength), 0, 1.5),
+      miniPlayerPulseStrength: clampRange(raw.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(raw.miniPlayerPulseStrength), 0, MINI_PLAYER_EFFECT_STRENGTH_MAX),
       miniPlayerGlowEnabled: raw.miniPlayerGlowEnabled !== false,
+      miniPlayerGlowStrength: clampRange(raw.miniPlayerGlowStrength == null ? fxDefaults.miniPlayerGlowStrength : Number(raw.miniPlayerGlowStrength), 0, MINI_PLAYER_EFFECT_STRENGTH_MAX),
       miniPlayerHoverExpand: raw.miniPlayerHoverExpand !== false,
       miniPlayerRadius: clampRange(raw.miniPlayerRadius == null ? fxDefaults.miniPlayerRadius : Number(raw.miniPlayerRadius), 4, 22),
       performanceBackground: normalizePerformanceBackgroundMode(raw.performanceBackground, raw.liveBackgroundKeep === true),
@@ -6016,8 +6028,9 @@ function saveLyricLayout() {
       desktopLyricsRows: normalizeDesktopLyricsRows(fx.desktopLyricsRows),
       desktopLyricsAlign: normalizeDesktopLyricsAlign(fx.desktopLyricsAlign),
       miniPlayerPulseEnabled: fx.miniPlayerPulseEnabled !== false,
-      miniPlayerPulseStrength: clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, 1.5),
+      miniPlayerPulseStrength: clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, MINI_PLAYER_EFFECT_STRENGTH_MAX),
       miniPlayerGlowEnabled: fx.miniPlayerGlowEnabled !== false,
+      miniPlayerGlowStrength: clampRange(fx.miniPlayerGlowStrength == null ? fxDefaults.miniPlayerGlowStrength : Number(fx.miniPlayerGlowStrength), 0, MINI_PLAYER_EFFECT_STRENGTH_MAX),
       miniPlayerHoverExpand: fx.miniPlayerHoverExpand !== false,
       miniPlayerRadius: clampRange(fx.miniPlayerRadius == null ? fxDefaults.miniPlayerRadius : Number(fx.miniPlayerRadius), 4, 22),
       performanceBackground: normalizePerformanceBackgroundMode(fx.performanceBackground, fx.liveBackgroundKeep === true),
@@ -22987,8 +23000,9 @@ var miniPlayerPulseBaseline = 0;
 function miniPlayerVisualPayload() {
   return {
     pulseEnabled: fx.miniPlayerPulseEnabled !== false,
-    pulseStrength: clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, 1.5),
+    pulseStrength: clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, MINI_PLAYER_EFFECT_STRENGTH_MAX),
     glowEnabled: fx.miniPlayerGlowEnabled !== false,
+    glowStrength: clampRange(fx.miniPlayerGlowStrength == null ? fxDefaults.miniPlayerGlowStrength : Number(fx.miniPlayerGlowStrength), 0, MINI_PLAYER_EFFECT_STRENGTH_MAX),
     hoverExpand: fx.miniPlayerHoverExpand !== false,
     radius: clampRange(fx.miniPlayerRadius == null ? fxDefaults.miniPlayerRadius : Number(fx.miniPlayerRadius), 4, 22),
   };
@@ -23180,12 +23194,16 @@ function pushMiniPlayerState(force, playbackOnly) {
 
 function applyMiniPlayerVisualControls() {
   var pulse = document.getElementById('fx-miniplayerpulse');
+  var glow = document.getElementById('fx-miniplayerglow');
   var radius = document.getElementById('fx-miniplayerradius');
-  if (pulse) pulse.value = clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, 1.5);
+  if (pulse) pulse.value = clampRange(fx.miniPlayerPulseStrength == null ? fxDefaults.miniPlayerPulseStrength : Number(fx.miniPlayerPulseStrength), 0, MINI_PLAYER_EFFECT_STRENGTH_MAX);
+  if (glow) glow.value = clampRange(fx.miniPlayerGlowStrength == null ? fxDefaults.miniPlayerGlowStrength : Number(fx.miniPlayerGlowStrength), 0, MINI_PLAYER_EFFECT_STRENGTH_MAX);
   if (radius) radius.value = clampRange(fx.miniPlayerRadius == null ? fxDefaults.miniPlayerRadius : Number(fx.miniPlayerRadius), 4, 22);
   var pulseOut = pulse && pulse.parentElement && pulse.parentElement.querySelector('output');
+  var glowOut = glow && glow.parentElement && glow.parentElement.querySelector('output');
   var radiusOut = radius && radius.parentElement && radius.parentElement.querySelector('output');
   if (pulseOut) pulseOut.textContent = Number(pulse.value).toFixed(2);
+  if (glowOut) glowOut.textContent = Number(glow.value).toFixed(2);
   if (radiusOut) radiusOut.textContent = Math.round(Number(radius.value)) + 'px';
   var toggleMap = [
     ['t-miniPlayerPulse', fx.miniPlayerPulseEnabled !== false],
@@ -28027,7 +28045,7 @@ function bindFxPanel() {
   var ids = [
     ['fx-intensity','intensity'],['fx-depth','depth'],['fx-coverres','coverResolution'],['fx-cineshake','cinemaShake'],['fx-lyricglow','lyricGlowStrength'],['fx-bgopacity','backgroundOpacity'],['fx-glassaberration','controlGlassChromaticOffset'],
     ['fx-desktoplyricssize','desktopLyricsSize'],['fx-desktoplyricsopacity','desktopLyricsOpacity'],['fx-desktoplyricsy','desktopLyricsY'],['fx-wallpaperopacity','wallpaperOpacity'],
-    ['fx-miniplayerpulse','miniPlayerPulseStrength'],['fx-miniplayerradius','miniPlayerRadius'],
+    ['fx-miniplayerpulse','miniPlayerPulseStrength'],['fx-miniplayerglow','miniPlayerGlowStrength'],['fx-miniplayerradius','miniPlayerRadius'],
     ['fx-shelfsize','shelfSize'],['fx-shelfx','shelfOffsetX'],['fx-shelfy','shelfOffsetY'],['fx-shelfz','shelfOffsetZ'],['fx-shelfangle','shelfAngleY'],['fx-shelfopacity','shelfOpacity'],['fx-shelfbgalpha','shelfBgOpacity'],
     ['fx-lyricspacing','lyricLetterSpacing'],['fx-lyriclineheight','lyricLineHeight'],['fx-lyricweight','lyricWeight'],
     ['fx-lyricscale','lyricScale'],['fx-lyricx','lyricOffsetX'],['fx-lyricy','lyricOffsetY'],['fx-lyricz','lyricOffsetZ'],['fx-lyrictiltx','lyricTiltX'],['fx-lyrictilty','lyricTiltY'],
@@ -28060,9 +28078,10 @@ function bindFxPanel() {
       if (pair[1] === 'desktopLyricsOpacity') fx.desktopLyricsOpacity = clampRange(fx.desktopLyricsOpacity, 0.28, 1);
       if (pair[1] === 'desktopLyricsY') fx.desktopLyricsY = clampRange(fx.desktopLyricsY, 0.08, 0.92);
       if (pair[1] === 'wallpaperOpacity') fx.wallpaperOpacity = clampRange(fx.wallpaperOpacity, 0.35, 1);
-      if (pair[1] === 'miniPlayerPulseStrength') fx.miniPlayerPulseStrength = clampRange(fx.miniPlayerPulseStrength, 0, 1.5);
+      if (pair[1] === 'miniPlayerPulseStrength') fx.miniPlayerPulseStrength = clampRange(fx.miniPlayerPulseStrength, 0, MINI_PLAYER_EFFECT_STRENGTH_MAX);
+      if (pair[1] === 'miniPlayerGlowStrength') fx.miniPlayerGlowStrength = clampRange(fx.miniPlayerGlowStrength, 0, MINI_PLAYER_EFFECT_STRENGTH_MAX);
       if (pair[1] === 'miniPlayerRadius') fx.miniPlayerRadius = clampRange(fx.miniPlayerRadius, 4, 22);
-      if (pair[1] === 'miniPlayerPulseStrength' || pair[1] === 'miniPlayerRadius') applyMiniPlayerVisualControls();
+      if (pair[1] === 'miniPlayerPulseStrength' || pair[1] === 'miniPlayerGlowStrength' || pair[1] === 'miniPlayerRadius') applyMiniPlayerVisualControls();
       if (pair[1] === 'shelfSize') fx.shelfSize = clampRange(fx.shelfSize, 0.65, 1.45);
       if (pair[1] === 'shelfOffsetX') fx.shelfOffsetX = clampRange(fx.shelfOffsetX, -1.2, 1.2);
       if (pair[1] === 'shelfOffsetY') fx.shelfOffsetY = clampRange(fx.shelfOffsetY, -0.9, 0.9);
@@ -28085,7 +28104,7 @@ function bindFxPanel() {
       if (pair[1] === 'lyricLetterSpacing' || pair[1] === 'lyricLineHeight' || pair[1] === 'lyricWeight' || pair[1] === 'lyricScale' || pair[1] === 'lyricGlowStrength') pushDesktopLyricsState(true);
       if (/^(desktopLyricsSize|desktopLyricsOpacity|desktopLyricsY)$/.test(pair[1])) pushDesktopLyricsState(true);
       if (pair[1] === 'wallpaperOpacity') pushWallpaperState(true);
-      if (pair[1] === 'miniPlayerPulseStrength' || pair[1] === 'miniPlayerRadius') pushMiniPlayerState(true);
+      if (pair[1] === 'miniPlayerPulseStrength' || pair[1] === 'miniPlayerGlowStrength' || pair[1] === 'miniPlayerRadius') pushMiniPlayerState(true);
       saveLyricLayout();
     });
   });
@@ -28575,9 +28594,232 @@ function updateProgressDetailText() {
   return parts.join(' · ');
 }
 function initUpdatePreview() {
+  initUpdateRouteControls();
   renderUpdatePreviewPanel();
   setUpdatePreviewVisible(true);
   checkLatestUpdate();
+}
+
+var UPDATE_ROUTE_MODES = ['auto', 'direct', 'mirror', 'proxy'];
+/**
+ * 归一化更新线路，未知值一律回落自动测速。
+ * @param {*} value 待归一化的线路标识。
+ * @returns {string} auto / direct / mirror / proxy 之一。
+ */
+function normalizeUpdateRoute(value) {
+  var mode = String(value == null ? '' : value).trim().toLowerCase();
+  return UPDATE_ROUTE_MODES.indexOf(mode) > 0 ? mode : 'auto';
+}
+function updateRouteLabelText(mode) {
+  var route = normalizeUpdateRoute(mode);
+  if (route === 'direct') return 'GitHub 直连';
+  if (route === 'mirror') return '国内加速';
+  if (route === 'proxy') return '本机代理';
+  return '自动测速';
+}
+function readSavedUpdateRoute() {
+  try { return normalizeUpdateRoute(localStorage.getItem(UPDATE_ROUTE_STORE_KEY)); } catch (e) { return 'auto'; }
+}
+/**
+ * 生成当前线路的说明文案，可用性以后端探测结果为准。
+ * @returns {string} 线路提示文案。
+ */
+function updateRouteHintText() {
+  var info = updatePreviewState.routeInfo || null;
+  var route = normalizeUpdateRoute(updatePreviewState.route);
+  if (route === 'direct') return '直接连接 GitHub，不走加速镜像和代理。';
+  if (route === 'mirror') {
+    var count = info ? Number(info.mirrorCount) || 0 : 0;
+    if (info && !count) return '没有配置国内加速线路，请改用其它线路。';
+    return count > 1 ? ('只走国内加速镜像，共 ' + count + ' 条备选。') : '只走国内加速镜像。';
+  }
+  if (route === 'proxy') {
+    if (info && !info.proxyLabel) return '没有检测到本机代理，请先在系统里设置代理。';
+    return info && info.proxyLabel ? ('通过本机代理 ' + info.proxyLabel + ' 直连 GitHub。') : '通过本机代理直连 GitHub。';
+  }
+  return '自动测速，挑当前最快的线路下载。';
+}
+function updateRouteAvailability(mode) {
+  var info = updatePreviewState.routeInfo || null;
+  if (!info) return true;
+  var route = normalizeUpdateRoute(mode);
+  if (route === 'mirror') return (Number(info.mirrorCount) || 0) > 0;
+  if (route === 'proxy') return !!info.proxyLabel;
+  return true;
+}
+/**
+ * 刷新线路分段控件与提示；下载中禁止切线路，避免半途换线导致进度错乱。
+ * @returns {void}
+ */
+function updateUpdateRouteControls() {
+  var route = normalizeUpdateRoute(updatePreviewState.route);
+  var locked = updatePreviewState.status === 'downloading' || updatePreviewState.status === 'opening';
+  var buttons = document.querySelectorAll('#update-route-seg [data-update-route]');
+  for (var i = 0; i < buttons.length; i++) {
+    var btn = buttons[i];
+    var mode = normalizeUpdateRoute(btn.getAttribute('data-update-route'));
+    var active = mode === route;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    btn.disabled = locked || (!active && !updateRouteAvailability(mode));
+  }
+  var hint = document.getElementById('update-route-hint');
+  if (hint) hint.textContent = updateRouteHintText();
+}
+/**
+ * 切换更新线路并落盘；下载中不允许切换。
+ * @param {string} mode 目标线路。
+ * @returns {string} 生效的线路。
+ */
+function setUpdateRoute(mode) {
+  var next = normalizeUpdateRoute(mode);
+  if (updatePreviewState.status === 'downloading' || updatePreviewState.status === 'opening') {
+    showToast('正在下载，先取消更新再切换线路');
+    return updatePreviewState.route;
+  }
+  var changed = next !== updatePreviewState.route;
+  updatePreviewState.route = next;
+  updatePreviewState.routeLabel = updateRouteLabelText(next);
+  if (changed) {
+    setPersistentLocalStorageItem(UPDATE_ROUTE_STORE_KEY, next);
+    showToast('更新线路：' + updatePreviewState.routeLabel);
+  }
+  updateUpdateRouteControls();
+  return next;
+}
+/**
+ * 读取后端可用线路信息（镜像条数与检测到的本机代理），失败时保持全部可选。
+ * @returns {Promise<void>} 结果写入 updatePreviewState.routeInfo。
+ */
+function loadUpdateRouteInfo() {
+  if (updatePreviewState.routeInfoPromise) return updatePreviewState.routeInfoPromise;
+  var request = apiJson('/api/update/routes?t=' + Date.now(), { timeoutMs: 8000 }).then(function(data){
+    if (data && data.ok !== false) {
+      updatePreviewState.routeInfo = {
+        mirrorCount: Number(data.mirrorCount) || 0,
+        proxyLabel: String(data.proxyLabel || ''),
+      };
+      updateUpdateRouteControls();
+    }
+  }).catch(function(){}).finally(function(){
+    updatePreviewState.routeInfoPromise = null;
+  });
+  updatePreviewState.routeInfoPromise = request;
+  return request;
+}
+var updateRouteControlsBound = false;
+/**
+ * 绑定线路分段控件；更新面板可能在延迟初始化之前就被打开，所以这里做幂等绑定。
+ * @returns {void}
+ */
+function initUpdateRouteControls() {
+  if (updateRouteControlsBound) {
+    updateUpdateRouteControls();
+    return;
+  }
+  updatePreviewState.route = readSavedUpdateRoute();
+  updatePreviewState.routeLabel = updateRouteLabelText(updatePreviewState.route);
+  var seg = document.getElementById('update-route-seg');
+  if (seg) {
+    updateRouteControlsBound = true;
+    seg.addEventListener('click', function(e){
+      var btn = e.target && e.target.closest ? e.target.closest('[data-update-route]') : null;
+      if (!btn || btn.disabled) return;
+      e.preventDefault();
+      setUpdateRoute(btn.getAttribute('data-update-route'));
+    });
+  }
+  updateUpdateRouteControls();
+}
+/**
+ * 拼出带线路参数的更新接口地址，线路选择只从任务开始时传一次。
+ * @param {string} pathname 更新接口路径。
+ * @returns {string} 带查询串的地址。
+ */
+function updateJobStartUrl(pathname) {
+  return pathname + '?route=' + encodeURIComponent(normalizeUpdateRoute(updatePreviewState.route));
+}
+/**
+ * 把更新任务启动失败的错误码翻译成用户能看懂的提示。
+ * @param {string} code 服务端返回的错误码或信息。
+ * @param {string} fallback 兜底文案。
+ * @returns {string} 展示用文案。
+ */
+function updateStartErrorText(code, fallback) {
+  var text = String(code || '');
+  if (/UPDATE_ROUTE_UNAVAILABLE/i.test(text)) return '当前线路没有可用地址，请换一条线路';
+  if (/UPDATE_PROXY_NOT_CONFIGURED/i.test(text)) return '没有检测到本机代理，请先设置系统代理或改用其它线路';
+  if (/UPDATE_PROXY_/i.test(text)) return '通过本机代理连接更新线路失败，请检查代理是否正常';
+  if (/UPDATE_CANCELED/i.test(text)) return '更新已取消';
+  return text || fallback || '请稍后重试';
+}
+
+/**
+ * 更新面板右侧按钮：下载中是“取消更新”，其余情况是关闭面板。
+ * @returns {void}
+ */
+function handleUpdateSecondaryAction() {
+  if (updatePreviewState.status === 'downloading') {
+    cancelRunningUpdateJob();
+    return;
+  }
+  closeUpdatePanel();
+}
+/**
+ * 请求服务端中止当前更新任务；补丁写盘阶段不可中断，由服务端拒绝并提示。
+ * @returns {Promise<void>} 结果写入 updatePreviewState。
+ */
+async function cancelRunningUpdateJob() {
+  var mode = updatePreviewState.mode === 'patch' ? 'patch' : 'installer';
+  var id = mode === 'patch' ? updatePreviewState.patchJobId : updatePreviewState.downloadJobId;
+  if (!id) {
+    clearUpdateJobPolling();
+    finishCanceledUpdateJob(null);
+    return;
+  }
+  if (updatePreviewState.canceling) return;
+  updatePreviewState.canceling = true;
+  updatePreviewState.message = '正在取消更新…';
+  syncUpdatePreviewStateClass();
+  try {
+    var job = await apiJson('/api/update/cancel?id=' + encodeURIComponent(id), { method: 'POST' });
+    if (!job || job.ok === false) {
+      var reason = (job && job.error) || 'UPDATE_JOB_NOT_CANCELABLE';
+      updatePreviewState.canceling = false;
+      updatePreviewState.message = reason === 'UPDATE_JOB_APPLYING' ? '补丁正在写入文件，无法中断' : '当前任务已无法取消';
+      showToast(updatePreviewState.message);
+      syncUpdatePreviewStateClass();
+      return;
+    }
+    clearUpdateJobPolling();
+    finishCanceledUpdateJob(job);
+  } catch (e) {
+    updatePreviewState.canceling = false;
+    updatePreviewState.message = '取消更新失败，请重试';
+    showToast(updatePreviewState.message);
+    syncUpdatePreviewStateClass();
+  }
+}
+/**
+ * 把面板落到“已取消”终态，进度数字清零，让用户可以换线路重来。
+ * @param {object|null} job 服务端返回的任务快照。
+ * @returns {void}
+ */
+function finishCanceledUpdateJob(job) {
+  updatePreviewState.canceling = false;
+  updatePreviewState.status = 'canceled';
+  updatePreviewState.canCancel = false;
+  updatePreviewState.speedBps = 0;
+  updatePreviewState.etaSeconds = 0;
+  updatePreviewState.installerPath = '';
+  updatePreviewState.patchFallbackTried = false;
+  updatePreviewState.errorReason = '';
+  updatePreviewState.errorDetail = '';
+  updatePreviewState.failedAttempts = [];
+  updatePreviewState.message = (job && job.message) || '更新已取消';
+  updateUpdatePreviewProgress(0);
+  updateUpdateRouteControls();
+  showToast('更新已取消');
 }
 
 function setUpdatePreviewVisible(visible) {
@@ -28804,6 +29046,9 @@ function updatePreviewClassSignature() {
     (Number(updatePreviewState.etaSeconds) || 0) + '\u001f' +
     (Number(updatePreviewState.attempt) || 0) + '\u001f' +
     (Number(updatePreviewState.attempts) || 0) + '\u001f' +
+    String(updatePreviewState.route || '') + '\u001f' +
+    (updatePreviewState.canceling ? 1 : 0) + '\u001f' +
+    (updatePreviewState.canCancel ? 1 : 0) + '\u001f' +
     (updatePreviewState.failedAttempts && updatePreviewState.failedAttempts.length || 0);
 }
 
@@ -28838,6 +29083,8 @@ function syncUpdatePreviewStateClass() {
   var isReady = updatePreviewState.status === 'ready';
   var isError = updatePreviewState.status === 'error';
   var isOpening = updatePreviewState.status === 'opening';
+  var isCanceled = updatePreviewState.status === 'canceled';
+  var isCanceling = !!updatePreviewState.canceling;
   var isChecking = updatePreviewState.checking;
   var isPatch = updatePreviewState.mode === 'patch';
   if (entry) {
@@ -28869,6 +29116,7 @@ function syncUpdatePreviewStateClass() {
   if (label) {
     if (isDownloading) label.textContent = (isPatch ? '快速补丁 ' : '正在下载 ') + Math.round(updatePreviewState.progress) + '%';
     else if (isOpening) label.textContent = '正在打开安装包';
+    else if (isCanceled) label.textContent = updatePreviewState.patchAvailable ? '重新安装补丁' : '重新下载';
     else if (isError && updatePreviewState.mode === 'patch' && updatePreviewState.downloadUrl) label.textContent = '下载完整安装包';
     else if (isError) label.textContent = updatePreviewState.mode === 'installer' ? '重试下载' : '重试更新';
     else if (isReady && isPatch && updatePreviewState.restartRequired) label.textContent = '重启生效';
@@ -28881,17 +29129,26 @@ function syncUpdatePreviewStateClass() {
     else label.textContent = updatePreviewState.patchAvailable ? '安装快速补丁' : ((canDownloadUpdate || canOpenRelease) ? '下载完整安装包' : '立即更新');
   }
   if (btn) btn.disabled = isChecking || !!updatePreviewState.checkError || (updatePreviewState.configured && !updatePreviewState.preview && !updatePreviewState.updateAvailable);
+  var secondary = document.getElementById('update-secondary-btn');
+  if (secondary) {
+    // 下载中把关闭按钮变成取消更新，避免用户只能关面板、任务却继续跑。
+    secondary.textContent = isCanceling ? '取消中…' : (isDownloading ? '取消更新' : '取消');
+    secondary.disabled = isCanceling;
+    secondary.classList.toggle('danger', isDownloading || isCanceling);
+  }
   var foot = document.getElementById('update-footnote');
   if (foot) {
     if (isChecking) foot.textContent = '正在连接更新服务并核对最新版本…';
     else if (updatePreviewState.checkError) foot.textContent = '检测失败：' + updatePreviewState.checkError;
     else if (isDownloading) foot.textContent = (updatePreviewState.message || (isPatch ? '正在下载快速补丁' : '正在下载完整安装包')) + (updateProgressDetailText() ? ' · ' + updateProgressDetailText() : '');
+    else if (isCanceled) foot.textContent = '更新已取消，可以换一条线路后重新下载。';
     else if (isError) foot.textContent = '下载失败：' + (updatePreviewState.errorReason || updatePreviewState.errorDetail || updatePreviewState.message || '请稍后重试') + (updatePreviewState.failedAttempts && updatePreviewState.failedAttempts.length ? ' · 已尝试 ' + updatePreviewState.failedAttempts.length + ' 条线路' : '');
     else if (isReady && isPatch) foot.textContent = updatePreviewState.restartRequired ? '快速补丁已应用，重启 Mineradio 后生效。' : '快速补丁已应用。';
     else if (isReady) foot.textContent = updatePreviewState.cached ? '已复用上次校验通过的安装包，不会重复下载。' : '安装包已准备好，点击按钮后再打开安装。';
     else if (updatePreviewState.patchAvailable) foot.textContent = '优先使用轻量补丁，只更新缺失或变更的资源文件；不适用时可下载完整安装包。';
     else foot.textContent = updatePreviewState.updateAvailable ? '没有可用快速补丁时会下载完整安装包。' : '当前版本 v' + updatePreviewState.currentVersion + ' 已是最新。';
   }
+  updateUpdateRouteControls();
 }
 
 function updateUpdatePreviewProgress(progress) {
@@ -28921,11 +29178,14 @@ function openUpdatePanel() {
   var entry = document.getElementById('update-entry');
   if (!mask) return;
   updatePreviewState.open = true;
+  // 面板可能在延迟初始化（9~12 秒）之前就被打开，这里补一次幂等绑定，否则线路分段按钮点了没反应。
+  initUpdateRouteControls();
   renderUpdatePreviewPanel();
   if (entry && window.gsap) {
     window.gsap.fromTo(entry, { scale: 0.93 }, { scale: 1, duration: 0.42, ease: 'back.out(1.7)', overwrite: 'auto' });
   }
   if (updatePreviewState.status !== 'downloading' && updatePreviewState.status !== 'opening') checkLatestUpdate({ force: true, announce: true });
+  loadUpdateRouteInfo();
   openGsapModal(mask);
   rescheduleUpdateJobPolling(true);
   animateUpdatePanelContents();
@@ -29061,17 +29321,19 @@ async function startRealUpdateDownload() {
   updatePreviewState.errorReason = '';
   updatePreviewState.errorDetail = '';
   updatePreviewState.failedAttempts = [];
+  updatePreviewState.canceling = false;
+  updatePreviewState.canCancel = false;
   updatePreviewState.message = '正在下载完整安装包';
   updateUpdatePreviewProgress(0);
   try {
-    var job = await apiJson('/api/update/download', { method: 'POST' });
+    var job = await apiJson(updateJobStartUrl('/api/update/download'), { method: 'POST' });
     if (!job || job.ok === false || !job.id) throw new Error((job && job.error) || 'UPDATE_DOWNLOAD_START_FAILED');
     updatePreviewState.downloadJobId = job.id;
     applyUpdateDownloadJob(job);
     if (updatePreviewState.status === 'downloading') scheduleUpdateJobPoll(job.id, 'installer');
   } catch (e) {
     updatePreviewState.status = 'error';
-    updatePreviewState.errorReason = (e && e.message) || '更新下载启动失败';
+    updatePreviewState.errorReason = updateStartErrorText(e && e.message, '更新下载启动失败');
     updatePreviewState.errorDetail = updatePreviewState.errorReason;
     updatePreviewState.message = updatePreviewState.errorReason;
     updateUpdatePreviewProgress(0);
@@ -29104,17 +29366,19 @@ async function startRealUpdatePatch() {
   updatePreviewState.errorDetail = '';
   updatePreviewState.failedAttempts = [];
   updatePreviewState.patchFallbackTried = false;
+  updatePreviewState.canceling = false;
+  updatePreviewState.canCancel = false;
   updatePreviewState.message = '正在下载快速补丁';
   updateUpdatePreviewProgress(0);
   try {
-    var job = await apiJson('/api/update/patch', { method: 'POST' });
+    var job = await apiJson(updateJobStartUrl('/api/update/patch'), { method: 'POST' });
     if (!job || job.ok === false || !job.id) throw new Error((job && job.error) || 'UPDATE_PATCH_START_FAILED');
     updatePreviewState.patchJobId = job.id;
     applyUpdateDownloadJob(job);
     if (updatePreviewState.status === 'downloading') scheduleUpdateJobPoll(job.id, 'patch');
   } catch (e) {
     updatePreviewState.status = 'error';
-    updatePreviewState.errorReason = (e && e.message) || '快速补丁不可用';
+    updatePreviewState.errorReason = updateStartErrorText(e && e.message, '快速补丁不可用');
     updatePreviewState.errorDetail = updatePreviewState.errorReason;
     updatePreviewState.message = updatePreviewState.errorReason;
     updateUpdatePreviewProgress(0);
@@ -29196,6 +29460,8 @@ function applyUpdateDownloadJob(job) {
     updatePreviewState.failedAttempts = Array.isArray(job && job.failedAttempts) ? job.failedAttempts : [];
     updatePreviewState.message = (job && job.message) || updatePreviewState.errorReason;
     updatePreviewState.status = 'error';
+    updatePreviewState.canceling = false;
+    updatePreviewState.canCancel = false;
     updateUpdatePreviewProgress(job && job.progress || updatePreviewState.progress || 0);
     if (updatePreviewState.mode === 'patch' && updatePreviewState.downloadUrl && !updatePreviewState.patchFallbackTried) {
       updatePreviewState.patchFallbackTried = true;
@@ -29221,6 +29487,17 @@ function applyUpdateDownloadJob(job) {
   updatePreviewState.message = job.message || '';
   updatePreviewState.restartRequired = !!job.restartRequired;
   updatePreviewState.cached = !!job.cached;
+  updatePreviewState.canCancel = !!job.canCancel;
+  if (job.route) {
+    updatePreviewState.route = normalizeUpdateRoute(job.route);
+    updatePreviewState.routeLabel = job.routeLabel || updateRouteLabelText(job.route);
+  }
+  // 取消是正常终态（ok 仍为 true），必须排在下载中分支之前，否则会被当成还在下载。
+  if (job.status === 'canceled') {
+    clearUpdateJobPolling();
+    finishCanceledUpdateJob(job);
+    return;
+  }
   if (job.status === 'downloading' || job.status === 'queued') {
     updatePreviewState.status = 'downloading';
     updateUpdatePreviewProgress(job.progress || 0);

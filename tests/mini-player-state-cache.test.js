@@ -51,8 +51,9 @@ function testDisabledCacheReleasesAndRejectsState() {
     pulse: 0,
     visual: {
       pulseEnabled: true,
-      pulseStrength: 0.78,
+      pulseStrength: 1,
       glowEnabled: true,
+      glowStrength: 1,
       hoverExpand: true,
       radius: 12,
     },

@@ -187,9 +187,13 @@ test('标准迷你播放器包含封面胶囊态和悬停展开动画契约', ()
   assert.match(html, /data-collapsed="true"/);
   assert.match(html, /data-glow="true"/);
   assert.match(html, /--mini-pulse/);
-  assert.match(html, /var\(--mini-pulse\) \* 0\.085/);
-  assert.match(html, /var\(--mini-pulse\) \* 0\.055/);
-  assert.match(html, /0 0 calc\(6px \+ var\(--mini-pulse\) \* 9px\)/);
+  assert.match(html, /--mini-glow/);
+  // 律动放大与光晕分别由 0~1 的 --mini-pulse / --mini-glow 驱动；系数就是各自的可见上限。
+  assert.match(html, /var\(--mini-pulse\) \* 0\.195/);
+  assert.match(html, /var\(--mini-pulse\) \* 0\.125/);
+  assert.match(html, /0 0 calc\(6px \+ var\(--mini-glow\) \* 14px\)/);
+  assert.match(html, /calc\(0\.08 \+ var\(--mini-glow\) \* 0\.42\)/);
+  assert.doesNotMatch(html, /box-shadow:[\s\S]{0,200}var\(--mini-pulse\)/);
   assert.match(html, /\.mini-shell\[data-glow="false"\] \.cover \{ box-shadow:/);
   assert.doesNotMatch(html, /\.cover::after \{[\s\S]*?inset: -4px;/);
   assert.match(html, /setExpanded\(true\)/);
@@ -233,18 +237,38 @@ test('标准迷你播放器把低频脉冲映射为可见封面缩放和光晕',
     hasTrack: true,
     playing: true,
     pulse: 0.25,
-    visual: { pulseEnabled: true, pulseStrength: 0.78, glowEnabled: true, hoverExpand: true, radius: 16 },
+    visual: { pulseEnabled: true, pulseStrength: 1, glowEnabled: true, glowStrength: 1, hoverExpand: true, radius: 16 },
   });
-  const visiblePulse = Number(shell.style.values['--mini-pulse']);
-  assert.ok(visiblePulse > 0.25 * 0.78);
+  const standardPulse = Number(shell.style.values['--mini-pulse']);
+  // 1.5.7 的可见幅度是 signal * 0.78 * 0.085，用户反馈根本看不出来；
+  // 标准力度下新版的封面放大量必须显著超过它。
+  const legacyScaleDelta = Math.pow(0.25, 0.72) * 0.78 * 0.085;
+  assert.ok(standardPulse * 0.195 > legacyScaleDelta * 2.5);
+  assert.equal(Number(shell.style.values['--mini-glow']), standardPulse);
   assert.equal(shell.style.values['--mini-radius'], '16px');
   assert.equal(shell.getAttribute('data-glow'), 'true');
 
+  // 强度上限只放大驱动值，饱和后仍然被压在 0~1，CSS 系数才是真正的几何上限。
   harness.applyState({
-    pulse: 0.9,
-    visual: { pulseEnabled: true, pulseStrength: 0, glowEnabled: false, hoverExpand: true, radius: 16 },
+    pulse: 1,
+    visual: { pulseEnabled: true, pulseStrength: 3, glowEnabled: true, glowStrength: 3, hoverExpand: true, radius: 16 },
+  });
+  const maxPulse = Number(shell.style.values['--mini-pulse']);
+  assert.ok(maxPulse > standardPulse && maxPulse <= 1);
+
+  // 律动和光晕互相独立：关掉律动后光晕仍然跟着音乐走。
+  harness.applyState({
+    visual: { pulseEnabled: false, pulseStrength: 3, glowEnabled: true, glowStrength: 2, hoverExpand: true, radius: 16 },
   });
   assert.equal(shell.style.values['--mini-pulse'], '0.000');
+  assert.ok(Number(shell.style.values['--mini-glow']) > 0);
+
+  harness.applyState({
+    pulse: 0.9,
+    visual: { pulseEnabled: true, pulseStrength: 0, glowEnabled: false, glowStrength: 3, hoverExpand: true, radius: 16 },
+  });
+  assert.equal(shell.style.values['--mini-pulse'], '0.000');
+  assert.equal(shell.style.values['--mini-glow'], '0.000');
   assert.equal(shell.getAttribute('data-glow'), 'false');
 });
 
@@ -470,8 +494,9 @@ test('迷你播放器视觉配置会被边界校正并持久化到状态缓存',
     pulse: 4,
     visual: {
       pulseEnabled: false,
-      pulseStrength: 4,
+      pulseStrength: 9,
       glowEnabled: false,
+      glowStrength: 9,
       hoverExpand: false,
       radius: 100,
     },
@@ -480,9 +505,27 @@ test('迷你播放器视觉配置会被边界校正并持久化到状态缓存',
   assert.equal(cache.value.pulse, 1);
   assert.deepEqual(cache.value.visual, {
     pulseEnabled: false,
-    pulseStrength: 1.5,
+    pulseStrength: 3,
     glowEnabled: false,
+    glowStrength: 3,
     hoverExpand: false,
     radius: 22,
   });
+});
+
+test('封面律动与光晕强度都有独立滑块并双向持久化', () => {
+  const index = read('public/index.html');
+  const renderer = read('public/app.js');
+
+  assert.match(index, /id="t-miniPlayerPulse"[^>]+toggleMiniPlayerVisual\('pulseEnabled'\)/);
+  assert.match(index, /id="t-miniPlayerGlow"[^>]+toggleMiniPlayerVisual\('glowEnabled'\)/);
+  assert.match(index, /封面律动强度<\/label><input id="fx-miniplayerpulse" type="range" min="0" max="3"/);
+  assert.match(index, /封面光晕强度<\/label><input id="fx-miniplayerglow" type="range" min="0" max="3"/);
+  assert.match(renderer, /var MINI_PLAYER_EFFECT_STRENGTH_MAX = 3;/);
+  assert.match(renderer, /miniPlayerPulseStrength:\s*1,/);
+  assert.match(renderer, /miniPlayerGlowStrength:\s*1,/);
+  assert.match(renderer, /\['fx-miniplayerglow','miniPlayerGlowStrength'\]/);
+  assert.match(renderer, /glowStrength:\s*clampRange\(fx\.miniPlayerGlowStrength/);
+  // 强度改动必须立刻推给迷你窗口，否则要等下一次切歌才生效。
+  assert.match(renderer, /pair\[1\] === 'miniPlayerGlowStrength'[\s\S]{0,160}pushMiniPlayerState\(true\)/);
 });

@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-v1.5.4-mini-cover-pulse-fix`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.5.7`；在 `v1.5.6` 标准迷你播放器收回态穿透与桌面歌词按钮镜像基础上，新增 `DIY -> 高级 -> 自动播放` 的启动继续 / 随机播放开关（复用底部控制栏播放歌单），并修复悬浮展开收回时桌面歌词按钮被 `.transport` 包含块拽到面板中间的错位，同时保留 Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、MP3/FLAC/M4A/WAV/OGG、本地歌单、全屏与用户数据迁移能力。
+- 当前源码版本：`v1.5.8`；在 `v1.5.7` 自动播放开关与迷你播放器悬浮展开错位修复基础上，新增软件内更新的手动线路选择（自动测速 / 直连 / 国内加速 / 本机代理）与下载中取消更新，并把迷你播放器封面律动、封面光晕改为 `0.00 ~ 3.00` 可调强度（`1.00` 标准，`0` 关闭），同时保留 Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、MP3/FLAC/M4A/WAV/OGG、本地歌单、全屏与用户数据迁移能力。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -141,4 +141,5 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 遇到 `标准迷你播放器自动收回按钮`、`完整控制栏右上角 ×`、`封面悬停展开`、`封面拖动移动`、`靠右向左展开`、`expandDirection`、`disableAutomaticCollapse`、`收回后空白区仍吞鼠标`、`setIgnoreMouseEvents`、`封面热区恢复交互`、`mineradio-mini-player-set-pointer-passthrough`、`词按钮左下角镜像`、`悬浮展开收回显示错位`、`词按钮飞到面板中间`、`transform 变成绝对定位包含块`、`叉号误改为关闭窗口` 或 `极简模式叉号` 时，必须优先读取 `.context/conventions/mineradio-mini-player-collapse.md`。
 - 遇到 `自动播放开关`、`启动自动继续播放`、`启动随机播放`、`autoPlaybackMode`、`AUTO_PLAYBACK_STORE_KEY`、`startAutoPlayback`、`fx-playback-fold`、`自动播放歌单` 或 `启动恢复只起播一次` 时，必须优先读取 `.context/conventions/mineradio-auto-playback.md`。
 - 遇到 `迷你播放器封面律动无效果`、`runMiniPlayerPulseTimer`、`miniPlayerPulseBaseline`、`隐藏窗口 AudioContext suspended` 或 `脉冲长期固定满值` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
-- 遇到 `软件内更新线路`、`自动测速`、`最快线路`、`UPDATE_ROUTE_PROBE_BYTES`、`rankUpdateDownloadCandidates`、`测速超时部分样本` 或 `镜像摘要门禁` 时，必须优先读取 `.context/architecture/mineradio-update-route-selection.md`。
+- 遇到 `封面律动强度`、`封面光晕强度`、`律动光晕不够明显`、`miniPlayerPulseStrength`、`miniPlayerGlowStrength`、`MINI_PLAYER_EFFECT_STRENGTH_MAX`、`MAX_MINI_PLAYER_EFFECT_STRENGTH`、`saturateMiniEffect`、`readMiniEffectStrength`、`--mini-pulse`、`--mini-glow`、`封面放大裁切`、`光晕被窗口裁掉` 或 `360 × 84 几何上限` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
+- 遇到 `软件内更新线路`、`自动测速`、`最快线路`、`UPDATE_ROUTE_PROBE_BYTES`、`rankUpdateDownloadCandidates`、`测速超时部分样本`、`镜像摘要门禁`、`手动选择更新线路`、`UPDATE_ROUTE_MODES`、`filterUpdateRouteCandidates`、`UPDATE_ROUTE_UNAVAILABLE`、`本机代理下载更新`、`resolveUpdateProxyTarget`、`CONNECT 隧道`、`取消更新`、`cancelUpdateDownloadJob`、`job.applying 拒绝取消` 或 `canceled 终态` 时，必须优先读取 `.context/architecture/mineradio-update-route-selection.md`。

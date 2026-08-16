@@ -321,15 +321,73 @@ async function testMirrorProbeKeepsDigestGate() {
 function testInstallerAndPatchShareFastestRouteSelection() {
   const installerSource = readServerSourceBetween(
     'async function downloadUpdateAssetWithMirrors(job) {',
-    'async function startUpdateDownloadJob(info) {'
+    'async function startUpdateDownloadJob(info, opts) {'
   );
   const patchSource = readServerSourceBetween(
     'async function downloadAndApplyPatchWithMirrors(job) {',
-    'function startUpdatePatchJob(info) {'
+    'async function startUpdatePatchJob(info, opts) {'
   );
 
   assert.match(installerSource, /const candidates = await rankUpdateDownloadCandidates\(job, rawCandidates\);/);
   assert.match(patchSource, /const candidates = await rankUpdateDownloadCandidates\(job, rawCandidates\);/);
+}
+
+/**
+ * 验证两条下载路径都先按用户选定线路裁剪候选，再交给同一份测速排序。
+ * @returns {void}
+ */
+function testBothDownloadPathsFilterRouteBeforeRanking() {
+  const installerSource = readServerSourceBetween(
+    'async function downloadUpdateAssetWithMirrors(job) {',
+    'async function startUpdateDownloadJob(info, opts) {'
+  );
+  const patchSource = readServerSourceBetween(
+    'async function downloadAndApplyPatchWithMirrors(job) {',
+    'async function startUpdatePatchJob(info, opts) {'
+  );
+
+  for (const source of [installerSource, patchSource]) {
+    const filterAt = source.indexOf('filterUpdateRouteCandidates(allCandidates, job.route)');
+    const rankAt = source.indexOf('rankUpdateDownloadCandidates(job, rawCandidates)');
+    assert.ok(filterAt >= 0, '下载路径必须按用户选定线路裁剪候选');
+    assert.ok(rankAt > filterAt, '线路裁剪必须发生在测速排序之前');
+    assert.match(source, /UPDATE_ROUTE_UNAVAILABLE/, '线路裁剪后没有候选时必须给出可换线路的错误码');
+  }
+}
+
+/**
+ * 验证两条下载路径在开始与每次换线前都检查取消状态。
+ * @returns {void}
+ */
+function testBothDownloadPathsHonorCancelBeforeEachAttempt() {
+  const installerSource = readServerSourceBetween(
+    'async function downloadUpdateAssetWithMirrors(job) {',
+    'async function startUpdateDownloadJob(info, opts) {'
+  );
+  const patchSource = readServerSourceBetween(
+    'async function downloadAndApplyPatchWithMirrors(job) {',
+    'async function startUpdatePatchJob(info, opts) {'
+  );
+
+  for (const source of [installerSource, patchSource]) {
+    const guards = source.match(/throwIfUpdateJobCanceled\(job\);/g) || [];
+    assert.ok(guards.length >= 2, '下载路径至少要在开始和换线前各检查一次取消');
+    assert.match(source, /if \(job\.canceled\) \{\s*markUpdateJobCanceled\(job\);/, '取消后必须落到已取消终态而不是下载失败');
+  }
+}
+
+/**
+ * 验证每一处下载空闲守卫都接入任务级取消信号，否则取消后连接仍会继续跑。
+ * @returns {void}
+ */
+function testEveryIdleGuardHonorsJobCancelSignal() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const calls = source.match(/createUpdateDownloadIdleGuard\([^)]*\)/g) || [];
+  assert.ok(calls.length >= 2, '安装包与补丁下载都必须使用空闲守卫');
+  for (const call of calls) {
+    if (/^createUpdateDownloadIdleGuard\(timeoutMs/.test(call)) continue;
+    assert.match(call, /job\.cancelSignal/, '空闲守卫必须接入任务级取消信号：' + call);
+  }
 }
 
 test('点击更新后优先选择实测最快线路', testFastestMeasuredRouteRanksFirst);
@@ -339,3 +397,6 @@ test('线路测速限制首段流量并取消剩余响应', testProbeUsesBounded
 test('测速超时前收到的部分样本仍参与最快线路排序', testTimedOutProbeKeepsPartialSample);
 test('镜像测速继续执行摘要校验门禁', testMirrorProbeKeepsDigestGate);
 test('完整安装包与快速补丁共用最快线路选择', testInstallerAndPatchShareFastestRouteSelection);
+test('两条下载路径都先裁剪线路再测速排序', testBothDownloadPathsFilterRouteBeforeRanking);
+test('两条下载路径在换线前都检查取消状态', testBothDownloadPathsHonorCancelBeforeEachAttempt);
+test('下载空闲守卫全部接入任务级取消信号', testEveryIdleGuardHonorsJobCancelSignal);

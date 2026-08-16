@@ -1,12 +1,15 @@
 'use strict';
 
 const MAX_MINI_PLAYER_COVER_LENGTH = 8 * 1024 * 1024;
+// 封面律动/光晕强度上限。1 是标准力度，>1 是用户主动要的“更明显”，0 等于关闭。
+const MAX_MINI_PLAYER_EFFECT_STRENGTH = 3;
 
 function createDefaultMiniPlayerVisual() {
   return {
     pulseEnabled: true,
-    pulseStrength: 0.78,
+    pulseStrength: 1,
     glowEnabled: true,
+    glowStrength: 1,
     hoverExpand: true,
     radius: 12,
   };
@@ -18,9 +21,13 @@ function normalizeMiniPlayerVisual(source, fallback) {
   if (Object.prototype.hasOwnProperty.call(source, 'pulseEnabled')) next.pulseEnabled = source.pulseEnabled === true;
   if (Object.prototype.hasOwnProperty.call(source, 'pulseStrength')) {
     const strength = Number(source.pulseStrength);
-    if (Number.isFinite(strength)) next.pulseStrength = Math.max(0, Math.min(1.5, strength));
+    if (Number.isFinite(strength)) next.pulseStrength = Math.max(0, Math.min(MAX_MINI_PLAYER_EFFECT_STRENGTH, strength));
   }
   if (Object.prototype.hasOwnProperty.call(source, 'glowEnabled')) next.glowEnabled = source.glowEnabled === true;
+  if (Object.prototype.hasOwnProperty.call(source, 'glowStrength')) {
+    const strength = Number(source.glowStrength);
+    if (Number.isFinite(strength)) next.glowStrength = Math.max(0, Math.min(MAX_MINI_PLAYER_EFFECT_STRENGTH, strength));
+  }
   if (Object.prototype.hasOwnProperty.call(source, 'hoverExpand')) next.hoverExpand = source.hoverExpand !== false;
   if (Object.prototype.hasOwnProperty.call(source, 'radius')) {
     const radius = Number(source.radius);

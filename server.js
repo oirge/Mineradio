@@ -4,10 +4,12 @@
 //  - 默认纯本地模式，不再加载网易云 / QQ 音乐运行依赖
 // ====================================================================
 const http = require('http');
+const https = require('https');
 const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const tls = require('tls');
+const { Readable } = require('stream');
 const { fileURLToPath } = require('url');
 
 const PORT = process.env.PORT || 3000;
@@ -62,6 +64,8 @@ const UPDATE_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
 const UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS = 30 * 1000;
 const UPDATE_ROUTE_PROBE_BYTES = 128 * 1024;
 const UPDATE_ROUTE_PROBE_TIMEOUT_MS = 4 * 1000;
+const UPDATE_PROXY_CONNECT_TIMEOUT_MS = 12 * 1000;
+const UPDATE_PROXY_MAX_REDIRECTS = 5;
 const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
@@ -225,6 +229,7 @@ function readUpdateConfig(pkg) {
     preview: local.preview !== false,
     preferMirrors: local.preferMirrors !== false,
     mirrors: readUpdateMirrors(local),
+    proxy: process.env.MINERADIO_UPDATE_PROXY || local.proxy || '',
     manifest: process.env.MINERADIO_UPDATE_MANIFEST
       || process.env.MINERADIO_UPDATE_MANIFEST_URL
       || process.env.MINERADIO_UPDATE_MANIFEST_FILE
@@ -289,6 +294,134 @@ function isKnownMirrorDownloadUrl(value) {
     if (prefix && url.startsWith(prefix)) return true;
   }
   return false;
+}
+const UPDATE_ROUTE_MODES = ['auto', 'direct', 'mirror', 'proxy'];
+/**
+ * 归一化用户选择的更新下载线路，未知值一律退回自动测速。
+ * @param {*} value 前端传入的线路标识。
+ * @returns {string} `auto` / `direct` / `mirror` / `proxy` 之一。
+ */
+function normalizeUpdateRouteMode(value) {
+  const mode = String(value == null ? '' : value).trim().toLowerCase();
+  return UPDATE_ROUTE_MODES.indexOf(mode) > 0 ? mode : 'auto';
+}
+/**
+ * 返回线路的中文展示名，供任务状态和前端提示共用同一份文案。
+ * @param {string} mode 线路标识。
+ * @returns {string} 中文线路名。
+ */
+function updateRouteModeLabel(mode) {
+  const value = normalizeUpdateRouteMode(mode);
+  if (value === 'direct') return 'GitHub 直连';
+  if (value === 'mirror') return '国内加速';
+  if (value === 'proxy') return '本机代理';
+  return '自动测速';
+}
+/**
+ * 按用户选定线路裁剪候选，保持候选生成逻辑单一来源，只做过滤不改写标签或顺序。
+ * @param {object[]} candidates 已生成的候选线路。
+ * @param {string} mode 线路标识。
+ * @returns {object[]} 该线路允许使用的候选线路。
+ */
+function filterUpdateRouteCandidates(candidates, mode) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  const route = normalizeUpdateRouteMode(mode);
+  if (route === 'mirror') return list.filter(item => !!(item && item.mirrored));
+  // 直连与本机代理都只走 GitHub 原始地址，代理线路再叠加镜像没有意义。
+  if (route === 'direct' || route === 'proxy') return list.filter(item => !!item && !item.mirrored);
+  return list.slice();
+}
+/**
+ * 解析代理地址；只接受 http/https 代理，socks 等无法用 CONNECT 隧道承载的形式一律拒绝。
+ * @param {*} value 代理地址，允许省略协议的 `host:port` 形式。
+ * @returns {{protocol: string, hostname: string, port: number, auth: string, label: string}|null} 解析结果，非法时为 null。
+ */
+function parseUpdateProxyTarget(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'http://' + raw;
+  let url = null;
+  try {
+    url = new URL(withScheme);
+  } catch (_) {
+    return null;
+  }
+  const protocol = String(url.protocol || '').toLowerCase();
+  if (protocol !== 'http:' && protocol !== 'https:') return null;
+  const hostname = String(url.hostname || '').trim();
+  const port = Number(url.port || (protocol === 'https:' ? 443 : 80));
+  if (!hostname || !Number.isFinite(port) || port < 1 || port > 65535) return null;
+  const user = url.username ? decodeURIComponent(url.username) : '';
+  const pass = url.password ? decodeURIComponent(url.password) : '';
+  return {
+    protocol,
+    hostname,
+    port,
+    auth: user ? user + ':' + pass : '',
+    // 展示名不带账号密码，避免代理凭据顺着任务状态泄漏到前端。
+    label: protocol.replace(':', '') + '://' + hostname + ':' + port,
+  };
+}
+/**
+ * 读取显式配置的更新代理地址（环境变量优先，其次 package.json 更新配置）。
+ * @returns {string} 代理地址字符串，未配置时为空。
+ */
+function readConfiguredUpdateProxyAddress() {
+  const envValue = process.env.MINERADIO_UPDATE_PROXY
+    || process.env.HTTPS_PROXY
+    || process.env.https_proxy
+    || process.env.HTTP_PROXY
+    || process.env.http_proxy
+    || process.env.ALL_PROXY
+    || process.env.all_proxy
+    || '';
+  if (String(envValue || '').trim()) return String(envValue).trim();
+  return String(UPDATE_CONFIG.proxy || '').trim();
+}
+/**
+ * 解析 Electron `resolveProxy` 的 PAC 风格结果，取第一条可用的 http 代理。
+ * @param {string} result `PROXY host:port` / `DIRECT` 形式的结果串。
+ * @returns {string} 代理地址，DIRECT 或仅 socks 时为空。
+ */
+function parseSystemProxyResolveResult(result) {
+  const entries = String(result || '').split(';');
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i].trim();
+    if (!entry) continue;
+    const match = entry.match(/^(PROXY|HTTPS)\s+(\S+)$/i);
+    if (!match) continue;
+    const scheme = match[1].toUpperCase() === 'HTTPS' ? 'https://' : 'http://';
+    return scheme + match[2];
+  }
+  return '';
+}
+/**
+ * 通过 Electron 会话查询系统代理；纯 Node 运行或查询失败时安静返回空值。
+ * @param {string} targetUrl 目标下载地址。
+ * @returns {Promise<string>} 系统代理地址，未取到时为空。
+ */
+async function resolveSystemUpdateProxyAddress(targetUrl) {
+  try {
+    const electron = require('electron');
+    const session = electron && electron.session && electron.session.defaultSession;
+    if (!session || typeof session.resolveProxy !== 'function') return '';
+    return parseSystemProxyResolveResult(await session.resolveProxy(targetUrl));
+  } catch (_) {
+    return '';
+  }
+}
+/**
+ * 按“显式地址 → 环境变量/配置 → 系统代理”的顺序解析本机代理线路。
+ * @param {*} explicit 前端显式指定的代理地址。
+ * @param {string} targetUrl 目标下载地址，用于系统代理查询。
+ * @returns {Promise<object|null>} 解析后的代理目标，未配置时为 null。
+ */
+async function resolveUpdateProxyTarget(explicit, targetUrl) {
+  const direct = parseUpdateProxyTarget(explicit);
+  if (direct) return direct;
+  const configured = parseUpdateProxyTarget(readConfiguredUpdateProxyAddress());
+  if (configured) return configured;
+  return parseUpdateProxyTarget(await resolveSystemUpdateProxyAddress(targetUrl));
 }
 function uniqueDownloadCandidates(urls, opts) {
   opts = opts || {};
@@ -714,12 +847,14 @@ function rememberUpdateInfo(info) {
 /**
  * 创建下载读流空闲计时器，防止线路响应头成功但正文长时间卡死。
  * @param {number} timeoutMs 空闲超时时间，单位毫秒。
+ * @param {AbortSignal=} cancelSignal 任务级取消信号，用户点“取消更新”时立刻中断正文读取。
  * @returns {{signal: AbortSignal, touch: Function, clear: Function}} fetch 可使用的中止信号和计时控制函数。
  */
-function createUpdateDownloadIdleGuard(timeoutMs) {
+function createUpdateDownloadIdleGuard(timeoutMs, cancelSignal) {
   const controller = new AbortController();
   const timeout = Math.max(5000, Number(timeoutMs) || UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS);
   let timer = null;
+  let unlinkCancel = null;
   const touch = (nextTimeoutMs) => {
     if (timer) clearTimeout(timer);
     const delay = Math.max(5000, Number(nextTimeoutMs) || timeout);
@@ -728,8 +863,21 @@ function createUpdateDownloadIdleGuard(timeoutMs) {
   const clear = () => {
     if (timer) clearTimeout(timer);
     timer = null;
+    if (unlinkCancel) unlinkCancel();
+    unlinkCancel = null;
   };
   touch();
+  if (cancelSignal && typeof cancelSignal.addEventListener === 'function') {
+    if (cancelSignal.aborted) controller.abort();
+    else {
+      const onCancel = () => controller.abort();
+      cancelSignal.addEventListener('abort', onCancel, { once: true });
+      // 单次下载结束就摘掉监听，避免长任务在任务级信号上堆积回调。
+      unlinkCancel = () => {
+        if (typeof cancelSignal.removeEventListener === 'function') cancelSignal.removeEventListener('abort', onCancel);
+      };
+    }
+  }
   return { signal: controller.signal, touch, clear };
 }
 function updateError(code, message, cause) {
@@ -751,6 +899,19 @@ function classifyUpdateError(err) {
     ? message + ': ' + causeDetail
     : (message || causeDetail || code || '未知错误');
   const classificationText = [code, name, message, causeCode, causeName, causeMessage].join(' ');
+  // 取消是用户主动行为，必须排在超时/中止分类之前，否则会被误报成网络超时。
+  if (/UPDATE_CANCELED/i.test(classificationText)) {
+    return { code: 'UPDATE_CANCELED', reason: '更新已取消。', detail };
+  }
+  if (/UPDATE_ROUTE_UNAVAILABLE/i.test(classificationText)) {
+    return { code: 'UPDATE_ROUTE_UNAVAILABLE', reason: '当前选择的更新线路没有可用地址，请换一条线路。', detail };
+  }
+  if (/UPDATE_PROXY_NOT_CONFIGURED/i.test(classificationText)) {
+    return { code: 'UPDATE_PROXY_NOT_CONFIGURED', reason: '没有检测到可用的本机代理，请先在系统里设置代理或改用其它线路。', detail };
+  }
+  if (/UPDATE_PROXY_/i.test(classificationText)) {
+    return { code: code || 'UPDATE_PROXY_FAILED', reason: '通过本机代理连接更新线路失败，请检查代理是否正常。', detail };
+  }
   if (/PATCH_ROLLBACK_FAILED/i.test(classificationText)) {
     return { code: code || 'PATCH_ROLLBACK_FAILED', reason: '快速补丁回滚失败，请改用完整安装包修复。', detail };
   }
@@ -980,6 +1141,12 @@ function publicUpdateJob(job) {
     attempt: job.attempt || 0,
     attempts: job.attempts || 0,
     mode: job.mode || 'installer',
+    route: job.route || 'auto',
+    routeLabel: job.routeLabel || '',
+    proxyLabel: job.proxyLabel || '',
+    canceled: job.status === 'canceled',
+    // 补丁进入写盘/回滚阶段后不能再中断，否则会留下半套文件。
+    canCancel: (job.status === 'queued' || job.status === 'downloading') && !job.applying && !job.canceled,
     message: job.message || '',
     restartRequired: !!job.restartRequired,
     cached: !!job.cached,
@@ -1259,6 +1426,72 @@ function setUpdateJobError(job, err, fallbackMessage) {
   job.message = fallbackMessage || info.reason;
   job.updatedAt = Date.now();
 }
+/**
+ * 把任务落到终态“已取消”，并清理进度数字，避免前端把旧速度当成还在下载。
+ * @param {object} job 更新任务。
+ * @returns {object} 同一个任务对象。
+ */
+function markUpdateJobCanceled(job) {
+  if (!job) return job;
+  job.canceled = true;
+  job.status = 'canceled';
+  job.error = '';
+  job.errorReason = '';
+  job.errorDetail = '';
+  job.message = '更新已取消';
+  job.speedBps = 0;
+  job.etaSeconds = 0;
+  job.updatedAt = Date.now();
+  return job;
+}
+/**
+ * 请求取消一个进行中的更新任务；已完成、已失败或正在写盘的任务不受影响。
+ * @param {object} job 更新任务。
+ * @returns {{ok: boolean, reason?: string}} 是否受理本次取消。
+ */
+function cancelUpdateDownloadJob(job) {
+  if (!job) return { ok: false, reason: 'UPDATE_JOB_NOT_FOUND' };
+  if (job.status === 'canceled') return { ok: true };
+  if (job.status === 'ready' || job.status === 'done' || job.status === 'error') {
+    return { ok: false, reason: 'UPDATE_JOB_NOT_CANCELABLE' };
+  }
+  // 补丁已经在写文件或回滚，中途打断会留下半套文件，只能等它自己收尾。
+  if (job.applying) return { ok: false, reason: 'UPDATE_JOB_APPLYING' };
+  job.canceled = true;
+  job.message = '正在取消更新…';
+  job.updatedAt = Date.now();
+  if (job.cancelController) {
+    try { job.cancelController.abort(); } catch (_) {}
+  }
+  return { ok: true };
+}
+/**
+ * 任务已被取消时抛出统一错误，让下载循环走同一条收尾路径。
+ * @param {object} job 更新任务。
+ * @returns {void}
+ */
+function throwIfUpdateJobCanceled(job) {
+  if (job && job.canceled) throw updateError('UPDATE_CANCELED', 'Update canceled');
+}
+/**
+ * 给任务挂上取消控制器与线路信息，下载循环和测速都从任务上读这些字段。
+ * @param {object} job 更新任务。
+ * @param {{route?: string, proxyTarget?: object}=} opts 线路选择结果。
+ * @returns {object} 同一个任务对象。
+ */
+function attachUpdateJobRoute(job, opts) {
+  const settings = opts || {};
+  const controller = new AbortController();
+  job.cancelController = controller;
+  job.cancelSignal = controller.signal;
+  job.canceled = false;
+  job.applying = false;
+  job.route = normalizeUpdateRouteMode(settings.route);
+  job.routeLabel = updateRouteModeLabel(job.route);
+  job.proxyTarget = settings.proxyTarget || null;
+  job.proxyLabel = job.proxyTarget ? job.proxyTarget.label : '';
+  return job;
+}
 function isFatalUpdateLocalError(err) {
   const code = String(err && err.code || '').trim();
   const causeCode = String(err && err.cause && err.cause.code || '').trim();
@@ -1281,10 +1514,245 @@ function prepareUpdateJobAttempt(job, candidate, index, total) {
   job.errorDetail = '';
   job.updatedAt = Date.now();
 }
+/**
+ * 生成代理认证头；无账号密码时返回空对象，避免发出空 Proxy-Authorization。
+ * @param {object} proxy 已解析的代理目标。
+ * @returns {object} 可直接合并进请求头的对象。
+ */
+function updateProxyAuthHeaders(proxy) {
+  if (!proxy || !proxy.auth) return {};
+  return { 'Proxy-Authorization': 'Basic ' + Buffer.from(proxy.auth).toString('base64') };
+}
+/**
+ * 判断是否为需要继续跟随的重定向状态码；GitHub Release 资产必然经过 302 跳转。
+ * @param {number} status HTTP 状态码。
+ * @returns {boolean} 需要跟随时为 true。
+ */
+function isUpdateRedirectStatus(status) {
+  const code = Number(status) || 0;
+  return code === 301 || code === 302 || code === 303 || code === 307 || code === 308;
+}
+/**
+ * 通过 HTTP 代理建立到目标主机的 CONNECT 隧道。
+ * @param {object} proxy 已解析的代理目标。
+ * @param {URL} target 目标地址。
+ * @param {AbortSignal=} signal 外部中止信号。
+ * @returns {Promise<import('net').Socket>} 已建立隧道的 socket。
+ */
+function connectUpdateProxyTunnel(proxy, target, signal) {
+  return new Promise((resolve, reject) => {
+    const targetPort = Number(target.port || (target.protocol === 'https:' ? 443 : 80));
+    const authority = target.hostname + ':' + targetPort;
+    const transport = proxy.protocol === 'https:' ? https : http;
+    const request = transport.request({
+      host: proxy.hostname,
+      port: proxy.port,
+      method: 'CONNECT',
+      path: authority,
+      agent: false,
+      headers: Object.assign({ Host: authority }, updateProxyAuthHeaders(proxy)),
+    });
+    let settled = false;
+    /**
+     * 单次结算门：隧道建立与失败路径共用，防止 abort/error/connect 竞争重复结算。
+     * @param {Error|null} err 失败原因，成功时为 null。
+     * @param {import('net').Socket|null} socket 已建立的 socket。
+     * @returns {void}
+     */
+    function settle(err, socket) {
+      if (settled) return;
+      settled = true;
+      if (signal && typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', onAbort);
+      request.removeListener('connect', onConnect);
+      if (err) {
+        try { request.destroy(); } catch (_) {}
+        if (socket) {
+          try { socket.destroy(); } catch (_) {}
+        }
+        reject(err);
+        return;
+      }
+      resolve(socket);
+    }
+    /** @returns {void} 外部取消时立刻放弃隧道。 */
+    function onAbort() {
+      settle(updateError('UPDATE_CANCELED', 'Update canceled'), null);
+    }
+    /**
+     * 代理返回 CONNECT 结果。
+     * @param {import('http').IncomingMessage} res 代理响应。
+     * @param {import('net').Socket} socket 隧道 socket。
+     * @returns {void}
+     */
+    function onConnect(res, socket) {
+      if (Number(res.statusCode) !== 200) {
+        settle(updateError('UPDATE_PROXY_CONNECT_FAILED', 'Proxy CONNECT returned HTTP ' + res.statusCode), socket);
+        return;
+      }
+      socket.setTimeout(0);
+      settle(null, socket);
+    }
+    if (signal && signal.aborted) {
+      settle(updateError('UPDATE_CANCELED', 'Update canceled'), null);
+      return;
+    }
+    if (signal && typeof signal.addEventListener === 'function') signal.addEventListener('abort', onAbort, { once: true });
+    request.setTimeout(UPDATE_PROXY_CONNECT_TIMEOUT_MS, () => {
+      settle(updateError('UPDATE_PROXY_TIMEOUT', 'Proxy CONNECT timed out'), null);
+    });
+    request.on('connect', onConnect);
+    request.on('error', err => settle(updateError('UPDATE_PROXY_CONNECT_FAILED', 'Proxy connection failed', err), null));
+    request.end();
+  });
+}
+/**
+ * 把 Node 响应包装成 fetch 风格结果，让代理线路与直连线路共用同一套下载与校验循环。
+ * @param {import('http').IncomingMessage} res Node 响应对象。
+ * @returns {object} 具备 ok / status / headers.get / body.getReader 的响应视图。
+ */
+function nodeResponseAsFetchLike(res) {
+  const status = Number(res.statusCode) || 0;
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: {
+      /**
+       * 读取响应头，语义与 fetch Headers.get 一致。
+       * @param {string} name 头名称。
+       * @returns {string|null} 头值，缺失时为 null。
+       */
+      get(name) {
+        const value = res.headers[String(name || '').toLowerCase()];
+        if (value == null) return null;
+        return Array.isArray(value) ? value.join(', ') : String(value);
+      },
+    },
+    body: Readable.toWeb(res),
+  };
+}
+/**
+ * 经由本机代理发起一次更新请求，必要时跟随重定向，返回 fetch 风格响应。
+ * @param {object} proxy 已解析的代理目标。
+ * @param {string} url 目标地址。
+ * @param {object=} options 请求参数，支持 headers 与 signal。
+ * @param {number=} depth 当前重定向深度。
+ * @returns {Promise<object>} fetch 风格响应。
+ */
+async function fetchThroughUpdateProxy(proxy, url, options, depth) {
+  const hops = Number(depth) || 0;
+  if (hops > UPDATE_PROXY_MAX_REDIRECTS) throw updateError('UPDATE_PROXY_TOO_MANY_REDIRECTS', 'Too many proxy redirects');
+  const opts = options || {};
+  const signal = opts.signal;
+  if (signal && signal.aborted) throw updateError('UPDATE_CANCELED', 'Update canceled');
+  let target = null;
+  try {
+    target = new URL(String(url || ''));
+  } catch (_) {
+    throw updateError('UPDATE_ASSET_MISSING', 'Invalid update download url');
+  }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+    throw updateError('UPDATE_ASSET_MISSING', 'Unsupported update download protocol');
+  }
+  const headers = Object.assign({ Host: target.host }, opts.headers || {});
+  let socket = null;
+  const response = await new Promise((resolve, reject) => {
+    let settled = false;
+    let request = null;
+    /**
+     * 单次结算门：响应、错误与取消路径共用，避免代理请求重复结算或泄漏 socket。
+     * @param {Error|null} err 失败原因。
+     * @param {import('http').IncomingMessage|null} res Node 响应。
+     * @returns {void}
+     */
+    function settle(err, res) {
+      if (settled) return;
+      settled = true;
+      if (signal && typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', onAbort);
+      if (err) {
+        if (request) {
+          try { request.destroy(); } catch (_) {}
+        }
+        if (socket) {
+          try { socket.destroy(); } catch (_) {}
+        }
+        reject(err);
+        return;
+      }
+      resolve(res);
+    }
+    /** @returns {void} 外部取消时中断代理请求。 */
+    function onAbort() {
+      settle(updateError('UPDATE_CANCELED', 'Update canceled'), null);
+    }
+    if (signal && typeof signal.addEventListener === 'function') signal.addEventListener('abort', onAbort, { once: true });
+    connectUpdateProxyTunnel(proxy, target, signal).then(tunnel => {
+      if (settled) {
+        try { tunnel.destroy(); } catch (_) {}
+        return;
+      }
+      socket = tunnel;
+      const stream = target.protocol === 'https:'
+        ? tls.connect({ socket: tunnel, servername: target.hostname, ALPNProtocols: ['http/1.1'] })
+        : tunnel;
+      stream.on('error', err => settle(updateError('UPDATE_PROXY_STREAM_FAILED', 'Proxy stream failed', err), null));
+      request = http.request({
+        // 隧道已经完成握手，这里只在既有连接上发普通 HTTP 请求，不再让 Node 重新建连。
+        // 绝对不能传 agent: false —— 那会让 Node 新建一个默认 Agent 并忽略 createConnection，
+        // 结果是请求跑去连 localhost:80 拿到 ECONNREFUSED。只有不传 agent 时 createConnection 才生效。
+        createConnection: () => stream,
+        method: opts.method || 'GET',
+        path: target.pathname + target.search,
+        headers,
+      });
+      request.on('response', res => settle(null, res));
+      request.on('error', err => settle(updateError('UPDATE_PROXY_REQUEST_FAILED', 'Proxy request failed', err), null));
+      request.end();
+    }).catch(err => settle(err, null));
+  });
+  if (isUpdateRedirectStatus(response.statusCode) && response.headers.location) {
+    const next = new URL(response.headers.location, target).toString();
+    response.resume();
+    try { response.destroy(); } catch (_) {}
+    try { if (socket) socket.destroy(); } catch (_) {}
+    return fetchThroughUpdateProxy(proxy, next, options, hops + 1);
+  }
+  return nodeResponseAsFetchLike(response);
+}
 function ensureMirrorCanBeVerified(job, candidate) {
   if (!candidate || !candidate.mirrored) return;
   if (job.sha256 || job.sha512) return;
   throw updateError('MIRROR_HASH_MISSING', 'Mirror download skipped because no digest is available');
+}
+/**
+ * 统一的更新请求出口：默认直连，任务选定本机代理时改走 CONNECT 隧道，返回同一套 fetch 风格响应。
+ * 测速、完整安装包和快速补丁都必须经过这里，避免线路选择在不同下载路径上分叉。
+ * @param {object} job 当前更新任务，携带已解析的代理目标。
+ * @param {string} url 请求地址。
+ * @param {object} options fetch 请求参数。
+ * @returns {Promise<object>} fetch 风格响应。
+ */
+function openUpdateRouteResponse(job, url, options) {
+  const proxy = job && job.proxyTarget;
+  if (!proxy) return fetch(url, options);
+  return fetchThroughUpdateProxy(proxy, url, options);
+}
+/**
+ * 把任务级取消信号接到单次请求的中止控制器上，取消更新时正在跑的请求立刻断开。
+ * @param {object} job 当前更新任务。
+ * @param {AbortController} controller 当次请求的中止控制器。
+ * @returns {Function|null} 解绑函数，无取消信号时为 null。
+ */
+function linkUpdateJobCancel(job, controller) {
+  const signal = job && job.cancelSignal;
+  if (!signal || typeof signal.addEventListener !== 'function') return null;
+  /** @returns {void} 任务被取消时中止当次请求。 */
+  function onCancel() {
+    controller.abort();
+  }
+  signal.addEventListener('abort', onCancel, { once: true });
+  return function unlinkUpdateJobCancel() {
+    if (typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', onCancel);
+  };
 }
 /**
  * 把更新任务切换到线路测速状态，前端轮询时可明确显示自动选线进度。
@@ -1294,7 +1762,8 @@ function ensureMirrorCanBeVerified(job, candidate) {
  */
 function prepareUpdateRouteSelection(job, total) {
   job.status = 'downloading';
-  job.sourceLabel = '自动测速';
+  // 非自动线路也可能有多条镜像候选，测速标签跟随任务选定的线路，避免前端误报“自动测速”。
+  job.sourceLabel = job.route && job.route !== 'auto' ? ((job.routeLabel || '当前线路') + '测速') : '自动测速';
   job.attempt = 0;
   job.attempts = total;
   job.received = 0;
@@ -1350,9 +1819,12 @@ async function probeUpdateDownloadCandidate(job, candidate, index) {
   let reader = null;
   let received = 0;
   let probeTimedOut = false;
+  let unlinkCancel = null;
   try {
     ensureMirrorCanBeVerified(job, candidate);
+    if (job && job.canceled) throw updateError('UPDATE_CANCELED', 'Update canceled');
     controller = new AbortController();
+    unlinkCancel = linkUpdateJobCancel(job, controller);
     /**
      * 结束超过统一测速窗口的请求；已收到的样本仍由外层按实测速率保留。
      * @returns {void} 中止当前候选线路请求。
@@ -1362,7 +1834,7 @@ async function probeUpdateDownloadCandidate(job, candidate, index) {
       controller.abort();
     }
     timer = setTimeout(abortSlowUpdateRouteProbe, UPDATE_ROUTE_PROBE_TIMEOUT_MS);
-    const resp = await fetch(candidate.url, {
+    const resp = await openUpdateRouteResponse(job, candidate.url, {
       signal: controller.signal,
       headers: {
         'User-Agent': `Mineradio/${APP_VERSION}`,
@@ -1396,6 +1868,7 @@ async function probeUpdateDownloadCandidate(job, candidate, index) {
       error: info,
     };
   } finally {
+    if (unlinkCancel) unlinkCancel();
     if (timer) clearTimeout(timer);
     if (reader) {
       try { await reader.cancel(); } catch (_) {}
@@ -1418,6 +1891,8 @@ async function rankUpdateDownloadCandidates(job, candidates) {
     probePromises.push(probeUpdateDownloadCandidate(job, list[i], i));
   }
   const results = await Promise.all(probePromises);
+  // 取消发生在测速阶段时不再重排线路，交给下载循环立刻收尾。
+  if (job && job.canceled) return list;
   const successful = [];
   const failed = [];
   for (let i = 0; i < results.length; i++) {
@@ -1433,29 +1908,33 @@ async function rankUpdateDownloadCandidates(job, candidates) {
 }
 async function downloadUpdateAssetWithMirrors(job) {
   const tmpPath = job.filePath + '.download';
-  const rawCandidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
+  const allCandidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
     ? job.downloadCandidates
     : uniqueDownloadCandidates(job.downloadUrl || '');
-  if (!rawCandidates.length) throw updateError('UPDATE_ASSET_MISSING', 'No usable installer download candidate');
+  if (!allCandidates.length) throw updateError('UPDATE_ASSET_MISSING', 'No usable installer download candidate');
+  const rawCandidates = filterUpdateRouteCandidates(allCandidates, job.route);
+  if (!rawCandidates.length) throw updateError('UPDATE_ROUTE_UNAVAILABLE', 'No download candidate for route ' + (job.route || 'auto'));
+  throwIfUpdateJobCanceled(job);
   const candidates = await rankUpdateDownloadCandidates(job, rawCandidates);
   const failures = [];
   fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
     try {
+      throwIfUpdateJobCanceled(job);
       try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
       ensureMirrorCanBeVerified(job, candidate);
       prepareUpdateJobAttempt(job, candidate, i, candidates.length);
       job.message = job.total ? '正在下载完整安装包' : '正在下载完整安装包，等待服务器返回大小';
 
-      const idleGuard = createUpdateDownloadIdleGuard(UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS);
+      const idleGuard = createUpdateDownloadIdleGuard(UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS, job.cancelSignal);
       idleGuard.touch(12000);
       const expectedSha256 = normalizeDigest(job.sha256 || '', 'sha256').toLowerCase();
       const expectedSha512 = normalizeDigest(job.sha512 || '', 'sha512');
       const sha256 = expectedSha256 ? crypto.createHash('sha256') : null;
       const sha512 = expectedSha512 ? crypto.createHash('sha512') : null;
       try {
-        const resp = await fetch(candidate.url, {
+        const resp = await openUpdateRouteResponse(job, candidate.url, {
           signal: idleGuard.signal,
           headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
         });
@@ -1547,6 +2026,11 @@ async function downloadUpdateAssetWithMirrors(job) {
       return;
     } catch (err) {
       try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+      // 用户取消要立刻收尾，不再换线、不写失败线路列表。
+      if (job.canceled) {
+        markUpdateJobCanceled(job);
+        return;
+      }
       const info = classifyUpdateError(err);
       failures.push({ source: candidate.label || '下载线路', reason: info.reason, detail: info.detail });
       job.failedAttempts = failures.slice(-6);
@@ -1561,7 +2045,7 @@ async function downloadUpdateAssetWithMirrors(job) {
     }
   }
 }
-async function startUpdateDownloadJob(info) {
+async function startUpdateDownloadJob(info, opts) {
   const release = info && info.release ? info.release : {};
   const asset = release.asset || {};
   const downloadUrl = release.downloadUrl || asset.downloadUrl || '';
@@ -1573,9 +2057,21 @@ async function startUpdateDownloadJob(info) {
   const existing = activeUpdateJobFor(version);
   if (existing) return publicUpdateJob(existing);
 
+  const settings = opts || {};
+  const route = normalizeUpdateRouteMode(settings.route);
+  let proxyTarget = null;
+  if (route === 'proxy') {
+    proxyTarget = await resolveUpdateProxyTarget(settings.proxy, downloadUrl);
+    if (!proxyTarget) return { ok: false, error: 'UPDATE_PROXY_NOT_CONFIGURED' };
+  }
+
   const fileName = safeUpdateFileName(asset.name || '', version);
   const filePath = path.join(UPDATE_DOWNLOAD_DIR, fileName);
-  const downloadCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, asset));
+  const downloadCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, asset), {
+    useMirrors: route !== 'direct' && route !== 'proxy',
+  });
+  const routeCandidates = filterUpdateRouteCandidates(downloadCandidates, route);
+  if (!routeCandidates.length) return { ok: false, error: 'UPDATE_ROUTE_UNAVAILABLE' };
   const expectedSize = asset.size || 0;
   const sha256 = normalizeDigest(asset.sha256 || '', 'sha256').toLowerCase();
   const sha512 = normalizeDigest(asset.sha512 || '', 'sha512');
@@ -1589,7 +2085,7 @@ async function startUpdateDownloadJob(info) {
     sha256,
     sha512,
     releaseUrl: release.htmlUrl || '',
-    attempts: downloadCandidates.length,
+    attempts: routeCandidates.length,
   });
   if (cached) return publicUpdateJob(cached);
   const current = activeUpdateJobFor(version);
@@ -1614,15 +2110,20 @@ async function startUpdateDownloadJob(info) {
     releaseUrl: release.htmlUrl || '',
     sourceLabel: '',
     attempt: 0,
-    attempts: downloadCandidates.length,
+    attempts: routeCandidates.length,
     failedAttempts: [],
     createdAt: now,
     updatedAt: now,
     error: '',
   };
+  attachUpdateJobRoute(job, { route, proxyTarget });
   updateDownloadJobs.set(job.id, job);
   trimUpdateJobs();
   void downloadUpdateAssetWithMirrors(job).catch(err => {
+    if (job.canceled) {
+      markUpdateJobCanceled(job);
+      return;
+    }
     const info = classifyUpdateError(err);
     setUpdateJobError(job, err, '下载失败：' + info.reason);
   });
@@ -1791,6 +2292,7 @@ function normalizePatchPayload(payload) {
   return { from, to, files, restartRequired: payload.restartRequired !== false };
 }
 async function downloadPatchBufferFromCandidate(job, candidate, index, total) {
+  throwIfUpdateJobCanceled(job);
   ensureMirrorCanBeVerified(job, candidate);
   prepareUpdateJobAttempt(job, candidate, index, total);
   job.mode = 'patch';
@@ -1798,10 +2300,10 @@ async function downloadPatchBufferFromCandidate(job, candidate, index, total) {
   job.progress = 0;
   job.updatedAt = Date.now();
 
-  const idleGuard = createUpdateDownloadIdleGuard(UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS);
+  const idleGuard = createUpdateDownloadIdleGuard(UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS, job.cancelSignal);
   idleGuard.touch(12000);
   try {
-    const resp = await fetch(candidate.url, {
+    const resp = await openUpdateRouteResponse(job, candidate.url, {
       signal: idleGuard.signal,
       headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
     });
@@ -1861,10 +2363,13 @@ async function downloadPatchBufferFromCandidate(job, candidate, index, total) {
   }
 }
 async function downloadAndApplyPatchWithMirrors(job) {
-  const rawCandidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
+  const allCandidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
     ? job.downloadCandidates
     : uniqueDownloadCandidates(job.downloadUrl || '');
-  if (!rawCandidates.length) throw updateError('PATCH_ASSET_MISSING', 'No usable patch download candidate');
+  if (!allCandidates.length) throw updateError('PATCH_ASSET_MISSING', 'No usable patch download candidate');
+  const rawCandidates = filterUpdateRouteCandidates(allCandidates, job.route);
+  if (!rawCandidates.length) throw updateError('UPDATE_ROUTE_UNAVAILABLE', 'No patch candidate for route ' + (job.route || 'auto'));
+  throwIfUpdateJobCanceled(job);
   const candidates = await rankUpdateDownloadCandidates(job, rawCandidates);
   const failures = [];
   fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
@@ -1872,13 +2377,20 @@ async function downloadAndApplyPatchWithMirrors(job) {
     const candidate = candidates[i];
     try {
       const raw = await downloadPatchBufferFromCandidate(job, candidate, i, candidates.length);
+      throwIfUpdateJobCanceled(job);
       const patch = normalizePatchPayload(JSON.parse(raw.toString('utf8').replace(/^\uFEFF/, '')));
       job.version = patch.to;
       job.message = '正在应用快速补丁';
       job.progress = 88;
       job.etaSeconds = 0;
       job.updatedAt = Date.now();
-      job.changedFiles = applyPatchFiles(job, patch.files);
+      // 进入写盘阶段后不能再被取消，否则会留下半套文件。
+      job.applying = true;
+      try {
+        job.changedFiles = applyPatchFiles(job, patch.files);
+      } finally {
+        job.applying = false;
+      }
       job.status = 'ready';
       job.progress = 100;
       job.restartRequired = patch.restartRequired;
@@ -1886,6 +2398,11 @@ async function downloadAndApplyPatchWithMirrors(job) {
       job.updatedAt = Date.now();
       return;
     } catch (err) {
+      // 用户取消要立刻收尾，不再换线、不写失败线路列表。
+      if (job.canceled) {
+        markUpdateJobCanceled(job);
+        return;
+      }
       const info = classifyUpdateError(err);
       failures.push({ source: candidate.label || '下载线路', reason: info.reason, detail: info.detail });
       job.failedAttempts = failures.slice(-6);
@@ -1899,7 +2416,7 @@ async function downloadAndApplyPatchWithMirrors(job) {
     }
   }
 }
-function startUpdatePatchJob(info) {
+async function startUpdatePatchJob(info, opts) {
   const release = info && info.release ? info.release : {};
   const patch = release.patch || {};
   const downloadUrl = patch.downloadUrl || '';
@@ -1911,8 +2428,20 @@ function startUpdatePatchJob(info) {
   const existing = latestUpdateDownloadJob(job => job.mode === 'patch' && job.version === version && isActiveUpdateJob(job));
   if (existing) return publicUpdateJob(existing);
 
+  const settings = opts || {};
+  const route = normalizeUpdateRouteMode(settings.route);
+  let proxyTarget = null;
+  if (route === 'proxy') {
+    proxyTarget = await resolveUpdateProxyTarget(settings.proxy, downloadUrl);
+    if (!proxyTarget) return { ok: false, error: 'UPDATE_PROXY_NOT_CONFIGURED' };
+  }
+
   const now = Date.now();
-  const downloadCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, patch));
+  const downloadCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, patch), {
+    useMirrors: route !== 'direct' && route !== 'proxy',
+  });
+  const routeCandidates = filterUpdateRouteCandidates(downloadCandidates, route);
+  if (!routeCandidates.length) return { ok: false, error: 'UPDATE_ROUTE_UNAVAILABLE' };
   const job = {
     id: 'patch-' + now.toString(36) + '-' + Math.random().toString(36).slice(2, 8),
     status: 'queued',
@@ -1932,16 +2461,21 @@ function startUpdatePatchJob(info) {
     restartRequired: true,
     sourceLabel: '',
     attempt: 0,
-    attempts: downloadCandidates.length,
+    attempts: routeCandidates.length,
     failedAttempts: [],
     message: '等待下载快速补丁',
     createdAt: now,
     updatedAt: now,
     error: '',
   };
+  attachUpdateJobRoute(job, { route, proxyTarget });
   updateDownloadJobs.set(job.id, job);
   trimUpdateJobs();
   void downloadAndApplyPatchWithMirrors(job).catch(err => {
+    if (job.canceled) {
+      markUpdateJobCanceled(job);
+      return;
+    }
     const info = classifyUpdateError(err);
     setUpdateJobError(job, err, '快速补丁失败：' + info.reason);
   });
@@ -2028,15 +2562,55 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pn === '/api/update/routes') {
+    const mirrors = Array.isArray(UPDATE_CONFIG.mirrors) ? UPDATE_CONFIG.mirrors : [];
+    let proxyLabel = '';
+    try {
+      const proxy = await resolveUpdateProxyTarget('', githubReleaseDownloadUrl(APP_VERSION, 'latest.yml'));
+      if (proxy) proxyLabel = proxy.label;
+    } catch (_) {}
+    sendJSON(res, {
+      ok: true,
+      routes: UPDATE_ROUTE_MODES.map(mode => ({
+        mode,
+        label: updateRouteModeLabel(mode),
+        available: mode === 'mirror' ? mirrors.length > 0 : (mode === 'proxy' ? !!proxyLabel : true),
+      })),
+      mirrorCount: mirrors.length,
+      proxyLabel,
+    });
+    return;
+  }
+
   if (pn === '/api/update/download') {
     try {
       const info = await fetchLatestUpdateInfo();
-      const job = await startUpdateDownloadJob(info);
+      const job = await startUpdateDownloadJob(info, {
+        route: url.searchParams.get('route') || '',
+        proxy: url.searchParams.get('proxy') || '',
+      });
       sendJSON(res, job, job.ok ? 200 : 400);
     } catch (err) {
       console.error('[UpdateDownload]', err);
       sendJSON(res, { ok: false, error: err.message || 'UPDATE_DOWNLOAD_START_FAILED' }, 500);
     }
+    return;
+  }
+
+  if (pn === '/api/update/cancel') {
+    const id = url.searchParams.get('id') || '';
+    const job = id ? updateDownloadJobs.get(id) : latestUpdateDownloadJob(isActiveUpdateJob);
+    if (!job) {
+      sendJSON(res, { ok: false, error: 'UPDATE_JOB_NOT_FOUND' }, 404);
+      return;
+    }
+    const result = cancelUpdateDownloadJob(job);
+    if (!result.ok) {
+      // error 必须放在快照之后，否则会被 publicUpdateJob 里的空 error 覆盖掉原因。
+      sendJSON(res, Object.assign(publicUpdateJob(job), { ok: false, error: result.reason || 'UPDATE_JOB_NOT_CANCELABLE' }), 409);
+      return;
+    }
+    sendJSON(res, publicUpdateJob(job));
     return;
   }
 
@@ -2052,7 +2626,10 @@ const server = http.createServer(async (req, res) => {
   if (pn === '/api/update/patch') {
     try {
       const info = await fetchLatestUpdateInfo();
-      const job = startUpdatePatchJob(info);
+      const job = await startUpdatePatchJob(info, {
+        route: url.searchParams.get('route') || '',
+        proxy: url.searchParams.get('proxy') || '',
+      });
       sendJSON(res, job, job.ok ? 200 : 400);
     } catch (err) {
       console.error('[UpdatePatch]', err);

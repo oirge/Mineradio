@@ -423,10 +423,12 @@ if (document.fonts && document.fonts.load) {
     <div class="mini-player-collapse-hint">开启后移开鼠标会回到封面；关闭后保持完整迷你播放器。</div>
     <div class="fx-section-label">封面效果</div>
     <div class="fx-toggle-grid mini-player-diy-grid">
-      <div class="fx-toggle" id="t-miniPlayerPulse" onclick="toggleMiniPlayerVisual('pulseEnabled')" title="让标准迷你播放器封面跟随音乐能量轻微缩放"><span>封面律动</span><span class="dot"></span></div>
-      <div class="fx-toggle" id="t-miniPlayerGlow" onclick="toggleMiniPlayerVisual('glowEnabled')" title="显示封面外沿的柔和律动光晕"><span>封面光晕</span><span class="dot"></span></div>
+      <div class="fx-toggle" id="t-miniPlayerPulse" onclick="toggleMiniPlayerVisual('pulseEnabled')" title="让标准迷你播放器封面跟随音乐能量缩放"><span>封面律动</span><span class="dot"></span></div>
+      <div class="fx-toggle" id="t-miniPlayerGlow" onclick="toggleMiniPlayerVisual('glowEnabled')" title="显示封面外沿跟随音乐的律动光晕"><span>封面光晕</span><span class="dot"></span></div>
     </div>
-    <div class="fx-slider"><label>封面律动强度</label><input id="fx-miniplayerpulse" type="range" min="0" max="1.5" step="0.01"><output></output></div>
+    <div class="mini-player-collapse-hint">1.00 是标准力度，往右调越明显；调到 0 或关掉上面的开关即停用。</div>
+    <div class="fx-slider"><label>封面律动强度</label><input id="fx-miniplayerpulse" type="range" min="0" max="3" step="0.01"><output></output></div>
+    <div class="fx-slider"><label>封面光晕强度</label><input id="fx-miniplayerglow" type="range" min="0" max="3" step="0.01"><output></output></div>
     <div class="fx-slider"><label>封面圆角</label><input id="fx-miniplayerradius" type="range" min="4" max="22" step="1"><output></output></div>
   </div>
 
@@ -926,12 +928,24 @@ if (document.fonts && document.fonts.load) {
         <div id="update-hero-sub" class="update-hero-sub"></div>
       </div>
       <div id="update-list" class="update-list"></div>
+      <div class="update-route">
+        <div class="update-route-head">
+          <div class="update-route-title">更新线路</div>
+          <div id="update-route-hint" class="update-route-hint">自动测速，挑最快的线路下载。</div>
+        </div>
+        <div id="update-route-seg" class="update-route-seg" role="group" aria-label="更新线路">
+          <button type="button" data-update-route="auto" aria-pressed="true">自动</button>
+          <button type="button" data-update-route="direct" aria-pressed="false">直连</button>
+          <button type="button" data-update-route="mirror" aria-pressed="false">国内加速</button>
+          <button type="button" data-update-route="proxy" aria-pressed="false">本机代理</button>
+        </div>
+      </div>
       <div class="update-actions">
         <button id="update-primary-btn" class="update-primary-btn" type="button" onclick="startUpdatePreviewDownload()">
           <span id="update-btn-fill" class="update-btn-fill"></span>
           <span id="update-btn-label" class="update-btn-label">立即更新</span>
         </button>
-        <button class="update-secondary-btn" type="button" onclick="closeUpdatePanel()">取消</button>
+        <button id="update-secondary-btn" class="update-secondary-btn" type="button" onclick="handleUpdateSecondaryAction()">取消</button>
       </div>
       <div id="update-footnote" class="update-footnote">预览版只演示更新手感，不会真的下载安装。</div>
     </div>

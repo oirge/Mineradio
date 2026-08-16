@@ -1,5 +1,23 @@
 ﻿# 发布流程
 
+## v1.5.8 更新线路手动选择、取消更新与迷你封面律动光晕强度
+- 正式发布版本从 `1.5.7` 提升为 `1.5.8`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.7` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
+- 更新线路模式集中在 `UPDATE_ROUTE_MODES = ['auto', 'direct', 'mirror', 'proxy']`；`normalizeUpdateRouteMode()` 只把已知值放行，未知值一律回落 `auto`。
+- `filterUpdateRouteCandidates()` 在 `rankUpdateDownloadCandidates()` 之前按线路裁剪候选：`direct` 只留非镜像候选，`mirror` 只留镜像候选，`proxy` 保留全部候选但强制走代理传输。裁剪后为空时抛 `UPDATE_ROUTE_UNAVAILABLE`，不得静默回落到别的线路。
+- 线路通过 `?route=` / `?proxy=` 查询参数下发，`/api/update/download` 和补丁入口都不解析请求体，前端 `updateJobStartUrl()` 负责拼参数。`/api/update/routes` 返回 `mirrorCount` 与 `proxyLabel` 供面板显示可用性。
+- 代理传输手写在核心 `http` / `https` / `tls` 之上：`CONNECT` 隧道 -> `tls.connect` -> `http.request({ createConnection })`，再用 `Readable.toWeb` 伪装成 fetch 响应，`package.json` 仍然零 `dependencies`。
+- `resolveUpdateProxyTarget()` 依赖 `session.defaultSession.resolveProxy(url)`，因此只有在 Electron 主进程内的 `server.js` 才能自动探测系统代理；独立 `node server.js` 返回空 `proxyLabel` 属于预期行为。
+- 取消更新使用任务级 `AbortController` 与 `job.canceled`；`canceled` 是 `ok: true` 的正常终态，前端必须在 `queued` / `downloading` 之前分支判断。`job.applying` 为真时拒绝取消，避免补丁应用中途留下混合版本。
+- 迷你封面律动/光晕强度：`miniPlayerPulseStrength` 与 `miniPlayerGlowStrength` 取值 `0 ~ MINI_PLAYER_EFFECT_STRENGTH_MAX(3)`，默认 `1`；主进程 `normalizeMiniPlayerVisual()` 用同一个 `MAX_MINI_PLAYER_EFFECT_STRENGTH` 夹紧。
+- renderer 在 `applyState()` 里把 `signal = Math.pow(pulse, 0.72)` 与强度相乘后经 `saturateMiniEffect()`（`1 - Math.exp(-1.15 * level)`）压成 `0 ~ 1` 的 `--mini-pulse` / `--mini-glow`；CSS 系数（收回态 `0.195`、展开态 `0.125`、光晕 `14px` / `0.42`）只表示 `360 × 84` 窗口的几何上限，想加强只能调强度，不得抬高系数。
+- 设置区沿用 `public/index.html` 既有 `fx-slider` / `fx-toggle-grid` / `mini-player-collapse-hint` 类，未新增 CSS，两个开关保持原位作为“关闭”入口。
+- 全量 Node 回归 `400/400`；新增 `tests/update-route-selection.test.js` 11 项线路与取消测试，扩展 `tests/update-fastest-route.test.js`、`tests/mini-player-visual.test.js`、`tests/mini-player-state-cache.test.js`，版本一致性、发布工作流标签与资产清单测试，以及关键 JavaScript 语法检查与 `git diff --check` 均通过。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布资产：`Mineradio-1.5.8-Setup.exe` `101487553` 字节；`.blockmap` `105911` 字节；`latest.yml` `347` 字节；SHA256 清单 `270` 字节。
+- SHA256：安装器 `484e70284a1b23263fbf0ad42c494c690519ef2da7a0164f57e73d1ec587b57c`；`.blockmap` `2a42264120479e348c583e33305c917dc31f04bad1577526f9bb88b0b23ff2fd`；`latest.yml` `e39fd4c475841b328df549257cf6216c2faf7e4a9f44ac1b2a8189a417436b72`；SHA256 清单 `bdab066abae282c73dc027dd46f7b19f71085eec02a9e5913ebf0b676e3fba89`。
+- `latest.yml` 的 Setup SHA512：`psjq0qrcIjuvXa+EoVsN0QUeZodpa8QleEKrC0yecKVM8zD5L485m7qasyIMces85YD7MDnr1u+gGLLwziSKmA==`。
+- 发布标题使用 `Mineradio v1.5.8 更新线路手动选择、取消更新与迷你封面律动光晕强度`。
+
 ## v1.5.7 自动播放开关与迷你播放器悬浮展开错位修复
 - 正式发布版本从 `1.5.6` 提升为 `1.5.7`；构建时需同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.5.6` 的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
 - 新增自动播放开关：状态 `off` / `continue` / `shuffle` 持久化到 `mineradio-auto-playback-v1`，并登记进 `PERSISTENT_UI_STATE_KEYS`，清理运行时缓存时不会被抹掉。
