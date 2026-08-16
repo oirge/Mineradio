@@ -187,7 +187,7 @@ test('本地媒体格式清单包含新增音频、封面和歌词后缀', () =>
   const index = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.js'), 'utf8');
-  for (const ext of ['aac', 'opus', 'webm', 'oga', 'weba']) {
+  for (const ext of ['mp2', 'aac', 'opus', 'webm', 'oga', 'weba', 'm4b', 'aif', 'aiff', 'aifc']) {
     assert.equal(classifier.isLocalAudioFile({ name: `track.${ext}`, type: '' }, true), true);
   }
   for (const ext of ['srt', 'vtt', 'ass', 'yrc']) {
@@ -204,7 +204,7 @@ test('本地媒体格式清单包含新增音频、封面和歌词后缀', () =>
   assert.equal(classifier.findLocalLyricFile(audioFile, classifier.buildLocalLyricMaps([lyricFile])), lyricFile);
   assert.equal(classifier.findLocalCoverFile(audioFile, classifier.buildLocalCoverMaps([coverFile])), coverFile);
 
-  for (const ext of ['aac', 'opus', 'webm', 'oga', 'weba', 'srt', 'vtt', 'ass', 'yrc', 'avif', 'gif', 'bmp', 'svg', 'jpe', 'jfif']) {
+  for (const ext of ['mp2', 'aac', 'opus', 'webm', 'oga', 'weba', 'm4b', 'aif', 'aiff', 'aifc', 'srt', 'vtt', 'ass', 'yrc', 'avif', 'gif', 'bmp', 'svg', 'jpe', 'jfif']) {
     assert.match(index, new RegExp(`\\.${ext}`));
     assert.match(main, new RegExp(`['"]\\.${ext}['"]`));
     assert.match(server, new RegExp(`['"]\\.${ext}['"]\\s*:`));
@@ -215,11 +215,16 @@ test('桌面扫描和本地文件代理返回新增格式的正确 MIME', async 
   const scanFull = loadDesktopFullScan();
   const contentType = loadLocalContentType();
   const expected = {
+    'track.mp2': 'audio/mpeg',
     'track.aac': 'audio/aac',
     'track.opus': 'audio/ogg',
     'track.webm': 'audio/webm',
     'track.oga': 'audio/ogg',
     'track.weba': 'audio/webm',
+    'track.m4b': 'audio/mp4',
+    'track.aif': 'audio/x-aiff',
+    'track.aiff': 'audio/x-aiff',
+    'track.aifc': 'audio/x-aiff',
     'track.srt': 'application/x-subrip',
     'track.vtt': 'text/vtt',
     'track.ass': 'text/x-ssa',

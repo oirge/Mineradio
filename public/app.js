@@ -23673,8 +23673,8 @@ document.addEventListener('visibilitychange', function(){
 // ============================================================
 //  文件拖放
 // ============================================================
-var LOCAL_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|oga|m4a|aac|opus|webm|weba)$/i;
-var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|oga|m4a|aac|opus|webm|weba)$/i;
+var LOCAL_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc)$/i;
+var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc)$/i;
 var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass|yrc)$/i;
 var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|jpe|jfif|png|webp|avif|gif|bmp|svg)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;

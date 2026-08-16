@@ -11,7 +11,7 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Removed login, online music portal, update prompts, and unnecessary guides.
 - Support for importing local music folders.
 - Support for importing individual local music files.
-- Support for MP3 / FLAC / M4A / WAV / OGG playback.
+- Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF playback.
 - Support for `.lrc` / `.txt` lyrics files with matching names.
 - Support for FLAC embedded `LYRICS` tags, including timestamped LRC lyrics.
 - Support for automatic lyrics translation recognition and display.
@@ -38,8 +38,10 @@ Build artifacts are located in `dist/`.
 
 ### Audio Format Support
 - ✅ MP3 (MPEG Audio Layer 3)
+- ✅ MP2 (MPEG Audio Layer 2)
 - ✅ FLAC (Free Lossless Audio Codec)
 - ✅ M4A (MPEG-4 Audio, including AAC and ALAC)
+- ✅ M4B (MPEG-4 audiobook audio)
 - ✅ WAV (Waveform Audio File Format)
 - ✅ OGG (Ogg Vorbis)
 - ✅ OGA (Ogg audio)
@@ -47,6 +49,7 @@ Build artifacts are located in `dist/`.
 - ✅ Opus (Ogg Opus)
 - ✅ WebM audio
 - ✅ WebA (WebM audio)
+- ✅ AIFF / AIFC (Audio Interchange File Format)
 
 ### Lyrics Features
 - Matching LRC/TXT/SRT/WebVTT/ASS/YRC lyrics files

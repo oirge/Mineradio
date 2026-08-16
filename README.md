@@ -9,7 +9,7 @@
 - 删除登录、在线音乐入口、更新提示和无用引导。
 - 支持导入本地音乐文件夹。
 - 支持单独导入本地音乐文件。
-- 支持 MP3 / FLAC / M4A / WAV / OGG 播放。
+- 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF 播放。
 - 支持同名 `.lrc` / `.txt` 歌词。
 - 支持 FLAC 内嵌 `LYRICS` 歌词标签，包括带时间轴的 LRC 歌词。
 - 支持同目录封面图片和音频内嵌封面。
@@ -26,10 +26,17 @@
 
 ### 🎵 音频格式支持
 - **MP3** - MPEG Audio Layer 3
+- **MP2** - MPEG Audio Layer 2
 - **FLAC** - 无损音频格式
 - **M4A** - MPEG-4 Audio (AAC/ALAC)
+- **M4B** - MPEG-4 有声书音频
 - **WAV** - 未压缩音频
 - **OGG** - Ogg Vorbis
+- **OGA** - Ogg 音频
+- **AAC** - Advanced Audio Coding
+- **Opus** - Ogg Opus
+- **WebM/WebA** - WebM 音频
+- **AIFF/AIFC** - AIFF 无损音频
 
 ### 📝 歌词功能
 - ✅ 同名 `.lrc` / `.txt` 歌词文件
@@ -126,7 +133,7 @@ npm test
 
 ### 最新版本 v1.4.2 (2026-08-12)
 
-- 支持 MP3/FLAC/M4A/WAV/OGG/OGA/AAC/Opus/WebM/WebA 多格式播放
+- 支持 MP3/MP2/FLAC/M4A/M4B/WAV/OGG/OGA/AAC/Opus/WebM/WebA/AIFF 多格式播放
 - 支持 LRC/TXT/SRT/VTT/ASS/YRC 外置歌词，以及 JPG/JPEG/JPE/JFIF/PNG/WebP/AVIF/GIF/BMP/SVG 封面
 - 修复标准 M4A 标签、音轨号、内嵌封面和后置 `moov` 读取
 - 修复旧 M4A 元数据缓存继续复用错误结果
@@ -140,7 +147,7 @@ npm test
 ## ❓ 常见问题
 
 ### 支持哪些音频格式？
-支持 MP3、FLAC、M4A、WAV、OGG 五种常见音频格式。
+支持 MP3、MP2、FLAC、M4A、M4B、WAV、OGG、OGA、AAC、Opus、WebM/WebA、AIFF/AIFC 等格式。
 
 ### 如何添加歌词？
 - 将 `.lrc` 或 `.txt` 歌词文件放在音乐文件同目录，保持文件名一致

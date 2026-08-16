@@ -249,14 +249,16 @@ function waitForServer(server) {
 }
 
 const LOCAL_LIBRARY_EXTS = new Set([
-  '.mp3', '.flac', '.m4a', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba',
+  '.mp3', '.mp2', '.flac', '.m4a', '.m4b', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba', '.aif', '.aiff', '.aifc',
   '.lrc', '.txt', '.srt', '.vtt', '.ass', '.yrc',
   '.jpg', '.jpeg', '.jpe', '.jfif', '.png', '.webp', '.avif', '.gif', '.bmp', '.svg',
 ]);
 const LOCAL_LIBRARY_MIME = {
   '.mp3': 'audio/mpeg',
+  '.mp2': 'audio/mpeg',
   '.flac': 'audio/flac',
   '.m4a': 'audio/mp4',
+  '.m4b': 'audio/mp4',
   '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
   '.oga': 'audio/ogg',
@@ -264,6 +266,9 @@ const LOCAL_LIBRARY_MIME = {
   '.opus': 'audio/ogg',
   '.webm': 'audio/webm',
   '.weba': 'audio/webm',
+  '.aif': 'audio/x-aiff',
+  '.aiff': 'audio/x-aiff',
+  '.aifc': 'audio/x-aiff',
   '.lrc': 'text/plain',
   '.txt': 'text/plain',
   '.srt': 'application/x-subrip',
