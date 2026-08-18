@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.6.1';
+var APP_VERSION = '1.6.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -12241,7 +12241,7 @@ function scheduleLocalAssetUiRefresh(song, reason) {
     localAssetUiRefreshTimer = null;
     localAssetUiRefreshReason = '';
     safeRenderQueuePanel(pendingReason, { scrollCurrent: miniQueueOpen });
-    if (LOCAL_ONLY_MODE && $results && $results.classList.contains('show') && $input) renderLocalLibraryResults($input.value || '');
+    if (LOCAL_ONLY_MODE) refreshVisibleLocalLibraryResults();
     if (LOCAL_ONLY_MODE && emptyHomeActive) renderHomeDiscover();
     scheduleShelfRebuild(pendingReason, true);
   }, typeof runtimeFramePressureUiDelay === 'function' ? runtimeFramePressureUiDelay(220) : 220);
@@ -18949,6 +18949,11 @@ function clearSearchResults() {
   $results.innerHTML = '';
   $results.classList.remove('show');
 }
+function refreshVisibleLocalLibraryResults(q) {
+  if (!$results || !$input || !$results.classList.contains('show')) return false;
+  renderLocalLibraryResults(q == null ? ($input.value || '') : q);
+  return true;
+}
 /**
  * 复制并清洗搜索历史。搜索历史最多展示 10 条，限量循环避免读取时创建 map/filter/slice 中间数组。
  * @param {Array<string>} source 搜索历史来源。
@@ -25105,7 +25110,7 @@ function refreshLocalMetadataUi(song, reason) {
     updateSystemMediaSessionPlaybackState(reason || 'local-metadata-ready');
   }
   safeRenderQueuePanel(reason || 'local-metadata-ready', { scrollCurrent: miniQueueOpen });
-  if (LOCAL_ONLY_MODE && $results && $results.classList.contains('show') && $input) renderLocalLibraryResults($input.value || '');
+  if (LOCAL_ONLY_MODE) refreshVisibleLocalLibraryResults();
   if (LOCAL_ONLY_MODE && emptyHomeActive) renderHomeDiscover();
   scheduleShelfRebuild(reason || 'local-metadata-ready', true);
 }
@@ -25994,7 +25999,7 @@ async function handleLocalFolderFiles(files, opts) {
   safeSwitchPlaylistTab('queue', renderReason);
   safeShelfRebuild(renderReason, true);
   renderHomeDiscover();
-  if ($input && !$input.value.trim()) renderLocalLibraryResults('');
+  if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
   if (!opts.restored) setPeek(document.getElementById('playlist-panel'), true, 'pl');
   scheduleLocalLibraryIndexSave(opts.folderPath || libraryFolderPath, songs, 120);
   function refreshAfterAssetHydration(count) {
@@ -26002,7 +26007,7 @@ async function handleLocalFolderFiles(files, opts) {
     if (!count) return;
     safeRenderQueuePanel('local-asset-cache-ready', { scrollCurrent: miniQueueOpen });
     renderHomeDiscover();
-    if ($input && !$input.value.trim()) renderLocalLibraryResults('');
+    if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
     scheduleShelfRebuild('local-asset-cache-ready', true);
     if (currentIdx >= 0 && playQueue[currentIdx]) updateControlTrackInfo(playQueue[currentIdx]);
     scheduleLocalLibraryIndexSave(opts.folderPath || libraryFolderPath, songs, 160);
@@ -26128,7 +26133,7 @@ function clearEmptyLocalLibrary(folderPath, opts) {
   safeRenderQueuePanel('local-library-empty');
   safeShelfRebuild('local-library-empty', true);
   renderHomeDiscover();
-  if ($input && !$input.value.trim()) renderLocalLibraryResults('');
+  if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
   updateCustomCoverButton();
   updateCustomLyricControls();
   updateEmptyHomeVisibility({ forceLoad: false });
@@ -26181,7 +26186,7 @@ async function handleFiles(files) {
     safeRenderQueuePanel('play-local-file');
     safeShelfRebuild('play-local-file', true);
     renderHomeDiscover();
-    if ($input && !$input.value.trim()) renderLocalLibraryResults('');
+    if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
     startLocalLibraryBackgroundProcessing([singleSong], { single:true });
     playQueueAt(0, { manual: true }).catch(function(e){ console.warn('[LocalFilePlay]', e); });
   }

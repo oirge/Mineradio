@@ -1,5 +1,16 @@
 ﻿# 发布流程
 
+## v1.6.2 修复搜索结果面板自动弹出
+- 正式发布版本从 `1.6.1` 提升为 `1.6.2`；构建时同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.6.1` 及更早版本的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
+- 修复本地曲库恢复、导入、清空和后台资产补水路径调用空查询渲染时自动给搜索结果加上 `show` 的问题。
+- 新增 `refreshVisibleLocalLibraryResults()`，只有搜索结果面板已经由用户打开时才刷新；用户点击搜索框后仍正常显示结果。
+- 移除未提交的迷你播放器实验改动，保持 `v1.6.1` 的迷你播放器、桌面歌词和窗口生命周期行为不变。
+- 全量 Node 回归 `412/412`；关键 JavaScript 语法检查与 `git diff --check` 通过。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 本地构建产物：`Mineradio-1.6.2-Setup.exe` `101492065` 字节；`.blockmap` `105907` 字节；`latest.yml` `347` 字节。
+- SHA256：安装器 `6010b5503c37ad6bff1d3bbbc932a67141b3f75814f38979d21b1814d65e3ea7`；`.blockmap` `6e6be00b2c1cdbc7c62c38bc8ae1d14414fe4983f9a4983503fb1b01b422bfb0`；`latest.yml` `2c63ab7717e864a8248b9fd873119ec57f07ed278300aad72323944ce7380198`。
+- `latest.yml` 的 Setup SHA512：`KznAhMWq6ZqDmocI10A6bVXei1a8z9cy4u5xtpdBSCiwBOMVM0bjqRnDB+bNW+yAPPOPyAaXOPi5jpUfCSTfmg==`。
+
 ## v1.6.1 扩展本地音乐格式支持
 - 正式发布版本从 `1.6.0` 提升为 `1.6.1`；构建时同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.6.0` 及更早版本的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
 - 新增 `MP2`、`M4B`、`AIF`、`AIFF`、`AIFC` 音频后缀的播放器识别、文件夹扫描、文件选择器和本地代理 MIME 支持。

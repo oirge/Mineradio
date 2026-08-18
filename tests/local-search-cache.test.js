@@ -168,7 +168,40 @@ function testLocalSearchPrioritizesSongArtistAndFileName() {
   assert.equal(results.some((song) => song.album === '目标词'), false);
 }
 
+/**
+ * 验证曲库恢复和后台补水只能刷新用户已经打开的搜索结果，不能主动弹出面板。
+ * @returns {void}
+ */
+function testLocalLibraryRefreshKeepsClosedSearchResultsHidden() {
+  const source = readRendererSource();
+  const refreshSource = readFunctionSource(
+    source,
+    'function refreshVisibleLocalLibraryResults(q)',
+    '/**\n * 复制并清洗搜索历史',
+  );
+  let visible = false;
+  const calls = [];
+  const context = {
+    $input: { value: '本地歌曲' },
+    $results: { classList: { contains: () => visible } },
+    renderLocalLibraryResults: (query) => calls.push(query),
+  };
+  vm.runInNewContext(`${refreshSource}\nthis.refresh = refreshVisibleLocalLibraryResults;`, context);
+
+  assert.equal(context.refresh(), false);
+  assert.deepEqual(calls, []);
+
+  visible = true;
+  assert.equal(context.refresh(), true);
+  assert.deepEqual(calls, ['本地歌曲']);
+
+  const restoreSource = readFunctionSource(source, 'async function handleLocalFolderFiles(files, opts)', '/**\n * 清理成功扫描到空文件夹后的旧本地曲库状态');
+  assert.match(restoreSource, /\$results\.classList\.remove\('show'\)[\s\S]*?refreshVisibleLocalLibraryResults\(''\)/);
+  assert.doesNotMatch(restoreSource, /renderLocalLibraryResults\(''\)/);
+}
+
 test('混合本地搜索池筛选保留本地歌曲', testLocalSearchWarmupSourcePreservesMixedQueue);
 test('本地搜索池把同一筛选数组交给预热任务', testLocalSearchPoolReusesFilteredArrayForWarmup);
 test('空查询搜索结果按曲库签名复用数组', testEmptyLocalSearchResultsReuseIdentity);
 test('local search prioritizes song artist and file name', testLocalSearchPrioritizesSongArtistAndFileName);
+test('曲库恢复不会自动弹出搜索结果面板', testLocalLibraryRefreshKeepsClosedSearchResultsHidden);

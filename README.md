@@ -131,12 +131,13 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
-### 最新版本 v1.6.1 (2026-08-16)
+### 最新版本 v1.6.2 (2026-08-18)
 
 - 支持 MP3/MP2/FLAC/M4A/M4B/WAV/OGG/OGA/AAC/Opus/WebM/WebA/AIFF 多格式播放
 - 支持 LRC/TXT/SRT/VTT/ASS/YRC 外置歌词，以及 JPG/JPEG/JPE/JFIF/PNG/WebP/AVIF/GIF/BMP/SVG 封面
 - 修复标准 M4A 标签、音轨号、内嵌封面和后置 `moov` 读取
 - 修复旧 M4A 元数据缓存继续复用错误结果
+- 修复本地曲库恢复、导入或后台补水时搜索结果面板自动弹出；只有用户点击搜索框后才显示
 - 迷你播放器优化和动画效果
 - 桌面歌词功能
 - 移除本地节奏分析环节
