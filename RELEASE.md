@@ -10,6 +10,7 @@
 - 本地构建产物：`Mineradio-1.6.2-Setup.exe` `101492065` 字节；`.blockmap` `105907` 字节；`latest.yml` `347` 字节。
 - SHA256：安装器 `6010b5503c37ad6bff1d3bbbc932a67141b3f75814f38979d21b1814d65e3ea7`；`.blockmap` `6e6be00b2c1cdbc7c62c38bc8ae1d14414fe4983f9a4983503fb1b01b422bfb0`；`latest.yml` `2c63ab7717e864a8248b9fd873119ec57f07ed278300aad72323944ce7380198`。
 - `latest.yml` 的 Setup SHA512：`KznAhMWq6ZqDmocI10A6bVXei1a8z9cy4u5xtpdBSCiwBOMVM0bjqRnDB+bNW+yAPPOPyAaXOPi5jpUfCSTfmg==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.6.2` 已标记 Latest；annotated tag 解引用到提交 `03dfbbf1e6f168a76c25466df415cf8ae6496702`，四项远端资产均为 uploaded，大小与本地构建一致，远端 SHA256 与本地一致。
 
 ## v1.6.1 扩展本地音乐格式支持
 - 正式发布版本从 `1.6.0` 提升为 `1.6.1`；构建时同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.6.0` 及更早版本的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
