@@ -10,6 +10,8 @@
   if (!Manifest) return;
 
   var PLUGIN_STORE_KEY = 'mineradio-plugins-v1';
+  // 自带主题的附加状态。这里只记「用户卸载过哪些自带主题」，卸载了就不再塞回来。
+  var PLUGIN_BUILTIN_STORE_KEY = 'mineradio-plugins-builtin-v1';
   var PLUGIN_THEME_STYLE_ID = 'mineradio-plugin-theme-style';
   // 单次钩子调用上限。音源接口慢是常态，但不能让一个卡住的插件把搜索永远吊住。
   var PLUGIN_CALL_TIMEOUT_MS = 12000;
@@ -69,6 +71,61 @@
     }
   }
 
+  /**
+   * 读回自带主题的附加状态。结构固定为 `{removed: string[]}`，外部改坏了就当空表。
+   * @returns {{removed: string[]}} 附加状态。
+   */
+  function readBuiltinState() {
+    var raw = '';
+    try { raw = global.localStorage ? (global.localStorage.getItem(PLUGIN_BUILTIN_STORE_KEY) || '') : ''; } catch (e) { raw = ''; }
+    var parsed = null;
+    try { parsed = raw ? JSON.parse(raw) : null; } catch (e) { parsed = null; }
+    var removed = parsed && Array.isArray(parsed.removed) ? parsed.removed : [];
+    var out = [];
+    for (var i = 0; i < removed.length && out.length < 64; i++) {
+      var id = String(removed[i] || '');
+      if (id && out.indexOf(id) < 0) out.push(id);
+    }
+    return { removed: out };
+  }
+
+  /**
+   * 落盘自带主题的附加状态。
+   * @param {{removed: string[]}} state 附加状态。
+   * @returns {void}
+   */
+  function writeBuiltinState(state) {
+    var payload = JSON.stringify({ removed: (state && state.removed) || [] });
+    try { if (global.localStorage) global.localStorage.setItem(PLUGIN_BUILTIN_STORE_KEY, payload); } catch (e) {}
+    if (typeof bridge.persist === 'function') {
+      try { bridge.persist(PLUGIN_BUILTIN_STORE_KEY, payload); } catch (e) {}
+    }
+  }
+
+  /**
+   * 取自带主题模块提供的插件包。模块没加载（例如纯浏览器环境）时返回空数组。
+   * @returns {Array<{fileName: string, content: string}>} 插件包数组。
+   */
+  function builtinThemePackages() {
+    var api = global.MineradioBuiltinThemes;
+    if (!api || typeof api.list !== 'function') return [];
+    try {
+      var arr = api.list();
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+
+  /**
+   * 判断一个 id 是不是自带主题。
+   * @param {string} id 插件 id。
+   * @returns {boolean} 是否自带。
+   */
+  function isBuiltinThemeId(id) {
+    var api = global.MineradioBuiltinThemes;
+    if (!api || typeof api.ids !== 'function') return false;
+    var key = String(id || '');
+    try { return api.ids().indexOf(key) >= 0; } catch (e) { return false; }
+  }
   /**
    * 按 id 找一条插件记录。
    * @param {string} id 插件 id。
@@ -720,11 +777,119 @@
     });
   }
   /**
+   * 主题互斥：同一时刻只允许一个主题插件启用。
+   * 两个主题一起开时后注入的那份会盖住前一份的同名变量，结果取决于安装顺序，用户看不懂也调不动，
+   * 所以启用一个就把其它的关掉，而不是让它们叠加。
+   * @param {string} keepId 要保留启用状态的主题 id。
+   * @returns {string[]} 被自动关掉的主题名字。
+   */
+  function enforceSingleTheme(keepId) {
+    var keep = String(keepId || '');
+    var turnedOff = [];
+    var now = Date.now();
+    for (var i = 0; i < records.length; i++) {
+      var rec = records[i];
+      if (rec.manifest.kind !== 'theme' || !rec.enabled) continue;
+      if (rec.manifest.id === keep) continue;
+      rec.enabled = false;
+      rec.updatedAt = now;
+      destroyWorker(rec.manifest.id, 'PLUGIN_THEME_SWITCHED');
+      turnedOff.push(rec.manifest.name);
+    }
+    return turnedOff;
+  }
+
+  /**
+   * 找当前启用的主题里最后被操作的那一个。历史数据（1.7.2 之前）可能有多个主题同时启用，
+   * 归一化时保留用户最近开的那个最接近他的本意。
+   * @returns {string} 主题 id，没有启用的主题时为空串。
+   */
+  function latestEnabledThemeId() {
+    var best = null;
+    for (var i = 0; i < records.length; i++) {
+      var rec = records[i];
+      if (rec.manifest.kind !== 'theme' || !rec.enabled) continue;
+      if (!best || (rec.updatedAt || 0) > (best.updatedAt || 0)) best = rec;
+    }
+    return best ? best.manifest.id : '';
+  }
+
+  /**
+   * 比较两个版本号（形如 `1.2.0`）。只用于判断自带主题要不要覆盖已装的旧版。
+   * @param {string} a 左值。
+   * @param {string} b 右值。
+   * @returns {number} a>b 为 1，a<b 为 -1，相等为 0。
+   */
+  function compareVersions(a, b) {
+    var pa = String(a || '0').split('.');
+    var pb = String(b || '0').split('.');
+    for (var i = 0; i < 4; i++) {
+      var na = parseInt(pa[i], 10) || 0;
+      var nb = parseInt(pb[i], 10) || 0;
+      if (na > nb) return 1;
+      if (na < nb) return -1;
+    }
+    return 0;
+  }
+
+  /**
+   * 把安装包自带的主题补进插件列表。
+   * 走的是和用户导入完全相同的 parsePluginPackage 通道，所以自带主题不享受任何清洗豁免。
+   * 三条规则：用户卸载过的不再塞回来；已装同 id 的只在自带版本更高时覆盖（保留启用状态，
+   * 也就不会把用户自己改的同 id 版本按回去）；新补进来的默认不启用，避免升级后擅自换掉界面外观。
+   * @returns {boolean} 列表是否有改动。
+   */
+  function seedBuiltinThemes() {
+    var packs = builtinThemePackages();
+    if (!packs.length) return false;
+    var state = readBuiltinState();
+    var changed = false;
+    for (var i = 0; i < packs.length; i++) {
+      var parsed = Manifest.parsePluginPackage(packs[i].fileName, packs[i].content);
+      if (!parsed.ok) {
+        logInternal('[plugin] 自带主题解析失败: ' + packs[i].fileName + ' ' + parsed.error);
+        continue;
+      }
+      var plugin = parsed.plugin;
+      var id = plugin.manifest.id;
+      if (state.removed.indexOf(id) >= 0) continue;
+      var existing = recordById(id);
+      var now = Date.now();
+      if (!existing) {
+        if (records.length >= Manifest.MAX_PLUGINS) continue;
+        records.push({
+          manifest: plugin.manifest,
+          script: plugin.script,
+          theme: plugin.theme,
+          enabled: false,
+          installedAt: now,
+          updatedAt: now
+        });
+        changed = true;
+        continue;
+      }
+      if (compareVersions(plugin.manifest.version, existing.manifest.version) <= 0) continue;
+      records[records.indexOf(existing)] = {
+        manifest: plugin.manifest,
+        script: plugin.script,
+        theme: plugin.theme,
+        enabled: existing.enabled,
+        installedAt: existing.installedAt,
+        updatedAt: now
+      };
+      destroyWorker(id, 'PLUGIN_UPDATED');
+      changed = true;
+    }
+    return changed;
+  }
+
+  /**
    * 安装（或覆盖安装）一个插件包。
    * 同 id 视为升级：保留原有启用状态与安装时间，只换脚本与清单。
    * @param {string} fileName 原始文件名，用来判定 `.js` / `.json` 包格式。
    * @param {string} content 文件文本。
-   * @returns {{ok: boolean, error?: string, manifest?: object, replaced?: boolean}} 安装结果。
+   * @returns {{ok: boolean, error?: string, manifest?: object, replaced?: boolean, switchedOff?: string[]}} 安装结果，
+   *   switchedOff 是因主题互斥被自动关掉的主题名字。
    */
   function install(fileName, content) {
     var parsed = Manifest.parsePluginPackage(fileName, content);
@@ -748,13 +913,24 @@
     } else {
       records.push(record);
     }
+    // 装进来的主题一旦是启用状态，就让它成为唯一启用的主题。
+    var switchedOff = record.manifest.kind === 'theme' && record.enabled ? enforceSingleTheme(record.manifest.id) : [];
+    // 用户手动装回一个之前卸掉的自带主题，就说明他改主意了，把「卸载过」的记忆清掉。
+    if (isBuiltinThemeId(record.manifest.id)) {
+      var state = readBuiltinState();
+      var at = state.removed.indexOf(record.manifest.id);
+      if (at >= 0) {
+        state.removed.splice(at, 1);
+        writeBuiltinState(state);
+      }
+    }
     writeStore();
     applyThemes();
-    return { ok: true, manifest: record.manifest, replaced: !!existing };
+    return { ok: true, manifest: record.manifest, replaced: !!existing, switchedOff: switchedOff };
   }
 
   /**
-   * 卸载一个插件。
+   * 卸载一个插件。自带主题被卸载时会记进「用户卸载过」名单，下次启动不再自动补回来。
    * @param {string} id 插件 id。
    * @returns {boolean} 是否命中并删除。
    */
@@ -763,6 +939,13 @@
     if (!rec) return false;
     records.splice(records.indexOf(rec), 1);
     destroyWorker(rec.manifest.id, 'PLUGIN_REMOVED');
+    if (isBuiltinThemeId(rec.manifest.id)) {
+      var state = readBuiltinState();
+      if (state.removed.indexOf(rec.manifest.id) < 0) {
+        state.removed.push(rec.manifest.id);
+        writeBuiltinState(state);
+      }
+    }
     writeStore();
     applyThemes();
     return true;
@@ -770,6 +953,7 @@
 
   /**
    * 启用/禁用一个插件。禁用会立刻销毁它的 worker，不留后台常驻。
+   * 启用主题类插件时其它主题会被自动关掉：主题之间是互斥的，不叠加。
    * @param {string} id 插件 id。
    * @param {boolean} enabled 目标状态。
    * @returns {boolean} 是否命中。
@@ -780,6 +964,7 @@
     rec.enabled = !!enabled;
     rec.updatedAt = Date.now();
     if (!rec.enabled) destroyWorker(rec.manifest.id, 'PLUGIN_DISABLED');
+    if (rec.enabled && rec.manifest.kind === 'theme') enforceSingleTheme(rec.manifest.id);
     writeStore();
     applyThemes();
     return true;
@@ -849,6 +1034,12 @@
     if (typeof opts.log === 'function') bridge.log = opts.log;
     records = readStore();
     destroyAllWorkers();
+    // 补齐安装包自带的主题：只在用户没主动卸载过、且本地版本比自带的旧时才动。
+    var changed = seedBuiltinThemes();
+    // 老版本可能同时启用了多个主题（那时还没有互斥规则），这里收敛成最近启用的那一个。
+    var keep = latestEnabledThemeId();
+    if (keep && enforceSingleTheme(keep).length) changed = true;
+    if (changed) writeStore();
     // 代理入口先要一次：主题不需要它，但装了音源插件时可以省掉首播的一次 IPC 往返。
     ensureProxyInfo();
     applyThemes();
@@ -857,6 +1048,7 @@
 
   global.MineradioPlugins = {
     STORE_KEY: PLUGIN_STORE_KEY,
+    BUILTIN_STORE_KEY: PLUGIN_BUILTIN_STORE_KEY,
     init: init,
     list: list,
     hasEnabled: hasEnabled,

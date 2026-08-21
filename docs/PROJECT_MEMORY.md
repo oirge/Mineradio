@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.7.1` 基于 GitHub `v1.6.3`，新增插件系统（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理，零内置插件）；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.2` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,21 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.2 安装包自带两份主题 + 主题互斥
+
+- 日期：2026-08-21。版本从 `1.7.1` 提升为 `1.7.2`。
+- 用户原话：「只保留主题插件 删除音源插件和歌单插件 主题插件切换使用另一个时自动禁止其他主题不要两个主题同时启用 发布1.7.2 自带theme-midnight-indigo.json(午夜靛蓝) theme-warm-amber.json(暖琥珀) 这两个主题」。
+- 删的是**示例插件文件**，不是插件子系统：`source` / `playlist` / `lyric` 三类脚本插件的能力、沙箱、代理、UI 一行没动，只是 `examples/plugins/` 不再附带那两份档案馆示例（原文件备份在 `C:\Users\Administrator\Desktop\Mineradio-归档\examples-plugins-1.7.1\`，`E:\桌面\播放器软件\工作区备份` 在本机不存在）。
+- 自带主题实现：新增 `public/plugin-builtin-themes.js`（两份 JSON 内嵌成 JS 字面量，导出 `MineradioBuiltinThemes.list()` / `.ids()`），`public/index.html` 在 `plugin-runtime.js` **之前**加载它。`plugin-runtime.js` 的 `init()` 调 `seedBuiltinThemes()`，走的是与用户导入完全相同的 `parsePluginPackage()` 通道 —— 自带主题不享受任何清洗豁免。
+- 三条自带主题规则：`enabled: false` 入列（升级不擅自换掉全体用户的外观）；卸载记进 `mineradio-plugins-builtin-v1` 的 `removed`，下次启动不再塞回来，手动装回时这条记忆被清掉；只在自带版本号 > 本地记录时覆盖，覆盖时保留 `enabled` / `installedAt`，所以用户自己改的同 id 高版本不会被按回去。
+- **不要给记录加 `builtin` 字段**：`Manifest.normalizePluginRecord()` 返回固定形状，多出来的字段过一次存盘就没了。自带身份靠 `MineradioBuiltinThemes.ids()` 这份常量名单判断。
+- 主题互斥实现：`enforceSingleTheme(keepId)` 关掉除 `keepId` 外所有启用中的主题，在 `setEnabled(id,true)`（主题）和 `install()`（装进来就是启用态的主题）两个变更点调用；`init()` 里再用 `latestEnabledThemeId()`（`updatedAt` 最大）收敛历史存档并落盘。理由：两份主题同时注入时后一份盖住前一份的同名变量，最终外观取决于安装顺序，用户看不懂也调不动。
+- UI 提示：`togglePluginEnabled()` 在切换前先记下会被顶掉的主题名（`setEnabled` 之后就问不出来了），提示成「已切换到 X，Y 已关闭」；`install()` 多返回一个 `switchedOff` 数组给导入路径用。
+- 主题着色强度：三份示例主题的 `--saved-*-glass-bg` 与 css 渐变提到肉眼可分辨（面板/卡片/搜索框底色 + 内发光）。**不许动的两条**：任何 `*-filter` 变量（玻璃模糊/饱和度是黄金参数）、渐变第一段必须保留 `rgba(var(--home-accent-rgb),…)` 让用户自己的强调色继续透出来。
+- 主题真正能改的只有九个变量：`--panel-glass-shadow` `--saved-panel-glass-bg` `--saved-panel-glass-shadow` `--saved-button-glass-bg` `--saved-button-glass-hover-bg` `--saved-button-glass-shadow` `--saved-button-glass-hover-shadow` `--champagne` `--source-local`。其余三类无效：被取色器钉成 `documentElement` 行内变量的（`--fc-accent*` `--glass-border` `--home-accent*` `--visual-*`，刻意如此，用户挑的强调色不该被插件改掉）、`app.css` 里声明了没人读的（`--fc-bg` `--fc-paper` `--fc-ink*` `--fc-muted` `--fc-hair*` `--champagne-deep` `--chill-*` `--fc-blue` `--fc-warm` `--glass-border-soft`）、被后面 `rgba(0,0,0,.1)!important` 字面值盖掉的（`--glass-bg` `--glass-bg-focus` `--glass-shadow`）。面板底色只能走 `css` 通道 + 同选择器 `!important`。
+- 守卫：`tests/plugin-system.test.js` 新增 6 条（自带包与 `examples/plugins/theme-*.json` 逐字段一致、首启装入但不启用、卸载不复活/装回恢复、版本比较覆盖并保留启用状态、两份自带主题互斥、历史多启用在 init 时收敛）；原「两个主题变量同时注入」那条按新不变式重写。`tests/packaging-file-whitelist.test.js` 加 `public/plugin-builtin-themes.js`。**vm 里跑出来的数组不能直接 `deepStrictEqual`**（跨 realm 原型不同，报告里 actual/expected 长得一模一样却红），要先 `Array.from()`。
+- 全量 Node 回归 `454/454`。真渲染进程验证（offscreen Electron + `executeJavaScript`）：两份自带主题默认 `enabled:false` 入列；开靛蓝→只有靛蓝启用；再开琥珀→靛蓝自动关闭、`--saved-panel-glass-bg` 计算值为 `rgba(44,26,10,.58)`；全关后注入内容长度 0，`#mineradio-plugin-theme-style` 始终只有 1 个节点。
 
 ## v1.7.1 修复 v1.7.0 安装包无法启动（打包白名单）
 

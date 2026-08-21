@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.1';
+var APP_VERSION = '1.7.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -33892,13 +33892,16 @@ async function importPluginFromDialog() {
     return;
   }
   var name = (res.manifest && res.manifest.name) || '插件';
-  showToast(res.replaced ? (name + ' 已更新') : (name + ' 已安装'));
+  // 覆盖安装一个正在启用的主题时可能顶掉另一个主题，提示里一起说，不让外观变化来得莫名其妙。
+  var off = Array.isArray(res.switchedOff) ? res.switchedOff : [];
+  var base = res.replaced ? (name + ' 已更新') : (name + ' 已安装');
+  showToast(off.length ? (base + '，' + off.join('、') + ' 已关闭') : base);
   renderPluginList();
   updatePluginCountLabel();
   refreshPluginPlaylists();
 }
 /**
- * 启用/禁用一个插件。
+ * 启用/禁用一个插件。主题之间互斥，启用一个主题时运行时会自动关掉原来那个，提示里点名说清楚。
  * @param {string} id 插件 id。
  * @returns {void}
  */
@@ -33908,8 +33911,17 @@ function togglePluginEnabled(id) {
   var hit = null;
   for (var i = 0; i < list.length; i++) if (list[i].id === id) hit = list[i];
   if (!hit) return;
+  // 先记下会被顶掉的主题名字：setEnabled 之后它们的 enabled 已经是 false，就问不出来了。
+  var replaced = [];
+  if (!hit.enabled && hit.kind === 'theme') {
+    for (var j = 0; j < list.length; j++) {
+      if (list[j].kind === 'theme' && list[j].enabled && list[j].id !== id) replaced.push(list[j].name);
+    }
+  }
   window.MineradioPlugins.setEnabled(id, !hit.enabled);
-  showToast(hit.name + (hit.enabled ? ' 已禁用' : ' 已启用'));
+  if (hit.enabled) showToast(hit.name + ' 已禁用');
+  else if (replaced.length) showToast('已切换到 ' + hit.name + '，' + replaced.join('、') + ' 已关闭');
+  else showToast(hit.name + ' 已启用');
   renderPluginList();
   updatePluginCountLabel();
   refreshPluginPlaylists();

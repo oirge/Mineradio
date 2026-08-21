@@ -1,0 +1,22 @@
+{
+  "schema": "mineradio-plugin-v1",
+  "id": "mineradio.theme.midnight-indigo",
+  "name": "午夜靛蓝",
+  "kind": "theme",
+  "version": "1.2.0",
+  "author": "Mineradio",
+  "theme": {
+    "vars": {
+      "--panel-glass-shadow": "0 24px 78px rgba(2,4,14,.46),0 0 0 1px rgba(190,205,255,.055),inset 0 1px 0 rgba(255,255,255,.17),inset 0 -18px 42px rgba(2,4,14,.20)",
+      "--saved-panel-glass-bg": "rgba(13,19,46,.58)",
+      "--saved-panel-glass-shadow": "inset 0 0 2px 1px rgba(188,204,255,.30),inset 0 0 12px 4px rgba(112,144,255,.10),0 12px 34px rgba(2,4,14,.42)",
+      "--saved-button-glass-bg": "rgba(17,25,56,.58)",
+      "--saved-button-glass-hover-bg": "rgba(108,140,255,.13)",
+      "--saved-button-glass-shadow": "inset 0 0 2px 1px rgba(188,204,255,.28),inset 0 0 10px 4px rgba(112,144,255,.10),0 10px 30px rgba(2,4,14,.34)",
+      "--saved-button-glass-hover-shadow": "inset 0 0 2px 1px rgba(200,214,255,.40),inset 0 0 12px 5px rgba(112,144,255,.15),0 12px 34px rgba(2,4,14,.40),0 0 18px rgba(108,140,255,.10)",
+      "--champagne": "#C3D2FF",
+      "--source-local": "#8FA8CF"
+    },
+    "css": "#search-box,#search-results,.search-mode-tabs,#fx-panel,#playlist-panel,#toast,.modal,.track-detail-modal,.cover-color-pop,.color-lab-pop,.visual-guide-card,.volume-popover,.quality-popover,.mini-queue-popover,.home-hero,.home-card,.home-tile,.home-mosaic-cell,.pl-inline-detail{background:linear-gradient(145deg,rgba(var(--home-accent-rgb),.12),rgba(16,22,52,.88) 44%,rgba(5,7,18,.86))!important}\n#search-box,#search-results,.search-mode-tabs{background:rgba(16,22,52,.56)!important}\n.search-empty{color:rgba(206,214,240,.52)}"
+  }
+}

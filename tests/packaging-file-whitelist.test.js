@@ -76,6 +76,7 @@ test('插件系统的所有源码文件都会进安装包', () => {
     'public/plugin-manifest.js',
     'public/plugin-runtime.js',
     'public/plugin-sandbox.js',
+    'public/plugin-builtin-themes.js',
   ];
   for (const rel of required) {
     assert.equal(fs.existsSync(path.join(root, rel)), true, `${rel} 必须存在`);

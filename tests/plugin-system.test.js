@@ -17,20 +17,23 @@ const publicDir = path.join(repoRoot, 'public');
 const manifestSource = fs.readFileSync(path.join(publicDir, 'plugin-manifest.js'), 'utf8');
 const sandboxSource = fs.readFileSync(path.join(publicDir, 'plugin-sandbox.js'), 'utf8');
 const runtimeSource = fs.readFileSync(path.join(publicDir, 'plugin-runtime.js'), 'utf8');
+const builtinThemesSource = fs.readFileSync(path.join(publicDir, 'plugin-builtin-themes.js'), 'utf8');
 const Manifest = require(path.join(publicDir, 'plugin-manifest.js'));
+const BuiltinThemes = require(path.join(publicDir, 'plugin-builtin-themes.js'));
 
 /**
  * 造一个最小渲染进程环境并加载真 plugin-manifest.js + plugin-runtime.js。
  * Worker 用 startSandbox 接真沙箱源码，fetch 用可编程桩，
  * 于是「插件 → 沙箱 → 宿主白名单 → 本地代理」整条链路都是真代码在跑。
- * @param {object} [options] 选项：fetchImpl 自定义代理响应、proxyInfo 覆盖代理入口。
+ * @param {object} [options] 选项：fetchImpl 自定义代理响应、proxyInfo 覆盖代理入口、
+ *   builtin 是否一起加载安装包自带主题模块、storage 复用一份已有的 localStorage 内容。
  * @returns {object} 宿主句柄：plugins（运行时 API）、styleNodes、requests、storage。
  */
 function startHost(options) {
   const opts = options || {};
   const requests = [];
   const styleNodes = [];
-  const storage = new Map();
+  const storage = opts.storage instanceof Map ? opts.storage : new Map();
   const documentStub = {
     head: { appendChild(node) { styleNodes.push(node); return node; } },
     createElement() { return { id: '', textContent: '' }; },
@@ -70,6 +73,8 @@ function startHost(options) {
   const context = vm.createContext(base);
   vm.runInContext('var globalThisRef = globalThis;', context);
   vm.runInContext(manifestSource, context, { filename: 'plugin-manifest.js' });
+  // 自带主题模块默认不加载：绝大多数用例只关心用户手动装的插件，凭空多两条记录会把断言搅乱。
+  if (opts.builtin) vm.runInContext(builtinThemesSource, context, { filename: 'plugin-builtin-themes.js' });
   vm.runInContext(runtimeSource, context, { filename: 'plugin-runtime.js' });
   return { context, plugins: base.MineradioPlugins, requests, styleNodes, storage };
 }
@@ -302,11 +307,7 @@ test('主题插件注入到独立 style 节点，用 textContent 且只有一个
   const host = startHost({});
   host.plugins.install('t.json', JSON.stringify({
     id: 'demo.theme', name: '主题', kind: 'theme',
-    theme: { vars: { '--fc-accent': '#7f5af0' }, css: '.panel{border-radius:18px}' },
-  }));
-  host.plugins.install('t2.json', JSON.stringify({
-    id: 'demo.theme2', name: '主题二', kind: 'theme',
-    theme: { vars: { '--panel-bg': '#0b0b10' }, css: '' },
+    theme: { vars: { '--fc-accent': '#7f5af0', '--panel-bg': '#0b0b10' }, css: '.panel{border-radius:18px}' },
   }));
   assert.equal(host.styleNodes.length, 1, '反复应用只用同一个 style 节点，不能累积');
   const css = host.styleNodes[0].textContent;
@@ -316,8 +317,68 @@ test('主题插件注入到独立 style 节点，用 textContent 且只有一个
   assert.match(css, /\.panel\{border-radius:18px\}/);
   host.plugins.setEnabled('demo.theme', false);
   assert.doesNotMatch(host.styleNodes[0].textContent, /--fc-accent/, '禁用后变量立刻撤掉');
-  host.plugins.remove('demo.theme2');
+  host.plugins.remove('demo.theme');
   assert.equal(host.styleNodes[0].textContent, '', '全部卸载后注入内容清空');
+});
+
+test('装第二个主题时第一个被自动关掉，同一时刻只有一份主题生效', () => {
+  const host = startHost({});
+  host.plugins.install('t.json', JSON.stringify({
+    id: 'demo.theme', name: '主题一', kind: 'theme',
+    theme: { vars: { '--champagne': '#aaa000' }, css: '' },
+  }));
+  const second = host.plugins.install('t2.json', JSON.stringify({
+    id: 'demo.theme2', name: '主题二', kind: 'theme',
+    theme: { vars: { '--champagne': '#0000bb' }, css: '' },
+  }));
+  assert.deepEqual(Array.from(second.switchedOff), ['主题一'], '安装结果里点名被顶掉的主题，UI 才能提示用户');
+  const list = host.plugins.list();
+  const enabled = list.filter((p) => p.kind === 'theme' && p.enabled).map((p) => p.id);
+  assert.deepEqual(Array.from(enabled), ['demo.theme2'], '两个主题不能同时启用');
+  const css = host.styleNodes[0].textContent;
+  assert.match(css, /--champagne:#0000bb/);
+  assert.doesNotMatch(css, /--champagne:#aaa000/, '被关掉的主题不能还留在注入的样式里');
+});
+
+test('启用一个主题会自动禁用其它主题，非主题插件不受影响', () => {
+  const host = startHost({});
+  host.plugins.install('demo.js', SOURCE_PLUGIN);
+  host.plugins.install('t.json', JSON.stringify({
+    id: 'demo.theme', name: '主题一', kind: 'theme', theme: { vars: { '--champagne': '#111111' }, css: '' },
+  }));
+  host.plugins.install('t2.json', JSON.stringify({
+    id: 'demo.theme2', name: '主题二', kind: 'theme', theme: { vars: { '--champagne': '#222222' }, css: '' },
+  }));
+  // 此刻只有主题二开着；手动把主题一切回来，主题二必须自动关掉。
+  host.plugins.setEnabled('demo.theme', true);
+  const byId = {};
+  host.plugins.list().forEach((p) => { byId[p.id] = p; });
+  assert.equal(byId['demo.theme'].enabled, true);
+  assert.equal(byId['demo.theme2'].enabled, false, '切主题就是换，不是叠加');
+  assert.equal(byId['demo.source'].enabled, true, '音源插件不参与主题互斥');
+  assert.match(host.styleNodes[0].textContent, /--champagne:#111111/);
+});
+
+test('历史数据里同时启用的多个主题在 init 时收敛成最近启用的那一个', () => {
+  const host = startHost({});
+  // 直接伪造 1.7.2 之前的存档：两个主题都是 enabled，updatedAt 分出先后。
+  host.storage.set('mineradio-plugins-v1', JSON.stringify([
+    {
+      manifest: { id: 'demo.theme', name: '主题一', kind: 'theme', version: '1.0.0', author: '', description: '', homepage: '', hosts: [] },
+      script: '', theme: { vars: { '--champagne': '#111111' }, css: '' }, enabled: true, installedAt: 1000, updatedAt: 1000,
+    },
+    {
+      manifest: { id: 'demo.theme2', name: '主题二', kind: 'theme', version: '1.0.0', author: '', description: '', homepage: '', hosts: [] },
+      script: '', theme: { vars: { '--champagne': '#222222' }, css: '' }, enabled: true, installedAt: 1000, updatedAt: 2000,
+    },
+  ]));
+  const list = host.plugins.init({});
+  const enabled = list.filter((p) => p.enabled).map((p) => p.id);
+  assert.deepEqual(Array.from(enabled), ['demo.theme2'], '保留 updatedAt 最新的那个主题');
+  assert.match(host.styleNodes[0].textContent, /--champagne:#222222/);
+  // 归一化结果必须落盘，否则下次启动又要重算一遍。
+  const stored = Manifest.normalizePluginRecords(host.storage.get('mineradio-plugins-v1'));
+  assert.deepEqual(stored.filter((r) => r.enabled).map((r) => r.manifest.id), ['demo.theme2']);
 });
 
 test('启用状态与安装记录落到 localStorage 并能重新水合', () => {
@@ -347,6 +408,98 @@ test('覆盖安装同 id 插件时保留启用状态并换掉脚本', () => {
   assert.equal(list.length, 1, '同 id 视为升级而不是新增');
   assert.equal(list[0].version, '2.0.0');
   assert.equal(list[0].enabled, false, '升级不擅自打开用户关掉的插件');
+});
+
+test('安装包自带的两份主题就是 examples/plugins 下的同名文件，逐字段一致', () => {
+  const packs = BuiltinThemes.list();
+  assert.equal(packs.length, 2, '自带午夜靛蓝与暖琥珀两份');
+  assert.deepEqual(packs.map((p) => p.fileName), ['theme-midnight-indigo.json', 'theme-warm-amber.json']);
+  for (const pack of packs) {
+    const onDisk = JSON.parse(fs.readFileSync(path.join(repoRoot, 'examples', 'plugins', pack.fileName), 'utf8'));
+    assert.deepEqual(JSON.parse(pack.content), onDisk, `${pack.fileName} 与示例目录里的内容必须一致，改了一边就要改另一边`);
+    // 走真解析通道：自带主题不享受清洗豁免，装不进去就等于没自带。
+    const parsed = Manifest.parsePluginPackage(pack.fileName, pack.content);
+    assert.equal(parsed.ok, true, `${pack.fileName} 必须能被 parsePluginPackage 接受`);
+    assert.equal(parsed.plugin.manifest.kind, 'theme');
+    assert.ok(Object.keys(parsed.plugin.theme.vars).length > 0, '清洗后不能一个变量都不剩');
+    assert.ok(parsed.plugin.theme.css.length > 0, '清洗后 css 不能被清空');
+  }
+  assert.deepEqual(BuiltinThemes.ids(), packs.map((p) => JSON.parse(p.content).id));
+});
+
+test('首次启动把自带主题装进列表，但默认不启用', () => {
+  const host = startHost({ builtin: true });
+  const list = host.plugins.init({});
+  const ids = list.map((p) => p.id);
+  for (const id of BuiltinThemes.ids()) assert.ok(ids.includes(id), `${id} 应该被自动装进列表`);
+  assert.equal(list.filter((p) => p.enabled).length, 0, '自带主题默认不启用，升级不擅自换掉用户看到的界面');
+  assert.equal(host.styleNodes.length === 0 || host.styleNodes[0].textContent === '', true, '没启用就不该注入任何主题样式');
+  // 再 init 一次不能重复塞。
+  const again = host.plugins.init({});
+  assert.equal(again.length, list.length, '反复 init 不重复补装');
+});
+
+test('自带主题被卸载后不会在下次启动时又冒出来，手动装回则恢复', () => {
+  const storage = new Map();
+  const first = startHost({ builtin: true, storage });
+  first.plugins.init({});
+  const victim = BuiltinThemes.ids()[0];
+  assert.equal(first.plugins.remove(victim), true);
+  assert.ok(storage.get('mineradio-plugins-builtin-v1').includes(victim), '卸载记忆落盘，换进程也记得');
+
+  const second = startHost({ builtin: true, storage });
+  const list = second.plugins.init({});
+  assert.equal(list.some((p) => p.id === victim), false, '用户卸载过的自带主题不再自动补回');
+  assert.equal(list.some((p) => p.id === BuiltinThemes.ids()[1]), true, '另一份不受影响');
+
+  // 用户改主意，手动装回示例目录里的同名文件：卸载记忆要跟着清掉。
+  const pack = BuiltinThemes.list()[0];
+  assert.equal(second.plugins.install(pack.fileName, pack.content).ok, true);
+  assert.equal(JSON.parse(storage.get('mineradio-plugins-builtin-v1')).removed.includes(victim), false);
+  const third = startHost({ builtin: true, storage });
+  assert.equal(third.plugins.init({}).some((p) => p.id === victim), true, '装回来之后就该一直在了');
+});
+
+test('自带主题只在版本更高时覆盖本地记录，且保留用户的启用状态', () => {
+  const pack = BuiltinThemes.list()[0];
+  const json = JSON.parse(pack.content);
+  const storage = new Map();
+  // 伪造一份「装了旧版且已启用」的存档。
+  storage.set('mineradio-plugins-v1', JSON.stringify([{
+    manifest: { id: json.id, name: '旧版午夜靛蓝', kind: 'theme', version: '0.0.1', author: '', description: '', homepage: '', hosts: [] },
+    script: '', theme: { vars: { '--champagne': '#123456' }, css: '' }, enabled: true, installedAt: 500, updatedAt: 500,
+  }]));
+  const host = startHost({ builtin: true, storage });
+  const list = host.plugins.init({});
+  const hit = list.find((p) => p.id === json.id);
+  assert.equal(hit.version, json.version, '旧版被自带的新版顶掉');
+  assert.equal(hit.enabled, true, '覆盖升级不动用户的启用状态');
+  assert.equal(hit.installedAt, 500, '安装时间沿用原记录');
+  assert.match(host.styleNodes[0].textContent, /--champagne:/);
+  assert.doesNotMatch(host.styleNodes[0].textContent, /#123456/, '生效的是新版负载');
+
+  // 反向：本地版本更高（用户自己改的同 id 版本）时不许被自带版本按回去。
+  const newer = new Map();
+  newer.set('mineradio-plugins-v1', JSON.stringify([{
+    manifest: { id: json.id, name: '我自己改的', kind: 'theme', version: '99.0.0', author: '', description: '', homepage: '', hosts: [] },
+    script: '', theme: { vars: { '--champagne': '#123456' }, css: '' }, enabled: true, installedAt: 500, updatedAt: 500,
+  }]));
+  const host2 = startHost({ builtin: true, storage: newer });
+  const kept = host2.plugins.init({}).find((p) => p.id === json.id);
+  assert.equal(kept.version, '99.0.0', '本地版本更高就不动它');
+  assert.equal(kept.name, '我自己改的');
+});
+
+test('启用一份自带主题时另一份自带主题被自动关掉', () => {
+  const host = startHost({ builtin: true });
+  host.plugins.init({});
+  const ids = BuiltinThemes.ids();
+  host.plugins.setEnabled(ids[0], true);
+  host.plugins.setEnabled(ids[1], true);
+  const byId = {};
+  host.plugins.list().forEach((p) => { byId[p.id] = p; });
+  assert.equal(byId[ids[0]].enabled, false);
+  assert.equal(byId[ids[1]].enabled, true);
 });
 
 test('插件返回空地址或不可序列化值时报明确错误', async () => {
