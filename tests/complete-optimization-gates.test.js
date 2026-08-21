@@ -20,8 +20,11 @@ function functionBody(source, name) {
 
 test('asar 打包使用可写 app.asar.unpacked 运行根', () => {
   assert.equal(packageJson.build.asar, true);
+  // plugin-proxy.js 必须跟 server.js 一起解包：server.js 在 app.asar.unpacked 里运行，
+  // `require('./plugin-proxy.js')` 是相对它自己的真实路径解析的，只打进 asar 会 MODULE_NOT_FOUND。
   assert.deepEqual(packageJson.build.asarUnpack, [
     'server.js',
+    'plugin-proxy.js',
     'package.json'
   ]);
   assert.match(serverSource, /function resolveRuntimeAppRoots\(\)/);

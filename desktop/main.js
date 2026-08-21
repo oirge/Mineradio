@@ -3599,7 +3599,18 @@ async function createWindow() {
   process.env.MINERADIO_LOCAL_FILE_TOKEN = LOCAL_FILE_TOKEN;
   process.env.MINERADIO_PLUGIN_TOKEN = PLUGIN_TOKEN;
 
-  localServer = require(path.join(APP_ROOT, 'server.js'));
+  // 本地服务加载失败时必须显式报出来。这里 throw 会被 createWindow 的调用方吞成
+  // 未处理的 Promise rejection：进程还活着，但窗口和本地服务都没有，用户看到的就是
+  // 「双击了没反应」。v1.7.0 因为 plugin-proxy.js 没进打包白名单正好撞上这一幕。
+  try {
+    localServer = require(path.join(APP_ROOT, 'server.js'));
+  } catch (e) {
+    const detail = (e && e.stack) || String(e);
+    console.error('[Mineradio] 本地服务加载失败:', detail);
+    try { dialog.showErrorBox('Mineradio 启动失败', '本地服务加载失败，安装包可能不完整。\n\n' + detail); } catch (_) {}
+    app.quit();
+    return;
+  }
   // 注入授权校验：让 HTTP 本地文件代理复用与 IPC 相同的授权根目录约束，堵住越权读取任意文件。
   localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
   await waitForServer(localServer);

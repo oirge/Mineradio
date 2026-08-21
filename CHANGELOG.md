@@ -1,3 +1,12 @@
+## v1.7.1 修复 v1.7.0 安装包无法启动
+- 发布版本从 `1.7.0` 提升为 `1.7.1`。**`v1.7.0` 安装包无法启动，请直接升级到本版本。**
+- 修复 `v1.7.0` 安装后双击没有任何反应的问题。根因是新增的 `plugin-proxy.js` 没有加入 `package.json` 的 `build.files` 打包白名单，安装包里缺这个文件，`server.js` 在 `require('./plugin-proxy.js')` 处抛 `MODULE_NOT_FOUND`，主窗口和本地服务都建不起来，进程活着但没有界面。
+- `plugin-proxy.js` 同时加入 `build.asarUnpack`：`server.js` 从 `app.asar.unpacked` 运行，相对 require 是按它自己的真实路径解析的，只打进 asar 仍然找不到。
+- 本地服务加载失败不再静默：`createWindow()` 里 `require(server.js)` 改为显式 try/catch，失败时打日志、弹出「Mineradio 启动失败」错误框并退出，而不是变成未处理的 Promise rejection 让用户面对一个没有窗口的进程。
+- 新增 `tests/packaging-file-whitelist.test.js`：扫描 `desktop/main.js`、`desktop/preload.js`、`server.js` 里的相对 require，逐个核对目标文件是否被 `build.files` 收录，并单独钉住插件系统四个源文件与 `asarUnpack` 的一致性。回滚白名单后这条测试会失败，所以同类漏装不会再溜过去。
+- 插件系统功能本身与 `v1.7.0` 一致，没有行为改动。
+- 全量 Node 回归 `446/446`；已用 `electron-builder --win dir` 实际打包并启动验证：修复前复现 `Cannot find module './plugin-proxy.js'` 且无窗口，修复后本地服务正常监听、启动流程走到 `home-revealed`。
+
 ## v1.7.0 新增插件系统：主题 / 音源 / 歌单
 - 发布版本从 `1.6.3` 提升为 `1.7.0`；已安装 `1.6.3` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
 - 新增插件系统，支持三种插件：主题插件（换配色与 CSS）、音源插件（提供搜索、播放地址、歌词、封面）、歌单插件（提供歌单列表与歌单详情）。不内置任何插件，全部由用户自己导入。

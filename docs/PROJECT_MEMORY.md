@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.7.0` 基于 GitHub `v1.6.3`，新增插件系统（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理，零内置插件）；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.1` 基于 GitHub `v1.6.3`，新增插件系统（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理，零内置插件）；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,17 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.1 修复 v1.7.0 安装包无法启动（打包白名单）
+
+- 日期：2026-08-21。版本从 `1.7.0` 提升为 `1.7.1`。
+- 用户原话：「直接打不开软件了」。
+- 根因：`package.json` 的 `build.files` 是**白名单**，没被任何模式命中的根级文件不会进包。新增的 `plugin-proxy.js` 没加进去，安装包里缺这个文件，`server.js:14` 的 `require('./plugin-proxy.js')` 抛 `MODULE_NOT_FOUND`，位置在 `createWindow()` 内，被调用方吞成未处理的 Promise rejection——进程活着，但窗口和本地服务都没有，用户看到的就是双击没反应。
+- 修复：`plugin-proxy.js` 同时加入 `build.files` **和** `build.asarUnpack`。两处都要：`server.js` 在 `app.asar.unpacked` 里运行，相对 require 按它自己的真实路径解析，只打进 asar 仍然找不到。这一点是实际打包复现出来的，不是推断。
+- 顺带堵住静默失败：`createWindow()` 里 `require(path.join(APP_ROOT,'server.js'))` 改成显式 try/catch，失败时 `console.error` + `dialog.showErrorBox('Mineradio 启动失败', …)` + `app.quit()`。以后这类问题至少会弹框而不是无声挂起。
+- 守卫：新增 `tests/packaging-file-whitelist.test.js`，扫 `desktop/main.js` / `desktop/preload.js` / `server.js` 的相对 require 并核对 `build.files` 收录情况，另外单独钉住插件四个源文件和 `asarUnpack` 一致性。已验证把白名单改回去这条测试会失败。`tests/complete-optimization-gates.test.js` 里对 `asarUnpack` 的精确断言同步加上 `plugin-proxy.js`。
+- 验证方式（以后再动打包配置照这个来）：`npx electron-builder --win dir` → 读 `dist/win-unpacked/resources/app.asar` 头部 JSON 确认根级条目 → 用 `Start-Process -RedirectStandardError` 起 `dist/win-unpacked/Mineradio.exe` 看日志。修复前复现 `Cannot find module './plugin-proxy.js'` 且无窗口，修复后本地服务监听并走到 `home-revealed`。注意：`Mineradio.exe` 从 bash 直接起会立刻脱离终端（exit 0）、拿不到 stdout，`MainWindowTitle` 也是空的（无边框窗口），别拿这两个当判断依据。
+- 全量 Node 回归 `446/446`。
 
 ## v1.7.0 插件系统（主题 / 音源 / 歌单）
 
