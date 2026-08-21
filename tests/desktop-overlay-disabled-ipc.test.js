@@ -46,6 +46,14 @@ function currentTestTime() { return 1000; }
 /** @returns {void} 测试不启动覆盖层同步计时器。 */
 function scheduleDesktopOverlaySync() {}
 
+/** @returns {void} 播放器内壁纸背景板由独立测试覆盖，这里只需要空实现。 */
+function syncWallpaperBoardSurface() {}
+
+/** @returns {void} 禁用态不应推送背景板状态，调用即视为回归。 */
+function pushWallpaperBoardState() {
+  throw new Error('禁用壁纸时不应推送背景板状态');
+}
+
 /**
  * 验证桌面歌词关闭时不构造节奏图载荷，也不发送 update IPC。
  * @returns {void}
@@ -179,11 +187,13 @@ function testDisabledWallpaperSkipsHeavyPayload() {
   }
 
   const context = {
-    fx: { wallpaperMode: false },
+    fx: { wallpaperMode: false, wallpaperSurface: 'desktop' },
     isDevelopmentLockedFx,
     getDesktopWindowApi,
     normalizeDevelopmentLockedFxState,
     wallpaperPayload: buildWallpaperPayload,
+    syncWallpaperBoardSurface,
+    pushWallpaperBoardState,
     desktopOverlayPushState: {
       wallpaperAt: 88,
       lastWallpaperKey: 'data:image/png;base64,' + 'A'.repeat(128 * 1024),

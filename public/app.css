@@ -87,6 +87,14 @@ body.custom-background-video #custom-bg::before{opacity:0!important}
 #album-bg{position:fixed;inset:0;z-index:0;background-size:cover;background-position:center;filter:blur(120px) brightness(0.18) saturate(1.5);transform:scale(1.4);transition:background-image 1.5s ease,opacity 1.5s ease;opacity:0}
 #album-bg.visible{opacity:1}
 body.custom-background-override #album-bg{opacity:0!important}
+/* 壁纸背景板是封面派生的整幅画面，与封面模糊底图重叠会互相糊掉，启用时让位。 */
+body.wallpaper-board-active #album-bg{opacity:0!important}
+/* 位于 #custom-bg 与 Wallpaper Engine 层之前，用户自选的背景图/视频/WE 壁纸仍然盖在上面。 */
+#wallpaper-board{position:fixed;inset:0;z-index:0;display:none;pointer-events:none;opacity:0;transition:opacity .45s ease}
+#wallpaper-board.mounted{display:block}
+#wallpaper-board.active{opacity:1}
+body.desktop-shell #wallpaper-board{border-radius:34px;clip-path:inset(0 round 34px)}
+body.desktop-shell.desktop-maximized #wallpaper-board,body.desktop-shell.desktop-fullscreen #wallpaper-board,html:fullscreen body.desktop-shell #wallpaper-board{border-radius:0!important;clip-path:none!important}
 #canvas-container{position:fixed;inset:0;z-index:1;transition:opacity 1450ms cubic-bezier(.16,1,.3,1),transform 1450ms cubic-bezier(.16,1,.3,1)}
 #canvas-container canvas{display:block;width:100%!important;height:100%!important}
 #canvas-container:focus,#canvas-container:focus-visible,#canvas-container canvas:focus,#canvas-container canvas:focus-visible,html:focus,html:focus-visible,body:focus,body:focus-visible{outline:none!important;box-shadow:none!important}

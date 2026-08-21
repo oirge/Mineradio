@@ -58,6 +58,7 @@ if (document.fonts && document.fonts.load) {
   <button id="fullscreen-diy-btn" class="desktop-mode-btn" type="button" onclick="toggleDiyMode()" title="DIY" aria-label="DIY" aria-pressed="false">DIY</button>
   <button id="fullscreen-exit-btn" class="desktop-mode-btn" type="button" onclick="toggleFullscreen()" title="退出全屏" aria-label="退出全屏">退出全屏</button>
 </div>
+<canvas id="wallpaper-board" aria-hidden="true"></canvas>
 <div id="custom-bg"><video id="custom-bg-video" muted loop playsinline preload="metadata"></video></div>
 <div id="wallpaper-engine-layer" aria-hidden="true">
   <img id="wallpaper-engine-image" alt="">
@@ -374,7 +375,7 @@ if (document.fonts && document.fonts.load) {
         <div class="fx-toggle" id="t-desktopLyricsStable" onclick="toggleFx('desktopLyricsStable')" title="固定歌词位置，不随播放上下浮动"><span>固定歌词位置</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-desktopLyricsCinema" onclick="toggleFx('desktopLyricsCinema')" title="桌面歌词绑定鼓点电影震动，基础漂浮始终保留"><span>桌面歌词电影震动</span><span class="dot"></span></div>
         <div class="fx-toggle" id="t-desktopLyricsHighlight" onclick="toggleFx('desktopLyricsHighlight')" title="桌面歌词按播放进度高亮，金色到青色的进度光带沿歌词流动"><span>桌面歌词高亮跟随</span><span class="dot"></span></div>
-        <div class="fx-toggle dev-locked" id="t-wallpaperMode" onclick="toggleFx('wallpaperMode')" title="开发中，暂不可用"><span>壁纸模式<em class="fx-dev-badge">开发中</em></span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-wallpaperMode" onclick="toggleFx('wallpaperMode')" title="封面光晕粒子壁纸，可切换画到桌面壁纸层或播放器背景板"><span>壁纸模式</span><span class="dot"></span></div>
       </div>
       <div class="fx-section-label">桌面 / 壁纸</div>
       <div class="fx-toggle-grid">
@@ -402,7 +403,12 @@ if (document.fonts && document.fonts.load) {
         <button data-desktop-lyrics-align="center">居中</button>
         <button data-desktop-lyrics-align="right">右对齐</button>
       </div>
-      <div class="fx-slider dev-locked"><label>壁纸透明度</label><input id="fx-wallpaperopacity" type="range" min="0.35" max="1" step="0.01" disabled><output></output></div>
+      <div class="fx-section-label">壁纸展示位置</div>
+      <div class="fx-seg" id="wallpaper-surface-seg">
+        <button data-wallpaper-surface="desktop" title="全屏挂到桌面壁纸层，在桌面图标和其它窗口后面显示">桌面壁纸层</button>
+        <button data-wallpaper-surface="board" title="画在播放器窗口内，作为界面最底层背景板">播放器背景板</button>
+      </div>
+      <div class="fx-slider"><label>壁纸透明度</label><input id="fx-wallpaperopacity" type="range" min="0.35" max="1" step="0.01"><output></output></div>
     </div>
   </div>
 
@@ -981,6 +987,7 @@ if (document.fonts && document.fonts.load) {
 
 <div id="fullscreen-transition-layer" aria-hidden="true"></div>
 
+<script src="wallpaper-effect.js"></script>
 <script src="app.js"></script>
 <script src="wallpaper-engine.js"></script>
 </body>

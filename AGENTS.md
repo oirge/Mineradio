@@ -4,10 +4,10 @@
 
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
-- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-v1.5.4-mini-cover-pulse-fix`
+- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.6.1`；在 `v1.6.0` 基础上新增 MP2、M4B、AIF/AIFF/AIFC 本地音频识别、扫描和代理 MIME 支持；保留标准迷你播放器隐藏播放时低平滑分析器回退、`0.00 ~ 3.00` 独立强度、开关、窗口几何上限、软件内更新线路选择与取消更新、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、本地歌单、全屏与用户数据迁移能力。
+- 当前源码版本：`v1.6.3`；在 `v1.6.2` 基础上解锁壁纸模式入口并新增「壁纸展示位置」切换（`桌面壁纸层` / `播放器背景板`），两个展示位置共用 `public/wallpaper-effect.js` 单一画面实现；保留 MP2、M4B、AIF/AIFF/AIFC 本地音频识别、扫描和代理 MIME 支持、标准迷你播放器隐藏播放时低平滑分析器回退、`0.00 ~ 3.00` 独立强度、开关、窗口几何上限、软件内更新线路选择与取消更新、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、本地歌单、全屏与用户数据迁移能力。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here
@@ -50,7 +50,7 @@ npm run build:win:dir
 npm run build:win
 ```
 
-前端主逻辑在 `public/index.html`。当前环境以 `C:\Users\oirg\Desktop\mok\Mineradio-sync` 为可写源码仓库；旧 `E:\桌面\播放器软件\Mineradio\resources\app` 在本环境不存在。改动后至少做：
+前端主逻辑在 `public/index.html`。当前环境以 `C:\Users\Administrator\Desktop\Mineradio-main` 为可写源码仓库；旧 `E:\桌面\播放器软件\Mineradio\resources\app` 在本环境不存在。改动后至少做：
 
 注意：运行版 `node_modules` 可能只包含运行依赖。如果发布打包时缺少 `electron-builder`，先在当前源码仓库执行 `npm install`，再执行 `npm run build:win`。
 
@@ -87,7 +87,7 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 - 视觉质量定义：质感、丝滑度、帧数稳定同时成立；性能优化不能牺牲既有质感。
 - 玻璃质感：当前播放器 SVG 玻璃质感是黄金版本，详见 `docs/GLASS_SVG_TEXTURE.md`。
 - 备份策略：不要删除旧资料；重复和历史内容移动到 `E:\桌面\播放器软件\工作区备份`。
-- 重要：不要再改旧外层源码目录。旧的 `E:\桌面\播放器软件\Mineradio\public` / `desktop` 已经归档；当前环境以 `C:\Users\oirg\Desktop\mok\Mineradio-sync\public` / `desktop` 为准。
+- 重要：不要再改旧外层源码目录。旧的 `E:\桌面\播放器软件\Mineradio\public` / `desktop` 已经归档；当前环境以 `C:\Users\Administrator\Desktop\Mineradio-main\public` / `desktop` 为准。
 
 ## Memory Protocol
 

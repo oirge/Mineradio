@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.6.2';
+var APP_VERSION = '1.6.3';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -1005,6 +1005,9 @@ var DESKTOP_LYRICS_SIZE_MIN = 0.20;
 var DESKTOP_LYRICS_SIZE_MAX = 1.55;
 // 迷你播放器封面律动/光晕强度上限。1.00 是标准力度，往上是用户主动要的“更明显”，0 等于关闭。
 var MINI_PLAYER_EFFECT_STRENGTH_MAX = 3;
+// 壁纸展示位置存档 schema。老版本壁纸模式入口被标记为开发中并强制写回 false，
+// 只有带本 schema 的存档才代表用户在新版里真的开过壁纸模式。
+var WALLPAPER_SURFACE_SCHEMA = 'wallpaper-surface-v1';
 var fxDefaults = {
   preset: 0,            // 0=emily cover, 1=tunnel, 2=orbit, 3=void, 4=vinyl, 5=wallpaper, 6=skull
   intensity: 0.85,
@@ -1062,6 +1065,7 @@ var fxDefaults = {
   miniPlayerRadius: 12,
   wallpaperMode: false,
   wallpaperOpacity: 1,
+  wallpaperSurface: 'desktop',
   floatLayer: false, cinema: true, edge: false, aiDepth: false, bloom: false, lyricGlow: true,
   lyricGlowBeat: true,
   lyricGlowParticles: false,
@@ -1179,15 +1183,15 @@ function clonePackagedDefaultFxSnapshot() {
 function packagedDefaultLyricLayoutRaw() {
   return Object.assign({ desktopLyricsSchema: 'desktop-lyrics-v3' }, clonePackagedDefaultFxSnapshot());
 }
-var DEVELOPMENT_LOCKED_FX = {
-  wallpaperMode: true
-};
+var DEVELOPMENT_LOCKED_FX = {};
 function isDevelopmentLockedFx(key) {
   return !!DEVELOPMENT_LOCKED_FX[key];
 }
 function normalizeDevelopmentLockedFxState() {
   if (!fx) return;
-  fx.wallpaperMode = false;
+  Object.keys(DEVELOPMENT_LOCKED_FX).forEach(function(key){
+    if (DEVELOPMENT_LOCKED_FX[key]) fx[key] = false;
+  });
 }
 function readSavedPlaybackVisualPreset() {
   try {
@@ -5864,6 +5868,8 @@ function readSavedLyricLayout() {
       ? savedBgMode === 'custom'
       : (raw.backgroundColorCustom === true || (raw.backgroundColorCustom !== false && savedBgColor !== '#000000') || savedBgOpacity < 1);
     var desktopLyricsSchemaReady = raw.desktopLyricsSchema === 'desktop-lyrics-v3';
+    // 壁纸模式在 v1.0.6 到 v1.6.2 之间被强制关闭并写回存档，只有本 schema 的存档才恢复用户开关。
+    var wallpaperSchemaReady = raw.wallpaperSchema === WALLPAPER_SURFACE_SCHEMA;
     var savedShelfCameraMode = normalizeShelfCameraMode(raw.shelfCameraMode || fxDefaults.shelfCameraMode);
     var savedShelfAngleManual = raw.shelfAngleYManual === true;
     var savedShelfAngle = savedShelfAngleManual
@@ -5938,8 +5944,9 @@ function readSavedLyricLayout() {
       performanceBackground: normalizePerformanceBackgroundMode(raw.performanceBackground, raw.liveBackgroundKeep === true),
       performanceQuality: normalizePerformanceQuality(raw.performanceQuality),
       liveBackgroundKeep: normalizePerformanceBackgroundMode(raw.performanceBackground, raw.liveBackgroundKeep === true) === 'keep',
-      wallpaperMode: false,
+      wallpaperMode: wallpaperSchemaReady ? raw.wallpaperMode === true : false,
       wallpaperOpacity: clampRange(raw.wallpaperOpacity == null ? fxDefaults.wallpaperOpacity : Number(raw.wallpaperOpacity), 0.35, 1),
+      wallpaperSurface: normalizeWallpaperSurface(raw.wallpaperSurface),
       coverResolution: normalizeCoverResolution(raw.coverResolution),
       shelf: /^(off|side|stage)$/.test(String(raw.shelf || '')) ? raw.shelf : fxDefaults.shelf,
       shelfCameraMode: savedShelfCameraMode,
@@ -5969,6 +5976,7 @@ function saveLyricLayout() {
     var layoutPayload = {
       visualPresetSchema: VISUAL_PRESET_SCHEMA,
       desktopLyricsSchema: 'desktop-lyrics-v3',
+      wallpaperSchema: WALLPAPER_SURFACE_SCHEMA,
       preset: presetForSave,
       intensity: clampRange(Number(fx.intensity) || fxDefaults.intensity, 0.2, 1.6),
       cinemaShake: clampRange(Number(fx.cinemaShake) || fxDefaults.cinemaShake, 0, 1.8),
@@ -6037,8 +6045,9 @@ function saveLyricLayout() {
       performanceBackground: normalizePerformanceBackgroundMode(fx.performanceBackground, fx.liveBackgroundKeep === true),
       performanceQuality: normalizePerformanceQuality(fx.performanceQuality),
       liveBackgroundKeep: normalizePerformanceBackgroundMode(fx.performanceBackground, fx.liveBackgroundKeep === true) === 'keep',
-      wallpaperMode: false,
+      wallpaperMode: fx.wallpaperMode === true,
       wallpaperOpacity: clampRange(fx.wallpaperOpacity == null ? fxDefaults.wallpaperOpacity : Number(fx.wallpaperOpacity), 0.35, 1),
+      wallpaperSurface: normalizeWallpaperSurface(fx.wallpaperSurface),
       coverResolution: normalizeCoverResolution(fx.coverResolution),
       shelf: /^(off|side|stage)$/.test(String(fx.shelf || '')) ? fx.shelf : fxDefaults.shelf,
       shelfCameraMode: normalizeShelfCameraMode(fx.shelfCameraMode || fxDefaults.shelfCameraMode),
@@ -6091,6 +6100,14 @@ function normalizeDesktopLyricsRows(value) {
 function normalizeDesktopLyricsAlign(value) {
   var normalized = String(value || '');
   return /^(left|center|right)$/.test(normalized) ? normalized : 'center';
+}
+/**
+ * 归一化壁纸展示位置，未知值统一回落到桌面壁纸层。
+ * @param {*} value 用户存档或分段按钮传入的原始值。
+ * @returns {string} `desktop` 表示桌面壁纸层，`board` 表示播放器内背景板。
+ */
+function normalizeWallpaperSurface(value) {
+  return String(value || '') === 'board' ? 'board' : 'desktop';
 }
 function normalizeShelfCameraMode(value) {
   return String(value || '') === 'static' ? 'static' : 'dynamic';
@@ -27473,7 +27490,7 @@ function updateDevelopmentFxControls() {
     ['desktopLyricsCinema', 't-desktopLyricsCinema', '桌面歌词绑定鼓点电影震动，基础漂浮始终保留'],
     ['desktopLyricsStable', 't-desktopLyricsStable', '关闭切行弹入与上下漂浮，歌词垂直位置保持固定'],
     ['desktopLyricsHighlight', 't-desktopLyricsHighlight', '桌面歌词按播放进度高亮，金色到青色的进度光带沿歌词流动'],
-    ['wallpaperMode', 't-wallpaperMode', '开发中，暂不可用']
+    ['wallpaperMode', 't-wallpaperMode', '封面光晕粒子壁纸，可切换画到桌面壁纸层或播放器背景板']
   ].forEach(function(item){
     var locked = isDevelopmentLockedFx(item[0]);
     var el = document.getElementById(item[1]);
@@ -27522,6 +27539,17 @@ function updateDesktopLyricsLayoutControls() {
     btn.classList.toggle('active', normalizeDesktopLyricsAlign(btn.getAttribute('data-desktop-lyrics-align')) === align);
   });
 }
+/**
+ * 同步壁纸展示位置分段按钮的选中态。
+ * @returns {void}
+ */
+function updateWallpaperSurfaceControls() {
+  var surface = normalizeWallpaperSurface(fx.wallpaperSurface);
+  fx.wallpaperSurface = surface;
+  document.querySelectorAll('#wallpaper-surface-seg [data-wallpaper-surface]').forEach(function(btn){
+    btn.classList.toggle('active', normalizeWallpaperSurface(btn.getAttribute('data-wallpaper-surface')) === surface);
+  });
+}
 function updatePerformanceControls() {
   fx.performanceBackground = normalizePerformanceBackgroundMode(fx.performanceBackground, fx.liveBackgroundKeep === true);
   fx.liveBackgroundKeep = fx.performanceBackground === 'keep';
@@ -27548,6 +27576,21 @@ function setPerformanceBackgroundMode(mode, silent) {
   if (!silent) {
     showToast(next === 'keep' ? '后台策略: 保持运行' : (next === 'release' ? '后台策略: 停止并释放' : '后台策略: 自动优化'));
   }
+}
+/**
+ * 切换壁纸展示位置。桌面壁纸层走主进程覆盖窗口，播放器背景板画在本窗口内。
+ * @param {string} mode `desktop` 或 `board`。
+ * @param {boolean=} silent 是否不弹提示。
+ * @returns {void}
+ */
+function setWallpaperSurface(mode, silent) {
+  var next = normalizeWallpaperSurface(mode);
+  var changed = normalizeWallpaperSurface(fx.wallpaperSurface) !== next;
+  fx.wallpaperSurface = next;
+  updateWallpaperSurfaceControls();
+  saveLyricLayout();
+  applyWallpaperModeState(true);
+  if (!silent && changed) showToast(next === 'board' ? '壁纸展示位置: 播放器背景板' : '壁纸展示位置: 桌面壁纸层');
 }
 function setPerformanceQualityMode(mode, silent) {
   var next = normalizePerformanceQuality(mode);
@@ -27634,6 +27677,7 @@ function updateFxInputs() {
   updateDesktopLyricsLayoutControls();
   var wallpaperModeToggle = document.getElementById('t-wallpaperMode');
   if (wallpaperModeToggle) wallpaperModeToggle.classList.toggle('on', fx.wallpaperMode);
+  updateWallpaperSurfaceControls();
   var shelfPodcastsToggle = document.getElementById('t-shelfShowPodcasts');
   if (shelfPodcastsToggle) shelfPodcastsToggle.classList.toggle('on', fx.shelfShowPodcasts !== false);
   var shelfMergeToggle = document.getElementById('t-shelfMergeCollections');
@@ -27897,6 +27941,7 @@ function relabelFxPanelControls() {
   setFxSectionBefore('fx-desktoplyricssize', '桌面歌词');
   setFxSectionBefore('desktop-lyrics-fps-seg', '桌面歌词帧率');
   setFxSectionBefore('desktop-lyrics-rows-seg', '桌面歌词布局');
+  setFxSectionBefore('wallpaper-surface-seg', '壁纸展示位置');
   setFxSectionBefore('shelf-seg', '3D 歌单架');
   setFxSectionBefore('shelf-camera-seg', '歌单架镜头');
   setFxSectionBefore('shelf-presence-seg', '歌单架显示');
@@ -28506,6 +28551,11 @@ function bindFxPanel() {
       saveLyricLayout();
       pushDesktopLyricsState(true);
       showToast(fx.desktopLyricsAlign === 'left' ? '桌面歌词左对齐' : (fx.desktopLyricsAlign === 'right' ? '桌面歌词右对齐' : '桌面歌词居中'));
+    });
+  });
+  document.querySelectorAll('#wallpaper-surface-seg [data-wallpaper-surface]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      setWallpaperSurface(btn.getAttribute('data-wallpaper-surface'));
     });
   });
   document.querySelectorAll('#performance-background-seg [data-performance-background]').forEach(function(btn){
@@ -32494,9 +32544,11 @@ var desktopLyricSnapshotState = { lines: null, idx: -1 };
 var desktopSongMetaCache = { title: null, artist: null, coverSignature: null, version: 0, value: null };
 /**
  * 判断桌面覆盖层是否需要持续同步。功能关闭时停止自调度，避免后台常驻轮询。
- * @returns {boolean} 当前是否存在启用的桌面覆盖层。
+ * 播放器内壁纸背景板不依赖桌面外壳，因此单独判定。
+ * @returns {boolean} 当前是否存在启用的桌面覆盖层或播放器背景板。
  */
 function desktopOverlayActive() {
+  if (wallpaperBoardActive()) return true;
   return !!(fx && (fx.desktopLyrics || fx.wallpaperMode) && window.desktopWindow && window.desktopWindow.isDesktop);
 }
 /**
@@ -32951,7 +33003,7 @@ function applyDesktopLyricsState(force) {
   scheduleDesktopOverlaySync(320);
 }
 /**
- * 仅在壁纸模式启用时构造并发送状态，禁用态不解析或传输封面。
+ * 仅在壁纸模式启用且展示位置为桌面壁纸层时构造并发送状态，禁用态不解析或传输封面。
  * @param {boolean=} force 是否忽略签名和发送间隔判重。
  * @returns {void}
  */
@@ -32959,6 +33011,7 @@ function pushWallpaperState(force) {
   var api = getDesktopWindowApi();
   if (!api || typeof api.updateWallpaperMode !== 'function') return;
   if (!fx || !fx.wallpaperMode || isDevelopmentLockedFx('wallpaperMode')) return;
+  if (fx.wallpaperSurface === 'board') return;
   var now = performance.now();
   if (!force && now - desktopOverlayPushState.wallpaperAt < 260) return;
   var payload = null;
@@ -32974,30 +33027,36 @@ function pushWallpaperState(force) {
   }
 }
 /**
- * 应用壁纸模式开关；关闭时只发送最小状态以释放主进程封面引用。
+ * 应用壁纸模式开关与展示位置：桌面壁纸层走主进程覆盖窗口，播放器背景板画在本窗口内。
+ * 未选中的那一侧一定被关闭并释放，两个展示位置永远只有一个在跑。
  * @param {boolean=} force 启用时是否强制同步完整状态。
  * @returns {void}
  */
 function applyWallpaperModeState(force) {
-  var api = getDesktopWindowApi();
-  if (!api) return;
   normalizeDevelopmentLockedFxState();
   var enabled = !!fx.wallpaperMode && !isDevelopmentLockedFx('wallpaperMode');
-  if (!enabled) {
-    // 桌面歌词仍启用时同步循环不会整体取消，单独清理含完整封面 data URL 的壁纸签名。
-    desktopOverlayPushState.wallpaperAt = 0;
-    desktopOverlayPushState.lastWallpaperKey = '';
-  }
-  var payload = null;
-  try {
-    payload = enabled ? wallpaperPayload() : { enabled: false };
-    if (typeof api.setWallpaperMode === 'function') {
-      api.setWallpaperMode(enabled, payload).catch(function(e){ console.warn('wallpaper state failed:', e); });
+  var boardActive = enabled && fx.wallpaperSurface === 'board';
+  var desktopActive = enabled && !boardActive;
+  syncWallpaperBoardSurface(boardActive, !!force);
+  var api = getDesktopWindowApi();
+  if (api) {
+    if (!desktopActive) {
+      // 桌面歌词仍启用时同步循环不会整体取消，单独清理含完整封面 data URL 的壁纸签名。
+      desktopOverlayPushState.wallpaperAt = 0;
+      desktopOverlayPushState.lastWallpaperKey = '';
     }
-  } finally {
-    if (enabled) releaseWallpaperTransferFields(payload || wallpaperPayloadCache);
+    var payload = null;
+    try {
+      payload = desktopActive ? wallpaperPayload() : { enabled: false };
+      if (typeof api.setWallpaperMode === 'function') {
+        api.setWallpaperMode(desktopActive, payload).catch(function(e){ console.warn('wallpaper state failed:', e); });
+      }
+    } finally {
+      if (desktopActive) releaseWallpaperTransferFields(payload || wallpaperPayloadCache);
+    }
+    if (desktopActive) pushWallpaperState(!!force);
   }
-  if (enabled) pushWallpaperState(!!force);
+  if (boardActive) pushWallpaperBoardState(true);
   scheduleDesktopOverlaySync(320);
 }
 function syncDesktopOverlayState() {
@@ -33006,7 +33065,92 @@ function syncDesktopOverlayState() {
     return;
   }
   if (fx.desktopLyrics) pushDesktopLyricsState(false);
-  if (fx.wallpaperMode) pushWallpaperState(false);
+  if (fx.wallpaperMode) {
+    if (fx.wallpaperSurface === 'board') pushWallpaperBoardState(false);
+    else pushWallpaperState(false);
+  }
+}
+// 播放器内壁纸背景板。画面实现与桌面壁纸层共用 wallpaper-effect.js，这里只负责挂载、状态推送与释放。
+var wallpaperBoardEffect = null;
+/**
+ * 判断播放器内壁纸背景板当前是否在渲染。
+ * @returns {boolean} 背景板是否已挂载并处于启用态。
+ */
+function wallpaperBoardActive() {
+  return !!(wallpaperBoardEffect && fx && fx.wallpaperMode && fx.wallpaperSurface === 'board' && !isDevelopmentLockedFx('wallpaperMode'));
+}
+/**
+ * 懒挂载壁纸背景板画布，只在首次切到背景板时创建画面实例。
+ * @returns {boolean} 是否已可用。
+ */
+function ensureWallpaperBoard() {
+  var canvas = document.getElementById('wallpaper-board');
+  if (!canvas || typeof window.createMineradioWallpaperEffect !== 'function') return false;
+  if (!wallpaperBoardEffect) wallpaperBoardEffect = window.createMineradioWallpaperEffect(canvas);
+  canvas.classList.add('mounted');
+  document.body.classList.add('wallpaper-board-active');
+  // 挂载与淡入分两帧，避免第一帧空画布直接以不透明度 1 闪出。
+  requestAnimationFrame(function(){
+    if (wallpaperBoardActive()) canvas.classList.add('active');
+  });
+  return true;
+}
+/**
+ * 释放壁纸背景板：注销画面实例、丢弃封面与粒子并隐藏画布。
+ * @returns {void}
+ */
+function releaseWallpaperBoard() {
+  if (wallpaperBoardEffect) {
+    wallpaperBoardEffect.applyState({ enabled: false, cover: '', playing: false });
+    wallpaperBoardEffect.dispose();
+    wallpaperBoardEffect = null;
+  }
+  var canvas = document.getElementById('wallpaper-board');
+  if (canvas) canvas.classList.remove('mounted', 'active');
+  document.body.classList.remove('wallpaper-board-active');
+}
+/**
+ * 把当前曲目状态推给背景板画面。与桌面壁纸层共用 wallpaperPayload 与封面释放逻辑。
+ * @param {boolean=} force 是否忽略发送间隔判重。
+ * @returns {void}
+ */
+function pushWallpaperBoardState(force) {
+  if (!wallpaperBoardActive()) return;
+  var now = performance.now();
+  if (!force && now - desktopOverlayPushState.wallpaperAt < 260) return;
+  var payload = null;
+  try {
+    payload = wallpaperPayload();
+    var key = payload.enabled + '|' + payload.title + '|' + payload.artist + '|' + payload.cover + '|' + payload.playing + '|' + payload.preset + '|' + payload.opacity;
+    if (!force && key === desktopOverlayPushState.lastWallpaperKey && now - desktopOverlayPushState.wallpaperAt < 1400) return;
+    desktopOverlayPushState.wallpaperAt = now;
+    desktopOverlayPushState.lastWallpaperKey = key;
+    wallpaperBoardEffect.applyState(payload);
+  } finally {
+    // applyState 已同步读走封面，立刻清掉复用载荷上的 data URL，避免常驻大字符串。
+    releaseWallpaperTransferFields(payload || wallpaperPayloadCache);
+  }
+}
+/**
+ * 按展示位置挂载或释放壁纸背景板。切到桌面壁纸层或关闭壁纸时彻底释放画面实例。
+ * @param {boolean} active 背景板是否应处于启用态。
+ * @param {boolean=} force 启用时是否强制立即推一次完整状态。
+ * @returns {void}
+ */
+function syncWallpaperBoardSurface(active, force) {
+  if (!active) {
+    if (wallpaperBoardEffect) {
+      desktopOverlayPushState.wallpaperAt = 0;
+      desktopOverlayPushState.lastWallpaperKey = '';
+    }
+    releaseWallpaperBoard();
+    return;
+  }
+  if (!ensureWallpaperBoard()) return;
+  if (force) {
+    desktopOverlayPushState.wallpaperAt = 0;
+    desktopOverlayPushState.lastWallpaperKey = '';
+  }
 }
 scheduleDesktopOverlaySync(320);
 

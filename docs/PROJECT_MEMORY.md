@@ -4,12 +4,12 @@
 
 ## Stable Project Facts
 
-- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-v1.5.4-mini-cover-pulse-fix`
+- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 当前源码检查点：`v1.6.1` 基于 GitHub `v1.6.0`，新增 MP2、M4B、AIF/AIFF/AIFC 本地音频识别、文件夹扫描、文件选择器和本地代理 MIME 支持；并保留隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
-- 当前工作分支：`release/v1.5.5-mini-player`；目标同步到 GitHub `origin/main` 和 tag `v1.6.1`。
+- 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -33,6 +33,21 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.6.3 壁纸模式解锁并新增展示位置切换
+
+- 日期：2026-08-21。
+- 版本从 `1.6.2` 提升为 `1.6.3`。
+- 用户原话：「在最新版的基础上更新增加选项切换桌面壁纸效果，以背景板形式展示」，并在澄清后明确选择「两者都要，用选项切换」。
+- 解除 `v1.0.6` 起对壁纸模式入口的强制关闭：`DEVELOPMENT_LOCKED_FX` 清空为 `{}`，`isDevelopmentLockedFx` / `normalizeDevelopmentLockedFxState` 改为通用实现，`t-wallpaperMode` 与 `fx-wallpaperopacity` 不再带 `dev-locked`。桌面歌词相关入口本轮未改动。
+- 新增 `public/wallpaper-effect.js`，导出 `window.createMineradioWallpaperEffect(canvas)`，返回 `{ applyState, setPaused, dispose }`。这是壁纸画面的唯一实现；`public/wallpaper.html` 和播放器内 `#wallpaper-board` 共用它，画面、调度节奏（播放中 RAF、空闲 30 FPS、关闭 1 秒）和关闭态释放完全一致。改这个模块会同时影响两个展示位置。
+- 新增 `fx.wallpaperSurface`（`desktop` / `board`，`normalizeWallpaperSurface` 归一化，未知值回落 `desktop`），设置面板新增 `#wallpaper-surface-seg` 分段控件。
+- 分流边界：`pushWallpaperState` 在 `wallpaperSurface === 'board'` 时直接 return，`applyWallpaperModeState` 计算 `boardActive` / `desktopActive`，未选中的那侧一定被关闭并释放，永远只有一个展示位置在跑。背景板走 `pushWallpaperBoardState`，`desktopOverlayActive()` 额外识别 `wallpaperBoardActive()`，因此背景板在非桌面壳环境也能同步。
+- `desktop/main.js` 本轮未改动：切到背景板时通过 `api.setWallpaperMode(false, { enabled:false })` 关闭 WorkerW 覆盖窗口即可。
+- 内存边界不要改坏：`pushWallpaperBoardState` 与桌面壁纸层共用 `wallpaperPayload()` 复用载荷，`applyState` 同步读走封面后必须立刻 `releaseWallpaperTransferFields`，不要让封面 data URL 常驻。当初考虑过 iframe + postMessage，已否决，原因是会把大封面 data URL 结构化克隆进第二个文档堆。
+- 层级边界：`#wallpaper-board` 必须排在 `#custom-bg` 和 `#wallpaper-engine-layer` 之前，用户自选背景图/视频和 Wallpaper Engine 壁纸才能继续盖在上层；启用时 `body.wallpaper-board-active` 让 `#album-bg` 让位，避免两层封面画面互相糊掉。
+- 存档兼容：新增 `wallpaperSchema: 'wallpaper-surface-v1'`（`WALLPAPER_SURFACE_SCHEMA`），只有带该 schema 的存档才恢复 `wallpaperMode`，避免旧版强制写回的 `false` 造成误开误关。DIY 用户存档归一化和 `PACKAGED_DEFAULT_FX_SNAPSHOT` 未加壁纸键，缺键回落 `fxDefaults`。
+- 回归覆盖：新增 `tests/wallpaper-surface-board.test.js`（8 项）；`tests/render-scheduler-hot-path.test.js` 和 `tests/complete-optimization-gates.test.js` 改读 `public/wallpaper-effect.js`；`tests/desktop-overlay-disabled-ipc.test.js` 补 `syncWallpaperBoardSurface` / `pushWallpaperBoardState` 桩。全量 Node 回归 `420/420`，`node --check` 与 `git diff --check` 通过。
 
 ## 2026-08-16 更新线路展示语义
 
@@ -666,7 +681,7 @@
   - `Mineradio-1.0.3-to-1.0.6.patch.json`
   - `Mineradio-1.0.4-to-1.0.6.patch.json`
   - `Mineradio-1.0.5-to-1.0.6.patch.json`
-- `v1.0.6` 将桌面歌词、桌面歌词穿透和壁纸模式入口标记为开发中并强制关闭；软件内更新日志文案改为“反正没什么人看，布想写日志了”。
+- `v1.0.6` 将桌面歌词、桌面歌词穿透和壁纸模式入口标记为开发中并强制关闭；软件内更新日志文案改为“反正没什么人看，布想写日志了”。壁纸模式入口已在 `v1.6.3` 解锁，本条只作为历史记录。
 - `v1.0.5` 已发布到 GitHub：`https://github.com/XxHuberrr/Mineradio/releases/tag/v1.0.5`
 - `v1.0.5` Release 资产包括：
   - `latest.yml`

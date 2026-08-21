@@ -11,7 +11,7 @@ const appSource = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const mainSource = fs.readFileSync(path.join(root, 'desktop', 'main.js'), 'utf8');
 const serverSource = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const lyricsSource = fs.readFileSync(path.join(root, 'public', 'desktop-lyrics.html'), 'utf8');
-const wallpaperSource = fs.readFileSync(path.join(root, 'public', 'wallpaper.html'), 'utf8');
+const wallpaperSource = fs.readFileSync(path.join(root, 'public', 'wallpaper-effect.js'), 'utf8');
 
 function functionBody(source, name) {
   const match = source.match(new RegExp('function\\s+' + name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&') + '\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}', 'm'));

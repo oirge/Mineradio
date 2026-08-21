@@ -21,11 +21,12 @@ function readMainSchedulerSource() {
 }
 
 /**
- * 读取壁纸覆盖层源码，验证关闭态释放资源并降低唤醒频率。
- * @returns {string} 壁纸覆盖层源码。
+ * 读取壁纸画面实现，验证关闭态释放资源并降低唤醒频率。
+ * 桌面壁纸层和播放器背景板共用本模块，因此只需校验一处。
+ * @returns {string} 壁纸画面源码。
  */
 function readWallpaperSource() {
-  return fs.readFileSync(path.join(root, 'public', 'wallpaper.html'), 'utf8');
+  return fs.readFileSync(path.join(root, 'public', 'wallpaper-effect.js'), 'utf8');
 }
 
 /**
