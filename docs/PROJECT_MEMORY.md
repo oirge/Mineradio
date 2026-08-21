@@ -48,6 +48,10 @@
 - 层级边界：`#wallpaper-board` 必须排在 `#custom-bg` 和 `#wallpaper-engine-layer` 之前，用户自选背景图/视频和 Wallpaper Engine 壁纸才能继续盖在上层；启用时 `body.wallpaper-board-active` 让 `#album-bg` 让位，避免两层封面画面互相糊掉。
 - 存档兼容：新增 `wallpaperSchema: 'wallpaper-surface-v1'`（`WALLPAPER_SURFACE_SCHEMA`），只有带该 schema 的存档才恢复 `wallpaperMode`，避免旧版强制写回的 `false` 造成误开误关。DIY 用户存档归一化和 `PACKAGED_DEFAULT_FX_SNAPSHOT` 未加壁纸键，缺键回落 `fxDefaults`。
 - 回归覆盖：新增 `tests/wallpaper-surface-board.test.js`（8 项）；`tests/render-scheduler-hot-path.test.js` 和 `tests/complete-optimization-gates.test.js` 改读 `public/wallpaper-effect.js`；`tests/desktop-overlay-disabled-ipc.test.js` 补 `syncWallpaperBoardSurface` / `pushWallpaperBoardState` 桩。全量 Node 回归 `420/420`，`node --check` 与 `git diff --check` 通过。
+- `v1.6.3` 已发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.6.3`，已是 Latest，非草稿非预发布。
+- 发布路径：本轮通过 GitHub CLI 完成。提交在 `codex/mini-cover-static`（`fb1fd2a`），推送分支后打注解 tag `v1.6.3` 并推送，`gh release create` 建 Release，再 `gh workflow run "Build and Release" --ref v1.6.3 -f tag=v1.6.3` 由 Windows Runner 构建并上传资产（`1m56s` 成功）。工作流用的是 `gh release upload $tag`，所以 Release 必须先存在。
+- `v1.6.3` Release 资产：`Mineradio-1.6.3-Setup.exe` `101496117` 字节 / SHA256 `d5e83ecf81c468b0acb5791cfc4eec6e6ed5b8459d62d25b51c845b5e030a4f7`；blockmap `105779` 字节 / `91b579440f1b28753ce1f03bc49ce359e076b7dcf42759e5569bf69789936438`；`latest.yml` `347` 字节 / `14dc0d435808d4fd72bbbc784e07285e080f80157b74c1f0f22716365cbaf499`；SHA256 清单 `273` 字节。未生成跨版本轻量补丁和 Portable ZIP。
+- `latest.yml` 的 Setup SHA512：`/7yN7lQPUSj9qZZApPZ9MDZnDm+qAsFQKiPNdb99MdjyC4PPqoFn1SoLM/1FZjM3As0bhM/gRiSWOxhwFvjSBw==`，`version: 1.6.3`，`releaseDate: 2026-08-21T02:52:41.009Z`。
 
 ## 2026-08-16 更新线路展示语义
 
