@@ -980,6 +980,37 @@ body.login-guide-active #login-guide-canvas{opacity:1}
 .modal-btn.danger:hover{color:#fff;border-color:rgba(255,142,161,.58);background:rgba(255,122,145,.21);box-shadow:0 10px 28px rgba(118,20,43,.20),inset 0 1px 0 rgba(255,255,255,.075)}
 .modal-btn.danger:focus-visible{outline:2px solid rgba(255,154,171,.48);outline-offset:2px}
 @media (max-width:520px){.playlist-delete-modal{padding:25px}.playlist-delete-actions{display:grid!important;grid-template-columns:1fr 1fr}.playlist-delete-actions .modal-btn{padding:9px 12px}}
+.plugin-modal{width:min(520px,92vw);max-width:min(520px,92vw);padding:28px;text-align:left}
+.plugin-modal-kicker{margin-bottom:7px;font-size:9.5px;font-weight:780;letter-spacing:.19em;color:rgba(244,210,138,.58)}
+.plugin-modal h2{text-align:left;margin:0 0 13px;font-size:20px;font-weight:720;letter-spacing:.1px}
+.plugin-modal-note{margin:0 0 16px;font-size:11.5px;line-height:1.6;color:rgba(255,255,255,.48)}
+.plugin-modal-actions{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.plugin-modal-actions .modal-btn{width:auto;flex:0 0 auto;padding:0 14px;height:32px;font-size:12px}
+.plugin-kind-seg{flex:1;min-width:0;margin-bottom:0}
+.plugin-kind-seg button{padding:7px 4px;font-size:11px}
+.plugin-kind-seg button[aria-pressed="true"]{background:rgba(var(--fc-accent-rgb),.10);color:var(--fc-accent)}
+.plugin-list{max-height:min(300px,42vh);overflow:auto;display:flex;flex-direction:column;gap:7px;padding-right:2px}
+.plugin-list::-webkit-scrollbar{width:3px}
+.plugin-list::-webkit-scrollbar-thumb{background:rgba(244,210,138,.24);border-radius:3px}
+.plugin-item,.plugin-playlist-item{display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:11px;border:1px solid rgba(255,255,255,.055);background:rgba(255,255,255,.032);transition:border-color .18s,background .18s}
+.plugin-item.on{border-color:rgba(var(--fc-accent-rgb),.26);background:rgba(var(--fc-accent-rgb),.06)}
+.plugin-item-main{flex:1;min-width:0}
+.plugin-item-title{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:rgba(255,255,255,.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plugin-item-kind{flex:0 0 auto;padding:1px 6px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.045);font-size:9px;font-weight:800;letter-spacing:.5px;color:rgba(255,255,255,.62)}
+.plugin-item-ver{flex:0 0 auto;font-size:9.5px;font-weight:600;color:rgba(255,255,255,.34)}
+.plugin-item-meta{margin-top:3px;font-size:10.5px;color:rgba(255,255,255,.42);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plugin-item-hosts{margin-top:3px;font-size:10px;line-height:1.45;color:rgba(255,255,255,.30);word-break:break-all}
+.plugin-item-actions{flex:0 0 auto;display:flex;gap:6px}
+.plugin-item-actions .fx-mini-btn,.plugin-playlist-item .fx-mini-btn{flex:0 0 auto;width:auto;min-width:50px;height:28px;padding:0 10px;font-size:11px}
+.fx-mini-btn.ghost.danger{color:rgba(255,210,218,.86);border-color:rgba(255,122,145,.30)}
+.fx-mini-btn.ghost.danger:hover{color:#fff;border-color:rgba(255,142,161,.54);background:rgba(255,122,145,.16)}
+.plugin-empty{padding:18px 8px;text-align:center;color:rgba(255,255,255,.38);font-size:11.5px;line-height:1.6}
+.plugin-playlist-box{display:flex;flex-direction:column;gap:7px;max-height:min(200px,30vh);overflow:auto;margin-top:10px}
+.plugin-playlist-box:empty{display:none}
+.plugin-playlist-box::-webkit-scrollbar{width:3px}
+.plugin-playlist-box::-webkit-scrollbar-thumb{background:rgba(244,210,138,.24);border-radius:3px}
+.tag-source.plugin{color:rgba(var(--fc-accent-rgb),.92);border-color:rgba(var(--fc-accent-rgb),.32);background:rgba(var(--fc-accent-rgb),.085);max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:520px){.plugin-modal{padding:24px}.plugin-modal-actions{flex-wrap:wrap}.plugin-kind-seg{flex:1 0 100%}}
 .track-detail-modal{width:min(700px,92vw);max-width:min(700px,92vw);max-height:min(780px,calc(100vh - 88px));padding:28px;text-align:left;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;scrollbar-width:none;-ms-overflow-style:none;background:linear-gradient(145deg,rgba(31,32,35,.94),rgba(13,14,17,.94));border-color:rgba(255,255,255,.13);box-shadow:0 34px 100px rgba(0,0,0,.58),0 0 0 1px rgba(var(--fc-accent-rgb),.05),inset 0 1px 0 rgba(255,255,255,.10)}
 .track-detail-modal h2{text-align:center;margin-bottom:16px}
 #track-detail-body{min-height:0;overflow:auto;padding-right:0;overscroll-behavior:contain}

@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.6.1` 基于 GitHub `v1.6.0`，新增 MP2、M4B、AIF/AIFF/AIFC 本地音频识别、文件夹扫描、文件选择器和本地代理 MIME 支持；并保留隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.0` 基于 GitHub `v1.6.3`，新增插件系统（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理，零内置插件）；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,22 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.0 插件系统（主题 / 音源 / 歌单）
+
+- 日期：2026-08-21。
+- 版本从 `1.6.3` 提升为 `1.7.0`。
+- 用户原话：「增加插件功能：主题插件，歌单插件，音源插件等」。三个作用域决定由 AskUserQuestion 明确选定：执行方式选「Worker 沙箱跑真 JS」，音源播放范围选「允许播在线流」且「本地播放路径一行不改」，交付范围选「三种插件一次做完并发布」。零内置插件。
+- 分层：`public/plugin-manifest.js`（包解析 / 校验 / 主题 CSS 清洗 / `@host` 归一化匹配，纯函数 UMD，浏览器 + Worker + Node 共用）、`public/plugin-sandbox.js`（Worker 内剥能力 + `new Function` 执行正文）、`public/plugin-runtime.js`（宿主侧记录管理 / RPC / 白名单判定 / 主题注入 / 结果归一化，暴露 `window.MineradioPlugins`）、`plugin-proxy.js` + `server.js`（出网代理）、`public/app.js` + `public/index.html`（管理界面与播放分支）。详见 `.context/architecture/mineradio-plugin-system.md`，插件作者文档在 `docs/PLUGIN_AUTHORING.md`。
+- 安全边界（改动前先看这条）：沙箱是**能力**沙箱不是语言沙箱，防线是插件拿不到任何有副作用的东西；插件正文必须用 `new Function` 而不是 `eval`，否则插件能看到 bootstrap 的 `pending` / `handlers` 闭包变量、劫持别的插件的调用（`tests/plugin-system.test.js` 用正则钉住这条）；`@host` 白名单只能在渲染进程判，沙箱里的变量都可能被插件改写；代理只管通用安全（协议、私网地址、体量、超时），不管业务白名单。
+- 故意的不对称：`/api/plugin/fetch` 只放 https，`/api/plugin/stream` 额外放 http。音乐 CDN 直链经常 302 到 http，流代理不跟就没法播。别把它「修」成一致。
+- 音频与封面都走 `/api/plugin/stream`，因为代理会补 `Access-Control-Allow-Origin: *` 和 `Cross-Origin-Resource-Policy: cross-origin`，这才让 `<audio crossOrigin="anonymous">`（Web Audio 分析器）和封面取色 canvas 对远程资源可用。
+- 本地播放路径未改：插件曲目走新增的 `playPluginQueueItem()`，与 `playLocalQueueItem()` 并列，`playQueueAt()` 按 `song.type` 分派。前半段共享的本地辅助函数本来就在 `type !== 'local'` / 缺 `localKey` 时提前返回。插件歌词写进 `song.localLyricText` 再调 `applyLocalOriginalLyricsState(song)`，复用现成 LRC 管线；本地歌词管线没有翻译概念，插件返回的 `translation` 目前被丢掉。
+- 插件歌曲不能加入「特别喜欢」与本地歌单：那两处按本地文件引用存盘，插件曲目没有文件可引用，半吊子实现会留死记录，所以明确拒绝并给提示。插件歌单也不进左侧本地歌单面板，只在插件管理弹窗里「播放」。
+- 主题层级：插件主题注入 head 里唯一的 `<style id="mineradio-plugin-theme-style">`，用 `textContent` 不用 `innerHTML`；`applyUiAccentColor()` 写在 documentElement 上的行内变量优先级更高，用户自调主色压过插件主题是有意的。`applyThemes()` 先同步写声明式部分再合并脚本主题结果，避免 Worker 启动那几秒界面裸着。
+- 存档：localStorage `mineradio-plugins-v1`，经 `bridge.persist`（`setPersistentLocalStorageItem`）+ preload `PERSISTENT_UI_STATE_KEYS` 备份。同 id 覆盖安装视为升级：换脚本、保留用户的启用/禁用状态。
+- 上限常量：单包 512 KB、最多 40 个插件、主题变量 160 条、主题 CSS 64 KB、`@host` 16 个、fetch 响应 8 MB / 15 秒、流 30 秒 / 5 次跳转。
+- 回归覆盖：新增 `tests/plugin-proxy.test.js`（7 项，起 127.0.0.1 临时上游跑真 HTTP）与 `tests/plugin-system.test.js`（16 项，`vm.createContext` 让真 sandbox 与真 runtime 互相对接，消息过 JSON 往返模拟结构化克隆）。写这类测试时注意：vm 里造的数组原型与测试 realm 不同，`assert.deepStrictEqual` 会因原型不匹配误报，断长度或逐字段断。全量 Node 回归 `443/443`。
 
 ## v1.6.3 壁纸模式解锁并新增展示位置切换
 

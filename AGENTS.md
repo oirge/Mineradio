@@ -7,7 +7,7 @@ Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索�
 - 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码版本：`v1.6.3`；在 `v1.6.2` 基础上解锁壁纸模式入口并新增「壁纸展示位置」切换（`桌面壁纸层` / `播放器背景板`），两个展示位置共用 `public/wallpaper-effect.js` 单一画面实现；保留 MP2、M4B、AIF/AIFF/AIFC 本地音频识别、扫描和代理 MIME 支持、标准迷你播放器隐藏播放时低平滑分析器回退、`0.00 ~ 3.00` 独立强度、开关、窗口几何上限、软件内更新线路选择与取消更新、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、本地歌单、全屏与用户数据迁移能力。
+- 当前源码版本：`v1.7.0`；在 `v1.6.3` 基础上新增插件系统（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理，零内置插件，见 `.context/architecture/mineradio-plugin-system.md` 与 `docs/PLUGIN_AUTHORING.md`）；保留壁纸模式入口与「壁纸展示位置」切换（`桌面壁纸层` / `播放器背景板`，共用 `public/wallpaper-effect.js`）、MP2、M4B、AIF/AIFF/AIFC 本地音频识别、扫描和代理 MIME 支持、标准迷你播放器隐藏播放时低平滑分析器回退、`0.00 ~ 3.00` 独立强度、开关、窗口几何上限、软件内更新线路选择与取消更新、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、本地歌单、全屏与用户数据迁移能力。
 - 统一备份区：`E:\桌面\播放器软件\工作区备份`
 
 ## Start Every New Codex Thread Here

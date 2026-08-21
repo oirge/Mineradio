@@ -1,3 +1,17 @@
+## v1.7.0 新增插件系统：主题 / 音源 / 歌单
+- 发布版本从 `1.6.3` 提升为 `1.7.0`；已安装 `1.6.3` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
+- 新增插件系统，支持三种插件：主题插件（换配色与 CSS）、音源插件（提供搜索、播放地址、歌词、封面）、歌单插件（提供歌单列表与歌单详情）。不内置任何插件，全部由用户自己导入。
+- 插件格式为单文件：`.js` 用开头的 `/** @id / @name / @kind / @version / @author / @host */` 块注释当清单，正文里用 `mineradio.on(...)` 注册钩子；`.json` 用于纯声明式主题包。单文件上限 512 KB，最多安装 40 个。
+- 插件跑在独立 Web Worker 沙箱里：`fetch`、`XMLHttpRequest`、`WebSocket`、`importScripts`、`indexedDB`、`caches`、`Worker`、`postMessage` 全部剥除，没有 DOM、没有 localStorage、没有主进程 IPC 桥，因此拿不到本地文件与账号；插件正文经 `new Function` 执行，看不到宿主闭包变量。
+- 插件联网只能走宿主代发：渲染进程按插件清单里的 `@host` 白名单逐条放行（只放 https，命中声明域名及其子域），再交给本地代理出网。被拒的请求根本不会到达代理。
+- 本地代理拦掉私网、环回、链路本地和组播地址，并把连接钉在解析出的公网 IP 上（`servername` + 显式 `Host`）以防 DNS rebinding；转发请求头只留 `referer` / `user-agent` / `cookie`，响应体上限 8 MB、请求超时 15 秒、流超时 30 秒、最多跟 5 次跳转。
+- 音频与封面统一经本地流代理，代理补上 `Access-Control-Allow-Origin` 与 `Cross-Origin-Resource-Policy`，所以插件歌曲同样有频谱律动、封面取色和封面光晕。
+- 主题插件的变量与 CSS 会被清洗：带 `;` `{` `}` 的变量值、指向远端的 `url()`、`@import`、`expression(`、`javascript:` 和任何 `<` 一律去掉，只保留 `data:` 内联图；注入到唯一一个 `<style id="mineradio-plugin-theme-style">` 节点，用户自己调的主色仍然优先。
+- 设置面板新增「插件」折叠区显示已装数量并进入插件管理弹窗；弹窗支持安装插件文件、按类型筛选（全部 / 主题 / 音源 / 歌单）、启用停用、卸载，以及直接播放插件歌单。
+- 搜索结果里插件歌曲与本地歌曲同列，来源标签显示插件名；插件歌曲不能加入「特别喜欢」和本地歌单（那两处按本地文件引用存盘），点击时给出明确提示。
+- 本地播放路径一行未改：插件曲目走并列的新分支，本地曲目仍走原有路径。插件歌词复用现有本地歌词管线，LRC 解析与逐字判定不变。
+- 全量 Node 回归 `443/443`；`node --check public/app.js`、`node --check public/plugin-runtime.js`、`node --check public/plugin-manifest.js`、`node --check public/plugin-sandbox.js`、`node --check plugin-proxy.js` 与 `node --check server.js` 均通过。
+
 ## v1.6.3 壁纸模式解锁并新增展示位置切换
 - 发布版本从 `1.6.2` 提升为 `1.6.3`；已安装 `1.6.2` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
 - 壁纸模式开关和壁纸透明度滑块从「开发中，暂不可用」解锁，恢复为可用设置项。

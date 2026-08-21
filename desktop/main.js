@@ -170,6 +170,8 @@ const MINI_PLAYER_MARGIN = 14;
 const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
 const APP_ICON_ICO = path.join(RESOURCE_ROOT, 'build', 'icon.ico');
 const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
+// 插件代理 token：与本地文件代理同一套做法，渲染进程要经 IPC 才能拿到，插件沙箱永远拿不到。
+const PLUGIN_TOKEN = crypto.randomBytes(16).toString('hex');
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell-settings.json';
 const DESKTOP_UI_STATE_FILE = 'desktop-ui-state.json';
 const PROFILE_STATE_MIGRATION_FILE = 'profile-state-migration-v2.json';
@@ -3074,6 +3076,46 @@ ipcMain.handle('mineradio-import-json-file', trustedMainFrameHandler(async (even
   }
 }));
 
+/**
+ * 把插件代理入口交给渲染进程。token 只在主进程与本地服务之间生成，
+ * 渲染进程按需取用，插件沙箱里没有任何途径能读到它。
+ * @returns {Promise<{ok:boolean, token?:string, port?:number, error?:string}>} 代理入口信息。
+ */
+ipcMain.handle('mineradio-plugin-proxy-info', trustedMainFrameHandler(async () => {
+  if (!mainServerPort) return { ok: false, error: 'PLUGIN_PROXY_NOT_READY' };
+  return { ok: true, token: PLUGIN_TOKEN, port: mainServerPort };
+}));
+
+/**
+ * 导入插件包文件（`.js` 头注释清单包或 `.json` 声明式主题包）。
+ * 和存档导入一样先卡大小，避免误选超大文件时 readFileSync 拖垮主进程；
+ * 真正的清单校验在渲染进程的 plugin-manifest 里做，这里只负责把文本取回来。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件，用于定位对话框宿主窗口。
+ * @returns {Promise<{ok:boolean, fileName?:string, text?:string, canceled?:boolean, error?:string}>} 导入结果。
+ */
+ipcMain.handle('mineradio-import-plugin-file', trustedMainFrameHandler(async (event) => {
+  try {
+    const owner = getSenderWindow(event);
+    const result = await dialog.showOpenDialog(owner, {
+      title: '导入 Mineradio 插件',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Mineradio 插件', extensions: ['js', 'json'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true };
+    const filePath = result.filePaths[0];
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return { ok: false, error: 'IMPORT_NOT_A_FILE' };
+    if (stat.size > 2 * 1024 * 1024) return { ok: false, error: 'PLUGIN_TOO_LARGE' };
+    const text = fs.readFileSync(filePath, 'utf8');
+    return { ok: true, fileName: path.basename(filePath), text };
+  } catch (e) {
+    return { ok: false, error: e.message || 'IMPORT_FAILED' };
+  }
+}));
+
 ipcMain.on('mineradio-ui-state-read-sync', (event) => {
   if (!isTrustedMainFrameSender(event)) {
     event.returnValue = {};
@@ -3555,6 +3597,7 @@ async function createWindow() {
   process.env.PORT = String(port);
   process.env.MINERADIO_UPDATE_DIR = getUpdateDownloadDir();
   process.env.MINERADIO_LOCAL_FILE_TOKEN = LOCAL_FILE_TOKEN;
+  process.env.MINERADIO_PLUGIN_TOKEN = PLUGIN_TOKEN;
 
   localServer = require(path.join(APP_ROOT, 'server.js'));
   // 注入授权校验：让 HTTP 本地文件代理复用与 IPC 相同的授权根目录约束，堵住越权读取任意文件。

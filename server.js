@@ -11,10 +11,13 @@ const crypto = require('crypto');
 const tls = require('tls');
 const { Readable } = require('stream');
 const { fileURLToPath } = require('url');
+const pluginProxy = require('./plugin-proxy.js');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
+// 插件代理 token。服务监听 0.0.0.0，没有这道门局域网里任何人都能拿它当开放中继。
+const PLUGIN_TOKEN = process.env.MINERADIO_PLUGIN_TOKEN || '';
 /**
  * 本地文件代理授权校验钩子。
  * 由桌面主进程注入，强制 /api/local-file 只能读取已授权曲库根目录内的文件；
@@ -2833,6 +2836,53 @@ const server = http.createServer(async (req, res) => {
       console.error('[LocalFile]', err);
       res.writeHead(500, { 'Access-Control-Allow-Origin': '*' });
       res.end();
+    }
+    return;
+  }
+
+  // ---------- 插件网络代理 ----------
+  // 插件在 Worker 沙箱里没有 fetch/XHR，所有出网都落到这两个入口。
+  // URL 是否在插件声明的 @host 白名单内由渲染进程判定（它才持有可信清单）；
+  // 这里只做与插件身份无关的通用安全门：token、https、内网地址拦截、体积与超时上限。
+  if (pn === '/api/plugin/fetch' || pn === '/api/plugin/stream') {
+    if (!PLUGIN_TOKEN || url.searchParams.get('token') !== PLUGIN_TOKEN) {
+      sendJSON(res, { ok: false, error: 'PLUGIN_FORBIDDEN' }, 403);
+      return;
+    }
+    if (pn === '/api/plugin/fetch') {
+      if (req.method !== 'POST') {
+        sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+        return;
+      }
+      try {
+        const raw = await readRequestBody(req);
+        const payload = raw && typeof raw === 'object' ? raw : {};
+        const result = await pluginProxy.performPluginFetch(payload);
+        sendJSON(res, { ok: true, ...result });
+      } catch (err) {
+        sendJSON(res, { ok: false, error: err.code || err.message || 'PLUGIN_FETCH_FAILED' }, 200);
+      }
+      return;
+    }
+    if (req.method !== 'GET') {
+      sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+      return;
+    }
+    try {
+      const forward = {};
+      if (req.headers.range) forward.range = req.headers.range;
+      const referer = url.searchParams.get('referer');
+      const userAgent = url.searchParams.get('ua');
+      if (referer) forward.referer = referer;
+      if (userAgent) forward['user-agent'] = userAgent;
+      await pluginProxy.streamPluginResource(url.searchParams.get('url'), req, res, { headers: forward });
+    } catch (err) {
+      if (!res.headersSent) {
+        res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(String(err.code || err.message || 'PLUGIN_STREAM_FAILED'));
+      } else if (!res.writableEnded) {
+        res.end();
+      }
     }
     return;
   }
