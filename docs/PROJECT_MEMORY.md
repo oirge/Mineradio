@@ -49,6 +49,10 @@
 - 存档：localStorage `mineradio-plugins-v1`，经 `bridge.persist`（`setPersistentLocalStorageItem`）+ preload `PERSISTENT_UI_STATE_KEYS` 备份。同 id 覆盖安装视为升级：换脚本、保留用户的启用/禁用状态。
 - 上限常量：单包 512 KB、最多 40 个插件、主题变量 160 条、主题 CSS 64 KB、`@host` 16 个、fetch 响应 8 MB / 15 秒、流 30 秒 / 5 次跳转。
 - 回归覆盖：新增 `tests/plugin-proxy.test.js`（7 项，起 127.0.0.1 临时上游跑真 HTTP）与 `tests/plugin-system.test.js`（16 项，`vm.createContext` 让真 sandbox 与真 runtime 互相对接，消息过 JSON 往返模拟结构化克隆）。写这类测试时注意：vm 里造的数组原型与测试 realm 不同，`assert.deepStrictEqual` 会因原型不匹配误报，断长度或逐字段断。全量 Node 回归 `443/443`。
+- `v1.7.0` 已发布到 GitHub：`https://github.com/oirge/Mineradio/releases/tag/v1.7.0`，已是 Latest，非草稿非预发布。
+- 发布路径：本轮通过 GitHub CLI 完成。提交在 `codex/mini-cover-static`（`c238d1b`），推送分支后打注解 tag `v1.7.0` 并推送，`gh release create` 建 Release，再 `gh workflow run "Build and Release" --ref v1.7.0 -f tag=v1.7.0` 由 Windows Runner 构建并上传资产。工作流用的是 `gh release upload $tag`，所以 Release 必须先存在。
+- `v1.7.0` Release 资产：`Mineradio-1.7.0-Setup.exe` `101516131` 字节 / SHA256 `c058169b5df2f99158af125dc54226ddaa02983dfb5260cb2b99eb3e02b79c90`；blockmap `105970` 字节 / `1999d07cca4d23549acc60c3df90d665ee0f58397bf73acf8a7a9ebc1b8a91c9`；`latest.yml` `347` 字节 / `f61a063512ccb25b0e9207aed89e81b0c1ec411037e41a2e2d0380181bcc53b6`；SHA256 清单 `273` 字节 / `5c0808a50977c37f7f0f8a64a8fa173a82fc8fcbe8730c1ba17594173ea39dd4`。未生成跨版本轻量补丁和 Portable ZIP。
+- `latest.yml` 的 Setup SHA512：`xWrjB+arwLokTBUK6/AUz6laSeeFtWcWXg3KHKWD55H6Y00gXPhGxXjdLOuOYFVt5tAbWJIjEkgwMShi07r4nQ==`，`version: 1.7.0`，`releaseDate: 2026-08-21T04:39:36.412Z`。
 
 ## v1.6.3 壁纸模式解锁并新增展示位置切换
 
