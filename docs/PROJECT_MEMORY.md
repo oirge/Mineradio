@@ -44,6 +44,9 @@
 - 守卫：新增 `tests/packaging-file-whitelist.test.js`，扫 `desktop/main.js` / `desktop/preload.js` / `server.js` 的相对 require 并核对 `build.files` 收录情况，另外单独钉住插件四个源文件和 `asarUnpack` 一致性。已验证把白名单改回去这条测试会失败。`tests/complete-optimization-gates.test.js` 里对 `asarUnpack` 的精确断言同步加上 `plugin-proxy.js`。
 - 验证方式（以后再动打包配置照这个来）：`npx electron-builder --win dir` → 读 `dist/win-unpacked/resources/app.asar` 头部 JSON 确认根级条目 → 用 `Start-Process -RedirectStandardError` 起 `dist/win-unpacked/Mineradio.exe` 看日志。修复前复现 `Cannot find module './plugin-proxy.js'` 且无窗口，修复后本地服务监听并走到 `home-revealed`。注意：`Mineradio.exe` 从 bash 直接起会立刻脱离终端（exit 0）、拿不到 stdout，`MainWindowTitle` 也是空的（无边框窗口），别拿这两个当判断依据。
 - 全量 Node 回归 `446/446`。
+- 发布路径：提交在 `codex/mini-cover-static`（`958de59`），推送分支 → 注解 tag `v1.7.1` → `gh release create v1.7.1` → `gh workflow run "Build and Release" --ref v1.7.1 -f tag=v1.7.1`（run `32450624993`，成功）。工作流用 `gh release upload $tag`，Release 必须先存在；工作流本身不跑测试，所以打包类问题只能靠本地回归和事后核包发现。
+- `v1.7.1` Release 资产：`Mineradio-1.7.1-Setup.exe` `101520699` 字节 / SHA256 `7bffb8e3d3c2d7257c6c6b8849cff4e1641a3c478fbb54ee2566fd87b7166960` / SHA512 `/VXC5VjVhOjd/erE5wiCQvF9ksSS0j9BU95JB8IfGwkjIStLNftbO+F3+SW9tPwUJaJ7GkbYkb4qk53DqGoMeg==`；blockmap `105909` 字节 / `e0276917b93838c0f374e1ed45221ae647465931511e6217785b476694ff39dc`；`latest.yml` `347` 字节 / `e9eb83449aad8b030a98172c5dc09b636ebeb5adf4c6bda85bf869b9029da412`；SHA256 清单 `273` 字节。未生成跨版本轻量补丁和 Portable ZIP。
+- 已回读远端安装包核包（这一步以后每次改打包配置都要做）：下载 `Mineradio-1.7.1-Setup.exe` 校验 SHA256/SHA512 与 `latest.yml` 一致，再用 `node_modules/electron-winstaller/vendor/7z.exe` 取出 `$PLUGINSDIR/app-64.7z`，确认 `resources/app.asar.unpacked/` 含 `plugin-proxy.js` `server.js` `package.json`，asar 根条目为 `build desktop package.json plugin-proxy.js public server.js`，`public/` 含 `plugin-manifest.js` `plugin-runtime.js` `plugin-sandbox.js`。本机没有系统级 7-Zip，用 `node_modules` 里那份即可。
 
 ## v1.7.0 插件系统（主题 / 音源 / 歌单）
 
