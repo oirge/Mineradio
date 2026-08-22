@@ -29,10 +29,10 @@
       align-items: center;
       gap: 5px;
       padding: 5px;
-      border: 1px solid rgba(255, 255, 255, 0.13);
+      border: 1px solid var(--th-mini-border, var(--th-popover-border, rgba(255, 255, 255, 0.13)));
       border-radius: 7px;
-      background: rgba(9, 12, 15, 0.97);
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      background: var(--th-mini-bg, var(--th-popover-bg, rgba(9, 12, 15, 0.97)));
+      box-shadow: var(--th-mini-shadow, 0 10px 28px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08));
       -webkit-app-region: drag;
     }
     .meta {
@@ -51,13 +51,13 @@
       letter-spacing: 0;
     }
     .title {
-      color: #f7fafb;
+      color: var(--th-mini-title, var(--th-text-strong, #f7fafb));
       font-size: 11.5px;
       font-weight: 650;
       line-height: 1.2;
     }
     .artist {
-      color: rgba(226, 234, 237, 0.52);
+      color: var(--th-mini-artist, var(--th-text-dim, rgba(226, 234, 237, 0.52)));
       font-size: 8.5px;
       line-height: 1.15;
     }
@@ -75,19 +75,19 @@
       width: 22px;
       height: 22px;
       padding: 0;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--th-mini-btn-border, var(--th-chip-border, rgba(255, 255, 255, 0.1)));
       border-radius: 5px;
-      background: #151a1f;
-      color: rgba(244, 248, 249, 0.76);
+      background: var(--th-mini-btn-bg, var(--th-chip-bg, #151a1f));
+      color: var(--th-mini-btn-text, var(--th-text-dim, rgba(244, 248, 249, 0.76)));
       cursor: pointer;
       outline: none;
       transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
       -webkit-app-region: no-drag;
     }
     button:hover:not(:disabled) {
-      border-color: rgba(110, 231, 216, 0.42);
-      background: #1b2428;
-      color: #ffffff;
+      border-color: var(--th-mini-btn-hover-border, var(--th-chip-hover-border, rgba(110, 231, 216, 0.42)));
+      background: var(--th-mini-btn-hover-bg, var(--th-chip-hover-bg, #1b2428));
+      color: var(--th-mini-btn-hover-text, #ffffff);
     }
     button:active:not(:disabled) { transform: scale(0.93); }
     button:focus-visible { box-shadow: 0 0 0 2px rgba(110, 231, 216, 0.34); }
@@ -96,9 +96,9 @@
     .play-toggle {
       width: 28px;
       height: 28px;
-      border-color: rgba(110, 231, 216, 0.3);
-      background: #172326;
-      color: #a9fff2;
+      border-color: var(--th-mini-play-border, rgba(110, 231, 216, 0.3));
+      background: var(--th-mini-play-bg, #172326);
+      color: var(--th-mini-play-text, #a9fff2);
     }
     .play-toggle svg { width: 14px; height: 14px; }
     .desktop-lyrics-toggle {
@@ -110,7 +110,7 @@
       border-color: transparent;
       border-radius: 50%;
       background: transparent;
-      color: rgba(225, 232, 235, 0.52);
+      color: var(--th-mini-ghost-text, var(--th-text-dim, rgba(225, 232, 235, 0.52)));
       font-size: 8px;
       font-weight: 700;
       line-height: 1;
@@ -140,7 +140,7 @@
       margin: -2px -2px 0 0;
       border-color: transparent;
       background: transparent;
-      color: rgba(225, 232, 235, 0.46);
+      color: var(--th-mini-ghost-text, var(--th-text-dim, rgba(225, 232, 235, 0.46)));
     }
     .restore svg { width: 11px; height: 11px; }
     @media (prefers-reduced-motion: reduce) {
@@ -189,6 +189,30 @@
       window.miniPlayer.command(action).catch(function(){});
     }
 
+    // 已经写到 documentElement 上的主题变量名，换主题时要擦掉不再出现的那些。
+    var appliedThemeVars = [];
+
+    /**
+     * 把主进程转发过来的 --th-* 变量写到根元素上。
+     * @param {Object<string,string>} vars 变量名到值。
+     * @returns {void}
+     */
+    function applyMiniThemeVars(vars) {
+      var root = document.documentElement;
+      var next = vars && typeof vars === 'object' ? vars : {};
+      var names = [];
+      for (var i = 0; i < appliedThemeVars.length; i++) {
+        if (!Object.prototype.hasOwnProperty.call(next, appliedThemeVars[i])) root.style.removeProperty(appliedThemeVars[i]);
+      }
+      var keys = Object.keys(next);
+      for (var j = 0; j < keys.length; j++) {
+        if (keys[j].indexOf('--th-') !== 0) continue;
+        root.style.setProperty(keys[j], String(next[keys[j]] == null ? '' : next[keys[j]]));
+        names.push(keys[j]);
+      }
+      appliedThemeVars = names;
+    }
+
     function applyState(patch) {
       patch = patch || {};
       miniState = Object.assign({}, miniState, patch);
@@ -216,6 +240,7 @@
       desktopLyricsButton.setAttribute('aria-pressed', desktopLyricsEnabled ? 'true' : 'false');
       desktopLyricsButton.title = desktopLyricsEnabled ? '关闭桌面歌词' : '开启桌面歌词';
       desktopLyricsButton.setAttribute('aria-label', desktopLyricsButton.title);
+      if (Object.prototype.hasOwnProperty.call(patch, 'themeVars')) applyMiniThemeVars(patch.themeVars);
     }
 
     document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });

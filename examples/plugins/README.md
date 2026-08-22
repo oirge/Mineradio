@@ -24,11 +24,12 @@ Mineradio 自带 **午夜靛蓝** 和 **暖琥珀** 两份主题（1.7.2 起随�
 
 主题走声明式 `.json`，不跑代码，装上立刻生效；`id` 相同会被当成升级覆盖，启用状态保留。
 
-先说期望值：**主题换的是玻璃外壳的色温，不是重画整个界面。** 这个播放器的画面主色来自封面取色和
-设置里的取色器，面板本身是半透明玻璃，封面会从下面透上来。所以主题生效后你看到的是面板/卡片/
-搜索框的底色偏冷或偏暖、内发光换色、香槟色文字和来源角标换色，而不是整屏变蓝或变黄。
+先说期望值：**主题换的是外壳色调，不是重画整个界面。** 画面主色仍然来自封面取色和设置里的取色器，
+面板是半透明玻璃、封面从下面透上来，所以卡片的选中态、Home 的填充、图标高亮依旧跟着你挑的强调色走。
+主题拿下的是面板/卡片/浮层/底栏/搜索框的底色描边阴影、分隔线和次级文字 —— 1.7.3 起这部分从
+十几处扩到了六十多处，左侧歌单、歌单来源弹层、右侧音效面板和迷你播放器都在内。
 
-**三类变量写了没反应**，第一版示例主题就是踩在这上面才「装上没效果」：
+**两类变量写了没反应**，第一版示例主题就是踩在这上面才「装上没效果」：
 
 1. **被取色器钉在行内的**：`--fc-accent` `--fc-accent-hov` `--fc-accent-rgb` `--glass-border`
    `--glass-shadow-focus`（界面高亮）、`--home-accent` `--home-accent-rgb`（Home 填充）、
@@ -36,23 +37,59 @@ Mineradio 自带 **午夜靛蓝** 和 **暖琥珀** 两份主题（1.7.2 起随�
    这些由设置面板写成 `documentElement` 的行内变量，插件注入的样式表压不过行内样式 ——
    这是刻意的设计，你自己挑的强调色不该被插件改掉。
 2. **只声明、没人读的**：`--fc-bg` `--fc-paper` `--fc-ink` `--fc-ink-2` `--fc-muted` `--fc-hair`
-   `--fc-hair-2` `--champagne-deep` `--chill-*` `--fc-blue` `--fc-warm` `--glass-border-soft`。
+   `--fc-hair-2` `--champagne-deep` `--chill-*` `--fc-blue` `--fc-warm` `--glass-border-soft`、
+   以及 `--glass-bg` / `--glass-bg-focus` / `--glass-shadow`（底色由写死的 `!important` 决定）。
    改了等于没改。
-3. **被后面的 `!important` 字面值盖掉的**：`#search-box` 的底色最终由一条写死的
-   `rgba(0,0,0,.1)!important` 决定，所以 `--glass-bg` / `--glass-bg-focus` / `--glass-shadow` 也无效。
 
-**`vars` 里真正有效的是这九个**（三个示例主题只改这些）：`--panel-glass-shadow`
-`--saved-panel-glass-bg` `--saved-panel-glass-shadow` `--saved-button-glass-bg`
-`--saved-button-glass-hover-bg` `--saved-button-glass-shadow` `--saved-button-glass-hover-shadow`
-`--champagne`（十几处文字与描边）`--source-local`（来源角标）。
+### 主通道：`--th-*`
 
-**面板、卡片、搜索框的底色只能走 `css` 通道**：用 app 自己的选择器写同名属性并加 `!important`，
-靠「同特异性、更靠后」赢下层叠 —— 示例文件末尾那三行就是这么做的。两条自律：
-不要动任何 `*-filter` 变量（玻璃的模糊/饱和度是调好的黄金参数），
-渐变第一段保留 `rgba(var(--home-accent-rgb),…)`，让用户自己的强调色继续透出来。
+1.7.3 起 `public/app.css` 里那些写死的 `!important` 字面值被就地改写成
+`var(--th-x, <原来的字面值>)`，主题只要设 `--th-*` 就能拿下这些面板。不设的时候取回落值，
+外观与没装主题时完全一致。**这是现在唯一推荐的上色方式**，`css` 通道只留给真正特殊的补丁。
 
-想自己调一版：复制任意一个 `.json`，改 `id`、`name` 和几个色值即可。
-变量值不能超过 200 字符、不能出现 `;` `{` `}`，`url()` 只允许 `data:`，远端地址会被清掉；
+| 变量组 | 管到哪 |
+| --- | --- |
+| `--th-panel-bg/-border/-shadow` | 搜索结果、搜索模式标签、右侧音效面板；也是其它面板组的兜底 |
+| `--th-side-panel-bg/-border/-shadow` | 左侧歌单面板（不设就跟 `--th-panel-*`） |
+| `--th-popover-bg/-border/-shadow` | 歌单来源选择弹层等浮层 |
+| `--th-subpanel-bg/-border` | 面板内嵌的分区容器（音效面板页签条） |
+| `--th-row-bg/-border/-shadow` | 歌单卡片、队列项、详情行、收藏项、插件项 |
+| `--th-row-hover-bg/-hover-border` | 上面那些的悬停态 |
+| `--th-row-active-bg` | 展开的卡片与当前播放项 |
+| `--th-chip-bg/-border/-hover-bg/-hover-border` | 小按钮与胶囊（不设就跟 `--th-row-*`） |
+| `--th-bar-bg/-shadow` | 底部控制条 |
+| `--th-search-bg` | 搜索框底 |
+| `--th-hairline` `--th-hairline-soft` | 分隔线 |
+| `--th-text-strong` `--th-text-dim` | 次级标题、艺人名等文字 |
+| `--th-mini-*` | 迷你播放器窗口，见下 |
+
+两条硬约束：**不要动任何 `*-filter` 变量**（玻璃的模糊/饱和度是调好的黄金参数），
+面板渐变第一段保留 `rgba(var(--home-accent-rgb),…)`，让用户自己的强调色继续透出来。
+卡片的「选中 / 已添加 / 当前播放」描边一律是 `rgba(var(--fc-accent-rgb),…)`，
+那是取色器的地盘，主题够不到也不该够到。
+
+**左侧歌单面板只能走 `--th-side-panel-*`。** 它最终由
+`html.control-glass-svg-ok #playlist-panel` 这条 `(1,1,1)` 规则决定，
+主题在 `css` 通道里写 `#playlist-panel{…!important}` 只有 `(1,0,0)`，压不过去。
+
+### 迷你播放器
+
+迷你播放器是另一个窗口，不加载插件运行时。主窗口把当前生效的 `--th-*` 通过
+`mineradio-mini-player-state` 那条 IPC 整表转发过去，主进程会再清洗一遍（只收 `--th-` 前缀、
+单值 200 字符上限、最多 64 个），迷你窗口收到后写到自己的 `documentElement` 上。
+它自己的一族是 `--th-mini-bg/-border/-shadow`、`-cover-bg/-cover-border/-cover-text`、
+`-title/-artist/-ghost-text`、`-btn-bg/-btn-border/-btn-text/-btn-hover-bg/-btn-hover-border/-btn-hover-text`、
+`-play-bg/-play-border/-play-text`；不设的会回落到 `--th-popover-*` / `--th-chip-*` / `--th-text-*`，
+所以只写通用组也能让迷你窗口跟着换色。封面的青色律动光晕是几何调好的，留作字面值不参与主题。
+
+### 还是走不通的老变量
+
+`--panel-glass-shadow` `--saved-panel-glass-*` `--saved-button-glass-*` `--champagne`
+`--source-local` 这九个仍然有效（示例主题保留着），但覆盖面远不如 `--th-*`。
+
+想自己调一版：复制任意一个 `.json`，改 `id`、`name` 和几个色值即可。改了载荷记得抬 `version` ——
+自带主题的种子只在版本号更高时才替换已经存下来的那份。
+变量最多 160 个、值不能超过 200 字符、不能出现 `;` `{` `}`，`url()` 只允许 `data:`，远端地址会被清掉；
 `css` 上限 64KB，`@import` / `@charset` / `@namespace` 会被剔除。
 
 ## 写给要写音源 / 歌单插件的人

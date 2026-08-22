@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.7.2` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.3` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,25 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.3 主题覆盖面扩大 + 迷你播放器跟着换色
+
+- 日期：2026-08-22。版本从 `1.7.2` 提升为 `1.7.3`。
+- 用户原话：「主题插件变化的不是很多啊 选择歌单界面没变 左侧歌单没变 右边歌单也没变 很多ui没变化」「迷你播放器也没变」。
+- **本节推翻 v1.7.2 那条「主题真正能改的只有九个变量……面板底色只能走 `css` 通道 + 同选择器 `!important`」**。那条结论在当时是对的，但只描述了当时的 `app.css`；现在主通道是 `--th-*` 变量族，`css` 通道退成补丁用途。
+- 根因（实测，不是推断）：`public/app.css` 尾部用写死的 `!important` 字面值画掉了大部分外壳，其中若干条选择器特异度是 `(1,1,1)`（典型：`html.control-glass-svg-ok #playlist-panel`）。主题在 `css` 通道里写 `#playlist-panel{…!important}` 只有 `(1,0,0)`，永远压不过去——这就是「左侧歌单没变」的全部原因。
+- 修复手法：**就地变量化**。把每条胜出的字面值改写成 `var(--th-x, <一模一样的原字面值>)`。没装主题时 CSSOM 取回落值，外观逐字节不变；装了主题就靠 `vars` 通道拿下同一条声明，不再和特异度打架。链式回落用于分组：`var(--th-side-panel-bg, var(--th-panel-bg, <字面值>))`、`var(--th-chip-bg, var(--th-row-bg, …))`、`var(--th-mini-bg, var(--th-popover-bg, …))`。
+- 主窗口变量族（28 个）：`--th-panel-bg|-border|-shadow`、`--th-side-panel-bg|-border|-shadow`（左侧歌单**只能**走这一组）、`--th-popover-bg|-border|-shadow`、`--th-subpanel-bg|-border`、`--th-row-bg|-border|-shadow|-hover-bg|-hover-border|-active-bg`、`--th-chip-bg|-border|-hover-bg|-hover-border`、`--th-bar-bg|-shadow`、`--th-search-bg`、`--th-hairline|-soft`、`--th-text-strong|-dim`。
+- 迷你播放器变量族（18 个）：`--th-mini-bg|-border|-shadow`、`-cover-bg|-cover-border|-cover-text`、`-title|-artist|-ghost-text`、`-btn-bg|-btn-border|-btn-text`、`-btn-hover-bg|-btn-hover-border|-btn-hover-text`、`-play-bg|-play-border|-play-text`。
+- 迷你播放器是独立窗口、**不加载 `plugin-runtime.js`**，只能拿主窗口合并后的最终值：`plugin-runtime.js` 存 `activeThemeVars` 并导出 `themeVars()` → `public/app.js` 的 `miniPlayerThemePayload()` 只挑 `--th-` 前缀、排序拼签名去重 → `desktop/main.js` `sendMiniPlayerState()` 用 `miniPlayerThemeSignature()` 再去重，整表塞进 `mineradio-mini-player-state` 补丁 → 迷你渲染进程 `applyMiniThemeVars()` 写 `documentElement.style`，并擦掉新表里不再出现的变量名（否则旧主题颜色残留在没被覆盖的那几个变量上）。
+- 两条容易踩的实现细节：主题对账**跳过纯播放态推送**（播放进度那条路 80ms 一次，没必要每次重算签名），条件是 `if (force || !playbackOnly)`；启用/禁用/安装/卸载插件后要 `pushMiniPlayerState(false)` 补推一次，不然要等下一次切歌迷你窗口才换色。`invalidateMiniPlayerSyncPatch` 里丢掉 `themeVars` 的补丁要把 `state.themeSignature` 置 `null`。
+- 主进程侧二次清洗 `normalizeMiniPlayerThemeVars()`（`desktop/mini-player-state-cache.js`）：只收 `/^--th-[a-z0-9][a-z0-9-]{0,58}$/`（名字先小写去空白）、单值 ≤200 字符、拒 `[;{}<>]|url(|expression(|javascript:|@import`、最多 64 条。渲染进程侧的 `normalizeThemeVars()`（`public/plugin-manifest.js`）仍是 160 条上限、同一套非法值正则、`css` 64 KB。
+- 实测数字：主窗口 79 个探针里主题能改的从 **18 → 63**；标准迷你窗口 **17/18**（唯一没变的是封面那圈青色律动光晕，见下）；极简迷你窗口 **14/14**；**主题关闭时与改动前逐属性差异 0/79、0/18、0/14**。量法是 offscreen Electron + `getComputedStyle` 对比。
+- 量迷你窗口的坑：`getComputedStyle` 会返回**过渡中途的插值**。`button` 上有 `transition: background-color 140ms`，刚 `setProperty` 就读会读回旧值，看起来像「按钮没上色」。探针必须先 `data-collapsed="false"`（收回态整块透明，量不到底色）+ `data-instant="true"`（映射到 `transition: none !important`），再等 350ms 读。
+- **不许再改坏的边界**：任何 `*-filter` 变量都不许变量化（玻璃模糊/饱和度是 `docs/GLASS_SVG_TEXTURE.md` 的黄金参数）；`rgba(var(--fc-accent-rgb),…)` / `--home-accent-rgb` / `--home-icon-rgb` / `--visual-icon-rgb` 一律保留字面值（选中态描边和渐变第一段必须继续读用户自己挑的强调色，取色器的行内变量优先级本来就该高于插件）；迷你播放器封面那条 `rgba(110,231,216,…)` 配 `calc(… var(--mini-glow) …)` 的青色光晕是按窗口几何调过的，留作字面值不参与主题。
+- 改了已发布主题的载荷**必须同时抬 `version`**：自带主题的种子只在版本号更高时替换用户 profile 里那一份，否则装过旧版的人看不到改动。三份示例主题（`theme-midnight-indigo.json` / `theme-warm-amber.json` / `theme-graphite.json`）各 55 变量、`"version": "1.4.0"`，`public/plugin-builtin-themes.js` 已按新载荷重新生成。
+- 守卫：新增 `tests/plugin-theme-reach.test.js`（7 条：三份主题变量齐全且逐条过清洗、版本 ≥1.4.0、`app.css` 关键面板用 `var(--th-*)` 且取色器地盘/`*-filter` 没被变量化、两份迷你 HTML 的 var+回落形式与 `applyMiniThemeVars` 接线、主进程二次清洗与签名顺序无关、缓存持有/释放 `themeVars`、runtime→renderer→main 整条转发链）。顺带改两条旧断言：`tests/mini-player-state-cache.test.js` 的整体 `deepEqual` 补 `themeVars: {}`，`tests/special-liked-playlist.test.js` 改成匹配 `var(--th-popover-bg,var(--th-panel-bg,rgba(6,7,11,.965)))!important`。全量 `461/461`。
+- 文档：`docs/PLUGIN_AUTHORING.md` 加「### 上色请走 `--th-*`」；`examples/plugins/README.md` 补主通道变量组→界面对照表、迷你播放器一节、「还是走不通的老变量」一节。
 
 ## v1.7.2 安装包自带两份主题 + 主题互斥
 

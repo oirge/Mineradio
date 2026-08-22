@@ -42,6 +42,7 @@ function testDisabledCacheReleasesAndRejectsState() {
   cache.setEnabled(false);
 
   assert.deepEqual(cache.value, {
+    themeVars: {},
     title: 'Mineradio',
     artist: '',
     cover: '',

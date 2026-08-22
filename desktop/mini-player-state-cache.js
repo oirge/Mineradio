@@ -3,6 +3,47 @@
 const MAX_MINI_PLAYER_COVER_LENGTH = 8 * 1024 * 1024;
 // 封面律动/光晕强度上限。1 是标准力度，>1 是用户主动要的“更明显”，0 等于关闭。
 const MAX_MINI_PLAYER_EFFECT_STRENGTH = 3;
+// 主题变量转发的硬上限。迷你播放器只吃 --th-* 这一族，多了也用不上，写死上限省得 renderer 灌满 IPC。
+const MAX_MINI_PLAYER_THEME_VARS = 64;
+const MAX_MINI_PLAYER_THEME_VALUE_LENGTH = 200;
+const MINI_PLAYER_THEME_NAME_RE = /^--th-[a-z0-9][a-z0-9-]{0,58}$/;
+// 值里出现这些就说明不是一个单纯的颜色/阴影，直接丢掉：分号和花括号能越出声明，url() 会拉远端资源。
+const MINI_PLAYER_THEME_VALUE_RE = /[;{}<>]|url\s*\(|expression\s*\(|javascript\s*:|@import/i;
+
+/**
+ * 清洗 renderer 送来的主题变量表。主窗口那边已经过一遍 normalizeThemeVars，
+ * 这里再收一次是因为迷你窗口是另一个渲染进程，不能让它依赖上游的清洗结果。
+ * @param {unknown} source 原始变量表。
+ * @returns {Object<string,string>} 只含合法 --th-* 键值的新对象。
+ */
+function normalizeMiniPlayerThemeVars(source) {
+  const out = {};
+  if (!source || typeof source !== 'object') return out;
+  const keys = Object.keys(source);
+  let count = 0;
+  for (let i = 0; i < keys.length && count < MAX_MINI_PLAYER_THEME_VARS; i += 1) {
+    const name = String(keys[i] || '').trim().toLowerCase();
+    if (!MINI_PLAYER_THEME_NAME_RE.test(name)) continue;
+    const value = String(source[keys[i]] == null ? '' : source[keys[i]]).trim();
+    if (!value || value.length > MAX_MINI_PLAYER_THEME_VALUE_LENGTH) continue;
+    if (MINI_PLAYER_THEME_VALUE_RE.test(value)) continue;
+    out[name] = value;
+    count += 1;
+  }
+  return out;
+}
+
+/**
+ * 把变量表压成稳定的签名，用来判断要不要重发。键排序后拼接，顺序变化不算变化。
+ * @param {Object<string,string>} vars 变量表。
+ * @returns {string} 签名。
+ */
+function miniPlayerThemeSignature(vars) {
+  const keys = Object.keys(vars || {}).sort();
+  let out = '';
+  for (let i = 0; i < keys.length; i += 1) out += keys[i] + ':' + vars[keys[i]] + '|';
+  return out;
+}
 
 function createDefaultMiniPlayerVisual() {
   return {
@@ -42,6 +83,7 @@ function normalizeMiniPlayerVisual(source, fallback) {
  */
 function createEmptyMiniPlayerState() {
   return {
+    themeVars: {},
     title: 'Mineradio',
     artist: '',
     cover: '',
@@ -114,10 +156,11 @@ class MiniPlayerStateCache {
       next.pulse = Number.isFinite(pulse) ? Math.max(0, Math.min(1, pulse)) : 0;
     }
     if (Object.prototype.hasOwnProperty.call(source, 'visual')) next.visual = normalizeMiniPlayerVisual(source.visual, next.visual);
+    if (Object.prototype.hasOwnProperty.call(source, 'themeVars')) next.themeVars = normalizeMiniPlayerThemeVars(source.themeVars);
     if (Object.prototype.hasOwnProperty.call(source, 'metaSignature')) next.metaSignature = String(source.metaSignature || '').slice(0, 240);
     this.value = next;
     return true;
   }
 }
 
-module.exports = { MiniPlayerStateCache };
+module.exports = { MiniPlayerStateCache, normalizeMiniPlayerThemeVars, miniPlayerThemeSignature };

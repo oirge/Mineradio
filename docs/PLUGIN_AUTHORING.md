@@ -119,6 +119,22 @@ mineradio.on('url', async function (song, quality) {
 
 用户在设置面板里手调的主色（`applyUiAccentColor()` 写在 `documentElement` 上的行内变量）优先级高于插件主题，插件压不过去，这是有意的。
 
+### 上色请走 `--th-*`
+
+`public/app.css` 里那些决定面板外观的 `!important` 字面值已经就地改成 `var(--th-x, <原字面值>)`，
+主题设 `--th-*` 就能拿下面板、浮层、卡片、底栏、分隔线和次级文字；不设就取回落值，
+外观与没装主题时一致。反过来说，在 `css` 通道里写 `#playlist-panel{…!important}` 是压不过
+`html.control-glass-svg-ok #playlist-panel` 那条 `(1,1,1)` 规则的，左侧歌单只能走
+`--th-side-panel-*`。完整变量清单和各组管到哪见
+[`examples/plugins/README.md`](../examples/plugins/README.md)。
+
+迷你播放器是独立窗口、不加载插件运行时，主窗口会把当前生效的 `--th-*` 通过
+`mineradio-mini-player-state` 整表转发过去，主进程再清洗一遍（只收 `--th-` 前缀、单值 200 字符、
+最多 64 条）。它自己那族是 `--th-mini-*`，不设时回落到 `--th-popover-*` / `--th-chip-*` / `--th-text-*`。
+
+一条容易忘的：改了已发布主题的载荷要同时抬 `version`，内置主题的种子只在版本号更高时才替换用户
+profile 里存着的那一份，否则装过旧版的人看不到改动。
+
 ## 播放限制
 
 - 插件歌曲能搜索、能播、能出歌词封面，但**不能**加入「特别喜欢」或本地歌单——那两处按本地文件引用存盘，插件歌曲没有文件可引用，会留下死记录。

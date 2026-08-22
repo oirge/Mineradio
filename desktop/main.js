@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
-const { MiniPlayerStateCache } = require('./mini-player-state-cache');
+const { MiniPlayerStateCache, miniPlayerThemeSignature } = require('./mini-player-state-cache');
 const { launchUpdateInstaller } = require('./update-installer-launcher');
 const { createWallpaperEngineBridge, registerWallpaperEngineScheme } = require('./wallpaper-engine-bridge');
 const {
@@ -2473,7 +2473,10 @@ function sendMiniPlayerState(force = false) {
   const state = miniPlayerStateCache.value;
   const visual = state.visual || {};
   const visualSignature = JSON.stringify(visual);
+  const themeVars = state.themeVars || {};
   const next = {
+    themeVars,
+    themeSignature: miniPlayerThemeSignature(themeVars),
     title: state.title || 'Mineradio',
     artist: state.artist || '',
     playing: !!state.playing,
@@ -2512,6 +2515,11 @@ function sendMiniPlayerState(force = false) {
   }
   if (force || !previous || next.desktopLyrics !== previous.desktopLyrics) {
     patch.desktopLyrics = next.desktopLyrics;
+    changed = true;
+  }
+  // 主题变量整表发：迷你窗口拿到的是最终值，自己不需要知道哪个插件在生效。
+  if (force || !previous || next.themeSignature !== previous.themeSignature) {
+    patch.themeVars = next.themeVars;
     changed = true;
   }
   if (includeCover && (force || !previous || next.pulse !== previous.pulse)) {

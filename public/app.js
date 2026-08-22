@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.2';
+var APP_VERSION = '1.7.3';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -23547,6 +23547,27 @@ function invalidateMiniPlayerSyncPatch(patch) {
   if (Object.prototype.hasOwnProperty.call(patch, 'hasTrack')) state.hasTrack = null;
   if (Object.prototype.hasOwnProperty.call(patch, 'pulse')) state.pulse = null;
   if (Object.prototype.hasOwnProperty.call(patch, 'visual')) state.visualSignature = '';
+  if (Object.prototype.hasOwnProperty.call(patch, 'themeVars')) state.themeSignature = null;
+}
+
+/**
+ * 取要转发给迷你播放器的主题变量：只挑 --th-* 那一族。
+ * 迷你窗口用不到 --saved-*-glass-* 之类的主窗口专用变量，少发一点也少一份可猜的攻击面。
+ * @returns {{vars: Object<string,string>, signature: string}} 变量表与稳定签名。
+ */
+function miniPlayerThemePayload() {
+  var vars = {};
+  var api = window.MineradioPlugins;
+  var source = api && typeof api.themeVars === 'function' ? api.themeVars() : null;
+  var keys = source ? Object.keys(source) : [];
+  keys.sort();
+  var signature = '';
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i].indexOf('--th-') !== 0) continue;
+    vars[keys[i]] = source[keys[i]];
+    signature += keys[i] + ':' + source[keys[i]] + '|';
+  }
+  return { vars: vars, signature: signature };
 }
 
 /**
@@ -23569,7 +23590,8 @@ function pushMiniPlayerState(force, playbackOnly) {
     hasTrack: null,
     desktopLyrics: null,
     pulse: null,
-    visualSignature: ''
+    visualSignature: '',
+    themeSignature: null
   });
   var resolveMetadata = !!(hasTrack && (force || !playbackOnly || state.song !== song || !state.metaSignature));
   var meta = resolveMetadata ? currentDesktopSongMeta() : null;
@@ -23604,6 +23626,15 @@ function pushMiniPlayerState(force, playbackOnly) {
     state.desktopLyrics = desktopLyricsEnabled;
     patch.desktopLyrics = desktopLyricsEnabled;
     changed = true;
+  }
+  // 主题只在非纯播放推送时对账：播放进度那条路径每 74ms 就来一次，没必要每次重算变量签名。
+  if (force || !playbackOnly) {
+    var theme = miniPlayerThemePayload();
+    if (force || state.themeSignature !== theme.signature) {
+      state.themeSignature = theme.signature;
+      patch.themeVars = theme.vars;
+      changed = true;
+    }
   }
   var visual = miniPlayerVisualPayload();
   var visualSignature = JSON.stringify(visual);
@@ -33899,6 +33930,8 @@ async function importPluginFromDialog() {
   renderPluginList();
   updatePluginCountLabel();
   refreshPluginPlaylists();
+  // 主题换了要立刻把新的 --th-* 推给迷你窗口，它不加载插件运行时，只认这条 IPC。
+  pushMiniPlayerState(false);
 }
 /**
  * 启用/禁用一个插件。主题之间互斥，启用一个主题时运行时会自动关掉原来那个，提示里点名说清楚。
@@ -33925,6 +33958,8 @@ function togglePluginEnabled(id) {
   renderPluginList();
   updatePluginCountLabel();
   refreshPluginPlaylists();
+  // 主题换了要立刻把新的 --th-* 推给迷你窗口，它不加载插件运行时，只认这条 IPC。
+  pushMiniPlayerState(false);
 }
 /**
  * 卸载一个插件。插件文件本身不落盘，卸载就是从列表里删掉。
@@ -33941,6 +33976,8 @@ function uninstallPlugin(id) {
   renderPluginList();
   updatePluginCountLabel();
   refreshPluginPlaylists();
+  // 主题换了要立刻把新的 --th-* 推给迷你窗口，它不加载插件运行时，只认这条 IPC。
+  pushMiniPlayerState(false);
 }
 /**
  * 渲染插件歌单区块。

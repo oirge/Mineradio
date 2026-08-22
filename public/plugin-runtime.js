@@ -22,6 +22,8 @@
 
   var records = [];
   var workers = Object.create(null);
+  // 最近一次 applyThemes 合并出来的变量表。迷你播放器窗口不加载插件运行时，只能靠这份表转发。
+  var activeThemeVars = {};
   var proxyInfo = null;
   var proxyInfoPromise = null;
   var bridge = {
@@ -760,6 +762,7 @@
     var scripted = [];
     for (var s = 0; s < list.length; s++) if (list[s].script) scripted.push(list[s]);
     // 声明式部分先同步写进去：脚本主题要等 worker 起来（最坏 8 秒），不能让界面在这段时间里裸着。
+    activeThemeVars = vars;
     node.textContent = buildThemeCss(vars, cssParts.join('\n'));
     if (!scripted.length) return Promise.resolve();
     return invokeAll(scripted, 'theme', []).then(function(results){
@@ -773,8 +776,20 @@
         if (safeCss) cssParts.push(safeCss);
       }
       // textContent 而不是 innerHTML：即使清洗漏掉了什么，也不会在这里被当成标签解析。
+      activeThemeVars = vars;
       node.textContent = buildThemeCss(vars, cssParts.join('\n'));
     });
+  }
+  /**
+   * 取当前生效的主题变量表副本。迷你播放器是独立窗口、不加载插件运行时，
+   * 主窗口靠这份表把 --th-* 通过 IPC 送过去，让它跟着主题一起换色。
+   * @returns {Object<string,string>} 变量名到值的副本。
+   */
+  function themeVars() {
+    var out = {};
+    var keys = Object.keys(activeThemeVars || {});
+    for (var i = 0; i < keys.length; i++) out[keys[i]] = activeThemeVars[keys[i]];
+    return out;
   }
   /**
    * 主题互斥：同一时刻只允许一个主题插件启用。
@@ -1057,6 +1072,7 @@
     remove: remove,
     setEnabled: setEnabled,
     applyThemes: applyThemes,
+    themeVars: themeVars,
     searchSongs: searchSongs,
     resolvePlayUrl: resolvePlayUrl,
     fetchLyric: fetchLyric,
