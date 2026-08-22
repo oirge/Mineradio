@@ -52,6 +52,8 @@
 - 改了已发布主题的载荷**必须同时抬 `version`**：自带主题的种子只在版本号更高时替换用户 profile 里那一份，否则装过旧版的人看不到改动。三份示例主题（`theme-midnight-indigo.json` / `theme-warm-amber.json` / `theme-graphite.json`）各 55 变量、`"version": "1.4.0"`，`public/plugin-builtin-themes.js` 已按新载荷重新生成。
 - 守卫：新增 `tests/plugin-theme-reach.test.js`（7 条：三份主题变量齐全且逐条过清洗、版本 ≥1.4.0、`app.css` 关键面板用 `var(--th-*)` 且取色器地盘/`*-filter` 没被变量化、两份迷你 HTML 的 var+回落形式与 `applyMiniThemeVars` 接线、主进程二次清洗与签名顺序无关、缓存持有/释放 `themeVars`、runtime→renderer→main 整条转发链）。顺带改两条旧断言：`tests/mini-player-state-cache.test.js` 的整体 `deepEqual` 补 `themeVars: {}`，`tests/special-liked-playlist.test.js` 改成匹配 `var(--th-popover-bg,var(--th-panel-bg,rgba(6,7,11,.965)))!important`。全量 `461/461`。
 - 文档：`docs/PLUGIN_AUTHORING.md` 加「### 上色请走 `--th-*`」；`examples/plugins/README.md` 补主通道变量组→界面对照表、迷你播放器一节、「还是走不通的老变量」一节。
+- 发布路径：提交 `0874898` 在 `codex/mini-cover-static`，推分支 → 注解 tag `v1.7.3` → `gh release create v1.7.3 --notes-file`（正文取 CHANGELOG 本节）→ `gh workflow run "Build and Release" --ref v1.7.3 -f tag=v1.7.3`（run `32547356785`，成功）。全程 `HTTPS_PROXY=http://127.0.0.1:7897`。这次发布前代理客户端没起，`7897` 无监听且直连被 reset，`git push` / `gh` 全部失败——遇到这种情况先 `netstat -ano | grep 7897` 确认监听再排查别的。
+- `v1.7.3` Release 资产：`Mineradio-1.7.3-Setup.exe` `101525507` 字节 / SHA256 `b9db856ec3d8edddddbfa88480510a5d28126e99535112d93f51e744a127bab3` / SHA512 `TU8+qDolE374NJI6fyud2al7nGUVpeBchmCE9miysdCIl4urnaSbEiUHrZm2EOHF1S23NiA9MQSPK4tIqpaXdQ==`；blockmap `105910` 字节 / `9f4d477c7e693fdc002d3be5fa34c719ebbf765fbf2f4d1a7b31e0dcc32fe844`；`latest.yml` `347` 字节 / `9868486b1f8951528d717515aa7cde896fdaf37bb5c923b24877e4c5880b0375`；SHA256 清单 `273` 字节。未生成跨版本轻量补丁和 Portable ZIP。
 
 ## v1.7.2 安装包自带两份主题 + 主题互斥
 
