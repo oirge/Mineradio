@@ -186,7 +186,7 @@ test('主题变量沿 renderer → 主进程 → 迷你窗口整条链路转发'
   assert.match(renderer, /if \(force \|\| !playbackOnly\) \{\s*var theme = miniPlayerThemePayload\(\);/);
   assert.match(renderer, /hasOwnProperty\.call\(patch, 'themeVars'\)\) state\.themeSignature = null;/);
   // 启用/禁用/安装/卸载插件后立刻补推一次，不然要等下一次切歌迷你窗口才换色。
-  assert.equal(renderer.match(/refreshPluginPlaylists\(\);\n  \/\/ 主题换了要立刻把新的 --th-\* 推给迷你窗口/g).length, 3);
+  assert.equal(renderer.match(/\/\/ 主题换了要立刻把新的 --th-\* 推给迷你窗口[^\n]*\n  pushMiniPlayerState\(false\);/g).length, 3);
 
   assert.match(main, /miniPlayerThemeSignature/);
   assert.match(main, /next\.themeSignature !== previous\.themeSignature/);

@@ -1,3 +1,18 @@
+## v1.7.4 插件只保留主题一种，音源与歌单能力整体移除
+
+- 发布版本从 `1.7.3` 提升为 `1.7.4`；已安装 `1.7.3` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
+- **插件现在只有主题一种。** 音源插件与歌单插件连同它们的六个钩子（`search` / `url` / `lyric` / `cover` / `playlists` / `playlistDetail`）一起删除，`PLUGIN_KINDS` 只剩 `['theme']`，`.json` 包不写 `kind` 默认就是 `theme`。
+- **插件的全部网络能力被拿掉。** 沙箱里的 `mineradio.request` / `requestJson` 删除，`@host` 白名单与 `PLUGIN_NO_HOST` / `PLUGIN_HOST_NOT_ALLOWED` / `PLUGIN_PROXY_UNAVAILABLE` / `PLUGIN_URL_EMPTY` / `PLUGIN_TOO_MANY_REQUESTS` 这些错误码一并删除，`mineradio` 现在正好只有 `version` / `manifest` / `on` / `log` 四个成员。
+- 本地代理整条链路删除：根目录 `plugin-proxy.js`（366 行）、`server.js` 里的 `/api/plugin/fetch` 与 `/api/plugin/stream` 入口、主进程的 `PLUGIN_TOKEN` 与 `mineradio-plugin-proxy-info` IPC、preload 的 `getPluginProxyInfo` 桥。插件从此没有任何出网通道，宿主也不再替它代发请求。
+- 界面上跟着去掉的：搜索结果里的插件音源分区与插件来源标签、插件管理弹窗里的「全部 / 主题 / 音源 / 歌单」筛选条与插件歌单面板、插件歌曲的播放路径（`playQueueAt()` 里 144 行插件取流分支）。FX 面板的插件折叠区副标题从「主题 / 音源 / 歌单」改成「主题」，两处说明文案改成「插件只换外观」。
+- **`.js` 脚本主题与 Worker 沙箱保留**：需要按时间或系统状态算颜色的主题仍然可以写 `@kind theme` 的 `.js` 并注册 `theme` 钩子，返回 `{ vars, css }`。钩子名只认 `theme` 一个，注册别的会直接启动失败；返回值走与声明式负载完全相同的清洗，脚本里绕不过去。
+- 旧存档自动收拾干净：`normalizePluginRecords()` 现在把 `source` / `playlist` 记录整条丢掉，`hosts` 字段不再进清单，装过旧插件的用户升级后不需要手动清理。
+- GitHub 上那些 LX Music / 落雪音乐系的「音源插件」明确不支持也不打算适配：它们要的就是宿主代发请求返回播放直链，而这条通道已经没有了。它们要么没有 `@kind theme`（`PLUGIN_BAD_KIND`），要么连 `@id` 都不写（`PLUGIN_BAD_ID`），在解析阶段就被拒。
+- 主题相关的一切没动：`--th-*` 变量族与 63 处覆盖、迷你播放器 `--th-mini-*` 转发链路、主题互斥、自带的午夜靛蓝 / 暖琥珀两份主题、取色器行内变量压过插件主题的优先级，全部与 `v1.7.3` 一致。
+- 删除 `tests/plugin-proxy.test.js`；`tests/plugin-system.test.js` 重写成 24 例，并**正向断言**被删掉的能力不会悄悄长回来：清单模块里搜不到 `host`、运行时源码里搜不到 `fetch` / `XMLHttpRequest` / `api/plugin/*`、运行时导出面精确等于 13 个主题相关 API、沙箱探针里 `request` / `requestJson` 都是 `undefined`。测试环境也刻意不再提供 `fetch` 与 `URL`。
+- 文档同步重写：`docs/PLUGIN_AUTHORING.md`、`examples/plugins/README.md`、`.context/architecture/mineradio-plugin-system.md`。
+- 全量 Node 回归 `454/454`。
+
 ## v1.7.3 主题终于能改动大部分界面，迷你播放器一起换色
 
 - 发布版本从 `1.7.2` 提升为 `1.7.3`；已安装 `1.7.2` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。

@@ -1,7 +1,7 @@
 'use strict';
 // 打包白名单守卫。`build.files` 是白名单：没被任何模式命中的根级文件不会进 asar，
 // 于是 `require('./x.js')` 在装好的安装包里直接 MODULE_NOT_FOUND，主窗口根本建不起来。
-// v1.7.0 就是这么炸的（新增的 plugin-proxy.js 没进白名单），这条测试负责让它不再发生。
+// v1.7.0 就是这么炸的（当时新增的 plugin-proxy.js 没进白名单），这条测试负责让它不再发生。
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -67,12 +67,10 @@ test('主进程与本地服务的根级依赖都在打包白名单里', () => {
 test('server.js 与它的同级模块一起被 asarUnpack，避免跨 asar 边界解析', () => {
   const unpack = packageJson.build.asarUnpack;
   assert.ok(unpack.includes('server.js'));
-  assert.ok(unpack.includes('plugin-proxy.js'), 'plugin-proxy.js 与 server.js 同级互相 require，解包状态必须一致');
 });
 
 test('插件系统的所有源码文件都会进安装包', () => {
   const required = [
-    'plugin-proxy.js',
     'public/plugin-manifest.js',
     'public/plugin-runtime.js',
     'public/plugin-sandbox.js',

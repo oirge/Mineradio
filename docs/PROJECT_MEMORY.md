@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.7.3` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.4` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，**`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,21 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.4 插件收窄成只有主题一种
+
+- 日期：2026-08-25。版本从 `1.7.3` 提升为 `1.7.4`。
+- 用户原话：「删除这两张插件只保留主题插件」，并在选项里选了「彻底删能力，保留脚本主题（推荐）」——即 `.json` 声明式主题与 `.js` + `theme` 钩子（Worker 沙箱）都留着，其余全删。
+- 删除清单（按层）：`public/plugin-manifest.js` 的 `PLUGIN_KINDS` 收成 `['theme']`、`normalizeHosts()` / `isPluginRequestAllowed()` / `hosts` 字段与 `@host` 解析；`public/plugin-sandbox.js` 的 `mineradio.request` / `requestJson` 与 `EVENTS` 里除 `theme` 之外的六个钩子名；`public/plugin-runtime.js` 的 `searchSongs` / `resolvePlayUrl` / `fetchLyric` / `fetchCover` / `fetchPlaylists` / `fetchPlaylistDetail` 与 RPC 里的 `plugin-request` 分支（-383 行）；根目录 `plugin-proxy.js` 整个文件（-366 行）；`server.js` 的 `/api/plugin/fetch` 与 `/api/plugin/stream`（-50 行）；`desktop/main.js` 的 `PLUGIN_TOKEN`、`mineradio-plugin-proxy-info` IPC 与 `MINERADIO_PLUGIN_TOKEN` 环境变量；`desktop/preload.js` 的 `getPluginProxyInfo` 桥；`public/app.js` 的搜索结果插件区、`songSourceTagHtml()` 插件分支、`playQueueAt()` 里 144 行插件取流路径、插件类型筛选与插件歌单面板（-321 行）；`package.json` 的 `build.files` / `asarUnpack` 两处 `plugin-proxy.js`。总计 -1715/+305。
+- 沙箱现在的对外面正好是 `{version, manifest, on, log}`（`Object.keys` 顺序 `version,manifest,on,log`），钩子名只认 `theme`，注册别的直接 `plugin-boot-failed: 未知插件钩子: xxx`。运行时导出面正好 13 个键：`STORE_KEY` `BUILTIN_STORE_KEY` `init` `list` `hasEnabled` `install` `importFromDialog` `remove` `setEnabled` `applyThemes` `themeVars` `destroyAllWorkers` `toast`。
+- `PLUGIN_ERROR_TEXT` 删掉 `PLUGIN_NO_HOST` / `PLUGIN_HOST_NOT_ALLOWED` / `PLUGIN_PROXY_UNAVAILABLE` / `PLUGIN_URL_EMPTY` / `PLUGIN_NOT_AVAILABLE` / `PLUGIN_TOO_MANY_REQUESTS`，`PLUGIN_BAD_KIND` 文案改成「插件 @kind 必须是 theme（只支持主题插件）」。
+- 旧存档兼容：`normalizePluginRecords()` 把 `source` / `playlist` 记录整条丢掉（不是改类型，是淘汰），`hosts` 字段不再进清单，用户不需要手动清理。
+- **外部市场插件为什么装不上（用户反复问过）**：GitHub 上 LX Music / 落雪音乐系的音源插件要的就是宿主代发请求返回播放直链，这条通道已经不存在。它们要么没有 `@kind theme`（`PLUGIN_BAD_KIND`），要么连 `@id` 都不写（`PLUGIN_BAD_ID`），解析阶段就被拒，永远不会被启动。结论是**明确不适配**，别再花时间尝试。
+- 守卫（正向断言能力不会长回来，这是这次测试改动的重点）：`tests/plugin-system.test.js` 重写成 24 例，其中 `typeof Manifest.isPluginRequestAllowed === 'undefined'`、`doesNotMatch(manifestSource, /host/i)`、`doesNotMatch(runtimeSource, /fetch|XMLHttpRequest/i)`、`doesNotMatch(runtimeSource, /api\/plugin\/(fetch|stream)/)`、`doesNotMatch(sandboxSource, /requestJson|plugin-request/)`、沙箱探针里 `request` / `requestJson` 都是 `'undefined'`、运行时导出键 `sort()` 后逐字对齐。测试宿主环境**刻意不提供** `fetch` / `XMLHttpRequest` / `URL`，运行时哪天又长出网络调用会直接炸。删除 `tests/plugin-proxy.test.js`。全量 `461 → 454/454`。
+- 跟着改的旧断言：`tests/packaging-file-whitelist.test.js` 的插件源码白名单从 5 个降到 4 个 `public/plugin-*.js`、`asarUnpack` 断言改成只查 `server.js`；`tests/complete-optimization-gates.test.js` 的 `asarUnpack` 精确等于 `['server.js','package.json']`；`tests/plugin-theme-reach.test.js:189` 那条「插件状态变了要补推迷你窗口」的正则原来靠已删除的 `refreshPluginPlaylists();` 定位，改成匹配注释 + `pushMiniPlayerState(false);`（3 处，`public/app.js` 33718 / 33745 / 33762）。
+- **vm 跨 realm 坑（第二次踩，写死在这里）**：`vm.createContext` 里造出来的对象和数组原型与测试 realm 不同，`assert.deepStrictEqual` 会报「Values have same structure but are not reference-equal」。断言前先 `Object.assign({}, x)` / `Array.from(x)` 抄到本 realm，或者逐字段断。
+- **主题侧一个没动**：`--th-*` 变量族与 63/79 覆盖、迷你播放器 `--th-mini-*` 整表转发与主进程二次清洗、主题互斥、自带两份主题的种子与卸载记忆、取色器行内变量优先级高于插件主题、`*-filter` 与 `rgba(var(--fc-accent-rgb),…)` 不参与主题——全部与 `v1.7.3` 一致，`v1.7.3` 那节的边界继续有效。
+- 文档同步：`docs/PLUGIN_AUTHORING.md` 与 `.context/architecture/mineradio-plugin-system.md` 重写，`examples/plugins/README.md` 换掉「写给要写音源 / 歌单插件的人」一节，`AGENTS.md` 第 10 行与本文件检查点同步。
 
 ## v1.7.3 主题覆盖面扩大 + 迷你播放器跟着换色
 

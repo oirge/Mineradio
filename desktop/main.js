@@ -170,8 +170,6 @@ const MINI_PLAYER_MARGIN = 14;
 const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
 const APP_ICON_ICO = path.join(RESOURCE_ROOT, 'build', 'icon.ico');
 const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
-// 插件代理 token：与本地文件代理同一套做法，渲染进程要经 IPC 才能拿到，插件沙箱永远拿不到。
-const PLUGIN_TOKEN = crypto.randomBytes(16).toString('hex');
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell-settings.json';
 const DESKTOP_UI_STATE_FILE = 'desktop-ui-state.json';
 const PROFILE_STATE_MIGRATION_FILE = 'profile-state-migration-v2.json';
@@ -3085,16 +3083,6 @@ ipcMain.handle('mineradio-import-json-file', trustedMainFrameHandler(async (even
 }));
 
 /**
- * 把插件代理入口交给渲染进程。token 只在主进程与本地服务之间生成，
- * 渲染进程按需取用，插件沙箱里没有任何途径能读到它。
- * @returns {Promise<{ok:boolean, token?:string, port?:number, error?:string}>} 代理入口信息。
- */
-ipcMain.handle('mineradio-plugin-proxy-info', trustedMainFrameHandler(async () => {
-  if (!mainServerPort) return { ok: false, error: 'PLUGIN_PROXY_NOT_READY' };
-  return { ok: true, token: PLUGIN_TOKEN, port: mainServerPort };
-}));
-
-/**
  * 导入插件包文件（`.js` 头注释清单包或 `.json` 声明式主题包）。
  * 和存档导入一样先卡大小，避免误选超大文件时 readFileSync 拖垮主进程；
  * 真正的清单校验在渲染进程的 plugin-manifest 里做，这里只负责把文本取回来。
@@ -3605,11 +3593,10 @@ async function createWindow() {
   process.env.PORT = String(port);
   process.env.MINERADIO_UPDATE_DIR = getUpdateDownloadDir();
   process.env.MINERADIO_LOCAL_FILE_TOKEN = LOCAL_FILE_TOKEN;
-  process.env.MINERADIO_PLUGIN_TOKEN = PLUGIN_TOKEN;
 
   // 本地服务加载失败时必须显式报出来。这里 throw 会被 createWindow 的调用方吞成
   // 未处理的 Promise rejection：进程还活着，但窗口和本地服务都没有，用户看到的就是
-  // 「双击了没反应」。v1.7.0 因为 plugin-proxy.js 没进打包白名单正好撞上这一幕。
+  // 「双击了没反应」。v1.7.0 就是这么炸的：新增的 server.js 同级模块没进打包白名单。
   try {
     localServer = require(path.join(APP_ROOT, 'server.js'));
   } catch (e) {

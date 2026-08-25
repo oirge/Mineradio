@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.3';
+var APP_VERSION = '1.7.4';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -10017,7 +10017,7 @@ async function writeBeatDiskCache(key, map, song, mode) {
       body: JSON.stringify({
         key: key,
         mode: mode || 'mr',
-        provider: songProviderKey(song),
+        provider: 'local',
         title: song && song.name,
         artist: song && song.artist,
         map: packed
@@ -17765,7 +17765,6 @@ function songDurationLabel(song) {
 }
 function songSourceLabel(song) {
   if (!song) return '未知';
-  if (song.type === 'plugin') return String(song.pluginName || '插件音源');
   if (song.type === 'local') return '本地上传';
   return '本地音乐';
 }
@@ -18753,8 +18752,8 @@ async function toggleLikeSong(song) {
     return;
   }
   if (song && song.type === 'plugin') {
-    // 特别喜欢与本地歌单都按本地文件引用存盘，插件歌曲没有文件可引用，存进去只会留一条死记录。
-    showToast('插件音源的歌曲不能加入本地歌单');
+    // 特别喜欢与本地歌单都按本地文件引用存盘。插件已经只剩主题，这里兜住旧存档里可能残留的插件歌曲记录。
+    showToast('这首歌不是本地文件，不能加入本地歌单');
     return;
   }
   showToast('本地模式不使用红心同步');
@@ -19159,15 +19158,7 @@ document.addEventListener('click', function(e){
 });
 updateSearchModeTabs();
 
-function songProviderKey(song) {
-  return song && song.type === 'plugin' ? 'plugin' : 'local';
-}
 function songSourceTagHtml(song) {
-  if (song && song.type === 'plugin') {
-    // 标签上写插件名而不是统一写 PLUGIN：装了多个音源时，用户要能一眼看出这条是谁给的。
-    var label = String(song.pluginName || '插件').trim() || '插件';
-    return '<span class="tag-source plugin" title="' + escHtml(label) + '">' + escHtml(label.slice(0, 8)) + '</span>';
-  }
   return '<span class="tag-source local">LOCAL</span>';
 }
 function searchResultMetaText(song) {
@@ -19508,30 +19499,13 @@ function renderLocalLibraryResults(q, opts) {
   if (opts.autoPlayFirst) playSearchResult(0);
 }
 /**
- * 判断插件音源是否可用（装了、开着、运行时在）。
- * @returns {boolean} 是否有可用的插件音源。
- */
-function hasPluginSourceAvailable() {
-  return !!(window.MineradioPlugins && window.MineradioPlugins.hasEnabled('source'));
-}
-/**
- * 搜索：本地库结果在前，插件音源结果在后。
- * 插件失败不影响本地结果——一个坏插件不该让整个搜索框变空。
+ * 搜索：只查本地曲库。插件在 v1.7.4 起只剩主题一种能力，不再参与搜索。
  * @param {string} q 搜索词。
  * @param {string} mode 搜索模式（当前只有 'local'）。
  * @returns {Promise<object[]>} 搜索结果。
  */
 async function fetchMusicSearchResults(q, mode) {
-  var localSongs = searchLocalSongs(q);
-  if (!hasPluginSourceAvailable()) return localSongs;
-  var pluginSongs = [];
-  try {
-    pluginSongs = await window.MineradioPlugins.searchSongs(q, 30);
-  } catch (err) {
-    console.warn('[PluginSearch]', err);
-  }
-  if (!pluginSongs || !pluginSongs.length) return localSongs;
-  return localSongs.concat(pluginSongs);
+  return searchLocalSongs(q);
 }
 function renderSongSearchResults(songs) {
   playlist = songs || [];
@@ -20850,150 +20824,6 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   safePlaybackStep('shelf-preview-suppress-end', suppressShelfPreviewForPlaybackSwitch);
 }
 
-/**
- * 播放一首插件音源歌曲。
- * 与 playLocalQueueItem 完全分开：本地播放路径一行不改，远程流的取址、封面、歌词都经插件运行时与本地代理。
- * @param {object} song 插件歌曲对象（type === 'plugin'）。
- * @param {number} idx 该歌曲在 playQueue 中的索引。
- * @param {object} opts 播放选项（manual/resumeAt/context 等）。
- * @param {number} token 本次切歌的 trackSwitchToken 快照。
- * @param {Function} markPlayPhase 记录播放阶段的回调。
- * @returns {Promise<void>}
- */
-async function playPluginQueueItem(song, idx, opts, token, markPlayPhase) {
-  markPlayPhase('plugin-resolve');
-  if (!window.MineradioPlugins) throw new Error('插件运行时未就绪');
-  var resolved = await window.MineradioPlugins.resolvePlayUrl(song, playbackQuality);
-  if (token !== trackSwitchToken || playQueue[idx] !== song) return;
-  var streamUrl = resolved && resolved.url;
-  if (!streamUrl) throw new Error('插件没有返回可播放地址');
-  song.pluginDirectUrl = resolved.directUrl || '';
-  currentLocalSong = null;
-
-  markPlayPhase('plugin-audio-element');
-  if (!audio) {
-    audio = new Audio();
-    audio.crossOrigin = 'anonymous';
-    audio.preload = 'auto';
-  } else {
-    audioFadeSerial++;
-    clearAudioFadeTimers();
-    audio.pause();
-  }
-  bindPlaybackProgressEvents(audio);
-  applyVolumeToAudio();
-  audio.src = streamUrl;
-  schedulePlaybackProgressUi('audio-source', true);
-  audio.onended = function(){
-    if (token !== trackSwitchToken) return;
-    finalizeListenSession(true);
-    if (playMode === 'single') setTimeout(function(){ playQueueAt(currentIdx, { autoRepeat: true }); }, 0);
-    else setTimeout(nextTrack, 0);
-  };
-  audio.onloadedmetadata = function(){
-    if (token !== trackSwitchToken || playQueue[idx] !== song) return;
-    // 插件给的时长常常是错的（或者没给），播起来之后以实际解码时长为准。
-    if (audio && isFinite(audio.duration) && audio.duration > 0) song.duration = audio.duration;
-    updateControlTrackInfo(song);
-    var thumbArtist = document.getElementById('thumb-artist');
-    if (thumbArtist) thumbArtist.textContent = songDisplaySubtitle(song);
-    safeRenderQueuePanel('plugin-metadata', { scrollCurrent: miniQueueOpen });
-  };
-  audio.onerror = function(){
-    if (token !== trackSwitchToken || playQueue[idx] !== song) return;
-    var mediaError = audio && audio.error;
-    song._lastPlaybackError = (mediaError && Number(mediaError.code)) || 0;
-    console.warn('[PluginPlaybackError]', song.name, song.pluginId, song._lastPlaybackError, song.pluginDirectUrl);
-  };
-  scheduleAudioResumePosition(audio, opts.resumeAt, token);
-  audio.load();
-
-  markPlayPhase('plugin-visual-prep');
-  try {
-    currentBeatMap = null;
-    beatMapNextIdx = 0;
-    resetAudioVisualState();
-    resetBeatCameraSync(0);
-    cancelBeatAnalysisTimer();
-    cancelDjBeatAnalysisTimer();
-    beatMapToken++;
-    djBeatMapToken++;
-    resetDjBeatMapState();
-    setDjModeActive(false);
-    hideBeatChip();
-    notifyDesktopLyricsBeatMapReady();
-  } catch (visualErr) {
-    console.warn('[PluginPlaybackVisualPrep]', song && song.name, visualErr);
-  }
-
-  markPlayPhase('plugin-assets');
-  document.getElementById('trial-banner').classList.remove('show');
-  if (song.cover) applyCoverDataUrl(song.cover, { trackToken: token });
-  loadPluginCoverForSong(song, token);
-  loadPluginLyricForSong(song, token);
-
-  markPlayPhase('audio-start');
-  var playbackStarted = await playAudio({ manual: !!opts.manual, silent: false });
-  if (token !== trackSwitchToken) return;
-  if (!playbackStarted) {
-    forcePlaybackControlsInteractive();
-    showToast(opts.manual ? '插件音源启动失败，可能是链接失效或需要重试' : '歌曲已载入，点击播放按钮继续播放');
-    return;
-  }
-  forcePlaybackControlsInteractive();
-  markPlayPhase('session-begin');
-  safePlaybackStep('listen-session-begin', function(){ beginListenSession(song, opts.context || null); });
-  safeRenderQueuePanel('play-plugin-queue-item');
-  scheduleShelfRebuild('play-plugin-queue-item', true);
-  safePlaybackStep('shelf-preview-suppress-end', suppressShelfPreviewForPlaybackSwitch);
-}
-/**
- * 判断一首插件歌曲是否仍是当前播放目标。远程取址/取词都是异步的，回来时可能已经切歌了。
- * @param {object} song 插件歌曲对象。
- * @param {number} token trackSwitchToken 快照。
- * @returns {boolean} 是否仍然当前。
- */
-function isCurrentPluginQueueSong(song, token) {
-  if (!song || song.type !== 'plugin') return false;
-  if (token != null && token !== trackSwitchToken) return false;
-  return playQueue[currentIdx] === song;
-}
-/**
- * 拉插件歌词并接进现有歌词管线。
- * 复用 localLyricText 字段：解析、逐字判定、偏好切换全都不用改。
- * @param {object} song 插件歌曲对象。
- * @param {number} token trackSwitchToken 快照。
- * @returns {void}
- */
-function loadPluginLyricForSong(song, token) {
-  if (!window.MineradioPlugins) return;
-  window.MineradioPlugins.fetchLyric(song).then(function(res){
-    var text = res && String(res.lyric || '').trim();
-    if (!text || !isCurrentPluginQueueSong(song, token)) return;
-    song.localLyricText = text;
-    applyLocalOriginalLyricsState(song);
-  }, function(err){ console.warn('[PluginLyric]', err); });
-}
-/**
- * 拉插件封面并应用到播放界面。封面走本地代理，所以取色 canvas 不会被污染。
- * @param {object} song 插件歌曲对象。
- * @param {number} token trackSwitchToken 快照。
- * @returns {void}
- */
-function loadPluginCoverForSong(song, token) {
-  if (!window.MineradioPlugins) return;
-  window.MineradioPlugins.fetchCover(song).then(function(url){
-    if (!url || !isCurrentPluginQueueSong(song, token)) return;
-    if (song.cover !== url) {
-      song.cover = url;
-      invalidateSongCoverCache(song);
-    }
-    applyCoverDataUrl(url, { trackToken: token });
-    updateControlTrackInfo(song);
-    safeRenderQueuePanel('plugin-cover-ready', { scrollCurrent: miniQueueOpen });
-    scheduleShelfRebuild('plugin-cover-ready', true);
-  }, function(err){ console.warn('[PluginCover]', err); });
-}
 async function playQueueAt(idx, opts) {
   opts = opts || {};
   if (idx < 0 || idx >= playQueue.length) return;
@@ -21026,8 +20856,7 @@ async function playQueueAt(idx, opts) {
     var song = safePlaybackStep('hydrate-song', function(){ return hydrateCustomCover(playQueue[idx]); }) || playQueue[idx];
     playQueue[idx] = song;
     markQueueContentChanged();
-    var isPluginTrack = !!(song && song.type === 'plugin');
-    if (!song || (song.type !== 'local' && !isPluginTrack)) {
+    if (!song || song.type !== 'local') {
       hideLoading();
       forcePlaybackControlsInteractive();
       showToast('纯本地播放器只播放本地音乐文件');
@@ -21071,8 +20900,7 @@ async function playQueueAt(idx, opts) {
         tweenParticleAlpha(uniforms.uAlpha.value || 0, 1.0, 220);
       });
     }
-    if (isPluginTrack) await playPluginQueueItem(song, idx, opts, token, markPlayPhase);
-    else await playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey, markPlayPhase);
+    await playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey, markPlayPhase);
   } catch (setupErr) {
     console.error('Play setup failed:', { phase: playPhase, error: setupErr }, setupErr);
     hideLoading();
@@ -33762,28 +33590,20 @@ function handleDesktopMiniPlayerCommand(payload) {
 // ============================================================
 //  插件管理
 // ============================================================
-var pluginKindFilter = 'all';
-var pluginPlaylistCache = [];
 var PLUGIN_ERROR_TEXT = {
   PLUGIN_EMPTY: '插件文件是空的',
   PLUGIN_TOO_LARGE: '插件文件太大（上限 512KB）',
   PLUGIN_BAD_JSON: '插件包不是合法 JSON',
   PLUGIN_BAD_ID: '插件缺少 @id',
   PLUGIN_BAD_NAME: '插件缺少 @name',
-  PLUGIN_BAD_KIND: '插件 @kind 必须是 theme / source / playlist',
-  PLUGIN_NO_HOST: '音源和歌单插件必须声明 @host 允许访问的域名',
+  PLUGIN_BAD_KIND: '插件 @kind 必须是 theme（只支持主题插件）',
   PLUGIN_NO_PAYLOAD: '插件里没有可用内容',
   PLUGIN_LIMIT_REACHED: '插件数量已达上限',
   PLUGIN_IMPORT_UNAVAILABLE: '当前环境不支持从文件安装插件',
   PLUGIN_IMPORT_FAILED: '读取插件文件失败',
   IMPORT_NOT_A_FILE: '选中的不是一个文件',
-  PLUGIN_HOST_NOT_ALLOWED: '插件请求的域名不在它声明的白名单里',
-  PLUGIN_PROXY_UNAVAILABLE: '本地插件代理未就绪',
-  PLUGIN_URL_EMPTY: '插件没有返回可播放地址',
-  PLUGIN_NOT_AVAILABLE: '插件已被禁用或卸载',
   PLUGIN_HOOK_MISSING: '插件没有实现这个功能',
-  PLUGIN_CALL_TIMEOUT: '插件响应超时',
-  PLUGIN_TOO_MANY_REQUESTS: '插件请求太频繁'
+  PLUGIN_CALL_TIMEOUT: '插件响应超时'
 };
 /**
  * 把插件错误码翻成人话。
@@ -33827,17 +33647,6 @@ function updatePluginCountLabel() {
   el.textContent = list.length ? (list.length + ' 个 · 启用 ' + enabled) : '0 个';
 }
 /**
- * 插件类型的中文名。
- * @param {string} kind 插件类型。
- * @returns {string} 中文名。
- */
-function pluginKindLabel(kind) {
-  if (kind === 'theme') return '主题';
-  if (kind === 'source') return '音源';
-  if (kind === 'playlist') return '歌单';
-  return '插件';
-}
-/**
  * 渲染插件列表。
  * @returns {void}
  */
@@ -33849,24 +33658,20 @@ function renderPluginList() {
     return;
   }
   var list = window.MineradioPlugins.list();
-  var shown = pluginKindFilter === 'all' ? list : list.filter(function(p){ return p.kind === pluginKindFilter; });
-  if (!shown.length) {
-    box.innerHTML = '<div class="plugin-empty">' + (list.length ? '这一类还没有插件' : '还没有安装插件。插件是一个 .js 或 .json 文件。') + '</div>';
+  if (!list.length) {
+    box.innerHTML = '<div class="plugin-empty">还没有安装插件。插件是一个 .js 或 .json 文件。</div>';
     return;
   }
   var html = '';
-  for (var i = 0; i < shown.length; i++) {
-    var p = shown[i];
+  for (var i = 0; i < list.length; i++) {
+    var p = list[i];
     var id = escHtml(p.id);
-    var hosts = (p.hosts || []).join(', ');
     html += '<div class="plugin-item' + (p.enabled ? ' on' : '') + '">' +
       '<div class="plugin-item-main">' +
         '<div class="plugin-item-title">' + escHtml(p.name) +
-          '<span class="plugin-item-kind">' + pluginKindLabel(p.kind) + '</span>' +
           (p.version ? '<span class="plugin-item-ver">v' + escHtml(p.version) + '</span>' : '') +
         '</div>' +
         '<div class="plugin-item-meta">' + escHtml(p.id) + (p.author ? ' · ' + escHtml(p.author) : '') + '</div>' +
-        (hosts ? '<div class="plugin-item-hosts">可访问：' + escHtml(hosts) + '</div>' : '') +
       '</div>' +
       '<div class="plugin-item-actions">' +
         '<button class="fx-mini-btn ghost" type="button" onclick="togglePluginEnabled(\'' + id + '\')">' + (p.enabled ? '禁用' : '启用') + '</button>' +
@@ -33877,31 +33682,12 @@ function renderPluginList() {
   box.innerHTML = html;
 }
 /**
- * 切换插件列表的类型筛选。
- * @param {string} kind all / theme / source / playlist。
- * @returns {void}
- */
-function setPluginKindFilter(kind) {
-  pluginKindFilter = kind === 'theme' || kind === 'source' || kind === 'playlist' ? kind : 'all';
-  var seg = document.getElementById('plugin-kind-seg');
-  if (seg) {
-    var btns = seg.querySelectorAll('[data-plugin-kind]');
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-plugin-kind') === pluginKindFilter ? 'true' : 'false');
-    }
-  }
-  renderPluginList();
-}
-/**
  * 打开插件管理弹窗。
  * @returns {void}
  */
 function openPluginManager() {
-  setPluginKindFilter(pluginKindFilter);
   renderPluginList();
-  renderPluginPlaylists();
   openGsapModal(document.getElementById('plugin-modal'));
-  refreshPluginPlaylists();
 }
 /**
  * 关闭插件管理弹窗。
@@ -33929,7 +33715,6 @@ async function importPluginFromDialog() {
   showToast(off.length ? (base + '，' + off.join('、') + ' 已关闭') : base);
   renderPluginList();
   updatePluginCountLabel();
-  refreshPluginPlaylists();
   // 主题换了要立刻把新的 --th-* 推给迷你窗口，它不加载插件运行时，只认这条 IPC。
   pushMiniPlayerState(false);
 }
@@ -33957,7 +33742,6 @@ function togglePluginEnabled(id) {
   else showToast(hit.name + ' 已启用');
   renderPluginList();
   updatePluginCountLabel();
-  refreshPluginPlaylists();
   // 主题换了要立刻把新的 --th-* 推给迷你窗口，它不加载插件运行时，只认这条 IPC。
   pushMiniPlayerState(false);
 }
@@ -33975,88 +33759,9 @@ function uninstallPlugin(id) {
   showToast((hit ? hit.name : '插件') + ' 已卸载');
   renderPluginList();
   updatePluginCountLabel();
-  refreshPluginPlaylists();
   // 主题换了要立刻把新的 --th-* 推给迷你窗口，它不加载插件运行时，只认这条 IPC。
   pushMiniPlayerState(false);
 }
-/**
- * 渲染插件歌单区块。
- * @returns {void}
- */
-function renderPluginPlaylists() {
-  var box = document.getElementById('plugin-playlist-box');
-  if (!box) return;
-  if (!window.MineradioPlugins || !window.MineradioPlugins.hasEnabled('playlist')) {
-    box.innerHTML = '';
-    return;
-  }
-  var html = '<div class="fx-section-label">插件歌单</div>';
-  if (!pluginPlaylistCache.length) {
-    html += '<div class="plugin-empty">正在读取插件歌单…</div>';
-    box.innerHTML = html;
-    return;
-  }
-  for (var i = 0; i < pluginPlaylistCache.length; i++) {
-    var pl = pluginPlaylistCache[i];
-    html += '<div class="plugin-playlist-item">' +
-      '<div class="plugin-item-main">' +
-        '<div class="plugin-item-title">' + escHtml(pl.name) + '</div>' +
-        '<div class="plugin-item-meta">' + escHtml(pl.pluginName || '') + (pl.count ? ' · ' + pl.count + ' 首' : '') + '</div>' +
-      '</div>' +
-      '<button class="fx-mini-btn ghost" type="button" onclick="playPluginPlaylist(' + i + ')">播放</button>' +
-    '</div>';
-  }
-  box.innerHTML = html;
-}
-/**
- * 重新拉一遍插件歌单列表。
- * @returns {Promise<void>}
- */
-async function refreshPluginPlaylists() {
-  if (!window.MineradioPlugins || !window.MineradioPlugins.hasEnabled('playlist')) {
-    pluginPlaylistCache = [];
-    renderPluginPlaylists();
-    return;
-  }
-  try {
-    pluginPlaylistCache = await window.MineradioPlugins.fetchPlaylists();
-  } catch (err) {
-    console.warn('[PluginPlaylists]', err);
-    pluginPlaylistCache = [];
-  }
-  renderPluginPlaylists();
-}
-/**
- * 播放一个插件歌单：拉详情、整队替换、从第一首开始。
- * @param {number} index pluginPlaylistCache 里的下标。
- * @returns {Promise<void>}
- */
-async function playPluginPlaylist(index) {
-  var playlistItem = pluginPlaylistCache[index];
-  if (!playlistItem || !window.MineradioPlugins) return;
-  showToast('正在读取「' + playlistItem.name + '」');
-  var songs = [];
-  try {
-    songs = await window.MineradioPlugins.fetchPlaylistDetail(playlistItem);
-  } catch (err) {
-    console.warn('[PluginPlaylistDetail]', err);
-  }
-  if (!songs || !songs.length) { showToast('这个插件歌单没有返回歌曲'); return; }
-  playQueue = songs;
-  markQueueContentChanged();
-  currentIdx = 0;
-  closePluginManager();
-  await playQueueAt(0, { manual: true, context: { type: 'plugin-playlist', id: playlistItem.id, name: playlistItem.name } });
-}
-(function bindPluginKindSeg(){
-  var seg = document.getElementById('plugin-kind-seg');
-  if (!seg) return;
-  seg.addEventListener('click', function(e){
-    var btn = e.target && e.target.closest ? e.target.closest('[data-plugin-kind]') : null;
-    if (!btn) return;
-    setPluginKindFilter(btn.getAttribute('data-plugin-kind'));
-  });
-})();
 // ============================================================
 //  启动
 // ============================================================

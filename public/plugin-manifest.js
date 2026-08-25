@@ -4,16 +4,15 @@
 // 所以只能依赖纯 ECMAScript，不能引用 document / localStorage 等宿主对象。
 (function(global){
   var PLUGIN_SCHEMA = 'mineradio-plugin-v1';
-  var PLUGIN_KINDS = ['theme', 'source', 'playlist'];
+  // 插件只有主题一种。音源与歌单能力在 v1.7.4 整体移除，插件不再有任何网络与播放通道。
+  var PLUGIN_KINDS = ['theme'];
   // 单个插件包上限。插件常驻 localStorage 与 IndexedDB 用户状态，放开体积会直接压到启动水合路径上。
   var MAX_PACKAGE_BYTES = 512 * 1024;
   var MAX_THEME_CSS_BYTES = 64 * 1024;
   var MAX_THEME_VARS = 160;
-  var MAX_HOSTS = 16;
   var MAX_PLUGINS = 40;
   var ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/;
   var VERSION_RE = /^[0-9]{1,4}(\.[0-9]{1,4}){0,3}(-[A-Za-z0-9.]{1,16})?$/;
-  var HOST_RE = /^(?!-)[a-z0-9-]{1,63}(\.(?!-)[a-z0-9-]{1,63})+$/;
   var CSS_VAR_RE = /^--[a-z0-9][a-z0-9-]{0,63}$/;
   // 变量值只允许单条声明字面量：分号/花括号会越出声明，url() 与 @import 会拉取远端资源，都必须拦掉。
   var UNSAFE_CSS_VALUE_RE = /[;{}<>]|url\s*\(|expression\s*\(|javascript\s*:|@import/i;
@@ -36,45 +35,21 @@
   /**
    * 解析 JS 插件的头注释清单。只看文件开头的第一个块注释，避免把插件正文里的注释误当清单。
    * @param {string} source 插件脚本源码。
-   * @returns {object} 原始键值表（hosts 为数组，值尚未归一化）。
+   * @returns {object} 原始键值表（值尚未归一化）。
    */
   function parseHeaderManifest(source) {
     var head = String(source || '').slice(0, 4096);
     var block = HEADER_BLOCK_RE.exec(head);
-    var raw = { hosts: [] };
+    var raw = {};
     if (!block) return raw;
     var lines = String(block[1]).split(/\r?\n/);
     for (var i = 0; i < lines.length; i++) {
       var m = HEADER_TAG_RE.exec(lines[i]);
       if (!m) continue;
       var key = m[1].toLowerCase();
-      var value = m[2];
-      if (key === 'host' || key === 'hosts') {
-        var parts = value.split(/[\s,]+/);
-        for (var p = 0; p < parts.length; p++) if (parts[p]) raw.hosts.push(parts[p]);
-      } else if (!Object.prototype.hasOwnProperty.call(raw, key)) {
-        raw[key] = value;
-      }
+      if (!Object.prototype.hasOwnProperty.call(raw, key)) raw[key] = m[2];
     }
     return raw;
-  }
-  /**
-   * 归一化插件声明的网络白名单。宿主只放行这里列出的主机，插件运行时改不了这份表。
-   * @param {unknown} list 原始主机列表。
-   * @returns {string[]} 小写、去重、合法的主机名数组。
-   */
-  function normalizeHosts(list) {
-    var out = [];
-    var seen = Object.create(null);
-    var source = Array.isArray(list) ? list : (list == null ? [] : String(list).split(/[\s,]+/));
-    for (var i = 0; i < source.length && out.length < MAX_HOSTS; i++) {
-      var host = text(source[i], 253).toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-      if (host.indexOf(':') >= 0) host = host.slice(0, host.indexOf(':'));
-      if (!host || seen[host] || !HOST_RE.test(host)) continue;
-      seen[host] = true;
-      out.push(host);
-    }
-    return out;
   }
 
   /**
@@ -148,8 +123,7 @@
         version: version,
         author: text(raw.author, 40),
         description: text(raw.description, 160),
-        homepage: homepage,
-        hosts: normalizeHosts(raw.hosts)
+        homepage: homepage
       }
     };
   }
@@ -187,7 +161,6 @@
     }
     // 声明式主题包既没有可用变量也没有脚本，就是一个空壳，装上去只会让用户以为坏了。
     if (!script && !theme) return { ok: false, error: 'PLUGIN_NO_PAYLOAD' };
-    if (script && manifest.kind !== 'theme' && !manifest.hosts.length) return { ok: false, error: 'PLUGIN_NO_HOST' };
     return { ok: true, plugin: { manifest: manifest, script: script, theme: theme } };
   }
   /**
@@ -246,41 +219,18 @@
     return out;
   }
 
-  /**
-   * 判断一个请求 URL 是否落在插件声明的白名单内。
-   * 只放行 https，且主机必须精确等于声明值或是其子域，避免 `evil-api.example.com.attacker.net` 这类后缀欺骗。
-   * @param {object} manifest 已归一化的清单。
-   * @param {string} url 待校验 URL。
-   * @returns {boolean} 是否放行。
-   */
-  function isPluginRequestAllowed(manifest, url) {
-    var hosts = manifest && Array.isArray(manifest.hosts) ? manifest.hosts : [];
-    if (!hosts.length) return false;
-    var parsed;
-    try { parsed = new URL(String(url || '')); } catch (e) { return false; }
-    if (parsed.protocol !== 'https:') return false;
-    var host = String(parsed.hostname || '').toLowerCase();
-    if (!host) return false;
-    for (var i = 0; i < hosts.length; i++) {
-      if (host === hosts[i] || host.endsWith('.' + hosts[i])) return true;
-    }
-    return false;
-  }
-
   var api = {
     PLUGIN_SCHEMA: PLUGIN_SCHEMA,
     PLUGIN_KINDS: PLUGIN_KINDS,
     MAX_PACKAGE_BYTES: MAX_PACKAGE_BYTES,
     MAX_PLUGINS: MAX_PLUGINS,
     parseHeaderManifest: parseHeaderManifest,
-    normalizeHosts: normalizeHosts,
     normalizeThemeVars: normalizeThemeVars,
     sanitizeThemeCss: sanitizeThemeCss,
     normalizeManifest: normalizeManifest,
     parsePluginPackage: parsePluginPackage,
     normalizePluginRecord: normalizePluginRecord,
-    normalizePluginRecords: normalizePluginRecords,
-    isPluginRequestAllowed: isPluginRequestAllowed
+    normalizePluginRecords: normalizePluginRecords
   };
   if (typeof module === 'object' && module && module.exports) module.exports = api;
   global.MineradioPluginManifest = api;

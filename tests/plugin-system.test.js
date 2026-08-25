@@ -1,10 +1,12 @@
 'use strict';
 // 插件系统白盒测试。三层各测一件事：
-// - plugin-manifest.js：包解析、清洗、白名单判定（纯函数，直接 require）；
+// - plugin-manifest.js：包解析、清洗、类型判定（纯函数，直接 require）；
 // - plugin-sandbox.js：能力剥离与消息协议（在 vm 里跑真源码，配一个假 self）；
-// - plugin-runtime.js：宿主侧 RPC、白名单执行、主题注入（在 vm 里跑真源码，配假 Worker/document/fetch）。
+// - plugin-runtime.js：宿主侧 RPC、主题注入与主题互斥（在 vm 里跑真源码，配假 Worker/document）。
 // 关键点是 runtime 与 sandbox 用真源码对接，中间的消息过一遍 JSON 往返模拟结构化克隆，
-// 这样「插件返回不可克隆值」「宿主放行了不该放行的主机」这类问题能在测试里就暴露。
+// 这样「插件返回不可克隆值」这类问题能在测试里就暴露。
+// v1.7.4 起插件只剩主题一种能力，所以这里同时守住两条底线：
+// 音源 / 歌单包在解析阶段就被拒；沙箱与运行时都不存在任何网络或播放通道。
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -23,15 +25,14 @@ const BuiltinThemes = require(path.join(publicDir, 'plugin-builtin-themes.js'));
 
 /**
  * 造一个最小渲染进程环境并加载真 plugin-manifest.js + plugin-runtime.js。
- * Worker 用 startSandbox 接真沙箱源码，fetch 用可编程桩，
- * 于是「插件 → 沙箱 → 宿主白名单 → 本地代理」整条链路都是真代码在跑。
- * @param {object} [options] 选项：fetchImpl 自定义代理响应、proxyInfo 覆盖代理入口、
- *   builtin 是否一起加载安装包自带主题模块、storage 复用一份已有的 localStorage 内容。
- * @returns {object} 宿主句柄：plugins（运行时 API）、styleNodes、requests、storage。
+ * Worker 用 startSandbox 接真沙箱源码，于是「插件 → 沙箱 → 宿主主题注入」整条链路都是真代码在跑。
+ * 环境里刻意不放 fetch / XMLHttpRequest / URL：运行时哪天又长出网络调用，这里会直接炸给你看。
+ * @param {object} [options] 选项：builtin 是否一起加载安装包自带主题模块、
+ *   storage 复用一份已有的 localStorage 内容、importPluginFile 桌面导入桩。
+ * @returns {object} 宿主句柄：plugins（运行时 API）、styleNodes、storage。
  */
 function startHost(options) {
   const opts = options || {};
-  const requests = [];
   const styleNodes = [];
   const storage = opts.storage instanceof Map ? opts.storage : new Map();
   const documentStub = {
@@ -43,7 +44,6 @@ function startHost(options) {
     console: { log() {}, error() {}, warn() {} },
     setTimeout,
     clearTimeout,
-    URL,
     document: documentStub,
     localStorage: {
       getItem(key) { return storage.has(key) ? storage.get(key) : null; },
@@ -51,16 +51,7 @@ function startHost(options) {
       removeItem(key) { storage.delete(key); },
     },
     desktopWindow: {
-      getPluginProxyInfo() {
-        return Promise.resolve(opts.proxyInfo || { ok: true, token: 'tok', port: 3000 });
-      },
       importPluginFile: opts.importPluginFile || (() => Promise.resolve({ ok: false, canceled: true })),
-    },
-    fetch(url, init) {
-      const payload = JSON.parse(init.body);
-      requests.push({ url, payload });
-      const impl = opts.fetchImpl || (() => ({ ok: true, status: 200, headers: {}, body: '{"ok":1}' }));
-      return Promise.resolve({ json: () => Promise.resolve(impl(payload)) });
     },
     Worker: function Worker() {
       const handle = startSandbox((msg) => { if (this.onmessage) this.onmessage({ data: msg }); });
@@ -76,9 +67,8 @@ function startHost(options) {
   // 自带主题模块默认不加载：绝大多数用例只关心用户手动装的插件，凭空多两条记录会把断言搅乱。
   if (opts.builtin) vm.runInContext(builtinThemesSource, context, { filename: 'plugin-builtin-themes.js' });
   vm.runInContext(runtimeSource, context, { filename: 'plugin-runtime.js' });
-  return { context, plugins: base.MineradioPlugins, requests, styleNodes, storage };
+  return { context, plugins: base.MineradioPlugins, styleNodes, storage };
 }
-
 /**
  * 在 vm 里启动一个插件沙箱实例，返回可与之收发消息的句柄。
  * 用真 plugin-sandbox.js 源码，只补一个假 self 上的 postMessage / addEventListener。
@@ -104,36 +94,44 @@ function startSandbox(onMessage) {
   };
 }
 
-const SOURCE_PLUGIN = [
+const THEME_SCRIPT_PLUGIN = [
   '/**',
-  ' * @id demo.source',
-  ' * @name 示例音源',
-  ' * @kind source',
+  ' * @id demo.script-theme',
+  ' * @name 示例脚本主题',
+  ' * @kind theme',
   ' * @version 1.2.3',
   ' * @author tester',
-  ' * @host api.example.com, cdn.example.com',
   ' */',
-  'mineradio.on("search", async function(q){',
-  '  var res = await mineradio.requestJson("https://api.example.com/s?q=" + q);',
-  '  return res.list;',
+  'mineradio.on("theme", function(){',
+  '  return { vars: { "--th-panel-bg": "#101418" }, css: ".pl-card{border-radius:14px}" };',
   '});',
-  'mineradio.on("url", async function(song){ return "https://cdn.example.com/" + song.id + ".mp3"; });',
 ].join('\n');
 
 test('JS 插件头注释清单被正确解析', () => {
-  const parsed = Manifest.parsePluginPackage('demo.js', SOURCE_PLUGIN);
+  const parsed = Manifest.parsePluginPackage('demo.js', THEME_SCRIPT_PLUGIN);
   assert.equal(parsed.ok, true);
-  assert.equal(parsed.plugin.manifest.id, 'demo.source');
-  assert.equal(parsed.plugin.manifest.name, '示例音源');
-  assert.equal(parsed.plugin.manifest.kind, 'source');
+  assert.equal(parsed.plugin.manifest.id, 'demo.script-theme');
+  assert.equal(parsed.plugin.manifest.name, '示例脚本主题');
+  assert.equal(parsed.plugin.manifest.kind, 'theme');
   assert.equal(parsed.plugin.manifest.version, '1.2.3');
-  assert.deepEqual(parsed.plugin.manifest.hosts, ['api.example.com', 'cdn.example.com']);
-  assert.ok(parsed.plugin.script.includes('mineradio.on("search"'));
+  assert.equal(parsed.plugin.manifest.author, 'tester');
+  assert.equal('hosts' in parsed.plugin.manifest, false, '插件不能联网，清单里也就没有主机白名单这个字段');
+  assert.ok(parsed.plugin.script.includes('mineradio.on("theme"'));
 });
-
-test('非主题插件必须声明 @host，否则拒绝安装', () => {
-  const noHost = SOURCE_PLUGIN.replace(' * @host api.example.com, cdn.example.com\n', '');
-  assert.equal(Manifest.parsePluginPackage('demo.js', noHost).error, 'PLUGIN_NO_HOST');
+test('插件只有主题一种类型，音源与歌单包在解析阶段就被拒', () => {
+  assert.deepEqual(Manifest.PLUGIN_KINDS, ['theme']);
+  for (const kind of ['source', 'playlist', 'music', 'lyric']) {
+    const js = THEME_SCRIPT_PLUGIN.replace('@kind theme', '@kind ' + kind);
+    assert.equal(Manifest.parsePluginPackage('demo.js', js).error, 'PLUGIN_BAD_KIND', '@kind ' + kind + ' 必须被拒');
+    const json = JSON.stringify({ id: 'demo.x', name: 'x', kind: kind, theme: { vars: { '--th-panel-bg': 'red' } } });
+    assert.equal(Manifest.parsePluginPackage('demo.json', json).error, 'PLUGIN_BAD_KIND');
+  }
+  // 市场上那些 LX 音源插件连 @id 都不写，第一道门就过不去，更不会跑起来。
+  const lx = [
+    '/**', ' * @name 某某音源', ' * @description x', ' * @version 1.0.0', ' */',
+    'lx.on("request", function(){});',
+  ].join('\n');
+  assert.equal(Manifest.parsePluginPackage('lx.js', lx).error, 'PLUGIN_BAD_ID');
 });
 
 test('清单缺 id / name / kind 时整包失败', () => {
@@ -144,6 +142,18 @@ test('清单缺 id / name / kind 时整包失败', () => {
   assert.equal(Manifest.parsePluginPackage('a.js', 'x'.repeat(600 * 1024)).error, 'PLUGIN_TOO_LARGE');
 });
 
+test('清单模块不再有任何联网相关能力', () => {
+  assert.equal(typeof Manifest.isPluginRequestAllowed, 'undefined');
+  assert.equal(typeof Manifest.normalizeHosts, 'undefined');
+  assert.doesNotMatch(manifestSource, /host/i, '连 @host 的解析代码都不该留着');
+  const parsed = Manifest.parsePluginPackage('t.json', JSON.stringify({
+    id: 'demo.theme', name: '主题', kind: 'theme',
+    hosts: 'api.example.com',
+    theme: { vars: { '--th-panel-bg': '#000' } },
+  }));
+  assert.equal(parsed.ok, true);
+  assert.equal('hosts' in parsed.plugin.manifest, false, '包里自带 hosts 字段也不会被带进清单');
+});
 test('声明式主题包只保留合法变量与安全 CSS', () => {
   const pkg = JSON.stringify({
     schema: 'mineradio-plugin-v1',
@@ -190,117 +200,94 @@ test('主题包没有任何可用负载时拒绝安装', () => {
   const pkg = JSON.stringify({ id: 'demo.empty', name: '空壳', kind: 'theme', theme: { vars: { '--x': 'url(a)' } } });
   assert.equal(Manifest.parsePluginPackage('t.json', pkg).error, 'PLUGIN_NO_PAYLOAD');
 });
-
-test('请求白名单只放行 https 与声明主机及其子域', () => {
-  const manifest = { hosts: ['api.example.com'] };
-  assert.equal(Manifest.isPluginRequestAllowed(manifest, 'https://api.example.com/x'), true);
-  assert.equal(Manifest.isPluginRequestAllowed(manifest, 'https://cdn.api.example.com/x'), true);
-  assert.equal(Manifest.isPluginRequestAllowed(manifest, 'http://api.example.com/x'), false);
-  assert.equal(Manifest.isPluginRequestAllowed(manifest, 'https://api.example.com.attacker.net/x'), false);
-  assert.equal(Manifest.isPluginRequestAllowed(manifest, 'https://xapi.example.com/x'), false);
-  assert.equal(Manifest.isPluginRequestAllowed(manifest, 'https://other.com/x'), false);
-  assert.equal(Manifest.isPluginRequestAllowed({ hosts: [] }, 'https://api.example.com/x'), false);
-  assert.equal(Manifest.isPluginRequestAllowed(manifest, 'not a url'), false);
-});
-
-test('主机白名单归一化会剥协议端口路径并限量去重', () => {
-  const hosts = Manifest.normalizeHosts('https://API.Example.com:443/path, api.example.com, bad_host, ok.example.org');
-  assert.deepEqual(hosts, ['api.example.com', 'ok.example.org']);
-  assert.equal(Manifest.normalizeHosts(new Array(40).fill('a.example.com').map((h, i) => `h${i}.${h}`)).length, 16);
-});
-
 test('沙箱源码剥掉了插件不该拿到的宿主能力', () => {
   for (const name of ['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts', 'indexedDB', 'caches', 'Worker', 'postMessage']) {
     assert.match(sandboxSource, new RegExp(`'${name}'`), `STRIPPED 必须包含 ${name}`);
   }
   assert.match(sandboxSource, /self\[STRIPPED\[s\]\] = undefined/);
   assert.match(sandboxSource, /delete self\[STRIPPED\[s\]\]/);
-  // 插件正文必须经 new Function 而不是 eval：eval 会让插件看到这里的闭包变量（pending / handlers）。
+  // 插件正文必须经 new Function 而不是 eval：eval 会让插件看到这里的闭包变量（handlers）。
   assert.match(sandboxSource, /new Function\('mineradio', 'lx', '"use strict";'/);
   assert.doesNotMatch(sandboxSource, /[^.\w]eval\(/);
+  // 宿主代发请求的通道在 v1.7.4 整体拆掉了，沙箱侧不能再留残枝。
+  assert.doesNotMatch(sandboxSource, /requestJson|plugin-request/);
+  assert.match(sandboxSource, /var EVENTS = \['theme'\];/);
 });
 
-test('沙箱里插件确实拿不到 fetch 与 importScripts', () => {
+test('沙箱只暴露 on / log，插件拿不到 fetch、importScripts 与任何请求 API', () => {
   const messages = [];
   const sandbox = startSandbox((msg) => messages.push(msg));
   sandbox.send({
     type: 'plugin-boot',
-    manifest: { id: 'probe', name: 'probe', kind: 'source', hosts: ['a.example.com'] },
-    script: 'mineradio.on("search", function(){ return { fetch: typeof fetch, imports: typeof importScripts, xhr: typeof XMLHttpRequest, post: typeof postMessage }; });',
+    manifest: { id: 'probe', name: 'probe', kind: 'theme' },
+    script: 'mineradio.on("theme", function(){ return { vars: {}, css: "", probe: {'
+      + ' fetch: typeof fetch, imports: typeof importScripts, xhr: typeof XMLHttpRequest,'
+      + ' post: typeof postMessage, request: typeof mineradio.request,'
+      + ' requestJson: typeof mineradio.requestJson, keys: Object.keys(mineradio).join(",")'
+      + ' } }; });',
   });
   assert.equal(messages[0].type, 'plugin-ready');
-  assert.deepEqual(messages[0].hooks, ['search']);
-  sandbox.send({ type: 'plugin-invoke', callId: 'c1', event: 'search', args: ['x'] });
+  assert.deepEqual(messages[0].hooks, ['theme']);
+  sandbox.send({ type: 'plugin-invoke', callId: 'c1', event: 'theme', args: [] });
   return new Promise((resolve) => setTimeout(resolve, 20)).then(() => {
     const result = messages.find((m) => m.type === 'plugin-result');
     assert.equal(result.ok, true);
-    assert.deepEqual(result.value, { fetch: 'undefined', imports: 'undefined', xhr: 'undefined', post: 'undefined' });
+    assert.deepEqual(result.value.probe, {
+      fetch: 'undefined',
+      imports: 'undefined',
+      xhr: 'undefined',
+      post: 'undefined',
+      request: 'undefined',
+      requestJson: 'undefined',
+      keys: 'version,manifest,on,log',
+    });
   });
 });
 
-test('宿主装上音源插件后，搜索经沙箱与本地代理拿到归一化结果', async () => {
-  const host = startHost({
-    fetchImpl: (payload) => ({
-      ok: true,
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ list: [
-        { id: '1001', name: '夜航', singer: ['歌手甲', '歌手乙'], albumName: '专辑A', interval: '03:45', img: 'https://cdn.example.com/a.jpg' },
-        { id: '1002', title: '晨雾', artist: '歌手丙', duration: 214000 },
-        { id: '1003' },
-      ], q: payload.url }),
-    }),
+test('沙箱只认 theme 一个钩子，注册 search / url 之类直接启动失败', () => {
+  const messages = [];
+  const sandbox = startSandbox((msg) => messages.push(msg));
+  sandbox.send({
+    type: 'plugin-boot',
+    manifest: { id: 'probe', name: 'probe', kind: 'theme' },
+    script: 'mineradio.on("search", function(){ return []; });',
   });
-  const installed = host.plugins.install('demo.js', SOURCE_PLUGIN);
-  assert.equal(installed.ok, true);
-  assert.equal(host.plugins.hasEnabled('source'), true);
-
-  const songs = await host.plugins.searchSongs('夜');
-  assert.equal(songs.length, 2, '缺 name 的条目被丢掉');
-  assert.equal(songs[0].type, 'plugin');
-  assert.equal(songs[0].pluginId, 'demo.source');
-  assert.equal(songs[0].name, '夜航');
-  assert.equal(songs[0].artist, '歌手甲 / 歌手乙');
-  assert.equal(songs[0].album, '专辑A');
-  assert.equal(songs[0].duration, 225, 'mm:ss 时长换算成秒');
-  assert.equal(songs[0].key, 'plugin:demo.source:1001');
-  assert.equal(songs[1].duration, 214, '毫秒时长换算成秒');
-
-  assert.equal(host.requests.length, 1, '插件请求只经本地代理发出');
-  assert.match(host.requests[0].url, /^http:\/\/127\.0\.0\.1:3000\/api\/plugin\/fetch\?token=tok$/);
-  assert.equal(host.requests[0].payload.url, 'https://api.example.com/s?q=夜');
+  assert.equal(messages[0].type, 'plugin-boot-failed');
+  assert.match(messages[0].error, /未知插件钩子: search/);
 });
-
-test('插件请求越出 @host 白名单时被宿主拒绝，且不会发出任何代理请求', async () => {
+test('运行时的对外面只剩主题相关 API，网络与播放通道彻底没有了', () => {
   const host = startHost({});
-  const evil = SOURCE_PLUGIN.replace(
-    'https://api.example.com/s?q=',
-    'https://api.example.com.attacker.net/s?q=',
-  );
-  assert.equal(host.plugins.install('evil.js', evil).ok, true);
-  const songs = await host.plugins.searchSongs('x');
-  // 注意用长度断言：vm 里造出来的数组与本 realm 的 Array 原型不同，deepStrictEqual 会因原型不匹配误报。
-  assert.equal(songs.length, 0, '被拒的插件不产出结果，但不拖垮整次搜索');
-  assert.equal(host.requests.length, 0, '白名单在宿主侧拦住，请求根本没到本地代理');
+  const api = host.plugins;
+  assert.deepEqual(Object.keys(api).sort(), [
+    'BUILTIN_STORE_KEY', 'STORE_KEY', 'applyThemes', 'destroyAllWorkers', 'hasEnabled',
+    'importFromDialog', 'init', 'install', 'list', 'remove', 'setEnabled', 'themeVars', 'toast',
+  ]);
+  for (const gone of ['searchSongs', 'resolvePlayUrl', 'fetchLyric', 'fetchCover', 'fetchPlaylists', 'fetchPlaylistDetail']) {
+    assert.equal(typeof api[gone], 'undefined', gone + ' 必须已经删掉');
+  }
+  assert.doesNotMatch(runtimeSource, /api\/plugin\/(fetch|stream)/);
+  assert.doesNotMatch(runtimeSource, /fetch|XMLHttpRequest/i, '运行时不许再有任何网络调用');
+  assert.doesNotMatch(runtimeSource, /plugin-request/);
 });
 
-test('播放地址走本地流代理，并带上插件要求的 Referer / UA', async () => {
-  const host = startHost({
-    fetchImpl: () => ({ ok: true, status: 200, headers: {}, body: JSON.stringify({ list: [{ id: '7', name: '曲' }] }) }),
-  });
-  const plugin = SOURCE_PLUGIN.replace(
-    'mineradio.on("url", async function(song){ return "https://cdn.example.com/" + song.id + ".mp3"; });',
-    'mineradio.on("url", async function(song){ return { url: "http://cdn.example.com/" + song.id + ".mp3", referer: "https://api.example.com/", userAgent: "DemoUA" }; });',
+test('脚本主题的 theme 钩子返回值经沙箱合并进注入的样式，并照样过清洗', async () => {
+  const host = startHost({});
+  const scripted = THEME_SCRIPT_PLUGIN.replace(
+    '  return { vars: { "--th-panel-bg": "#101418" }, css: ".pl-card{border-radius:14px}" };',
+    '  return { vars: { "--th-panel-bg": "#101418", "--th-evil": "red;}body{display:none" },'
+      + ' css: ".pl-card{border-radius:14px}@import url(https://evil.example/x.css);" };',
   );
-  host.plugins.install('demo.js', plugin);
-  const songs = await host.plugins.searchSongs('曲');
-  const resolved = await host.plugins.resolvePlayUrl(songs[0], 'high');
-  assert.equal(resolved.directUrl, 'http://cdn.example.com/7.mp3');
-  assert.match(resolved.url, /^http:\/\/127\.0\.0\.1:3000\/api\/plugin\/stream\?token=tok&url=/);
-  const parsed = new URL(resolved.url);
-  assert.equal(parsed.searchParams.get('url'), 'http://cdn.example.com/7.mp3', 'http CDN 直链交给流代理，而不是在这里拒掉');
-  assert.equal(parsed.searchParams.get('referer'), 'https://api.example.com/');
-  assert.equal(parsed.searchParams.get('ua'), 'DemoUA');
+  assert.equal(host.plugins.install('theme.js', scripted).ok, true);
+  await host.plugins.applyThemes();
+  const css = host.styleNodes[0].textContent;
+  assert.match(css, /:root\{[^}]*--th-panel-bg:#101418/);
+  assert.doesNotMatch(css, /--th-evil/, '越出声明的变量值在宿主侧被丢掉');
+  assert.match(css, /\.pl-card\{border-radius:14px\}/);
+  assert.doesNotMatch(css, /@import/);
+  assert.doesNotMatch(css, /evil\.example/);
+  // 迷你播放器是独立窗口、不加载运行时，只能拿这份合并后的表。
+  // 注意 Object.assign 抄一份：vm 里造出来的对象原型跟本 realm 的 Object 不同，直接 deepStrictEqual 会误报。
+  assert.deepEqual(Object.assign({}, host.plugins.themeVars()), { '--th-panel-bg': '#101418' });
 });
 
 test('主题插件注入到独立 style 节点，用 textContent 且只有一个节点', () => {
@@ -320,7 +307,6 @@ test('主题插件注入到独立 style 节点，用 textContent 且只有一个
   host.plugins.remove('demo.theme');
   assert.equal(host.styleNodes[0].textContent, '', '全部卸载后注入内容清空');
 });
-
 test('装第二个主题时第一个被自动关掉，同一时刻只有一份主题生效', () => {
   const host = startHost({});
   host.plugins.install('t.json', JSON.stringify({
@@ -333,16 +319,15 @@ test('装第二个主题时第一个被自动关掉，同一时刻只有一份�
   }));
   assert.deepEqual(Array.from(second.switchedOff), ['主题一'], '安装结果里点名被顶掉的主题，UI 才能提示用户');
   const list = host.plugins.list();
-  const enabled = list.filter((p) => p.kind === 'theme' && p.enabled).map((p) => p.id);
+  const enabled = list.filter((p) => p.enabled).map((p) => p.id);
   assert.deepEqual(Array.from(enabled), ['demo.theme2'], '两个主题不能同时启用');
   const css = host.styleNodes[0].textContent;
   assert.match(css, /--champagne:#0000bb/);
   assert.doesNotMatch(css, /--champagne:#aaa000/, '被关掉的主题不能还留在注入的样式里');
 });
 
-test('启用一个主题会自动禁用其它主题，非主题插件不受影响', () => {
+test('手动启用另一个主题会自动关掉当前那个，切主题是换不是叠加', () => {
   const host = startHost({});
-  host.plugins.install('demo.js', SOURCE_PLUGIN);
   host.plugins.install('t.json', JSON.stringify({
     id: 'demo.theme', name: '主题一', kind: 'theme', theme: { vars: { '--champagne': '#111111' }, css: '' },
   }));
@@ -355,8 +340,9 @@ test('启用一个主题会自动禁用其它主题，非主题插件不受影�
   host.plugins.list().forEach((p) => { byId[p.id] = p; });
   assert.equal(byId['demo.theme'].enabled, true);
   assert.equal(byId['demo.theme2'].enabled, false, '切主题就是换，不是叠加');
-  assert.equal(byId['demo.source'].enabled, true, '音源插件不参与主题互斥');
+  assert.equal(host.plugins.hasEnabled('theme'), true);
   assert.match(host.styleNodes[0].textContent, /--champagne:#111111/);
+  assert.doesNotMatch(host.styleNodes[0].textContent, /#222222/);
 });
 
 test('历史数据里同时启用的多个主题在 init 时收敛成最近启用的那一个', () => {
@@ -364,11 +350,11 @@ test('历史数据里同时启用的多个主题在 init 时收敛成最近启�
   // 直接伪造 1.7.2 之前的存档：两个主题都是 enabled，updatedAt 分出先后。
   host.storage.set('mineradio-plugins-v1', JSON.stringify([
     {
-      manifest: { id: 'demo.theme', name: '主题一', kind: 'theme', version: '1.0.0', author: '', description: '', homepage: '', hosts: [] },
+      manifest: { id: 'demo.theme', name: '主题一', kind: 'theme', version: '1.0.0', author: '', description: '', homepage: '' },
       script: '', theme: { vars: { '--champagne': '#111111' }, css: '' }, enabled: true, installedAt: 1000, updatedAt: 1000,
     },
     {
-      manifest: { id: 'demo.theme2', name: '主题二', kind: 'theme', version: '1.0.0', author: '', description: '', homepage: '', hosts: [] },
+      manifest: { id: 'demo.theme2', name: '主题二', kind: 'theme', version: '1.0.0', author: '', description: '', homepage: '' },
       script: '', theme: { vars: { '--champagne': '#222222' }, css: '' }, enabled: true, installedAt: 1000, updatedAt: 2000,
     },
   ]));
@@ -380,28 +366,45 @@ test('历史数据里同时启用的多个主题在 init 时收敛成最近启�
   const stored = Manifest.normalizePluginRecords(host.storage.get('mineradio-plugins-v1'));
   assert.deepEqual(stored.filter((r) => r.enabled).map((r) => r.manifest.id), ['demo.theme2']);
 });
+test('存档里残留的旧类型记录会被整条丢掉，不会参与任何调用', () => {
+  const host = startHost({});
+  host.storage.set('mineradio-plugins-v1', JSON.stringify([
+    {
+      manifest: { id: 'legacy.source', name: '旧音源', kind: 'source', version: '1.0.0' },
+      script: 'mineradio.on("search", function(){ return []; });', theme: null,
+      enabled: true, installedAt: 1000, updatedAt: 1000,
+    },
+    {
+      manifest: { id: 'demo.theme', name: '主题', kind: 'theme', version: '1.0.0' },
+      script: '', theme: { vars: { '--champagne': '#333333' }, css: '' }, enabled: true, installedAt: 1000, updatedAt: 1000,
+    },
+  ]));
+  const list = host.plugins.init({});
+  assert.deepEqual(Array.from(list.map((p) => p.id)), ['demo.theme'], '旧音源记录在归一化时就被淘汰');
+  assert.match(host.styleNodes[0].textContent, /--champagne:#333333/);
+});
 
 test('启用状态与安装记录落到 localStorage 并能重新水合', () => {
   const host = startHost({});
-  host.plugins.install('demo.js', SOURCE_PLUGIN);
-  host.plugins.setEnabled('demo.source', false);
+  host.plugins.install('demo.js', THEME_SCRIPT_PLUGIN);
+  host.plugins.setEnabled('demo.script-theme', false);
   const raw = host.storage.get('mineradio-plugins-v1');
   assert.ok(raw, '插件列表写进 localStorage');
   const rehydrated = Manifest.normalizePluginRecords(raw);
   assert.equal(rehydrated.length, 1);
-  assert.equal(rehydrated[0].manifest.id, 'demo.source');
+  assert.equal(rehydrated[0].manifest.id, 'demo.script-theme');
   assert.equal(rehydrated[0].enabled, false);
   const restored = host.plugins.init({});
   assert.equal(restored.length, 1);
   assert.equal(restored[0].enabled, false);
-  assert.equal(host.plugins.hasEnabled('source'), false, '禁用的音源插件不参与搜索');
+  assert.equal(host.plugins.hasEnabled('theme'), false, '禁用的主题不参与换肤');
 });
 
 test('覆盖安装同 id 插件时保留启用状态并换掉脚本', () => {
   const host = startHost({});
-  host.plugins.install('demo.js', SOURCE_PLUGIN);
-  host.plugins.setEnabled('demo.source', false);
-  const again = host.plugins.install('demo.js', SOURCE_PLUGIN.replace('@version 1.2.3', '@version 2.0.0'));
+  host.plugins.install('demo.js', THEME_SCRIPT_PLUGIN);
+  host.plugins.setEnabled('demo.script-theme', false);
+  const again = host.plugins.install('demo.js', THEME_SCRIPT_PLUGIN.replace('@version 1.2.3', '@version 2.0.0'));
   assert.equal(again.ok, true);
   assert.equal(again.replaced, true);
   const list = host.plugins.list();
@@ -409,7 +412,6 @@ test('覆盖安装同 id 插件时保留启用状态并换掉脚本', () => {
   assert.equal(list[0].version, '2.0.0');
   assert.equal(list[0].enabled, false, '升级不擅自打开用户关掉的插件');
 });
-
 test('安装包自带的两份主题就是 examples/plugins 下的同名文件，逐字段一致', () => {
   const packs = BuiltinThemes.list();
   assert.equal(packs.length, 2, '自带午夜靛蓝与暖琥珀两份');
@@ -459,14 +461,13 @@ test('自带主题被卸载后不会在下次启动时又冒出来，手动装�
   const third = startHost({ builtin: true, storage });
   assert.equal(third.plugins.init({}).some((p) => p.id === victim), true, '装回来之后就该一直在了');
 });
-
 test('自带主题只在版本更高时覆盖本地记录，且保留用户的启用状态', () => {
   const pack = BuiltinThemes.list()[0];
   const json = JSON.parse(pack.content);
   const storage = new Map();
   // 伪造一份「装了旧版且已启用」的存档。
   storage.set('mineradio-plugins-v1', JSON.stringify([{
-    manifest: { id: json.id, name: '旧版午夜靛蓝', kind: 'theme', version: '0.0.1', author: '', description: '', homepage: '', hosts: [] },
+    manifest: { id: json.id, name: '旧版午夜靛蓝', kind: 'theme', version: '0.0.1', author: '', description: '', homepage: '' },
     script: '', theme: { vars: { '--champagne': '#123456' }, css: '' }, enabled: true, installedAt: 500, updatedAt: 500,
   }]));
   const host = startHost({ builtin: true, storage });
@@ -481,7 +482,7 @@ test('自带主题只在版本更高时覆盖本地记录，且保留用户的�
   // 反向：本地版本更高（用户自己改的同 id 版本）时不许被自带版本按回去。
   const newer = new Map();
   newer.set('mineradio-plugins-v1', JSON.stringify([{
-    manifest: { id: json.id, name: '我自己改的', kind: 'theme', version: '99.0.0', author: '', description: '', homepage: '', hosts: [] },
+    manifest: { id: json.id, name: '我自己改的', kind: 'theme', version: '99.0.0', author: '', description: '', homepage: '' },
     script: '', theme: { vars: { '--champagne': '#123456' }, css: '' }, enabled: true, installedAt: 500, updatedAt: 500,
   }]));
   const host2 = startHost({ builtin: true, storage: newer });
@@ -502,26 +503,23 @@ test('启用一份自带主题时另一份自带主题被自动关掉', () => {
   assert.equal(byId[ids[1]].enabled, true);
 });
 
-test('插件返回空地址或不可序列化值时报明确错误', async () => {
+test('主题脚本崩掉或返回不可序列化值时只是这份主题不生效，不拖垮换肤', async () => {
   const host = startHost({});
   const broken = [
-    '/**',
-    ' * @id demo.broken',
-    ' * @name 坏插件',
-    ' * @kind source',
-    ' * @host api.example.com',
-    ' */',
-    'mineradio.on("url", function(){ return ""; });',
-    'mineradio.on("search", function(){ var o = {}; o.self = o; return o; });',
+    '/**', ' * @id demo.broken', ' * @name 坏主题', ' * @kind theme', ' */',
+    'mineradio.on("theme", function(){ var o = {}; o.self = o; return o; });',
   ].join('\n');
-  host.plugins.install('broken.js', broken);
-  const songs = await host.plugins.searchSongs('x');
-  assert.equal(songs.length, 0, '循环引用返回值在沙箱侧就被拦住，不会让 postMessage 整体失败');
-  await assert.rejects(
-    () => host.plugins.resolvePlayUrl({ type: 'plugin', pluginId: 'demo.broken', pluginRaw: {} }),
-    /PLUGIN_URL_EMPTY/,
-  );
+  assert.equal(host.plugins.install('broken.js', broken).ok, true);
+  await host.plugins.applyThemes();
+  // 循环引用返回值在沙箱侧就被拦住，宿主拿不到这份主题，注入内容保持空。
+  assert.equal(host.styleNodes[0].textContent, '');
+  assert.deepEqual(Object.assign({}, host.plugins.themeVars()), {});
+
+  const crash = [
+    '/**', ' * @id demo.crash', ' * @name 崩溃主题', ' * @kind theme', ' */',
+    'throw new Error("boom");',
+  ].join('\n');
+  assert.equal(host.plugins.install('crash.js', crash).ok, true);
+  await host.plugins.applyThemes();
+  assert.equal(host.styleNodes[0].textContent, '', '启动就抛错的主题也只是不生效');
 });
-
-
-
