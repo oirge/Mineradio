@@ -1,0 +1,16 @@
+{
+  "schema": "mineradio-plugin-v1",
+  "id": "mineradio.theme.background.deep-sea",
+  "name": "深海微光",
+  "kind": "theme",
+  "version": "1.0.0",
+  "author": "Mineradio",
+  "description": "只轻调默认封面渐变背景，保留面板配色与用户自定义背景。",
+  "theme": {
+    "vars": {
+      "--th-bg-color": "radial-gradient(circle at 22% 18%,rgba(0,116,134,.32),transparent 44%),linear-gradient(150deg,#02090d,#061b24 55%,#020507)",
+      "--th-bg-tint": "linear-gradient(135deg,rgba(0,108,125,.15),rgba(8,24,52,.08) 58%,rgba(77,176,188,.08))",
+      "--th-bg-tint-opacity": ".82"
+    }
+  }
+}

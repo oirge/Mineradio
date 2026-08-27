@@ -31,7 +31,15 @@ function theme(fileName) {
   return JSON.parse(read('examples/plugins/' + fileName));
 }
 
-const THEME_FILES = ['theme-midnight-indigo.json', 'theme-warm-amber.json', 'theme-graphite.json'];
+const FULL_THEME_FILES = ['theme-midnight-indigo.json', 'theme-warm-amber.json', 'theme-graphite.json'];
+const BACKGROUND_THEME_FILES = [
+  'theme-background-deep-sea.json',
+  'theme-background-ember.json',
+  'theme-background-forest.json',
+];
+const BACKGROUND_CAPABLE_THEME_FILES = FULL_THEME_FILES.concat(BACKGROUND_THEME_FILES);
+const THEME_FILES = FULL_THEME_FILES.concat(BACKGROUND_THEME_FILES);
+const BACKGROUND_THEME_VARS = ['--th-bg-color', '--th-bg-tint', '--th-bg-tint-opacity'];
 
 // 主窗口这一族必须由三份示例主题全部覆盖，少一个就会出现「这块没跟着换色」。
 const MAIN_THEME_VARS = [
@@ -56,7 +64,7 @@ const MINI_THEME_VARS = [
 ];
 
 test('三份示例主题都声明完整的 --th-* 变量并能通过清洗', () => {
-  for (const fileName of THEME_FILES) {
+  for (const fileName of FULL_THEME_FILES) {
     const doc = theme(fileName);
     const vars = doc.theme && doc.theme.vars;
     assert.ok(vars, fileName + ' 缺少 theme.vars');
@@ -71,13 +79,34 @@ test('三份示例主题都声明完整的 --th-* 变量并能通过清洗', () 
   }
 });
 
+test('可改背景的主题都声明三个背景变量，三份纯背景主题不夹带其它负载', () => {
+  for (const fileName of BACKGROUND_CAPABLE_THEME_FILES) {
+    const doc = theme(fileName);
+    const vars = doc.theme && doc.theme.vars;
+    assert.ok(vars, fileName + ' 缺少 theme.vars');
+    for (const name of BACKGROUND_THEME_VARS) {
+      assert.ok(Object.prototype.hasOwnProperty.call(vars, name), fileName + ' 缺少 ' + name);
+    }
+    const kept = normalizeThemeVars(vars);
+    for (const name of BACKGROUND_THEME_VARS) {
+      assert.equal(kept[name], vars[name], fileName + ' 的 ' + name + ' 过不了清洗');
+    }
+  }
+
+  for (const fileName of BACKGROUND_THEME_FILES) {
+    const doc = theme(fileName);
+    assert.deepEqual(Object.keys(doc.theme.vars).sort(), BACKGROUND_THEME_VARS.slice().sort(), fileName + ' 应只修改背景变量');
+    assert.equal(String(doc.theme.css || ''), '', fileName + ' 不应靠附加 CSS 绕过背景变量');
+  }
+});
+
 test('改了主题载荷必须抬版本号，否则 profile 里的旧载荷不会被替换', () => {
   for (const fileName of THEME_FILES) {
     const doc = theme(fileName);
     const parts = String(doc.version || '').split('.').map(Number);
     assert.ok(parts.length === 3 && parts.every(Number.isFinite), fileName + ' 版本号格式不对');
-    // 1.4.0 是补齐 --th-mini-* 的那一版；再改载荷就得继续往上走。
-    assert.ok(parts[0] > 1 || (parts[0] === 1 && parts[1] >= 4), fileName + ' 版本号没跟着载荷抬');
+    const minimumMinor = BACKGROUND_THEME_FILES.includes(fileName) ? 0 : 5;
+    assert.ok(parts[0] > 1 || (parts[0] === 1 && parts[1] >= minimumMinor), fileName + ' 版本号没跟着载荷抬');
   }
 });
 
@@ -99,6 +128,22 @@ test('app.css 的关键面板都改成 var(--th-*, 原字面值) 而不是写死
   assert.match(css, /#playlist-panel \.pl-card\.expanded[\s\S]{0,300}rgba\(var\(--fc-accent-rgb\),\.28\)!important/);
   // 玻璃的模糊/饱和度是调好的黄金参数，一个 filter 变量都不能被主题接管。
   assert.doesNotMatch(css, /--th-[a-z-]*filter/);
+});
+
+test('主题可轻量改背景底色与封面色调，用户自定义背景仍保持优先', () => {
+  const css = read('public/app.css');
+  const app = read('public/app.js');
+  const html = read('public/index.html');
+
+  assert.match(css, /#custom-bg\{[^}]*background:var\(--custom-bg-color,var\(--th-bg-color,#000\)\)/);
+  assert.match(css, /#theme-bg-tint\{[^}]*background:var\(--th-bg-tint,transparent\);opacity:var\(--th-bg-tint-opacity,0\)/);
+  assert.match(css, /body\.custom-background-override #theme-bg-tint,body\.wallpaper-engine-active #theme-bg-tint,body\.wallpaper-board-active #theme-bg-tint\{opacity:0!important\}/);
+  assert.match(app, /if \(override\) root\.style\.setProperty\('--custom-bg-color', color\);\s*else root\.style\.removeProperty\('--custom-bg-color'\);/);
+
+  const albumIndex = html.indexOf('<div id="album-bg"></div>');
+  const tintIndex = html.indexOf('<div id="theme-bg-tint" aria-hidden="true"></div>');
+  const canvasIndex = html.indexOf('<div id="canvas-container"></div>');
+  assert.ok(albumIndex >= 0 && albumIndex < tintIndex && tintIndex < canvasIndex, '主题色罩必须位于封面底图之上、粒子画布之下');
 });
 
 test('迷你播放器两套外壳都把底色描边文字接到 --th-mini-* 并保留原字面值兜底', () => {

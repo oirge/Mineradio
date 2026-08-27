@@ -412,10 +412,16 @@ test('覆盖安装同 id 插件时保留启用状态并换掉脚本', () => {
   assert.equal(list[0].version, '2.0.0');
   assert.equal(list[0].enabled, false, '升级不擅自打开用户关掉的插件');
 });
-test('安装包自带的两份主题就是 examples/plugins 下的同名文件，逐字段一致', () => {
+test('安装包自带的五份主题就是 examples/plugins 下的同名文件，逐字段一致', () => {
   const packs = BuiltinThemes.list();
-  assert.equal(packs.length, 2, '自带午夜靛蓝与暖琥珀两份');
-  assert.deepEqual(packs.map((p) => p.fileName), ['theme-midnight-indigo.json', 'theme-warm-amber.json']);
+  assert.equal(packs.length, 5, '自带两份完整主题与三份纯背景主题');
+  assert.deepEqual(packs.map((p) => p.fileName), [
+    'theme-midnight-indigo.json',
+    'theme-warm-amber.json',
+    'theme-background-deep-sea.json',
+    'theme-background-ember.json',
+    'theme-background-forest.json',
+  ]);
   for (const pack of packs) {
     const onDisk = JSON.parse(fs.readFileSync(path.join(repoRoot, 'examples', 'plugins', pack.fileName), 'utf8'));
     assert.deepEqual(JSON.parse(pack.content), onDisk, `${pack.fileName} 与示例目录里的内容必须一致，改了一边就要改另一边`);
@@ -424,7 +430,11 @@ test('安装包自带的两份主题就是 examples/plugins 下的同名文件�
     assert.equal(parsed.ok, true, `${pack.fileName} 必须能被 parsePluginPackage 接受`);
     assert.equal(parsed.plugin.manifest.kind, 'theme');
     assert.ok(Object.keys(parsed.plugin.theme.vars).length > 0, '清洗后不能一个变量都不剩');
-    assert.ok(parsed.plugin.theme.css.length > 0, '清洗后 css 不能被清空');
+    if (pack.fileName.startsWith('theme-background-')) {
+      assert.equal(parsed.plugin.theme.css, '', '纯背景主题不需要附加 CSS');
+    } else {
+      assert.ok(parsed.plugin.theme.css.length > 0, '完整主题的 css 不能被清空');
+    }
   }
   assert.deepEqual(BuiltinThemes.ids(), packs.map((p) => JSON.parse(p.content).id));
 });

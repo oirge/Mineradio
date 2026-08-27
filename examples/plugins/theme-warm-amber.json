@@ -3,7 +3,7 @@
   "id": "mineradio.theme.warm-amber",
   "name": "暖琥珀",
   "kind": "theme",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "Mineradio",
   "theme": {
     "vars": {
@@ -16,6 +16,9 @@
       "--saved-button-glass-hover-shadow": "inset 0 0 2px 1px rgba(255,232,196,.40),inset 0 0 12px 5px rgba(244,185,97,.16),0 12px 34px rgba(14,8,2,.40),0 0 18px rgba(244,185,97,.11)",
       "--champagne": "#F4B961",
       "--source-local": "#CFAE8F",
+      "--th-bg-color": "radial-gradient(circle at 76% 18%,rgba(151,91,24,.27),transparent 43%),linear-gradient(150deg,#100803,#231409 54%,#090402)",
+      "--th-bg-tint": "linear-gradient(135deg,rgba(102,49,9,.10),rgba(239,151,47,.10) 54%,rgba(36,17,5,.12))",
+      "--th-bg-tint-opacity": ".74",
       "--th-panel-bg": "linear-gradient(145deg,rgba(var(--home-accent-rgb),.12),rgba(46,30,14,.88) 44%,rgba(16,10,4,.86))",
       "--th-panel-border": "rgba(255,226,180,.10)",
       "--th-panel-shadow": "0 24px 78px rgba(16,10,4,.52),0 0 0 1px rgba(255,226,180,.06),inset 0 1px 0 rgba(255,255,255,.15),inset 0 -18px 42px rgba(16,10,4,.22)",

@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.7.4` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，**`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.5` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,18 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.5 主题背景换色 + 三份内置背景主题
+
+- 日期：2026-08-27。版本从 `1.7.4` 提升为 `1.7.5`。
+- 用户原话：「在最新版的基础上更新插件主题也能稍加更改背景颜色，在加几个背景插件」。边界是轻量换色，不把主题扩成壁纸引擎，不动电影视觉系统、粒子、玻璃模糊参数或现有 UI 布局。
+- 背景接口：`--th-bg-color` 提供默认最底层色，`--th-bg-tint` 提供封面模糊背景上的轻量色调，`--th-bg-tint-opacity` 控制色调透明度。`public/app.css` 里 `#custom-bg` 使用 `var(--custom-bg-color,var(--th-bg-color,#000))`，独立的 `#theme-bg-tint` 消费后两个变量。
+- **用户自定义背景必须永远优先。** `applyCustomBackground()` 只在纯默认态移除行内 `--custom-bg-color`；用户设了纯色、图片、视频或透明度时继续写行内值压过主题。播放器背景板启用时只有默认态通过 `body.wallpaper-board-active:not(.custom-background-override) #custom-bg` 让底色让位，用户自定义背景仍保留在画布上层；Wallpaper Engine 与自定义媒体的图层关系不得回退。
+- 主题负载：午夜靛蓝、暖琥珀与石墨各加三个背景变量并抬到 `1.5.0`；新增 `theme-background-deep-sea.json`（深海微光）、`theme-background-ember.json`（暗焰余晖）、`theme-background-forest.json`（冷杉夜雾）三份纯变量主题。安装包自带主题从 2 份扩为 5 份，默认都不启用，互斥、卸载记忆与版本覆盖规则不变。
+- 纯背景主题只有三个 `vars`、不带 `css`是合法最小负载；它仍是互斥 `theme`，启用时会关掉当前完整主题，面板配色回落默认值。
+- 守卫：`tests/plugin-system.test.js` 钉住 5 份内置包与 `examples/plugins/` 逐字段一致，不再错把纯背景主题的空 CSS 当成失败；`tests/plugin-theme-reach.test.js` 钉住背景三变量、清洗、纯背景最小负载、CSS 消费点与用户行内变量优先级。
+- 文档：`CHANGELOG.md`、`docs/PLUGIN_AUTHORING.md`、`examples/plugins/README.md` 与 `.context/architecture/mineradio-plugin-system.md` 同步记录五份内置主题、背景变量和优先级边界。
+- 构建核验：`npm run build:win` 成功；安装器 `101513979` 字节 / SHA256 `8c4456df71e3d19576f2770b3ce63ed40681f8b948670aa91d1ec4c5b3938998` / SHA512 `h8W0CFH+vaWbOwiuCz9vWfz1wlRyHxGQtuebvnZCz/VaKuKm60MnsabHPOXE8fkWJtPZEWvP/2TQmJ3uBDNS6g==`；blockmap `105842` 字节 / SHA256 `891b44d76812774a19d1fb77791221679b77124bcaae7f4136595608a41bd0b2`；`latest.yml` `347` 字节 / SHA256 `e56a00e15788587a5de2a5e8ce1c0c09c2fe870b244f5964514e5e9254b9bbab`；SHA256 清单 `273` 字节。打包内容已确认含 5 份内置主题与 4 个插件源码文件，未含已删除的 `plugin-proxy.js`。
 
 ## v1.7.4 插件收窄成只有主题一种
 

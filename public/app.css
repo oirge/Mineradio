@@ -77,7 +77,7 @@ body.desktop-shell.desktop-fullscreen #top-right{top:24px}
 @media (max-width:720px){#fullscreen-diy-zone{width:202px;height:48px;gap:6px}#fullscreen-diy-btn,#fullscreen-exit-btn{min-width:96px;height:32px}}
 
 /* ---------- 背景 ---------- */
-#custom-bg{position:fixed;inset:0;z-index:0;background:var(--custom-bg-color,#000);overflow:hidden;transition:background .35s ease}
+#custom-bg{position:fixed;inset:0;z-index:0;background:var(--custom-bg-color,var(--th-bg-color,#000));overflow:hidden;transition:background .35s ease}
 #custom-bg-video{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);object-fit:cover;opacity:var(--custom-bg-video-opacity,0);filter:none;transform:scale(1.002);transition:opacity .35s ease;pointer-events:none;background:#000}
 #custom-bg::before{content:'';position:absolute;inset:-1px;background-image:var(--custom-bg-image,none);background-size:cover;background-position:center;opacity:var(--custom-bg-image-opacity,0);filter:none;transform:scale(1.002);transition:opacity .35s ease,background-image .35s ease;pointer-events:none}
 #custom-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.06),rgba(0,0,0,.16));opacity:var(--custom-bg-overlay-opacity,0);pointer-events:none}
@@ -89,7 +89,11 @@ body.custom-background-video #custom-bg::before{opacity:0!important}
 body.custom-background-override #album-bg{opacity:0!important}
 /* 壁纸背景板是封面派生的整幅画面，与封面模糊底图重叠会互相糊掉，启用时让位。 */
 body.wallpaper-board-active #album-bg{opacity:0!important}
-/* 位于 #custom-bg 与 Wallpaper Engine 层之前，用户自选的背景图/视频/WE 壁纸仍然盖在上面。 */
+/* 背景板位于自定义背景之下；默认底色需让位，否则不透明主题渐变会把画布完全盖住。用户自定义背景仍保留在上层。 */
+body.wallpaper-board-active:not(.custom-background-override) #custom-bg{opacity:0!important}
+#theme-bg-tint{position:fixed;inset:0;z-index:0;background:var(--th-bg-tint,transparent);opacity:var(--th-bg-tint-opacity,0);pointer-events:none;transition:background .35s ease,opacity .35s ease}
+body.custom-background-override #theme-bg-tint,body.wallpaper-engine-active #theme-bg-tint,body.wallpaper-board-active #theme-bg-tint{opacity:0!important}
+/* 位于默认底色与封面底图之上；自定义背景和 Wallpaper Engine 启用时由状态类隐藏。 */
 #wallpaper-board{position:fixed;inset:0;z-index:0;display:none;pointer-events:none;opacity:0;transition:opacity .45s ease}
 #wallpaper-board.mounted{display:block}
 #wallpaper-board.active{opacity:1}

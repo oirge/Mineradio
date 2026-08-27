@@ -3,7 +3,7 @@
   "id": "mineradio.theme.graphite",
   "name": "石墨",
   "kind": "theme",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "Mineradio",
   "theme": {
     "vars": {
@@ -16,6 +16,9 @@
       "--saved-button-glass-hover-shadow": "inset 0 0 2px 1px rgba(255,255,255,.40),inset 0 0 12px 5px rgba(216,216,224,.14),0 12px 34px rgba(0,0,0,.42),0 0 18px rgba(216,216,224,.08)",
       "--champagne": "#D8D8E0",
       "--source-local": "#A8A8B2",
+      "--th-bg-color": "radial-gradient(circle at 30% 16%,rgba(111,116,130,.15),transparent 43%),linear-gradient(150deg,#050506,#141416 54%,#030304)",
+      "--th-bg-tint": "linear-gradient(135deg,rgba(255,255,255,.03),rgba(35,35,39,.07) 52%,rgba(0,0,0,.12))",
+      "--th-bg-tint-opacity": ".68",
       "--th-panel-bg": "linear-gradient(145deg,rgba(var(--home-accent-rgb),.12),rgba(26,26,30,.88) 44%,rgba(9,9,11,.86))",
       "--th-panel-border": "rgba(255,255,255,.10)",
       "--th-panel-shadow": "0 24px 78px rgba(9,9,11,.52),0 0 0 1px rgba(255,255,255,.06),inset 0 1px 0 rgba(255,255,255,.15),inset 0 -18px 42px rgba(9,9,11,.22)",

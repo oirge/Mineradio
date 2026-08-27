@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.4';
+var APP_VERSION = '1.7.5';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -26892,7 +26892,9 @@ function applyCustomBackground() {
   var root = document.documentElement;
   var layer = document.getElementById('custom-bg');
   var video = document.getElementById('custom-bg-video');
-  root.style.setProperty('--custom-bg-color', color);
+  // 默认封面背景让主题接管底色；用户自定义纯色、媒体或透明度时仍由行内变量优先。
+  if (override) root.style.setProperty('--custom-bg-color', color);
+  else root.style.removeProperty('--custom-bg-color');
   document.body.classList.toggle('custom-background-override', override);
   document.body.classList.toggle('custom-background-flat', override && !media);
   document.body.classList.toggle('custom-background-video', hasVideo);

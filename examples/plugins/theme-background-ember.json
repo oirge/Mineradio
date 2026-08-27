@@ -1,0 +1,16 @@
+{
+  "schema": "mineradio-plugin-v1",
+  "id": "mineradio.theme.background.ember",
+  "name": "暗焰余晖",
+  "kind": "theme",
+  "version": "1.0.0",
+  "author": "Mineradio",
+  "description": "只轻调默认封面渐变背景，保留面板配色与用户自定义背景。",
+  "theme": {
+    "vars": {
+      "--th-bg-color": "radial-gradient(circle at 78% 22%,rgba(164,47,25,.30),transparent 43%),linear-gradient(150deg,#100302,#260907 54%,#050101)",
+      "--th-bg-tint": "linear-gradient(135deg,rgba(113,18,12,.12),rgba(239,80,40,.10) 58%,rgba(44,5,4,.14))",
+      "--th-bg-tint-opacity": ".82"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "mineradio-plugin-v1",
+  "id": "mineradio.theme.background.forest",
+  "name": "冷杉夜雾",
+  "kind": "theme",
+  "version": "1.0.0",
+  "author": "Mineradio",
+  "description": "只轻调默认封面渐变背景，保留面板配色与用户自定义背景。",
+  "theme": {
+    "vars": {
+      "--th-bg-color": "radial-gradient(circle at 24% 22%,rgba(25,105,79,.30),transparent 44%),linear-gradient(150deg,#020907,#071d15 54%,#010504)",
+      "--th-bg-tint": "linear-gradient(135deg,rgba(18,92,68,.14),rgba(6,28,21,.08) 58%,rgba(99,150,116,.07))",
+      "--th-bg-tint-opacity": ".82"
+    }
+  }
+}

@@ -1,5 +1,15 @@
 ﻿# 发布流程
 
+## v1.7.5 主题可轻调背景，并新增三份背景主题
+- 正式发布版本从 `1.7.4` 提升为 `1.7.5`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 必须保持一致，使 `1.7.4` 及更早版本可通过 `latest.yml` 自动更新。
+- 主题新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 三个默认背景变量；用户自定义纯色、图片、视频、Wallpaper Engine 与「播放器背景板」继续优先，主题不得覆盖用户背景。
+- 午夜靛蓝、暖琥珀与石墨主题升到 `1.5.0`；安装包新增 `深海微光` / `暗焰余晖` / `冷杉夜雾` 三份纯背景主题，自带主题总数为五份且默认都不启用。
+- 发布前运行全量 Node 回归、`node --check server.js`、`node --check public/app.js` 与 `git diff --check`，并实际检查默认背景、五份内置主题、自定义背景及 Wallpaper Engine / 播放器背景板的图层让位。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；发布标题使用 `Mineradio v1.7.5 主题可轻调背景，并新增三份背景主题`。
+- 本地构建产物：`Mineradio-1.7.5-Setup.exe` `101513979` 字节；`.blockmap` `105842` 字节；`latest.yml` `347` 字节；`Mineradio-1.7.5-SHA256SUMS.txt` `273` 字节。
+- SHA256：安装器 `8c4456df71e3d19576f2770b3ce63ed40681f8b948670aa91d1ec4c5b3938998`；`.blockmap` `891b44d76812774a19d1fb77791221679b77124bcaae7f4136595608a41bd0b2`；`latest.yml` `e56a00e15788587a5de2a5e8ce1c0c09c2fe870b244f5964514e5e9254b9bbab`；SHA256 清单 `273` 字节。
+- `latest.yml` 的 Setup SHA512：`h8W0CFH+vaWbOwiuCz9vWfz1wlRyHxGQtuebvnZCz/VaKuKm60MnsabHPOXE8fkWJtPZEWvP/2TQmJ3uBDNS6g==`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+
 ## v1.6.2 修复搜索结果面板自动弹出
 - 正式发布版本从 `1.6.1` 提升为 `1.6.2`；构建时同步 `package.json`、`package-lock.json` 和前端 `APP_VERSION`，使已安装 `1.6.1` 及更早版本的客户端满足 `latestVersion > APP_VERSION` 并通过 `latest.yml` 自动更新。
 - 修复本地曲库恢复、导入、清空和后台资产补水路径调用空查询渲染时自动给搜索结果加上 `show` 的问题。

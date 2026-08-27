@@ -200,6 +200,7 @@ test('壁纸展示位置有分段控件、背景板画布和持久化 schema', (
   );
   assert.match(cssSource, /#wallpaper-board\{position:fixed;inset:0;z-index:0;/);
   assert.match(cssSource, /body\.wallpaper-board-active #album-bg\{opacity:0!important\}/);
+  assert.match(cssSource, /body\.wallpaper-board-active:not\(\.custom-background-override\) #custom-bg\{opacity:0!important\}/);
   // 背景板必须排在 #custom-bg 和 Wallpaper Engine 层之前，用户自选背景才能继续盖在上面。
   assert.ok(
     indexSource.indexOf('id="wallpaper-board"') < indexSource.indexOf('id="custom-bg"'),

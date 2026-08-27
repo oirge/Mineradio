@@ -1,5 +1,5 @@
 'use strict';
-// 安装包自带的两份声明式主题包（1.7.2 起）。内容与 examples/plugins/ 下同名文件逐字段一致，
+// 安装包自带的声明式主题包。内容与 examples/plugins/ 下同名文件逐字段一致，
 // tests/plugin-system.test.js 钉住这一点，改了示例文件却忘了改这里会红。
 // 首次启动由 plugin-runtime.js 的 seedBuiltinThemes() 走与用户导入完全相同的 parsePluginPackage()
 // 通道装进插件列表：清洗规则、变量白名单、体积上限全都一视同仁，自带主题不享受任何特权。
@@ -15,7 +15,7 @@
         "id": "mineradio.theme.midnight-indigo",
         "name": "午夜靛蓝",
         "kind": "theme",
-        "version": "1.4.0",
+        "version": "1.5.0",
         "author": "Mineradio",
         "theme": {
           "vars": {
@@ -28,6 +28,9 @@
             "--saved-button-glass-hover-shadow": "inset 0 0 2px 1px rgba(200,214,255,.40),inset 0 0 12px 5px rgba(112,144,255,.15),0 12px 34px rgba(2,4,14,.40),0 0 18px rgba(108,140,255,.10)",
             "--champagne": "#C3D2FF",
             "--source-local": "#8FA8CF",
+            "--th-bg-color": "radial-gradient(circle at 24% 18%,rgba(43,72,145,.30),transparent 43%),linear-gradient(150deg,#02040d,#09122a 54%,#02040d)",
+            "--th-bg-tint": "linear-gradient(135deg,rgba(38,68,148,.15),rgba(4,8,22,.07) 56%,rgba(117,143,255,.09))",
+            "--th-bg-tint-opacity": ".76",
             "--th-panel-bg": "linear-gradient(145deg,rgba(var(--home-accent-rgb),.12),rgba(16,22,52,.88) 44%,rgba(5,7,18,.86))",
             "--th-panel-border": "rgba(188,204,255,.10)",
             "--th-panel-shadow": "0 24px 78px rgba(5,7,18,.52),0 0 0 1px rgba(188,204,255,.06),inset 0 1px 0 rgba(255,255,255,.15),inset 0 -18px 42px rgba(5,7,18,.22)",
@@ -87,7 +90,7 @@
         "id": "mineradio.theme.warm-amber",
         "name": "暖琥珀",
         "kind": "theme",
-        "version": "1.4.0",
+        "version": "1.5.0",
         "author": "Mineradio",
         "theme": {
           "vars": {
@@ -100,6 +103,9 @@
             "--saved-button-glass-hover-shadow": "inset 0 0 2px 1px rgba(255,232,196,.40),inset 0 0 12px 5px rgba(244,185,97,.16),0 12px 34px rgba(14,8,2,.40),0 0 18px rgba(244,185,97,.11)",
             "--champagne": "#F4B961",
             "--source-local": "#CFAE8F",
+            "--th-bg-color": "radial-gradient(circle at 76% 18%,rgba(151,91,24,.27),transparent 43%),linear-gradient(150deg,#100803,#231409 54%,#090402)",
+            "--th-bg-tint": "linear-gradient(135deg,rgba(102,49,9,.10),rgba(239,151,47,.10) 54%,rgba(36,17,5,.12))",
+            "--th-bg-tint-opacity": ".74",
             "--th-panel-bg": "linear-gradient(145deg,rgba(var(--home-accent-rgb),.12),rgba(46,30,14,.88) 44%,rgba(16,10,4,.86))",
             "--th-panel-border": "rgba(255,226,180,.10)",
             "--th-panel-shadow": "0 24px 78px rgba(16,10,4,.52),0 0 0 1px rgba(255,226,180,.06),inset 0 1px 0 rgba(255,255,255,.15),inset 0 -18px 42px rgba(16,10,4,.22)",
@@ -148,6 +154,66 @@
             "--th-mini-ghost-text": "rgba(240,218,186,.56)"
           },
           "css": "#search-box,#search-results,.search-mode-tabs,#fx-panel,#playlist-panel,#toast,.modal,.track-detail-modal,.cover-color-pop,.color-lab-pop,.visual-guide-card,.volume-popover,.quality-popover,.mini-queue-popover,.home-hero,.home-card,.home-tile,.home-mosaic-cell,.pl-inline-detail{background:linear-gradient(145deg,rgba(var(--home-accent-rgb),.12),rgba(46,30,14,.88) 44%,rgba(16,10,4,.86))!important}\n#search-box,#search-results,.search-mode-tabs{background:rgba(46,30,14,.56)!important}\n.search-empty{color:rgba(240,222,198,.52)}"
+        }
+      }
+    },
+    {
+      fileName: "theme-background-deep-sea.json",
+      json:
+      {
+        "schema": "mineradio-plugin-v1",
+        "id": "mineradio.theme.background.deep-sea",
+        "name": "深海微光",
+        "kind": "theme",
+        "version": "1.0.0",
+        "author": "Mineradio",
+        "description": "只轻调默认封面渐变背景，保留面板配色与用户自定义背景。",
+        "theme": {
+          "vars": {
+            "--th-bg-color": "radial-gradient(circle at 22% 18%,rgba(0,116,134,.32),transparent 44%),linear-gradient(150deg,#02090d,#061b24 55%,#020507)",
+            "--th-bg-tint": "linear-gradient(135deg,rgba(0,108,125,.15),rgba(8,24,52,.08) 58%,rgba(77,176,188,.08))",
+            "--th-bg-tint-opacity": ".82"
+          }
+        }
+      }
+    },
+    {
+      fileName: "theme-background-ember.json",
+      json:
+      {
+        "schema": "mineradio-plugin-v1",
+        "id": "mineradio.theme.background.ember",
+        "name": "暗焰余晖",
+        "kind": "theme",
+        "version": "1.0.0",
+        "author": "Mineradio",
+        "description": "只轻调默认封面渐变背景，保留面板配色与用户自定义背景。",
+        "theme": {
+          "vars": {
+            "--th-bg-color": "radial-gradient(circle at 78% 22%,rgba(164,47,25,.30),transparent 43%),linear-gradient(150deg,#100302,#260907 54%,#050101)",
+            "--th-bg-tint": "linear-gradient(135deg,rgba(113,18,12,.12),rgba(239,80,40,.10) 58%,rgba(44,5,4,.14))",
+            "--th-bg-tint-opacity": ".82"
+          }
+        }
+      }
+    },
+    {
+      fileName: "theme-background-forest.json",
+      json:
+      {
+        "schema": "mineradio-plugin-v1",
+        "id": "mineradio.theme.background.forest",
+        "name": "冷杉夜雾",
+        "kind": "theme",
+        "version": "1.0.0",
+        "author": "Mineradio",
+        "description": "只轻调默认封面渐变背景，保留面板配色与用户自定义背景。",
+        "theme": {
+          "vars": {
+            "--th-bg-color": "radial-gradient(circle at 24% 22%,rgba(25,105,79,.30),transparent 44%),linear-gradient(150deg,#020907,#071d15 54%,#010504)",
+            "--th-bg-tint": "linear-gradient(135deg,rgba(18,92,68,.14),rgba(6,28,21,.08) 58%,rgba(99,150,116,.07))",
+            "--th-bg-tint-opacity": ".82"
+          }
         }
       }
     }
