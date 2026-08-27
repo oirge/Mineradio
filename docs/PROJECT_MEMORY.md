@@ -45,6 +45,7 @@
 - 守卫：`tests/plugin-system.test.js` 钉住 5 份内置包与 `examples/plugins/` 逐字段一致，不再错把纯背景主题的空 CSS 当成失败；`tests/plugin-theme-reach.test.js` 钉住背景三变量、清洗、纯背景最小负载、CSS 消费点与用户行内变量优先级。
 - 文档：`CHANGELOG.md`、`docs/PLUGIN_AUTHORING.md`、`examples/plugins/README.md` 与 `.context/architecture/mineradio-plugin-system.md` 同步记录五份内置主题、背景变量和优先级边界。
 - 构建核验：`npm run build:win` 成功；安装器 `101513979` 字节 / SHA256 `8c4456df71e3d19576f2770b3ce63ed40681f8b948670aa91d1ec4c5b3938998` / SHA512 `h8W0CFH+vaWbOwiuCz9vWfz1wlRyHxGQtuebvnZCz/VaKuKm60MnsabHPOXE8fkWJtPZEWvP/2TQmJ3uBDNS6g==`；blockmap `105842` 字节 / SHA256 `891b44d76812774a19d1fb77791221679b77124bcaae7f4136595608a41bd0b2`；`latest.yml` `347` 字节 / SHA256 `e56a00e15788587a5de2a5e8ce1c0c09c2fe870b244f5964514e5e9254b9bbab`；SHA256 清单 `273` 字节。打包内容已确认含 5 份内置主题与 4 个插件源码文件，未含已删除的 `plugin-proxy.js`。
+- 发布核验：提交 `d937927` 已推送到 `codex/mini-cover-static`，注解 tag `v1.7.5` 已推送；先建 GitHub Release，再运行 `Build and Release` workflow（run `33042160371`，成功，1m58s）。远端 Release 为正式非 draft / 非 prerelease，资产共 4 项：`Mineradio-1.7.5-Setup.exe` `101513620` 字节 / GitHub digest `sha256:18575ef4406ece91fde5007997ccd29103797c859a9c15f77d97a93c49cd2977`；`.blockmap` `105810` 字节 / `sha256:e266c9b4251277900d5b124613ae7835e0fb265983a61b64181c8bb1b59e5177`；`latest.yml` `347` 字节 / `sha256:6395fe1dec634a0f215ff5c27dfa7cd950e103763f021c3e032b8c64f6a79d2d`；SHA256 清单 `273` 字节 / `sha256:ac807b1644392fc59c8853142b96e398f347a7b5b21161094f5b4c88ab461ca5`。远端 `latest.yml` 的版本为 `1.7.5`，Release URL：`https://github.com/oirge/Mineradio/releases/tag/v1.7.5`。
 
 ## v1.7.4 插件收窄成只有主题一种
 
