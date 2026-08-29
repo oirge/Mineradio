@@ -353,7 +353,7 @@ test('歌曲封面拖动移动窗口，短按仍保持展开行为', () => {
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
 });
 
-test('收回态整窗保持可交互，指针离开窗口才恢复穿透', () => {
+test('收回态只有封面热区参与命中，封面外的透明区交还桌面', () => {
   const harness = createMiniPlayerHarness();
   const shell = harness.nodes['mini-shell'];
   const coverWrap = harness.nodes['cover-wrap'];
@@ -361,17 +361,18 @@ test('收回态整窗保持可交互，指针离开窗口才恢复穿透', () =>
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
   assert.deepEqual(harness.passthroughs, [true]);
 
-  // 收回后指针进入窗口任意位置都要恢复交互：空白处右键菜单、双击恢复都依赖整窗命中。
+  // 收回后封面以外那截看不见的窗体不参与命中：坐标落在完整面板旧位置也保持穿透，
+  // 桌面点击和桌面右键菜单都不能被吞掉（收回态的播放器右键菜单只在封面上可用）。
   harness.document.dispatch('mousemove', { clientX: 40, clientY: 40 });
-  assert.deepEqual(harness.passthroughs, [true, false]);
+  assert.deepEqual(harness.passthroughs, [true]);
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
 
-  // 指针移到封面热区才展开面板，穿透状态不变化。
+  // 指针进入封面热区：先恢复窗口交互（封面可点、可右键），再展开面板。
   harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
   assert.deepEqual(harness.passthroughs, [true, false]);
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
 
-  // 展开后整块面板都要参与命中，指针移到控制区不能重新穿透。
+  // 展开后整块面板都要参与命中，指针移到控制区不能重新穿透——展开态整窗可点、可右键。
   shell.hover = true;
   harness.document.dispatch('mousemove', { clientX: 40, clientY: 40 });
   assert.deepEqual(harness.passthroughs, [true, false]);
@@ -382,15 +383,14 @@ test('收回态整窗保持可交互，指针离开窗口才恢复穿透', () =>
   shell.dispatch('mouseleave');
   harness.flushTimers();
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
-  // 指针仍在窗口上（未收到 document mouseleave），收回后整窗继续可交互，不能穿透。
-  assert.deepEqual(harness.passthroughs, [true, false]);
+  assert.deepEqual(harness.passthroughs, [true, false, true]);
 
-  // 指针整体离开窗口后在窗与热区标记必须清零，收回态立即恢复穿透。
+  // 指针整体离开窗口后热区标记必须清零，收回态继续保持穿透。
   harness.document.dispatch('mouseleave', {});
   assert.deepEqual(harness.passthroughs, [true, false, true]);
 });
 
-test('封面拖动期间保持窗口交互，拖动结束后指针在窗则不穿透', () => {
+test('封面拖动期间保持窗口交互，拖动结束后按热区恢复穿透', () => {
   const harness = createMiniPlayerHarness();
   const coverWrap = harness.nodes['cover-wrap'];
 
@@ -404,10 +404,6 @@ test('封面拖动期间保持窗口交互，拖动结束后指针在窗则不�
 
   coverWrap.dispatch('pointerup', { pointerId: 3 });
   harness.flushTimers();
-  // 拖完指针仍在窗口上：收回后整窗继续可交互（右键菜单可用），不恢复穿透。
-  assert.deepEqual(harness.passthroughs, [true, false]);
-
-  harness.document.dispatch('mouseleave', {});
   assert.deepEqual(harness.passthroughs, [true, false, true]);
 });
 
