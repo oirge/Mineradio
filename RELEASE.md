@@ -1,5 +1,15 @@
 ﻿# 发布流程
 
+## v1.7.13 迷你播放器右键菜单与任务栏托盘完全一致
+- 正式发布版本从 `1.7.12` 提升为 `1.7.13`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.12` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版是迷你播放器右键菜单对齐：托盘与迷你共用 `buildAppContextMenuTemplate()` 的六项菜单，勾选态实时读真实设置；新增 `win.on('system-context-menu')` + `preventDefault()` 拦掉拖拽区的窗口系统菜单（迷你窗口不可缩放/最小化/最大化，那份系统菜单只剩「关闭」可点），非拖拽区仍走 `webContents.on('context-menu')`；两套外壳共用窗口工厂，极简同样整窗可右键。
+- 发布前运行全量 Node 回归（483/483）、`node --check desktop/main.js`、`node --check server.js` 与 `git diff --check`。OS 级拖拽区右键无法在禁用合成输入的前提下自动验证，靠 `system-context-menu` 类型签名与单测挂接断言兜底。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；发布标题使用 `v1.7.13 迷你播放器右键菜单与任务栏托盘完全一致`。
+- 远端构建产物：`Mineradio-1.7.13-Setup.exe` `101519427` 字节；`.blockmap` `105854` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.13-SHA256SUMS.txt` `275` 字节。
+- SHA256：安装器 `bd04b51b47d8a0f470d9ccbbda754ce16f57207198caa82a80963b972346a1a8`；`.blockmap` `67ce19467c2433adc9b1f9fbfbb6ed24ba718f387236485f7464fddb9c6b9b98`；`latest.yml` `da76fc578157769bf7f5f03ebbf3206c38a7a1a9abd0765674c249212be35bcb`。
+- `latest.yml` 的 Setup SHA512：`1TaQ2NQVad91NAwMZAvEACLMID5s5wyjXYLzoLEwLiAEMw5nYeKkqDR3nW16v6OTk87ujqqRs7Lh8CWGgYjnJQ==`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.7.13` 已标记 Latest（非 draft / 非 prerelease），四项资产齐全，远端 `latest.yml` 版本为 `1.7.13`；构建工作流 run `33243112462` success。提交 `067ac7d` 已推送，注解 tag `v1.7.13` 已推送。
+
 ## v1.7.12 迷你播放器整窗可右键
 - 正式发布版本从 `1.7.11` 提升为 `1.7.12`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.11` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版是迷你播放器交互修复：收回态穿透规则改为「指针在窗口内 = 整窗可交互，离开窗口 = 恢复穿透」，任意位置都能右键弹菜单；封面热区仍负责悬停展开；极简外壳零改动。约定文档与两条穿透回归用例同步改写。
