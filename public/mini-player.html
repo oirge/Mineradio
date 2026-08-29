@@ -346,6 +346,7 @@
     var receivedExternalState = false;
     var COVER_HOT_REGION_PADDING = 6;
     var pointerInCoverHotRegion = false;
+    var pointerInsideWindow = false;
     var pointerPassthrough = null;
 
     /**
@@ -443,15 +444,15 @@
     }
 
     /**
-     * 判断收回态是否应该让出窗口鼠标事件。收回后只有封面热区需要命中，
-     * 其余透明区域必须交还桌面，不能继续吞掉点击或被误拖动。
+     * 判断收回态是否应该让出窗口鼠标事件。收回后整个窗口都保持可交互——任意位置都能
+     * 右键弹菜单、双击恢复——只有指针离开窗口后才交还桌面，不影响窗口外区域的命中。
      * @returns {boolean} 需要鼠标穿透时返回 true。
      */
     function shouldPassPointerThrough() {
       if (!hoverExpandEnabled()) return false;
       if (miniShell.getAttribute('data-collapsed') !== 'true') return false;
       if (coverDrag) return false;
-      return !pointerInCoverHotRegion;
+      return !pointerInsideWindow;
     }
 
     /**
@@ -486,25 +487,31 @@
     }
 
     /**
-     * 用转发坐标维护封面热区命中状态：进入热区先恢复窗口交互并展开，离开热区恢复穿透。
+     * 用鼠标事件维护指针在窗状态与封面热区命中：转发或真实 mousemove 只会
+     * 在指针位于窗口上时到达，收到即视为指针在窗口内，收回态据此让整窗保持
+     * 可交互（任意位置都能右键弹菜单）；进入封面热区先恢复窗口交互并展开，
+     * 离开热区排定收回，离开窗口后恢复穿透。
      * @param {object} event 鼠标或指针事件。
      * @returns {void}
      */
     function trackCoverHotRegion(event) {
+      if (!pointerInsideWindow) {
+        pointerInsideWindow = true;
+        syncPointerPassthrough();
+      }
       var inside = pointerInCoverHotRegionAt(event);
       if (inside === pointerInCoverHotRegion) return;
       pointerInCoverHotRegion = inside;
-      syncPointerPassthrough();
       if (inside) expandFromInteraction();
       else if (!coverDrag && !miniShell.matches(':hover')) scheduleCollapse();
     }
 
     /**
-     * 指针离开窗口后清除热区标记，收回态立即恢复鼠标穿透。
+     * 指针离开窗口后清除在窗与热区标记，收回态立即恢复鼠标穿透。
      * @returns {void}
      */
     function clearCoverHotRegion() {
-      if (!pointerInCoverHotRegion) return;
+      pointerInsideWindow = false;
       pointerInCoverHotRegion = false;
       syncPointerPassthrough();
     }

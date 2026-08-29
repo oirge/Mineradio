@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v1.7.12 迷你播放器整窗可右键
+- 正式发布版本从 `1.7.11` 提升为 `1.7.12`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.11` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版是迷你播放器交互修复：收回态穿透规则改为「指针在窗口内 = 整窗可交互，离开窗口 = 恢复穿透」，任意位置都能右键弹菜单；封面热区仍负责悬停展开；极简外壳零改动。约定文档与两条穿透回归用例同步改写。
+- 发布前运行全量 Node 回归（480/480）与 `git diff --check`；核验 asar 内 `public/mini-player.html` 含 `pointerInsideWindow`（5 处）。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；发布标题使用 `v1.7.12 迷你播放器整窗可右键`。
+- 本地构建产物：`Mineradio-1.7.12-Setup.exe` `101519159` 字节；`.blockmap` `106053` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.12-SHA256SUMS.txt` `272` 字节。
+- SHA256：安装器 `ecdd30da9bbd5c87da581bc7ad5781134bea2ad79add3ec095f92cc492f714fc`；`.blockmap` `acd2dd0b31f977a73d4a0a596c3ba36888653b8136f1c70b698c2a3b8beed245`；`latest.yml` `db195a72c2c2a52eb3212cf14219b165ab559a0c41ef07299a1026598c0208f4`。
+- `latest.yml` 的 Setup SHA512：见远端 `latest.yml`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+
 ## v1.7.11 迷你播放器支持右键菜单
 - 正式发布版本从 `1.7.10` 提升为 `1.7.11`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.10` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版是迷你播放器交互增强：右键弹出与托盘一致的原生菜单（`显示播放器` / `迷你播放器样式` 标准/极简 radio / `退出播放器`），三种动作分别与恢复按钮、托盘样式子菜单、托盘退出完全同路径；标准与极简外壳共用 `createMiniPlayerWindow` 一处挂接；收回态穿透期间右键自然落不到窗口。迷你页面 DOM 零改动。

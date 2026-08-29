@@ -353,7 +353,7 @@ test('歌曲封面拖动移动窗口，短按仍保持展开行为', () => {
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
 });
 
-test('收回态把窗口鼠标事件交还桌面，指针回到封面热区立即恢复交互', () => {
+test('收回态整窗保持可交互，指针离开窗口才恢复穿透', () => {
   const harness = createMiniPlayerHarness();
   const shell = harness.nodes['mini-shell'];
   const coverWrap = harness.nodes['cover-wrap'];
@@ -361,11 +361,12 @@ test('收回态把窗口鼠标事件交还桌面，指针回到封面热区立�
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
   assert.deepEqual(harness.passthroughs, [true]);
 
-  // 收回后的空白区域不再参与命中：坐标落在完整面板旧位置也保持穿透。
+  // 收回后指针进入窗口任意位置都要恢复交互：空白处右键菜单、双击恢复都依赖整窗命中。
   harness.document.dispatch('mousemove', { clientX: 40, clientY: 40 });
-  assert.deepEqual(harness.passthroughs, [true]);
+  assert.deepEqual(harness.passthroughs, [true, false]);
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
 
+  // 指针移到封面热区才展开面板，穿透状态不变化。
   harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
   assert.deepEqual(harness.passthroughs, [true, false]);
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
@@ -381,14 +382,15 @@ test('收回态把窗口鼠标事件交还桌面，指针回到封面热区立�
   shell.dispatch('mouseleave');
   harness.flushTimers();
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
-  assert.deepEqual(harness.passthroughs, [true, false, true]);
+  // 指针仍在窗口上（未收到 document mouseleave），收回后整窗继续可交互，不能穿透。
+  assert.deepEqual(harness.passthroughs, [true, false]);
 
-  // 指针整体离开窗口后热区标记必须清零，收回态继续保持穿透。
+  // 指针整体离开窗口后在窗与热区标记必须清零，收回态立即恢复穿透。
   harness.document.dispatch('mouseleave', {});
   assert.deepEqual(harness.passthroughs, [true, false, true]);
 });
 
-test('封面拖动期间保持窗口交互，拖动结束后按热区恢复穿透', () => {
+test('封面拖动期间保持窗口交互，拖动结束后指针在窗则不穿透', () => {
   const harness = createMiniPlayerHarness();
   const coverWrap = harness.nodes['cover-wrap'];
 
@@ -402,6 +404,10 @@ test('封面拖动期间保持窗口交互，拖动结束后按热区恢复穿�
 
   coverWrap.dispatch('pointerup', { pointerId: 3 });
   harness.flushTimers();
+  // 拖完指针仍在窗口上：收回后整窗继续可交互（右键菜单可用），不恢复穿透。
+  assert.deepEqual(harness.passthroughs, [true, false]);
+
+  harness.document.dispatch('mouseleave', {});
   assert.deepEqual(harness.passthroughs, [true, false, true]);
 });
 
