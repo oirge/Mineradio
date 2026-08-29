@@ -49,6 +49,7 @@
 - 不要再改坏的边界：交接延时和 CSS 时长必须一起改，只调一边就会重新回到「原生最小化盖住过渡」；过渡进行中改 `transform-origin` 会掉头；`body` / `html` 的透明背景不能加底色。
 - 验证纪律：**不要用合成鼠标点击**（本机是用户正在使用的桌面，`v1.7.6` 那次点进了用户开着的剪映窗口）。这次全程走 CDP：`collapseToMiniPlayer()` 直接在页面里调，恢复主窗口用迷你窗口里的 `window.miniPlayer.command('restore')`；主窗口一恢复迷你窗口就销毁，`Runtime.evaluate` 的回包永远等不到，必须自己 `Promise.race` 超时。`contextBridge` 暴露的 `window.desktopWindow` 是冻结对象，从 `Runtime.evaluate` 里给它的方法打桩会静默失败，量交接时刻只能靠固定的 `setTimeout` 延时推算。
 - 探针文件全部用 `tmp-probe-*` 前缀放仓库根目录，验证完连隔离实例一起清掉，一个都不许提交。
+- 发布核验：提交 `a71bdf2` 已推送到 `codex/mini-cover-static`，注解 tag `v1.7.7` 已推送；先建 GitHub Release，再运行 `Build and Release` workflow（run `33230392198`，成功）。远端 Release 为正式非 draft / 非 prerelease，资产共 4 项：`Mineradio-1.7.7-Setup.exe` `101520210` 字节 / GitHub digest `sha256:c03faf18f55a98e406bb796b900407cceeb84fd96b2665ca63fb977139c5b82e`；`.blockmap` `105961` 字节 / `sha256:993ed1fdc0472ecacd9ca54ed8441f71f4c7452b2efef2431101fb64ff7f50a4`；`latest.yml` `347` 字节 / `sha256:e91d322ec3565a1ab732a4ca7b96680e95063fff8f173fd6c06c17a360a7a179`；SHA256 清单 `273` 字节 / `sha256:05b74ff91a5afcb8c531ed3621586e96bd65b4ee35a1a76f61c0b1e2ca8c1fa4`。远端 `latest.yml` 的版本为 `1.7.7`，Release URL：`https://github.com/oirge/Mineradio/releases/tag/v1.7.7`。
 
 ## v1.7.6 主界面收缩到迷你播放器的过渡
 
