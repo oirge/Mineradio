@@ -5,9 +5,10 @@
 - 本版是启动优化：`public/index.html` 的 `three.js` / `gsap.min.js` 两个阻塞脚本从 `<head>` 挪到 `</body>` 前、`app.js` 之前，相对执行顺序不变（`app.js` 顶层就实例化 `THREE` 场景）；`server.js` 对 `/vendor/*` 发 `public, max-age=604800`，其余静态文件仍 `no-cache`。默认外观与交互零改动。
 - 发布前运行全量 Node 回归（473/473）、`node --check server.js`、`node --check public/app.js` 与 `git diff --check`；核验 `dist/win-unpacked/resources/app.asar` 内 `index.html` 的脚本顺序为移动后的版本。
 - Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；发布标题使用 `v1.7.8 启动首帧不再被 vendor 脚本卡住`。
-- 本地构建产物：`Mineradio-1.7.8-Setup.exe` `101520204` 字节；`.blockmap` `105845` 字节；`latest.yml` `347` 字节；`Mineradio-1.7.8-SHA256SUMS.txt` 269 字节。
+- 本地构建产物：`Mineradio-1.7.8-Setup.exe` `101520204` 字节；`.blockmap` `105845` 字节；`latest.yml` `347` 字节；`Mineradio-1.7.8-SHA256SUMS.txt` `270` 字节。
 - SHA256：安装器 `026e5b835795b3ec8b95b70d9ba0eda1777d5dc5efb3aca7adb86ace487f3d34`；`.blockmap` `adc7763c489e00bd999df48f8f6848c361c683bfa771d547d0636e271523ede4`；`latest.yml` `35cb2a27423e22e2c1fc8fc82bbd4e7e99b9d81bb91d1e5f0d10d145b51f1f45`。
 - `latest.yml` 的 Setup SHA512：`X377s+bshHKte/fgCeGgfj1jxFcMqtnmqQfqFn4LBVhv5vzK8MwGWaw5JMksmNXh7jPFqT479MZdqn+CPoimzQ==`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.7.8` 已标记 Latest（非 draft / 非 prerelease），四项远端资产大小与本地构建一致，远端 SHA256 与本地逐项一致，远端 `latest.yml` 版本为 `1.7.8`。提交 `df0fb2f` 已同时推送到 `codex/mini-cover-static` 与 `main`（快进），注解 tag `v1.7.8` 已推送。
 
 ## v1.7.5 主题可轻调背景，并新增三份背景主题
 - 正式发布版本从 `1.7.4` 提升为 `1.7.5`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 必须保持一致，使 `1.7.4` 及更早版本可通过 `latest.yml` 自动更新。
