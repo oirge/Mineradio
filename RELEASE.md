@@ -8,6 +8,7 @@
 - 本地构建产物：`Mineradio-1.7.10-Setup.exe` `101519374` 字节；`.blockmap` `105968` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.10-SHA256SUMS.txt` `272` 字节。
 - SHA256：安装器 `49bf58991e0802ffc3f269c1bc5814f7cf5e9d93c37bb611b10efe9101ce6028`；`.blockmap` `33c16557618ac7bcec328fbc6ec471c487c5359bd86b0e7bc5736f79ca1abe1e`；`latest.yml` `163def84b0febb5d0f5b32a80e5d2de222dd0a5fda2e0dcf40095e88cac62935`。
 - `latest.yml` 的 Setup SHA512：`X86qauFXNg2ADPIuQLN55E+PGwz/UPLE4FE4ykSu6HpkjhEZdavPUW52CMZuZMv6a1Cl6OOAaU4Dpr1/0+FYag==`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.7.10` 已标记 Latest（非 draft / 非 prerelease），四项远端资产大小与本地构建一致、SHA256 逐项一致，远端 `latest.yml` 版本为 `1.7.10`。提交 `3566dc6` 已同时推送到 `codex/mini-cover-static` 与 `main`（快进），注解 tag `v1.7.10` 已推送。
 
 ## v1.7.9 每次启动省掉两趟隐藏窗口空转
 - 正式发布版本从 `1.7.8` 提升为 `1.7.9`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.8` 及更早版本可通过 `latest.yml` 自动更新。
