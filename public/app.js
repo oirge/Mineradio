@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.5';
+var APP_VERSION = '1.7.6';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -33433,6 +33433,165 @@ function setDesktopMiniPlayerMode(mode) {
   }).catch(function(){ showToast('迷你播放器样式切换失败'); });
 }
 
+// 主界面收缩到迷你播放器的过渡状态。动画只作用于 #desktop-window-shell 的变换与不透明度，
+// 布局、CSS 变量和交互入口一律不动；动画结束必须无过渡地复位，避免下次恢复出现回弹。
+var miniCollapseState = { active: false, token: 0, actionTimer: 0, resetTimer: 0, prewarmTimer: 0, prewarmAt: 0, originApplied: false };
+var MINI_COLLAPSE_ACTION_DELAY = 150;
+var MINI_COLLAPSE_RESET_DELAY = 260;
+var MINI_COLLAPSE_PREWARM_DWELL = 90;
+var MINI_COLLAPSE_PREWARM_THROTTLE = 900;
+
+/** @returns {boolean} 系统要求降低动效时返回 true。 */
+function prefersReducedMiniCollapseMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+/**
+ * 判断当前是否该走收缩过渡。迷你播放器关闭、非桌面壳或全屏状态下一律保持原生最小化。
+ * @returns {boolean} 允许收缩过渡时返回 true。
+ */
+function miniCollapseAvailable() {
+  var api = window.desktopWindow;
+  if (!api || typeof api.minimize !== 'function') return false;
+  if (!document.body.classList.contains('desktop-shell')) return false;
+  if (!desktopShellSettings.miniPlayer) return false;
+  if (fullscreenTransitionState.active || isFullscreenUiActive()) return false;
+  return true;
+}
+
+/**
+ * 把主进程回传的归一化迷你窗口中心写成收缩动画原点，让主界面朝迷你播放器实际角落收拢。
+ * @param {{x?: number, y?: number}=} origin 归一化原点，取值范围 -0.6 ~ 1.6。
+ * @returns {void}
+ */
+function applyMiniCollapseOrigin(origin) {
+  if (!origin) return;
+  var x = Number(origin.x);
+  var y = Number(origin.y);
+  if (!isFinite(x) || !isFinite(y)) return;
+  x = Math.max(-0.6, Math.min(1.6, x));
+  y = Math.max(-0.6, Math.min(1.6, y));
+  miniCollapseState.originApplied = true;
+  document.documentElement.style.setProperty('--mini-collapse-x', (x * 100).toFixed(2) + '%');
+  document.documentElement.style.setProperty('--mini-collapse-y', (y * 100).toFixed(2) + '%');
+}
+
+/**
+ * 清除收缩过渡的指定定时器。
+ * @param {'actionTimer'|'resetTimer'|'prewarmTimer'} name 定时器字段名。
+ * @returns {void}
+ */
+function clearMiniCollapseTimer(name) {
+  var timer = miniCollapseState[name];
+  if (timer) clearTimeout(timer);
+  miniCollapseState[name] = 0;
+}
+
+/**
+ * 请求主进程预热迷你窗口并记下收缩动画原点。
+ * 迷你 renderer 的启动比收缩动画长，越早预热留下的空白越短。
+ * @param {boolean=} immediate 点击最小化时传 true，跳过节流确保这一次一定预热。
+ * @returns {void}
+ */
+function requestMiniCollapsePrewarm(immediate) {
+  var api = window.desktopWindow;
+  if (!api || typeof api.prepareMiniPlayerTransition !== 'function') return;
+  var now = Date.now();
+  if (!immediate && miniCollapseState.prewarmAt && now - miniCollapseState.prewarmAt < MINI_COLLAPSE_PREWARM_THROTTLE) return;
+  miniCollapseState.prewarmAt = now;
+  var pending;
+  try {
+    pending = api.prepareMiniPlayerTransition();
+  } catch (_e) {
+    return;
+  }
+  if (!pending || typeof pending.then !== 'function') return;
+  // 原点只取决于两个窗口的位置，悬停时算出来和点击时算出来一致，迟到应用也不会跳原点。
+  pending.then(function(result){
+    if (result && result.origin) applyMiniCollapseOrigin(result.origin);
+  }).catch(function(){});
+}
+
+/**
+ * 悬停或聚焦最小化按钮时排一次预热。短暂划过按钮不触发，避免无谓建窗口。
+ * @returns {void}
+ */
+function armMiniCollapsePrewarm() {
+  if (miniCollapseState.active || miniCollapseState.prewarmTimer) return;
+  if (!miniCollapseAvailable()) return;
+  miniCollapseState.prewarmTimer = setTimeout(function(){
+    miniCollapseState.prewarmTimer = 0;
+    if (miniCollapseState.active || !miniCollapseAvailable()) return;
+    requestMiniCollapsePrewarm(false);
+  }, MINI_COLLAPSE_PREWARM_DWELL);
+}
+
+/**
+ * 指针离开或失焦时撤掉还没落地的预热排期。已经建好的预热窗口由主进程 TTL 回收。
+ * @returns {void}
+ */
+function cancelMiniCollapsePrewarm() {
+  clearMiniCollapseTimer('prewarmTimer');
+}
+
+/**
+ * 结束收缩过渡并无过渡复位外壳。最小化已经落地时窗口不可见，复位不会被用户看到。
+ * @param {number} token 本轮过渡令牌。
+ * @returns {void}
+ */
+function finishMiniCollapse(token) {
+  if (token !== miniCollapseState.token) return;
+  clearMiniCollapseTimer('actionTimer');
+  clearMiniCollapseTimer('resetTimer');
+  miniCollapseState.active = false;
+  document.body.classList.add('mini-collapse-reset');
+  document.body.classList.remove('mini-collapsing', 'mini-collapse-run');
+  void document.body.offsetWidth;
+  document.body.classList.remove('mini-collapse-reset');
+}
+
+/**
+ * 最小化到迷你播放器。先预热迷你窗口消除冷启动空白（悬停已经预热过时这里只做补漏），
+ * 再让主界面朝迷你角落收拢，收缩到位后才交给系统最小化，两段动作接成一次连续过渡。
+ * 迷你播放器关闭、非桌面壳或全屏状态下保持原生最小化，不做任何视觉改动。
+ * @returns {void}
+ */
+function collapseToMiniPlayer() {
+  var api = window.desktopWindow;
+  if (!api || typeof api.minimize !== 'function') return;
+  if (miniCollapseState.active) return;
+  cancelMiniCollapsePrewarm();
+  if (!miniCollapseAvailable()) {
+    api.minimize();
+    return;
+  }
+  var token = ++miniCollapseState.token;
+  miniCollapseState.active = true;
+  requestMiniCollapsePrewarm(true);
+  var reduced = prefersReducedMiniCollapseMotion();
+  document.body.classList.remove('mini-collapse-reset', 'mini-collapse-run');
+  document.body.classList.add('mini-collapsing');
+  void document.body.offsetWidth;
+  document.body.classList.add('mini-collapse-run');
+  miniCollapseState.actionTimer = setTimeout(function(){
+    miniCollapseState.actionTimer = 0;
+    var result;
+    try {
+      result = api.minimize();
+    } catch (_e) {
+      finishMiniCollapse(token);
+      return;
+    }
+    if (result && typeof result.catch === 'function') {
+      result.catch(function(){ finishMiniCollapse(token); });
+    }
+    clearMiniCollapseTimer('resetTimer');
+    miniCollapseState.resetTimer = setTimeout(function(){
+      finishMiniCollapse(token);
+    }, reduced ? 60 : MINI_COLLAPSE_RESET_DELAY);
+  }, reduced ? 20 : MINI_COLLAPSE_ACTION_DELAY);
+}
+
 /**
  * 处理主进程发给主 renderer 的迷你播放器控制或状态重同步命令。
  * @param {{action?: string}=} payload 命令载荷。
@@ -33502,10 +33661,17 @@ function handleDesktopMiniPlayerCommand(payload) {
       e.preventDefault();
       e.stopPropagation();
       var action = btn.getAttribute('data-window-action');
-      if (action === 'minimize') api.minimize();
+      if (action === 'minimize') collapseToMiniPlayer();
       if (action === 'maximize') toggleFullscreen();
       if (action === 'close') api.close();
     });
+    // 悬停最小化按钮就开始预热迷你窗口。迷你 renderer 的启动比收缩动画长，
+    // 只在点击时预热仍会留下空白，悬停这段时间正好用来跑完启动。
+    if (btn.getAttribute('data-window-action') !== 'minimize') return;
+    btn.addEventListener('pointerenter', armMiniCollapsePrewarm);
+    btn.addEventListener('pointerleave', cancelMiniCollapsePrewarm);
+    btn.addEventListener('focus', armMiniCollapsePrewarm);
+    btn.addEventListener('blur', cancelMiniCollapsePrewarm);
   });
 
   if (typeof api.onDesktopLyricsLockState === 'function') {

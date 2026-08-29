@@ -278,12 +278,21 @@
     .mini-shell[data-instant="true"] .transport,
     .mini-shell[data-instant="true"] .restore,
     .mini-shell[data-instant="true"] button { transition: none !important; }
+    /* 主界面收缩落地前窗口是隐藏的预热窗口，外壳先留白，等窗口显示且首帧状态到位再淡入，
+       这样迷你播放器不会闪一下「Mineradio / 等待播放」占位文案。 */
+    body[data-enter="pending"] .mini-shell { opacity: 0; }
+    body[data-enter="run"] .mini-shell { animation: mini-shell-enter 260ms cubic-bezier(.16, 1, .3, 1) both; }
+    @keyframes mini-shell-enter {
+      from { opacity: 0; transform: translateY(5px) scale(0.955); }
+      to { opacity: 1; transform: none; }
+    }
     @media (prefers-reduced-motion: reduce) {
+      body[data-enter="run"] .mini-shell { animation: none; }
       .mini-shell, .cover, .cover::after, .cover img, .meta, .transport, .restore, button { transition: none; }
     }
   </style>
 </head>
-<body data-playing="false">
+<body data-playing="false" data-enter="pending">
   <main class="mini-shell" id="mini-shell" data-collapsed="true" data-expand-direction="right" data-has-track="false" data-glow="true" aria-label="Mineradio 迷你播放器">
     <div class="cover" id="cover-wrap" role="button" tabindex="0" aria-label="展开迷你播放器" aria-expanded="false">
       <span class="cover-fallback">M</span>
@@ -740,7 +749,53 @@
     function receiveState(patch) {
       applyState(patch, !receivedExternalState);
       receivedExternalState = true;
+      miniEnterStateReady = true;
+      runMiniEnterAnimation();
     }
+
+    // 入场动画只跑一次，条件是窗口已经显示且首帧状态到位。
+    // 预热窗口在主界面收缩期间是隐藏的，document.visibilityState 会在窗口显示时转为 visible。
+    var miniEnterDone = false;
+    var miniEnterStateReady = false;
+    var miniEnterGraceTimer = 0;
+
+    /**
+     * 在窗口可见且状态就绪时播放一次外壳淡入。降低动效偏好只做即时显示。
+     * @returns {void}
+     */
+    function runMiniEnterAnimation() {
+      if (miniEnterDone) return;
+      if (document.visibilityState === 'hidden') return;
+      if (!miniEnterStateReady) {
+        if (!miniEnterGraceTimer) {
+          miniEnterGraceTimer = setTimeout(function(){
+            miniEnterGraceTimer = 0;
+            miniEnterStateReady = true;
+            runMiniEnterAnimation();
+          }, 160);
+        }
+        return;
+      }
+      miniEnterDone = true;
+      if (miniEnterGraceTimer) {
+        clearTimeout(miniEnterGraceTimer);
+        miniEnterGraceTimer = 0;
+      }
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.body.removeAttribute('data-enter');
+        return;
+      }
+      document.body.setAttribute('data-enter', 'run');
+      setTimeout(function(){ document.body.removeAttribute('data-enter'); }, 320);
+    }
+
+    document.addEventListener('visibilitychange', runMiniEnterAnimation);
+    // 兜底：任何情况下都不允许外壳因为等待入场条件而长期不可见。
+    setTimeout(function(){
+      if (miniEnterDone) return;
+      miniEnterDone = true;
+      document.body.removeAttribute('data-enter');
+    }, 1500);
 
     cover.addEventListener('load', function(){
       if (cover.getAttribute('src')) coverWrap.classList.add('ready');
@@ -790,6 +845,7 @@
     });
     if (window.miniPlayer && typeof window.miniPlayer.onState === 'function') window.miniPlayer.onState(receiveState);
     applyState({}, true);
+    runMiniEnterAnimation();
   </script>
 </body>
 </html>

@@ -137,6 +137,10 @@ let miniPlayerPointerPassthrough = false;
 let miniPlayerLastSentState = null;
 let miniPlayerRecoveryTimer = null;
 let miniPlayerRecreateTimer = null;
+// 主窗口开始收缩动画时预热的迷你窗口。最小化真正落地前它只是隐藏的已加载窗口，
+// 主窗口最终没有最小化时必须由 discardMiniPlayerPrewarm() 丢弃，不为不可见窗口常驻内存。
+let miniPlayerPrewarmWindow = null;
+let miniPlayerPrewarmTimer = null;
 const miniPlayerUserBoundsByMode = { standard: null, compact: null };
 const miniPlayerSavedBoundsSignatures = { standard: '', compact: '' };
 const miniPlayerProgrammaticCloseWindows = new WeakSet();
@@ -168,6 +172,9 @@ const COMPACT_MINI_PLAYER_WIDTH = 268;
 const COMPACT_MINI_PLAYER_HEIGHT = 58;
 const MINI_PLAYER_MARGIN = 14;
 const MINI_PLAYER_RECOVERY_INTERVAL = 5000;
+// 预热窗口最长等待主窗口最小化的时间。收缩动画只有 260ms 左右，
+// 2600ms 足够覆盖慢机器上的最小化落地，超时仍未进入迷你模式就丢弃预热窗口。
+const MINI_PLAYER_PREWARM_TTL = 2600;
 const APP_ICON_ICO = path.join(RESOURCE_ROOT, 'build', 'icon.ico');
 const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell-settings.json';
@@ -2569,6 +2576,12 @@ function stopMiniPlayerRecreateTimer() {
   miniPlayerRecreateTimer = null;
 }
 
+function stopMiniPlayerPrewarmTimer() {
+  if (!miniPlayerPrewarmTimer) return;
+  clearTimeout(miniPlayerPrewarmTimer);
+  miniPlayerPrewarmTimer = null;
+}
+
 function scheduleMiniPlayerRecovery(delay = MINI_PLAYER_RECOVERY_INTERVAL) {
   stopMiniPlayerRecoveryTimer();
   if (!shouldShowMiniPlayer()) return;
@@ -2801,6 +2814,9 @@ function showMiniPlayerWindow() {
     stopMiniPlayerRecoveryTimer();
     return;
   }
+  // 已经进入迷你模式，预热窗口转为正常生命周期，不能再被丢弃计时器回收。
+  stopMiniPlayerPrewarmTimer();
+  miniPlayerPrewarmWindow = null;
   const win = createMiniPlayerWindow();
   scheduleMiniPlayerRecovery();
   if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
@@ -2832,9 +2848,71 @@ function hideMiniPlayerWindow() {
 function closeMiniPlayerWindow() {
   stopMiniPlayerRecoveryTimer();
   stopMiniPlayerRecreateTimer();
+  stopMiniPlayerPrewarmTimer();
+  miniPlayerPrewarmWindow = null;
   const win = miniPlayerWindow;
   if (win) destroyMiniPlayerWindowInstance(win);
   miniPlayerLastSentState = null;
+}
+
+/**
+ * 计算迷你窗口中心相对主窗口内容区的归一化坐标，供主 renderer 作为收缩动画原点。
+ * 越界坐标按 -0.6 ~ 1.6 收敛，异常主窗口尺寸直接返回 null 让 renderer 用默认原点。
+ * @returns {{x:number,y:number}|null} 归一化收缩原点。
+ */
+function miniPlayerTransitionOrigin() {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const mode = normalizeMiniPlayerMode(miniPlayerMode);
+  const target = clampMiniPlayerBounds(miniPlayerUserBoundsByMode[mode] || miniPlayerDefaultBounds(mode), mode);
+  const main = mainWindow.getBounds();
+  if (!main || !(Number(main.width) > 0) || !(Number(main.height) > 0)) return null;
+  const centerX = Number(target.x) + Number(target.width) / 2;
+  const centerY = Number(target.y) + Number(target.height) / 2;
+  return {
+    x: Math.round(clampNumber((centerX - Number(main.x)) / Number(main.width), -0.6, 1.6, 0.5) * 1000) / 1000,
+    y: Math.round(clampNumber((centerY - Number(main.y)) / Number(main.height), -0.6, 1.6, 0.5) * 1000) / 1000,
+  };
+}
+
+/**
+ * 丢弃未被使用的预热窗口。主窗口最终没有进入迷你模式时必须释放，
+ * 已经进入迷你模式或窗口已经显示时保持原生命周期，不误关正在服务的窗口。
+ * @returns {void}
+ */
+function discardMiniPlayerPrewarm() {
+  stopMiniPlayerPrewarmTimer();
+  const win = miniPlayerPrewarmWindow;
+  miniPlayerPrewarmWindow = null;
+  if (!win || win.isDestroyed()) return;
+  if (miniPlayerWindow !== win) return;
+  if (shouldShowMiniPlayer() || win.isVisible()) return;
+  closeMiniPlayerWindow();
+}
+
+/**
+ * 主窗口开始收缩动画时预热迷你窗口，让最小化落地时首帧已经就绪，消除冷启动空白间隙。
+ * 同时回传收缩动画原点，使主界面朝迷你播放器实际所在的角落收拢。
+ * @returns {{ok:boolean,prepared:boolean,enabled:boolean,mode:string,origin:({x:number,y:number}|null),error?:string}} 预热结果与动画原点。
+ */
+function prepareMiniPlayerTransition() {
+  const mode = normalizeMiniPlayerMode(miniPlayerMode);
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { ok: false, prepared: false, enabled: !!miniPlayerEnabled, mode, origin: null, error: 'MAIN_WINDOW_UNAVAILABLE' };
+  }
+  const result = { ok: true, prepared: false, enabled: !!miniPlayerEnabled, mode, origin: miniPlayerTransitionOrigin() };
+  if (!miniPlayerEnabled || miniPlayerRecoverySession.paused) return result;
+  // 主窗口已经隐藏或最小化时迷你窗口归正常生命周期管理，不能再挂预热丢弃计时器。
+  if (mainWindow.isMinimized() || !mainWindow.isVisible()) return result;
+  const existing = miniPlayerWindow && !miniPlayerWindow.isDestroyed() ? miniPlayerWindow : null;
+  if (existing && existing.isVisible()) return result;
+  const win = existing || createMiniPlayerWindow();
+  if (!win || win.isDestroyed()) return result;
+  miniPlayerPrewarmWindow = win;
+  result.prepared = true;
+  stopMiniPlayerPrewarmTimer();
+  miniPlayerPrewarmTimer = setTimeout(discardMiniPlayerPrewarm, MINI_PLAYER_PREWARM_TTL);
+  if (typeof miniPlayerPrewarmTimer.unref === 'function') miniPlayerPrewarmTimer.unref();
+  return result;
 }
 
 /**
@@ -2942,6 +3020,10 @@ ipcMain.handle('mineradio-mini-player-set-enabled', trustedMainFrameHandler((_ev
 
 ipcMain.handle('mineradio-mini-player-set-mode', trustedMainFrameHandler((_event, mode) => {
   return setMiniPlayerMode(mode);
+}));
+
+ipcMain.handle('mineradio-mini-player-prepare-transition', trustedMainFrameHandler(() => {
+  return prepareMiniPlayerTransition();
 }));
 
 /**

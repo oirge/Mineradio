@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.7.5` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.6` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口（见下方 v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,19 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.6 主界面收缩到迷你播放器的过渡
+
+- 日期：2026-08-29。版本从 `1.7.5` 提升为 `1.7.6`。
+- 用户原话：「再最新版的基础上优化缩小主界面到迷你播放器的过渡界面」。边界是只优化过渡本身，不动布局、配色、文案和交互入口，`public/index.html` 不新增任何元素。
+- 诊断出三个缺陷：两侧都没有动画（一边是 Windows 原生最小化，一边是 `showInactive()` 直接弹出）；迷你窗口每次恢复都销毁、每次最小化才重建，`renderer` 冷启动约 `600ms` 全露在外面；迷你外壳弹出瞬间会闪一下 `Mineradio / 等待播放` 占位文案。
+- 主进程新增（`desktop/main.js`）：`MINI_PLAYER_PREWARM_TTL = 2600`、`miniPlayerPrewarmWindow` / `miniPlayerPrewarmTimer`、`stopMiniPlayerPrewarmTimer()`、`miniPlayerTransitionOrigin()`（迷你窗口中心相对主窗口归一化，越界收敛到 `-0.6 ~ 1.6`，异常主窗口尺寸返回 `null`）、`discardMiniPlayerPrewarm()`（幂等，且不误关已在服务或替代的窗口）、`prepareMiniPlayerTransition()`，IPC 走 `mineradio-mini-player-prepare-transition` + `trustedMainFrameHandler`。`showMiniPlayerWindow()` / `closeMiniPlayerWindow()` 都要解除预热标记，否则 TTL 会回收正在服务的窗口。
+- renderer 新增（`public/app.js`，紧挨 `handleDesktopMiniPlayerCommand()` 之前，必须保持顶层以便 `vm` 抽取）：`miniCollapseState`、`MINI_COLLAPSE_ACTION_DELAY = 150` / `MINI_COLLAPSE_RESET_DELAY = 260` / `MINI_COLLAPSE_PREWARM_DWELL = 90` / `MINI_COLLAPSE_PREWARM_THROTTLE = 900`、`miniCollapseAvailable()`、`applyMiniCollapseOrigin()`、`requestMiniCollapsePrewarm(immediate)`、`armMiniCollapsePrewarm()` / `cancelMiniCollapsePrewarm()`、`finishMiniCollapse(token)`、`collapseToMiniPlayer()`。最小化按钮同时挂 `pointerenter` / `pointerleave` / `focus` / `blur` 做悬停预热。
+- CSS 只加四行（`public/app.css`，紧跟全屏过渡的降低动效钳制之后），全部作用于 `#desktop-window-shell`：`body.mini-collapsing` 设 `transform-origin:var(--mini-collapse-x,92%) var(--mini-collapse-y,96%)` 与过渡，`.mini-collapse-run` 落到 `scale(.86)` / `opacity:.05` / 轻微压暗，`body.mini-collapse-reset` 用 `!important` 无过渡复位（必须同帧摘掉，否则下次恢复会带着复位类），`prefers-reduced-motion` 钳到 `.06s`。`#desktop-window-shell` 只有在 `body.desktop-shell` 下才是 `position:fixed`，所以变换只在桌面外壳生效。
+- 两套迷你外壳（`public/mini-player.html`、`public/mini-player-compact.html`）加 `data-enter="pending"`（`opacity:0`）+ `@keyframes mini-shell-enter`，`runMiniEnterAnimation()` 要求窗口已可见（`document.visibilityState !== 'hidden'`）且首帧状态到位（`receiveState` 或 `160ms` 宽限）才淡入，另有 `1500ms` 无条件兜底摘掉 `data-enter`。降低动效规则必须合并进各文件既有的那一个 `@media (prefers-reduced-motion: reduce)` 块，不要新开一块。`data-instant` 只关 `transition`、不影响 `animation`，两者可以共存。
+- 实测时序（`1387x780` 主窗口，标准迷你外壳）：点击后 `+10ms` 预热窗口已存在且不可见、主窗口仍在；`+170ms` 主窗口最小化落地；`+700~770ms` 迷你窗口显示。也就是说迷你 `renderer` 启动约 `700ms`，只靠点击时预热只能盖住 `150ms`，所以补了悬停预热。
+- 不要再改坏的边界：预热窗口在 `show:false` 状态下靠 `shouldShowMiniPlayer()` 把 `ready-to-show` / `did-finish-load` 的显示全部挡住，主窗口还在时绝不能提前显示；`hideMiniPlayerWindow()` → `closeMiniPlayerWindow()` 「不为不可见窗口常驻内存」的策略保持不变，预热只是加了一个有 TTL 的例外；迷你播放器关闭、非桌面外壳、`fullscreenTransitionState.active` 或 `isFullscreenUiActive()` 时必须退回原生 `api.minimize()`。
+- 测试：新增 `tests/mini-player-collapse-transition.test.js`（14 例），`npm test` 470 例全绿。`vm.runInNewContext` 造出来的对象跨 realm、原型不同，`assert.deepEqual` 会报「same structure but not reference-equal」，只能逐字段比较——本项目第三次踩这个坑。
 
 ## v1.7.5 主题背景换色 + 三份内置背景主题
 
