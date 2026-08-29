@@ -10,7 +10,7 @@ const vm = require('node:vm');
 
 function loadServeStatic(fsImpl = fs) {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  const start = source.indexOf('function serveStatic(req, res, filePath) {');
+  const start = source.indexOf('function serveStatic(req, res, filePath, cacheControl) {');
   assert.ok(start >= 0, 'serveStatic implementation missing');
   let depth = 0;
   let end = -1;
@@ -107,6 +107,32 @@ test('静态 renderer 资源 200 响应使用流式读取，不复制整文件 B
     assert.equal(response.headers['content-length'], String(body.length));
     assert.equal(streamCalls, 1);
     assert.equal(readFileCalls, 0);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('vendor 资源走长缓存策略，200 与 304 都带上 max-age 且不重验证', async () => {
+  const serveStatic = loadServeStatic();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mineradio-static-vendor-'));
+  const asset = path.join(tempDir, 'lib.js');
+  fs.writeFileSync(asset, 'window.__vendorLib = true;', 'utf8');
+  const server = http.createServer((req, res) => serveStatic(req, res, asset, 'public, max-age=604800'));
+  try {
+    await new Promise((resolve, reject) => {
+      server.listen(0, '127.0.0.1', resolve);
+      server.once('error', reject);
+    });
+    const port = server.address().port;
+    const first = await request(port);
+    assert.equal(first.status, 200);
+    assert.equal(first.headers['cache-control'], 'public, max-age=604800');
+    assert.match(first.headers.etag || '', /^"[0-9a-f]+-[0-9a-f]+"$/);
+
+    const second = await request(port, { 'If-None-Match': first.headers.etag });
+    assert.equal(second.status, 304);
+    assert.equal(second.headers['cache-control'], 'public, max-age=604800');
   } finally {
     await new Promise(resolve => server.close(resolve));
     fs.rmSync(tempDir, { recursive: true, force: true });

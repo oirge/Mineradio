@@ -34,6 +34,15 @@
 
 ## Release Memory
 
+## v1.7.8 启动首帧不再被 vendor 脚本卡住
+
+- 日期：2026-08-29。版本从 `1.7.7` 提升为 `1.7.8`。本轮是「有什么需要优化的」排查的落地：全库审查后确认运行时优化已做得很深，只挑了两项有量化依据、零 UI 改动的启动优化。
+- **vendor 阻塞脚本位置**：`public/index.html` 原来 `<head>` 第 11-12 行是 `<script src="vendor/three.r128.min.js">` + `gsap.min.js`（603KB + 73KB），HTML 解析到第 11 行就停等，首帧被推迟。两行整体挪到 `</body>` 前、`app.js` 之前。**这是硬顺序不是可选项**：`app.js` 顶层（`app.js:1602` 附近）就 `var scene = new THREE.Scene()`，vendor 必须先于 app.js 求值，所以不能只给 vendor 加 `defer`（defer 会在 body 末尾经典脚本之后执行，直接崩）。挪动后相对执行顺序完全不变。这个顺序现在被 `tests/frontend-html-script-syntax.test.js` 的新断言钉死：head 零外链脚本、three < gsap < app.js。
+- **vendor 缓存头**：`server.js` `serveStatic()` 加了第四个参数 `cacheControl`，默认仍 `no-cache`；静态分发对 `pn.startsWith('/vendor/')` 传 `public, max-age=604800`。vendor 库随安装包版本走、不单独热替换，7 天新鲜期内启动免 304 重验证。**不要放宽到全部静态文件**：`app.js` / `app.css` / `index.html` 必须保持 `no-cache`，否则更新后 renderer 可能拿旧文件。
+- 首帧收益估算：冷启动 `50~150ms`（603KB 的 three.js 解析不再挡在 DOM 构造前面），热启动大部分被 V8 code cache 摊掉；vendor 304 免重验证再省 `10~30ms`。head 里的字体 preload、内联 boot 脚本（localStorage 类名 + `document.fonts.load`）保持原位。
+- 检查过并明确**不做**的：拆分/模块化 `app.js`（34.5k 行）与升级 `three.r128`（本地加载无网络瓶颈，动视觉系统风险大）；迷你预热窗口长驻复用（与「不为不可见窗口常驻内存」策略相反）；主进程启动链并行化（`installProtocol` / `migratePrimaryProfileState` 总共省不到 30ms）；`app.js`/`app.css` 压缩（破坏可调试性，收益被 code cache 摊掉）。
+- 判断依据（截至本轮）：GPU 开关（`CHROMIUM_PERFORMANCE_SWITCHES`）、字体本地打包、music-tempo 懒加载、3D 空闲限帧、节拍 FFT 限频、缓存驻留管理都已就位，剩下的启动耗时主要就是 vendor 解析这一段。
+
 ## v1.7.7 收缩过渡改成看得见的一段动作
 
 - 日期：2026-08-29。版本从 `1.7.6` 提升为 `1.7.7`。

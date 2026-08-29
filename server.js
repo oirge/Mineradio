@@ -172,14 +172,14 @@ function parseLocalFileRange(rangeHeader, total) {
 }
 
 // ---------- 工具 ----------
-function serveStatic(req, res, filePath) {
+function serveStatic(req, res, filePath, cacheControl) {
   const ext = path.extname(filePath);
   fs.stat(filePath, (statErr, stat) => {
     if (statErr || !stat.isFile()) { res.writeHead(404); res.end('Not Found'); return; }
     const etag = '"' + stat.size.toString(16) + '-' + Math.floor(Number(stat.mtimeMs) || 0).toString(16) + '"';
     const headers = {
       'Content-Type': MIME[ext] || 'text/plain',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': cacheControl || 'no-cache',
       'ETag': etag,
       'Last-Modified': stat.mtime.toUTCString(),
     };
@@ -2845,7 +2845,11 @@ const server = http.createServer(async (req, res) => {
 
   let filePath = pn === '/' ? '/index.html' : pn;
   filePath = path.join(RESOURCE_ROOT, 'public', filePath);
-  serveStatic(req, res, filePath);
+  // vendor 库随安装包版本一起走、不单独热替换，7 天新鲜期内免 304 重验证，加快下次启动。
+  const vendorCacheControl = pn.startsWith('/vendor/')
+    ? 'public, max-age=604800'
+    : undefined;
+  serveStatic(req, res, filePath, vendorCacheControl);
 });
 
 server.listen(PORT, HOST, () => {

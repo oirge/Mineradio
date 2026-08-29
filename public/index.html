@@ -8,8 +8,6 @@
 <link rel="preload" href="vendor/fonts/Inter-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/NotoSansSC-ui.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="vendor/fonts.css">
-<script src="vendor/three.r128.min.js"></script>
-<script src="vendor/gsap.min.js"></script>
 <script>
 try {
   document.documentElement.classList.add(localStorage.getItem('mineradio-diy-player-mode-v1') === '1' ? 'diy-mode-preload' : 'simple-mode-preload');
@@ -1019,6 +1017,9 @@ if (document.fonts && document.fonts.load) {
 
 <div id="fullscreen-transition-layer" aria-hidden="true"></div>
 
+<!-- three/gsap 必须先于 app.js 求值（app.js 顶层就实例化 THREE 场景），放在 body 末尾只为不阻塞 head 解析和首帧。 -->
+<script src="vendor/three.r128.min.js"></script>
+<script src="vendor/gsap.min.js"></script>
 <script src="wallpaper-effect.js"></script>
 <script src="plugin-manifest.js"></script>
 <script src="plugin-builtin-themes.js"></script>
