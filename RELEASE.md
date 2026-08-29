@@ -1,5 +1,15 @@
 ﻿# 发布流程
 
+## v1.7.14 收回后的迷你播放器只在封面上吃鼠标
+- 正式发布版本从 `1.7.13` 提升为 `1.7.14`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.13` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版是收回态命中范围回退：`shouldPassPointerThrough()` 判据从 `pointerInsideWindow` 改回 `pointerInCoverHotRegion`，收回态只有封面热区（外扩 6px）参与命中，封面以外那截透明窗体交还桌面，`pointerInsideWindow` 变量删除；展开态与极简外壳整窗仍可点可右键，v1.7.13 的托盘同构 6 项菜单不变。
+- 发布前运行全量 Node 回归（483/483）、`node --check server.js` 与 `git diff --check`；`tests/mini-player-visual.test.js` 两条穿透用例已改回热区时序（收回态空白处 `mousemove` 必须保持穿透）。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；发布标题使用 `v1.7.14 收回后的迷你播放器只在封面上吃鼠标`。
+- 远端构建产物：`Mineradio-1.7.14-Setup.exe` `101519285` 字节；`.blockmap` `105972` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.14-SHA256SUMS.txt` `275` 字节。
+- SHA256：安装器 `39f7dca466cf9c054b793b4d18dfe423b4ecfca8e526a8dd02bc4f21d176ee9d`；`.blockmap` `400ff7496b96bd193aefcef1b3faa156251ece423f20d9fe74b9271dc320e00c`；`latest.yml` `7d6b44895d86e6b0527f6fc3275b65a4e42a74d753ae38a2e84a0396bd1c453e`。
+- `latest.yml` 的 Setup SHA512：`XST+mNWswps8ADEiuVbcl1Wp44YftUw9CsFzGB091v553yXvSM0GDHV82nC+f++LJnkdGHP6JMLmPqjwtsp+PA==`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.7.14` 已标记 Latest（非 draft / 非 prerelease），四项资产齐全，远端 `latest.yml` 版本为 `1.7.14`；构建工作流 run `33243994690` success。提交 `9d9b895` 已推送，注解 tag `v1.7.14` 已推送。
+
 ## v1.7.13 迷你播放器右键菜单与任务栏托盘完全一致
 - 正式发布版本从 `1.7.12` 提升为 `1.7.13`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.12` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版是迷你播放器右键菜单对齐：托盘与迷你共用 `buildAppContextMenuTemplate()` 的六项菜单，勾选态实时读真实设置；新增 `win.on('system-context-menu')` + `preventDefault()` 拦掉拖拽区的窗口系统菜单（迷你窗口不可缩放/最小化/最大化，那份系统菜单只剩「关闭」可点），非拖拽区仍走 `webContents.on('context-menu')`；两套外壳共用窗口工厂，极简同样整窗可右键。
