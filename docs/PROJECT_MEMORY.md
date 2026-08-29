@@ -46,6 +46,8 @@
 - 实测时序（`1387x780` 主窗口，标准迷你外壳）：点击后 `+10ms` 预热窗口已存在且不可见、主窗口仍在；`+170ms` 主窗口最小化落地；`+700~770ms` 迷你窗口显示。也就是说迷你 `renderer` 启动约 `700ms`，只靠点击时预热只能盖住 `150ms`，所以补了悬停预热。
 - 不要再改坏的边界：预热窗口在 `show:false` 状态下靠 `shouldShowMiniPlayer()` 把 `ready-to-show` / `did-finish-load` 的显示全部挡住，主窗口还在时绝不能提前显示；`hideMiniPlayerWindow()` → `closeMiniPlayerWindow()` 「不为不可见窗口常驻内存」的策略保持不变，预热只是加了一个有 TTL 的例外；迷你播放器关闭、非桌面外壳、`fullscreenTransitionState.active` 或 `isFullscreenUiActive()` 时必须退回原生 `api.minimize()`。
 - 测试：新增 `tests/mini-player-collapse-transition.test.js`（14 例），`npm test` 470 例全绿。`vm.runInNewContext` 造出来的对象跨 realm、原型不同，`assert.deepEqual` 会报「same structure but not reference-equal」，只能逐字段比较——本项目第三次踩这个坑。
+- 发布核验：提交 `f284932` 已推送到 `codex/mini-cover-static`，注解 tag `v1.7.6` 已推送；先建 GitHub Release，再运行 `Build and Release` workflow（run `33228632736`，成功）。远端 Release 为正式非 draft / 非 prerelease，资产共 4 项：`Mineradio-1.7.6-Setup.exe` `101517696` 字节 / GitHub digest `sha256:ec19ed70d4c4195e70e577374c5686ad7cf7d45adbbf0e397e5f3a36338d42cf`；`.blockmap` `105884` 字节 / `sha256:132bd4a7baf1c7ffd61b60821f5f40a0c2d9477f02b20c71917b60840b39c0f0`；`latest.yml` `347` 字节 / `sha256:f71d3a5c8a7062d04ae2376f77716a095292983fb14e21828d4b43c1f289342a`；SHA256 清单 `273` 字节 / `sha256:f08ca92bb0efd0918cecdf02cf23064662362bbcd2ac9faf449b7aa620e8dc05`。远端 `latest.yml` 的版本为 `1.7.6`，Release URL：`https://github.com/oirge/Mineradio/releases/tag/v1.7.6`。
+- 启动核验用隔离实例：`MINERADIO_INSTANCE_ID=<name>`（`desktop/main.js:38` 读取）给独立 userData 与单实例锁，`--user-data-dir` 无效。**不要用合成鼠标点击去验证过渡**：本机是用户正在使用的桌面，`SetCursorPos` + `mouse_event` 会抢走用户的光标并点到前台的其他程序上；这次就点进了用户正开着的剪映窗口。
 
 ## v1.7.5 主题背景换色 + 三份内置背景主题
 
