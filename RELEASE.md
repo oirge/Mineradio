@@ -8,6 +8,7 @@
 - 本地构建产物：`Mineradio-1.7.12-Setup.exe` `101519159` 字节；`.blockmap` `106053` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.12-SHA256SUMS.txt` `272` 字节。
 - SHA256：安装器 `ecdd30da9bbd5c87da581bc7ad5781134bea2ad79add3ec095f92cc492f714fc`；`.blockmap` `acd2dd0b31f977a73d4a0a596c3ba36888653b8136f1c70b698c2a3b8beed245`；`latest.yml` `db195a72c2c2a52eb3212cf14219b165ab559a0c41ef07299a1026598c0208f4`。
 - `latest.yml` 的 Setup SHA512：见远端 `latest.yml`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.7.12` 已标记 Latest（非 draft / 非 prerelease），四项远端资产大小与本地构建一致、SHA256 逐项一致，远端 `latest.yml` 版本为 `1.7.12`。提交 `6589f64` 已同时推送到 `codex/mini-cover-static` 与 `main`（快进），注解 tag `v1.7.12` 已推送。
 
 ## v1.7.11 迷你播放器支持右键菜单
 - 正式发布版本从 `1.7.10` 提升为 `1.7.11`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.10` 及更早版本可通过 `latest.yml` 自动更新。
