@@ -34,6 +34,14 @@
 
 ## Release Memory
 
+## v1.7.11 迷你播放器支持右键菜单
+
+- 日期：2026-08-29。版本从 `1.7.10` 提升为 `1.7.11`。用户需求原话：「让右键迷你播放器显示的是右键任务栏软件的一样，有显示播放器、退出播放器、更新迷你样式」。
+- **实现**：`desktop/main.js` 的 `createMiniPlayerWindow()` 里 `win.webContents.on('context-menu')` → `event.preventDefault()` → `showMiniPlayerContextMenu(win)`（挂在 `handleMiniPlayerSystemSuspend` 前）。菜单模板：`显示播放器`（`focusMainWindow`，与迷你页恢复按钮的 `command('restore')` 同一条主进程路径）→ `迷你播放器样式` 子菜单（`标准（带封面）`/`极简（无封面）` radio，checked 跟随 `miniPlayerMode`，click 走 `setMiniPlayerMode`——切换会 `closeMiniPlayerWindow()` + 重建对应外壳）→ separator → `退出播放器`（`appQuitting = true; app.quit()`，与托盘「退出 Mineradio」完全同路径，**不会被关闭到托盘拦住**）。
+- **关键事实**：标准与极简两种外壳都从 `createMiniPlayerWindow` 出来（按 mode 选页面），所以一处挂接天然覆盖两壳；收回态 `setIgnoreMouseEvents(true,{forward:true})` 期间右键事件根本到不了窗口，菜单只在可交互（展开/常显/封面热区）状态出现，穿透与热区恢复机制不受影响；`mini-player.html:844` 的「点非按钮区域=恢复」监听的是 `click`，右键不冲突。
+- **验证纪律**：没有合成右键点击。冒烟 = 隔离实例 CDP 里 `setMiniPlayerEnabled(true)` + `desktopWindow.minimize()` → `/json/list` 出现 mini-player.html 目标且 `readyState:complete`、`#mini-shell` 存在 → `miniPlayer.command('restore')` 后回包必丢（迷你窗口销毁断 WS，v1.7.7 已记录的预期现象）。菜单模板与托盘逐项同构，托盘路径是生产验证过的。
+- 测试：新增 `tests/mini-player-context-menu.test.js` 3 例（context-menu 监听 + preventDefault；三项接线逐项正则；两壳共用工厂断言），全量 480 例全绿。约定文档 `.context/conventions/mineradio-mini-player-collapse.md` 已补右键菜单条目。
+
 ## v1.7.10 搜索结果面板有了入场动画
 
 - 日期：2026-08-29。版本从 `1.7.9` 提升为 `1.7.10`。用户反馈「点击搜索界面出现的太僵硬」——这是第一条真实使用驱动的优化反馈，按既定套路 CDP 实测定位后修复。

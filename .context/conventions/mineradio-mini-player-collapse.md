@@ -31,6 +31,7 @@
 - 桌面歌词按钮在 DOM 上必须是 `.mini-shell` 的直属子节点（排在 `.transport` 之后保持 Tab 顺序），收回态另用 `.mini-shell[data-collapsed="true"] .desktop-lyrics-toggle { opacity:0; pointer-events:none; }` 单独淡出，不再借 `.transport` 的 `opacity` 隐藏。
 - 收回态位移动画随展开方向镜像：向右展开用 `translateX(10px)`，向左展开用 `translateX(-10px)`，保证面板始终朝远离封面的一侧滑出。
 - 极简页面 `public/mini-player-compact.html` 不添加该按钮。
+- 迷你播放器（标准与极简共用 `createMiniPlayerWindow`）的右键由主进程 `webContents.on('context-menu')` 统一接管并 `preventDefault`，弹出与托盘一致的原生菜单：`显示播放器`（`focusMainWindow()`，与恢复按钮同路径）、`迷你播放器样式` 子菜单（标准/极简 radio，`setMiniPlayerMode`）、`退出播放器`（`appQuitting = true` + `app.quit()`，与托盘退出同路径）；收回态穿透期间右键落不到窗口，菜单只会在可交互状态出现。回归测试：`tests/mini-player-context-menu.test.js`。
 - 回归测试必须锁定四角按钮原位、标准页面无 `collapse`、设置区 `× 自动收回` 常驻、双向持久化、封面拖动/短按分流、右侧向左展开、桌面歌词入口与左下角镜像、桌面歌词按钮不在 `.transport` 内、收回态鼠标穿透与热区恢复，以及极简模式无按钮。
 
 ## Reference

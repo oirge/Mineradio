@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v1.7.11 迷你播放器支持右键菜单
+- 正式发布版本从 `1.7.10` 提升为 `1.7.11`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.10` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版是迷你播放器交互增强：右键弹出与托盘一致的原生菜单（`显示播放器` / `迷你播放器样式` 标准/极简 radio / `退出播放器`），三种动作分别与恢复按钮、托盘样式子菜单、托盘退出完全同路径；标准与极简外壳共用 `createMiniPlayerWindow` 一处挂接；收回态穿透期间右键自然落不到窗口。迷你页面 DOM 零改动。
+- 发布前运行全量 Node 回归（480/480）、`node --check desktop/main.js` 与 `git diff --check`；隔离实例冒烟：开启迷你 → 最小化主窗口 → 迷你窗口加载健康（`readyState:complete`、`#mini-shell` 存在）；核验 asar 内 `desktop/main.js` 含 `showMiniPlayerContextMenu`（2 处：定义 + 挂接）。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；发布标题使用 `v1.7.11 迷你播放器支持右键菜单`。
+- 本地构建产物：`Mineradio-1.7.11-Setup.exe` `101518157` 字节；`.blockmap` `105933` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.11-SHA256SUMS.txt` `272` 字节。
+- SHA256：安装器 `5f58cd77f8550ad347bc5b7ef7b4668794d8f88304acf307550e47da9c46d896`；`.blockmap` `b782071635f04753fcf92f9b9eb49f3ab0a00f80913f4a7eae42d5cf30b96c89`；`latest.yml` `8f1940affde76b5074ef53780218b5e348a2d2e4045ca6c9a7d41506cf8db00c`。
+- `latest.yml` 的 Setup SHA512：`1XQAIC5cv/Dr3QYtHMBe3KzOg6JlBwKY+69aE++DAx9DzJc0wr18u5AsPyTqwu0NmFApc7tKH64W/ZUcN0JeTw==`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+
 ## v1.7.10 搜索结果面板有了入场动画
 - 正式发布版本从 `1.7.9` 提升为 `1.7.10`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.9` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版是交互打磨：`#search-results` 搜索结果面板原为 `display:none → block` 硬切，现挂 `search-results-in` 入场动画（260ms，opacity/transform，缓动与搜索区下滑同族）；玻璃滤镜与配色零改动，`prefers-reduced-motion` 跳过。app.js 零改动。

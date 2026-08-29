@@ -2702,6 +2702,45 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
 }
 
 /**
+ * 在迷你播放器上弹出与托盘一致的原生右键菜单：显示播放器、切换迷你播放器样式、退出播放器。
+ * 收回态穿透期间右键落不到窗口上，菜单只会在可交互状态下出现。
+ * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
+ * @returns {void}
+ */
+function showMiniPlayerContextMenu(win) {
+  if (!win || win.isDestroyed() || miniPlayerWindow !== win) return;
+  const menu = Menu.buildFromTemplate([
+    { label: '显示播放器', click: focusMainWindow },
+    {
+      label: '迷你播放器样式',
+      submenu: [
+        {
+          label: '标准（带封面）',
+          type: 'radio',
+          checked: miniPlayerMode === 'standard',
+          click: () => setMiniPlayerMode('standard'),
+        },
+        {
+          label: '极简（无封面）',
+          type: 'radio',
+          checked: miniPlayerMode === 'compact',
+          click: () => setMiniPlayerMode('compact'),
+        },
+      ],
+    },
+    { type: 'separator' },
+    {
+      label: '退出播放器',
+      click: () => {
+        appQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+  menu.popup({ window: win });
+}
+
+/**
  * 在系统休眠期间暂停迷你播放器恢复，避免后台重载或重建 renderer。
  * @returns {void}
  */
@@ -2776,6 +2815,10 @@ function createMiniPlayerWindow() {
   requestMiniPlayerStateSync();
   keepMiniPlayerOnTop(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('context-menu', (event) => {
+    event.preventDefault();
+    showMiniPlayerContextMenu(win);
+  });
   win.once('ready-to-show', () => {
     if (miniPlayerWindow !== win || win.isDestroyed() || !shouldShowMiniPlayer()) return;
     positionMiniPlayerWindow();
