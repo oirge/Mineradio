@@ -1207,12 +1207,12 @@ function setStartupEnabled(enabled) {
 }
 
 /**
- * 根据当前状态重建托盘菜单，确保菜单勾选态和真实设置一致。
- * @returns {void}
+ * 构建应用统一的原生右键菜单模板。托盘图标和迷你播放器（标准 / 极简两套外壳）共用同一份，
+ * 迷你播放器右键的项目、顺序、勾选态和行为必须与任务栏托盘右键完全一致，且每一项都可点。
+ * @returns {Array<object>} `Menu.buildFromTemplate()` 的模板。
  */
-function refreshTrayMenu() {
-  if (!tray) return;
-  tray.setContextMenu(Menu.buildFromTemplate([
+function buildAppContextMenuTemplate() {
+  return [
     { label: '显示 Mineradio', click: focusMainWindow },
     {
       label: '关闭按钮最小化到托盘',
@@ -1265,7 +1265,16 @@ function refreshTrayMenu() {
         app.quit();
       },
     },
-  ]));
+  ];
+}
+
+/**
+ * 根据当前状态重建托盘菜单，确保菜单勾选态和真实设置一致。
+ * @returns {void}
+ */
+function refreshTrayMenu() {
+  if (!tray) return;
+  tray.setContextMenu(Menu.buildFromTemplate(buildAppContextMenuTemplate()));
 }
 
 /**
@@ -2702,42 +2711,14 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
 }
 
 /**
- * 在迷你播放器上弹出与托盘一致的原生右键菜单：显示播放器、切换迷你播放器样式、退出播放器。
- * 收回态穿透期间右键落不到窗口上，菜单只会在可交互状态下出现。
+ * 在迷你播放器上弹出与任务栏托盘完全一致的原生右键菜单：显示播放器、关闭到托盘、迷你播放器开关与样式、
+ * 开机自启、退出，每一项都可点。标准和极简两套外壳共用这一份，菜单弹在鼠标当前位置。
  * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
  * @returns {void}
  */
 function showMiniPlayerContextMenu(win) {
   if (!win || win.isDestroyed() || miniPlayerWindow !== win) return;
-  const menu = Menu.buildFromTemplate([
-    { label: '显示播放器', click: focusMainWindow },
-    {
-      label: '迷你播放器样式',
-      submenu: [
-        {
-          label: '标准（带封面）',
-          type: 'radio',
-          checked: miniPlayerMode === 'standard',
-          click: () => setMiniPlayerMode('standard'),
-        },
-        {
-          label: '极简（无封面）',
-          type: 'radio',
-          checked: miniPlayerMode === 'compact',
-          click: () => setMiniPlayerMode('compact'),
-        },
-      ],
-    },
-    { type: 'separator' },
-    {
-      label: '退出播放器',
-      click: () => {
-        appQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-  menu.popup({ window: win });
+  Menu.buildFromTemplate(buildAppContextMenuTemplate()).popup({ window: win });
 }
 
 /**
@@ -2816,6 +2797,14 @@ function createMiniPlayerWindow() {
   keepMiniPlayerOnTop(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('context-menu', (event) => {
+    event.preventDefault();
+    showMiniPlayerContextMenu(win);
+  });
+  // Windows 上 `-webkit-app-region: drag` 区域的右键被系统当成非客户区处理，弹出的是几乎全灰的窗口
+  // 系统菜单（迷你窗口不可缩放/最小化/最大化，只剩「关闭」能点），renderer 连 contextmenu 都收不到。
+  // 拦掉它换成同一份应用菜单，迷你播放器整个窗口任意位置右键才都可点。两套外壳的 .mini-shell 都是拖拽区，
+  // 所以标准和极简都靠这一条兜住。
+  win.on('system-context-menu', (event) => {
     event.preventDefault();
     showMiniPlayerContextMenu(win);
   });

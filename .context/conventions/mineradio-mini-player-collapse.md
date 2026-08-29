@@ -31,7 +31,8 @@
 - 桌面歌词按钮在 DOM 上必须是 `.mini-shell` 的直属子节点（排在 `.transport` 之后保持 Tab 顺序），收回态另用 `.mini-shell[data-collapsed="true"] .desktop-lyrics-toggle { opacity:0; pointer-events:none; }` 单独淡出，不再借 `.transport` 的 `opacity` 隐藏。
 - 收回态位移动画随展开方向镜像：向右展开用 `translateX(10px)`，向左展开用 `translateX(-10px)`，保证面板始终朝远离封面的一侧滑出。
 - 极简页面 `public/mini-player-compact.html` 不添加该按钮。
-- 迷你播放器（标准与极简共用 `createMiniPlayerWindow`）的右键由主进程 `webContents.on('context-menu')` 统一接管并 `preventDefault`，弹出与托盘一致的原生菜单：`显示播放器`（`focusMainWindow()`，与恢复按钮同路径）、`迷你播放器样式` 子菜单（标准/极简 radio，`setMiniPlayerMode`）、`退出播放器`（`appQuitting = true` + `app.quit()`，与托盘退出同路径）；收回态穿透期间右键落不到窗口，菜单只会在可交互状态出现。回归测试：`tests/mini-player-context-menu.test.js`。
+- 迷你播放器（标准与极简共用 `createMiniPlayerWindow`）的右键菜单自 v1.7.13 起与任务栏托盘**共用同一份模板** `buildAppContextMenuTemplate()`，六项必须逐项一致且每项都可点：`显示 Mineradio`（`focusMainWindow()`，与恢复按钮同路径）、`关闭按钮最小化到托盘`（checkbox，写回设置后 `refreshTrayMenu()`）、`最小化时显示迷你播放器`（checkbox → `setMiniPlayerEnabled`）、`迷你播放器样式` 子菜单（标准/极简 radio → `setMiniPlayerMode`）、`开机自动启动`（checkbox → `setStartupEnabled`，失败回退勾选态）、分隔线、`退出 Mineradio`（`appQuitting = true` + `app.quit()`，与托盘退出同路径）。`main.js` 里 `Menu.buildFromTemplate` 只允许托盘与迷你两个调用点，都传这一份模板；两处任何一处自带 `label:` 就算漂移。
+- 右键有两条入口，都必须挂：非拖拽区走 `win.webContents.on('context-menu')`，整块 `.mini-shell` 这样的 `-webkit-app-region: drag` 区域在 Windows 上被系统当成非客户区、只会弹几乎全灰的窗口系统菜单（迷你窗口 `resizable/minimizable/maximizable` 全 false）且 renderer 收不到 `contextmenu`，必须由 `win.on('system-context-menu')` + `preventDefault()` 换成同一份应用菜单。`popup({ window: win })` 不传 x/y（Electron 默认就是当前光标位置，`system-context-menu` 的 `point` 是屏幕坐标，手动换算只会引入偏移）。两套外壳页面都不许 `preventDefault()` 掉 DOM `contextmenu`。回归测试：`tests/mini-player-context-menu.test.js`。
 - 回归测试必须锁定四角按钮原位、标准页面无 `collapse`、设置区 `× 自动收回` 常驻、双向持久化、封面拖动/短按分流、右侧向左展开、桌面歌词入口与左下角镜像、桌面歌词按钮不在 `.transport` 内、收回态鼠标穿透与热区恢复，以及极简模式无按钮。
 
 ## Reference

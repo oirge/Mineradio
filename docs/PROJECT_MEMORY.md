@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.7.7` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口，`v1.7.7` 把交接时机改成「外壳淡到全透明之后再交给系统最小化」（`240ms`，终态 `scale(.6)`）才真正看得出来（见下方 v1.7.7 / v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.13` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口，`v1.7.7` 把交接时机改成「外壳淡到全透明之后再交给系统最小化」（`240ms`，终态 `scale(.6)`）才真正看得出来（见下方 v1.7.7 / v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**，**`v1.7.11`~`v1.7.13` 起迷你播放器整窗任意位置可右键（含拖拽区，靠 `system-context-menu` 拦系统菜单），菜单与任务栏托盘共用同一份 `buildAppContextMenuTemplate()`、六项完全一致（见下方 v1.7.13 区块）**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,16 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.13 迷你播放器右键菜单与托盘完全对齐
+
+- 日期：2026-08-29。版本从 `1.7.12` 提升为 `1.7.13`。用户需求原话：「最新版本迷你播放器右键要全部可点与任务栏右键效果一样 极简播放器也能」。
+- **两个缺口，一并补掉**。(1) 内容缺口：迷你菜单只有 3 项（显示播放器 / 迷你播放器样式 / 退出播放器），托盘有 6 项，勾选类设置（关闭到托盘、最小化时显示迷你播放器、开机自启）在迷你上完全没有。(2) 「点不动」缺口：Windows 把 `-webkit-app-region: drag` 区域的右键当成非客户区处理，直接弹**窗口系统菜单**，而迷你窗口 `resizable/minimizable/maximizable` 全是 false，那份系统菜单里只有「关闭」不是灰的——用户看到的「不能全部点」就是这个，而且 renderer 连 `contextmenu` 事件都收不到，v1.7.11/v1.7.12 的 `webContents` 挂接在拖拽区上根本不会触发。
+- **实现**：抽出 `buildAppContextMenuTemplate()`（`desktop/main.js`，紧邻 `refreshTrayMenu()` 之前），托盘 `tray.setContextMenu(...)` 与 `showMiniPlayerContextMenu()` 都只传这一份；`main.js` 里 `Menu.buildFromTemplate` 从此只有这两个调用点，两份菜单不可能再漂移。窗口侧新增 `win.on('system-context-menu', (event) => { event.preventDefault(); showMiniPlayerContextMenu(win); })`，非拖拽区继续走 `win.webContents.on('context-menu')`，两条路弹同一份菜单。
+- **不要再改坏的边界**：`popup({ window: win })` **不要传 x/y**——Electron 的 `PopupOptions.x/y` 默认就是「当前光标位置」，`system-context-menu` 的 `point` 是**屏幕**坐标，手动换算只会引入偏移 bug。`showMiniPlayerContextMenu` 的 `if (!win || win.isDestroyed() || miniPlayerWindow !== win) return;` 守卫必须留着（旧窗口的迟到事件不能操作新窗口）。两套外壳都不许在页面里 `preventDefault()` 掉 DOM `contextmenu`，否则非拖拽区右键彻底哑掉（已写成测试断言）。
+- 极简外壳零改动：`.mini-shell` 同样是整块拖拽区，且与标准共用 `createMiniPlayerWindow()`（`const page = mode === 'compact' ? ...`），所以 `system-context-menu` 这一条同时兜住两壳；极简没有穿透，天然整窗可右键。
+- **验证纪律**：仍然没有合成右键点击（会抢光标点到用户正在用的窗口上）。OS 级拖拽区那一条腿无法在不做真实右键的前提下复现——CDP 注入的输入在系统非客户区命中测试之后才进入——所以它靠 `electron.d.ts:2538/:5031` 的 `system-context-menu` 类型签名 + 单测挂接断言兜，用户自己右键是最终确认。
+- 测试：`tests/mini-player-context-menu.test.js` 3 例 → 6 例，改成在 `vm` 里**真的执行**模板构建器并逐项点击（项目顺序、每项非灰且可点/带子菜单、勾选态跟随真实设置、开机自启失败回退勾选、退出先置 `appQuitting`、改设置后必须 `refreshTrayMenu()`），外加两条右键路径挂接与两壳拖拽区断言。**vm 造出的数组/对象跨 realm，`assert.deepEqual` 会因原型不同误判**（本项目第四次踩），断言前先 `Array.from(...)` 拷回本 realm 或逐字段比。全量 483 例全绿。
 
 ## v1.7.12 迷你播放器整窗可右键
 
