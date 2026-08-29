@@ -28,8 +28,9 @@ body.fullscreen-transitioning.fullscreen-transition-enter:not(.fullscreen-transi
 body.fullscreen-transitioning.fullscreen-transition-exit:not(.fullscreen-transition-revealing) #desktop-window-shell{transform:translateZ(0) scale(1.012);filter:brightness(.74) saturate(.9)}
 body.fullscreen-transitioning.fullscreen-transition-revealing #desktop-window-shell{transform:translateZ(0) scale(1);filter:none}
 @media (prefers-reduced-motion:reduce){#fullscreen-transition-layer,body.fullscreen-transitioning #desktop-window-shell{transition-duration:.06s!important}}
-body.mini-collapsing #desktop-window-shell{transform-origin:var(--mini-collapse-x,92%) var(--mini-collapse-y,96%);transition:transform .26s cubic-bezier(.32,.02,.24,1),opacity .24s cubic-bezier(.4,0,.2,1),filter .24s ease;will-change:transform,opacity,filter}
-body.mini-collapsing.mini-collapse-run #desktop-window-shell{transform:translateZ(0) scale(.86);opacity:.05;filter:brightness(.7) saturate(.88)}
+body.mini-collapsing #desktop-window-shell{transform-origin:var(--mini-collapse-x,92%) var(--mini-collapse-y,96%);transition:transform .2s cubic-bezier(.3,0,.8,.15),opacity .17s cubic-bezier(.4,0,.9,.4) .02s,filter .18s ease;will-change:transform,opacity,filter}
+body.mini-collapsing.desktop-maximized #desktop-window-shell{border-radius:26px!important}
+body.mini-collapsing.mini-collapse-run #desktop-window-shell{transform:translateZ(0) scale(.6);opacity:0;filter:brightness(.82) saturate(.92)}
 body.mini-collapse-reset #desktop-window-shell{transition:none!important;transform:translateZ(0) scale(1)!important;opacity:1!important;filter:none!important;will-change:auto}
 @media (prefers-reduced-motion:reduce){body.mini-collapsing #desktop-window-shell{transition-duration:.06s!important}}
 body.desktop-shell #desktop-titlebar{position:fixed;z-index:500;top:0;left:0;right:0;height:44px;padding:0 12px 0 18px;display:flex;align-items:center;justify-content:space-between;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;-webkit-app-region:drag;pointer-events:none}

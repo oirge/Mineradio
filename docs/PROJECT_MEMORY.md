@@ -8,7 +8,7 @@
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 当前源码检查点：`v1.7.6` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口（见下方 v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前源码检查点：`v1.7.7` 基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口，`v1.7.7` 把交接时机改成「外壳淡到全透明之后再交给系统最小化」（`240ms`，终态 `scale(.6)`）才真正看得出来（见下方 v1.7.7 / v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
 - 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
@@ -33,6 +33,22 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.7 收缩过渡改成看得见的一段动作
+
+- 日期：2026-08-29。版本从 `1.7.6` 提升为 `1.7.7`。
+- 用户原话：装上 `v1.7.6` 之后一句「没变化啊」。这是对 `v1.7.6` 那段收缩过渡的否定反馈，任务是查清为什么看不出来并真正做到看得见。
+- **不要再靠读代码猜，要量。** 排查用的是 CDP：`MINERADIO_INSTANCE_ID=collapseprobe ./node_modules/electron/dist/electron.exe . --remote-debugging-port=9333`，然后 `GET /json/list` 找目标（**主 renderer 的 url 是 `http://127.0.0.1:40080/`，不是 `file://.../index.html`，匹配器不能找 `index.html`**），`Runtime.enable` + `Runtime.evaluate {awaitPromise:true,returnByValue:true}`，在页面里 `setInterval` 每 `16ms` 采一次 `getComputedStyle('#desktop-window-shell')`。node v24 自带 `WebSocket`，驱动只需要 `node:http`。
+- 病根不是没生效，而是交接时机错了：`v1.7.6` 在 `150ms` 就调 `api.minimize()`，而实测那一刻外壳还有 `opacity≈0.19` / `scale≈0.885`，于是 Windows 自己那段飞向任务栏的最小化动画盖在还看得见的界面上，两段动作方向还相反（一个朝迷你角落，一个朝任务栏），观感就是熟悉的原生最小化；再加上 `150ms` 内只缩 `13.5%`、没有位移，本来就不够一眼看出。
+- 修法（`public/app.css` 五行 + `public/app.js` 常量）：`transform .2s cubic-bezier(.3,0,.8,.15)`、`opacity .17s cubic-bezier(.4,0,.9,.4) .02s`、`filter .18s ease`；`.mini-collapse-run` 落到 `scale(.6)` / `opacity:0` / `brightness(.82) saturate(.92)`；`MINI_COLLAPSE_ACTION_DELAY = 240`、`MINI_COLLAPSE_RESET_DELAY = 300`；最大化态补 `body.mini-collapsing.desktop-maximized #desktop-window-shell{border-radius:26px!important}`（`app.css:22` 的最大化覆盖用 `!important` 抹掉了圆角，同特异性的后置规则才压得住）。
+- **交接延时必须比 CSS 时长多留余量。** 实测点击到过渡真正起画有 `15~30ms` 的样式重算 + 首帧延迟，所以 `240ms` 对应的是 `190/200ms` 的 CSS 收尾。改完实测：起画 `+16ms`，`opacity` 在 `+222ms` 到 `0`，`240ms` 交接时窗口里已经没有可见内容。
+- **窗口本身是全透明的**：实测 `html` / `body` / `#desktop-window-shell` 的 `background-color` 全是 `rgba(0,0,0,0)`，`body` 下除外壳没有其他可见大块子节点。所以外壳淡到 `0` 就等于窗口空了，系统最小化动画没有东西可动——这是「先跑完再交接」能成立的前提，谁要给 `body` 加底色就会把这个前提破坏掉。
+- **`transform-origin` 不参与过渡，过渡期间绝对不能改。** 预热 IPC 的回包常落在动画中段，`v1.7.6` 会当帧改写 `--mini-collapse-x/y`，外壳缩到一半突然掉头。现在 `applyMiniCollapseOrigin()` 在 `miniCollapseState.active` 时只把值存进 `miniCollapseState.pendingOrigin`，由 `finishMiniCollapse()` 复位后（窗口已最小化、外壳不可见）落地，下一次收缩才用上；悬停预热的回包不在过渡期内，仍然即时生效。
+- 迷你外壳入场同步加大：标准 `280ms` / `translateY(7px) scale(.9)`，极简 `260ms` / `translateY(6px) scale(.92)`。
+- 测试：`tests/mini-player-collapse-transition.test.js` 15 例，`npm test` 471 例全绿。新增的那条回归断言从 CSS 里按属性名解析 `transition` 简写（简写里 `cubic-bezier` 自带逗号，只能定点取），钉死「`opacity` / `transform` 都要在 `MINI_COLLAPSE_ACTION_DELAY - 30ms` 前结束」和「终态 `scale ≤ .7`」——这两条正是 `v1.7.6` 违反的不变量。
+- 不要再改坏的边界：交接延时和 CSS 时长必须一起改，只调一边就会重新回到「原生最小化盖住过渡」；过渡进行中改 `transform-origin` 会掉头；`body` / `html` 的透明背景不能加底色。
+- 验证纪律：**不要用合成鼠标点击**（本机是用户正在使用的桌面，`v1.7.6` 那次点进了用户开着的剪映窗口）。这次全程走 CDP：`collapseToMiniPlayer()` 直接在页面里调，恢复主窗口用迷你窗口里的 `window.miniPlayer.command('restore')`；主窗口一恢复迷你窗口就销毁，`Runtime.evaluate` 的回包永远等不到，必须自己 `Promise.race` 超时。`contextBridge` 暴露的 `window.desktopWindow` 是冻结对象，从 `Runtime.evaluate` 里给它的方法打桩会静默失败，量交接时刻只能靠固定的 `setTimeout` 延时推算。
+- 探针文件全部用 `tmp-probe-*` 前缀放仓库根目录，验证完连隔离实例一起清掉，一个都不许提交。
 
 ## v1.7.6 主界面收缩到迷你播放器的过渡
 

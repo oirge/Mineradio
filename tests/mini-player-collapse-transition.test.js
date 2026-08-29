@@ -109,7 +109,8 @@ test('最小化按钮走收缩过渡，且过渡样式只作用于桌面外壳',
   assert.match(app, /btn\.addEventListener\('pointerenter', armMiniCollapsePrewarm\);/);
   assert.match(app, /btn\.addEventListener\('pointerleave', cancelMiniCollapsePrewarm\);/);
   assert.match(css, /body\.mini-collapsing #desktop-window-shell\{transform-origin:var\(--mini-collapse-x,92%\) var\(--mini-collapse-y,96%\)/);
-  assert.match(css, /body\.mini-collapsing\.mini-collapse-run #desktop-window-shell\{transform:translateZ\(0\) scale\(\.86\)/);
+  assert.match(css, /body\.mini-collapsing\.mini-collapse-run #desktop-window-shell\{transform:translateZ\(0\) scale\(\.6\);opacity:0/);
+  assert.match(css, /body\.mini-collapsing\.desktop-maximized #desktop-window-shell\{border-radius:26px!important\}/);
   assert.match(css, /body\.mini-collapse-reset #desktop-window-shell\{transition:none!important/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{body\.mini-collapsing #desktop-window-shell\{transition-duration:\.06s!important\}\}/);
   assert.match(preload, /prepareMiniPlayerTransition: \(\) => ipcRenderer\.invoke\('mineradio-mini-player-prepare-transition'\)/);
@@ -141,21 +142,27 @@ test('收缩过渡先预热迷你窗口，收缩到位后才交给系统最小�
 
   await Promise.resolve();
   await Promise.resolve();
-  assert.equal(env.vars.get('--mini-collapse-x'), '94.00%');
-  assert.equal(env.vars.get('--mini-collapse-y'), '97.00%');
+  // transform-origin 不参与过渡，收缩进行中落地新原点会让外壳当帧掉头，只能先缓存。
+  assert.equal(env.vars.has('--mini-collapse-x'), false, '过渡进行中不能改收缩原点');
+  assert.equal(env.context.state.pendingOrigin.x, 0.94);
+  assert.equal(env.context.state.pendingOrigin.y, 0.97);
 
   const actionTimer = env.timers.get(env.context.state.actionTimer);
-  assert.equal(actionTimer.delay, 150);
+  assert.equal(actionTimer.delay, 240);
   actionTimer.callback();
   assert.equal(env.calls.minimize, 1);
 
   const resetTimer = env.timers.get(env.context.state.resetTimer);
-  assert.equal(resetTimer.delay, 260);
+  assert.equal(resetTimer.delay, 300);
   resetTimer.callback();
   assert.equal(env.context.state.active, false);
   assert.equal(env.classes.has('mini-collapsing'), false);
   assert.equal(env.classes.has('mini-collapse-run'), false);
   assert.equal(env.classes.has('mini-collapse-reset'), false, '复位类必须同帧摘掉，不留在下一次恢复上');
+  // 缓存的原点在收尾落地，下一次收缩才朝真正的迷你角落收。
+  assert.equal(env.vars.get('--mini-collapse-x'), '94.00%');
+  assert.equal(env.vars.get('--mini-collapse-y'), '97.00%');
+  assert.equal(env.context.state.pendingOrigin, null);
 });
 
 test('悬停最小化按钮就提前预热，短暂划过不建窗口', async () => {
@@ -260,6 +267,34 @@ test('收缩原点按迷你窗口中心归一化，异常主窗口尺寸退回�
 
   context.mainWindow = null;
   assert.equal(context.origin(), null);
+});
+
+test('收缩必须在交给系统最小化之前淡到全透明，否则系统最小化动画会盖掉过渡', () => {
+  const css = readProjectFile('public/app.css');
+  const app = readProjectFile('public/app.js');
+  const rule = /body\.mini-collapsing #desktop-window-shell\{[^}]*?transition:([^;]+);/.exec(css);
+  assert.ok(rule, '未找到收缩过渡的 transition 声明');
+
+  // transition 简写里 cubic-bezier 自带逗号，只能按属性名定点取。
+  const fade = /opacity (\d*\.?\d+)s cubic-bezier\([^)]*\)(?: (\d*\.?\d+)s)?/.exec(rule[1]);
+  const move = /transform (\d*\.?\d+)s cubic-bezier\([^)]*\)(?: (\d*\.?\d+)s)?/.exec(rule[1]);
+  assert.ok(fade && move, '收缩过渡必须显式声明 transform 与 opacity 的时长');
+  const fadeEnd = (Number(fade[1]) + Number(fade[2] || 0)) * 1000;
+  const moveEnd = (Number(move[1]) + Number(move[2] || 0)) * 1000;
+
+  const action = Number(/var MINI_COLLAPSE_ACTION_DELAY = (\d+);/.exec(app)[1]);
+  // 实测点击到过渡起画有 15~30ms 的样式重算与首帧延迟，交接必须比 CSS 时长多留这段余量。
+  const START_LATENCY = 30;
+  assert.ok(
+    fadeEnd + START_LATENCY <= action,
+    `淡出要在 ${action - START_LATENCY}ms 前结束，实际 ${fadeEnd}ms；外壳还看得见就最小化，用户看到的还是原生最小化`,
+  );
+  assert.ok(moveEnd + START_LATENCY <= action, `缩放要在 ${action - START_LATENCY}ms 前结束，实际 ${moveEnd}ms`);
+
+  // 收缩幅度太小等于没变化，这里锁住一个肉眼能看出来的量级。
+  const scale = /body\.mini-collapsing\.mini-collapse-run #desktop-window-shell\{transform:translateZ\(0\) scale\((\.\d+)\)/.exec(css);
+  assert.ok(scale, '未找到收缩终态');
+  assert.ok(Number(scale[1]) <= 0.7, `收缩终态 scale=${scale[1]}，幅度不足以看出过渡`);
 });
 
 /**

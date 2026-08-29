@@ -146,9 +146,9 @@
     /* 主界面收缩落地前窗口是隐藏的预热窗口，外壳先留白，等窗口显示且首帧状态到位再淡入，
        这样迷你播放器不会闪一下「Mineradio / 等待播放」占位文案。 */
     body[data-enter="pending"] .mini-shell { opacity: 0; }
-    body[data-enter="run"] .mini-shell { animation: mini-shell-enter 240ms cubic-bezier(.16, 1, .3, 1) both; }
+    body[data-enter="run"] .mini-shell { animation: mini-shell-enter 260ms cubic-bezier(.16, 1, .3, 1) both; }
     @keyframes mini-shell-enter {
-      from { opacity: 0; transform: translateY(4px) scale(0.96); }
+      from { opacity: 0; transform: translateY(6px) scale(0.92); }
       to { opacity: 1; transform: none; }
     }
     @media (prefers-reduced-motion: reduce) {

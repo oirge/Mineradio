@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.6';
+var APP_VERSION = '1.7.7';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -33435,9 +33435,16 @@ function setDesktopMiniPlayerMode(mode) {
 
 // 主界面收缩到迷你播放器的过渡状态。动画只作用于 #desktop-window-shell 的变换与不透明度，
 // 布局、CSS 变量和交互入口一律不动；动画结束必须无过渡地复位，避免下次恢复出现回弹。
-var miniCollapseState = { active: false, token: 0, actionTimer: 0, resetTimer: 0, prewarmTimer: 0, prewarmAt: 0, originApplied: false };
-var MINI_COLLAPSE_ACTION_DELAY = 150;
-var MINI_COLLAPSE_RESET_DELAY = 260;
+// 收缩必须先跑完再交给系统最小化：外壳淡到全透明后系统那段最小化动画就没有可见内容可动，
+// 两段动作才接得上；若在外壳还看得见时就最小化，用户看到的仍然是熟悉的原生最小化。
+// 实测：点击到过渡真正起画有 15~30ms 的样式重算与首帧延迟，交接延时必须比 CSS 时长多留这段余量，
+// 否则最小化落在淡出的最后一段陡坡上，外壳还有三成可见度就被系统动画接走。
+var miniCollapseState = {
+  active: false, token: 0, actionTimer: 0, resetTimer: 0,
+  prewarmTimer: 0, prewarmAt: 0, originApplied: false, pendingOrigin: null,
+};
+var MINI_COLLAPSE_ACTION_DELAY = 240;
+var MINI_COLLAPSE_RESET_DELAY = 300;
 var MINI_COLLAPSE_PREWARM_DWELL = 90;
 var MINI_COLLAPSE_PREWARM_THROTTLE = 900;
 
@@ -33461,6 +33468,7 @@ function miniCollapseAvailable() {
 
 /**
  * 把主进程回传的归一化迷你窗口中心写成收缩动画原点，让主界面朝迷你播放器实际角落收拢。
+ * transform-origin 不参与过渡，收缩进行中改原点会让外壳当帧掉头，所以过渡期间只缓存，收尾时再落地。
  * @param {{x?: number, y?: number}=} origin 归一化原点，取值范围 -0.6 ~ 1.6。
  * @returns {void}
  */
@@ -33471,6 +33479,11 @@ function applyMiniCollapseOrigin(origin) {
   if (!isFinite(x) || !isFinite(y)) return;
   x = Math.max(-0.6, Math.min(1.6, x));
   y = Math.max(-0.6, Math.min(1.6, y));
+  if (miniCollapseState.active) {
+    miniCollapseState.pendingOrigin = { x: x, y: y };
+    return;
+  }
+  miniCollapseState.pendingOrigin = null;
   miniCollapseState.originApplied = true;
   document.documentElement.style.setProperty('--mini-collapse-x', (x * 100).toFixed(2) + '%');
   document.documentElement.style.setProperty('--mini-collapse-y', (y * 100).toFixed(2) + '%');
@@ -33506,7 +33519,8 @@ function requestMiniCollapsePrewarm(immediate) {
     return;
   }
   if (!pending || typeof pending.then !== 'function') return;
-  // 原点只取决于两个窗口的位置，悬停时算出来和点击时算出来一致，迟到应用也不会跳原点。
+  // 原点只取决于两个窗口的位置，悬停时算出来和点击时算出来一致；点击那次的回包必然迟于起画，
+  // 由 applyMiniCollapseOrigin 缓存到收尾时落地，下一次收缩就有准确原点。
   pending.then(function(result){
     if (result && result.origin) applyMiniCollapseOrigin(result.origin);
   }).catch(function(){});
@@ -33548,6 +33562,8 @@ function finishMiniCollapse(token) {
   document.body.classList.remove('mini-collapsing', 'mini-collapse-run');
   void document.body.offsetWidth;
   document.body.classList.remove('mini-collapse-reset');
+  // 过渡期间缓存下来的原点在这里落地：此刻外壳已经复位且窗口不可见，改原点看不出来。
+  if (miniCollapseState.pendingOrigin) applyMiniCollapseOrigin(miniCollapseState.pendingOrigin);
 }
 
 /**
