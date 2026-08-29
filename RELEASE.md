@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v1.7.9 每次启动省掉两趟隐藏窗口空转
+- 正式发布版本从 `1.7.8` 提升为 `1.7.9`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.8` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版是启动优化：`migratePrimaryProfileState()` 在稳态（旧档迁移已完成 + 本地服务端口没变）下短路跳过隐藏窗口的 `localStorage` 读+写空转（微基准一趟写 `~113ms` / 读 `~20ms+`），打包版每次启动省约 `130~150ms`；新增 `ui-state-origin-marker.json` 记录上次迁移目标 `origin`。端口变化或旧档待迁移仍走完整路径，`preload` 文件兜底不变。渲染进程、界面、交互零改动。
+- 发布前运行全量 Node 回归（474/474）、`node --check desktop/main.js` 与 `git diff --check`；核验 `dist/win-unpacked/resources/app.asar` 内 `desktop/main.js` 含 `readLastMigratedUiStateOrigin` 稳态短路。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；发布标题使用 `v1.7.9 每次启动省掉两趟隐藏窗口空转`。
+- 本地构建产物：`Mineradio-1.7.9-Setup.exe` `101520093` 字节；`.blockmap` `105906` 字节；`latest.yml` `347` 字节；`Mineradio-1.7.9-SHA256SUMS.txt` `270` 字节。
+- SHA256：安装器 `099c967c35e25d2e4137b6e4fb348b51a53aff82f8423842761cb8e8f14373bf`；`.blockmap` `0d4e9011a18484ba0846fe41306e55c7dfb6c124d3e85e67a7ffe96a76feb9c0`；`latest.yml` `548a35c26e42c5fd9b7e9b2607e6f4325680747c5ec1c9ad166f09d72d840a50`。
+- `latest.yml` 的 Setup SHA512：`I+ekyEfzRPpguwhGF1gKGT6zv9p/Jvu0OES7whtuq6630IRQHNfJX9bzwdbd/xFC+wNnPwDYq4BYGPY98Rvr/g==`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+
 ## v1.7.8 启动首帧不再被 vendor 脚本卡住
 - 正式发布版本从 `1.7.7` 提升为 `1.7.8`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.7` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版是启动优化：`public/index.html` 的 `three.js` / `gsap.min.js` 两个阻塞脚本从 `<head>` 挪到 `</body>` 前、`app.js` 之前，相对执行顺序不变（`app.js` 顶层就实例化 `THREE` 场景）；`server.js` 对 `/vendor/*` 发 `public, max-age=604800`，其余静态文件仍 `no-cache`。默认外观与交互零改动。

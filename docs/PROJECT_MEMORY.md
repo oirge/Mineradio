@@ -34,6 +34,17 @@
 
 ## Release Memory
 
+## v1.7.9 每次启动省掉两趟隐藏窗口空转
+
+- 日期：2026-08-29。版本从 `1.7.8` 提升为 `1.7.9`。本轮「继续优化」先用 CDP 实测再动手：`MINERADIO_INSTANCE_ID=startprobe electron . --remote-debugging-port=9334` + `performance.getEntriesByType('paint'/'navigation'/'resource')`，确认资源全部在 ~565ms 内并行拉完、网络不是瓶颈；首帧 1228ms、DCL 2353ms，冷启动中段 ~1.1s 是 2.3MB JS 解析编译（每次安装只发生一次，热启动有 V8 code cache，不动它）。
+- **真金矿在 `migratePrimaryProfileState()`**：打包版每次启动、`new BrowserWindow` 之前都执行「`readProfilePersistentValues()` → `writeSessionLocalStorage()`」，各经 `withStorageProbe` 开一个隐藏 `BrowserWindow`、`interceptStringProtocol('http')`、`loadURL('/__mineradio_profile_state_migration__')` + `executeJavaScript`，写完还 `flushStorageData()`。稳态（旧档迁移已完成 + 端口没变）下这是原样回写，微基准（Electron 主进程直接驱动 `profile-state-migration.js`）实测写一趟 `113ms`、读一趟 `20ms+` → 每次启动省 `~130-150ms`。
+- **修法**：`desktop/main.js` 新增 `ui-state-origin-marker.json`（`readLastMigratedUiStateOrigin()` / `writeLastMigratedUiStateOrigin()`，临时文件 + `rename` 原子落盘）；`migratePrimaryProfileState()` 开头在 `readProfilePersistentValues` 之前短路：`!legacyProfiles.length && readLastMigratedUiStateOrigin() === currentOrigin` 直接 return；完整路径收尾 `writeLastMigratedUiStateOrigin(currentOrigin)`。
+- **为什么安全**：`localStorage` 按 `origin` 隔离，端口变化时 marker 不匹配 → 照旧走完整迁移把旧 origin 的值搬到新 origin，这是该机制存在的意义；旧档迁移待办（marker 缺失/未完成）绝不短路；用户数据意外丢失时 `preload` 的 `restorePersistentUiState()`（`sendSync` 读 `desktop-ui-state.json` 补缺失键）兜底不变——所以标记文件绝不能替代 preload 兜底，两道保险都要在。
+- **注意开发态永远测不到这个路径**：`isPrimaryPackagedInstance()` 要求 `app.isPackaged === true` 且无 `MINERADIO_INSTANCE_ID`，dev `electron .` 恒为非 primary、迁移整体跳过。要量它只能打包版（用真实 profile，没做）或微基准。微基准用临时 `session.fromPath()` 时 `readSessionLocalStorage` 可能静默失败返回 `[]`、重复 `writeSessionLocalStorage` 可能原生崩溃——这是裸临时 session 的探针不稳，不代表生产行为（生产一直带着这路径跑）。
+- 测试：`tests/profile-state-migration.test.js` 新增守卫（短路必须在 `readProfilePersistentValues` 之前、`!legacyProfiles.length` 前置、收尾必须 `writeLastMigratedUiStateOrigin`），474 例全绿；`node --check desktop/main.js` + 隔离实例冒烟通过。
+- 排查过并明确**不做**：`wallpaper-engine.js`（113KB）懒加载——与 `app.js` 靠裸全局变量深度耦合，懒加载要在 app.js 启动路径上找到并守卫所有调用点，风险大于 ~5% 解析收益；`installProtocol` 只是 `protocol.handle` 注册，零开销；`preload` 的 `sendSync`（几 ms 的 UI 状态文件读取）无法异步化——`localStorage` 必须在 `app.js` 求值前就位；压缩 `app.js`——空白/注释剥离不减 token，带 mangle 的压缩毁调试栈；主进程启动链并行化——`migratePrimaryProfileState` 本轮已短路，其余各步都是 ms 级。
+- 冷启动瓶颈结论（供下轮参考）：打包版冷启动剩余大头是 2.3MB JS 的解析编译 + 渲染进程冷启动，都是每次安装一次性成本，热启动已被 code cache 摊薄；不要再为它做结构性重构。
+
 ## v1.7.8 启动首帧不再被 vendor 脚本卡住
 
 - 日期：2026-08-29。版本从 `1.7.7` 提升为 `1.7.8`。本轮是「有什么需要优化的」排查的落地：全库审查后确认运行时优化已做得很深，只挑了两项有量化依据、零 UI 改动的启动优化。

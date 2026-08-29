@@ -180,6 +180,7 @@ const LOCAL_FILE_TOKEN = crypto.randomBytes(16).toString('hex');
 const DESKTOP_SHELL_SETTINGS_FILE = 'desktop-shell-settings.json';
 const DESKTOP_UI_STATE_FILE = 'desktop-ui-state.json';
 const PROFILE_STATE_MIGRATION_FILE = 'profile-state-migration-v2.json';
+const UI_STATE_ORIGIN_MARKER_FILE = 'ui-state-origin-marker.json';
 const PROFILE_STATE_MIGRATION_STAGING_ROOT = path.join(
   app.getPath('temp'),
   'Mineradio-profile-migration-staging',
@@ -898,6 +899,38 @@ function profileStateMigrationPath() {
   return path.join(app.getPath('userData'), PROFILE_STATE_MIGRATION_FILE);
 }
 
+function uiStateOriginMarkerPath() {
+  return path.join(app.getPath('userData'), UI_STATE_ORIGIN_MARKER_FILE);
+}
+
+/**
+ * 读取上次完整迁移写入 localStorage 的 origin。
+ * @returns {string} origin 字符串，无标记时返回空串。
+ */
+function readLastMigratedUiStateOrigin() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(uiStateOriginMarkerPath(), 'utf8'));
+    return typeof raw.origin === 'string' ? raw.origin : '';
+  } catch (_e) {
+    return '';
+  }
+}
+
+/**
+ * 记录本次完整迁移的目标 origin，供下次启动判断稳态跳过。
+ * @param {string} origin 本地服务 origin。
+ * @returns {void}
+ */
+function writeLastMigratedUiStateOrigin(origin) {
+  try {
+    const file = uiStateOriginMarkerPath();
+    const tempFile = `${file}.tmp`;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(tempFile, JSON.stringify({ schema: 1, origin: String(origin || ''), at: Date.now() }, null, 2), 'utf8');
+    fs.renameSync(tempFile, file);
+  } catch (_e) {}
+}
+
 function hasCompletedLegacyProfileMigration() {
   try {
     const data = JSON.parse(fs.readFileSync(profileStateMigrationPath(), 'utf8'));
@@ -1056,10 +1089,16 @@ async function readProfilePersistentValues(profile, profileSession, preferredOri
 async function migratePrimaryProfileState(port) {
   if (!INSTANCE_PROFILE.primary) return { ok: true, skipped: true };
   const currentOrigin = `http://127.0.0.1:${Number(port) || 3000}`;
+  // 稳态（旧档迁移已完成、本地服务端口没变）下，下面的「读出 localStorage 再原样写回」
+  // 是纯空转，却要各开一个隐藏窗口做导航。跳过它们；渲染层 preload 的
+  // restorePersistentUiState 本来就会用 desktop-ui-state.json 兜底补齐缺失键。
+  const legacyProfiles = hasCompletedLegacyProfileMigration() ? [] : legacyProfilesForMigration();
+  if (!legacyProfiles.length && readLastMigratedUiStateOrigin() === currentOrigin) {
+    return { ok: true, skipped: true, migrated: false };
+  }
   const destination = await readProfilePersistentValues(INSTANCE_PROFILE, session.defaultSession, currentOrigin);
   let mergedValues = destination.values;
   let selectedModifiedAt = destination.modifiedAt;
-  const legacyProfiles = hasCompletedLegacyProfileMigration() ? [] : legacyProfilesForMigration();
   let legacyStorageReadOk = true;
   for (const legacyProfile of legacyProfiles) {
     try {
@@ -1102,6 +1141,7 @@ async function migratePrimaryProfileState(port) {
     writeDesktopUiStatePatch(mergedValues);
   }
   if (legacyProfiles.length && legacyStorageReadOk) writeLegacyProfileMigrationMarker(legacyProfiles);
+  writeLastMigratedUiStateOrigin(currentOrigin);
   return {
     ok: true,
     migrated: legacyProfiles.length > 0,

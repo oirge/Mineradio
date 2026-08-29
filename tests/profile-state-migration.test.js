@@ -168,3 +168,26 @@ test('主进程与 preload 对歌单状态使用同一持久化白名单', () =>
   }
   assert.match(main, /await migratePrimaryProfileState\(port\)/);
 });
+
+test('迁移稳态必须跳过隐藏窗口读写，端口变化或旧档待迁移才走完整路径', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'main.js'), 'utf8');
+  const fnStart = main.indexOf('async function migratePrimaryProfileState(port)');
+  assert.ok(fnStart >= 0, 'migratePrimaryProfileState 必须存在');
+  const fnEnd = main.indexOf('\nasync function ', fnStart + 1);
+  const fn = main.slice(fnStart, fnEnd > 0 ? fnEnd : undefined);
+
+  // 稳态短路必须先于隐藏窗口的 localStorage 读取。
+  const skipAt = fn.indexOf('readLastMigratedUiStateOrigin() === currentOrigin');
+  const readAt = fn.indexOf('readProfilePersistentValues(INSTANCE_PROFILE');
+  assert.ok(skipAt > 0, '必须有稳态 origin 短路判断');
+  assert.ok(readAt > skipAt, '稳态短路必须发生在 readProfilePersistentValues 之前');
+  assert.match(fn, /!legacyProfiles\.length && readLastMigratedUiStateOrigin\(\) === currentOrigin/,
+    '旧档迁移待办时不得短路，必须走完整迁移');
+
+  // 完整迁移收尾必须记录 origin 标记，供下次启动进入稳态。
+  assert.match(fn, /writeLastMigratedUiStateOrigin\(currentOrigin\)/);
+
+  // 短路不得在记录标记之前生效（首次运行必须走一次完整路径建立标记）。
+  const markerWriteAt = fn.indexOf('function writeLastMigratedUiStateOrigin');
+  assert.equal(markerWriteAt, -1, '标记读写辅助函数必须定义在 migratePrimaryProfileState 之外');
+});
