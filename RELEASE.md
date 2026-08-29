@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v1.7.10 搜索结果面板有了入场动画
+- 正式发布版本从 `1.7.9` 提升为 `1.7.10`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.9` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版是交互打磨：`#search-results` 搜索结果面板原为 `display:none → block` 硬切，现挂 `search-results-in` 入场动画（260ms，opacity/transform，缓动与搜索区下滑同族）；玻璃滤镜与配色零改动，`prefers-reduced-motion` 跳过。app.js 零改动。
+- 发布前运行全量 Node 回归（477/477）与 `git diff --check`；核验 asar 内 `public/app.css` 含 `search-results-in`（2 处：.show 规则 + keyframes）。
+- Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；发布标题使用 `v1.7.10 搜索结果面板有了入场动画`。
+- 本地构建产物：`Mineradio-1.7.10-Setup.exe` `101519374` 字节；`.blockmap` `105968` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.10-SHA256SUMS.txt` `272` 字节。
+- SHA256：安装器 `49bf58991e0802ffc3f269c1bc5814f7cf5e9d93c37bb611b10efe9101ce6028`；`.blockmap` `33c16557618ac7bcec328fbc6ec471c487c5359bd86b0e7bc5736f79ca1abe1e`；`latest.yml` `163def84b0febb5d0f5b32a80e5d2de222dd0a5fda2e0dcf40095e88cac62935`。
+- `latest.yml` 的 Setup SHA512：`X86qauFXNg2ADPIuQLN55E+PGwz/UPLE4FE4ykSu6HpkjhEZdavPUW52CMZuZMv6a1Cl6OOAaU4Dpr1/0+FYag==`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+
 ## v1.7.9 每次启动省掉两趟隐藏窗口空转
 - 正式发布版本从 `1.7.8` 提升为 `1.7.9`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.8` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版是启动优化：`migratePrimaryProfileState()` 在稳态（旧档迁移已完成 + 本地服务端口没变）下短路跳过隐藏窗口的 `localStorage` 读+写空转（微基准一趟写 `~113ms` / 读 `~20ms+`），打包版每次启动省约 `130~150ms`；新增 `ui-state-origin-marker.json` 记录上次迁移目标 `origin`。端口变化或旧档待迁移仍走完整路径，`preload` 文件兜底不变。渲染进程、界面、交互零改动。

@@ -34,6 +34,15 @@
 
 ## Release Memory
 
+## v1.7.10 搜索结果面板有了入场动画
+
+- 日期：2026-08-29。版本从 `1.7.9` 提升为 `1.7.10`。用户反馈「点击搜索界面出现的太僵硬」——这是第一条真实使用驱动的优化反馈，按既定套路 CDP 实测定位后修复。
+- **病根是 `#search-results` 的 `display:none → block` 硬切**：搜索下拉那块玻璃面板（结果/历史）从来没有任何过渡，回车或点击的一瞬间凭空出现。搜索区本体（`#search-area`）的 `top:-92px → 34px` 滑动本来就有 `.45s cubic-bezier(.2,.7,.2,1)`，逐帧采样（65 帧、avg gap `13.75ms`、偶发 `26.6ms`）确认不僵硬，未改动——**别把两者混为一谈**。
+- **修法**：`public/app.css` 给 `#search-results.show` 挂 `@keyframes search-results-in`（`260ms`，`opacity 0→1` + `translateY(-8px)→0`，缓动与搜索区同族），`@media (prefers-reduced-motion:reduce)` 跳过。只动画合成器属性；玻璃 `backdrop-filter:blur(40px) saturate(1.4)`、边框、阴影零改动。关闭侧保持即时隐藏（下拉惯例，避免玻璃残留）。
+- **行为细节（测试钉死）**：面板开着时重复 `classList.add('show')` 是 no-op 不会重播/闪烁，只有 remove 后再 add 才播一次；`display:none → block` 每次重渲染都会重启 CSS 动画，所以入场必然每次打开都有。app.js 侧零改动。
+- **CDP 复测技巧**：动画生效后 `panel.getAnimations()` 可直接读 `animationName/duration/getKeyframes()`，**不依赖窗口可见**；隐藏窗口里 CSS 动画时钟会暂停（`getComputedStyle` 停在 from 帧）且 rAF 完全不跑（`frameCount:0`），看到「动画卡在起点」是环境假象不是 bug。主窗口 `backgroundThrottling:false` 不豁免 occlusion/最小化的 rAF 暂停。探针窗口被用户最小化后继续采样就会踩这个坑。
+- 测试：新增 `tests/search-results-entrance.test.js` 3 例，全量 477 例全绿。
+
 ## v1.7.9 每次启动省掉两趟隐藏窗口空转
 
 - 日期：2026-08-29。版本从 `1.7.8` 提升为 `1.7.9`。本轮「继续优化」先用 CDP 实测再动手：`MINERADIO_INSTANCE_ID=startprobe electron . --remote-debugging-port=9334` + `performance.getEntriesByType('paint'/'navigation'/'resource')`，确认资源全部在 ~565ms 内并行拉完、网络不是瓶颈；首帧 1228ms、DCL 2353ms，冷启动中段 ~1.1s 是 2.3MB JS 解析编译（每次安装只发生一次，热启动有 V8 code cache，不动它）。

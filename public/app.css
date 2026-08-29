@@ -194,7 +194,10 @@ body.local-only-mode .login-link{display:none!important}
 body.local-only-mode .tag-source.local{color:#e6edf3;border-color:rgba(157,184,207,.34);background:rgba(157,184,207,.12)}
 body.empty-home-active.diy-mode #search-area:not(.has-results) #search-mode-tabs{display:none}
 #search-results{margin-top:8px;background:rgba(12,12,18,0.55);border:1px solid rgba(255,255,255,0.06);border-radius:14px;max-height:360px;overflow-y:auto;overscroll-behavior:contain;backdrop-filter:blur(40px) saturate(1.4);-webkit-backdrop-filter:blur(40px) saturate(1.4);display:none}
-#search-results.show{display:block;border-color:rgba(var(--fc-accent-rgb),.16);box-shadow:0 18px 54px rgba(0,0,0,.34),0 0 0 1px rgba(var(--fc-accent-rgb),.05)}
+/* display:none → block 是硬切，必须靠 keyframes 给一次入场；transform/opacity 走合成器，不碰布局。 */
+#search-results.show{display:block;border-color:rgba(var(--fc-accent-rgb),.16);box-shadow:0 18px 54px rgba(0,0,0,.34),0 0 0 1px rgba(var(--fc-accent-rgb),.05);animation:search-results-in .26s cubic-bezier(.2,.7,.2,1) both}
+@keyframes search-results-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#search-results.show{animation:none}}
 #search-results::-webkit-scrollbar{width:3px}
 #search-results::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
 .search-empty{padding:16px;text-align:center;font-size:12px;color:rgba(255,255,255,.42);letter-spacing:.4px}
