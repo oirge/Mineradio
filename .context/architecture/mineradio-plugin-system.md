@@ -1,6 +1,6 @@
 # Mineradio 插件系统架构
 
-`v1.7.0` 引入，`v1.7.4` 收窄成只有一种插件：主题（`theme`）。音源与歌单能力（含插件的全部网络与播放通道）在 `v1.7.4` 整体移除。`v1.7.5` 起主题可轻量调整默认背景，安装包自带两份完整主题与三份纯背景主题（默认都不启用），其余由用户自己导入。
+`v1.7.0` 引入，`v1.7.4` 收窄成只有一种插件：主题（`theme`）。音源与歌单能力（含插件的全部网络与播放通道）在 `v1.7.4` 整体移除。`v1.7.5` 起主题可轻量调整默认背景，安装包自带六份完整主题（五份暗色：午夜靛蓝、暖琥珀、深海微光、暗焰余晖、冷杉夜雾；一份浅色：雪昼白），默认都不启用，其余由用户自己导入。
 
 ## 分层与文件
 
@@ -32,13 +32,13 @@ localStorage `mineradio-plugins-v1`，经 `bridge.persist`（即 `setPersistentL
 
 插件主题写进 head 里唯一一个 `<style id="mineradio-plugin-theme-style">` 节点，用 `textContent` 而不是 `innerHTML`。`applyUiAccentColor()` 写在 documentElement 上的行内变量优先级更高，所以用户自己调的主色仍然压过插件主题——这是有意的。声明式主题在 `applyThemes()` 里同步写入，脚本主题的结果再合并重写一次，避免 Worker 启动那几秒界面裸着。
 
-背景变量也走同一个注入节点：`#custom-bg` 读 `var(--custom-bg-color,var(--th-bg-color,#000))`，独立的 `#theme-bg-tint` 覆在 `#album-bg` 之上并读取 `--th-bg-tint` 和 `--th-bg-tint-opacity`。纯背景主题可以只有这三个 `vars`、没有 `css`；它仍是互斥的 `theme`，启用时会关掉当前完整主题。
+背景变量也走同一个注入节点：`#custom-bg` 读 `var(--custom-bg-color,var(--th-bg-color,#000))`，独立的 `#theme-bg-tint` 覆在 `#album-bg` 之上并读取 `--th-bg-tint` 和 `--th-bg-tint-opacity`。所有内置主题都同时覆盖背景与面板变量；三份历史背景主题已升级为完整主题，仍受互斥的 `theme` 规则约束。
 
 迷你播放器是独立窗口、不加载插件运行时，只能靠 `themeVars()` → `miniPlayerThemePayload()` → `mineradio-mini-player-state` 的整表转发拿到 `--th-*`。
 
 ## 测试
 
 - `tests/plugin-system.test.js`：`vm.createContext` 造最小渲染进程与最小 Worker 环境，跑**真**的 sandbox / runtime 源码互相对接，消息过一遍 `JSON.parse(JSON.stringify(…))` 模拟结构化克隆。环境里刻意不提供 `fetch` / `XMLHttpRequest` / `URL`，运行时哪天又长出网络调用会直接炸。
-- `tests/plugin-theme-reach.test.js`：主题覆盖面、三个背景变量、用户自定义背景优先级，以及 `--th-*` 从 renderer 到迷你窗口的整条转发链路。
+- `tests/plugin-theme-reach.test.js`：七份示例主题的完整覆盖面、三个背景变量、暗色主题视觉签名、白色主题可读性、用户自定义背景优先级，以及 `--th-*` 从 renderer 到迷你窗口的整条转发链路。
 
 注意：vm 里造出来的数组/对象原型与测试 realm 的不同，`assert.deepStrictEqual` 会因原型不匹配误报，用 `Array.from(...)` / `Object.assign({}, ...)` 抄一份再断，或断长度、逐字段断。

@@ -1,5 +1,11 @@
 ﻿# 发布流程
 
+## v1.7.15 主题插件差异化与雪昼白主题
+- 正式发布版本从 `1.7.14` 提升为 `1.7.15`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.14` 及更早版本可通过 `latest.yml` 自动更新。
+- `深海微光`、`暗焰余晖`、`冷杉夜雾` 升级为三份独立的完整主题，分别使用蓝青、熔岩红、冷杉绿的背景、面板、文字、控件和迷你播放器变量；新增完整浅色主题 `雪昼白`。六份内置主题均默认不启用并保持互斥。
+- 发布前运行主题专项回归、全量 Node 回归、关键 JavaScript 语法检查与 `git diff --check`；Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布标题使用 `v1.7.15 主题插件差异化与雪昼白主题`。
+
 ## v1.7.14 收回后的迷你播放器只在封面上吃鼠标
 - 正式发布版本从 `1.7.13` 提升为 `1.7.14`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.13` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版是收回态命中范围回退：`shouldPassPointerThrough()` 判据从 `pointerInsideWindow` 改回 `pointerInCoverHotRegion`，收回态只有封面热区（外扩 6px）参与命中，封面以外那截透明窗体交还桌面，`pointerInsideWindow` 变量删除；展开态与极简外壳整窗仍可点可右键，v1.7.13 的托盘同构 6 项菜单不变。

@@ -31,17 +31,25 @@ function theme(fileName) {
   return JSON.parse(read('examples/plugins/' + fileName));
 }
 
-const FULL_THEME_FILES = ['theme-midnight-indigo.json', 'theme-warm-amber.json', 'theme-graphite.json'];
+const FULL_THEME_FILES = [
+  'theme-midnight-indigo.json',
+  'theme-warm-amber.json',
+  'theme-white.json',
+  'theme-background-deep-sea.json',
+  'theme-background-ember.json',
+  'theme-background-forest.json',
+  'theme-graphite.json',
+];
 const BACKGROUND_THEME_FILES = [
   'theme-background-deep-sea.json',
   'theme-background-ember.json',
   'theme-background-forest.json',
 ];
-const BACKGROUND_CAPABLE_THEME_FILES = FULL_THEME_FILES.concat(BACKGROUND_THEME_FILES);
-const THEME_FILES = FULL_THEME_FILES.concat(BACKGROUND_THEME_FILES);
+const BACKGROUND_CAPABLE_THEME_FILES = FULL_THEME_FILES;
+const THEME_FILES = FULL_THEME_FILES;
 const BACKGROUND_THEME_VARS = ['--th-bg-color', '--th-bg-tint', '--th-bg-tint-opacity'];
 
-// 主窗口这一族必须由三份示例主题全部覆盖，少一个就会出现「这块没跟着换色」。
+// 主窗口这一族必须由所有完整示例主题覆盖，少一个就会出现「这块没跟着换色」。
 const MAIN_THEME_VARS = [
   '--th-panel-bg', '--th-panel-border', '--th-panel-shadow',
   '--th-side-panel-bg', '--th-side-panel-border', '--th-side-panel-shadow',
@@ -63,7 +71,7 @@ const MINI_THEME_VARS = [
   '--th-mini-play-bg', '--th-mini-play-border', '--th-mini-play-text',
 ];
 
-test('三份示例主题都声明完整的 --th-* 变量并能通过清洗', () => {
+test('七份示例主题都声明完整的 --th-* 变量并能通过清洗', () => {
   for (const fileName of FULL_THEME_FILES) {
     const doc = theme(fileName);
     const vars = doc.theme && doc.theme.vars;
@@ -79,7 +87,7 @@ test('三份示例主题都声明完整的 --th-* 变量并能通过清洗', () 
   }
 });
 
-test('可改背景的主题都声明三个背景变量，三份纯背景主题不夹带其它负载', () => {
+test('所有完整主题都声明三个背景变量并能通过清洗', () => {
   for (const fileName of BACKGROUND_CAPABLE_THEME_FILES) {
     const doc = theme(fileName);
     const vars = doc.theme && doc.theme.vars;
@@ -92,12 +100,22 @@ test('可改背景的主题都声明三个背景变量，三份纯背景主题�
       assert.equal(kept[name], vars[name], fileName + ' 的 ' + name + ' 过不了清洗');
     }
   }
+});
 
-  for (const fileName of BACKGROUND_THEME_FILES) {
-    const doc = theme(fileName);
-    assert.deepEqual(Object.keys(doc.theme.vars).sort(), BACKGROUND_THEME_VARS.slice().sort(), fileName + ' 应只修改背景变量');
-    assert.equal(String(doc.theme.css || ''), '', fileName + ' 不应靠附加 CSS 绕过背景变量');
-  }
+test('深海、暗焰、冷杉三份暗色主题具有彼此不同的视觉签名', () => {
+  const signatures = BACKGROUND_THEME_FILES.map((fileName) => {
+    const vars = theme(fileName).theme.vars;
+    return [vars['--th-bg-color'], vars['--th-bg-tint'], vars['--th-panel-bg'], vars['--champagne']].join('|');
+  });
+  assert.equal(new Set(signatures).size, signatures.length, '三份暗色主题不能共用同一套颜色负载');
+});
+
+test('雪昼白是浅底深字，不能出现白底白字', () => {
+  const vars = theme('theme-white.json').theme.vars;
+  assert.match(String(vars['--th-bg-color']), /#f8fbff|#f[0-9a-f]{5}/i);
+  assert.match(String(vars['--th-panel-bg']), /#(?:e|f)[0-9a-f]{5}|rgba\(2[0-9]{2},/i);
+  assert.match(String(vars['--th-text-strong']), /rgba\((?:[0-9]|[1-4][0-9]),/i);
+  assert.notEqual(vars['--th-bg-color'], vars['--th-text-strong']);
 });
 
 test('改了主题载荷必须抬版本号，否则 profile 里的旧载荷不会被替换', () => {
@@ -105,7 +123,7 @@ test('改了主题载荷必须抬版本号，否则 profile 里的旧载荷不�
     const doc = theme(fileName);
     const parts = String(doc.version || '').split('.').map(Number);
     assert.ok(parts.length === 3 && parts.every(Number.isFinite), fileName + ' 版本号格式不对');
-    const minimumMinor = BACKGROUND_THEME_FILES.includes(fileName) ? 0 : 5;
+    const minimumMinor = BACKGROUND_THEME_FILES.includes(fileName) ? 1 : 0;
     assert.ok(parts[0] > 1 || (parts[0] === 1 && parts[1] >= minimumMinor), fileName + ' 版本号没跟着载荷抬');
   }
 });

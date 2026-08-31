@@ -412,12 +412,13 @@ test('覆盖安装同 id 插件时保留启用状态并换掉脚本', () => {
   assert.equal(list[0].version, '2.0.0');
   assert.equal(list[0].enabled, false, '升级不擅自打开用户关掉的插件');
 });
-test('安装包自带的五份主题就是 examples/plugins 下的同名文件，逐字段一致', () => {
+test('安装包自带的六份主题就是 examples/plugins 下的同名文件，逐字段一致', () => {
   const packs = BuiltinThemes.list();
-  assert.equal(packs.length, 5, '自带两份完整主题与三份纯背景主题');
+  assert.equal(packs.length, 6, '自带五份暗色完整主题与一份浅色完整主题');
   assert.deepEqual(packs.map((p) => p.fileName), [
     'theme-midnight-indigo.json',
     'theme-warm-amber.json',
+    'theme-white.json',
     'theme-background-deep-sea.json',
     'theme-background-ember.json',
     'theme-background-forest.json',
@@ -430,11 +431,7 @@ test('安装包自带的五份主题就是 examples/plugins 下的同名文件�
     assert.equal(parsed.ok, true, `${pack.fileName} 必须能被 parsePluginPackage 接受`);
     assert.equal(parsed.plugin.manifest.kind, 'theme');
     assert.ok(Object.keys(parsed.plugin.theme.vars).length > 0, '清洗后不能一个变量都不剩');
-    if (pack.fileName.startsWith('theme-background-')) {
-      assert.equal(parsed.plugin.theme.css, '', '纯背景主题不需要附加 CSS');
-    } else {
-      assert.ok(parsed.plugin.theme.css.length > 0, '完整主题的 css 不能被清空');
-    }
+    assert.ok(parsed.plugin.theme.css.length > 0, '完整主题的 css 不能被清空');
   }
   assert.deepEqual(BuiltinThemes.ids(), packs.map((p) => JSON.parse(p.content).id));
 });
