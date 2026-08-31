@@ -3,8 +3,11 @@
 ## v1.7.15 主题插件差异化与雪昼白主题
 - 正式发布版本从 `1.7.14` 提升为 `1.7.15`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.14` 及更早版本可通过 `latest.yml` 自动更新。
 - `深海微光`、`暗焰余晖`、`冷杉夜雾` 升级为三份独立的完整主题，分别使用蓝青、熔岩红、冷杉绿的背景、面板、文字、控件和迷你播放器变量；新增完整浅色主题 `雪昼白`。六份内置主题均默认不启用并保持互斥。
-- 发布前运行主题专项回归、全量 Node 回归、关键 JavaScript 语法检查与 `git diff --check`；Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
+- 发布前主题专项回归 `35/35`、干净 release worktree 全量 Node 回归 `485/485`；关键 JavaScript 语法检查与 `git diff --check` 通过。Windows x64 NSIS 继续只发布安装器、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP。
 - 发布标题使用 `v1.7.15 主题插件差异化与雪昼白主题`。
+- 本地 Windows x64 NSIS 构建产物：`Mineradio-1.7.15-Setup.exe` `101520385` 字节；`.blockmap` `105947` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.15-SHA256SUMS.txt` `275` 字节。
+- SHA256：安装器 `0dfae05d4222dd176e07a29450d2849604db5673931ad336a2f4fc90a8ada4b1`；`.blockmap` `4d6ce2543f9dbfd8d099e2b0df5701ce122976cbf4ac45543eef7f4e85488b15`；`latest.yml` `3bac837fe23c1c00c36a7ed289b17b0cdaae2f1d47f8805ddc2b003c197ad1f6`。
+- `latest.yml` 的 Setup SHA512：`/yEHOpyc3X00GLPOuKtdJlYm3dkRM8aM+kqqSHa6hflJUEr3XDlr9W9P9tNrsIkUogtxzmS52d/gdJoNQS5g/Q==`。
 
 ## v1.7.14 收回后的迷你播放器只在封面上吃鼠标
 - 正式发布版本从 `1.7.13` 提升为 `1.7.14`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.13` 及更早版本可通过 `latest.yml` 自动更新。
