@@ -482,7 +482,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.15';
+var APP_VERSION = '1.7.16';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -23257,7 +23257,31 @@ function miniPlayerVisualPayload() {
   };
 }
 
+/**
+ * 判断当前是否还有迷你播放器律动消费者。
+ * 极简外壳不显示封面，且两种效果都关闭或强度为零时，后台不应继续做频谱采样。
+ * @returns {boolean} 标准外壳至少有一种有效效果时返回 true。
+ */
+function miniPlayerPulsePipelineActive() {
+  if (typeof desktopShellSettings !== 'undefined' && desktopShellSettings
+      && desktopShellSettings.miniPlayerMode === 'compact') return false;
+  var pulseEnabled = true;
+  var pulseStrength = 1;
+  var glowEnabled = true;
+  var glowStrength = 1;
+  if (typeof fx !== 'undefined' && fx) {
+    pulseEnabled = fx.miniPlayerPulseEnabled !== false;
+    glowEnabled = fx.miniPlayerGlowEnabled !== false;
+    var rawPulseStrength = Number(fx.miniPlayerPulseStrength);
+    var rawGlowStrength = Number(fx.miniPlayerGlowStrength);
+    if (isFinite(rawPulseStrength)) pulseStrength = rawPulseStrength;
+    if (isFinite(rawGlowStrength)) glowStrength = rawGlowStrength;
+  }
+  return (pulseEnabled && pulseStrength > 0) || (glowEnabled && glowStrength > 0);
+}
+
 function miniPlayerPulseValue() {
+  if (typeof miniPlayerPulsePipelineActive === 'function' && !miniPlayerPulsePipelineActive()) return 0;
   if (!playing || !audio || audio.paused || audio.ended) return 0;
   var documentHidden = typeof document !== 'undefined' && document.hidden === true;
   var runtimeHidden = documentHidden || (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState
@@ -23275,7 +23299,8 @@ function miniPlayerPulseTimerActive() {
   var documentHidden = typeof document !== 'undefined' && document.hidden === true;
   var runtimeHidden = documentHidden || (typeof desktopRuntimeState !== 'undefined' && desktopRuntimeState
     && (desktopRuntimeState.minimized || desktopRuntimeState.visible === false));
-  return !!(window.desktopWindow && window.desktopWindow.isDesktop && runtimeHidden &&
+  var pipelineActive = typeof miniPlayerPulsePipelineActive !== 'function' || miniPlayerPulsePipelineActive();
+  return !!(pipelineActive && window.desktopWindow && window.desktopWindow.isDesktop && runtimeHidden &&
     desktopShellSettings && desktopShellSettings.miniPlayer &&
     audio && audio.src && !audio.paused && !audio.ended);
 }
@@ -23287,6 +23312,12 @@ function miniPlayerPulseTimerActive() {
  */
 function runMiniPlayerPulseTimer() {
   miniPlayerPulseTimer = 0;
+  var pipelineActive = typeof miniPlayerPulsePipelineActive !== 'function' || miniPlayerPulsePipelineActive();
+  if (!pipelineActive) {
+    miniPlayerPulseSample = 0;
+    miniPlayerPulseBaseline = 0;
+    return;
+  }
   if (!miniPlayerPulseTimerActive()) {
     miniPlayerPulseSample *= 0.72;
     miniPlayerPulseBaseline *= 0.82;
@@ -23376,6 +23407,7 @@ function invalidateMiniPlayerSyncPatch(patch) {
   if (Object.prototype.hasOwnProperty.call(patch, 'pulse')) state.pulse = null;
   if (Object.prototype.hasOwnProperty.call(patch, 'visual')) state.visualSignature = '';
   if (Object.prototype.hasOwnProperty.call(patch, 'themeVars')) state.themeSignature = null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'miniPlayerMode')) state.miniPlayerMode = null;
 }
 
 /**
@@ -23399,6 +23431,23 @@ function miniPlayerThemePayload() {
 }
 
 /**
+ * 生成极简外壳所需的歌曲元数据，不读取或复制完整封面。
+ * 极简窗口没有封面消费者，标题/歌手变化仍需同步，但不应为了它触碰大封面 data URL。
+ * @param {object|null} song 当前歌曲对象。
+ * @returns {{title:string, artist:string, cover:string, _signature:string}} 不含封面的元数据。
+ */
+function miniPlayerSongMetaWithoutCover(song) {
+  var title = song && (song.name || song.title) || 'Mineradio';
+  var artist = song && (song.artist || song.ar || song.author) || '';
+  return {
+    title: String(title),
+    artist: String(artist),
+    cover: '',
+    _signature: String(title) + '|' + String(artist)
+  };
+}
+
+/**
  * 将迷你播放器状态按字段增量同步到主进程。歌曲或播放状态未变化时不产生 IPC。
  * @param {boolean=} force 是否强制发送完整状态。
  * @param {boolean=} playbackOnly 是否只检查播放状态；首次同步或歌曲对象变化时仍自动补齐元数据。
@@ -23411,6 +23460,9 @@ function pushMiniPlayerState(force, playbackOnly) {
   var song = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
   var hasTrack = !!song;
   var isPlaying = !!(hasTrack && audio && audio.src && !audio.paused && !audio.ended);
+  var miniPlayerMode = typeof desktopShellSettings !== 'undefined' && desktopShellSettings
+    && desktopShellSettings.miniPlayerMode === 'compact' ? 'compact' : 'standard';
+  var includeMiniPlayerCover = miniPlayerMode === 'standard';
   var state = miniPlayerSyncState || (miniPlayerSyncState = {
     song: null,
     metaSignature: '',
@@ -23419,10 +23471,15 @@ function pushMiniPlayerState(force, playbackOnly) {
     desktopLyrics: null,
     pulse: null,
     visualSignature: '',
-    themeSignature: null
+    themeSignature: null,
+    miniPlayerMode: null
   });
-  var resolveMetadata = !!(hasTrack && (force || !playbackOnly || state.song !== song || !state.metaSignature));
-  var meta = resolveMetadata ? currentDesktopSongMeta() : null;
+  var modeChanged = state.miniPlayerMode !== miniPlayerMode;
+  state.miniPlayerMode = miniPlayerMode;
+  var resolveMetadata = !!(hasTrack && (force || !playbackOnly || state.song !== song || !state.metaSignature || (modeChanged && includeMiniPlayerCover)));
+  var meta = resolveMetadata
+    ? (includeMiniPlayerCover ? currentDesktopSongMeta() : miniPlayerSongMetaWithoutCover(song))
+    : null;
   var metaSignature = hasTrack
     ? (resolveMetadata
       ? String(meta && (meta._signature || ((meta.title || '') + '|' + (meta.artist || '') + '|' + (meta.cover || ''))) || '')
@@ -23431,12 +23488,16 @@ function pushMiniPlayerState(force, playbackOnly) {
   if (resolveMetadata || !hasTrack) state.song = song;
   var patch = {};
   var changed = false;
-  if (force || state.metaSignature !== metaSignature) {
+  if (force || state.metaSignature !== metaSignature || (modeChanged && includeMiniPlayerCover)) {
     state.metaSignature = metaSignature;
     patch.metaSignature = metaSignature;
     patch.title = hasTrack && meta && meta.title || 'Mineradio';
     patch.artist = hasTrack && meta && meta.artist || '';
-    patch.cover = hasTrack && meta && meta.cover || '';
+    if (includeMiniPlayerCover) patch.cover = hasTrack && meta && meta.cover || '';
+    changed = true;
+  }
+  if (force || modeChanged) {
+    patch.miniPlayerMode = miniPlayerMode;
     changed = true;
   }
   if (force || state.playing !== isPlaying) {
@@ -23467,9 +23528,15 @@ function pushMiniPlayerState(force, playbackOnly) {
   var visual = miniPlayerVisualPayload();
   var visualSignature = JSON.stringify(visual);
   var now = performance.now();
-  var pulse = miniPlayerPulseValue();
+  var pulsePipelineActive = typeof miniPlayerPulsePipelineActive !== 'function' || miniPlayerPulsePipelineActive();
+  if (!pulsePipelineActive) {
+    stopMiniPlayerPulseTimer();
+    miniPlayerPulseSample = 0;
+    miniPlayerPulseBaseline = 0;
+  }
+  var pulse = pulsePipelineActive ? miniPlayerPulseValue() : 0;
   var pulseChanged = state.pulse == null || Math.abs(state.pulse - pulse) >= 0.012;
-  if (force || (now - miniPlayerPulseLastAt >= 74 && pulseChanged)) {
+  if (pulsePipelineActive && (force || (now - miniPlayerPulseLastAt >= 74 && pulseChanged))) {
     state.pulse = pulse;
     miniPlayerPulseLastAt = now;
     patch.pulse = pulse;
@@ -23520,6 +23587,7 @@ function applyMiniPlayerVisualControls() {
       : '自动收回已关闭：迷你播放器保持完整面板；点击可恢复封面自动收回';
   }
   if (hoverState) hoverState.textContent = hoverExpandEnabled ? '开启' : '关闭';
+  syncMiniPlayerPulseTimer();
 }
 
 function toggleMiniPlayerVisual(key) {
@@ -33352,6 +33420,7 @@ function normalizeDesktopMiniPlayerMode(value) {
  */
 function applyDesktopShellSettings(next) {
   next = next || {};
+  var previousMode = desktopShellSettings.miniPlayerMode;
   if (typeof next.closeToTray === 'boolean') desktopShellSettings.closeToTray = next.closeToTray;
   if (typeof next.miniPlayerEnabled === 'boolean') desktopShellSettings.miniPlayer = next.miniPlayerEnabled;
   else if (typeof next.miniPlayer === 'boolean') desktopShellSettings.miniPlayer = next.miniPlayer;
@@ -33368,6 +33437,7 @@ function applyDesktopShellSettings(next) {
     button.classList.toggle('active', button.getAttribute('data-mini-player-mode') === desktopShellSettings.miniPlayerMode);
   });
   syncMiniPlayerPulseTimer();
+  if (previousMode !== desktopShellSettings.miniPlayerMode && typeof pushMiniPlayerState === 'function') pushMiniPlayerState(true);
 }
 
 /**
@@ -33704,6 +33774,12 @@ function handleDesktopMiniPlayerCommand(payload) {
   if (typeof api.onMiniPlayerCommand === 'function') {
     api.onMiniPlayerCommand(handleDesktopMiniPlayerCommand);
   }
+  if (typeof api.onDesktopShellSettingsChanged === 'function') {
+    // 托盘或迷你窗口菜单改设置时只更新本地快照，不重复弹出设置操作提示。
+    api.onDesktopShellSettingsChanged(function(payload){
+      if (payload && payload.ok === true) applyDesktopShellSettings(payload);
+    });
+  }
   if (typeof api.onDesktopLyricsEnabledState === 'function') {
     api.onDesktopLyricsEnabledState(function(payload){
       var enabled = !!(payload && payload.enabled);
@@ -33809,7 +33885,9 @@ function initPluginRuntime() {
     window.MineradioPlugins.init({
       persist: setPersistentLocalStorageItem,
       toast: showToast,
-      log: function(){ console.log.apply(console, ['[Plugin]'].concat(Array.prototype.slice.call(arguments))); }
+      log: function(){ console.log.apply(console, ['[Plugin]'].concat(Array.prototype.slice.call(arguments))); },
+      // 脚本主题是异步的，只有最终合并完成后再把同一份变量表推给独立迷你窗口。
+      themeApplied: function(){ pushMiniPlayerState(false); }
     });
   } catch (err) {
     console.warn('[PluginInit]', err);

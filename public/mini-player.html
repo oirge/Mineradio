@@ -243,19 +243,32 @@
     .desktop-lyrics-toggle:hover:not(:disabled) {
       border-color: transparent;
       background: transparent;
-      color: #dffffa;
+      color: var(--th-mini-btn-hover-text, #dffffa);
     }
     .desktop-lyrics-toggle.active {
       border-color: transparent;
       background: transparent;
-      color: #a9fff2;
+      color: var(--th-mini-play-text, #a9fff2);
       text-shadow: 0 0 6px rgba(110, 231, 216, 0.38);
+    }
+    .desktop-lyrics-toggle::before,
+    .restore::before {
+      content: "";
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      bottom: -4px;
+      left: -4px;
+      border-radius: inherit;
+      pointer-events: auto;
+      -webkit-app-region: no-drag;
     }
     .desktop-lyrics-glyph { pointer-events: none; }
     .pause-icon { display: none; }
     body[data-playing="true"] .play-icon { display: none; }
     body[data-playing="true"] .pause-icon { display: block; }
     .restore {
+      position: relative;
       flex: 0 0 24px;
       width: 24px;
       height: 24px;
@@ -333,6 +346,7 @@
     var desktopLyricsButton = document.getElementById('desktop-lyrics');
     var controls = [document.getElementById('previous'), playButton, document.getElementById('next')];
     var lastCover = '';
+    var failedCover = '';
     var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false, pulse:0, expandDirection:'right', visual:{ pulseEnabled:true, pulseStrength:1, glowEnabled:true, glowStrength:1, hoverExpand:true, radius:12 } };
     var MINI_EFFECT_STRENGTH_MAX = 3;
     var renderedPlaying = null;
@@ -341,12 +355,16 @@
     var renderedExpandDirection = null;
     var hoverTimer = 0;
     var coverDrag = null;
+    var coverDragGeneration = 0;
+    var coverMoveQueue = [];
+    var coverMoveActive = false;
     var suppressCoverClick = false;
     var suppressCoverClickTimer = 0;
     var receivedExternalState = false;
     var COVER_HOT_REGION_PADDING = 6;
     var pointerInCoverHotRegion = false;
     var pointerPassthrough = null;
+    var pointerPassthroughRequestToken = 0;
 
     /**
      * 读取封面律动/光晕强度档位，缺失或非法时回落到标准力度 1.00。
@@ -409,15 +427,139 @@
     }
 
     /**
-     * 请求主进程按增量移动迷你播放器窗口。
+     * 取得封面未受律动 scale 影响的视口矩形；主进程需要稳定布局锚点，不能把视觉外扩当成窗口位移。
+     * @returns {{left:number,top:number,width:number,height:number}|null} 未变形封面矩形。
+     */
+    function untransformedCoverRect() {
+      if (!coverWrap || typeof coverWrap.getBoundingClientRect !== 'function') return null;
+      var rect = coverWrap.getBoundingClientRect();
+      if (!rect) return null;
+      var visualWidth = Number(rect.width);
+      var visualHeight = Number(rect.height);
+      if (!(visualWidth > 0)) visualWidth = Number(rect.right) - Number(rect.left);
+      if (!(visualHeight > 0)) visualHeight = Number(rect.bottom) - Number(rect.top);
+      if (!(visualWidth > 0) || !(visualHeight > 0)) return null;
+      var layoutWidth = Number(coverWrap.offsetWidth);
+      var layoutHeight = Number(coverWrap.offsetHeight);
+      if (!(layoutWidth > 0)) layoutWidth = visualWidth;
+      if (!(layoutHeight > 0)) layoutHeight = visualHeight;
+      return {
+        left: Number(rect.left) + (visualWidth - layoutWidth) / 2,
+        top: Number(rect.top) + (visualHeight - layoutHeight) / 2,
+        width: layoutWidth,
+        height: layoutHeight,
+      };
+    }
+
+    /**
+     * 将封面视口矩形换算成屏幕坐标；screenX/clientX 同属 CSS 像素，不按 devicePixelRatio 再缩放。
+     * @param {object} event pointerdown 事件。
+     * @returns {{x:number,y:number}|null} 未变形封面屏幕左上角。
+     */
+    function coverScreenAnchor(event) {
+      var rect = untransformedCoverRect();
+      if (!rect) return null;
+      var screenX = pointerScreenCoordinate(event, 'screenX');
+      var screenY = pointerScreenCoordinate(event, 'screenY');
+      if (screenX === null || screenY === null) return null;
+      var clientX = pointerScreenCoordinate(event, 'clientX');
+      var clientY = pointerScreenCoordinate(event, 'clientY');
+      if (clientX !== null && clientY !== null) {
+        return { x: screenX + rect.left - clientX, y: screenY + rect.top - clientY };
+      }
+      var windowX = pointerScreenCoordinate(window, 'screenX');
+      var windowY = pointerScreenCoordinate(window, 'screenY');
+      if (windowX === null || windowY === null) return null;
+      return { x: windowX + rect.left, y: windowY + rect.top };
+    }
+
+    /**
+     * 生成带代际的拖动元数据；首个请求携带实测锚点，后续请求复用同一锚点以抵抗窗口布局变化。
+     * @param {{generation:number,anchor?:{x:number,y:number},layout?:'collapsed'|'expanded'}} drag 当前拖动状态。
+     * @returns {{generation:number,anchor?:{x:number,y:number},layout:'collapsed'|'expanded'} } IPC 元数据。
+     */
+    function coverDragMeta(drag) {
+      var meta = {
+        generation: drag.generation,
+        layout: drag.layout,
+      };
+      if (drag.anchor) meta.anchor = { x: drag.anchor.x, y: drag.anchor.y };
+      return meta;
+    }
+
+    /**
+     * 接收主进程为当前文档分配的拖动代际，确保 renderer 重载后新拖动不会落在旧代际之前。
+     * @param {unknown} value 主进程下发的代际种子。
+     * @returns {void}
+     */
+    function syncCoverDragGeneration(value) {
+      var generation = Number(value);
+      if (!isFinite(generation) || generation < 0) return;
+      generation = Math.floor(generation);
+      if (generation > coverDragGeneration) coverDragGeneration = generation;
+    }
+
+    /**
+     * 请求主进程按增量移动迷你播放器窗口，并按提交顺序串行化 IPC。
      * @param {number} dx 水平位移。
      * @param {number} dy 垂直位移。
      * @param {boolean} commit 是否为拖动结束并保存最终坐标。
+     * @param {{generation:number,anchor?:{x:number,y:number},layout?:'collapsed'|'expanded'}=} dragMeta
+     *   当前封面拖动的代际、首帧锚点和布局状态。
+     * @returns {Promise<unknown>} 已排入队列的主进程请求。
+     */
+    /**
+     * 依次发送封面拖动 IPC；前一项未回执时不发送后一项，确保 commit 读取到最后一次成功移动。
      * @returns {void}
      */
-    function moveMiniPlayerWindowBy(dx, dy, commit) {
-      if (!window.miniPlayer || typeof window.miniPlayer.moveBy !== 'function') return;
-      window.miniPlayer.moveBy(dx, dy, commit === true).catch(ignoreMiniPlayerMoveFailure);
+    function pumpCoverMoveQueue() {
+      if (coverMoveActive || !coverMoveQueue.length) return;
+      var request = coverMoveQueue.shift();
+      coverMoveActive = true;
+      var result;
+      try {
+        result = window.miniPlayer.moveBy(
+          request.dx,
+          request.dy,
+          request.commit,
+          request.dragMeta,
+        );
+      } catch (_error) {
+        result = Promise.reject(_error);
+      }
+      Promise.resolve(result).then(function(value){
+        request.resolve(value);
+      }, function(){
+        ignoreMiniPlayerMoveFailure();
+        request.resolve(undefined);
+      }).then(function(){
+        coverMoveActive = false;
+        pumpCoverMoveQueue();
+      });
+    }
+
+    /**
+     * 把窗口移动请求加入单消费者队列，避免 pointerup 的 commit 越过尚未完成的增量。
+     * @param {number} dx 水平位移。
+     * @param {number} dy 垂直位移。
+     * @param {boolean} commit 是否为拖动结束并保存最终坐标。
+     * @param {{generation:number,anchor?:{x:number,y:number},layout?:'collapsed'|'expanded'}=} dragMeta
+     *   当前封面拖动的代际、首帧锚点和布局状态。
+     * @returns {Promise<unknown>} 已排入队列的主进程请求。
+     */
+    function moveMiniPlayerWindowBy(dx, dy, commit, dragMeta) {
+      if (!window.miniPlayer || typeof window.miniPlayer.moveBy !== 'function') return Promise.resolve();
+      var result = new Promise(function(resolve){
+        coverMoveQueue.push({
+          dx: dx,
+          dy: dy,
+          commit: commit === true,
+          dragMeta: dragMeta,
+          resolve: resolve,
+        });
+        pumpCoverMoveQueue();
+      });
+      return result.catch(ignoreMiniPlayerMoveFailure);
     }
 
     function sendCommand(action) {
@@ -457,15 +599,43 @@
     }
 
     /**
-     * 把窗口鼠标穿透状态同步给主进程，状态未变化时不重复发送 IPC。
+     * 结算一次窗口穿透 IPC；只有主进程明确成功时才提交已确认状态。
+     * @param {{next:boolean,previous:boolean|null,token:number}} request 本次请求及其旧值与令牌。
+     * @param {unknown} result 主进程返回的结果；明确 ok:false 视为失败。
      * @returns {void}
+     */
+    function settlePointerPassthrough(request, result) {
+      if (request.token !== pointerPassthroughRequestToken) return;
+      if (result && result.ok === false && pointerPassthrough === request.next) {
+        pointerPassthrough = request.previous;
+      }
+    }
+
+    /**
+     * 把窗口鼠标穿透状态同步给主进程，缓存只记录已确认值，失败后下一次同步可再次尝试。
+     * @returns {void} 发起异步 IPC；失败不会抛到页面事件循环。
      */
     function syncPointerPassthrough() {
       var next = shouldPassPointerThrough();
-      if (next === pointerPassthrough) return;
-      pointerPassthrough = next;
       if (!window.miniPlayer || typeof window.miniPlayer.setPointerPassthrough !== 'function') return;
-      window.miniPlayer.setPointerPassthrough(next).catch(ignoreMiniPlayerMoveFailure);
+      if (next === pointerPassthrough) return;
+      var request = {
+        next: next,
+        previous: pointerPassthrough,
+        token: ++pointerPassthroughRequestToken,
+      };
+      // 先乐观写入，保证同一状态在 IPC 待回执期间仍然去重；失败时由 settle 回滚。
+      pointerPassthrough = next;
+      var result;
+      try {
+        result = window.miniPlayer.setPointerPassthrough(next);
+      } catch (_error) {
+        settlePointerPassthrough(request, { ok: false });
+        return;
+      }
+      Promise.resolve(result)
+        .then(function(value){ settlePointerPassthrough(request, value); })
+        .catch(function(){ settlePointerPassthrough(request, { ok: false }); });
     }
 
     /**
@@ -553,10 +723,17 @@
       }, 420);
     }
 
+    /**
+     * 按封面地址更新图片；失败地址在真正变化前保留哨兵，避免高频状态补丁反复触发网络加载。
+     * @param {unknown} src 主进程下发的封面地址。
+     * @returns {void}
+     */
     function setCover(src) {
       src = String(src || '');
+      if (src === failedCover) return;
       if (src === lastCover) return;
       lastCover = src;
+      failedCover = '';
       coverWrap.classList.remove('ready');
       if (!src) {
         cover.removeAttribute('src');
@@ -594,8 +771,12 @@
       var screenX = pointerScreenCoordinate(event, 'screenX');
       var screenY = pointerScreenCoordinate(event, 'screenY');
       if (screenX === null || screenY === null) return;
+      coverDragGeneration += 1;
       coverDrag = {
         pointerId: event.pointerId,
+        generation: coverDragGeneration,
+        anchor: coverScreenAnchor(event),
+        layout: miniShell.getAttribute('data-collapsed') === 'true' ? 'collapsed' : 'expanded',
         startX: screenX,
         startY: screenY,
         lastX: screenX,
@@ -627,7 +808,7 @@
       coverDrag.lastY = screenY;
       coverDrag.moved = true;
       coverWrap.classList.add('dragging');
-      if (dx || dy) moveMiniPlayerWindowBy(dx, dy);
+      if (dx || dy) moveMiniPlayerWindowBy(dx, dy, false, coverDragMeta(coverDrag));
       if (event.preventDefault) event.preventDefault();
     }
 
@@ -640,13 +821,14 @@
       if (!coverDrag || (event && event.pointerId !== undefined && event.pointerId !== coverDrag.pointerId)) return;
       var moved = coverDrag.moved;
       var pointerId = coverDrag.pointerId;
+      var dragMeta = coverDragMeta(coverDrag);
       coverDrag = null;
       coverWrap.classList.remove('dragging');
       if (typeof coverWrap.releasePointerCapture === 'function' && pointerId !== undefined) {
         try { coverWrap.releasePointerCapture(pointerId); } catch (_error) {}
       }
       if (moved) {
-        moveMiniPlayerWindowBy(0, 0, true);
+        moveMiniPlayerWindowBy(0, 0, true, dragMeta);
         suppressCoverClickOnce();
       }
       syncPointerPassthrough();
@@ -700,13 +882,15 @@
      * @returns {void}
      */
     function applyState(patch, immediate) {
-      patch = patch || {};
-      miniState = Object.assign({}, miniState, patch);
-      var next = miniState;
+       patch = patch || {};
+       miniState = Object.assign({}, miniState, patch);
+       if (Object.prototype.hasOwnProperty.call(patch, 'dragGeneration')) {
+         syncCoverDragGeneration(patch.dragGeneration);
+       }
+       var next = miniState;
       var hasTrack = next.hasTrack === true;
       var playing = hasTrack && next.playing === true;
       miniShell.setAttribute('data-has-track', hasTrack ? 'true' : 'false');
-      coverWrap.setAttribute('aria-hidden', hasTrack ? 'false' : 'true');
       var nextTitle = hasTrack ? String(next.title || '未知歌曲') : 'Mineradio';
       var nextArtist = hasTrack ? String(next.artist || '本地音乐') : '等待播放';
       if (title.textContent !== nextTitle) title.textContent = nextTitle;
@@ -805,9 +989,9 @@
     });
     cover.addEventListener('error', function(){
       coverWrap.classList.remove('ready');
-      // 失败地址需要释放缓存标记，后续播放状态同步才能重新触发加载。
+      // 保留失败地址哨兵，避免每 80ms 的 pulse 补丁把同一坏地址重新赋给 img。
       if (cover.getAttribute('src') === lastCover) {
-        lastCover = '';
+        failedCover = lastCover;
         cover.removeAttribute('src');
       }
     });

@@ -54,6 +54,19 @@ function buildTemplate(overrides) {
     isStartupEnabled: () => false,
     setStartupEnabled: (value) => { calls.startup.push(value); return { ok: true, enabled: !!value }; },
   }, overrides || {});
+  /**
+   * 在隔离 vm 中复现生产设置入口的副作用，让菜单点击仍能验证统一处理路径。
+   * @param {boolean} enabled 新的关闭到托盘设置。
+   * @returns {{ok:true,closeToTray:boolean}} 已确认的设置快照。
+   */
+  if (typeof context.setCloseToTrayEnabled !== 'function') {
+    context.setCloseToTrayEnabled = (enabled) => {
+      context.closeToTrayEnabled = !!enabled;
+      context.writeDesktopShellSettings({ closeToTray: context.closeToTrayEnabled });
+      context.refreshTrayMenu();
+      return { ok: true, closeToTray: context.closeToTrayEnabled };
+    };
+  }
   vm.runInNewContext(
     extractFunction('buildAppContextMenuTemplate', 'refreshTrayMenu')
       + '\nthis.build = buildAppContextMenuTemplate;',
@@ -164,7 +177,7 @@ test('迷你窗口同时拦下 renderer 右键和系统非客户区右键，两�
 
   assert.match(
     factory,
-    /win\.webContents\.on\('context-menu', \(event\) => \{\s*\n\s*event\.preventDefault\(\);\s*\n\s*showMiniPlayerContextMenu\(win\);/,
+    /win\.webContents\.on\('context-menu', \(event, params\) => \{\s*\n\s*event\.preventDefault\(\);[\s\S]*?params\.frame[\s\S]*?showMiniPlayerContextMenu\(win\);/,
     '非拖拽区右键走 renderer 的 context-menu',
   );
   // 拖拽区右键在 Windows 上被系统接走，弹的是几乎全灰的窗口系统菜单，renderer 收不到 contextmenu。

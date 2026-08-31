@@ -3,7 +3,7 @@
 const MAX_MINI_PLAYER_COVER_LENGTH = 8 * 1024 * 1024;
 // 封面律动/光晕强度上限。1 是标准力度，>1 是用户主动要的“更明显”，0 等于关闭。
 const MAX_MINI_PLAYER_EFFECT_STRENGTH = 3;
-// 主题变量转发的硬上限。迷你播放器只吃 --th-* 这一族，多了也用不上，写死上限省得 renderer 灌满 IPC。
+// 普通主题变量转发的硬上限。--th-mini-* 是迷你窗口的必需变量，必须先于普通变量保留。
 const MAX_MINI_PLAYER_THEME_VARS = 64;
 const MAX_MINI_PLAYER_THEME_VALUE_LENGTH = 200;
 const MINI_PLAYER_THEME_NAME_RE = /^--th-[a-z0-9][a-z0-9-]{0,58}$/;
@@ -20,15 +20,22 @@ function normalizeMiniPlayerThemeVars(source) {
   const out = {};
   if (!source || typeof source !== 'object') return out;
   const keys = Object.keys(source);
-  let count = 0;
-  for (let i = 0; i < keys.length && count < MAX_MINI_PLAYER_THEME_VARS; i += 1) {
+  const mini = [];
+  const ordinary = [];
+  const seen = new Set();
+  for (let i = 0; i < keys.length; i += 1) {
     const name = String(keys[i] || '').trim().toLowerCase();
     if (!MINI_PLAYER_THEME_NAME_RE.test(name)) continue;
+    if (seen.has(name)) continue;
     const value = String(source[keys[i]] == null ? '' : source[keys[i]]).trim();
     if (!value || value.length > MAX_MINI_PLAYER_THEME_VALUE_LENGTH) continue;
     if (MINI_PLAYER_THEME_VALUE_RE.test(value)) continue;
-    out[name] = value;
-    count += 1;
+    seen.add(name);
+    (name.indexOf('--th-mini-') === 0 ? mini : ordinary).push([name, value]);
+  }
+  for (let i = 0; i < mini.length; i += 1) out[mini[i][0]] = mini[i][1];
+  for (let i = 0; i < ordinary.length && i < MAX_MINI_PLAYER_THEME_VARS; i += 1) {
+    out[ordinary[i][0]] = ordinary[i][1];
   }
   return out;
 }
@@ -107,7 +114,18 @@ class MiniPlayerStateCache {
   constructor(enabled) {
     this.enabled = !!enabled;
     this.resident = false;
+    this.mode = 'standard';
     this.value = createEmptyMiniPlayerState();
+  }
+
+  /**
+   * 记录迷你窗口样式；切到极简时立即丢掉可能仍在缓存里的完整封面。
+   * @param {unknown} mode 主渲染器报告的迷你播放器样式。
+   * @returns {void}
+   */
+  setMode(mode) {
+    this.mode = mode === 'compact' ? 'compact' : 'standard';
+    if (this.mode === 'compact') this.value.cover = '';
   }
 
   /**
@@ -142,12 +160,14 @@ class MiniPlayerStateCache {
     if (!this.enabled || !this.resident) return false;
     const source = payload && typeof payload === 'object' ? payload : {};
     const next = { ...this.value };
+    if (Object.prototype.hasOwnProperty.call(source, 'miniPlayerMode')) this.setMode(source.miniPlayerMode);
     if (Object.prototype.hasOwnProperty.call(source, 'title')) next.title = String(source.title || 'Mineradio').slice(0, 260);
     if (Object.prototype.hasOwnProperty.call(source, 'artist')) next.artist = String(source.artist || '').slice(0, 320);
-    if (Object.prototype.hasOwnProperty.call(source, 'cover')) {
+    if (Object.prototype.hasOwnProperty.call(source, 'cover') && this.mode !== 'compact') {
       const cover = String(source.cover || '');
       next.cover = cover.length <= MAX_MINI_PLAYER_COVER_LENGTH ? cover : '';
     }
+    if (this.mode === 'compact') next.cover = '';
     if (Object.prototype.hasOwnProperty.call(source, 'playing')) next.playing = !!source.playing;
     if (Object.prototype.hasOwnProperty.call(source, 'hasTrack')) next.hasTrack = !!source.hasTrack;
     if (Object.prototype.hasOwnProperty.call(source, 'desktopLyrics')) next.desktopLyrics = source.desktopLyrics === true;

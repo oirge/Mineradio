@@ -50,6 +50,7 @@ function createMiniPlayerHarness() {
   const listeners = new Map();
   const commands = [];
   const moves = [];
+  const moveMetas = [];
   const passthroughs = [];
   let nextTimerId = 1;
 
@@ -142,8 +143,9 @@ function createMiniPlayerHarness() {
           commands.push(action);
           return Promise.resolve({ ok: true });
         },
-        moveBy(dx, dy, commit) {
+        moveBy(dx, dy, commit, dragMeta) {
           moves.push({ dx, dy, commit: commit === true });
+          moveMetas.push(dragMeta || null);
           return Promise.resolve({ ok: true });
         },
         setPointerPassthrough(passthrough) {
@@ -167,6 +169,7 @@ function createMiniPlayerHarness() {
     nodes,
     commands,
     moves,
+    moveMetas,
     passthroughs,
     document: documentNode,
     applyState(patch) { stateHandler(patch); },
@@ -314,7 +317,7 @@ test('标准迷你播放器会根据主进程方向把完整面板翻到封面�
   assert.match(html, /data-expand-direction="left"\][^}]*\.restore \{[^}]*margin:\s*-1px 0 0 -1px;/);
 });
 
-test('歌曲封面拖动移动窗口，短按仍保持展开行为', () => {
+test('歌曲封面拖动移动窗口，短按仍保持展开行为', async () => {
   const harness = createMiniPlayerHarness();
   const shell = harness.nodes['mini-shell'];
   const coverWrap = harness.nodes['cover-wrap'];
@@ -341,6 +344,8 @@ test('歌曲封面拖动移动窗口，短按仍保持展开行为', () => {
     preventDefault() { prevented += 1; },
   });
   coverWrap.dispatch('pointerup', { pointerId: 7 });
+  // 移动队列要等前一项 IPC 回执后才发送 commit，这里让出微任务队列再断言顺序。
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
   assert.deepEqual(harness.moves, [
     { dx: 10, dy: 6, commit: false },
     { dx: 0, dy: 0, commit: true },
@@ -351,6 +356,49 @@ test('歌曲封面拖动移动窗口，短按仍保持展开行为', () => {
   assert.equal(shell.getAttribute('data-collapsed'), 'true');
   coverWrap.dispatch('click', { preventDefault() { prevented += 1; } });
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
+});
+
+test('展开态首个拖动请求携带未变形锚点，并让 commit 排在增量之后', async () => {
+  const harness = createMiniPlayerHarness();
+  const shell = harness.nodes['mini-shell'];
+  const coverWrap = harness.nodes['cover-wrap'];
+  shell.setAttribute('data-collapsed', 'false');
+  coverWrap.rect = { left: 14, top: 15, right: 68, bottom: 69, width: 54, height: 54 };
+  coverWrap.offsetWidth = 54;
+  coverWrap.offsetHeight = 54;
+
+  coverWrap.dispatch('pointerdown', {
+    button: 0,
+    pointerId: 9,
+    screenX: 100,
+    screenY: 100,
+    clientX: 20,
+    clientY: 20,
+  });
+  coverWrap.dispatch('pointermove', {
+    pointerId: 9,
+    screenX: 110,
+    screenY: 106,
+    clientX: 30,
+    clientY: 26,
+    preventDefault() {},
+  });
+  coverWrap.dispatch('pointerup', { pointerId: 9 });
+
+  // 第一项会同步发出，结束提交要等它的 Promise 回执后再发出。
+  assert.equal(harness.moves.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(harness.moveMetas[0])), {
+    generation: 1,
+    anchor: { x: 94, y: 95 },
+    layout: 'expanded',
+  });
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
+  assert.equal(harness.moves.length, 2);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(harness.moveMetas[1])),
+    JSON.parse(JSON.stringify(harness.moveMetas[0])),
+  );
+  assert.equal(harness.moves[1].commit, true);
 });
 
 test('收回态只有封面热区参与命中，封面外的透明区交还桌面', () => {

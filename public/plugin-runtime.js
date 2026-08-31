@@ -20,10 +20,13 @@
   var workers = Object.create(null);
   // 最近一次 applyThemes 合并出来的变量表。迷你播放器窗口不加载插件运行时，只能靠这份表转发。
   var activeThemeVars = {};
+  // 异步脚本主题的应用代际；旧代回包不能覆盖更新后的最终主题。
+  var themeApplyGeneration = 0;
   var bridge = {
     persist: null,
     toast: null,
-    log: null
+    log: null,
+    themeApplied: null
   };
 
   /**
@@ -380,10 +383,25 @@
   }
 
   /**
+   * 在最新一轮主题真正写入后通知宿主，供独立迷你窗口同步最终变量表。
+   * @param {number} generation 本轮主题应用代际。
+   * @returns {void}
+   */
+  function notifyThemeApplied(generation) {
+    if (generation !== themeApplyGeneration || typeof bridge.themeApplied !== 'function') return;
+    try {
+      bridge.themeApplied(themeVars());
+    } catch (e) {
+      logInternal('[plugin] 主题同步回调失败: ' + ((e && e.message) || e));
+    }
+  }
+
+  /**
    * 应用全部启用的主题插件。声明式主题先生效，脚本主题（theme 钩子）随后覆盖同名变量。
    * @returns {Promise<void>} 应用完成。
    */
   function applyThemes() {
+    var generation = ++themeApplyGeneration;
     var node = ensureThemeStyleNode();
     if (!node) return Promise.resolve();
     var list = enabledByKind('theme');
@@ -401,8 +419,12 @@
     // 声明式部分先同步写进去：脚本主题要等 worker 起来（最坏 8 秒），不能让界面在这段时间里裸着。
     activeThemeVars = vars;
     node.textContent = buildThemeCss(vars, cssParts.join('\n'));
-    if (!scripted.length) return Promise.resolve();
+    if (!scripted.length) {
+      notifyThemeApplied(generation);
+      return Promise.resolve();
+    }
     return invokeAll(scripted, 'theme', []).then(function(results){
+      if (generation !== themeApplyGeneration) return;
       for (var r = 0; r < results.length; r++) {
         var value = results[r].value;
         if (!value || typeof value !== 'object') continue;
@@ -415,6 +437,7 @@
       // textContent 而不是 innerHTML：即使清洗漏掉了什么，也不会在这里被当成标签解析。
       activeThemeVars = vars;
       node.textContent = buildThemeCss(vars, cssParts.join('\n'));
+      notifyThemeApplied(generation);
     });
   }
   /**
@@ -683,6 +706,7 @@
     if (typeof opts.persist === 'function') bridge.persist = opts.persist;
     if (typeof opts.toast === 'function') bridge.toast = opts.toast;
     if (typeof opts.log === 'function') bridge.log = opts.log;
+    if (typeof opts.themeApplied === 'function') bridge.themeApplied = opts.themeApplied;
     records = readStore();
     destroyAllWorkers();
     // 补齐安装包自带的主题：只在用户没主动卸载过、且本地版本比自带的旧时才动。

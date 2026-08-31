@@ -74,6 +74,17 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     ipcRenderer.on('mineradio-mini-player-command', listener);
     return () => ipcRenderer.removeListener('mineradio-mini-player-command', listener);
   },
+  /**
+   * 订阅托盘或迷你播放器原生菜单修改后的真实桌面壳设置。
+   * @param {Function} callback 接收设置快照的回调。
+   * @returns {Function} 解除当前监听的函数。
+   */
+  onDesktopShellSettingsChanged: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-desktop-shell-settings-changed', listener);
+    return () => ipcRenderer.removeListener('mineradio-desktop-shell-settings-changed', listener);
+  },
   setDesktopLyricsEnabled: (enabled, payload) => ipcRenderer.invoke('mineradio-desktop-lyrics-set-enabled', !!enabled, payload || {}),
   updateDesktopLyrics: (payload) => ipcRenderer.invoke('mineradio-desktop-lyrics-update', payload || {}),
   onDesktopLyricsLockState: (callback) => {

@@ -8,6 +8,11 @@ const { execFile, spawn } = require('child_process');
 const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache, miniPlayerThemeSignature } = require('./mini-player-state-cache');
+const {
+  beginMiniPlayerCoverDrag,
+  miniPlayerCoverBounds,
+  updateMiniPlayerCoverDrag,
+} = require('./mini-player-cover-drag');
 const { launchUpdateInstaller } = require('./update-installer-launcher');
 const { createWallpaperEngineBridge, registerWallpaperEngineScheme } = require('./wallpaper-engine-bridge');
 const {
@@ -133,6 +138,9 @@ let miniPlayerEnabled = true;
 let miniPlayerActive = false;
 let miniPlayerMode = 'standard';
 let miniPlayerUserMovePending = false;
+let miniPlayerCoverDragSession = null;
+let miniPlayerCoverDragGeneration = 0;
+let miniPlayerDisplayTopologyDirty = false;
 let miniPlayerPointerPassthrough = false;
 let miniPlayerLastSentState = null;
 let miniPlayerRecoveryTimer = null;
@@ -146,6 +154,8 @@ const miniPlayerSavedBoundsSignatures = { standard: '', compact: '' };
 const miniPlayerProgrammaticCloseWindows = new WeakSet();
 const miniPlayerRendererReloadWindows = new WeakSet();
 const miniPlayerWindowModes = new WeakMap();
+const miniPlayerExpandDirections = new WeakMap();
+const miniPlayerCoverLayouts = new WeakMap();
 const miniPlayerRecoverySession = new MiniPlayerRecoverySession({
   stopRecoveryTimer: stopMiniPlayerRecoveryTimer,
   stopRecreateTimer: stopMiniPlayerRecreateTimer,
@@ -168,6 +178,7 @@ const MIN_WINDOWED_WIDTH = 960;
 const MIN_WINDOWED_HEIGHT = 540;
 const MINI_PLAYER_WIDTH = 360;
 const MINI_PLAYER_HEIGHT = 84;
+const MINI_PLAYER_COVER_SIZE = 54;
 const COMPACT_MINI_PLAYER_WIDTH = 268;
 const COMPACT_MINI_PLAYER_HEIGHT = 58;
 const MINI_PLAYER_MARGIN = 14;
@@ -851,7 +862,7 @@ function focusMainWindow() {
 
 /**
  * 读取桌面壳设置文件。托盘关闭策略需要早于前端加载生效，所以放在主进程持久化。
- * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number}, miniPlayerCompactBounds?: {x:number, y:number}}} 已保存的桌面壳设置。
+ * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number, expandDirection?:'left'|'right'}, miniPlayerCompactBounds?: {x:number, y:number}}} 已保存的桌面壳设置。
  */
 function readDesktopShellSettings() {
   try {
@@ -865,8 +876,8 @@ function readDesktopShellSettings() {
 
 /**
  * 写入桌面壳设置文件。该文件只保存主进程必须提前知道的窗口行为。
- * @param {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number}, miniPlayerCompactBounds?: {x:number, y:number}}} patch 要覆盖的设置字段。
- * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number}, miniPlayerCompactBounds?: {x:number, y:number}}} 写入后的完整设置。
+ * @param {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number, expandDirection?:'left'|'right'}, miniPlayerCompactBounds?: {x:number, y:number}}} patch 要覆盖的设置字段。
+ * @returns {{closeToTray?: boolean, miniPlayer?: boolean, miniPlayerMode?: string, miniPlayerBounds?: {x:number, y:number, expandDirection?:'left'|'right'}, miniPlayerCompactBounds?: {x:number, y:number}}} 写入后的完整设置。
  */
 function writeDesktopShellSettings(patch) {
   const file = path.join(app.getPath('userData'), DESKTOP_SHELL_SETTINGS_FILE);
@@ -1192,18 +1203,65 @@ function isStartupEnabled() {
 }
 
 /**
+ * 生成桌面壳设置的单一真实快照，IPC 查询与原生菜单变更广播共用同一契约。
+ * @returns {{ok:true,closeToTray:boolean,miniPlayer:boolean,miniPlayerEnabled:boolean,miniPlayerMode:'standard'|'compact',startup:boolean,startupEnabled:boolean}} 当前真实设置。
+ */
+function desktopShellSettingsSnapshot() {
+  const startupEnabled = isStartupEnabled();
+  return {
+    ok: true,
+    closeToTray: closeToTrayEnabled,
+    miniPlayer: miniPlayerEnabled,
+    miniPlayerEnabled,
+    miniPlayerMode,
+    startup: startupEnabled,
+    startupEnabled,
+  };
+}
+
+/**
+ * 把原生菜单修改后的真实设置推给主 renderer，避免设置面板和迷你律动门禁长期保留旧值。
+ * @returns {ReturnType<typeof desktopShellSettingsSnapshot>} 已广播或待下次初始化读取的设置快照。
+ */
+function broadcastDesktopShellSettingsChanged() {
+  const payload = desktopShellSettingsSnapshot();
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return payload;
+  mainWindow.webContents.send('mineradio-desktop-shell-settings-changed', payload);
+  return payload;
+}
+
+/**
+ * 设置关闭按钮最小化到托盘，并同步持久化、原生菜单与主 renderer。
+ * @param {boolean} enabled 是否启用关闭到托盘。
+ * @returns {{ok:true,closeToTray:boolean}} 主进程确认后的真实状态。
+ */
+function setCloseToTrayEnabled(enabled) {
+  closeToTrayEnabled = !!enabled;
+  writeDesktopShellSettings({ closeToTray: closeToTrayEnabled });
+  refreshTrayMenu();
+  broadcastDesktopShellSettingsChanged();
+  return { ok: true, closeToTray: closeToTrayEnabled };
+}
+
+/**
  * 设置 Windows 开机启动。失败时直接抛错，由 IPC 返回明确错误。
  * @param {boolean} enabled 是否开启开机启动。
  * @returns {{ok:boolean, enabled:boolean}} 设置后的真实状态。
  */
 function setStartupEnabled(enabled) {
-  if (process.platform !== 'win32') return { ok: false, enabled: false, unsupported: true };
+  if (process.platform !== 'win32') {
+    const result = { ok: false, enabled: false, unsupported: true };
+    broadcastDesktopShellSettingsChanged();
+    return result;
+  }
   app.setLoginItemSettings({
     openAtLogin: !!enabled,
     path: process.execPath,
     args: [],
   });
-  return { ok: true, enabled: isStartupEnabled() };
+  const result = { ok: true, enabled: isStartupEnabled() };
+  broadcastDesktopShellSettingsChanged();
+  return result;
 }
 
 /**
@@ -1218,11 +1276,7 @@ function buildAppContextMenuTemplate() {
       label: '关闭按钮最小化到托盘',
       type: 'checkbox',
       checked: closeToTrayEnabled,
-      click: (item) => {
-        closeToTrayEnabled = !!item.checked;
-        writeDesktopShellSettings({ closeToTray: closeToTrayEnabled });
-        refreshTrayMenu();
-      },
+      click: (item) => setCloseToTrayEnabled(item.checked),
     },
     {
       label: '最小化时显示迷你播放器',
@@ -2437,13 +2491,214 @@ function miniPlayerExpandDirectionForBounds(bounds) {
 }
 
 /**
+ * 从持久化边界中恢复显式方向；旧设置没有方向字段时按校正后的窗口位置生成一次默认值。
+ * @param {{x:number,y:number,width:number,height:number,expandDirection?:unknown}|null} bounds 标准迷你播放器边界。
+ * @returns {'left'|'right'} 可直接用于布局和后续持久化的方向。
+ */
+function miniPlayerExpandDirectionFromBoundsState(bounds) {
+  if (bounds && (bounds.expandDirection === 'left' || bounds.expandDirection === 'right')) {
+    return bounds.expandDirection;
+  }
+  return miniPlayerExpandDirectionForBounds(bounds);
+}
+
+/**
+ * 读取标准迷你播放器当前显式展开方向。拖动换边后优先保留会话写入的方向，
+ * 避免按补偿后的透明窗口边界重新计算并把封面推回旧侧。
+ * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
+ * @returns {'left'|'right'} 当前标准迷你播放器展开方向。
+ */
+function miniPlayerExpandDirectionForWindow(win) {
+  const cached = win ? miniPlayerExpandDirections.get(win) : '';
+  if (cached === 'left' || cached === 'right') return cached;
+  const next = miniPlayerExpandDirectionFromBoundsState(win && !win.isDestroyed() ? win.getBounds() : null);
+  if (win) miniPlayerExpandDirections.set(win, next);
+  return next;
+}
+
+/**
+ * 选择本次封面拖动应使用的显示器工作区。按累计逻辑封面矩形而非已夹紧窗口判断，
+ * 封面大部分进入相邻显示器后即可切换目标工作区，不会被旧屏边缘持续吞掉增量。
+ * @param {{coverX:number,coverY:number}} session 当前封面拖动会话。
+ * @param {number} dx 本次水平增量。
+ * @param {number} dy 本次垂直增量。
+ * @returns {{x:number,y:number,width:number,height:number}} 目标显示器工作区。
+ */
+function miniPlayerCoverDragWorkArea(session, dx, dy) {
+  const display = screen.getDisplayMatching({
+    x: Math.round(session.coverX + dx),
+    y: Math.round(session.coverY + dy),
+    width: MINI_PLAYER_COVER_SIZE,
+    height: MINI_PLAYER_COVER_SIZE,
+  }) || screen.getPrimaryDisplay();
+  return display.workArea;
+}
+
+/**
+ * 生成封面拖动使用的虚拟桌面工作区。跨显示器时只在整个桌面边缘夹紧，
+ * 不把窗口强行吸回某一块显示器，避免封面经过屏幕接缝时跳动。
+ * @returns {{x:number,y:number,width:number,height:number}} 所有显示器工作区的外接矩形。
+ */
+function miniPlayerCoverDragClampWorkArea() {
+  const displays = typeof screen.getAllDisplays === 'function' ? screen.getAllDisplays() : [];
+  const areas = displays
+    .map(display => display && display.workArea)
+    .filter(area => area && Number.isFinite(Number(area.x)) && Number.isFinite(Number(area.y))
+      && Number.isFinite(Number(area.width)) && Number.isFinite(Number(area.height))
+      && Number(area.width) > 0 && Number(area.height) > 0);
+  if (!areas.length) return screen.getPrimaryDisplay().workArea;
+  const left = Math.min(...areas.map(area => Number(area.x)));
+  const top = Math.min(...areas.map(area => Number(area.y)));
+  const right = Math.max(...areas.map(area => Number(area.x) + Number(area.width)));
+  const bottom = Math.max(...areas.map(area => Number(area.y) + Number(area.height)));
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+/**
+ * 推进当前迷你文档的拖动代际；renderer 重载前先推进，迟到的旧 IPC 就不能复用新页面会话。
+ * @returns {number} 当前有效的正整数代际。
+ */
+function advanceMiniPlayerCoverDragGeneration() {
+  if (!Number.isSafeInteger(miniPlayerCoverDragGeneration)
+    || miniPlayerCoverDragGeneration >= Number.MAX_SAFE_INTEGER) {
+    miniPlayerCoverDragGeneration = 1;
+  } else {
+    miniPlayerCoverDragGeneration += 1;
+  }
+  miniPlayerCoverDragSession = null;
+  // renderer 重载会让旧的 moved 事件迟到；清掉原生移动标记，避免它把新页面状态误写入设置。
+  miniPlayerUserMovePending = false;
+  return miniPlayerCoverDragGeneration;
+}
+
+/**
+ * 在显示器拓扑改变后校正迷你播放器；拖动尚未结束时保留封面锚点，避免系统事件抢走指针位移。
+ * @param {{x:number,y:number,layout?:'collapsed'|'expanded'}=} anchorOverride 拖动结束时保存的封面屏幕锚点。
+ * @returns {void}
+ */
+function reconcileMiniPlayerAfterDisplayTopology(anchorOverride) {
+  const win = miniPlayerWindow;
+  if (!win || win.isDestroyed()) {
+    miniPlayerDisplayTopologyDirty = false;
+    return;
+  }
+  if (miniPlayerCoverDragSession || miniPlayerUserMovePending) {
+    miniPlayerDisplayTopologyDirty = true;
+    return;
+  }
+  miniPlayerDisplayTopologyDirty = false;
+  const mode = miniPlayerModeForWindow(win);
+  if (mode !== 'standard') {
+    positionMiniPlayerWindow();
+    return;
+  }
+  try {
+    const bounds = win.getBounds();
+    const storedBounds = miniPlayerUserBoundsByMode.standard;
+    const currentDirection = miniPlayerExpandDirectionForWindow(win);
+    const rememberedLayout = miniPlayerCoverLayouts.get(win);
+    const layout = anchorOverride && (anchorOverride.layout === 'expanded' || anchorOverride.layout === 'collapsed')
+      ? anchorOverride.layout
+      : rememberedLayout === 'expanded' ? 'expanded' : 'collapsed';
+    miniPlayerCoverLayouts.set(win, layout);
+    const coverAnchor = anchorOverride && Number.isFinite(anchorOverride.x) && Number.isFinite(anchorOverride.y)
+      ? { x: anchorOverride.x, y: anchorOverride.y }
+      : miniPlayerCoverBounds(bounds, currentDirection, layout);
+    // 用真实封面锚点重算方向；只移动透明窗口，避免拓扑变化时封面横跳。
+    const session = beginMiniPlayerCoverDrag({
+      bounds,
+      direction: currentDirection,
+      anchor: coverAnchor,
+      layout,
+    });
+    const workArea = miniPlayerCoverDragWorkArea(session, 0, 0);
+    const result = updateMiniPlayerCoverDrag(
+      session,
+      0,
+      0,
+      workArea,
+      miniPlayerCoverDragClampWorkArea(),
+    );
+    const nextBounds = result.bounds;
+    const direction = result.direction;
+    if (nextBounds.x !== bounds.x || nextBounds.y !== bounds.y) win.setBounds(nextBounds, false);
+    miniPlayerExpandDirections.set(win, direction);
+    miniPlayerUserBoundsByMode.standard = { ...nextBounds, expandDirection: direction };
+    if (storedBounds && (storedBounds.x !== nextBounds.x
+      || storedBounds.y !== nextBounds.y
+      || storedBounds.expandDirection !== direction)) {
+      persistMiniPlayerUserBounds({ ...nextBounds, expandDirection: direction }, mode);
+    }
+    sendMiniPlayerState();
+  } catch (error) {
+    // 拓扑变化期间原生窗口可能短暂不可写；保留 dirty 标记，让下一次系统事件重试。
+    miniPlayerDisplayTopologyDirty = true;
+    console.warn('Mini player topology reconcile skipped:', error.message);
+    return;
+  }
+}
+
+/**
+ * 处理显示器增删或参数变化；用户拖动/原生移动期间只记脏，结束后再校正。
+ * @returns {void}
+ */
+function handleMiniPlayerDisplayTopologyChanged() {
+  if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) {
+    miniPlayerDisplayTopologyDirty = false;
+    return;
+  }
+  if (miniPlayerCoverDragSession || miniPlayerUserMovePending) {
+    miniPlayerDisplayTopologyDirty = true;
+    return;
+  }
+  reconcileMiniPlayerAfterDisplayTopology();
+}
+
+/**
+ * 校验 renderer 附带的封面拖动锚点与代际。缺失元数据代表旧的无锚点调用，
+ * 但一旦提供对象就必须完整、可排序且只包含当前拖动所需的字段。
+ * @param {unknown} value IPC 附带的拖动元数据。
+ * @returns {{generation:number,anchor?:{x:number,y:number},layout?:'collapsed'|'expanded'}|null} 已确认的元数据。
+ */
+function normalizeMiniPlayerCoverDragMeta(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('dragMeta 必须是对象');
+  }
+  if (!Number.isSafeInteger(value.generation) || value.generation <= 0) {
+    throw new TypeError('dragMeta.generation 必须是正整数');
+  }
+  const result = { generation: value.generation };
+  if (value.anchor !== undefined && value.anchor !== null) {
+    if (typeof value.anchor !== 'object' || Array.isArray(value.anchor)) {
+      throw new TypeError('dragMeta.anchor 必须是坐标对象');
+    }
+    if (typeof value.anchor.x !== 'number' || !Number.isFinite(value.anchor.x)
+      || typeof value.anchor.y !== 'number' || !Number.isFinite(value.anchor.y)) {
+      throw new TypeError('dragMeta.anchor 必须是有限坐标');
+    }
+    result.anchor = { x: value.anchor.x, y: value.anchor.y };
+  }
+  if (value.layout !== undefined && value.layout !== null) {
+    if (value.layout !== 'collapsed' && value.layout !== 'expanded') {
+      throw new RangeError('dragMeta.layout 必须是 collapsed 或 expanded');
+    }
+    result.layout = value.layout;
+  }
+  return result;
+}
+
+/**
  * 生成迷你播放器坐标签名，用于区分用户拖动、程序校正和重复持久化。
  * @param {{x:number, y:number}} bounds 窗口坐标。
  * @returns {string} 取整后的坐标签名。
  */
 function miniPlayerBoundsSignature(bounds) {
   if (!bounds) return '';
-  return `${Math.round(bounds.x)}|${Math.round(bounds.y)}`;
+  const direction = bounds.expandDirection === 'left' || bounds.expandDirection === 'right'
+    ? `|${bounds.expandDirection}`
+    : '';
+  return `${Math.round(bounds.x)}|${Math.round(bounds.y)}${direction}`;
 }
 
 /**
@@ -2456,8 +2711,17 @@ function savedMiniPlayerBounds(value, mode) {
   if (!value || typeof value !== 'object') return null;
   if (typeof value.x !== 'number' || !Number.isFinite(value.x)) return null;
   if (typeof value.y !== 'number' || !Number.isFinite(value.y)) return null;
-  const size = miniPlayerSize(mode);
-  return clampMiniPlayerBounds({ x: value.x, y: value.y, ...size }, mode);
+  const normalizedMode = normalizeMiniPlayerMode(mode);
+  const size = miniPlayerSize(normalizedMode);
+  const nextBounds = clampMiniPlayerBounds({ x: value.x, y: value.y, ...size }, normalizedMode);
+  if (normalizedMode !== 'standard') return nextBounds;
+  return {
+    ...nextBounds,
+    expandDirection: miniPlayerExpandDirectionFromBoundsState({
+      ...nextBounds,
+      expandDirection: value.expandDirection,
+    }),
+  };
 }
 
 /**
@@ -2469,13 +2733,19 @@ function savedMiniPlayerBounds(value, mode) {
 function persistMiniPlayerUserBounds(bounds, mode) {
   const normalizedMode = normalizeMiniPlayerMode(mode);
   const nextBounds = clampMiniPlayerBounds(bounds, normalizedMode);
-  const signature = miniPlayerBoundsSignature(nextBounds);
-  miniPlayerUserBoundsByMode[normalizedMode] = nextBounds;
+  const storedBounds = normalizedMode === 'standard'
+    ? { ...nextBounds, expandDirection: miniPlayerExpandDirectionFromBoundsState(bounds) }
+    : nextBounds;
+  const signature = miniPlayerBoundsSignature(storedBounds);
+  miniPlayerUserBoundsByMode[normalizedMode] = storedBounds;
   if (signature === miniPlayerSavedBoundsSignatures[normalizedMode]) return nextBounds;
   const settingKey = normalizedMode === 'compact' ? 'miniPlayerCompactBounds' : 'miniPlayerBounds';
-  writeDesktopShellSettings({ [settingKey]: { x: nextBounds.x, y: nextBounds.y } });
+  const settingValue = normalizedMode === 'standard'
+    ? { x: storedBounds.x, y: storedBounds.y, expandDirection: storedBounds.expandDirection }
+    : { x: storedBounds.x, y: storedBounds.y };
+  writeDesktopShellSettings({ [settingKey]: settingValue });
   miniPlayerSavedBoundsSignatures[normalizedMode] = signature;
-  return nextBounds;
+  return storedBounds;
 }
 
 /**
@@ -2486,6 +2756,7 @@ function persistMiniPlayerUserBounds(bounds, mode) {
  */
 function beginMiniPlayerUserMove(win) {
   if (miniPlayerWindow !== win || win.isDestroyed()) return;
+  miniPlayerCoverDragSession = null;
   miniPlayerUserMovePending = true;
 }
 
@@ -2497,8 +2768,19 @@ function beginMiniPlayerUserMove(win) {
 function handleMiniPlayerMoved(win) {
   if (miniPlayerWindow !== win || win.isDestroyed() || !miniPlayerUserMovePending) return;
   miniPlayerUserMovePending = false;
-  persistMiniPlayerUserBounds(win.getBounds(), miniPlayerModeForWindow(win));
+  const mode = miniPlayerModeForWindow(win);
+  const bounds = win.getBounds();
+  if (mode === 'standard') {
+    const direction = miniPlayerExpandDirectionForBounds(bounds);
+    miniPlayerExpandDirections.set(win, direction);
+    persistMiniPlayerUserBounds({ ...bounds, expandDirection: direction }, mode);
+  } else {
+    persistMiniPlayerUserBounds(bounds, mode);
+  }
   sendMiniPlayerState();
+  if (typeof miniPlayerDisplayTopologyDirty !== 'undefined' && miniPlayerDisplayTopologyDirty) {
+    reconcileMiniPlayerAfterDisplayTopology();
+  }
 }
 
 /**
@@ -2508,10 +2790,21 @@ function handleMiniPlayerMoved(win) {
 function positionMiniPlayerWindow() {
   if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) return;
   const mode = miniPlayerModeForWindow(miniPlayerWindow);
-  const nextBounds = clampMiniPlayerBounds(miniPlayerUserBoundsByMode[mode] || miniPlayerDefaultBounds(mode), mode);
+  const storedBounds = miniPlayerUserBoundsByMode[mode];
+  const nextBounds = clampMiniPlayerBounds(storedBounds || miniPlayerDefaultBounds(mode), mode);
   miniPlayerUserMovePending = false;
+  miniPlayerCoverDragSession = null;
   miniPlayerWindow.setBounds(nextBounds, false);
-  if (miniPlayerUserBoundsByMode[mode]) persistMiniPlayerUserBounds(nextBounds, mode);
+  if (mode === 'standard') {
+    const direction = miniPlayerExpandDirectionFromBoundsState({
+      ...nextBounds,
+      expandDirection: storedBounds && storedBounds.expandDirection,
+    });
+    miniPlayerExpandDirections.set(miniPlayerWindow, direction);
+    if (storedBounds) persistMiniPlayerUserBounds({ ...nextBounds, expandDirection: direction }, mode);
+  } else if (storedBounds) {
+    persistMiniPlayerUserBounds(nextBounds, mode);
+  }
   sendMiniPlayerState();
 }
 
@@ -2543,7 +2836,9 @@ function sendMiniPlayerState(force = false) {
     next.pulse = Number.isFinite(state.pulse) ? state.pulse : 0;
     next.visual = visual;
     next.visualSignature = visualSignature;
-    next.expandDirection = miniPlayerExpandDirectionForBounds(win.getBounds());
+    next.expandDirection = miniPlayerExpandDirectionForWindow(win);
+    // renderer 重载后会从这份种子继续递增，迟到的旧拖动请求不会和新页面复用同一代际。
+    next.dragGeneration = miniPlayerCoverDragGeneration;
   }
   const previous = miniPlayerLastSentState;
   const patch = {};
@@ -2586,6 +2881,10 @@ function sendMiniPlayerState(force = false) {
   }
   if (includeCover && (force || !previous || next.expandDirection !== previous.expandDirection)) {
     patch.expandDirection = next.expandDirection;
+    changed = true;
+  }
+  if (includeCover && (force || !previous || next.dragGeneration !== previous.dragGeneration)) {
+    patch.dragGeneration = next.dragGeneration;
     changed = true;
   }
   if (!changed) return;
@@ -2667,6 +2966,9 @@ function destroyMiniPlayerWindowInstance(win) {
   if (miniPlayerWindow === win) {
     miniPlayerWindow = null;
     miniPlayerUserMovePending = false;
+    miniPlayerCoverDragSession = null;
+    miniPlayerCoverDragGeneration = 0;
+    miniPlayerDisplayTopologyDirty = false;
     miniPlayerPointerPassthrough = false;
     miniPlayerStateCache.setResident(false);
   }
@@ -2697,6 +2999,7 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
     if (!contents.isDestroyed() && (rendererGone || contents.isCrashed()) && !miniPlayerRendererReloadWindows.has(win)) {
       try {
         miniPlayerRendererReloadWindows.add(win);
+        advanceMiniPlayerCoverDragGeneration();
         contents.reload();
         scheduleMiniPlayerRecovery(800);
         return;
@@ -2711,6 +3014,84 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
 }
 
 /**
+ * 校验迷你播放器主文档 URL，只允许当前本地服务端口与当前样式对应的单一页面。
+ * @param {string} value 待校验的文档地址。
+ * @param {'standard'|'compact'} mode 当前迷你播放器样式。
+ * @returns {boolean} 地址属于当前可信迷你文档时返回 true。
+ */
+function isTrustedMiniPlayerDocumentUrl(value, mode) {
+  try {
+    const parsed = new URL(String(value || ''));
+    if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1') return false;
+    const expectedPort = Number(mainServerPort || 3000);
+    if (Number(parsed.port || 0) !== expectedPort) return false;
+    const page = normalizeMiniPlayerMode(mode) === 'compact'
+      ? '/mini-player-compact.html'
+      : '/mini-player.html';
+    return parsed.pathname === page;
+  } catch (_error) {
+    return false;
+  }
+}
+
+/**
+ * 校验迷你 IPC 是否来自当前窗口、当前主 frame 与当前样式对应的可信本地文档。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @returns {boolean} 事件来自当前可信迷你主文档时返回 true。
+ */
+function isTrustedMiniPlayerFrameSender(event) {
+  try {
+    if (!event || !event.sender || !miniPlayerWindow || miniPlayerWindow.isDestroyed()) return false;
+    if (event.sender !== miniPlayerWindow.webContents) return false;
+    if (typeof event.sender.isDestroyed === 'function' && event.sender.isDestroyed()) return false;
+    const mode = miniPlayerModeForWindow(miniPlayerWindow);
+    const frame = event.senderFrame || null;
+    // senderFrame 缺失时无法证明调用来自主 frame；getURL 只代表主文档，不能替代来源身份。
+    if (!frame || frame.parent) return false;
+    if (event.sender.mainFrame && frame !== event.sender.mainFrame) return false;
+    return isTrustedMiniPlayerDocumentUrl(frame.url, mode);
+  } catch (_error) {
+    return false;
+  }
+}
+
+/**
+ * 安装迷你窗口导航守卫，阻止 URL 拖放、未来链接或子 frame 把带 preload 的窗口导航到外部页面。
+ * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
+ * @param {'standard'|'compact'} mode 当前窗口创建时固定的样式。
+ * @returns {void}
+ */
+function installMiniPlayerNavigationGuard(win, mode) {
+  if (!win || !win.webContents || typeof win.webContents.on !== 'function') return;
+  win.webContents.on('will-navigate', (event, details, _url, _isInPlace, isMainFrame) => {
+    const url = details && typeof details === 'object' ? details.url : String(details || '');
+    const fromMainFrame = details && typeof details === 'object' && 'isMainFrame' in details
+      ? details.isMainFrame
+      : isMainFrame !== false;
+    if (fromMainFrame && isTrustedMiniPlayerDocumentUrl(url, mode)) return;
+    event.preventDefault();
+  });
+  win.webContents.on('will-frame-navigate', (event, details) => {
+    const url = details && typeof details === 'object' ? details.url : String(details || '');
+    const frame = details && typeof details === 'object' ? (details.frame || null) : null;
+    if (frame && frame.parent) {
+      event.preventDefault();
+      return;
+    }
+    if (details && details.isMainFrame === true && isTrustedMiniPlayerDocumentUrl(url, mode)) return;
+    event.preventDefault();
+  });
+  win.webContents.on('will-redirect', (event, details, _url, _isInPlace, isMainFrame) => {
+    const targetUrl = details && typeof details === 'object' ? details.url : String(details || '');
+    const fromMainFrame = details && typeof details === 'object' && 'isMainFrame' in details
+      ? details.isMainFrame
+      : isMainFrame !== false;
+    if (fromMainFrame && isTrustedMiniPlayerDocumentUrl(targetUrl, mode)) return;
+    event.preventDefault();
+  });
+}
+
+/**
  * 在迷你播放器上弹出与任务栏托盘完全一致的原生右键菜单：显示播放器、关闭到托盘、迷你播放器开关与样式、
  * 开机自启、退出，每一项都可点。标准和极简两套外壳共用这一份，菜单弹在鼠标当前位置。
  * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
@@ -2718,6 +3099,10 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
  */
 function showMiniPlayerContextMenu(win) {
   if (!win || win.isDestroyed() || miniPlayerWindow !== win) return;
+  const url = win.webContents && typeof win.webContents.getURL === 'function'
+    ? win.webContents.getURL()
+    : '';
+  if (!isTrustedMiniPlayerDocumentUrl(url, miniPlayerModeForWindow(win))) return;
   Menu.buildFromTemplate(buildAppContextMenuTemplate()).popup({ window: win });
 }
 
@@ -2761,11 +3146,15 @@ function createMiniPlayerWindow() {
   if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) return miniPlayerWindow;
   miniPlayerWindow = null;
   miniPlayerUserMovePending = false;
+  miniPlayerCoverDragSession = null;
+  miniPlayerCoverDragGeneration = 0;
+  miniPlayerDisplayTopologyDirty = false;
   // 新窗口默认参与命中，穿透缓存必须重置，否则新 renderer 的首次上报会被当成重复请求丢掉。
   miniPlayerPointerPassthrough = false;
   miniPlayerStateCache.setResident(false);
   const mode = normalizeMiniPlayerMode(miniPlayerMode);
-  const bounds = clampMiniPlayerBounds(miniPlayerUserBoundsByMode[mode] || miniPlayerDefaultBounds(mode), mode);
+  const storedBounds = miniPlayerUserBoundsByMode[mode];
+  const bounds = clampMiniPlayerBounds(storedBounds || miniPlayerDefaultBounds(mode), mode);
   const win = new BrowserWindow({
     ...bounds,
     frame: false,
@@ -2792,12 +3181,23 @@ function createMiniPlayerWindow() {
   });
   miniPlayerWindow = win;
   miniPlayerWindowModes.set(win, mode);
+  if (mode === 'standard') {
+    miniPlayerCoverLayouts.set(win, 'collapsed');
+    miniPlayerExpandDirections.set(win, miniPlayerExpandDirectionFromBoundsState({
+      ...bounds,
+      expandDirection: storedBounds && storedBounds.expandDirection,
+    }));
+  }
   miniPlayerStateCache.setResident(true);
   requestMiniPlayerStateSync();
   keepMiniPlayerOnTop(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  win.webContents.on('context-menu', (event) => {
+  installMiniPlayerNavigationGuard(win, mode);
+  win.webContents.on('context-menu', (event, params) => {
     event.preventDefault();
+    const frame = params && params.frame;
+    if (!frame || frame.parent || !isTrustedMiniPlayerDocumentUrl(frame.url, mode)) return;
+    if (win.webContents.mainFrame && frame !== win.webContents.mainFrame) return;
     showMiniPlayerContextMenu(win);
   });
   // Windows 上 `-webkit-app-region: drag` 区域的右键被系统当成非客户区处理，弹出的是几乎全灰的窗口
@@ -2810,6 +3210,10 @@ function createMiniPlayerWindow() {
   });
   win.once('ready-to-show', () => {
     if (miniPlayerWindow !== win || win.isDestroyed() || !shouldShowMiniPlayer()) return;
+    if (!isTrustedMiniPlayerDocumentUrl(win.webContents.getURL(), mode)) {
+      scheduleMiniPlayerWindowRecovery(win, 'untrusted-document');
+      return;
+    }
     positionMiniPlayerWindow();
     if (win.isMinimized()) win.restore();
     win.showInactive();
@@ -2819,6 +3223,11 @@ function createMiniPlayerWindow() {
   });
   win.webContents.on('did-finish-load', () => {
     if (miniPlayerWindow !== win) return;
+    advanceMiniPlayerCoverDragGeneration();
+    if (!isTrustedMiniPlayerDocumentUrl(win.webContents.getURL(), mode)) {
+      scheduleMiniPlayerWindowRecovery(win, 'untrusted-document');
+      return;
+    }
     miniPlayerRendererReloadWindows.delete(win);
     miniPlayerLastSentState = null;
     if (shouldShowMiniPlayer()) showMiniPlayerWindow();
@@ -2861,6 +3270,7 @@ function createMiniPlayerWindow() {
     if (wasCurrent) {
       miniPlayerWindow = null;
       miniPlayerUserMovePending = false;
+      miniPlayerCoverDragSession = null;
       miniPlayerPointerPassthrough = false;
       miniPlayerLastSentState = null;
       miniPlayerStateCache.setResident(false);
@@ -2897,6 +3307,12 @@ function showMiniPlayerWindow() {
     return;
   }
   if (win.webContents.isLoadingMainFrame()) return;
+  if (!isTrustedMiniPlayerDocumentUrl(win.webContents.getURL(), miniPlayerModeForWindow(win))) {
+    // 恢复可能跨过锁屏/休眠暂停边界，显示前再拦一次，避免旧窗口留在外部文档。
+    destroyMiniPlayerWindowInstance(win);
+    if (shouldShowMiniPlayer()) scheduleMiniPlayerRecovery(120);
+    return;
+  }
   const wasVisible = win.isVisible();
   const wasMinimized = win.isMinimized();
   if (wasMinimized) win.restore();
@@ -3014,6 +3430,7 @@ function setMiniPlayerEnabled(enabled) {
     closeMiniPlayerWindow();
   }
   refreshTrayMenu();
+  broadcastDesktopShellSettingsChanged();
   return { ok: true, miniPlayerEnabled };
 }
 
@@ -3027,6 +3444,7 @@ function setMiniPlayerMode(mode) {
     if (shouldShowMiniPlayer()) showMiniPlayerWindow();
   }
   refreshTrayMenu();
+  broadcastDesktopShellSettingsChanged();
   return { ok: true, miniPlayerMode };
 }
 
@@ -3062,22 +3480,11 @@ ipcMain.handle('desktop-window-close', trustedMainFrameHandler((event) => {
 }));
 
 ipcMain.handle('mineradio-tray-get-settings', trustedMainFrameHandler(() => {
-  return {
-    ok: true,
-    closeToTray: closeToTrayEnabled,
-    miniPlayer: miniPlayerEnabled,
-    miniPlayerEnabled,
-    miniPlayerMode,
-    startup: isStartupEnabled(),
-    startupEnabled: isStartupEnabled(),
-  };
+  return desktopShellSettingsSnapshot();
 }));
 
 ipcMain.handle('mineradio-tray-set-close-to-tray', trustedMainFrameHandler((_event, enabled) => {
-  closeToTrayEnabled = !!enabled;
-  writeDesktopShellSettings({ closeToTray: closeToTrayEnabled });
-  refreshTrayMenu();
-  return { ok: true, closeToTray: closeToTrayEnabled };
+  return setCloseToTrayEnabled(enabled);
 }));
 
 ipcMain.handle('mineradio-startup-set-enabled', trustedMainFrameHandler((_event, enabled) => {
@@ -3122,26 +3529,99 @@ ipcMain.handle('mineradio-mini-player-update', trustedMainFrameHandler(handleMin
  * @param {number} dx 水平位移，单次限制在 160 像素内。
  * @param {number} dy 垂直位移，单次限制在 160 像素内。
  * @param {boolean} commit 是否为拖动结束；只在结束时把内存坐标写入设置文件。
+ * @param {{generation:number,anchor?:{x:number,y:number},layout?:'collapsed'|'expanded'}} dragMeta renderer
+ *   首帧锚点与拖动代际；无元数据的旧调用只允许继续已有会话，不能凭空开启新会话。
  * @returns {{ok:boolean,ignored?:boolean,error?:string}} 移动结果。
  */
-function handleMiniPlayerMoveBy(event, dx, dy, commit) {
-  if (!event || !miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {
+function handleMiniPlayerMoveBy(event, dx, dy, commit, dragMeta) {
+  if (!isTrustedMiniPlayerFrameSender(event)) {
     return { ok: true, ignored: true };
   }
   try {
+    const request = normalizeMiniPlayerCoverDragMeta(dragMeta);
+    if (request && request.generation < miniPlayerCoverDragGeneration) {
+      // 旧拖动的 commit 可能在新拖动开始后才抵达；它不能覆盖新会话或清空新会话。
+      return { ok: true, ignored: true };
+    }
     const mode = miniPlayerModeForWindow(miniPlayerWindow);
+    if (mode !== 'standard') return { ok: true, ignored: true };
     const bounds = miniPlayerWindow.getBounds();
-    const next = clampMiniPlayerBounds({
-      ...bounds,
-      x: Math.round(bounds.x + clampNumber(dx, -160, 160, 0)),
-      y: Math.round(bounds.y + clampNumber(dy, -160, 160, 0)),
-    }, mode);
     miniPlayerUserMovePending = false;
-    if (next.x !== bounds.x || next.y !== bounds.y) miniPlayerWindow.setBounds(next, false);
-    miniPlayerUserBoundsByMode[mode] = next;
-    if (commit === true) persistMiniPlayerUserBounds(next, mode);
-    sendMiniPlayerState();
-    return { ok: true };
+    if (request && (request.layout === 'collapsed' || request.layout === 'expanded')) {
+      miniPlayerCoverLayouts.set(miniPlayerWindow, request.layout);
+    }
+    if (!request && !miniPlayerCoverDragSession) {
+      // 无代际的迟到调用无法证明属于当前拖动；拒绝新开会话，避免重载后旧 commit 改写坐标。
+      return { ok: true, ignored: true };
+    }
+    if (request && request.generation === miniPlayerCoverDragGeneration && !miniPlayerCoverDragSession) {
+      // 同一代际已经 commit、原生移动或重定位后，迟到的重复请求不能重新开启会话。
+      return { ok: true, ignored: true };
+    }
+    if (request && request.generation > miniPlayerCoverDragGeneration) {
+      miniPlayerCoverDragGeneration = request.generation;
+      miniPlayerCoverDragSession = beginMiniPlayerCoverDrag({
+        bounds,
+        direction: miniPlayerExpandDirectionForWindow(miniPlayerWindow),
+        anchor: request.anchor,
+        layout: request.layout,
+      });
+      miniPlayerCoverDragSession.generation = request.generation;
+      miniPlayerCoverDragSession.lastBounds = { ...bounds };
+    }
+    if (!miniPlayerCoverDragSession) {
+      miniPlayerCoverDragSession = beginMiniPlayerCoverDrag({
+        bounds,
+        direction: miniPlayerExpandDirectionForWindow(miniPlayerWindow),
+        layout: miniPlayerCoverLayouts.get(miniPlayerWindow) || 'collapsed',
+      });
+      miniPlayerCoverDragSession.lastBounds = { ...bounds };
+    }
+    if (commit === true) {
+      const session = miniPlayerCoverDragSession;
+      const committedBounds = session.lastBounds || bounds;
+      const direction = session.direction || miniPlayerExpandDirectionForWindow(miniPlayerWindow);
+      const topologyAnchor = {
+        x: session.coverX,
+        y: session.coverY,
+        layout: session.layout,
+      };
+      const storedBounds = { ...committedBounds, expandDirection: direction };
+      miniPlayerUserBoundsByMode[mode] = storedBounds;
+      persistMiniPlayerUserBounds(storedBounds, mode);
+      miniPlayerCoverLayouts.set(miniPlayerWindow, topologyAnchor.layout);
+      miniPlayerCoverDragSession = null;
+      sendMiniPlayerState();
+      if (typeof miniPlayerDisplayTopologyDirty !== 'undefined' && miniPlayerDisplayTopologyDirty) {
+        reconcileMiniPlayerAfterDisplayTopology(topologyAnchor);
+      }
+      return { ok: true };
+    }
+    const deltaX = clampNumber(dx, -160, 160, 0);
+    const deltaY = clampNumber(dy, -160, 160, 0);
+    if (!deltaX && !deltaY) return { ok: true, ignored: true };
+    const workArea = miniPlayerCoverDragWorkArea(miniPlayerCoverDragSession, deltaX, deltaY);
+    const clampWorkArea = miniPlayerCoverDragClampWorkArea();
+    try {
+      const result = updateMiniPlayerCoverDrag(
+        miniPlayerCoverDragSession,
+        deltaX,
+        deltaY,
+        workArea,
+        clampWorkArea,
+      );
+      const next = result.bounds;
+      if (next.x !== bounds.x || next.y !== bounds.y) miniPlayerWindow.setBounds(next, false);
+      miniPlayerExpandDirections.set(miniPlayerWindow, result.direction);
+      miniPlayerCoverDragSession.lastBounds = { ...next };
+      miniPlayerUserBoundsByMode[mode] = { ...next, expandDirection: result.direction };
+      sendMiniPlayerState();
+      return { ok: true };
+    } catch (error) {
+      // setBounds 失败时回滚逻辑坐标并结束本代会话，避免下一次增量沿着未落地的位置继续漂移。
+      miniPlayerCoverDragSession = null;
+      return { ok: false, error: error.message || 'MINI_PLAYER_MOVE_FAILED' };
+    }
   } catch (e) {
     return { ok: false, error: e.message || 'MINI_PLAYER_MOVE_FAILED' };
   }
@@ -3158,7 +3638,20 @@ ipcMain.handle('mineradio-mini-player-move-by', handleMiniPlayerMoveBy);
  * @returns {{ok:boolean,ignored?:boolean,error?:string}} 穿透设置结果。
  */
 function handleMiniPlayerPointerPassthrough(event, passthrough) {
-  if (!event || !miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {
+  if (!isTrustedMiniPlayerFrameSender(event)) {
+    return { ok: true, ignored: true };
+  }
+  const mode = miniPlayerModeForWindow(miniPlayerWindow);
+  if (mode !== 'standard') {
+    // 极简播放器整窗必须保持可命中，切换模式时先撤销旧标准窗口遗留的穿透状态。
+    if (miniPlayerPointerPassthrough) {
+      try {
+        miniPlayerWindow.setIgnoreMouseEvents(false);
+        miniPlayerPointerPassthrough = false;
+      } catch (e) {
+        return { ok: false, error: e.message || 'MINI_PLAYER_PASSTHROUGH_FAILED' };
+      }
+    }
     return { ok: true, ignored: true };
   }
   const next = passthrough === true;
@@ -3177,7 +3670,7 @@ function handleMiniPlayerPointerPassthrough(event, passthrough) {
 ipcMain.handle('mineradio-mini-player-set-pointer-passthrough', handleMiniPlayerPointerPassthrough);
 
 ipcMain.handle('mineradio-mini-player-command', (event, action) => {
-  if (!miniPlayerWindow || miniPlayerWindow.isDestroyed() || event.sender !== miniPlayerWindow.webContents) {
+  if (!isTrustedMiniPlayerFrameSender(event)) {
     return { ok: false, error: 'MINI_PLAYER_INVALID_SENDER' };
   }
   const command = String(action || '');
@@ -3932,21 +4425,21 @@ if (!gotSingleInstanceLock) {
       positionDesktopLyricsWindow();
       sendDesktopLyricsWindowGeometry(true);
       positionWallpaperWindow();
-      positionMiniPlayerWindow();
+      handleMiniPlayerDisplayTopologyChanged();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-added', () => {
       keepMainWindowInsideDisplay(mainWindow);
       sendDesktopLyricsWindowGeometry(true);
-      positionMiniPlayerWindow();
+      handleMiniPlayerDisplayTopologyChanged();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-removed', () => {
       keepMainWindowInsideDisplay(mainWindow);
       sendDesktopLyricsWindowGeometry(true);
-      positionMiniPlayerWindow();
+      handleMiniPlayerDisplayTopologyChanged();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });

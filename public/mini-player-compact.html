@@ -120,19 +120,32 @@
     .desktop-lyrics-toggle:hover:not(:disabled) {
       border-color: transparent;
       background: transparent;
-      color: #dffffa;
+      color: var(--th-mini-btn-hover-text, #dffffa);
     }
     .desktop-lyrics-toggle.active {
       border-color: transparent;
       background: transparent;
-      color: #a9fff2;
+      color: var(--th-mini-play-text, #a9fff2);
       text-shadow: 0 0 5px rgba(110, 231, 216, 0.34);
+    }
+    .desktop-lyrics-toggle::before,
+    .restore::before {
+      content: "";
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      bottom: -4px;
+      left: -4px;
+      border-radius: inherit;
+      pointer-events: auto;
+      -webkit-app-region: no-drag;
     }
     .desktop-lyrics-glyph { pointer-events: none; }
     .pause-icon { display: none; }
     body[data-playing="true"] .play-icon { display: none; }
     body[data-playing="true"] .pause-icon { display: block; }
     .restore {
+      position: relative;
       flex: 0 0 18px;
       width: 18px;
       height: 18px;
