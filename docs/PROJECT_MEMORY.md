@@ -42,6 +42,7 @@
 - `public/plugin-builtin-themes.js` 与示例目录逐字段同步，内置主题共六份：五份暗色完整主题和一份浅色完整主题。主题互斥、用户自定义背景优先、取色器强调色优先和迷你播放器变量转发边界不变。
 - 涉及文件：`examples/plugins/theme-background-deep-sea.json`、`theme-background-ember.json`、`theme-background-forest.json`、`theme-white.json`、`public/plugin-builtin-themes.js`、插件文档与主题测试。
 - 验证：主题专项测试 `35/35`；干净 release worktree 全量回归 `485/485`；Windows x64 NSIS 构建成功，包内 `package.json`、前端 `APP_VERSION` 和六份内置主题均已反查确认。
+- GitHub Release 已于 2026-08-31 正式发布：`https://github.com/oirge/Mineradio/releases/tag/v1.7.15`，安装器、blockmap、`latest.yml` 和 SHA256 清单四项资产远端摘要与本地一致。
 
 ## v1.7.14 收回态只在封面上吃鼠标（穿透判据回到热区）
 

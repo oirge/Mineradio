@@ -8,6 +8,7 @@
 - 本地 Windows x64 NSIS 构建产物：`Mineradio-1.7.15-Setup.exe` `101520385` 字节；`.blockmap` `105947` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.15-SHA256SUMS.txt` `275` 字节。
 - SHA256：安装器 `0dfae05d4222dd176e07a29450d2849604db5673931ad336a2f4fc90a8ada4b1`；`.blockmap` `4d6ce2543f9dbfd8d099e2b0df5701ce122976cbf4ac45543eef7f4e85488b15`；`latest.yml` `3bac837fe23c1c00c36a7ed289b17b0cdaae2f1d47f8805ddc2b003c197ad1f6`。
 - `latest.yml` 的 Setup SHA512：`/yEHOpyc3X00GLPOuKtdJlYm3dkRM8aM+kqqSHa6hflJUEr3XDlr9W9P9tNrsIkUogtxzmS52d/gdJoNQS5g/Q==`。
+- GitHub Release：`https://github.com/oirge/Mineradio/releases/tag/v1.7.15` 已正式发布（非 draft / 非 prerelease），四项资产已上传，远端 `latest.yml` 版本为 `1.7.15`；标签目标提交为 `e9a9e0b`。
 
 ## v1.7.14 收回后的迷你播放器只在封面上吃鼠标
 - 正式发布版本从 `1.7.13` 提升为 `1.7.14`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.13` 及更早版本可通过 `latest.yml` 自动更新。
