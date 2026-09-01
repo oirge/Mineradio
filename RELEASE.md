@@ -1,5 +1,19 @@
 ﻿# 发布流程
 
+## v1.7.18 本地曲库改用 SQLite + 文件指纹/路径索引
+- 正式发布版本从 `1.7.17` 提升为 `1.7.18`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.17` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版把本地曲库落到 `node:sqlite`（Electron 自带，零新增依赖、无原生模块重编译）：新增 `desktop/local-library-store.js`，用户数据目录下建 `local-library.db`，WAL 日志 + `PRAGMA user_version` 迁移 + `BEGIN IMMEDIATE` 事务；行身份由文件指纹 `pathKey|size|mtime` 决定，保存歌曲 ID、路径、大小、修改时间、时长、格式、Artist / Album / Genre / Year、封面缓存、歌词缓存、播放次数、最近播放和收藏状态。
+- 扫描无快照时先问数据库走增量，只 `stat` 变化过的目录；索引改为按行 FNV-1a 摘要增量回写；解除旧快照与旧索引的 `16000` 条截断（旧逻辑超限后只计数不入库，签名仍匹配，等于静默丢歌），仅数据库不可用的回落路径保留旧上限。
+- `(root_id, song_key)` / `(root_id, fingerprint)` 组合索引修掉查询计划陷阱：只有单列索引时索引回写会退化成按 `root_id` 整根扫描，两万行实测 `295,319ms` → `1,640ms`（约 180×），已用 `EXPLAIN QUERY PLAN` 断言钉死。
+- 播放次数与收藏状态双写进库但只在原有有效收听门内累加一次，`localStorage` 的听歌统计与「特别喜欢」引用表仍是唯一权威来源、无回读路径，因此不存在双计数；界面布局、样式、文案与交互入口零改动。缺 `node:sqlite` 时主进程与渲染层各自一次性 latch 降级回 IndexedDB 旧路径。
+- 发布前全量 Node 回归 `540/540`（新增 `tests/local-library-sqlite-store.test.js` 12 例、`tests/local-library-db-bridge.test.js` 9 例），并通过 `node --check` 对 `public/app.js`、`desktop/main.js`、`desktop/preload.js`、`desktop/local-library-store.js`、`server.js` 与 `git diff --check`；本轮不启动本机 Electron、不合成鼠标键盘输入、不修改 `Mineradio-sync`。
+- Windows x64 NSIS 仍只发布 `Setup.exe`、`.blockmap`、`latest.yml` 和 SHA256 清单；GitHub Actions `Build and Release` run `33494043918` 成功（1m49s），提交 `b07f1bd`，注解 tag `v1.7.18` → `b07f1bd` 已推送；GitHub Release `https://github.com/oirge/Mineradio/releases/tag/v1.7.18` 已正式发布并标记 Latest（非 draft / 非 prerelease），四项资产已上传。
+- 资产大小：`Mineradio-1.7.18-Setup.exe` `101547905` 字节；`.blockmap` `106000` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.18-SHA256SUMS.txt` `275` 字节。
+- SHA256（四项资产已回下载逐一实测复核）：安装器 `544c75a1339bc285ed758ca4d8bd8e2d4abff1007a947a75a354fd0b78e7a42a`；`.blockmap` `940a2d695e80a5d6bc4b431c4e56de05f194db9ef19b2b23d435bdac3880795a`；`latest.yml` `be4152ba8bdf86a65690760c63a8d12decf86429761f67231998f33fb4b7a7bd`；SHA256 清单 `5a185d3efae5ddda7f6bf34c87310650de425f87df63d6fe1be362039b5a94ae`。
+- `latest.yml` 的版本为 `1.7.18`，`path` 与 `size` 与实际安装器一致；其 Setup SHA512 `kvOE3xLL7vs4iUCbzXLY1IlPdc43zJEL9k8x7UQ+0WmUHLIxnm+SUPAtlge8an3TjN0MFFk7AQBtflueAD8LPA==` 与本地实测一致；Setup.exe 产品版本 `1.7.18`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+- 新增 `desktop/local-library-store.js` 的打包覆盖来自 `build.files` 已有的 `desktop/**/*` 与 `tests/packaging-file-whitelist.test.js` 守卫，`asarUnpack` 仍是 `['server.js','package.json']`；本机无 7z，本轮未解包安装器内 `app.asar` 做明文核对。
+- 发布标题使用 `v1.7.18 本地曲库改用 SQLite + 文件指纹/路径索引`。
+
 ## v1.7.17 迷你播放器封面命中与右键竞态修复
 - 正式发布版本从 `1.7.16` 提升为 `1.7.17`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.16` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版修复收回态封面热区命中后的右键竞态：renderer 优先通过 `mineradio-mini-player-set-pointer-passthrough-sync` 同步解除原生穿透，主进程在返回前完成 `setIgnoreMouseEvents(false)`；旧异步通道仅作兼容回退，失败仍可重试。
