@@ -6,7 +6,10 @@
 - 两套迷你页面的 `.mini-shell` 固定为 `no-drag`，右键主要由 renderer `context-menu` 接管，窗口移动通过独立 `mineradio-mini-player-window-move-by` IPC；`system-context-menu` 仅保留为可信主 frame 的平台兜底。
 - 标准收回态命中边界仍是封面热区外扩 `6px`，封面外透明区交还桌面；标准展开态与极简外壳整窗可右键，菜单继续与托盘六项一致。
 - 发布前全量 Node 回归 `519/519`，并通过 `node --check desktop/main.js`、`node --check desktop/mini-player-preload.js`、`node --check server.js` 和 `git diff --check`；本轮不启动 Electron、不合成鼠标键盘输入、不修改 `Mineradio-sync`。
-- Windows x64 NSIS 仍只发布 `Setup.exe`、`.blockmap`、`latest.yml` 和 SHA256 清单；正式 run、四项资产摘要与校验结果在远程工作流完成后补录。
+- Windows x64 NSIS 仍只发布 `Setup.exe`、`.blockmap`、`latest.yml` 和 SHA256 清单；GitHub Actions `Build and Release` run `33469762872` 成功，提交 `67b837e`；GitHub Release `https://github.com/oirge/Mineradio/releases/tag/v1.7.17` 已正式发布并标记 Latest（非 draft / 非 prerelease），四项资产已上传。
+- 资产大小：`Mineradio-1.7.17-Setup.exe` `101533166` 字节；`.blockmap` `105929` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.17-SHA256SUMS.txt` `275` 字节。
+- SHA256：安装器 `f5e8cf50a1b69cf80ef9844aaab54646a19a863f3cdabc9304d943e83ab2b0f4`；`.blockmap` `5a86cca7a3971090f84ccd7f31dc32a2a75bc4e3a2c2cea78d2f6b4364bb69e5`；`latest.yml` `046384cad50ec39a72be9ad34632a515176166828a55275ba748bb82d7087535`；SHA256 清单 `4ea69fc48eee779e5e63a0b3e01537ea8f529bb9c4305af77402e1e78cda6a5f`。
+- `latest.yml` 的版本为 `1.7.17`，Setup 路径和大小匹配；Setup.exe 产品版本 `1.7.17`，其 SHA512 为 `pYtJ+djhRP2Eoin+Z6Vag9OhkXTTWVlFHSbyLmmtwQFF8scDyQxDs5P0CFLen+hcJNdMHVJNmzWfl9sC2IYNVQ==`。
 - 发布标题使用 `v1.7.17 迷你播放器封面命中与右键竞态修复`。
 
 ## v1.7.16 迷你播放器右键命中与安全边界加固

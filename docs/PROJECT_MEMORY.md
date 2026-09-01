@@ -41,7 +41,7 @@
 - 收回态从穿透切回可命中时，renderer 优先调用同步 `setPointerPassthroughSync()`；主进程通过 `ipcMain.on` 设置 `event.returnValue`，在同步返回前完成 `setIgnoreMouseEvents(false)`，因此右键不再等待 `invoke()` Promise。
 - 异步 `setPointerPassthrough()` 仍保留为旧 preload 的兼容回退；同步/异步失败都不提交未确认缓存，下一次状态变化继续重试。
 - 两个迷你页面的 `.mini-shell` 固定为 `-webkit-app-region: no-drag`，客户区右键走 renderer `context-menu`，独立窗口移动 IPC 负责拖动；`system-context-menu` 仅作为可信主 frame 的平台兜底。
-- 验证：全量 Node 回归 `519/519`；同步竞态回归覆盖“原生窗口命中状态在 Promise 回执前已解除穿透”；未启动 Electron、未合成鼠标键盘输入、未修改 `Mineradio-sync`。
+- 验证：全量 Node 回归 `519/519`；同步竞态回归覆盖“原生窗口命中状态在 Promise 回执前已解除穿透”；GitHub Actions `Build and Release` run `33469762872` 成功，四项 Windows x64 资产已上传并完成 SHA256、`latest.yml` 与 Setup.exe 版本核对；Release 已标记 Latest；未启动 Electron、未合成鼠标键盘输入、未修改 `Mineradio-sync`。
 
 ## v1.7.16 迷你播放器右键命中与安全边界加固
 
