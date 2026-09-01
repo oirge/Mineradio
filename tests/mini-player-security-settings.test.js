@@ -150,7 +150,7 @@ function testMiniPlayerNavigationGuard() {
 }
 
 /**
- * 验证窗口工厂与三条迷你特权 IPC 都接入同一可信文档门禁。
+ * 验证窗口工厂与迷你播放器特权 IPC 都接入同一可信文档门禁。
  * @returns {void}
  */
 function testMiniPlayerSecurityWiring() {
@@ -161,7 +161,7 @@ function testMiniPlayerSecurityWiring() {
   const createSource = main.slice(createStart, createEnd);
   assert.match(createSource, /setWindowOpenHandler[\s\S]*?installMiniPlayerNavigationGuard\(win, mode\)/);
   assert.match(createSource, /did-finish-load[\s\S]*?isTrustedMiniPlayerDocumentUrl\(win\.webContents\.getURL\(\), mode\)/);
-  assert.match(createSource, /context-menu', \(event, params\)[\s\S]*?params\.frame[\s\S]*?showMiniPlayerContextMenu\(win\)/);
+  assert.match(createSource, /context-menu', \(event, params\)[\s\S]*?handleMiniPlayerRendererContextMenu\(win, mode, event, params\)/);
   const showStart = main.indexOf('function showMiniPlayerWindow()');
   const showEnd = main.indexOf('function hideMiniPlayerWindow()', showStart + 1);
   assert.ok(showStart >= 0 && showEnd > showStart, '未找到迷你播放器显示函数');

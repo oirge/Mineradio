@@ -3056,6 +3056,36 @@ function isTrustedMiniPlayerFrameSender(event) {
 }
 
 /**
+ * 校验右键事件是否来自当前迷你窗口的可信主 frame。
+ * renderer context-menu 会带 frame；Windows 的 system-context-menu 没有 frame，
+ * 此时只回退到当前 mainFrame 或当前文档 URL，不能接受任意缺失来源。
+ * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
+ * @param {'standard'|'compact'} mode 当前窗口创建时固定的样式。
+ * @param {Electron.WebFrameMain=} frame renderer 传来的右键 frame。
+ * @returns {boolean} 可信主 frame 时返回 true。
+ */
+function isTrustedMiniPlayerMainFrame(win, mode, frame) {
+  try {
+    if (!win || win.isDestroyed() || miniPlayerWindow !== win || !win.webContents) return false;
+    const contents = win.webContents;
+    const mainFrame = contents.mainFrame || null;
+    if (frame) {
+      if (frame.parent) return false;
+      if (mainFrame && frame !== mainFrame) return false;
+      return isTrustedMiniPlayerDocumentUrl(frame.url, mode);
+    }
+    if (mainFrame) {
+      if (mainFrame.parent) return false;
+      return isTrustedMiniPlayerDocumentUrl(mainFrame.url, mode);
+    }
+    const url = typeof contents.getURL === 'function' ? contents.getURL() : '';
+    return isTrustedMiniPlayerDocumentUrl(url, mode);
+  } catch (_error) {
+    return false;
+  }
+}
+
+/**
  * 安装迷你窗口导航守卫，阻止 URL 拖放、未来链接或子 frame 把带 preload 的窗口导航到外部页面。
  * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
  * @param {'standard'|'compact'} mode 当前窗口创建时固定的样式。
@@ -3095,15 +3125,45 @@ function installMiniPlayerNavigationGuard(win, mode) {
  * 在迷你播放器上弹出与任务栏托盘完全一致的原生右键菜单：显示播放器、关闭到托盘、迷你播放器开关与样式、
  * 开机自启、退出，每一项都可点。标准和极简两套外壳共用这一份，菜单弹在鼠标当前位置。
  * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
+ * @param {Electron.WebFrameMain=} frame renderer 右键事件所属的主 frame；系统菜单兜底没有该参数。
  * @returns {void}
  */
-function showMiniPlayerContextMenu(win) {
+function showMiniPlayerContextMenu(win, frame) {
   if (!win || win.isDestroyed() || miniPlayerWindow !== win) return;
-  const url = win.webContents && typeof win.webContents.getURL === 'function'
-    ? win.webContents.getURL()
-    : '';
-  if (!isTrustedMiniPlayerDocumentUrl(url, miniPlayerModeForWindow(win))) return;
+  const mode = miniPlayerModeForWindow(win);
+  if (!isTrustedMiniPlayerMainFrame(win, mode, frame)) return;
   Menu.buildFromTemplate(buildAppContextMenuTemplate()).popup({ window: win });
+}
+
+/**
+ * 处理 renderer 客户区右键。renderer 事件必须带真实主 frame；缺失 frame 不能先 preventDefault，
+ * 否则既不能证明来源，又会把浏览器/桌面原本的右键吞掉。
+ * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
+ * @param {'standard'|'compact'} mode 当前窗口创建时固定的样式。
+ * @param {Electron.Event} event 右键事件。
+ * @param {Electron.ContextMenuParams=} params Electron 右键参数。
+ * @returns {boolean} 已接管应用菜单时返回 true。
+ */
+function handleMiniPlayerRendererContextMenu(win, mode, event, params) {
+  const frame = params && params.frame;
+  if (!frame || !isTrustedMiniPlayerMainFrame(win, mode, frame)) return false;
+  event.preventDefault();
+  showMiniPlayerContextMenu(win, frame);
+  return true;
+}
+
+/**
+ * 处理 Windows/Linux 非客户区右键兜底。该事件没有 frame，只能校验当前 webContents 的主 frame。
+ * @param {Electron.BrowserWindow} win 当前迷你播放器窗口。
+ * @param {'standard'|'compact'} mode 当前窗口创建时固定的样式。
+ * @param {Electron.Event} event 系统右键事件。
+ * @returns {boolean} 已接管应用菜单时返回 true。
+ */
+function handleMiniPlayerSystemContextMenu(win, mode, event) {
+  if (!isTrustedMiniPlayerMainFrame(win, mode)) return false;
+  event.preventDefault();
+  showMiniPlayerContextMenu(win);
+  return true;
 }
 
 /**
@@ -3194,19 +3254,12 @@ function createMiniPlayerWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   installMiniPlayerNavigationGuard(win, mode);
   win.webContents.on('context-menu', (event, params) => {
-    event.preventDefault();
-    const frame = params && params.frame;
-    if (!frame || frame.parent || !isTrustedMiniPlayerDocumentUrl(frame.url, mode)) return;
-    if (win.webContents.mainFrame && frame !== win.webContents.mainFrame) return;
-    showMiniPlayerContextMenu(win);
+    handleMiniPlayerRendererContextMenu(win, mode, event, params);
   });
-  // Windows 上 `-webkit-app-region: drag` 区域的右键被系统当成非客户区处理，弹出的是几乎全灰的窗口
-  // 系统菜单（迷你窗口不可缩放/最小化/最大化，只剩「关闭」能点），renderer 连 contextmenu 都收不到。
-  // 拦掉它换成同一份应用菜单，迷你播放器整个窗口任意位置右键才都可点。两套外壳的 .mini-shell 都是拖拽区，
-  // 所以标准和极简都靠这一条兜住。
+  // 两套外壳都固定为 `-webkit-app-region: no-drag`，右键由 renderer 客户区统一接管，窗口移动走指针事件 + IPC。
+  // 保留 system-context-menu 仅作平台兜底：若宿主仍把某个区域当成非客户区，先校验当前主 frame 再换成应用菜单。
   win.on('system-context-menu', (event) => {
-    event.preventDefault();
-    showMiniPlayerContextMenu(win);
+    handleMiniPlayerSystemContextMenu(win, mode, event);
   });
   win.once('ready-to-show', () => {
     if (miniPlayerWindow !== win || win.isDestroyed() || !shouldShowMiniPlayer()) return;
@@ -3630,6 +3683,49 @@ function handleMiniPlayerMoveBy(event, dx, dy, commit, dragMeta) {
 ipcMain.handle('mineradio-mini-player-move-by', handleMiniPlayerMoveBy);
 
 /**
+ * 按极简外壳或展开态空白区的拖动偏移移动当前窗口。
+ * 这是独立于封面代际会话的窗口移动通道；整窗 no-drag 后仍保留原本的拖动能力。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件。
+ * @param {number} dx 水平位移，单次限制在 160 像素内。
+ * @param {number} dy 垂直位移，单次限制在 160 像素内。
+ * @param {boolean} commit 是否为拖动结束；只在结束时把内存坐标写入设置文件。
+ * @param {'collapsed'|'expanded'} layout renderer 当前布局状态。
+ * @returns {{ok:boolean,ignored?:boolean,error?:string}} 移动结果。
+ */
+function handleMiniPlayerWindowMoveBy(event, dx, dy, commit, layout) {
+  if (!isTrustedMiniPlayerFrameSender(event)) {
+    return { ok: true, ignored: true };
+  }
+  const win = miniPlayerWindow;
+  try {
+    const mode = miniPlayerModeForWindow(win);
+    const bounds = win.getBounds();
+    const deltaX = clampNumber(dx, -160, 160, 0);
+    const deltaY = clampNumber(dy, -160, 160, 0);
+    if (layout === 'collapsed' || layout === 'expanded') miniPlayerCoverLayouts.set(win, layout);
+    miniPlayerUserMovePending = false;
+    const next = clampMiniPlayerBounds({
+      ...bounds,
+      x: Math.round(bounds.x + deltaX),
+      y: Math.round(bounds.y + deltaY),
+    }, mode);
+    if (next.x !== bounds.x || next.y !== bounds.y) win.setBounds(next, false);
+    const storedBounds = mode === 'standard'
+      ? { ...next, expandDirection: miniPlayerExpandDirectionForBounds(next) }
+      : next;
+    if (mode === 'standard') miniPlayerExpandDirections.set(win, storedBounds.expandDirection);
+    miniPlayerUserBoundsByMode[mode] = storedBounds;
+    if (commit === true) persistMiniPlayerUserBounds(storedBounds, mode);
+    sendMiniPlayerState();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message || 'MINI_PLAYER_WINDOW_MOVE_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-mini-player-window-move-by', handleMiniPlayerWindowMoveBy);
+
+/**
  * 按标准迷你播放器收回态让出窗口鼠标事件。收回后窗口仍是固定的 360 × 84 透明窗口，
  * 只有封面热区需要参与命中；其余透明区域必须交还桌面，不能吞掉点击或被误拖动。
  * 只有当前迷你播放器 renderer 可以调用，旧窗口或伪造 sender 直接忽略。
@@ -3668,6 +3764,15 @@ function handleMiniPlayerPointerPassthrough(event, passthrough) {
 }
 
 ipcMain.handle('mineradio-mini-player-set-pointer-passthrough', handleMiniPlayerPointerPassthrough);
+
+// 收回态从穿透切回可命中必须同步完成，否则封面刚命中时的右键可能先落到桌面。
+ipcMain.on('mineradio-mini-player-set-pointer-passthrough-sync', (event, passthrough) => {
+  try {
+    event.returnValue = handleMiniPlayerPointerPassthrough(event, passthrough);
+  } catch (error) {
+    event.returnValue = { ok: false, error: error.message || 'MINI_PLAYER_PASSTHROUGH_FAILED' };
+  }
+});
 
 ipcMain.handle('mineradio-mini-player-command', (event, action) => {
   if (!isTrustedMiniPlayerFrameSender(event)) {

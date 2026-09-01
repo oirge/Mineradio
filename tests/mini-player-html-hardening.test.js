@@ -20,7 +20,7 @@ function readMiniPage(fileName) {
 /**
  * 构造标准迷你播放器的轻量 DOM/IPC 环境。
  * @param {{pointerResults?: Array<unknown>}=} options IPC 结果队列；缺省均视为成功。
- * @returns {{nodes: Record<string, object>, document: object, applyState: Function, sync: Function, flushMicrotasks: Function, pointerCalls: boolean[], coverAssignments: string[]}} 可驱动页面脚本的测试环境。
+ * @returns {{nodes: Record<string, object>, document: object, applyState: Function, sync: Function, flushMicrotasks: Function, pointerCalls: boolean[], coverAssignments: string[], isNativePointerIgnored: Function}} 可驱动页面脚本的测试环境。
  */
 function createStandardHarness(options = {}) {
   const html = readMiniPage('mini-player.html');
@@ -30,6 +30,7 @@ function createStandardHarness(options = {}) {
   const pointerResults = Array.isArray(options.pointerResults) ? options.pointerResults.slice() : [];
   const pointerCalls = [];
   const coverAssignments = [];
+  let nativePointerIgnored = false;
   let nextTimerId = 1;
   let stateHandler = null;
 
@@ -129,11 +130,36 @@ function createStandardHarness(options = {}) {
    * @param {boolean} value 请求的穿透值。
    * @returns {Promise<unknown>} 主进程模拟结果。
    */
-  function setPointerPassthrough(value) {
+  function takePointerResult(value) {
     pointerCalls.push(value === true);
     const result = pointerResults.length ? pointerResults.shift() : { ok: true };
+    return result;
+  }
+
+  /**
+   * 模拟旧 invoke 通道：调用已经发出，但原生命中状态要等 Promise 结算后才变化。
+   * @param {boolean} value 请求的穿透值。
+   * @returns {Promise<unknown>} 延迟结算的主进程结果。
+   */
+  function setPointerPassthrough(value) {
+    const result = takePointerResult(value);
     if (result instanceof Error) return Promise.reject(result);
-    return Promise.resolve(result);
+    return Promise.resolve(result).then(function(resolved){
+      if (!(resolved && resolved.ok === false)) nativePointerIgnored = value === true;
+      return resolved;
+    });
+  }
+
+  /**
+   * 模拟 sendSync 通道：主进程返回前原生窗口命中状态已经完成切换。
+   * @param {boolean} value 请求的穿透值。
+   * @returns {unknown} 同步主进程结果。
+   */
+  function setPointerPassthroughSync(value) {
+    const result = takePointerResult(value);
+    if (result instanceof Error) throw result;
+    if (!(result && result.ok === false)) nativePointerIgnored = value === true;
+    return result;
   }
 
   const context = {
@@ -154,9 +180,10 @@ function createStandardHarness(options = {}) {
       requestAnimationFrame(callback) { callback(); },
       matchMedia() { return { matches: false }; },
       miniPlayer: {
-        command() { return Promise.resolve({ ok: true }); },
-        moveBy() { return Promise.resolve({ ok: true }); },
-        setPointerPassthrough,
+         command() { return Promise.resolve({ ok: true }); },
+         moveBy() { return Promise.resolve({ ok: true }); },
+         setPointerPassthroughSync,
+         setPointerPassthrough,
         onState(callback) { stateHandler = callback; },
       },
     },
@@ -181,6 +208,7 @@ function createStandardHarness(options = {}) {
     sync() { context.__syncPointerPassthrough(); },
     pointerCalls,
     coverAssignments,
+    isNativePointerIgnored() { return nativePointerIgnored; },
     flushTimers() {
       const pending = [...timers.values()];
       timers.clear();
@@ -225,6 +253,28 @@ test('穿透 IPC reject 后保留旧缓存并允许下一次同步重试', async
 
   harness.sync();
   await harness.flushMicrotasks();
+  assert.deepEqual(harness.pointerCalls, [true, false, false]);
+});
+
+test('命中封面时同步解除原生穿透，右键无需等待 Promise 回执', () => {
+  const harness = createStandardHarness();
+  assert.equal(harness.isNativePointerIgnored(), true);
+
+  harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
+
+  assert.equal(harness.isNativePointerIgnored(), false);
+  assert.deepEqual(harness.pointerCalls, [true, false]);
+});
+
+test('封面热区恢复失败后，停留在热区的后续坐标会重试并解除穿透', () => {
+  const harness = createStandardHarness({ pointerResults: [{ ok: true }, { ok: false }, { ok: true }] });
+  assert.equal(harness.isNativePointerIgnored(), true);
+
+  harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
+  assert.equal(harness.isNativePointerIgnored(), true);
+
+  harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
+  assert.equal(harness.isNativePointerIgnored(), false);
   assert.deepEqual(harness.pointerCalls, [true, false, false]);
 });
 

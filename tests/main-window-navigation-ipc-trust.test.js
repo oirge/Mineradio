@@ -530,7 +530,9 @@ function testHighPrivilegeIpcWiring() {
     'mineradio-desktop-lyrics-set-stable-state',
     'mineradio-mini-player-command',
     'mineradio-mini-player-move-by',
+    'mineradio-mini-player-window-move-by',
     'mineradio-mini-player-set-pointer-passthrough',
+    'mineradio-mini-player-set-pointer-passthrough-sync',
   ]);
 
   // 双 sender 通道：主 renderer 分支必须走统一可信主 frame 校验。

@@ -33,7 +33,8 @@
       border-radius: 7px;
       background: var(--th-mini-bg, var(--th-popover-bg, rgba(9, 12, 15, 0.97)));
       box-shadow: var(--th-mini-shadow, 0 10px 28px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08));
-      -webkit-app-region: drag;
+      /* 右键必须留在 renderer 客户区；窗口拖动由指针事件和独立 moveWindowBy IPC 处理。 */
+      -webkit-app-region: no-drag;
     }
     .meta {
       min-width: 0;
@@ -197,6 +198,7 @@
   </main>
   <script>
     'use strict';
+    var miniShell = document.getElementById('mini-shell');
     var title = document.getElementById('title');
     var artist = document.getElementById('artist');
     var playButton = document.getElementById('play');
@@ -205,10 +207,143 @@
     var miniState = { title:'Mineradio', artist:'', playing:false, hasTrack:false, desktopLyrics:false };
     var renderedPlaying = null;
     var renderedHasTrack = null;
+    var shellDrag = null;
+    var shellMoveQueue = [];
+    var shellMoveActive = false;
+    var lastShellPointerEvent = null;
+    var lastWindowDragEndAt = 0;
 
     function sendCommand(action) {
       if (!window.miniPlayer || typeof window.miniPlayer.command !== 'function') return;
       window.miniPlayer.command(action).catch(function(){});
+    }
+
+    /**
+     * 依次发送极简外壳拖动 IPC，保证结束提交排在最后一项增量之后。
+     * @returns {void}
+     */
+    function pumpShellMoveQueue() {
+      if (shellMoveActive || !shellMoveQueue.length) return;
+      var request = shellMoveQueue.shift();
+      shellMoveActive = true;
+      var result;
+      try {
+        result = window.miniPlayer.moveWindowBy(request.dx, request.dy, request.commit, 'expanded');
+      } catch (_error) {
+        result = Promise.reject(_error);
+      }
+      Promise.resolve(result).then(function(value){
+        request.resolve(value);
+      }, function(){
+        request.resolve(undefined);
+      }).then(function(){
+        shellMoveActive = false;
+        pumpShellMoveQueue();
+      });
+    }
+
+    /**
+     * 把极简外壳拖动请求加入队列。
+     * @param {number} dx 水平位移。
+     * @param {number} dy 垂直位移。
+     * @param {boolean} commit 是否为拖动结束并保存最终坐标。
+     * @returns {Promise<unknown>} 已排入队列的主进程请求。
+     */
+    function moveMiniPlayerShellBy(dx, dy, commit) {
+      if (!window.miniPlayer || typeof window.miniPlayer.moveWindowBy !== 'function') return Promise.resolve();
+      var result = new Promise(function(resolve){
+        shellMoveQueue.push({ dx: dx, dy: dy, commit: commit === true, resolve: resolve });
+        pumpShellMoveQueue();
+      });
+      return result.catch(function(){});
+    }
+
+    /**
+     * 判断同一指针事件是否已经由目标节点处理过，避免 document/window 兜底监听重复发送增量。
+     * @param {object} event 指针事件。
+     * @returns {boolean} 已处理时返回 true。
+     */
+    function isRepeatedShellPointerEvent(event) {
+      if (!event || typeof event !== 'object') return false;
+      if (lastShellPointerEvent === event) return true;
+      lastShellPointerEvent = event;
+      return false;
+    }
+
+    /**
+     * 开始拖动极简播放器窗口；按钮区域保留点击功能。
+     * @param {object} event 指针按下事件。
+     * @returns {void}
+     */
+    function beginShellDrag(event) {
+      if (shellDrag || !event || event.button !== 0) return;
+      var target = event.target;
+      if (target && typeof target.closest === 'function' && target.closest('button')) return;
+      var screenX = Number(event.screenX);
+      var screenY = Number(event.screenY);
+      if (!isFinite(screenX) || !isFinite(screenY)) return;
+      shellDrag = {
+        pointerId: event.pointerId,
+        startX: screenX,
+        startY: screenY,
+        lastX: screenX,
+        lastY: screenY,
+        moved: false,
+      };
+      if (typeof miniShell.setPointerCapture === 'function' && event.pointerId !== undefined) {
+        try { miniShell.setPointerCapture(event.pointerId); } catch (_error) {}
+      }
+    }
+
+    /**
+     * 发送极简外壳拖动增量。
+     * @param {object} event 指针移动事件。
+     * @returns {void}
+     */
+    function updateShellDrag(event) {
+      if (!shellDrag || !event || event.pointerId !== shellDrag.pointerId) return;
+      if (isRepeatedShellPointerEvent(event)) return;
+      var screenX = Number(event.screenX);
+      var screenY = Number(event.screenY);
+      if (!isFinite(screenX) || !isFinite(screenY)) return;
+      var totalDx = screenX - shellDrag.startX;
+      var totalDy = screenY - shellDrag.startY;
+      if (!shellDrag.moved && Math.max(Math.abs(totalDx), Math.abs(totalDy)) < 5) return;
+      var dx = Math.round(screenX - shellDrag.lastX);
+      var dy = Math.round(screenY - shellDrag.lastY);
+      shellDrag.lastX = screenX;
+      shellDrag.lastY = screenY;
+      shellDrag.moved = true;
+      if (dx || dy) moveMiniPlayerShellBy(dx, dy, false);
+      if (event.preventDefault) event.preventDefault();
+    }
+
+    /**
+     * 结束极简外壳拖动，并提交最终坐标。
+     * @param {object} event 指针结束事件。
+     * @returns {void}
+     */
+    function finishShellDrag(event) {
+      if (!shellDrag || (event && event.pointerId !== undefined && event.pointerId !== shellDrag.pointerId)) return;
+      if (isRepeatedShellPointerEvent(event)) return;
+      var moved = shellDrag.moved;
+      var pointerId = shellDrag.pointerId;
+      shellDrag = null;
+      if (typeof miniShell.releasePointerCapture === 'function' && pointerId !== undefined) {
+        try { miniShell.releasePointerCapture(pointerId); } catch (_error) {}
+      }
+      if (moved) {
+        moveMiniPlayerShellBy(0, 0, true);
+        lastWindowDragEndAt = Date.now();
+      }
+    }
+
+    /**
+     * 判断双击是否只是刚结束的窗口拖动合成出来的。
+     * @returns {boolean} 需要忽略这次双击时返回 true。
+     */
+    function windowDragJustEnded() {
+      return Date.now() - lastWindowDragEndAt < 400;
     }
 
     // 已经写到 documentElement 上的主题变量名，换主题时要擦掉不再出现的那些。
@@ -320,12 +455,28 @@
       document.body.removeAttribute('data-enter');
     }, 1500);
 
+    miniShell.addEventListener('pointerdown', beginShellDrag);
+    miniShell.addEventListener('pointermove', updateShellDrag);
+    miniShell.addEventListener('pointerup', finishShellDrag);
+    miniShell.addEventListener('pointercancel', finishShellDrag);
+    miniShell.addEventListener('lostpointercapture', finishShellDrag);
+    document.addEventListener('pointermove', updateShellDrag, true);
+    document.addEventListener('pointerup', finishShellDrag, true);
+    document.addEventListener('pointercancel', finishShellDrag, true);
+    document.addEventListener('lostpointercapture', finishShellDrag, true);
+    if (window && typeof window.addEventListener === 'function') {
+      window.addEventListener('pointermove', updateShellDrag, true);
+      window.addEventListener('pointerup', finishShellDrag, true);
+      window.addEventListener('pointercancel', finishShellDrag, true);
+      window.addEventListener('lostpointercapture', finishShellDrag, true);
+    }
     document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });
     playButton.addEventListener('click', function(){ sendCommand('toggle-play'); });
     document.getElementById('next').addEventListener('click', function(){ sendCommand('next'); });
     desktopLyricsButton.addEventListener('click', function(){ sendCommand('toggle-desktop-lyrics'); });
     document.getElementById('restore').addEventListener('click', function(){ sendCommand('restore'); });
-    document.getElementById('mini-shell').addEventListener('dblclick', function(event){
+    miniShell.addEventListener('dblclick', function(event){
+      if (windowDragJustEnded()) return;
       if (!event.target.closest('button')) sendCommand('restore');
     });
     if (window.miniPlayer && typeof window.miniPlayer.onState === 'function') window.miniPlayer.onState(receiveState);

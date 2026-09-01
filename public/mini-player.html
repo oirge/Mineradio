@@ -33,7 +33,8 @@
       border-radius: 8px;
       background: var(--th-mini-bg, var(--th-popover-bg, rgba(9, 12, 15, 0.96)));
       box-shadow: var(--th-mini-shadow, 0 14px 38px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08));
-      -webkit-app-region: drag;
+      /* 右键必须留在 renderer 客户区；窗口拖动由指针事件和独立 moveWindowBy IPC 处理。 */
+      -webkit-app-region: no-drag;
       --mini-pulse: 0;
       --mini-glow: 0;
       --mini-radius: 12px;
@@ -355,15 +356,22 @@
     var renderedExpandDirection = null;
     var hoverTimer = 0;
     var coverDrag = null;
+    var shellDrag = null;
     var coverDragGeneration = 0;
     var coverMoveQueue = [];
     var coverMoveActive = false;
+    var shellMoveQueue = [];
+    var shellMoveActive = false;
+    var lastCoverPointerEvent = null;
+    var lastShellPointerEvent = null;
+    var lastWindowDragEndAt = 0;
     var suppressCoverClick = false;
     var suppressCoverClickTimer = 0;
     var receivedExternalState = false;
     var COVER_HOT_REGION_PADDING = 6;
     var pointerInCoverHotRegion = false;
     var pointerPassthrough = null;
+    var pointerPassthroughPending = null;
     var pointerPassthroughRequestToken = 0;
 
     /**
@@ -547,7 +555,7 @@
      *   当前封面拖动的代际、首帧锚点和布局状态。
      * @returns {Promise<unknown>} 已排入队列的主进程请求。
      */
-    function moveMiniPlayerWindowBy(dx, dy, commit, dragMeta) {
+    function moveMiniPlayerCoverBy(dx, dy, commit, dragMeta) {
       if (!window.miniPlayer || typeof window.miniPlayer.moveBy !== 'function') return Promise.resolve();
       var result = new Promise(function(resolve){
         coverMoveQueue.push({
@@ -558,6 +566,61 @@
           resolve: resolve,
         });
         pumpCoverMoveQueue();
+      });
+      return result.catch(ignoreMiniPlayerMoveFailure);
+    }
+
+    /**
+     * 依次发送外壳空白区拖动 IPC；它与封面拖动队列和代际会话完全分开。
+     * @returns {void}
+     */
+    function pumpShellMoveQueue() {
+      if (shellMoveActive || !shellMoveQueue.length) return;
+      var request = shellMoveQueue.shift();
+      shellMoveActive = true;
+      var result;
+      try {
+        result = window.miniPlayer.moveWindowBy(
+          request.dx,
+          request.dy,
+          request.commit,
+          request.layout,
+        );
+      } catch (_error) {
+        result = Promise.reject(_error);
+      }
+      Promise.resolve(result).then(function(value){
+        request.resolve(value);
+      }, function(){
+        ignoreMiniPlayerMoveFailure();
+        request.resolve(undefined);
+      }).then(function(){
+        shellMoveActive = false;
+        pumpShellMoveQueue();
+      });
+    }
+
+    /**
+     * 把外壳拖动请求加入单消费者队列，保证结束提交排在最后一项增量之后。
+     * @param {number} dx 水平位移。
+     * @param {number} dy 垂直位移。
+     * @param {boolean} commit 是否为拖动结束并保存最终坐标。
+     * @param {'collapsed'|'expanded'} layout 当前页面布局状态。
+     * @returns {Promise<unknown>} 已排入队列的主进程请求。
+     */
+    function moveMiniPlayerShellBy(dx, dy, commit, layout) {
+      if (!window.miniPlayer || typeof window.miniPlayer.moveWindowBy !== 'function') {
+        return Promise.resolve();
+      }
+      var result = new Promise(function(resolve){
+        shellMoveQueue.push({
+          dx: dx,
+          dy: dy,
+          commit: commit === true,
+          layout: layout === 'collapsed' ? 'collapsed' : 'expanded',
+          resolve: resolve,
+        });
+        pumpShellMoveQueue();
       });
       return result.catch(ignoreMiniPlayerMoveFailure);
     }
@@ -581,7 +644,7 @@
      * @returns {boolean} 仍在交互中时返回 true。
      */
     function expansionInteractionActive() {
-      return !!coverDrag || coverWrap.matches(':hover') || miniShell.matches(':focus-within');
+      return !!coverDrag || !!shellDrag || coverWrap.matches(':hover') || miniShell.matches(':focus-within');
     }
 
     /**
@@ -594,48 +657,78 @@
     function shouldPassPointerThrough() {
       if (!hoverExpandEnabled()) return false;
       if (miniShell.getAttribute('data-collapsed') !== 'true') return false;
-      if (coverDrag) return false;
+      if (coverDrag || shellDrag) return false;
       return !pointerInCoverHotRegion;
     }
 
     /**
      * 结算一次窗口穿透 IPC；只有主进程明确成功时才提交已确认状态。
-     * @param {{next:boolean,previous:boolean|null,token:number}} request 本次请求及其旧值与令牌。
+     * @param {{next:boolean,token:number,resolve:Function}} request 本次请求与令牌。
      * @param {unknown} result 主进程返回的结果；明确 ok:false 视为失败。
      * @returns {void}
      */
     function settlePointerPassthrough(request, result) {
-      if (request.token !== pointerPassthroughRequestToken) return;
-      if (result && result.ok === false && pointerPassthrough === request.next) {
-        pointerPassthrough = request.previous;
+      var succeeded = !(result && result.ok === false);
+      if (request.token !== pointerPassthroughRequestToken) {
+        request.resolve({ ok: false, ignored: true });
+        return;
       }
+      pointerPassthroughPending = null;
+      if (succeeded) pointerPassthrough = request.next;
+      request.resolve(result || { ok: succeeded });
+      if (succeeded && shouldPassPointerThrough() !== pointerPassthrough) syncPointerPassthrough();
     }
 
     /**
      * 把窗口鼠标穿透状态同步给主进程，缓存只记录已确认值，失败后下一次同步可再次尝试。
-     * @returns {void} 发起异步 IPC；失败不会抛到页面事件循环。
+     * 优先使用同步通道，让收回态封面刚命中时的右键不会在异步回执前落到桌面；旧 preload
+     * 没有同步通道时仍回退到原有 invoke，并保留失败重试语义。
+     * @returns {Promise<unknown>} 主进程确认窗口命中状态后的结果。
      */
     function syncPointerPassthrough() {
       var next = shouldPassPointerThrough();
-      if (!window.miniPlayer || typeof window.miniPlayer.setPointerPassthrough !== 'function') return;
-      if (next === pointerPassthrough) return;
+      if (!window.miniPlayer
+        || (typeof window.miniPlayer.setPointerPassthroughSync !== 'function'
+          && typeof window.miniPlayer.setPointerPassthrough !== 'function')) {
+        return Promise.resolve({ ok: false, error: 'MINI_PLAYER_PASSTHROUGH_UNAVAILABLE' });
+      }
+      if (pointerPassthroughPending && pointerPassthroughPending.next === next) {
+        return pointerPassthroughPending.promise;
+      }
+      if (!pointerPassthroughPending && next === pointerPassthrough) {
+        return Promise.resolve({ ok: true, ignored: true });
+      }
+      if (pointerPassthroughPending) {
+        pointerPassthroughPending.resolve({ ok: false, ignored: true });
+        pointerPassthroughPending = null;
+      }
+      var resolveRequest;
       var request = {
         next: next,
-        previous: pointerPassthrough,
         token: ++pointerPassthroughRequestToken,
       };
-      // 先乐观写入，保证同一状态在 IPC 待回执期间仍然去重；失败时由 settle 回滚。
-      pointerPassthrough = next;
+      request.promise = new Promise(function(resolve){
+        resolveRequest = resolve;
+      });
+      request.resolve = resolveRequest;
+      pointerPassthroughPending = request;
       var result;
       try {
-        result = window.miniPlayer.setPointerPassthrough(next);
+        result = typeof window.miniPlayer.setPointerPassthroughSync === 'function'
+          ? window.miniPlayer.setPointerPassthroughSync(next)
+          : window.miniPlayer.setPointerPassthrough(next);
       } catch (_error) {
         settlePointerPassthrough(request, { ok: false });
-        return;
+        return request.promise;
       }
-      Promise.resolve(result)
-        .then(function(value){ settlePointerPassthrough(request, value); })
-        .catch(function(){ settlePointerPassthrough(request, { ok: false }); });
+      if (result && typeof result.then === 'function') {
+        Promise.resolve(result)
+          .then(function(value){ settlePointerPassthrough(request, value); })
+          .catch(function(){ settlePointerPassthrough(request, { ok: false }); });
+      } else {
+        settlePointerPassthrough(request, result);
+      }
+      return request.promise;
     }
 
     /**
@@ -658,6 +751,18 @@
     }
 
     /**
+     * 穿透切回成功后展开面板；同步通道会在 Promise 微任务之前完成原生命中切换。
+     * @param {Promise<unknown>|unknown} pointerReady 穿透状态请求结果。
+     * @returns {void}
+     */
+    function expandAfterPointerReady(pointerReady) {
+      Promise.resolve(pointerReady).then(function(result){
+        if (result && result.ok === false) return;
+        if (pointerInCoverHotRegion && !shouldPassPointerThrough()) expandFromInteraction();
+      });
+    }
+
+    /**
      * 用转发坐标维护封面热区命中状态：进入热区先恢复窗口交互再展开（展开后整窗都能点、
      * 能右键），离开热区排定收回并把封面以外的窗体交还桌面。
      * @param {object} event 鼠标或指针事件。
@@ -665,11 +770,18 @@
      */
     function trackCoverHotRegion(event) {
       var inside = pointerInCoverHotRegionAt(event);
-      if (inside === pointerInCoverHotRegion) return;
+      if (inside === pointerInCoverHotRegion) {
+        // 上一次恢复请求失败时，指针可能仍停在封面上；后续转发坐标继续提供重试机会。
+        if (inside && !pointerPassthroughPending && shouldPassPointerThrough() !== pointerPassthrough) {
+          expandAfterPointerReady(syncPointerPassthrough());
+        }
+        return;
+      }
       pointerInCoverHotRegion = inside;
-      syncPointerPassthrough();
-      if (inside) expandFromInteraction();
-      else if (!coverDrag && !miniShell.matches(':hover')) scheduleCollapse();
+      var pointerReady = syncPointerPassthrough();
+      if (inside) {
+        expandAfterPointerReady(pointerReady);
+      } else if (!coverDrag && !shellDrag && !miniShell.matches(':hover')) scheduleCollapse();
     }
 
     /**
@@ -677,7 +789,6 @@
      * @returns {void}
      */
     function clearCoverHotRegion() {
-      if (!pointerInCoverHotRegion) return;
       pointerInCoverHotRegion = false;
       syncPointerPassthrough();
     }
@@ -762,12 +873,30 @@
     }
 
     /**
+     * 判断同一指针事件是否已经由目标节点处理过，避免 document/window 兜底监听重复发送增量。
+     * @param {object} event 指针事件。
+     * @param {'cover'|'shell'} owner 当前拖动类型。
+     * @returns {boolean} 已处理时返回 true。
+     */
+    function isRepeatedPointerEvent(event, owner) {
+      if (!event || typeof event !== 'object') return false;
+      if (owner === 'cover') {
+        if (lastCoverPointerEvent === event) return true;
+        lastCoverPointerEvent = event;
+      } else {
+        if (lastShellPointerEvent === event) return true;
+        lastShellPointerEvent = event;
+      }
+      return false;
+    }
+
+    /**
      * 开始记录封面指针拖动，屏幕坐标用于抵消窗口移动后的本地坐标变化。
      * @param {object} event 指针按下事件。
      * @returns {void}
      */
     function beginCoverDrag(event) {
-      if (!event || event.button !== 0) return;
+      if (coverDrag || shellDrag || !event || event.button !== 0) return;
       var screenX = pointerScreenCoordinate(event, 'screenX');
       var screenY = pointerScreenCoordinate(event, 'screenY');
       if (screenX === null || screenY === null) return;
@@ -790,12 +919,40 @@
     }
 
     /**
+     * 展开态或极简外壳的空白区拖动窗口；该会话不使用封面锚点和封面代际。
+     * @param {object} event 指针按下事件。
+     * @returns {void}
+     */
+    function beginShellDrag(event) {
+      if (coverDrag || shellDrag || !event || event.button !== 0) return;
+      var target = event.target;
+      if (target && typeof target.closest === 'function' && target.closest('button')) return;
+      var screenX = pointerScreenCoordinate(event, 'screenX');
+      var screenY = pointerScreenCoordinate(event, 'screenY');
+      if (screenX === null || screenY === null) return;
+      shellDrag = {
+        pointerId: event.pointerId,
+        startX: screenX,
+        startY: screenY,
+        lastX: screenX,
+        lastY: screenY,
+        moved: false,
+        layout: miniShell.getAttribute('data-collapsed') === 'true' ? 'collapsed' : 'expanded',
+      };
+      syncPointerPassthrough();
+      if (typeof miniShell.setPointerCapture === 'function' && event.pointerId !== undefined) {
+        try { miniShell.setPointerCapture(event.pointerId); } catch (_error) {}
+      }
+    }
+
+    /**
      * 把超过点击阈值的封面位移按增量发送给主进程。
      * @param {object} event 指针移动事件。
      * @returns {void}
      */
     function updateCoverDrag(event) {
       if (!coverDrag || !event || event.pointerId !== coverDrag.pointerId) return;
+      if (isRepeatedPointerEvent(event, 'cover')) return;
       var screenX = pointerScreenCoordinate(event, 'screenX');
       var screenY = pointerScreenCoordinate(event, 'screenY');
       if (screenX === null || screenY === null) return;
@@ -808,7 +965,30 @@
       coverDrag.lastY = screenY;
       coverDrag.moved = true;
       coverWrap.classList.add('dragging');
-      if (dx || dy) moveMiniPlayerWindowBy(dx, dy, false, coverDragMeta(coverDrag));
+      if (dx || dy) moveMiniPlayerCoverBy(dx, dy, false, coverDragMeta(coverDrag));
+      if (event.preventDefault) event.preventDefault();
+    }
+
+    /**
+     * 把空白区拖动位移发送给独立的窗口移动通道。
+     * @param {object} event 指针移动事件。
+     * @returns {void}
+     */
+    function updateShellDrag(event) {
+      if (!shellDrag || !event || event.pointerId !== shellDrag.pointerId) return;
+      if (isRepeatedPointerEvent(event, 'shell')) return;
+      var screenX = pointerScreenCoordinate(event, 'screenX');
+      var screenY = pointerScreenCoordinate(event, 'screenY');
+      if (screenX === null || screenY === null) return;
+      var totalDx = screenX - shellDrag.startX;
+      var totalDy = screenY - shellDrag.startY;
+      if (!shellDrag.moved && Math.max(Math.abs(totalDx), Math.abs(totalDy)) < 5) return;
+      var dx = Math.round(screenX - shellDrag.lastX);
+      var dy = Math.round(screenY - shellDrag.lastY);
+      shellDrag.lastX = screenX;
+      shellDrag.lastY = screenY;
+      shellDrag.moved = true;
+      if (dx || dy) moveMiniPlayerShellBy(dx, dy, false, shellDrag.layout);
       if (event.preventDefault) event.preventDefault();
     }
 
@@ -819,6 +999,7 @@
      */
     function finishCoverDrag(event) {
       if (!coverDrag || (event && event.pointerId !== undefined && event.pointerId !== coverDrag.pointerId)) return;
+      if (isRepeatedPointerEvent(event, 'cover')) return;
       var moved = coverDrag.moved;
       var pointerId = coverDrag.pointerId;
       var dragMeta = coverDragMeta(coverDrag);
@@ -828,11 +1009,42 @@
         try { coverWrap.releasePointerCapture(pointerId); } catch (_error) {}
       }
       if (moved) {
-        moveMiniPlayerWindowBy(0, 0, true, dragMeta);
+        moveMiniPlayerCoverBy(0, 0, true, dragMeta);
         suppressCoverClickOnce();
       }
       syncPointerPassthrough();
       if (!miniShell.matches(':hover')) scheduleCollapse();
+    }
+
+    /**
+     * 结束空白区窗口拖动，并把最后一项请求标记为提交。
+     * @param {object} event 指针结束事件。
+     * @returns {void}
+     */
+    function finishShellDrag(event) {
+      if (!shellDrag || (event && event.pointerId !== undefined && event.pointerId !== shellDrag.pointerId)) return;
+      if (isRepeatedPointerEvent(event, 'shell')) return;
+      var moved = shellDrag.moved;
+      var pointerId = shellDrag.pointerId;
+      var layout = shellDrag.layout;
+      shellDrag = null;
+      if (typeof miniShell.releasePointerCapture === 'function' && pointerId !== undefined) {
+        try { miniShell.releasePointerCapture(pointerId); } catch (_error) {}
+      }
+      if (moved) {
+        moveMiniPlayerShellBy(0, 0, true, layout);
+        lastWindowDragEndAt = Date.now();
+      }
+      syncPointerPassthrough();
+      if (!miniShell.matches(':hover')) scheduleCollapse();
+    }
+
+    /**
+     * 判断双击是否只是刚结束的窗口拖动合成出来的。
+     * @returns {boolean} 需要忽略这次双击时返回 true。
+     */
+    function windowDragJustEnded() {
+      return Date.now() - lastWindowDragEndAt < 400;
     }
 
     /**
@@ -1020,6 +1232,31 @@
     });
     miniShell.addEventListener('focusin', expandFromInteraction);
     miniShell.addEventListener('focusout', scheduleCollapse);
+    // 整窗 no-drag 后，展开态和极简外壳的空白区由 renderer 自己拖动；封面继续走独立锚点会话。
+    miniShell.addEventListener('pointerdown', beginShellDrag);
+    miniShell.addEventListener('pointermove', updateShellDrag);
+    miniShell.addEventListener('pointerup', finishShellDrag);
+    miniShell.addEventListener('pointercancel', finishShellDrag);
+    miniShell.addEventListener('lostpointercapture', finishShellDrag);
+    // 指针捕获在透明窗口移动、穿透切换或跨屏时可能丢失，document/window 监听作为兜底。
+    document.addEventListener('pointermove', updateCoverDrag, true);
+    document.addEventListener('pointerup', finishCoverDrag, true);
+    document.addEventListener('pointercancel', finishCoverDrag, true);
+    document.addEventListener('lostpointercapture', finishCoverDrag, true);
+    document.addEventListener('pointermove', updateShellDrag, true);
+    document.addEventListener('pointerup', finishShellDrag, true);
+    document.addEventListener('pointercancel', finishShellDrag, true);
+    document.addEventListener('lostpointercapture', finishShellDrag, true);
+    if (window && typeof window.addEventListener === 'function') {
+      window.addEventListener('pointermove', updateCoverDrag, true);
+      window.addEventListener('pointerup', finishCoverDrag, true);
+      window.addEventListener('pointercancel', finishCoverDrag, true);
+      window.addEventListener('lostpointercapture', finishCoverDrag, true);
+      window.addEventListener('pointermove', updateShellDrag, true);
+      window.addEventListener('pointerup', finishShellDrag, true);
+      window.addEventListener('pointercancel', finishShellDrag, true);
+      window.addEventListener('lostpointercapture', finishShellDrag, true);
+    }
     document.addEventListener('mousemove', trackCoverHotRegion);
     document.addEventListener('mouseleave', clearCoverHotRegion);
     document.getElementById('previous').addEventListener('click', function(){ sendCommand('previous'); });
@@ -1028,6 +1265,7 @@
     desktopLyricsButton.addEventListener('click', function(){ sendCommand('toggle-desktop-lyrics'); });
     document.getElementById('restore').addEventListener('click', function(){ sendCommand('restore'); });
     document.getElementById('mini-shell').addEventListener('dblclick', function(event){
+      if (windowDragJustEnded()) return;
       if (!event.target.closest('button')) sendCommand('restore');
     });
     if (window.miniPlayer && typeof window.miniPlayer.onState === 'function') window.miniPlayer.onState(receiveState);

@@ -667,6 +667,8 @@ function testMiniPlayerPointerPassthroughWiring() {
   const main = readMainSource();
 
   assert.match(preload, /setPointerPassthrough:[\s\S]*?'mineradio-mini-player-set-pointer-passthrough'/);
+  assert.match(preload, /setPointerPassthroughSync:[\s\S]*?ipcRenderer\.sendSync\([\s\S]*?'mineradio-mini-player-set-pointer-passthrough-sync'/);
+  assert.match(main, /ipcMain\.on\('mineradio-mini-player-set-pointer-passthrough-sync',[\s\S]*?event\.returnValue = handleMiniPlayerPointerPassthrough\(event, passthrough\)/);
   assert.match(main, /function createMiniPlayerWindow\(\)[\s\S]*?miniPlayerPointerPassthrough = false;/);
   assert.match(main, /function destroyMiniPlayerWindowInstance\(win\)[\s\S]*?miniPlayerPointerPassthrough = false;/);
   assert.match(main, /const topologyAnchor = \{[\s\S]*?session\.coverX[\s\S]*?session\.coverY[\s\S]*?session\.layout[\s\S]*?reconcileMiniPlayerAfterDisplayTopology\(topologyAnchor\)/);

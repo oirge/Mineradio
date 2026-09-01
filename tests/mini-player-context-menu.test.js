@@ -34,6 +34,33 @@ function readFunctionSource(signature) {
 }
 
 /**
+ * 在 vm 中装载右键入口处理器，观测它是否吞掉默认事件以及传入的 frame。
+ * @returns {{win:object, trustedFrame:object, calls:{prevented:number,shown:Array<object>}, context:object}} 右键测试环境。
+ */
+function loadContextMenuHandlers() {
+  const calls = { prevented: 0, shown: [] };
+  const win = { name: 'mini-window' };
+  const trustedFrame = { parent: null, url: 'http://127.0.0.1:3000/mini-player.html' };
+  const context = {
+    isTrustedMiniPlayerMainFrame(candidateWin, mode, frame) {
+      return candidateWin === win
+        && mode === 'standard'
+        && (!frame || (frame === trustedFrame && frame.parent === null));
+    },
+    showMiniPlayerContextMenu(candidateWin, frame) {
+      calls.shown.push({ candidateWin, frame });
+    },
+  };
+  vm.runInNewContext(
+    readFunctionSource('function handleMiniPlayerRendererContextMenu(win, mode, event, params)')
+      + '\n'
+      + readFunctionSource('function handleMiniPlayerSystemContextMenu(win, mode, event)'),
+    context,
+  );
+  return { win, trustedFrame, calls, context };
+}
+
+/**
  * 在 vm 里跑出统一右键菜单模板，并观测每一项的点击行为。
  * @param {object=} overrides 需要覆盖的上下文字段。
  * @returns {{template: Array<object>, calls: object, context: object}} 模板与观测集合。
@@ -85,7 +112,7 @@ test('托盘和迷你播放器共用同一份右键菜单模板，不再各写�
   const tray = readFunctionSource('function refreshTrayMenu()');
   assert.match(tray, /tray\.setContextMenu\(Menu\.buildFromTemplate\(buildAppContextMenuTemplate\(\)\)\)/, '托盘必须用统一模板');
 
-  const mini = readFunctionSource('function showMiniPlayerContextMenu(win)');
+  const mini = readFunctionSource('function showMiniPlayerContextMenu(win, frame)');
   assert.match(mini, /Menu\.buildFromTemplate\(buildAppContextMenuTemplate\(\)\)\.popup\(\{ window: win \}\)/, '迷你右键必须用统一模板');
   assert.match(mini, /if \(!win \|\| win\.isDestroyed\(\) \|\| miniPlayerWindow !== win\) return;/, '必须校验窗口仍是当前迷你窗口');
   // 菜单项写死在模板里，迷你菜单函数本体不许再出现任何 label，否则两份菜单又会漂移。
@@ -170,31 +197,77 @@ test('勾选态跟随真实设置，开机自启设置失败时把勾去掉', ()
   assert.equal(item.checked, false, '设置失败必须回退勾选态');
 });
 
-test('迷你窗口同时拦下 renderer 右键和系统非客户区右键，两条路都走统一菜单', () => {
+test('迷你窗口只接管可信主 frame 右键，并保留系统右键兜底', () => {
   const factoryStart = main.indexOf('function createMiniPlayerWindow()');
   const factoryEnd = main.indexOf('\nfunction ', factoryStart + 1);
   const factory = main.slice(factoryStart, factoryEnd > 0 ? factoryEnd : undefined);
 
   assert.match(
     factory,
-    /win\.webContents\.on\('context-menu', \(event, params\) => \{\s*\n\s*event\.preventDefault\(\);[\s\S]*?params\.frame[\s\S]*?showMiniPlayerContextMenu\(win\);/,
+    /win\.webContents\.on\('context-menu', \(event, params\) => \{\s*\n\s*handleMiniPlayerRendererContextMenu\(win, mode, event, params\);/,
     '非拖拽区右键走 renderer 的 context-menu',
+  );
+  const rendererHandler = readFunctionSource('function handleMiniPlayerRendererContextMenu(win, mode, event, params)');
+  assert.match(rendererHandler, /const frame = params && params\.frame;/);
+  assert.match(rendererHandler, /if \(!frame \|\| !isTrustedMiniPlayerMainFrame\(win, mode, frame\)\) return false;/);
+  assert.ok(
+    rendererHandler.indexOf('if (!frame || !isTrustedMiniPlayerMainFrame(win, mode, frame)) return false;')
+      < rendererHandler.indexOf('event.preventDefault();'),
+    '非法 frame 不能先被 preventDefault 吞掉',
   );
   // 拖拽区右键在 Windows 上被系统接走，弹的是几乎全灰的窗口系统菜单，renderer 收不到 contextmenu。
   assert.match(
     factory,
-    /win\.on\('system-context-menu', \(event\) => \{\s*\n\s*event\.preventDefault\(\);\s*\n\s*showMiniPlayerContextMenu\(win\);/,
+    /win\.on\('system-context-menu', \(event\) => \{\s*\n\s*handleMiniPlayerSystemContextMenu\(win, mode, event\);/,
     '拖拽区右键必须拦掉系统菜单并换成应用菜单',
   );
+  const systemHandler = readFunctionSource('function handleMiniPlayerSystemContextMenu(win, mode, event)');
+  assert.match(systemHandler, /if \(!isTrustedMiniPlayerMainFrame\(win, mode\)\) return false;/);
+  assert.match(systemHandler, /event\.preventDefault\(\);[\s\S]*?showMiniPlayerContextMenu\(win\);/);
 });
 
-test('两套外壳都把整块 mini-shell 设成拖拽区，所以标准与极简都依赖系统右键拦截', () => {
+test('renderer 右键缺失 frame 或命中子 frame 时不吞默认菜单', () => {
+  const env = loadContextMenuHandlers();
+  const event = { preventDefault() { env.calls.prevented += 1; } };
+
+  assert.equal(env.context.handleMiniPlayerRendererContextMenu(env.win, 'standard', event, {}), false);
+  assert.equal(env.context.handleMiniPlayerRendererContextMenu(
+    env.win,
+    'standard',
+    event,
+    { frame: { parent: {}, url: env.trustedFrame.url } },
+  ), false);
+  assert.equal(env.calls.prevented, 0, '来源不明或子 frame 不能吞掉默认右键');
+  assert.equal(env.calls.shown.length, 0);
+});
+
+test('renderer 可信主 frame 与 system fallback 都只弹一次应用菜单', () => {
+  const env = loadContextMenuHandlers();
+  const rendererEvent = { preventDefault() { env.calls.prevented += 1; } };
+  const systemEvent = { preventDefault() { env.calls.prevented += 1; } };
+
+  assert.equal(env.context.handleMiniPlayerRendererContextMenu(
+    env.win,
+    'standard',
+    rendererEvent,
+    { frame: env.trustedFrame },
+  ), true);
+  assert.equal(env.context.handleMiniPlayerSystemContextMenu(env.win, 'standard', systemEvent), true);
+  assert.equal(env.calls.prevented, 2);
+  assert.deepEqual(env.calls.shown, [
+    { candidateWin: env.win, frame: env.trustedFrame },
+    { candidateWin: env.win, frame: undefined },
+  ]);
+});
+
+test('两套外壳整块 mini-shell 都留在 renderer 客户区，拖动走独立 IPC', () => {
   const factory = main.slice(main.indexOf('function createMiniPlayerWindow()'));
   assert.match(factory, /const page = mode === 'compact' \? 'mini-player-compact\.html' : 'mini-player\.html';/, '标准与极简共用同一个窗口工厂');
 
   ['mini-player.html', 'mini-player-compact.html'].forEach((file) => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'public', file), 'utf8');
-    assert.match(html, /\.mini-shell \{[^}]*-webkit-app-region: drag;/, file);
+    assert.match(html, /\.mini-shell \{[^}]*-webkit-app-region: no-drag;/, file);
+    assert.match(html, /moveWindowBy/, `${file} 必须保留 renderer 拖动通道`);
     // 谁在页面里 preventDefault 掉 contextmenu，非拖拽区的右键就再也弹不出菜单。
     assert.doesNotMatch(html, /contextmenu/, `${file} 不能自己拦 contextmenu`);
   });

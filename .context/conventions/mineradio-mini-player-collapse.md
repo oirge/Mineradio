@@ -29,14 +29,14 @@
 - 拖动 IPC 必须带正整数 `generation`；renderer 重载前主进程先推进代际并清除 `miniPlayerUserMovePending`，`did-finish-load` 再为新文档建立代际状态。旧代际的迟到移动或 commit 只能被忽略，不能清空新会话或改写新坐标。
 - 拖动提交若同时遇到显示器拓扑脏标记，必须在清空会话前保存 `{ x: session.coverX, y: session.coverY, layout: session.layout }` 并传给拓扑校正；无拖动锚点时使用当前窗口最近记住的 `collapsed/expanded` 布局，不能固定按收回态偏移重算。拓扑校正若坐标和方向均未变化，不重复写入设置。
 - 展开方向由主进程比较窗口到当前显示器左右工作区边缘的空间决定；标准 BrowserWindow 继续固定为 `360 × 84`，不通过频繁缩放窗口实现收回动画。
-- 收回态穿透只能用 `setIgnoreMouseEvents(true, { forward: true })` 实现，CSS `pointer-events` 管不住窗口命中；穿透期间 renderer 靠转发的 `mousemove` 与 `coverWrap` 矩形（外扩 `6px`）判断指针是否回到封面热区，回到热区立刻通过 `mineradio-mini-player-set-pointer-passthrough` 收回鼠标事件并展开。
+- 收回态穿透只能用 `setIgnoreMouseEvents(true, { forward: true })` 实现，CSS `pointer-events` 管不住窗口命中；穿透期间 renderer 靠转发的 `mousemove` 与 `coverWrap` 矩形（外扩 `6px`）判断指针是否回到封面热区，回到热区先通过 `mineradio-mini-player-set-pointer-passthrough-sync` 同步收回鼠标事件，再展开；同步通道不可用时才回退到 `mineradio-mini-player-set-pointer-passthrough`，失败仍保留旧缓存并允许重试。
 - 穿透通道只接受当前迷你窗口 sender，重复上报去重；封面拖动期间和关闭悬停展开时必须强制保持窗口交互，窗口创建 / 销毁 / 关闭都要重置主进程穿透缓存。
 - 桌面歌词开关向左展开时用 `left: 5px; right: auto;` 镜像到左下角。
 - 桌面歌词按钮在 DOM 上必须是 `.mini-shell` 的直属子节点（排在 `.transport` 之后保持 Tab 顺序），收回态另用 `.mini-shell[data-collapsed="true"] .desktop-lyrics-toggle { opacity:0; pointer-events:none; }` 单独淡出，不再借 `.transport` 的 `opacity` 隐藏。
 - 收回态位移动画随展开方向镜像：向右展开用 `translateX(10px)`，向左展开用 `translateX(-10px)`，保证面板始终朝远离封面的一侧滑出。
 - 极简页面 `public/mini-player-compact.html` 不添加该按钮。
 - 迷你播放器（标准与极简共用 `createMiniPlayerWindow`）的右键菜单自 v1.7.13 起与任务栏托盘**共用同一份模板** `buildAppContextMenuTemplate()`，六项必须逐项一致且每项都可点：`显示 Mineradio`（`focusMainWindow()`，与恢复按钮同路径）、`关闭按钮最小化到托盘`（checkbox，写回设置后 `refreshTrayMenu()`）、`最小化时显示迷你播放器`（checkbox → `setMiniPlayerEnabled`）、`迷你播放器样式` 子菜单（标准/极简 radio → `setMiniPlayerMode`）、`开机自动启动`（checkbox → `setStartupEnabled`，失败回退勾选态）、分隔线、`退出 Mineradio`（`appQuitting = true` + `app.quit()`，与托盘退出同路径）。`main.js` 里 `Menu.buildFromTemplate` 只允许托盘与迷你两个调用点，都传这一份模板；两处任何一处自带 `label:` 就算漂移。
-- 右键有两条入口，都必须挂：非拖拽区走 `win.webContents.on('context-menu')`，整块 `.mini-shell` 这样的 `-webkit-app-region: drag` 区域在 Windows 上被系统当成非客户区、只会弹几乎全灰的窗口系统菜单（迷你窗口 `resizable/minimizable/maximizable` 全 false）且 renderer 收不到 `contextmenu`，必须由 `win.on('system-context-menu')` + `preventDefault()` 换成同一份应用菜单。`popup({ window: win })` 不传 x/y（Electron 默认就是当前光标位置，`system-context-menu` 的 `point` 是屏幕坐标，手动换算只会引入偏移）。两套外壳页面都不许 `preventDefault()` 掉 DOM `contextmenu`。收回态只有封面能弹这份菜单（见上方穿透规则），展开态整窗都能弹；极简外壳没有收回态与穿透，整窗恒可右键。回归测试：`tests/mini-player-context-menu.test.js`。
+- 右键有两条入口，都必须挂：两套外壳的 `.mini-shell` 当前固定为 `-webkit-app-region: no-drag`，客户区右键走 `win.webContents.on('context-menu')`；若 Windows/宿主仍把某区域交给非客户区，才由 `win.on('system-context-menu')` + `preventDefault()` 作为可信主 frame 校验后的兜底换成同一份应用菜单。`popup({ window: win })` 不传 x/y（Electron 默认就是当前光标位置，系统事件的 `point` 是屏幕坐标，手动换算只会引入偏移）。两套外壳页面都不许 `preventDefault()` 掉 DOM `contextmenu`。收回态只有封面能弹这份菜单（见上方穿透规则），展开态整窗都能弹；极简外壳没有收回态与穿透，整窗恒可右键。回归测试：`tests/mini-player-context-menu.test.js`。
 - 回归测试必须锁定四角按钮原位、标准页面无 `collapse`、设置区 `× 自动收回` 常驻、双向持久化、封面拖动/短按分流、右侧向左展开、桌面歌词入口与左下角镜像、桌面歌词按钮不在 `.transport` 内、收回态鼠标穿透与热区恢复，以及极简模式无按钮。
 
 ## Reference

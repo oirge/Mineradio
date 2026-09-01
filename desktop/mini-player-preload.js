@@ -43,6 +43,30 @@ if (isTrustedMiniPlayerDocument()) contextBridge.exposeInMainWorld('miniPlayer',
     dragMeta,
   ),
   /**
+   * 请求主进程按迷你外壳空白区的拖动偏移移动窗口；不进入封面拖动代际会话。
+   * @param {number} dx 水平位移。
+   * @param {number} dy 垂直位移。
+   * @param {boolean} commit 是否为拖动结束并保存最终坐标。
+   * @param {'collapsed'|'expanded'} layout 当前页面布局状态。
+   * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 主进程移动结果。
+   */
+  moveWindowBy: (dx, dy, commit, layout) => ipcRenderer.invoke(
+    'mineradio-mini-player-window-move-by',
+    Number(dx) || 0,
+    Number(dy) || 0,
+    commit === true,
+    layout === 'collapsed' ? 'collapsed' : 'expanded',
+  ),
+  /**
+   * 同步确认窗口命中状态；收回态封面刚被命中时，右键不能等待异步 IPC 回执。
+   * @param {boolean} passthrough 是否让出窗口鼠标事件。
+   * @returns {{ok:boolean,ignored?:boolean,error?:string}} 主进程处理结果。
+   */
+  setPointerPassthroughSync: (passthrough) => ipcRenderer.sendSync(
+    'mineradio-mini-player-set-pointer-passthrough-sync',
+    passthrough === true,
+  ),
+  /**
    * 请求主进程在收回态让出窗口鼠标事件，只保留封面热区参与命中。
    * @param {boolean} passthrough 是否让出窗口鼠标事件。
    * @returns {Promise<{ok:boolean,ignored?:boolean,error?:string}>} 主进程处理结果。

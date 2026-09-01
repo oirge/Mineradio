@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v1.7.17 迷你播放器封面命中与右键竞态修复
+- 正式发布版本从 `1.7.16` 提升为 `1.7.17`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.16` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版修复收回态封面热区命中后的右键竞态：renderer 优先通过 `mineradio-mini-player-set-pointer-passthrough-sync` 同步解除原生穿透，主进程在返回前完成 `setIgnoreMouseEvents(false)`；旧异步通道仅作兼容回退，失败仍可重试。
+- 两套迷你页面的 `.mini-shell` 固定为 `no-drag`，右键主要由 renderer `context-menu` 接管，窗口移动通过独立 `mineradio-mini-player-window-move-by` IPC；`system-context-menu` 仅保留为可信主 frame 的平台兜底。
+- 标准收回态命中边界仍是封面热区外扩 `6px`，封面外透明区交还桌面；标准展开态与极简外壳整窗可右键，菜单继续与托盘六项一致。
+- 发布前全量 Node 回归 `519/519`，并通过 `node --check desktop/main.js`、`node --check desktop/mini-player-preload.js`、`node --check server.js` 和 `git diff --check`；本轮不启动 Electron、不合成鼠标键盘输入、不修改 `Mineradio-sync`。
+- Windows x64 NSIS 仍只发布 `Setup.exe`、`.blockmap`、`latest.yml` 和 SHA256 清单；正式 run、四项资产摘要与校验结果在远程工作流完成后补录。
+- 发布标题使用 `v1.7.17 迷你播放器封面命中与右键竞态修复`。
+
 ## v1.7.16 迷你播放器右键命中与安全边界加固
 - 正式发布版本从 `1.7.15` 提升为 `1.7.16`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.15` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版固定右键语义：标准收回态只有封面热区（外扩 `6px`）可点可右键，透明空白交还桌面；标准展开态和极简外壳整窗可右键；可交互窗口均使用与任务栏托盘一致的六项菜单。

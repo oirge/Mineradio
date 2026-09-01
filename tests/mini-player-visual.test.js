@@ -41,7 +41,7 @@ function extractFunction(source, name) {
 
 /**
  * 构造标准迷你播放器的无界面 DOM 与 IPC 测试环境。
- * @returns {{nodes:Record<string, object>, commands:string[], moves:Array<{dx:number,dy:number,commit:boolean}>, passthroughs:boolean[], document:object, applyState:Function, flushTimers:Function}} 可驱动的渲染器测试环境。
+ * @returns {{nodes:Record<string, object>, commands:string[], moves:Array<{dx:number,dy:number,commit:boolean}>, shellMoves:Array<{dx:number,dy:number,commit:boolean}>, passthroughs:boolean[], passthroughSyncCalls:boolean[], document:object, applyState:Function, flushTimers:Function, flushMicrotasks:Function}} 可驱动的渲染器测试环境。
  */
 function createMiniPlayerHarness() {
   const html = read('public/mini-player.html');
@@ -50,8 +50,10 @@ function createMiniPlayerHarness() {
   const listeners = new Map();
   const commands = [];
   const moves = [];
+  const shellMoves = [];
   const moveMetas = [];
   const passthroughs = [];
+  const passthroughSyncCalls = [];
   let nextTimerId = 1;
 
   /**
@@ -148,9 +150,18 @@ function createMiniPlayerHarness() {
           moveMetas.push(dragMeta || null);
           return Promise.resolve({ ok: true });
         },
+        moveWindowBy(dx, dy, commit) {
+          shellMoves.push({ dx, dy, commit: commit === true });
+          return Promise.resolve({ ok: true });
+        },
         setPointerPassthrough(passthrough) {
           passthroughs.push(passthrough === true);
           return Promise.resolve({ ok: true });
+        },
+        setPointerPassthroughSync(passthrough) {
+          passthroughs.push(passthrough === true);
+          passthroughSyncCalls.push(passthrough === true);
+          return { ok: true };
         },
         onState(callback) { stateHandler = callback; },
       },
@@ -170,13 +181,18 @@ function createMiniPlayerHarness() {
     commands,
     moves,
     moveMetas,
+    shellMoves,
     passthroughs,
+    passthroughSyncCalls,
     document: documentNode,
     applyState(patch) { stateHandler(patch); },
     flushTimers() {
       const pending = [...timers.values()];
       timers.clear();
       for (const callback of pending) callback();
+    },
+    async flushMicrotasks() {
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
     },
   };
 }
@@ -401,7 +417,7 @@ test('展开态首个拖动请求携带未变形锚点，并让 commit 排在增
   assert.equal(harness.moves[1].commit, true);
 });
 
-test('收回态只有封面热区参与命中，封面外的透明区交还桌面', () => {
+test('收回态只有封面热区参与命中，封面外的透明区交还桌面', async () => {
   const harness = createMiniPlayerHarness();
   const shell = harness.nodes['mini-shell'];
   const coverWrap = harness.nodes['cover-wrap'];
@@ -417,13 +433,16 @@ test('收回态只有封面热区参与命中，封面外的透明区交还桌�
 
   // 指针进入封面热区：先恢复窗口交互（封面可点、可右键），再展开面板。
   harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
+  await harness.flushMicrotasks();
   assert.deepEqual(harness.passthroughs, [true, false]);
+  assert.deepEqual(harness.passthroughSyncCalls, [true, false]);
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
 
   // 展开后整块面板都要参与命中，指针移到控制区不能重新穿透——展开态整窗可点、可右键。
   shell.hover = true;
   harness.document.dispatch('mousemove', { clientX: 40, clientY: 40 });
   assert.deepEqual(harness.passthroughs, [true, false]);
+  assert.deepEqual(harness.passthroughSyncCalls, [true, false]);
   assert.equal(shell.getAttribute('data-collapsed'), 'false');
 
   shell.hover = false;
@@ -438,11 +457,12 @@ test('收回态只有封面热区参与命中，封面外的透明区交还桌�
   assert.deepEqual(harness.passthroughs, [true, false, true]);
 });
 
-test('封面拖动期间保持窗口交互，拖动结束后按热区恢复穿透', () => {
+test('封面拖动期间保持窗口交互，拖动结束后按热区恢复穿透', async () => {
   const harness = createMiniPlayerHarness();
   const coverWrap = harness.nodes['cover-wrap'];
 
   harness.document.dispatch('mousemove', { clientX: 320, clientY: 40 });
+  await harness.flushMicrotasks();
   assert.deepEqual(harness.passthroughs, [true, false]);
 
   coverWrap.dispatch('pointerdown', { button: 0, pointerId: 3, screenX: 200, screenY: 200 });
@@ -453,6 +473,33 @@ test('封面拖动期间保持窗口交互，拖动结束后按热区恢复穿�
   coverWrap.dispatch('pointerup', { pointerId: 3 });
   harness.flushTimers();
   assert.deepEqual(harness.passthroughs, [true, false, true]);
+});
+
+test('展开态空白区拖动走独立窗口 IPC，不污染封面代际会话', async () => {
+  const harness = createMiniPlayerHarness();
+  const shell = harness.nodes['mini-shell'];
+  shell.setAttribute('data-collapsed', 'false');
+
+  shell.dispatch('pointerdown', {
+    button: 0,
+    pointerId: 11,
+    screenX: 200,
+    screenY: 200,
+  });
+  shell.dispatch('pointermove', {
+    pointerId: 11,
+    screenX: 214,
+    screenY: 206,
+    preventDefault() {},
+  });
+  shell.dispatch('pointerup', { pointerId: 11 });
+  await harness.flushMicrotasks();
+
+  assert.deepEqual(harness.shellMoves, [
+    { dx: 14, dy: 6, commit: false },
+    { dx: 0, dy: 0, commit: true },
+  ]);
+  assert.deepEqual(harness.moves, []);
 });
 
 test('关闭悬停展开后始终保持完整迷你播放器', () => {
