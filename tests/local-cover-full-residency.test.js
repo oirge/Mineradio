@@ -284,8 +284,8 @@ async function testBackgroundThumbnailFailureRemainsRetryable() {
   /** @returns {Promise<boolean>} 模拟非当前对象缩略图生成失败。 */
   function assignLocalCoverSource() { return Promise.resolve(false); }
 
-  /** @returns {boolean} 测试歌曲允许读取 FLAC 内嵌封面。 */
-  function canReadEmbeddedFlacCover() { return true; }
+  /** @returns {boolean} 测试歌曲允许读取可截断内嵌封面。 */
+  function canReadTruncatableEmbeddedCover() { return true; }
 
   /** @returns {void} 记录不应发生的资产缓存写入。 */
   function scheduleLocalAssetCacheWrite() { cacheWrites += 1; }
@@ -310,7 +310,7 @@ async function testBackgroundThumbnailFailureRemainsRetryable() {
     LOCAL_COVER_THUMB_QUALITY: 0.82,
     Promise,
     assignLocalCoverSource,
-    canReadEmbeddedFlacCover,
+    canReadTruncatableEmbeddedCover,
     console: { warn: ignoreWarning },
     extractEmbeddedCoverSource,
     invalidateSongCoverCache: ignoreSync,
@@ -360,7 +360,7 @@ async function testCurrentFullCoverWithoutThumbnailIsNotPersistedAsLoaded() {
   function createLocalCoverThumbnailDataUrl() { return Promise.resolve(''); }
 
   /** @returns {boolean} 测试歌曲允许读取内嵌封面。 */
-  function canReadEmbeddedFlacCover() { return true; }
+  function canReadTruncatableEmbeddedCover() { return true; }
 
   /** @returns {void} 记录不应发生的持久缓存写入。 */
   function scheduleLocalAssetCacheWrite() { cacheWrites += 1; }
@@ -382,7 +382,7 @@ async function testCurrentFullCoverWithoutThumbnailIsNotPersistedAsLoaded() {
     LOCAL_COVER_THUMB_QUALITY: 0.82,
     Promise,
     assignLocalCoverSource,
-    canReadEmbeddedFlacCover,
+    canReadTruncatableEmbeddedCover,
     console: { warn: ignoreWarning },
     createLocalCoverThumbnailDataUrl,
     extractEmbeddedCoverSource,
@@ -448,8 +448,8 @@ async function testBackgroundEmbeddedCoverSkipsFullDataUrl() {
     return Promise.resolve(true);
   }
 
-  /** @returns {boolean} 测试歌曲允许读取 FLAC 内嵌封面。 */
-  function canReadEmbeddedFlacCover() { return true; }
+  /** @returns {boolean} 测试歌曲允许读取可截断内嵌封面。 */
+  function canReadTruncatableEmbeddedCover() { return true; }
 
   /** @returns {void} 测试忽略轻量副作用。 */
   function ignoreSideEffect() {}
@@ -465,7 +465,7 @@ async function testBackgroundEmbeddedCoverSkipsFullDataUrl() {
     LOCAL_COVER_THUMB_QUALITY: 0.82,
     Promise,
     assignLocalCoverSource,
-    canReadEmbeddedFlacCover,
+    canReadTruncatableEmbeddedCover,
     console: { warn: ignoreWarning },
     extractEmbeddedCoverSource,
     invalidateSongCoverCache: ignoreSideEffect,

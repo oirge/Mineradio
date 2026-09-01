@@ -241,7 +241,7 @@ async function testExternalCoverUrlSkipsFullDataUrlRead() {
   }
 
   /** @returns {boolean} 测试歌曲不依赖内嵌封面。 */
-  function canReadEmbeddedFlacCover() { return false; }
+  function canReadTruncatableEmbeddedCover() { return false; }
 
   /** @returns {void} 忽略测试不关心的 UI 副作用。 */
   function ignoreSideEffect() {}
@@ -251,7 +251,7 @@ async function testExternalCoverUrlSkipsFullDataUrlRead() {
     String,
     console: { warn() {} },
     assignLocalCoverSource,
-    canReadEmbeddedFlacCover,
+    canReadTruncatableEmbeddedCover,
     ensureLocalCoverPreviewUrl,
     extractEmbeddedCoverSource: () => Promise.resolve(null),
     invalidateSongCoverCache: ignoreSideEffect,

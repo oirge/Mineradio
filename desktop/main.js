@@ -277,6 +277,7 @@ function waitForServer(server) {
 
 const LOCAL_LIBRARY_EXTS = new Set([
   '.mp3', '.mp2', '.flac', '.m4a', '.m4b', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba', '.aif', '.aiff', '.aifc',
+  '.ape', '.dsf',
   '.lrc', '.txt', '.srt', '.vtt', '.ass', '.yrc',
   '.jpg', '.jpeg', '.jpe', '.jfif', '.png', '.webp', '.avif', '.gif', '.bmp', '.svg',
 ]);
@@ -300,6 +301,8 @@ const LOCAL_LIBRARY_MIME = {
   '.aif': 'audio/x-aiff',
   '.aiff': 'audio/x-aiff',
   '.aifc': 'audio/x-aiff',
+  '.ape': 'audio/x-ape',
+  '.dsf': 'audio/x-dsf',
   '.lrc': 'text/plain',
   '.txt': 'text/plain',
   '.srt': 'application/x-subrip',

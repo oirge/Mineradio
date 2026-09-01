@@ -135,7 +135,7 @@ var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
 // 因此 applyLocalAssetCacheToSong 的 hasOwnProperty 判定会跳过它，升级后不会整库回落文件名重解析。
 var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'genre', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
-var LOCAL_METADATA_TAG_SCHEMA = 3;
+var LOCAL_METADATA_TAG_SCHEMA = 4;
 var PERSISTENT_UI_STATE_KEYS = [
   VOLUME_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
@@ -18041,7 +18041,7 @@ function localAudioFormatLabel(song) {
   if (ext === 'mp3') return 'MP3';
   if (ext === 'wav') return 'WAV';
   if (ext === 'm4a') return 'M4A';
-  if (ext === 'ogg') return 'OGG';
+  if (ext === 'ogg' || ext === 'oga') return 'OGG';
   return ext ? ext.toUpperCase() : 'LOCAL';
 }
 function localAudioFileBytes(song) {
@@ -20837,22 +20837,47 @@ function applyLocalOriginalLyricsState(song) {
   setOriginalLyricsState(withLyricFallback(lines), hasNativeKaraoke, timingSource);
   applyPreferredLyricsForCurrent(true);
 }
-function canReadEmbeddedFlacLyrics(song) {
-  return !!(song && song.localFile && /\.flac$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
-}
-function canReadEmbeddedFlacCover(song) {
-  return !!(song && song.localFile && /\.flac$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
+/**
+ * 返回歌曲用于格式判断的文件名，兼容仅有绝对路径的记录。
+ * @param {object} song 本地歌曲对象。
+ * @returns {string} 文件名或路径；无本地文件时返回空字符串。
+ */
+function localSongFormatName(song) {
+  if (!song || !song.localFile) return '';
+  return String(song.localFile.name || song.localPath || song.localFilePathAbsolute || '');
 }
 /**
- * 判断歌曲是否可能包含 M4A 内嵌封面，供后台轻量扫描失败后保留前台重试状态。
+ * 判断歌曲所在格式是否支持内嵌歌词解析。
  * @param {object} song 本地歌曲对象。
- * @returns {boolean} 文件是否为 M4A。
+ * @returns {boolean} 是否可能读到内嵌歌词。
  */
-function canReadEmbeddedM4aCover(song) {
-  return !!(song && song.localFile && /\.m4a$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
+function canReadEmbeddedLyrics(song) {
+  return /\.(mp3|flac|ogg|oga|opus|wav|ape|dsf)$/i.test(localSongFormatName(song));
 }
+/**
+ * 判断内嵌歌词是否可能因轻量扫描上限被截断，用于保留前台完整重试状态。
+ * @param {object} song 本地歌曲对象。
+ * @returns {boolean} 轻量扫描失败后是否值得完整重试。
+ */
+function canReadTruncatableEmbeddedLyrics(song) {
+  // MP3 歌词按完整 ID3v2 长度读取，不受轻量上限影响，失败即为真的没有歌词。
+  return /\.(flac|ogg|oga|opus|wav|ape|dsf)$/i.test(localSongFormatName(song));
+}
+/**
+ * 判断歌曲所在格式是否支持内嵌封面解析。
+ * @param {object} song 本地歌曲对象。
+ * @returns {boolean} 是否可能读到内嵌封面。
+ */
 function canReadEmbeddedCover(song) {
-  return !!(song && song.localFile && /\.(mp3|flac|m4a)$/i.test(song.localFile.name || song.localPath || song.localFilePathAbsolute || ''));
+  return /\.(mp3|flac|m4a|ogg|oga|opus|wav|ape|dsf)$/i.test(localSongFormatName(song));
+}
+/**
+ * 判断内嵌封面是否可能因轻量扫描上限被截断，用于保留前台完整重试状态。
+ * @param {object} song 本地歌曲对象。
+ * @returns {boolean} 轻量扫描失败后是否值得完整重试。
+ */
+function canReadTruncatableEmbeddedCover(song) {
+  return /\.(flac|m4a|ogg|oga|opus|wav|ape|dsf)$/i.test(localSongFormatName(song));
 }
 function maybeApplyLocalLyricsForSong(song, opts) {
   opts = opts || {};
@@ -20915,7 +20940,7 @@ function ensureLocalLyricsForSong(song, opts) {
      */
     function continuePendingLocalLyricLoad(ok) {
       maybeApplyLocalLyricsForSong(song, opts);
-      if (!ok && !opts.background && !song.localLyricLoaded && !song.localLyricText && canReadEmbeddedFlacLyrics(song)) {
+      if (!ok && !opts.background && !song.localLyricLoaded && !song.localLyricText && canReadEmbeddedLyrics(song)) {
         return ensureLocalLyricsForSong(song, opts);
       }
       return ok;
@@ -20934,26 +20959,27 @@ function ensureLocalLyricsForSong(song, opts) {
     }
     return hydrateLocalLyricCacheForSong(song).then(continueAfterLocalLyricCache);
   }
-  if (!song.localLyricFile && !canReadEmbeddedFlacLyrics(song)) {
+  if (!song.localLyricFile && !canReadEmbeddedLyrics(song)) {
     song.localLyricLoaded = true;
     scheduleLocalAssetCacheWrite(song);
     return Promise.resolve(false);
   }
   song.localLyricLoading = true;
+  var embeddedLyricSource = embeddedLyricSourceLabel(song);
   var lyricPromise = song.localLyricFile
     ? readLocalTextFile(song.localLyricFile).then(function(text){ return { text: text, source: song.localLyricFile.name || 'local lyrics file' }; })
-    : extractFlacEmbeddedLyricsText(song.localFile, { light: !!opts.background }).then(function(text){ return { text: text, source: text ? 'FLAC LYRICS' : '' }; });
+    : extractEmbeddedLyricsText(song.localFile, { light: !!opts.background }).then(function(text){ return { text: text, source: text ? embeddedLyricSource : '' }; });
   song.localLyricPromise = lyricPromise.then(function(result){
     result = result || {};
     var text = String(result.text || '').trim();
     song.localLyricText = text;
     if (text) song.localLyricResidencyReleased = false;
     if (text) {
-      if (!song.localLyricFile) song.localLyricTagName = result.source || 'FLAC LYRICS';
+      if (!song.localLyricFile) song.localLyricTagName = result.source || embeddedLyricSource;
       if (!song.localLyricFile && !song.localLyricFileName) song.localLyricFileName = song.localLyricTagName;
       song.localLyricLoaded = true;
       song.localLyricLightScanned = false;
-    } else if (opts.background && !song.localLyricFile && canReadEmbeddedFlacLyrics(song)) {
+    } else if (opts.background && !song.localLyricFile && canReadTruncatableEmbeddedLyrics(song)) {
       song.localLyricLoaded = false;
       song.localLyricLightScanned = true;
     } else {
@@ -20965,7 +20991,7 @@ function ensureLocalLyricsForSong(song, opts) {
     scheduleLocalAssetUiRefresh(song, 'local-lyric-prefetch');
     return !!text;
   }).catch(function(){
-    if (opts.background && !song.localLyricFile && canReadEmbeddedFlacLyrics(song)) song.localLyricLightScanned = true;
+    if (opts.background && !song.localLyricFile && canReadTruncatableEmbeddedLyrics(song)) song.localLyricLightScanned = true;
     else song.localLyricLoaded = true;
     syncLocalSongAssetFields(song);
     if (opts.applyCurrent && (opts.token == null || opts.token === trackSwitchToken) && isCurrentLocalQueueSong(song)) updateCustomLyricControls();
@@ -24059,8 +24085,8 @@ document.addEventListener('visibilitychange', function(){
 // ============================================================
 //  文件拖放
 // ============================================================
-var LOCAL_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc)$/i;
-var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc)$/i;
+var LOCAL_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i;
+var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i;
 var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass|yrc)$/i;
 var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|jpe|jfif|png|webp|avif|gif|bmp|svg)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
@@ -24742,6 +24768,24 @@ function uint32BE(bytes, offset) {
 function uint32LE(bytes, offset) {
   return (bytes[offset] || 0) + ((bytes[offset + 1] || 0) * 0x100) + ((bytes[offset + 2] || 0) * 0x10000) + ((bytes[offset + 3] || 0) * 0x1000000);
 }
+/**
+ * 读取小端 16 位无符号整数。
+ * @param {Uint8Array} bytes 字节。
+ * @param {number} offset 起始偏移。
+ * @returns {number} 读取到的数值。
+ */
+function uint16LE(bytes, offset) {
+  return (bytes[offset] || 0) + ((bytes[offset + 1] || 0) * 0x100);
+}
+/**
+ * 读取小端 64 位无符号整数；超过 2^53 的值会损失精度，音频头部不会出现。
+ * @param {Uint8Array} bytes 字节。
+ * @param {number} offset 起始偏移。
+ * @returns {number} 读取到的数值。
+ */
+function uint64LE(bytes, offset) {
+  return uint32LE(bytes, offset) + uint32LE(bytes, offset + 4) * 4294967296;
+}
 function utf8FromBytes(bytes, start, len) {
   return decodeBytesWithEncoding(bytes.subarray(start, start + len), 'utf-8');
 }
@@ -24760,10 +24804,50 @@ function decodeBytesWithEncoding(bytes, encoding) {
     return out;
   }
 }
-function decodeId3TextFrame(bytes, start, end) {
+var localStrictUtf8Decoder;
+/**
+ * 严格 UTF-8 解码；遇到非法字节序列会抛错，用于判定标签是否真的是 UTF-8。
+ * @param {Uint8Array} bytes 待解码字节。
+ * @returns {string} 解码结果。
+ */
+function decodeStrictUtf8Bytes(bytes) {
+  if (localStrictUtf8Decoder === undefined) {
+    try {
+      localStrictUtf8Decoder = new TextDecoder('utf-8', { fatal: true });
+    } catch (e) {
+      localStrictUtf8Decoder = null;
+    }
+  }
+  if (!localStrictUtf8Decoder) throw new Error('STRICT_UTF8_UNAVAILABLE');
+  return localStrictUtf8Decoder.decode(bytes).replace(/^\uFEFF/, '');
+}
+/**
+ * 解码历史遗留编码的标签文本（ID3v1、ID3v2 latin1 帧、RIFF INFO）。
+ * 纯 ASCII 与 UTF-8 走严格解码；否则按中文标签最常见的 GBK 处理，仍失败才退回 latin1。
+ * @param {Uint8Array} bytes 待解码字节。
+ * @returns {string} 解码结果。
+ */
+function decodeLegacyTagText(bytes) {
+  if (!bytes || !bytes.length) return '';
+  try {
+    return decodeStrictUtf8Bytes(bytes);
+  } catch (e) {}
+  var gbk = decodeBytesWithEncoding(bytes, 'gbk');
+  // 含替换字符说明不是 GBK，多为西欧 latin1 标签。
+  if (gbk && gbk.indexOf('\ufffd') < 0) return gbk;
+  return decodeBytesWithEncoding(bytes, 'latin1');
+}
+/**
+ * 按 ID3v2 编码字节解码指定区间文本。
+ * @param {Uint8Array} bytes 标签字节。
+ * @param {number} start 文本起始偏移。
+ * @param {number} end 文本结束偏移，不含该位置。
+ * @param {number} enc ID3v2 编码标识。
+ * @returns {string} 解码结果。
+ */
+function decodeId3TextWithEncoding(bytes, start, end, enc) {
   if (start >= end) return '';
-  var enc = bytes[start] || 0;
-  var body = bytes.subarray(start + 1, end);
+  var body = bytes.subarray(start, end);
   if (enc === 1) {
     if (body.length >= 2 && body[0] === 0xfe && body[1] === 0xff) return decodeBytesWithEncoding(body.subarray(2), 'utf-16be');
     if (body.length >= 2 && body[0] === 0xff && body[1] === 0xfe) return decodeBytesWithEncoding(body.subarray(2), 'utf-16le');
@@ -24771,7 +24855,11 @@ function decodeId3TextFrame(bytes, start, end) {
   }
   if (enc === 2) return decodeBytesWithEncoding(body, 'utf-16be');
   if (enc === 3) return decodeBytesWithEncoding(body, 'utf-8');
-  return decodeBytesWithEncoding(body, 'latin1');
+  return decodeLegacyTagText(body);
+}
+function decodeId3TextFrame(bytes, start, end) {
+  if (start >= end) return '';
+  return decodeId3TextWithEncoding(bytes, start + 1, end, bytes[start] || 0);
 }
 // ID3v1 数字流派表：ID3v2 的 TCON 允许写成 "(17)" 或裸数字，M4A 的 gnre atom 也是 1-based 数字，
 // 没有这张表就只能把 "(17)" 原样显示给用户。索引 133 的原始名称是种族歧视词，这里换成通行的 Afro-Punk。
@@ -24884,44 +24972,23 @@ function id3TextFrameKey(id) {
       return '';
   }
 }
+/**
+ * 读取 MP3 文件头部的完整 ID3v2 标签字节。
+ * @param {File|object} file 本地 MP3 文件记录。
+ * @returns {Promise<Uint8Array>} 标签字节；没有标签时长度为 0。
+ */
+async function readMp3Id3v2Bytes(file) {
+  var result = await readId3v2TagBytes(file, 0, ID3_MAX_TAG_BYTES);
+  return result.bytes;
+}
+/**
+ * 解析 MP3 ID3v2 展示元数据。
+ * @param {File|object} file 本地 MP3 文件记录。
+ * @returns {Promise<object>} 标签对象。
+ */
 async function extractMp3LocalMetadata(file) {
-  var fileSize = localFileSize(file);
-  var first = await readLocalFileBytes(file, 0, Math.min(fileSize || 0, 256 * 1024) || 256 * 1024);
-  if (asciiFromBytes(first, 0, 3) !== 'ID3' || first.length < 10) return {};
-  var version = first[3] || 3;
-  var tagSize = synchsafeInt(first, 6);
-  if (!tagSize || tagSize > 48 * 1024 * 1024) return {};
-  var total = Math.min((fileSize || tagSize + 10), tagSize + 10);
-  var bytes = first.length >= total ? first : await readLocalFileBytes(file, 0, total);
-  var pos = 10;
-  var end = Math.min(bytes.length, tagSize + 10);
-  var tags = {};
-  if (version >= 3 && (bytes[5] & 0x40) && pos + 4 <= end) {
-    var extSize = version === 4 ? synchsafeInt(bytes, pos) : uint32BE(bytes, pos);
-    if (extSize > 0 && extSize < end - pos) pos += version === 4 ? extSize : extSize + 4;
-  }
-  while (version >= 3 && pos + 10 <= end) {
-    var id = asciiFromBytes(bytes, pos, 4);
-    var size = version === 4 ? synchsafeInt(bytes, pos + 4) : uint32BE(bytes, pos + 4);
-    if (!/^[A-Z0-9]{4}$/.test(id) || size <= 0) break;
-    var frameStart = pos + 10;
-    var frameEnd = Math.min(end, frameStart + size);
-    var key = id3TextFrameKey(id);
-    if (key) putLocalMetadataTag(tags, key, decodeId3TextFrame(bytes, frameStart, frameEnd));
-    pos = frameEnd;
-  }
-  pos = 10;
-  while (version === 2 && pos + 6 <= end) {
-    var shortId = asciiFromBytes(bytes, pos, 3);
-    var shortSize = uint24BE(bytes, pos + 3);
-    if (!/^[A-Z0-9]{3}$/.test(shortId) || shortSize <= 0) break;
-    var shortStart = pos + 6;
-    var shortEnd = Math.min(end, shortStart + shortSize);
-    var shortKey = id3TextFrameKey(shortId);
-    if (shortKey) putLocalMetadataTag(tags, shortKey, decodeId3TextFrame(bytes, shortStart, shortEnd));
-    pos = shortEnd;
-  }
-  return tags;
+  var bytes = await readMp3Id3v2Bytes(file);
+  return bytes.length ? parseId3v2Tags(bytes, 0, {}) : {};
 }
 /**
  * 把 Vorbis comment key 映射到播放器展示元数据字段。
@@ -25249,13 +25316,1211 @@ async function extractM4aEmbeddedCoverSource(file, opts) {
   await parseM4aIlst(file, session.ilst, result);
   return result.cover || null;
 }
+var EMPTY_LOCAL_BYTES = new Uint8Array(0);
+var ID3_MAX_TAG_BYTES = 48 * 1024 * 1024;
+var ID3_MAX_PICTURE_BYTES = 64 * 1024 * 1024;
+// 常见 ID3v2 标签连封面一起也在 256KB 以内，一次探针读完可省掉第二次整段读取。
+var ID3_PROBE_BYTES = 256 * 1024;
+var ID3_FRAME_ID_RE = /^[A-Z0-9]+$/;
+/**
+ * 读取 ID3v2 标签总长度（含 10 字节头与可选 footer），用于跳过前置标签。
+ * @param {Uint8Array} bytes 含标签头的字节。
+ * @param {number} start 标签起始偏移。
+ * @returns {number} 标签总字节数；不是 ID3v2 标签时返回 0。
+ */
+function id3v2TagTotalBytes(bytes, start) {
+  if (bytes.length < start + 10 || asciiFromBytes(bytes, start, 3) !== 'ID3') return 0;
+  var size = synchsafeInt(bytes, start + 6);
+  if (size <= 0 || size > ID3_MAX_TAG_BYTES) return 0;
+  return 10 + size + ((bytes[start + 5] & 0x10) ? 10 : 0);
+}
+/**
+ * 遍历 ID3v2 帧，兼容 v2.2 的 3 字节帧 ID 与 v2.3/v2.4 的 4 字节帧 ID。
+ * @param {Uint8Array} bytes 标签字节。
+ * @param {number} start 标签起始偏移。
+ * @param {function(string, number, number, number): (boolean|void)} handler 帧回调；返回 true 表示提前结束。
+ * @returns {boolean} handler 是否提前命中。
+ */
+function walkId3v2Frames(bytes, start, handler) {
+  if (bytes.length < start + 10 || asciiFromBytes(bytes, start, 3) !== 'ID3') return false;
+  var version = bytes[start + 3] || 3;
+  var tagSize = synchsafeInt(bytes, start + 6);
+  if (tagSize <= 0 || tagSize > ID3_MAX_TAG_BYTES) return false;
+  var end = Math.min(bytes.length, start + 10 + tagSize);
+  var pos = start + 10;
+  if (version >= 3 && (bytes[start + 5] & 0x40) && pos + 4 <= end) {
+    // 扩展头长度在 v2.4 是 synchsafe 且含自身，v2.3 是普通 uint32 且不含自身。
+    var extSize = version === 4 ? synchsafeInt(bytes, pos) : uint32BE(bytes, pos);
+    if (extSize > 0 && extSize < end - pos) pos += version === 4 ? extSize : extSize + 4;
+  }
+  var idLen = version === 2 ? 3 : 4;
+  var headerLen = version === 2 ? 6 : 10;
+  while (pos + headerLen <= end) {
+    var id = asciiFromBytes(bytes, pos, idLen);
+    var size = version === 2 ? uint24BE(bytes, pos + idLen)
+      : (version === 4 ? synchsafeInt(bytes, pos + idLen) : uint32BE(bytes, pos + idLen));
+    // 帧 ID 只允许大写字母和数字，填充区会在这里终止扫描。
+    if (size <= 0 || id.length < idLen || !ID3_FRAME_ID_RE.test(id)) break;
+    var frameStart = pos + headerLen;
+    var frameEnd = Math.min(end, frameStart + size);
+    if (handler(id, frameStart, frameEnd, version) === true) return true;
+    pos = frameEnd;
+  }
+  return false;
+}
+/**
+ * 解析 ID3v2 文本帧到展示标签。
+ * @param {Uint8Array} bytes 标签字节。
+ * @param {number} start 标签起始偏移。
+ * @param {object} tags 展示标签结果。
+ * @returns {object} 传入的标签对象。
+ */
+function parseId3v2Tags(bytes, start, tags) {
+  /**
+   * 把可识别文本帧写入展示标签。
+   * @param {string} id 帧 ID。
+   * @param {number} frameStart 帧数据起点。
+   * @param {number} frameEnd 帧数据终点，不含该位置。
+   * @returns {boolean} 是否结束遍历。
+   */
+  function handleId3TextFrame(id, frameStart, frameEnd) {
+    var key = id3TextFrameKey(id);
+    if (key) putLocalMetadataTag(tags, key, decodeId3TextFrame(bytes, frameStart, frameEnd));
+    return false;
+  }
+  walkId3v2Frames(bytes, start, handleId3TextFrame);
+  return tags;
+}
+/**
+ * 解析 ID3v2 APIC/PIC 图片，返回短生命周期封面 Blob。
+ * @param {Uint8Array} bytes 标签字节。
+ * @param {number} start 标签起始偏移。
+ * @returns {Blob|null} 封面 Blob；没有图片时返回 null。
+ */
+function parseId3v2Picture(bytes, start) {
+  var found = null;
+  /**
+   * 解析单个图片帧；命中后立即结束遍历。
+   * @param {string} id 帧 ID。
+   * @param {number} frameStart 帧数据起点。
+   * @param {number} frameEnd 帧数据终点，不含该位置。
+   * @param {number} version ID3v2 主版本。
+   * @returns {boolean} 是否结束遍历。
+   */
+  function handleId3PictureFrame(id, frameStart, frameEnd, version) {
+    if (frameEnd - frameStart < 8) return false;
+    var enc = bytes[frameStart] || 0;
+    var wide = (enc === 1 || enc === 2) ? 2 : 1;
+    var mime = '';
+    var descStart = 0;
+    if (version >= 3 && id === 'APIC') {
+      var mimeEnd = findZero(bytes, frameStart + 1, frameEnd, 1);
+      if (mimeEnd < 0) return false;
+      mime = asciiFromBytes(bytes, frameStart + 1, mimeEnd - frameStart - 1) || 'image/jpeg';
+      // MIME 为 "-->" 时帧内是图片 URL 而不是图片数据。
+      if (mime === '-->') return false;
+      descStart = mimeEnd + 2;
+    } else if (version === 2 && id === 'PIC') {
+      mime = asciiFromBytes(bytes, frameStart + 1, 3).toLowerCase() === 'png' ? 'image/png' : 'image/jpeg';
+      descStart = frameStart + 5;
+    } else {
+      return false;
+    }
+    var descEnd = findZero(bytes, descStart, frameEnd, wide);
+    var imageStart = descEnd >= 0 ? descEnd + wide : descStart;
+    if (imageStart >= frameEnd || frameEnd - imageStart > ID3_MAX_PICTURE_BYTES) return false;
+    found = blobBytesToCoverBlob(bytes.subarray(imageStart, frameEnd), mime);
+    return true;
+  }
+  walkId3v2Frames(bytes, start, handleId3PictureFrame);
+  return found;
+}
+/**
+ * 解析 ID3v2 内嵌歌词，USLT 与 TXXX(LYRICS) 共用既有优先级规则。
+ * @param {Uint8Array} bytes 标签字节。
+ * @param {number} start 标签起始偏移。
+ * @returns {string} 优先级最高的歌词文本。
+ */
+function parseId3v2Lyrics(bytes, start) {
+  var best = { priority: 0, text: '' };
+  /**
+   * 收集单个歌词候选帧。
+   * @param {string} id 帧 ID。
+   * @param {number} frameStart 帧数据起点。
+   * @param {number} frameEnd 帧数据终点，不含该位置。
+   * @param {number} version ID3v2 主版本。
+   * @returns {boolean} 是否结束遍历。
+   */
+  function handleId3LyricFrame(id, frameStart, frameEnd, version) {
+    var isUslt = id === 'USLT' || (version === 2 && id === 'ULT');
+    var isTxxx = id === 'TXXX' || (version === 2 && id === 'TXX');
+    if ((!isUslt && !isTxxx) || frameEnd - frameStart < 2) return false;
+    var enc = bytes[frameStart] || 0;
+    var wide = (enc === 1 || enc === 2) ? 2 : 1;
+    // USLT 在编码字节后还有 3 字节语言码，之后才是描述符。
+    var descStart = frameStart + 1 + (isUslt ? 3 : 0);
+    var descEnd = findZero(bytes, descStart, frameEnd, wide);
+    if (descEnd < 0) return false;
+    var key = isUslt ? 'LYRICS' : decodeId3TextWithEncoding(bytes, descStart, descEnd, enc);
+    var maxPriority = embeddedLyricFieldMaxPriority(key);
+    if (best.priority >= maxPriority) return false;
+    var textStart = descEnd + wide;
+    // 未知描述符只有存在完整 LRC 时间标签才可能命中回退优先级。
+    if (maxPriority === 25 && wide === 1 && !hasEmbeddedLyricTimeTagBytes(bytes, textStart, frameEnd)) return false;
+    var value = normalizeEmbeddedLyricText(decodeId3TextWithEncoding(bytes, textStart, frameEnd, enc));
+    var priority = embeddedLyricFieldPriority(key, value);
+    if (value && priority > best.priority) {
+      best.priority = priority;
+      best.text = value;
+    }
+    return best.priority >= 100;
+  }
+  walkId3v2Frames(bytes, start, handleId3LyricFrame);
+  return best.text;
+}
+/**
+ * 去掉 ID3v1 定长字段尾部的 NUL 与空格填充。
+ * @param {Uint8Array} bytes 标签字节。
+ * @param {number} start 字段起始偏移。
+ * @param {number} len 字段长度。
+ * @returns {Uint8Array} 去填充后的字节视图。
+ */
+function trimId3v1Field(bytes, start, len) {
+  var end = Math.min(bytes.length, start + len);
+  while (end > start && (bytes[end - 1] === 0 || bytes[end - 1] === 0x20)) end--;
+  return bytes.subarray(start, end);
+}
+/**
+ * 解析 128 字节 ID3v1 标签，作为 APEv2/ID3v2 缺失字段的兜底。
+ * @param {Uint8Array} bytes 含标签的字节。
+ * @param {number} start 标签起始偏移。
+ * @param {object} tags 展示标签结果。
+ * @returns {boolean} 是否命中 ID3v1 标签。
+ */
+function parseId3v1Tags(bytes, start, tags) {
+  if (bytes.length < start + 128 || asciiFromBytes(bytes, start, 3) !== 'TAG') return false;
+  putLocalMetadataTag(tags, 'title', decodeLegacyTagText(trimId3v1Field(bytes, start + 3, 30)));
+  putLocalMetadataTag(tags, 'artist', decodeLegacyTagText(trimId3v1Field(bytes, start + 33, 30)));
+  putLocalMetadataTag(tags, 'album', decodeLegacyTagText(trimId3v1Field(bytes, start + 63, 30)));
+  putLocalMetadataTag(tags, 'year', decodeLegacyTagText(trimId3v1Field(bytes, start + 93, 4)));
+  // ID3v1.1 把音轨号写在 comment 末字节，前一字节必须为 0。
+  if (!bytes[start + 125] && bytes[start + 126]) putLocalMetadataTag(tags, 'track', String(bytes[start + 126]));
+  return true;
+}
+var LOCAL_HEADER_WINDOW_BYTES = 64 * 1024;
+/**
+ * 拼接多个字节片段。
+ * @param {Array<Uint8Array>} parts 字节片段。
+ * @param {number} total 片段总长度。
+ * @returns {Uint8Array} 拼接结果。
+ */
+function concatLocalBytes(parts, total) {
+  if (parts.length === 1) return parts[0];
+  var out = new Uint8Array(total);
+  var offset = 0;
+  for (var i = 0; i < parts.length; i++) {
+    out.set(parts[i], offset);
+    offset += parts[i].length;
+  }
+  return out;
+}
+/**
+ * 构造带滑动窗口的本地文件读取器：顺序解析容器头时按窗口批量读取，避免逐字段 IPC 往返。
+ * 返回的字节视图在下一次窗口未命中时会失效，需要跨读取保留时必须自行复制。
+ * @param {File|object} file 本地音频文件记录。
+ * @param {number} maxOffset 允许扫描的最大绝对偏移；0 表示不限制。
+ * @returns {object} 窗口读取器。
+ */
+function localHeaderWindow(file, maxOffset) {
+  var size = localFileSize(file) || 0;
+  var limit = maxOffset > 0 ? Math.min(size, maxOffset) : size;
+  var buffer = null;
+  var base = 0;
+  return {
+    size: size,
+    limit: limit,
+    /**
+     * 读取指定区间；超出扫描上限或文件结尾时返回短结果。
+     * @param {number} offset 起始偏移。
+     * @param {number} length 请求长度。
+     * @returns {Promise<Uint8Array>} 读取到的字节视图。
+     */
+    at: async function(offset, length) {
+      offset = Math.max(0, Math.floor(Number(offset) || 0));
+      length = Math.max(0, Math.floor(Number(length) || 0));
+      if (!length || offset >= limit) return EMPTY_LOCAL_BYTES;
+      var want = Math.min(length, limit - offset);
+      if (buffer && offset >= base && offset + want <= base + buffer.length) {
+        return buffer.subarray(offset - base, offset - base + want);
+      }
+      var span = Math.min(limit - offset, Math.max(want, LOCAL_HEADER_WINDOW_BYTES));
+      var bytes = await readLocalFileBytes(file, offset, offset + span);
+      buffer = bytes;
+      base = offset;
+      return bytes.length > want ? bytes.subarray(0, want) : bytes;
+    },
+    /**
+     * 释放窗口缓冲，使大范围读取结果可尽早回收。
+     * @returns {void}
+     */
+    release: function() {
+      buffer = null;
+    }
+  };
+}
+var OGG_MAX_SCAN_PAGES = 4096;
+var OGG_MAX_PACKET_BYTES = 32 * 1024 * 1024;
+var OGG_TAIL_SCAN_BYTES = 64 * 1024;
+var OGG_FLAC_METADATA_PACKETS = 12;
+/**
+ * 读取 Ogg 页头中的 64 位 granule position。
+ * @param {Uint8Array} bytes 页头字节。
+ * @param {number} offset granule 字段偏移。
+ * @returns {number} granule 值；-1 表示该页内没有包结束。
+ */
+function oggGranuleValue(bytes, offset) {
+  var low = uint32LE(bytes, offset);
+  var high = uint32LE(bytes, offset + 4);
+  if (low === 4294967295 && high === 4294967295) return -1;
+  return high * 4294967296 + low;
+}
+/**
+ * 读取单个 Ogg 页头，并复制分段表。
+ * @param {object} win 窗口读取器。
+ * @param {number} offset 页起始偏移。
+ * @returns {Promise<object|null>} 页描述；不是完整合法页时返回 null。
+ */
+async function readOggPageHeader(win, offset) {
+  var head = await win.at(offset, 27);
+  if (head.length < 27 || asciiFromBytes(head, 0, 4) !== 'OggS' || head[4] !== 0) return null;
+  var segCount = head[26];
+  var page = {
+    flags: head[5],
+    granule: oggGranuleValue(head, 6),
+    serial: uint32LE(head, 14),
+    segCount: segCount,
+    lacing: EMPTY_LOCAL_BYTES,
+    dataStart: offset + 27 + segCount,
+    dataLength: 0,
+    nextOffset: 0
+  };
+  if (segCount) {
+    var table = await win.at(offset + 27, segCount);
+    if (table.length < segCount) return null;
+    // 分段表必须复制：读取 payload 会让窗口视图失效。
+    page.lacing = table.slice();
+    for (var i = 0; i < segCount; i++) page.dataLength += page.lacing[i];
+  }
+  page.nextOffset = page.dataStart + page.dataLength;
+  return page;
+}
+/**
+ * 把一页 payload 按分段表切成数据包，跨页包在 pending 中累积。
+ * @param {object} page 页描述。
+ * @param {Uint8Array} payload 页 payload。
+ * @param {Array<Uint8Array>} packets 已完成的数据包。
+ * @param {{parts:Array<Uint8Array>,length:number}} pending 跨页累积状态。
+ * @param {number} wanted 需要的包数量。
+ * @returns {boolean} 是否仍可继续扫描。
+ */
+function appendOggPagePackets(page, payload, packets, pending, wanted) {
+  var pos = 0;
+  for (var i = 0; i < page.segCount && packets.length < wanted; i++) {
+    var length = page.lacing[i];
+    if (length) {
+      // 复制：窗口视图会在下一次未命中读取时失效。
+      pending.parts.push(payload.slice(pos, pos + length));
+      pending.length += length;
+      pos += length;
+      if (pending.length > OGG_MAX_PACKET_BYTES) return false;
+    }
+    // 分段长度 255 表示包在下一段继续。
+    if (length === 255) continue;
+    packets.push(concatLocalBytes(pending.parts, pending.length));
+    pending.parts = [];
+    pending.length = 0;
+  }
+  return true;
+}
+/**
+ * 从首个逻辑流收集前若干个完整数据包。
+ * @param {object} win 窗口读取器。
+ * @param {number} start 首页起始偏移。
+ * @param {number} wanted 需要的包数量。
+ * @returns {Promise<object>} `{packets, serial, complete}`；complete=false 表示扫描范围内包不完整。
+ */
+async function readOggStreamPackets(win, start, wanted) {
+  var offset = start;
+  var serial = -1;
+  var packets = [];
+  var pending = { parts: [], length: 0 };
+  var complete = true;
+  for (var pageIndex = 0; pageIndex < OGG_MAX_SCAN_PAGES && packets.length < wanted; pageIndex++) {
+    var page = await readOggPageHeader(win, offset);
+    if (!page) { complete = false; break; }
+    offset = page.nextOffset;
+    if (serial < 0) serial = page.serial;
+    // 复用流里其它逻辑流的页与本流的包无关。
+    if (page.serial !== serial) continue;
+    var payload = page.dataLength ? await win.at(page.dataStart, page.dataLength) : EMPTY_LOCAL_BYTES;
+    if (payload.length < page.dataLength) { complete = false; break; }
+    if (!appendOggPagePackets(page, payload, packets, pending, wanted)) { complete = false; break; }
+  }
+  return { packets: packets, serial: serial, complete: complete };
+}
+/**
+ * 解析 Ogg 首包中的编解码信息。
+ * @param {Uint8Array} packet 逻辑流第一个数据包。
+ * @returns {object|null} 编解码描述；无法识别时返回 null。
+ */
+function parseOggCodecInfo(packet) {
+  if (!packet || packet.length < 19) return null;
+  if (packet.length >= 30 && packet[0] === 1 && asciiFromBytes(packet, 1, 6) === 'vorbis') {
+    var vorbisRate = uint32LE(packet, 12);
+    return {
+      codec: 'vorbis', channels: packet[11], sampleRate: vorbisRate,
+      granuleRate: vorbisRate, preSkip: 0, totalSamples: 0
+    };
+  }
+  if (asciiFromBytes(packet, 0, 8) === 'OpusHead') {
+    // Opus 的 granule position 恒为 48kHz 计数，且包含头部 pre-skip。
+    return {
+      codec: 'opus', channels: packet[9], sampleRate: uint32LE(packet, 12) || 48000,
+      granuleRate: 48000, preSkip: packet[10] + (packet[11] << 8), totalSamples: 0
+    };
+  }
+  if (packet.length >= 51 && packet[0] === 127 && asciiFromBytes(packet, 1, 4) === 'FLAC' &&
+      asciiFromBytes(packet, 9, 4) === 'fLaC') {
+    // Ogg FLAC 首包内嵌完整 STREAMINFO：4 字节 block 头后是 34 字节内容。
+    var s = 17;
+    var flacRate = (packet[s + 10] << 12) | (packet[s + 11] << 4) | (packet[s + 12] >> 4);
+    return {
+      codec: 'flac', channels: ((packet[s + 12] >> 1) & 7) + 1, sampleRate: flacRate,
+      granuleRate: flacRate, preSkip: 0,
+      totalSamples: (packet[s + 13] & 15) * 4294967296 + uint32BE(packet, s + 14)
+    };
+  }
+  return null;
+}
+/**
+ * 取出 Ogg 第二个包中的 Vorbis comment payload。
+ * @param {string} codec 编解码标识。
+ * @param {Uint8Array} packet 第二个数据包。
+ * @returns {Uint8Array} comment payload；不是注释包时长度为 0。
+ */
+function oggCommentPayload(codec, packet) {
+  if (!packet || !packet.length) return EMPTY_LOCAL_BYTES;
+  if (codec === 'vorbis') {
+    if (packet.length > 7 && packet[0] === 3 && asciiFromBytes(packet, 1, 6) === 'vorbis') return packet.subarray(7);
+    return EMPTY_LOCAL_BYTES;
+  }
+  if (codec === 'opus') {
+    if (packet.length > 8 && asciiFromBytes(packet, 0, 8) === 'OpusTags') return packet.subarray(8);
+    return EMPTY_LOCAL_BYTES;
+  }
+  // Ogg FLAC 第二个包是裸 METADATA_BLOCK，类型 4 才是 VORBIS_COMMENT。
+  if (packet.length > 4 && (packet[0] & 0x7f) === 4) return packet.subarray(4);
+  return EMPTY_LOCAL_BYTES;
+}
+/**
+ * 遍历 Vorbis comment payload 中的字段，key 归一化后回调。
+ * @param {Uint8Array} bytes payload 字节。
+ * @param {function(string, number, number):boolean} handler 字段回调，返回 true 结束遍历。
+ * @returns {boolean} 是否被回调提前结束。
+ */
+function forEachVorbisComment(bytes, handler) {
+  var end = bytes.length;
+  if (end <= 8) return false;
+  var p = 4 + uint32LE(bytes, 0);
+  if (p + 4 > end) return false;
+  var count = Math.min(uint32LE(bytes, p), 10000);
+  p += 4;
+  for (var i = 0; i < count && p + 4 <= end; i++) {
+    var length = uint32LE(bytes, p);
+    p += 4;
+    // 只有越界才说明 payload 损坏；零长度字段仅跳过当前计数项。
+    if (p + length > end) break;
+    var start = p;
+    p += length;
+    var eq = findByteInRange(bytes, start, p, 61);
+    if (eq <= start) continue;
+    var key = asciiFromBytes(bytes, start, eq - start).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (handler(key, eq + 1, p) === true) return true;
+  }
+  return false;
+}
+/**
+ * 解码 Vorbis comment 中的 base64 value。
+ * @param {Uint8Array} bytes payload 字节。
+ * @param {number} start value 起始偏移。
+ * @param {number} end value 结束偏移，不含该位置。
+ * @returns {Uint8Array} 解码字节；无效时长度为 0。
+ */
+function decodeBase64ValueBytes(bytes, start, end) {
+  // base64 是纯 ASCII，用 latin1 解码即可得到原文，且避免逐字符拼接大字符串。
+  var text = decodeBytesWithEncoding(bytes.subarray(start, end), 'latin1').replace(/[^A-Za-z0-9+/=]/g, '');
+  if (text.length < 8) return EMPTY_LOCAL_BYTES;
+  try {
+    var binary = atob(text);
+    var out = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  } catch (e) {
+    return EMPTY_LOCAL_BYTES;
+  }
+}
+/**
+ * 从图片首字节猜测 MIME，用于没有独立 MIME 字段的容器。
+ * @param {Uint8Array} bytes 图片字节。
+ * @returns {string} 图片 MIME。
+ */
+function sniffImageMime(bytes) {
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes.length > 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif';
+  if (bytes.length > 12 && asciiFromBytes(bytes, 0, 4) === 'RIFF' && asciiFromBytes(bytes, 8, 4) === 'WEBP') return 'image/webp';
+  if (bytes.length > 4 && bytes[0] === 0x42 && bytes[1] === 0x4d) return 'image/bmp';
+  return 'image/jpeg';
+}
+/**
+ * 打开 Ogg 元数据会话：解析首包编解码信息与注释包。
+ * @param {File|object} file 本地文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @param {number} wanted 需要收集的数据包数量。
+ * @returns {Promise<object>} `{info, serial, comment, packets, complete}`。
+ */
+async function readOggMetadataSession(file, opts, wanted) {
+  opts = opts || {};
+  var win = localHeaderWindow(file, opts.light ? LOCAL_ASSET_LIGHT_SCAN_BYTES : 0);
+  try {
+    var read = await readOggStreamPackets(win, 0, wanted);
+    var info = read.packets.length ? parseOggCodecInfo(read.packets[0]) : null;
+    var comment = info && read.packets.length > 1 ? oggCommentPayload(info.codec, read.packets[1]) : EMPTY_LOCAL_BYTES;
+    return {
+      info: info, serial: read.serial, comment: comment,
+      packets: read.packets, complete: read.complete
+    };
+  } finally {
+    win.release();
+  }
+}
+/**
+ * 从文件尾部最后一页的 granule position 推导时长。
+ * @param {File|object} file 本地文件记录。
+ * @param {object} info 编解码描述。
+ * @param {number} serial 目标逻辑流序号。
+ * @returns {Promise<number>} 秒数；无法确定时返回 0。
+ */
+async function readOggTailDuration(file, info, serial) {
+  var rate = info && info.granuleRate > 0 ? info.granuleRate : 0;
+  if (!rate) return 0;
+  if (info.totalSamples > 0) return info.totalSamples / rate;
+  var size = localFileSize(file) || 0;
+  if (size < 27) return 0;
+  var start = Math.max(0, size - OGG_TAIL_SCAN_BYTES);
+  var bytes = await readLocalFileBytes(file, start, size);
+  // 末尾页的 granule 是整个逻辑流的样本总数；-1 页要继续往前找。
+  for (var i = bytes.length - 27; i >= 0; i--) {
+    if (bytes[i] !== 79 || asciiFromBytes(bytes, i, 4) !== 'OggS' || bytes[i + 4] !== 0) continue;
+    if (uint32LE(bytes, i + 14) !== serial) continue;
+    var granule = oggGranuleValue(bytes, i + 6);
+    if (granule <= 0) continue;
+    return Math.max(0, granule - (info.preSkip || 0)) / rate;
+  }
+  return 0;
+}
+/**
+ * 解析 Vorbis comment 中的内嵌封面：优先 METADATA_BLOCK_PICTURE，其次旧式 COVERART。
+ * @param {Uint8Array} bytes comment payload。
+ * @returns {Blob|null} 封面 Blob；没有图片时返回 null。
+ */
+function vorbisCommentPictureBlob(bytes) {
+  if (!bytes || !bytes.length) return null;
+  var found = null;
+  var legacy = EMPTY_LOCAL_BYTES;
+  var legacyMime = '';
+  /**
+   * 收集封面候选字段。
+   * @param {string} key 归一化字段名。
+   * @param {number} start value 起始偏移。
+   * @param {number} end value 结束偏移，不含该位置。
+   * @returns {boolean} 是否结束遍历。
+   */
+  function handleVorbisPictureComment(key, start, end) {
+    if (key === 'METADATABLOCKPICTURE') {
+      var block = decodeBase64ValueBytes(bytes, start, end);
+      if (block.length > 32) found = extractFlacPictureBlob(block, 0, block.length);
+      return !!found;
+    }
+    if (key === 'COVERART' && !legacy.length) legacy = decodeBase64ValueBytes(bytes, start, end);
+    else if (key === 'COVERARTMIME' && !legacyMime) legacyMime = utf8FromBytes(bytes, start, end - start).trim();
+    return false;
+  }
+  forEachVorbisComment(bytes, handleVorbisPictureComment);
+  if (found) return found;
+  if (legacy.length > 32) return blobBytesToCoverBlob(legacy, legacyMime || sniffImageMime(legacy));
+  return null;
+}
+/**
+ * 解析 OGG/OPUS 展示元数据，并按 granule position 补出时长。
+ * @param {File|object} file 本地 Ogg 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<object>} 标签对象；`_mineradioScanComplete=false` 表示需要完整重试。
+ */
+async function extractOggLocalMetadata(file, opts) {
+  var session = await readOggMetadataSession(file, opts, 2);
+  var tags = {};
+  if (!session.info) {
+    // 首包被轻量上限截断才值得完整重试；确实不是 Ogg 的文件不重试。
+    tags._mineradioScanComplete = session.complete;
+    return tags;
+  }
+  if (session.comment.length) parseFlacMetadataVorbisPayload(session.comment, tags);
+  else if (!session.complete) tags._mineradioScanComplete = false;
+  var duration = await readOggTailDuration(file, session.info, session.serial);
+  if (duration > 0) tags.duration = duration;
+  return tags;
+}
+/**
+ * 解析 OGG/OPUS 内嵌封面。
+ * @param {File|object} file 本地 Ogg 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<Blob|null>} 封面 Blob；没有封面时返回 null。
+ */
+async function extractOggEmbeddedCoverSource(file, opts) {
+  var session = await readOggMetadataSession(file, opts, 2);
+  if (!session.info) return null;
+  var blob = vorbisCommentPictureBlob(session.comment);
+  if (blob) return blob;
+  if (session.info.codec !== 'flac') return null;
+  // Ogg FLAC 的 PICTURE 是独立 METADATA_BLOCK，位于注释包之后的数据包里。
+  var extended = await readOggMetadataSession(file, opts, OGG_FLAC_METADATA_PACKETS);
+  for (var i = 2; i < extended.packets.length; i++) {
+    var packet = extended.packets[i];
+    if (packet.length > 32 && (packet[0] & 0x7f) === 6) {
+      var picture = extractFlacPictureBlob(packet, 4, packet.length);
+      if (picture) return picture;
+    }
+    // 最后一个 metadata block 之后就是音频包，没有继续扫描的价值。
+    if (packet.length && (packet[0] & 0x80)) break;
+  }
+  return null;
+}
+/**
+ * 解析 OGG/OPUS 内嵌歌词。
+ * @param {File|object} file 本地 Ogg 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<string>} 歌词文本；没有歌词时返回空字符串。
+ */
+async function extractOggEmbeddedLyricsText(file, opts) {
+  var session = await readOggMetadataSession(file, opts, 2);
+  if (!session.comment.length) return '';
+  var best = { priority: 0, text: '' };
+  parseFlacLyricsVorbisPayload(session.comment, best);
+  return best.text || '';
+}
+var RIFF_MAX_CHUNKS = 512;
+var LOCAL_MAX_TAG_BYTES = 24 * 1024 * 1024;
+/**
+ * 判断 4 字节是否为可打印的 RIFF chunk id，用于在填充区终止目录扫描。
+ * @param {Uint8Array} bytes 字节。
+ * @param {number} offset 起始偏移。
+ * @returns {boolean} 是否为合法 chunk id。
+ */
+function isRiffChunkId(bytes, offset) {
+  for (var i = 0; i < 4; i++) {
+    if (bytes[offset + i] < 0x20 || bytes[offset + i] > 0x7e) return false;
+  }
+  return true;
+}
+/**
+ * 扫描 RIFF/RF64 chunk 目录；只记录 descriptor，不读取 chunk 内容。
+ * @param {object} win 窗口读取器。
+ * @returns {Promise<object|null>} `{chunks, complete}`；不是 WAVE 时返回 null。
+ */
+async function readRiffChunkDirectory(win) {
+  var head = await win.at(0, 12);
+  if (head.length < 12) return null;
+  var magic = asciiFromBytes(head, 0, 4);
+  var rf64 = magic === 'RF64' || magic === 'BW64';
+  if ((magic !== 'RIFF' && !rf64) || asciiFromBytes(head, 8, 4) !== 'WAVE') return null;
+  var riffSize = uint32LE(head, 4);
+  var end = rf64 ? win.size : Math.min(win.size, 8 + riffSize);
+  var result = { chunks: [], complete: true };
+  var dataSize64 = -1;
+  var pos = 12;
+  while (pos + 8 <= end && result.chunks.length < RIFF_MAX_CHUNKS) {
+    var header = await win.at(pos, 8);
+    if (header.length < 8) { result.complete = false; break; }
+    if (!isRiffChunkId(header, 0)) { result.complete = false; break; }
+    var id = asciiFromBytes(header, 0, 4);
+    var size = uint32LE(header, 4);
+    var dataStart = pos + 8;
+    if (id === 'ds64' && size >= 24) {
+      var ds64 = await win.at(dataStart, 24);
+      if (ds64.length >= 16) dataSize64 = uint64LE(ds64, 8);
+    }
+    // RF64 把超过 4GB 的 data 长度写成 0xFFFFFFFF，真值来自 ds64。
+    if (id === 'data' && size === 4294967295 && dataSize64 >= 0) size = dataSize64;
+    result.chunks.push({ id: id, start: dataStart, size: size });
+    // chunk 以偶数边界对齐，奇数长度后有一个填充字节。
+    pos = dataStart + size + (size % 2);
+  }
+  return result;
+}
+/**
+ * 解析 WAV `fmt ` chunk。
+ * @param {Uint8Array} bytes chunk 内容。
+ * @returns {object} 采样格式描述。
+ */
+function parseWavFormatChunk(bytes) {
+  var channels = uint16LE(bytes, 2);
+  var sampleRate = uint32LE(bytes, 4);
+  var byteRate = uint32LE(bytes, 8);
+  var bits = uint16LE(bytes, 14);
+  // WAVE_FORMAT_EXTENSIBLE 的真实编码写在扩展 GUID 里，位深和采样率字段仍然有效。
+  if (!byteRate && sampleRate && channels && bits) byteRate = sampleRate * channels * Math.ceil(bits / 8);
+  return { format: uint16LE(bytes, 0), channels: channels, sampleRate: sampleRate, byteRate: byteRate, bits: bits };
+}
+/**
+ * 把 RIFF INFO 字段名映射到播放器展示字段。
+ * @param {string} id INFO 子 chunk id。
+ * @returns {string} 播放器字段名；无消费者时返回空字符串。
+ */
+function riffInfoTagKey(id) {
+  if (id === 'INAM' || id === 'TITL') return 'title';
+  if (id === 'IART' || id === 'IPRF') return 'artist';
+  if (id === 'IPRD' || id === 'IALB') return 'album';
+  if (id === 'IAAR' || id === 'ISBJ') return 'albumArtist';
+  if (id === 'ITRK' || id === 'IPRT' || id === 'TRCK') return 'track';
+  if (id === 'ICRD' || id === 'IYER' || id === 'YEAR') return 'year';
+  return '';
+}
+/**
+ * 解析 LIST/INFO chunk 中的展示元数据。
+ * @param {Uint8Array} bytes LIST chunk 内容，含开头的 `INFO` 标识。
+ * @param {object} tags 展示标签结果。
+ * @returns {void}
+ */
+function parseRiffInfoTags(bytes, tags) {
+  var end = bytes.length;
+  var pos = 4;
+  while (pos + 8 <= end) {
+    if (!isRiffChunkId(bytes, pos)) break;
+    var id = asciiFromBytes(bytes, pos, 4);
+    var size = uint32LE(bytes, pos + 4);
+    var start = pos + 8;
+    var stop = Math.min(end, start + size);
+    var key = riffInfoTagKey(id);
+    if (key) {
+      // INFO 值是 NUL 结尾的字符串，编码未规定，按 UTF-8/GBK/latin1 依次尝试。
+      var zero = findZero(bytes, start, stop, 1);
+      putLocalMetadataTag(tags, key, decodeLegacyTagText(bytes.subarray(start, zero >= 0 ? zero : stop)));
+    }
+    pos = start + size + (size % 2);
+  }
+}
+/**
+ * 打开 WAV 元数据会话：定位 fmt/data/LIST-INFO/id3 chunk。
+ * chunk 目录只读 8 字节头，不受轻量上限限制；轻量模式只限制标签 chunk 的读取体积。
+ * @param {File|object} file 本地 WAV 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<object|null>} 会话对象；不是 WAVE 时返回 null。
+ */
+async function readWavMetadataSession(file, opts) {
+  opts = opts || {};
+  var win = localHeaderWindow(file, 0);
+  var directory = await readRiffChunkDirectory(win);
+  if (!directory) {
+    win.release();
+    return null;
+  }
+  var session = {
+    win: win, complete: true, fmt: null, dataSize: 0, info: null, id3: null,
+    maxTagBytes: opts.light ? LOCAL_ASSET_LIGHT_SCAN_BYTES : LOCAL_MAX_TAG_BYTES
+  };
+  for (var i = 0; i < directory.chunks.length; i++) {
+    var chunk = directory.chunks[i];
+    if (chunk.id === 'fmt ' && !session.fmt && chunk.size >= 16) {
+      var fmtBytes = await win.at(chunk.start, Math.min(chunk.size, 64));
+      if (fmtBytes.length >= 16) session.fmt = parseWavFormatChunk(fmtBytes);
+    } else if (chunk.id === 'data' && !session.dataSize) {
+      session.dataSize = chunk.size;
+    } else if (chunk.id === 'LIST' && !session.info && chunk.size > 4) {
+      var listType = await win.at(chunk.start, 4);
+      if (asciiFromBytes(listType, 0, 4) === 'INFO') session.info = chunk;
+    } else if ((chunk.id === 'id3 ' || chunk.id === 'ID3 ') && !session.id3 && chunk.size >= 10) {
+      session.id3 = chunk;
+    }
+  }
+  return session;
+}
+/**
+ * 读取一个标签 chunk 的完整内容；超过当前扫描预算时留待完整重试。
+ * @param {object} session WAV 元数据会话。
+ * @param {object} chunk 目标 chunk descriptor。
+ * @returns {Promise<Uint8Array>} chunk 内容；跳过时长度为 0。
+ */
+async function readWavTagChunkBytes(session, chunk) {
+  if (chunk.size > session.maxTagBytes) {
+    session.complete = false;
+    return EMPTY_LOCAL_BYTES;
+  }
+  return await session.win.at(chunk.start, chunk.size);
+}
+/**
+ * 解析 WAV 展示元数据：id3 chunk 优先，其次 LIST/INFO，并按 fmt/data 推导时长。
+ * @param {File|object} file 本地 WAV 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<object>} 标签对象；`_mineradioScanComplete=false` 表示需要完整重试。
+ */
+async function extractWavLocalMetadata(file, opts) {
+  var session = await readWavMetadataSession(file, opts);
+  if (!session) return {};
+  var tags = {};
+  try {
+    if (session.id3) {
+      var id3Bytes = await readWavTagChunkBytes(session, session.id3);
+      if (id3Bytes.length >= 10) parseId3v2Tags(id3Bytes, 0, tags);
+    }
+    if (session.info) {
+      var infoBytes = await readWavTagChunkBytes(session, session.info);
+      if (infoBytes.length > 4) parseRiffInfoTags(infoBytes, tags);
+    }
+    var byteRate = session.fmt ? session.fmt.byteRate : 0;
+    if (byteRate > 0 && session.dataSize > 0) tags.duration = session.dataSize / byteRate;
+    if (!session.complete) tags._mineradioScanComplete = false;
+  } finally {
+    session.win.release();
+  }
+  return tags;
+}
+/**
+ * 解析 WAV id3 chunk 中的内嵌封面。
+ * @param {File|object} file 本地 WAV 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<Blob|null>} 封面 Blob；没有封面时返回 null。
+ */
+async function extractWavEmbeddedCoverSource(file, opts) {
+  var session = await readWavMetadataSession(file, opts);
+  if (!session) return null;
+  try {
+    if (!session.id3) return null;
+    var bytes = await readWavTagChunkBytes(session, session.id3);
+    return bytes.length >= 10 ? parseId3v2Picture(bytes, 0) : null;
+  } finally {
+    session.win.release();
+  }
+}
+/**
+ * 解析 WAV id3 chunk 中的内嵌歌词。
+ * @param {File|object} file 本地 WAV 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<string>} 歌词文本；没有歌词时返回空字符串。
+ */
+async function extractWavEmbeddedLyricsText(file, opts) {
+  var session = await readWavMetadataSession(file, opts);
+  if (!session) return '';
+  try {
+    if (!session.id3) return '';
+    var bytes = await readWavTagChunkBytes(session, session.id3);
+    return bytes.length >= 10 ? parseId3v2Lyrics(bytes, 0) : '';
+  } finally {
+    session.win.release();
+  }
+}
+/**
+ * 读取指定偏移处的完整 ID3v2 标签字节。
+ * @param {File|object} file 本地文件记录。
+ * @param {number} start 标签起始偏移。
+ * @param {number} maxBytes 本轮允许的标签体积上限。
+ * @param {number=} probeBytes 首次探针读取的字节数，默认 `ID3_PROBE_BYTES`。
+ * @returns {Promise<object>} `{bytes, truncated}`；truncated 表示标签超出预算需完整重试。
+ */
+async function readId3v2TagBytes(file, start, maxBytes, probeBytes) {
+  if (start < 0) return { bytes: EMPTY_LOCAL_BYTES, truncated: false };
+  var probe = probeBytes > 10 ? probeBytes : ID3_PROBE_BYTES;
+  var fileSize = localFileSize(file) || 0;
+  var probeEnd = fileSize ? Math.min(fileSize, start + probe) : start + probe;
+  var head = await readLocalFileBytes(file, start, probeEnd);
+  var total = head.length >= 10 ? id3v2TagTotalBytes(head, 0) : 0;
+  if (!total) return { bytes: EMPTY_LOCAL_BYTES, truncated: false };
+  if (total > maxBytes) return { bytes: EMPTY_LOCAL_BYTES, truncated: true };
+  // 探针已覆盖整个标签时直接切片，避免同一段字节被读第二次。
+  if (head.length >= total) return { bytes: head.subarray(0, total), truncated: false };
+  var bytes = await readLocalFileBytes(file, start, start + total);
+  return { bytes: bytes, truncated: false };
+}
+/**
+ * 解析 APE 头部：版本、声道、采样率与总样本数。
+ * @param {object} win 窗口读取器。
+ * @returns {Promise<object|null>} 流信息；不是 APE 文件时返回 null。
+ */
+async function readApeStreamInfo(win) {
+  var probe = await win.at(0, 10);
+  // APE 允许文件头有 ID3v2，'MAC ' 之前的部分对解码器是 junk。
+  var junk = probe.length >= 10 ? id3v2TagTotalBytes(probe, 0) : 0;
+  var head = await win.at(junk, 128);
+  if (head.length < 32 || asciiFromBytes(head, 0, 4) !== 'MAC ') return null;
+  var info = { junk: junk, version: uint16LE(head, 4), channels: 0, sampleRate: 0, bps: 16, totalBlocks: 0 };
+  if (info.version >= 3980) {
+    var descriptorLength = uint32LE(head, 8);
+    var block = await win.at(junk + (descriptorLength > 52 ? descriptorLength : 52), 24);
+    if (block.length < 24) return null;
+    var totalFrames = uint32LE(block, 12);
+    info.bps = uint16LE(block, 16);
+    info.channels = uint16LE(block, 18);
+    info.sampleRate = uint32LE(block, 20);
+    if (totalFrames > 0) info.totalBlocks = (totalFrames - 1) * uint32LE(block, 4) + uint32LE(block, 8);
+    return info;
+  }
+  var compressionLevel = uint16LE(head, 6);
+  var formatFlags = uint16LE(head, 8);
+  info.channels = uint16LE(head, 10);
+  info.sampleRate = uint32LE(head, 12);
+  info.bps = (formatFlags & 1) ? 8 : ((formatFlags & 8) ? 24 : 16);
+  // 3980 之前的版本不存 blocksPerFrame，只能由版本号和压缩等级推出。
+  var blocksPerFrame = info.version >= 3950 ? 73728 * 4
+    : ((info.version >= 3900 || (info.version >= 3800 && compressionLevel >= 4000)) ? 73728 : 9216);
+  var oldTotalFrames = uint32LE(head, 24);
+  if (oldTotalFrames > 0) info.totalBlocks = (oldTotalFrames - 1) * blocksPerFrame + uint32LE(head, 28);
+  return info;
+}
+/**
+ * 归一化标签字段名，去掉大小写与分隔符差异。
+ * @param {string} key 原始字段名。
+ * @returns {string} 归一化字段名。
+ */
+function normalizedTagKey(key) {
+  return String(key || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+/**
+ * 定位文件尾部的 APEv2 标签与 ID3v1 标签。
+ * @param {File|object} file 本地文件记录。
+ * @param {number} maxTagBytes 本轮允许的标签体积上限。
+ * @returns {Promise<object>} `{items, id3v1, truncated}`。
+ */
+async function readApeTagRegion(file, maxTagBytes) {
+  var result = { items: EMPTY_LOCAL_BYTES, id3v1: EMPTY_LOCAL_BYTES, truncated: false };
+  var size = localFileSize(file) || 0;
+  if (size < 32) return result;
+  var tail = await readLocalFileBytes(file, size - Math.min(size, 160), size);
+  if (tail.length < 32) return result;
+  var tailBase = size - tail.length;
+  if (tail.length >= 128 && asciiFromBytes(tail, tail.length - 128, 3) === 'TAG') {
+    result.id3v1 = tail.subarray(tail.length - 128);
+  }
+  // APEv2 footer 是文件最后 32 字节；存在 ID3v1 时再往前挪 128 字节。
+  var candidates = [size - 32, result.id3v1.length ? size - 160 : -1];
+  var footerPos = -1;
+  for (var i = 0; i < candidates.length && footerPos < 0; i++) {
+    var offset = candidates[i] - tailBase;
+    if (candidates[i] < 0 || offset < 0 || offset + 32 > tail.length) continue;
+    if (asciiFromBytes(tail, offset, 8) === 'APETAGEX') footerPos = candidates[i];
+  }
+  if (footerPos < 0) return result;
+  // footer 里的 tag size 含 footer 自身，不含可选的前置 header。
+  var tagSize = uint32LE(tail, footerPos - tailBase + 12);
+  if (tagSize > maxTagBytes) result.truncated = true;
+  else if (tagSize > 32 && footerPos + 32 - tagSize >= 0) {
+    result.items = await readLocalFileBytes(file, footerPos + 32 - tagSize, footerPos);
+  }
+  return result;
+}
+/**
+ * 遍历 APEv2 标签项。
+ * @param {Uint8Array} bytes items 区域字节。
+ * @param {function(string, number, number, number):boolean} handler 标签项回调，返回 true 结束遍历。
+ * @returns {boolean} 是否被回调提前结束。
+ */
+function forEachApeTagItem(bytes, handler) {
+  var end = bytes.length;
+  var pos = 0;
+  for (var i = 0; i < 10000 && pos + 10 <= end; i++) {
+    var valueSize = uint32LE(bytes, pos);
+    var flags = uint32LE(bytes, pos + 4);
+    var keyStart = pos + 8;
+    var keyEnd = findZero(bytes, keyStart, end, 1);
+    if (keyEnd < 0 || keyEnd === keyStart) break;
+    var valueStart = keyEnd + 1;
+    var valueEnd = valueStart + valueSize;
+    if (valueEnd > end) break;
+    pos = valueEnd;
+    if (handler(asciiFromBytes(bytes, keyStart, keyEnd - keyStart), valueStart, valueEnd, flags) === true) return true;
+  }
+  return false;
+}
+/**
+ * 解析 APEv2 文本项到展示标签。
+ * @param {Uint8Array} bytes items 区域字节。
+ * @param {object} tags 展示标签结果。
+ * @returns {void}
+ */
+function parseApeTagItems(bytes, tags) {
+  /**
+   * 写入单个文本项。
+   * @param {string} key 标签项名。
+   * @param {number} valueStart value 起始偏移。
+   * @param {number} valueEnd value 结束偏移，不含该位置。
+   * @param {number} flags 标签项 flags。
+   * @returns {boolean} 是否结束遍历。
+   */
+  function handleApeTextItem(key, valueStart, valueEnd, flags) {
+    // flags 的 bit1-2 是类型：0 为 UTF-8 文本，1 为二进制，2 为外部引用。
+    if ((flags >> 1) & 3) return false;
+    var field = vorbisCommentKey(key);
+    if (!field || tags[field]) return false;
+    // 多值项用 NUL 分隔，展示只取第一个值。
+    var zero = findZero(bytes, valueStart, valueEnd, 1);
+    putLocalMetadataTag(tags, field, decodeLegacyTagText(bytes.subarray(valueStart, zero >= 0 ? zero : valueEnd)));
+    return false;
+  }
+  forEachApeTagItem(bytes, handleApeTextItem);
+}
+/**
+ * 解析 APEv2 二进制封面项，优先 “Cover Art (Front)”。
+ * @param {Uint8Array} bytes items 区域字节。
+ * @returns {Blob|null} 封面 Blob；没有图片时返回 null。
+ */
+function apeTagPictureBlob(bytes) {
+  var front = null;
+  var other = null;
+  /**
+   * 收集封面候选项。
+   * @param {string} key 标签项名。
+   * @param {number} valueStart value 起始偏移。
+   * @param {number} valueEnd value 结束偏移，不含该位置。
+   * @param {number} flags 标签项 flags。
+   * @returns {boolean} 是否结束遍历。
+   */
+  function handleApeCoverItem(key, valueStart, valueEnd, flags) {
+    var normalized = normalizedTagKey(key);
+    if (((flags >> 1) & 3) !== 1 || normalized.indexOf('COVERART') !== 0) return false;
+    // 二进制项内容是 “文件名 + NUL + 图片字节”。
+    var zero = findZero(bytes, valueStart, valueEnd, 1);
+    var imageStart = zero >= 0 ? zero + 1 : valueStart;
+    if (valueEnd - imageStart < 32) return false;
+    var image = bytes.subarray(imageStart, valueEnd);
+    var blob = blobBytesToCoverBlob(image, sniffImageMime(image));
+    if (normalized === 'COVERARTFRONT') front = blob;
+    else if (!other) other = blob;
+    return !!front;
+  }
+  forEachApeTagItem(bytes, handleApeCoverItem);
+  return front || other;
+}
+/**
+ * 解析 APEv2 歌词项，沿用既有歌词字段优先级。
+ * @param {Uint8Array} bytes items 区域字节。
+ * @returns {string} 优先级最高的歌词文本。
+ */
+function apeTagLyricsText(bytes) {
+  var best = { priority: 0, text: '' };
+  /**
+   * 收集单个歌词候选项。
+   * @param {string} key 标签项名。
+   * @param {number} valueStart value 起始偏移。
+   * @param {number} valueEnd value 结束偏移，不含该位置。
+   * @param {number} flags 标签项 flags。
+   * @returns {boolean} 是否结束遍历。
+   */
+  function handleApeLyricItem(key, valueStart, valueEnd, flags) {
+    if ((flags >> 1) & 3) return false;
+    var maxPriority = embeddedLyricFieldMaxPriority(key);
+    if (best.priority >= maxPriority) return false;
+    // 未知字段只有存在完整 LRC 时间标签才可能命中回退优先级。
+    if (maxPriority === 25 && !hasEmbeddedLyricTimeTagBytes(bytes, valueStart, valueEnd)) return false;
+    var value = normalizeEmbeddedLyricText(decodeLegacyTagText(bytes.subarray(valueStart, valueEnd)));
+    var priority = embeddedLyricFieldPriority(key, value);
+    if (value && priority > best.priority) {
+      best.priority = priority;
+      best.text = value;
+    }
+    return best.priority >= 100;
+  }
+  forEachApeTagItem(bytes, handleApeLyricItem);
+  return best.text;
+}
+/**
+ * 打开 APE 元数据会话：头部流信息 + 尾部 APEv2/ID3v1 标签。
+ * @param {File|object} file 本地 APE 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<object>} `{info, items, id3v1, complete}`。
+ */
+async function readApeMetadataSession(file, opts) {
+  opts = opts || {};
+  var maxTagBytes = opts.light ? LOCAL_ASSET_LIGHT_SCAN_BYTES : LOCAL_MAX_TAG_BYTES;
+  var win = localHeaderWindow(file, 0);
+  var info = null;
+  try {
+    info = await readApeStreamInfo(win);
+  } finally {
+    win.release();
+  }
+  if (!info) return { info: null, items: EMPTY_LOCAL_BYTES, id3v1: EMPTY_LOCAL_BYTES, complete: true };
+  var region = await readApeTagRegion(file, maxTagBytes);
+  return {
+    info: info, items: region.items, id3v1: region.id3v1,
+    maxTagBytes: maxTagBytes, complete: !region.truncated
+  };
+}
+/**
+ * 解析 APE 展示元数据：APEv2 优先，其次文件头 ID3v2 与尾部 ID3v1。
+ * @param {File|object} file 本地 APE 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<object>} 标签对象；`_mineradioScanComplete=false` 表示需要完整重试。
+ */
+async function extractApeLocalMetadata(file, opts) {
+  var session = await readApeMetadataSession(file, opts);
+  var tags = {};
+  if (!session.info) return tags;
+  if (session.items.length) parseApeTagItems(session.items, tags);
+  if (session.info.junk) {
+    var id3 = await readId3v2TagBytes(file, 0, session.maxTagBytes);
+    if (id3.bytes.length) parseId3v2Tags(id3.bytes, 0, tags);
+    if (id3.truncated) tags._mineradioScanComplete = false;
+  }
+  if (session.id3v1.length) parseId3v1Tags(session.id3v1, 0, tags);
+  if (session.info.sampleRate > 0 && session.info.totalBlocks > 0) {
+    tags.duration = session.info.totalBlocks / session.info.sampleRate;
+  }
+  if (!session.complete) tags._mineradioScanComplete = false;
+  return tags;
+}
+/**
+ * 解析 APE 内嵌封面：APEv2 二进制项优先，其次文件头 ID3v2 的 APIC。
+ * @param {File|object} file 本地 APE 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<Blob|null>} 封面 Blob；没有封面时返回 null。
+ */
+async function extractApeEmbeddedCoverSource(file, opts) {
+  var session = await readApeMetadataSession(file, opts);
+  if (!session.info) return null;
+  if (session.items.length) {
+    var blob = apeTagPictureBlob(session.items);
+    if (blob) return blob;
+  }
+  if (!session.info.junk) return null;
+  var id3 = await readId3v2TagBytes(file, 0, session.maxTagBytes);
+  return id3.bytes.length ? parseId3v2Picture(id3.bytes, 0) : null;
+}
+/**
+ * 解析 APE 内嵌歌词：APEv2 歌词项优先，其次文件头 ID3v2 的 USLT。
+ * @param {File|object} file 本地 APE 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<string>} 歌词文本；没有歌词时返回空字符串。
+ */
+async function extractApeEmbeddedLyricsText(file, opts) {
+  var session = await readApeMetadataSession(file, opts);
+  if (!session.info) return '';
+  if (session.items.length) {
+    var text = apeTagLyricsText(session.items);
+    if (text) return text;
+  }
+  if (!session.info.junk) return '';
+  var id3 = await readId3v2TagBytes(file, 0, session.maxTagBytes);
+  return id3.bytes.length ? parseId3v2Lyrics(id3.bytes, 0) : '';
+}
+/**
+ * 打开 DSF 元数据会话：解析 DSD/fmt 头与 ID3v2 位置。
+ * @param {File|object} file 本地 DSF 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<object|null>} 会话对象；不是 DSF 时返回 null。
+ */
+async function readDsfMetadataSession(file, opts) {
+  opts = opts || {};
+  var win = localHeaderWindow(file, 0);
+  try {
+    var head = await win.at(0, 28);
+    if (head.length < 28 || asciiFromBytes(head, 0, 4) !== 'DSD ') return null;
+    var fmtOffset = uint64LE(head, 4);
+    var metadataOffset = uint64LE(head, 20);
+    if (fmtOffset < 28) return null;
+    var fmt = await win.at(fmtOffset, 52);
+    if (fmt.length < 52 || asciiFromBytes(fmt, 0, 4) !== 'fmt ') return null;
+    return {
+      channels: uint32LE(fmt, 24),
+      sampleRate: uint32LE(fmt, 28),
+      bitsPerSample: uint32LE(fmt, 32),
+      sampleCount: uint64LE(fmt, 36),
+      metadataOffset: metadataOffset,
+      maxTagBytes: opts.light ? LOCAL_ASSET_LIGHT_SCAN_BYTES : LOCAL_MAX_TAG_BYTES
+    };
+  } finally {
+    win.release();
+  }
+}
+/**
+ * 读取 DSF 头部指向的 ID3v2 标签。
+ * @param {File|object} file 本地 DSF 文件记录。
+ * @param {object} session DSF 元数据会话。
+ * @returns {Promise<object>} `{bytes, truncated}`。
+ */
+async function readDsfId3v2Bytes(file, session) {
+  var size = localFileSize(file) || 0;
+  // metadataOffset 为 0 表示文件没有标签块。
+  if (!session.metadataOffset || session.metadataOffset + 10 > size) {
+    return { bytes: EMPTY_LOCAL_BYTES, truncated: false };
+  }
+  return await readId3v2TagBytes(file, session.metadataOffset, session.maxTagBytes);
+}
+/**
+ * 解析 DSF 展示元数据与时长。
+ * @param {File|object} file 本地 DSF 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<object>} 标签对象；`_mineradioScanComplete=false` 表示需要完整重试。
+ */
+async function extractDsfLocalMetadata(file, opts) {
+  var session = await readDsfMetadataSession(file, opts);
+  if (!session) return {};
+  var tags = {};
+  var id3 = await readDsfId3v2Bytes(file, session);
+  if (id3.bytes.length) parseId3v2Tags(id3.bytes, 0, tags);
+  if (id3.truncated) tags._mineradioScanComplete = false;
+  // DSF 的 sample count 是单声道 1-bit 样本数，除以 DSD 采样率即为秒数。
+  if (session.sampleRate > 0 && session.sampleCount > 0) tags.duration = session.sampleCount / session.sampleRate;
+  return tags;
+}
+/**
+ * 解析 DSF 内嵌封面。
+ * @param {File|object} file 本地 DSF 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<Blob|null>} 封面 Blob；没有封面时返回 null。
+ */
+async function extractDsfEmbeddedCoverSource(file, opts) {
+  var session = await readDsfMetadataSession(file, opts);
+  if (!session) return null;
+  var id3 = await readDsfId3v2Bytes(file, session);
+  return id3.bytes.length ? parseId3v2Picture(id3.bytes, 0) : null;
+}
+/**
+ * 解析 DSF 内嵌歌词。
+ * @param {File|object} file 本地 DSF 文件记录。
+ * @param {{light?:boolean}=} opts 是否限制轻量扫描范围。
+ * @returns {Promise<string>} 歌词文本；没有歌词时返回空字符串。
+ */
+async function extractDsfEmbeddedLyricsText(file, opts) {
+  var session = await readDsfMetadataSession(file, opts);
+  if (!session) return '';
+  var id3 = await readDsfId3v2Bytes(file, session);
+  return id3.bytes.length ? parseId3v2Lyrics(id3.bytes, 0) : '';
+}
+/**
+ * 按音频格式提取展示元数据标签。
+ * @param {File|object} file 本地音频文件记录。
+ * @param {{light?:boolean}=} opts 是否限制后台轻量扫描范围。
+ * @returns {Promise<object>} 展示标签对象；无法解析时为空对象。
+ */
 async function extractLocalMetadataTags(file, opts) {
   if (!file) return {};
   var name = String(file.name || '').toLowerCase();
   try {
-    if (/\.mp3$/i.test(name)) return await extractMp3LocalMetadata(file);
-    if (/\.flac$/i.test(name)) return await extractFlacLocalMetadata(file, opts);
-    if (/\.m4a$/i.test(name)) return await extractM4aLocalMetadata(file, opts);
+    if (/\.mp3$/.test(name)) return await extractMp3LocalMetadata(file);
+    if (/\.flac$/.test(name)) return await extractFlacLocalMetadata(file, opts);
+    if (/\.m4a$/.test(name)) return await extractM4aLocalMetadata(file, opts);
+    if (/\.(ogg|oga|opus)$/.test(name)) return await extractOggLocalMetadata(file, opts);
+    if (/\.wav$/.test(name)) return await extractWavLocalMetadata(file, opts);
+    if (/\.ape$/.test(name)) return await extractApeLocalMetadata(file, opts);
+    if (/\.dsf$/.test(name)) return await extractDsfLocalMetadata(file, opts);
   } catch (e) {
     console.warn('[LocalMetadata]', file && file.name, e);
   }
@@ -25443,53 +26708,17 @@ function extractFlacPictureBlob(bytes, start, end) {
  * @returns {Promise<Blob|null>} 找到的封面 Blob；没有封面时返回 null。
  */
 async function extractMp3EmbeddedCoverSource(file) {
-  var fileSize = localFileSize(file);
-  var first = await readLocalFileBytes(file, 0, Math.min(fileSize || 0, 256 * 1024) || 256 * 1024);
-  if (asciiFromBytes(first, 0, 3) !== 'ID3' || first.length < 10) return null;
-  var version = first[3] || 3;
-  var tagSize = synchsafeInt(first, 6);
-  if (!tagSize || tagSize > 48 * 1024 * 1024) return null;
-  var total = Math.min((fileSize || tagSize + 10), tagSize + 10);
-  var bytes = first.length >= total ? first : await readLocalFileBytes(file, 0, total);
-  var pos = 10;
-  var end = Math.min(bytes.length, tagSize + 10);
-  while (version >= 3 && pos + 10 <= end) {
-    var id = asciiFromBytes(bytes, pos, 4);
-    var size = version === 4 ? synchsafeInt(bytes, pos + 4) : uint32BE(bytes, pos + 4);
-    if (!id.trim() || size <= 0) break;
-    var frameStart = pos + 10;
-    var frameEnd = Math.min(end, frameStart + size);
-    if (id === 'APIC' && frameEnd > frameStart + 8) {
-      var enc = bytes[frameStart] || 0;
-      var mimeEnd = findZero(bytes, frameStart + 1, frameEnd, 1);
-      if (mimeEnd < 0) break;
-      var mime = asciiFromBytes(bytes, frameStart + 1, mimeEnd - frameStart - 1) || 'image/jpeg';
-      var descStart = mimeEnd + 2;
-      var descEnd = findZero(bytes, descStart, frameEnd, (enc === 1 || enc === 2) ? 2 : 1);
-      var imageStart = descEnd >= 0 ? descEnd + ((enc === 1 || enc === 2) ? 2 : 1) : descStart;
-      if (imageStart < frameEnd) return blobBytesToCoverBlob(bytes.subarray(imageStart, frameEnd), mime);
-    }
-    pos = frameEnd;
-  }
-  pos = 10;
-  while (version === 2 && pos + 6 <= end) {
-    var shortId = asciiFromBytes(bytes, pos, 3);
-    var shortSize = uint24BE(bytes, pos + 3);
-    if (!shortId.trim() || shortSize <= 0) break;
-    var shortStart = pos + 6;
-    var shortEnd = Math.min(end, shortStart + shortSize);
-    if (shortId === 'PIC' && shortEnd > shortStart + 8) {
-      var fmt = asciiFromBytes(bytes, shortStart + 1, 3).toLowerCase();
-      var shortMime = fmt === 'png' ? 'image/png' : 'image/jpeg';
-      var shortEnc = bytes[shortStart] || 0;
-      var shortDescStart = shortStart + 5;
-      var shortDescEnd = findZero(bytes, shortDescStart, shortEnd, (shortEnc === 1 || shortEnc === 2) ? 2 : 1);
-      var shortImageStart = shortDescEnd >= 0 ? shortDescEnd + ((shortEnc === 1 || shortEnc === 2) ? 2 : 1) : shortDescStart;
-      if (shortImageStart < shortEnd) return blobBytesToCoverBlob(bytes.subarray(shortImageStart, shortEnd), shortMime);
-    }
-    pos = shortEnd;
-  }
-  return null;
+  var bytes = await readMp3Id3v2Bytes(file);
+  return bytes.length ? parseId3v2Picture(bytes, 0) : null;
+}
+/**
+ * 解析 MP3 ID3v2 内嵌歌词。
+ * @param {File|object} file 本地 MP3 文件记录。
+ * @returns {Promise<string>} 优先级最高的歌词文本；没有歌词时返回空字符串。
+ */
+async function extractMp3EmbeddedLyricsText(file) {
+  var bytes = await readMp3Id3v2Bytes(file);
+  return bytes.length ? parseId3v2Lyrics(bytes, 0) : '';
 }
 /**
  * 解析 FLAC PICTURE 并返回短生命周期封面 Blob。
@@ -25522,13 +26751,48 @@ async function extractEmbeddedCoverSource(file, opts) {
   if (!file) return null;
   var name = String(file.name || '').toLowerCase();
   try {
-    if (/\.mp3$/i.test(name)) return await extractMp3EmbeddedCoverSource(file);
-    if (/\.flac$/i.test(name)) return await extractFlacEmbeddedCoverSource(file, opts);
-    if (/\.m4a$/i.test(name)) return await extractM4aEmbeddedCoverSource(file, opts);
+    if (/\.mp3$/.test(name)) return await extractMp3EmbeddedCoverSource(file);
+    if (/\.flac$/.test(name)) return await extractFlacEmbeddedCoverSource(file, opts);
+    if (/\.m4a$/.test(name)) return await extractM4aEmbeddedCoverSource(file, opts);
+    if (/\.(ogg|oga|opus)$/.test(name)) return await extractOggEmbeddedCoverSource(file, opts);
+    if (/\.wav$/.test(name)) return await extractWavEmbeddedCoverSource(file, opts);
+    if (/\.ape$/.test(name)) return await extractApeEmbeddedCoverSource(file, opts);
+    if (/\.dsf$/.test(name)) return await extractDsfEmbeddedCoverSource(file, opts);
   } catch (e) {
     console.warn('[LocalEmbeddedCover]', file && file.name, e);
   }
   return null;
+}
+/**
+ * 按音频格式提取内嵌歌词文本。
+ * @param {File|object} file 本地音频文件记录。
+ * @param {{light?:boolean}=} opts 是否限制后台轻量扫描范围。
+ * @returns {Promise<string>} 歌词文本；没有内嵌歌词时返回空字符串。
+ */
+async function extractEmbeddedLyricsText(file, opts) {
+  if (!file) return '';
+  var name = String(file.name || '').toLowerCase();
+  try {
+    if (/\.mp3$/.test(name)) return await extractMp3EmbeddedLyricsText(file);
+    if (/\.flac$/.test(name)) return await extractFlacEmbeddedLyricsText(file, opts);
+    if (/\.(ogg|oga|opus)$/.test(name)) return await extractOggEmbeddedLyricsText(file, opts);
+    if (/\.wav$/.test(name)) return await extractWavEmbeddedLyricsText(file, opts);
+    if (/\.ape$/.test(name)) return await extractApeEmbeddedLyricsText(file, opts);
+    if (/\.dsf$/.test(name)) return await extractDsfEmbeddedLyricsText(file, opts);
+  } catch (e) {
+    console.warn('[LocalEmbeddedLyrics]', file && file.name, e);
+  }
+  return '';
+}
+/**
+ * 返回内嵌标签来源标签文本，用于歌词面板显示解析出处。
+ * @param {object} song 本地歌曲。
+ * @returns {string} 来源标签。
+ */
+function embeddedLyricSourceLabel(song) {
+  var name = String((song && (song.localFileName || song.name)) || '').toLowerCase();
+  var match = /\.([a-z0-9]+)$/.exec(name);
+  return (match ? match[1].toUpperCase() : 'LOCAL') + ' LYRICS';
 }
 function applyLocalMetadataTags(song, tags) {
   if (!song || !tags) return false;
@@ -25540,6 +26804,8 @@ function applyLocalMetadataTags(song, tags) {
   if (tags.track && song.trackNumber !== tags.track) { song.trackNumber = tags.track; changed = true; }
   if (tags.genre && !isLocalSourcePlaceholderMetadata(tags.genre) && song.genre !== tags.genre) { song.genre = tags.genre; changed = true; }
   if (tags.year && song.year !== tags.year) { song.year = tags.year; changed = true; }
+  // 头部推导出的时长只在缺省时补齐：真实播放测得的时长更可信。
+  if (tags.duration > 0 && !(song.duration > 0)) { song.duration = tags.duration; changed = true; }
   updateLocalAudioQualityInfo(song);
   return changed;
 }
@@ -25691,7 +26957,7 @@ function ensureLocalCoverForSong(song, opts) {
     var embeddedSource = !coverSource;
     if (!coverSource) coverSource = await extractEmbeddedCoverSource(song.localFile, { light: !!opts.background });
     if (!coverSource) {
-      if (opts.background && !song.localCoverFile && (canReadEmbeddedFlacCover(song) || canReadEmbeddedM4aCover(song))) {
+      if (opts.background && !song.localCoverFile && canReadTruncatableEmbeddedCover(song)) {
         song.localCoverLightScanned = true;
       } else {
         song.localCoverLoaded = true;
@@ -25725,7 +26991,7 @@ function ensureLocalCoverForSong(song, opts) {
     return true;
   })().catch(function(err){
     console.warn('[LocalCover]', song && song.name, err);
-    if (opts.background && !song.localCoverFile && (canReadEmbeddedFlacCover(song) || canReadEmbeddedM4aCover(song))) song.localCoverLightScanned = true;
+    if (opts.background && !song.localCoverFile && canReadTruncatableEmbeddedCover(song)) song.localCoverLightScanned = true;
     else song.localCoverLoaded = true;
     syncLocalSongAssetFields(song);
     if (song.localCoverLoaded) scheduleLocalAssetCacheWrite(song);
@@ -25763,7 +27029,7 @@ async function preloadLocalSongAssets(song, opts) {
       coverOpts: { trackToken: trackSwitchToken, deferHeavy: false, delay: 0, timeout: 1200 }
     })
     : null;
-  var lyricPromise = shouldLoadLyrics && !song.localLyricFile && canReadEmbeddedFlacLyrics(song)
+  var lyricPromise = shouldLoadLyrics && !song.localLyricFile && canReadEmbeddedLyrics(song)
     ? ensureLocalLyricsForSong(song, { applyCurrent: applyCurrent, background: background })
     : null;
   await metadataPromise;

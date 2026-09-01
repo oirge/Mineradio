@@ -470,13 +470,13 @@ async function testBackgroundPreloadStartsMetadataAndCoverTogether() {
   /** @returns {boolean} 测试歌曲使用音频内嵌封面。 */
   function canReadEmbeddedCover() { return true; }
 
-  /** @returns {boolean} 测试歌曲允许读取 FLAC 内嵌歌词。 */
-  function canReadEmbeddedFlacLyrics() { return true; }
+  /** @returns {boolean} 测试歌曲允许读取内嵌歌词。 */
+  function canReadEmbeddedLyrics() { return true; }
 
   const context = {
     Promise,
     canReadEmbeddedCover,
-    canReadEmbeddedFlacLyrics,
+    canReadEmbeddedLyrics,
     ensureLocalCoverForSong,
     ensureLocalLyricsForSong,
     ensureLocalMetadataForSong,
@@ -534,12 +534,12 @@ async function testBackgroundPreloadKeepsExternalCoverSequential() {
   function canReadEmbeddedCover() { return false; }
 
   /** @returns {boolean} 纯后台场景不读取内嵌歌词。 */
-  function canReadEmbeddedFlacLyrics() { return false; }
+  function canReadEmbeddedLyrics() { return false; }
 
   const context = {
     Promise,
     canReadEmbeddedCover,
-    canReadEmbeddedFlacLyrics,
+    canReadEmbeddedLyrics,
     ensureLocalCoverForSong,
     ensureLocalLyricsForSong,
     ensureLocalMetadataForSong,
