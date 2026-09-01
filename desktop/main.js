@@ -33,6 +33,14 @@ const {
   stageProfileSessionData,
   writeSessionLocalStorage,
 } = require('./profile-state-migration');
+const {
+  LOCAL_LIBRARY_DB_FILE_NAME,
+  buildIndexRecordFromFileRow,
+  createLocalLibraryStore,
+  isLocalLibraryStoreSupported,
+  makeStoreFingerprint,
+  normalizeStorePathKey,
+} = require('./local-library-store');
 registerWallpaperEngineScheme(protocol);
 
 const APP_NAME = 'Mineradio';
@@ -271,6 +279,10 @@ const LOCAL_LIBRARY_EXTS = new Set([
   '.mp3', '.mp2', '.flac', '.m4a', '.m4b', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba', '.aif', '.aiff', '.aifc',
   '.lrc', '.txt', '.srt', '.vtt', '.ass', '.yrc',
   '.jpg', '.jpeg', '.jpe', '.jfif', '.png', '.webp', '.avif', '.gif', '.bmp', '.svg',
+]);
+// 曲库快照同时包含音频、歌词和封面文件；只有音频才计入 SQLite 的 audio 计数与曲库签名。
+const LOCAL_LIBRARY_AUDIO_EXTS = new Set([
+  '.mp3', '.mp2', '.flac', '.m4a', '.m4b', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba', '.aif', '.aiff', '.aifc',
 ]);
 const LOCAL_LIBRARY_MIME = {
   '.mp3': 'audio/mpeg',
@@ -630,10 +642,29 @@ async function scanLocalMusicFolderIncremental(folderPath, previousSnapshot) {
 
 async function scanLocalMusicFolder(folderPath, options) {
   const snapshot = options && options.previousSnapshot;
+  let result = null;
   if (snapshot && Array.isArray(snapshot.files) && Array.isArray(snapshot.directories)) {
-    return scanLocalMusicFolderIncremental(folderPath, snapshot);
+    result = await scanLocalMusicFolderIncremental(folderPath, snapshot);
+  } else {
+    // 渲染层没带快照时先问数据库：有历史行就能走增量扫描，只 stat 变化过的目录。
+    const stored = (!options || options.useStoredSnapshot !== false) ? loadLocalLibraryStoreRoot(folderPath, { index: false }) : null;
+    if (stored && stored.ok && stored.files.length && stored.directories.length) {
+      result = await scanLocalMusicFolderIncremental(folderPath, {
+        files: stored.files,
+        directories: stored.directories,
+        truncated: stored.truncated,
+        savedAt: stored.savedAt,
+      });
+      if (result && result.ok) result.storedSnapshot = true;
+    } else {
+      result = await scanLocalMusicFolderFull(folderPath);
+    }
   }
-  return scanLocalMusicFolderFull(folderPath);
+  if (result && result.ok) {
+    const summary = await syncLocalLibraryStoreFromScan(result.folderPath, result);
+    if (summary) result.db = summary;
+  }
+  return result;
 }
 
 async function refreshLocalMusicFileEntries(folderPath, snapshotOrFiles) {
@@ -653,6 +684,212 @@ async function refreshLocalMusicFileEntries(folderPath, snapshotOrFiles) {
     directories: snapshot.directories,
     snapshot: true,
     restoredFromSnapshot: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 本地曲库 SQLite 存储：文件指纹 + 路径索引常驻磁盘，几万首歌启动时不再重放整包 JSON。
+// ---------------------------------------------------------------------------
+
+let localLibraryStoreHandle = null;
+let localLibraryStoreUnavailable = false;
+
+/**
+ * 惰性获取本地曲库 SQLite 存储。不可用时只标记一次并返回 null，调用方全部走 IndexedDB 旧路径。
+ * @returns {object|null} 存储句柄或 null。
+ */
+function getLocalLibraryStore() {
+  if (localLibraryStoreHandle || localLibraryStoreUnavailable) return localLibraryStoreHandle;
+  if (!isLocalLibraryStoreSupported()) {
+    localLibraryStoreUnavailable = true;
+    return null;
+  }
+  try {
+    const handle = createLocalLibraryStore({ filePath: path.join(app.getPath('userData'), LOCAL_LIBRARY_DB_FILE_NAME) });
+    const status = handle.getStatus();
+    if (!status || !status.ok) {
+      localLibraryStoreUnavailable = true;
+      return null;
+    }
+    localLibraryStoreHandle = handle;
+  } catch (_e) {
+    localLibraryStoreUnavailable = true;
+    localLibraryStoreHandle = null;
+  }
+  return localLibraryStoreHandle;
+}
+
+/**
+ * 关闭曲库数据库连接，退出前调用，保证 WAL 正常收尾。
+ * @returns {void}
+ */
+function closeLocalLibraryStore() {
+  if (!localLibraryStoreHandle) return;
+  try {
+    localLibraryStoreHandle.close();
+  } catch (_e) { /* 关闭失败不影响退出 */ }
+  localLibraryStoreHandle = null;
+}
+
+/**
+ * 把扫描结果里的一条文件记录压成 SQLite 存储需要的最小字段集。
+ * 路径解析继续留在主进程，存储层只认归一化后的输入。
+ * @param {string} root 曲库根目录。
+ * @param {object} record 扫描产出的文件记录。
+ * @returns {object|null} 存储条目，非法记录返回 null。
+ */
+function localLibraryStoreFileEntry(root, record) {
+  if (!record) return null;
+  const rel = localLibraryRelPathFromRecord(root, record);
+  if (!rel) return null;
+  const abs = String(record.fullPath || record.filePath || path.resolve(root, rel));
+  const size = Number(record.size) || 0;
+  const mtime = Number(record.lastModified) || 0;
+  const name = String(record.name || path.basename(abs));
+  const ext = path.extname(name || abs).toLowerCase();
+  return {
+    rel: rel,
+    name: name,
+    ext: ext,
+    mime: String(record.type || LOCAL_LIBRARY_MIME[ext] || ''),
+    isAudio: LOCAL_LIBRARY_AUDIO_EXTS.has(ext),
+    size: size,
+    mtime: mtime,
+    pathKey: normalizeStorePathKey(abs),
+    // 与渲染层 localSongKeyFromFile 完全同构：原始绝对路径 + 大小 + 修改时间。
+    songKey: abs + ':' + size + ':' + mtime,
+  };
+}
+
+/**
+ * 把扫描结果同步进 SQLite。失败只记在返回值里，绝不影响本轮扫描结果本身。
+ * @param {string} root 曲库根目录。
+ * @param {object} scan 扫描结果。
+ * @returns {Promise<object|null>} 同步结果摘要。
+ */
+async function syncLocalLibraryStoreFromScan(root, scan) {
+  const store = getLocalLibraryStore();
+  if (!store || !scan || !scan.ok) return null;
+  const source = Array.isArray(scan.files) ? scan.files : [];
+  const files = [];
+  for (let i = 0; i < source.length; i += 1) {
+    const entry = localLibraryStoreFileEntry(root, source[i]);
+    if (entry) files.push(entry);
+  }
+  const dirSource = Array.isArray(scan.directories) ? scan.directories : [];
+  const directories = new Array(dirSource.length);
+  for (let i = 0; i < dirSource.length; i += 1) {
+    const dir = dirSource[i] || {};
+    directories[i] = { rel: normalizeLocalLibraryRelPath(dir.relativePath || ''), mtime: Number(dir.lastModified) || 0 };
+  }
+  try {
+    return await store.syncRoot({
+      folderPath: root,
+      files: files,
+      directories: directories,
+      truncated: !!scan.truncated,
+      scanMode: String(scan.scanMode || ''),
+    });
+  } catch (e) {
+    return { ok: false, error: e.message || 'LOCAL_LIBRARY_DB_SYNC_FAILED' };
+  }
+}
+
+/**
+ * 由 SQLite 行还原渲染层需要的文件描述。校验与 rehydrateLocalLibraryFileRecord 同源，
+ * 但直接按列构造对象，避免大曲库恢复时为每行多做一次浅拷贝。
+ * @param {string} root 曲库根目录。
+ * @param {object} row 数据库 files 行。
+ * @returns {object|null} 文件描述。
+ */
+function localLibraryStoreFileRecordFromRow(root, row) {
+  const rel = normalizeLocalLibraryRelPath(row && row.rel_path || '');
+  if (!rel) return null;
+  const abs = path.resolve(root, rel);
+  if (!isPathInsideLocalLibraryRoot(root, abs)) return null;
+  const name = String(row.name || path.basename(abs));
+  const ext = String(row.ext || path.extname(name) || '').toLowerCase();
+  if (!LOCAL_LIBRARY_EXTS.has(ext)) return null;
+  const webkitRelativePath = localLibraryRelativePath(root, rel);
+  return {
+    fullPath: abs,
+    filePath: abs,
+    url: localFileProxyUrl(abs),
+    name: name,
+    relativePath: webkitRelativePath,
+    webkitRelativePath: webkitRelativePath,
+    size: Number(row.size) || 0,
+    lastModified: Number(row.mtime) || 0,
+    type: String(row.mime || LOCAL_LIBRARY_MIME[ext] || ''),
+  };
+}
+
+/**
+ * 从 SQLite 一次性取回曲库文件列表、目录列表和索引记录。
+ * 旧路径要先读 IndexedDB 快照、跨 IPC 送回主进程再逐条 rehydrate；这里一次查询直接拼好。
+ * @param {string} folderPath 曲库根路径。
+ * @param {{index?:boolean}=} options 是否附带索引记录。
+ * @returns {object|null} 还原结果，数据库不可用返回 null。
+ */
+function loadLocalLibraryStoreRoot(folderPath, options) {
+  const store = getLocalLibraryStore();
+  if (!store) return null;
+  let root = '';
+  try {
+    root = rememberLocalMusicRoot(folderPath);
+  } catch (e) {
+    return { ok: false, error: e.message || 'LOCAL_LIBRARY_NOT_DIRECTORY' };
+  }
+  let loaded = null;
+  try {
+    loaded = store.loadRoot(root);
+  } catch (e) {
+    return { ok: false, error: e.message || 'LOCAL_LIBRARY_DB_LOAD_FAILED' };
+  }
+  if (!loaded || !loaded.ok) return loaded || null;
+  const wantIndex = !options || options.index !== false;
+  const rows = loaded.files;
+  const files = [];
+  const records = wantIndex ? {} : null;
+  let indexCount = 0;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const record = localLibraryStoreFileRecordFromRow(root, row);
+    if (!record) continue;
+    files.push(record);
+    // index_updated_at 只由渲染层索引回写设置，是「这一行已有解析过的元数据」的唯一判据。
+    if (!wantIndex || !Number(row.index_updated_at) || !Number(row.is_audio)) continue;
+    const songKey = String(row.song_key || '');
+    if (!songKey) continue;
+    const indexRecord = buildIndexRecordFromFileRow(row);
+    indexRecord.fullPath = record.fullPath;
+    indexRecord.path = record.relativePath;
+    records[songKey] = indexRecord;
+    indexCount += 1;
+  }
+  const dirRows = loaded.directories;
+  const directories = new Array(dirRows.length);
+  for (let i = 0; i < dirRows.length; i += 1) {
+    const rel = normalizeLocalLibraryRelPath(dirRows[i] && dirRows[i].rel_path || '');
+    directories[i] = {
+      fullPath: rel ? path.join(root, rel) : root,
+      relativePath: rel,
+      lastModified: Number(dirRows[i] && dirRows[i].mtime) || 0,
+    };
+  }
+  return {
+    ok: true,
+    folderPath: root,
+    files: files,
+    directories: directories,
+    index: wantIndex ? { schema: 1, folderPath: root, savedAt: loaded.indexSavedAt, count: indexCount, records: records } : null,
+    truncated: !!loaded.truncated,
+    scanMode: String(loaded.scanMode || ''),
+    scanSignature: String(loaded.scanSignature || ''),
+    savedAt: Number(loaded.savedAt) || 0,
+    indexSavedAt: Number(loaded.indexSavedAt) || 0,
+    fileCount: Number(loaded.fileCount) || 0,
+    audioCount: Number(loaded.audioCount) || 0,
   };
 }
 
@@ -3913,6 +4150,71 @@ ipcMain.handle('mineradio-local-music-refresh-entries', trustedMainFrameHandler(
   }
 }));
 
+/**
+ * 统一包裹曲库数据库调用。数据库不可用或单次调用抛错都只降级成失败返回值，渲染层继续走 IndexedDB。
+ * @param {(store:object)=>object} run 实际操作。
+ * @returns {object} 操作结果。
+ */
+function withLocalLibraryStore(run) {
+  const store = getLocalLibraryStore();
+  if (!store) return { ok: false, error: 'LOCAL_LIBRARY_DB_UNAVAILABLE' };
+  try {
+    return run(store);
+  } catch (e) {
+    return { ok: false, error: e.message || 'LOCAL_LIBRARY_DB_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-local-library-db-status', trustedMainFrameHandler(() => withLocalLibraryStore((store) => store.getStatus())));
+
+ipcMain.handle('mineradio-local-library-db-load', trustedMainFrameHandler((_event, folderPath, options) => {
+  if (!folderPath) return { ok: false, error: 'LOCAL_LIBRARY_PATH_EMPTY' };
+  const result = loadLocalLibraryStoreRoot(folderPath, options || {});
+  return result || { ok: false, error: 'LOCAL_LIBRARY_DB_UNAVAILABLE' };
+}));
+
+ipcMain.handle('mineradio-local-library-db-save-index', trustedMainFrameHandler((_event, folderPath, records) => withLocalLibraryStore((store) => {
+  if (!folderPath) return { ok: false, error: 'LOCAL_LIBRARY_PATH_EMPTY' };
+  return store.saveIndexRecords(folderPath, Array.isArray(records) ? records : []);
+})));
+
+ipcMain.handle('mineradio-local-library-db-clear', trustedMainFrameHandler((_event, folderPath) => withLocalLibraryStore((store) => {
+  if (!folderPath) return { ok: false, error: 'LOCAL_LIBRARY_PATH_EMPTY' };
+  return store.clearRoot(folderPath);
+})));
+
+ipcMain.handle('mineradio-local-library-db-read-assets', trustedMainFrameHandler((_event, keys) => withLocalLibraryStore((store) => store.readAssetRecords(Array.isArray(keys) ? keys : []))));
+
+ipcMain.handle('mineradio-local-library-db-write-assets', trustedMainFrameHandler((_event, records) => withLocalLibraryStore((store) => {
+  const list = Array.isArray(records) ? records : [records];
+  let saved = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const result = store.writeAssetRecord(list[i]);
+    if (result && result.ok) saved += 1;
+  }
+  return { ok: true, saved: saved, total: list.length };
+})));
+
+ipcMain.handle('mineradio-local-library-db-read-lyrics', trustedMainFrameHandler((_event, keys) => withLocalLibraryStore((store) => store.readLyricRecords(Array.isArray(keys) ? keys : []))));
+
+ipcMain.handle('mineradio-local-library-db-write-lyrics', trustedMainFrameHandler((_event, records) => withLocalLibraryStore((store) => {
+  const list = Array.isArray(records) ? records : [records];
+  let saved = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const result = store.writeLyricRecord(list[i]);
+    if (result && result.ok) saved += 1;
+  }
+  return { ok: true, saved: saved, total: list.length };
+})));
+
+ipcMain.handle('mineradio-local-library-db-bump-play', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.bumpPlayStat(payload || {}))));
+
+ipcMain.handle('mineradio-local-library-db-set-favorite', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.setFavorite(payload || {}))));
+
+ipcMain.handle('mineradio-local-library-db-read-stats', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.readStats(payload || {}))));
+
+ipcMain.handle('mineradio-local-library-db-trim', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.trim(payload || {}))));
+
 ipcMain.handle('mineradio-local-file-read-range', trustedMainFrameHandler(async (_event, filePath, start, end) => {
   try {
     return await readAuthorizedLocalFileRange(filePath, start, end);
@@ -4572,5 +4874,6 @@ if (!gotSingleInstanceLock) {
     closeOverlayWindows();
     wallpaperEngineBridge.dispose();
     if (localServer && localServer.close) localServer.close();
+    closeLocalLibraryStore();
   });
 }

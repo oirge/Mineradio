@@ -131,7 +131,9 @@ var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
 var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
 var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
-var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'trackNumber', 'year'];
+// genre 是向前生效字段：新解析的曲目会写入曲库与缓存，旧记录不带该键，
+// 因此 applyLocalAssetCacheToSong 的 hasOwnProperty 判定会跳过它，升级后不会整库回落文件名重解析。
+var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'genre', 'trackNumber', 'year'];
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
 var LOCAL_METADATA_TAG_SCHEMA = 3;
 var PERSISTENT_UI_STATE_KEYS = [
@@ -390,6 +392,14 @@ var localLyricCacheWriteRecords = {};
 var localLibraryPersistentMemory = {};
 var localLibraryPersistentFolderPath = '';
 var localLibraryPersistentGeneration = 0;
+// 桌面壳 SQLite 曲库存储：探测一次结果就常驻，避免每次读写都过一遍 IPC 才发现桌面壳没这条通道。
+var localLibraryDbState = { probed: false, available: false, promise: null, status: null };
+// loadLocalLibraryDb 的一次性交接：hydrate 阶段取回的文件表交给紧随其后的 readLocalLibrarySnapshot 消费后立即释放，
+// 几万首歌的数组不能在这里长期驻留。
+var localLibraryDbSnapshotHandoff = null;
+// 索引写入摘要表：只把真正变化的行推给主进程，避免 420ms 防抖里反复整表重写。
+var localLibraryDbIndexDigests = {};
+var localLibraryDbIndexDigestGeneration = 0;
 var localLibraryIndexWriteTimer = null;
 var localIndexedDbTrimTimer = null;
 var localIndexedDbTrimRunning = false;
@@ -482,7 +492,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.17';
+var APP_VERSION = '1.7.18';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -6525,6 +6535,8 @@ async function trimLocalIndexedDbCaches(reason) {
   var dropped = 0;
   try {
     var keep = collectProtectedLocalAssetCacheKeys();
+    // SQLite 曲库有独立的容量上限，和 IndexedDB 用同一批保护键一起裁剪，避免两套缓存各自为政。
+    if (localLibraryDbActive()) callLocalLibraryDb('trimLocalLibraryDb', { protectedKeys: Object.keys(keep) });
     var db = await openLocalAssetCacheDb();
     dropped += await new Promise(function(resolve, reject){
       var now = Date.now();
@@ -6887,13 +6899,200 @@ async function deleteLocalLibraryPersistentRecords(folderPath) {
   }
 }
 /**
+ * 取回桌面壳暴露的 SQLite 曲库通道；纯浏览器环境或旧壳返回 null。
+ * @returns {object|null} 桌面壳桥接对象。
+ */
+function localLibraryDbApi() {
+  var api = typeof window !== 'undefined' ? window.desktopWindow : null;
+  if (!api || !api.isDesktop) return null;
+  if (typeof api.localLibraryDbStatus !== 'function') return null;
+  return api;
+}
+/**
+ * 探测一次 SQLite 曲库是否可用并缓存结论。node:sqlite 缺失或建库失败时永久降级到 IndexedDB。
+ * @returns {Promise<boolean>} 是否可用。
+ */
+function probeLocalLibraryDb() {
+  if (localLibraryDbState.probed) return Promise.resolve(localLibraryDbState.available);
+  if (localLibraryDbState.promise) return localLibraryDbState.promise;
+  var api = localLibraryDbApi();
+  if (!api) {
+    localLibraryDbState.probed = true;
+    localLibraryDbState.available = false;
+    return Promise.resolve(false);
+  }
+  localLibraryDbState.promise = (async function(){
+    var ok = false;
+    try {
+      var status = await api.localLibraryDbStatus();
+      ok = !!(status && status.ok && status.available);
+      localLibraryDbState.status = status || null;
+    } catch (e) {
+      console.warn('[LocalLibraryDbProbe]', e);
+      ok = false;
+    }
+    localLibraryDbState.probed = true;
+    localLibraryDbState.available = ok;
+    localLibraryDbState.promise = null;
+    return ok;
+  })();
+  return localLibraryDbState.promise;
+}
+/**
+ * 同步判断 SQLite 曲库当前是否已确认可用；未探测完成时按不可用处理，调用方自行走 IndexedDB。
+ * @returns {boolean} 是否已确认可用。
+ */
+function localLibraryDbActive() {
+  return !!(localLibraryDbState.probed && localLibraryDbState.available);
+}
+/**
+ * 统一调用 SQLite 曲库通道。永不抛出：任何失败都返回 null 让调用方回落 IndexedDB；
+ * 只有主进程明确回报存储不可用才把状态latch成不可用，避免单次瞬时错误永久关闭 SQLite 路径。
+ * @param {string} method 桥接方法名。
+ * @param {*} a 第一参数。
+ * @param {*} b 第二参数。
+ * @returns {Promise<object|null>} 主进程返回值；不可用或失败时为 null。
+ */
+async function callLocalLibraryDb(method, a, b) {
+  var api = localLibraryDbApi();
+  if (!api || typeof api[method] !== 'function') return null;
+  if (!(await probeLocalLibraryDb())) return null;
+  try {
+    var result = arguments.length >= 3 ? await api[method](a, b) : (arguments.length === 2 ? await api[method](a) : await api[method]());
+    if (result && result.ok === false && result.error === 'LOCAL_LIBRARY_DB_UNAVAILABLE') {
+      localLibraryDbState.available = false;
+      return null;
+    }
+    return result || null;
+  } catch (e) {
+    console.warn('[LocalLibraryDb]', method, e);
+    return null;
+  }
+}
+/**
+ * FNV-1a 32 位文本摘要。索引增量写入用它判断某行是否真的变了，比逐字段比较便宜且不需要保留整行副本。
+ * @param {string} text 待摘要文本。
+ * @returns {string} 8 位十六进制摘要。
+ */
+function localLibraryDbTextDigest(text) {
+  var str = String(text || '');
+  var hash = 0x811c9dc5;
+  for (var i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = (hash + (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)) >>> 0;
+  }
+  return hash.toString(16);
+}
+/**
+ * 生成索引行摘要，仅覆盖会随扫描/解析变化的字段。
+ * @param {object} record 索引行。
+ * @returns {string} 行摘要。
+ */
+function localLibraryDbIndexDigest(record) {
+  if (!record) return '';
+  return localLibraryDbTextDigest([
+    record.fileSignature || '', record.pathKey || '', record.size || 0, record.mtime || 0,
+    record.name || '', record.artist || '', record.album || '', record.albumArtist || '',
+    record.genre || '', record.year || '', record.trackNumber || '', record.duration || 0,
+    record.localFormat || '', record.localBitrateKbps || 0,
+    record.localMetadataLoaded ? 1 : 0, record.localMetadataTagSchema || 0,
+    record.lyricStatus || '', record.lyricSource || '', record.lyricFileName || '', record.lyricTagName || '', record.lyricFileSignature || '',
+    record.coverStatus || '', record.coverSource || '', record.coverFileName || '', record.coverFileSignature || '',
+  ].join(''));
+}
+/**
+ * 曲库代次变化时丢弃摘要表，防止 A→B→A 时把 B 的摘要当成 A 的现状而漏写。
+ * @param {number} generation 当前常驻代次。
+ * @returns {void}
+ */
+function resetLocalLibraryDbIndexDigests(generation) {
+  if (localLibraryDbIndexDigestGeneration === generation) return;
+  localLibraryDbIndexDigestGeneration = generation;
+  localLibraryDbIndexDigests = {};
+}
+/**
+ * 把本地曲目的播放次数与最近播放写进 SQLite。song_stats 按 song_key 独立存活，
+ * 重扫、换库或删掉索引都不会清零，所以这里只做累加，不重放历史。
+ * @param {object} snapshot 听歌会话快照（listenSongSnapshot 结果）。
+ * @param {{listenMs?:number, completed?:boolean, playedAt?:number}} result 本次结算数据。
+ * @returns {void}
+ */
+function syncLocalLibraryDbPlayStat(snapshot, result) {
+  var snap = snapshot || {};
+  if (snap.type !== 'local') return;
+  var songKey = String(snap.localKey || '');
+  if (!songKey) return;
+  var payload = result || {};
+  callLocalLibraryDb('bumpLocalLibraryDbPlayStat', {
+    key: songKey,
+    pathKey: snap.pathKey || '',
+    plays: 1,
+    listenMs: Math.max(0, Math.round(Number(payload.listenMs) || 0)),
+    completed: payload.completed ? 1 : 0,
+    lastPlayedAt: Number(payload.playedAt) || Date.now(),
+    name: snap.name || '',
+    artist: snap.artist || '',
+  });
+}
+/**
+ * 把「特别喜欢」的收藏状态写进 SQLite，localStorage 引用表仍是唯一权威来源。
+ * @param {object} song 本地歌曲对象。
+ * @param {boolean} favorite 是否收藏。
+ * @returns {void}
+ */
+function syncLocalLibraryDbFavorite(song, favorite) {
+  if (!song || song.type !== 'local') return;
+  var songKey = String(song.localKey || '');
+  if (!songKey) return;
+  callLocalLibraryDb('setLocalLibraryDbFavorite', {
+    key: songKey,
+    pathKey: localLibraryPathKeyFromSong(song),
+    favorite: favorite ? 1 : 0,
+    name: song.name || '',
+    artist: songArtistText(song),
+  });
+}
+/**
  * 预热本地库索引供后续同步接口读取；大快照由恢复入口按需读取后释放。
  * @param {string} folderPath 本地库文件夹路径。
  * @returns {Promise<void>}
  */
 async function hydrateLocalLibraryPersistentState(folderPath) {
   if (!folderPath) return;
-  activateLocalLibraryPersistentMemory(folderPath);
+  var generation = activateLocalLibraryPersistentMemory(folderPath);
+  resetLocalLibraryDbIndexDigests(generation);
+  if (await probeLocalLibraryDb()) {
+    var loaded = await callLocalLibraryDb('loadLocalLibraryDb', folderPath, { index: true });
+    if (loaded && loaded.ok && generation === localLibraryPersistentGeneration && folderPath === localLibraryPersistentFolderPath) {
+      var records = loaded.index && loaded.index.records ? loaded.index.records : null;
+      var indexKeys = records ? Object.keys(records) : [];
+      if (Array.isArray(loaded.files) && loaded.files.length) {
+        localLibraryDbSnapshotHandoff = {
+          folderPath: folderPath,
+          generation: generation,
+          files: loaded.files,
+          directories: Array.isArray(loaded.directories) ? loaded.directories : [],
+          truncated: !!loaded.truncated,
+        };
+      }
+      // 空索引说明 SQLite 还没接管这套曲库（升级首启），必须继续读 IndexedDB 旧索引，
+      // 否则 syncLocalLibraryIndexWithSongs 会把整库判成新增并触发全量元数据重解析。
+      if (indexKeys.length) {
+        var savedAt = Number(loaded.index.savedAt) || Date.now();
+        rememberLocalLibraryPersistentRecord({
+          id: localLibraryPersistentKey(folderPath, 'index'),
+          schema: LOCAL_LIBRARY_CACHE_SCHEMA,
+          kind: 'index',
+          folderPath: folderPath,
+          savedAt: savedAt,
+          data: { schema: 1, folderPath: folderPath, savedAt: savedAt, count: indexKeys.length, records: records },
+        }, generation);
+        // 载入即视为磁盘现状，摘要表随之落位，后续只写真正改动的行。
+        for (var i = 0; i < indexKeys.length; i++) localLibraryDbIndexDigests[indexKeys[i]] = localLibraryDbIndexDigest(records[indexKeys[i]]);
+        return;
+      }
+    }
+  }
   await readLocalLibraryPersistentRecord(folderPath, 'index');
 }
 scheduleLocalIndexedDbTrim('startup', 9000);
@@ -7191,6 +7390,7 @@ function localAssetCacheSnapshot(song) {
     album: song.album || '',
     albumArtist: song.albumArtist || '',
     trackNumber: song.trackNumber || '',
+    genre: song.genre || '',
     year: song.year || '',
     localMetadataLoaded: !!song.localMetadataLoaded,
     localMetadataTagSchema: song.localMetadataLoaded ? LOCAL_METADATA_TAG_SCHEMA : 0,
@@ -7230,11 +7430,14 @@ function localLyricCacheSnapshot(song) {
     localLyricFileName: song.localLyricFileName || '',
     localLyricTagName: song.localLyricTagName || '',
     localLyricFileSignature: localAssetFileSignature(song.localLyricFile),
+    localLibraryPathKey: localLibraryPathKeyFromSong(song),
+    localLibraryFileSignature: localLibraryFileSignatureFromSong(song),
     localLyricSource: song.localLyricFile ? 'file' : (song.localLyricTagName ? 'embedded' : (song.localLyricLoaded ? 'none' : ''))
   };
 }
 /**
- * 批量读取本地资产缓存记录。缓存补水会分块调用，先用显式循环压缩 key 列表再发起 IndexedDB 读取。
+ * 批量读取本地资产缓存记录。SQLite 曲库优先，未命中的键回落 IndexedDB 并顺带迁移，
+ * 缓存补水会分块调用，先用显式循环压缩 key 列表再发起读取。
  * @param {Array<string>} keys 需要读取的缓存键。
  * @returns {Promise<object>} 以缓存键为索引的记录表。
  */
@@ -7246,26 +7449,48 @@ async function readLocalAssetCacheRecords(keys) {
   }
   keys = compactKeys;
   if (!keys.length) return {};
+  var merged = null;
+  var dbResult = await callLocalLibraryDb('readLocalLibraryDbAssets', keys);
+  if (dbResult && dbResult.ok && dbResult.records) {
+    merged = dbResult.records;
+    var missing = [];
+    for (var missIdx = 0; missIdx < keys.length; missIdx++) {
+      if (!merged[keys[missIdx]]) missing.push(keys[missIdx]);
+    }
+    if (!missing.length) return merged;
+    keys = missing;
+  }
   var db = await openLocalAssetCacheDb();
-  return new Promise(function(resolve, reject){
-    var out = {};
+  var legacyKeys = keys;
+  var out = await new Promise(function(resolve, reject){
+    var found = {};
     var tx = db.transaction(LOCAL_ASSET_CACHE_STORE, 'readonly');
     var store = tx.objectStore(LOCAL_ASSET_CACHE_STORE);
-    for (var keyIdx = 0; keyIdx < keys.length; keyIdx++) {
-      var key = keys[keyIdx];
+    for (var keyIdx = 0; keyIdx < legacyKeys.length; keyIdx++) {
+      var key = legacyKeys[keyIdx];
       var req = store.get(key);
       req.onsuccess = function(event){
         var result = event && event.target ? event.target.result : null;
-        if (result && result.id) out[result.id] = result;
+        if (result && result.id) found[result.id] = result;
       };
     }
-    tx.oncomplete = function(){ db.close(); resolve(out); };
+    tx.oncomplete = function(){ db.close(); resolve(found); };
     tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexedDB read failed')); };
     tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexedDB read aborted')); };
   });
+  if (!merged) return out;
+  // 只在 IndexedDB 里的旧记录顺手搬进 SQLite，迁移失败不影响本次读取。
+  var migrate = [];
+  var outKeys = Object.keys(out);
+  for (var outIdx = 0; outIdx < outKeys.length; outIdx++) {
+    merged[outKeys[outIdx]] = out[outKeys[outIdx]];
+    migrate.push(out[outKeys[outIdx]]);
+  }
+  if (migrate.length) callLocalLibraryDb('writeLocalLibraryDbAssets', migrate);
+  return merged;
 }
 /**
- * 批量读取独立歌词缓存记录；只在当前播放或显式歌词请求时调用。
+ * 批量读取独立歌词缓存记录；只在当前播放或显式歌词请求时调用。SQLite 优先，未命中回落 IndexedDB。
  * @param {Array<string>} keys 需要读取的歌曲缓存键。
  * @returns {Promise<object>} 以歌曲缓存键为索引的歌词记录表。
  */
@@ -7277,26 +7502,50 @@ async function readLocalLyricCacheRecords(keys) {
   }
   keys = compactKeys;
   if (!keys.length) return {};
+  var merged = null;
+  var dbResult = await callLocalLibraryDb('readLocalLibraryDbLyrics', keys);
+  if (dbResult && dbResult.ok && dbResult.records) {
+    merged = dbResult.records;
+    var missing = [];
+    for (var missIdx = 0; missIdx < keys.length; missIdx++) {
+      if (!merged[keys[missIdx]]) missing.push(keys[missIdx]);
+    }
+    if (!missing.length) return merged;
+    keys = missing;
+  }
   var db = await openLocalAssetCacheDb();
-  return new Promise(function(resolve, reject){
-    var out = {};
+  var legacyKeys = keys;
+  var out = await new Promise(function(resolve, reject){
+    var found = {};
     var tx = db.transaction(LOCAL_LYRICS_CACHE_STORE, 'readonly');
     var store = tx.objectStore(LOCAL_LYRICS_CACHE_STORE);
-    for (var keyIdx = 0; keyIdx < keys.length; keyIdx++) {
-      var key = keys[keyIdx];
+    for (var keyIdx = 0; keyIdx < legacyKeys.length; keyIdx++) {
+      var key = legacyKeys[keyIdx];
       var req = store.get(key);
       req.onsuccess = function(event){
         var result = event && event.target ? event.target.result : null;
-        if (result && result.id) out[result.id] = result;
+        if (result && result.id) found[result.id] = result;
       };
     }
-    tx.oncomplete = function(){ db.close(); resolve(out); };
+    tx.oncomplete = function(){ db.close(); resolve(found); };
     tx.onerror = function(){ db.close(); reject(tx.error || new Error('indexeddb lyric read failed')); };
     tx.onabort = function(){ db.close(); reject(tx.error || new Error('indexeddb lyric read aborted')); };
   });
+  if (!merged) return out;
+  var migrate = [];
+  var outKeys = Object.keys(out);
+  for (var outIdx = 0; outIdx < outKeys.length; outIdx++) {
+    merged[outKeys[outIdx]] = out[outKeys[outIdx]];
+    migrate.push(out[outKeys[outIdx]]);
+  }
+  if (migrate.length) callLocalLibraryDb('writeLocalLibraryDbLyrics', migrate);
+  return merged;
 }
 async function putLocalAssetCacheRecord(record) {
   if (!record || !record.id) return false;
+  var dbResult = await callLocalLibraryDb('writeLocalLibraryDbAssets', record);
+  // SQLite 写成功即视为落盘，不再往 IndexedDB 复制一份，几万首歌不必再受 9000 条 / 96MB 上限。
+  if (dbResult && dbResult.ok && dbResult.saved) return true;
   var db = await openLocalAssetCacheDb();
   return new Promise(function(resolve, reject){
     var tx = db.transaction(LOCAL_ASSET_CACHE_STORE, 'readwrite');
@@ -7311,12 +7560,14 @@ async function putLocalAssetCacheRecord(record) {
   });
 }
 /**
- * 写入独立歌词缓存记录，并保持 IndexedDB 事务三路结算。
+ * 写入独立歌词缓存记录。SQLite 优先，回落时保持 IndexedDB 事务三路结算。
  * @param {object} record 歌词缓存记录。
  * @returns {Promise<boolean>} 是否完成写入。
  */
 async function putLocalLyricCacheRecord(record) {
   if (!record || !record.id) return false;
+  var dbResult = await callLocalLibraryDb('writeLocalLibraryDbLyrics', record);
+  if (dbResult && dbResult.ok && dbResult.saved) return true;
   var db = await openLocalAssetCacheDb();
   return new Promise(function(resolve, reject){
     var tx = db.transaction(LOCAL_LYRICS_CACHE_STORE, 'readwrite');
@@ -16546,6 +16797,9 @@ function listenSongSnapshot(song) {
     source: songSourceLabel(song),
     provider: song.type === 'local' ? 'local' : (song.provider || song.source || song.type || ''),
     duration: Number(song.duration) || 0,
+    // 本地曲目额外带上 SQLite 的行键：snap.key 是 queueItemKey（前缀 local:），不能直接当 song_key 用。
+    localKey: song.type === 'local' ? String(song.localKey || '') : '',
+    pathKey: song.type === 'local' ? localLibraryPathKeyFromSong(song) : '',
   };
 }
 function beginListenSession(song, context) {
@@ -16632,6 +16886,7 @@ function finalizeListenSession(completed) {
     listenStatsState.artists[name] = artistStat;
   });
   saveListenStatsState();
+  syncLocalLibraryDbPlayStat(snap, { listenMs: record.listenMs, completed: !!completed, playedAt: now });
   if (emptyHomeActive) renderHomeDiscover();
 }
 function mostPlayedSong() {
@@ -18638,11 +18893,13 @@ function toggleSpecialLikedSong(song) {
   if (index >= 0) {
     refs.splice(index, 1);
     writeSpecialLikedSongRefs(refs);
+    syncLocalLibraryDbFavorite(song, false);
     showToast('已移出特别喜欢');
     return false;
   }
   refs.push(specialLikedSongRef(song));
   writeSpecialLikedSongRefs(refs);
+  syncLocalLibraryDbFavorite(song, true);
   showToast('已加入特别喜欢');
   return true;
 }
@@ -24516,6 +24773,34 @@ function decodeId3TextFrame(bytes, start, end) {
   if (enc === 3) return decodeBytesWithEncoding(body, 'utf-8');
   return decodeBytesWithEncoding(body, 'latin1');
 }
+// ID3v1 数字流派表：ID3v2 的 TCON 允许写成 "(17)" 或裸数字，M4A 的 gnre atom 也是 1-based 数字，
+// 没有这张表就只能把 "(17)" 原样显示给用户。索引 133 的原始名称是种族歧视词，这里换成通行的 Afro-Punk。
+var ID3V1_GENRE_NAMES = [
+  'Blues', 'Classic Rock', 'Country', 'Dance', 'Disco', 'Funk', 'Grunge', 'Hip-Hop',
+  'Jazz', 'Metal', 'New Age', 'Oldies', 'Other', 'Pop', 'R&B', 'Rap',
+  'Reggae', 'Rock', 'Techno', 'Industrial', 'Alternative', 'Ska', 'Death Metal', 'Pranks',
+  'Soundtrack', 'Euro-Techno', 'Ambient', 'Trip-Hop', 'Vocal', 'Jazz+Funk', 'Fusion', 'Trance',
+  'Classical', 'Instrumental', 'Acid', 'House', 'Game', 'Sound Clip', 'Gospel', 'Noise',
+  'AlternRock', 'Bass', 'Soul', 'Punk', 'Space', 'Meditative', 'Instrumental Pop', 'Instrumental Rock',
+  'Ethnic', 'Gothic', 'Darkwave', 'Techno-Industrial', 'Electronic', 'Pop-Folk', 'Eurodance', 'Dream',
+  'Southern Rock', 'Comedy', 'Cult', 'Gangsta', 'Top 40', 'Christian Rap', 'Pop/Funk', 'Jungle',
+  'Native American', 'Cabaret', 'New Wave', 'Psychadelic', 'Rave', 'Showtunes', 'Trailer', 'Lo-Fi',
+  'Tribal', 'Acid Punk', 'Acid Jazz', 'Polka', 'Retro', 'Musical', 'Rock & Roll', 'Hard Rock',
+  'Folk', 'Folk-Rock', 'National Folk', 'Swing', 'Fast Fusion', 'Bebob', 'Latin', 'Revival',
+  'Celtic', 'Bluegrass', 'Avantgarde', 'Gothic Rock', 'Progressive Rock', 'Psychedelic Rock', 'Symphonic Rock', 'Slow Rock',
+  'Big Band', 'Chorus', 'Easy Listening', 'Acoustic', 'Humour', 'Speech', 'Chanson', 'Opera',
+  'Chamber Music', 'Sonata', 'Symphony', 'Booty Bass', 'Primus', 'Porn Groove', 'Satire', 'Slow Jam',
+  'Club', 'Tango', 'Samba', 'Folklore', 'Ballad', 'Power Ballad', 'Rhythmic Soul', 'Freestyle',
+  'Duet', 'Punk Rock', 'Drum Solo', 'A capella', 'Euro-House', 'Dance Hall', 'Goa', 'Drum & Bass',
+  'Club-House', 'Hardcore', 'Terror', 'Indie', 'BritPop', 'Afro-Punk', 'Polsk Punk', 'Beat',
+  'Christian Gangsta Rap', 'Heavy Metal', 'Black Metal', 'Crossover', 'Contemporary Christian', 'Christian Rock', 'Merengue', 'Salsa',
+  'Thrash Metal', 'Anime', 'JPop', 'Synthpop', 'Abstract', 'Art Rock', 'Baroque', 'Bhangra',
+  'Big Beat', 'Breakbeat', 'Chillout', 'Downtempo', 'Dub', 'EBM', 'Eclectic', 'Electro',
+  'Electroclash', 'Emo', 'Experimental', 'Garage', 'Global', 'IDM', 'Illbient', 'Industro-Goth',
+  'Jam Band', 'Krautrock', 'Leftfield', 'Lounge', 'Math Rock', 'New Romantic', 'Nu-Breakz', 'Post-Punk',
+  'Post-Rock', 'Psytrance', 'Shoegaze', 'Space Rock', 'Trop Rock', 'World Music', 'Neoclassical', 'Audiobook',
+  'Audio Theatre', 'Neue Deutsche Welle', 'Podcast', 'Indie Rock', 'G-Funk', 'Dubstep', 'Garage Rock', 'Psybient',
+];
 function normalizeLocalMetadataValue(value) {
   return String(value || '')
     .replace(/\u0000+/g, ' / ')
@@ -24546,8 +24831,30 @@ function putLocalMetadataTag(tags, key, value) {
   else if (key === 'artist' && !tags.artist) tags.artist = value;
   else if (key === 'album' && !tags.album) tags.album = value;
   else if (key === 'albumArtist' && !tags.albumArtist) tags.albumArtist = value;
+  else if (key === 'genre') {
+    var genreName = normalizeLocalMetadataGenre(value);
+    if (genreName && !tags.genre) tags.genre = genreName;
+  }
   else if (key === 'track' && !tags.track) tags.track = value;
   else if (key === 'year' && !tags.year) tags.year = value;
+}
+/**
+ * 归一化流派文本。ID3v1 数字流派会被写成 "(17)" 或裸数字，需要还原成可读名称。
+ * @param {string} value 原始流派文本。
+ * @returns {string} 可展示的流派名称。
+ */
+function normalizeLocalMetadataGenre(value) {
+  var text = String(value || '').trim();
+  if (!text) return '';
+  var numeric = /^\(?(\d{1,3})\)?$/.exec(text);
+  if (numeric) {
+    var name = ID3V1_GENRE_NAMES[Number(numeric[1])];
+    return name || '';
+  }
+  // "(17)Rock" 这类前缀式写法保留后面的可读名称。
+  var prefixed = /^\((\d{1,3})\)\s*(.+)$/.exec(text);
+  if (prefixed) return String(prefixed[2] || '').trim();
+  return text;
 }
 function id3TextFrameKey(id) {
   switch (id) {
@@ -24563,6 +24870,9 @@ function id3TextFrameKey(id) {
     case 'TPE2':
     case 'TP2':
       return 'albumArtist';
+    case 'TCON':
+    case 'TCO':
+      return 'genre';
     case 'TRCK':
     case 'TRK':
       return 'track';
@@ -24624,6 +24934,7 @@ function vorbisCommentKey(key) {
   if (key === 'ARTIST' || key === 'PERFORMER') return 'artist';
   if (key === 'ALBUM') return 'album';
   if (key === 'ALBUMARTIST') return 'albumArtist';
+  if (key === 'GENRE') return 'genre';
   if (key === 'TRACKNUMBER' || key === 'TRACK') return 'track';
   if (key === 'DATE' || key === 'YEAR') return 'year';
   return '';
@@ -24857,6 +25168,7 @@ function m4aMetadataKey(type) {
   if (type === '\u00a9ART') return 'artist';
   if (type === '\u00a9alb') return 'album';
   if (type === 'aART') return 'albumArtist';
+  if (type === '\u00a9gen' || type === 'gnre') return 'genre';
   if (type === '\u00a9day') return 'year';
   if (type === 'trkn') return 'track';
   return '';
@@ -24895,6 +25207,12 @@ async function parseM4aIlst(file, ilst, result) {
           if (payload.length === payloadLength) {
             if (key === 'track') {
               if (payload.length >= 4) putLocalMetadataTag(result.tags, key, String((payload[2] << 8) | payload[3]));
+            } else if (key === 'genre' && item.type === 'gnre') {
+              // gnre 是二进制 atom，存 1-based ID3v1 流派序号；转成 0-based 数字交给流派归一化解析成名称。
+              if (payload.length >= 2) {
+                var genreIndex = (payload[0] << 8) | payload[1];
+                if (genreIndex >= 1) putLocalMetadataTag(result.tags, key, String(genreIndex - 1));
+              }
             } else {
               putLocalMetadataTag(result.tags, key, decodeM4aText(payload, data.dataType || 1));
             }
@@ -25220,6 +25538,7 @@ function applyLocalMetadataTags(song, tags) {
   if (tags.album && !isLocalSourcePlaceholderMetadata(tags.album) && song.album !== tags.album) { song.album = tags.album; changed = true; }
   if (tags.albumArtist && !isLocalSourcePlaceholderMetadata(tags.albumArtist) && song.albumArtist !== tags.albumArtist) { song.albumArtist = tags.albumArtist; changed = true; }
   if (tags.track && song.trackNumber !== tags.track) { song.trackNumber = tags.track; changed = true; }
+  if (tags.genre && !isLocalSourcePlaceholderMetadata(tags.genre) && song.genre !== tags.genre) { song.genre = tags.genre; changed = true; }
   if (tags.year && song.year !== tags.year) { song.year = tags.year; changed = true; }
   updateLocalAudioQualityInfo(song);
   return changed;
@@ -25544,11 +25863,22 @@ function normalizeLocalLibrarySnapshotInput(files, directories, truncated) {
     truncated: !!(input.truncated || truncated)
   };
 }
-function saveLocalLibrarySnapshot(folderPath, files, truncated) {
+/**
+ * 保存本地曲库快照。SQLite 曲库接管时磁盘上已有完整 files 表，这里只算签名不再写 IndexedDB 大 JSON，
+ * 顺带解除历史 16000 条截断——那个截断只统计不入库，会让签名永远匹配而悄悄丢歌。
+ * @param {string} folderPath 曲库根路径。
+ * @param {FileList|Array<object>|object} files 文件列表或扫描结果。
+ * @param {boolean=} truncated 扫描是否被截断。
+ * @param {boolean=} dbBacked 本轮文件列表是否来自主进程扫描（已同步进 SQLite）。
+ * @returns {boolean} 是否完成保存。
+ */
+function saveLocalLibrarySnapshot(folderPath, files, truncated, dbBacked) {
   if (!folderPath || !files) return false;
   try {
     var normalized = normalizeLocalLibrarySnapshotInput(files, null, truncated);
     if (!normalized.files.length) return false;
+    // SQLite 已经持有这套曲库时不再复制一份 IndexedDB 快照，几万首歌的整表 JSON 写入是启动期最贵的一笔。
+    var skipIdbSnapshot = !!dbBacked && localLibraryDbActive();
     var compact = [];
     var directories = [];
     var sigCount = 0;
@@ -25567,7 +25897,12 @@ function saveLocalLibrarySnapshot(folderPath, files, truncated) {
       sigSize += localFileSize(compactFile);
       sigMtime = Math.max(sigMtime, Number(compactFile.lastModified) || 0);
       sigCount++;
-      if (compact.length < 16000) compact.push(compactFile);
+      if (!skipIdbSnapshot) compact.push(compactFile);
+    }
+    if (skipIdbSnapshot) {
+      // SQLite 接管后不再经过 writeLocalLibraryPersistentRecord，旧 localStorage 快照要在这里收尾清掉。
+      try { localStorage.removeItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY); } catch (e2) {}
+      return true;
     }
     for (var dirIdx = 0; dirIdx < normalized.directories.length && directories.length < 20000; dirIdx++) {
       var compactDir = compactLocalLibrarySnapshotDirectory(normalized.directories[dirIdx]);
@@ -25589,7 +25924,26 @@ function saveLocalLibrarySnapshot(folderPath, files, truncated) {
     return false;
   }
 }
+/**
+ * 读取本地曲库快照。SQLite 交接件优先，签名按同一套 6 段格式就地计算，保证后台刷新比对不变形。
+ * @param {string} folderPath 曲库根路径。
+ * @returns {Promise<object|null>} 快照负载。
+ */
 async function readLocalLibrarySnapshot(folderPath) {
+  var handoff = localLibraryDbSnapshotHandoff;
+  localLibraryDbSnapshotHandoff = null;
+  if (handoff && handoff.folderPath === folderPath && handoff.generation === localLibraryPersistentGeneration && handoff.files.length) {
+    return {
+      schema: 2,
+      folderPath: folderPath,
+      savedAt: Date.now(),
+      truncated: !!handoff.truncated,
+      signature: localLibrarySnapshotSignature(handoff.files),
+      directories: handoff.directories || [],
+      files: handoff.files,
+      fromDb: true
+    };
+  }
   var cached = await readLocalLibraryPersistentRecord(folderPath, 'snapshot');
   if (cached && cached.data && cached.data.folderPath === folderPath && Array.isArray(cached.data.files) && cached.data.files.length) {
     if (!Array.isArray(cached.data.directories)) cached.data.directories = [];
@@ -25638,6 +25992,7 @@ function localLibraryIndexRecord(song) {
     album: song.album || '',
     albumArtist: song.albumArtist || '',
     trackNumber: song.trackNumber || '',
+    genre: song.genre || '',
     year: song.year || '',
     duration: Number(song.duration) || 0,
     localFormat: song.localFormat || '',
@@ -25867,23 +26222,53 @@ function localLibrarySyncToastText(sync) {
   if (!bits.length && stats.unchanged) bits.push('无变化');
   return bits.length ? '，' + bits.join(' / ') : '';
 }
+/**
+ * 保存本地曲库索引。SQLite 接管时只把摘要变化的行推给主进程并就地更新常驻索引，
+ * 不再每次防抖都整表重写 IndexedDB；同时解除历史 16000 条截断。
+ * @param {string} folderPath 曲库根路径。
+ * @param {Array<object>} songs 当前曲库歌曲。
+ * @returns {boolean} 是否产生了保存动作。
+ */
 function saveLocalLibraryIndex(folderPath, songs) {
   folderPath = folderPath || savedLocalLibraryFolderPath();
   songs = songs || localLibrarySongs || [];
   if (!folderPath || !songs.length) return false;
   try {
+    var dbActive = localLibraryDbActive() && folderPath === localLibraryPersistentFolderPath;
     var records = {};
     var count = 0;
-    for (var i = 0; i < songs.length && count < 16000; i++) {
+    var deltas = dbActive ? [] : null;
+    for (var i = 0; i < songs.length; i++) {
       var song = songs[i];
       if (!song || !song.localKey) continue;
+      if (!dbActive && count >= 16000) break;
       var record = localLibraryIndexRecord(song);
-      if (record) {
-        records[record.key] = record;
-        count++;
-      }
+      if (!record) continue;
+      records[record.key] = record;
+      count++;
+      if (!dbActive) continue;
+      var digest = localLibraryDbIndexDigest(record);
+      if (localLibraryDbIndexDigests[record.key] === digest) continue;
+      localLibraryDbIndexDigests[record.key] = digest;
+      deltas.push(record);
     }
     if (!count) return false;
+    if (dbActive) {
+      // 常驻索引仍要保持最新：syncLocalLibraryIndexWithSongs 是同步读取的，缺了它后台刷新会把整库判成新增。
+      var savedAt = Date.now();
+      rememberLocalLibraryPersistentRecord({
+        id: localLibraryPersistentKey(folderPath, 'index'),
+        schema: LOCAL_LIBRARY_CACHE_SCHEMA,
+        kind: 'index',
+        folderPath: folderPath,
+        savedAt: savedAt,
+        data: { schema: 1, folderPath: folderPath, savedAt: savedAt, count: count, records: records },
+      }, localLibraryPersistentGeneration);
+      if (deltas.length) callLocalLibraryDb('saveLocalLibraryDbIndex', folderPath, deltas);
+      // SQLite 接管后不再经过 writeLocalLibraryPersistentRecord，旧 localStorage 索引要在这里收尾清掉。
+      try { localStorage.removeItem(LOCAL_LIBRARY_INDEX_STORE_KEY); } catch (e2) {}
+      return true;
+    }
     var payload = {
       schema: 1,
       folderPath: folderPath,
@@ -25917,6 +26302,7 @@ async function openLocalFolderImport() {
         folderPath: result.folderPath || '',
         persist: true,
         autoPlay: true,
+        desktopScanned: true,
         directories: result.directories || [],
         truncated: !!result.truncated
       });
@@ -25935,6 +26321,26 @@ async function restoreSavedLocalMusicFolder() {
   if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return false;
   await hydrateLocalLibraryPersistentState(folderPath);
   var snapshot = await readLocalLibrarySnapshot(folderPath);
+  // SQLite 交接件里的 files 已经是主进程重建好的绝对路径 + 代理 URL 记录，
+  // 不必再把整个数组送进 refreshLocalMusicFiles 转一圈；删除的文件仍由后台增量扫描剔除。
+  if (snapshot && snapshot.fromDb) {
+    try {
+      await handleLocalFolderFiles(snapshot.files, {
+        folderOnly: true,
+        folderPath: folderPath,
+        persist: false,
+        autoPlay: false,
+        restored: true,
+        fromSnapshot: true,
+        directories: snapshot.directories || [],
+        truncated: !!snapshot.truncated
+      });
+      refreshSavedLocalMusicFolderInBackground(folderPath, snapshot);
+      return true;
+    } catch (e) {
+      console.warn('[LocalLibraryDbRestore]', e);
+    }
+  }
   if (snapshot && typeof api.refreshLocalMusicFiles === 'function') {
     try {
       var restored = await api.refreshLocalMusicFiles(folderPath, snapshot);
@@ -26002,7 +26408,8 @@ function refreshSavedLocalMusicFolderInBackground(folderPath, snapshot) {
   var api = desktopLocalMusicApi();
   if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return;
   var snapshotSignature = typeof snapshot === 'string' ? snapshot : (snapshot && snapshot.signature || '');
-  var previousSnapshot = snapshot && typeof snapshot === 'object' ? snapshot : null;
+  // 快照来自 SQLite 时不再把整个 files 数组回传主进程：主进程会自己读同一份 files 表走增量扫描。
+  var previousSnapshot = snapshot && typeof snapshot === 'object' && !snapshot.fromDb ? snapshot : null;
   var ownedSongs = localLibrarySongs;
 
   /**
@@ -26014,7 +26421,7 @@ function refreshSavedLocalMusicFolderInBackground(folderPath, snapshot) {
     if (localLibrarySongs !== ownedSongs) return;
     if (!result || !result.ok || !Array.isArray(result.files)) return;
     var nextSig = localLibrarySnapshotSignature(result.files || []);
-    saveLocalLibrarySnapshot(result.folderPath || folderPath, result);
+    saveLocalLibrarySnapshot(result.folderPath || folderPath, result, false, true);
     if (snapshotSignature && nextSig === snapshotSignature) {
       scheduleLocalLibraryIndexSave(result.folderPath || folderPath, ownedSongs || [], 900);
       return;
@@ -26032,6 +26439,7 @@ function refreshSavedLocalMusicFolderInBackground(folderPath, snapshot) {
       autoPlay: false,
       restored: true,
       refreshed: true,
+      desktopScanned: true,
       directories: result.directories || [],
       truncated: !!result.truncated
     });
@@ -26093,7 +26501,7 @@ async function handleLocalFolderFiles(files, opts) {
     files: files,
     directories: opts.directories || [],
     truncated: !!opts.truncated
-  });
+  }, false, !!opts.desktopScanned);
   finalizeListenSession(false);
   revokeDiscardedLocalSongObjectUrls(localLibrarySongs, [songs, playlist]);
   localLibrarySongs = songs;

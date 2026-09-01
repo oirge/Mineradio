@@ -4,7 +4,7 @@
 
 ## Stable Project Facts
 
-- 当前源码续版：`v1.7.17`（修复标准迷你播放器收回态封面命中后立即右键仍落到桌面的异步竞态；命中切换优先走同步 IPC，失败保留重试；两套外壳固定 `no-drag`，窗口拖动与右键客户区分流）。
+- 当前源码续版：`v1.7.18`（本地曲库改用 `node:sqlite` + 文件指纹/路径索引常驻磁盘；扫描先问数据库走增量、索引按行摘要增量回写、解除历史 `16000` 条截断；播放次数/最近播放/收藏状态双写进库但 `localStorage` 仍是唯一权威，UI 零改动）。
 - 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
@@ -34,6 +34,19 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.18 本地曲库 SQLite + 文件指纹/路径索引
+
+- 日期：2026-09-01。目标是「几万首歌也可以很快启动」：本地曲库不再每次启动重放整包 JSON 快照，改为常驻 SQLite。
+- 新增 `desktop/local-library-store.js`，用 Electron 自带的 `node:sqlite`（`DatabaseSync`）建 `local-library.db` 于用户数据目录：零新增依赖、无原生模块重编译，`asarUnpack` 仍是 `['server.js','package.json']`。WAL 日志、`PRAGMA user_version` 迁移、预编译语句缓存，写入统一 `BEGIN IMMEDIATE`。
+- 每行保存歌曲 ID（`song_key`）、路径与归一化路径键、文件大小、修改时间、时长、格式、Artist / Album / Genre / Year、封面缓存、歌词缓存、播放次数、最近播放、收藏状态。行身份靠文件指纹 `pathKey|size|mtime`：指纹一致保留已解析元数据与缓存，指纹变化整组清空。
+- **组合索引是硬要求。** 只有单列索引时 `UPDATE files ... WHERE root_id=? AND song_key=?` 会被规划成 `SEARCH files USING INDEX idx_files_root_sort (root_id=?)`，即每条索引写扫一遍整根，两万行实测 `295,319ms`；加 `(root_id, song_key)` / `(root_id, fingerprint)` 后降到 `1,640ms`（约 180×）。`tests/local-library-sqlite-store.test.js` 用 `EXPLAIN QUERY PLAN` 永久钉死，`idx_files_song_key` / `idx_files_fingerprint` / `idx_files_seen` 必须保持删除。
+- 三个键的构造在渲染层/主进程/存储层必须逐字节同构：`pathKey` 小写正斜杠、`fingerprint = pathKey|size|mtime`、`songKey` 用**未小写**的原始绝对路径 + `:size:mtime`。注意 `queueItemKey()` 返回的是 `local:` 前缀的队列键，**不能**当 `song_key` 用，播放统计与收藏必须传 `song.localKey`。
+- 播放次数只在 `finalizeListenSession()` 原有有效收听门内累加一次；`localStorage` 的 `listenStatsState` 与「特别喜欢」引用表仍是唯一权威来源，数据库无回读路径，因此不存在双计数，UI 与交互零改动。`song_stats` 按 `song_key` 独立存活，重扫、换库、删索引都不清零。
+- 缓存回收顺序固定：保护键 `saved_at` 提到当前时间 → `maxAge` 过期（默认 180 天，`saved_at = 0` 跳过）→ 记录数 LRU → 封面字节上限（窗口函数 `SUM(cover_bytes) OVER (...)`）。
+- 缺 `node:sqlite` 的环境整层降级：主进程只标记一次，渲染层探测一次性 latch，全部回落 IndexedDB 旧路径。测试里模拟「运行时没有内置模块」必须 hook `Module._load`，`Module._resolveFilename` 拦不住内置模块。
+- `Genre` 为向前生效字段：旧记录不带该键，不会被判成脏行重写。
+- 验证：新增 `tests/local-library-sqlite-store.test.js`（12 例，真实 `node:sqlite`）与 `tests/local-library-db-bridge.test.js`（9 例，渲染层接缝）；全量 Node 回归 `540/540` 通过。本轮未启动本机 Electron，未改动任何界面。
 
 ## v1.7.17 迷你播放器封面命中与右键竞态修复
 
