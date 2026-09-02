@@ -12,6 +12,7 @@ const PERSISTENT_UI_STATE_KEYS = [
   'mineradio-free-camera-v1',
   'mineradio-local-library-folder-v1',
   'mineradio-playback-session-v1',
+  'mineradio-queue-snapshots-v1',
   'mineradio-special-liked-playlist-v1',
   'mineradio-local-playlists-v1',
   'mineradio-local-playback-source-v1',

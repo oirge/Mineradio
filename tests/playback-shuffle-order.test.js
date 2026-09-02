@@ -87,7 +87,8 @@ test('固定乱序状态使用 WeakSet 不保留已替换队列', () => {
 });
 
 test('切换随机模式和恢复随机会话都会洗牌一次', () => {
-  assert.match(appSource, /playMode = modes\[\(idx \+ 1\) % modes\.length\];\s+if \(playMode === 'shuffle'\) shufflePlayQueueOnce/);
+  assert.match(appSource, /playMode = mode;\s+if \(changed && playMode === 'shuffle'\) shufflePlayQueueOnce/);
+  assert.match(appSource, /function cyclePlayMode\(\) \{[\s\S]*?setPlayMode\(modes\[\(idx \+ 1\) % modes\.length\]\);/);
   assert.match(appSource, /playMode = \/\^\(loop\|shuffle\|single\)\$\/[\s\S]*?if \(playMode === 'shuffle'\) \{\s*shufflePlayQueueOnce/);
 });
 
