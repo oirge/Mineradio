@@ -218,6 +218,7 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-free-camera-v1',
   'mineradio-local-library-folder-v1',
   'mineradio-playback-session-v1',
+  'mineradio-song-resume-v1',
   'mineradio-special-liked-playlist-v1',
   'mineradio-local-playlists-v1',
   'mineradio-local-playback-source-v1',
@@ -1219,6 +1220,167 @@ function scheduleWindowStateSend(win, delay = 80) {
     mainWindowStateTimer = null;
     sendWindowState(win);
   }, delay);
+}
+
+// ============================================================
+//  全局鼠标侧键热键
+//  Electron 的 globalShortcut 只收键盘，BrowserWindow 的 app-command 又只在窗口拿到焦点时才来，
+//  想让鼠标侧键在别的软件里也能切歌就只剩一条路：挂一个系统级低层鼠标钩子。
+//  注意 libuiohook 是「监听器」不是「过滤器」——它拦不住事件本身，
+//  所以浏览器里的后退、游戏里的侧键动作照样会发生，这一点必须在界面上说清楚。
+// ============================================================
+/** uiohook 鼠标按钮号：3 = 中键，4 = 侧键 1（后退），5 = 侧键 2（前进）。左右键永远不给绑。 */
+const GLOBAL_MOUSE_HOTKEY_BUTTONS = new Set([3, 4, 5]);
+let mouseHookModule = null;
+let mouseHookLoadFailed = false;
+let mouseHookRunning = false;
+let mouseHookHandlerBound = false;
+let globalMouseHotkeyMap = new Map();
+let localMouseHotkeySignatures = new Set();
+
+/**
+ * 懒加载低层钩子原生模块。没绑鼠标热键的用户全程都不会把它拉进进程。
+ * @returns {object|null} 模块对象，不可用时返回 null。
+ */
+function loadMouseHookModule() {
+  if (mouseHookModule) return mouseHookModule;
+  if (mouseHookLoadFailed) return null;
+  try {
+    mouseHookModule = require('uiohook-napi');
+  } catch (err) {
+    mouseHookLoadFailed = true;
+    mouseHookModule = null;
+    console.warn('[mineradio] 低层鼠标钩子不可用，全局鼠标热键已关闭：', (err && err.message) || err);
+  }
+  return mouseHookModule;
+}
+
+/**
+ * 把按钮号与修饰键压成一个可比较的签名。
+ * @param {number} button uiohook 按钮号。
+ * @param {{ctrl?:boolean,alt?:boolean,shift?:boolean,meta?:boolean}} mods 修饰键状态。
+ * @returns {string} 签名字符串。
+ */
+function mouseHotkeySignature(button, mods) {
+  const m = mods || {};
+  return (m.ctrl ? 'C' : '') + (m.alt ? 'A' : '') + (m.shift ? 'S' : '') + (m.meta ? 'W' : '') + '#' + (Number(button) || 0);
+}
+
+/**
+ * 低层钩子送来一次鼠标按下：查表并触发动作。
+ * @param {{button:number,ctrlKey:boolean,altKey:boolean,shiftKey:boolean,metaKey:boolean}} event 钩子事件。
+ * @returns {void}
+ */
+function handleGlobalMouseHotkeyEvent(event) {
+  if (!event || !GLOBAL_MOUSE_HOTKEY_BUTTONS.has(Number(event.button))) return;
+  const signature = mouseHotkeySignature(event.button, {
+    ctrl: !!event.ctrlKey,
+    alt: !!event.altKey,
+    shift: !!event.shiftKey,
+    meta: !!event.metaKey,
+  });
+  const action = globalMouseHotkeyMap.get(signature);
+  if (!action) return;
+  // 窗口在前台、而且渲染层自己也绑了同一个组合：交给渲染层，别一次按键跑两遍。
+  if (localMouseHotkeySignatures.has(signature) && mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) return;
+  sendGlobalHotkeyAction(action);
+}
+
+/**
+ * 停掉低层钩子。没有任何鼠标热键时不该让钩子继续挂在系统上。
+ * @returns {void}
+ */
+function stopGlobalMouseHotkeyHook() {
+  if (!mouseHookRunning) return;
+  mouseHookRunning = false;
+  try {
+    if (mouseHookModule && mouseHookModule.uIOhook) mouseHookModule.uIOhook.stop();
+  } catch (err) {
+    console.warn('[mineradio] 停止低层鼠标钩子失败：', (err && err.message) || err);
+  }
+}
+
+/**
+ * 按需启动低层钩子。
+ * @returns {boolean} 钩子是否可用。
+ */
+function startGlobalMouseHotkeyHook() {
+  const mod = loadMouseHookModule();
+  if (!mod || !mod.uIOhook) return false;
+  if (!mouseHookHandlerBound) {
+    try {
+      mod.uIOhook.on('mousedown', handleGlobalMouseHotkeyEvent);
+      mouseHookHandlerBound = true;
+    } catch (err) {
+      console.warn('[mineradio] 挂载鼠标钩子监听失败：', (err && err.message) || err);
+      return false;
+    }
+  }
+  if (mouseHookRunning) return true;
+  try {
+    mod.uIOhook.start();
+    mouseHookRunning = true;
+  } catch (err) {
+    console.warn('[mineradio] 启动低层鼠标钩子失败：', (err && err.message) || err);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 配置全局鼠标热键。渲染层每次改键都整表重发，这里整表替换。
+ * @param {{bindings?:Array<object>,local?:Array<object>}|Array<object>} payload 绑定表。
+ *   `bindings` 是全局绑定，`local` 只用来标记「渲染层也绑了同一个组合」以免双触发。
+ * @returns {{ok:boolean,available:boolean,results:Array<object>}} 每条绑定的注册结果。
+ */
+function configureMineradioGlobalMouseHotkeys(payload = {}) {
+  const source = Array.isArray(payload) ? { bindings: payload } : (payload || {});
+  const bindings = Array.isArray(source.bindings) ? source.bindings : [];
+  const local = Array.isArray(source.local) ? source.local : [];
+  localMouseHotkeySignatures = new Set();
+  for (const item of local) {
+    const button = Number(item && item.button);
+    if (!GLOBAL_MOUSE_HOTKEY_BUTTONS.has(button)) continue;
+    localMouseHotkeySignatures.add(mouseHotkeySignature(button, item));
+  }
+  const next = new Map();
+  const results = [];
+  const hookReady = bindings.length ? startGlobalMouseHotkeyHook() : false;
+  for (const item of bindings) {
+    const action = String((item && item.action) || '');
+    const button = Number(item && item.button);
+    if (!action) continue;
+    if (!GLOBAL_MOUSE_HOTKEY_BUTTONS.has(button)) {
+      results.push({
+        action,
+        ok: false,
+        conflict: { kind: 'unsupported', sourceName: '不支持这个鼠标键', sourceIcon: 'warning', reason: '只有中键和两个侧键能绑定，左右键要留给正常点击' },
+      });
+      continue;
+    }
+    if (!hookReady) {
+      results.push({
+        action,
+        ok: false,
+        conflict: { kind: 'unsupported', sourceName: '系统鼠标钩子不可用', sourceIcon: 'warning', reason: '这台机器装不上低层鼠标钩子，鼠标键只能在 Mineradio 窗口内生效' },
+      });
+      continue;
+    }
+    const signature = mouseHotkeySignature(button, item);
+    if (next.has(signature)) {
+      results.push({
+        action,
+        ok: false,
+        conflict: { kind: 'occupied', sourceName: 'Mineradio 内部重复', sourceIcon: 'warning', reason: '同一个鼠标组合绑到了多个功能' },
+      });
+      continue;
+    }
+    next.set(signature, action);
+    results.push({ action, ok: true });
+  }
+  globalMouseHotkeyMap = next;
+  if (!next.size) stopGlobalMouseHotkeyHook();
+  return { ok: true, available: !mouseHookLoadFailed, results };
 }
 
 function rectsOverlapOnY(a, b) {
@@ -4238,6 +4400,10 @@ ipcMain.handle('mineradio-hotkeys-configure-global', trustedMainFrameHandler((_e
   return configureMineradioGlobalHotkeys(bindings);
 }));
 
+ipcMain.handle('mineradio-hotkeys-configure-global-mouse', trustedMainFrameHandler((_event, payload) => {
+  return configureMineradioGlobalMouseHotkeys(payload);
+}));
+
 ipcMain.handle('mineradio-export-json-file', trustedMainFrameHandler(async (event, payload = {}) => {
   try {
     const owner = getSenderWindow(event);
@@ -4435,6 +4601,8 @@ ipcMain.handle('mineradio-local-library-db-write-lyrics', trustedMainFrameHandle
 })));
 
 ipcMain.handle('mineradio-local-library-db-bump-play', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.bumpPlayStat(payload || {}))));
+
+ipcMain.handle('mineradio-local-library-db-clear-play', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.clearPlayStats(payload || {}))));
 
 ipcMain.handle('mineradio-local-library-db-set-favorite', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.setFavorite(payload || {}))));
 
@@ -5098,6 +5266,7 @@ if (!gotSingleInstanceLock) {
   app.on('before-quit', () => {
     appQuitting = true;
     unregisterMineradioGlobalHotkeys();
+    stopGlobalMouseHotkeyHook();
     closeOverlayWindows();
     wallpaperEngineBridge.dispose();
     if (localServer && localServer.close) localServer.close();

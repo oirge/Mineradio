@@ -837,6 +837,29 @@ function createLocalLibraryStore(options) {
   }
 
   /**
+   * 清空播放统计。`song_stats` 一行里同时躺着收藏状态，所以只能把播放列归零，不能删行。
+   * 与渲染层的两档清空对齐：`recent` 只抹最近播放时间，`all` 连次数与累计时长一起归零。
+   * @param {object} payload `{ scope: 'recent'|'all' }`。
+   * @returns {object} 受影响行数。
+   */
+  function clearPlayStats(payload) {
+    const input = payload || {};
+    const scope = toText(input.scope) === 'all' ? 'all' : 'recent';
+    if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
+    const now = Date.now();
+    const changes = inTransaction(() => {
+      const statement = scope === 'all'
+        ? prepare('UPDATE song_stats SET play_count=0, listen_ms=0, completed=0, last_played_at=0, updated_at=? '
+          + 'WHERE play_count<>0 OR listen_ms<>0 OR completed<>0 OR last_played_at<>0')
+        : prepare('UPDATE song_stats SET last_played_at=0, updated_at=? WHERE last_played_at<>0');
+      if (!statement) return null;
+      return toInt(statement.run(now).changes);
+    });
+    if (changes === null || changes === undefined) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_STAT_CLEAR_FAILED' };
+    return { ok: true, scope: scope, cleared: changes };
+  }
+
+  /**
    * 写入收藏状态。
    * @param {object} payload 收藏负载。
    * @returns {object} 写入后的统计行。
@@ -1022,6 +1045,7 @@ function createLocalLibraryStore(options) {
     readLyricRecords: readLyricRecords,
     writeLyricRecord: writeLyricRecord,
     bumpPlayStat: bumpPlayStat,
+    clearPlayStats: clearPlayStats,
     setFavorite: setFavorite,
     readStats: readStats,
     trim: trim,

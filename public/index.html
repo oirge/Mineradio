@@ -504,6 +504,17 @@ if (document.fonts && document.fonts.load) {
         <button type="button" class="fx-mini-btn ghost" onclick="openAutoPlaybackPlaylistPicker()" title="打开底部控制栏的播放歌单选择器">选择</button>
       </div>
       <div class="mini-player-collapse-hint">自动播放使用底部控制栏选中的播放歌单，切换后下次启动生效。</div>
+      <div class="fx-section-label">断点续播</div>
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-songResume" onclick="toggleSongResumeSetting()" title="每首歌单独记住上次听到哪儿，下次播到同一首自动从断点接上"><span>记住单曲断点</span><span class="dot"></span></div>
+      </div>
+      <div class="lyric-color-row">
+        <span>已记断点</span>
+        <strong id="song-resume-value">暂无断点</strong>
+        <button type="button" class="fx-mini-btn ghost" onclick="resumeLastPlayback('panel')" title="立刻接着上次的歌曲和进度继续播放">继续上次播放</button>
+      </div>
+      <div class="mini-player-collapse-hint" id="song-resume-hint">每首歌单独记住上次听到哪儿，下次播到同一首会自动从断点接上。</div>
+      <div class="mini-player-collapse-hint">只有听过 15 秒以上、且离结尾还有 20 秒以上的位置才会记成断点；听完一首会自动清掉它的断点。</div>
     </div>
   </div>
 
@@ -968,6 +979,31 @@ if (document.fonts && document.fonts.load) {
     <div class="btn-row playlist-delete-actions">
       <button id="local-playlist-delete-cancel" class="modal-btn" type="button" onclick="closeLocalPlaylistDeleteModal()">取消</button>
       <button id="local-playlist-delete-confirm" class="modal-btn danger" type="button" onclick="confirmLocalPlaylistDelete()">删除歌单</button>
+    </div>
+  </div>
+</div>
+
+<!-- 清空最近播放记录确认 -->
+<div id="listen-history-clear-modal" class="modal-mask" role="dialog" aria-modal="true" aria-labelledby="listen-history-clear-title">
+  <div class="modal playlist-delete-modal">
+    <div class="playlist-delete-icon" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+        <path d="M3 4v5h5"></path>
+        <path d="M12 8v4l3 2"></path>
+      </svg>
+    </div>
+    <div class="playlist-delete-kicker">LISTEN HISTORY</div>
+    <h2 id="listen-history-clear-title">清空最近播放记录？</h2>
+    <div class="playlist-delete-target">
+      <div id="listen-history-clear-name" class="playlist-delete-name">最近播放</div>
+      <div id="listen-history-clear-meta" class="playlist-delete-meta">0 条记录</div>
+    </div>
+    <p class="playlist-delete-note">「只清最近播放」清掉最近播放列表和播放时间，播放次数与累计时长仍然保留；「全部清空」连播放次数、累计时长和断点续播位置一起归零。两种都不会删除本地音乐文件。</p>
+    <div class="btn-row playlist-delete-actions">
+      <button id="listen-history-clear-cancel" class="modal-btn" type="button" onclick="closeListenHistoryClearModal()">取消</button>
+      <button class="modal-btn" type="button" onclick="confirmListenHistoryClear('recent')">只清最近播放</button>
+      <button class="modal-btn danger" type="button" onclick="confirmListenHistoryClear('all')">全部清空</button>
     </div>
   </div>
 </div>

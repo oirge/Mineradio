@@ -1554,6 +1554,10 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .queue-current-hint{border-color:rgba(var(--fc-accent-rgb),.26)!important;background:rgba(var(--fc-accent-rgb),.075)!important;color:rgba(255,255,255,.86)!important}
 .pl-name{font-size:12px;color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pl-sub{font-size:10.5px;color:rgba(255,255,255,.42);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-sub.pl-listen-stat{margin-top:2px;color:rgba(var(--fc-accent-rgb),.62);font-variant-numeric:tabular-nums}
+.pl-card.expanded .pl-sub.pl-listen-stat,.pl-card:hover .pl-sub.pl-listen-stat{color:rgba(var(--fc-accent-rgb),.80)}
+.local-playlist-view-actions .fx-mini-btn.danger{color:rgba(255,154,169,.86);border-color:rgba(255,122,144,.24)!important;background:rgba(255,122,144,.08)!important}
+.local-playlist-view-actions .fx-mini-btn.danger:hover{color:#ff9aa9;border-color:rgba(255,122,144,.40)!important;background:rgba(255,122,144,.14)!important}
 .pl-section-label{margin:14px 2px 7px;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(0,245,212,.50)}
 .local-playlist-empty-hint{margin:0 1px 8px;padding:10px 11px;border-radius:10px;border:1px dashed rgba(255,255,255,.08);color:rgba(255,255,255,.34);font-size:10.5px;line-height:1.5;text-align:center}
 .local-playlist-view-head{display:flex;align-items:flex-start;gap:10px;margin:8px 0 12px;padding:11px;border-radius:13px;border:1px solid rgba(var(--fc-accent-rgb),.16);background:rgba(var(--fc-accent-rgb),.045)}
@@ -1937,6 +1941,15 @@ html.control-glass-svg-ok .pl-inline-detail{
   box-shadow:inset 0 1px 0 rgba(255,255,255,.075),0 10px 28px rgba(82,10,30,.14)!important;
 }
 #local-playlist-delete-confirm.modal-btn.danger:hover{
+  background:linear-gradient(145deg,rgba(255,137,158,.27),rgba(112,22,45,.38))!important;
+  border-color:rgba(255,159,176,.62)!important;
+}
+#listen-history-clear-modal .modal-btn.danger{
+  background:linear-gradient(145deg,rgba(255,122,145,.18),rgba(92,19,38,.30))!important;
+  border-color:rgba(255,142,161,.42)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.075),0 10px 28px rgba(82,10,30,.14)!important;
+}
+#listen-history-clear-modal .modal-btn.danger:hover{
   background:linear-gradient(145deg,rgba(255,137,158,.27),rgba(112,22,45,.38))!important;
   border-color:rgba(255,159,176,.62)!important;
 }
