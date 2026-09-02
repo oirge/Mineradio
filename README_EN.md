@@ -12,7 +12,7 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Support for importing local music folders.
 - Support for importing individual local music files.
 - Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) playback.
-- Support for `.lrc` / `.txt` lyrics files with matching names.
+- Support for `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` lyrics files with matching names.
 - Support for MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags, including timestamped LRC lyrics.
 - Support for automatic lyrics translation recognition and display.
 - Support for cover images in the same directory and embedded audio covers.
@@ -67,6 +67,20 @@ Build artifacts are located in `dist/`.
 - Local music library management
 - Playlist management
 - Shuffle/repeat playback
+
+## Changelog
+
+See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
+
+### Latest release v1.7.19 (2026-09-02)
+
+- Added tag, cover, embedded lyrics and duration parsing for OGG / OGA / OPUS / WAV / APE / DSD(.dsf)
+- APE and DSD now play directly: the desktop side wraps them as a virtual WAV stream, so Range requests and seeking keep working
+- WAV handles RF64 / BW64 64-bit sizes, so files larger than 4GB report the correct duration
+- The local library moved to SQLite with file-fingerprint and path indexes, and the old 16000-track cap is gone
+- Fixed mini player cover hit testing and the right-click race in the collapsed state
+- Added `THIRD-PARTY-NOTICES.md` for third-party component licenses
+- Full Node regression suite: `558/558` passing
 
 ## Notice
 
