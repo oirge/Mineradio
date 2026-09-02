@@ -9,9 +9,9 @@
 - 删除登录、在线音乐入口、更新提示和无用引导。
 - 支持导入本地音乐文件夹。
 - 支持单独导入本地音乐文件。
-- 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF 播放。
+- 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) 播放。
 - 支持同名 `.lrc` / `.txt` 歌词。
-- 支持 FLAC 内嵌 `LYRICS` 歌词标签，包括带时间轴的 LRC 歌词。
+- 支持 MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 内嵌歌词标签，包括带时间轴的 LRC 歌词。
 - 支持同目录封面图片和音频内嵌封面。
 - 移除本地节奏分析环节。
 - 支持多格式音频播放、歌词显示、迷你播放器和桌面歌词。
@@ -37,10 +37,12 @@
 - **Opus** - Ogg Opus
 - **WebM/WebA** - WebM 音频
 - **AIFF/AIFC** - AIFF 无损音频
+- **APE** - Monkey's Audio 无损音频
+- **DSD (.dsf)** - DSD Stream File 高解析音频
 
 ### 📝 歌词功能
 - ✅ 同名 `.lrc` / `.txt` 歌词文件
-- ✅ FLAC 内嵌 `LYRICS` 歌词标签
+- ✅ MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 内嵌歌词标签
 - ✅ 带时间轴的 LRC 格式
 - ✅ 歌词翻译自动识别和显示
 - ✅ 桌面歌词窗口（可拖动、可调整大小）
@@ -148,7 +150,7 @@ npm test
 ## ❓ 常见问题
 
 ### 支持哪些音频格式？
-支持 MP3、MP2、FLAC、M4A、M4B、WAV、OGG、OGA、AAC、Opus、WebM/WebA、AIFF/AIFC 等格式。
+支持 MP3、MP2、FLAC、M4A、M4B、WAV、OGG、OGA、AAC、Opus、WebM/WebA、AIFF/AIFC、APE、DSD(.dsf) 等格式。
 
 ### 如何添加歌词？
 - 将 `.lrc` 或 `.txt` 歌词文件放在音乐文件同目录，保持文件名一致

@@ -11,9 +11,9 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Removed login, online music portal, update prompts, and unnecessary guides.
 - Support for importing local music folders.
 - Support for importing individual local music files.
-- Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF playback.
+- Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) playback.
 - Support for `.lrc` / `.txt` lyrics files with matching names.
-- Support for FLAC embedded `LYRICS` tags, including timestamped LRC lyrics.
+- Support for MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags, including timestamped LRC lyrics.
 - Support for automatic lyrics translation recognition and display.
 - Support for cover images in the same directory and embedded audio covers.
 - Removed local rhythm analysis.
@@ -50,11 +50,13 @@ Build artifacts are located in `dist/`.
 - ✅ WebM audio
 - ✅ WebA (WebM audio)
 - ✅ AIFF / AIFC (Audio Interchange File Format)
+- ✅ APE (Monkey's Audio lossless)
+- ✅ DSD (.dsf, DSD Stream File)
 
 ### Lyrics Features
 - Matching LRC/TXT/SRT/WebVTT/ASS/YRC lyrics files
 - Matching JPG/JPEG/JPE/JFIF/PNG/WebP/AVIF/GIF/BMP/SVG cover files
-- FLAC embedded lyrics tags
+- MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags
 - Automatic lyrics translation recognition
 - Desktop lyrics display
 - Dual-line lyrics support

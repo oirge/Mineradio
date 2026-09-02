@@ -4,13 +4,14 @@
 
 ## Stable Project Facts
 
-- 当前源码续版：`v1.7.18`（本地曲库改用 `node:sqlite` + 文件指纹/路径索引常驻磁盘；扫描先问数据库走增量、索引按行摘要增量回写、解除历史 `16000` 条截断；播放次数/最近播放/收藏状态双写进库但 `localStorage` 仍是唯一权威，UI 零改动）。
+- 当前源码续版：`v1.7.19`（新增 Ogg Vorbis/Opus/Ogg FLAC、WAV（含 RF64/BW64）、APE、DSF 的标签/封面/歌词/时长解析；APE 与 DSD 经 `desktop/audio/wav-stream.js` 实时转成虚拟 WAV 后按 Range 播放；`desktop/audio/ape-decoder.js` 移植自 FFmpeg 属 `LGPL-2.1+`，声明记在根目录 `THIRD-PARTY-NOTICES.md`；DST 压缩的 `.dff` 不在范围内。`558/558` 全绿）。
+- 上一续版：`v1.7.18`（本地曲库改用 `node:sqlite` + 文件指纹/路径索引常驻磁盘；扫描先问数据库走增量、索引按行摘要增量回写、解除历史 `16000` 条截断；播放次数/最近播放/收藏状态双写进库但 `localStorage` 仍是唯一权威，UI 零改动）。
 - 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 历史检查点摘要：`v1.7.16`（迷你播放器右键命中与安全边界加固发布候选；标准收回态只有封面热区（外扩 `6px`）可点可右键，透明空白交还桌面；标准展开态与极简外壳整窗可右键；封面拖动、跨显示器移动、展开方向持久化、迷你页面 URL/frame/preload/IPC 信任边界、极简负载与失败重试均已修复）基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口，`v1.7.7` 把交接时机改成「外壳淡到全透明之后再交给系统最小化」（`240ms`，终态 `scale(.6)`）才真正看得出来（见下方 v1.7.7 / v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**，**`v1.7.11`~`v1.7.14` 起迷你播放器右键菜单与任务栏托盘共用同一份 `buildAppContextMenuTemplate()`、六项完全一致（拖拽区靠 `system-context-menu` 拦系统菜单）；收回态只有封面参与命中、封面外交还桌面，展开态与极简整窗可右键（见下方 v1.7.14 / v1.7.13 区块）**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
-- 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
+- 当前工作分支：`feat/format-support-ogg-ape-wav-dsf`；从 `codex/mini-cover-static` 的 `b07f1bd`（v1.7.18）拉出，PR 目标为 `main`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -34,6 +35,18 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持
+
+- 日期：2026-09-02。目标是「更强的格式支持」：解析侧补齐 Ogg 系列、WAV、APE、DSF 的标签/封面/歌词/时长，播放侧让 Chromium 不认识的 APE 与 DSD 能直接播。
+- 解析实现全部落在 `public/app.js` 的 `base64ChunksToBytes` ~ `applyLocalMetadataTags` 这一段里，自成闭包（`asciiFromBytes`、`synchsafeInt`、`extractFlacPictureBlob`、歌词优先级表等都在段内），所以单元测试可以只切这一段进 `node:vm` 就驱动全部七种格式。
+- 三个分发器统一按扩展名路由：`extractLocalMetadataTags`（mp3/flac/m4a/ogg|oga|opus/wav/ape/dsf）、`extractEmbeddedCoverSource`（同上）、新增 `extractEmbeddedLyricsText`（同上但不含 m4a）。能力判定 `canReadEmbeddedLyrics` / `canReadEmbeddedCover` 与两个 `canReadTruncatable*`（都不含 mp3，因为 MP3 按完整标签长度读，失败即真的没有）。
+- Ogg 时长有两条路：Ogg FLAC 的 STREAMINFO 给了 `totalSamples` 就直接算，**不读尾部**；Vorbis / Opus 才回读最后 64KB 反向找同 serial 且 `granule > 0` 的页，Opus 还要扣 `pre-skip`。测试用「请求次数」区分这两条路（1 次 vs 2 次）。
+- `readId3v2TagBytes` 的 `256KB` 探针语义是共享契约：探针覆盖整个标签就直接 `subarray` 复用，超出才发第二次 Range 读。MP3、WAV 的 `id3 ` chunk、APE 的文件头 ID3v2、DSF 的尾部 ID3v2 全部走它。
+- 超预算统一语义：后台轻量 `4MB`（`LOCAL_ASSET_LIGHT_SCAN_BYTES`）、前台 `24MB`（`LOCAL_MAX_TAG_BYTES`），超了就 `_mineradioScanComplete=false` 让前台完整重试，不返回半截标签。
+- 播放侧：`desktop/audio/wav-stream.js` 把 APE/DSF 包装成「虚拟 WAV」——size 可精确算、任意区间可解码，`/api/local-file` 的 Range/416/`raw=1` 全部保留。两个解码器（`ape-decoder.js` 支持 3800–3990，`dsf-decoder.js` 字节查表 FIR 抽取）都只接受 `read(offset,length)`，不碰 fs。
+- **授权：`desktop/audio/ape-decoder.js` 是 FFmpeg `libavformat/ape.c` + `libavcodec/apedec.c` 的逐行移植，`LGPL-2.1-or-later`**，按 LGPL v2.1 第 3 条在本项目内以 `GPL-3.0` 分发；声明写在新增的根目录 `THIRD-PARTY-NOTICES.md`（该文件与 `LICENSE` 已加入 `build.files`）。DST 压缩的 `.dff` 明确不在范围内。
+- 验证：新增 `tests/local-format-tag-parsing.test.js`（18 例，真实字节夹具）；全量 Node 回归 `558/558` 通过。本轮未启动本机 Electron，未改动任何界面。
 
 ## v1.7.18 本地曲库 SQLite + 文件指纹/路径索引
 

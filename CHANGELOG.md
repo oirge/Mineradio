@@ -1,3 +1,19 @@
+## v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持
+
+- 发布版本从 `1.7.18` 提升为 `1.7.19`；已安装 `1.7.18` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
+- **新增五类格式的标签、封面、歌词与时长解析。** 渲染层扩展到 Ogg Vorbis / Ogg Opus / Ogg FLAC、WAV（含 RF64 / BW64）、APE（Monkey's Audio）与 DSF（DSD Stream File）：`extractLocalMetadataTags`、`extractEmbeddedCoverSource` 与新增的 `extractEmbeddedLyricsText` 三个分发器统一按扩展名路由，能力判定 `canReadEmbeddedLyrics` / `canReadEmbeddedCover` 及对应的可重试判定同步扩展。
+- **Ogg 系列**：按页读取并跨页拼接数据包，跳过同文件内其它逻辑流；Vorbis comment 支持 `METADATA_BLOCK_PICTURE` 与旧式 `COVERART` / `COVERARTMIME` 封面；时长优先取 Ogg FLAC STREAMINFO 的总采样数，没有时才回读尾部 64KB 找最后一个 granule，Opus 会扣掉 `pre-skip`。
+- **WAV**：走 RIFF chunk 目录，`id3 ` chunk 优先、`LIST`/`INFO` 补齐缺失字段，时长由 `data` 大小除以 `fmt ` 的字节率得出；`RF64` / `BW64` 用 `ds64` 的 64 位 `dataSize` 替换 `0xFFFFFFFF`，超过 4GB 的文件也能算对时长。
+- **APE**：3.99+ 读描述符后的头部块，3.98 及更早按版本号与压缩等级推导 `blocksPerFrame`；标签按 APEv2 页脚 → 文件头 ID3v2 → 尾部 ID3v1 的顺序合并，二进制封面项支持 `Cover Art (Front)` 优先。
+- **DSF**：按 `DSD ` 头部的 metadata 指针读尾部 ID3v2，时长为 `fmt ` 里的单声道 1-bit 采样数除以 DSD 采样率；`metadataOffset` 为 0 视为正常无标签，不会浪费一次读取。
+- **APE 与 DSD 现在能直接播放。** Chromium 不认识这两种格式，新增 `desktop/audio/wav-stream.js` 把它们包装成“虚拟 WAV 文件”——总长度可精确计算、任意字节区间按需解码，`/api/local-file` 的 Range 请求、416 响应与 `raw=1` 原始字节通道全部照常工作，拖动进度条不受影响。`desktop/audio/ape-decoder.js` 是纯 JS 的 Monkey's Audio 解码（3800–3990），`desktop/audio/dsf-decoder.js` 用字节查表的 FIR 抽取把 1-bit DSD 码流转成 PCM。两个解码器都不碰文件系统，只接受 `read(offset, length)` 读取器。
+- 头部推导出的时长回填到展示字段，无损与高解析度曲目在首次播放前就能看到正确时长。
+- ID3v2 读取保留原 MP3 的 `256KB` 探针语义：探针已经覆盖整个标签时直接切片复用，只有超出探针的大标签才发第二次 Range 读取，同一段字节不会被读两次。
+- 标签体积超过本轮扫描预算（后台轻量 `4MB`、前台 `24MB`）时统一标记 `_mineradioScanComplete=false`，交由前台完整重试，而不是返回半截结果。
+- `desktop/audio/ape-decoder.js` 是 FFmpeg `libavformat/ape.c` 与 `libavcodec/apedec.c` 的逐行移植，原始条款为 `LGPL-2.1-or-later`，按 LGPL v2.1 第 3 条在本项目内以 `GPL-3.0` 分发；新增根目录 `THIRD-PARTY-NOTICES.md` 记录该声明与其余第三方组件，并把它和 `LICENSE` 一起纳入安装包白名单。DST 压缩的 `.dff` 不在本轮范围内。
+- 新增 `tests/local-format-tag-parsing.test.js`（18 例，用真实字节夹具驱动 `public/app.js` 里的解析实现，覆盖跨页数据包、旁路逻辑流、`ds64` 64 位长度、APE 新旧头部、DSF 探针复用与四种格式的超预算截断标记）；全量 Node 回归 `558/558` 通过。
+- 本轮未启动本机 Electron，未修改任何界面布局、样式、文案与交互入口；Windows x64 安装资产由 GitHub Actions 远程构建。
+
 ## v1.7.18 本地曲库改用 SQLite + 文件指纹/路径索引
 
 - 发布版本从 `1.7.17` 提升为 `1.7.18`；已安装 `1.7.17` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
