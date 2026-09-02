@@ -74,8 +74,13 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.7.20 (2026-09-02)
+### Latest release v1.7.21 (2026-09-02)
 
+- New volume normalization (ReplayGain): existing loudness tags are read and applied so tracks from different albums and sources play at the same level
+- Track and Album reference modes, a ±12 dB Preamp, and a peak-based clipping guard
+- Reads `REPLAYGAIN_*`, ID3v2 `TXXX` / `RVA2` and Opus `R128_*` tags from FLAC / OGG / OPUS / MP3 / WAV / APE / M4A / DSF
+- No library rescan required: newly scanned tracks pick the tags up in passing, older ones fill in once on first play and are cached
+- Normalization runs on its own gain node, so the volume slider, fades and visualizer levels are untouched
 - Automatic music folder monitoring: new tracks are indexed, deleted tracks are pruned, edited tags and covers refresh on their own — no restart needed
 - Syncing never interrupts playback: the library is mutated in place, and the currently playing track stays put even if its file is gone
 - New bottom-right sync indicator: `已同步 12,431 首歌曲`
@@ -83,7 +88,7 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Added tag, cover, embedded lyrics and duration parsing for OGG / OGA / OPUS / WAV / APE / DSD(.dsf)
 - APE and DSD now play directly: the desktop side wraps them as a virtual WAV stream, so Range requests and seeking keep working
 - The local library moved to SQLite with file-fingerprint and path indexes, and the old 16000-track cap is gone
-- Full Node regression suite: `594/594` passing
+- Full Node regression suite: `616/616` passing
 
 ## Notice
 

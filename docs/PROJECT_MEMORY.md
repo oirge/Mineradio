@@ -4,15 +4,15 @@
 
 ## Stable Project Facts
 
-- 当前源码续版：`v1.7.20`（音乐文件夹自动监控：新增 `desktop/local-library-watcher.js`（`fs.watch` 递归 + `unref`，防抖 `900ms` / 最长等待 `4500ms` 双阀门，递归不支持时降级只看根一层，`EPERM`/`ENOENT` 按 `5000→60000ms` 退避重试，`overflow` 时让渲染层退回整库比对）；渲染层 `applyOwnedLocalLibraryRefresh` 有队列时不再提示「下次启动会自动同步」，改走 `applyLocalLibraryAutoSync` 原地增删改——`localLibrarySongs` 与 `playQueue` 是同一个数组只能原地改、改动的歌只改字段不换对象、正在播放那首即使文件被删也原位保留、接管时迁移 `customCoverMap` 的 `local:<localKey>` 并清空 `localUrl`、有在途解析则推迟到下一轮；右下角新增 `已同步 N 首歌曲` 指示器（懒建 `#local-sync-badge`、`4200ms` 淡出、`index.html` 未动、`app.css` 只追加 3 条）；顺手修掉 `.ape`/`.dsf` 漏在 `LOCAL_LIBRARY_AUDIO_EXTS` 外导致不计入曲库数量的老问题。`594/594` 全绿，UI 零改动）。
-- 上一续版：`v1.7.19`（新增 Ogg Vorbis/Opus/Ogg FLAC、WAV（含 RF64/BW64）、APE、DSF 的标签/封面/歌词/时长解析；APE 与 DSD 经 `desktop/audio/wav-stream.js` 实时转成虚拟 WAV 后按 Range 播放；`desktop/audio/ape-decoder.js` 移植自 FFmpeg 属 `LGPL-2.1+`，声明记在根目录 `THIRD-PARTY-NOTICES.md`；DST 压缩的 `.dff` 不在范围内。`558/558` 全绿）。
-- 更早续版：`v1.7.18`（本地曲库改用 `node:sqlite` + 文件指纹/路径索引常驻磁盘；扫描先问数据库走增量、索引按行摘要增量回写、解除历史 `16000` 条截断；播放次数/最近播放/收藏状态双写进库但 `localStorage` 仍是唯一权威，UI 零改动）。
+- 当前源码续版：`v1.7.21`（音量均衡 ReplayGain：音频链路插入独立增益节点 `source → analyser → replayGainNode → gainNode → destination`——必须在 analyser 之后（可视化保持原始电平）、`gainNode` 之前（音量与淡入淡出仍由 `gainNode.gain` 独占）；`resolveReplayGain` 纯函数算 `10^((gain+preamp)/20)`，防削波按 `min(linear, 1/peak)` 封顶、没有峰值标签时不衰减，最后夹在 `0.05`–`4`，整轨/整专辑基准在缺标签时互相回退、两个都没有就保持原始电平；Preamp ±12 dB 按 0.1 dB 取整，改设置走 `80ms` 斜坡、切歌立即生效。标签采集不新增 extractor：Vorbis comment（FLAC 与 Ogg 共用）、ID3v2 `TXXX` 与新增 `readId3v2Rva2MasterGain`（只认主音量声道 `0x01`、故意不取峰值）、APEv2、M4A `----` 加 `readM4aFreeformName`，Opus `R128_*` 按 Q7.8 `/256` 补 `5 dB` 折算，`iTunNORM` 故意排除，真实 `REPLAYGAIN_*` 压过 R128；轻量扫描未读全时整块丢掉不写半截。持久化绕开 `LOCAL_METADATA_VALUE_FIELDS`（真值判定会丢掉合法的 `0 dB`），走 `assets.extra` JSON 列无需迁移，老缓存首次播放时惰性补齐一次并写回；设置存 `mineradio-replay-gain-v1` 不进 `fx`。`public/index.html` 只加一个同构折叠区，`public/app.css` 一行未动。新增 `tests/replay-gain-tag-parsing.test.js`（10 例）与 `tests/replay-gain-normalization.test.js`（12 例），`616/616` 全绿，UI 零改动）。
+- 上一续版：`v1.7.20`（音乐文件夹自动监控：新增 `desktop/local-library-watcher.js`（`fs.watch` 递归 + `unref`，防抖 `900ms` / 最长等待 `4500ms` 双阀门，递归不支持时降级只看根一层，`EPERM`/`ENOENT` 按 `5000→60000ms` 退避重试，`overflow` 时让渲染层退回整库比对）；渲染层 `applyOwnedLocalLibraryRefresh` 有队列时不再提示「下次启动会自动同步」，改走 `applyLocalLibraryAutoSync` 原地增删改——`localLibrarySongs` 与 `playQueue` 是同一个数组只能原地改、改动的歌只改字段不换对象、正在播放那首即使文件被删也原位保留、接管时迁移 `customCoverMap` 的 `local:<localKey>` 并清空 `localUrl`、有在途解析则推迟到下一轮；右下角新增 `已同步 N 首歌曲` 指示器（懒建 `#local-sync-badge`、`4200ms` 淡出、`index.html` 未动、`app.css` 只追加 3 条）；顺手修掉 `.ape`/`.dsf` 漏在 `LOCAL_LIBRARY_AUDIO_EXTS` 外导致不计入曲库数量的老问题。`594/594` 全绿，UI 零改动）。
+- 更早续版：`v1.7.19`（新增 Ogg Vorbis/Opus/Ogg FLAC、WAV（含 RF64/BW64）、APE、DSF 的标签/封面/歌词/时长解析；APE 与 DSD 经 `desktop/audio/wav-stream.js` 实时转成虚拟 WAV 后按 Range 播放；`desktop/audio/ape-decoder.js` 移植自 FFmpeg 属 `LGPL-2.1+`，声明记在根目录 `THIRD-PARTY-NOTICES.md`；DST 压缩的 `.dff` 不在范围内。`558/558` 全绿）。
 - 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
-- 历史检查点摘要：`v1.7.16`（迷你播放器右键命中与安全边界加固发布候选；标准收回态只有封面热区（外扩 `6px`）可点可右键，透明空白交还桌面；标准展开态与极简外壳整窗可右键；封面拖动、跨显示器移动、展开方向持久化、迷你页面 URL/frame/preload/IPC 信任边界、极简负载与失败重试均已修复）基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口，`v1.7.7` 把交接时机改成「外壳淡到全透明之后再交给系统最小化」（`240ms`，终态 `scale(.6)`）才真正看得出来（见下方 v1.7.7 / v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**，**`v1.7.11`~`v1.7.14` 起迷你播放器右键菜单与任务栏托盘共用同一份 `buildAppContextMenuTemplate()`、六项完全一致（拖拽区靠 `system-context-menu` 拦系统菜单）；收回态只有封面参与命中、封面外交还桌面，展开态与极简整窗可右键（见下方 v1.7.14 / v1.7.13 区块）**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
-- 当前工作分支：`main`。`feat/format-support-ogg-ape-wav-dsf`（v1.7.18 + v1.7.19）已通过 PR #24 以合并提交 `f8b40fc` 并入 `main`，分支保留未删；v1.7.20 的音乐文件夹自动监控直接落在 `main` 上，版本 `1.7.20`。
+- 历史检查点摘要：`v1.7.18`（本地曲库改用 `node:sqlite` + 文件指纹/路径索引常驻磁盘；扫描先问数据库走增量、索引按行摘要增量回写、解除历史 `16000` 条截断；播放次数/最近播放/收藏状态双写进库但 `localStorage` 仍是唯一权威，UI 零改动）；`v1.7.16`（迷你播放器右键命中与安全边界加固发布候选；标准收回态只有封面热区（外扩 `6px`）可点可右键，透明空白交还桌面；标准展开态与极简外壳整窗可右键；封面拖动、跨显示器移动、展开方向持久化、迷你页面 URL/frame/preload/IPC 信任边界、极简负载与失败重试均已修复）基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口，`v1.7.7` 把交接时机改成「外壳淡到全透明之后再交给系统最小化」（`240ms`，终态 `scale(.6)`）才真正看得出来（见下方 v1.7.7 / v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**，**`v1.7.11`~`v1.7.14` 起迷你播放器右键菜单与任务栏托盘共用同一份 `buildAppContextMenuTemplate()`、六项完全一致（拖拽区靠 `system-context-menu` 拦系统菜单）；收回态只有封面参与命中、封面外交还桌面，展开态与极简整窗可右键（见下方 v1.7.14 / v1.7.13 区块）**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
+- 当前工作分支：`main`。`feat/format-support-ogg-ape-wav-dsf`（v1.7.18 + v1.7.19）已通过 PR #24 以合并提交 `f8b40fc` 并入 `main`，分支保留未删；v1.7.20 的音乐文件夹自动监控与 v1.7.21 的音量均衡（ReplayGain）都直接落在 `main` 上，版本 `1.7.21`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -36,6 +36,23 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.21 音量均衡（ReplayGain）
+
+- 日期：2026-09-02。用户原话是「FLAC 很大声 → 下一首老歌突然很小声 → 再下一首又爆音」，要求支持 ReplayGain Track、ReplayGain Album、Preamp、防削波和音量归一化开关，做完直接发布新版。
+- 选型：只读文件里已有的 ReplayGain / R128 标签，不做实时响度分析。实时算响度要完整解码整首歌，几万首的库根本跑不起来；而 foobar2000 / mp3gain / opusenc 早就把标签写进文件了，读标签是零成本拿到正确答案的唯一路径。没有标签的歌一律保持原始电平，绝不猜一个增益——猜错比不均衡更难受。
+- 防削波用「按峰值封顶」而不是压缩器：`min(linear, 1/peak)`，纯函数、零延迟、不改音色、可单测；插压缩器节点要在播放中改链路，还会引入音染。标签里没有峰值时与 foobar2000 一致不做额外衰减，界面文案如实说明当前是否被封顶。
+- 增益节点的位置是这一版最关键的决定：`analyser` 之后、`gainNode` 之前。放在 analyser 之前会让可视化与节拍频谱跟着均衡忽明忽暗（一首歌被压 `-9 dB`，画面就整首暗一截）；直接乘进 `gainNode.gain` 会和 `targetVolume`、`AUDIO_FADE_IN_MS` / `AUDIO_FADE_OUT_MS` 的全部淡入淡出、`currentAudioOutputGain()` 抢同一个参数，任何一次淡出都会把均衡增益冲掉。
+- `attemptAudioPlay` 的顺序是先 `playLocalQueueItem` 再 `initAudio()`，所以 `initAudio()` 末尾必须 `setReplayGainNodeGain(replayGainActive.linear, true)` 补位，否则每次重建音频节点后第一下都没有均衡。
+- 不重扫曲库：ReplayGain 走 `assets.extra` JSON 列（`mergeExtraFields` 对嵌套对象无损往返），既不用改表结构，也不用升 `LOCAL_METADATA_TAG_SCHEMA`——升版会让整库回落重解析，几万首歌等于开机卡死一轮。升级前入库的歌由 `ensureLocalReplayGainForSong` 在首次播放时补齐一次并写回缓存，确认无标签的置 `localReplayGainResolved` 不再重扫。
+- 刻意不把 ReplayGain 挂进 `LOCAL_METADATA_VALUE_FIELDS`：那条链路的 hydration 是真值判定（`if (record[k] && !song[k])`），合法的 `0 dB` 增益会被当成缺失值丢掉。交接改成 `applyLocalMetadataTags` 里两行内联赋值，且不计入 `changed`（ReplayGain 不参与展示，没必要为音量数据触发列表重绘）。
+- `applyLocalMetadataTags` 与 `ensureLocalMetadataForSong` 都落在多个 `node:vm` 测试切片里，切片外的新标识符会 `ReferenceError`，再被这些函数自己的 `.catch` 吞掉（然后照常置 `localMetadataLoaded = true` 并写缓存，测试还是绿的但行为已经错了）。所以归一化放在 `extractLocalMetadataTags` 出口的 `finalizeLocalMetadataReplayGain`，它落在每个标签解析切片内部。
+- RVA2 只取增益不取峰值：`bitsRepresentingPeak` 的归一化方式各家 tagger 不一致，取错一个峰值会在防削波开启时静默把整首压小，比不读更糟。
+- Opus 的 `R128_*` 是 Q7.8 定点（`/256`），参考响度是 `-23 LUFS`，ReplayGain 是 `-18 LUFS`，换算要补 `+5 dB`；`iTunNORM` 的参考完全不同，故意不混入。同一文件里真实 `REPLAYGAIN_*` 优先于 R128 折算值，靠 `putReplayGainTag` 的 `hasOwnProperty` 首个可解析值胜出实现。
+- 设置存独立键 `mineradio-replay-gain-v1` 而不是 `fx`：`fx` 是视觉系统状态，会被预设导入导出和用户存档带走，别人一个预设就能改掉你的音量设定。`rg-preamp` 也刻意不加进 `bindFxPanel` 的滑杆白名单。
+- UI 按「能不动 UI 就不动 UI」办：`public/index.html` 只在 `fx-playback-fold` 之后新增一个与既有折叠区同构的区块（全部复用现成类名），`public/app.css` 一行未动；`fxPanelTargetForNode` 与 `relabelFxPanelControls` 各加一处 `fx-volume-fold`，`fx-plugin-fold` 的 fall-through 结果不变，输出等价。
+- 测试：`tests/replay-gain-tag-parsing.test.js`（10 例，自建 FLAC / ID3v2 / RIFF / APEv2 / MP4 真实字节夹具）、`tests/replay-gain-normalization.test.js`（12 例，`node:vm` 跑真实增益实现，最后一例用源码正则钉死链路顺序、存档键与界面入口）；`tests/auto-playback-startup.test.js` 的两条正则按新增折叠区放宽。全量 `616/616` 通过。
+- 本轮未启动本机 Electron，Windows x64 安装资产由 GitHub Actions 远程构建。
 
 ## v1.7.20 音乐文件夹自动监控
 

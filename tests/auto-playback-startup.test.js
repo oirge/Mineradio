@@ -298,8 +298,11 @@ test('自动播放开关常驻 DIY 高级页并接在启动恢复链路上', () 
   assert.match(appSource, /var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';/);
   assert.match(appSource, /PERSISTENT_UI_STATE_KEYS[\s\S]*?AUTO_PLAYBACK_STORE_KEY,/);
   assert.match(appSource, /id === 'fx-advanced' \|\| id === 'fx-playback-fold'/);
-  assert.match(appSource, /'fx-stage-fold','fx-playback-fold','fx-advanced'/);
-  assert.match(appSource, /initAutoPlaybackControls\(\);\s*if \(LOCAL_ONLY_MODE\) scheduleSavedLocalMusicFolderRestore\(700\);/);
+  assert.match(appSource, /'fx-stage-fold','fx-playback-fold'[^\]]*'fx-advanced'/);
+  assert.match(
+    appSource,
+    /initAutoPlaybackControls\(\);\s*(?:initReplayGainControls\(\);\s*)?if \(LOCAL_ONLY_MODE\) scheduleSavedLocalMusicFolderRestore\(700\);/,
+  );
 
   // 启动恢复的两条出口都要接上自动播放，否则被动队列分支永远不出声。
   assert.match(

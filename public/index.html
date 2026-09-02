@@ -507,6 +507,26 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold" id="fx-volume-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-volume-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>音量均衡</strong><small>ReplayGain 整轨 / 整专辑与防削波</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-replayGain" onclick="toggleReplayGainSetting('enabled')" title="读取文件里的 ReplayGain 标签，把不同专辑的响度拉到同一水平"><span>音量归一化</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-replayGainClipGuard" onclick="toggleReplayGainSetting('clipGuard')" title="按标签里的峰值封顶增益，避免提升后削波爆音"><span>防削波</span><span class="dot"></span></div>
+      </div>
+      <div class="fx-section-label">均衡基准</div>
+      <div class="fx-seg" id="replaygain-mode-seg" title="整轨让每首歌一样响，整专辑保留专辑内部的响度起伏">
+        <button type="button" data-replaygain-mode="track" aria-pressed="true" title="每首歌单独拉平，随机播放最稳">整轨</button>
+        <button type="button" data-replaygain-mode="album" aria-pressed="false" title="按整张专辑统一增益，保留专辑内的动态设计">整专辑</button>
+      </div>
+      <div class="fx-slider"><label>预增益 Preamp</label><input id="rg-preamp" type="range" min="-12" max="12" step="0.5"><output></output></div>
+      <div class="mini-player-collapse-hint" id="replaygain-hint">关闭时按文件原始电平播放，不做任何增益修正。</div>
+      <div class="mini-player-collapse-hint">支持 FLAC / OGG / OPUS / MP3 / WAV / APE / M4A / DSF 里的 ReplayGain 与 R128 标签；没有标签的歌曲保持原始电平。</div>
+    </div>
+  </div>
+
   <div class="fx-fold" id="fx-plugin-fold">
     <div class="fx-fold-head" onclick="document.getElementById('fx-plugin-fold').classList.toggle('open')">
       <span class="fx-fold-title"><strong>插件</strong><small>主题</small></span><span class="arrow">▶</span>

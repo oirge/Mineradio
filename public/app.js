@@ -4,7 +4,7 @@
 // ============================================================
 //  Global State
 // ============================================================
-var audio = null, audioCtx = null, source = null, analyser = null, beatAnalyser = null, gainNode = null, audioReady = false;
+var audio = null, audioCtx = null, source = null, analyser = null, beatAnalyser = null, gainNode = null, replayGainNode = null, audioReady = false;
 var uiSfxCtx = null, lastShelfSelectSfxAt = 0, uiSfxCloseTimer = 0;
 var UI_SFX_NOISE_VARIANTS = 6;
 var UI_SFX_IDLE_RELEASE_MS = 5000;
@@ -130,6 +130,7 @@ var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
 var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
+var REPLAY_GAIN_STORE_KEY = 'mineradio-replay-gain-v1';
 var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
 // genre 是向前生效字段：新解析的曲目会写入曲库与缓存，旧记录不带该键，
 // 因此 applyLocalAssetCacheToSong 的 hasOwnProperty 判定会跳过它，升级后不会整库回落文件名重解析。
@@ -152,6 +153,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   PLAYBACK_SESSION_STORE_KEY,
   LOCAL_PLAYBACK_SOURCE_STORE_KEY,
   AUTO_PLAYBACK_STORE_KEY,
+  REPLAY_GAIN_STORE_KEY,
   UPDATE_ROUTE_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
@@ -492,7 +494,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.20';
+var APP_VERSION = '1.7.21';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -7381,7 +7383,7 @@ function localAssetCacheSnapshot(song) {
   var key = localAssetCacheKey(song);
   if (!key) return null;
   updateLocalAudioQualityInfo(song);
-  return {
+  var snapshot = {
     id: key,
     schema: LOCAL_ASSET_CACHE_SCHEMA,
     savedAt: Date.now(),
@@ -7409,6 +7411,9 @@ function localAssetCacheSnapshot(song) {
     localCoverFileSignature: localAssetFileSignature(song.localCoverFile),
     localCoverSource: song.localCoverFile ? 'file' : ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? 'embedded' : (song.localCoverLoaded ? 'none' : ''))
   };
+  // ReplayGain 走 extra JSON 列，只在解析到时写入，缺省时不占用缓存体积。
+  if (song.localReplayGain && typeof song.localReplayGain === 'object') snapshot.localReplayGain = song.localReplayGain;
+  return snapshot;
 }
 /**
  * 生成独立歌词持久化快照；歌词原文只进入 lyrics store，不再复制到 assets store。
@@ -7628,6 +7633,10 @@ function applyLocalAssetCacheToSong(song, record, opts) {
       song[valueKey] = record[valueKey];
       changed = true;
     }
+  }
+  // ReplayGain 不参与展示，命中缓存时静默补齐，不触发 changed 引起的列表重绘。
+  if (record.localReplayGain && typeof record.localReplayGain === 'object' && !song.localReplayGain) {
+    song.localReplayGain = record.localReplayGain;
   }
   var lyricFileSig = localAssetFileSignature(song.localLyricFile);
   var canUseLyricCache = lyricRecord && (song.localLyricFile
@@ -19169,6 +19178,7 @@ function cloneSong(song){
   delete copy.localCoverPromise;
   delete copy.localLyricPromise;
   delete copy.localLyricCachePromise;
+  delete copy.localReplayGainPromise;
   delete copy.localCoverLoading;
   delete copy.localLyricLoading;
   if (fullCover && copy.customCover === fullCover) delete copy.customCover;
@@ -19842,14 +19852,18 @@ function initAudio() {
   analyser = audioCtx.createAnalyser();
   beatAnalyser = audioCtx.createAnalyser();
   gainNode = audioCtx.createGain();
+  // ReplayGain 增益放在 analyser 之后：可视化与节拍频谱仍取原始电平，音量与淡入淡出继续由 gainNode 独占。
+  replayGainNode = audioCtx.createGain();
   analyser.fftSize = FFT_SIZE;
   analyser.smoothingTimeConstant = 0.58;
   beatAnalyser.fftSize = BEAT_FFT_SIZE;
   beatAnalyser.smoothingTimeConstant = 0.10;
   source.connect(analyser);
   source.connect(beatAnalyser);
-  analyser.connect(gainNode);
+  analyser.connect(replayGainNode);
+  replayGainNode.connect(gainNode);
   gainNode.connect(audioCtx.destination);
+  setReplayGainNodeGain(replayGainActive.linear, true);
   applyVolumeToAudio();
   frequencyData.fill(0);
   beatFrequencyData.fill(0);
@@ -20122,6 +20136,167 @@ function applyVolumeToAudio() {
     gainNode.gain.cancelScheduledValues(now);
     gainNode.gain.setTargetAtTime(targetVolume, now, 0.025);
   }
+}
+
+// 音量均衡（ReplayGain）：读标签里的整轨/整专辑增益，叠加 Preamp 后作为独立增益节点，可选按峰值防削波。
+var REPLAY_GAIN_PREAMP_MIN = -12;
+var REPLAY_GAIN_PREAMP_MAX = 12;
+var REPLAY_GAIN_MIN_LINEAR = 0.05;
+var REPLAY_GAIN_MAX_LINEAR = 4;
+var REPLAY_GAIN_RAMP_SECONDS = 0.08;
+var replayGainSettings = { enabled: false, mode: 'track', preampDb: 0, clipGuard: true };
+var replayGainActive = { linear: 1, source: 'off', gainDb: 0, appliedDb: 0, clipped: false, peak: 0 };
+/**
+ * 归一化音量均衡设置，容错旧值与越界输入。
+ * @param {object} raw 原始设置对象。
+ * @returns {{enabled:boolean,mode:string,preampDb:number,clipGuard:boolean}} 归一化设置。
+ */
+function normalizeReplayGainSettings(raw) {
+  var input = raw && typeof raw === 'object' ? raw : {};
+  var preamp = Number(input.preampDb);
+  if (!isFinite(preamp)) preamp = 0;
+  return {
+    enabled: !!input.enabled,
+    mode: input.mode === 'album' ? 'album' : 'track',
+    preampDb: Math.round(clampRange(preamp, REPLAY_GAIN_PREAMP_MIN, REPLAY_GAIN_PREAMP_MAX) * 10) / 10,
+    clipGuard: input.clipGuard !== false
+  };
+}
+/**
+ * 读取已保存的音量均衡设置。
+ * @returns {{enabled:boolean,mode:string,preampDb:number,clipGuard:boolean}} 归一化设置。
+ */
+function readSavedReplayGainSettings() {
+  try {
+    var text = localStorage.getItem(REPLAY_GAIN_STORE_KEY);
+    return normalizeReplayGainSettings(text ? JSON.parse(text) : null);
+  } catch (_e) {
+    return normalizeReplayGainSettings(null);
+  }
+}
+/**
+ * 计算某首歌应当施加的均衡增益。没有可用标签时保持原始电平，不做任何猜测性放大。
+ * @param {object} info 歌曲上的 ReplayGain 信息。
+ * @param {object} settings 音量均衡设置。
+ * @returns {{linear:number,source:string,gainDb:number,appliedDb:number,clipped:boolean,peak:number}} 增益解析结果。
+ */
+function resolveReplayGain(info, settings) {
+  var conf = normalizeReplayGainSettings(settings);
+  var idle = { linear: 1, source: 'off', gainDb: 0, appliedDb: 0, clipped: false, peak: 0 };
+  if (!conf.enabled) return idle;
+  var data = info && typeof info === 'object' ? info : null;
+  if (!data) { idle.source = 'none'; return idle; }
+  var trackGain = typeof data.trackGainDb === 'number' && isFinite(data.trackGainDb) ? data.trackGainDb : null;
+  var albumGain = typeof data.albumGainDb === 'number' && isFinite(data.albumGainDb) ? data.albumGainDb : null;
+  // 专辑模式缺少整专辑增益时回退到整轨增益，反之同理；两者都没有就当作无标签。
+  var useAlbum = conf.mode === 'album' ? albumGain != null : (trackGain == null && albumGain != null);
+  var gainDb = useAlbum ? albumGain : trackGain;
+  if (gainDb == null) { idle.source = 'none'; return idle; }
+  var peakRaw = useAlbum
+    ? (typeof data.albumPeak === 'number' ? data.albumPeak : data.trackPeak)
+    : (typeof data.trackPeak === 'number' ? data.trackPeak : data.albumPeak);
+  var peak = typeof peakRaw === 'number' && isFinite(peakRaw) && peakRaw > 0 ? peakRaw : 0;
+  var linear = Math.pow(10, (gainDb + conf.preampDb) / 20);
+  var clipped = false;
+  // 防削波按峰值封顶：峰值标签缺失时无从判断，与 foobar2000 一致不做额外衰减。
+  if (conf.clipGuard && peak > 0) {
+    var maxLinear = 1 / peak;
+    if (linear > maxLinear) {
+      linear = maxLinear;
+      clipped = true;
+    }
+  }
+  linear = clampRange(linear, REPLAY_GAIN_MIN_LINEAR, REPLAY_GAIN_MAX_LINEAR);
+  return {
+    linear: linear,
+    source: useAlbum ? 'album' : 'track',
+    gainDb: gainDb,
+    appliedDb: Math.round(Math.log(linear) / Math.LN10 * 200) / 10,
+    clipped: clipped,
+    peak: peak
+  };
+}
+/**
+ * 把解析出的线性增益写入均衡节点，默认用短斜坡避免切换设置时爆音。
+ * @param {number} linear 线性增益。
+ * @param {boolean=} immediate 是否立即生效。
+ * @returns {void}
+ */
+function setReplayGainNodeGain(linear, immediate) {
+  var value = clampRange(Number(linear) || 1, REPLAY_GAIN_MIN_LINEAR, REPLAY_GAIN_MAX_LINEAR);
+  if (!replayGainNode || !replayGainNode.gain) return;
+  if (!audioCtx || immediate) {
+    replayGainNode.gain.value = value;
+    return;
+  }
+  var now = audioCtx.currentTime || 0;
+  replayGainNode.gain.cancelScheduledValues(now);
+  replayGainNode.gain.setValueAtTime(replayGainNode.gain.value, now);
+  replayGainNode.gain.linearRampToValueAtTime(value, now + REPLAY_GAIN_RAMP_SECONDS);
+}
+/**
+ * 按当前设置为指定歌曲应用均衡增益。
+ * @param {object} song 本地歌曲。
+ * @param {{immediate?:boolean}=} opts 是否立即生效。
+ * @returns {object} 增益解析结果。
+ */
+function applyReplayGainForCurrentSong(song, opts) {
+  var resolved = resolveReplayGain(song && song.localReplayGain, replayGainSettings);
+  replayGainActive = resolved;
+  setReplayGainNodeGain(resolved.linear, !!(opts && opts.immediate));
+  return resolved;
+}
+/**
+ * 为播放中的歌曲惰性补齐 ReplayGain 标签：老缓存记录没有该字段时只在开关打开后解析一次。
+ * @param {object} song 本地歌曲。
+ * @returns {Promise<object|null>} ReplayGain 信息；无标签时为 null。
+ */
+async function ensureLocalReplayGainForSong(song) {
+  if (!song || song.type !== 'local' || !song.localFile) return null;
+  if (song.localReplayGain) return song.localReplayGain;
+  if (song.localReplayGainResolved) return null;
+  if (song.localReplayGainPromise) return song.localReplayGainPromise;
+  song.localReplayGainPromise = (async function () {
+    try {
+      // 已有元数据解析在跑就复用它的结果，避免同一文件被读两遍。
+      if (song.localMetadataPromise) await song.localMetadataPromise;
+      if (song.localReplayGain) return song.localReplayGain;
+      var tags = await extractLocalMetadataTags(song.localFile, {});
+      if (tags && tags.replayGain) {
+        song.localReplayGain = tags.replayGain;
+        scheduleLocalAssetCacheWrite(song);
+        return song.localReplayGain;
+      }
+      song.localReplayGainResolved = true;
+      return null;
+    } catch (e) {
+      console.warn('[ReplayGain]', song && song.name, e);
+      return null;
+    } finally {
+      song.localReplayGainPromise = null;
+    }
+  })();
+  return song.localReplayGainPromise;
+}
+/**
+ * 切歌时准备均衡增益：先用已知标签立即生效，再在需要时补齐标签并重新应用。
+ * @param {object} song 本地歌曲。
+ * @param {number} token 切歌令牌，用于丢弃过期结果。
+ * @returns {void}
+ */
+function prepareReplayGainForSong(song, token) {
+  applyReplayGainForCurrentSong(song, { immediate: true });
+  if (!replayGainSettings.enabled || !song || song.localReplayGain) return;
+  /**
+   * 标签补齐后重新应用增益，仅在仍播放同一首时生效。
+   * @returns {void}
+   */
+  function reapplyResolvedReplayGain() {
+    if (token !== trackSwitchToken || !isCurrentLocalQueueSong(song)) return;
+    applyReplayGainForCurrentSong(song);
+    updateReplayGainControls();
+  }
+  ensureLocalReplayGainForSong(song).then(reapplyResolvedReplayGain, reapplyResolvedReplayGain);
 }
 
 function flushVolumePreference() {
@@ -20544,6 +20719,119 @@ function initAutoPlaybackControls() {
     });
   }
   updateAutoPlaybackControls();
+}
+
+/**
+ * 生成音量均衡说明文案，顺带回报当前歌曲的实际增益结果。
+ * @returns {string} 说明文案。
+ */
+function replayGainHintText() {
+  if (!replayGainSettings.enabled) return '关闭时按文件原始电平播放，不做任何增益修正。';
+  var modeText = replayGainSettings.mode === 'album' ? '整专辑增益（Album）' : '整轨增益（Track）';
+  if (replayGainActive.source === 'none') return modeText + '：当前歌曲没有 ReplayGain 标签，保持原始电平。';
+  if (replayGainActive.source === 'off') return modeText + '：等待歌曲标签解析。';
+  var suffix = replayGainActive.clipped ? '，已按峰值防削波封顶' : '';
+  return modeText + '：当前实际增益 ' + (replayGainActive.appliedDb > 0 ? '+' : '') + replayGainActive.appliedDb.toFixed(1) + ' dB' + suffix + '。';
+}
+
+/**
+ * 同步音量均衡设置区的开关、模式分段按钮、Preamp 滑杆与说明文案。
+ * @returns {void}
+ */
+function updateReplayGainControls() {
+  var master = document.getElementById('t-replayGain');
+  if (master) master.classList.toggle('on', replayGainSettings.enabled);
+  var clipGuard = document.getElementById('t-replayGainClipGuard');
+  if (clipGuard) clipGuard.classList.toggle('on', replayGainSettings.clipGuard);
+  var buttons = document.querySelectorAll('#replaygain-mode-seg [data-replaygain-mode]');
+  for (var i = 0; i < buttons.length; i++) {
+    var button = buttons[i];
+    var active = button.getAttribute('data-replaygain-mode') === replayGainSettings.mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  var slider = document.getElementById('rg-preamp');
+  if (slider) {
+    if (Number(slider.value) !== replayGainSettings.preampDb) slider.value = String(replayGainSettings.preampDb);
+    var out = slider.parentNode ? slider.parentNode.querySelector('output') : null;
+    if (out) out.textContent = (replayGainSettings.preampDb > 0 ? '+' : '') + replayGainSettings.preampDb.toFixed(1) + ' dB';
+  }
+  var hint = document.getElementById('replaygain-hint');
+  if (hint) hint.textContent = replayGainHintText();
+}
+
+/**
+ * 落盘音量均衡设置并按新设置立即重算当前歌曲增益。
+ * @returns {void}
+ */
+function commitReplayGainSettings() {
+  replayGainSettings = normalizeReplayGainSettings(replayGainSettings);
+  setPersistentLocalStorageItem(REPLAY_GAIN_STORE_KEY, JSON.stringify(replayGainSettings));
+  var song = currentLocalSong;
+  if (replayGainSettings.enabled && song && !song.localReplayGain) prepareReplayGainForSong(song, trackSwitchToken);
+  else applyReplayGainForCurrentSong(song);
+  updateReplayGainControls();
+}
+
+/**
+ * 切换音量均衡开关或防削波开关。
+ * @param {string} key 设置名：`enabled` 或 `clipGuard`。
+ * @returns {void}
+ */
+function toggleReplayGainSetting(key) {
+  if (key !== 'enabled' && key !== 'clipGuard') return;
+  replayGainSettings[key] = !replayGainSettings[key];
+  commitReplayGainSettings();
+  if (key === 'enabled') showToast(replayGainSettings.enabled ? '音量均衡: 开启' : '音量均衡: 关闭');
+  else showToast(replayGainSettings.clipGuard ? '防削波: 开启' : '防削波: 关闭');
+}
+
+/**
+ * 切换整轨 / 整专辑均衡模式。
+ * @param {string} mode 目标模式。
+ * @returns {void}
+ */
+function setReplayGainMode(mode) {
+  var next = mode === 'album' ? 'album' : 'track';
+  if (next === replayGainSettings.mode) return;
+  replayGainSettings.mode = next;
+  commitReplayGainSettings();
+  showToast(next === 'album' ? '音量均衡: 整专辑' : '音量均衡: 整轨');
+}
+
+/**
+ * 设置 Preamp 预增益。
+ * @param {*} value 目标 dB 值。
+ * @returns {void}
+ */
+function setReplayGainPreamp(value) {
+  var next = Number(value);
+  if (!isFinite(next)) return;
+  replayGainSettings.preampDb = next;
+  commitReplayGainSettings();
+}
+
+/**
+ * 绑定音量均衡控件并同步初始状态。
+ * @returns {void}
+ */
+function initReplayGainControls() {
+  replayGainSettings = readSavedReplayGainSettings();
+  var seg = document.getElementById('replaygain-mode-seg');
+  if (seg) {
+    seg.addEventListener('click', function(e){
+      var button = e.target && e.target.closest ? e.target.closest('[data-replaygain-mode]') : null;
+      if (!button) return;
+      e.preventDefault();
+      setReplayGainMode(button.getAttribute('data-replaygain-mode'));
+    });
+  }
+  var slider = document.getElementById('rg-preamp');
+  if (slider) {
+    slider.addEventListener('input', function(){ setReplayGainPreamp(slider.value); });
+  }
+  applyReplayGainForCurrentSong(currentLocalSong, { immediate: true });
+  updateReplayGainControls();
 }
 
 function queueSong(song, opts) {
@@ -21024,6 +21312,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   if (!localUrl) throw new Error('本地音频文件不可用');
   currentLocalSong = song;
   schedulePlaybackMetadataRefresh(song);
+  prepareReplayGainForSong(song, token);
   applyLocalOriginalLyricsState(song);
   loadLocalLyricsForSong(song, token);
   document.getElementById('trial-banner').classList.remove('show');
@@ -24990,6 +25279,122 @@ async function extractMp3LocalMetadata(file) {
   var bytes = await readMp3Id3v2Bytes(file);
   return bytes.length ? parseId3v2Tags(bytes, 0, {}) : {};
 }
+// ReplayGain 标签解析：REPLAYGAIN_* 文本项、ID3v2 TXXX/RVA2、APEv2 项与 MP4 `----` 自定义项共用同一套字段名与取值规则。
+var REPLAY_GAIN_TAG_DB_LIMIT = 60;
+var REPLAY_GAIN_TAG_PEAK_LIMIT = 64;
+// R128 以 -23 LUFS 为参考，ReplayGain 以 -18 LUFS 为参考，换算时补足 5 dB。
+var REPLAY_GAIN_R128_REFERENCE_OFFSET_DB = 5;
+/**
+ * 把任意来源的 ReplayGain 标签名映射到统一字段名。
+ * @param {string} key 原始标签名。
+ * @returns {string} 统一字段名；不是 ReplayGain 标签时返回空字符串。
+ */
+function replayGainTagField(key) {
+  var flat = String(key == null ? '' : key).replace(/[\s_\-.]/g, '').toUpperCase();
+  if (flat === 'REPLAYGAINTRACKGAIN') return 'trackGainDb';
+  if (flat === 'REPLAYGAINTRACKPEAK') return 'trackPeak';
+  if (flat === 'REPLAYGAINALBUMGAIN') return 'albumGainDb';
+  if (flat === 'REPLAYGAINALBUMPEAK') return 'albumPeak';
+  if (flat === 'R128TRACKGAIN') return 'r128TrackGainDb';
+  if (flat === 'R128ALBUMGAIN') return 'r128AlbumGainDb';
+  return '';
+}
+/**
+ * 写入一个 ReplayGain 字段，按“首个可解析值胜出”处理重复标签。
+ * @param {object} target ReplayGain 原始值容器。
+ * @param {string} field 统一字段名。
+ * @param {*} value 原始标签值。
+ * @returns {boolean} 是否写入成功。
+ */
+function putReplayGainTag(target, field, value) {
+  if (!target || !field) return false;
+  if (Object.prototype.hasOwnProperty.call(target, field)) return false;
+  var parsed = null;
+  if (field === 'trackPeak' || field === 'albumPeak') parsed = parseReplayGainPeak(value);
+  else if (field === 'r128TrackGainDb' || field === 'r128AlbumGainDb') parsed = parseReplayGainR128(value);
+  else parsed = parseReplayGainDb(value);
+  if (parsed == null) return false;
+  target[field] = parsed;
+  return true;
+}
+/**
+ * 惰性创建标签结果上的 ReplayGain 原始值容器。
+ * @param {object} tags 标签结果对象。
+ * @returns {object} ReplayGain 原始值容器。
+ */
+function localMetadataReplayGainTarget(tags) {
+  if (!tags.replayGain || typeof tags.replayGain !== 'object') tags.replayGain = {};
+  return tags.replayGain;
+}
+/**
+ * 解析 ReplayGain 增益文本，接受 "-7.06 dB"、"+3.2dB" 与裸数字，并拒绝明显越界值。
+ * @param {*} value 原始增益值。
+ * @returns {number|null} 增益 dB；无法解析时返回 null。
+ */
+function parseReplayGainDb(value) {
+  if (typeof value === 'number') {
+    return isFinite(value) && Math.abs(value) <= REPLAY_GAIN_TAG_DB_LIMIT ? value : null;
+  }
+  var text = String(value == null ? '' : value).trim();
+  if (!text) return null;
+  var match = /^([+-]?\d+(?:\.\d+)?)\s*(?:db)?$/i.exec(text);
+  if (!match) return null;
+  var db = Number(match[1]);
+  if (!isFinite(db) || Math.abs(db) > REPLAY_GAIN_TAG_DB_LIMIT) return null;
+  return db;
+}
+/**
+ * 解析 ReplayGain 峰值文本。峰值以 1.0 为满刻度，超过上限说明标签损坏。
+ * @param {*} value 原始峰值。
+ * @returns {number|null} 峰值；无法解析时返回 null。
+ */
+function parseReplayGainPeak(value) {
+  var peak = typeof value === 'number' ? value : Number(String(value == null ? '' : value).trim());
+  if (!isFinite(peak) || peak <= 0 || peak > REPLAY_GAIN_TAG_PEAK_LIMIT) return null;
+  return peak;
+}
+/**
+ * 解析 Opus R128 增益（Q7.8 定点整数），并换算到 ReplayGain 的参考响度。
+ * @param {*} value 原始 R128 值。
+ * @returns {number|null} 增益 dB；无法解析时返回 null。
+ */
+function parseReplayGainR128(value) {
+  var text = String(value == null ? '' : value).trim();
+  if (!/^[+-]?\d+$/.test(text)) return null;
+  var db = Number(text) / 256 + REPLAY_GAIN_R128_REFERENCE_OFFSET_DB;
+  if (!isFinite(db) || Math.abs(db) > REPLAY_GAIN_TAG_DB_LIMIT) return null;
+  return db;
+}
+/**
+ * 把原始 ReplayGain 标签整理成播放端可直接使用的结构，真实 ReplayGain 优先于 R128 折算值。
+ * @param {object} raw 原始值容器。
+ * @returns {object|null} 归一化结果；没有任何可用增益时返回 null。
+ */
+function normalizeReplayGainInfo(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  var info = { resolved: 1 };
+  var trackGain = typeof raw.trackGainDb === 'number' ? raw.trackGainDb : raw.r128TrackGainDb;
+  var albumGain = typeof raw.albumGainDb === 'number' ? raw.albumGainDb : raw.r128AlbumGainDb;
+  if (typeof trackGain === 'number' && isFinite(trackGain)) info.trackGainDb = Math.round(trackGain * 1000) / 1000;
+  if (typeof albumGain === 'number' && isFinite(albumGain)) info.albumGainDb = Math.round(albumGain * 1000) / 1000;
+  if (typeof raw.trackPeak === 'number' && isFinite(raw.trackPeak)) info.trackPeak = Math.round(raw.trackPeak * 1000000) / 1000000;
+  if (typeof raw.albumPeak === 'number' && isFinite(raw.albumPeak)) info.albumPeak = Math.round(raw.albumPeak * 1000000) / 1000000;
+  if (typeof info.trackGainDb !== 'number' && typeof info.albumGainDb !== 'number') return null;
+  return info;
+}
+/**
+ * 收尾标签结果里的 ReplayGain：仅在整文件扫描完成时落盘，避免轻量扫描写入半截标签。
+ * @param {object} tags 标签结果对象。
+ * @returns {object} 原样返回的标签结果对象。
+ */
+function finalizeLocalMetadataReplayGain(tags) {
+  if (!tags || typeof tags !== 'object') return tags;
+  if (!tags.replayGain) return tags;
+  var normalized = tags._mineradioScanComplete === false ? null : normalizeReplayGainInfo(tags.replayGain);
+  if (normalized) tags.replayGain = normalized;
+  else delete tags.replayGain;
+  return tags;
+}
 /**
  * 把 Vorbis comment key 映射到播放器展示元数据字段。
  * @param {string} key 原始 Vorbis 字段名。
@@ -25044,7 +25449,13 @@ function parseFlacMetadataVorbisPayload(bytes, tags) {
     p = commentEnd;
     var eq = findByteInRange(bytes, commentStart, commentEnd, 61);
     if (eq <= commentStart) continue;
-    var key = vorbisCommentKey(utf8FromBytes(bytes, commentStart, eq - commentStart));
+    var rawKey = utf8FromBytes(bytes, commentStart, eq - commentStart);
+    var rgField = replayGainTagField(rawKey);
+    if (rgField) {
+      putReplayGainTag(localMetadataReplayGainTarget(tags), rgField, utf8FromBytes(bytes, eq + 1, commentEnd - eq - 1));
+      continue;
+    }
+    var key = vorbisCommentKey(rawKey);
     if (!key || tags[key]) continue;
     putLocalMetadataTag(tags, key, utf8FromBytes(bytes, eq + 1, commentEnd - eq - 1));
   }
@@ -25241,6 +25652,29 @@ function m4aMetadataKey(type) {
   return '';
 }
 /**
+ * 读取 M4A `----` 自定义项的 name 子 atom，得到 ReplayGain 之类的自定义标签名。
+ * @param {File|object} file 本地 M4A 文件记录。
+ * @param {object} item ilst 项 atom。
+ * @returns {Promise<string>} 自定义标签名；不存在时返回空字符串。
+ */
+async function readM4aFreeformName(file, item) {
+  var pos = item.offset + item.headerSize;
+  while (pos + 8 <= item.end) {
+    var child = await readM4aAtomHeader(file, pos, item.end);
+    if (!child) return '';
+    if (child.type === 'name') {
+      // name atom 的 payload 前 4 字节是 version/flags，之后才是名称文本。
+      var nameStart = child.offset + child.headerSize + 4;
+      var nameLength = child.end - nameStart;
+      if (nameLength <= 0 || nameLength > M4A_MAX_TEXT_BYTES) return '';
+      var nameBytes = await readLocalFileBytes(file, nameStart, child.end);
+      return nameBytes.length === nameLength ? utf8FromBytes(nameBytes, 0, nameBytes.length) : '';
+    }
+    pos = child.end;
+  }
+  return '';
+}
+/**
  * 解析 M4A ilst 中的展示标签和内嵌封面。
  * @param {File|object} file 本地 M4A 文件记录。
  * @param {object} ilst ilst atom 描述。
@@ -25264,6 +25698,17 @@ async function parseM4aIlst(file, ilst, result) {
             var mime = data.dataType === 13 ? 'image/jpeg' : (data.dataType === 14 ? 'image/png' : '');
             if (!mime) mime = coverBytes[0] === 0x89 && coverBytes[1] === 0x50 ? 'image/png' : 'image/jpeg';
             result.cover = blobBytesToCoverBlob(coverBytes, mime);
+          }
+        }
+      } else if (item.type === '----' && result.tags) {
+        var freeformLength = data.dataEnd - data.dataStart;
+        if (freeformLength > 0 && freeformLength <= M4A_MAX_TEXT_BYTES) {
+          var rgField = replayGainTagField(await readM4aFreeformName(file, item));
+          if (rgField) {
+            var rgBytes = await readLocalFileBytes(file, data.dataStart, data.dataEnd);
+            if (rgBytes.length === freeformLength) {
+              putReplayGainTag(localMetadataReplayGainTarget(result.tags), rgField, decodeM4aText(rgBytes, data.dataType || 1));
+            }
           }
         }
       } else if (result.tags) {
@@ -25369,6 +25814,28 @@ function walkId3v2Frames(bytes, start, handler) {
   return false;
 }
 /**
+ * 从 RVA2 帧读取主音量增益。峰值字段各家 tagger 归一化方式不一致，这里只取增益。
+ * @param {Uint8Array} bytes 标签字节。
+ * @param {number} frameStart 帧数据起点。
+ * @param {number} frameEnd 帧数据终点，不含该位置。
+ * @returns {number|null} 增益 dB；没有主音量声道时返回 null。
+ */
+function readId3v2Rva2MasterGain(bytes, frameStart, frameEnd) {
+  var idEnd = findZero(bytes, frameStart, frameEnd, 1);
+  if (idEnd < 0) return null;
+  var pos = idEnd + 1;
+  while (pos + 3 <= frameEnd) {
+    var channel = bytes[pos];
+    var raw = (bytes[pos + 1] << 8) | bytes[pos + 2];
+    if (raw & 0x8000) raw -= 0x10000;
+    var peakBits = bytes[pos + 3] || 0;
+    // 主音量声道(0x01)才是整轨增益，其余声道对播放端没有意义。
+    if (channel === 1) return raw / 512;
+    pos += 4 + Math.ceil(peakBits / 8);
+  }
+  return null;
+}
+/**
  * 解析 ID3v2 文本帧到展示标签。
  * @param {Uint8Array} bytes 标签字节。
  * @param {number} start 标签起始偏移。
@@ -25377,13 +25844,30 @@ function walkId3v2Frames(bytes, start, handler) {
  */
 function parseId3v2Tags(bytes, start, tags) {
   /**
-   * 把可识别文本帧写入展示标签。
+   * 把可识别文本帧写入展示标签，并顺带收集 ReplayGain。
    * @param {string} id 帧 ID。
    * @param {number} frameStart 帧数据起点。
    * @param {number} frameEnd 帧数据终点，不含该位置。
+   * @param {number} version ID3v2 主版本。
    * @returns {boolean} 是否结束遍历。
    */
-  function handleId3TextFrame(id, frameStart, frameEnd) {
+  function handleId3TextFrame(id, frameStart, frameEnd, version) {
+    if (id === 'RVA2' || (version === 2 && id === 'RVA')) {
+      var rva2Gain = readId3v2Rva2MasterGain(bytes, frameStart, frameEnd);
+      if (rva2Gain != null) putReplayGainTag(localMetadataReplayGainTarget(tags), 'trackGainDb', rva2Gain);
+      return false;
+    }
+    if ((id === 'TXXX' || (version === 2 && id === 'TXX')) && frameEnd - frameStart >= 2) {
+      var enc = bytes[frameStart] || 0;
+      var wide = (enc === 1 || enc === 2) ? 2 : 1;
+      var descEnd = findZero(bytes, frameStart + 1, frameEnd, wide);
+      if (descEnd < 0) return false;
+      var rgField = replayGainTagField(decodeId3TextWithEncoding(bytes, frameStart + 1, descEnd, enc));
+      if (rgField) {
+        putReplayGainTag(localMetadataReplayGainTarget(tags), rgField, decodeId3TextWithEncoding(bytes, descEnd + wide, frameEnd, enc));
+        return false;
+      }
+    }
     var key = id3TextFrameKey(id);
     if (key) putLocalMetadataTag(tags, key, decodeId3TextFrame(bytes, frameStart, frameEnd));
     return false;
@@ -26267,11 +26751,17 @@ function parseApeTagItems(bytes, tags) {
   function handleApeTextItem(key, valueStart, valueEnd, flags) {
     // flags 的 bit1-2 是类型：0 为 UTF-8 文本，1 为二进制，2 为外部引用。
     if ((flags >> 1) & 3) return false;
-    var field = vorbisCommentKey(key);
-    if (!field || tags[field]) return false;
     // 多值项用 NUL 分隔，展示只取第一个值。
     var zero = findZero(bytes, valueStart, valueEnd, 1);
-    putLocalMetadataTag(tags, field, decodeLegacyTagText(bytes.subarray(valueStart, zero >= 0 ? zero : valueEnd)));
+    var text = decodeLegacyTagText(bytes.subarray(valueStart, zero >= 0 ? zero : valueEnd));
+    var rgField = replayGainTagField(key);
+    if (rgField) {
+      putReplayGainTag(localMetadataReplayGainTarget(tags), rgField, text);
+      return false;
+    }
+    var field = vorbisCommentKey(key);
+    if (!field || tags[field]) return false;
+    putLocalMetadataTag(tags, field, text);
     return false;
   }
   forEachApeTagItem(bytes, handleApeTextItem);
@@ -26514,13 +27004,15 @@ async function extractLocalMetadataTags(file, opts) {
   if (!file) return {};
   var name = String(file.name || '').toLowerCase();
   try {
-    if (/\.mp3$/.test(name)) return await extractMp3LocalMetadata(file);
-    if (/\.flac$/.test(name)) return await extractFlacLocalMetadata(file, opts);
-    if (/\.m4a$/.test(name)) return await extractM4aLocalMetadata(file, opts);
-    if (/\.(ogg|oga|opus)$/.test(name)) return await extractOggLocalMetadata(file, opts);
-    if (/\.wav$/.test(name)) return await extractWavLocalMetadata(file, opts);
-    if (/\.ape$/.test(name)) return await extractApeLocalMetadata(file, opts);
-    if (/\.dsf$/.test(name)) return await extractDsfLocalMetadata(file, opts);
+    var tags = null;
+    if (/\.mp3$/.test(name)) tags = await extractMp3LocalMetadata(file);
+    else if (/\.flac$/.test(name)) tags = await extractFlacLocalMetadata(file, opts);
+    else if (/\.m4a$/.test(name)) tags = await extractM4aLocalMetadata(file, opts);
+    else if (/\.(ogg|oga|opus)$/.test(name)) tags = await extractOggLocalMetadata(file, opts);
+    else if (/\.wav$/.test(name)) tags = await extractWavLocalMetadata(file, opts);
+    else if (/\.ape$/.test(name)) tags = await extractApeLocalMetadata(file, opts);
+    else if (/\.dsf$/.test(name)) tags = await extractDsfLocalMetadata(file, opts);
+    if (tags) return finalizeLocalMetadataReplayGain(tags);
   } catch (e) {
     console.warn('[LocalMetadata]', file && file.name, e);
   }
@@ -26806,6 +27298,8 @@ function applyLocalMetadataTags(song, tags) {
   if (tags.year && song.year !== tags.year) { song.year = tags.year; changed = true; }
   // 头部推导出的时长只在缺省时补齐：真实播放测得的时长更可信。
   if (tags.duration > 0 && !(song.duration > 0)) { song.duration = tags.duration; changed = true; }
+  // ReplayGain 不参与展示，不计入 changed，避免为音量数据触发列表重绘。
+  if (tags.replayGain && typeof tags.replayGain === 'object' && !song.localReplayGain) song.localReplayGain = tags.replayGain;
   updateLocalAudioQualityInfo(song);
   return changed;
 }
@@ -30018,7 +30512,7 @@ function fxPanelTargetForNode(node, current) {
   if (id === 'fx-lyric-fold') return 'lyrics';
   if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
-  if (id === 'fx-advanced' || id === 'fx-playback-fold' || node.classList.contains('fx-actions')) return 'advanced';
+  if (id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-volume-fold' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
   if (inputId === 'fx-bgopacity' || inputId === 'fx-glassaberration') return 'appearance';
   if (inputId === 'fx-lyricglow') return 'lyrics';
@@ -30078,7 +30572,7 @@ function organizeFxPanel() {
     }
     (pages[target] || pages.presets).appendChild(node);
   });
-  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-advanced'].forEach(function(id){
+  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-volume-fold','fx-advanced'].forEach(function(id){
     var fold = document.getElementById(id);
     if (fold) fold.classList.add('open');
   });
@@ -36321,6 +36815,7 @@ updateCustomLyricControls();
 updateLikeButtons();
 updateLocalPlaybackPlaylistSourceButton();
 initAutoPlaybackControls();
+initReplayGainControls();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 initPluginRuntime();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
