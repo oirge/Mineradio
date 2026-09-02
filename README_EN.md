@@ -11,6 +11,7 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Removed login, online music portal, update prompts, and unnecessary guides.
 - Support for importing local music folders.
 - Support for importing individual local music files.
+- Smart library categories: artist / album / album artist / genre / decade, plus recently added, recently played, most played and never played.
 - Automatic music folder monitoring: new files are indexed, deleted files are pruned, tag and cover edits refresh on their own, no restart required.
 - Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) playback.
 - Support for `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` lyrics files with matching names.
@@ -66,6 +67,7 @@ Build artifacts are located in `dist/`.
 - Mini player (pinnable, draggable)
 - Desktop lyrics window
 - Local music library management
+- Smart library categories (artist / album / album artist / genre / decade / recently added / recently played / most played / never played)
 - Automatic music folder monitoring with a bottom-right synced-track indicator
 - Playlist management
 - Shuffle/repeat playback
@@ -74,26 +76,26 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.7.22 (2026-09-02)
+### Latest release v1.7.23 (2026-09-02)
 
+- Smart library categories: a new **音乐库 / Library** entry at the top of the library panel, holding five song views (`All songs / Recently added / Recently played / Most played / Never played`) and five group browsers (`Artist / Album / Album artist / Genre / Decade`)
+- Three-level navigation — Library → group → songs — with a back button and "play all" at every level; any category can become the bottom-bar playback source
+- Decades are bucketed by ten years (`1990s / 2000s / 2010s`), unparseable years fall into "unknown decade" and sort last; a missing album artist falls back to the artist
+- Recently played / most played / never played are driven by local listening stats, ties broken by accumulated listen time and then last-played time
+- New library-add timestamps, so "recently added" reflects real import order, capped at 200 tracks; editing tags or covers no longer makes a track look newly added, and a first full import is not stamped with one identical moment
+- The whole library is indexed in a single pass, group cards reuse the panel's existing lazy-load budget, and no new CSS was added
 - A real audio effect chain in a fixed order: `Preset → EQ → Preamp → Limiter → Spatial → Output`, permanently wired into the audio graph so toggling it never clicks
 - 8 presets: Normal / Rock / Pop / Classical / Jazz / Bass Boost / Vocal / Custom; dragging any band lands on Custom, and returning the curve to a preset shape is recognised again automatically
 - 10-band graphic EQ from `31 Hz` to `16 kHz` — shelving filters at both ends, peaking in between, ±12 dB per band in 0.5 dB steps
 - Automatic preamp headroom derived from the largest boost, plus an end-of-chain limiter (threshold -12 to 0 dB) that catches transient overshoot
 - Stereo width uses a true mid/side matrix: width 1 reproduces the original channels sample for sample, 0 collapses to mono, 2 widens
 - Effect profiles export and import as `xxx.eq.json`, carrying the curve, preamp, limiter and spatial settings
-- New volume normalization (ReplayGain): existing loudness tags are read and applied so tracks from different albums and sources play at the same level
-- Track and Album reference modes, a ±12 dB Preamp, and a peak-based clipping guard
-- Reads `REPLAYGAIN_*`, ID3v2 `TXXX` / `RVA2` and Opus `R128_*` tags from FLAC / OGG / OPUS / MP3 / WAV / APE / M4A / DSF
-- No library rescan required: newly scanned tracks pick the tags up in passing, older ones fill in once on first play and are cached
-- The effect chain and normalization both run on their own nodes, so the volume slider, fades and visualizer levels are untouched
+- Volume normalization (ReplayGain): existing loudness tags are read and applied so tracks from different albums and sources play at the same level, with Track/Album reference modes, a ±12 dB preamp and a clipping guard
 - Automatic music folder monitoring: new tracks are indexed, deleted tracks are pruned, edited tags and covers refresh on their own — no restart needed
-- Syncing never interrupts playback: the library is mutated in place, and the currently playing track stays put even if its file is gone
-- New bottom-right sync indicator: `已同步 12,431 首歌曲`
-- Added tag, cover, embedded lyrics and duration parsing for OGG / OGA / OPUS / WAV / APE / DSD(.dsf)
-- APE and DSD now play directly: the desktop side wraps them as a virtual WAV stream, so Range requests and seeking keep working
+- Syncing never interrupts playback: the library is mutated in place, the currently playing track stays put even if its file is gone, and a bottom-right indicator reads `已同步 12,431 首歌曲`
+- Tag, cover, embedded lyrics and duration parsing for OGG / OGA / OPUS / WAV / APE / DSD(.dsf); APE and DSD play directly
 - The local library moved to SQLite with file-fingerprint and path indexes, and the old 16000-track cap is gone
-- Full Node regression suite: `630/630` passing
+- Full Node regression suite: `652/652` passing
 
 ## Notice
 

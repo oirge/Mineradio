@@ -496,7 +496,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.22';
+var APP_VERSION = '1.7.23';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -17294,7 +17294,313 @@ async function waitForHomeDiscoverIdle(timeout) {
 function normalizeLocalPlaylistKind(kind) {
   var value = String(kind || '');
   if (value === SPECIAL_LIKED_PLAYLIST_ID || value === 'library') return value;
+  if (value.indexOf(LOCAL_LIBRARY_CATEGORY_KIND_PREFIX) === 0) return normalizeLocalLibraryCategoryKind(value);
   return value.indexOf('local-playlist:') === 0 ? value : 'library';
+}
+/* ============ 音乐库智能分类 ============
+ * 三层 kind：library-cat:<id> 直接是一串歌，library-group:<field> 是一层分组目录，
+ * library-value:<field>:<value> 是分组里的某一项。全部按当前曲库现算，不落盘、不进
+ * SQLite（曲库表没有迁移通道），因此这些 kind 一律不写入播放来源持久键。 */
+var LOCAL_LIBRARY_CATEGORY_KIND_PREFIX = 'library-';
+var LOCAL_LIBRARY_CATEGORY_KIND = 'library-cat:';
+var LOCAL_LIBRARY_GROUP_KIND = 'library-group:';
+var LOCAL_LIBRARY_VALUE_KIND = 'library-value:';
+var LOCAL_LIBRARY_CATEGORY_HOME_KIND = 'library-cat:home';
+var LOCAL_LIBRARY_RECENT_ADDED_LIMIT = 200;
+var LOCAL_LIBRARY_CATEGORY_DEFS = [
+  { id: 'all', title: '所有歌曲', icon: '♫', hint: '整库全部本地歌曲' },
+  { id: 'recent-added', title: '最近添加', icon: '✚', hint: '按入库时间倒序' },
+  { id: 'recent-played', title: '最近播放', icon: '↻', hint: '按最后播放时间倒序' },
+  { id: 'most-played', title: '播放最多', icon: '★', hint: '按播放次数倒序' },
+  { id: 'never-played', title: '未播放', icon: '○', hint: '还没有播放记录' }
+];
+var LOCAL_LIBRARY_GROUP_DEFS = [
+  { field: 'artist', title: '艺术家', icon: '◉', unit: '位', unknown: '未知艺术家' },
+  { field: 'album', title: '专辑', icon: '◆', unit: '张', unknown: '未知专辑' },
+  { field: 'albumArtist', title: '专辑艺术家', icon: '◈', unit: '位', unknown: '未知艺术家' },
+  { field: 'genre', title: '流派', icon: '✦', unit: '种', unknown: '未知流派' },
+  { field: 'decade', title: '年代', icon: '◇', unit: '个', unknown: '未知年代' }
+];
+var localLibraryCategoryCache = { signature: '', source: null, groups: null, categories: null, valueKind: '', valueSongs: null };
+function isLocalLibraryCategoryKind(kind) {
+  return String(kind || '').indexOf(LOCAL_LIBRARY_CATEGORY_KIND_PREFIX) === 0;
+}
+function localLibraryCategoryDefById(id) {
+  for (var i = 0; i < LOCAL_LIBRARY_CATEGORY_DEFS.length; i++) {
+    if (LOCAL_LIBRARY_CATEGORY_DEFS[i].id === id) return LOCAL_LIBRARY_CATEGORY_DEFS[i];
+  }
+  return null;
+}
+function localLibraryGroupDefByField(field) {
+  for (var i = 0; i < LOCAL_LIBRARY_GROUP_DEFS.length; i++) {
+    if (LOCAL_LIBRARY_GROUP_DEFS[i].field === field) return LOCAL_LIBRARY_GROUP_DEFS[i];
+  }
+  return null;
+}
+function localLibraryCategoryKind(id) { return LOCAL_LIBRARY_CATEGORY_KIND + id; }
+function localLibraryGroupKind(field) { return LOCAL_LIBRARY_GROUP_KIND + field; }
+function localLibraryValueKind(field, value) { return LOCAL_LIBRARY_VALUE_KIND + field + ':' + value; }
+/* 分组值本身可能带冒号（歌名、专辑名很常见），所以只在第一个冒号处切一刀。 */
+function parseLocalLibraryValueKind(kind) {
+  var value = String(kind || '');
+  if (value.indexOf(LOCAL_LIBRARY_VALUE_KIND) !== 0) return null;
+  var rest = value.slice(LOCAL_LIBRARY_VALUE_KIND.length);
+  var split = rest.indexOf(':');
+  if (split <= 0) return null;
+  var field = rest.slice(0, split);
+  var groupValue = rest.slice(split + 1);
+  if (!groupValue || !localLibraryGroupDefByField(field)) return null;
+  return { field: field, value: groupValue };
+}
+function normalizeLocalLibraryCategoryKind(kind) {
+  var value = String(kind || '');
+  if (value === LOCAL_LIBRARY_CATEGORY_HOME_KIND) return value;
+  if (value.indexOf(LOCAL_LIBRARY_CATEGORY_KIND) === 0) {
+    return localLibraryCategoryDefById(value.slice(LOCAL_LIBRARY_CATEGORY_KIND.length)) ? value : 'library';
+  }
+  if (value.indexOf(LOCAL_LIBRARY_GROUP_KIND) === 0) {
+    return localLibraryGroupDefByField(value.slice(LOCAL_LIBRARY_GROUP_KIND.length)) ? value : 'library';
+  }
+  return parseLocalLibraryValueKind(value) ? value : 'library';
+}
+/* 年代取 year 里的四位数字：标签常写成 2019-03-05 或 2019/03，只认第一段年份。 */
+function localLibraryDecadeLabel(year) {
+  var match = /(\d{4})/.exec(String(year == null ? '' : year));
+  if (!match) return '未知年代';
+  var value = Number(match[1]);
+  if (!(value >= 1000 && value <= 9999)) return '未知年代';
+  return (Math.floor(value / 10) * 10) + '年代';
+}
+function localLibraryDecadeSortValue(label) {
+  var match = /^(\d{3,4})/.exec(String(label || ''));
+  return match ? Number(match[1]) : -1;
+}
+function localLibraryGroupValueForSong(field, song) {
+  if (!song) return '';
+  if (field === 'decade') return localLibraryDecadeLabel(song.year);
+  var raw = '';
+  if (field === 'artist') raw = song.artist;
+  else if (field === 'album') raw = song.album;
+  else if (field === 'albumArtist') raw = song.albumArtist || song.artist;
+  else if (field === 'genre') raw = song.genre;
+  else return '';
+  var text = String(raw == null ? '' : raw).trim();
+  if (text) return text;
+  var def = localLibraryGroupDefByField(field);
+  return def ? def.unknown : '';
+}
+/* 入库时间没有落在 SQLite 里（曲库表没有迁移通道），所以取渲染层盖的时间戳，
+ * 没盖过的回落到文件修改时间——比没有排序依据要准得多。 */
+function localLibrarySongAddedAt(song) {
+  if (!song) return 0;
+  var stamped = Number(song.localLibraryAddedAt) || 0;
+  if (stamped > 0) return stamped;
+  return Number(song.localFileLastModified) || 0;
+}
+function localLibraryListenStat(song) {
+  if (!song) return null;
+  if (typeof ensureListenStatsState !== 'function' || typeof queueItemKey !== 'function') return null;
+  var state = ensureListenStatsState();
+  if (!state || !state.songs) return null;
+  var key = queueItemKey(song);
+  return key ? (state.songs[key] || null) : null;
+}
+/* 播放统计每次写入都会刷新 updatedAt，拿它当分类缓存的失效信号就够了。 */
+function localLibraryListenStatsSignature() {
+  if (typeof ensureListenStatsState !== 'function') return '0';
+  var state = ensureListenStatsState();
+  return String((state && state.updatedAt) || 0);
+}
+function invalidateLocalLibraryCategoryIndex() {
+  localLibraryCategoryCache.signature = '';
+  localLibraryCategoryCache.source = null;
+  localLibraryCategoryCache.groups = null;
+  localLibraryCategoryCache.categories = null;
+  localLibraryCategoryCache.valueKind = '';
+  localLibraryCategoryCache.valueSongs = null;
+}
+function localLibraryCategorySignature(songs) {
+  var length = songs.length;
+  var first = length && songs[0] ? String(songs[0].localKey || '') : '';
+  var last = length && songs[length - 1] ? String(songs[length - 1].localKey || '') : '';
+  return length + '|' + first + '|' + last + '|' + localLibraryListenStatsSignature();
+}
+/* 只在真正进入分类视图时才建索引，根视图那张卡不需要任何统计。 */
+function localLibraryCategoryStore() {
+  var songs = localSearchPool();
+  var signature = localLibraryCategorySignature(songs);
+  var cache = localLibraryCategoryCache;
+  if (cache.source === songs && cache.signature === signature && cache.groups && cache.categories) return cache;
+  buildLocalLibraryCategoryStore(songs, signature);
+  return cache;
+}
+/* 一次遍历同时喂五个分组桶和三份播放统计名单，两万首曲库也只走一趟。 */
+function buildLocalLibraryCategoryStore(songs, signature) {
+  var cache = localLibraryCategoryCache;
+  var groups = {};
+  var buckets = {};
+  var fields = [];
+  for (var g = 0; g < LOCAL_LIBRARY_GROUP_DEFS.length; g++) {
+    var groupField = LOCAL_LIBRARY_GROUP_DEFS[g].field;
+    fields.push(groupField);
+    groups[groupField] = [];
+    buckets[groupField] = Object.create(null);
+  }
+  var played = [];
+  var recentPlayed = [];
+  var neverPlayed = [];
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    if (!song) continue;
+    for (var f = 0; f < fields.length; f++) {
+      var field = fields[f];
+      var value = localLibraryGroupValueForSong(field, song);
+      if (!value) continue;
+      var entry = buckets[field][value];
+      if (entry) { entry.count++; continue; }
+      entry = { value: value, count: 1, cover: song };
+      buckets[field][value] = entry;
+      groups[field].push(entry);
+    }
+    var stat = localLibraryListenStat(song);
+    var plays = stat ? Math.max(0, Number(stat.plays) || 0) : 0;
+    var lastAt = stat ? Math.max(0, Number(stat.lastPlayedAt) || 0) : 0;
+    if (plays > 0) played.push({ song: song, plays: plays, listenMs: Math.max(0, Number(stat.listenMs) || 0), at: lastAt });
+    if (lastAt > 0) recentPlayed.push({ song: song, at: lastAt });
+    if (plays <= 0 && lastAt <= 0) neverPlayed.push(song);
+  }
+  for (var s = 0; s < fields.length; s++) sortLocalLibraryGroupEntries(fields[s], groups[fields[s]]);
+  played.sort(compareLocalLibraryPlayedEntry);
+  recentPlayed.sort(function(a, b){ return b.at - a.at; });
+  cache.signature = signature;
+  cache.source = songs;
+  cache.groups = groups;
+  cache.categories = {
+    'recent-added': localLibraryRecentAddedSongs(songs),
+    'recent-played': localLibraryPluckSongs(recentPlayed),
+    'most-played': localLibraryPluckSongs(played),
+    'never-played': neverPlayed
+  };
+  cache.valueKind = '';
+  cache.valueSongs = null;
+  return cache;
+}
+function localLibraryPluckSongs(entries) {
+  var songs = [];
+  for (var i = 0; i < entries.length; i++) songs.push(entries[i].song);
+  return songs;
+}
+function compareLocalLibraryPlayedEntry(a, b) {
+  if (a.plays !== b.plays) return b.plays - a.plays;
+  if (a.listenMs !== b.listenMs) return b.listenMs - a.listenMs;
+  return b.at - a.at;
+}
+/* 最近添加封顶 200 首，不然它跟「所有歌曲」就是同一张列表。 */
+function localLibraryRecentAddedSongs(songs) {
+  var picked = [];
+  for (var i = 0; i < songs.length; i++) {
+    if (songs[i]) picked.push(songs[i]);
+  }
+  picked.sort(function(a, b){ return localLibrarySongAddedAt(b) - localLibrarySongAddedAt(a); });
+  if (picked.length > LOCAL_LIBRARY_RECENT_ADDED_LIMIT) picked.length = LOCAL_LIBRARY_RECENT_ADDED_LIMIT;
+  return picked;
+}
+function localLibraryGroupNameCompare(a, b) {
+  if (typeof LOCAL_LIBRARY_NAME_COMPARE === 'function') return LOCAL_LIBRARY_NAME_COMPARE(a, b);
+  return a < b ? -1 : (a > b ? 1 : 0);
+}
+/* 年代按数字从新到旧排，未知年代垫底；其余分组走中文排序器。 */
+function sortLocalLibraryGroupEntries(field, entries) {
+  if (field === 'decade') {
+    entries.sort(function(a, b){
+      var av = localLibraryDecadeSortValue(a.value);
+      var bv = localLibraryDecadeSortValue(b.value);
+      if (av !== bv) return bv - av;
+      return localLibraryGroupNameCompare(a.value, b.value);
+    });
+    return entries;
+  }
+  entries.sort(function(a, b){ return localLibraryGroupNameCompare(a.value, b.value); });
+  return entries;
+}
+function localLibraryGroupEntries(field) {
+  var store = localLibraryCategoryStore();
+  var entries = store.groups ? store.groups[field] : null;
+  return entries || [];
+}
+function localLibraryCategorySongs(id) {
+  if (id === 'all') return localSearchPool();
+  var store = localLibraryCategoryStore();
+  var list = store.categories ? store.categories[id] : null;
+  return list || [];
+}
+/* 分组里的具体一项按需筛一次并缓存，来回点艺术家不会每次重扫整库。 */
+function localLibraryValueSongs(field, value) {
+  var cache = localLibraryCategoryCache;
+  var kind = localLibraryValueKind(field, value);
+  localLibraryCategoryStore();
+  if (cache.valueKind === kind && cache.valueSongs) return cache.valueSongs;
+  var songs = localSearchPool();
+  var picked = [];
+  for (var i = 0; i < songs.length; i++) {
+    if (songs[i] && localLibraryGroupValueForSong(field, songs[i]) === value) picked.push(songs[i]);
+  }
+  cache.valueKind = kind;
+  cache.valueSongs = picked;
+  return picked;
+}
+/* 目录层（音乐库首页、分组列表）本身没有歌，返回空数组让渲染层去铺卡片。 */
+function localLibraryCategoryKindSongs(kind) {
+  if (kind === LOCAL_LIBRARY_CATEGORY_HOME_KIND) return [];
+  if (kind.indexOf(LOCAL_LIBRARY_GROUP_KIND) === 0) return [];
+  if (kind.indexOf(LOCAL_LIBRARY_CATEGORY_KIND) === 0) return localLibraryCategorySongs(kind.slice(LOCAL_LIBRARY_CATEGORY_KIND.length));
+  var parsed = parseLocalLibraryValueKind(kind);
+  return parsed ? localLibraryValueSongs(parsed.field, parsed.value) : [];
+}
+function localLibraryCategoryView(kind) {
+  var normalized = normalizeLocalLibraryCategoryKind(kind);
+  if (normalized === LOCAL_LIBRARY_CATEGORY_HOME_KIND) {
+    return { kind: normalized, mode: 'home', title: '音乐库', icon: '≡',
+      subtitle: '智能分类 · ' + (LOCAL_LIBRARY_CATEGORY_DEFS.length + LOCAL_LIBRARY_GROUP_DEFS.length) + ' 个入口', parent: 'library' };
+  }
+  if (normalized.indexOf(LOCAL_LIBRARY_CATEGORY_KIND) === 0) {
+    var def = localLibraryCategoryDefById(normalized.slice(LOCAL_LIBRARY_CATEGORY_KIND.length));
+    if (!def) return null;
+    return { kind: normalized, mode: 'category', title: def.title, icon: def.icon, hint: def.hint,
+      parent: LOCAL_LIBRARY_CATEGORY_HOME_KIND };
+  }
+  if (normalized.indexOf(LOCAL_LIBRARY_GROUP_KIND) === 0) {
+    var groupDef = localLibraryGroupDefByField(normalized.slice(LOCAL_LIBRARY_GROUP_KIND.length));
+    if (!groupDef) return null;
+    return { kind: normalized, mode: 'group', title: groupDef.title, icon: groupDef.icon, def: groupDef,
+      parent: LOCAL_LIBRARY_CATEGORY_HOME_KIND };
+  }
+  var parsed = parseLocalLibraryValueKind(normalized);
+  if (!parsed) return null;
+  var valueDef = localLibraryGroupDefByField(parsed.field);
+  return { kind: normalized, mode: 'value', title: parsed.value, icon: valueDef ? valueDef.icon : '♪',
+    def: valueDef, field: parsed.field, value: parsed.value, parent: localLibraryGroupKind(parsed.field) };
+}
+/* 目录层的卡片数量、分组条数都是动态的，必须并进面板签名，否则早退分支会吃掉重绘。 */
+function localLibraryCategoryDomSignature(view) {
+  if (!view) return '';
+  if (view.mode === 'home') {
+    var parts = [];
+    for (var c = 0; c < LOCAL_LIBRARY_CATEGORY_DEFS.length; c++) parts.push(localLibraryCategorySongs(LOCAL_LIBRARY_CATEGORY_DEFS[c].id).length);
+    for (var g = 0; g < LOCAL_LIBRARY_GROUP_DEFS.length; g++) parts.push(localLibraryGroupEntries(LOCAL_LIBRARY_GROUP_DEFS[g].field).length);
+    return 'home|' + localLibraryCategoryCache.signature + '|' + parts.join(',');
+  }
+  if (view.mode === 'group') {
+    var entries = localLibraryGroupEntries(view.def.field);
+    var first = entries.length ? entries[0].value + '/' + entries[0].count : '';
+    var last = entries.length ? entries[entries.length - 1].value + '/' + entries[entries.length - 1].count : '';
+    return 'group|' + view.def.field + '|' + localLibraryCategoryCache.signature + '|' + entries.length + '|' + first + '|' + last;
+  }
+  return view.mode + '|' + view.kind;
+}
+function localLibraryCategoryTitle(kind) {
+  var view = localLibraryCategoryView(kind);
+  return view ? view.title : '全部音乐';
 }
 function compactLocalPlaylistRefs(source) {
   var refs = [];
@@ -17391,6 +17697,7 @@ function invalidateLocalPlaylistSongLookup() {
   localPlaylistSongLookupCache.lastKey = '';
   localPlaylistSongLookupCache.byKey = Object.create(null);
   localPlaylistSongLookupCache.byPath = Object.create(null);
+  invalidateLocalLibraryCategoryIndex();
 }
 function getLocalPlaylistSongLookup() {
   var source = localLibrarySongs && localLibrarySongs.length ? localLibrarySongs : (playQueue || []);
@@ -17521,6 +17828,7 @@ function getLocalPlaylistSongsById(id) {
 function readSavedLocalPlaybackPlaylistSelection() {
   try {
     var value = normalizeLocalPlaylistKind(localStorage.getItem(LOCAL_PLAYBACK_SOURCE_STORE_KEY));
+    if (isLocalLibraryCategoryKind(value)) return 'library';
     return value.indexOf('local-playlist:') === 0 && !localPlaylistById(value) ? 'library' : value;
   } catch (e) {
     return 'library';
@@ -17530,6 +17838,7 @@ function localPlaylistSongs(kind) {
   var normalized = normalizeLocalPlaylistKind(kind);
   if (normalized === SPECIAL_LIKED_PLAYLIST_ID) return getSpecialLikedSongs();
   if (normalized.indexOf('local-playlist:') === 0) return getLocalPlaylistSongsById(normalized);
+  if (isLocalLibraryCategoryKind(normalized)) return localLibraryCategoryKindSongs(normalized);
   return localSearchPool();
 }
 function localLibraryPlaylistSongs() {
@@ -17545,6 +17854,7 @@ function localPlaybackPlaylistSourceName(kind) {
     var playlist = localPlaylistById(normalized);
     return playlist ? playlist.name : '全部音乐';
   }
+  if (isLocalLibraryCategoryKind(normalized)) return localLibraryCategoryTitle(normalized);
   return '全部音乐';
 }
 function renderLocalPlaybackPlaylistPicker() {
@@ -17569,6 +17879,13 @@ function renderLocalPlaybackPlaylistPicker() {
   }
   var librarySongs = localSearchPool();
   appendOption('library', '全部音乐', librarySongs, librarySongs.length, '≡', 'library');
+  /* 智能分类是现算出来的临时来源，只有正在用它播放时才占一格，不常驻这个列表。 */
+  if (isLocalLibraryCategoryKind(localLibraryPlaybackSelection)) {
+    var categoryView = localLibraryCategoryView(localLibraryPlaybackSelection);
+    var categorySongs = localPlaylistSongs(localLibraryPlaybackSelection);
+    appendOption(localLibraryPlaybackSelection, categoryView ? categoryView.title : '智能分类',
+      categorySongs, categorySongs.length, categoryView ? categoryView.icon : '≡', 'library');
+  }
   var specialSongs = getSpecialLikedSongs();
   appendOption(SPECIAL_LIKED_PLAYLIST_ID, '特别喜欢', specialSongs, specialSongs.length, '♥', 'liked');
   var playlists = readLocalPlaylists();
@@ -17587,14 +17904,15 @@ function updateLocalPlaybackPlaylistSourceButton() {
   if (!btn) return;
   var special = localLibraryPlaybackSelection === SPECIAL_LIKED_PLAYLIST_ID;
   var custom = localLibraryPlaybackSelection.indexOf('local-playlist:') === 0 ? localPlaylistById(localLibraryPlaybackSelection) : null;
+  var category = isLocalLibraryCategoryKind(localLibraryPlaybackSelection) ? localLibraryCategoryView(localLibraryPlaybackSelection) : null;
   var label = document.getElementById('playlist-source-label');
   var icon = document.getElementById('playlist-source-icon');
-  var sourceName = special ? '特别喜欢' : (custom ? custom.name : '全部音乐');
+  var sourceName = special ? '特别喜欢' : (custom ? custom.name : (category ? category.title : '全部音乐'));
   btn.classList.toggle('special', special);
   btn.classList.toggle('custom', !!custom);
   btn.setAttribute('aria-expanded', localPlaybackPlaylistPickerOpen ? 'true' : 'false');
-  if (label) label.textContent = special ? '喜欢' : (custom ? custom.name.slice(0, 6) : '全部');
-  if (icon) icon.textContent = special ? '♥' : (custom ? '♪' : '≡');
+  if (label) label.textContent = special ? '喜欢' : (custom ? custom.name.slice(0, 6) : (category ? category.title.slice(0, 6) : '全部'));
+  if (icon) icon.textContent = special ? '♥' : (custom ? '♪' : (category ? category.icon : '≡'));
   btn.title = '当前：' + sourceName + '，点击选择播放歌单';
   btn.setAttribute('aria-label', btn.title);
   if (localPlaybackPlaylistPickerOpen) renderLocalPlaybackPlaylistPicker();
@@ -17602,9 +17920,12 @@ function updateLocalPlaybackPlaylistSourceButton() {
 function setLocalPlaybackPlaylistSelection(kind) {
   var nextSelection = normalizeLocalPlaylistKind(kind);
   if (nextSelection.indexOf('local-playlist:') === 0 && !localPlaylistById(nextSelection)) nextSelection = 'library';
+  /* 智能分类按当前曲库现算，重启时曲库还没水化，存进去只会解析成空来源，
+   * 于是拿它播放时只在内存里生效，持久键继续保留上一个稳定来源。 */
+  var persistable = nextSelection.indexOf('library-') !== 0;
   if (localLibraryPlaybackSelection !== nextSelection) {
     localLibraryPlaybackSelection = nextSelection;
-    setPersistentLocalStorageItem(LOCAL_PLAYBACK_SOURCE_STORE_KEY, localLibraryPlaybackSelection);
+    if (persistable) setPersistentLocalStorageItem(LOCAL_PLAYBACK_SOURCE_STORE_KEY, localLibraryPlaybackSelection);
   }
   updateLocalPlaybackPlaylistSourceButton();
   if (typeof updateAutoPlaybackControls === 'function') updateAutoPlaybackControls();
@@ -17731,7 +18052,9 @@ function playSelectedLocalPlaylist() {
   if (!songs.length) {
     showToast(localLibraryPlaylistSelection === SPECIAL_LIKED_PLAYLIST_ID
       ? '特别喜欢歌单还是空的'
-      : (localLibraryPlaylistSelection.indexOf('local-playlist:') === 0 ? '这个歌单暂无可播放歌曲' : '还没有本地音乐'));
+      : (isLocalLibraryCategoryKind(localLibraryPlaylistSelection)
+        ? '这个分类暂无可播放歌曲'
+        : (localLibraryPlaylistSelection.indexOf('local-playlist:') === 0 ? '这个歌单暂无可播放歌曲' : '还没有本地音乐')));
     return;
   }
   playLocalLibrarySong(0, localLibraryPlaylistSelection);
@@ -17742,6 +18065,11 @@ function openLocalLibraryQueue() {
   homeSuppressed = false;
   setHomeControlsLocked(false);
   var songs = localLibraryPlaybackSongs();
+  /* 智能分类是动态集合，空了要退回全部音乐，不能误判成"还没导入音乐"。 */
+  if (!songs.length && isLocalLibraryCategoryKind(localLibraryPlaybackSelection)) {
+    setLocalPlaybackPlaylistSelection('library');
+    songs = localLibraryPlaybackSongs();
+  }
   if (!songs.length) {
     openHomeLocalImport();
     return;
@@ -17777,6 +18105,7 @@ function playLocalLibrarySong(index, kind, opts) {
   if (!songs.length) {
     if (sourceKind === SPECIAL_LIKED_PLAYLIST_ID) showToast('特别喜欢歌单还是空的');
     else if (sourceKind.indexOf('local-playlist:') === 0) showToast('这个歌单暂无可播放歌曲');
+    else if (isLocalLibraryCategoryKind(sourceKind)) showToast('这个分类暂无可播放歌曲');
     else openHomeLocalImport();
     return false;
   }
@@ -23761,7 +24090,7 @@ function schedulePlaylistPanelLazyCheck() {
     if (!panel) return;
     maybeGrowQueuePanelRenderLimit();
     maybeGrowPlaylistPanelDetailRenderLimit();
-    var total = LOCAL_ONLY_MODE ? (localLibrarySongs || []).length : userPlaylists.length;
+    var total = LOCAL_ONLY_MODE ? localLibraryPlaylistPanelItemCount() : userPlaylists.length;
     if (queueViewTab !== 'playlists' || playlistPanelRenderLimit >= total) return;
     if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 180) growPlaylistPanelRenderLimit();
   });
@@ -24001,7 +24330,7 @@ function localPlaylistsDomSignature(playlists) {
 }
 function growPlaylistPanelRenderLimit() {
   var total = LOCAL_ONLY_MODE
-    ? localLibraryPlaylistSongs().length
+    ? localLibraryPlaylistPanelItemCount()
     : userPlaylists.length;
   if (!total) return;
   var batch = playlistPanelBatchSize();
@@ -24017,6 +24346,82 @@ function bindPlaylistPanelLazyRender() {
   playlistPanelLazyBound = true;
   panel.addEventListener('scroll', schedulePlaylistPanelLazyCheck, { passive: true });
 }
+/* 目录层铺的是分组卡片而不是歌，懒加载要按卡片数算，不然滚到底加不出下一批。 */
+function localLibraryPlaylistPanelItemCount() {
+  var view = isLocalLibraryCategoryKind(localLibraryPlaylistSelection)
+    ? localLibraryCategoryView(localLibraryPlaylistSelection)
+    : null;
+  if (view && view.mode === 'group') return localLibraryGroupEntries(view.def.field).length;
+  if (view && view.mode === 'home') return 0;
+  return localLibraryPlaylistSongs().length;
+}
+function localLibraryCategoryHeadHtml(view, count) {
+  var directory = view.mode === 'home' || view.mode === 'group';
+  var sub = '';
+  if (view.mode === 'home') sub = view.subtitle;
+  else if (view.mode === 'group') sub = localLibraryGroupEntries(view.def.field).length + ' ' + view.def.unit + ' · 点击任意项查看歌曲';
+  else if (view.mode === 'value') sub = count + ' 首 · ' + (view.def ? view.def.title : '智能分类');
+  else sub = count + ' 首 · ' + (view.hint || '智能分类');
+  return '<div class="local-playlist-view-head">' +
+    '<div style="min-width:0;flex:1"><div class="pl-name">' + escHtml(view.title) + '</div><div class="pl-sub">' + escHtml(sub) + '</div></div>' +
+    '<div class="local-playlist-view-actions">' +
+      (directory ? '' : '<button class="fx-mini-btn ghost" type="button" data-selected-playlist-play="1">播放全部</button>') +
+      '<button class="fx-mini-btn ghost" type="button" data-library-back="' + escHtml(view.parent) + '">返回</button>' +
+    '</div>' +
+  '</div>';
+}
+function localLibraryCategoryCardHtml(kind, icon, title, sub, cover, playTitle) {
+  return '<div class="pl-card" data-library-kind="' + escHtml(kind) + '">' +
+    (cover
+      ? '<img src="' + escHtml(cover) + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">'
+      : '<div class="pl-cover-placeholder">' + escHtml(icon) + '</div>') +
+    '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(title) + '</div><div class="pl-sub">' + escHtml(sub) + '</div></div>' +
+    (playTitle
+      ? '<button class="song-action-btn" type="button" data-library-kind-play="' + escHtml(kind) + '" title="' + escHtml(playTitle) + '">▶</button>'
+      : '') +
+  '</div>';
+}
+function localLibraryCategoryHomeCardsHtml() {
+  var html = '<div class="pl-section-label">歌曲视图 · ' + LOCAL_LIBRARY_CATEGORY_DEFS.length + '</div>';
+  for (var i = 0; i < LOCAL_LIBRARY_CATEGORY_DEFS.length; i++) {
+    var def = LOCAL_LIBRARY_CATEGORY_DEFS[i];
+    var list = localLibraryCategorySongs(def.id);
+    html += localLibraryCategoryCardHtml(localLibraryCategoryKind(def.id), def.icon, def.title,
+      list.length + ' 首 · ' + def.hint,
+      list.length ? songCoverSrc(list[0], 88) : '',
+      '播放' + def.title);
+  }
+  html += '<div class="pl-section-label">分组浏览 · ' + LOCAL_LIBRARY_GROUP_DEFS.length + '</div>';
+  for (var g = 0; g < LOCAL_LIBRARY_GROUP_DEFS.length; g++) {
+    var groupDef = LOCAL_LIBRARY_GROUP_DEFS[g];
+    var entries = localLibraryGroupEntries(groupDef.field);
+    html += localLibraryCategoryCardHtml(localLibraryGroupKind(groupDef.field), groupDef.icon, groupDef.title,
+      entries.length + ' ' + groupDef.unit + ' · 点击展开',
+      entries.length && entries[0].cover ? songCoverSrc(entries[0].cover, 88) : '',
+      '');
+  }
+  return html;
+}
+/* 分组项也走面板的懒加载额度：几千张专辑一次全铺会把面板卡死。 */
+function localLibraryGroupCardsHtml(def) {
+  var entries = localLibraryGroupEntries(def.field);
+  if (!entries.length) return '<div class="local-playlist-empty-hint">还没有可用的' + escHtml(def.title) + '信息</div>';
+  var batch = playlistPanelBatchSize();
+  var limit = Math.max(batch, Math.min(entries.length, playlistPanelRenderLimit || batch));
+  var visible = Math.min(entries.length, limit);
+  var html = '';
+  for (var i = 0; i < visible; i++) {
+    var entry = entries[i];
+    html += localLibraryCategoryCardHtml(localLibraryValueKind(def.field, entry.value), def.icon, entry.value,
+      entry.count + ' 首 · ' + def.title,
+      entry.cover ? songCoverSrc(entry.cover, 88) : '',
+      '播放' + entry.value);
+  }
+  if (entries.length > visible) {
+    html += '<button type="button" class="fx-mini-btn ghost pl-load-more" data-pl-load-more="1">加载更多 ' + visible + '/' + entries.length + '</button>';
+  }
+  return html;
+}
 function renderLocalLibraryPlaylistPanel(opts) {
   opts = opts || {};
   var $pl = document.getElementById('pl-list');
@@ -24028,6 +24433,12 @@ function renderLocalLibraryPlaylistPanel(opts) {
     localLibraryPlaylistSelection = 'library';
   }
   var selectedSpecial = selectedKind === SPECIAL_LIKED_PLAYLIST_ID;
+  var selectedCategory = isLocalLibraryCategoryKind(selectedKind) ? localLibraryCategoryView(selectedKind) : null;
+  if (isLocalLibraryCategoryKind(selectedKind) && !selectedCategory) {
+    selectedKind = 'library';
+    localLibraryPlaylistSelection = 'library';
+  }
+  var categoryDirectory = !!(selectedCategory && (selectedCategory.mode === 'home' || selectedCategory.mode === 'group'));
   var selectedRoot = selectedKind === 'library';
   var specialSongs = getSpecialLikedSongs();
   var playlists = readLocalPlaylists();
@@ -24038,11 +24449,13 @@ function renderLocalLibraryPlaylistPanel(opts) {
   playlistPanelRenderLimit = Math.max(panelBatch, Math.min(songs.length, playlistPanelRenderLimit || panelBatch));
   var visibleLength = Math.min(songs.length, playlistPanelRenderLimit);
   var specialCoverSignature = specialSongs.length ? songCoverSignature(specialSongs[0]) : '';
-  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + localLibraryPlaylistDomSignature(songs, visibleLength);
+  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + localLibraryPlaylistDomSignature(songs, visibleLength) + '|' + localLibraryCategoryDomSignature(selectedCategory);
   if (domSignature === playlistPanelLastDomSignature) return;
   playlistPanelLastDomSignature = domSignature;
   var html = '';
   if (selectedRoot) {
+    html += localLibraryCategoryCardHtml(LOCAL_LIBRARY_CATEGORY_HOME_KIND, '≡', '音乐库',
+      '智能分类 · 艺术家 / 专辑 / 流派 / 年代 / 播放记录', '', '');
     var specialCover = specialSongs.length ? songCoverSrc(specialSongs[0], 88) : '';
     html += '<div class="pl-card" data-special-liked-playlist="1">' +
       (specialCover ? '<img src="' + escHtml(specialCover) + '" alt="" loading="lazy" decoding="async">' : '<div class="pl-cover-placeholder liked">♥</div>') +
@@ -24065,6 +24478,10 @@ function renderLocalLibraryPlaylistPanel(opts) {
       '</div>';
     }
     html += '<div class="pl-section-label">全部音乐 · ' + songs.length + ' 首</div>';
+  } else if (selectedCategory) {
+    html += localLibraryCategoryHeadHtml(selectedCategory, songs.length);
+    if (selectedCategory.mode === 'home') html += localLibraryCategoryHomeCardsHtml();
+    else if (selectedCategory.mode === 'group') html += localLibraryGroupCardsHtml(selectedCategory.def);
   } else {
     var selectedTitle = selectedSpecial ? '特别喜欢' : selectedCustom.name;
     var storedCount = selectedSpecial ? readSpecialLikedSongRefs().length : selectedCustom.songRefs.length;
@@ -24078,13 +24495,15 @@ function renderLocalLibraryPlaylistPanel(opts) {
       '</div>' +
     '</div>';
   }
-  if (!songs.length) {
+  if (!songs.length && !categoryDirectory) {
     var emptyText = selectedRoot
       ? '还没有本地音乐'
-      : (selectedSpecial ? '特别喜欢歌单还是空的' : '这个歌单暂无可播放歌曲');
+      : (selectedSpecial ? '特别喜欢歌单还是空的' : (selectedCategory ? '这个分类暂无歌曲' : '这个歌单暂无可播放歌曲'));
     var emptyHint = selectedRoot
       ? '<button class="fx-mini-btn ghost" type="button" onclick="openLocalFolderImport()" style="margin-top:10px">导入文件夹</button>'
-      : '<span style="display:inline-block;margin-top:8px;font-size:10.5px">可从搜索结果、当前队列或播放栏“+”按钮添加歌曲</span>';
+      : (selectedCategory
+        ? '<span style="display:inline-block;margin-top:8px;font-size:10.5px">播放过的歌曲会自动出现在最近播放和播放最多里</span>'
+        : '<span style="display:inline-block;margin-top:8px;font-size:10.5px">可从搜索结果、当前队列或播放栏“+”按钮添加歌曲</span>');
     html += '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">' + emptyText + '<br>' + emptyHint + '</div>';
   }
   for (var i = 0; i < visibleLength; i++) {
@@ -24208,6 +24627,27 @@ document.getElementById('pl-list').addEventListener('click', function(e){
     e.preventDefault();
     e.stopPropagation();
     openAllLocalLibraryPlaylist();
+    return;
+  }
+  var libraryBack = e.target && e.target.closest ? e.target.closest('[data-library-back]') : null;
+  if (libraryBack) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectLocalPlaylist(libraryBack.getAttribute('data-library-back') || 'library');
+    return;
+  }
+  var libraryKindPlay = e.target && e.target.closest ? e.target.closest('[data-library-kind-play]') : null;
+  if (libraryKindPlay) {
+    e.preventDefault();
+    e.stopPropagation();
+    playLocalLibrarySong(0, libraryKindPlay.getAttribute('data-library-kind-play'));
+    return;
+  }
+  var libraryKindCard = e.target && e.target.closest ? e.target.closest('[data-library-kind]') : null;
+  if (libraryKindCard) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectLocalPlaylist(libraryKindCard.getAttribute('data-library-kind'));
     return;
   }
   var specialPlay = e.target && e.target.closest ? e.target.closest('[data-special-liked-play]') : null;
@@ -28386,6 +28826,87 @@ async function readLocalLibrarySnapshot(folderPath) {
     return null;
   }
 }
+/* ---- 入库时间 ----
+ * 曲库表（SQLite）没有迁移通道，seen_at 每次同步都会重写，所以「最近添加」的时间戳
+ * 单独存在渲染层，用路径键索引：改标签会换 localKey，换路径才算换一首歌。上限之外的
+ * 老记录按时间从新到旧裁掉，回落到文件修改时间照样能排序。 */
+var LOCAL_LIBRARY_ADDED_AT_STORE_KEY = 'mineradio-local-added-at-v1';
+var LOCAL_LIBRARY_ADDED_AT_LIMIT = 4000;
+var localLibraryAddedAtMap = null;
+var localLibraryAddedAtDirty = false;
+function ensureLocalLibraryAddedAtMap() {
+  if (localLibraryAddedAtMap) return localLibraryAddedAtMap;
+  localLibraryAddedAtMap = Object.create(null);
+  try {
+    var raw = localStorage.getItem(LOCAL_LIBRARY_ADDED_AT_STORE_KEY);
+    var parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object') {
+      for (var key in parsed) {
+        var at = Number(parsed[key]) || 0;
+        if (key && at > 0) localLibraryAddedAtMap[key] = at;
+      }
+    }
+  } catch (e) {
+    localLibraryAddedAtMap = Object.create(null);
+  }
+  return localLibraryAddedAtMap;
+}
+function saveLocalLibraryAddedAtMap() {
+  var map = ensureLocalLibraryAddedAtMap();
+  var keys = Object.keys(map);
+  if (keys.length > LOCAL_LIBRARY_ADDED_AT_LIMIT) {
+    keys.sort(function(a, b){ return (map[b] || 0) - (map[a] || 0); });
+    for (var i = LOCAL_LIBRARY_ADDED_AT_LIMIT; i < keys.length; i++) delete map[keys[i]];
+    keys.length = LOCAL_LIBRARY_ADDED_AT_LIMIT;
+  }
+  var payload = {};
+  for (var k = 0; k < keys.length; k++) payload[keys[k]] = map[keys[k]];
+  try {
+    setPersistentLocalStorageItem(LOCAL_LIBRARY_ADDED_AT_STORE_KEY, JSON.stringify(payload));
+  } catch (e) {}
+  localLibraryAddedAtDirty = false;
+  return keys.length;
+}
+/* 首次导入整库时全部歌曲都是"新"，盖上同一个时刻毫无排序意义，所以只在已有索引
+ * （即真的是这次才多出来的文件）时才盖时间戳，其余靠文件修改时间兜底。 */
+function noteLocalLibraryAddedAt(songs, sync) {
+  songs = songs || [];
+  var map = ensureLocalLibraryAddedAtMap();
+  var hasIndex = !!(sync && sync.stats && sync.stats.hasIndex);
+  var now = Date.now();
+  var stamped = 0;
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    var key = song ? localLibraryPathKeyFromSong(song) : '';
+    if (!key) continue;
+    var saved = Number(map[key]) || 0;
+    if (saved > 0) { song.localLibraryAddedAt = saved; continue; }
+    if (!hasIndex || song.localLibraryChangeState !== 'new') continue;
+    song.localLibraryAddedAt = now;
+    map[key] = now;
+    stamped++;
+  }
+  if (stamped) saveLocalLibraryAddedAtMap();
+  if (typeof invalidateLocalLibraryCategoryIndex === 'function') invalidateLocalLibraryCategoryIndex();
+  return stamped;
+}
+/* 监控到的新文件逐首盖章，落盘留给同步收尾一次写完。 */
+function stampLocalLibraryAddedAtSong(song) {
+  var key = song ? localLibraryPathKeyFromSong(song) : '';
+  if (!key) return 0;
+  var map = ensureLocalLibraryAddedAtMap();
+  var saved = Number(map[key]) || 0;
+  song.localLibraryAddedAt = saved > 0 ? saved : Date.now();
+  if (saved > 0) return 0;
+  map[key] = song.localLibraryAddedAt;
+  localLibraryAddedAtDirty = true;
+  return 1;
+}
+function flushLocalLibraryAddedAtMap() {
+  if (!localLibraryAddedAtDirty) return false;
+  saveLocalLibraryAddedAtMap();
+  return true;
+}
 function localLibraryAssetStatus(readyValue, loaded, lightScanned) {
   if (readyValue) return 'ready';
   if (loaded) return 'none';
@@ -28917,6 +29438,7 @@ async function handleLocalFolderFiles(files, opts) {
   var libraryFolderPath = opts.folderPath || savedLocalLibraryFolderPath();
   await hydrateLocalLibraryPersistentState(libraryFolderPath);
   var librarySync = syncLocalLibraryIndexWithSongs(libraryFolderPath, songs);
+  noteLocalLibraryAddedAt(songs, librarySync);
   var deferAssetHydration = !!opts.restored
     || songs.length > 700
     || !!(librarySync && librarySync.stats && librarySync.stats.hasIndex && librarySync.stats.unchanged > 64);
@@ -29326,6 +29848,8 @@ function applyLocalLibraryAutoSyncDiff(songs, diff, protectedSongs, liveLists) {
       if (adoptLocalLibraryAutoSyncSong(step.song, step.next, collect)) { changed++; fresh.push(step.song); }
       else deferred++;
     } else if (step.state === 'new') {
+      // 监控期间新出现的文件才是真的"最近添加"，这里盖上入库时间戳。
+      if (typeof stampLocalLibraryAddedAtSong === 'function') stampLocalLibraryAddedAtSong(step.song);
       fresh.push(step.song);
     }
     next.push(step.song);
@@ -29407,6 +29931,7 @@ function applyLocalLibraryAutoSync(folderPath, result) {
  */
 function finishLocalLibraryAutoSync(folderPath, songs, applied) {
   var reason = 'local-library-auto-sync';
+  if (typeof flushLocalLibraryAddedAtMap === 'function') flushLocalLibraryAddedAtMap();
   safeRenderQueuePanel(reason, { scrollCurrent: false });
   safeShelfRebuild(reason, true);
   renderHomeDiscover();
