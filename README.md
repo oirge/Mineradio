@@ -9,9 +9,9 @@
 - 删除登录、在线音乐入口、更新提示和无用引导。
 - 支持导入本地音乐文件夹。
 - 支持单独导入本地音乐文件。
-- 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF 播放。
-- 支持同名 `.lrc` / `.txt` 歌词。
-- 支持 FLAC 内嵌 `LYRICS` 歌词标签，包括带时间轴的 LRC 歌词。
+- 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) 播放。
+- 支持同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` 歌词。
+- 支持 MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 内嵌歌词标签，包括带时间轴的 LRC 歌词。
 - 支持同目录封面图片和音频内嵌封面。
 - 移除本地节奏分析环节。
 - 支持多格式音频播放、歌词显示、迷你播放器和桌面歌词。
@@ -37,10 +37,12 @@
 - **Opus** - Ogg Opus
 - **WebM/WebA** - WebM 音频
 - **AIFF/AIFC** - AIFF 无损音频
+- **APE** - Monkey's Audio 无损音频
+- **DSD (.dsf)** - DSD Stream File 高解析音频
 
 ### 📝 歌词功能
-- ✅ 同名 `.lrc` / `.txt` 歌词文件
-- ✅ FLAC 内嵌 `LYRICS` 歌词标签
+- ✅ 同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` 歌词文件
+- ✅ MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 内嵌歌词标签
 - ✅ 带时间轴的 LRC 格式
 - ✅ 歌词翻译自动识别和显示
 - ✅ 桌面歌词窗口（可拖动、可调整大小）
@@ -97,8 +99,8 @@ npm run build:win
    - 支持拖拽调整播放顺序
 
 3. **查看歌词**
-   - 歌词文件需与音乐文件同名（`.lrc` 或 `.txt`）
-   - FLAC 文件可使用内嵌歌词标签
+   - 歌词文件需与音乐文件同名（`.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc`）
+   - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 文件可使用内嵌歌词标签
    - 开启桌面歌词窗口显示
 
 ---
@@ -131,28 +133,26 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
-### 最新版本 v1.6.2 (2026-08-18)
+### 最新版本 v1.7.19 (2026-09-02)
 
-- 支持 MP3/MP2/FLAC/M4A/M4B/WAV/OGG/OGA/AAC/Opus/WebM/WebA/AIFF 多格式播放
-- 支持 LRC/TXT/SRT/VTT/ASS/YRC 外置歌词，以及 JPG/JPEG/JPE/JFIF/PNG/WebP/AVIF/GIF/BMP/SVG 封面
-- 修复标准 M4A 标签、音轨号、内嵌封面和后置 `moov` 读取
-- 修复旧 M4A 元数据缓存继续复用错误结果
-- 修复本地曲库恢复、导入或后台补水时搜索结果面板自动弹出；只有用户点击搜索框后才显示
-- 迷你播放器优化和动画效果
-- 桌面歌词功能
-- 移除本地节奏分析环节
-- 优化封面和歌词加载逻辑
+- 新增 OGG / OGA / OPUS / WAV / APE / DSD(.dsf) 的标签、封面、内嵌歌词与时长解析
+- APE 与 DSD 可直接播放：桌面端把它们包装成虚拟 WAV 流，Range 请求与进度拖动照常工作
+- WAV 支持 RF64 / BW64 的 64 位长度，超过 4GB 的文件也能算对时长
+- 本地曲库改用 SQLite + 文件指纹/路径索引，几万首歌启动不再重放整包 JSON，并解除历史 16000 条上限
+- 修复迷你播放器封面命中与右键竞态，收回态只在封面上吃鼠标
+- 新增 `THIRD-PARTY-NOTICES.md` 记录第三方组件授权
+- 全量 Node 回归 `558/558` 通过
 
 ---
 
 ## ❓ 常见问题
 
 ### 支持哪些音频格式？
-支持 MP3、MP2、FLAC、M4A、M4B、WAV、OGG、OGA、AAC、Opus、WebM/WebA、AIFF/AIFC 等格式。
+支持 MP3、MP2、FLAC、M4A、M4B、WAV、OGG、OGA、AAC、Opus、WebM/WebA、AIFF/AIFC、APE、DSD(.dsf) 等格式。
 
 ### 如何添加歌词？
-- 将 `.lrc` 或 `.txt` 歌词文件放在音乐文件同目录，保持文件名一致
-- FLAC 文件可直接使用内嵌的 `LYRICS` 标签
+- 将 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` 歌词文件放在音乐文件同目录，保持文件名一致
+- MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 文件可直接使用内嵌歌词标签（如 FLAC/OGG 的 `LYRICS`、MP3 的 `USLT`）
 
 ### 封面图片如何加载？
 - 自动读取音频文件内嵌封面
