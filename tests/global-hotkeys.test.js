@@ -588,3 +588,34 @@ test('退出前撤销全局热键，接线与样式都在位', () => {
   assert.match(appSource, /function bindHotkeySettings\(\)[\s\S]{0,600}registerGlobalHotkeys\(\)/);
   assert.match(cssSource, /\.hotkey-modal\.warn \.hotkey-capture-tip\{/);
 });
+
+test('热键面板复用播放器的弹窗与胶囊类名，主题插件的 css 段才能选中它', () => {
+  const shell = slice(appSource, 'function ensureHotkeyModal() {', 'function hotkeyStatusMarkup(', 'ensureHotkeyModal');
+  // 外壳必须是 .modal-mask + .modal：内置/第三方主题的 css 段就是按这两个类名写的，
+  // 自己另起一套类名会既不像播放器，也一条主题规则都接不到。
+  assert.match(shell, /modal\.className = 'modal-mask hotkey-modal'/);
+  assert.match(shell, /<div class="modal hotkey-dialog">/);
+  // 分段切换借 .panel-tab、关闭走 .btn-row + .modal-btn，不再是右上角一个裸的 ×。
+  assert.match(shell, /class="panel-tab active" data-hotkey-scope="local"/);
+  assert.match(shell, /class="panel-tab" data-hotkey-scope="global"/);
+  assert.match(shell, /<div class="btn-row">[\s\S]{0,160}class="modal-btn"[^>]*data-hotkey-close/);
+  assert.doesNotMatch(shell, /hotkey-close"|hotkey-head|hotkey-title/);
+
+  // 每一行的按键/默认按钮都戴 .fx-mini-btn 的皮，app.css 的主题兼容层按这个类名灌 --th-chip-*。
+  const rows = slice(appSource, 'function renderHotkeyScope(', 'function renderHotkeySettings(', 'renderHotkeyScope');
+  assert.match(rows, /class="fx-mini-btn hotkey-key/);
+  assert.match(rows, /class="fx-mini-btn ghost hotkey-reset"/);
+});
+
+test('热键面板的颜色全部走主题令牌，不写死深灰底', () => {
+  const block = slice(cssSource, '.hotkey-dialog{', '/*  歌单/队列面板', 'hotkey CSS');
+  // 行、文字、胶囊分别接 --th-row-* / --th-text-* / --th-chip-*，换主题时才会跟着走。
+  ['--th-row-bg', '--th-row-border', '--th-row-hover-bg', '--th-text-strong', '--th-text-dim', '--th-chip-bg', '--th-chip-border']
+    .forEach(function(token){ assert.ok(block.includes(token), '热键样式缺少主题令牌 ' + token); });
+  // 强调色一律 rgba(var(--fc-accent-rgb),...)，写死青色连用户自己调的强调色都不跟。
+  assert.doesNotMatch(block, /rgba\(0,\s*245,\s*212/);
+  assert.match(block, /rgba\(var\(--fc-accent-rgb\),/);
+  // 弹窗层级回到 .modal-mask 的 50：之前的 1450 会盖住 z-index 500 的自绘标题栏，窗口按钮点不到。
+  assert.doesNotMatch(block, /z-index:\s*1450/);
+  assert.doesNotMatch(cssSource, /\.hotkey-modal\{position:fixed/);
+});

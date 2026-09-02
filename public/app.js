@@ -563,7 +563,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.25';
+var APP_VERSION = '1.7.26';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -32784,20 +32784,29 @@ function ensureHotkeyModal() {
   if (modal) return modal;
   modal = document.createElement('div');
   modal.id = 'hotkey-modal';
-  modal.className = 'hotkey-modal';
+  // 外壳一律复用 .modal-mask / .modal / .modal-btn / .panel-tab：
+  // 主题插件的 css 段就是按 .modal 这些选择器写的，自己另起一套类名既跟播放器长得不像，也一条主题规则都接不到。
+  modal.className = 'modal-mask hotkey-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'hotkey-modal-title');
   modal.innerHTML =
-    '<div class="hotkey-dialog" role="dialog" aria-modal="true" aria-label="热键设置">' +
-      '<div class="hotkey-head">' +
-        '<div><div class="hotkey-title">热键设置</div><div class="hotkey-sub">局内热键只在 Mineradio 窗口内生效；全局热键会向系统注册，并检测是否被占用。</div></div>' +
-        '<button class="hotkey-close" type="button" data-hotkey-close aria-label="关闭">×</button>' +
-      '</div>' +
+    '<div class="modal hotkey-dialog">' +
+      '<div class="hotkey-kicker">KEYBOARD SHORTCUTS</div>' +
+      '<h2 id="hotkey-modal-title">热键设置</h2>' +
+      '<p class="hotkey-sub">局内热键只在 Mineradio 窗口内生效；全局热键会向系统注册，并检测是否被占用。</p>' +
       '<div class="hotkey-toolbar">' +
-        '<div class="hotkey-tabs"><button type="button" data-hotkey-scope="local" class="active">局内热键</button><button type="button" data-hotkey-scope="global">全局热键</button></div>' +
+        '<div class="hotkey-tabs"><button type="button" class="panel-tab active" data-hotkey-scope="local">局内热键</button><button type="button" class="panel-tab" data-hotkey-scope="global">全局热键</button></div>' +
         '<div class="hotkey-note">按 Backspace / Delete 可清空当前功能热键</div>' +
       '</div>' +
-      '<div id="hotkey-local-section" class="hotkey-section active"></div>' +
-      '<div id="hotkey-global-section" class="hotkey-section"></div>' +
+      '<div class="hotkey-scroll">' +
+        '<div id="hotkey-local-section" class="hotkey-section active"></div>' +
+        '<div id="hotkey-global-section" class="hotkey-section"></div>' +
+      '</div>' +
       '<div class="hotkey-capture-tip" id="hotkey-capture-tip">正在录入组合键，按 Esc 取消。</div>' +
+      '<div class="btn-row">' +
+        '<button class="modal-btn" type="button" data-hotkey-close>关闭</button>' +
+      '</div>' +
     '</div>';
   document.body.appendChild(modal);
   modal.addEventListener('click', function(e){
@@ -32837,10 +32846,13 @@ function renderHotkeyScope(scope) {
     html += '<div class="hotkey-group"><div class="hotkey-group-title">' + escHtml(category) + '</div>';
     groups[category].forEach(function(action){
       var binding = (hotkeySettings[scope] && hotkeySettings[scope][action.key]) || '';
-      html += '<div class="hotkey-row">' +
+      var capturing = !!(hotkeyCaptureState && hotkeyCaptureState.scope === scope && hotkeyCaptureState.action === action.key);
+      // 按钮借 .fx-mini-btn 的皮：app.css 里的主题兼容层按这个类名把 --th-chip-* 灌进来，
+      // 单独发明一套 .hotkey-key 底色就会在换主题时留成一块深色补丁。
+      html += '<div class="hotkey-row' + (capturing ? ' capturing' : '') + '">' +
         '<div class="hotkey-name">' + escHtml(action.label) + '</div>' +
-        '<button class="hotkey-key' + (hotkeyCaptureState && hotkeyCaptureState.scope === scope && hotkeyCaptureState.action === action.key ? ' capturing' : '') + '" type="button" data-hotkey-bind="' + scope + '" data-hotkey-action="' + action.key + '">' + escHtml(hotkeyCaptureState && hotkeyCaptureState.scope === scope && hotkeyCaptureState.action === action.key ? '按下组合键...' : formatHotkey(binding)) + '</button>' +
-        '<button class="hotkey-reset" type="button" data-hotkey-reset="' + scope + '" data-hotkey-action="' + action.key + '">默认</button>' +
+        '<button class="fx-mini-btn hotkey-key' + (capturing ? ' capturing' : '') + '" type="button" data-hotkey-bind="' + scope + '" data-hotkey-action="' + action.key + '">' + escHtml(capturing ? '按下组合键...' : formatHotkey(binding)) + '</button>' +
+        '<button class="fx-mini-btn ghost hotkey-reset" type="button" data-hotkey-reset="' + scope + '" data-hotkey-action="' + action.key + '">默认</button>' +
         hotkeyStatusMarkup(scope, action.key, binding, duplicate) +
       '</div>';
     });

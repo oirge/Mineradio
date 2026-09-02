@@ -603,6 +603,19 @@ test('新增队列样式全部落在 app.css 里', () => {
     .forEach((sel) => assert.ok(cssSource.indexOf(sel) >= 0, '缺少样式 ' + sel));
 });
 
+test('队列样式跟着主题令牌和强调色走，不写死青色', () => {
+  const block = slice(cssSource, '.queue-chip{', '.pl-card{', '队列样式');
+  // 写死 rgba(0,245,212,...) 的话，用户自己调的强调色和主题插件都带不动这一块。
+  assert.doesNotMatch(block, /rgba\(0,\s*245,\s*212/);
+  assert.match(block, /rgba\(var\(--fc-accent-rgb\),/);
+  ['--th-chip-bg', '--th-chip-border', '--th-chip-hover-bg', '--th-row-bg', '--th-row-border', '--th-text-strong', '--th-text-dim', '--th-hairline-soft']
+    .forEach((token) => assert.ok(block.includes(token), '队列样式缺少主题令牌 ' + token));
+  // 拖动落点提示必须压过主题兼容层给 .queue-item 的 !important box-shadow，否则开主题就看不见落点。
+  assert.match(block, /\.queue-item\.drop-before\{box-shadow:inset 0 2px 0 0 rgba\(var\(--fc-accent-rgb\),\.72\)!important\}/);
+  assert.match(block, /\.queue-item\.drop-after\{box-shadow:inset 0 -2px 0 0 rgba\(var\(--fc-accent-rgb\),\.72\)!important\}/);
+  assert.match(block, /\.queue-item\.dragging\{[^}]*border-color:rgba\(var\(--fc-accent-rgb\),\.28\)!important\}/);
+});
+
 test('播完即停挂在 onended 上，队列内拖动不再亮文件遮罩', () => {
   assert.match(appSource, /audio\.onended = function\(\)\{[\s\S]{0,200}?if \(stopAfterCurrentTrack\) \{\s*stopPlaybackAfterCurrentTrack\(\);\s*return;/);
   assert.match(appSource, /dragenter[\s\S]{0,80}?if \(queueDragState \|\| !dragEventHasFiles\(e\)\) return;/);

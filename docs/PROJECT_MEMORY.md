@@ -1350,3 +1350,17 @@
 - `refreshShelfRenderFrameState()` 使用模块级对象就地刷新当前帧状态；主渲染链路只读取一次歌单模式、详情打开状态和侧栏常驻状态，Skull 相机、Skull 粒子、壁纸压暗和舞台歌词均消费同一快照。快照不得跨帧保存或由下游修改结构。
 - 回归：`tests/frame-hot-path.test.js` 锁定 getter 单次读取与快照传递；全量 Node 回归 `248/248`，`public/app.js`、`server.js`、`desktop/main.js`、`desktop/preload.js` 语法检查、`git diff --check` 和 Windows x64 NSIS 构建通过。
 - 发布产物：`Mineradio-1.3.8-Setup.exe` 103342250 字节，SHA256 为 `0F1B395B4A50A1148796C9CE04B7DBCDB65AD61EC2045F658B6C1537CB55F58E`；blockmap 110214 字节，SHA256 为 `F4A1BD6003760CC4110B3050EA7063239B696BBBCA45AD883B0F22EFB0CA7FD0`；`latest.yml` 347 字节，SHA256 为 `2CD0423032E81EB013A8A89217B7374B353881E81E0F3BBA190AAE1AEA3984EF`；不生成 Portable ZIP。
+
+### 2026-09-02 - v1.7.26 新增控件必须接上主题令牌（热键面板与队列样式返工）
+
+- 用户原话：「热键界面ui不符合我播放器ui啊而且主题插件这个热键界面不生效 你改一下」，随后「发布新版」。
+- **这条要长期记住：Mineradio 的主题插件只有两条通道能作用于一个控件** —— 插件 `theme.vars` 灌到 `:root` 的 `--th-*` 令牌，或者 `theme.css` 那段 `!important` 规则里点名的类名（`.modal`、`#fx-panel`、`#playlist-panel`、`.queue-item`、`.home-card` …）。以后任何新控件的样式，要么复用 `public/app.css` 兼容层点名过的类名，要么自己走 `--th-*` 令牌，最好两条都占；否则换主题时它就是一块纹理不对的补丁。`v1.7.25` 的 `.hotkey-*`（48 条规则 0 个令牌）和 `.queue-*` 就是这么翻车的。
+- 强调色一律 `rgba(var(--fc-accent-rgb),…)`，**不许再写字面 `rgba(0,245,212,…)`** —— 写死连用户自己在设置里调的强调色都不跟。同理 `--champagne` 各主题都重定义过，金色装饰走令牌而不是 `rgba(244,210,138,…)`。
+- 语义色（可用绿 / 冲突黄）不能直接当文字色：浅色主题（雪昼白 `--th-text-strong: rgba(27,49,65,0.96)`）下白底薄荷字看不见。写法定为 `color:var(--th-text-strong,#7ee2a8)` —— 令牌没设回落语义色（默认深色外观不变），主题在时跟主题正文色；绿/黄的信息移到色点与实心图标上。
+- **兼容层的 `!important` 会吃掉状态类。** `.pl-card,.queue-item,.mini-queue-item,.pl-detail-row` 那条把 `border` 与 `box-shadow` 都设成 `!important`，所以 `.queue-item.drop-before/.drop-after/.dragging/.next-up` 这类状态修饰必须自带 `!important` 才压得住（同为 `!important` 时按特异性判）。以后给 `.queue-item` / `.pl-card` 加状态样式都要记得。
+- 反过来也成立：既然规则自己引用了 `var(--th-*)`，就**不要**再往兼容层重复列一遍选择器，只会多一份 `!important` 冲突面。`.queue-next-up-row` 是虚线框，兼容层那种 `border:1px solid` 的写法会把线型抹平，这类控件只能自己换颜色。
+- `.hotkey-modal` 必须继续留在遮罩元素上（`tests/global-hotkeys.test.js` 钉了 `.hotkey-modal.warn .hotkey-capture-tip`）：遮罩是 `modal-mask hotkey-modal`、卡片是 `modal hotkey-dialog`。
+- 弹窗层级不要自己发明：热键弹窗原来 `z-index:1450` 压在自绘标题栏 `#desktop-titlebar`（`500`）之上，开着弹窗时窗口控制按钮点不到。统一落到 `.modal-mask` 的 `50`。
+- **纯 CSS 改动的视觉验收办法（好用，留着）：** 起一个只有 `<link href="app.css">` 的临时静态页，把真实 markup 贴进去，再用查询参数把某个主题的 `--th-*` 与 `css` 段注入 `:root`，截图对比深/浅两种主题；`getComputedStyle` 可以直接验 `!important` 优先级到底谁赢。不必启动 Electron。临时文件放仓库外并用完删除。
+- 故意没有改 `public/plugin-builtin-themes.js`：外壳戴上 `.modal` 后内置主题已覆盖，改那个文件还得同步改被 `tests/plugin-system.test.js` 钉住的 `examples/plugins/*.json`，而令牌这条路对第三方主题一样有效。
+- 验证：全量 Node 回归 `712/712`（上一版基线 `709`），新增 3 例锁定外壳类名复用、`--th-*` 覆盖、队列样式不许残留写死青色与 `z-index:1450`。本轮未启动本机 Electron。
