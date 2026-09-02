@@ -15,7 +15,9 @@
 - SHA256（四项资产已回下载逐一实测复核，清单内三项全部 MATCH）：安装器 `602c898df68c52b53e22089dce024b66136047c33c606b373f13f6cf4c357113`；`.blockmap` `91db1311a1879f4622b6c540b7f62f197e95ca64e47c578be0eab17a3214417f`；`latest.yml` `7c6e9e2caca8e601bbf8683ab00ebd2cd76fb6a5649b79e32fdbcfe2ad99b2f6`；SHA256 清单 `6c7a5e2ce21f0491607a73f076a5d26e5a62b2fe7ff2fff6e4e89b0b78f6c5f2`。
 - `latest.yml` 的版本为 `1.7.19`，`path` 与 `size`（`101601482`）与实际安装器一致；其 Setup SHA512 `iIMYjWNjn8e0fW0A9PGEaQtLPNrhP0Tzmj2OLjDN01gvj1kcjPIS/pwEGDBL7B2NVKolflK21GopH5/FDfR23Q==` 与回下载实测一致；Setup.exe 产品版本与文件版本均为 `1.7.19`。本版本不生成跨版本轻量补丁和 Portable ZIP。
 - 本机无 7z，本轮未解包安装器内 `app.asar` 做明文核对；asar 内容核对是在本地 `npm run build:win:dir` 的产物上做的（与远端同一提交同一配置）。
-- 分支状态：tag 与 Release 都落在 `feat/format-support-ogg-ape-wav-dsf` 的 `9490fde`，`origin/main` 仍停在 `e076bcd`（v1.7.17），PR #24 仍处于 OPEN / MERGEABLE，`v1.7.18` 与 `v1.7.19` 两次发布都尚未并入 `main`。
+- 分支状态：tag 与 Release 都落在 `feat/format-support-ogg-ape-wav-dsf` 的 `9490fde`，PR #24 仍处于 OPEN，`v1.7.18` 与 `v1.7.19` 两次发布的**代码**都尚未并入 `main`。
+- 仓库首页同步（发布后追加）：GitHub 首页 README 从默认分支 `main` 渲染，而 `main` 上的 README 还停在「最新版本 v1.6.2 (2026-08-18)」，格式列表无 APE / DSD、内嵌歌词写成「仅 FLAC」、外置歌词只写 `.lrc` / `.txt`。已开纯文档 PR #25（`docs/readme-sync-1719`，只动 `README.md` / `README_EN.md`，27 个代码文件一个没碰），`verify` 检查通过后 squash 合入 `main` → `4f6e312`；`gh api repos/oirge/Mineradio/readme` 回读确认首页现在渲染的是 v1.7.19 版本的 README（blob `8f72209`）。文案口径对齐代码：内嵌歌词按 `canReadEmbeddedLyrics` 的 `/\.(mp3|flac|ogg|oga|opus|wav|ape|dsf)$/i`，外置歌词按 `LOCAL_LYRIC_FILE_RE` 的 `/\.(lrc|txt|srt|vtt|ass|yrc)$/i`。
+- 仓库 About 描述同步（发布后追加）：旧值 `Mineradio 二改本地播放器，原项目: https://github.com/XxHuberrr/Mineradio` 未提任何格式，已 `gh api -X PATCH repos/oirge/Mineradio -f description=...` 换成含完整格式列表的版本并保留原项目署名；`homepage`（仍指向原项目）与 `topics`（仍为空）未改动，需要回退只用同一条命令写回旧值。
 - 发布标题使用 `v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持`。
 
 ## v1.7.18 本地曲库改用 SQLite + 文件指纹/路径索引

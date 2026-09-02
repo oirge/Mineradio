@@ -47,6 +47,8 @@
 - 播放侧：`desktop/audio/wav-stream.js` 把 APE/DSF 包装成「虚拟 WAV」——size 可精确算、任意区间可解码，`/api/local-file` 的 Range/416/`raw=1` 全部保留。两个解码器（`ape-decoder.js` 支持 3800–3990，`dsf-decoder.js` 字节查表 FIR 抽取）都只接受 `read(offset,length)`，不碰 fs。
 - **授权：`desktop/audio/ape-decoder.js` 是 FFmpeg `libavformat/ape.c` + `libavcodec/apedec.c` 的逐行移植，`LGPL-2.1-or-later`**，按 LGPL v2.1 第 3 条在本项目内以 `GPL-3.0` 分发；声明写在新增的根目录 `THIRD-PARTY-NOTICES.md`（该文件与 `LICENSE` 已加入 `build.files`）。DST 压缩的 `.dff` 明确不在范围内。
 - 验证：新增 `tests/local-format-tag-parsing.test.js`（18 例，真实字节夹具）；全量 Node 回归 `558/558` 通过。本轮未启动本机 Electron，未改动任何界面。
+- **仓库首页只认默认分支。** GitHub 的 `https://github.com/oirge/Mineradio` 首页 README 与 About 面板都从默认分支 `main` 取，功能分支上改 README 对首页零效果——`v1.7.18` / `v1.7.19` 的代码都还挂在 `feat/format-support-ogg-ape-wav-dsf`（PR #24 未合），所以首页的「最新版本」块一直停在 `v1.6.2 (2026-08-18)`。同步首页时不要为此去合功能代码：从 `origin/main` 单独切一条纯文档分支（`docs/readme-sync-1719`）、`git checkout <功能分支> -- README.md README_EN.md` 取现成内容、squash 合入即可（PR #25 → `main` 的 `4f6e312`）。两边 README 内容逐字节相同，功能分支后续合 `main` 时三方合并不会冲突。合完用 `gh api repos/oirge/Mineradio/readme` 回读 blob SHA 确认首页真的换了，不要只看分支。
+- README 的能力口径必须对着代码写，不要抄旧文案：内嵌歌词看 `canReadEmbeddedLyrics` 的 `/\.(mp3|flac|ogg|oga|opus|wav|ape|dsf)$/i`（MP3 走 `USLT` / `TXXX(LYRICS)`，不是只有 FLAC），外置歌词看 `LOCAL_LYRIC_FILE_RE` 的 `/\.(lrc|txt|srt|vtt|ass|yrc)$/i`（不是只有 `.lrc` / `.txt`）。About 描述用 `gh api -X PATCH repos/oirge/Mineradio -f description=...` 改，原项目署名要保留；`homepage` 指向原项目是有意为之，别顺手改。
 
 ## v1.7.18 本地曲库 SQLite + 文件指纹/路径索引
 
