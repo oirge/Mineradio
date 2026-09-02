@@ -496,7 +496,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.23';
+var APP_VERSION = '1.7.24';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -13704,7 +13704,7 @@ function makeShelfManager() {
     };
   }
   function currentItems() {
-    var showPlaylists = queueViewTab === 'playlists' || !playQueue.length;
+    var showPlaylists = isPlaylistListTab() || !playQueue.length;
     allItemsIsQueue = !showPlaylists && !!playQueue.length;
     if (allItemsIsQueue) return new Array(playQueue.length);
     var items = [];
@@ -18038,7 +18038,7 @@ function selectLocalPlaylist(kind) {
   var panel = document.getElementById('playlist-panel');
   if (panel) panel.scrollTop = 0;
   renderLocalLibraryPlaylistPanel({ animate: true });
-  safeSwitchPlaylistTab('playlists', 'local-playlist-select');
+  safeSwitchPlaylistTab(isLocalLibraryCategoryKind(nextSelection) ? 'library' : 'playlists', 'local-playlist-select');
   if (panel && panel.classList.contains('show') && !playlistPanelPinned) showLocalPlaylistPanelAutoHide();
 }
 function openSpecialLikedPlaylist() {
@@ -19345,7 +19345,8 @@ async function toggleLikeSong(song) {
     updateLikeButtons(song);
     refreshSearchResultActionStates();
     safeRenderQueuePanel('special-liked-toggle', { scrollCurrent: miniQueueOpen });
-    if (queueViewTab === 'playlists') refreshUserPlaylists(true);
+    /* 这段被 tests/special-liked-playlist.test.js 单独切进 vm 跑，跨切片的判断得守卫。 */
+    if (typeof isPlaylistListTab === 'function' ? isPlaylistListTab() : queueViewTab === 'playlists') refreshUserPlaylists(true);
     return;
   }
   if (song && song.type === 'plugin') {
@@ -23714,7 +23715,7 @@ function togglePlaylistPanel(force) {
       if (!playQueue.length && queueViewTab === 'queue') switchPlaylistTab('playlists');
       if (playQueue.length && currentIdx >= 0 && queueViewTab !== 'queue') switchPlaylistTab('queue');
       if (queueViewTab === 'queue') animateVisiblePanelList(document.getElementById('queue-list'), '.queue-item', el, '.queue-item.now', { scrollActive: false });
-      else if (queueViewTab === 'playlists') animateVisiblePanelList(document.getElementById('pl-list'), '.pl-card', el);
+      else if (isPlaylistListTab()) animateVisiblePanelList(document.getElementById('pl-list'), '.pl-card', el);
       else animateVisiblePanelList(document.getElementById('podcast-list'), '.pl-card', el);
     }, 180);
   }
@@ -23754,22 +23755,53 @@ function scrollPlaylistPanelToCurrent() {
     smoothScrollToItem(panel, list.querySelector('.queue-item.now'), { duration: 0.28, align: 0.34 });
   });
 }
-function switchPlaylistTab(tab) {
+/* tab 名 'library' 指外层的「音乐库」智能分类页，与播放列表 kind 'library'（全部音乐）不是同一层概念。 */
+function normalizePlaylistPanelTab(tab) {
   if (LOCAL_ONLY_MODE && tab === 'podcasts') tab = 'playlists';
-  tab = tab === 'podcasts' ? 'podcasts' : (tab === 'playlists' ? 'playlists' : 'queue');
+  if (tab === 'podcasts') return 'podcasts';
+  if (tab === 'playlists') return 'playlists';
+  if (tab === 'library') return 'library';
+  return 'queue';
+}
+/* 音乐库与歌单共用 #pl-pane 和 #pl-list，凡是判断「面板正在铺卡片列表」的地方都要把音乐库算进来。 */
+function isPlaylistListTab(tab) {
+  var current = tab || queueViewTab;
+  return current === 'playlists' || current === 'library';
+}
+/* 工具条也是共用的：音乐库那一页没有「新建歌单」可言，说明文字也得跟着换。 */
+function applyPlaylistPaneToolbarMode(tab) {
+  var chip = document.getElementById('pl-pane-chip');
+  var createBtn = document.getElementById('pl-pane-create-btn');
+  var library = tab === 'library';
+  if (chip) chip.textContent = library ? '音乐库智能分类' : '本地音乐与独立歌单';
+  if (createBtn) createBtn.style.display = library ? 'none' : '';
+}
+function switchPlaylistTab(tab) {
+  tab = normalizePlaylistPanelTab(tab);
   var previousTab = queueViewTab;
   queueViewTab = tab;
+  /* 两个 tab 共用一份选中状态，切 tab 就得把选中项摆到对应那一层，否则会串页。 */
+  if (tab === 'library' && !isLocalLibraryCategoryKind(localLibraryPlaylistSelection)) {
+    localLibraryPlaylistSelection = LOCAL_LIBRARY_CATEGORY_HOME_KIND;
+    resetPlaylistPanelRenderLimit();
+  } else if (tab === 'playlists' && isLocalLibraryCategoryKind(localLibraryPlaylistSelection)) {
+    localLibraryPlaylistSelection = 'library';
+    resetPlaylistPanelRenderLimit();
+  }
   document.getElementById('tab-queue').classList.toggle('active', tab === 'queue');
   document.getElementById('tab-pl').classList.toggle('active', tab === 'playlists');
+  var libraryTab = document.getElementById('tab-library');
+  if (libraryTab) libraryTab.classList.toggle('active', tab === 'library');
   var podcastTab = document.getElementById('tab-podcast');
   if (podcastTab) podcastTab.classList.toggle('active', tab === 'podcasts');
   document.getElementById('queue-pane').style.display = tab === 'queue' ? '' : 'none';
-  document.getElementById('pl-pane').style.display = tab === 'playlists' ? '' : 'none';
+  document.getElementById('pl-pane').style.display = isPlaylistListTab(tab) ? '' : 'none';
   var podcastPane = document.getElementById('podcast-pane');
   if (podcastPane) podcastPane.style.display = tab === 'podcasts' ? '' : 'none';
-  if (tab === 'playlists' || tab === 'podcasts') refreshUserPlaylists();
+  applyPlaylistPaneToolbarMode(tab);
+  if (isPlaylistListTab(tab) || tab === 'podcasts') refreshUserPlaylists();
   if (tab === 'queue') animateVisiblePanelList(document.getElementById('queue-list'), '.queue-item', document.getElementById('playlist-panel'), '.queue-item.now');
-  if (tab === 'playlists') animateVisiblePanelList(document.getElementById('pl-list'), '.pl-card', document.getElementById('playlist-panel'));
+  if (isPlaylistListTab(tab)) animateVisiblePanelList(document.getElementById('pl-list'), '.pl-card', document.getElementById('playlist-panel'));
   if (tab === 'podcasts') animateVisiblePanelList(document.getElementById('podcast-list'), '.pl-card', document.getElementById('playlist-panel'));
   if (previousTab !== tab) safeShelfRebuild('playlist-tab-' + tab, true);
 }
@@ -23796,8 +23828,7 @@ function closeMiniQueue() {
   setMiniQueueOpen(false);
 }
 function openPlaylistPanelTab(tab, preserve) {
-  if (LOCAL_ONLY_MODE && tab === 'podcasts') tab = 'playlists';
-  tab = tab === 'podcasts' ? 'podcasts' : (tab === 'playlists' ? 'playlists' : 'queue');
+  tab = normalizePlaylistPanelTab(tab);
   var panel = document.getElementById('playlist-panel');
   if (panel && panel.dataset && preserve !== false) panel.dataset.preserveTabOnOpen = '1';
   switchPlaylistTab(tab);
@@ -24454,8 +24485,6 @@ function renderLocalLibraryPlaylistPanel(opts) {
   playlistPanelLastDomSignature = domSignature;
   var html = '';
   if (selectedRoot) {
-    html += localLibraryCategoryCardHtml(LOCAL_LIBRARY_CATEGORY_HOME_KIND, '≡', '音乐库',
-      '智能分类 · 艺术家 / 专辑 / 流派 / 年代 / 播放记录', '', '');
     var specialCover = specialSongs.length ? songCoverSrc(specialSongs[0], 88) : '';
     html += '<div class="pl-card" data-special-liked-playlist="1">' +
       (specialCover ? '<img src="' + escHtml(specialCover) + '" alt="" loading="lazy" decoding="async">' : '<div class="pl-cover-placeholder liked">♥</div>') +
@@ -24479,9 +24508,13 @@ function renderLocalLibraryPlaylistPanel(opts) {
     }
     html += '<div class="pl-section-label">全部音乐 · ' + songs.length + ' 首</div>';
   } else if (selectedCategory) {
-    html += localLibraryCategoryHeadHtml(selectedCategory, songs.length);
-    if (selectedCategory.mode === 'home') html += localLibraryCategoryHomeCardsHtml();
-    else if (selectedCategory.mode === 'group') html += localLibraryGroupCardsHtml(selectedCategory.def);
+    /* 音乐库首页的标题由外层 tab 承担，这里只铺入口，避免同一个「音乐库」写两遍。 */
+    if (selectedCategory.mode === 'home') {
+      html += localLibraryCategoryHomeCardsHtml();
+    } else {
+      html += localLibraryCategoryHeadHtml(selectedCategory, songs.length);
+      if (selectedCategory.mode === 'group') html += localLibraryGroupCardsHtml(selectedCategory.def);
+    }
   } else {
     var selectedTitle = selectedSpecial ? '特别喜欢' : selectedCustom.name;
     var storedCount = selectedSpecial ? readSpecialLikedSongRefs().length : selectedCustom.songRefs.length;

@@ -642,6 +642,7 @@ if (document.fonts && document.fonts.load) {
   <div class="panel-tabs">
     <button id="tab-queue" class="panel-tab active" onclick="switchPlaylistTab('queue')">当前队列</button>
     <button id="tab-pl" class="panel-tab" onclick="switchPlaylistTab('playlists')">歌单</button>
+    <button id="tab-library" class="panel-tab" onclick="switchPlaylistTab('library')">音乐库</button>
   </div>
   <div id="queue-pane">
     <div class="queue-toolbar">
@@ -655,9 +656,9 @@ if (document.fonts && document.fonts.load) {
   </div>
   <div id="pl-pane" style="display:none">
     <div class="queue-toolbar">
-      <div class="queue-chip">本地音乐与独立歌单</div>
+      <div id="pl-pane-chip" class="queue-chip">本地音乐与独立歌单</div>
       <div style="display:flex;gap:6px">
-        <button class="fx-mini-btn ghost" onclick="openCreateLocalPlaylistModal()" style="height:26px;padding:0 10px;font-size:11px">新建</button>
+        <button id="pl-pane-create-btn" class="fx-mini-btn ghost" onclick="openCreateLocalPlaylistModal()" style="height:26px;padding:0 10px;font-size:11px">新建</button>
         <button class="fx-mini-btn ghost" onclick="openLocalFolderImport()" style="height:26px;padding:0 10px;font-size:11px">导入</button>
       </div>
     </div>

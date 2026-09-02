@@ -363,7 +363,7 @@ test('入库时间表按时间从新到旧裁到上限', () => {
   assert.equal(saved['/song-0.flac'], undefined, '最老的记录先被裁掉');
 });
 
-test('曲库面板根视图多出音乐库入口，分类视图自带返回与播放全部', () => {
+test('曲库面板把音乐库交给外层 tab，根视图不再重复入口，分类视图自带返回与播放全部', () => {
   const source = readAppSource();
   const renderer = readFunctionBlock(
     source,
@@ -371,11 +371,12 @@ test('曲库面板根视图多出音乐库入口，分类视图自带返回与�
     'function toggleLocalLibraryLike(index)',
   );
 
-  // 根视图只多一张卡，特别喜欢 / 独立歌单 / 全部音乐 的顺序保持原样
-  assert.match(renderer, /localLibraryCategoryCardHtml\(LOCAL_LIBRARY_CATEGORY_HOME_KIND, '≡', '音乐库'/);
-  assert.ok(renderer.indexOf('LOCAL_LIBRARY_CATEGORY_HOME_KIND') < renderer.indexOf('data-special-liked-playlist'));
+  // 音乐库已经提到 tab 栏，根视图恢复成 特别喜欢 → 独立歌单 → 全部音乐
+  assert.doesNotMatch(renderer, /LOCAL_LIBRARY_CATEGORY_HOME_KIND, '≡', '音乐库'/);
   assert.ok(renderer.indexOf('data-special-liked-playlist') < renderer.indexOf('独立歌单 · '));
   assert.ok(renderer.indexOf('独立歌单 · ') < renderer.indexOf('全部音乐 · '));
+  // 分类首页的标题由 tab 承担，这一层只铺入口，不再画一遍 view-head
+  assert.match(renderer, /if \(selectedCategory\.mode === 'home'\) \{\s*\n\s*html \+= localLibraryCategoryHomeCardsHtml\(\);/);
   // 分类视图复用既有玻璃样式类，不引入新 CSS
   assert.match(renderer, /class="local-playlist-view-head"/);
   assert.match(renderer, /class="local-playlist-view-actions"/);
@@ -386,6 +387,141 @@ test('曲库面板根视图多出音乐库入口，分类视图自带返回与�
   // 分组卡片走面板懒加载额度
   assert.match(renderer, /data-pl-load-more="1">加载更多 ' \+ visible \+ '\/' \+ entries\.length/);
   assert.match(renderer, /localLibraryCategoryDomSignature\(selectedCategory\)/);
+});
+
+test('音乐库是与当前队列 / 歌单并排的第三个 tab，共用同一个列表容器', () => {
+  const source = readAppSource();
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+
+  // tab 顺序必须是 当前队列 → 歌单 → 音乐库
+  const tabQueue = html.indexOf('id="tab-queue"');
+  const tabPl = html.indexOf('id="tab-pl"');
+  const tabLibrary = html.indexOf('id="tab-library"');
+  assert.ok(tabQueue > 0, '当前队列 tab 必须还在');
+  assert.ok(tabPl > tabQueue, '歌单排在当前队列之后');
+  assert.ok(tabLibrary > tabPl, '音乐库排在歌单之后');
+  assert.match(html, /id="tab-library"[^>]*onclick="switchPlaylistTab\('library'\)"[^>]*>音乐库<\/button>/);
+  // 工具条共用，所以要能按 tab 换说明并藏掉「新建」
+  assert.match(html, /id="pl-pane-chip"/);
+  assert.match(html, /id="pl-pane-create-btn"/);
+
+  const tabSwitch = readFunctionBlock(source, 'function switchPlaylistTab(tab)', 'function setMiniQueueOpen(open)');
+  // 两个 tab 共用一份选中状态：切过去摆到分类首页，切回来退到全部音乐
+  assert.match(tabSwitch, /tab === 'library' && !isLocalLibraryCategoryKind\(localLibraryPlaylistSelection\)/);
+  assert.match(tabSwitch, /localLibraryPlaylistSelection = LOCAL_LIBRARY_CATEGORY_HOME_KIND/);
+  assert.match(tabSwitch, /tab === 'playlists' && isLocalLibraryCategoryKind\(localLibraryPlaylistSelection\)/);
+  assert.match(tabSwitch, /getElementById\('pl-pane'\)\.style\.display = isPlaylistListTab\(tab\)/);
+  assert.match(tabSwitch, /applyPlaylistPaneToolbarMode\(tab\)/);
+  // 选中分类后 tab 必须落到音乐库，否则会被 switchPlaylistTab 当成歌单又退回去
+  assert.match(source, /safeSwitchPlaylistTab\(isLocalLibraryCategoryKind\(nextSelection\) \? 'library' : 'playlists', 'local-playlist-select'\)/);
+  // 凡是「面板正在铺卡片」的判断都得把音乐库算进来，否则曲库变化时这一页不刷新
+  assert.match(source, /function isPlaylistListTab\(tab\) \{/);
+  const strayTabChecks = source.split('\n').filter(
+    (line) => line.includes("queueViewTab === 'playlists'") && !line.includes('typeof isPlaylistListTab'),
+  );
+  assert.deepEqual(strayTabChecks, [], '面板铺卡片的判断要统一走 isPlaylistListTab，只有 vm 切片守卫允许留回落');
+});
+
+/**
+ * 把真实的 tab 切换代码搬进隔离 realm，配一份够用的假 DOM，直接看行为而不是看正则。
+ * @param {string} selection 初始选中的播放列表 kind。
+ * @param {string} tab 初始 tab。
+ * @returns {object} vm 上下文，els 里是每个假节点的最终状态。
+ */
+function createTabContext(selection = 'library', tab = 'queue') {
+  const block = readFunctionBlock(
+    readAppSource(),
+    'function normalizePlaylistPanelTab(tab)',
+    'function setMiniQueueOpen(open)',
+  );
+  const els = {};
+  function fakeEl(id) {
+    const node = {
+      id,
+      active: false,
+      style: { display: '' },
+      textContent: '',
+      classList: { toggle: (name, on) => { if (name === 'active') node.active = !!on; } },
+    };
+    els[id] = node;
+    return node;
+  }
+  ['tab-queue', 'tab-pl', 'tab-library', 'queue-pane', 'pl-pane', 'pl-list', 'queue-list', 'playlist-panel',
+    'pl-pane-chip', 'pl-pane-create-btn'].forEach(fakeEl);
+  const renders = [];
+  const context = {
+    LOCAL_ONLY_MODE: true,
+    queueViewTab: tab,
+    localLibraryPlaylistSelection: selection,
+    LOCAL_LIBRARY_CATEGORY_HOME_KIND: 'library-cat:home',
+    isLocalLibraryCategoryKind: (kind) => String(kind || '').indexOf('library-') === 0,
+    resetPlaylistPanelRenderLimit: () => { renders.push('reset'); },
+    refreshUserPlaylists: () => { renders.push('render'); },
+    animateVisiblePanelList: () => {},
+    safeShelfRebuild: () => {},
+    document: { getElementById: (id) => els[id] || null },
+    els,
+    renders,
+  };
+  vm.runInNewContext(`${block}\nthis.switchTab = switchPlaylistTab;\nthis.isListTab = isPlaylistListTab;`, context);
+  return context;
+}
+
+test('切到音乐库 tab 会把选中项摆到分类首页，切回歌单则退回全部音乐', () => {
+  const ctx = createTabContext('library', 'queue');
+
+  ctx.switchTab('library');
+  assert.equal(ctx.queueViewTab, 'library');
+  assert.equal(ctx.localLibraryPlaylistSelection, 'library-cat:home', '音乐库 tab 必须落在分类首页');
+  assert.equal(ctx.els['tab-library'].active, true);
+  assert.equal(ctx.els['tab-pl'].active, false);
+  assert.equal(ctx.els['tab-queue'].active, false);
+  assert.equal(ctx.els['pl-pane'].style.display, '', '音乐库和歌单共用同一个 pane');
+  assert.equal(ctx.els['queue-pane'].style.display, 'none');
+  assert.equal(ctx.els['pl-pane-chip'].textContent, '音乐库智能分类');
+  assert.equal(ctx.els['pl-pane-create-btn'].style.display, 'none', '音乐库那一页没有「新建歌单」');
+  assert.ok(ctx.renders.includes('render'), '切过去要重绘一次');
+
+  ctx.switchTab('playlists');
+  assert.equal(ctx.localLibraryPlaylistSelection, 'library', '切回歌单要退回全部音乐，不能留在分类里');
+  assert.equal(ctx.els['tab-pl'].active, true);
+  assert.equal(ctx.els['tab-library'].active, false);
+  assert.equal(ctx.els['pl-pane'].style.display, '');
+  assert.equal(ctx.els['pl-pane-chip'].textContent, '本地音乐与独立歌单');
+  assert.equal(ctx.els['pl-pane-create-btn'].style.display, '');
+});
+
+test('从分组或某位艺术家切走再回来不会串页，队列 tab 不动选中项', () => {
+  // 停在 library-value 层时切到队列，选中项要原样保留，回来还在音乐库
+  const deep = createTabContext('library-value:artist:周杰伦', 'library');
+  deep.switchTab('queue');
+  assert.equal(deep.queueViewTab, 'queue');
+  assert.equal(deep.localLibraryPlaylistSelection, 'library-value:artist:周杰伦', '切到队列不该动分类选中项');
+  assert.equal(deep.els['pl-pane'].style.display, 'none');
+  deep.switchTab('library');
+  assert.equal(deep.localLibraryPlaylistSelection, 'library-value:artist:周杰伦', '回到音乐库应停在原来那一层');
+
+  // 反过来，停在独立歌单时切到音乐库不能把歌单当成分类
+  const custom = createTabContext('local-playlist:abc', 'playlists');
+  custom.switchTab('library');
+  assert.equal(custom.localLibraryPlaylistSelection, 'library-cat:home');
+  custom.switchTab('playlists');
+  assert.equal(custom.localLibraryPlaylistSelection, 'library', '分类退场后回落全部音乐');
+
+  // 特别喜欢是歌单侧的选中项，切到歌单 tab 不该被动过
+  const liked = createTabContext('special-liked', 'playlists');
+  liked.switchTab('playlists');
+  assert.equal(liked.localLibraryPlaylistSelection, 'special-liked');
+
+  // podcasts 在本地模式下并到歌单，仍要按歌单那一侧处理
+  const podcast = createTabContext('library-group:genre', 'library');
+  podcast.switchTab('podcasts');
+  assert.equal(podcast.queueViewTab, 'playlists');
+  assert.equal(podcast.localLibraryPlaylistSelection, 'library');
+
+  assert.equal(podcast.isListTab('library'), true);
+  assert.equal(podcast.isListTab('playlists'), true);
+  assert.equal(podcast.isListTab('queue'), false);
 });
 
 test('分类点击钩子排在通用歌单卡兜底之前', () => {
