@@ -648,11 +648,22 @@ if (document.fonts && document.fonts.load) {
     <div class="queue-toolbar">
       <div id="play-mode-chip" class="queue-chip">顺序循环</div>
       <div style="display:flex;gap:6px">
-        <button class="fx-mini-btn ghost" onclick="cyclePlayMode()" style="height:26px;padding:0 10px;font-size:11px">切换模式</button>
+        <button class="fx-mini-btn ghost" onclick="saveCurrentQueueSnapshot()" style="height:26px;padding:0 10px;font-size:11px" title="把当前队列顺序存成一份存档">存队列</button>
         <button class="fx-mini-btn ghost" onclick="clearQueue()" style="height:26px;padding:0 10px;font-size:11px">清空</button>
       </div>
     </div>
+    <div class="queue-mode-row">
+      <button type="button" id="queue-mode-loop" class="queue-mode-btn" onclick="setPlayMode('loop')" aria-pressed="false" title="队列循环">队列循环</button>
+      <button type="button" id="queue-mode-single" class="queue-mode-btn" onclick="setPlayMode('single')" aria-pressed="false" title="单曲循环">单曲循环</button>
+      <button type="button" id="queue-mode-shuffle" class="queue-mode-btn" onclick="setPlayMode('shuffle')" aria-pressed="false" title="随机播放">随机</button>
+      <button type="button" id="queue-stop-after-btn" class="queue-mode-btn stop-after" onclick="toggleStopAfterCurrent()" aria-pressed="false" title="播放完当前歌曲后停止">播完即停</button>
+    </div>
+    <div id="queue-next-up" class="queue-next-up"></div>
     <div id="queue-list" class="queue-list"></div>
+    <div class="queue-archive">
+      <div class="queue-archive-head">队列存档</div>
+      <div id="queue-archive-list" class="queue-archive-list"></div>
+    </div>
   </div>
   <div id="pl-pane" style="display:none">
     <div class="queue-toolbar">

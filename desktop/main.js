@@ -1075,9 +1075,85 @@ function sendWindowState(win) {
   win.webContents.send('desktop-window-state', getWindowState(win));
 }
 
+/**
+ * 全局热键里由主进程直接兜住的窗口级动作。渲染层收不到这些动作，
+ * 因为窗口被托盘收起后「显示 / 隐藏」必须由主进程执行。
+ * @type {Set<string>}
+ */
+const MAIN_PROCESS_HOTKEY_ACTIONS = new Set(['toggleMainWindow']);
+
+/**
+ * 在主进程侧执行窗口级全局热键动作。
+ * 隐藏走 `minimize()` 而不是 `hide()`，以复用既有的「最小化 → 迷你播放器 / 托盘」语义。
+ * @param {string} action 动作标识。
+ * @returns {boolean} 是否已由主进程消费。
+ */
+function runMainProcessHotkeyAction(action) {
+  if (action !== 'toggleMainWindow') return false;
+  if (!mainWindow || mainWindow.isDestroyed()) return true;
+  if (mainWindow.isVisible() && !mainWindow.isMinimized()) mainWindow.minimize();
+  else focusMainWindow();
+  return true;
+}
+
 function sendGlobalHotkeyAction(action) {
-  if (!mainWindow || mainWindow.isDestroyed() || !action) return;
+  if (!action) return;
+  if (MAIN_PROCESS_HOTKEY_ACTIONS.has(action)) {
+    runMainProcessHotkeyAction(action);
+    return;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('mineradio-global-hotkey', { action });
+}
+
+/** Electron `globalShortcut` 认识的修饰键词元。 */
+const ACCELERATOR_MODIFIER_TOKENS = new Set([
+  'Command', 'Cmd', 'Control', 'Ctrl', 'CommandOrControl', 'CmdOrCtrl',
+  'Alt', 'Option', 'AltGr', 'Shift', 'Super', 'Meta',
+]);
+
+/** Electron `globalShortcut` 认识的具名按键词元（大小写不敏感比较）。 */
+const ACCELERATOR_NAMED_KEY_TOKENS = new Set([
+  'plus', 'space', 'tab', 'capslock', 'numlock', 'scrolllock', 'backspace',
+  'delete', 'insert', 'return', 'enter', 'up', 'down', 'left', 'right',
+  'home', 'end', 'pageup', 'pagedown', 'escape', 'esc', 'printscreen',
+  'volumeup', 'volumedown', 'volumemute',
+  'medianexttrack', 'mediaprevioustrack', 'mediastop', 'mediaplaypause',
+  'numdec', 'numadd', 'numsub', 'nummult', 'numdiv',
+]);
+
+/** Electron 接受的单字符按键词元。 */
+const ACCELERATOR_LITERAL_KEYS = ')!@#$%^&*(:;+=<,_->.?/~`{]|[}"\'';
+
+/**
+ * 判断单个词元是否是 Electron 认得的按键（非修饰键）。
+ * @param {string} token 词元。
+ * @returns {boolean} 是否合法按键。
+ */
+function isAcceleratorKeyToken(token) {
+  if (!token) return false;
+  if (token.length === 1) {
+    if (/^[0-9A-Za-z]$/.test(token)) return true;
+    return ACCELERATOR_LITERAL_KEYS.includes(token);
+  }
+  if (/^F([1-9]|1[0-9]|2[0-4])$/i.test(token)) return true;
+  if (/^num[0-9]$/i.test(token)) return true;
+  return ACCELERATOR_NAMED_KEY_TOKENS.has(token.toLowerCase());
+}
+
+/**
+ * 校验加速键字符串：必须是「零个或多个修饰键 + 恰好一个末位按键」。
+ * 自己先判一次，才能把「组合键不被支持」和「组合键被别的软件占用」区分开——
+ * 两者在 `globalShortcut.register()` 里都只表现为返回 false。
+ * @param {string} accelerator 加速键字符串。
+ * @returns {boolean} 是否是 Electron 能解析的加速键。
+ */
+function isSupportedAccelerator(accelerator) {
+  const parts = String(accelerator || '').split('+');
+  if (parts.length < 1 || parts.some((part) => part === '')) return false;
+  const key = parts[parts.length - 1];
+  if (!isAcceleratorKeyToken(key)) return false;
+  return parts.slice(0, -1).every((part) => ACCELERATOR_MODIFIER_TOKENS.has(part));
 }
 
 function unregisterMineradioGlobalHotkeys() {
@@ -1096,6 +1172,20 @@ function configureMineradioGlobalHotkeys(bindings = []) {
     const accelerator = item && String(item.accelerator || '').trim();
     if (!action || !accelerator || seen.has(accelerator)) continue;
     seen.add(accelerator);
+    if (!isSupportedAccelerator(accelerator)) {
+      results.push({
+        action,
+        accelerator,
+        ok: false,
+        conflict: {
+          kind: 'unsupported',
+          sourceName: '不支持该组合键',
+          sourceIcon: 'warning',
+          reason: '这个按键无法注册成系统级全局热键，请换一组',
+        },
+      });
+      continue;
+    }
     let registered = false;
     try {
       registered = globalShortcut.register(accelerator, () => sendGlobalHotkeyAction(action));
@@ -1111,6 +1201,7 @@ function configureMineradioGlobalHotkeys(bindings = []) {
         accelerator,
         ok: false,
         conflict: {
+          kind: 'occupied',
           sourceName: '系统 / 其他软件',
           sourceIcon: 'warning',
           reason: '该组合键已被占用或被系统保留',

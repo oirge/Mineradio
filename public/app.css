@@ -1449,6 +1449,7 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .hotkey-status .source-icon{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,206,112,.12);color:#ffce70;font-size:11px;flex:0 0 auto}
 .hotkey-capture-tip{display:none;margin-top:10px;padding:9px 11px;border-radius:12px;border:1px solid rgba(var(--fc-accent-rgb),.22);background:rgba(var(--fc-accent-rgb),.075);font-size:12px;color:rgba(255,255,255,.74)}
 .hotkey-modal.capturing .hotkey-capture-tip{display:block}
+.hotkey-modal.warn .hotkey-capture-tip{display:block;border-color:rgba(255,138,128,.34);background:rgba(255,138,128,.1);color:rgba(255,214,208,.9)}
 @media (max-width:720px){
   .hotkey-row{grid-template-columns:1fr;gap:7px}
   .hotkey-toolbar{align-items:flex-start;flex-direction:column}
@@ -1492,6 +1493,45 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .queue-chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);font-size:10.5px;color:rgba(255,255,255,.65)}
 .queue-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 4px}
 .queue-toolbar .fx-mini-btn{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;line-height:1}
+/* 播放模式与「播完即停」——一排小胶囊，选中态用主色描边，和面板其他控件同一套语言 */
+.queue-mode-row{display:flex;align-items:center;gap:5px;margin:2px 0 4px}
+.queue-mode-btn{flex:1 1 0;min-width:0;height:25px;padding:0 6px;border-radius:999px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.028);color:rgba(255,255,255,.56);font-size:10.5px;line-height:1;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .18s,border-color .18s,color .18s}
+.queue-mode-btn:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.85)}
+.queue-mode-btn.active{border-color:rgba(0,245,212,.36);background:rgba(0,245,212,.10);color:#eafffb}
+.queue-mode-btn.stop-after.active{border-color:rgba(255,183,94,.4);background:rgba(255,183,94,.12);color:#ffe6c4}
+/* 下一首预览 */
+.queue-next-up{display:none;margin:2px 0 6px}
+.queue-next-up.show{display:block}
+.queue-next-up-row{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border-radius:10px;border:1px dashed rgba(255,255,255,.10);background:rgba(255,255,255,.02);cursor:pointer;text-align:left;transition:background .18s,border-color .18s}
+.queue-next-up-row:hover{background:rgba(0,245,212,.06);border-color:rgba(0,245,212,.26)}
+.queue-next-up-tag{flex:0 0 auto;padding:2px 6px;border-radius:999px;background:rgba(0,245,212,.12);color:rgba(0,245,212,.86);font-size:9.5px;line-height:1.5;white-space:nowrap}
+.queue-next-up-row img,.queue-next-up-cover{width:26px;height:26px;border-radius:5px;object-fit:cover;background:rgba(255,255,255,.06);flex:0 0 auto}
+.queue-next-up-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.queue-next-up-name{font-size:11.5px;color:rgba(255,255,255,.86);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-next-up-sub{font-size:10px;color:rgba(255,255,255,.38);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-next-up-idx{flex:0 0 auto;font-size:10px;color:rgba(255,255,255,.30);font-variant-numeric:tabular-nums}
+.queue-next-up-stop{padding:6px 10px;border-radius:10px;border:1px dashed rgba(255,183,94,.28);background:rgba(255,183,94,.07);color:rgba(255,214,168,.86);font-size:10.5px;text-align:center}
+/* 队列项的拖动句柄与落点提示 */
+.qi-drag{flex:0 0 auto;display:flex;flex-direction:column;justify-content:center;gap:2.5px;width:10px;padding:2px 0;opacity:0;cursor:grab;transition:opacity .15s}
+.qi-drag i{display:block;width:10px;height:1.5px;border-radius:1px;background:rgba(255,255,255,.34)}
+.queue-item:hover .qi-drag{opacity:1}
+.queue-item.dragging{opacity:.42;border-color:rgba(0,245,212,.28)}
+.queue-item.drop-before{box-shadow:inset 0 2px 0 0 rgba(0,245,212,.72)}
+.queue-item.drop-after{box-shadow:inset 0 -2px 0 0 rgba(0,245,212,.72)}
+.queue-item.next-up{border-color:rgba(255,255,255,.13)}
+.queue-item.next-up .qi-name{color:rgba(255,255,255,.98)}
+/* 队列存档 */
+.queue-archive{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.05)}
+.queue-archive-head{font-size:10px;letter-spacing:.09em;color:rgba(255,255,255,.34);margin-bottom:6px}
+.queue-archive-list{display:flex;flex-direction:column;gap:5px}
+.queue-archive-empty{padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.02);color:rgba(255,255,255,.28);font-size:10.5px;text-align:center}
+.queue-archive-item{display:flex;align-items:stretch;gap:5px}
+.queue-archive-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding:7px 9px;border-radius:9px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);cursor:pointer;text-align:left;transition:background .18s,border-color .18s}
+.queue-archive-main:hover{background:rgba(0,245,212,.06);border-color:rgba(0,245,212,.24)}
+.queue-archive-name{font-size:11.5px;color:rgba(255,255,255,.86);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-archive-sub{font-size:10px;color:rgba(255,255,255,.36);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-archive-del{flex:0 0 auto;width:26px;border-radius:9px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);color:rgba(255,255,255,.42);font-size:14px;line-height:1;cursor:pointer;transition:background .18s,color .18s,border-color .18s}
+.queue-archive-del:hover{background:rgba(255,138,128,.12);border-color:rgba(255,138,128,.3);color:#ffd6d0}
 .pl-card{display:flex;align-items:center;gap:10px;padding:9px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);transition:background .18s,border-color .18s,transform .18s;cursor:pointer;margin-bottom:7px;will-change:transform,opacity;content-visibility:auto;contain-intrinsic-block-size:64px}
 .pl-card:hover{background:rgba(255,255,255,.06)}
 .pl-card img{width:44px;height:44px;border-radius:8px;object-fit:cover;background:rgba(255,255,255,.06);flex-shrink:0}

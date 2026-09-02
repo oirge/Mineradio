@@ -128,6 +128,7 @@ var LOCAL_LIBRARY_FOLDER_STORE_KEY = 'mineradio-local-library-folder-v1';
 var LOCAL_LIBRARY_SNAPSHOT_STORE_KEY = 'mineradio-local-library-snapshot-v1';
 var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
+var QUEUE_SNAPSHOT_STORE_KEY = 'mineradio-queue-snapshots-v1';
 var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
 var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
 var REPLAY_GAIN_STORE_KEY = 'mineradio-replay-gain-v1';
@@ -152,6 +153,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   FREE_CAMERA_STORE_KEY,
   LOCAL_LIBRARY_FOLDER_STORE_KEY,
   PLAYBACK_SESSION_STORE_KEY,
+  QUEUE_SNAPSHOT_STORE_KEY,
   LOCAL_PLAYBACK_SOURCE_STORE_KEY,
   AUTO_PLAYBACK_STORE_KEY,
   REPLAY_GAIN_STORE_KEY,
@@ -358,10 +360,67 @@ var HOTKEY_ACTIONS = [
   { key:'nextTrack', label:'下一首', category:'播放', local:'ArrowRight', global:'Ctrl+Alt+ArrowRight' },
   { key:'volumeUp', label:'音量增加', category:'音量', local:'ArrowUp', global:'Ctrl+Alt+ArrowUp' },
   { key:'volumeDown', label:'音量降低', category:'音量', local:'ArrowDown', global:'Ctrl+Alt+ArrowDown' },
+  { key:'toggleMute', label:'静音 / 取消静音', category:'音量', local:'KeyM', global:'Ctrl+Alt+KeyM' },
   { key:'toggleFullscreen', label:'全屏', category:'窗口', local:'KeyF', global:'Ctrl+Alt+KeyF' },
+  { key:'toggleMainWindow', label:'显示 / 隐藏主窗口', category:'窗口', local:'', global:'Ctrl+Alt+KeyH' },
   { key:'toggleDesktopLyrics', label:'桌面歌词', category:'歌词', local:'Alt+KeyL', global:'Ctrl+Alt+KeyL' }
 ];
+/**
+ * `KeyboardEvent.code` → { Electron 加速键词元, 展示文本 } 映射。
+ * `bare` 表示该键本身就是专用媒体键，可以不带修饰键直接注册全局热键。
+ */
+var HOTKEY_KEY_MAP = {
+  Space:{ accel:'Space', label:'Space' },
+  Enter:{ accel:'Enter', label:'Enter' },
+  NumpadEnter:{ accel:'Enter', label:'Enter' },
+  Tab:{ accel:'Tab', label:'Tab' },
+  Backspace:{ accel:'Backspace', label:'Backspace' },
+  Delete:{ accel:'Delete', label:'Delete' },
+  Insert:{ accel:'Insert', label:'Insert' },
+  Home:{ accel:'Home', label:'Home' },
+  End:{ accel:'End', label:'End' },
+  PageUp:{ accel:'PageUp', label:'PageUp' },
+  PageDown:{ accel:'PageDown', label:'PageDown' },
+  Escape:{ accel:'Escape', label:'Esc' },
+  CapsLock:{ accel:'Capslock', label:'CapsLock' },
+  NumLock:{ accel:'Numlock', label:'NumLock' },
+  ScrollLock:{ accel:'Scrolllock', label:'ScrollLock' },
+  PrintScreen:{ accel:'PrintScreen', label:'PrintScreen' },
+  ArrowLeft:{ accel:'Left', label:'Left' },
+  ArrowRight:{ accel:'Right', label:'Right' },
+  ArrowUp:{ accel:'Up', label:'Up' },
+  ArrowDown:{ accel:'Down', label:'Down' },
+  Minus:{ accel:'-', label:'-' },
+  Equal:{ accel:'=', label:'=' },
+  BracketLeft:{ accel:'[', label:'[' },
+  BracketRight:{ accel:']', label:']' },
+  Backslash:{ accel:'\\', label:'\\' },
+  Semicolon:{ accel:';', label:';' },
+  Quote:{ accel:'\'', label:'\'' },
+  Backquote:{ accel:'`', label:'`' },
+  Comma:{ accel:',', label:',' },
+  Period:{ accel:'.', label:'.' },
+  Slash:{ accel:'/', label:'/' },
+  NumpadAdd:{ accel:'numadd', label:'Num +' },
+  NumpadSubtract:{ accel:'numsub', label:'Num -' },
+  NumpadMultiply:{ accel:'nummult', label:'Num *' },
+  NumpadDivide:{ accel:'numdiv', label:'Num /' },
+  NumpadDecimal:{ accel:'numdec', label:'Num .' },
+  MediaPlayPause:{ accel:'MediaPlayPause', label:'媒体播放键', bare:true },
+  MediaTrackNext:{ accel:'MediaNextTrack', label:'媒体下一首键', bare:true },
+  MediaTrackPrevious:{ accel:'MediaPreviousTrack', label:'媒体上一首键', bare:true },
+  MediaStop:{ accel:'MediaStop', label:'媒体停止键', bare:true },
+  AudioVolumeUp:{ accel:'VolumeUp', label:'音量+键', bare:true },
+  AudioVolumeDown:{ accel:'VolumeDown', label:'音量-键', bare:true },
+  AudioVolumeMute:{ accel:'VolumeMute', label:'静音键', bare:true }
+};
+var HOTKEY_MODIFIER_ACCELERATORS = { Ctrl:'Control', Alt:'Alt', Shift:'Shift', Meta:'Super' };
+/** 只有这三个修饰键能把全局热键约束到「不会在别的软件里抢键」的程度，Shift 单独不算。 */
+var HOTKEY_STRONG_MODIFIERS = { Ctrl:true, Alt:true, Meta:true };
+/** 主进程直接消费的窗口级动作，渲染层不重复执行。 */
+var MAIN_PROCESS_HOTKEY_ACTIONS = { toggleMainWindow:true };
 var hotkeyCaptureState = null;
+var hotkeyCaptureNotice = '';
 var hotkeyGlobalStatus = {};
 var diyPlayerMode = readDiyModePreference();
 var customCoverMap = {};
@@ -480,6 +539,14 @@ var queuePanelRenderFingerprint = '';
 var miniQueueRenderFingerprint = '';
 var queuePanelLastDomSignature = '';
 var miniQueueLastDomSignature = '';
+/** 「播放完当前歌曲后停止」是一次性开关：触发一次后自动复位，避免用户忘了关掉再纳闷为什么不连播。 */
+var stopAfterCurrentTrack = false;
+/** 队列拖动重排的过程状态，只在一次拖动内有效。 */
+var queueDragState = null;
+/** 存档份数与单份曲目上限，避免 localStorage 被大曲库队列顶爆。 */
+var QUEUE_SNAPSHOT_LIMIT = 12;
+var QUEUE_SNAPSHOT_TRACK_LIMIT = 3000;
+var queueSnapshots = [];
 var localSearchPoolCache = { source: null, signature: '', items: [] };
 var localSearchIndexWarmState = { token: 0, source: null, signature: '', cursor: 0, timer: null, complete: true };
 var searchResultsLastDomSignature = '';
@@ -496,7 +563,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.24';
+var APP_VERSION = '1.7.25';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -22331,6 +22398,10 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   audio.onended = function(){
     if (token !== trackSwitchToken) return;
     finalizeListenSession(true);
+    if (stopAfterCurrentTrack) {
+      stopPlaybackAfterCurrentTrack();
+      return;
+    }
     if (playMode === 'single') setTimeout(function(){ playQueueAt(currentIdx, { autoRepeat: true }); }, 0);
     else setTimeout(nextTrack, 0);
   };
@@ -22624,10 +22695,17 @@ function clearQueue() {
   updateEmptyHomeVisibility({ forceLoad: false });
   pushMiniPlayerState(false);
 }
+/**
+ * 从队列移除一首，并把「当前播放」指针跟着搬到正确位置。
+ * 删掉当前歌曲之前的条目时索引整体前移一格，否则高亮会错位到别的歌上。
+ * @param {number} idx 要移除的队列下标。
+ * @returns {void}
+ */
 function removeFromQueue(idx) {
   if (idx < 0 || idx >= playQueue.length) return;
   playQueue.splice(idx, 1);
   markQueueContentChanged();
+  if (currentIdx >= 0 && currentIdx > idx) currentIdx -= 1;
   if (currentIdx >= playQueue.length) currentIdx = playQueue.length - 1;
   savePlaybackSession(true);
   safeRenderQueuePanel('remove-queue-item');
@@ -22663,6 +22741,8 @@ function updatePlayModeButton(animate) {
     btn.classList.toggle('active', playMode !== 'loop');
   }
   if (icon) icon.innerHTML = playModeIconMarkup(playMode);
+  updatePlayModeButtonRow();
+  updateStopAfterCurrentButton();
   if (!animate || !btn) return;
   if (window.gsap) {
     window.gsap.killTweensOf(btn);
@@ -22683,14 +22763,555 @@ function updatePlayModeButton(animate) {
   }
 }
 
+/**
+ * 直接切到指定播放模式。三种模式各给一个入口，用户不用连点「切换模式」猜下一个是什么。
+ * @param {string} mode 目标模式：loop / shuffle / single。
+ * @param {{toast?: boolean}=} opts 提示选项。
+ * @returns {void}
+ */
+function setPlayMode(mode, opts) {
+  opts = opts || {};
+  mode = String(mode || '');
+  if (!/^(loop|shuffle|single)$/.test(mode)) return;
+  var changed = playMode !== mode;
+  playMode = mode;
+  if (changed && playMode === 'shuffle') shufflePlayQueueOnce({ toast: false, reason: 'shuffle-mode' });
+  updatePlayModeButton(changed);
+  savePlaybackSession(true);
+  safeRenderQueuePanel('play-mode');
+  if (opts.toast !== false) showToast('播放模式: ' + playModeLabel(playMode));
+}
+
 function cyclePlayMode() {
   var modes = ['loop', 'shuffle', 'single'];
   var idx = modes.indexOf(playMode);
-  playMode = modes[(idx + 1) % modes.length];
-  if (playMode === 'shuffle') shufflePlayQueueOnce({ toast: false, reason: 'shuffle-mode' });
-  updatePlayModeButton(true);
+  setPlayMode(modes[(idx + 1) % modes.length]);
+}
+
+/**
+ * 同步三个播放模式按钮的选中态。
+ * @returns {void}
+ */
+function updatePlayModeButtonRow() {
+  ['loop', 'shuffle', 'single'].forEach(function(mode){
+    var btn = document.getElementById('queue-mode-' + mode);
+    if (!btn) return;
+    var on = playMode === mode;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+/**
+ * 切换「播放完当前歌曲后停止」。
+ * @returns {void}
+ */
+function toggleStopAfterCurrent() {
+  setStopAfterCurrent(!stopAfterCurrentTrack, { toast: true });
+}
+
+/**
+ * 设置「播放完当前歌曲后停止」。这是一次性开关，触发后由 onended 自己复位。
+ * @param {boolean} on 是否开启。
+ * @param {{toast?: boolean}=} opts 提示选项。
+ * @returns {void}
+ */
+function setStopAfterCurrent(on, opts) {
+  opts = opts || {};
+  var next = !!on;
+  var changed = stopAfterCurrentTrack !== next;
+  stopAfterCurrentTrack = next;
+  updateStopAfterCurrentButton();
+  if (changed) safeRenderQueuePanel('stop-after-current');
+  if (opts.toast) showToast(next ? '本曲播完后停止' : '已恢复连续播放');
+}
+
+/**
+ * 同步「播完即停」按钮外观。
+ * @returns {void}
+ */
+function updateStopAfterCurrentButton() {
+  var btn = document.getElementById('queue-stop-after-btn');
+  if (!btn) return;
+  btn.classList.toggle('active', stopAfterCurrentTrack);
+  btn.setAttribute('aria-pressed', stopAfterCurrentTrack ? 'true' : 'false');
+  btn.title = stopAfterCurrentTrack ? '本曲播完后停止（再点一下取消）' : '播放完当前歌曲后停止';
+}
+
+/**
+ * 「播放完当前歌曲后停止」真正落地的那一步：停在这首歌上、复位开关、把进度拨回开头，
+ * 这样再按播放就是重听本曲，而不是莫名跳到下一首。
+ * @returns {void}
+ */
+function stopPlaybackAfterCurrentTrack() {
+  setStopAfterCurrent(false, { toast: false });
+  playing = false;
+  setPlayIcon(false);
+  hideLoading();
+  try { if (audio) audio.currentTime = 0; } catch (_e) {}
+  forcePlaybackControlsInteractive();
+  safePlaybackStep('stop-after-current-sync', function(){ syncPlaybackStateFromAudioEvent('stop-after-current'); });
+  safePlaybackStep('stop-after-current-session', function(){ savePlaybackSession(true); });
+  safePlaybackStep('stop-after-current-render', function(){ safeRenderQueuePanel('stop-after-current-done'); });
+  safePlaybackStep('stop-after-current-mini', function(){ pushMiniPlayerState(true); });
+  safePlaybackStep('stop-after-current-hide', function(){ scheduleControlsHide(520); });
+  showToast('本曲已播完，已停止');
+}
+
+/**
+ * 推算下一首会播哪一首。随机模式下队列本身已经洗过，顺着队列走就是随机顺序。
+ * @returns {number} 队列索引；不会继续播放时返回 -1。
+ */
+function nextQueueIndexPreview() {
+  if (!playQueue.length) return -1;
+  if (stopAfterCurrentTrack) return -1;
+  if (playMode === 'single') return currentIdx >= 0 && currentIdx < playQueue.length ? currentIdx : 0;
+  if (currentIdx < 0) return 0;
+  return (currentIdx + 1) % playQueue.length;
+}
+
+/**
+ * 把队列里某一项移到另一个位置，正在播放的那首继续指向原来的歌。
+ * @param {number} from 原位置。
+ * @param {number} to 目标位置。
+ * @returns {boolean} 是否真的发生了移动。
+ */
+function moveQueueItem(from, to) {
+  from = Number(from);
+  to = Number(to);
+  if (!isFinite(from) || !isFinite(to)) return false;
+  if (from < 0 || from >= playQueue.length) return false;
+  to = Math.max(0, Math.min(playQueue.length - 1, to));
+  if (from === to) return false;
+  var current = currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
+  var item = playQueue.splice(from, 1)[0];
+  playQueue.splice(to, 0, item);
+  markQueueContentChanged();
+  if (current) currentIdx = playQueue.indexOf(current);
   savePlaybackSession(true);
-  showToast('播放模式: ' + playModeLabel(playMode));
+  safeRenderQueuePanel('reorder-queue');
+  safeShelfRebuild('reorder-queue');
+  return true;
+}
+
+/**
+ * 读出队列项上的索引。
+ * @param {EventTarget} node 事件目标。
+ * @returns {number} 队列索引，取不到返回 -1。
+ */
+function queueIndexFromEventTarget(node) {
+  var item = node && node.closest ? node.closest('[data-queue-index]') : null;
+  if (!item) return -1;
+  var idx = Number(item.getAttribute('data-queue-index'));
+  return isFinite(idx) && idx >= 0 ? idx : -1;
+}
+
+/**
+ * 清掉拖动过程中的落点提示。
+ * @returns {void}
+ */
+function clearQueueDropMarkers() {
+  var list = document.getElementById('queue-list');
+  if (!list) return;
+  Array.prototype.forEach.call(list.querySelectorAll('.drop-before,.drop-after,.dragging'), function(node){
+    node.classList.remove('drop-before', 'drop-after', 'dragging');
+  });
+}
+
+/**
+ * 判断这次拖拽是否携带文件。队列内部拖动不带文件，不能让整屏文件拖入蒙层跟着亮。
+ * @param {DragEvent} e 拖拽事件。
+ * @returns {boolean} 是否携带文件。
+ */
+function dragEventHasFiles(e) {
+  var dt = e && e.dataTransfer;
+  var types = dt && dt.types;
+  if (!types) return false;
+  for (var i = 0; i < types.length; i++) {
+    if (String(types[i]) === 'Files') return true;
+  }
+  return false;
+}
+
+var queueDragBound = false;
+/**
+ * 给队列列表挂上拖动重排。拖动句柄限定在 `.qi-drag`，避免用户想点歌却触发拖动。
+ * @returns {void}
+ */
+function bindQueueDragReorder() {
+  var list = document.getElementById('queue-list');
+  if (!list || queueDragBound) return;
+  queueDragBound = true;
+  list.addEventListener('dragstart', function(e){
+    var idx = queueIndexFromEventTarget(e.target);
+    if (idx < 0) return;
+    queueDragState = { from: idx, to: idx };
+    var item = e.target.closest('[data-queue-index]');
+    if (item) item.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      // 必须写一份数据，否则部分平台不会派发后续的 dragover / drop。
+      try { e.dataTransfer.setData('text/x-mineradio-queue', String(idx)); } catch (err) {}
+    }
+  });
+  list.addEventListener('dragover', function(e){
+    if (!queueDragState) return;
+    var item = e.target && e.target.closest ? e.target.closest('[data-queue-index]') : null;
+    if (!item) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    var idx = queueIndexFromEventTarget(e.target);
+    if (idx < 0) return;
+    var rect = item.getBoundingClientRect();
+    var after = rect.height > 0 && (e.clientY - rect.top) > rect.height / 2;
+    queueDragState.to = after ? idx + 1 : idx;
+    Array.prototype.forEach.call(list.querySelectorAll('.drop-before,.drop-after'), function(node){
+      if (node !== item) node.classList.remove('drop-before', 'drop-after');
+    });
+    item.classList.toggle('drop-after', after);
+    item.classList.toggle('drop-before', !after);
+  });
+  list.addEventListener('drop', function(e){
+    if (!queueDragState) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var from = queueDragState.from;
+    var to = queueDragState.to;
+    queueDragState = null;
+    clearQueueDropMarkers();
+    // 插入点在原位之后时，摘掉自己会让后面的项前移一格。
+    if (to > from) to -= 1;
+    moveQueueItem(from, to);
+  });
+  list.addEventListener('dragend', function(){
+    queueDragState = null;
+    clearQueueDropMarkers();
+  });
+}
+
+/**
+ * 渲染「下一首」预览条。停在本曲时给出明确说明，而不是留一条空栏。
+ * @returns {void}
+ */
+function renderQueueNextUp() {
+  var host = document.getElementById('queue-next-up');
+  if (!host) return;
+  if (!playQueue.length) {
+    host.innerHTML = '';
+    host.classList.remove('show');
+    return;
+  }
+  host.classList.add('show');
+  var idx = nextQueueIndexPreview();
+  if (idx < 0) {
+    host.innerHTML = '<div class="queue-next-up-stop">本曲播完后停止</div>';
+    return;
+  }
+  var song = playQueue[idx] || {};
+  var thumb = songCoverSrc(song, 60);
+  var img = thumb
+    ? '<img src="' + escHtml(thumb) + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">'
+    : '<div class="queue-next-up-cover"></div>';
+  var label = playMode === 'single' ? '单曲循环' : '下一首';
+  host.innerHTML = '<button type="button" class="queue-next-up-row" data-queue-next-up="' + idx + '" title="直接播放这一首">' +
+    '<span class="queue-next-up-tag">' + escHtml(label) + '</span>' + img +
+    '<span class="queue-next-up-info">' +
+      '<span class="queue-next-up-name">' + escHtml(song.name || '未知歌曲') + '</span>' +
+      '<span class="queue-next-up-sub">' + escHtml(songDisplaySubtitle(song)) + '</span>' +
+    '</span>' +
+    '<span class="queue-next-up-idx">#' + (idx + 1) + '</span>' +
+  '</button>';
+}
+
+/**
+ * 生成一条存档曲目记录。只留能重新定位歌曲的字段——封面 data URL 和歌词
+ * 一律不写，否则一份大队列就能把 localStorage 顶爆。
+ * @param {object} song 队列歌曲。
+ * @returns {object} 精简记录。
+ */
+function queueSnapshotTrackRecord(song) {
+  song = song || {};
+  return {
+    key: queueItemKey(song),
+    localKey: song.localKey ? String(song.localKey) : '',
+    pathKey: song.localLibraryPathKey ? String(song.localLibraryPathKey) : '',
+    name: song.name || '',
+    artist: song.artist || ''
+  };
+}
+
+/**
+ * 读取全部队列存档。
+ * @returns {Array<object>} 存档列表，读失败时为空数组。
+ */
+function readQueueSnapshots() {
+  try {
+    var raw = JSON.parse(localStorage.getItem(QUEUE_SNAPSHOT_STORE_KEY) || 'null');
+    if (!raw || raw.schema !== 1 || !Array.isArray(raw.items)) return [];
+    return raw.items.filter(function(item){
+      return item && item.id && Array.isArray(item.tracks);
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * 落盘队列存档。
+ * @returns {void}
+ */
+function writeQueueSnapshots() {
+  try {
+    setPersistentLocalStorageItem(QUEUE_SNAPSHOT_STORE_KEY, JSON.stringify({
+      schema: 1,
+      items: queueSnapshots.slice(0, QUEUE_SNAPSHOT_LIMIT)
+    }));
+  } catch (e) {}
+}
+
+/**
+ * 生成默认存档名：优先用当前歌曲，让列表里一眼认得出是哪一份。
+ * @returns {string} 存档名。
+ */
+function defaultQueueSnapshotName() {
+  var song = currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
+  var base = song && song.name ? String(song.name) : '';
+  var stamp = new Date();
+  var time = String(stamp.getMonth() + 1) + '/' + stamp.getDate() + ' ' +
+    String(stamp.getHours()).padStart(2, '0') + ':' + String(stamp.getMinutes()).padStart(2, '0');
+  return base ? (base + ' 等 ' + playQueue.length + ' 首 · ' + time) : ('队列 ' + playQueue.length + ' 首 · ' + time);
+}
+
+/**
+ * 把当前队列存成一份存档。
+ * @param {string=} name 存档名，留空用默认名。
+ * @returns {object|null} 新存档，队列为空时返回 null。
+ */
+function saveQueueSnapshot(name) {
+  if (!playQueue.length) {
+    showToast('队列为空，没有可保存的内容');
+    return null;
+  }
+  var tracks = [];
+  for (var i = 0; i < playQueue.length && i < QUEUE_SNAPSHOT_TRACK_LIMIT; i++) {
+    tracks.push(queueSnapshotTrackRecord(playQueue[i]));
+  }
+  var snapshot = {
+    id: 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: String(name || '').trim() || defaultQueueSnapshotName(),
+    savedAt: Date.now(),
+    playMode: /^(loop|shuffle|single)$/.test(playMode) ? playMode : 'loop',
+    currentIdx: currentIdx >= 0 && currentIdx < tracks.length ? currentIdx : -1,
+    total: playQueue.length,
+    tracks: tracks
+  };
+  queueSnapshots.unshift(snapshot);
+  if (queueSnapshots.length > QUEUE_SNAPSHOT_LIMIT) queueSnapshots.length = QUEUE_SNAPSHOT_LIMIT;
+  writeQueueSnapshots();
+  renderQueueSnapshots();
+  var truncated = playQueue.length > tracks.length;
+  showToast(truncated
+    ? ('已保存队列存档（只存前 ' + tracks.length + ' 首）')
+    : ('已保存队列存档 · ' + tracks.length + ' 首'));
+  return snapshot;
+}
+
+/**
+ * 保存当前队列，名字用默认命名。UI 按钮直接接这个。
+ * @returns {void}
+ */
+function saveCurrentQueueSnapshot() {
+  saveQueueSnapshot('');
+}
+
+/**
+ * 删除一份存档。
+ * @param {string} id 存档标识。
+ * @returns {boolean} 是否删掉了。
+ */
+function deleteQueueSnapshot(id) {
+  id = String(id || '');
+  var before = queueSnapshots.length;
+  queueSnapshots = queueSnapshots.filter(function(item){ return item.id !== id; });
+  if (queueSnapshots.length === before) return false;
+  writeQueueSnapshots();
+  renderQueueSnapshots();
+  showToast('已删除队列存档');
+  return true;
+}
+
+/**
+ * 建立「存档记录 → 现存歌曲对象」的查找表。存档里只有标识，播放需要的
+ * `localFile` 句柄只能从当前曲库/队列里的活对象上取。
+ * @returns {{byKey:object, byPath:object, byName:object}} 查找表。
+ */
+function queueSnapshotResolveIndex() {
+  var index = { byKey: {}, byPath: {}, byName: {} };
+  function add(song) {
+    if (!song) return;
+    var key = queueItemKey(song);
+    if (key && !index.byKey[key]) index.byKey[key] = song;
+    var pathKey = song.localLibraryPathKey ? String(song.localLibraryPathKey) : '';
+    if (pathKey && !index.byPath[pathKey]) index.byPath[pathKey] = song;
+    var nameKey = String(song.name || '') + '|' + String(song.artist || '');
+    if (nameKey !== '|' && !index.byName[nameKey]) index.byName[nameKey] = song;
+  }
+  if (Array.isArray(localLibrarySongs)) localLibrarySongs.forEach(add);
+  if (Array.isArray(playQueue)) playQueue.forEach(add);
+  return index;
+}
+
+/**
+ * 把一条存档记录还原成现存歌曲对象。曲库重扫后 localKey 会带上新的大小/时间戳，
+ * 所以按 localKey → 路径键 → 曲名+歌手依次退让。
+ * @param {object} record 存档记录。
+ * @param {{byKey:object, byPath:object, byName:object}} index 查找表。
+ * @returns {object|null} 命中的歌曲，找不到返回 null。
+ */
+function resolveQueueSnapshotTrack(record, index) {
+  if (!record || !index) return null;
+  if (record.key && index.byKey[record.key]) return index.byKey[record.key];
+  if (record.pathKey && index.byPath[record.pathKey]) return index.byPath[record.pathKey];
+  var nameKey = String(record.name || '') + '|' + String(record.artist || '');
+  if (nameKey !== '|' && index.byName[nameKey]) return index.byName[nameKey];
+  return null;
+}
+
+/**
+ * 恢复一份队列存档。只换队列，不打断正在播放的这一首。
+ * @param {string} id 存档标识。
+ * @returns {boolean} 是否恢复成功。
+ */
+function restoreQueueSnapshot(id) {
+  id = String(id || '');
+  var snapshot = null;
+  for (var i = 0; i < queueSnapshots.length; i++) {
+    if (queueSnapshots[i].id === id) { snapshot = queueSnapshots[i]; break; }
+  }
+  if (!snapshot) {
+    showToast('这份队列存档已经不在了');
+    return false;
+  }
+  var playingSong = currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
+  var index = queueSnapshotResolveIndex();
+  var songs = [];
+  var savedCurrent = -1;
+  for (var j = 0; j < snapshot.tracks.length; j++) {
+    var song = resolveQueueSnapshotTrack(snapshot.tracks[j], index);
+    if (!song) continue;
+    if (j === snapshot.currentIdx) savedCurrent = songs.length;
+    songs.push(song);
+  }
+  var missing = snapshot.tracks.length - songs.length;
+  if (!songs.length) {
+    showToast(missing ? '存档里的歌曲都不在当前曲库里' : '这份存档是空的');
+    return false;
+  }
+  playQueue = songs;
+  // 存档里保存的就是洗好的顺序，别让 playQueueAt 把它当新队列再洗一次。
+  if (snapshot.playMode === 'shuffle') shuffledPlayQueueArrays.add(playQueue);
+  var playingIdx = playingSong ? playQueue.indexOf(playingSong) : -1;
+  currentIdx = playingIdx >= 0 ? playingIdx : (savedCurrent >= 0 ? savedCurrent : 0);
+  markQueueContentChanged();
+  setStopAfterCurrent(false, { toast: false });
+  if (/^(loop|shuffle|single)$/.test(String(snapshot.playMode || ''))) {
+    playMode = snapshot.playMode;
+    updatePlayModeButton(false);
+  }
+  savePlaybackSession(true);
+  safeRenderQueuePanel('restore-queue-snapshot', { animate: true, resetLimit: true, scrollCurrent: true });
+  safeShelfRebuild('restore-queue-snapshot');
+  updateCustomCoverButton();
+  updateCustomLyricControls();
+  updateEmptyHomeVisibility({ forceLoad: false });
+  showToast(missing
+    ? ('已恢复队列 · ' + songs.length + ' 首（' + missing + ' 首不在当前曲库）')
+    : ('已恢复队列 · ' + songs.length + ' 首'));
+  return true;
+}
+
+/**
+ * 存档时间的短标签。
+ * @param {number} ts 时间戳。
+ * @returns {string} 月/日 时:分。
+ */
+function queueSnapshotTimeLabel(ts) {
+  var d = new Date(Number(ts) || 0);
+  if (!isFinite(d.getTime()) || !Number(ts)) return '';
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+    String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+/**
+ * 渲染队列存档列表。
+ * @returns {void}
+ */
+function renderQueueSnapshots() {
+  var host = document.getElementById('queue-archive-list');
+  if (!host) return;
+  if (!queueSnapshots.length) {
+    host.innerHTML = '<div class="queue-archive-empty">还没有存档，点「存队列」把现在的顺序留下来</div>';
+    return;
+  }
+  var html = '';
+  queueSnapshots.forEach(function(item){
+    var count = Array.isArray(item.tracks) ? item.tracks.length : 0;
+    var total = Number(item.total) || count;
+    var sub = count + ' 首' + (total > count ? ('（原 ' + total + ' 首）') : '') +
+      ' · ' + playModeLabel(item.playMode) +
+      (queueSnapshotTimeLabel(item.savedAt) ? (' · ' + queueSnapshotTimeLabel(item.savedAt)) : '');
+    html += '<div class="queue-archive-item">' +
+      '<button type="button" class="queue-archive-main" data-queue-snapshot-restore="' + escHtml(item.id) + '" title="恢复这份队列">' +
+        '<span class="queue-archive-name">' + escHtml(item.name || '未命名队列') + '</span>' +
+        '<span class="queue-archive-sub">' + escHtml(sub) + '</span>' +
+      '</button>' +
+      '<button type="button" class="queue-archive-del" data-queue-snapshot-delete="' + escHtml(item.id) + '" title="删除这份存档">×</button>' +
+    '</div>';
+  });
+  host.innerHTML = html;
+}
+
+/** 下一首预览与队列存档的事件委托只绑一次。 */
+var queuePanelExtrasBound = false;
+
+/**
+ * 绑定「下一首预览」点击跳转与队列存档的恢复/删除。
+ * @returns {void}
+ */
+function bindQueuePanelExtras() {
+  if (queuePanelExtrasBound) return;
+  var nextUpEl = document.getElementById('queue-next-up');
+  var archiveEl = document.getElementById('queue-archive-list');
+  if (!nextUpEl && !archiveEl) return;
+  queuePanelExtrasBound = true;
+  if (nextUpEl) {
+    nextUpEl.addEventListener('click', function(e){
+      var row = e.target && e.target.closest ? e.target.closest('[data-queue-next-up]') : null;
+      if (!row) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var idx = Number(row.getAttribute('data-queue-next-up'));
+      if (isFinite(idx) && idx >= 0 && idx < playQueue.length) playQueueAt(idx);
+    });
+  }
+  if (archiveEl) {
+    archiveEl.addEventListener('click', function(e){
+      var target = e.target;
+      var del = target && target.closest ? target.closest('[data-queue-snapshot-delete]') : null;
+      if (del) {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteQueueSnapshot(del.getAttribute('data-queue-snapshot-delete'));
+        return;
+      }
+      var restore = target && target.closest ? target.closest('[data-queue-snapshot-restore]') : null;
+      if (!restore) return;
+      e.preventDefault();
+      e.stopPropagation();
+      restoreQueueSnapshot(restore.getAttribute('data-queue-snapshot-restore'));
+    });
+  }
 }
 updatePlayModeButton(false);
 
@@ -23712,7 +24333,7 @@ function togglePlaylistPanel(force) {
     if (window.gsap) window.gsap.fromTo(el, { x: -12, autoAlpha: 0.92 }, { x: 0, autoAlpha: 1, duration: 0.22, ease: 'power2.out', overwrite: true });
     scheduleUiWarmTask(function(){
       flushDeferredQueuePanel('playlist-panel-open');
-      if (!playQueue.length && queueViewTab === 'queue') switchPlaylistTab('playlists');
+      if (!playQueue.length && queueViewTab === 'queue' && !queueSnapshots.length) switchPlaylistTab('playlists');
       if (playQueue.length && currentIdx >= 0 && queueViewTab !== 'queue') switchPlaylistTab('queue');
       if (queueViewTab === 'queue') animateVisiblePanelList(document.getElementById('queue-list'), '.queue-item', el, '.queue-item.now', { scrollActive: false });
       else if (isPlaylistListTab()) animateVisiblePanelList(document.getElementById('pl-list'), '.pl-card', el);
@@ -23896,6 +24517,12 @@ bindSmoothQueueScrolling();
 bindPlaylistPanelLazyRender();
 bindMiniQueueLazyRender();
 bindModalBackdropClose();
+queueSnapshots = readQueueSnapshots();
+bindQueueDragReorder();
+bindQueuePanelExtras();
+renderQueueSnapshots();
+updateStopAfterCurrentButton();
+updatePlayModeButtonRow();
 function normalizedQueueRenderLimit(current, initial, batch, total) {
   var min = Math.max(1, Number(initial) || 1);
   var step = Math.max(1, Number(batch) || min);
@@ -23936,6 +24563,7 @@ function queueVisibleRows(renderLimit, seedRows) {
   var limit = Math.min(playQueue.length, Math.max(0, renderLimit || 0));
   var rows = seedRows && seedRows.length >= limit ? seedRows : new Array(limit);
   var start = seedRows ? Math.min(seedRows.length, limit) : 0;
+  var nextIdx = nextQueueIndexPreview();
   for (var i = start; i < limit; i++) {
     var song = playQueue[i] || {};
     var artist = song.type === 'local' ? '' : songArtistText(song);
@@ -23952,8 +24580,14 @@ function queueVisibleRows(renderLimit, seedRows) {
       coverSignature: songCoverSignature(song),
       thumb: songCoverSrc(song, 60),
       liked: isSongLiked(song),
-      current: i === currentIdx
+      current: i === currentIdx,
+      nextUp: i === nextIdx && i !== currentIdx
     };
+  }
+  if (seedRows && start > 0) {
+    for (var j = 0; j < start && j < limit; j++) {
+      if (rows[j]) rows[j].nextUp = j === nextIdx && j !== currentIdx;
+    }
   }
   return rows;
 }
@@ -23967,7 +24601,8 @@ function queueVisibleRows(renderLimit, seedRows) {
 function queueVisibleDomSignature(renderLimit, mini, visibleRows) {
   var limit = Math.min(playQueue.length, Math.max(0, renderLimit || 0));
   visibleRows = visibleRows || queueVisibleRows(limit);
-  var signature = (mini ? 'mini' : 'panel') + '|' + playQueue.length + '|' + limit + '|' + currentIdx + '|' + (LOCAL_ONLY_MODE ? 1 : 0);
+  var signature = (mini ? 'mini' : 'panel') + '|' + playQueue.length + '|' + limit + '|' + currentIdx + '|' + (LOCAL_ONLY_MODE ? 1 : 0) +
+    '|' + playMode + '|' + (stopAfterCurrentTrack ? 1 : 0) + '|next:' + nextQueueIndexPreview();
   for (var i = 0; i < limit; i++) {
     var row = visibleRows[i];
     signature += '|' +
@@ -24061,7 +24696,9 @@ function queueItemHtml(row) {
       '<button onclick="event.stopPropagation();collectQueueIndex(' + i + ')" title="选择收藏到任意歌单">' + playlistPlusIconSvg() + '</button>' +
       '<button onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
       '</div>';
-  return '<div class="queue-item' + (row.current ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
+  return '<div class="queue-item' + (row.current ? ' now' : '') + (row.nextUp ? ' next-up' : '') + '"' +
+    ' draggable="true" data-queue-index="' + i + '" onclick="playQueueAt(' + i + ')">' +
+    '<span class="qi-drag" aria-hidden="true" title="拖动调整顺序"><i></i><i></i><i></i></span>' +
     imgTag +
     '<div class="qi-info"><div class="qi-name">' + escHtml(row.name) + '</div><div class="qi-sub">' + subHtml + '</div></div>' +
     actionsHtml +
@@ -24169,6 +24806,12 @@ function renderQueuePanel(opts) {
   if (!$ql) return;
   var seq = ++queueRenderSeq;
   syncQueueRenderLimits(opts);
+  bindQueueDragReorder();
+  bindQueuePanelExtras();
+  renderQueueNextUp();
+  renderQueueSnapshots();
+  updatePlayModeButtonRow();
+  updateStopAfterCurrentButton();
   if (!playQueue.length) {
     queuePanelLastDomSignature = 'empty';
     miniQueueLastDomSignature = '';
@@ -24177,7 +24820,8 @@ function renderQueuePanel(opts) {
     resetMiniQueueRenderLimit();
     renderMiniQueuePanel();
     var panel = document.getElementById('playlist-panel');
-    if (panel && (panel.classList.contains('show') || panel.classList.contains('peek')) && queueViewTab === 'queue') switchPlaylistTab('playlists');
+    // 有存档时留在队列页，否则用户想「恢复队列」却被弹去歌单页，反而找不到入口。
+    if (panel && (panel.classList.contains('show') || panel.classList.contains('peek')) && queueViewTab === 'queue' && !queueSnapshots.length) switchPlaylistTab('playlists');
     return;
   }
   queuePanelRenderLimit = normalizedQueueRenderLimit(queuePanelRenderLimit, queuePanelInitialRenderLimit(), queuePanelBatchSize(), playQueue.length);
@@ -30180,11 +30824,14 @@ async function handleFiles(files) {
   if (!audioFile) updateCustomCoverButton();
 }
 var dropOv = document.getElementById('drop-overlay'), dragCount = 0;
-document.addEventListener('dragenter', function(e){ e.preventDefault(); dragCount++; dropOv.classList.add('show'); });
-document.addEventListener('dragleave', function(e){ e.preventDefault(); dragCount--; if (dragCount<=0){ dragCount=0; dropOv.classList.remove('show'); } });
+// 队列内部拖动重排也会冒泡到 document，这里只对「真的拖了文件进来」亮遮罩，否则每次调队列顺序都闪一下。
+document.addEventListener('dragenter', function(e){ e.preventDefault(); if (queueDragState || !dragEventHasFiles(e)) return; dragCount++; dropOv.classList.add('show'); });
+document.addEventListener('dragleave', function(e){ e.preventDefault(); if (queueDragState || !dragEventHasFiles(e)) return; dragCount--; if (dragCount<=0){ dragCount=0; dropOv.classList.remove('show'); } });
 document.addEventListener('dragover',  function(e){ e.preventDefault(); });
 document.addEventListener('drop', function(e){
-  e.preventDefault(); dragCount = 0; dropOv.classList.remove('show');
+  e.preventDefault();
+  if (queueDragState) return;
+  dragCount = 0; dropOv.classList.remove('show');
   if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
 });
 
@@ -31995,43 +32642,70 @@ function normalizeHotkeyEvent(e) {
   if (!code) return '';
   return mods.concat([code]).join('+');
 }
+/**
+ * 解析组合键末位按键，拿到 Electron 加速键词元与展示文本。
+ * @param {string} code `KeyboardEvent.code`。
+ * @returns {{accel:string,label:string,bare?:boolean}|null} 不认识的按键返回 null。
+ */
+function hotkeyKeyInfo(code) {
+  code = String(code || '');
+  if (!code) return null;
+  if (HOTKEY_KEY_MAP[code]) return HOTKEY_KEY_MAP[code];
+  if (/^Key[A-Z]$/.test(code)) return { accel: code.slice(3), label: code.slice(3) };
+  if (/^Digit[0-9]$/.test(code)) return { accel: code.slice(5), label: code.slice(5) };
+  if (/^Numpad[0-9]$/.test(code)) return { accel: 'num' + code.slice(6), label: 'Num' + code.slice(6) };
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return { accel: code, label: code };
+  return null;
+}
 function hotkeyDisplayPart(part) {
   if (part === 'Ctrl') return 'Ctrl';
   if (part === 'Alt') return 'Alt';
   if (part === 'Shift') return 'Shift';
   if (part === 'Meta') return 'Win';
-  if (part === 'Space') return 'Space';
-  if (part === 'ArrowLeft') return 'Left';
-  if (part === 'ArrowRight') return 'Right';
-  if (part === 'ArrowUp') return 'Up';
-  if (part === 'ArrowDown') return 'Down';
-  if (/^Key[A-Z]$/.test(part)) return part.slice(3);
-  if (/^Digit[0-9]$/.test(part)) return part.slice(5);
-  if (/^Numpad[0-9]$/.test(part)) return 'Num' + part.slice(6);
-  return part.replace(/^Equal$/, '=').replace(/^Minus$/, '-');
+  var info = hotkeyKeyInfo(part);
+  return info ? info.label : part;
 }
 function formatHotkey(hotkey) {
   hotkey = String(hotkey || '').trim();
   if (!hotkey) return '未设置';
   return hotkey.split('+').map(hotkeyDisplayPart).join(' + ');
 }
+/**
+ * 把内部组合键翻译成 Electron `globalShortcut` 加速键。
+ * 任何一个词元翻不出来就整条返回空串——宁可本地拒掉，也不要送一条主进程注册不了、
+ * 却只能报「已被占用」的假冲突给用户。
+ * @param {string} hotkey 内部组合键，例如 `Ctrl+Alt+ArrowLeft`。
+ * @returns {string} 加速键字符串，不支持时为空串。
+ */
 function hotkeyToAccelerator(hotkey) {
   var parts = String(hotkey || '').split('+').filter(Boolean);
   if (!parts.length) return '';
-  return parts.map(function(part){
-    if (part === 'Ctrl') return 'Control';
-    if (part === 'Alt') return 'Alt';
-    if (part === 'Shift') return 'Shift';
-    if (part === 'Meta') return 'Super';
-    if (part === 'Space') return 'Space';
-    if (part === 'ArrowLeft') return 'Left';
-    if (part === 'ArrowRight') return 'Right';
-    if (part === 'ArrowUp') return 'Up';
-    if (part === 'ArrowDown') return 'Down';
-    if (/^Key[A-Z]$/.test(part)) return part.slice(3);
-    if (/^Digit[0-9]$/.test(part)) return part.slice(5);
-    return part;
-  }).join('+');
+  var mods = [];
+  for (var i = 0; i < parts.length - 1; i++) {
+    var mod = HOTKEY_MODIFIER_ACCELERATORS[parts[i]];
+    if (!mod) return '';
+    mods.push(mod);
+  }
+  var info = hotkeyKeyInfo(parts[parts.length - 1]);
+  if (!info) return '';
+  return mods.concat([info.accel]).join('+');
+}
+/**
+ * 判断组合键能不能当全局热键，返回拒绝原因。
+ * 全局热键会向系统注册，一旦允许裸键，用户在任何软件里都按不出这个键了。
+ * @param {string} hotkey 内部组合键。
+ * @returns {string} 空串表示可用，否则是给用户看的原因。
+ */
+function globalHotkeyRejectReason(hotkey) {
+  var parts = String(hotkey || '').trim().split('+').filter(Boolean);
+  if (!parts.length) return '';
+  var info = hotkeyKeyInfo(parts[parts.length - 1]);
+  if (!info) return '这个按键不能注册成全局热键，请换一组';
+  if (info.bare) return '';
+  for (var i = 0; i < parts.length - 1; i++) {
+    if (HOTKEY_STRONG_MODIFIERS[parts[i]]) return '';
+  }
+  return '全局热键至少要带 Ctrl、Alt 或 Win，否则会在所有软件里抢走这个键';
 }
 function hotkeyDuplicateMap(scope) {
   var map = {};
@@ -32049,7 +32723,15 @@ function executeHotkeyAction(actionKey, source) {
   if (actionKey === 'nextTrack') return nextTrack();
   if (actionKey === 'volumeUp') return adjustVolumeByKeyboard(0.05);
   if (actionKey === 'volumeDown') return adjustVolumeByKeyboard(-0.05);
+  if (actionKey === 'toggleMute') return toggleMute();
   if (actionKey === 'toggleFullscreen') return toggleFullscreen();
+  if (actionKey === 'toggleMainWindow') {
+    // 全局触发时主进程已经收起/唤回窗口了，渲染层再动一次会把状态弹回去。
+    if (source === 'global') return;
+    var api = getDesktopWindowApi && getDesktopWindowApi();
+    if (api && typeof api.minimize === 'function') return api.minimize();
+    return;
+  }
   if (actionKey === 'toggleDesktopLyrics') return toggleFx('desktopLyrics');
 }
 function handleConfiguredLocalHotkey(e) {
@@ -32133,11 +32815,14 @@ function hotkeyStatusMarkup(scope, actionKey, binding, duplicate) {
   if (!binding) return '<span class="hotkey-status">未设置</span>';
   if (duplicate && duplicate[binding] > 1) return '<span class="hotkey-status conflict"><span class="source-icon">!</span>Mineradio 内部重复</span>';
   if (scope === 'local') return '<span class="hotkey-status ok">可用</span>';
+  var reject = globalHotkeyRejectReason(binding);
+  if (reject) return '<span class="hotkey-status conflict" title="' + escHtml(reject) + '"><span class="source-icon">!</span>不能作为全局热键</span>';
   var status = hotkeyGlobalStatus[actionKey];
   if (!status) return '<span class="hotkey-status">待检测</span>';
   if (status.ok) return '<span class="hotkey-status ok">可用</span>';
   var source = status.conflict && status.conflict.sourceName || '系统 / 其他软件';
-  return '<span class="hotkey-status conflict"><span class="source-icon">!</span>' + escHtml(source) + '</span>';
+  var reason = status.conflict && status.conflict.reason || '';
+  return '<span class="hotkey-status conflict"' + (reason ? ' title="' + escHtml(reason) + '"' : '') + '><span class="source-icon">!</span>' + escHtml(source) + '</span>';
 }
 function renderHotkeyScope(scope) {
   var wrap = document.getElementById(scope === 'global' ? 'hotkey-global-section' : 'hotkey-local-section');
@@ -32167,6 +32852,9 @@ function renderHotkeySettings() {
   var modal = ensureHotkeyModal();
   var active = modal.getAttribute('data-scope') || 'local';
   modal.classList.toggle('capturing', !!hotkeyCaptureState);
+  modal.classList.toggle('warn', !!hotkeyCaptureNotice);
+  var tip = document.getElementById('hotkey-capture-tip');
+  if (tip) tip.textContent = hotkeyCaptureNotice || '正在录入组合键，按 Esc 取消。';
   modal.querySelectorAll('[data-hotkey-scope]').forEach(function(btn){
     btn.classList.toggle('active', btn.getAttribute('data-hotkey-scope') === active);
   });
@@ -32176,6 +32864,15 @@ function renderHotkeySettings() {
   if (global) global.classList.toggle('active', active === 'global');
   renderHotkeyScope('local');
   renderHotkeyScope('global');
+}
+/**
+ * 更新录入区提示。传空串恢复默认提示并撤掉告警配色。
+ * @param {string} message 提示文案。
+ * @returns {void}
+ */
+function setHotkeyCaptureNotice(message) {
+  hotkeyCaptureNotice = String(message || '');
+  renderHotkeySettings();
 }
 function setHotkeyModalScope(scope) {
   var modal = ensureHotkeyModal();
@@ -32191,11 +32888,13 @@ function openHotkeySettings() {
 }
 function closeHotkeySettings() {
   hotkeyCaptureState = null;
+  hotkeyCaptureNotice = '';
   var modal = document.getElementById('hotkey-modal');
-  if (modal) modal.classList.remove('show', 'capturing');
+  if (modal) modal.classList.remove('show', 'capturing', 'warn');
 }
 function startHotkeyCapture(action, scope) {
   hotkeyCaptureState = { action: action, scope: scope === 'global' ? 'global' : 'local' };
+  hotkeyCaptureNotice = '';
   var modal = ensureHotkeyModal();
   modal.setAttribute('data-scope', hotkeyCaptureState.scope);
   renderHotkeySettings();
@@ -32203,10 +32902,12 @@ function startHotkeyCapture(action, scope) {
 function setHotkeyBinding(action, scope, value) {
   if (!hotkeySettings) hotkeySettings = getHotkeyDefaults();
   if (!hotkeySettings[scope]) hotkeySettings[scope] = {};
+  if (scope === 'global' && value && globalHotkeyRejectReason(value)) return false;
   hotkeySettings[scope][action] = value || '';
   saveHotkeySettings();
   renderHotkeySettings();
   if (scope === 'global') registerGlobalHotkeys();
+  return true;
 }
 function resetHotkeyBinding(action, scope) {
   var meta = hotkeyActionMeta(action);
@@ -32224,7 +32925,7 @@ function registerGlobalHotkeys() {
   var bindings = [];
   HOTKEY_ACTIONS.forEach(function(action){
     var key = hotkeySettings.global && hotkeySettings.global[action.key];
-    if (!key || duplicate[key] > 1) return;
+    if (!key || duplicate[key] > 1 || globalHotkeyRejectReason(key)) return;
     var accelerator = hotkeyToAccelerator(key);
     if (accelerator) bindings.push({ action: action.key, accelerator: accelerator });
   });
@@ -32235,12 +32936,46 @@ function registerGlobalHotkeys() {
     });
     hotkeyGlobalStatus = next;
     renderHotkeySettings();
+    scheduleGlobalHotkeyFailureNotice();
   }).catch(function(){
     hotkeyGlobalStatus = {};
     renderHotkeySettings();
   });
 }
+/**
+ * 收集本次注册失败的动作。
+ * @returns {string[]} 失败的动作标识。
+ */
+function failedGlobalHotkeyActions() {
+  var failed = [];
+  Object.keys(hotkeyGlobalStatus).forEach(function(actionKey){
+    var status = hotkeyGlobalStatus[actionKey];
+    if (status && status.ok === false) failed.push(actionKey);
+  });
+  return failed;
+}
+/**
+ * 全局热键被系统或别的软件占住时提示一次。
+ * 不提示用户只会觉得「按了没反应」——而 Ctrl+Alt+方向键在不少显卡驱动上正好被旋转屏幕占用。
+ * 热键面板开着时行内状态已经写清楚了，就不再弹提示。
+ * @returns {void}
+ */
+function scheduleGlobalHotkeyFailureNotice() {
+  var failed = failedGlobalHotkeyActions();
+  if (!failed.length) { globalHotkeyFailureNotified = false; return; }
+  var modal = document.getElementById('hotkey-modal');
+  if (modal && modal.classList.contains('show')) return;
+  if (globalHotkeyFailureNotified) return;
+  globalHotkeyFailureNotified = true;
+  var meta = hotkeyActionMeta(failed[0]);
+  var text = failed.length === 1
+    ? '全局热键「' + (meta && meta.label || failed[0]) + '」被系统或其他软件占用，可在「热键」里改键'
+    : failed.length + ' 个全局热键被系统或其他软件占用，可在「热键」里改键';
+  // 启动阶段还有别的提示要出，错开一点避免叠在一起。
+  setTimeout(function(){ showToast(text); }, 1800);
+}
 var globalHotkeyListenerBound = false;
+var globalHotkeyFailureNotified = false;
 function bindHotkeySettings() {
   ensureHotkeySettingsButton();
   ensureHotkeyModal();
@@ -32270,19 +33005,28 @@ document.addEventListener('keydown', function(e){
   e.stopPropagation();
   if (e.code === 'Escape') {
     hotkeyCaptureState = null;
+    hotkeyCaptureNotice = '';
     renderHotkeySettings();
     return;
   }
-  if (e.code === 'Backspace' || e.code === 'Delete') {
+  // 只有不带修饰键的 Backspace / Delete 当清空，这样 Ctrl+Alt+Delete 这类组合仍然录得进来。
+  if ((e.code === 'Backspace' || e.code === 'Delete') && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
     var clearTarget = hotkeyCaptureState;
     hotkeyCaptureState = null;
+    hotkeyCaptureNotice = '';
     setHotkeyBinding(clearTarget.action, clearTarget.scope, '');
     return;
   }
   var combo = normalizeHotkeyEvent(e);
   if (!combo) return;
   var target = hotkeyCaptureState;
+  if (target.scope === 'global') {
+    var reject = globalHotkeyRejectReason(combo);
+    // 录入状态保留，用户可以直接再按一组，不用重新点按钮。
+    if (reject) { setHotkeyCaptureNotice(formatHotkey(combo) + '：' + reject); return; }
+  }
   hotkeyCaptureState = null;
+  hotkeyCaptureNotice = '';
   setHotkeyBinding(target.action, target.scope, combo);
 }, true);
 function bindFxPanel() {
