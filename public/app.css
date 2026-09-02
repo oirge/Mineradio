@@ -1191,6 +1191,9 @@ body.fx-fab-auto-hide.fx-fab-peek #fx-fab-hide-btn{right:84px;opacity:1;visibili
 body.controls-visible #fx-fab-hide-btn,
 body.desktop-shell.diy-mode.controls-visible #fx-fab-hide-btn{bottom:139px}
 body.immersive-mode #fx-fab-hide-btn{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+#local-sync-badge{position:fixed;z-index:16;right:24px;bottom:88px;max-width:min(52vw,320px);padding:8px 14px;border-radius:12px;font-size:12px;letter-spacing:.4px;color:rgba(232,240,254,.92);background:rgba(10,12,18,.78);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 44px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(22px) saturate(1.2);-webkit-backdrop-filter:blur(22px) saturate(1.2);opacity:0;transform:translateY(8px);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .24s cubic-bezier(.16,1,.3,1),transform .24s cubic-bezier(.16,1,.3,1),bottom .38s cubic-bezier(.16,1,.3,1)}
+#local-sync-badge.show{opacity:1;transform:translateY(0)}
+body.controls-visible #local-sync-badge{bottom:190px}
 body.desktop-shell.diy-mode #fx-panel{top:64px;bottom:132px;max-height:none}
 body.desktop-shell.diy-mode #fx-fab{bottom:24px}
 body.desktop-shell.diy-mode #fx-fab-hide-btn{bottom:37px}

@@ -492,7 +492,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.19';
+var APP_VERSION = '1.7.20';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -27690,11 +27690,13 @@ function refreshSavedLocalMusicFolderInBackground(folderPath, snapshot) {
     saveLocalLibrarySnapshot(result.folderPath || folderPath, result, false, true);
     if (snapshotSignature && nextSig === snapshotSignature) {
       scheduleLocalLibraryIndexSave(result.folderPath || folderPath, ownedSongs || [], 900);
+      reportLocalLibrarySyncedCount((ownedSongs || []).length);
       return;
     }
     var passiveRestoredQueue = localLibraryPassiveQueue && !playing && !(audio && audio.src && !audio.paused);
     if (playQueue.length && !passiveRestoredQueue) {
-      showToast('本地音乐文件夹已更新，下次启动会自动同步');
+      // 有队列正在播时不再整库重建，改成就地增删改：播放不断，改过的标签与封面照样跟着刷新。
+      if (applyLocalLibraryAutoSync(result.folderPath || folderPath, result)) return;
       scheduleLocalLibraryIndexSave(result.folderPath || folderPath, ownedSongs || [], 900);
       return;
     }
@@ -27800,6 +27802,8 @@ async function handleLocalFolderFiles(files, opts) {
   if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
   if (!opts.restored) setPeek(document.getElementById('playlist-panel'), true, 'pl');
   scheduleLocalLibraryIndexSave(opts.folderPath || libraryFolderPath, songs, 120);
+  registerLocalLibraryWatchRoots(libraryFolderPath);
+  if (opts.restored) reportLocalLibrarySyncedCount(songs.length);
   function refreshAfterAssetHydration(count) {
     if (localLibrarySongs !== songs) return;
     if (!count) return;
@@ -27867,6 +27871,8 @@ async function handleLocalFolderFiles(files, opts) {
 function clearEmptyLocalLibrary(folderPath, opts) {
   opts = opts || {};
   if (folderPath && opts.persist !== false) saveLocalLibraryFolderPath(folderPath);
+  // 清空后仍然盯着这个目录：往空文件夹里放进第一首歌时才能自动入库。
+  registerLocalLibraryWatchRoots(folderPath || savedLocalLibraryFolderPath());
   if (localLibraryIndexWriteTimer) {
     clearTimeout(localLibraryIndexWriteTimer);
     localLibraryIndexWriteTimer = null;
@@ -27938,6 +27944,466 @@ function clearEmptyLocalLibrary(folderPath, opts) {
   forcePlaybackControlsInteractive();
   pushMiniPlayerState(false);
 }
+
+var LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS = 700;
+var LOCAL_LIBRARY_SYNC_BADGE_HOLD_MS = 4200;
+var localLibraryWatchRoot = '';
+var localLibraryWatchUnsubscribe = null;
+var localLibraryWatchPendingRoot = '';
+var localLibraryWatchSyncTimer = null;
+var localLibraryWatchSyncRunning = false;
+var localLibraryWatchSyncQueued = false;
+var localLibrarySyncBadgeTimer = null;
+
+/**
+ * 给曲库数量加千分位。曲库动辄上万首，`已同步 12431 首歌曲` 读起来太费劲。
+ * @param {number} count 歌曲数量。
+ * @returns {string} 带千分位分隔的数字文本。
+ */
+function formatLocalLibrarySyncCount(count) {
+  var value = Math.floor(Number(count) || 0);
+  if (value < 0) value = 0;
+  var text = String(value);
+  var out = '';
+  for (var i = 0; i < text.length; i++) {
+    if (i > 0 && (text.length - i) % 3 === 0) out += ',';
+    out += text.charAt(i);
+  }
+  return out;
+}
+
+/**
+ * 取右下角同步指示器节点，没有就懒建一个。挂在 body 上，不占 index.html 的静态结构。
+ * @returns {HTMLElement|null} 指示器节点；文档还没就绪时返回 null。
+ */
+function localLibrarySyncBadgeElement() {
+  var el = document.getElementById('local-sync-badge');
+  if (el) return el;
+  if (!document.body) return null;
+  el = document.createElement('div');
+  el.id = 'local-sync-badge';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+  document.body.appendChild(el);
+  return el;
+}
+
+/**
+ * 在右下角报一次已同步的曲库数量。指示器只读不点，几秒后自己淡出，不抢任何交互。
+ * @param {number} count 当前曲库歌曲数量。
+ * @returns {string} 实际显示的文本；无法显示时返回空串。
+ */
+function reportLocalLibrarySyncedCount(count) {
+  var el = localLibrarySyncBadgeElement();
+  if (!el) return '';
+  var text = '已同步 ' + formatLocalLibrarySyncCount(count) + ' 首歌曲';
+  el.textContent = text;
+  el.classList.add('show');
+  if (localLibrarySyncBadgeTimer) clearTimeout(localLibrarySyncBadgeTimer);
+  localLibrarySyncBadgeTimer = setTimeout(function(){
+    localLibrarySyncBadgeTimer = null;
+    var node = document.getElementById('local-sync-badge');
+    if (node) node.classList.remove('show');
+  }, LOCAL_LIBRARY_SYNC_BADGE_HOLD_MS);
+  return text;
+}
+
+/**
+ * 比对现有曲库与最新扫描结果。用路径键认人、用「路径|大小|修改时间」签名判断是否被改过，
+ * 所以改标签或换封面只会落进 changed，不会被当成"删一首再加一首"而丢掉播放次数与收藏。
+ * @param {Array<object>} currentSongs 当前曲库歌曲。
+ * @param {Array<object>} nextSongs 最新扫描构造出的歌曲。
+ * @returns {{plan: Array<object>, removed: Array<object>, added: number, changed: number, unchanged: number, total: number}} 差异计划。
+ */
+function localLibraryAutoSyncDiff(currentSongs, nextSongs) {
+  var current = Array.isArray(currentSongs) ? currentSongs : [];
+  var next = Array.isArray(nextSongs) ? nextSongs : [];
+  var byPathKey = Object.create(null);
+  for (var i = 0; i < current.length; i++) {
+    var song = current[i];
+    if (!song) continue;
+    var key = localLibraryPathKeyFromSong(song);
+    if (!key || byPathKey[key]) continue;
+    byPathKey[key] = { song: song, index: i, matched: false };
+  }
+  var plan = new Array(next.length);
+  var added = 0;
+  var changed = 0;
+  var unchanged = 0;
+  for (var j = 0; j < next.length; j++) {
+    var candidate = next[j];
+    var candidateKey = candidate ? localLibraryPathKeyFromSong(candidate) : '';
+    var entry = candidateKey ? byPathKey[candidateKey] : null;
+    if (!entry || entry.matched) {
+      plan[j] = { song: candidate, next: null, state: 'new' };
+      added++;
+      continue;
+    }
+    entry.matched = true;
+    if (localLibraryFileSignatureFromSong(entry.song) === localLibraryFileSignatureFromSong(candidate)) {
+      plan[j] = { song: entry.song, next: null, state: 'unchanged' };
+      unchanged++;
+      continue;
+    }
+    plan[j] = { song: entry.song, next: candidate, state: 'changed' };
+    changed++;
+  }
+  var removed = [];
+  for (var pathKey in byPathKey) {
+    var record = byPathKey[pathKey];
+    if (!record.matched) removed.push(record);
+  }
+  removed.sort(function(a, b){ return a.index - b.index; });
+  return { plan: plan, removed: removed, added: added, changed: changed, unchanged: unchanged, total: next.length };
+}
+
+/**
+ * 把改动过的文件字段搬到原有歌曲对象上。就地改而不是换对象，播放队列、当前歌曲、
+ * 迷你播放器和桌面歌词才不会因为一次改标签就丢掉引用。有在途解析任务时拒绝接管，
+ * 让那一首留到下一轮同步，避免旧任务把过期标签写回新文件。
+ * @param {object} song 曲库里已有的歌曲对象。
+ * @param {object} next 最新扫描构造出的同路径歌曲。
+ * @returns {boolean} 是否完成接管。
+ */
+function adoptLocalLibraryAutoSyncSong(song, next, stale) {
+  if (!song || !next) return false;
+  if (song.localMetadataPromise || song.localCoverPromise || song.localLyricPromise || song.localLyricCachePromise) return false;
+  if (song.localCoverLoading || song.localLyricLoading) return false;
+  var prevCoverKey = songCustomCoverKey(song);
+  var prevThumb = song.localCoverThumbDataUrl || '';
+  var prevCoverObjectUrl = song.localCoverObjectUrl || '';
+  if (stale) stale.push({ localUrl: song.localUrl || '', localCoverObjectUrl: prevCoverObjectUrl });
+  releaseLocalFullCoverData(song);
+  var fields = ['name', 'artist', 'localKey', 'localPath', 'localFilePathAbsolute', 'localFileSize',
+    'localFileLastModified', 'localLibraryPathKey', 'localLibraryFileSignature', 'localFormat',
+    'localFileUrl', 'localFile', 'localLyricFile', 'localLyricFileName', 'localCoverFile', 'localCoverFileName'];
+  for (var i = 0; i < fields.length; i++) song[fields[i]] = next[fields[i]];
+  finalizeLocalLibraryAutoSyncAdoption(song, prevCoverKey, prevThumb, prevCoverObjectUrl);
+  return true;
+}
+
+/**
+ * 接管后清空派生缓存并迁移自定义封面。localKey 里带着文件大小与修改时间，
+ * 不迁移的话用户手挑的封面会因为一次改标签就对不上号；标签文本字段一律清空，
+ * 这样"把标题标签删掉"也能如实回落到文件名，而不是留着上一版的旧标题。
+ * @param {object} song 已完成字段接管的歌曲对象。
+ * @param {string} prevCoverKey 接管前的自定义封面键。
+ * @param {string} prevThumb 接管前的封面缩略图数据。
+ * @param {string} prevCoverObjectUrl 接管前的封面 Object URL。
+ * @returns {void}
+ */
+function finalizeLocalLibraryAutoSyncAdoption(song, prevCoverKey, prevThumb, prevCoverObjectUrl) {
+  var nextCoverKey = songCustomCoverKey(song);
+  if (prevCoverKey && nextCoverKey && prevCoverKey !== nextCoverKey) {
+    try {
+      var covers = ensureCustomCoverMap();
+      var custom = covers[prevCoverKey];
+      if (custom && !covers[nextCoverKey]) {
+        covers[nextCoverKey] = custom;
+        delete covers[prevCoverKey];
+        saveCustomCoverMap();
+      }
+    } catch (e) {}
+  }
+  if (song.customCover && (song.customCover === prevThumb || song.customCover === prevCoverObjectUrl)) delete song.customCover;
+  song.localUrl = '';
+  song.localCoverObjectUrl = '';
+  song.localCoverThumbDataUrl = '';
+  song.localCoverDataUrl = '';
+  song.localCoverLoaded = false;
+  song.localCoverLightScanned = false;
+  song.localLyricText = '';
+  song.localLyricTagName = '';
+  song.localLyricLoaded = false;
+  song.localLyricLightScanned = false;
+  song.localLyricResidencyReleased = false;
+  song.localMetadataLoaded = false;
+  song.localMetadataTagSchema = 0;
+  song.album = '';
+  song.albumArtist = '';
+  song.genre = '';
+  song.trackNumber = '';
+  song.year = '';
+  song.localIndexedLyricStatus = '';
+  song.localIndexedCoverStatus = '';
+  song.localIndexedFileSignature = '';
+  song.localLibraryIndexApplied = false;
+  song.localLibraryChangeState = 'modified';
+  hydrateCustomCover(song);
+  invalidateSongCoverCache(song);
+  updateLocalAudioQualityInfo(song);
+}
+
+/**
+ * 按差异计划就地重排曲库数组。整个函数只改数组内容不换数组本身，
+ * 因为播放源是曲库时 playQueue 与 localLibrarySongs 是同一个数组，
+ * 而全局各处的归属判断都在比对数组身份，换一个新数组等于把正在播的队列判成过期。
+ * @param {Array<object>} songs 需要就地同步的曲库数组。
+ * @param {object} diff localLibraryAutoSyncDiff 的输出。
+ * @param {Array<object>} protectedSongs 不允许被移除的歌曲（正在播放的那一首）。
+ * @param {Array<Array<object>>} liveLists 仍可能共用同一 Object URL 的存活列表。
+ * @returns {{ok: boolean, added: number, changed: number, removed: number, deferred: number, kept: number, total: number}} 应用结果。
+ */
+function applyLocalLibraryAutoSyncDiff(songs, diff, protectedSongs, liveLists) {
+  if (!Array.isArray(songs) || !diff || !Array.isArray(diff.plan)) {
+    return { ok:false, added:0, changed:0, removed:0, deferred:0, kept:0, total:0 };
+  }
+  var guarded = [];
+  var guardSource = protectedSongs || [];
+  for (var g = 0; g < guardSource.length; g++) {
+    if (guardSource[g] && guarded.indexOf(guardSource[g]) < 0) guarded.push(guardSource[g]);
+  }
+  var stale = [];
+  var next = [];
+  var fresh = [];
+  var changed = 0;
+  var deferred = 0;
+  for (var i = 0; i < diff.plan.length; i++) {
+    var step = diff.plan[i];
+    if (!step || !step.song) continue;
+    if (step.state === 'changed' && step.next) {
+      // 正在播放的那一首不能回收旧 Object URL：audio.src 还指着它，撤销就等于当场断音。
+      var collect = guarded.indexOf(step.song) < 0 ? stale : null;
+      if (adoptLocalLibraryAutoSyncSong(step.song, step.next, collect)) { changed++; fresh.push(step.song); }
+      else deferred++;
+    } else if (step.state === 'new') {
+      fresh.push(step.song);
+    }
+    next.push(step.song);
+  }
+  var removedSongs = [];
+  var kept = 0;
+  var removedPlan = Array.isArray(diff.removed) ? diff.removed : [];
+  for (var r = 0; r < removedPlan.length; r++) {
+    var record = removedPlan[r];
+    if (!record || !record.song) continue;
+    if (guarded.indexOf(record.song) >= 0) {
+      // 正在播放的文件被删掉了也先留在列表里，等下次重启或重新导入再收尾，中途不打断播放。
+      var at = Math.min(Math.max(0, Number(record.index) || 0), next.length);
+      next.splice(at, 0, record.song);
+      kept++;
+      continue;
+    }
+    removedSongs.push(record.song);
+  }
+  songs.length = 0;
+  for (var k = 0; k < next.length; k++) songs.push(next[k]);
+  var lists = [songs].concat(Array.isArray(liveLists) ? liveLists : []);
+  if (stale.length) revokeDiscardedLocalSongObjectUrls(stale, lists);
+  if (removedSongs.length) revokeDiscardedLocalSongObjectUrls(removedSongs, lists);
+  return {
+    ok: true,
+    added: Number(diff.added) || 0,
+    changed: changed,
+    removed: removedSongs.length,
+    deferred: deferred,
+    kept: kept,
+    total: songs.length,
+    fresh: fresh,
+  };
+}
+
+/**
+ * 把一次后台扫描结果就地同步进当前曲库：新增入库、消失清理、改过的重新解析标签与封面，
+ * 最后在右下角报一次总数。不再像过去那样只弹"下次启动会自动同步"然后什么都不做。
+ * @param {string} folderPath 曲库根路径。
+ * @param {{files?: Array<object>, folderPath?: string}} result 主进程扫描结果。
+ * @returns {boolean} 是否真的产生了同步动作。
+ */
+function applyLocalLibraryAutoSync(folderPath, result) {
+  var songs = localLibrarySongs;
+  if (!Array.isArray(songs) || !songs.length) return false;
+  if (!result || !Array.isArray(result.files)) return false;
+  var nextSongs = createLocalSongsFromFiles(result.files, { folderOnly: true });
+  // 扫到空多半是磁盘掉线或权限变化，宁可这轮不动也不能顺手清空整库；清空仍走原来的空文件夹路径。
+  if (!nextSongs.length) return false;
+  var diff = localLibraryAutoSyncDiff(songs, nextSongs);
+  if (!diff.added && !diff.changed && !diff.removed.length) {
+    reportLocalLibrarySyncedCount(songs.length);
+    return false;
+  }
+  var queueOwnsLibrary = playQueue === songs;
+  var playingSong = (playQueue && currentIdx >= 0) ? playQueue[currentIdx] : null;
+  var previousIdx = currentIdx;
+  var applied = applyLocalLibraryAutoSyncDiff(songs, diff, [currentLocalSong, playingSong], [playQueue || [], playlist || []]);
+  if (!applied.ok) return false;
+  if (queueOwnsLibrary && playingSong) {
+    var movedIdx = songs.indexOf(playingSong);
+    currentIdx = movedIdx >= 0 ? movedIdx : Math.max(0, Math.min(previousIdx, songs.length - 1));
+  } else if (queueOwnsLibrary) {
+    currentIdx = Math.max(0, Math.min(previousIdx, songs.length - 1));
+  }
+  invalidateLocalPlaylistSongLookup();
+  resetSearchRenderCache();
+  finishLocalLibraryAutoSync(folderPath, songs, applied);
+  return true;
+}
+
+/**
+ * 同步落地后的收尾：补水新歌资产缓存、重排后台解析队列、刷新可见界面并保存索引。
+ * @param {string} folderPath 曲库根路径。
+ * @param {Array<object>} songs 已就地同步好的曲库数组。
+ * @param {{added: number, changed: number, removed: number, deferred: number}} applied 应用结果。
+ * @returns {void}
+ */
+function finishLocalLibraryAutoSync(folderPath, songs, applied) {
+  var reason = 'local-library-auto-sync';
+  safeRenderQueuePanel(reason, { scrollCurrent: false });
+  safeShelfRebuild(reason, true);
+  renderHomeDiscover();
+  if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
+  refreshLocalPlaylistSurfaces(reason);
+  if (currentIdx >= 0 && playQueue && playQueue[currentIdx]) updateControlTrackInfo(playQueue[currentIdx]);
+  scheduleLocalLibraryIndexSave(folderPath || savedLocalLibraryFolderPath(), songs, 240);
+  /**
+   * 资产缓存补水结束后重排后台解析队列。startLocalLibraryBackgroundProcessing 是替换语义，
+   * 只塞增量会把原本还没解析完的老歌挤出队列，所以要按整库重新挑一次待办。
+   * @returns {void}
+   */
+  function startAutoSyncAssetProcessing() {
+    if (localLibrarySongs !== songs) return;
+    startLocalLibraryBackgroundProcessing(localLibraryAssetProcessingSongs(songs), { refreshed: true });
+    reportLocalLibrarySyncedCount(songs.length);
+  }
+  var pending = Array.isArray(applied && applied.fresh) ? applied.fresh : [];
+  if (!pending.length) {
+    startAutoSyncAssetProcessing();
+    return;
+  }
+  hydrateLocalAssetCacheForSongs(pending, { includeLyrics: false })
+    .catch(function(e){ console.warn('[LocalLibraryAutoSyncAssetCache]', e); })
+    .then(startAutoSyncAssetProcessing);
+}
+
+/**
+ * 判断两个监控根是否指同一目录。主进程会把路径 resolve 过一遍，
+ * 大小写和尾部分隔符都可能和渲染层存的不一样，直接字符串比会误判成"别的库"。
+ * @param {string} a 路径 A。
+ * @param {string} b 路径 B。
+ * @returns {boolean} 是否为同一目录。
+ */
+function localLibraryWatchRootMatches(a, b) {
+  var left = normalizeLocalLibraryPathKey(a).replace(/\/+$/, '');
+  var right = normalizeLocalLibraryPathKey(b).replace(/\/+$/, '');
+  return !!left && left === right;
+}
+
+/**
+ * 把当前曲库根注册给主进程的文件夹监控。渲染层只维护一个曲库根，
+ * 但 IPC 与主进程都按列表设计，以后要接多个根不用再改协议。
+ * @param {string} folderPath 曲库根路径。
+ * @returns {boolean} 是否已交给主进程。
+ */
+function registerLocalLibraryWatchRoots(folderPath) {
+  var api = desktopLocalMusicApi();
+  if (!api || typeof api.setLocalLibraryWatchRoots !== 'function') return false;
+  var text = String(folderPath || savedLocalLibraryFolderPath() || '');
+  if (localLibraryWatchUnsubscribe && localLibraryWatchRootMatches(localLibraryWatchRoot, text)) return true;
+  localLibraryWatchRoot = text;
+  if (!localLibraryWatchUnsubscribe && typeof api.onLocalLibraryWatchChanged === 'function') {
+    try {
+      localLibraryWatchUnsubscribe = api.onLocalLibraryWatchChanged(handleLocalLibraryWatchChanged) || null;
+    } catch (e) {
+      localLibraryWatchUnsubscribe = null;
+    }
+  }
+  try {
+    var call = api.setLocalLibraryWatchRoots(text ? [text] : []);
+    if (call && typeof call.catch === 'function') call.catch(function(e){ console.warn('[LocalLibraryWatch]', e); });
+  } catch (e2) {
+    console.warn('[LocalLibraryWatch]', e2);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 收到主进程合并后的文件夹变更通知。真正的重扫交给防抖，
+ * 所以往里拷一整张专辑不会被放大成上百次扫描。
+ * @param {{folderPath?: string, overflow?: boolean, reason?: string}} payload 变更通知。
+ * @returns {boolean} 是否安排了同步。
+ */
+function handleLocalLibraryWatchChanged(payload) {
+  if (!LOCAL_ONLY_MODE) return false;
+  var folderPath = String((payload && payload.folderPath) || localLibraryWatchRoot || '');
+  if (!folderPath) return false;
+  if (localLibraryWatchRoot && !localLibraryWatchRootMatches(folderPath, localLibraryWatchRoot)) return false;
+  if (!localLibraryReady) return false;
+  return scheduleLocalLibraryWatchSync(folderPath, LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS);
+}
+
+/**
+ * 安排一次监控触发的曲库重扫。密集通知只保留最后一次；正在扫的时候只排一轮补扫，
+ * 避免边扫边被新事件推着无限重入。
+ * @param {string} folderPath 曲库根路径。
+ * @param {number} delay 延迟毫秒数。
+ * @returns {boolean} 是否已排上。
+ */
+function scheduleLocalLibraryWatchSync(folderPath, delay) {
+  localLibraryWatchPendingRoot = String(folderPath || localLibraryWatchPendingRoot || localLibraryWatchRoot || '');
+  if (!localLibraryWatchPendingRoot) return false;
+  if (localLibraryWatchSyncRunning) {
+    localLibraryWatchSyncQueued = true;
+    return true;
+  }
+  if (localLibraryWatchSyncTimer) clearTimeout(localLibraryWatchSyncTimer);
+  localLibraryWatchSyncTimer = setTimeout(function(){
+    localLibraryWatchSyncTimer = null;
+    runLocalLibraryWatchSync().catch(function(e){ console.warn('[LocalLibraryWatchSync]', e); });
+  }, delay == null ? LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS : delay);
+  return true;
+}
+
+/**
+ * 执行一次监控触发的重扫并就地同步曲库。不带快照调用主进程扫描即可命中 SQLite 增量路径，
+ * 只 stat 变过的目录；扫完中途换过库就整轮作废，不写任何东西。
+ * 曲库当前为空（上次扫到空文件夹）时改走原来的整库导入路径，这样"空文件夹里放进第一首歌"也能自动入库。
+ * @returns {Promise<boolean>} 是否完成了一轮同步。
+ */
+async function runLocalLibraryWatchSync() {
+  if (localLibraryWatchSyncRunning) {
+    localLibraryWatchSyncQueued = true;
+    return false;
+  }
+  var folderPath = localLibraryWatchPendingRoot || localLibraryWatchRoot || savedLocalLibraryFolderPath();
+  var api = desktopLocalMusicApi();
+  if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return false;
+  var ownedSongs = localLibrarySongs;
+  var rebuildFromEmpty = !Array.isArray(ownedSongs) || !ownedSongs.length;
+  localLibraryWatchSyncRunning = true;
+  localLibraryWatchPendingRoot = '';
+  try {
+    var result = await api.scanLocalMusicFolder(folderPath);
+    if (localLibrarySongs !== ownedSongs) return false;
+    if (!result || !result.ok || !Array.isArray(result.files)) return false;
+    saveLocalLibrarySnapshot(result.folderPath || folderPath, result, false, true);
+    if (!rebuildFromEmpty) return applyLocalLibraryAutoSync(result.folderPath || folderPath, result);
+    if (!result.files.length) return false;
+    await handleLocalFolderFiles(result.files, {
+      folderOnly: true,
+      folderPath: result.folderPath || folderPath,
+      persist: false,
+      autoPlay: false,
+      restored: true,
+      refreshed: true,
+      desktopScanned: true,
+      directories: result.directories || [],
+      truncated: !!result.truncated
+    });
+    reportLocalLibrarySyncedCount((localLibrarySongs || []).length);
+    return true;
+  } catch (e) {
+    console.warn('[LocalLibraryWatchSync]', e);
+    return false;
+  } finally {
+    localLibraryWatchSyncRunning = false;
+    if (localLibraryWatchSyncQueued) {
+      localLibraryWatchSyncQueued = false;
+      scheduleLocalLibraryWatchSync(folderPath, LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS);
+    }
+  }
+}
+
 var fileInput = document.getElementById('file-input');
 if (fileInput) fileInput.addEventListener('change', function(e){ handleFiles(e.target.files); e.target.value = ''; });
 var localFolderInput = document.getElementById('local-folder-input');

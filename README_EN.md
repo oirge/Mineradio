@@ -11,6 +11,7 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Removed login, online music portal, update prompts, and unnecessary guides.
 - Support for importing local music folders.
 - Support for importing individual local music files.
+- Automatic music folder monitoring: new files are indexed, deleted files are pruned, tag and cover edits refresh on their own, no restart required.
 - Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) playback.
 - Support for `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` lyrics files with matching names.
 - Support for MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags, including timestamped LRC lyrics.
@@ -65,6 +66,7 @@ Build artifacts are located in `dist/`.
 - Mini player (pinnable, draggable)
 - Desktop lyrics window
 - Local music library management
+- Automatic music folder monitoring with a bottom-right synced-track indicator
 - Playlist management
 - Shuffle/repeat playback
 
@@ -72,15 +74,16 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.7.19 (2026-09-02)
+### Latest release v1.7.20 (2026-09-02)
 
+- Automatic music folder monitoring: new tracks are indexed, deleted tracks are pruned, edited tags and covers refresh on their own — no restart needed
+- Syncing never interrupts playback: the library is mutated in place, and the currently playing track stays put even if its file is gone
+- New bottom-right sync indicator: `已同步 12,431 首歌曲`
+- Fixed APE / DSD files being scanned but excluded from the library track count
 - Added tag, cover, embedded lyrics and duration parsing for OGG / OGA / OPUS / WAV / APE / DSD(.dsf)
 - APE and DSD now play directly: the desktop side wraps them as a virtual WAV stream, so Range requests and seeking keep working
-- WAV handles RF64 / BW64 64-bit sizes, so files larger than 4GB report the correct duration
 - The local library moved to SQLite with file-fingerprint and path indexes, and the old 16000-track cap is gone
-- Fixed mini player cover hit testing and the right-click race in the collapsed state
-- Added `THIRD-PARTY-NOTICES.md` for third-party component licenses
-- Full Node regression suite: `558/558` passing
+- Full Node regression suite: `594/594` passing
 
 ## Notice
 

@@ -1,3 +1,17 @@
+## v1.7.20 音乐文件夹自动监控
+
+- 发布版本从 `1.7.19` 提升为 `1.7.20`；已安装 `1.7.19` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
+- **音乐文件夹现在会被持续监控，改动即时生效。** 新增 `desktop/local-library-watcher.js`：`fs.watch(root, { recursive: true, persistent: false })` + `unref()` 挂载，`900ms` 防抖合并整张专辑的上百个事件，另有 `4500ms` 最长等待阀门保证长时间拷贝也能中途上报；递归监控不可用的平台自动降级成只看根目录一层；`EPERM` / `ENOENT`（权限拒绝、移动硬盘掉线）按 `5000ms → 60000ms` 指数退避重试，设备接回后自动恢复监控。
+- **四类改动各走各的路径，不再等下次启动。** 新增歌曲自动入库、删除歌曲自动清理、修改标签自动更新、修改封面自动刷新。旧行为是启动约 `1.2s` 后检测到目录变化、但只要有播放队列就弹一句「下次启动会自动同步」然后作废本轮结果；现在改成就地增删改。
+- **同步过程不打断播放。** `localLibrarySongs` 只做原地增删（`playbackSource === 'library'` 时它与 `playQueue` 是同一个数组，换数组会让所有归属判定失效）；改动过的歌只改字段、不换对象，`currentLocalSong`、`playQueue[currentIdx]`、迷你播放器与桌面歌词握着的引用全部继续有效；被删掉的文件如果正在播放则原位保留、`currentIdx` 按 `indexOf` 重算并夹紧，等下次启动再收尾。
+- 接管一首歌时按 `localKey`（`路径 + 大小 + 修改时间`）把 `customCoverMap` 里用户手挑的封面迁到新键，否则一次改标签就会让它变成孤儿；`localUrl` / `localCoverObjectUrl` 清空后交给既有的 `revokeDiscardedLocalSongObjectUrls` 回收，但正在播放那首的 blob 仍是 `audio.src`、单独跳过。
+- 标签被删除时如实回落：`album` / `albumArtist` / `genre` / `trackNumber` / `year` 清空、`name` / `artist` 退回文件名推导，不留上一版的旧值；`duration` 故意保留，避免刷新瞬间闪一下 `0:00`。元数据、封面或歌词解析还在途中（`localCoverPromise` 等标志）时本轮不接管，留到下一轮，避免过期结果写回。
+- **右下角新增同步指示器：`已同步 12,431 首歌曲`。** 千分位分组，`4.2s` 后自动淡出，`role=status` / `aria-live=polite`，`pointer-events:none` 不吃鼠标；元素由渲染层懒建并挂在 `body` 上，`public/index.html` 一行未动。
+- 监控根仍逐个走 `rememberLocalMusicRoot` 授权，未授权的根原样回报 `rejected`；两个新 IPC 通道 `mineradio-local-library-watch-set-roots` / `mineradio-local-library-watch-status` 均由 `trustedMainFrameHandler` 包裹，preload 侧只透传数组并返回退订函数。退出流程里监控句柄先于 SQLite 关闭。
+- 修掉一个会让上面这个数字本身报错的老问题：`.ape` 与 `.dsf` 一直在扫描白名单里，却漏在 `LOCAL_LIBRARY_AUDIO_EXTS` 之外，导致 APE / DSD 被扫到但不计入 SQLite 的 audio 计数与曲库签名。
+- 新增 `tests/local-library-watcher.test.js`（19 例，注入 `fs` 与定时器桩，覆盖防抖/最长等待双阀门、递归降级、指数退避、`overflow` 截断、增量 `setRoots` 与 `close` 后的静默）、`tests/local-library-auto-sync.test.js`（12 例，用 `node:vm` 跑 `public/app.js` 里的真实实现，钉死数组身份、播放保护、封面迁移与延迟接管）和 `tests/local-library-watch-wiring.test.js`（5 例，钉死扩展名集合与主进程/preload 的接线）；全量 Node 回归 `594/594` 通过。
+- 本轮未启动本机 Electron，未修改任何界面布局、交互入口与既有样式规则（仅为新增指示器追加 3 条 CSS）；Windows x64 安装资产由 GitHub Actions 远程构建。
+
 ## v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持
 
 - 发布版本从 `1.7.18` 提升为 `1.7.19`；已安装 `1.7.18` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。

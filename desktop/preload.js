@@ -75,6 +75,15 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   setLocalLibraryDbFavorite: (payload) => ipcRenderer.invoke('mineradio-local-library-db-set-favorite', payload || {}),
   readLocalLibraryDbStats: (payload) => ipcRenderer.invoke('mineradio-local-library-db-read-stats', payload || {}),
   trimLocalLibraryDb: (payload) => ipcRenderer.invoke('mineradio-local-library-db-trim', payload || {}),
+  // 音乐文件夹自动监控：监控列表由渲染层的曲库根决定，主进程只负责把合并后的变更推回来。
+  setLocalLibraryWatchRoots: (folders) => ipcRenderer.invoke('mineradio-local-library-watch-set-roots', Array.isArray(folders) ? folders : []),
+  getLocalLibraryWatchStatus: () => ipcRenderer.invoke('mineradio-local-library-watch-status'),
+  onLocalLibraryWatchChanged: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-local-library-watch-changed', listener);
+    return () => ipcRenderer.removeListener('mineradio-local-library-watch-changed', listener);
+  },
   onGlobalHotkey: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload || {});

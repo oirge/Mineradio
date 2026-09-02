@@ -4,14 +4,15 @@
 
 ## Stable Project Facts
 
-- 当前源码续版：`v1.7.19`（新增 Ogg Vorbis/Opus/Ogg FLAC、WAV（含 RF64/BW64）、APE、DSF 的标签/封面/歌词/时长解析；APE 与 DSD 经 `desktop/audio/wav-stream.js` 实时转成虚拟 WAV 后按 Range 播放；`desktop/audio/ape-decoder.js` 移植自 FFmpeg 属 `LGPL-2.1+`，声明记在根目录 `THIRD-PARTY-NOTICES.md`；DST 压缩的 `.dff` 不在范围内。`558/558` 全绿）。
-- 上一续版：`v1.7.18`（本地曲库改用 `node:sqlite` + 文件指纹/路径索引常驻磁盘；扫描先问数据库走增量、索引按行摘要增量回写、解除历史 `16000` 条截断；播放次数/最近播放/收藏状态双写进库但 `localStorage` 仍是唯一权威，UI 零改动）。
+- 当前源码续版：`v1.7.20`（音乐文件夹自动监控：新增 `desktop/local-library-watcher.js`（`fs.watch` 递归 + `unref`，防抖 `900ms` / 最长等待 `4500ms` 双阀门，递归不支持时降级只看根一层，`EPERM`/`ENOENT` 按 `5000→60000ms` 退避重试，`overflow` 时让渲染层退回整库比对）；渲染层 `applyOwnedLocalLibraryRefresh` 有队列时不再提示「下次启动会自动同步」，改走 `applyLocalLibraryAutoSync` 原地增删改——`localLibrarySongs` 与 `playQueue` 是同一个数组只能原地改、改动的歌只改字段不换对象、正在播放那首即使文件被删也原位保留、接管时迁移 `customCoverMap` 的 `local:<localKey>` 并清空 `localUrl`、有在途解析则推迟到下一轮；右下角新增 `已同步 N 首歌曲` 指示器（懒建 `#local-sync-badge`、`4200ms` 淡出、`index.html` 未动、`app.css` 只追加 3 条）；顺手修掉 `.ape`/`.dsf` 漏在 `LOCAL_LIBRARY_AUDIO_EXTS` 外导致不计入曲库数量的老问题。`594/594` 全绿，UI 零改动）。
+- 上一续版：`v1.7.19`（新增 Ogg Vorbis/Opus/Ogg FLAC、WAV（含 RF64/BW64）、APE、DSF 的标签/封面/歌词/时长解析；APE 与 DSD 经 `desktop/audio/wav-stream.js` 实时转成虚拟 WAV 后按 Range 播放；`desktop/audio/ape-decoder.js` 移植自 FFmpeg 属 `LGPL-2.1+`，声明记在根目录 `THIRD-PARTY-NOTICES.md`；DST 压缩的 `.dff` 不在范围内。`558/558` 全绿）。
+- 更早续版：`v1.7.18`（本地曲库改用 `node:sqlite` + 文件指纹/路径索引常驻磁盘；扫描先问数据库走增量、索引按行摘要增量回写、解除历史 `16000` 条截断；播放次数/最近播放/收藏状态双写进库但 `localStorage` 仍是唯一权威，UI 零改动）。
 - 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 历史检查点摘要：`v1.7.16`（迷你播放器右键命中与安全边界加固发布候选；标准收回态只有封面热区（外扩 `6px`）可点可右键，透明空白交还桌面；标准展开态与极简外壳整窗可右键；封面拖动、跨显示器移动、展开方向持久化、迷你页面 URL/frame/preload/IPC 信任边界、极简负载与失败重试均已修复）基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口，`v1.7.7` 把交接时机改成「外壳淡到全透明之后再交给系统最小化」（`240ms`，终态 `scale(.6)`）才真正看得出来（见下方 v1.7.7 / v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**，**`v1.7.11`~`v1.7.14` 起迷你播放器右键菜单与任务栏托盘共用同一份 `buildAppContextMenuTemplate()`、六项完全一致（拖拽区靠 `system-context-menu` 拦系统菜单）；收回态只有封面参与命中、封面外交还桌面，展开态与极简整窗可右键（见下方 v1.7.14 / v1.7.13 区块）**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
-- 当前工作分支：`main`。`feat/format-support-ogg-ape-wav-dsf`（v1.7.18 + v1.7.19）已通过 PR #24 以合并提交 `f8b40fc` 并入 `main`，分支保留未删；`main` 现在与该分支头 `265cd61` 的树完全一致，版本 `1.7.19`。
+- 当前工作分支：`main`。`feat/format-support-ogg-ape-wav-dsf`（v1.7.18 + v1.7.19）已通过 PR #24 以合并提交 `f8b40fc` 并入 `main`，分支保留未删；v1.7.20 的音乐文件夹自动监控直接落在 `main` 上，版本 `1.7.20`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -35,6 +36,22 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.20 音乐文件夹自动监控
+
+- 日期：2026-09-02。用户原话是「新增歌曲 → 自动入库 / 删除歌曲 → 自动清理 / 修改标签 → 自动更新 / 修改封面 → 自动刷新，然后右下角：已同步 12,431 首歌曲」。
+- 真正要修的行为缺口在 `applyOwnedLocalLibraryRefresh`：它启动约 `1.2s` 后**已经**能检测到文件夹变化，但只要 `playQueue.length` 非空就只弹 `showToast('本地音乐文件夹已更新，下次启动会自动同步')` 然后把本轮扫描结果整个作废。所以这一版不是「加监控」，而是「监控 + 把那条死路改成真正的原地同步」。
+- 监控模块 `desktop/local-library-watcher.js` 全部依赖注入（`fs` / `setTimer` / `clearTimer` / `isTrackedPath` / `onFlush` / `onStatusChange`），所以测试不碰真实文件系统也不碰真实定时器。两个阀门缺一不可：防抖 `900ms` 合并整张专辑的上百个事件，最长等待 `4500ms` 不被事件重排，否则持续拷贝会把防抖无限推后、一次都不上报。
+- `fs.watch` 句柄必须 `unref()`，不然退出流程会被 watcher 吊住。退出时 `closeLocalLibraryWatcher()` 必须排在 `closeLocalLibraryStore()` 之前。
+- 数组身份是这一版最容易踩的坑：`playbackSource === 'library'` 时 `playQueue === localLibrarySongs`（同一个数组对象），全项目的归属判定都写成 `if (localLibrarySongs !== ownedSongs) return;`。所以同步只能 `songs.length = 0` + push 这种原地改法，任何 `songs = [...]` 都会静默废掉播放队列。同理改动过的歌只改字段、不换对象，否则 `currentLocalSong`、`playQueue[currentIdx]`、迷你播放器与桌面歌词握的引用会一起失效。原地改完还要 `invalidateLocalPlaylistSongLookup()`，因为 `getLocalPlaylistSongLookup` 按 `source`/`length`/`firstKey`/`lastKey` 缓存。
+- 免费重解析机制：`localAssetCacheKey(song) === song.localKey === 路径 + ':' + 大小 + ':' + 修改时间`，所以改标签换封面天然导致缓存未命中、自动重解析，不需要额外的失效逻辑；`localLibraryFileSignatureFromSong` = `pathKey|size|lastModified` 就是变更检测器。代价是 `songCustomCoverKey(song)` = `local:<localKey>` 也会跟着变，接管时必须迁移 `customCoverMap`，否则用户手挑的封面一次改标签就成孤儿。
+- `ensureLocalSongUrl` 先返回缓存的 `song.localUrl`，所以接管必须清空它；旧 blob 交既有 `revokeDiscardedLocalSongObjectUrls`，但正在播放那首的 blob 还是 `audio.src`，撤销就是当场断音，必须单独跳过。
+- 有在途解析（`localMetadataPromise` / `localCoverPromise` / `localLyricPromise` / `localLyricCachePromise` / `localCoverLoading` / `localLyricLoading`）时本轮不接管、留到下一轮：如果先把签名改对，旧任务的过期结果就永远写不回去了。
+- 标签删除要如实回落（`album` / `albumArtist` / `genre` / `trackNumber` / `year` 清空、`name` / `artist` 退回文件名推导），但 `duration` 故意保留，避免刷新瞬间闪一下 `0:00`。空扫描结果直接早退，不允许「扫到 0 首」把曲库清空。
+- 右下角指示器由渲染层懒建（`#local-sync-badge` 挂 `body`，`role=status` / `aria-live=polite` / `pointer-events: none`，`4200ms` 淡出），`public/index.html` 一行未动，`public/app.css` 只追加 3 条新规则、没改任何既有规则。刻意没加沉浸模式抑制规则——它本身是瞬时、不吃鼠标、会自动消失的。
+- `.ape` / `.dsf` 一直在 `LOCAL_LIBRARY_EXTS` 扫描白名单里，却漏在 `LOCAL_LIBRARY_AUDIO_EXTS` 外，于是 APE / DSD 被扫到但不计入 SQLite 的 audio 计数与曲库签名——正好就是这一版要显示的那个数字，顺手修掉。
+- 渲染层曲库仍是单根（`LOCAL_LIBRARY_FOLDER_STORE_KEY` 只存一个标量路径），但 watcher 模块、两个 IPC 与主进程接线都按多根设计。用户举的三个文件夹合并成一个可见曲库需要重写快照/索引/hydrate/扫描全链路并新增文件夹列表设置面板，属于上千行且必然动 UI 的改动，本轮按 `能不动 UI 就不动 UI` 明确未做，并已如实告知用户。
+- 测试新增 36 例（`594/594`）：watcher 19 例走注入桩，auto-sync 12 例用 `node:vm` 跑 `public/app.js` 的真实实现，wiring 5 例静态钉死扩展名集合与主进程/preload 接线。**vm 跨 realm 的坑**：vm 内用字面量造出的数组/对象带的是 vm realm 的原型，即便把外层 `Array`/`Object` 注入进 context 也一样，`assert/strict` 的 deepStrictEqual 会因原型不同直接判负；断言前必须 `Array.from(x)` / `Object.assign({}, x)` 拷回本 realm。
 
 ## v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持
 

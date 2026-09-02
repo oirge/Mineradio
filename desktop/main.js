@@ -41,6 +41,7 @@ const {
   makeStoreFingerprint,
   normalizeStorePathKey,
 } = require('./local-library-store');
+const { createLocalLibraryWatcher } = require('./local-library-watcher');
 registerWallpaperEngineScheme(protocol);
 
 const APP_NAME = 'Mineradio';
@@ -284,6 +285,7 @@ const LOCAL_LIBRARY_EXTS = new Set([
 // 曲库快照同时包含音频、歌词和封面文件；只有音频才计入 SQLite 的 audio 计数与曲库签名。
 const LOCAL_LIBRARY_AUDIO_EXTS = new Set([
   '.mp3', '.mp2', '.flac', '.m4a', '.m4b', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba', '.aif', '.aiff', '.aifc',
+  '.ape', '.dsf',
 ]);
 const LOCAL_LIBRARY_MIME = {
   '.mp3': 'audio/mpeg',
@@ -894,6 +896,121 @@ function loadLocalLibraryStoreRoot(folderPath, options) {
     fileCount: Number(loaded.fileCount) || 0,
     audioCount: Number(loaded.audioCount) || 0,
   };
+}
+
+let localLibraryWatcher = null;
+let localLibraryWatchRoots = [];
+
+/**
+ * 判断一条监控事件的相对路径是否值得唤醒扫描。只认曲库支持的音频、歌词和封面扩展名，
+ * 标签软件写出的 `.tmp` / `.part` 中间文件和系统的 `Thumbs.db` 都会在这里被挡掉。
+ * @param {string} relPath fs.watch 给出的相对路径。
+ * @returns {boolean} 是否属于曲库关心的文件。
+ */
+function localLibraryWatchTrackedPath(relPath) {
+  const text = String(relPath || '');
+  if (!text) return false;
+  return LOCAL_LIBRARY_EXTS.has(path.extname(text).toLowerCase());
+}
+
+/**
+ * 把一次合并后的文件夹变更推给主 renderer。渲染层拿到通知后走既有增量扫描，
+ * 主进程这里不自己改曲库状态，避免和渲染层的曲库所有权判定打两套账。
+ * @param {object} payload 监控器给出的变更快照。
+ * @returns {void}
+ */
+function broadcastLocalLibraryWatchChange(payload) {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+  const detail = payload || {};
+  mainWindow.webContents.send('mineradio-local-library-watch-changed', {
+    folderPath: String(detail.folderPath || ''),
+    paths: Array.isArray(detail.paths) ? detail.paths.slice(0, 64) : [],
+    changed: Array.isArray(detail.paths) ? detail.paths.length : 0,
+    overflow: !!detail.overflow,
+    reason: String(detail.reason || ''),
+  });
+}
+
+/**
+ * 懒创建曲库监控器。监控本身不该影响播放，任何创建失败都只降级成"没有监控"。
+ * @returns {object|null} 监控器实例；不可用时返回 null。
+ */
+function getLocalLibraryWatcher() {
+  if (localLibraryWatcher) return localLibraryWatcher;
+  try {
+    localLibraryWatcher = createLocalLibraryWatcher({
+      isTrackedPath: localLibraryWatchTrackedPath,
+      onFlush: broadcastLocalLibraryWatchChange,
+    });
+  } catch (e) {
+    console.warn('[LocalLibraryWatch] create failed', e && e.message);
+    localLibraryWatcher = null;
+  }
+  return localLibraryWatcher;
+}
+
+/**
+ * 应用渲染层给出的监控列表。每个根都要先过 `rememberLocalMusicRoot` 授权校验，
+ * 不存在或不是目录的路径直接落进 rejected，不会挂上监控也不会阻断其余根。
+ * @param {Array<string>} folders 期望监控的文件夹列表。
+ * @returns {object} 实际生效的监控列表与被拒项。
+ */
+function applyLocalLibraryWatchRoots(folders) {
+  const source = Array.isArray(folders) ? folders : [];
+  const authorized = [];
+  const rejected = [];
+  for (const folder of source) {
+    const text = typeof folder === 'string' ? folder.trim() : '';
+    if (!text) continue;
+    try {
+      authorized.push(rememberLocalMusicRoot(text));
+    } catch (e) {
+      rejected.push({ folderPath: text, error: e && e.message ? String(e.message) : 'LOCAL_LIBRARY_NOT_DIRECTORY' });
+    }
+  }
+  const watcher = getLocalLibraryWatcher();
+  if (!watcher) {
+    localLibraryWatchRoots = [];
+    return { ok: false, error: 'LOCAL_LIBRARY_WATCH_UNAVAILABLE', roots: [], rejected };
+  }
+  const applied = watcher.setRoots(authorized);
+  localLibraryWatchRoots = Array.isArray(applied.roots) ? applied.roots : [];
+  const status = watcher.getStatus();
+  return {
+    ok: true,
+    roots: localLibraryWatchRoots,
+    added: applied.added || [],
+    removed: applied.removed || [],
+    rejected,
+    watching: status.roots || [],
+  };
+}
+
+/**
+ * 读取监控状态。设置面板与自检都用它确认监控是否真的挂上了。
+ * @returns {object} 监控状态快照。
+ */
+function localLibraryWatchStatusSnapshot() {
+  if (!localLibraryWatcher) return { ok: true, active: false, roots: [], watching: [] };
+  const status = localLibraryWatcher.getStatus();
+  const watching = status.roots || [];
+  return {
+    ok: true,
+    active: watching.some((entry) => entry && entry.active),
+    roots: localLibraryWatchRoots.slice(),
+    watching,
+  };
+}
+
+/**
+ * 关闭曲库监控。退出前调用，避免 fs 句柄拖住进程退出。
+ * @returns {void}
+ */
+function closeLocalLibraryWatcher() {
+  if (!localLibraryWatcher) return;
+  try { localLibraryWatcher.close(); } catch (_e) {}
+  localLibraryWatcher = null;
+  localLibraryWatchRoots = [];
 }
 
 /**
@@ -4153,6 +4270,22 @@ ipcMain.handle('mineradio-local-music-refresh-entries', trustedMainFrameHandler(
   }
 }));
 
+ipcMain.handle('mineradio-local-library-watch-set-roots', trustedMainFrameHandler(async (_event, folders) => {
+  try {
+    return applyLocalLibraryWatchRoots(folders);
+  } catch (e) {
+    return { ok: false, error: e.message || 'LOCAL_LIBRARY_WATCH_SET_FAILED', roots: [] };
+  }
+}));
+
+ipcMain.handle('mineradio-local-library-watch-status', trustedMainFrameHandler(async () => {
+  try {
+    return localLibraryWatchStatusSnapshot();
+  } catch (e) {
+    return { ok: false, error: e.message || 'LOCAL_LIBRARY_WATCH_STATUS_FAILED', roots: [] };
+  }
+}));
+
 /**
  * 统一包裹曲库数据库调用。数据库不可用或单次调用抛错都只降级成失败返回值，渲染层继续走 IndexedDB。
  * @param {(store:object)=>object} run 实际操作。
@@ -4877,6 +5010,7 @@ if (!gotSingleInstanceLock) {
     closeOverlayWindows();
     wallpaperEngineBridge.dispose();
     if (localServer && localServer.close) localServer.close();
+    closeLocalLibraryWatcher();
     closeLocalLibraryStore();
   });
 }
