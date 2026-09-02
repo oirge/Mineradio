@@ -1,5 +1,27 @@
 ﻿# 发布流程
 
+## v1.7.21 音量均衡（ReplayGain）
+- 正式发布版本从 `1.7.20` 提升为 `1.7.21`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:497`）与发布工作流默认 tag 保持一致，`1.7.20` → `1.7.21`。
+- 本版解决「FLAC 很大声 → 下一首老歌突然很小声 → 再下一首又爆音」：只读文件里已有的 ReplayGain / R128 标签做归一化，不做实时响度分析（实时算响度要完整解码整首歌，几万首的库根本跑不起来，而 foobar2000 / mp3gain / opusenc / rsgain 早就把标签写进文件了），没有标签的歌一律保持原始电平、绝不猜一个增益。
+- 音频链路插入独立增益节点 `source → analyser → replayGainNode → gainNode → destination`：必须排在 `analyser` 之后（否则可视化与节拍频谱会跟着均衡忽明忽暗，一首歌被压 `-9 dB` 画面就整首暗一截），必须排在 `gainNode` 之前（`gainNode.gain` 继续独占 `targetVolume` 与全部淡入淡出，`currentAudioOutputGain()` 语义不变）；`attemptAudioPlay` 是先 `playLocalQueueItem` 再 `initAudio()`，所以 `initAudio()` 末尾补一次 `setReplayGainNodeGain(replayGainActive.linear, true)`，否则重建音频节点后第一下没有均衡。
+- 增益引擎是纯函数 `resolveReplayGain`：`linear = 10^((gain + preamp)/20)`，防削波按 `min(linear, 1/peak)` 封顶而不是插压缩器（零延迟、不改音色、可单测），峰值标签缺失时与 foobar2000 一致不额外衰减，最后夹在 `0.05`–`4`；整轨与整专辑基准在缺标签时互相回退（峰值跟着基准一起回退），两个增益都没有时 `source='none'` 保持原始电平；Preamp `±12 dB` 按 `0.1 dB` 取整，播放中改设置走 `80ms` 斜坡、切歌立即生效。
+- 标签采集不新增 extractor：Vorbis comment（`parseFlacMetadataVorbisPayload` 被 FLAC 与 Ogg Vorbis / Opus / OggFLAC 共用，改一处覆盖全部）、ID3v2 `TXXX` 与新增 `readId3v2Rva2MasterGain`（RVA2 增益 = 有符号 int16 BE `/512` dB，只认主音量声道 `0x01`；`bitsRepresentingPeak` 各家 tagger 归一化不一致，取错峰值会在防削波开启时静默把整首压小，所以故意不取峰值）、APEv2、M4A `----` 加 `readM4aFreeformName`；Opus `R128_*` 按 Q7.8 `/256` 折算并补 `5 dB`（`-23 LUFS` → `-18 LUFS`），`iTunNORM` 响度参考不同故意排除，同一文件里真实 `REPLAYGAIN_*` 靠 `putReplayGainTag` 的首个可解析值胜出压过 R128 折算值；轻量扫描没读全（`_mineradioScanComplete === false`）时整块丢掉而不是写半截错增益。
+- 不重扫曲库：刻意绕开 `LOCAL_METADATA_VALUE_FIELDS`（它的 hydration 是真值判定，合法的 `0 dB` 增益会被当成缺失值丢掉），交接改成 `applyLocalMetadataTags` 里两行内联赋值且不计入 `changed`；持久化走 `assets.extra` JSON 列（`mergeExtraFields` 对嵌套对象无损往返），无需数据库迁移、无需升 `LOCAL_METADATA_TAG_SCHEMA`（升版会让整库回落重解析，几万首歌等于开机卡死一轮）；升级前入库的歌由 `ensureLocalReplayGainForSong` 在首次播放惰性补齐一次并写回缓存，确认无标签的置 `localReplayGainResolved` 不再重扫。
+- 归一化落在 `extractLocalMetadataTags` 出口的 `finalizeLocalMetadataReplayGain`，而不是放进 `applyLocalMetadataTags` / `ensureLocalMetadataForSong`：后两者落在多个 `node:vm` 测试切片里，切片外的新标识符会 `ReferenceError` 并被这些函数自己的 `.catch` 吞掉（然后照常置 `localMetadataLoaded = true` 并写缓存，测试全绿但行为已经错了）。
+- 设置存独立键 `mineradio-replay-gain-v1`（已在 `PERSISTENT_UI_STATE_KEYS`）而不是 `fx`：`fx` 是视觉系统状态，会被预设与用户存档的导入导出带走，别人一个预设就能改掉音量设定；`rg-preamp` 也不在 `bindFxPanel` 的滑杆白名单里，所以永远不会写进 `fx`。
+- UI 改动面：`public/index.html` 只在 `fx-playback-fold` 之后新增一个与既有折叠区同构的区块（复用 `fx-fold` / `fx-toggle-grid` / `fx-toggle` / `fx-section-label` / `fx-seg` / `fx-slider` / `mini-player-collapse-hint` 现成类名），`public/app.css` 一行未动；`fxPanelTargetForNode` 与 `relabelFxPanelControls` 各加一处 `fx-volume-fold` 让新区块归到 DIY 高级页，`fx-plugin-fold` 的 fall-through 结果不变、输出等价。
+- 发布前全量 Node 回归 `616/616`（新增 `tests/replay-gain-tag-parsing.test.js` 10 例，自建 FLAC / ID3v2 / RIFF / APEv2 / MP4 真实字节夹具，覆盖 R128 折算、RVA2 主声道、`iTunNORM` 排除与轻量扫描未读全；新增 `tests/replay-gain-normalization.test.js` 12 例，用 `node:vm` 跑真实增益实现，最后一例用源码正则钉死链路顺序、存档键与界面入口；`tests/auto-playback-startup.test.js` 两条正则按新增折叠区放宽，仍钉死 `fx-playback-fold` 在 relabel 列表里、`initAutoPlaybackControls()` 紧接启动恢复），并通过 `node --check public/app.js` 与 `git diff --check`。
+- 本轮资产改为**本机** `npm run build:win` 产出后用 `gh release upload --clobber` 上传（v1.7.19 / v1.7.20 是 GitHub Actions 远程构建）：本机 `node_modules` 已含 `electron-builder 26.15.3`，`electron 43.4.0` 走系统代理 `127.0.0.1:7897` 下载，`dist/win-unpacked` 与 NSIS 安装器一次通过；工作流 `Build and Release` 本轮未 dispatch，其默认 tag 已同步为 `v1.7.21` 备用。
+- Windows x64 NSIS 仍只发布 `Setup.exe`、`.blockmap`、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP；四项资产远端 `state=uploaded`。
+- 资产大小：`Mineradio-1.7.21-Setup.exe` `101602292` 字节；`.blockmap` `106010` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.21-SHA256SUMS.txt` `275` 字节（远端 API 报告的四项大小与本机产物逐一一致）。
+- SHA256：安装器 `ef83cb37fd72f43e45eb7ee0d2af33836adaf51f7aa1b2458ed54321c692dd98`；`.blockmap` `781c1bdd93d3d1aa31820889b0e89a10e66844d7386e4c97dc05cde71bf54327`；`latest.yml` `f78b18e5eec00e6f811e5a458eab501ecf449ab7c15c8bfc12088060e487b162`；清单自身 `ae4744bca9258e33c358f263d348111a548f2f7eb19678013946e3a42cc0e116`。清单内三项与本机产物实测全部 MATCH。
+- `latest.yml` 的版本为 `1.7.21`，`path` 与 `size`（`101602292`）与实际安装器一致；其 Setup SHA512 `4Cx/2RG3GCTpJF5ZGYjHihbrXA+uCNwGFaSqCvwVRz/bOfrQM2rArcJkuPptGZ2lQrSKOW8K1xl6kpydPQb3+g==` 与安装器实测 SHA512 一致。
+- 回下载复核范围如实记录：`latest.yml` 与 `Mineradio-1.7.21-SHA256SUMS.txt` 两项已从 Release 下载回来与本机产物逐字节比对一致；`Setup.exe`（约 `96.9 MiB`）与 `.blockmap` 本轮只核对远端 API 报告的大小，未整包回下载。
+- asar 核对：本机无 7z，改用 Node 直接解 `dist/win-unpacked/resources/app.asar` 的 pickle 头（叶子文件 54 个），内部 `package.json` 版本与 `public/app.js` 的 `APP_VERSION` 均为 `1.7.21`，`public/index.html` 含 `fx-volume-fold`、`public/app.js` 含 `replayGainNode.connect(gainNode)`——装进安装器的确实是本版代码。
+- 安装器未做代码签名（`build.win.signAndEditExecutable` 为 `false`，仓库未配置证书），`Get-AuthenticodeSignature` 实测 `NotSigned`，与历次发布一致。
+- 提交 `9e4bdef feat: normalize playback loudness with ReplayGain tags` 直接落在 `main`（推送前先 `git fetch` 确认与远端同点，无非快进），附注 tag `v1.7.21 音量均衡（ReplayGain）` 指向同一提交；Release 先建草稿再上传资产，校验通过后 `gh release edit v1.7.21 --draft=false --latest`，`repos/oirge/Mineradio/releases/latest` 已指向 `v1.7.21`。
+- 发布标题使用 `v1.7.21 音量均衡（ReplayGain）`。
+
 ## v1.7.20 音乐文件夹自动监控
 - 正式发布版本从 `1.7.19` 提升为 `1.7.20`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.19` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版让设置过的音乐文件夹持续受监控，四类改动即时生效、不必重启：新增歌曲自动入库、删除歌曲自动清理、修改标签自动更新、修改封面自动刷新，右下角报出 `已同步 N 首歌曲`。真正要修的行为缺口在 `applyOwnedLocalLibraryRefresh`——它启动约 `1.2s` 后已经能检测到目录变化，但只要有播放队列就只弹「下次启动会自动同步」然后把本轮扫描结果整个作废；现在改成走 `applyLocalLibraryAutoSync` 的原地增删改。

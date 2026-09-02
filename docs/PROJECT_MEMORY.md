@@ -52,7 +52,7 @@
 - 设置存独立键 `mineradio-replay-gain-v1` 而不是 `fx`：`fx` 是视觉系统状态，会被预设导入导出和用户存档带走，别人一个预设就能改掉你的音量设定。`rg-preamp` 也刻意不加进 `bindFxPanel` 的滑杆白名单。
 - UI 按「能不动 UI 就不动 UI」办：`public/index.html` 只在 `fx-playback-fold` 之后新增一个与既有折叠区同构的区块（全部复用现成类名），`public/app.css` 一行未动；`fxPanelTargetForNode` 与 `relabelFxPanelControls` 各加一处 `fx-volume-fold`，`fx-plugin-fold` 的 fall-through 结果不变，输出等价。
 - 测试：`tests/replay-gain-tag-parsing.test.js`（10 例，自建 FLAC / ID3v2 / RIFF / APEv2 / MP4 真实字节夹具）、`tests/replay-gain-normalization.test.js`（12 例，`node:vm` 跑真实增益实现，最后一例用源码正则钉死链路顺序、存档键与界面入口）；`tests/auto-playback-startup.test.js` 的两条正则按新增折叠区放宽。全量 `616/616` 通过。
-- 本轮未启动本机 Electron，Windows x64 安装资产由 GitHub Actions 远程构建。
+- 本轮资产改回本机构建：`npm run build:win`（`node_modules` 已含 `electron-builder 26.15.3`，`electron 43.4.0` 走系统代理 `127.0.0.1:7897` 下载）产出后用 `gh release upload --clobber` 上传四项资产，`Build and Release` 工作流未 dispatch（默认 tag 已同步为 `v1.7.21` 备用）。本机无 7z，asar 核对改用 Node 直接解 `app.asar` 的 pickle 头，内部 `package.json` 版本与 `public/app.js` 的 `APP_VERSION` 均为 `1.7.21`；安装器无代码签名（仓库未配置证书，`Get-AuthenticodeSignature` 实测 `NotSigned`），与历次发布一致。`latest.yml` 与 SHA256 清单已从 Release 回下载逐字节比对，安装器与 blockmap 只核对远端 API 报告的大小。
 
 ## v1.7.20 音乐文件夹自动监控
 
