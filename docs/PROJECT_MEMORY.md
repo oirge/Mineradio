@@ -1364,3 +1364,4 @@
 - **纯 CSS 改动的视觉验收办法（好用，留着）：** 起一个只有 `<link href="app.css">` 的临时静态页，把真实 markup 贴进去，再用查询参数把某个主题的 `--th-*` 与 `css` 段注入 `:root`，截图对比深/浅两种主题；`getComputedStyle` 可以直接验 `!important` 优先级到底谁赢。不必启动 Electron。临时文件放仓库外并用完删除。
 - 故意没有改 `public/plugin-builtin-themes.js`：外壳戴上 `.modal` 后内置主题已覆盖，改那个文件还得同步改被 `tests/plugin-system.test.js` 钉住的 `examples/plugins/*.json`，而令牌这条路对第三方主题一样有效。
 - 验证：全量 Node 回归 `712/712`（上一版基线 `709`），新增 3 例锁定外壳类名复用、`--th-*` 覆盖、队列样式不许残留写死青色与 `z-index:1450`。本轮未启动本机 Electron。
+- **发布产物的 `SHA256SUMS.txt` 是 CRLF 换行**（`release.yml` 里 pwsh `Out-File` 的默认行为），Linux / macOS / Git Bash 直接 `sha256sum -c` 会因文件名尾部的 `\r` 全部报 `No such file or directory`，要先 `tr -d '\r'`。核验发布资产时别被这个假失败带跑；下版要修就把那句 `Out-File` 换成 `[IO.File]::WriteAllText`。
