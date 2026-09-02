@@ -1,7 +1,7 @@
 {
   "name": "mineradio",
   "productName": "Mineradio",
-  "version": "1.7.26",
+  "version": "1.7.27",
   "description": "Mineradio 二改本地音乐播放器，支持 MP3/MP2/FLAC/M4A/M4B/WAV/OGG/OGA/AAC/Opus/WebM/WebA/AIFF/APE/DSD(.dsf)、本地封面和歌词",
   "author": "Mineradio",
   "main": "desktop/main.js",
@@ -30,12 +30,15 @@
       "LICENSE",
       "THIRD-PARTY-NOTICES.md",
       "!public/index.*.html",
-      "public/index.html"
+      "public/index.html",
+      "node_modules/uiohook-napi/**/*",
+      "node_modules/node-gyp-build/**/*"
     ],
     "asar": true,
     "asarUnpack": [
       "server.js",
-      "package.json"
+      "package.json",
+      "node_modules/uiohook-napi/**"
     ],
     "win": {
       "executableName": "Mineradio",
@@ -86,6 +89,9 @@
         "https://gh-proxy.com/"
       ]
     }
+  },
+  "dependencies": {
+    "uiohook-napi": "1.5.5"
   },
   "devDependencies": {
     "electron": "^43.4.0",

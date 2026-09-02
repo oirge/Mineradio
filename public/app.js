@@ -128,6 +128,7 @@ var LOCAL_LIBRARY_FOLDER_STORE_KEY = 'mineradio-local-library-folder-v1';
 var LOCAL_LIBRARY_SNAPSHOT_STORE_KEY = 'mineradio-local-library-snapshot-v1';
 var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
+var SONG_RESUME_STORE_KEY = 'mineradio-song-resume-v1';
 var QUEUE_SNAPSHOT_STORE_KEY = 'mineradio-queue-snapshots-v1';
 var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
 var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
@@ -153,6 +154,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   FREE_CAMERA_STORE_KEY,
   LOCAL_LIBRARY_FOLDER_STORE_KEY,
   PLAYBACK_SESSION_STORE_KEY,
+  SONG_RESUME_STORE_KEY,
   QUEUE_SNAPSHOT_STORE_KEY,
   LOCAL_PLAYBACK_SOURCE_STORE_KEY,
   AUTO_PLAYBACK_STORE_KEY,
@@ -358,6 +360,7 @@ var HOTKEY_ACTIONS = [
   { key:'togglePlay', label:'播放 / 暂停', category:'播放', local:'Space', global:'Ctrl+Alt+Space' },
   { key:'prevTrack', label:'上一首', category:'播放', local:'ArrowLeft', global:'Ctrl+Alt+ArrowLeft' },
   { key:'nextTrack', label:'下一首', category:'播放', local:'ArrowRight', global:'Ctrl+Alt+ArrowRight' },
+  { key:'resumeLastPlayback', label:'继续上次播放', category:'播放', local:'', global:'' },
   { key:'volumeUp', label:'音量增加', category:'音量', local:'ArrowUp', global:'Ctrl+Alt+ArrowUp' },
   { key:'volumeDown', label:'音量降低', category:'音量', local:'ArrowDown', global:'Ctrl+Alt+ArrowDown' },
   { key:'toggleMute', label:'静音 / 取消静音', category:'音量', local:'KeyM', global:'Ctrl+Alt+KeyM' },
@@ -412,8 +415,24 @@ var HOTKEY_KEY_MAP = {
   MediaStop:{ accel:'MediaStop', label:'媒体停止键', bare:true },
   AudioVolumeUp:{ accel:'VolumeUp', label:'音量+键', bare:true },
   AudioVolumeDown:{ accel:'VolumeDown', label:'音量-键', bare:true },
-  AudioVolumeMute:{ accel:'VolumeMute', label:'静音键', bare:true }
+  AudioVolumeMute:{ accel:'VolumeMute', label:'静音键', bare:true },
+  // 鼠标键：Electron 的 globalShortcut 收不了鼠标，所以 accel 一律留空，
+  // 全局注册走 `configureGlobalMouseHotkeys` 那条低层钩子的路，bare 表示可以不带修饰键直接绑。
+  MouseMiddle:{ accel:'', label:'鼠标中键', bare:true, mouse:true },
+  MouseBack:{ accel:'', label:'鼠标侧键 1 · 后退', bare:true, mouse:true },
+  MouseForward:{ accel:'', label:'鼠标侧键 2 · 前进', bare:true, mouse:true }
 };
+/**
+ * 可绑定的鼠标键词元 → { DOM `MouseEvent.button`, uiohook 按钮号 }。
+ * 左键 0 与右键 2 永远不收：把它们绑成热键之后界面就点不动了。
+ */
+var HOTKEY_MOUSE_TOKENS = {
+  MouseMiddle:{ dom:1, uio:3 },
+  MouseBack:{ dom:3, uio:4 },
+  MouseForward:{ dom:4, uio:5 }
+};
+/** DOM `MouseEvent.button` → 词元，供录入与局内派发反查。 */
+var HOTKEY_MOUSE_TOKEN_BY_DOM_BUTTON = { 1:'MouseMiddle', 3:'MouseBack', 4:'MouseForward' };
 var HOTKEY_MODIFIER_ACCELERATORS = { Ctrl:'Control', Alt:'Alt', Shift:'Shift', Meta:'Super' };
 /** 只有这三个修饰键能把全局热键约束到「不会在别的软件里抢键」的程度，Shift 单独不算。 */
 var HOTKEY_STRONG_MODIFIERS = { Ctrl:true, Alt:true, Meta:true };
@@ -563,7 +582,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.26';
+var APP_VERSION = '1.7.27';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -17012,6 +17031,383 @@ function homeListenSummary() {
   }
   return { recent: recent, topSong: topSong, topArtist: topArtist, totalPlays: totalPlays };
 }
+// ============================================================
+//  单曲播放统计 / 断点续播
+// ============================================================
+/**
+ * 累计播放时长的人话文案。
+ * @param {number} ms 毫秒。
+ * @returns {string} 例如 `1 小时 12 分钟`、`3 分 20 秒`、`不足 1 分钟`。
+ */
+function formatListenDurationText(ms) {
+  var total = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  if (!total) return '0 秒';
+  var hours = Math.floor(total / 3600);
+  var minutes = Math.floor((total % 3600) / 60);
+  var seconds = total % 60;
+  if (hours) return hours + ' 小时' + (minutes ? ' ' + minutes + ' 分钟' : '');
+  if (minutes) return minutes + ' 分' + (seconds ? ' ' + seconds + ' 秒' : '钟');
+  return total + ' 秒';
+}
+/**
+ * 最近播放时间的人话文案。跨天之后给绝对时间，免得「3 天前」还要用户自己算。
+ * @param {number} ts 时间戳。
+ * @returns {string} 展示文案，无记录时为空串。
+ */
+function formatListenTimeText(ts) {
+  var value = Number(ts) || 0;
+  if (!value) return '';
+  var diff = Date.now() - value;
+  if (diff < 0) diff = 0;
+  if (diff < 60000) return '刚刚';
+  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+  var date = new Date(value);
+  var pad = function(n){ return (n < 10 ? '0' : '') + n; };
+  var stamp = pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  if (diff < 604800000) return Math.floor(diff / 86400000) + ' 天前 · ' + stamp;
+  if (date.getFullYear() !== new Date().getFullYear()) return date.getFullYear() + '-' + stamp;
+  return stamp;
+}
+/**
+ * 取一首歌的听歌统计条目。
+ * @param {object} song 曲目对象。
+ * @returns {object|null} 统计条目，没听过时为 null。
+ */
+function songListenStatFor(song) {
+  if (!song) return null;
+  var key = queueItemKey(song);
+  if (!key) return null;
+  var songs = ensureListenStatsState().songs || {};
+  return songs[key] || null;
+}
+/**
+ * 列表行用的一行统计摘要。
+ * @param {object} song 曲目对象。
+ * @param {string} mode `recent` 按最近播放时间排，`plays` 按播放次数排。
+ * @returns {string} 摘要文案，没记录时为空串。
+ */
+function songListenStatBrief(song, mode) {
+  var stat = songListenStatFor(song);
+  if (!stat) return '';
+  var plays = Number(stat.plays) || 0;
+  var when = formatListenTimeText(stat.lastPlayedAt);
+  var parts = [];
+  if (mode === 'plays') {
+    if (plays) parts.push('播放 ' + plays + ' 次');
+    if (when) parts.push(when);
+  } else {
+    if (when) parts.push(when);
+    if (plays) parts.push('播放 ' + plays + ' 次');
+  }
+  var resume = songResumePositionText(song);
+  if (resume) parts.push('续播 ' + resume);
+  return parts.join(' · ');
+}
+/**
+ * 歌曲详情弹窗里的单曲播放统计段。
+ * 没有任何记录时给一句空态文案，别在详情里留一片假的 0。
+ * @param {object} song 曲目对象。
+ * @returns {string} 统计段的 HTML。
+ */
+function songListenStatDetailHtml(song) {
+  var stat = songListenStatFor(song);
+  var resume = songResumePositionText(song);
+  var inner;
+  if (!stat && !resume) {
+    inner = '<div class="detail-empty">这首歌还没有播放记录，听过之后会显示播放次数和累计时长。</div>';
+  } else {
+    var plays = stat && Number(stat.plays) || 0;
+    var completed = stat && Number(stat.completed) || 0;
+    inner = '<div class="detail-grid">' +
+      detailRow('播放次数', plays ? plays + ' 次' : '暂无') +
+      detailRow('完整播放', completed ? completed + ' 次' : '暂无') +
+      detailRow('累计播放时长', formatListenDurationText(stat && stat.listenMs)) +
+      detailRow('最近播放时间', formatListenTimeText(stat && stat.lastPlayedAt) || '暂无') +
+      detailRow('最后播放位置', resume || '无断点') +
+    '</div>';
+  }
+  return '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">播放统计</div></div>' + inner + '</div>';
+}
+/** 每首歌只留一条断点，超过这个条数按最后记录时间淘汰。 */
+var SONG_RESUME_MAX_ENTRIES = 400;
+/** 听不到 15 秒不算「听了一半」，记下来只会让下次播放莫名从中间开始。 */
+var SONG_RESUME_MIN_SECONDS = 15;
+/** 尾巴不足 20 秒当听完，清掉断点，否则单曲循环会卡在结尾反复重进。 */
+var SONG_RESUME_MIN_REMAIN_SECONDS = 20;
+var songResumeState = null;
+var songResumeWriteTimer = null;
+function createEmptySongResumeState() { return { schema: 1, enabled: true, songs: {} }; }
+/**
+ * 规整断点续播存档。
+ * @param {*} value 原始值。
+ * @returns {{schema:number,enabled:boolean,songs:object}} 规整后的存档。
+ */
+function normalizeSongResumeState(value) {
+  var state = createEmptySongResumeState();
+  if (!value || typeof value !== 'object') return state;
+  state.enabled = value.enabled !== false;
+  var songs = value.songs && typeof value.songs === 'object' ? value.songs : {};
+  for (var key in songs) {
+    if (!Object.prototype.hasOwnProperty.call(songs, key)) continue;
+    var item = songs[key];
+    if (!item || typeof item !== 'object') continue;
+    var sec = Number(item.sec) || 0;
+    if (sec < SONG_RESUME_MIN_SECONDS) continue;
+    state.songs[key] = {
+      key: String(item.key || key),
+      sec: sec,
+      dur: Number(item.dur) || 0,
+      at: Number(item.at) || 0,
+      name: String(item.name || '')
+    };
+  }
+  return state;
+}
+function loadSongResumeState() {
+  try {
+    return normalizeSongResumeState(JSON.parse(localStorage.getItem(SONG_RESUME_STORE_KEY) || 'null'));
+  } catch (e) {
+    return createEmptySongResumeState();
+  }
+}
+function ensureSongResumeState() {
+  if (!songResumeState) songResumeState = loadSongResumeState();
+  return songResumeState;
+}
+/**
+ * 落盘断点续播存档。写入合到一个短延迟里，避免每秒进度回调都打一次 localStorage。
+ * @param {boolean=} force 立即写入。
+ * @returns {void}
+ */
+function saveSongResumeState(force) {
+  var flush = function(){
+    songResumeWriteTimer = null;
+    try {
+      setPersistentLocalStorageItem(SONG_RESUME_STORE_KEY, JSON.stringify(ensureSongResumeState()));
+    } catch (e) {}
+  };
+  if (force) {
+    if (songResumeWriteTimer) { clearTimeout(songResumeWriteTimer); songResumeWriteTimer = null; }
+    flush();
+    return;
+  }
+  if (songResumeWriteTimer) return;
+  songResumeWriteTimer = setTimeout(flush, 1200);
+}
+function songResumeEnabled() { return !!ensureSongResumeState().enabled; }
+/**
+ * 开关断点续播。
+ * @param {boolean} on 是否开启。
+ * @param {{silent?:boolean}=} opts 选项。
+ * @returns {void}
+ */
+function setSongResumeEnabled(on, opts) {
+  var state = ensureSongResumeState();
+  state.enabled = !!on;
+  saveSongResumeState(true);
+  updateSongResumeControls();
+  if (!(opts && opts.silent)) showToast(state.enabled ? '断点续播已开启' : '断点续播已关闭');
+}
+/**
+ * 取一首歌的断点条目。
+ * @param {object} song 曲目对象。
+ * @returns {object|null} 断点条目。
+ */
+function songResumeEntry(song) {
+  if (!song) return null;
+  var key = queueItemKey(song);
+  if (!key) return null;
+  return ensureSongResumeState().songs[key] || null;
+}
+/**
+ * 取一首歌应当续播的秒数。
+ * @param {object} song 曲目对象。
+ * @returns {number} 秒数，没有断点时为 0。
+ */
+function songResumeSeconds(song) {
+  var entry = songResumeEntry(song);
+  if (!entry) return 0;
+  var sec = Number(entry.sec) || 0;
+  return sec >= SONG_RESUME_MIN_SECONDS ? sec : 0;
+}
+/**
+ * 最后播放位置的展示文案。
+ * @param {object} song 曲目对象。
+ * @returns {string} 例如 `2:13`，没有断点时为空串。
+ */
+function songResumePositionText(song) {
+  var sec = songResumeSeconds(song);
+  return sec ? formatProgramTime(sec) : '';
+}
+/**
+ * 记录一首歌的最后播放位置。
+ * 只在「听过一小段、又没听到尾巴」时才留断点：听了不到 15 秒记下来是噪声，
+ * 听到只剩 20 秒等于听完，留着会让下次播放一进来就跳到结尾。
+ * @param {object} song 曲目对象。
+ * @param {number} sec 当前秒数。
+ * @param {number} dur 总时长秒数。
+ * @returns {void}
+ */
+function recordSongResumePosition(song, sec, dur) {
+  if (!song) return;
+  var key = queueItemKey(song);
+  if (!key) return;
+  var state = ensureSongResumeState();
+  var seconds = Number(sec) || 0;
+  var duration = Number(dur) || 0;
+  var keep = seconds >= SONG_RESUME_MIN_SECONDS && (!duration || duration - seconds >= SONG_RESUME_MIN_REMAIN_SECONDS);
+  if (!keep) {
+    if (state.songs[key]) { delete state.songs[key]; saveSongResumeState(); }
+    return;
+  }
+  state.songs[key] = {
+    key: key,
+    sec: Math.round(seconds * 10) / 10,
+    dur: duration,
+    at: Date.now(),
+    name: String(song.name || song.title || '')
+  };
+  var keys = Object.keys(state.songs);
+  if (keys.length > SONG_RESUME_MAX_ENTRIES) {
+    keys.sort(function(a, b){ return (Number(state.songs[a].at) || 0) - (Number(state.songs[b].at) || 0); });
+    var drop = keys.length - SONG_RESUME_MAX_ENTRIES;
+    for (var i = 0; i < drop; i++) delete state.songs[keys[i]];
+  }
+  saveSongResumeState();
+}
+/**
+ * 清掉一首歌的断点。
+ * @param {object} song 曲目对象。
+ * @returns {void}
+ */
+function clearSongResumePosition(song) {
+  if (!song) return;
+  var key = queueItemKey(song);
+  if (!key) return;
+  var state = ensureSongResumeState();
+  if (!state.songs[key]) return;
+  delete state.songs[key];
+  saveSongResumeState(true);
+}
+// ============================================================
+//  最近播放记录清空
+//  两档：只清最近播放（history + lastPlayedAt）和全部清空（连次数 / 时长 / 断点一起归零）。
+//  分两档是因为「最近播放」是隐私向的，而播放次数是用户攒出来的资产，不该被一个按钮连带删掉。
+// ============================================================
+var pendingListenHistoryClearScope = '';
+/**
+ * 统计当前可清空的记录量，用于确认弹窗上的副标题。
+ * @returns {{history:number, songs:number, resume:number}} 记录条数快照。
+ */
+function listenHistoryClearCounts() {
+  var stats = ensureListenStatsState();
+  var songKeys = 0;
+  for (var key in stats.songs) {
+    if (Object.prototype.hasOwnProperty.call(stats.songs, key)) songKeys++;
+  }
+  var resume = 0;
+  var resumeState = ensureSongResumeState();
+  for (var rk in resumeState.songs) {
+    if (Object.prototype.hasOwnProperty.call(resumeState.songs, rk)) resume++;
+  }
+  return { history: Array.isArray(stats.history) ? stats.history.length : 0, songs: songKeys, resume: resume };
+}
+/**
+ * 打开清空最近播放的确认弹窗。
+ * @returns {void}
+ */
+function openListenHistoryClearModal() {
+  var el = document.getElementById('listen-history-clear-modal');
+  if (!el) return;
+  var counts = listenHistoryClearCounts();
+  if (!counts.history && !counts.songs && !counts.resume) {
+    showToast('还没有播放记录');
+    return;
+  }
+  var nameEl = document.getElementById('listen-history-clear-name');
+  if (nameEl) nameEl.textContent = counts.history ? '最近播放 · ' + counts.history + ' 首' : '最近播放';
+  var metaEl = document.getElementById('listen-history-clear-meta');
+  if (metaEl) {
+    var parts = [];
+    if (counts.songs) parts.push(counts.songs + ' 首歌有统计');
+    if (counts.resume) parts.push(counts.resume + ' 个断点');
+    metaEl.textContent = parts.length ? parts.join(' · ') : '暂无播放统计';
+  }
+  openGsapModal(el);
+  setTimeout(function(){
+    var cancel = document.getElementById('listen-history-clear-cancel');
+    if (cancel) { try { cancel.focus(); } catch (e) {} }
+  }, 120);
+}
+/**
+ * 关闭清空确认弹窗。
+ * @param {Function} [afterClose] 关闭动画结束后的回调。
+ * @returns {void}
+ */
+function closeListenHistoryClearModal(afterClose) {
+  var el = document.getElementById('listen-history-clear-modal');
+  pendingListenHistoryClearScope = '';
+  if (!el) { if (typeof afterClose === 'function') afterClose(); return; }
+  closeGsapModal(el, afterClose);
+}
+/**
+ * 确认清空：先关弹窗再落盘，避免动画期间列表重排导致的跳动。
+ * @param {string} scope 'recent' 只清最近播放，'all' 全部清空。
+ * @returns {void}
+ */
+function confirmListenHistoryClear(scope) {
+  var mode = scope === 'all' ? 'all' : 'recent';
+  closeListenHistoryClearModal(function(){ clearListenHistory(mode); });
+}
+/**
+ * 把清空同步到 SQLite 曲库里的播放统计镜像。
+ * `song_stats` 一行里还躺着收藏状态，所以那边是把播放列归零而不是删行；
+ * 不同步的话「全部清空」只清掉了 localStorage，本机数据库里还留着一份同样的记录。
+ * @param {string} scope 'recent' 或 'all'，与渲染层两档一致。
+ * @returns {void}
+ */
+function syncLocalLibraryDbListenHistoryClear(scope) {
+  Promise.resolve(callLocalLibraryDb('clearLocalLibraryDbPlayStats', { scope: scope === 'all' ? 'all' : 'recent' }))
+    .catch(function(e){ console.warn('[ListenHistoryClear]', e); });
+}
+/**
+ * 真正执行清空并刷新所有依赖播放记录的视图。
+ * @param {string} scope 'recent' 或 'all'。
+ * @returns {void}
+ */
+function clearListenHistory(scope) {
+  var all = scope === 'all';
+  var stats = ensureListenStatsState();
+  stats.history = [];
+  var key;
+  for (key in stats.songs) {
+    if (!Object.prototype.hasOwnProperty.call(stats.songs, key)) continue;
+    if (all) { delete stats.songs[key]; continue; }
+    if (stats.songs[key]) stats.songs[key].lastPlayedAt = 0;
+  }
+  for (key in stats.artists) {
+    if (!Object.prototype.hasOwnProperty.call(stats.artists, key)) continue;
+    if (all) { delete stats.artists[key]; continue; }
+    if (stats.artists[key]) stats.artists[key].lastPlayedAt = 0;
+  }
+  saveListenStatsState();
+  if (all) {
+    var resumeState = ensureSongResumeState();
+    resumeState.songs = {};
+    saveSongResumeState(true);
+    clearPlaybackSession();
+    pendingPlaybackSessionResume = { idx: -1, time: 0 };
+  }
+  syncLocalLibraryDbListenHistoryClear(all ? 'all' : 'recent');
+  invalidateLocalLibraryCategoryIndex();
+  // 面板有 DOM 签名早退，清空后行内容可能凑巧和旧签名一致，这里直接把签名作废逼它重画。
+  playlistPanelLastDomSignature = '';
+  if (typeof renderLocalLibraryPlaylistPanel === 'function') renderLocalLibraryPlaylistPanel();
+  if (typeof updateSongResumeControls === 'function') updateSongResumeControls();
+  if (typeof emptyHomeActive !== 'undefined' && emptyHomeActive && typeof renderHomeDiscover === 'function') renderHomeDiscover();
+  showToast(all ? '播放记录与统计已清空' : '最近播放已清空');
+}
 function fallbackHomeTiles() {
   return [
     { kind: 'local', title: '导入本地音乐', sub: '支持 10 种音频格式' },
@@ -18763,6 +19159,7 @@ function openTrackDetailModal(type, songOverride) {
         (getCustomCoverForSong(song) ? '<span class="detail-chip">自定义封面</span>' : '') +
         (hasCustomLyricForSong(song) ? '<span class="detail-chip">自定义歌词</span>' : '') +
       '</div>' +
+      songListenStatDetailHtml(song) +
       '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">' + detailCommentTitle + '</div></div><div id="song-comments">' + (detailCanLoadComments ? '<div class="detail-loading">正在载入评论...</div>' : '<div class="detail-empty">' + detailEmptyText + '</div>') + '</div></div>';
   }
   bindTrackDetailScrollers();
@@ -21238,6 +21635,8 @@ function cancelPendingPlaybackSessionSave() {
 function writePlaybackSession() {
   var now = Date.now();
   playbackSessionSaveState.lastAt = now;
+  // 断点续播和会话记录共用同一条节流：位置每 2.2 秒记一次，够准又不会一直砸存储。
+  try { recordSongResumeTick(); } catch (e) {}
   try {
     var song = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
     var folderPath = savedLocalLibraryFolderPath();
@@ -21489,6 +21888,115 @@ function initAutoPlaybackControls() {
     });
   }
   updateAutoPlaybackControls();
+}
+
+/**
+ * 找出「继续上次播放」应该落在哪首歌、从第几秒开始。
+ * 优先级：本次启动待恢复的会话 > 磁盘上的会话记录 > 最近播放里第一首还在当前队列的歌。
+ * 最后一档要在几万首的队列里查 key，所以先把最近播放的 key 收成表，再对队列做一次单遍扫描。
+ * @returns {{idx:number, time:number, from:string}|null} 命中的位置，没有任何记录时返回 null。
+ */
+function resolveLastPlaybackTarget() {
+  if (!Array.isArray(playQueue) || !playQueue.length) return null;
+  if (pendingPlaybackSessionResume && pendingPlaybackSessionResume.idx >= 0 && pendingPlaybackSessionResume.idx < playQueue.length) {
+    return { idx: pendingPlaybackSessionResume.idx, time: Math.max(0, Number(pendingPlaybackSessionResume.time) || 0), from: 'pending' };
+  }
+  var session = readPlaybackSession();
+  if (session) {
+    var sessionIdx = findPlaybackSessionIndex(playQueue, session);
+    if (sessionIdx >= 0) return { idx: sessionIdx, time: Math.max(0, Number(session.currentTime) || 0), from: 'session' };
+  }
+  var history = ensureListenStatsState().history;
+  if (!Array.isArray(history) || !history.length) return null;
+  var order = {};
+  for (var h = 0; h < history.length; h++) {
+    var historyKey = history[h] && history[h].key ? String(history[h].key) : '';
+    if (!historyKey || Object.prototype.hasOwnProperty.call(order, historyKey)) continue;
+    order[historyKey] = h;
+  }
+  var bestIdx = -1;
+  var bestOrder = Infinity;
+  for (var i = 0; i < playQueue.length; i++) {
+    var queueKey = queueItemKey(playQueue[i]);
+    if (!queueKey || !Object.prototype.hasOwnProperty.call(order, queueKey)) continue;
+    if (order[queueKey] >= bestOrder) continue;
+    bestOrder = order[queueKey];
+    bestIdx = i;
+    if (bestOrder === 0) break;
+  }
+  if (bestIdx < 0) return null;
+  return { idx: bestIdx, time: songResumeSeconds(playQueue[bestIdx]), from: 'history' };
+}
+
+/**
+ * 「继续上次播放」：不看自动播放开关，按用户当下的意愿立刻接上次的位置播。
+ * @param {string=} source 触发来源，仅用于排查问题时区分面板按钮和热键。
+ * @returns {boolean} 是否已经发起播放。
+ */
+function resumeLastPlayback(source) {
+  var target = resolveLastPlaybackTarget();
+  if (!target) {
+    showToast(Array.isArray(playQueue) && playQueue.length ? '还没有可以继续的播放记录' : '先导入本地音乐再继续播放');
+    return false;
+  }
+  if (typeof clearLocalLibraryPassiveQueue === 'function') clearLocalLibraryPassiveQueue();
+  if (pendingPlaybackSessionResume && pendingPlaybackSessionResume.idx === target.idx) {
+    pendingPlaybackSessionResume = { idx: -1, time: 0 };
+  }
+  playToggleBusy = false;
+  forcePlaybackControlsInteractive();
+  var song = playQueue[target.idx];
+  var label = song && (song.name || song.title) ? String(song.name || song.title) : '上次的歌曲';
+  showToast(target.time >= 1 ? '继续播放：' + label + ' · ' + formatProgramTime(target.time) : '继续播放：' + label);
+  Promise.resolve(playQueueAt(target.idx, { manual: true, resumeAt: target.time }))
+    .catch(function(e){ console.warn('[ResumeLastPlayback]', source || '', e); })
+    .then(forcePlaybackControlsInteractive);
+  return true;
+}
+
+/**
+ * 同步断点续播开关、已记断点数量和说明文案。
+ * @returns {void}
+ */
+function updateSongResumeControls() {
+  var on = songResumeEnabled();
+  var toggle = document.getElementById('t-songResume');
+  if (toggle) {
+    toggle.classList.toggle('on', on);
+    toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  var value = document.getElementById('song-resume-value');
+  if (value) {
+    var songs = ensureSongResumeState().songs;
+    var count = 0;
+    for (var key in songs) {
+      if (Object.prototype.hasOwnProperty.call(songs, key)) count++;
+    }
+    value.textContent = count ? count + ' 个断点' : '暂无断点';
+  }
+  var hint = document.getElementById('song-resume-hint');
+  if (hint) {
+    hint.textContent = on
+      ? '每首歌单独记住上次听到哪儿，下次播到同一首会自动从断点接上。'
+      : '关闭后不再记住单曲断点，每首歌都从头开始播放。';
+  }
+}
+
+/**
+ * 面板上的断点续播开关。
+ * @returns {void}
+ */
+function toggleSongResumeSetting() {
+  setSongResumeEnabled(!songResumeEnabled());
+}
+
+/**
+ * 启动时同步一次断点续播 UI。
+ * @returns {void}
+ */
+function initSongResumeControls() {
+  ensureSongResumeState();
+  updateSongResumeControls();
 }
 
 /**
@@ -22356,6 +22864,36 @@ function loadLocalLyricsForSong(song, token) {
   return ensureLocalLyricsForSong(song, { token:token, applyCurrent:true });
 }
 /**
+ * 决定这一次播放该从第几秒开始。
+ * 显式传进来的 `resumeAt` 优先（启动恢复、「继续上次播放」都走这条），其次才是这首歌自己的断点。
+ * 单曲循环重播必须从头开始，否则一首歌会卡在断点上原地打转。
+ * @param {object} song 即将播放的曲目。
+ * @param {{resumeAt?: number, autoRepeat?: boolean}=} opts 播放选项。
+ * @returns {number} 起播秒数，0 表示从头播。
+ */
+function resolveTrackStartSeconds(song, opts) {
+  opts = opts || {};
+  var explicit = Number(opts.resumeAt) || 0;
+  if (explicit > 0) return explicit;
+  if (opts.autoRepeat) return 0;
+  if (!songResumeEnabled()) return 0;
+  return songResumeSeconds(song);
+}
+/**
+ * 播放中按节流记一次断点。
+ * 只认 `currentLocalSong`（音频元素当前真正装着的那首）并要求已经播过 1 秒：
+ * 切歌后 seek 生效前会有一小段 0 秒窗口，那时候记位置会把还没用上的断点抹掉。
+ * @returns {void}
+ */
+function recordSongResumeTick() {
+  if (!songResumeEnabled()) return;
+  var song = currentLocalSong;
+  if (!song || !audio || !audio.src || audio.ended) return;
+  var seconds = getPlaybackCurrentSeconds();
+  if (!(seconds > 1)) return;
+  recordSongResumePosition(song, seconds, getPlaybackDurationSeconds());
+}
+/**
  * 载入并启动单个本地队列项的实际播放流程（在 playQueueAt 递增 trackSwitchToken 后调用）。
  * 由于内部存在 await playAudio 的挂起窗口，切歌竞态期间此调用可能已过期，收尾逻辑必须先复查 token，
  * 否则过期调用会用旧歌覆盖新歌的听歌会话，污染统计画像与最近播放数据。
@@ -22398,6 +22936,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   audio.onended = function(){
     if (token !== trackSwitchToken) return;
     finalizeListenSession(true);
+    clearSongResumePosition(song); // 整首听完就别留断点，否则重播会跳到中间
     if (stopAfterCurrentTrack) {
       stopPlaybackAfterCurrentTrack();
       return;
@@ -22425,7 +22964,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
     song._lastPlaybackError = code;
     console.warn('[LocalPlaybackError]', song.name, song.localFormat || '', code, localUrl);
   };
-  scheduleAudioResumePosition(audio, opts.resumeAt, token);
+  scheduleAudioResumePosition(audio, resolveTrackStartSeconds(song, opts), token);
   audio.load();
 
   markPlayPhase('visual-prep');
@@ -22478,6 +23017,8 @@ async function playQueueAt(idx, opts) {
   try {
     markPlayPhase('session-finalize');
     safePlaybackStep('session-finalize', function(){ finalizeListenSession(false); });
+    // 换歌前把上一首的断点定住：这一步之后 currentIdx 就变了，再记就记到新歌头上了。
+    safePlaybackStep('song-resume-record', recordSongResumeTick);
     homeForcedOpen = false;
     if (!opts.preserveHomeState) homeSuppressed = false;
     currentIdx = idx;
@@ -24969,9 +25510,10 @@ function maybeGrowPlaylistPanelDetailRenderLimit() {
 function resetPlaylistPanelRenderLimit() {
   playlistPanelRenderLimit = playlistPanelBatchSize();
 }
-function localLibraryPlaylistDomSignature(songs, renderLimit) {
+function localLibraryPlaylistDomSignature(songs, renderLimit, statMode) {
   songs = songs || [];
-  var signature = 'local-playlist|' + songs.length + '|' + renderLimit;
+  statMode = statMode || '';
+  var signature = 'local-playlist|' + songs.length + '|' + renderLimit + '|' + statMode;
   for (var i = 0; i < renderLimit; i++) {
     var song = songs[i] || {};
     signature += '|' +
@@ -24979,11 +25521,24 @@ function localLibraryPlaylistDomSignature(songs, renderLimit) {
       queueItemKey(song) + '~' +
       (song.name || song.title || '') + '~' +
       songDisplaySubtitle(song) + '~' +
+      (statMode ? songListenStatBrief(song, statMode) : '') + '~' +
       songCoverSignature(song) + '~' +
       (isSongLiked(song) ? 1 : 0);
   }
   if (songs.length > renderLimit) signature += '|more:' + songs.length;
   return signature;
+}
+/**
+ * 智能分类下歌曲行要不要额外挂一行播放统计。
+ * 只有「最近播放」「播放最多」这两个分类挂——别的分类挂上去只是噪声。
+ * @param {object|null} view 分类视图。
+ * @returns {string} `recent` / `plays` / 空串。
+ */
+function localLibraryCategoryStatMode(view) {
+  if (!view || view.mode !== 'category') return '';
+  if (view.kind === LOCAL_LIBRARY_CATEGORY_KIND + 'recent-played') return 'recent';
+  if (view.kind === LOCAL_LIBRARY_CATEGORY_KIND + 'most-played') return 'plays';
+  return '';
 }
 function localPlaylistsDomSignature(playlists) {
   var list = Array.isArray(playlists) ? playlists : [];
@@ -25037,10 +25592,12 @@ function localLibraryCategoryHeadHtml(view, count) {
   else if (view.mode === 'group') sub = localLibraryGroupEntries(view.def.field).length + ' ' + view.def.unit + ' · 点击任意项查看歌曲';
   else if (view.mode === 'value') sub = count + ' 首 · ' + (view.def ? view.def.title : '智能分类');
   else sub = count + ' 首 · ' + (view.hint || '智能分类');
+  var statMode = localLibraryCategoryStatMode(view);
   return '<div class="local-playlist-view-head">' +
     '<div style="min-width:0;flex:1"><div class="pl-name">' + escHtml(view.title) + '</div><div class="pl-sub">' + escHtml(sub) + '</div></div>' +
     '<div class="local-playlist-view-actions">' +
       (directory ? '' : '<button class="fx-mini-btn ghost" type="button" data-selected-playlist-play="1">播放全部</button>') +
+      (statMode ? '<button class="fx-mini-btn ghost danger" type="button" data-clear-listen-history="1">清空记录</button>' : '') +
       '<button class="fx-mini-btn ghost" type="button" data-library-back="' + escHtml(view.parent) + '">返回</button>' +
     '</div>' +
   '</div>';
@@ -25124,7 +25681,8 @@ function renderLocalLibraryPlaylistPanel(opts) {
   playlistPanelRenderLimit = Math.max(panelBatch, Math.min(songs.length, playlistPanelRenderLimit || panelBatch));
   var visibleLength = Math.min(songs.length, playlistPanelRenderLimit);
   var specialCoverSignature = specialSongs.length ? songCoverSignature(specialSongs[0]) : '';
-  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + localLibraryPlaylistDomSignature(songs, visibleLength) + '|' + localLibraryCategoryDomSignature(selectedCategory);
+  var rowStatMode = localLibraryCategoryStatMode(selectedCategory);
+  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + localLibraryPlaylistDomSignature(songs, visibleLength, rowStatMode) + '|' + localLibraryCategoryDomSignature(selectedCategory);
   if (domSignature === playlistPanelLastDomSignature) return;
   playlistPanelLastDomSignature = domSignature;
   var html = '';
@@ -25198,7 +25756,9 @@ function renderLocalLibraryPlaylistPanel(opts) {
     }
     html += '<div class="pl-card" data-local-library-index="' + i + '">' +
       imgTag +
-      '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(song.name || '本地音乐') + '</div><div class="pl-sub">' + escHtml(songDisplaySubtitle(song) || '本地文件') + '</div></div>' +
+      '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(song.name || '本地音乐') + '</div><div class="pl-sub">' + escHtml(songDisplaySubtitle(song) || '本地文件') + '</div>' +
+      (rowStatMode ? '<div class="pl-sub pl-listen-stat">' + escHtml(songListenStatBrief(song, rowStatMode) || '还没有播放记录') + '</div>' : '') +
+      '</div>' +
       rowActions +
     '</div>';
   }
@@ -25304,6 +25864,13 @@ document.getElementById('pl-list').addEventListener('click', function(e){
     e.preventDefault();
     e.stopPropagation();
     openAllLocalLibraryPlaylist();
+    return;
+  }
+  var clearListen = e.target && e.target.closest ? e.target.closest('[data-clear-listen-history]') : null;
+  if (clearListen) {
+    e.preventDefault();
+    e.stopPropagation();
+    openListenHistoryClearModal();
     return;
   }
   var libraryBack = e.target && e.target.closest ? e.target.closest('[data-library-back]') : null;
@@ -32665,6 +33232,45 @@ function hotkeyDisplayPart(part) {
   var info = hotkeyKeyInfo(part);
   return info ? info.label : part;
 }
+/**
+ * 取组合键末位的鼠标词元定义。
+ * @param {string} hotkey 内部组合键。
+ * @returns {{dom:number,uio:number}|null} 不是鼠标组合时返回 null。
+ */
+function hotkeyMouseToken(hotkey) {
+  var parts = String(hotkey || '').trim().split('+').filter(Boolean);
+  if (!parts.length) return null;
+  return HOTKEY_MOUSE_TOKENS[parts[parts.length - 1]] || null;
+}
+/**
+ * 把鼠标组合键拆成主进程要的绑定描述。
+ * @param {string} hotkey 内部组合键，例如 `Ctrl+MouseBack`。
+ * @returns {{button:number,ctrl:boolean,alt:boolean,shift:boolean,meta:boolean}|null} 不是鼠标组合时返回 null。
+ */
+function hotkeyMouseDescriptor(hotkey) {
+  var token = hotkeyMouseToken(hotkey);
+  if (!token) return null;
+  var parts = String(hotkey || '').trim().split('+').filter(Boolean);
+  var mods = {};
+  for (var i = 0; i < parts.length - 1; i++) mods[parts[i]] = true;
+  return { button: token.uio, ctrl: !!mods.Ctrl, alt: !!mods.Alt, shift: !!mods.Shift, meta: !!mods.Meta };
+}
+/**
+ * 把一次鼠标按下折成内部组合键。左右键不参与绑定，直接返回空串。
+ * @param {MouseEvent} e 鼠标事件。
+ * @returns {string} 内部组合键，不可绑定时为空串。
+ */
+function normalizeHotkeyMouseEvent(e) {
+  if (!e) return '';
+  var token = HOTKEY_MOUSE_TOKEN_BY_DOM_BUTTON[Number(e.button)];
+  if (!token) return '';
+  var mods = [];
+  if (e.ctrlKey) mods.push('Ctrl');
+  if (e.altKey) mods.push('Alt');
+  if (e.shiftKey) mods.push('Shift');
+  if (e.metaKey) mods.push('Meta');
+  return mods.concat([token]).join('+');
+}
 function formatHotkey(hotkey) {
   hotkey = String(hotkey || '').trim();
   if (!hotkey) return '未设置';
@@ -32680,6 +33286,9 @@ function formatHotkey(hotkey) {
 function hotkeyToAccelerator(hotkey) {
   var parts = String(hotkey || '').split('+').filter(Boolean);
   if (!parts.length) return '';
+  // 鼠标组合永远翻不成 Electron 加速键：不在这里挡掉的话 `Ctrl+MouseBack` 会拼出
+  // 'Control+' 这种真值废串，一路送到主进程再回一条假的「已被占用」。
+  if (HOTKEY_MOUSE_TOKENS[parts[parts.length - 1]]) return '';
   var mods = [];
   for (var i = 0; i < parts.length - 1; i++) {
     var mod = HOTKEY_MODIFIER_ACCELERATORS[parts[i]];
@@ -32721,6 +33330,10 @@ function executeHotkeyAction(actionKey, source) {
   if (actionKey === 'togglePlay') return togglePlay();
   if (actionKey === 'prevTrack') return prevTrack();
   if (actionKey === 'nextTrack') return nextTrack();
+  if (actionKey === 'resumeLastPlayback') {
+    if (typeof resumeLastPlayback === 'function') return resumeLastPlayback('hotkey');
+    return;
+  }
   if (actionKey === 'volumeUp') return adjustVolumeByKeyboard(0.05);
   if (actionKey === 'volumeDown') return adjustVolumeByKeyboard(-0.05);
   if (actionKey === 'toggleMute') return toggleMute();
@@ -32763,6 +33376,30 @@ function shouldSuppressDefaultConfiguredHotkey(e) {
   }
   return false;
 }
+/**
+ * 局内鼠标键派发。绑定表与键盘共用一套，只是末位词元换成鼠标词元。
+ * @param {MouseEvent} e 鼠标按下事件。
+ * @returns {boolean} 是否已消费该次按下。
+ */
+function handleConfiguredLocalMouseHotkey(e) {
+  if (!hotkeySettings || !hotkeySettings.local || !e) return false;
+  if (hotkeyCaptureState) return false;
+  var modal = document.getElementById('hotkey-modal');
+  if (modal && modal.classList.contains('show')) return false;
+  var combo = normalizeHotkeyMouseEvent(e);
+  if (!combo) return false;
+  var duplicate = hotkeyDuplicateMap('local');
+  for (var i = 0; i < HOTKEY_ACTIONS.length; i++) {
+    var action = HOTKEY_ACTIONS[i];
+    if (hotkeySettings.local[action.key] !== combo) continue;
+    e.preventDefault();
+    e.stopPropagation();
+    if (duplicate[combo] > 1) return true;
+    executeHotkeyAction(action.key, 'local');
+    return true;
+  }
+  return false;
+}
 function ensureHotkeySettingsButton() {
   var panel = document.getElementById('fx-panel');
   var head = panel && panel.querySelector('.fx-head');
@@ -32794,10 +33431,10 @@ function ensureHotkeyModal() {
     '<div class="modal hotkey-dialog">' +
       '<div class="hotkey-kicker">KEYBOARD SHORTCUTS</div>' +
       '<h2 id="hotkey-modal-title">热键设置</h2>' +
-      '<p class="hotkey-sub">局内热键只在 Mineradio 窗口内生效；全局热键会向系统注册，并检测是否被占用。</p>' +
+      '<p class="hotkey-sub">局内热键只在 Mineradio 窗口内生效；全局热键会向系统注册，并检测是否被占用。鼠标中键与两个侧键也能绑，但系统级鼠标键只是「监听」，原本的后退 / 前进动作仍会照常发生。</p>' +
       '<div class="hotkey-toolbar">' +
         '<div class="hotkey-tabs"><button type="button" class="panel-tab active" data-hotkey-scope="local">局内热键</button><button type="button" class="panel-tab" data-hotkey-scope="global">全局热键</button></div>' +
-        '<div class="hotkey-note">按 Backspace / Delete 可清空当前功能热键</div>' +
+        '<div class="hotkey-note">按 Backspace / Delete 可清空；录入时也能直接按鼠标中键 / 侧键</div>' +
       '</div>' +
       '<div class="hotkey-scroll">' +
         '<div id="hotkey-local-section" class="hotkey-section active"></div>' +
@@ -32926,6 +33563,29 @@ function resetHotkeyBinding(action, scope) {
   if (!meta) return;
   setHotkeyBinding(action, scope, scope === 'global' ? meta.global : meta.local);
 }
+/**
+ * 把鼠标绑定送去主进程的低层钩子。桌面端没有这条 API 时给出可读的降级状态，
+ * 不要让用户对着一个「待检测」猜为什么鼠标键在别的软件里没反应。
+ * @param {object} api 桌面端 API。
+ * @param {Array<object>} bindings 全局鼠标绑定。
+ * @param {Array<object>} local 局内鼠标绑定，仅用于避免前台双触发。
+ * @returns {Promise<{results:Array<object>}>} 注册结果。
+ */
+function configureGlobalMouseHotkeysSafely(api, bindings, local) {
+  if (!api || typeof api.configureGlobalMouseHotkeys !== 'function') {
+    if (!bindings.length) return Promise.resolve({ ok: true, results: [] });
+    return Promise.resolve({ ok: true, available: false, results: bindings.map(function(item){
+      return {
+        action: item.action,
+        ok: false,
+        conflict: { kind: 'unsupported', sourceName: '桌面端不支持', reason: '当前桌面端没有全局鼠标钩子，鼠标键只能在 Mineradio 窗口内生效' }
+      };
+    }) });
+  }
+  return api.configureGlobalMouseHotkeys({ bindings: bindings, local: local }).catch(function(){
+    return { ok: false, results: [] };
+  });
+}
 function registerGlobalHotkeys() {
   var api = getDesktopWindowApi && getDesktopWindowApi();
   if (!api || typeof api.configureGlobalHotkeys !== 'function') {
@@ -32935,17 +33595,37 @@ function registerGlobalHotkeys() {
   }
   var duplicate = hotkeyDuplicateMap('global');
   var bindings = [];
+  var mouseBindings = [];
   HOTKEY_ACTIONS.forEach(function(action){
     var key = hotkeySettings.global && hotkeySettings.global[action.key];
     if (!key || duplicate[key] > 1 || globalHotkeyRejectReason(key)) return;
+    var mouse = hotkeyMouseDescriptor(key);
+    if (mouse) {
+      mouse.action = action.key;
+      mouseBindings.push(mouse);
+      return;
+    }
     var accelerator = hotkeyToAccelerator(key);
     if (accelerator) bindings.push({ action: action.key, accelerator: accelerator });
   });
-  return api.configureGlobalHotkeys(bindings).then(function(res){
+  var localDuplicate = hotkeyDuplicateMap('local');
+  var localMouse = [];
+  HOTKEY_ACTIONS.forEach(function(action){
+    var key = hotkeySettings.local && hotkeySettings.local[action.key];
+    if (!key || localDuplicate[key] > 1) return;
+    var mouse = hotkeyMouseDescriptor(key);
+    if (mouse) localMouse.push(mouse);
+  });
+  return Promise.all([
+    api.configureGlobalHotkeys(bindings),
+    configureGlobalMouseHotkeysSafely(api, mouseBindings, localMouse)
+  ]).then(function(list){
     var next = {};
-    (res && res.results || []).forEach(function(item){
-      next[item.action] = item;
-    });
+    for (var i = 0; i < list.length; i++) {
+      (list[i] && list[i].results || []).forEach(function(item){
+        if (item && item.action) next[item.action] = item;
+      });
+    }
     hotkeyGlobalStatus = next;
     renderHotkeySettings();
     scheduleGlobalHotkeyFailureNotice();
@@ -33040,6 +33720,40 @@ document.addEventListener('keydown', function(e){
   hotkeyCaptureState = null;
   hotkeyCaptureNotice = '';
   setHotkeyBinding(target.action, target.scope, combo);
+}, true);
+// 鼠标键：录入时收编中键/侧键，平时按局内绑定派发。
+// 左键与右键一律放过——录入面板本身要靠左键点按钮，右键还要留给菜单。
+document.addEventListener('mousedown', function(e){
+  if (!hotkeyCaptureState) {
+    handleConfiguredLocalMouseHotkey(e);
+    return;
+  }
+  var combo = normalizeHotkeyMouseEvent(e);
+  if (!combo) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var mouseTarget = hotkeyCaptureState;
+  if (mouseTarget.scope === 'global') {
+    var mouseReject = globalHotkeyRejectReason(combo);
+    if (mouseReject) { setHotkeyCaptureNotice(formatHotkey(combo) + '：' + mouseReject); return; }
+  }
+  hotkeyCaptureState = null;
+  hotkeyCaptureNotice = '';
+  setHotkeyBinding(mouseTarget.action, mouseTarget.scope, combo);
+}, true);
+// mousedown 上的 preventDefault 挡不住随后的 auxclick，中键还会触发自动滚动之类的默认行为。
+document.addEventListener('auxclick', function(e){
+  var combo = normalizeHotkeyMouseEvent(e);
+  if (!combo) return;
+  if (hotkeyCaptureState) { e.preventDefault(); e.stopPropagation(); return; }
+  if (!hotkeySettings || !hotkeySettings.local) return;
+  for (var i = 0; i < HOTKEY_ACTIONS.length; i++) {
+    if (hotkeySettings.local[HOTKEY_ACTIONS[i].key] === combo) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+  }
 }, true);
 function bindFxPanel() {
   liftFxFloatingPopups();
@@ -34690,6 +35404,7 @@ function bindModalBackdropClose() {
     ['login-modal', closeLoginModal],
     ['user-modal', closeUserModal],
     ['local-playlist-delete-modal', closeLocalPlaylistDeleteModal],
+    ['listen-history-clear-modal', closeListenHistoryClearModal],
     ['custom-lyric-modal', closeCustomLyricModal],
     ['update-modal', closeUpdatePanel]
   ].forEach(function(pair){
@@ -36224,6 +36939,12 @@ document.addEventListener('keydown', function(e){
     if (playlistDeleteModal && playlistDeleteModal.classList.contains('show')) {
       e.preventDefault();
       closeLocalPlaylistDeleteModal();
+      return;
+    }
+    var listenClearModal = document.getElementById('listen-history-clear-modal');
+    if (listenClearModal && listenClearModal.classList.contains('show')) {
+      e.preventDefault();
+      closeListenHistoryClearModal();
       return;
     }
     if (immersiveMode) {
@@ -38793,6 +39514,7 @@ updateCustomCoverButton();
 updateCustomLyricControls();
 updateLikeButtons();
 updateLocalPlaybackPlaylistSourceButton();
+initSongResumeControls();
 initAutoPlaybackControls();
 initReplayGainControls();
 initAudioChainControls();

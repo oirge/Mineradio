@@ -69,6 +69,28 @@ test('server.js 与它的同级模块一起被 asarUnpack，避免跨 asar 边�
   assert.ok(unpack.includes('server.js'));
 });
 
+test('低层鼠标钩子的原生模块和它的加载器都进包，而且解出 asar', () => {
+  // 上面那条相对依赖扫描只认 `./` / `../`，bare require('uiohook-napi') 它看不见，
+  // 而 build.files 是白名单——这两个 node_modules 模式必须手写进去。
+  assert.equal(isPackaged('node_modules/uiohook-napi/dist/index.js'), true);
+  assert.equal(isPackaged('node_modules/uiohook-napi/prebuilds/win32-x64/uiohook-napi.node'), true);
+  assert.equal(isPackaged('node_modules/node-gyp-build/index.js'), true, 'uiohook 的入口就是 require("node-gyp-build")，少了它照样 MODULE_NOT_FOUND');
+  // .node 二进制在 asar 里 dlopen 不了，必须解包出来。
+  assert.ok(packageJson.build.asarUnpack.includes('node_modules/uiohook-napi/**'));
+  assert.equal(packageJson.dependencies['uiohook-napi'], '1.5.5', '原生模块钉死版本，别让 ^ 在某次构建里换掉预编译二进制');
+});
+
+test('锁文件里所有依赖都指向官方源，别把本地镜像地址提交上去', () => {
+  // 本机 npm 默认走 registry.npmmirror.com，一旦混进锁文件，CI 上的 npm ci 就会去拉一个
+  // 跟 integrity 对不上的地址。
+  const lock = fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8');
+  const bad = (lock.match(/"resolved": "https?:\/\/(?!registry\.npmjs\.org\/)[^"]+"/g) || []);
+  assert.deepEqual(bad, []);
+  const lockJson = JSON.parse(lock);
+  assert.equal(lockJson.packages['node_modules/uiohook-napi'].version, '1.5.5');
+  assert.equal(lockJson.packages[''].dependencies['uiohook-napi'], '1.5.5');
+});
+
 test('插件系统的所有源码文件都会进安装包', () => {
   const required = [
     'public/plugin-manifest.js',

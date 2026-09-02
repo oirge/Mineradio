@@ -386,6 +386,55 @@ async function testPlayStatsAndFavorite() {
 }
 
 /**
+ * 两档清空各自只碰该碰的列，而且都不许把 song_stats 的行删掉——收藏状态和播放统计
+ * 挤在同一行里，删行等于顺手把用户的收藏也清了。
+ * @returns {Promise<void>}
+ */
+async function testClearPlayStats() {
+  await withStore(async (handle) => {
+    const a = 'D:\\Music\\A.mp3:1024:1700000000000';
+    const b = 'D:\\Music\\B.mp3:1024:1700000000000';
+    handle.bumpPlayStat({ key: a, plays: 3, listenMs: 90000, completed: 2, lastPlayedAt: 9000, name: 'A' });
+    handle.bumpPlayStat({ key: b, plays: 1, listenMs: 20000, completed: 0, lastPlayedAt: 8000, name: 'B' });
+    handle.setFavorite({ key: a, favorite: true, name: 'A' });
+
+    const recent = handle.clearPlayStats({ scope: 'recent' });
+    assert.equal(recent.ok, true);
+    assert.equal(recent.scope, 'recent');
+    assert.equal(recent.cleared, 2, '两行的最近播放时间都被抹掉');
+    let stats = handle.readStats({ keys: [a, b] }).stats;
+    assert.equal(stats[a].lastPlayedAt, 0);
+    assert.equal(stats[b].lastPlayedAt, 0);
+    assert.equal(stats[a].plays, 3, '只清最近播放不许动次数');
+    assert.equal(stats[a].listenMs, 90000);
+    assert.equal(stats[a].completed, 2);
+    assert.equal(stats[a].favorite, true, '收藏更不该被清空碰到');
+
+    // 已经清干净了再清一次，受影响行数是 0 而不是报错。
+    assert.deepEqual(
+      { ok: handle.clearPlayStats({ scope: 'recent' }).ok, cleared: handle.clearPlayStats({ scope: 'recent' }).cleared },
+      { ok: true, cleared: 0 },
+    );
+
+    const all = handle.clearPlayStats({ scope: 'all' });
+    assert.equal(all.cleared, 2);
+    stats = handle.readStats({ keys: [a, b] }).stats;
+    assert.equal(stats[a].plays, 0);
+    assert.equal(stats[a].listenMs, 0);
+    assert.equal(stats[a].completed, 0);
+    assert.equal(stats[b].plays, 0);
+    assert.equal(stats[a].favorite, true);
+    // 行还在，所以收藏那份数据也还在；getStatus 的 stats 计数不该掉。
+    assert.equal(handle.getStatus().stats, 2);
+    // 不认的 scope 一律按 recent 处理，别让打错的字符串把次数清了。
+    handle.bumpPlayStat({ key: a, plays: 5, listenMs: 1000, lastPlayedAt: 7000 });
+    assert.equal(handle.clearPlayStats({ scope: 'nonsense' }).scope, 'recent');
+    assert.equal(handle.readStats({ keys: [a] }).stats[a].plays, 5);
+    assert.equal(handle.clearPlayStats().scope, 'recent', '不给负载也不能崩');
+  });
+}
+
+/**
  * 回收时受保护键先被顶到最新，因此正在播放的曲目不会被自己触发的这次回收清掉。
  * @returns {Promise<void>}
  */
@@ -500,6 +549,7 @@ test('两万首曲库可原样落盘并有序读回', testLargeLibraryRoundTrip)
 test('完整扫描剔除删除文件而截断扫描不剔除', testPruneRespectsTruncatedScan);
 test('封面 BLOB 与歌词缓存 round-trip 形状不变', testAssetAndLyricRoundTrip);
 test('播放次数累加、最近播放取最大值、收藏可切换', testPlayStatsAndFavorite);
+test('两档清空只归零播放列，收藏和行本身都留着', testClearPlayStats);
 test('缓存回收保护正在使用的键并遵守字节上限', testTrimProtectsActiveKeys);
 test('缓存回收按 saved_at 过期且跳过未标注记录', testTrimExpiresByAge);
 test('缺少 node:sqlite 时整层降级且不抛异常', testGracefulUnavailable);

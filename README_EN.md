@@ -71,12 +71,27 @@ Build artifacts are located in `dist/`.
 - Automatic music folder monitoring with a bottom-right synced-track indicator
 - Playlist management
 - Shuffle/repeat playback
+- Per-track listening stats (play count, completed plays, accumulated listen time, last-played time)
+- Resume playback (each track remembers where you stopped) plus a "resume last playback" action
+- Two-tier clearing of recently-played records (recent only, or counts and listen time as well)
+- Customizable global hotkeys, including the mouse middle button and both side buttons
 
 ## Changelog
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.7.24 (2026-09-02)
+### Latest release v1.7.27 (2026-09-03)
+
+- Per-track listening stats: play count, completed plays, accumulated listen time and last-played time are kept per track. The "recently played / most played" lists show a summary under each row, and the song detail dialog has a full "playback stats" section
+- Resume playback: each track remembers where you stopped and picks up there next time. A position is only remembered after 15 seconds of listening and only if at least 20 seconds remain, and it is cleared once the track finishes
+- "Resume last playback": a button in the settings panel that can also be bound to a hotkey. It ignores the autoplay toggle — pressing it resumes the last track at the last position
+- Clearing recently-played records is now two-tier: "clear recent only" keeps play counts and accumulated listen time, "clear everything" also zeroes counts, listen time and resume positions. Neither deletes local music files, and both also clear the stats mirror in the local SQLite library
+- Global hotkeys accept the mouse middle button and both side buttons (combinable with `Ctrl` / `Alt` / `Shift` / `Win`); the left and right buttons stay reserved for normal clicking. Note that a system-level mouse hook only *listens*, it cannot swallow the event, so back/forward still act normally in other applications; in-app-only bindings are unaffected
+- The mouse hook is loaded on demand: with no mouse binding the native module is never pulled into the process, and removing the last binding stops the hook immediately. It only reads button and modifier state — no input is recorded, stored or transmitted (see [PRIVACY.md](./PRIVACY.md))
+- Full Node regression suite: `807/807` passing
+
+<details>
+<summary>v1.7.24 — Library became a top-level tab</summary>
 
 - Library is now a top-level tab: the left panel's tab bar reads `当前队列 / 歌单 / 音乐库` (Queue / Playlists / Library), so smart categories are one click away instead of hidden behind a card
 - Both tabs share one list and one selection, and switching repositions it: entering Library lands on the category home, returning to Playlists falls back to "All songs" — no cross-page bleed
@@ -97,6 +112,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Tag, cover, embedded lyrics and duration parsing for OGG / OGA / OPUS / WAV / APE / DSD(.dsf); APE and DSD play directly
 - The local library moved to SQLite with file-fingerprint and path indexes, and the old 16000-track cap is gone
 - Full Node regression suite: `655/655` passing
+
+</details>
 
 ## Notice
 

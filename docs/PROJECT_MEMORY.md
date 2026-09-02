@@ -1365,3 +1365,23 @@
 - 故意没有改 `public/plugin-builtin-themes.js`：外壳戴上 `.modal` 后内置主题已覆盖，改那个文件还得同步改被 `tests/plugin-system.test.js` 钉住的 `examples/plugins/*.json`，而令牌这条路对第三方主题一样有效。
 - 验证：全量 Node 回归 `712/712`（上一版基线 `709`），新增 3 例锁定外壳类名复用、`--th-*` 覆盖、队列样式不许残留写死青色与 `z-index:1450`。本轮未启动本机 Electron。
 - **发布产物的 `SHA256SUMS.txt` 是 CRLF 换行**（`release.yml` 里 pwsh `Out-File` 的默认行为），Linux / macOS / Git Bash 直接 `sha256sum -c` 会因文件名尾部的 `\r` 全部报 `No such file or directory`，要先 `tr -d '\r'`。核验发布资产时别被这个假失败带跑；下版要修就把那句 `Out-File` 换成 `[IO.File]::WriteAllText`。
+
+### 2026-09-03 - v1.7.27 播放统计的两份存储、断点门槛，以及鼠标热键的能力边界
+
+- 用户原话：「继续更新加：最近播放时间 / 累计播放时长 / 播放次数 / 最后播放位置 / 断点续播 /「继续上次播放」/ 最近播放记录清空 / 单曲播放统计　全局快捷键支持鼠标侧键 更新好发布新版本」。
+- **播放统计有两份存储，动其中一份就要想到另一份。** 界面读的是 `localStorage` 的 `mineradio-listen-stats-v1`（`songs` / `artists` / `history`）；`desktop/local-library-store.js` 的 `song_stats` 表还有一份镜像，`syncLocalLibraryDbPlayStat` 每次结算都写。渲染层目前**从不读回**镜像，所以镜像里的残留在界面上完全看不出来——本轮的清空功能第一版就只清了 `localStorage`，用户按了「全部清空」而数据库里原封不动。以后凡是「清空 / 重置 / 迁移」播放统计，两处都要动。
+- **`song_stats` 的清空只能 `UPDATE` 归零，不能 `DELETE` 行。** 同一行里还存着 `favorite` / `favorite_at`，「特别喜欢」歌单靠它；删行等于顺手清掉用户的收藏。`clearPlayStats({scope})` 两档：`all` 归零 `play_count` / `listen_ms` / `completed` / `last_played_at`，`recent` 只归零 `last_played_at`。
+- **镜像写失败不能让用户的操作失败。** 没有 `node:sqlite` 或数据库打不开是常态，清空是用户当场按下的动作，`localStorage` 那份该清照清，镜像那边失败只记 `console.warn`，并且别漏出 unhandled rejection。
+- **三条数值门槛不要「顺手调低」，它们各自挡着一类误判：** 有效播放 = `完整播完 || 累计 45 秒 || 进度过半 || (读不到时长时 30 秒)`——挡的是「切歌前手滑点开两秒」污染最常播放榜；断点最小 15 秒 + 距结尾至少 20 秒——挡的是「续播把用户丢到片尾」；断点上限 400 条按最后记录时间淘汰。断点写入与会话记录共用 `writePlaybackSession` 里那条 2.2 秒节流，别再另开定时器。
+- **「继续上次播放」不看自动播放开关。** 那个开关管的是「启动要不要自动出声」，按钮是用户当下的明确意愿，两回事。落点三级回落：待恢复会话 → 磁盘会话 → 最近播放里第一首还在当前队列的歌；第三档在几万首队列里必须先把 history 的 key 收成表再单遍扫描，不许嵌套循环。
+- **两档清空的分界要长期保住：** 最近播放时间是隐私向的，播放次数与累计时长是用户攒出来的资产，一个按钮不该连带删掉。未知 scope 一律当 `recent`，因为误判成 `all` 不可逆。
+- **`globalShortcut` 只收键盘 —— 鼠标键必须走系统级低层钩子，这是引入第一个运行时依赖的唯一理由。** `uiohook-napi@1.5.5`（钉死版本），Windows 上装 `WH_MOUSE_LL`（libuiohook 同时也装 `WH_KEYBOARD_LL` 跟踪修饰键）。只在确实存在全局鼠标绑定时 `require`，绑定清空就 `stop()`。
+- **libuiohook 是 listener 不是 filter：绑了侧键之后，其它程序原本的后退 / 前进照样发生，拦不掉。** 这是 API 的能力边界，不是缺陷。热键面板里那句提示不许删，也别当成 bug 去「修」。要不受影响就只绑「局内」。
+- **鼠标键位有两套编号，改一处必须改两处：** `HOTKEY_MOUSE_TOKENS` 里每个 token 同时带 `dom`（渲染层 `mousedown` 用）和 `uio`（主进程用），外加一张反查表。左键 / 右键永不开放绑定。鼠标条目的 `accel` 是空串且 `bare:true`，所以 `hotkeyToAccelerator` 必须显式挡掉它们，否则 `Ctrl+MouseBack` 会拼出 `'Control+'` 这种真值垃圾串送进 `globalShortcut.register`。
+- **中键的自动滚动要在 `auxclick` 上再挡一次**，`mousedown` 的 `preventDefault` 挡不住它。所以渲染层是两个 capture 阶段监听，缺一不可。
+- **局内 / 全局同时绑同一个组合时的去重靠一份不带 `action` 的 `local` 签名表**，主进程只在「签名在表里且主窗口有焦点」时跳过派发；别改成靠 `action` 判断。
+- **原生模块进包要手写白名单。** `build.files` 是白名单，而打包测试的相对依赖扫描只认 `./` / `../`，bare `require('uiohook-napi')` 它看不见；`node_modules/uiohook-napi/**/*` 和 `node_modules/node-gyp-build/**/*`（uiohook 的入口就是 `require('node-gyp-build')`）都得显式写上。`.node` 二进制在 asar 里 `dlopen` 不了，必须进 `asarUnpack`——而 `tests/complete-optimization-gates.test.js` 那条 `asarUnpack` 断言是全量 `deepEqual`，加条目要同步改它。
+- **锁文件里的 `resolved` 必须全部指向 `registry.npmjs.org`。** 本机 npm 默认走 `registry.npmmirror.com`，混进去 CI 上的 `npm ci` 会拉到跟 integrity 对不上的地址。生成锁文件时加 `--registry=https://registry.npmjs.org/`；现在有测试扫这条了。
+- **引入静态链接 LGPL 组件时要披露、也要写准。** uiohook-napi 是 MIT，链的 libuiohook 是 LGPL-3.0-or-later，按 LGPL v3 第 2 条可在 GPL-3.0 项目内分发。声明里只能说「随附预编译 `.node`、版本已钉死、重编译替换即可再链接」——**不能写成「安装包附了完整编译源码」**，electron-builder 的默认 node_modules 排除规则会剥掉 `binding.gyp` 与 `.h/.cc/.cpp`。
+- **`node:vm` 切片测试的两条老规矩又各踩一次：** 切片外声明的标识符必须由 harness 供上**并用正则钉住**，否则生产代码的 `try/catch` 把 `ReferenceError` 咽掉、测试静默假通过；`let` / `const` 在 vm 顶层不是 context 属性，主进程那些 `let globalMouseHotkeyMap` / `const GLOBAL_MOUSE_HOTKEY_BUTTONS` 宿主完全看不见，断言只能走返回值与调用记录。默认热键表自带九组键盘全局绑定，routing 断言前要先把整个 scope 清空。
+- 验证：全量 Node 回归 `807/807`（上一版基线 `712`）。本轮未启动本机 Electron，未合成鼠标键盘输入；`uiohook-napi` 只在裸 Node 下实测加载过，**Electron 运行时里的钩子行为未经本机验证**。
