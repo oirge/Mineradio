@@ -1,5 +1,21 @@
 ﻿# 发布流程
 
+## v1.7.26 热键设置面板换成播放器自己的皮，主题插件终于带得动它
+- 正式发布版本从 `1.7.25` 提升为 `1.7.26`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:566`）与发布工作流默认 tag 保持一致，`1.7.25` → `1.7.26`。
+- 用户原话：「热键界面ui不符合我播放器ui啊而且主题插件这个热键界面不生效 你改一下」，随附热键设置弹窗截图（扁平深灰方框、纯白文字、右上角裸 `×`、方角行、绿色「可用」文字）。随后「发布新版」。
+- **两个抱怨是同一个根因。** 主题插件只有两条通道能作用于一个控件：插件 `theme.vars` 灌到 `:root` 的 `--th-*` 令牌，或者 `theme.css` 那段 `!important` 规则里点名的类名（`.modal,.track-detail-modal,#fx-panel,#playlist-panel,.home-card,…`）。原来的 `.hotkey-*` 两条都不占——48 条规则里 0 个 `--th-*`，类名也不在任何主题的选择器表里。既然颜色全是写死的深灰字面量，它当然既不像播放器、也换不动主题。**新增控件要想「自动跟主题」，必须复用兼容层点名过的类名，或者自己走 `--th-*` 令牌，最好两条都占。**
+- 改法是两条通道一次补齐：外壳换成 `.modal-mask hotkey-modal` + `<div class="modal hotkey-dialog">`（主题的 `css` 段按 `.modal` 选，直接命中），分段用 `.panel-tab`、按键/默认按钮用 `.fx-mini-btn`（`.ghost`）、底部 `.btn-row` + `.modal-btn`（这些类名都在 `public/app.css` 兼容层的胶囊列表里，`--th-chip-*` 自动灌进来）；剩下的热键专属颜色改走 `--th-row-*` / `--th-chip-*` / `--th-text-strong` / `--th-text-dim` / `--champagne`，强调色统一 `rgba(var(--fc-accent-rgb),…)`。**故意没有改 `public/plugin-builtin-themes.js`**：既然外壳戴上了 `.modal`，内置主题的 `css` 段已经覆盖到，改那个文件还得同步改 `examples/plugins/*.json`（被 `tests/plugin-system.test.js` 钉住），而且令牌这条路对第三方主题一样有效。
+- `.hotkey-modal` 这个类名**必须继续留在遮罩元素上**：`tests/global-hotkeys.test.js` 有一条 `/\.hotkey-modal\.warn \.hotkey-capture-tip\{/` 的 CSS 断言。所以是遮罩 `modal-mask hotkey-modal`、卡片 `modal hotkey-dialog`，不是把 `.hotkey-modal` 整个删掉。
+- 删掉的旧规则（现在靠继承）：`.hotkey-modal{position:fixed;inset:0;z-index:1450;…}`、`.hotkey-modal.show`、旧 `.hotkey-dialog` 自带的渐变/边框/阴影、`.hotkey-head`、`.hotkey-title`、`.hotkey-close`、`.hotkey-tabs button`。层级从 `1450` 落回 `.modal-mask` 的 `50`，**这顺带修掉一个真 bug**：`1450` 压在自绘标题栏（`#desktop-titlebar` 是 `500`）之上，弹窗开着时窗口控制按钮点不到；`#toast`（`200`）现在也能像其它弹窗那样浮上来。
+- **浅色主题下语义色不能直接当文字色。** 「可用」原本是 `#7ee2a8`，在「雪昼白」（`--th-text-strong: rgba(27,49,65,0.96)`、卡片是白的）下白底薄荷字基本看不见。现在写成 `color:var(--th-text-strong,#7ee2a8)`——令牌没设时回落语义色，默认深色主题外观不变，主题在时跟主题正文色走；绿/黄的语义信息移到 `::before` 色点和 `.source-icon` 实心琥珀圆点上，颜色不依赖底色。`.hotkey-kicker` 同理改成 `color:var(--champagne)` + `opacity:.82`（各主题的 `--champagne` 都是可读色，浅色主题是 `#2f718e`）。
+- **主题兼容层的 `!important` 会吃掉状态类。** `.pl-card,.queue-item,.mini-queue-item,.pl-detail-row` 那条把 `border` 和 `box-shadow` 都写成 `!important`，所以 `.queue-item.drop-before` / `.drop-after` / `.dragging` / `.next-up` 只要不带 `!important` 就会被整块盖掉——开主题后拖动队列看不到插入位置线。这四条已补 `!important`（同为 `!important` 时按特异性判，`.queue-item.next-up` 的 `0,2,0` 压过 `0,1,0`），并在浏览器里读 `getComputedStyle` 逐条确认过。
+- v1.7.25 新增的队列样式是同一个毛病（0 个令牌、写死 `rgba(0,245,212,…)`），一并改掉：`.queue-chip` / `.queue-mode-btn` / `.queue-next-up-*` / `.qi-drag i` / `.queue-archive-*`。`.queue-next-up-row` 是虚线框，所以兼容层那种 `border:1px solid` 的写法不能套上去，它自己走 `var(--th-row-border,…)` 只换颜色不换线型。
+- 因为改写后的规则本身就引用 `var(--th-*)`，**没有往 `public/app.css` 的兼容层新增选择器**：兼容层的作用是给「样式里没提令牌」的控件补令牌，重复列一遍只会多一份 `!important` 冲突面。
+- 视觉验收方式记录下来备用：起一个只有 `<link href="app.css">` 的临时静态页面，把 `ensureHotkeyModal()` 的真实 markup 贴进去，并用 `?theme=light` 把「雪昼白」那套 `--th-*` 与 `css` 段注入 `:root`，再截图对比两种主题。本轮未启动本机 Electron，未合成鼠标键盘输入。临时页面用完已删除。
+- 发布前全量 Node 回归 `712/712`（`main` 基线 `709`）：`tests/global-hotkeys.test.js` 新增 2 例（外壳必须是 `.modal-mask` + `.modal`、tabs 是 `.panel-tab`、按钮是 `.fx-mini-btn`，且 `.hotkey-close` / `.hotkey-head` / `.hotkey-title` 不许残留；`.hotkey-*` CSS 必须覆盖 7 个 `--th-*` 令牌、不许有 `rgba(0,245,212` 与 `z-index:1450`），`tests/playback-queue-power.test.js` 新增 1 例（队列样式同样的令牌与字面量约束，外加三条落点提示 `!important` 断言）。切片锚点：`function ensureHotkeyModal() {` → `function hotkeyStatusMarkup(`、`function renderHotkeyScope(` → `function renderHotkeySettings(`、CSS 从 `.hotkey-dialog{` 到 `/*  歌单/队列面板`、`.queue-chip{` 到 `.pl-card{`。
+- 其中一轮 `node --test` 打过一条 `ERR_ASSERTION`（`actual: 0, expected: 1`，栈在 `processPendingSubtests`）但不报失败测试名，之后连跑 6 轮都是 `fail 0`、抓不到复现，判为既有的时序抖动，与本轮 CSS 改动无关；如后续复现再定位。
+
+
 ## v1.7.25 全局快捷键可自定义 + 播放队列升级成队列工作台
 - 正式发布版本从 `1.7.24` 提升为 `1.7.25`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:566`）与发布工作流默认 tag 保持一致，`1.7.24` → `1.7.25`。
 - 用户原话：「在最新版的基础上更新全局快捷键 比如：Ctrl + Alt + ← 上一首 / Ctrl + Alt + → 下一首 / Ctrl + Alt + ↓ 播放/暂停 / Ctrl + Alt + ↑/↓ 音量 / 用户可自定义快捷键」，随后「更新好快捷键之后再更新更强的播放队列……当前播放队列 / 下一首预览 / 拖动调整队列 / 从队列移除 /「播放完当前歌曲后停止」/「单曲循环」/「队列循环」/ 队列保存/恢复」，最后「全部更新好之后发布新版」。

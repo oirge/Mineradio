@@ -1420,37 +1420,43 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .fx-advanced-body{margin-top:0}
 .fx-fold,.fx-advanced{background:rgba(255,255,255,.024)}
 
-.hotkey-modal{position:fixed;inset:0;z-index:1450;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.48);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
-.hotkey-modal.show{display:flex}
-.hotkey-dialog{width:min(760px,calc(100vw - 36px));max-height:min(720px,calc(100vh - 44px));overflow:auto;border-radius:18px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(180deg,rgba(14,15,20,.96),rgba(5,6,8,.96));box-shadow:0 32px 110px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.08);padding:18px;color:#fff}
-.hotkey-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
-.hotkey-title{font-size:16px;font-weight:800;letter-spacing:.04em}
-.hotkey-sub{margin-top:5px;font-size:11.5px;line-height:1.5;color:rgba(255,255,255,.48)}
-.hotkey-close{width:30px;height:30px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:rgba(255,255,255,.66);font-size:18px;line-height:1;cursor:pointer}
-.hotkey-close:hover{background:rgba(255,255,255,.09);color:#fff}
-.hotkey-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0}
-.hotkey-tabs{display:flex;gap:8px}
-.hotkey-tabs button{height:30px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.035);color:rgba(255,255,255,.58);font:760 12px/1 var(--font-sans);cursor:pointer;padding:0 13px}
-.hotkey-tabs button.active{border-color:rgba(var(--fc-accent-rgb),.35);background:rgba(var(--fc-accent-rgb),.12);color:#fff}
-.hotkey-note{font-size:11px;color:rgba(255,255,255,.42);text-align:right}
+/* 热键面板：外壳复用 .modal-mask / .modal / .modal-btn / .panel-tab，这里只补宽度、留白和行网格。
+   颜色一律走 --th-* 主题令牌与 rgba(var(--fc-accent-rgb)) 强调色 —— 之前这一块写的是字面深灰，
+   主题插件既选不中（它们的 css 段按 .modal 选）也灌不进（一个 --th-* 都没用），换主题后就剩这里是块深色补丁。 */
+.hotkey-dialog{width:min(740px,92vw);max-width:min(740px,92vw);max-height:min(760px,calc(100vh - 96px));padding:26px;text-align:left;display:flex;flex-direction:column;overflow:hidden}
+.hotkey-dialog::before{content:'';position:absolute;top:0;left:24px;right:24px;height:1px;background:linear-gradient(90deg,transparent,rgba(244,210,138,.58),rgba(255,255,255,.20),transparent);opacity:.72;pointer-events:none}
+.hotkey-kicker{margin-bottom:7px;font-size:9.5px;font-weight:780;letter-spacing:.19em;text-transform:uppercase;color:var(--champagne,#f4d28a);opacity:.82}
+.hotkey-dialog h2{text-align:left;margin:0 0 9px;font-size:20px;font-weight:720;letter-spacing:.1px}
+.hotkey-sub{margin:0;font-size:11.5px;line-height:1.6;color:var(--th-text-dim,rgba(255,255,255,.48))}
+.hotkey-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:15px 0 2px}
+.hotkey-tabs{display:flex;align-items:center;gap:8px}
+.hotkey-note{font-size:11px;color:var(--th-text-dim,rgba(255,255,255,.42));text-align:right}
+.hotkey-scroll{flex:1;min-height:0;overflow:auto;margin:0 -6px;padding:2px 6px;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(var(--fc-accent-rgb),.22) transparent}
 .hotkey-section{display:none}
 .hotkey-section.active{display:block}
 .hotkey-group{margin-top:12px}
-.hotkey-group-title{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:rgba(var(--fc-accent-rgb),.78);margin:0 0 8px}
-.hotkey-row{display:grid;grid-template-columns:minmax(112px,1fr) 180px 86px minmax(126px,1.15fr);gap:9px;align-items:center;min-height:46px;margin:6px 0;padding:9px;border-radius:12px;border:1px solid rgba(255,255,255,.065);background:rgba(255,255,255,.028)}
-.hotkey-name{min-width:0;font-size:12.5px;font-weight:760;color:rgba(255,255,255,.88);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hotkey-key{height:30px;border-radius:9px;border:1px solid rgba(255,255,255,.11);background:rgba(0,0,0,.22);color:#fff;font:760 11.5px/1 var(--font-sans);cursor:pointer;padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hotkey-key:hover,.hotkey-key.capturing{border-color:rgba(var(--fc-accent-rgb),.42);background:rgba(var(--fc-accent-rgb),.10)}
-.hotkey-reset{height:30px;border-radius:9px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);color:rgba(255,255,255,.55);font:700 11px/1 var(--font-sans);cursor:pointer}
-.hotkey-reset:hover{background:rgba(255,255,255,.08);color:#fff}
-.hotkey-status{min-width:0;font-size:11px;color:rgba(255,255,255,.46);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hotkey-status.ok{color:rgba(126,226,168,.78)}
-.hotkey-status.conflict{color:rgba(255,206,112,.86)}
-.hotkey-status .source-icon{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,206,112,.12);color:#ffce70;font-size:11px;flex:0 0 auto}
-.hotkey-capture-tip{display:none;margin-top:10px;padding:9px 11px;border-radius:12px;border:1px solid rgba(var(--fc-accent-rgb),.22);background:rgba(var(--fc-accent-rgb),.075);font-size:12px;color:rgba(255,255,255,.74)}
+.hotkey-group:first-child{margin-top:2px}
+.hotkey-group-title{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:rgba(var(--fc-accent-rgb),.72);margin:0 0 7px}
+.hotkey-row{display:grid;grid-template-columns:minmax(112px,1fr) 176px 74px minmax(132px,1.1fr);gap:9px;align-items:center;min-height:46px;margin:6px 0;padding:8px 10px;border-radius:12px;border:1px solid var(--th-row-border,rgba(255,255,255,.065));background:var(--th-row-bg,rgba(255,255,255,.028));box-shadow:var(--th-row-shadow,inset 0 1px 0 rgba(255,255,255,.035));transition:border-color .18s,background .18s}
+.hotkey-row:hover{border-color:var(--th-row-hover-border,rgba(255,255,255,.13));background:var(--th-row-hover-bg,rgba(255,255,255,.05))}
+.hotkey-row.capturing{border-color:rgba(var(--fc-accent-rgb),.34);background:rgba(var(--fc-accent-rgb),.07)}
+.hotkey-name{min-width:0;font-size:12.5px;font-weight:760;color:var(--th-text-strong,rgba(255,255,255,.88));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hotkey-row .hotkey-key{height:30px;padding:0 10px;border-radius:9px;font:760 11.5px/1 var(--font-sans);color:var(--th-text-strong,rgba(255,255,255,.92));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hotkey-row .hotkey-key:hover,.hotkey-row .hotkey-key.capturing{border-color:rgba(var(--fc-accent-rgb),.42)!important;background:rgba(var(--fc-accent-rgb),.10)!important;color:#fff}
+.hotkey-row .hotkey-reset{height:30px;padding:0 8px;border-radius:9px;font:700 11px/1 var(--font-sans)}
+/* 状态胶囊：颜色只留在圆点/描边/淡底上，文字走 --th-text-strong。
+   把「可用」直接染成 #7ee2a8 的话，浅色主题下白胶囊配薄荷字基本看不见 —— 令牌没设时才回落到语义色，
+   所以默认主题看着还是原来的绿，换主题就跟着主题的正文色走。 */
+.hotkey-status{justify-self:start;max-width:100%;min-width:0;display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--th-chip-border,rgba(255,255,255,.10));background:var(--th-chip-bg,rgba(255,255,255,.035));font-size:10.5px;color:var(--th-text-dim,rgba(255,255,255,.46));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hotkey-status.ok{border-color:rgba(126,226,168,.34);background:rgba(126,226,168,.14);color:var(--th-text-strong,#7ee2a8)}
+.hotkey-status.ok::before{content:'';width:6px;height:6px;border-radius:50%;background:#57d295;box-shadow:0 0 0 2px rgba(126,226,168,.18);flex:0 0 auto}
+.hotkey-status.conflict{border-color:rgba(255,206,112,.36);background:rgba(255,206,112,.15);color:var(--th-text-strong,#ffce70)}
+.hotkey-status .source-icon{width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#ffce70;color:#3d2c07;font-size:10px;font-weight:800;flex:0 0 auto}
+.hotkey-capture-tip{display:none;margin-top:12px;padding:9px 11px;border-radius:12px;border:1px solid rgba(var(--fc-accent-rgb),.22);background:rgba(var(--fc-accent-rgb),.075);font-size:12px;color:var(--th-text-strong,rgba(255,255,255,.74))}
 .hotkey-modal.capturing .hotkey-capture-tip{display:block}
 .hotkey-modal.warn .hotkey-capture-tip{display:block;border-color:rgba(255,138,128,.34);background:rgba(255,138,128,.1);color:rgba(255,214,208,.9)}
-@media (max-width:720px){
+.hotkey-dialog .btn-row{margin-top:14px;justify-content:flex-end}
+@media (max-width:760px){
   .hotkey-row{grid-template-columns:1fr;gap:7px}
   .hotkey-toolbar{align-items:flex-start;flex-direction:column}
   .hotkey-note{text-align:left}
@@ -1490,48 +1496,51 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .qi-act button.liked,.song-action-btn.liked{color:#ff7a90;background:rgba(255,122,144,.10)}
 .song-action-btn{width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.045);color:rgba(255,255,255,.58);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .18s;font-size:14px;line-height:1}
 .song-action-btn:hover{background:rgba(0,245,212,.10);border-color:rgba(0,245,212,.32);color:#eafffb;transform:translateY(-1px)}
-.queue-chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);font-size:10.5px;color:rgba(255,255,255,.65)}
+.queue-chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--th-chip-border,rgba(255,255,255,.10));background:var(--th-chip-bg,rgba(255,255,255,.03));font-size:10.5px;color:var(--th-text-dim,rgba(255,255,255,.65))}
 .queue-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 4px}
 .queue-toolbar .fx-mini-btn{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;line-height:1}
-/* 播放模式与「播完即停」——一排小胶囊，选中态用主色描边，和面板其他控件同一套语言 */
+/* 播放模式与「播完即停」——一排小胶囊，选中态用主色描边，和面板其他控件同一套语言。
+   底色一律走 --th-chip-*，强调色走 var(--fc-accent-rgb)：写死青色的话换主题和换强调色都不跟。 */
 .queue-mode-row{display:flex;align-items:center;gap:5px;margin:2px 0 4px}
-.queue-mode-btn{flex:1 1 0;min-width:0;height:25px;padding:0 6px;border-radius:999px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.028);color:rgba(255,255,255,.56);font-size:10.5px;line-height:1;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .18s,border-color .18s,color .18s}
-.queue-mode-btn:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.85)}
-.queue-mode-btn.active{border-color:rgba(0,245,212,.36);background:rgba(0,245,212,.10);color:#eafffb}
+.queue-mode-btn{flex:1 1 0;min-width:0;height:25px;padding:0 6px;border-radius:999px;border:1px solid var(--th-chip-border,rgba(255,255,255,.09));background:var(--th-chip-bg,rgba(255,255,255,.028));color:var(--th-text-dim,rgba(255,255,255,.56));font-size:10.5px;line-height:1;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .18s,border-color .18s,color .18s}
+.queue-mode-btn:hover{background:var(--th-chip-hover-bg,rgba(255,255,255,.06));border-color:var(--th-chip-hover-border,rgba(255,255,255,.16));color:var(--th-text-strong,rgba(255,255,255,.85))}
+.queue-mode-btn.active{border-color:rgba(var(--fc-accent-rgb),.36);background:rgba(var(--fc-accent-rgb),.10);color:#fff}
 .queue-mode-btn.stop-after.active{border-color:rgba(255,183,94,.4);background:rgba(255,183,94,.12);color:#ffe6c4}
 /* 下一首预览 */
 .queue-next-up{display:none;margin:2px 0 6px}
 .queue-next-up.show{display:block}
-.queue-next-up-row{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border-radius:10px;border:1px dashed rgba(255,255,255,.10);background:rgba(255,255,255,.02);cursor:pointer;text-align:left;transition:background .18s,border-color .18s}
-.queue-next-up-row:hover{background:rgba(0,245,212,.06);border-color:rgba(0,245,212,.26)}
-.queue-next-up-tag{flex:0 0 auto;padding:2px 6px;border-radius:999px;background:rgba(0,245,212,.12);color:rgba(0,245,212,.86);font-size:9.5px;line-height:1.5;white-space:nowrap}
+.queue-next-up-row{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border-radius:10px;border:1px dashed var(--th-row-border,rgba(255,255,255,.10));background:var(--th-row-bg,rgba(255,255,255,.02));cursor:pointer;text-align:left;transition:background .18s,border-color .18s}
+.queue-next-up-row:hover{background:rgba(var(--fc-accent-rgb),.06);border-color:rgba(var(--fc-accent-rgb),.26)}
+.queue-next-up-tag{flex:0 0 auto;padding:2px 6px;border-radius:999px;background:rgba(var(--fc-accent-rgb),.12);color:rgba(var(--fc-accent-rgb),.86);font-size:9.5px;line-height:1.5;white-space:nowrap}
 .queue-next-up-row img,.queue-next-up-cover{width:26px;height:26px;border-radius:5px;object-fit:cover;background:rgba(255,255,255,.06);flex:0 0 auto}
 .queue-next-up-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.queue-next-up-name{font-size:11.5px;color:rgba(255,255,255,.86);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.queue-next-up-sub{font-size:10px;color:rgba(255,255,255,.38);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.queue-next-up-idx{flex:0 0 auto;font-size:10px;color:rgba(255,255,255,.30);font-variant-numeric:tabular-nums}
+.queue-next-up-name{font-size:11.5px;color:var(--th-text-strong,rgba(255,255,255,.86));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-next-up-sub{font-size:10px;color:var(--th-text-dim,rgba(255,255,255,.38));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-next-up-idx{flex:0 0 auto;font-size:10px;color:var(--th-text-dim,rgba(255,255,255,.30));font-variant-numeric:tabular-nums}
 .queue-next-up-stop{padding:6px 10px;border-radius:10px;border:1px dashed rgba(255,183,94,.28);background:rgba(255,183,94,.07);color:rgba(255,214,168,.86);font-size:10.5px;text-align:center}
-/* 队列项的拖动句柄与落点提示 */
+/* 队列项的拖动句柄与落点提示。
+   落点提示必须带 !important：主题兼容层给 .queue-item 的 border/box-shadow 就是 !important，
+   不加的话一开主题插件，拖动时的上下高亮线会被整块盖掉。 */
 .qi-drag{flex:0 0 auto;display:flex;flex-direction:column;justify-content:center;gap:2.5px;width:10px;padding:2px 0;opacity:0;cursor:grab;transition:opacity .15s}
-.qi-drag i{display:block;width:10px;height:1.5px;border-radius:1px;background:rgba(255,255,255,.34)}
+.qi-drag i{display:block;width:10px;height:1.5px;border-radius:1px;background:var(--th-text-dim,rgba(255,255,255,.34))}
 .queue-item:hover .qi-drag{opacity:1}
-.queue-item.dragging{opacity:.42;border-color:rgba(0,245,212,.28)}
-.queue-item.drop-before{box-shadow:inset 0 2px 0 0 rgba(0,245,212,.72)}
-.queue-item.drop-after{box-shadow:inset 0 -2px 0 0 rgba(0,245,212,.72)}
-.queue-item.next-up{border-color:rgba(255,255,255,.13)}
-.queue-item.next-up .qi-name{color:rgba(255,255,255,.98)}
+.queue-item.dragging{opacity:.42;border-color:rgba(var(--fc-accent-rgb),.28)!important}
+.queue-item.drop-before{box-shadow:inset 0 2px 0 0 rgba(var(--fc-accent-rgb),.72)!important}
+.queue-item.drop-after{box-shadow:inset 0 -2px 0 0 rgba(var(--fc-accent-rgb),.72)!important}
+.queue-item.next-up{border-color:var(--th-row-hover-border,rgba(255,255,255,.13))!important}
+.queue-item.next-up .qi-name{color:var(--th-text-strong,rgba(255,255,255,.98))}
 /* 队列存档 */
-.queue-archive{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.05)}
-.queue-archive-head{font-size:10px;letter-spacing:.09em;color:rgba(255,255,255,.34);margin-bottom:6px}
+.queue-archive{margin-top:10px;padding-top:8px;border-top:1px solid var(--th-hairline-soft,rgba(255,255,255,.05))}
+.queue-archive-head{font-size:10px;letter-spacing:.09em;color:var(--th-text-dim,rgba(255,255,255,.34));margin-bottom:6px}
 .queue-archive-list{display:flex;flex-direction:column;gap:5px}
-.queue-archive-empty{padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.02);color:rgba(255,255,255,.28);font-size:10.5px;text-align:center}
+.queue-archive-empty{padding:8px 10px;border-radius:9px;background:var(--th-row-bg,rgba(255,255,255,.02));color:var(--th-text-dim,rgba(255,255,255,.28));font-size:10.5px;text-align:center}
 .queue-archive-item{display:flex;align-items:stretch;gap:5px}
-.queue-archive-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding:7px 9px;border-radius:9px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);cursor:pointer;text-align:left;transition:background .18s,border-color .18s}
-.queue-archive-main:hover{background:rgba(0,245,212,.06);border-color:rgba(0,245,212,.24)}
-.queue-archive-name{font-size:11.5px;color:rgba(255,255,255,.86);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.queue-archive-sub{font-size:10px;color:rgba(255,255,255,.36);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.queue-archive-del{flex:0 0 auto;width:26px;border-radius:9px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.025);color:rgba(255,255,255,.42);font-size:14px;line-height:1;cursor:pointer;transition:background .18s,color .18s,border-color .18s}
-.queue-archive-del:hover{background:rgba(255,138,128,.12);border-color:rgba(255,138,128,.3);color:#ffd6d0}
+.queue-archive-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding:7px 9px;border-radius:9px;border:1px solid var(--th-row-border,rgba(255,255,255,.06));background:var(--th-row-bg,rgba(255,255,255,.025));cursor:pointer;text-align:left;transition:background .18s,border-color .18s}
+.queue-archive-main:hover{background:rgba(var(--fc-accent-rgb),.06);border-color:rgba(var(--fc-accent-rgb),.24)}
+.queue-archive-name{font-size:11.5px;color:var(--th-text-strong,rgba(255,255,255,.86));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-archive-sub{font-size:10px;color:var(--th-text-dim,rgba(255,255,255,.36));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-archive-del{flex:0 0 auto;width:26px;border-radius:9px;border:1px solid var(--th-chip-border,rgba(255,255,255,.06));background:var(--th-chip-bg,rgba(255,255,255,.025));color:var(--th-text-dim,rgba(255,255,255,.42));font-size:14px;line-height:1;cursor:pointer;transition:background .18s,color .18s,border-color .18s}
+.queue-archive-del:hover{background:rgba(255,138,128,.12)!important;border-color:rgba(255,138,128,.3)!important;color:#ffd6d0!important}
 .pl-card{display:flex;align-items:center;gap:10px;padding:9px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);transition:background .18s,border-color .18s,transform .18s;cursor:pointer;margin-bottom:7px;will-change:transform,opacity;content-visibility:auto;contain-intrinsic-block-size:64px}
 .pl-card:hover{background:rgba(255,255,255,.06)}
 .pl-card img{width:44px;height:44px;border-radius:8px;object-fit:cover;background:rgba(255,255,255,.06);flex-shrink:0}
