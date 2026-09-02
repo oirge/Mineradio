@@ -222,8 +222,11 @@ async function testPlaybackHydratesOneCachedLyric() {
   /** @returns {void} 记录歌词应用次数。 */
   function maybeApplyLocalLyricsForSong() { calls.applied += 1; }
 
-  /** @returns {boolean} 测试不需要读取 FLAC 内嵌歌词。 */
-  function canReadEmbeddedFlacLyrics() { return false; }
+  /** @returns {boolean} 测试不需要读取内嵌歌词。 */
+  function canReadEmbeddedLyrics() { return false; }
+
+  /** @returns {string} 内嵌歌词来源标签。 */
+  function embeddedLyricSourceLabel() { return 'FLAC LYRICS'; }
 
   /** @returns {void} 测试不需要持久化或同步副本。 */
   function noop() {}
@@ -234,7 +237,9 @@ async function testPlaybackHydratesOneCachedLyric() {
   const context = {
     hydrateLocalAssetCacheForSongRange,
     maybeApplyLocalLyricsForSong,
-    canReadEmbeddedFlacLyrics,
+    canReadEmbeddedLyrics,
+    canReadTruncatableEmbeddedLyrics: canReadEmbeddedLyrics,
+    embeddedLyricSourceLabel,
     scheduleLocalAssetCacheWrite: noop,
     syncLocalSongAssetFields: noop,
     scheduleLocalAssetUiRefresh: noop,
@@ -272,8 +277,8 @@ async function testPlaybackHydratesOneCachedLyric() {
 async function testBackgroundProcessingSkipsInactiveLyrics() {
   const calls = { metadata: 0, covers: 0, lyrics: 0 };
 
-  /** @returns {boolean} 测试歌曲不需要读取内嵌 FLAC 歌词。 */
-  function canReadEmbeddedFlacLyrics() { return false; }
+  /** @returns {boolean} 测试歌曲不需要读取内嵌歌词。 */
+  function canReadEmbeddedLyrics() { return false; }
 
   /** @returns {boolean} 测试歌曲不需要读取内嵌封面。 */
   function canReadEmbeddedCover() { return false; }
@@ -300,7 +305,7 @@ async function testBackgroundProcessingSkipsInactiveLyrics() {
   }
 
   const context = {
-    canReadEmbeddedFlacLyrics,
+    canReadEmbeddedLyrics,
     canReadEmbeddedCover,
     localIndexedAssetCanWaitForCache,
     ensureLocalMetadataForSong,
@@ -776,11 +781,14 @@ async function testLateLyricFileReadDoesNotRestoreOldResidency() {
   /** @returns {Promise<string>} 返回受控歌词读取任务。 */
   function readLocalTextFile() { return lyricRead; }
 
-  /** @returns {boolean} 测试使用外置歌词，不读取 FLAC 内嵌字段。 */
-  function canReadEmbeddedFlacLyrics() { return false; }
+  /** @returns {boolean} 测试使用外置歌词，不读取内嵌字段。 */
+  function canReadEmbeddedLyrics() { return false; }
+
+  /** @returns {string} 内嵌歌词来源标签。 */
+  function embeddedLyricSourceLabel() { return 'LRC'; }
 
   /** @returns {Promise<string>} 测试不会调用内嵌歌词解析。 */
-  function extractFlacEmbeddedLyricsText() { return Promise.resolve(''); }
+  function extractEmbeddedLyricsText() { return Promise.resolve(''); }
 
   /**
    * 在释放前捕获持久化歌词快照。
@@ -825,8 +833,10 @@ async function testLateLyricFileReadDoesNotRestoreOldResidency() {
     playlist: [],
     trackSwitchToken: 1,
     readLocalTextFile,
-    canReadEmbeddedFlacLyrics,
-    extractFlacEmbeddedLyricsText,
+    canReadEmbeddedLyrics,
+    canReadTruncatableEmbeddedLyrics: canReadEmbeddedLyrics,
+    embeddedLyricSourceLabel,
+    extractEmbeddedLyricsText,
     scheduleLocalAssetCacheWrite,
     invalidateSongCoverCache,
     scheduleLocalAssetUiRefresh,

@@ -38,6 +38,8 @@ function createSpecialLikedContext(initialStorage = '[]') {
       getItem: (key) => storage.get(key) || null,
     },
     setPersistentLocalStorageItem: (key, value) => storage.set(key, value),
+    // toggleSpecialLikedSong 会把收藏状态同步给 SQLite 曲库，切片里没有桌面壳桥接，注入空实现即可。
+    syncLocalLibraryDbFavorite: () => {},
     showToast: () => {},
   };
   vm.runInNewContext(`${functions}\nthis.api = { compactSpecialLikedSongRefs, readSpecialLikedSongRefs, toggleSpecialLikedSong, specialLikedSongRefIndex, getSpecialLikedSongs };`, context);

@@ -62,6 +62,19 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   refreshLocalMusicFiles: (folderPath, files) => ipcRenderer.invoke('mineradio-local-music-refresh-entries', folderPath, files || []),
   readLocalFileRange: (filePath, start, end) => ipcRenderer.invoke('mineradio-local-file-read-range', filePath, start, end),
   readLocalFileDataUrl: (filePath) => ipcRenderer.invoke('mineradio-local-file-read-data-url', filePath),
+  // 本地曲库 SQLite：文件指纹 + 路径索引常驻磁盘，几万首歌启动不再重放整包 JSON。
+  localLibraryDbStatus: () => ipcRenderer.invoke('mineradio-local-library-db-status'),
+  loadLocalLibraryDb: (folderPath, options) => ipcRenderer.invoke('mineradio-local-library-db-load', String(folderPath || ''), options || {}),
+  saveLocalLibraryDbIndex: (folderPath, records) => ipcRenderer.invoke('mineradio-local-library-db-save-index', String(folderPath || ''), records || []),
+  clearLocalLibraryDb: (folderPath) => ipcRenderer.invoke('mineradio-local-library-db-clear', String(folderPath || '')),
+  readLocalLibraryDbAssets: (keys) => ipcRenderer.invoke('mineradio-local-library-db-read-assets', keys || []),
+  writeLocalLibraryDbAssets: (records) => ipcRenderer.invoke('mineradio-local-library-db-write-assets', records || []),
+  readLocalLibraryDbLyrics: (keys) => ipcRenderer.invoke('mineradio-local-library-db-read-lyrics', keys || []),
+  writeLocalLibraryDbLyrics: (records) => ipcRenderer.invoke('mineradio-local-library-db-write-lyrics', records || []),
+  bumpLocalLibraryDbPlayStat: (payload) => ipcRenderer.invoke('mineradio-local-library-db-bump-play', payload || {}),
+  setLocalLibraryDbFavorite: (payload) => ipcRenderer.invoke('mineradio-local-library-db-set-favorite', payload || {}),
+  readLocalLibraryDbStats: (payload) => ipcRenderer.invoke('mineradio-local-library-db-read-stats', payload || {}),
+  trimLocalLibraryDb: (payload) => ipcRenderer.invoke('mineradio-local-library-db-trim', payload || {}),
   onGlobalHotkey: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload || {});

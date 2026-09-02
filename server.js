@@ -128,6 +128,8 @@ const LOCAL_FILE_MIME = {
   '.aif': 'audio/x-aiff',
   '.aiff': 'audio/x-aiff',
   '.aifc': 'audio/x-aiff',
+  '.ape': 'audio/x-ape',
+  '.dsf': 'audio/x-dsf',
   '.lrc': 'text/plain; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
   '.srt': 'application/x-subrip; charset=utf-8',
@@ -169,6 +171,90 @@ function parseLocalFileRange(rangeHeader, total) {
     return { invalid: true };
   }
   return { start, end: Math.min(end, total - 1) };
+}
+
+/**
+ * 懒加载 APE / DSF 转码模块（位于 asar 内，需按 RESOURCE_ROOT 定位）。
+ * @returns {Object|null} 模块，或不可用时 null。
+ */
+let audioTranscodeModule;
+function loadAudioTranscode() {
+  if (audioTranscodeModule !== undefined) return audioTranscodeModule;
+  audioTranscodeModule = null;
+  try {
+    audioTranscodeModule = require(path.join(RESOURCE_ROOT, 'desktop', 'audio', 'wav-stream.js'));
+  } catch (err) {
+    console.warn('[LocalFile] 转码模块不可用:', err.message);
+  }
+  return audioTranscodeModule;
+}
+
+/**
+ * 为浏览器不认识的无损格式（APE / DSD）打开“虚拟 WAV 文件”。
+ * @param {string} filePath 已授权的绝对路径。
+ * @returns {Object|null} 不需要或无法转码时返回 null（退回原始字节）。
+ */
+function openTranscodeSource(filePath) {
+  const mod = loadAudioTranscode();
+  if (!mod || !mod.transcodeKind(filePath)) return null;
+  try {
+    return mod.openTranscodeSource(filePath);
+  } catch (err) {
+    console.warn('[LocalFile] 无法转码，改发原始字节:', err.message);
+    return null;
+  }
+}
+
+/**
+ * 发送虚拟 WAV（含 Range 支持，<audio> 拖动进度条依赖它）。
+ * @param {http.IncomingMessage} req 请求。
+ * @param {http.ServerResponse} res 响应。
+ * @param {Object} src openTranscodeSource() 的结果。
+ * @returns {void}
+ */
+function sendTranscodedAudio(req, res, src) {
+  const total = src.size;
+  const parsedRange = parseLocalFileRange(req.headers.range, total);
+  if (parsedRange && parsedRange.invalid) {
+    src.close();
+    res.writeHead(416, {
+      'Access-Control-Allow-Origin': '*',
+      'Content-Range': `bytes */${total}`,
+    });
+    res.end();
+    return;
+  }
+  const start = parsedRange ? parsedRange.start : 0;
+  const end = parsedRange ? parsedRange.end : Math.max(0, total - 1);
+  const headers = {
+    'Content-Type': src.contentType,
+    'Content-Length': String(end - start + 1),
+    'Accept-Ranges': 'bytes',
+    'Access-Control-Allow-Origin': '*',
+    'Cross-Origin-Resource-Policy': 'cross-origin',
+    'Cache-Control': 'no-store',
+    'X-Mineradio-Transcode': `${src.kind};${src.sampleRate}Hz;${src.channels}ch;${src.bps}bit`,
+  };
+  if (parsedRange) headers['Content-Range'] = `bytes ${start}-${end}/${total}`;
+  res.writeHead(parsedRange ? 206 : 200, headers);
+  const body = src.createStream(start, end);
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    src.close();
+  };
+  body.on('error', (err) => {
+    console.error('[LocalFile]', err);
+    release();
+    res.end();
+  });
+  body.on('close', release);
+  res.on('close', () => {
+    body.destroy();
+    release();
+  });
+  body.pipe(res);
 }
 
 // ---------- 工具 ----------
@@ -2793,6 +2879,14 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
         res.end('Not found');
         return;
+      }
+      /* APE / DSD 浏览器不认识，实时转码成 WAV 再交给 <audio>；raw=1 时仍发原始字节。 */
+      if (url.searchParams.get('raw') !== '1') {
+        const transcoded = openTranscodeSource(target);
+        if (transcoded) {
+          sendTranscodedAudio(req, res, transcoded);
+          return;
+        }
       }
       const total = stat.size;
       let start = 0;

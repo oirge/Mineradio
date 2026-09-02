@@ -1,5 +1,39 @@
 ﻿# 发布流程
 
+## v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持
+- 正式发布版本从 `1.7.18` 提升为 `1.7.19`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.18` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版把本地播放的格式覆盖面从 MP3 / FLAC / M4A 一系扩展到 Ogg Vorbis / Ogg Opus / Ogg FLAC、WAV（含 RF64 / BW64）、APE（Monkey's Audio）与 DSF（DSD Stream File）：标签、封面、内嵌歌词与时长全部可读，`extractLocalMetadataTags`、`extractEmbeddedCoverSource` 与新增的 `extractEmbeddedLyricsText` 三个分发器按扩展名统一路由，能力判定 `canReadEmbeddedLyrics` / `canReadEmbeddedCover` 与两个可重试判定同步扩展。
+- Ogg 系列按页读取并跨页拼接数据包、跳过同文件内其它逻辑流，支持 `METADATA_BLOCK_PICTURE` 与旧式 `COVERART` / `COVERARTMIME`；时长优先取 Ogg FLAC STREAMINFO 的总采样数（此时不读尾部），没有时才回读尾部 `64KB` 找最后一个 granule，Opus 额外扣掉 `pre-skip`。WAV 走 RIFF chunk 目录、`id3 ` chunk 优先且 `LIST`/`INFO` 补齐缺失字段，`RF64`/`BW64` 用 `ds64` 的 64 位 `dataSize` 替换 `0xFFFFFFFF`。APE 分 3.99+ 描述符与 3.98 及更早的推导两条路，标签按 APEv2 页脚 → 文件头 ID3v2 → 尾部 ID3v1 合并。DSF 按 `DSD ` 头部 metadata 指针读尾部 ID3v2，`metadataOffset` 为 0 视为正常无标签、不浪费一次读取。
+- APE 与 DSD 现在能直接播放：Chromium 不认识这两种格式，新增 `desktop/audio/wav-stream.js` 把它们包装成「虚拟 WAV 文件」——总长度可精确计算、任意字节区间按需解码，`/api/local-file` 的 Range 请求、416 响应与 `raw=1` 原始字节通道全部照常工作。`desktop/audio/ape-decoder.js` 是纯 JS 的 Monkey's Audio 解码（3800–3990），`desktop/audio/dsf-decoder.js` 用字节查表的 FIR 抽取把 1-bit DSD 转成 PCM，两者都只接受 `read(offset, length)`、不碰文件系统。
+- ID3v2 读取保留原 MP3 的 `256KB` 探针语义（探针覆盖整段标签就直接切片复用，只有超出探针才发第二次 Range 读取），MP3、WAV 的 `id3 ` chunk、APE 文件头 ID3v2 与 DSF 尾部 ID3v2 共用；标签超过本轮扫描预算（后台轻量 `4MB`、前台 `24MB`）时统一标记 `_mineradioScanComplete=false` 交前台完整重试，不返回半截结果。
+- 授权：`desktop/audio/ape-decoder.js` 是 FFmpeg `libavformat/ape.c` 与 `libavcodec/apedec.c` 的逐行移植，原始条款为 `LGPL-2.1-or-later`，按 LGPL v2.1 第 3 条在本项目内以 `GPL-3.0` 分发；新增根目录 `THIRD-PARTY-NOTICES.md` 记录该声明与 three.js / music-tempo / Inter / GSAP 的条款，并把它与 `LICENSE` 一起纳入 `build.files` 随安装包分发。DST 压缩的 `.dff` 不在本版范围内。
+- 发布前全量 Node 回归 `558/558`（新增 `tests/local-format-tag-parsing.test.js` 18 例，用真实字节夹具驱动 `public/app.js` 里的实际解析实现，并用 Range 请求次数钉死读取行为：Ogg FLAC 拿到 STREAMINFO 只读 1 次、Vorbis/Opus 才读 2 次、DSF 超探针只补读 1 次、超预算不发额外读），并通过 `node --check` 对 `public/app.js`、`desktop/main.js`、`server.js` 与 `git diff --check`。
+- 本轮补做了 asar 重打包与启动验证：`npm run build:win:dir` 通过，`app.asar` 内 `version` 与 `APP_VERSION` 均为 `1.7.19`，七种格式的 `extractOgg/Wav/Ape/Dsf*` 解析入口与三个解码器齐全，`LICENSE` 与 `THIRD-PARTY-NOTICES.md` 首次进包，`tests/` 与 `public/index.*.html` 未漏入，`asarUnpack` 仍是 `['server.js','package.json']`；以 `MINERADIO_INSTANCE_ID` 隔离档案启动 `dist/win-unpacked/Mineradio.exe`，主进程与 5 个子进程存活、本地服务在 `127.0.0.1` 正常监听、`GET /` 与 `GET /app.js` 均 `200` 且 `APP_VERSION=1.7.19`，stderr 只有 Electron 自带的 `DEP0180 fs.Stats` 弃用警告。验证后已结束进程并删除隔离档案，未触碰主档案 `Mineradio-oirge`。
+- 不带 `MINERADIO_INSTANCE_ID` 直接启动 `dist/win-unpacked` 会被判为 primary 实例、userData 落回 `%APPDATA%\Mineradio-oirge`，与已安装实例抢同一把单实例锁后立即 `app.quit()`（表现为「双击没反应」并把已运行窗口唤到前台）；本机验证打包产物必须显式给 `MINERADIO_INSTANCE_ID`，`--user-data-dir` 无效（`desktop/main.js` 启动时 `app.setPath('userData', ...)` 会覆盖该开关）。
+- Windows x64 NSIS 仍只发布 `Setup.exe`、`.blockmap`、`latest.yml` 和 SHA256 清单；GitHub Actions `Build and Release` run `33581096535` 成功（2m8s），提交 `9490fde`，注解 tag `v1.7.19` → `9490fde` 已推送；GitHub Release `https://github.com/oirge/Mineradio/releases/tag/v1.7.19` 已正式发布并标记 Latest（非 draft / 非 prerelease），四项资产已上传。
+- 资产大小：`Mineradio-1.7.19-Setup.exe` `101601482` 字节；`.blockmap` `105934` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.19-SHA256SUMS.txt` `275` 字节。
+- SHA256（四项资产已回下载逐一实测复核，清单内三项全部 MATCH）：安装器 `602c898df68c52b53e22089dce024b66136047c33c606b373f13f6cf4c357113`；`.blockmap` `91db1311a1879f4622b6c540b7f62f197e95ca64e47c578be0eab17a3214417f`；`latest.yml` `7c6e9e2caca8e601bbf8683ab00ebd2cd76fb6a5649b79e32fdbcfe2ad99b2f6`；SHA256 清单 `6c7a5e2ce21f0491607a73f076a5d26e5a62b2fe7ff2fff6e4e89b0b78f6c5f2`。
+- `latest.yml` 的版本为 `1.7.19`，`path` 与 `size`（`101601482`）与实际安装器一致；其 Setup SHA512 `iIMYjWNjn8e0fW0A9PGEaQtLPNrhP0Tzmj2OLjDN01gvj1kcjPIS/pwEGDBL7B2NVKolflK21GopH5/FDfR23Q==` 与回下载实测一致；Setup.exe 产品版本与文件版本均为 `1.7.19`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+- 本机无 7z，本轮未解包安装器内 `app.asar` 做明文核对；asar 内容核对是在本地 `npm run build:win:dir` 的产物上做的（与远端同一提交同一配置）。
+- 分支状态：tag 与 Release 都落在 `feat/format-support-ogg-ape-wav-dsf` 的 `9490fde`，PR #24 仍处于 OPEN，`v1.7.18` 与 `v1.7.19` 两次发布的**代码**都尚未并入 `main`。
+- 仓库首页同步（发布后追加）：GitHub 首页 README 从默认分支 `main` 渲染，而 `main` 上的 README 还停在「最新版本 v1.6.2 (2026-08-18)」，格式列表无 APE / DSD、内嵌歌词写成「仅 FLAC」、外置歌词只写 `.lrc` / `.txt`。已开纯文档 PR #25（`docs/readme-sync-1719`，只动 `README.md` / `README_EN.md`，27 个代码文件一个没碰），`verify` 检查通过后 squash 合入 `main` → `4f6e312`；`gh api repos/oirge/Mineradio/readme` 回读确认首页现在渲染的是 v1.7.19 版本的 README（blob `8f72209`）。文案口径对齐代码：内嵌歌词按 `canReadEmbeddedLyrics` 的 `/\.(mp3|flac|ogg|oga|opus|wav|ape|dsf)$/i`，外置歌词按 `LOCAL_LYRIC_FILE_RE` 的 `/\.(lrc|txt|srt|vtt|ass|yrc)$/i`。
+- 仓库 About 描述同步（发布后追加）：旧值 `Mineradio 二改本地播放器，原项目: https://github.com/XxHuberrr/Mineradio` 未提任何格式，已 `gh api -X PATCH repos/oirge/Mineradio -f description=...` 换成含完整格式列表的版本并保留原项目署名；`homepage`（仍指向原项目）与 `topics`（仍为空）未改动，需要回退只用同一条命令写回旧值。
+- 发布标题使用 `v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持`。
+
+## v1.7.18 本地曲库改用 SQLite + 文件指纹/路径索引
+- 正式发布版本从 `1.7.17` 提升为 `1.7.18`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.17` 及更早版本可通过 `latest.yml` 自动更新。
+- 本版把本地曲库落到 `node:sqlite`（Electron 自带，零新增依赖、无原生模块重编译）：新增 `desktop/local-library-store.js`，用户数据目录下建 `local-library.db`，WAL 日志 + `PRAGMA user_version` 迁移 + `BEGIN IMMEDIATE` 事务；行身份由文件指纹 `pathKey|size|mtime` 决定，保存歌曲 ID、路径、大小、修改时间、时长、格式、Artist / Album / Genre / Year、封面缓存、歌词缓存、播放次数、最近播放和收藏状态。
+- 扫描无快照时先问数据库走增量，只 `stat` 变化过的目录；索引改为按行 FNV-1a 摘要增量回写；解除旧快照与旧索引的 `16000` 条截断（旧逻辑超限后只计数不入库，签名仍匹配，等于静默丢歌），仅数据库不可用的回落路径保留旧上限。
+- `(root_id, song_key)` / `(root_id, fingerprint)` 组合索引修掉查询计划陷阱：只有单列索引时索引回写会退化成按 `root_id` 整根扫描，两万行实测 `295,319ms` → `1,640ms`（约 180×），已用 `EXPLAIN QUERY PLAN` 断言钉死。
+- 播放次数与收藏状态双写进库但只在原有有效收听门内累加一次，`localStorage` 的听歌统计与「特别喜欢」引用表仍是唯一权威来源、无回读路径，因此不存在双计数；界面布局、样式、文案与交互入口零改动。缺 `node:sqlite` 时主进程与渲染层各自一次性 latch 降级回 IndexedDB 旧路径。
+- 发布前全量 Node 回归 `540/540`（新增 `tests/local-library-sqlite-store.test.js` 12 例、`tests/local-library-db-bridge.test.js` 9 例），并通过 `node --check` 对 `public/app.js`、`desktop/main.js`、`desktop/preload.js`、`desktop/local-library-store.js`、`server.js` 与 `git diff --check`；本轮不启动本机 Electron、不合成鼠标键盘输入、不修改 `Mineradio-sync`。
+- Windows x64 NSIS 仍只发布 `Setup.exe`、`.blockmap`、`latest.yml` 和 SHA256 清单；GitHub Actions `Build and Release` run `33494043918` 成功（1m49s），提交 `b07f1bd`，注解 tag `v1.7.18` → `b07f1bd` 已推送；GitHub Release `https://github.com/oirge/Mineradio/releases/tag/v1.7.18` 已正式发布并标记 Latest（非 draft / 非 prerelease），四项资产已上传。
+- 资产大小：`Mineradio-1.7.18-Setup.exe` `101547905` 字节；`.blockmap` `106000` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.18-SHA256SUMS.txt` `275` 字节。
+- SHA256（四项资产已回下载逐一实测复核）：安装器 `544c75a1339bc285ed758ca4d8bd8e2d4abff1007a947a75a354fd0b78e7a42a`；`.blockmap` `940a2d695e80a5d6bc4b431c4e56de05f194db9ef19b2b23d435bdac3880795a`；`latest.yml` `be4152ba8bdf86a65690760c63a8d12decf86429761f67231998f33fb4b7a7bd`；SHA256 清单 `5a185d3efae5ddda7f6bf34c87310650de425f87df63d6fe1be362039b5a94ae`。
+- `latest.yml` 的版本为 `1.7.18`，`path` 与 `size` 与实际安装器一致；其 Setup SHA512 `kvOE3xLL7vs4iUCbzXLY1IlPdc43zJEL9k8x7UQ+0WmUHLIxnm+SUPAtlge8an3TjN0MFFk7AQBtflueAD8LPA==` 与本地实测一致；Setup.exe 产品版本 `1.7.18`。本版本不生成跨版本轻量补丁和 Portable ZIP。
+- 新增 `desktop/local-library-store.js` 的打包覆盖来自 `build.files` 已有的 `desktop/**/*` 与 `tests/packaging-file-whitelist.test.js` 守卫，`asarUnpack` 仍是 `['server.js','package.json']`；本机无 7z，本轮未解包安装器内 `app.asar` 做明文核对。
+- 发布标题使用 `v1.7.18 本地曲库改用 SQLite + 文件指纹/路径索引`。
+
 ## v1.7.17 迷你播放器封面命中与右键竞态修复
 - 正式发布版本从 `1.7.16` 提升为 `1.7.17`；`package.json`、`package-lock.json`、前端 `APP_VERSION` 与发布工作流默认 tag 保持一致，`1.7.16` 及更早版本可通过 `latest.yml` 自动更新。
 - 本版修复收回态封面热区命中后的右键竞态：renderer 优先通过 `mineradio-mini-player-set-pointer-passthrough-sync` 同步解除原生穿透，主进程在返回前完成 `setIgnoreMouseEvents(false)`；旧异步通道仅作兼容回退，失败仍可重试。

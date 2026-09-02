@@ -4,13 +4,14 @@
 
 ## Stable Project Facts
 
-- 当前源码续版：`v1.7.17`（修复标准迷你播放器收回态封面命中后立即右键仍落到桌面的异步竞态；命中切换优先走同步 IPC，失败保留重试；两套外壳固定 `no-drag`，窗口拖动与右键客户区分流）。
+- 当前源码续版：`v1.7.19`（新增 Ogg Vorbis/Opus/Ogg FLAC、WAV（含 RF64/BW64）、APE、DSF 的标签/封面/歌词/时长解析；APE 与 DSD 经 `desktop/audio/wav-stream.js` 实时转成虚拟 WAV 后按 Range 播放；`desktop/audio/ape-decoder.js` 移植自 FFmpeg 属 `LGPL-2.1+`，声明记在根目录 `THIRD-PARTY-NOTICES.md`；DST 压缩的 `.dff` 不在范围内。`558/558` 全绿）。
+- 上一续版：`v1.7.18`（本地曲库改用 `node:sqlite` + 文件指纹/路径索引常驻磁盘；扫描先问数据库走增量、索引按行摘要增量回写、解除历史 `16000` 条截断；播放次数/最近播放/收藏状态双写进库但 `localStorage` 仍是唯一权威，UI 零改动）。
 - 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
 - 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 统一备份目录：`E:\桌面\播放器软件\工作区备份`
 - 历史检查点摘要：`v1.7.16`（迷你播放器右键命中与安全边界加固发布候选；标准收回态只有封面热区（外扩 `6px`）可点可右键，透明空白交还桌面；标准展开态与极简外壳整窗可右键；封面拖动、跨显示器移动、展开方向持久化、迷你页面 URL/frame/preload/IPC 信任边界、极简负载与失败重试均已修复）基于 GitHub `v1.6.3`，插件系统在 `v1.7.0` 引入（当时是主题 / 音源 / 歌单三类，Worker 能力沙箱 + `@host` 白名单 + 本地 SSRF 防护代理），`v1.7.2` 起安装包自带 `午夜靛蓝` / `暖琥珀` 两份声明式主题（默认不启用）且主题改为互斥，`v1.7.3` 起主题走 `--th-*` 变量族接管 `app.css` 的 `!important` 字面值（覆盖 63/79 处探针，默认外观零变化）并把 `--th-mini-*` 转发给迷你播放器两套外壳，`v1.7.4` 起插件只剩主题一种，音源 / 歌单两类连同插件的全部网络与播放通道（`mineradio.request`、`@host` 白名单、`plugin-proxy.js`、`/api/plugin/*`）整体删除，**`v1.7.6` 起主界面最小化走收缩过渡并预热迷你窗口，`v1.7.7` 把交接时机改成「外壳淡到全透明之后再交给系统最小化」（`240ms`，终态 `scale(.6)`）才真正看得出来（见下方 v1.7.7 / v1.7.6 区块）**，**`v1.7.5` 起新增 `--th-bg-color` / `--th-bg-tint` / `--th-bg-tint-opacity` 背景变量，内置主题扩为两份完整主题 + 深海微光 / 暗焰余晖 / 冷杉夜雾三份纯背景主题，用户自定义背景仍优先**，**`v1.7.11`~`v1.7.14` 起迷你播放器右键菜单与任务栏托盘共用同一份 `buildAppContextMenuTemplate()`、六项完全一致（拖拽区靠 `system-context-menu` 拦系统菜单）；收回态只有封面参与命中、封面外交还桌面，展开态与极简整窗可右键（见下方 v1.7.14 / v1.7.13 区块）**；并保留壁纸展示位置切换、MP2、M4B、AIF/AIFF/AIFC 本地音频识别与代理 MIME 支持、隐藏播放时低平滑分析器回退、软件内更新的手动线路选择与下载中取消更新、迷你播放器封面律动/光晕可调强度、自动播放开关、收回态鼠标穿透、显示器边缘展开、封面拖动、Wallpaper Engine 生命周期、主窗口导航/IPC 信任边界、本地文件授权、多歌单、全屏过渡与用户数据迁移修复。
-- 当前工作分支：`codex/mini-cover-static`；起点为 tag `v1.6.1` 的 `84a17cf`。
+- 当前工作分支：`feat/format-support-ogg-ape-wav-dsf`；从 `codex/mini-cover-static` 的 `b07f1bd`（v1.7.18）拉出，PR 目标为 `main`。
 - 最近正式安装包 Release 基线：`v1.6.1`（2026-08-16，扩展 MP2、M4B、AIF/AIFF/AIFC 本地音频格式；Windows x64 NSIS 仅发布安装器、blockmap、`latest.yml` 和 SHA256 清单，不生成或上传 Portable ZIP）。
 - 当前系统代理：`127.0.0.1:7897`；PowerShell / Node / electron-builder 需要显式设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 为 `http://127.0.0.1:7897`。
 - 发布入口：GitHub Releases，更新检查依赖 `latest.yml` 和可选轻量补丁 JSON。
@@ -34,6 +35,33 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持
+
+- 日期：2026-09-02。目标是「更强的格式支持」：解析侧补齐 Ogg 系列、WAV、APE、DSF 的标签/封面/歌词/时长，播放侧让 Chromium 不认识的 APE 与 DSD 能直接播。
+- 解析实现全部落在 `public/app.js` 的 `base64ChunksToBytes` ~ `applyLocalMetadataTags` 这一段里，自成闭包（`asciiFromBytes`、`synchsafeInt`、`extractFlacPictureBlob`、歌词优先级表等都在段内），所以单元测试可以只切这一段进 `node:vm` 就驱动全部七种格式。
+- 三个分发器统一按扩展名路由：`extractLocalMetadataTags`（mp3/flac/m4a/ogg|oga|opus/wav/ape/dsf）、`extractEmbeddedCoverSource`（同上）、新增 `extractEmbeddedLyricsText`（同上但不含 m4a）。能力判定 `canReadEmbeddedLyrics` / `canReadEmbeddedCover` 与两个 `canReadTruncatable*`（都不含 mp3，因为 MP3 按完整标签长度读，失败即真的没有）。
+- Ogg 时长有两条路：Ogg FLAC 的 STREAMINFO 给了 `totalSamples` 就直接算，**不读尾部**；Vorbis / Opus 才回读最后 64KB 反向找同 serial 且 `granule > 0` 的页，Opus 还要扣 `pre-skip`。测试用「请求次数」区分这两条路（1 次 vs 2 次）。
+- `readId3v2TagBytes` 的 `256KB` 探针语义是共享契约：探针覆盖整个标签就直接 `subarray` 复用，超出才发第二次 Range 读。MP3、WAV 的 `id3 ` chunk、APE 的文件头 ID3v2、DSF 的尾部 ID3v2 全部走它。
+- 超预算统一语义：后台轻量 `4MB`（`LOCAL_ASSET_LIGHT_SCAN_BYTES`）、前台 `24MB`（`LOCAL_MAX_TAG_BYTES`），超了就 `_mineradioScanComplete=false` 让前台完整重试，不返回半截标签。
+- 播放侧：`desktop/audio/wav-stream.js` 把 APE/DSF 包装成「虚拟 WAV」——size 可精确算、任意区间可解码，`/api/local-file` 的 Range/416/`raw=1` 全部保留。两个解码器（`ape-decoder.js` 支持 3800–3990，`dsf-decoder.js` 字节查表 FIR 抽取）都只接受 `read(offset,length)`，不碰 fs。
+- **授权：`desktop/audio/ape-decoder.js` 是 FFmpeg `libavformat/ape.c` + `libavcodec/apedec.c` 的逐行移植，`LGPL-2.1-or-later`**，按 LGPL v2.1 第 3 条在本项目内以 `GPL-3.0` 分发；声明写在新增的根目录 `THIRD-PARTY-NOTICES.md`（该文件与 `LICENSE` 已加入 `build.files`）。DST 压缩的 `.dff` 明确不在范围内。
+- 验证：新增 `tests/local-format-tag-parsing.test.js`（18 例，真实字节夹具）；全量 Node 回归 `558/558` 通过。本轮未启动本机 Electron，未改动任何界面。
+- **仓库首页只认默认分支。** GitHub 的 `https://github.com/oirge/Mineradio` 首页 README 与 About 面板都从默认分支 `main` 取，功能分支上改 README 对首页零效果——`v1.7.18` / `v1.7.19` 的代码都还挂在 `feat/format-support-ogg-ape-wav-dsf`（PR #24 未合），所以首页的「最新版本」块一直停在 `v1.6.2 (2026-08-18)`。同步首页时不要为此去合功能代码：从 `origin/main` 单独切一条纯文档分支（`docs/readme-sync-1719`）、`git checkout <功能分支> -- README.md README_EN.md` 取现成内容、squash 合入即可（PR #25 → `main` 的 `4f6e312`）。两边 README 内容逐字节相同，功能分支后续合 `main` 时三方合并不会冲突。合完用 `gh api repos/oirge/Mineradio/readme` 回读 blob SHA 确认首页真的换了，不要只看分支。
+- README 的能力口径必须对着代码写，不要抄旧文案：内嵌歌词看 `canReadEmbeddedLyrics` 的 `/\.(mp3|flac|ogg|oga|opus|wav|ape|dsf)$/i`（MP3 走 `USLT` / `TXXX(LYRICS)`，不是只有 FLAC），外置歌词看 `LOCAL_LYRIC_FILE_RE` 的 `/\.(lrc|txt|srt|vtt|ass|yrc)$/i`（不是只有 `.lrc` / `.txt`）。About 描述用 `gh api -X PATCH repos/oirge/Mineradio -f description=...` 改，原项目署名要保留；`homepage` 指向原项目是有意为之，别顺手改。
+
+## v1.7.18 本地曲库 SQLite + 文件指纹/路径索引
+
+- 日期：2026-09-01。目标是「几万首歌也可以很快启动」：本地曲库不再每次启动重放整包 JSON 快照，改为常驻 SQLite。
+- 新增 `desktop/local-library-store.js`，用 Electron 自带的 `node:sqlite`（`DatabaseSync`）建 `local-library.db` 于用户数据目录：零新增依赖、无原生模块重编译，`asarUnpack` 仍是 `['server.js','package.json']`。WAL 日志、`PRAGMA user_version` 迁移、预编译语句缓存，写入统一 `BEGIN IMMEDIATE`。
+- 每行保存歌曲 ID（`song_key`）、路径与归一化路径键、文件大小、修改时间、时长、格式、Artist / Album / Genre / Year、封面缓存、歌词缓存、播放次数、最近播放、收藏状态。行身份靠文件指纹 `pathKey|size|mtime`：指纹一致保留已解析元数据与缓存，指纹变化整组清空。
+- **组合索引是硬要求。** 只有单列索引时 `UPDATE files ... WHERE root_id=? AND song_key=?` 会被规划成 `SEARCH files USING INDEX idx_files_root_sort (root_id=?)`，即每条索引写扫一遍整根，两万行实测 `295,319ms`；加 `(root_id, song_key)` / `(root_id, fingerprint)` 后降到 `1,640ms`（约 180×）。`tests/local-library-sqlite-store.test.js` 用 `EXPLAIN QUERY PLAN` 永久钉死，`idx_files_song_key` / `idx_files_fingerprint` / `idx_files_seen` 必须保持删除。
+- 三个键的构造在渲染层/主进程/存储层必须逐字节同构：`pathKey` 小写正斜杠、`fingerprint = pathKey|size|mtime`、`songKey` 用**未小写**的原始绝对路径 + `:size:mtime`。注意 `queueItemKey()` 返回的是 `local:` 前缀的队列键，**不能**当 `song_key` 用，播放统计与收藏必须传 `song.localKey`。
+- 播放次数只在 `finalizeListenSession()` 原有有效收听门内累加一次；`localStorage` 的 `listenStatsState` 与「特别喜欢」引用表仍是唯一权威来源，数据库无回读路径，因此不存在双计数，UI 与交互零改动。`song_stats` 按 `song_key` 独立存活，重扫、换库、删索引都不清零。
+- 缓存回收顺序固定：保护键 `saved_at` 提到当前时间 → `maxAge` 过期（默认 180 天，`saved_at = 0` 跳过）→ 记录数 LRU → 封面字节上限（窗口函数 `SUM(cover_bytes) OVER (...)`）。
+- 缺 `node:sqlite` 的环境整层降级：主进程只标记一次，渲染层探测一次性 latch，全部回落 IndexedDB 旧路径。测试里模拟「运行时没有内置模块」必须 hook `Module._load`，`Module._resolveFilename` 拦不住内置模块。
+- `Genre` 为向前生效字段：旧记录不带该键，不会被判成脏行重写。
+- 验证：新增 `tests/local-library-sqlite-store.test.js`（12 例，真实 `node:sqlite`）与 `tests/local-library-db-bridge.test.js`（9 例，渲染层接缝）；全量 Node 回归 `540/540` 通过。本轮未启动本机 Electron，未改动任何界面。
 
 ## v1.7.17 迷你播放器封面命中与右键竞态修复
 

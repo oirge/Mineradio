@@ -1,3 +1,34 @@
+## v1.7.19 OGG / OPUS / APE / WAV / DSD(.dsf) 格式支持
+
+- 发布版本从 `1.7.18` 提升为 `1.7.19`；已安装 `1.7.18` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
+- **新增五类格式的标签、封面、歌词与时长解析。** 渲染层扩展到 Ogg Vorbis / Ogg Opus / Ogg FLAC、WAV（含 RF64 / BW64）、APE（Monkey's Audio）与 DSF（DSD Stream File）：`extractLocalMetadataTags`、`extractEmbeddedCoverSource` 与新增的 `extractEmbeddedLyricsText` 三个分发器统一按扩展名路由，能力判定 `canReadEmbeddedLyrics` / `canReadEmbeddedCover` 及对应的可重试判定同步扩展。
+- **Ogg 系列**：按页读取并跨页拼接数据包，跳过同文件内其它逻辑流；Vorbis comment 支持 `METADATA_BLOCK_PICTURE` 与旧式 `COVERART` / `COVERARTMIME` 封面；时长优先取 Ogg FLAC STREAMINFO 的总采样数，没有时才回读尾部 64KB 找最后一个 granule，Opus 会扣掉 `pre-skip`。
+- **WAV**：走 RIFF chunk 目录，`id3 ` chunk 优先、`LIST`/`INFO` 补齐缺失字段，时长由 `data` 大小除以 `fmt ` 的字节率得出；`RF64` / `BW64` 用 `ds64` 的 64 位 `dataSize` 替换 `0xFFFFFFFF`，超过 4GB 的文件也能算对时长。
+- **APE**：3.99+ 读描述符后的头部块，3.98 及更早按版本号与压缩等级推导 `blocksPerFrame`；标签按 APEv2 页脚 → 文件头 ID3v2 → 尾部 ID3v1 的顺序合并，二进制封面项支持 `Cover Art (Front)` 优先。
+- **DSF**：按 `DSD ` 头部的 metadata 指针读尾部 ID3v2，时长为 `fmt ` 里的单声道 1-bit 采样数除以 DSD 采样率；`metadataOffset` 为 0 视为正常无标签，不会浪费一次读取。
+- **APE 与 DSD 现在能直接播放。** Chromium 不认识这两种格式，新增 `desktop/audio/wav-stream.js` 把它们包装成“虚拟 WAV 文件”——总长度可精确计算、任意字节区间按需解码，`/api/local-file` 的 Range 请求、416 响应与 `raw=1` 原始字节通道全部照常工作，拖动进度条不受影响。`desktop/audio/ape-decoder.js` 是纯 JS 的 Monkey's Audio 解码（3800–3990），`desktop/audio/dsf-decoder.js` 用字节查表的 FIR 抽取把 1-bit DSD 码流转成 PCM。两个解码器都不碰文件系统，只接受 `read(offset, length)` 读取器。
+- 头部推导出的时长回填到展示字段，无损与高解析度曲目在首次播放前就能看到正确时长。
+- ID3v2 读取保留原 MP3 的 `256KB` 探针语义：探针已经覆盖整个标签时直接切片复用，只有超出探针的大标签才发第二次 Range 读取，同一段字节不会被读两次。
+- 标签体积超过本轮扫描预算（后台轻量 `4MB`、前台 `24MB`）时统一标记 `_mineradioScanComplete=false`，交由前台完整重试，而不是返回半截结果。
+- `desktop/audio/ape-decoder.js` 是 FFmpeg `libavformat/ape.c` 与 `libavcodec/apedec.c` 的逐行移植，原始条款为 `LGPL-2.1-or-later`，按 LGPL v2.1 第 3 条在本项目内以 `GPL-3.0` 分发；新增根目录 `THIRD-PARTY-NOTICES.md` 记录该声明与其余第三方组件，并把它和 `LICENSE` 一起纳入安装包白名单。DST 压缩的 `.dff` 不在本轮范围内。
+- 新增 `tests/local-format-tag-parsing.test.js`（18 例，用真实字节夹具驱动 `public/app.js` 里的解析实现，覆盖跨页数据包、旁路逻辑流、`ds64` 64 位长度、APE 新旧头部、DSF 探针复用与四种格式的超预算截断标记）；全量 Node 回归 `558/558` 通过。
+- 本轮未启动本机 Electron，未修改任何界面布局、样式、文案与交互入口；Windows x64 安装资产由 GitHub Actions 远程构建。
+
+## v1.7.18 本地曲库改用 SQLite + 文件指纹/路径索引
+
+- 发布版本从 `1.7.17` 提升为 `1.7.18`；已安装 `1.7.17` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
+- **本地曲库常驻 SQLite，几万首歌启动不再重放整包 JSON。** 新增 `desktop/local-library-store.js`，用 Electron 自带的 `node:sqlite` 建库（零新增依赖、无原生模块重编译），落在用户数据目录的 `local-library.db`；WAL 日志、`PRAGMA user_version` 迁移、预编译语句缓存，写入统一走 `BEGIN IMMEDIATE` 事务。
+- 每行保存歌曲 ID（`song_key`）、绝对路径与归一化路径键、文件大小、修改时间、时长、格式、Artist / Album / Genre / Year、封面缓存、歌词缓存、播放次数、最近播放和收藏状态；行身份由「路径键 + 大小 + 修改时间」组成的文件指纹决定，指纹一致就保留已解析的元数据与封面歌词缓存，指纹变化才整组清空重解析。
+- **启动与扫描改为按需增量。** 渲染层没带快照时主进程先问数据库，有历史行就只 `stat` 变化过的目录；扫描结果回写数据库后，快照以 `fromDb` 交接给渲染层。索引回写改成按行 FNV-1a 摘要的增量写入，不再每次防抖都整表重写。
+- **修掉一个会让索引回写慢两个数量级的查询计划陷阱。** 只有单列索引时 `UPDATE files ... WHERE root_id=? AND song_key=?` 会退化成按 `root_id` 整根扫描（两万行实测 `295,319ms`），改用 `(root_id, song_key)` / `(root_id, fingerprint)` 组合索引后降到 `1,640ms`（约 180×），并用 `EXPLAIN QUERY PLAN` 断言永久钉死。
+- **解除历史 `16000` 条截断。** 旧快照与旧索引都在第 16000 条后只计数不入库，签名却照样匹配，等于静默丢歌；SQLite 接管后全量落盘，仅在数据库不可用的回落路径保留旧上限。
+- 播放次数、最近播放与收藏状态双写进库：播放结算只在原有有效收听门（`completed` / `listenMs ≥ 45s` / 进度 ≥ 50% / 无时长且 ≥ 30s）内累加一次，`localStorage` 的听歌统计与「特别喜欢」引用表仍是唯一权威来源，数据库只做可索引的持久镜像，没有回读路径，UI 与计数行为零改动。`song_stats` 按 `song_key` 独立存活，重扫、换库或删掉索引都不清零。
+- 缓存回收顺序固定为「保护正在使用的键 → `saved_at` 过期（默认 180 天，未标注的记录跳过）→ 记录数 LRU → 封面字节上限」，字节上限用窗口函数 `SUM(cover_bytes) OVER (...)` 一次算完。
+- `Genre` 是向前生效字段：本版之后新解析的曲目才带该标签，旧记录不会因为缺 `genre` 被判定为脏行重写。
+- 缺 `node:sqlite` 的运行环境整层降级：主进程只标记一次不可用，渲染层探测同样一次性 latch，所有调用静默回落到原 IndexedDB 路径，播放结算与点赞不会因此抛错。
+- 新增 `tests/local-library-sqlite-store.test.js`（12 例，跑真实 `node:sqlite`，含两万首落盘读回、查询计划回归、缓存回收与降级）与 `tests/local-library-db-bridge.test.js`（9 例，钉死探测 latch、参数原样转发、行摘要稳定性、播放统计用 `localKey` 而非 `local:` 队列键）；全量 Node 回归 `540/540` 通过。
+- 本轮未启动本机 Electron，未修改任何界面布局、样式、文案与交互入口；Windows x64 安装资产由 GitHub Actions 远程构建。
+
 ## v1.7.17 迷你播放器封面命中与右键竞态修复
 
 - 发布版本从 `1.7.16` 提升为 `1.7.17`；已安装 `1.7.16` 及更早版本的客户端可通过现有更新检查自动发现并安装本版本。
