@@ -1,5 +1,26 @@
 ﻿# 发布流程
 
+## v1.7.24 音乐库升级成外层标签页（当前队列 / 歌单 / 音乐库）
+- 正式发布版本从 `1.7.23` 提升为 `1.7.24`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:499`）与发布工作流默认 tag 保持一致，`1.7.23` → `1.7.24`。
+- 用户原话是「音乐课放外面 当前队列 歌单 音乐库 这样排放」（音乐课＝音乐库的笔误）：上一版把智能分类做成「歌单」页里的第一张卡，用户找不到，本版把它提到与「当前队列」「歌单」并排的外层标签。这是用户明确点名的界面改动，所以覆盖「能不动 UI 就不动 UI」的默认。
+- 实现上没有新增第三个面板，而是让「音乐库」与「歌单」共用同一个 `#pl-pane` / `#pl-list` 和同一份 `localLibraryPlaylistSelection`，只在 `switchPlaylistTab` 里做一次选中项迁移：切到 `library` 且选中不是分类 → `LOCAL_LIBRARY_CATEGORY_HOME_KIND`，切回 `playlists` 且选中是分类 → `'library'`（全部音乐），两种迁移各跟一次 `resetPlaylistPanelRenderLimit()`；切到 `queue` 一律不动选中项，所以停在某位艺术家上看一眼当前队列再回来仍在原来那一层。
+- **注意 tab 名 `'library'` 与播放列表 kind `'library'`（全部音乐）不是同一层概念**，前者是外层那一整页智能分类、后者是 `normalizeLocalPlaylistKind` 认的一个选中项。
+- 最容易踩的坑是递归：`selectLocalPlaylist` 内部会 `safeSwitchPlaylistTab`，而 `switchPlaylistTab` 又会 `refreshUserPlaylists()` → `renderLocalLibraryPlaylistPanel()`，所以 `switchPlaylistTab` 只允许改状态 + 渲染，选中项迁移必须是直接赋值、绝不能反过来调 `selectLocalPlaylist`。
+- 第二个坑是「面板正在铺卡片列表」的判断散在四处（3D 歌单架 `currentItems()` 的 `showPlaylists`、`toggleLikeSong` 的刷新、面板打开时的入场动画分支、`switchPlaylistTab` 自己的 `#pl-pane` 显隐与动画），原来全写成 `queueViewTab === 'playlists'`，漏一处音乐库那页就静默不刷新；现在统一收口到新增的 `isPlaylistListTab(tab)`。其中 `toggleLikeSong` 那处必须保留 `typeof isPlaylistListTab === 'function' ? … : queueViewTab === 'playlists'` 守卫——`tests/special-liked-playlist.test.js` 把该函数单独切进 `node:vm` 且只注入 `queueViewTab`，裸调会 `ReferenceError`（第一版改完就红在这里）；为免这条回落被当成先例，`tests/local-library-categories.test.js` 里的断言改成按行过滤，只放过带 `typeof isPlaylistListTab` 的那一行。
+- 工具条也是共用的：`applyPlaylistPaneToolbarMode(tab)` 按标签切 `#pl-pane-chip` 文案（`音乐库智能分类` / `本地音乐与独立歌单`）并在音乐库页隐藏 `#pl-pane-create-btn`（「新建」只对独立歌单有意义，「导入」两页都保留）。提到外层后「音乐库」不能出现两遍，所以根视图那张「音乐库」卡删掉（歌单页恢复成 特别喜欢 → 独立歌单 → 全部音乐）、分类首页不再画 `view-head`（`mode === 'home'` 直接只铺 `localLibraryCategoryHomeCardsHtml()`）。
+- 顺手纠正一处旧文档措辞：`localLibraryCategoryHeadHtml` 是 `directory ? '' : 播放全部`，**只有歌曲层有「播放全部」**，首页与分组层从来没有；`v1.7.23` 的 README/发布说明写成「每层都带返回与播放全部」并不准确，本版起改用「分组层与歌曲层都带返回按钮，歌曲层还有播放全部」。
+- UI 改动面：`public/index.html` 只新增一个 `id="tab-library"` 按钮与两个 id（`pl-pane-chip` / `pl-pane-create-btn`），**`public/app.css` 一行未动**——`.panel-tab` 是 `padding:6px 12px` / `font-size:11px`、`.panel-tabs` 是 `gap:8px`，三个标签合计约 187px，面板 340px 去掉内边距还有 304px，量过装得下才直接加第三个按钮。`queueViewTab` 不持久化、默认 `'queue'`，冷启动仍从当前队列进。
+- 发布前全量 Node 回归 `655/655`（`tests/local-library-categories.test.js` 22 → 25 例，新增两例用 `node:vm` 跑真实标签逻辑，切片锚点 `function normalizePlaylistPanelTab(tab)` → `function setMiniQueueOpen(open)`，桩齐 `tab-queue` / `tab-pl` / `tab-library` / `queue-pane` / `pl-pane` / `pl-list` / `queue-list` / `playlist-panel` / `pl-pane-chip` / `pl-pane-create-btn` 十个节点，覆盖两向迁移、`library-value:artist:周杰伦` 经队列标签往返不丢、`local-playlist:abc` 切音乐库落首页、`special-liked` 不被动、`LOCAL_ONLY_MODE` 下 `podcasts` 折成 `playlists` 时选中项归 `'library'`）。
+- 资产为**本机** `npm run build:win` 产出后 `gh release create` 一次性上传（`node_modules` 已含 `electron-builder 26.15.3`，`electron 43.4.0` 走系统代理 `127.0.0.1:7897`）；工作流 `Build and Release` 本轮未 dispatch，其默认 tag 已同步为 `v1.7.24` 备用。Windows x64 NSIS 仍只发布 `Setup.exe`、`.blockmap`、`latest.yml` 与 SHA256 清单，不生成 Portable ZIP；四项资产远端 `state=uploaded`。
+- 资产大小：`Mineradio-1.7.24-Setup.exe` `101618629` 字节；`.blockmap` `106000` 字节；`latest.yml` `350` 字节；`Mineradio-1.7.24-SHA256SUMS.txt` `272` 字节（远端 API 报告的四项大小与本机产物逐一一致）。
+- SHA256：安装器 `15ae98850dbb46ba53124e7eadd13fa0800deafa341a3df9436bf37dec9ae2bc`；`.blockmap` `c7d60d471b3394d94348fec23387b5d91eb93642e45b43ebcac39beae955d1d4`；`latest.yml` `1e68efb998e3a7ca6f66cc0d8ef3094d12a56929b518ecb3507537f0f3c0cab9`。
+- `latest.yml` 的版本为 `1.7.24`，`path` 与 `size`（`101618629`）与实际安装器一致；其 Setup SHA512 `W0PVEZPj6Ez2uETRziwd29r9U5y+k6+aoKpe7sn0nbGlr7Ef+gqym6sIhfcs5tUpHofUHCFpm9XvpHmARGc3pg==` 与安装器实测 SHA512 一致。
+- 回下载复核范围如实记录：`latest.yml` 与 `Mineradio-1.7.24-SHA256SUMS.txt` 两项已从 Release 下载回来与本机产物逐字节比对（`cmp`）一致；`Setup.exe`（约 `96.9 MiB`）与 `.blockmap` 本轮只核对远端 API 报告的大小，未整包回下载。
+- asar 核对：直接在 `dist/win-unpacked/resources/app.asar` 里比对标记串，`var APP_VERSION = '1.7.24'`、`function normalizePlaylistPanelTab(tab)`、`function isPlaylistListTab(tab)`、`function applyPlaylistPaneToolbarMode(tab)`、`id="tab-library"`、`pl-pane-chip`、`pl-pane-create-btn` 全部命中，且 `APP_VERSION = '1.7.23'` 零命中、`queueViewTab === 'playlists'` 只剩 1 处（就是那条 vm 守卫回落）——装进安装器的确实是本版代码。
+- 安装器未做代码签名（`build.win.signAndEditExecutable` 为 `false`，仓库未配置证书），`Get-AuthenticodeSignature` 实测 `NotSigned`，与历次发布一致。
+- 提交 `c43d0a5 feat: promote the library to a top-level panel tab` 直接落在 `main`（推送为快进，无强推），附注 tag `v1.7.24 音乐库升级成外层标签页（当前队列 / 歌单 / 音乐库）`。
+- 发布标题使用 `v1.7.24 音乐库升级成外层标签页（当前队列 / 歌单 / 音乐库）`。
+
 ## v1.7.23 音乐库智能分类（艺术家 / 专辑 / 专辑艺术家 / 流派 / 年代 / 播放记录）
 - 正式发布版本从 `1.7.22` 提升为 `1.7.23`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:499`）与发布工作流默认 tag 保持一致，`1.7.22` → `1.7.23`。
 - 本版把用户点名的十项分类落成三层导航：`library-cat:home` 是音乐库首页，`library-cat:<id>` 是五个歌曲视图（`all` / `recent-added` / `recent-played` / `most-played` / `never-played`），`library-group:<field>` 是五个分组目录（`artist` / `album` / `albumArtist` / `genre` / `decade`），`library-value:<field>:<value>` 是分组里的某一项。所有新 kind 共用 `library-` 前缀并只经 `normalizeLocalPlaylistKind` 一道门，认不出的一律回落 `'library'`，所以浏览状态、播放来源、面板渲染、底部来源按钮与来源选择器都不需要新增第四种选择模型。
