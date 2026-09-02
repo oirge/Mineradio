@@ -6,7 +6,6 @@
 
 **基于 Mineradio 二次修改的本地音乐播放器**
 
-- 删除登录、在线音乐入口、更新提示和无用引导。
 - 支持导入本地音乐文件夹。
 - 支持单独导入本地音乐文件。
 - 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) 播放。
