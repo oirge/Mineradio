@@ -1,5 +1,23 @@
 ﻿# 发布流程
 
+## v1.7.25 全局快捷键可自定义 + 播放队列升级成队列工作台
+- 正式发布版本从 `1.7.24` 提升为 `1.7.25`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:566`）与发布工作流默认 tag 保持一致，`1.7.24` → `1.7.25`。
+- 用户原话：「在最新版的基础上更新全局快捷键 比如：Ctrl + Alt + ← 上一首 / Ctrl + Alt + → 下一首 / Ctrl + Alt + ↓ 播放/暂停 / Ctrl + Alt + ↑/↓ 音量 / 用户可自定义快捷键」，随后「更新好快捷键之后再更新更强的播放队列……当前播放队列 / 下一首预览 / 拖动调整队列 / 从队列移除 /「播放完当前歌曲后停止」/「单曲循环」/「队列循环」/ 队列保存/恢复」，最后「全部更新好之后发布新版」。
+- **需求自身有一处冲突并已裁定：** `Ctrl+Alt+↓` 同时被列为「播放/暂停」和「音量降低」，一个组合键只能绑一个动作。播放/暂停保留在既有默认 `Ctrl+Alt+Space`，`↑/↓` 留给音量；九个动作都能在设置里改键，想换成方向键的用户先改音量键再把播放/暂停设成 `Ctrl+Alt+↓` 即可。后续版本不要把播放/暂停默认改成 `Ctrl+Alt+↓`。
+- **先查再写省了大半工作量。** 全局快捷键系统连默认绑定都已经和需求逐字一致（`HOTKEY_ACTIONS` 的 `Ctrl+Alt+ArrowLeft` / `ArrowRight` / `ArrowUp` / `ArrowDown` / `Space`），队列侧的「当前播放队列」面板、`removeFromQueue`、`playMode='single'`（单曲循环）、`playMode='loop'`（队列循环）也都已存在。真正新增的是：加速键语法校验与失败分类回报、下一首预览、拖动重排、播完即停、队列存档。
+- 快捷键侧的硬化点：录制时先跑 `globalHotkeyRejectReason`，不受支持的键位当场给中文原因，不再先写进配置再静默注册失败；主进程 `isSupportedAccelerator` 按 `ACCELERATOR_MODIFIER_TOKENS` / `ACCELERATOR_NAMED_KEY_TOKENS` / `ACCELERATOR_LITERAL_KEYS` 校验，`globalShortcut.register` 失败按 `conflict.kind: 'unsupported' | 'occupied'` 回报，渲染层用 `scheduleGlobalHotkeyFailureNotice` 把多个失败合成一条提示。`Comma` **不是**合法加速键词元，字面形式是 `,`；专用媒体键（`MediaPlayPause` / `MediaNextTrack` / `MediaPreviousTrack` / `MediaStop` / `VolumeUp` / `VolumeDown` / `VolumeMute`）在 `HOTKEY_KEY_MAP` 里带 `bare:true`，允许不带修饰键单独注册。`MAIN_PROCESS_HOTKEY_ACTIONS` 里的动作（显示/隐藏主窗口）走主进程执行，不依赖窗口焦点。
+- **队列存档只存身份、不存内容。** 本地歌曲带不可序列化的 `localFile` File 句柄，所以每首只写 `{key, localKey, pathKey, name, artist}`，恢复时按「localKey → 路径键 → 曲名+歌手」三级回落到活的 `localLibrarySongs` 重新解析，重扫曲库或换盘符后仍能对上，缺失曲目在提示里报数。上限 12 份 / 每份 3000 首。存档键 `mineradio-queue-snapshots-v1` 必须同时进 `public/app.js` 的 `PERSISTENT_UI_STATE_KEYS` 与 `desktop/preload.js` 的同名白名单，且 `var QUEUE_SNAPSHOT_STORE_KEY` 的声明要排在 `PERSISTENT_UI_STATE_KEYS` 数组字面量**之前**，否则数组求值时拿到 `undefined`。
+- 恢复随机存档时必须 `shuffledPlayQueueArrays.add(playQueue)`，否则 `playQueueAt` 会把它当新队列再洗一次，存档里的顺序白存。
+- `nextQueueIndexPreview()` 每轮渲染只算一次（不是每行一次），并且必须进 `queueVisibleDomSignature`，否则切播放模式或开关播完即停不会重绘——热路径测试 `tests/queue-render-hot-path.test.js` 把「每轮一次」和「模式进签名」两条都钉死了。
+- 两个容易漏的副作用：队列内部拖动会冒泡到 `document`，全局「拖文件进来」遮罩要用 `if (queueDragState || !dragEventHasFiles(e)) return;` 挡掉，否则每次调顺序都闪一下；队列为空时有两处会把面板自动切去歌单页（`togglePlaylistPanel` 的 `scheduleUiWarmTask` 与 `renderQueuePanel` 的空队列分支），都要加 `&& !queueSnapshots.length`，否则用户想「恢复队列」反而找不到入口。
+- 顺手修掉一个老缺陷：`removeFromQueue` 删除位于 `currentIdx` 之前的条目时没把指针前移，「正在播放」高亮会错位到别的歌上。
+- UI 只在 `#queue-pane` 内部增量：`.queue-mode-row` 四个按钮、`#queue-next-up`、行内 `.qi-drag` 握把、`.queue-archive` 存档区；工具条把原来的「切换模式」换成「存队列」（`cyclePlayMode` 保留，仍由 `#play-mode-btn` 触发）。`public/app.css` 新增约 40 行，全部复用既有 `rgba(0,245,212,…)` 青与 `rgba(255,183,94,…)` 警示色。`v1.7.24` 的三标签栏（`当前队列 / 歌单 / 音乐库`）在 `#queue-pane` 之上，未被动到。
+- **发布流程上踩的坑：开工前先 `git fetch`。** 本轮先在 `v1.7.18` 的旧本地分支上把两块功能做完并本地提交，才发现远端已经发到 `v1.7.24`（`v1.7.19` 就是那条 OGG/APE/WAV/DSF 提交发的版）。改法是从 `origin/main` 开新分支 `feat/global-hotkeys-and-queue-power` 再 `git cherry-pick`：`public/app.js` 只在 `APP_VERSION` 一行冲突，`public/index.html` / `public/app.css` / `desktop/main.js` / `desktop/preload.js` 全部自动合上，其余冲突只是版本号与文档。旧分支状态留在本地 `backup/queue-power-on-1718`。
+- 发布前全量 Node 回归 `709/709`（`main` 基线 `655`）：新增 `tests/global-hotkeys.test.js` 18 例、`tests/playback-queue-power.test.js` 36 例，扩写 `tests/queue-render-hot-path.test.js`、`tests/playback-shuffle-order.test.js`。跨 realm 断言注意：`vm` 里用 `.filter()` / `.map()` 造出来的数组留在 vm realm，`assert.deepEqual`（strict）会判「结构相同但引用不等」，需要先 JSON round-trip。
+- tag `v1.7.25` 打在 `3fa7d49`，PR #27 以**合并提交** `9fc73f4` 合入 `main`（不能 squash，否则 tag 脱离 `main` 祖先链），`git describe origin/main` = `v1.7.25-1-g9fc73f4`。
+- GitHub Actions `Build and Release` run `33629076628` 成功，Release 已标记 Latest，四项 Windows x64 资产：`Mineradio-1.7.25-Setup.exe` `101624015` 字节 / SHA256 `bc79d2daeb87dc94bd5f6db435ababc7fedbc94c80fdaab0c26ecaee3ab7289d`；`.blockmap` `106037` 字节 / `6bb7108ba4b5554690c8ef9a0e5cc9261c0398ce25142d36e9ac3b6f5433d833`；`latest.yml` `350` 字节 / `b58ca16f86f3015032195a99e2b828c5e7bdab56531eb5c9cf74a521e21a0cae`（`version: 1.7.25`）；`Mineradio-1.7.25-SHA256SUMS.txt` `275` 字节。不生成 Portable ZIP。
+- 本轮未启动本机 Electron，未合成鼠标键盘输入，未改动 `_src` / `asar` 重打包。
+
 ## v1.7.24 音乐库升级成外层标签页（当前队列 / 歌单 / 音乐库）
 - 正式发布版本从 `1.7.23` 提升为 `1.7.24`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:499`）与发布工作流默认 tag 保持一致，`1.7.23` → `1.7.24`。
 - 用户原话是「音乐课放外面 当前队列 歌单 音乐库 这样排放」（音乐课＝音乐库的笔误）：上一版把智能分类做成「歌单」页里的第一张卡，用户找不到，本版把它提到与「当前队列」「歌单」并排的外层标签。这是用户明确点名的界面改动，所以覆盖「能不动 UI 就不动 UI」的默认。
