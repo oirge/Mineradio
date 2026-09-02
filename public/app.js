@@ -131,6 +131,7 @@ var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
 var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
 var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
 var REPLAY_GAIN_STORE_KEY = 'mineradio-replay-gain-v1';
+var AUDIO_CHAIN_STORE_KEY = 'mineradio-audio-chain-v1';
 var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
 // genre 是向前生效字段：新解析的曲目会写入曲库与缓存，旧记录不带该键，
 // 因此 applyLocalAssetCacheToSong 的 hasOwnProperty 判定会跳过它，升级后不会整库回落文件名重解析。
@@ -154,6 +155,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   LOCAL_PLAYBACK_SOURCE_STORE_KEY,
   AUTO_PLAYBACK_STORE_KEY,
   REPLAY_GAIN_STORE_KEY,
+  AUDIO_CHAIN_STORE_KEY,
   UPDATE_ROUTE_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
@@ -494,7 +496,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.21';
+var APP_VERSION = '1.7.22';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -19860,10 +19862,14 @@ function initAudio() {
   beatAnalyser.smoothingTimeConstant = 0.10;
   source.connect(analyser);
   source.connect(beatAnalyser);
+  // 音效链整段挂在均衡增益之后、gainNode 之前：可视化取原始电平，音量与淡入淡出仍由 gainNode 独占。
+  audioChain = createAudioEffectChain(audioCtx);
   analyser.connect(replayGainNode);
-  replayGainNode.connect(gainNode);
+  replayGainNode.connect(audioChain.input);
+  audioChain.output.connect(gainNode);
   gainNode.connect(audioCtx.destination);
   setReplayGainNodeGain(replayGainActive.linear, true);
+  applyAudioChainToNodes(true);
   applyVolumeToAudio();
   frequencyData.fill(0);
   beatFrequencyData.fill(0);
@@ -20122,6 +20128,373 @@ function fadeOutAndPauseAudio() {
       settleFadeOut(true);
       setAudioOutputGainImmediate(0);
     }, AUDIO_FADE_OUT_MS + 80);
+  });
+}
+
+// 音效链：预设 → EQ → Preamp → Limiter → Spatial → Output。整条链常驻音频图，
+// 每一级都有数学上完全透明的中性值（0 dB 频段、ratio=1 限幅、width=1 中/侧矩阵），
+// 所以关闭音效链不用改接线，切换开关也不会有咔哒声。
+var AUDIO_CHAIN_BAND_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+var AUDIO_CHAIN_BAND_LABELS = ['31 Hz', '62 Hz', '125 Hz', '250 Hz', '500 Hz', '1 kHz', '2 kHz', '4 kHz', '8 kHz', '16 kHz'];
+var AUDIO_CHAIN_BAND_GAIN_MIN = -12;
+var AUDIO_CHAIN_BAND_GAIN_MAX = 12;
+var AUDIO_CHAIN_BAND_Q = 1;
+var AUDIO_CHAIN_PREAMP_MIN = -12;
+var AUDIO_CHAIN_PREAMP_MAX = 12;
+var AUDIO_CHAIN_TOTAL_PREAMP_MIN = -24;
+var AUDIO_CHAIN_LIMITER_MIN = -12;
+var AUDIO_CHAIN_LIMITER_MAX = 0;
+var AUDIO_CHAIN_LIMITER_RATIO = 20;
+var AUDIO_CHAIN_WIDTH_MIN = 0;
+var AUDIO_CHAIN_WIDTH_MAX = 2;
+var AUDIO_CHAIN_RAMP_SECONDS = 0.08;
+var AUDIO_CHAIN_FILE_FORMAT = 'mineradio.eq';
+var AUDIO_CHAIN_FILE_VERSION = 1;
+// 预设曲线按 10 个 ISO 频段给出，单位 dB；自定义没有固定曲线，靠 matchAudioChainPreset 反推。
+var AUDIO_CHAIN_PRESETS = [
+  { id: 'normal', label: 'Normal', gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: 'rock', label: 'Rock', gains: [5, 4, 2, -1, -2, 0, 2, 4, 4.5, 4] },
+  { id: 'pop', label: 'Pop', gains: [-1, 0, 1.5, 3, 3.5, 2.5, 1, 0, -0.5, -1] },
+  { id: 'classical', label: 'Classical', gains: [2.5, 2, 1, 0, 0, 0, 0.5, 1.5, 2.5, 2.5] },
+  { id: 'jazz', label: 'Jazz', gains: [3, 2, 1, 1.5, -0.5, -0.5, 0.5, 1.5, 2.5, 2] },
+  { id: 'bass', label: 'Bass Boost', gains: [8, 7, 5, 2.5, 0, 0, 0, 0, 0, 0] },
+  { id: 'vocal', label: 'Vocal', gains: [-3, -2.5, -1, 1.5, 4, 4.5, 3.5, 1.5, 0, -1] },
+  { id: 'custom', label: '自定义', gains: null }
+];
+var audioChain = null;
+var audioChainSettings = {
+  enabled: false,
+  gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  preampDb: 0,
+  autoPreamp: true,
+  limiterEnabled: true,
+  limiterThresholdDb: -1,
+  spatialEnabled: false,
+  widthRatio: 1,
+  profileName: 'Normal'
+};
+var audioChainActive = null;
+/**
+ * 归一化 10 个频段增益，容错长度不足、越界与非数字输入。
+ * @param {*} raw 原始增益数组。
+ * @returns {Array<number>} 长度固定为 10 的增益数组，单位 dB，按 0.5 dB 取整。
+ */
+function normalizeAudioChainGains(raw) {
+  var list = raw && typeof raw === 'object' && typeof raw.length === 'number' ? raw : [];
+  var out = [];
+  for (var i = 0; i < AUDIO_CHAIN_BAND_FREQUENCIES.length; i++) {
+    var value = Number(list[i]);
+    if (!isFinite(value)) value = 0;
+    out.push(Math.round(clampRange(value, AUDIO_CHAIN_BAND_GAIN_MIN, AUDIO_CHAIN_BAND_GAIN_MAX) * 2) / 2);
+  }
+  return out;
+}
+/**
+ * 按 id 取内置预设。
+ * @param {string} id 预设 id。
+ * @returns {object|null} 预设对象；没有就是 null。
+ */
+function audioChainPresetById(id) {
+  for (var i = 0; i < AUDIO_CHAIN_PRESETS.length; i++) {
+    if (AUDIO_CHAIN_PRESETS[i].id === id) return AUDIO_CHAIN_PRESETS[i];
+  }
+  return null;
+}
+/**
+ * 反推当前曲线属于哪个内置预设，全都不匹配就算自定义。这样拖动任一频段都会自动落到「自定义」。
+ * @param {*} gains 频段增益数组。
+ * @returns {string} 预设 id。
+ */
+function matchAudioChainPreset(gains) {
+  var normalized = normalizeAudioChainGains(gains);
+  for (var i = 0; i < AUDIO_CHAIN_PRESETS.length; i++) {
+    var preset = AUDIO_CHAIN_PRESETS[i];
+    if (!preset.gains) continue;
+    var same = true;
+    for (var j = 0; j < normalized.length; j++) {
+      if (Math.abs(normalized[j] - preset.gains[j]) > 0.001) { same = false; break; }
+    }
+    if (same) return preset.id;
+  }
+  return 'custom';
+}
+/**
+ * 归一化音效链设置，容错旧值与越界输入。频段曲线是唯一真相，预设名一律靠曲线反推，不单独存。
+ * @param {object} raw 原始设置对象。
+ * @returns {object} 归一化设置。
+ */
+function normalizeAudioChainSettings(raw) {
+  var input = raw && typeof raw === 'object' ? raw : {};
+  var preamp = Number(input.preampDb);
+  if (!isFinite(preamp)) preamp = 0;
+  var threshold = Number(input.limiterThresholdDb);
+  if (!isFinite(threshold)) threshold = -1;
+  var width = Number(input.widthRatio);
+  if (!isFinite(width)) width = 1;
+  return {
+    enabled: !!input.enabled,
+    gains: normalizeAudioChainGains(input.gains),
+    preampDb: Math.round(clampRange(preamp, AUDIO_CHAIN_PREAMP_MIN, AUDIO_CHAIN_PREAMP_MAX) * 2) / 2,
+    autoPreamp: input.autoPreamp !== false,
+    limiterEnabled: input.limiterEnabled !== false,
+    limiterThresholdDb: Math.round(clampRange(threshold, AUDIO_CHAIN_LIMITER_MIN, AUDIO_CHAIN_LIMITER_MAX) * 2) / 2,
+    spatialEnabled: !!input.spatialEnabled,
+    widthRatio: Math.round(clampRange(width, AUDIO_CHAIN_WIDTH_MIN, AUDIO_CHAIN_WIDTH_MAX) * 20) / 20,
+    profileName: typeof input.profileName === 'string' ? input.profileName.slice(0, 48) : ''
+  };
+}
+/**
+ * 读取已保存的音效链设置。
+ * @returns {object} 归一化设置。
+ */
+function readSavedAudioChainSettings() {
+  try {
+    var text = localStorage.getItem(AUDIO_CHAIN_STORE_KEY);
+    return normalizeAudioChainSettings(text ? JSON.parse(text) : null);
+  } catch (_e) {
+    return normalizeAudioChainSettings(null);
+  }
+}
+/**
+ * 解析音效链当前应写入各节点的参数。关闭时返回一组完全透明的中性值，不需要改接线。
+ * @param {object} settings 音效链设置。
+ * @returns {object} 解析结果。
+ */
+function resolveAudioChainState(settings) {
+  var conf = normalizeAudioChainSettings(settings);
+  var preset = matchAudioChainPreset(conf.gains);
+  if (!conf.enabled) {
+    return {
+      enabled: false,
+      preset: preset,
+      gains: normalizeAudioChainGains(null),
+      preampDb: 0,
+      autoPreampDb: 0,
+      totalPreampDb: 0,
+      preampLinear: 1,
+      limiter: { enabled: false, thresholdDb: 0, ratio: 1 },
+      width: 1,
+      maxBoostDb: 0
+    };
+  }
+  var maxBoost = 0;
+  for (var i = 0; i < conf.gains.length; i++) {
+    if (conf.gains[i] > maxBoost) maxBoost = conf.gains[i];
+  }
+  // 自动预增益按最大提升量反向留余量：Bass Boost 抬 8 dB 就先垫 -8 dB，进限幅前不至于顶满刻度。
+  var autoDb = conf.autoPreamp ? -maxBoost : 0;
+  var totalDb = clampRange(conf.preampDb + autoDb, AUDIO_CHAIN_TOTAL_PREAMP_MIN, AUDIO_CHAIN_PREAMP_MAX);
+  return {
+    enabled: true,
+    preset: preset,
+    gains: conf.gains.slice(),
+    preampDb: conf.preampDb,
+    autoPreampDb: autoDb,
+    totalPreampDb: Math.round(totalDb * 10) / 10,
+    preampLinear: Math.pow(10, totalDb / 20),
+    limiter: {
+      enabled: conf.limiterEnabled,
+      thresholdDb: conf.limiterEnabled ? conf.limiterThresholdDb : 0,
+      ratio: conf.limiterEnabled ? AUDIO_CHAIN_LIMITER_RATIO : 1
+    },
+    width: conf.spatialEnabled ? conf.widthRatio : 1,
+    maxBoostDb: maxBoost
+  };
+}
+/**
+ * 搭出常驻音效链：10 段 EQ → 预增益 → 限幅 → 立体声中/侧矩阵 → 输出。
+ * 中/侧算法：mid=(L+R)/2、side=(L-R)/2，输出 L=mid+width*side、R=mid-width*side；
+ * width=1 时逐样本还原原始 L/R，width=0 并成单声道，width=2 加宽。
+ * @param {AudioContext} ctx 音频上下文。
+ * @returns {object|null} 链路节点集合；上下文缺失时为 null。
+ */
+function createAudioEffectChain(ctx) {
+  if (!ctx) return null;
+  var bands = [];
+  var last = AUDIO_CHAIN_BAND_FREQUENCIES.length - 1;
+  for (var i = 0; i <= last; i++) {
+    var filter = ctx.createBiquadFilter();
+    // 两端用搁架滤波器托住整个低频/高频区，中间八段用 peaking，跟常见图示均衡器一致。
+    filter.type = i === 0 ? 'lowshelf' : (i === last ? 'highshelf' : 'peaking');
+    filter.frequency.value = AUDIO_CHAIN_BAND_FREQUENCIES[i];
+    if (filter.type === 'peaking') filter.Q.value = AUDIO_CHAIN_BAND_Q;
+    filter.gain.value = 0;
+    bands.push(filter);
+  }
+  var preamp = ctx.createGain();
+  preamp.gain.value = 1;
+  // ratio=1 时压缩曲线退化成直线、补偿增益恒为 1，等于旁通；关限幅只改 ratio，不动接线。
+  var limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = 0;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 1;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.25;
+  var splitter = ctx.createChannelSplitter(2);
+  var mid = ctx.createGain();
+  mid.gain.value = 0.5;
+  var sideInvert = ctx.createGain();
+  sideInvert.gain.value = -1;
+  var side = ctx.createGain();
+  side.gain.value = 0.5;
+  var width = ctx.createGain();
+  width.gain.value = 1;
+  var widthInvert = ctx.createGain();
+  widthInvert.gain.value = -1;
+  var merger = ctx.createChannelMerger(2);
+  for (var j = 0; j < last; j++) bands[j].connect(bands[j + 1]);
+  bands[last].connect(preamp);
+  preamp.connect(limiter);
+  limiter.connect(splitter);
+  splitter.connect(mid, 0);
+  splitter.connect(mid, 1);
+  splitter.connect(side, 0);
+  splitter.connect(sideInvert, 1);
+  sideInvert.connect(side);
+  side.connect(width);
+  width.connect(widthInvert);
+  mid.connect(merger, 0, 0);
+  mid.connect(merger, 0, 1);
+  width.connect(merger, 0, 0);
+  widthInvert.connect(merger, 0, 1);
+  return {
+    input: bands[0],
+    output: merger,
+    bands: bands,
+    preamp: preamp,
+    limiter: limiter,
+    spatial: { splitter: splitter, mid: mid, sideInvert: sideInvert, side: side, width: width, widthInvert: widthInvert, merger: merger }
+  };
+}
+/**
+ * 把目标值写进音效链上的某个 AudioParam，默认走短斜坡，避免拖滑杆时爆音。
+ * @param {AudioParam} param 目标参数。
+ * @param {*} value 目标值。
+ * @param {boolean=} immediate 是否立即生效。
+ * @returns {void}
+ */
+function setAudioChainParam(param, value, immediate) {
+  if (!param) return;
+  var next = Number(value);
+  if (!isFinite(next)) return;
+  if (!audioCtx || immediate) {
+    param.value = next;
+    return;
+  }
+  var now = audioCtx.currentTime || 0;
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(param.value, now);
+  param.linearRampToValueAtTime(next, now + AUDIO_CHAIN_RAMP_SECONDS);
+}
+/**
+ * 按当前设置把参数写入整条音效链。链路还没建好时只更新解析结果，等 initAudio 建好后补位。
+ * @param {boolean=} immediate 是否立即生效。
+ * @returns {object} 解析结果。
+ */
+function applyAudioChainToNodes(immediate) {
+  var state = resolveAudioChainState(audioChainSettings);
+  audioChainActive = state;
+  if (!audioChain) return state;
+  for (var i = 0; i < audioChain.bands.length; i++) {
+    setAudioChainParam(audioChain.bands[i].gain, state.gains[i], immediate);
+  }
+  setAudioChainParam(audioChain.preamp.gain, state.preampLinear, immediate);
+  setAudioChainParam(audioChain.limiter.threshold, state.limiter.thresholdDb, immediate);
+  setAudioChainParam(audioChain.limiter.ratio, state.limiter.ratio, immediate);
+  // widthInvert 恒为 -1，这里只推 width：右声道自然拿到 mid - width*side。
+  setAudioChainParam(audioChain.spatial.width.gain, state.width, immediate);
+  return state;
+}
+/**
+ * 生成 `xxx.eq.json` 档案内容。
+ * @param {string} name 档案名。
+ * @returns {object} 可直接序列化的档案对象。
+ */
+function audioChainProfilePayload(name) {
+  var conf = normalizeAudioChainSettings(audioChainSettings);
+  var bands = [];
+  for (var i = 0; i < conf.gains.length; i++) {
+    bands.push({ frequency: AUDIO_CHAIN_BAND_FREQUENCIES[i], gain: conf.gains[i] });
+  }
+  return {
+    format: AUDIO_CHAIN_FILE_FORMAT,
+    version: AUDIO_CHAIN_FILE_VERSION,
+    name: typeof name === 'string' && name ? name.slice(0, 48) : (conf.profileName || '自定义音效'),
+    eqEnabled: conf.enabled,
+    bands: bands,
+    preamp: conf.preampDb,
+    autoPreamp: conf.autoPreamp,
+    limiter: { enabled: conf.limiterEnabled, thresholdDb: conf.limiterThresholdDb },
+    spatial: { enabled: conf.spatialEnabled, width: conf.widthRatio }
+  };
+}
+/**
+ * 生成 `.eq.json` 文件名，剔除 Windows 文件名里不允许的字符。
+ * @param {string} name 档案名。
+ * @returns {string} 安全文件名。
+ */
+function audioChainProfileFileName(name) {
+  var base = String(name == null ? '' : name).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 48);
+  if (!base) base = 'mineradio';
+  return base + '.eq.json';
+}
+/**
+ * 把档案里的频段读回本机的 10 个 ISO 频段：既支持纯 dB 数组，也支持带频率的对象数组，
+ * 后者按最接近的频率对齐，方便直接吃别的播放器导出的曲线。
+ * @param {*} raw 档案里的 bands 字段。
+ * @returns {Array<number>|null} 10 段增益；无法识别时为 null。
+ */
+function normalizeImportedAudioChainBands(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.length !== 'number' || !raw.length) return null;
+  var plain = true;
+  for (var i = 0; i < raw.length; i++) {
+    if (raw[i] !== null && typeof raw[i] === 'object') { plain = false; break; }
+  }
+  if (plain) return normalizeAudioChainGains(raw);
+  var gains = normalizeAudioChainGains(null);
+  var matched = false;
+  for (var j = 0; j < raw.length; j++) {
+    var entry = raw[j];
+    if (!entry || typeof entry !== 'object') continue;
+    var freq = Number(entry.frequency);
+    var gain = Number(entry.gain);
+    if (!isFinite(freq) || !isFinite(gain)) continue;
+    var best = 0;
+    var bestDelta = -1;
+    for (var k = 0; k < AUDIO_CHAIN_BAND_FREQUENCIES.length; k++) {
+      var delta = Math.abs(AUDIO_CHAIN_BAND_FREQUENCIES[k] - freq);
+      if (bestDelta < 0 || delta < bestDelta) {
+        bestDelta = delta;
+        best = k;
+      }
+    }
+    gains[best] = gain;
+    matched = true;
+  }
+  return matched ? normalizeAudioChainGains(gains) : null;
+}
+/**
+ * 校验并归一化导入的 `.eq.json` 档案，只认本格式，缺字段一律回落到安全默认值。
+ * @param {*} raw 解析后的 JSON。
+ * @returns {object|null} 可直接替换设置的归一化结果；不是本格式时为 null。
+ */
+function normalizeImportedAudioChainProfile(raw) {
+  var input = raw && typeof raw === 'object' ? raw : null;
+  if (!input || input.format !== AUDIO_CHAIN_FILE_FORMAT) return null;
+  var gains = normalizeImportedAudioChainBands(input.bands);
+  if (!gains) return null;
+  var limiter = input.limiter && typeof input.limiter === 'object' ? input.limiter : {};
+  var spatial = input.spatial && typeof input.spatial === 'object' ? input.spatial : {};
+  return normalizeAudioChainSettings({
+    enabled: input.eqEnabled !== false,
+    gains: gains,
+    preampDb: input.preamp,
+    autoPreamp: input.autoPreamp,
+    limiterEnabled: limiter.enabled,
+    limiterThresholdDb: limiter.thresholdDb,
+    spatialEnabled: !!spatial.enabled,
+    widthRatio: spatial.width,
+    profileName: typeof input.name === 'string' ? input.name : ''
   });
 }
 
@@ -20832,6 +21205,298 @@ function initReplayGainControls() {
   }
   applyReplayGainForCurrentSong(currentLocalSong, { immediate: true });
   updateReplayGainControls();
+}
+
+/**
+ * 取当前曲线的显示名：自定义曲线优先显示导入或保存时的档案名。
+ * @returns {string} 显示名。
+ */
+function audioChainProfileLabel() {
+  var activePreset = matchAudioChainPreset(audioChainSettings.gains);
+  if (activePreset === 'custom' && audioChainSettings.profileName) return audioChainSettings.profileName;
+  var preset = audioChainPresetById(activePreset);
+  return preset ? preset.label : 'Normal';
+}
+
+/**
+ * 生成音效链说明文案，顺带回报实际生效的预增益与各级状态。
+ * @returns {string} 说明文案。
+ */
+function audioChainHintText() {
+  if (!audioChainSettings.enabled) return '关闭时整条链保持中性：EQ 全 0 dB、限幅旁通、声场原样输出。';
+  var state = audioChainActive || resolveAudioChainState(audioChainSettings);
+  var preampText = '预增益 ' + (state.totalPreampDb > 0 ? '+' : '') + state.totalPreampDb.toFixed(1) + ' dB';
+  if (state.autoPreampDb < 0) preampText += '（含自动留余量 ' + state.autoPreampDb.toFixed(1) + ' dB）';
+  var parts = ['EQ ' + audioChainProfileLabel(), preampText];
+  parts.push(state.limiter.enabled ? '限幅 ' + state.limiter.thresholdDb.toFixed(1) + ' dB' : '限幅旁通');
+  parts.push(state.width === 1 ? '声场原样' : '声场 ' + Math.round(state.width * 100) + '%');
+  return parts.join(' · ') + '。';
+}
+
+/**
+ * 同步单个音效链滑杆的取值与右侧读数。
+ * @param {string} id 滑杆元素 id。
+ * @param {number} value 当前值。
+ * @param {number} kind 读数样式：1 为 dB，0 为百分比。
+ * @returns {void}
+ */
+function syncAudioChainSlider(id, value, kind) {
+  var slider = document.getElementById(id);
+  if (!slider) return;
+  if (Number(slider.value) !== value) slider.value = String(value);
+  var out = slider.parentNode ? slider.parentNode.querySelector('output') : null;
+  if (!out) return;
+  if (kind === 1) out.textContent = (value > 0 ? '+' : '') + value.toFixed(1) + ' dB';
+  else out.textContent = Math.round(value * 100) + '%';
+}
+/**
+ * 同步音效链设置区的开关、预设分段按钮、十段滑杆、档案名与说明文案。
+ * @returns {void}
+ */
+function updateAudioChainControls() {
+  var master = document.getElementById('t-audioChain');
+  if (master) master.classList.toggle('on', audioChainSettings.enabled);
+  var autoPreamp = document.getElementById('t-audioChainAutoPreamp');
+  if (autoPreamp) autoPreamp.classList.toggle('on', audioChainSettings.autoPreamp);
+  var limiterToggle = document.getElementById('t-audioChainLimiter');
+  if (limiterToggle) limiterToggle.classList.toggle('on', audioChainSettings.limiterEnabled);
+  var spatialToggle = document.getElementById('t-audioChainSpatial');
+  if (spatialToggle) spatialToggle.classList.toggle('on', audioChainSettings.spatialEnabled);
+  var activePreset = matchAudioChainPreset(audioChainSettings.gains);
+  var buttons = document.querySelectorAll('#fx-eq-fold [data-eq-preset]');
+  for (var i = 0; i < buttons.length; i++) {
+    var button = buttons[i];
+    var active = button.getAttribute('data-eq-preset') === activePreset;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  for (var b = 0; b < AUDIO_CHAIN_BAND_FREQUENCIES.length; b++) {
+    syncAudioChainSlider('eq-band-' + b, audioChainSettings.gains[b], 1);
+  }
+  syncAudioChainSlider('eq-preamp', audioChainSettings.preampDb, 1);
+  syncAudioChainSlider('eq-limiter-threshold', audioChainSettings.limiterThresholdDb, 1);
+  syncAudioChainSlider('eq-spatial-width', audioChainSettings.widthRatio, 0);
+  var nameValue = document.getElementById('eq-profile-name');
+  if (nameValue) nameValue.textContent = audioChainProfileLabel();
+  var hint = document.getElementById('eq-hint');
+  if (hint) hint.textContent = audioChainHintText();
+}
+
+/**
+ * 落盘音效链设置并立刻推到音频节点上。
+ * @returns {void}
+ */
+function commitAudioChainSettings() {
+  audioChainSettings = normalizeAudioChainSettings(audioChainSettings);
+  setPersistentLocalStorageItem(AUDIO_CHAIN_STORE_KEY, JSON.stringify(audioChainSettings));
+  applyAudioChainToNodes();
+  updateAudioChainControls();
+}
+/**
+ * 切换音效链上的某个开关。
+ * @param {string} key 设置名：`enabled` / `autoPreamp` / `limiterEnabled` / `spatialEnabled`。
+ * @returns {void}
+ */
+function toggleAudioChainSetting(key) {
+  var labels = { enabled: '音效链', autoPreamp: '自动预增益', limiterEnabled: '限幅保护', spatialEnabled: '立体声扩展' };
+  if (!Object.prototype.hasOwnProperty.call(labels, key)) return;
+  audioChainSettings[key] = !audioChainSettings[key];
+  commitAudioChainSettings();
+  showToast(labels[key] + ': ' + (audioChainSettings[key] ? '开启' : '关闭'));
+}
+
+/**
+ * 套用内置预设曲线；「自定义」本身没有固定曲线，只提示拖动频段即可。
+ * @param {string} id 预设 id。
+ * @returns {void}
+ */
+function setAudioChainPreset(id) {
+  var preset = audioChainPresetById(id);
+  if (!preset) return;
+  if (!preset.gains) {
+    showToast('音效链: 拖动频段即为自定义');
+    return;
+  }
+  audioChainSettings.gains = preset.gains.slice();
+  audioChainSettings.profileName = preset.label;
+  commitAudioChainSettings();
+  showToast('音效链: ' + preset.label);
+}
+
+/**
+ * 设置某个频段的增益。
+ * @param {*} index 频段序号。
+ * @param {*} value 目标 dB 值。
+ * @returns {void}
+ */
+function setAudioChainBandGain(index, value) {
+  var i = Number(index);
+  var next = Number(value);
+  if (!isFinite(i) || !isFinite(next)) return;
+  if (i < 0 || i >= AUDIO_CHAIN_BAND_FREQUENCIES.length) return;
+  var gains = audioChainSettings.gains.slice();
+  gains[i] = next;
+  audioChainSettings.gains = gains;
+  // 手动改过曲线后若还挂着内置预设名，就把名字清掉，让显示回落到「自定义」。
+  if (matchAudioChainPreset(gains) === 'custom') {
+    for (var p = 0; p < AUDIO_CHAIN_PRESETS.length; p++) {
+      if (AUDIO_CHAIN_PRESETS[p].label === audioChainSettings.profileName) {
+        audioChainSettings.profileName = '';
+        break;
+      }
+    }
+  }
+  commitAudioChainSettings();
+}
+/**
+ * 设置音效链预增益（Preamp）。
+ * @param {*} value 目标 dB 值。
+ * @returns {void}
+ */
+function setAudioChainPreamp(value) {
+  var next = Number(value);
+  if (!isFinite(next)) return;
+  audioChainSettings.preampDb = next;
+  commitAudioChainSettings();
+}
+
+/**
+ * 设置限幅阈值。
+ * @param {*} value 目标 dB 值。
+ * @returns {void}
+ */
+function setAudioChainLimiterThreshold(value) {
+  var next = Number(value);
+  if (!isFinite(next)) return;
+  audioChainSettings.limiterThresholdDb = next;
+  commitAudioChainSettings();
+}
+
+/**
+ * 设置立体声宽度：0 合成单声道，1 原样，2 加宽。
+ * @param {*} value 目标宽度系数。
+ * @returns {void}
+ */
+function setAudioChainWidth(value) {
+  var next = Number(value);
+  if (!isFinite(next)) return;
+  audioChainSettings.widthRatio = next;
+  commitAudioChainSettings();
+}
+/**
+ * 导出当前音效链为 `xxx.eq.json`，优先走桌面端的保存对话框。
+ * @returns {void}
+ */
+function exportAudioChainProfile() {
+  var payload = audioChainProfilePayload(audioChainProfileLabel());
+  var text = JSON.stringify(payload, null, 2);
+  var fileName = audioChainProfileFileName(payload.name);
+  var api = getDesktopWindowApi && getDesktopWindowApi();
+  if (api && typeof api.exportJsonFile === 'function') {
+    api.exportJsonFile({ defaultName: fileName, text: text }).then(function(res){
+      if (res && res.ok) showToast('音效档案已导出');
+      else if (!res || !res.canceled) showToast('音效档案导出失败');
+    }).catch(function(){ showToast('音效档案导出失败'); });
+    return;
+  }
+  var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+/**
+ * 读入 `.eq.json` 文本并套用；格式不对就原样保留当前设置。
+ * @param {*} text 文件文本。
+ * @param {string=} fileName 文件名，用于档案里没有 name 时回退。
+ * @returns {boolean} 是否成功套用。
+ */
+function importAudioChainProfileText(text, fileName) {
+  var payload = null;
+  try { payload = JSON.parse(String(text || '')); } catch (e) {}
+  var next = normalizeImportedAudioChainProfile(payload);
+  if (!next) {
+    showToast('导入失败，文件不是有效的音效档案');
+    return false;
+  }
+  if (!next.profileName) {
+    next.profileName = String(fileName || '').split(/[\\/]/).pop().replace(/\.eq\.json$/i, '').replace(/\.json$/i, '').slice(0, 48);
+  }
+  audioChainSettings = next;
+  commitAudioChainSettings();
+  showToast('已导入 ' + audioChainProfileLabel());
+  return true;
+}
+/**
+ * 打开对话框导入 `.eq.json` 音效档案，复用既有的 JSON 导入通道。
+ * @returns {void}
+ */
+function importAudioChainProfileFromDialog() {
+  var api = getDesktopWindowApi && getDesktopWindowApi();
+  if (api && typeof api.importJsonFile === 'function') {
+    api.importJsonFile().then(function(res){
+      if (res && res.ok) importAudioChainProfileText(res.text, res.filePath || 'mineradio.eq.json');
+      else if (!res || !res.canceled) showToast('导入失败');
+    }).catch(function(){ showToast('导入失败'); });
+    return;
+  }
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.eq.json,.json,application/json';
+  input.onchange = function(){
+    var file = input.files && input.files[0];
+    if (file) readAudioChainProfileFile(file);
+  };
+  input.click();
+}
+
+/**
+ * 从本地文件对象读入音效档案。
+ * @param {File} file 文件对象。
+ * @returns {void}
+ */
+function readAudioChainProfileFile(file) {
+  if (!file || !/\.json$/i.test(file.name || '')) {
+    showToast('请导入 .eq.json 音效档案');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e){ importAudioChainProfileText(e.target && e.target.result, file.name); };
+  reader.onerror = function(){ showToast('导入失败'); };
+  reader.readAsText(file, 'utf-8');
+}
+/**
+ * 绑定音效链控件并同步初始状态。预设按钮与十三个滑杆都用折叠区上的委托监听，省掉逐个绑定。
+ * @returns {void}
+ */
+function initAudioChainControls() {
+  audioChainSettings = readSavedAudioChainSettings();
+  var fold = document.getElementById('fx-eq-fold');
+  if (fold) {
+    fold.addEventListener('click', function(e){
+      var button = e.target && e.target.closest ? e.target.closest('[data-eq-preset]') : null;
+      if (!button) return;
+      e.preventDefault();
+      setAudioChainPreset(button.getAttribute('data-eq-preset'));
+    });
+    fold.addEventListener('input', function(e){
+      var input = e.target;
+      if (!input) return;
+      var band = input.getAttribute ? input.getAttribute('data-eq-band') : null;
+      if (band !== null && band !== undefined) {
+        setAudioChainBandGain(band, input.value);
+        return;
+      }
+      if (input.id === 'eq-preamp') setAudioChainPreamp(input.value);
+      else if (input.id === 'eq-limiter-threshold') setAudioChainLimiterThreshold(input.value);
+      else if (input.id === 'eq-spatial-width') setAudioChainWidth(input.value);
+    });
+  }
+  applyAudioChainToNodes(true);
+  updateAudioChainControls();
 }
 
 function queueSong(song, opts) {
@@ -30512,7 +31177,7 @@ function fxPanelTargetForNode(node, current) {
   if (id === 'fx-lyric-fold') return 'lyrics';
   if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
-  if (id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-volume-fold' || node.classList.contains('fx-actions')) return 'advanced';
+  if (id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
   if (inputId === 'fx-bgopacity' || inputId === 'fx-glassaberration') return 'appearance';
   if (inputId === 'fx-lyricglow') return 'lyrics';
@@ -36816,6 +37481,7 @@ updateLikeButtons();
 updateLocalPlaybackPlaylistSourceButton();
 initAutoPlaybackControls();
 initReplayGainControls();
+initAudioChainControls();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 initPluginRuntime();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);

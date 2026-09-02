@@ -527,6 +527,58 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold" id="fx-eq-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-eq-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>音效链</strong><small>预设 → EQ → Preamp → Limiter → Spatial</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-audioChain" onclick="toggleAudioChainSetting('enabled')" title="打开后 10 段 EQ、预增益、限幅与声场才会生效"><span>音效链</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-audioChainAutoPreamp" onclick="toggleAudioChainSetting('autoPreamp')" title="按最大提升量自动垫出余量，避免抬高频段后削波"><span>自动预增益</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-audioChainLimiter" onclick="toggleAudioChainSetting('limiterEnabled')" title="链路末端加限幅，压住瞬时过冲"><span>限幅保护</span><span class="dot"></span></div>
+        <div class="fx-toggle" id="t-audioChainSpatial" onclick="toggleAudioChainSetting('spatialEnabled')" title="用中/侧矩阵调整声场宽度，关闭时逐样本原样输出"><span>立体声扩展</span><span class="dot"></span></div>
+      </div>
+      <div class="fx-section-label">预设</div>
+      <div class="fx-seg" id="eq-preset-seg-a" title="选一条内置曲线，拖动任意频段后自动变成自定义">
+        <button type="button" data-eq-preset="normal" aria-pressed="true" title="全 0 dB，完全不改音色">Normal</button>
+        <button type="button" data-eq-preset="rock" aria-pressed="false" title="两端抬高的 V 型曲线">Rock</button>
+        <button type="button" data-eq-preset="pop" aria-pressed="false" title="中频前推，人声与主旋律更贴耳">Pop</button>
+      </div>
+      <div class="fx-seg" id="eq-preset-seg-b" title="选一条内置曲线，拖动任意频段后自动变成自定义">
+        <button type="button" data-eq-preset="classical" aria-pressed="false" title="两端轻抬，中频保持干净">Classical</button>
+        <button type="button" data-eq-preset="jazz" aria-pressed="false" title="低频温暖，高频留出空气感">Jazz</button>
+        <button type="button" data-eq-preset="bass" aria-pressed="false" title="重低频大幅提升，建议配合自动预增益">Bass Boost</button>
+      </div>
+      <div class="fx-seg" id="eq-preset-seg-c" title="选一条内置曲线，拖动任意频段后自动变成自定义">
+        <button type="button" data-eq-preset="vocal" aria-pressed="false" title="突出人声频段，压低两端">Vocal</button>
+        <button type="button" data-eq-preset="custom" aria-pressed="false" title="自己拖出来的曲线，可导出成 .eq.json">自定义</button>
+      </div>
+      <div class="fx-section-label">10 段均衡</div>
+      <div id="eq-band-grid">
+        <div class="fx-slider"><label>31 Hz</label><input id="eq-band-0" data-eq-band="0" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>62 Hz</label><input id="eq-band-1" data-eq-band="1" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>125 Hz</label><input id="eq-band-2" data-eq-band="2" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>250 Hz</label><input id="eq-band-3" data-eq-band="3" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>500 Hz</label><input id="eq-band-4" data-eq-band="4" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>1 kHz</label><input id="eq-band-5" data-eq-band="5" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>2 kHz</label><input id="eq-band-6" data-eq-band="6" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>4 kHz</label><input id="eq-band-7" data-eq-band="7" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>8 kHz</label><input id="eq-band-8" data-eq-band="8" type="range" min="-12" max="12" step="0.5"><output></output></div>
+        <div class="fx-slider"><label>16 kHz</label><input id="eq-band-9" data-eq-band="9" type="range" min="-12" max="12" step="0.5"><output></output></div>
+      </div>
+      <div class="fx-section-label">预增益与限幅</div>
+      <div class="fx-slider"><label>预增益 Preamp</label><input id="eq-preamp" type="range" min="-12" max="12" step="0.5"><output></output></div>
+      <div class="fx-slider"><label>限幅阈值</label><input id="eq-limiter-threshold" type="range" min="-12" max="0" step="0.5"><output></output></div>
+      <div class="fx-section-label">声场 Spatial</div>
+      <div class="fx-slider"><label>立体声宽度</label><input id="eq-spatial-width" type="range" min="0" max="2" step="0.05"><output></output></div>
+      <div class="fx-section-label">音效档案</div>
+      <div class="lyric-color-row"><span>当前档案</span><strong id="eq-profile-name">Normal</strong><button type="button" class="fx-mini-btn ghost" onclick="exportAudioChainProfile()" title="把当前曲线与各级参数存成 xxx.eq.json">导出</button></div>
+      <div class="lyric-color-row"><span>档案文件</span><strong>xxx.eq.json</strong><button type="button" class="fx-mini-btn ghost" onclick="importAudioChainProfileFromDialog()" title="读入之前导出的 .eq.json 音效档案">导入</button></div>
+      <div class="mini-player-collapse-hint" id="eq-hint">关闭时整条链保持中性：EQ 全 0 dB、限幅旁通、声场原样输出。</div>
+      <div class="mini-player-collapse-hint">链路顺序固定为 预设 → EQ → Preamp → Limiter → Spatial → Output，接在音量均衡之后、音量与淡入淡出之前。</div>
+    </div>
+  </div>
+
   <div class="fx-fold" id="fx-plugin-fold">
     <div class="fx-fold-head" onclick="document.getElementById('fx-plugin-fold').classList.toggle('open')">
       <span class="fx-fold-title"><strong>插件</strong><small>主题</small></span><span class="arrow">▶</span>

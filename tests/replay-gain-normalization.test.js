@@ -322,10 +322,11 @@ async function testPrepareFillsMissingTagLater() {
  * @returns {void}
  */
 function testSourceWiring() {
-  // 均衡增益挂在 analyser 之后、gainNode 之前：可视化仍取原始电平，音量与淡入淡出继续由 gainNode 独占。
+  // 均衡增益挂在 analyser 之后、音效链与 gainNode 之前：可视化仍取原始电平，音量与淡入淡出继续由 gainNode 独占。
   assert.match(appSource, /source\.connect\(analyser\);/);
   assert.match(appSource, /analyser\.connect\(replayGainNode\);/);
-  assert.match(appSource, /replayGainNode\.connect\(gainNode\);/);
+  assert.match(appSource, /replayGainNode\.connect\(audioChain\.input\);/);
+  assert.match(appSource, /audioChain\.output\.connect\(gainNode\);/);
   assert.match(appSource, /gainNode\.connect\(audioCtx\.destination\);/);
   // 音频节点重建后要用已算好的增益补位，避免刚起播那一下漏掉均衡。
   assert.match(appSource, /setReplayGainNodeGain\(replayGainActive\.linear, true\);/);

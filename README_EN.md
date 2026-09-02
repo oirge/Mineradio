@@ -74,21 +74,26 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.7.21 (2026-09-02)
+### Latest release v1.7.22 (2026-09-02)
 
+- A real audio effect chain in a fixed order: `Preset → EQ → Preamp → Limiter → Spatial → Output`, permanently wired into the audio graph so toggling it never clicks
+- 8 presets: Normal / Rock / Pop / Classical / Jazz / Bass Boost / Vocal / Custom; dragging any band lands on Custom, and returning the curve to a preset shape is recognised again automatically
+- 10-band graphic EQ from `31 Hz` to `16 kHz` — shelving filters at both ends, peaking in between, ±12 dB per band in 0.5 dB steps
+- Automatic preamp headroom derived from the largest boost, plus an end-of-chain limiter (threshold -12 to 0 dB) that catches transient overshoot
+- Stereo width uses a true mid/side matrix: width 1 reproduces the original channels sample for sample, 0 collapses to mono, 2 widens
+- Effect profiles export and import as `xxx.eq.json`, carrying the curve, preamp, limiter and spatial settings
 - New volume normalization (ReplayGain): existing loudness tags are read and applied so tracks from different albums and sources play at the same level
 - Track and Album reference modes, a ±12 dB Preamp, and a peak-based clipping guard
 - Reads `REPLAYGAIN_*`, ID3v2 `TXXX` / `RVA2` and Opus `R128_*` tags from FLAC / OGG / OPUS / MP3 / WAV / APE / M4A / DSF
 - No library rescan required: newly scanned tracks pick the tags up in passing, older ones fill in once on first play and are cached
-- Normalization runs on its own gain node, so the volume slider, fades and visualizer levels are untouched
+- The effect chain and normalization both run on their own nodes, so the volume slider, fades and visualizer levels are untouched
 - Automatic music folder monitoring: new tracks are indexed, deleted tracks are pruned, edited tags and covers refresh on their own — no restart needed
 - Syncing never interrupts playback: the library is mutated in place, and the currently playing track stays put even if its file is gone
 - New bottom-right sync indicator: `已同步 12,431 首歌曲`
-- Fixed APE / DSD files being scanned but excluded from the library track count
 - Added tag, cover, embedded lyrics and duration parsing for OGG / OGA / OPUS / WAV / APE / DSD(.dsf)
 - APE and DSD now play directly: the desktop side wraps them as a virtual WAV stream, so Range requests and seeking keep working
 - The local library moved to SQLite with file-fingerprint and path indexes, and the old 16000-track cap is gone
-- Full Node regression suite: `616/616` passing
+- Full Node regression suite: `630/630` passing
 
 ## Notice
 
