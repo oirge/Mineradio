@@ -81,7 +81,16 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.7.28 (2026-09-03)
+### Latest release v1.7.29 (2026-09-03)
+
+- The music-folder auto-sync indicator ("已同步 xx 首歌曲" / "synced xx tracks") moved from the bottom-right corner to **below the search box**: with nothing else under the search box it sits directly beneath it, and as soon as search results appear it slides below the result list instead of covering it — no existing layout is pushed around
+- The indicator now **follows theme plugins**: background, border, shadow and text all read theme tokens first (the same family as the search box), falling back to the player's own glass material when no theme is installed, so it looks like the same material as the adjacent search box. Text stays readable on light themes; only the small accent dot keeps a semantic colour
+- The top search bar only peeks out when the pointer is near the top, so the indicator holds it open for the few seconds it is visible and releases it on fade-out. A search bar you opened yourself is never taken over or closed for you, and it stays open while the input has focus, results or the import hint are showing, or the pointer is still up top
+- No new UI elements; `public/index.html` was not touched
+- Full Node regression suite: `845/845` passing
+
+<details>
+<summary>v1.7.28 — Gapless playback and a 0~10 second crossfade</summary>
 
 - New "gapless playback" toggle (on by default): the next track is decoded ahead of time during automatic advance and takes over the instant the previous one ends, so there is no audible gap between adjacent tracks
 - New "crossfade" slider: `0 ~ 10` seconds in `0.5` second steps. Above zero the outgoing and incoming tracks overlap along an equal-power curve, so the midpoint does not dip in loudness
@@ -89,6 +98,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - No pops, no double playback and no sudden silence across state changes: two permanently wired `<audio>` decks only ever have their gain adjusted, never their connections. A crossfade commits and advances the queue only once the next track is genuinely audible, and if the start is rejected everything rolls back and the current track keeps playing
 - The only UI addition is one collapsible section under the volume block on the settings panel's "Advanced" page (one toggle plus one slider); the stylesheet was not touched
 - Full Node regression suite: `834/834` passing
+
+</details>
 
 <details>
 <summary>v1.7.27 — Listening stats, resume playback, mouse-button hotkeys</summary>

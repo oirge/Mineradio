@@ -1401,3 +1401,16 @@
 - **每加一个启动初始化函数，都要去放宽 `tests/auto-playback-startup.test.js` 那条启动顺序正则** —— ReplayGain、音效链、无缝各踩了一次，已经第三回了。以后新增 `initXxxControls()` 顺手补一个 `(?:initXxxControls\(\);\s*)?` 可选组。
 - **`node:vm` 切片的两条老规矩又各踩一次：** ES6 简写方法不可 `new`，桩 `new Audio()` 必须写成 `Audio: function () {}`；`require('node:assert/strict')` 把 `deepEqual` 别名成 `deepStrictEqual`，跨 realm 容器断言前必须 `Object.assign({}, x)` / `Array.from` 拷回本 realm。
 - 验证：全量 Node 回归 `834/834`（上一版基线 `807`），新增 `tests/gapless-crossfade.test.js` 27 例。本轮未启动本机 Electron，**交叉与接续的实际听感未在本机 Electron 里试听过**，全部结论来自桩 AudioContext 下的逐条自动化断言。
+
+### 2026-09-03 - v1.7.29 同步指示器移到搜索框下面：挂进容器而不是重算坐标
+
+- 用户原话：「已同步xx歌曲位置改动一下再搜索框下面，显示的要符合主题插件」，随后「发布新版」。
+- **要把一个东西挪到某个控件下面，优先挂进那个控件的容器、用 `top:100%` 贴底边，不要去重算固定坐标。** `#local-sync-badge` 改成 `#search-stack` 的绝对定位子节点（`top:100%;right:0;margin-top:8px`，`margin-top` 与 `#search-results` 同值），于是 `stage-mode` / `simple-mode` / 桌面壳 / 移动端那几套宽度与 `top` 变体全部自动跟上，一处都不用另算；`#search-stack` 只补了一条 `position:relative`。
+- **别按「某一行控件的高度」算死坐标 —— 那一行可能永远是 `display:none` 的。** `LOCAL_ONLY_MODE` 在 `public/app.js:74` 是硬编码 `true`，`app.css` 里 `body.local-only-mode #search-mode-tabs{display:none}` 因此恒成立。第一版把 `#search-mode-tabs` 的行高算进 `top`，结果那个坐标正好压在搜索结果列表第一行上。改坐标前先确认参照物在当前模式下真的存在。
+- **挂进「按需探头」的容器要连它的可见性一起接管。** 顶部搜索区只在鼠标 `y<66` 时才 `.peek`，指示器挂进去就等于跟着一起隐身。按住 `.peek` 的四条边界一条都不能省：① 用户自己划开的不接管也不替他关（先读 `.peek`）；② `setPeek` 有自己的拒绝理由（沉浸模式一律不给开搜索区），所以**叫完必须回读 `.peek` 再决定记不记按住状态**，否则会记下一个假的「按住」，放开时把用户本来开着的搜索区关掉；③ 放开时只在「那条全局 mousemove 自己也会收」的情况下才收 —— 查 mousemove 写下的指针区标记、`emptyHomeActive`、输入框焦点、`#search-results.show`、`#upload-tip.show`；④ mousemove 的收起分支要加按住豁免，否则指示器刚露头就被连着搜索区一起收掉。
+- **新控件要合主题，只有两条通道：设 `--th-*` 令牌，或被主题的 `css` 段点名。** 这是 `v1.7.26` 记下的规矩，本轮再确认一次。指示器不在任何现成主题的选择器清单里，所以走令牌：底色 `--th-search-bg` → `--th-chip-bg` → `--saved-panel-glass-bg` 三级回落，描边 `--th-chip-border`，阴影 `--th-row-shadow`，文字 `--th-text-strong`（浅色主题也读得清），语义色只留在 `--fc-accent-rgb` 那颗圆点上。
+- **想让新控件有黄金玻璃质感，不要往 `app.css` 那两条长 `!important` 选择器列表里加名字。** 那两条列表是统一入口，加进去等于让主题令牌永远赢不过 `!important`。正确做法是在自己的 id 规则里把 `--saved-panel-glass-*` 当**回落值**（id 选择器本来就赢过那些类），再单独写一条 `html.control-glass-svg-ok #自己的id` 跟着升级到同一支 SVG 滤镜。
+- **CSS 属性名互为后缀时，正则断言必须连分隔符一起锚。** `assert.doesNotMatch(rule, /top:\d/)` 被 `margin-top:8px` 命中，收紧成 `(?:^|;)top:\d` 又被 `top:100%` 命中，最终只能写成 `(?:^|;)top:[\d.]+px`（只禁硬编码像素 `top`）。同理 `cssRule()` 取规则要用 `\n#id{` 换行锚定，否则 `#search-area.stage-mode #search-stack{` 会先命中。
+- **测试 harness 里「登记一个节点」和「把它塞进 body.children」是两件事。** `createDocumentShim().mount(id)` 只登记不推进 `body.children`，否则「取不到宿主时退回 `body`」那条测试的 `children.length` 断言会被前面的挂载污染。另加 `createSandbox({peekRefused})` 还原「叫了 `setPeek` 但没开起来」的沉浸模式。
+- 位置改动带走了一条死规则：`body.controls-visible #local-sync-badge{bottom:190px}`（右下角时代给抬起的播放控制条让位）已删除。`public/index.html` 一行未动 —— 指示器一直是运行时懒建的。
+- 验证：全量 Node 回归 `845/845`（上一版基线 `834`），`tests/local-library-auto-sync.test.js` 从 12 例扩到 23 例。本轮未启动本机 Electron，**指示器在真实窗口里的落位与主题切换效果没有肉眼验证过**，全部结论来自源码/CSS 的逐条自动化断言。

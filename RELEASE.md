@@ -1,5 +1,21 @@
 ﻿# 发布流程
 
+## v1.7.29 同步指示器移到搜索框下面并接上主题插件令牌
+- 正式发布版本从 `1.7.28` 提升为 `1.7.29`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:591`）与发布工作流默认 tag 保持一致，`1.7.28` → `1.7.29`。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` + `package.json` 版本，**漏一处就会红**。
+- 用户原话：「已同步xx歌曲位置改动一下再搜索框下面，显示的要符合主题插件」，随后「发布新版」。
+- **位置方案定为「挂进 `#search-stack` 用 `top:100%` 贴底边」，而不是重算一组固定坐标。** `#search-stack` 补一条 `position:relative` 当定位祖先，`#local-sync-badge` 改成 `position:absolute;top:100%;right:0;margin-top:8px`（`margin-top` 与 `#search-results` 完全同值）。这样 `#search-area.stage-mode #search-stack{width:min(360px,52vw)}`、`body.simple-mode #search-stack{width:100%}`、桌面壳/移动端那几套 `top` 变体全部自动跟上，一处都不用再算；绝对定位不占流，任何模式下都不推挤原有布局，也不会和固定居中的 `#toast` 打架。
+- **千万别按 `.search-mode-tabs` 的行高去算死坐标。** 第一版想写 `top:66px`（搜索框 58px + 8px 间距）之外再加一段 tabs 行高，但 `LOCAL_ONLY_MODE` 在 `public/app.js:74` 是**硬编码 `true`**，`app.css:184` 的 `body.local-only-mode #search-mode-tabs{display:none}` 因此恒成立 —— 按 tabs 存在算出来的坐标正好落在搜索结果列表第一行上。`top:100%` 是唯一不用关心这一族显隐的写法。
+- **代价是「顶部搜索区只在鼠标 `y<66` 时才探头」，挂进去等于跟着它一起隐身**，所以显示的那 `4200ms` 必须主动把 `.peek` 按住（`holdLocalLibrarySyncBadgePeek`）。四条边界都要守：① 用户自己划开的不接管（先读 `.peek`）、也不替他关掉；② `setPeek` 自己有拒绝的理由（沉浸模式一律不给开搜索区），所以叫完要**回读 `.peek` 再决定记不记按住状态**，否则会记下一个假的「按住」并在放开时替用户关掉本来开着的搜索区；③ 放开时只在「那条全局 mousemove 自己也会收」的情况下才收 —— 查 mousemove 写下的 `localLibrarySyncBadgeSearchZoneHot`、`emptyHomeActive`、输入框焦点、`#search-results.show`、`#upload-tip.show`；④ mousemove 的收起分支要加按住豁免，否则鼠标一离开顶部，指示器刚露头就被连着搜索区一起收掉。
+- **主题合规只有两条通道，这次只能用令牌通道。** 主题插件要么设 `--th-*` 令牌，要么在 `css` 段里点名某个选择器加 `!important`（`v1.7.26` 那一轮的教训）。指示器不在任何现成主题的选择器清单里，所以走令牌：底色 `--th-search-bg` → `--th-chip-bg` → `--saved-panel-glass-bg` 三级回落（`--th-search-bg` 语义上就是主题给搜索区那一族的底色，且 `app.css` 从不自己引用它），描边 `--th-chip-border` → `transparent`，阴影 `--th-row-shadow` → `--saved-panel-glass-shadow`，文字 `--th-text-strong`（雪昼白这类浅色主题也读得清），语义色只留在那颗 `--fc-accent-rgb` 圆点上。
+- **没有把指示器塞进 `app.css:1617` / `:1624` 那两条长 `!important` 选择器列表。** 那两条列表（`#search-box,#search-results,.search-mode-tabs,#fx-panel,#toast,…`）是黄金玻璃的统一入口，往里加名字等于让主题令牌永远赢不过 `!important`。改成在指示器自己的 id 规则里把 `--saved-panel-glass-*` 当**回落值**用（id 选择器本来就赢过那些类），再单独加一条 `html.control-glass-svg-ok #local-sync-badge` 跟邻居一起升级到同一支玻璃 SVG 滤镜。**没有降级成普通毛玻璃**。
+- 删掉了 `body.controls-visible #local-sync-badge{bottom:190px}` —— 那是右下角时代为了给抬起的播放控制条让位的补偿，新位置在顶部，留着就是一条永远不生效的死规则。
+- `public/index.html` 一行未动：指示器一直是 `localLibrarySyncBadgeElement()` 运行时懒建的，只把父节点从 `body` 换成 `#search-stack`（取不到时仍退回 `body`，那条退路有测试钉着）。
+- 测试从 12 例扩到 23 例（`tests/local-library-auto-sync.test.js`）。harness 侧新增 `createDocumentShim().mount(id)`（登记节点但**不**推进 `body.children`，否则退回 `body` 那条测试的 `children.length` 断言会被污染）与 `createSandbox({searchDom, peeking, peekRefused})`，`peekRefused` 专门还原「叫了 `setPeek` 但没开起来」的沉浸模式。CSS 断言用换行锚定的 `cssRule()`（`\n#local-sync-badge{`），否则 `#search-area.stage-mode #search-stack{` 会先命中。
+- **`assert.doesNotMatch(badge, /top:\d/)` 这条断言写崩了两次**：`margin-top:8px` 里有 `top:8`，收紧成 `(?:^|;)top:\d` 又被 `top:100%` 的 `top:1` 命中，最终写成 `(?:^|;)top:[\d.]+px` —— 只禁「硬编码像素 `top`」这一件事。CSS 属性名互为后缀时，正则一定要连分隔符一起锚。
+- 验证：`node --check public/app.js` 通过，`git diff --check` 干净，全量 Node 回归 `845/845`（`main` 基线 `834`）。功能提交 `2a1b1c0`，PR #32 以**合并提交** `3ef1146` 合入 `main`，PR 上 `verify` 工作流通过（run `33716042507`，1m8s）。
+- 本轮未启动本机 Electron，**指示器在真实窗口里的落位与主题切换效果没有肉眼验证过**，全部结论来自源码/CSS 的逐条自动化断言；发布用的安装包由 GitHub Actions 远程构建，本地未做安装冒烟。
+<!--RELEASE_V1729_ASSETS-->
+
 ## v1.7.28 无缝播放（Gapless）与 0~10 秒交叉淡入淡出（Crossfade）
 - 正式发布版本从 `1.7.27` 提升为 `1.7.28`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:591`）与发布工作流默认 tag 保持一致，`1.7.27` → `1.7.28`。
 - 用户原话：「再最新版的基础上继续给 Mineradio 增加无缝播放和 Crossfade。要求：1. 新增 Gapless 开关。2. 支持相邻歌曲无明显停顿。3. 新增 Crossfade，支持 0~10 秒。4. Crossfade = 0 时保持原来的播放逻辑。5. 不影响手动切歌、上一首、下一首。6. 不影响随机播放和自动播放。7. 播放器状态切换时不能出现爆音、重复播放或突然静音。8. 保持现有 UI 风格，只增加必要设置。9. 增加播放切换和边界情况测试。 更新好后发布新版」。
