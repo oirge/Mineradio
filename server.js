@@ -136,6 +136,10 @@ const LOCAL_FILE_MIME = {
   '.vtt': 'text/vtt; charset=utf-8',
   '.ass': 'text/x-ssa; charset=utf-8',
   '.yrc': 'text/plain; charset=utf-8',
+  // KRC 可能是加密二进制，不能挂 charset，否则解码前就被当文本处理坏了。
+  '.krc': 'application/octet-stream',
+  '.qrc': 'application/xml; charset=utf-8',
+  '.ttml': 'application/ttml+xml; charset=utf-8',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.jpe': 'image/jpeg',

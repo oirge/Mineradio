@@ -37,7 +37,7 @@ function readLocalFileDecoderSource() {
 function readLocalTextSources() {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const decodeStart = source.indexOf('function decodeLocalTextBuffer(');
-  const readStart = source.indexOf('async function readLocalTextFile(', decodeStart);
+  const readStart = source.indexOf('async function readLocalTextFileBytes(', decodeStart);
   const readEnd = source.indexOf('function readFileAsDataUrl(', readStart);
   assert.ok(decodeStart >= 0 && readStart > decodeStart && readEnd > readStart, '未找到本地文本解码实现');
   return {
