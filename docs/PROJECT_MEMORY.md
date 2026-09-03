@@ -1413,4 +1413,6 @@
 - **CSS 属性名互为后缀时，正则断言必须连分隔符一起锚。** `assert.doesNotMatch(rule, /top:\d/)` 被 `margin-top:8px` 命中，收紧成 `(?:^|;)top:\d` 又被 `top:100%` 命中，最终只能写成 `(?:^|;)top:[\d.]+px`（只禁硬编码像素 `top`）。同理 `cssRule()` 取规则要用 `\n#id{` 换行锚定，否则 `#search-area.stage-mode #search-stack{` 会先命中。
 - **测试 harness 里「登记一个节点」和「把它塞进 body.children」是两件事。** `createDocumentShim().mount(id)` 只登记不推进 `body.children`，否则「取不到宿主时退回 `body`」那条测试的 `children.length` 断言会被前面的挂载污染。另加 `createSandbox({peekRefused})` 还原「叫了 `setPeek` 但没开起来」的沉浸模式。
 - 位置改动带走了一条死规则：`body.controls-visible #local-sync-badge{bottom:190px}`（右下角时代给抬起的播放控制条让位）已删除。`public/index.html` 一行未动 —— 指示器一直是运行时懒建的。
-- 验证：全量 Node 回归 `845/845`（上一版基线 `834`），`tests/local-library-auto-sync.test.js` 从 12 例扩到 23 例。本轮未启动本机 Electron，**指示器在真实窗口里的落位与主题切换效果没有肉眼验证过**，全部结论来自源码/CSS 的逐条自动化断言。
+- **`Date.now()` 不是「代号」，不能拿来当扫描世代标记。** 曲库清理原先是 `DELETE FROM files WHERE root_id=? AND seen_at<>?`，把毫秒时间戳当本轮扫描的身份；Windows 的时钟粒度可能有十几毫秒，两次扫描落在同一刻时上一轮留下的行会被当成「本轮见过」躲过删除 —— **用户删掉的歌一直留在音乐库里**。发布 PR 的 CI 红出来的（`removed` 应为 `1` 却是 `0`），本机把 `Date.now()` 冻死后必然复现。现在每个根维护严格递增的 `nextSyncStamp`（首次同步探一次 `MAX(seen_at)`，之后内存里 `max(now, 高水位 + 1)`）。以后凡是「用时间戳区分两批数据」的写法，先问一句「两批会不会落在同一刻」。
+- **CI 偶发红一次，先当真缺陷查，不要先按重跑处理。** 这次那条测试在本机永远绿（真实时钟会走），只有 CI 的时钟粒度把它逼出来；重跑一次大概也会绿，但缺陷会跟着安装包发出去。判定标准是「能不能构造出必然复现的条件」——能，就是缺陷。
+- 验证：全量 Node 回归 `846/846`（上一版基线 `834`），`tests/local-library-auto-sync.test.js` 从 12 例扩到 23 例，另加一例冻结时钟下的清理回归。本轮未启动本机 Electron，**指示器在真实窗口里的落位与主题切换效果没有肉眼验证过**，全部结论来自源码/CSS 的逐条自动化断言。

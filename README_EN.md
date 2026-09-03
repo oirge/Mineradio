@@ -87,7 +87,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - The indicator now **follows theme plugins**: background, border, shadow and text all read theme tokens first (the same family as the search box), falling back to the player's own glass material when no theme is installed, so it looks like the same material as the adjacent search box. Text stays readable on light themes; only the small accent dot keeps a semantic colour
 - The top search bar only peeks out when the pointer is near the top, so the indicator holds it open for the few seconds it is visible and releases it on fade-out. A search bar you opened yourself is never taken over or closed for you, and it stays open while the input has focus, results or the import hint are showing, or the pointer is still up top
 - No new UI elements; `public/index.html` was not touched
-- Full Node regression suite: `845/845` passing
+- Fixed a library-pruning defect that could leave deleted tracks in the library forever: a full scan drops rows it did not see this pass, but "this pass" was marked with a millisecond timestamp, so two scans landing in the same clock tick made stale rows look like they had been seen. The per-root scan stamp is now strictly increasing
+- Full Node regression suite: `846/846` passing
 
 <details>
 <summary>v1.7.28 — Gapless playback and a 0~10 second crossfade</summary>

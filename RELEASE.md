@@ -12,7 +12,9 @@
 - `public/index.html` 一行未动：指示器一直是 `localLibrarySyncBadgeElement()` 运行时懒建的，只把父节点从 `body` 换成 `#search-stack`（取不到时仍退回 `body`，那条退路有测试钉着）。
 - 测试从 12 例扩到 23 例（`tests/local-library-auto-sync.test.js`）。harness 侧新增 `createDocumentShim().mount(id)`（登记节点但**不**推进 `body.children`，否则退回 `body` 那条测试的 `children.length` 断言会被污染）与 `createSandbox({searchDom, peeking, peekRefused})`，`peekRefused` 专门还原「叫了 `setPeek` 但没开起来」的沉浸模式。CSS 断言用换行锚定的 `cssRule()`（`\n#local-sync-badge{`），否则 `#search-area.stage-mode #search-stack{` 会先命中。
 - **`assert.doesNotMatch(badge, /top:\d/)` 这条断言写崩了两次**：`margin-top:8px` 里有 `top:8`，收紧成 `(?:^|;)top:\d` 又被 `top:100%` 的 `top:1` 命中，最终写成 `(?:^|;)top:[\d.]+px` —— 只禁「硬编码像素 `top`」这一件事。CSS 属性名互为后缀时，正则一定要连分隔符一起锚。
-- 验证：`node --check public/app.js` 通过，`git diff --check` 干净，全量 Node 回归 `845/845`（`main` 基线 `834`）。功能提交 `2a1b1c0`，PR #32 以**合并提交** `3ef1146` 合入 `main`，PR 上 `verify` 工作流通过（run `33716042507`，1m8s）。
+- **本轮发布 PR 上的 `verify` 先红了一次，红出来一个真缺陷，不是抖动。** `tests/local-library-sqlite-store.test.js` 的 `完整扫描剔除删除文件而截断扫描不剔除` 在 CI 上 `removed` 应为 `1` 却是 `0`（run `33716635422`，844/845）。根因：`desktop/local-library-store.js` 的清理是 `DELETE FROM files WHERE root_id=? AND seen_at<>?`，也就是把 `Date.now()` 当「本轮扫描代号」用；Windows 上时钟粒度可能有十几毫秒，三次同步落在同一刻时上一轮留下的行 `seen_at` 与本轮完全相同，于是被当成「本轮见过」躲过删除 —— **用户删掉的歌会一直留在音乐库里**。本机把 `Date.now()` 冻死后一次复现（`full.removed = 0`、`c.mp3` 还在）。
+- 修法是给每个曲库根一个严格递增的扫描代号（`nextSyncStamp`）：进程内第一次同步该根时探一次 `MAX(seen_at)`（那次本来就要重写整根，一条聚合查询可以忽略），之后只在内存里 `max(now, 高水位 + 1)` 递增，时钟回拨也不会撞车；`close()` 里跟着清掉高水位表。**没有加索引也没有动 schema** —— `idx_files_seen` 是上几版特意删掉的（清理条件走不了索引，留着只是给每行加一次索引写）。新增 `两次扫描落在同一时钟刻度时完整扫描仍然剔除删除文件`：把 `Date.now()` 冻成常量跑完整三步，**先确认这条测试在旧实现下会红**再提交。
+- 验证：`node --check` 过了 `public/app.js`、`server.js`、`desktop/main.js`、`desktop/local-library-store.js`，`git diff --check` 干净，全量 Node 回归 `846/846`（`main` 基线 `834`）。功能提交 `2a1b1c0`，PR #32 以**合并提交** `3ef1146` 合入 `main`，PR 上 `verify` 工作流通过（run `33716042507`，1m8s）。
 - 本轮未启动本机 Electron，**指示器在真实窗口里的落位与主题切换效果没有肉眼验证过**，全部结论来自源码/CSS 的逐条自动化断言；发布用的安装包由 GitHub Actions 远程构建，本地未做安装冒烟。
 <!--RELEASE_V1729_ASSETS-->
 

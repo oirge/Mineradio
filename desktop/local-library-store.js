@@ -395,6 +395,9 @@ function createLocalLibraryStore(options) {
   const sqlite = loadSqliteModule();
   const dbPath = toText(opts.filePath) || path.join(toText(opts.directory) || process.cwd(), LOCAL_LIBRARY_DB_FILE_NAME);
   const statementCache = new Map();
+  // 每个曲库根的 seen_at 高水位。清理靠「seen_at 与本轮时间戳不相等」判定删除，
+  // 所以本轮时间戳必须与库里已有的任何 seen_at 都不同，详见 nextSyncStamp。
+  const syncStampByRoot = new Map();
   let db = null;
   let openError = sqlite ? '' : 'SQLITE_UNAVAILABLE';
   let closed = false;
@@ -467,6 +470,7 @@ function createLocalLibraryStore(options) {
   function close() {
     closed = true;
     statementCache.clear();
+    syncStampByRoot.clear();
     if (!db) return;
     try { db.close(); } catch (_e) {}
     db = null;
@@ -501,6 +505,35 @@ function createLocalLibraryStore(options) {
     }
     const row = findRootRow(folderPath);
     return row ? toInt(row.id) : 0;
+  }
+
+  /**
+   * 取本轮同步的时间戳，保证与该曲库根里已有的任何 seen_at 都不相等。
+   *
+   * 清理已删除文件用的是 `DELETE FROM files WHERE root_id=? AND seen_at<>?`，也就是把这个时间戳
+   * 当「本轮扫描代号」用。但 `Date.now()` 不是代号：Windows 上它的粒度可能有十几毫秒，两次扫描
+   * 落在同一刻时，上一轮留下的行 seen_at 与本轮完全相同，于是被当成「本轮见过」躲过删除——
+   * 删掉的歌永远留在库里。CI 上真的漏过一次（完整扫描 `removed` 应为 1 却是 0）。
+   *
+   * 所以每个根维护一个高水位：进程内第一次同步该根时探一次库里的 `MAX(seen_at)`（那次同步本来
+   * 就要重写整根，多一条聚合查询可以忽略），之后只在内存里递增，不再查库。时钟回拨也安全，因为
+   * 取的是 `max(now, 高水位 + 1)`。
+   * @param {number} rootId roots 表主键。
+   * @returns {number} 严格大于该根已有全部 seen_at 的时间戳。
+   */
+  function nextSyncStamp(rootId) {
+    let high = syncStampByRoot.get(rootId);
+    if (high == null) {
+      high = 0;
+      const statement = prepare('SELECT MAX(seen_at) AS seen_at FROM files WHERE root_id=?');
+      if (statement) {
+        try { high = toInt((statement.get(rootId) || {}).seen_at); } catch (_e) { high = 0; }
+      }
+    }
+    const now = Date.now();
+    const stamp = now > high ? now : high + 1;
+    syncStampByRoot.set(rootId, stamp);
+    return stamp;
   }
 
   /**
@@ -542,9 +575,10 @@ function createLocalLibraryStore(options) {
     const files = Array.isArray(input.files) ? input.files : [];
     const directories = Array.isArray(input.directories) ? input.directories : [];
     const truncated = !!input.truncated;
-    const savedAt = Date.now();
     const rootId = ensureRootId(folderPath);
     if (!rootId) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_ROOT_FAILED' };
+    // 必须先有 rootId 才能取本轮时间戳：它是清理用的扫描代号，要保证与这个根里已有的 seen_at 都不同。
+    const savedAt = nextSyncStamp(rootId);
     let stored = 0;
     let audio = 0;
     let totalSize = 0;
