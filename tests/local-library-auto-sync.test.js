@@ -7,6 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const APP_SOURCE = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+const APP_CSS = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.css'), 'utf8');
 
 /**
  * 按字符串边界切出一段真实源码，保证测试跑的是线上那份实现。
@@ -32,6 +33,8 @@ const AUTO_SYNC_SOURCE = sliceSource(
 );
 const EXPORTS = [
   'formatLocalLibrarySyncCount',
+  'localLibrarySyncBadgeElement',
+  'localLibrarySyncBadgeHoldingPeek',
   'reportLocalLibrarySyncedCount',
   'localLibraryAutoSyncDiff',
   'adoptLocalLibraryAutoSyncSong',
@@ -78,6 +81,25 @@ function createDocumentShim() {
     body,
     createElement,
     getElementById(id) { return registry.get(String(id)) || null; },
+    /**
+     * 往注册表里摆一个带 id 的节点，但不塞进 body.children ——
+     * 用来还原 index.html 里的 #search-area / #search-stack 这些静态结构。
+     * @param {string} id 节点 id。
+     * @returns {object} 节点桩。
+     */
+    mount(id) {
+      const node = createElement('div');
+      node.id = String(id);
+      node.children = [];
+      node.appendChild = function appendChild(child) {
+        child.parentNode = node;
+        node.children.push(child);
+        if (child.id) registry.set(String(child.id), child);
+        return child;
+      };
+      registry.set(String(id), node);
+      return node;
+    },
   };
 }
 
@@ -110,13 +132,18 @@ function createTimerShim() {
 }
 /**
  * 在 vm 里跑起真实的自动同步实现，外部依赖全部换成可观测的桩。
+ * @param {object} [opts] 可选项。opts.searchDom 摆出顶部搜索区那套静态结构并接上
+ *   setPeek 探针；opts.peeking 让搜索区一开始就是探出状态。
  * @returns {object} 沙箱上下文与观测记录。
  */
-function createSandbox() {
+function createSandbox(opts) {
+  const options = opts || {};
   const doc = createDocumentShim();
   const timers = createTimerShim();
   const covers = Object.create(null);
   const calls = { revokes: [], saves: 0, released: [], hydrated: [], invalidated: [], quality: [] };
+  const peeks = [];
+  const nodes = Object.create(null);
   const context = {
     console,
     Math, Number, String, Array, Object, Boolean, Date, JSON, Promise, Set, Map,
@@ -136,8 +163,24 @@ function createSandbox() {
     updateLocalAudioQualityInfo: (song) => { calls.quality.push(song); },
     revokeDiscardedLocalSongObjectUrls: (list, lists) => { calls.revokes.push({ list, lists }); },
   };
+  if (options.searchDom) {
+    // 还原 index.html 的顶部搜索区：#search-area 只有带上 .peek 才是可见的，
+    // 指示器如今就挂在它里面的 #search-stack 下。
+    nodes.area = doc.mount('search-area');
+    nodes.stack = doc.mount('search-stack');
+    nodes.input = doc.mount('search-input');
+    nodes.results = doc.mount('search-results');
+    if (options.peeking) nodes.area.classList.add('peek');
+    context.setPeek = function setPeek(el, on, key) {
+      peeks.push({ id: el ? String(el.id) : '', on: !!on, key: String(key) });
+      // 沉浸模式下真实的 setPeek 会直接拒绝开搜索区，用这个开关还原「叫了但没开」。
+      if (!el || !el.classList || options.peekRefused) return;
+      if (on) el.classList.add('peek');
+      else el.classList.remove('peek');
+    };
+  }
   vm.runInNewContext(`${PATH_KEY_SOURCE}\n${AUTO_SYNC_SOURCE}\n${EXPORTS}`, context);
-  return { context, doc, timers, covers, calls };
+  return { context, doc, timers, covers, calls, peeks, nodes };
 }
 
 /**
@@ -188,13 +231,13 @@ test('formatLocalLibrarySyncCount 给曲库数量加千分位', () => {
   assert.equal(format(undefined), '0');
 });
 
-test('reportLocalLibrarySyncedCount 在右下角报出数量并自动淡出', () => {
+test('reportLocalLibrarySyncedCount 报出数量并自动淡出（取不到搜索区时退回 body）', () => {
   const h = createSandbox();
   const text = h.context.reportLocalLibrarySyncedCount(12431);
   assert.equal(text, '已同步 12,431 首歌曲');
   const badge = h.doc.getElementById('local-sync-badge');
   assert.ok(badge);
-  // 懒建在 body 上，index.html 的静态结构一行都不用动。
+  // 没有 #search-stack 就退回 body，被裁过的 DOM 里也还报得出来。
   assert.equal(badge.parentNode, h.doc.body);
   assert.equal(badge.textContent, '已同步 12,431 首歌曲');
   assert.equal(badge.classList.contains('show'), true);
@@ -207,6 +250,116 @@ test('reportLocalLibrarySyncedCount 在右下角报出数量并自动淡出', ()
   assert.equal(h.timers.size(), 1);
   assert.equal(h.timers.fire(4200), 1);
   assert.equal(badge.classList.contains('show'), false);
+});
+
+test('指示器挂进搜索框那一叠，位置和宽度跟着搜索框走', () => {
+  const h = createSandbox({ searchDom: true });
+  h.context.reportLocalLibrarySyncedCount(12431);
+  const badge = h.doc.getElementById('local-sync-badge');
+  assert.ok(badge);
+  // 挂在 #search-stack 里，stage / simple / 桌面外壳各种模式变体全跟着搜索框走。
+  assert.equal(badge.parentNode, h.nodes.stack);
+  assert.equal(h.nodes.stack.children.length, 1);
+  assert.equal(h.doc.body.children.length, 0);
+  assert.equal(badge.textContent, '已同步 12,431 首歌曲');
+  // 只建一次，重复上报不会往那一叠里再塞一个。
+  h.context.reportLocalLibrarySyncedCount(7);
+  assert.equal(h.nodes.stack.children.length, 1);
+  assert.equal(h.context.localLibrarySyncBadgeElement(), badge);
+});
+
+test('指示器显示时把顶部搜索区按住，淡出后再放开', () => {
+  const h = createSandbox({ searchDom: true });
+  assert.equal(h.context.localLibrarySyncBadgeHoldingPeek(), false);
+  h.context.reportLocalLibrarySyncedCount(12431);
+  // 指示器现在挂在搜索区里面，搜索区没探出来就等于白报一场。
+  assert.deepEqual(h.peeks, [{ id: 'search-area', on: true, key: 'search' }]);
+  assert.equal(h.nodes.area.classList.contains('peek'), true);
+  assert.equal(h.context.localLibrarySyncBadgeHoldingPeek(), true);
+  assert.equal(h.timers.fire(4200), 1);
+  assert.equal(h.doc.getElementById('local-sync-badge').classList.contains('show'), false);
+  assert.deepEqual(h.peeks[1], { id: 'search-area', on: false, key: 'search' });
+  assert.equal(h.peeks.length, 2);
+  assert.equal(h.nodes.area.classList.contains('peek'), false);
+  assert.equal(h.context.localLibrarySyncBadgeHoldingPeek(), false);
+});
+
+test('搜索区已经开着时既不接管也不替用户关掉', () => {
+  const h = createSandbox({ searchDom: true, peeking: true });
+  h.context.reportLocalLibrarySyncedCount(12431);
+  // 用户自己划开的搜索区不归指示器管，免得几秒后当着人家的面收回去。
+  assert.deepEqual(h.peeks, []);
+  assert.equal(h.context.localLibrarySyncBadgeHoldingPeek(), false);
+  assert.equal(h.timers.fire(4200), 1);
+  assert.deepEqual(h.peeks, []);
+  assert.equal(h.nodes.area.classList.contains('peek'), true);
+});
+
+test('输入框有焦点或结果列表开着时不收起搜索区', () => {
+  const focused = createSandbox({ searchDom: true });
+  focused.context.reportLocalLibrarySyncedCount(12431);
+  assert.equal(focused.peeks.length, 1);
+  focused.doc.activeElement = focused.nodes.input;
+  assert.equal(focused.timers.fire(4200), 1);
+  // 正在打字，收起搜索区等于把输入框从人手里抽走。
+  assert.equal(focused.peeks.length, 1);
+  assert.equal(focused.nodes.area.classList.contains('peek'), true);
+  assert.equal(focused.context.localLibrarySyncBadgeHoldingPeek(), false);
+
+  const listing = createSandbox({ searchDom: true });
+  listing.context.reportLocalLibrarySyncedCount(12431);
+  assert.equal(listing.peeks.length, 1);
+  listing.nodes.results.classList.add('show');
+  assert.equal(listing.timers.fire(4200), 1);
+  assert.equal(listing.peeks.length, 1);
+  assert.equal(listing.nodes.area.classList.contains('peek'), true);
+});
+
+test('鼠标还停在留住区、或空态首页常开时，放开按住状态也不收搜索区', () => {
+  const hot = createSandbox({ searchDom: true });
+  hot.context.reportLocalLibrarySyncedCount(12431);
+  assert.equal(hot.peeks.length, 1);
+  // 那条 mousemove 每次都会写这个标记；鼠标正停在顶部却收掉，下一次 mousemove 之前就一直是收着的。
+  hot.context.localLibrarySyncBadgeSearchZoneHot = true;
+  assert.equal(hot.timers.fire(4200), 1);
+  assert.equal(hot.peeks.length, 1);
+  assert.equal(hot.nodes.area.classList.contains('peek'), true);
+
+  const home = createSandbox({ searchDom: true });
+  home.context.reportLocalLibrarySyncedCount(12431);
+  // 空态首页把搜索区当常开件，mousemove 自己也不会收，指示器更不该替它收。
+  home.context.emptyHomeActive = true;
+  assert.equal(home.timers.fire(4200), 1);
+  assert.equal(home.peeks.length, 1);
+  assert.equal(home.nodes.area.classList.contains('peek'), true);
+
+  const tip = createSandbox({ searchDom: true });
+  tip.doc.mount('upload-tip').classList.add('show');
+  tip.context.reportLocalLibrarySyncedCount(12431);
+  assert.equal(tip.peeks.length, 1);
+  assert.equal(tip.timers.fire(4200), 1);
+  assert.equal(tip.peeks.length, 1);
+  assert.equal(tip.nodes.area.classList.contains('peek'), true);
+});
+
+test('setPeek 拒绝开搜索区时不记按住状态（沉浸模式）', () => {
+  const h = createSandbox({ searchDom: true, peekRefused: true });
+  h.context.reportLocalLibrarySyncedCount(12431);
+  // 沉浸模式下搜索区一律不给开，那就不该记按住状态 —— 否则那几秒里 mousemove 的收起分支会被白白豁免。
+  assert.deepEqual(h.peeks, [{ id: 'search-area', on: true, key: 'search' }]);
+  assert.equal(h.nodes.area.classList.contains('peek'), false);
+  assert.equal(h.context.localLibrarySyncBadgeHoldingPeek(), false);
+  assert.equal(h.timers.fire(4200), 1);
+  assert.equal(h.peeks.length, 1);
+});
+
+test('缺 setPeek 时指示器照样报得出来，不会去按搜索区', () => {
+  const h = createSandbox();
+  // 切片外的函数在 vm 里是裸标识符，必须 typeof 兜住，否则整条上报链当场 ReferenceError。
+  assert.equal(h.context.reportLocalLibrarySyncedCount(3), '已同步 3 首歌曲');
+  assert.equal(h.context.localLibrarySyncBadgeHoldingPeek(), false);
+  assert.equal(h.timers.fire(4200), 1);
+  assert.equal(h.doc.getElementById('local-sync-badge').classList.contains('show'), false);
 });
 
 test('localLibraryWatchRootMatches 容忍大小写、分隔符和尾部斜杠', () => {
@@ -400,4 +553,100 @@ test('接管把旧 Object URL 收进待回收清单', () => {
   assert.equal(song.localUrl, '');
   assert.equal(song.localCoverObjectUrl, '');
   assert.equal(h.context.adoptLocalLibraryAutoSyncSong(null, null, stale), false);
+});
+
+/**
+ * 取 app.css 里某条顶格选择器的声明块。按行首锚定，免得
+ * `#search-area.stage-mode #search-stack{...}` 这种后代选择器抢先匹配上。
+ * @param {string} selector 选择器原文。
+ * @returns {string} 大括号里的声明串。
+ */
+function cssRule(selector) {
+  const key = `\n${selector}{`;
+  const at = APP_CSS.indexOf(key);
+  assert.ok(at >= 0, `missing css rule: ${selector}`);
+  const end = APP_CSS.indexOf('}', at);
+  assert.ok(end > at, `unterminated css rule: ${selector}`);
+  return APP_CSS.slice(at + key.length, end);
+}
+
+/**
+ * 从声明块里读一个像素值。
+ * @param {string} rule 声明串。
+ * @param {string} prop 属性名。
+ * @returns {number} 像素数。
+ */
+function cssPx(rule, prop) {
+  const hit = new RegExp(`(?:^|;)${prop}:(\\d+(?:\\.\\d+)?)px`).exec(rule);
+  assert.ok(hit, `missing ${prop} in rule: ${rule.slice(0, 60)}`);
+  return Number(hit[1]);
+}
+
+test('指示器样式绝对定位在搜索框那一叠里，不留右下角的老坐标', () => {
+  const stack = cssRule('#search-stack');
+  // 绝对定位要有一个定过位的祖先，否则会一路飘到 body。
+  assert.match(stack, /position:relative/);
+  const badge = cssRule('#local-sync-badge');
+  assert.match(badge, /position:absolute/);
+  assert.match(badge, /right:0/);
+  assert.doesNotMatch(badge, /position:fixed/);
+  assert.doesNotMatch(badge, /bottom:/);
+  assert.doesNotMatch(badge, /right:24px/);
+  // 老的贴边坐标和跟着控制条抬高的补偿规则都得跟着位置一起清掉。
+  assert.ok(!APP_CSS.includes('body.controls-visible #local-sync-badge'));
+  assert.ok(!APP_CSS.includes('#local-sync-badge{position:fixed'));
+});
+
+test('指示器贴着搜索框那一叠的底边，压不到结果列表上', () => {
+  const badge = cssRule('#local-sync-badge');
+  const results = cssRule('#search-results');
+  // 贴那一叠的底边：搜索框下面没东西时就在搜索框正下方，结果列表一开就顺到列表下面。
+  assert.match(badge, /top:100%/);
+  assert.match(badge, /right:0/);
+  // 和结果列表用同一个间距，读起来才是一叠而不是两处。
+  assert.equal(cssPx(badge, 'margin-top'), cssPx(results, 'margin-top'));
+  // #search-mode-tabs 在 local-only 模式下是 display:none 的，按它的行高算死坐标会正好压在结果列表上。
+  assert.doesNotMatch(badge, /(?:^|;)top:[\d.]+px/);
+  assert.ok(APP_CSS.includes('body.local-only-mode #search-mode-tabs'));
+  assert.equal(cssPx(badge, 'height'), 32);
+  assert.match(badge, /max-width:100%/);
+  assert.match(badge, /white-space:nowrap/);
+  assert.match(badge, /text-overflow:ellipsis/);
+  // 只读不点，别抢搜索框和结果列表的点击。
+  assert.match(badge, /pointer-events:none/);
+});
+
+test('指示器配色走主题令牌，没主题时回落到黄金玻璃', () => {
+  const badge = cssRule('#local-sync-badge');
+  // 主题插件只有两条通道：--th-* 令牌，或者被主题 css 段点名。这里占的是令牌那条。
+  assert.match(badge, /background:var\(--th-search-bg,var\(--th-chip-bg,var\(--saved-panel-glass-bg,/);
+  assert.match(badge, /border:1px solid var\(--th-chip-border,transparent\)/);
+  assert.match(badge, /box-shadow:var\(--th-row-shadow,var\(--saved-panel-glass-shadow\)\)/);
+  assert.match(badge, /backdrop-filter:var\(--saved-panel-glass-filter,/);
+  // 文字走 --th-text-strong，浅色主题（雪昼白那类）下也读得清；语义色只在圆点上。
+  assert.match(badge, /color:var\(--th-text-strong,/);
+  const dot = cssRule('#local-sync-badge::before');
+  assert.match(dot, /background:rgba\(var\(--fc-accent-rgb\),/);
+  // 玻璃 SVG 就绪时跟邻居升级到同一支滤镜，而不是退化成普通毛玻璃。
+  const svg = cssRule('html.control-glass-svg-ok #local-sync-badge');
+  assert.match(svg, /backdrop-filter:var\(--saved-panel-glass-svg-filter\)/);
+  assert.match(svg, /-webkit-backdrop-filter:var\(--saved-panel-glass-svg-filter\)/);
+  // 淡入淡出只动 opacity/transform，掉不到主线程上。
+  assert.match(cssRule('#local-sync-badge.show'), /opacity:1/);
+});
+
+test('顶部搜索区的收起分支认指示器的按住状态', () => {
+  // 鼠标一旦离开顶部 66px，这条分支就会把搜索区收回去 —— 指示器正挂在里面，必须让它豁免。
+  assert.ok(APP_SOURCE.includes(
+    "else if (saOn && !emptyHomeActive && !(typeof localLibrarySyncBadgeHoldingPeek === 'function' && localLibrarySyncBadgeHoldingPeek())) setPeek(sa, false, 'search');"
+  ));
+  // 切片外的 setPeek 在 vm 里是裸标识符，取用前必须 typeof 兜一层。
+  assert.match(AUTO_SYNC_SOURCE, /typeof setPeek !== 'function'/);
+  assert.match(AUTO_SYNC_SOURCE, /typeof emptyHomeActive !== 'undefined'/);
+  assert.match(AUTO_SYNC_SOURCE, /getElementById\('search-stack'\)/);
+  // 留住区标记由那条 mousemove 写入，写的和判的必须是同一个条件。
+  assert.ok(APP_SOURCE.includes(
+    'var searchPeekWanted = ey < 66 || inSearchPanel || searchFocused || uploadTipOpen;'
+  ));
+  assert.ok(APP_SOURCE.includes('localLibrarySyncBadgeSearchZoneHot = searchPeekWanted;'));
 });
