@@ -538,6 +538,20 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold" id="fx-gapless-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-gapless-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>无缝播放</strong><small>Gapless 接续与 0~10 秒交叉淡入淡出</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-gapless" onclick="toggleGaplessSetting()" title="提前解码下一首，自动续播时直接接上，相邻两首之间没有可闻的停顿"><span>无缝播放</span><span class="dot"></span></div>
+      </div>
+      <div class="fx-slider"><label>交叉淡入淡出</label><input id="gapless-crossfade" type="range" min="0" max="10" step="0.5"><output></output></div>
+      <div class="mini-player-collapse-hint" id="gapless-hint">无缝播放：提前解码下一首，自动续播时直接接上，任何时刻只有一路声音。</div>
+      <div class="mini-player-collapse-hint">交叉为 0 时保持原来的播放逻辑；手动切歌、上一首、下一首、随机播放与自动播放都不受影响。</div>
+    </div>
+  </div>
+
   <div class="fx-fold" id="fx-eq-fold">
     <div class="fx-fold-head" onclick="document.getElementById('fx-eq-fold').classList.toggle('open')">
       <span class="fx-fold-title"><strong>音效链</strong><small>预设 → EQ → Preamp → Limiter → Spatial</small></span><span class="arrow">▶</span>

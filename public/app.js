@@ -5,6 +5,10 @@
 //  Global State
 // ============================================================
 var audio = null, audioCtx = null, source = null, analyser = null, beatAnalyser = null, gainNode = null, replayGainNode = null, audioReady = false;
+// 无缝播放 / 交叉淡入淡出用的双 deck：两个 HTMLAudioElement 常驻，各自一条 MediaElementSource 与 deckGain，
+// 在 initAudio 里一次性接好之后绝不改接线。全局 audio 始终指向 audioDeckList[audioDeckActive].el，
+// 所以进度条、统计、媒体会话、桌面歌词这些读全局 audio 的消费方会跟着换 deck，不需要各自改一遍。
+var audioDeckList = [], audioDeckActive = 0;
 var uiSfxCtx = null, lastShelfSelectSfxAt = 0, uiSfxCloseTimer = 0;
 var UI_SFX_NOISE_VARIANTS = 6;
 var UI_SFX_IDLE_RELEASE_MS = 5000;
@@ -134,6 +138,7 @@ var LOCAL_PLAYBACK_SOURCE_STORE_KEY = 'mineradio-local-playback-source-v1';
 var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
 var REPLAY_GAIN_STORE_KEY = 'mineradio-replay-gain-v1';
 var AUDIO_CHAIN_STORE_KEY = 'mineradio-audio-chain-v1';
+var GAPLESS_STORE_KEY = 'mineradio-gapless-v1';
 var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
 // genre 是向前生效字段：新解析的曲目会写入曲库与缓存，旧记录不带该键，
 // 因此 applyLocalAssetCacheToSong 的 hasOwnProperty 判定会跳过它，升级后不会整库回落文件名重解析。
@@ -160,6 +165,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   AUTO_PLAYBACK_STORE_KEY,
   REPLAY_GAIN_STORE_KEY,
   AUDIO_CHAIN_STORE_KEY,
+  GAPLESS_STORE_KEY,
   UPDATE_ROUTE_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
@@ -582,7 +588,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.27';
+var APP_VERSION = '1.7.28';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -20644,7 +20650,7 @@ async function doSearch(q, opts) {
 function initAudio() {
   if (audioReady) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  source = audioCtx.createMediaElementSource(audio);
+  ensureAudioDeckPool();
   analyser = audioCtx.createAnalyser();
   beatAnalyser = audioCtx.createAnalyser();
   gainNode = audioCtx.createGain();
@@ -20654,8 +20660,10 @@ function initAudio() {
   analyser.smoothingTimeConstant = 0.58;
   beatAnalyser.fftSize = BEAT_FFT_SIZE;
   beatAnalyser.smoothingTimeConstant = 0.10;
-  source.connect(analyser);
-  source.connect(beatAnalyser);
+  // 两个 deck 各自 source → deckGain，再一起汇进 analyser / beatAnalyser。deckGain 的中性值恒为 1，
+  // 乘 1 在 IEEE754 里逐位透明，所以 Crossfade = 0（任何时刻只有一个 deck 出声）时输出与单元素时代完全一致。
+  attachAudioDeckNodes();
+  source = audioDeckList.length && audioDeckList[0] ? audioDeckList[0].source : null;
   // 音效链整段挂在均衡增益之后、gainNode 之前：可视化取原始电平，音量与淡入淡出仍由 gainNode 独占。
   audioChain = createAudioEffectChain(audioCtx);
   analyser.connect(replayGainNode);
@@ -20899,6 +20907,9 @@ function restorePlaybackGain() {
 }
 function fadeOutAndPauseAudio() {
   if (!audio || audio.paused) return Promise.resolve(false);
+  // 暂停前先把交叉结掉：主增益淡出只会静音、不会暂停正在淡出的旧 deck，
+  // 放着不管它会继续解码到自然结束，听起来就是「暂停了还有声音」。
+  if (typeof finishCrossfadeImmediately === 'function') finishCrossfadeImmediately('fade-out-pause');
   var serial = ++audioFadeSerial;
   rampAudioOutputGain(0, AUDIO_FADE_OUT_MS);
   return new Promise(function(resolve) {
@@ -21293,9 +21304,19 @@ function normalizeImportedAudioChainProfile(raw) {
 }
 
 function applyVolumeToAudio() {
-  if (audio) {
+  var elementVolume = gainNode ? 1 : targetVolume;
+  // 双 deck 都要归一：闲置 deck 之后可能被无缝接续直接接管，元素音量必须提前和当前策略一致，
+  // 否则接管瞬间会跳一次电平。typeof 判定是给只截取本函数上游片段的单测留的兜底。
+  var decks = typeof audioDeckList !== 'undefined' && audioDeckList && audioDeckList.length ? audioDeckList : null;
+  if (decks) {
+    for (var i = 0; i < decks.length; i++) {
+      var deckEl = decks[i] && decks[i].el;
+      if (!deckEl) continue;
+      if (deckEl.muted) deckEl.muted = false;
+      if (Math.abs(deckEl.volume - elementVolume) > 0.001) deckEl.volume = elementVolume;
+    }
+  } else if (audio) {
     if (audio.muted) audio.muted = false;
-    var elementVolume = gainNode ? 1 : targetVolume;
     if (Math.abs(audio.volume - elementVolume) > 0.001) audio.volume = elementVolume;
   }
   if (gainNode && audioCtx) {
@@ -21304,6 +21325,808 @@ function applyVolumeToAudio() {
     gainNode.gain.setTargetAtTime(targetVolume, now, 0.025);
   }
 }
+
+// ============================================================
+//  无缝播放 / 交叉淡入淡出（Gapless / Crossfade）
+// ============================================================
+// 三档行为，互不干扰：
+//   1. 无缝播放关 + Crossfade 0：完全走旧流程，不预取、不换 deck，每首开头仍是 460 ms 主增益淡入。
+//   2. 无缝播放开 + Crossfade 0：提前把下一首解码到闲置 deck，自然结束时直接接管，用 12 ms deck 斜坡代替
+//      460 ms 淡入。任何时刻仍然只有一个 deck 出声，不叠混，主音量与原有淡入淡出一个字没改。
+//   3. Crossfade > 0：距结尾 N 秒提前起播下一首，两条 deckGain 走等功率曲线对交叉，总能量恒定不塌陷。
+// 关键安全约束：只有「自动续播」和「交叉接管」两条路径允许接管预取 deck。手动切歌 / 上一首 / 下一首 /
+// 失败跳过全部照旧走 audio.src = url，要求 5 因此天然成立；随机与自动播放只决定下一个下标，预取读的就是
+// 续播用的同一个下标函数 nextQueueIndexPreview，要求 6 因此天然成立。
+var GAPLESS_CROSSFADE_MIN_SECONDS = 0;
+var GAPLESS_CROSSFADE_MAX_SECONDS = 10;
+var GAPLESS_CROSSFADE_STEP_SECONDS = 0.5;
+// 预取提前量：至少比交叉时长多留 6 秒，保证交叉起点到来时闲置 deck 已经能立刻出声。
+var GAPLESS_PREFETCH_LEAD_SECONDS = 20;
+// 纯无缝接续用的极短斜坡：从 0 硬跳到 1 会在解码首样本上留一个直流阶跃，12 ms 足够抹平又听不出延迟。
+var GAPLESS_HANDOFF_RAMP_SECONDS = 0.012;
+// 交叉要给旧歌留的最小尾巴，同时是短歌保护基准：交叉时长不超过 (时长 - 该值) / 2。
+var GAPLESS_MIN_TAIL_SECONDS = 0.35;
+// 等功率曲线采样点数：33 点在 10 秒交叉上每点约 0.3 秒，听感已经完全连续。
+var GAPLESS_CURVE_POINTS = 33;
+// 交叉窗口容差：timeupdate 大约 4 Hz，早一点点进窗口比整段交叉被跳过好。
+var GAPLESS_TRIGGER_SLACK_SECONDS = 0.28;
+// HAVE_FUTURE_DATA：低于这一档就不接管，宁可走旧的 load 流程也不要接管出一个卡顿。
+var GAPLESS_READY_STATE_PLAYABLE = 3;
+var gaplessSettings = { enabled: true, crossfadeSeconds: 0 };
+var gaplessPrefetch = { deckIndex: -1, url: '', key: '', queueIndex: -1 };
+var crossfadeState = { active: false, starting: false, handoffPending: false, fromDeckIndex: -1, toDeckIndex: -1, seconds: 0, settleSerial: 0, blockedUrl: '' };
+
+/**
+ * 归一化无缝播放设置，容忍任何脏数据或旧版本残留。
+ * @param {*} raw 原始设置对象。
+ * @returns {{enabled:boolean, crossfadeSeconds:number}} 归一化后的设置。
+ */
+function normalizeGaplessSettings(raw) {
+  var src = raw && typeof raw === 'object' ? raw : {};
+  var seconds = Number(src.crossfadeSeconds);
+  if (!isFinite(seconds)) seconds = 0;
+  seconds = clampRange(seconds, GAPLESS_CROSSFADE_MIN_SECONDS, GAPLESS_CROSSFADE_MAX_SECONDS);
+  seconds = Math.round(seconds / GAPLESS_CROSSFADE_STEP_SECONDS) * GAPLESS_CROSSFADE_STEP_SECONDS;
+  seconds = Math.round(seconds * 10) / 10;
+  return { enabled: src.enabled !== false, crossfadeSeconds: seconds };
+}
+
+/**
+ * 读取本地保存的无缝播放设置。
+ * @returns {{enabled:boolean, crossfadeSeconds:number}} 设置对象。
+ */
+function readSavedGaplessSettings() {
+  try {
+    var raw = localStorage.getItem(GAPLESS_STORE_KEY);
+    if (!raw) return normalizeGaplessSettings(null);
+    return normalizeGaplessSettings(JSON.parse(raw));
+  } catch (e) { return normalizeGaplessSettings(null); }
+}
+
+/**
+ * 无缝接续或交叉是否需要双 deck 支撑。Crossfade 自己就是一种接续方式，所以开了它就不看无缝开关。
+ * @returns {boolean} 是否需要预取。
+ */
+function gaplessEnabledForHandoff() {
+  return !!(gaplessSettings.enabled || gaplessSettings.crossfadeSeconds > 0);
+}
+/**
+ * 造一个 deck 用的音频元素，参数与旧的单元素完全一致。
+ * @returns {HTMLAudioElement} 新建的音频元素。
+ */
+function createAudioDeckElement() {
+  var el = new Audio();
+  el.crossOrigin = 'anonymous';
+  el.preload = 'auto';
+  return el;
+}
+
+/**
+ * 保证双 deck 池已经就绪。已存在的 audio 会被复用成第 0 号 deck，
+ * 因为它可能已经接上了 MediaElementSource，重新 new 一个会把整条音频链丢掉。
+ * @returns {Array<object>} deck 列表。
+ */
+function ensureAudioDeckPool() {
+  if (!audioDeckList.length) {
+    var primary = audio || createAudioDeckElement();
+    audioDeckList = [{ el: primary, source: null, gain: null, pendingStartRamp: 0, retireSerial: 0 }];
+    audioDeckActive = 0;
+    audio = primary;
+  }
+  while (audioDeckList.length < 2) {
+    audioDeckList.push({ el: createAudioDeckElement(), source: null, gain: null, pendingStartRamp: 0, retireSerial: 0 });
+  }
+  for (var i = 0; i < audioDeckList.length; i++) {
+    if (typeof bindPlaybackProgressEvents === 'function') bindPlaybackProgressEvents(audioDeckList[i].el);
+  }
+  attachAudioDeckNodes();
+  return audioDeckList;
+}
+
+/**
+ * 给每个 deck 建 MediaElementSource 与 deckGain 并接进公共分析链。
+ * 幂等：已经接好的 deck 直接跳过；audioCtx 还没建时先不接，initAudio 建完 analyser 会再调一次。
+ * @returns {void}
+ */
+function attachAudioDeckNodes() {
+  if (!audioCtx || !analyser || !beatAnalyser || !audioDeckList.length) return;
+  for (var i = 0; i < audioDeckList.length; i++) {
+    var deck = audioDeckList[i];
+    if (!deck || !deck.el || deck.source) continue;
+    try {
+      deck.source = audioCtx.createMediaElementSource(deck.el);
+      deck.gain = audioCtx.createGain();
+      deck.gain.gain.value = 1;
+      deck.source.connect(deck.gain);
+      deck.gain.connect(analyser);
+      deck.gain.connect(beatAnalyser);
+    } catch (err) {
+      console.warn('[Gapless] deck 接线失败:', err && (err.message || err));
+      deck.source = null;
+      deck.gain = null;
+    }
+  }
+}
+
+/**
+ * 当前出声的 deck。
+ * @returns {object|null} deck 对象。
+ */
+function activeAudioDeck() { return audioDeckList[audioDeckActive] || null; }
+
+/**
+ * 闲置 deck 的下标，只有两个 deck 都在时才有效。
+ * @returns {number} 下标，-1 表示没有可用的闲置 deck。
+ */
+function idleAudioDeckIndex() {
+  if (audioDeckList.length < 2) return -1;
+  return audioDeckActive === 0 ? 1 : 0;
+}
+
+/**
+ * 闲置 deck 对象。
+ * @returns {object|null} deck 对象。
+ */
+function idleAudioDeck() {
+  var index = idleAudioDeckIndex();
+  return index < 0 ? null : audioDeckList[index] || null;
+}
+/**
+ * 读一个 deck 当前的实际增益，用于中断时从现值起坡，不会硬拉回去产生阶跃。
+ * @param {object} deck deck 对象。
+ * @returns {number} 0~1 的增益值。
+ */
+function currentAudioDeckGain(deck) {
+  if (deck && deck.gain) {
+    var value = Number(deck.gain.gain.value);
+    if (isFinite(value)) return clampRange(value, 0, 1);
+  }
+  return 1;
+}
+
+/**
+ * 立刻把 deck 增益定到某个值。没有 WebAudio 时才退回元素音量，
+ * 且只在 gainNode 缺席（元素音量没被主增益接管）时才动，避免和主音量互相打架。
+ * @param {object} deck deck 对象。
+ * @param {number} value 目标增益。
+ * @returns {void}
+ */
+function setAudioDeckGainImmediate(deck, value) {
+  if (!deck) return;
+  var target = clampRange(value, 0, 1);
+  if (!deck.gain || !audioCtx) {
+    if (deck.el && !gainNode) { try { deck.el.volume = target; } catch (e) {} }
+    return;
+  }
+  var now = audioCtx.currentTime || 0;
+  try { deck.gain.gain.cancelScheduledValues(now); } catch (e) {}
+  try { deck.gain.gain.setValueAtTime(target, now); } catch (e) {}
+}
+
+/**
+ * 给一个 deck 排一条增益斜坡。等功率（sin/cos）曲线保证对交叉期间两路能量和恒定；
+ * 线性对交叉会在中点掉到约 -6 dB，听起来像中间塌了一块。setValueCurveAtTime 不可用时退回线性。
+ * @param {object} deck deck 对象。
+ * @param {number} from 起始增益。
+ * @param {number} to 目标增益。
+ * @param {number} seconds 斜坡时长秒数。
+ * @param {boolean} equalPower 是否使用等功率曲线。
+ * @returns {void}
+ */
+function rampAudioDeckGain(deck, from, to, seconds, equalPower) {
+  if (!deck) return;
+  var start = clampRange(from, 0, 1);
+  var end = clampRange(to, 0, 1);
+  if (!deck.gain || !audioCtx) {
+    if (deck.el && !gainNode) { try { deck.el.volume = end; } catch (e) {} }
+    return;
+  }
+  var param = deck.gain.gain;
+  var now = audioCtx.currentTime || 0;
+  var span = Math.max(0.004, Number(seconds) || 0);
+  try { param.cancelScheduledValues(now); } catch (e) {}
+  if (equalPower) {
+    var curve = new Float32Array(GAPLESS_CURVE_POINTS);
+    var rising = end >= start;
+    for (var i = 0; i < GAPLESS_CURVE_POINTS; i++) {
+      var angle = (i / (GAPLESS_CURVE_POINTS - 1)) * Math.PI / 2;
+      curve[i] = rising ? Math.sin(angle) : Math.cos(angle);
+    }
+    curve[0] = start;
+    curve[GAPLESS_CURVE_POINTS - 1] = end;
+    try { param.setValueCurveAtTime(curve, now, span); return; } catch (e) {}
+    try { param.cancelScheduledValues(now); } catch (e2) {}
+  }
+  try { param.setValueAtTime(start, now); } catch (e) {}
+  try { param.linearRampToValueAtTime(end, now + span); } catch (e) {
+    try { param.setValueAtTime(end, now + span); } catch (e2) {}
+  }
+}
+
+/**
+ * 作废一个 deck 上待执行的收尾定时器，避免刚被重新接管的 deck 被上一轮的收尾误停。
+ * @param {object} deck deck 对象。
+ * @returns {void}
+ */
+function cancelDeckRetire(deck) {
+  if (deck) deck.retireSerial = (deck.retireSerial || 0) + 1;
+}
+/**
+ * 收掉一个已经静音或已播完的 deck：停播、解掉自然结束回调、增益复位成中性 1。
+ * @param {object} deck deck 对象。
+ * @param {{clearSource?: boolean, force?: boolean}=} opts 收尾选项。
+ * @returns {void}
+ */
+function retireAudioDeck(deck, opts) {
+  opts = opts || {};
+  if (!deck || !deck.el) return;
+  if (deck === activeAudioDeck() && !opts.force) return;
+  cancelDeckRetire(deck);
+  deck.pendingStartRamp = 0;
+  try { deck.el.onended = null; } catch (e) {}
+  try { deck.el.pause(); } catch (e) {}
+  setAudioDeckGainImmediate(deck, 1);
+  if (opts.clearSource) {
+    try { deck.el.removeAttribute('src'); deck.el.load(); } catch (e) {}
+  }
+}
+
+/**
+ * 收掉一个可能还在出声的 deck：先用极短斜坡压到 0 再停，避免在非零电平上硬切造成爆音，
+ * 停稳之后把增益复位成中性 1，下一轮预取拿到的就是干净的 deck。
+ * @param {object} deck deck 对象。
+ * @param {number} seconds 压低用的斜坡秒数。
+ * @returns {void}
+ */
+function duckAndRetireAudioDeck(deck, seconds) {
+  if (!deck || !deck.el) return;
+  deck.pendingStartRamp = 0;
+  try { deck.el.onended = null; } catch (e) {}
+  var level = currentAudioDeckGain(deck);
+  if (level <= 0.001 || !deck.gain) { retireAudioDeck(deck); return; }
+  var span = Math.max(0.02, Number(seconds) || GAPLESS_HANDOFF_RAMP_SECONDS);
+  rampAudioDeckGain(deck, level, 0, span, false);
+  cancelDeckRetire(deck);
+  var serial = deck.retireSerial;
+  setTimeout(function(){
+    if (deck.retireSerial !== serial) return;
+    if (deck !== activeAudioDeck()) { try { deck.el.pause(); } catch (e) {} }
+    setAudioDeckGainImmediate(deck, 1);
+  }, Math.ceil(span * 1000) + 40);
+}
+
+/**
+ * 丢掉当前预取记录。默认连带清空闲置 deck 的媒体源，释放解码缓冲。
+ * @param {{keepBuffer?: boolean}=} opts 释放选项。
+ * @returns {void}
+ */
+function releaseGaplessPrefetch(opts) {
+  opts = opts || {};
+  var deck = gaplessPrefetch.deckIndex >= 0 ? audioDeckList[gaplessPrefetch.deckIndex] : null;
+  gaplessPrefetch.deckIndex = -1;
+  gaplessPrefetch.url = '';
+  gaplessPrefetch.key = '';
+  gaplessPrefetch.queueIndex = -1;
+  if (!deck || !deck.el || deck === activeAudioDeck() || opts.keepBuffer) return;
+  cancelDeckRetire(deck);
+  try { deck.el.pause(); } catch (e) {}
+  try { deck.el.removeAttribute('src'); deck.el.load(); } catch (e) {}
+  setAudioDeckGainImmediate(deck, 1);
+}
+
+/**
+ * 起播确认之后把接管 deck 的增益补齐到 1。放在 play() 已经 resolve 之后，
+ * 斜坡正好落在第一个可闻样本上，既没有咔哒也没有可感知的延迟。
+ * @returns {void}
+ */
+function settleGaplessDeckStart() {
+  for (var i = 0; i < audioDeckList.length; i++) {
+    var deck = audioDeckList[i];
+    if (!deck || !deck.pendingStartRamp) continue;
+    var seconds = deck.pendingStartRamp;
+    deck.pendingStartRamp = 0;
+    if (i === audioDeckActive) rampAudioDeckGain(deck, currentAudioDeckGain(deck), 1, seconds, false);
+    else setAudioDeckGainImmediate(deck, 1);
+  }
+}
+/**
+ * 下一首要预取的队列下标。直接复用续播用的 nextQueueIndexPreview，所以随机重排后的顺序、
+ * 单曲循环、「播完即停」这些规则只有一份代码说了算，预取绝不会和真实续播分叉。
+ * @returns {number} 队列下标，-1 表示没有下一首。
+ */
+function gaplessNextIndex() {
+  if (typeof nextQueueIndexPreview !== 'function') return -1;
+  var idx = nextQueueIndexPreview();
+  if (idx < 0 || idx >= playQueue.length) return -1;
+  return idx;
+}
+
+/**
+ * 取出可预取的本地曲目。
+ * @param {number} idx 队列下标。
+ * @returns {object|null} 本地曲目对象。
+ */
+function gaplessSongAt(idx) {
+  var song = idx >= 0 && idx < playQueue.length ? playQueue[idx] : null;
+  return song && song.type === 'local' ? song : null;
+}
+
+/**
+ * 随机模式下队列还没洗过牌时，playQueueAt 会先洗牌再决定下标，预取的那一首不一定还是下一首。
+ * 这种情况一律不预取也不交叉，交回原来的续播路径，保证随机播放行为零变化。
+ * @returns {boolean} 是否存在待执行的洗牌。
+ */
+function gaplessShufflePending() {
+  if (playMode !== 'shuffle') return false;
+  if (typeof shuffledPlayQueueArrays === 'undefined' || !shuffledPlayQueueArrays) return true;
+  return !shuffledPlayQueueArrays.has(playQueue);
+}
+
+/**
+ * 解析出下一首的播放地址。
+ * @param {object} song 曲目对象。
+ * @returns {string} 播放地址，失败返回空串。
+ */
+function gaplessResolveUrl(song) {
+  try { return typeof ensureLocalSongUrl === 'function' ? ensureLocalSongUrl(song) || '' : ''; } catch (e) { return ''; }
+}
+
+/**
+ * 把下一首提前解码到闲置 deck。只做「设 src + load」，不碰任何播放状态，所以随时可以放弃。
+ * @returns {void}
+ */
+function maybeStartGaplessPrefetch() {
+  if (!gaplessEnabledForHandoff() || gaplessShufflePending()) {
+    if (gaplessPrefetch.deckIndex >= 0) releaseGaplessPrefetch();
+    return;
+  }
+  if (crossfadeState.active || crossfadeState.starting) return;
+  var deck = activeAudioDeck();
+  if (!deck || !deck.el || !deck.el.src) return;
+  var duration = Number(deck.el.duration);
+  var current = Number(deck.el.currentTime);
+  if (!isFinite(duration) || duration <= 0 || !isFinite(current)) return;
+  var lead = Math.max(GAPLESS_PREFETCH_LEAD_SECONDS, gaplessSettings.crossfadeSeconds + 6);
+  if (duration - current > lead) return;
+  var nextIdx = gaplessNextIndex();
+  var song = gaplessSongAt(nextIdx);
+  if (!song) {
+    if (gaplessPrefetch.deckIndex >= 0) releaseGaplessPrefetch();
+    return;
+  }
+  var target = idleAudioDeck();
+  var targetIndex = idleAudioDeckIndex();
+  if (!target || !target.el || targetIndex < 0) return;
+  var url = gaplessResolveUrl(song);
+  if (!url || url === crossfadeState.blockedUrl) return;
+  if (gaplessPrefetch.deckIndex === targetIndex && gaplessPrefetch.url === url) {
+    gaplessPrefetch.queueIndex = nextIdx;
+    return;
+  }
+  gaplessPrefetch.deckIndex = targetIndex;
+  gaplessPrefetch.url = url;
+  gaplessPrefetch.key = typeof queueItemKey === 'function' ? queueItemKey(song) : '';
+  gaplessPrefetch.queueIndex = nextIdx;
+  cancelDeckRetire(target);
+  setAudioDeckGainImmediate(target, 1);
+  try {
+    target.el.onended = null;
+    target.el.pause();
+    target.el.src = url;
+    target.el.load();
+    applyVolumeToAudio();
+  } catch (err) {
+    console.warn('[Gapless] 预取失败:', err && (err.message || err));
+    releaseGaplessPrefetch({ keepBuffer: true });
+  }
+}
+/**
+ * 接管预取 deck 前把起播位置对好。断点续播和 opts.resumeAt 走的还是同一个解析函数，
+ * 所以无缝接续不会绕过续播设置，也不会在接管之后再 seek 一次造成可闻的跳动。
+ * @param {object} deck deck 对象。
+ * @param {object} song 曲目对象。
+ * @param {object} opts 播放选项。
+ * @returns {void}
+ */
+function applyGaplessDeckStartPosition(deck, song, opts) {
+  if (!deck || !deck.el) return;
+  var seconds = 0;
+  try {
+    seconds = typeof resolveTrackStartSeconds === 'function' ? Number(resolveTrackStartSeconds(song, opts || {})) : 0;
+  } catch (e) { seconds = 0; }
+  if (!isFinite(seconds) || seconds < 0.35) {
+    if (Number(deck.el.currentTime) > 0.05) { try { deck.el.currentTime = 0; } catch (e) {} }
+    return;
+  }
+  var duration = Number(deck.el.duration);
+  if (isFinite(duration) && duration > 0) seconds = Math.min(seconds, Math.max(0, duration - 1));
+  if (Math.abs(Number(deck.el.currentTime) - seconds) < 0.12) return;
+  try { deck.el.currentTime = seconds; } catch (e) {}
+}
+
+/**
+ * 自动续播 / 交叉接管时把全局 audio 指向已经预解码好的 deck。
+ * 手动切歌、上一首、下一首、失败跳过都进不到这里，所以它们的行为一个字没变。
+ * @param {object} song 即将播放的曲目。
+ * @param {object} opts playQueueAt 传下来的播放选项。
+ * @param {string} localUrl 本次要播放的地址。
+ * @returns {boolean} 是否完成接管；false 表示调用方继续走原来的 load 流程。
+ */
+function adoptGaplessDeckForSong(song, opts, localUrl) {
+  opts = opts || {};
+  var wantCrossfade = opts.crossfade === true;
+  if (!wantCrossfade) {
+    if (opts.autoAdvance !== true && opts.autoRepeat !== true) return false;
+    if (!gaplessSettings.enabled) return false;
+  }
+  if (audioDeckList.length < 2 || !localUrl) return false;
+  var index = gaplessPrefetch.deckIndex;
+  if (index < 0 || index === audioDeckActive) return false;
+  var deck = audioDeckList[index];
+  if (!deck || !deck.el) return false;
+  if (gaplessPrefetch.url !== localUrl) return false;
+  if (deck.el.src !== localUrl && deck.el.currentSrc !== localUrl) return false;
+  if (!wantCrossfade && deck.el.readyState < GAPLESS_READY_STATE_PLAYABLE) return false;
+  var retiring = activeAudioDeck();
+  cancelDeckRetire(deck);
+  audioDeckActive = index;
+  audio = deck.el;
+  gaplessPrefetch.deckIndex = -1;
+  gaplessPrefetch.url = '';
+  gaplessPrefetch.key = '';
+  gaplessPrefetch.queueIndex = -1;
+  // 交叉接管：deck 已经在出声，两条增益斜坡也已经排好，这里只需要把全局指针挪过去。
+  if (wantCrossfade) return true;
+  // 纯无缝接续：旧 deck 已经自然播完，直接收掉，任何时刻都只有一个 deck 出声。
+  if (retiring && retiring !== deck) retireAudioDeck(retiring);
+  applyGaplessDeckStartPosition(deck, song, opts);
+  setAudioDeckGainImmediate(deck, 0);
+  deck.pendingStartRamp = GAPLESS_HANDOFF_RAMP_SECONDS;
+  return true;
+}
+
+/**
+ * 每次 timeupdate 检查一遍是否该预取或起交叉。用 timeupdate 而不是自建定时器，
+ * 是因为它由媒体时钟驱动：后台标签页被节流时不会漏掉交叉点，暂停时也不会空转。
+ * @param {EventTarget=} target 事件源元素。
+ * @returns {void}
+ */
+function runGaplessPlaybackWatch(target) {
+  if (target && audio && target !== audio) return;
+  maybeStartGaplessPrefetch();
+  maybeStartCrossfade();
+}
+/**
+ * 计算本次交叉实际可用的秒数。短歌保护：交叉不超过 (时长 - 最小尾巴) / 2，
+ * 否则一首 8 秒的歌配 10 秒交叉会从头叠到尾，等于两首歌一起放。
+ * @param {number} duration 当前曲目总时长秒数。
+ * @returns {number} 实际交叉秒数，0 表示不交叉。
+ */
+function resolveCrossfadeSeconds(duration) {
+  var want = Number(gaplessSettings.crossfadeSeconds) || 0;
+  if (want <= 0) return 0;
+  var room = (Number(duration) || 0) - GAPLESS_MIN_TAIL_SECONDS;
+  if (room <= 0) return 0;
+  return Math.max(0, Math.min(want, room / 2));
+}
+
+/**
+ * 判断是否该起交叉，并在满足条件时发起。所有拒绝分支都会回落到原有的 onended 续播路径。
+ * @returns {void}
+ */
+function maybeStartCrossfade() {
+  if (gaplessSettings.crossfadeSeconds <= 0) return;
+  if (crossfadeState.active || crossfadeState.starting) return;
+  if (audioDeckList.length < 2 || gaplessShufflePending()) return;
+  var deck = activeAudioDeck();
+  if (!deck || !deck.el || !deck.el.src || deck.el.paused || deck.el.ended) return;
+  var duration = Number(deck.el.duration);
+  var current = Number(deck.el.currentTime);
+  if (!isFinite(duration) || duration <= 0 || !isFinite(current)) return;
+  var seconds = resolveCrossfadeSeconds(duration);
+  if (seconds <= 0) return;
+  var remaining = duration - current;
+  // 还没进窗口，或者已经太贴近结尾（来不及交叉），都交给原来的 onended 续播路径。
+  if (remaining > seconds + GAPLESS_TRIGGER_SLACK_SECONDS) return;
+  if (remaining <= 0.12) return;
+  var nextIdx = gaplessNextIndex();
+  var song = gaplessSongAt(nextIdx);
+  if (!song) return;
+  // 单曲循环和单曲队列的下一首就是自己：同一个文件在两个 deck 上叠播会听成回声，直接不交叉。
+  if (nextIdx === currentIdx) return;
+  var url = gaplessResolveUrl(song);
+  if (!url || url === crossfadeState.blockedUrl) return;
+  var targetIndex = idleAudioDeckIndex();
+  var target = targetIndex < 0 ? null : audioDeckList[targetIndex];
+  if (!target || !target.el) return;
+  startCrossfadeHandoff(nextIdx, song, url, Math.min(seconds, remaining), targetIndex);
+}
+
+/**
+ * 起一次交叉接管。先把下一首在闲置 deck 上真的播起来，确认成功之后才提交队列推进，
+ * 所以起播被拒或解码失败时旧歌还完好无损地在播、onended 也还有效，绝不会出现突然静音。
+ * @param {number} nextIdx 下一首的队列下标。
+ * @param {object} song 下一首曲目。
+ * @param {string} url 下一首的播放地址。
+ * @param {number} seconds 交叉秒数。
+ * @param {number} targetIndex 接管 deck 的下标。
+ * @returns {void}
+ */
+function startCrossfadeHandoff(nextIdx, song, url, seconds, targetIndex) {
+  var fromIndex = audioDeckActive;
+  var target = audioDeckList[targetIndex];
+  var from = audioDeckList[fromIndex];
+  if (!target || !target.el || !from || !from.el) return;
+  crossfadeState.starting = true;
+  crossfadeState.fromDeckIndex = fromIndex;
+  crossfadeState.toDeckIndex = targetIndex;
+  cancelDeckRetire(target);
+  try {
+    if (target.el.src !== url && target.el.currentSrc !== url) { target.el.src = url; target.el.load(); }
+    target.el.onended = null;
+  } catch (err) { abortCrossfadeStart(target, url, err); return; }
+  gaplessPrefetch.deckIndex = targetIndex;
+  gaplessPrefetch.url = url;
+  gaplessPrefetch.key = typeof queueItemKey === 'function' ? queueItemKey(song) : '';
+  gaplessPrefetch.queueIndex = nextIdx;
+  setAudioDeckGainImmediate(target, 0);
+  applyGaplessDeckStartPosition(target, song, {});
+  var started = null;
+  try { started = target.el.play(); } catch (err2) { abortCrossfadeStart(target, url, err2); return; }
+  if (!started || typeof started.then !== 'function') {
+    commitCrossfadeHandoff(nextIdx, fromIndex, targetIndex, seconds);
+    return;
+  }
+  started.then(function(){
+    commitCrossfadeHandoff(nextIdx, fromIndex, targetIndex, seconds);
+  }, function(err3){
+    abortCrossfadeStart(target, url, err3);
+  });
+}
+
+/**
+ * 预起播失败时原样退回：闲置 deck 停掉并复位，正在播的旧歌一个字没动，
+ * 它的 onended 仍然有效，会照原来的路径续播。失败地址进黑名单，避免这一首里反复重试。
+ * @param {object} target 接管失败的 deck。
+ * @param {string} url 失败的播放地址。
+ * @param {*} err 失败原因。
+ * @returns {void}
+ */
+function abortCrossfadeStart(target, url, err) {
+  crossfadeState.starting = false;
+  crossfadeState.fromDeckIndex = -1;
+  crossfadeState.toDeckIndex = -1;
+  crossfadeState.blockedUrl = url || '';
+  console.warn('[Crossfade] 预起播失败，回落到原有续播路径:', err && (err.message || err));
+  if (target && target !== activeAudioDeck()) { try { target.el.pause(); } catch (e) {} }
+  releaseGaplessPrefetch();
+}
+/**
+ * 下一首已经确认在闲置 deck 上出声，这里才真正提交：排等功率对交叉、按听完的口径结算旧歌、推进队列。
+ * handoffPending 是一次性令牌，只有交叉自己提交的这一次 playQueueAt 能吃到，
+ * 从而让 pauseCurrentAudioForTrackSwitch 放过正在淡出的旧 deck；其他任何切歌都吃不到。
+ * @param {number} nextIdx 下一首的队列下标。
+ * @param {number} fromIndex 淡出 deck 下标。
+ * @param {number} toIndex 接管 deck 下标。
+ * @param {number} seconds 交叉秒数。
+ * @returns {void}
+ */
+function commitCrossfadeHandoff(nextIdx, fromIndex, toIndex, seconds) {
+  crossfadeState.starting = false;
+  var from = audioDeckList[fromIndex];
+  var to = audioDeckList[toIndex];
+  // 提交前已经被手动切歌抢走：收掉刚起播的 deck，队列一个字不动。
+  if (!from || !to || audioDeckActive !== fromIndex) {
+    crossfadeState.fromDeckIndex = -1;
+    crossfadeState.toDeckIndex = -1;
+    if (to && to !== activeAudioDeck()) duckAndRetireAudioDeck(to, GAPLESS_HANDOFF_RAMP_SECONDS);
+    return;
+  }
+  crossfadeState.active = true;
+  crossfadeState.fromDeckIndex = fromIndex;
+  crossfadeState.toDeckIndex = toIndex;
+  crossfadeState.seconds = seconds;
+  rampAudioDeckGain(from, currentAudioDeckGain(from), 0, seconds, true);
+  rampAudioDeckGain(to, 0, 1, seconds, true);
+  // 交叉等于把旧歌听完：按 onended 的口径结算，否则播放统计会漏掉一次完整播放。
+  // 断点不用另外清：紧接着的 playQueueAt 会调 recordSongResumeTick，离结尾不足 20 秒时它自己会删掉残留断点。
+  if (typeof finalizeListenSession === 'function') { try { finalizeListenSession(true); } catch (e) {} }
+  crossfadeState.handoffPending = true;
+  var advancing = null;
+  try {
+    advancing = playQueueAt(nextIdx, { autoAdvance: true, crossfade: true });
+  } catch (err) {
+    crossfadeState.handoffPending = false;
+    console.warn('[Crossfade] 接管切歌抛错:', err && (err.message || err));
+    finishCrossfadeImmediately('handoff-error');
+    return;
+  }
+  crossfadeState.handoffPending = false;
+  Promise.resolve(advancing).then(function(){
+    scheduleCrossfadeSettle(seconds);
+  }, function(err2){
+    console.warn('[Crossfade] 接管切歌失败:', err2 && (err2.message || err2));
+    finishCrossfadeImmediately('handoff-failed');
+  });
+}
+
+/**
+ * 交叉斜坡走完之后收掉旧 deck。用定时器兜底而不是靠 ended 事件：
+ * 旧歌可能因为交叉窗口比剩余时长长而先播完，也可能因为被 seek 而根本到不了结尾。
+ * @param {number} seconds 交叉秒数。
+ * @returns {void}
+ */
+function scheduleCrossfadeSettle(seconds) {
+  var wait = Math.ceil(Math.max(0, Number(seconds) || 0) * 1000) + 90;
+  crossfadeState.settleSerial = (crossfadeState.settleSerial || 0) + 1;
+  var serial = crossfadeState.settleSerial;
+  setTimeout(function(){
+    if (crossfadeState.settleSerial !== serial) return;
+    finishCrossfade('ramp-complete');
+  }, wait);
+}
+
+/**
+ * 交叉正常走完：旧 deck 此时已经被斜坡压到 0，直接收掉并清空媒体源释放解码缓冲。
+ * @param {string} reason 结束原因，仅用于排查。
+ * @returns {void}
+ */
+function finishCrossfade(reason) {
+  if (!crossfadeState.active) return;
+  var from = crossfadeState.fromDeckIndex >= 0 ? audioDeckList[crossfadeState.fromDeckIndex] : null;
+  crossfadeState.active = false;
+  crossfadeState.handoffPending = false;
+  crossfadeState.fromDeckIndex = -1;
+  crossfadeState.toDeckIndex = -1;
+  crossfadeState.seconds = 0;
+  if (from && from !== activeAudioDeck()) retireAudioDeck(from, { clearSource: true });
+  var active = activeAudioDeck();
+  if (active) {
+    var level = currentAudioDeckGain(active);
+    if (level < 0.999) rampAudioDeckGain(active, level, 1, GAPLESS_HANDOFF_RAMP_SECONDS, false);
+  }
+}
+
+/**
+ * 立刻结束交叉：还在出声的 deck 先用极短斜坡压到 0 再停，不在非零电平上硬切；
+ * 接管 deck 的增益补齐到 1，免得之后一直被一个半程的 deckGain 压着。
+ * 手动切歌、上一首、下一首、暂停都会走到这里，所以任何时刻最多只有一个 deck 出声。
+ * @param {string} reason 结束原因，仅用于排查。
+ * @returns {void}
+ */
+function finishCrossfadeImmediately(reason) {
+  if (!crossfadeState.active && !crossfadeState.starting) return;
+  var fromIndex = crossfadeState.fromDeckIndex;
+  var toIndex = crossfadeState.toDeckIndex;
+  crossfadeState.active = false;
+  crossfadeState.starting = false;
+  crossfadeState.handoffPending = false;
+  crossfadeState.fromDeckIndex = -1;
+  crossfadeState.toDeckIndex = -1;
+  crossfadeState.seconds = 0;
+  crossfadeState.settleSerial = (crossfadeState.settleSerial || 0) + 1;
+  for (var i = 0; i < audioDeckList.length; i++) {
+    if (i !== fromIndex && i !== toIndex) continue;
+    var deck = audioDeckList[i];
+    if (!deck || deck === activeAudioDeck()) continue;
+    duckAndRetireAudioDeck(deck, GAPLESS_HANDOFF_RAMP_SECONDS);
+  }
+  var active = activeAudioDeck();
+  if (active) {
+    active.pendingStartRamp = 0;
+    var level = currentAudioDeckGain(active);
+    if (level < 0.999) rampAudioDeckGain(active, level, 1, GAPLESS_HANDOFF_RAMP_SECONDS, false);
+  }
+}
+
+/**
+ * 每条切歌路径的公共复位点：结束交叉、清掉起播失败黑名单。
+ * @param {string} reason 复位原因。
+ * @returns {void}
+ */
+function resetGaplessForTrackSwitch(reason) {
+  crossfadeState.blockedUrl = '';
+  finishCrossfadeImmediately(reason || 'track-switch');
+}
+/**
+ * 秒数显示：整数不带小数点，半秒档显示一位小数。
+ * @param {number} value 秒数。
+ * @returns {string} 展示文本。
+ */
+function formatGaplessSeconds(value) {
+  var n = Number(value) || 0;
+  return Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) : n.toFixed(1);
+}
+
+/**
+ * 无缝播放折叠面板的说明文案。
+ * @returns {string} 说明文本。
+ */
+function gaplessHintText() {
+  if (gaplessSettings.crossfadeSeconds > 0) {
+    return '交叉淡入淡出 ' + formatGaplessSeconds(gaplessSettings.crossfadeSeconds) + ' 秒：等功率对交叉，相邻两首重叠过渡，手动切歌与上下首不受影响。';
+  }
+  if (gaplessSettings.enabled) return '无缝播放：提前解码下一首，自动续播时直接接上，任何时刻只有一路声音。';
+  return '已关闭：完全按旧流程切歌，每首开头保留 460 ms 淡入。';
+}
+
+/**
+ * 同步无缝播放面板上的开关、滑杆与说明文案。
+ * @returns {void}
+ */
+function updateGaplessControls() {
+  var toggle = document.getElementById('t-gapless');
+  if (toggle) toggle.classList.toggle('on', !!gaplessSettings.enabled);
+  var slider = document.getElementById('gapless-crossfade');
+  if (slider) {
+    if (Math.abs(Number(slider.value) - gaplessSettings.crossfadeSeconds) > 0.01) slider.value = String(gaplessSettings.crossfadeSeconds);
+    var out = slider.parentNode ? slider.parentNode.querySelector('output') : null;
+    if (out) out.textContent = gaplessSettings.crossfadeSeconds > 0 ? formatGaplessSeconds(gaplessSettings.crossfadeSeconds) + ' s' : '关';
+  }
+  var hint = document.getElementById('gapless-hint');
+  if (hint) hint.textContent = gaplessHintText();
+}
+
+/**
+ * 归一化、落盘并刷新无缝播放设置。
+ * 正在进行的交叉不打断：中途截断斜坡反而会听到一次电平跳变，新值下一首生效。
+ * @returns {void}
+ */
+function commitGaplessSettings() {
+  gaplessSettings = normalizeGaplessSettings(gaplessSettings);
+  try { setPersistentLocalStorageItem(GAPLESS_STORE_KEY, JSON.stringify(gaplessSettings)); } catch (e) {}
+  if (!gaplessEnabledForHandoff()) releaseGaplessPrefetch();
+  updateGaplessControls();
+}
+
+/**
+ * 切换无缝播放开关。
+ * @returns {void}
+ */
+function toggleGaplessSetting() {
+  gaplessSettings.enabled = !gaplessSettings.enabled;
+  commitGaplessSettings();
+  showToast(gaplessSettings.enabled ? '无缝播放已开启' : '无缝播放已关闭');
+}
+
+/**
+ * 设置交叉淡入淡出秒数（0~10，0 为关闭）。
+ * @param {number|string} value 目标秒数。
+ * @param {{toast?: boolean}=} opts 提示选项。
+ * @returns {void}
+ */
+function setGaplessCrossfadeSeconds(value, opts) {
+  opts = opts || {};
+  var next = normalizeGaplessSettings({ enabled: gaplessSettings.enabled, crossfadeSeconds: value }).crossfadeSeconds;
+  if (Math.abs(next - gaplessSettings.crossfadeSeconds) < 0.01) { updateGaplessControls(); return; }
+  gaplessSettings.crossfadeSeconds = next;
+  commitGaplessSettings();
+  if (opts.toast !== false) showToast(next > 0 ? '交叉淡入淡出 ' + formatGaplessSeconds(next) + ' 秒' : '交叉淡入淡出已关闭');
+}
+
+/**
+ * 读取保存的设置并挂上面板事件委托。input 只更新数值不弹提示，change 落定时才提示，避免拖动时刷屏。
+ * @returns {void}
+ */
+function initGaplessControls() {
+  gaplessSettings = readSavedGaplessSettings();
+  var fold = document.getElementById('fx-gapless-fold');
+  if (fold && !fold._mineradioGaplessBound) {
+    fold._mineradioGaplessBound = true;
+    fold.addEventListener('input', function(ev){
+      var node = ev.target;
+      if (!node || node.id !== 'gapless-crossfade') return;
+      setGaplessCrossfadeSeconds(node.value, { toast: false });
+    });
+    fold.addEventListener('change', function(ev){
+      var node = ev.target;
+      if (!node || node.id !== 'gapless-crossfade') return;
+      setGaplessCrossfadeSeconds(node.value, { toast: true });
+    });
+  }
+  updateGaplessControls();
+}
+
 
 // 音量均衡（ReplayGain）：读标签里的整轨/整专辑增益，叠加 Preamp 后作为独立增益节点，可选按峰值防削波。
 var REPLAY_GAIN_PREAMP_MIN = -12;
@@ -22538,6 +23361,11 @@ function skipFailedQueueItem(idx, token, message) {
 
 function pauseCurrentAudioForTrackSwitch() {
   playToggleBusy = false;
+  // 交叉接管自己提交的那一次切歌必须放过旧 deck：它正在走淡出，在这里暂停就成了硬切。
+  // handoffPending 是一次性令牌，只有 commitCrossfadeHandoff 紧接着的这一次调用能吃到，
+  // 手动切歌 / 上一首 / 下一首 / 失败跳过一律吃不到，照旧走下面的暂停逻辑。
+  if (crossfadeState.handoffPending) { crossfadeState.handoffPending = false; return; }
+  resetGaplessForTrackSwitch('track-switch');
   if (!audio) return;
   try {
     audioFadeSerial++;
@@ -22919,19 +23747,25 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   loadLocalCoverForSong(song, token, { trackToken: token, deferHeavy: false, delay: 0, timeout: 1200 });
 
   markPlayPhase('audio-element');
-  if (!audio) {
-    audio = new Audio();
-    audio.crossOrigin = 'anonymous';
-    audio.preload = 'auto';
-  }
-  else {
-    audioFadeSerial++;
-    clearAudioFadeTimers();
-    audio.pause();
+  ensureAudioDeckPool();
+  // 自动续播 / 交叉接管时直接接管已经预解码好的闲置 deck：不重新 load、不重新解码，
+  // 相邻两首之间就没有那段可闻的空白。手动切歌、上一首、下一首、失败跳过都进不到这里。
+  var adoptedDeck = adoptGaplessDeckForSong(song, opts, localUrl);
+  if (!adoptedDeck) {
+    if (!audio) {
+      audio = new Audio();
+      audio.crossOrigin = 'anonymous';
+      audio.preload = 'auto';
+    }
+    else {
+      audioFadeSerial++;
+      clearAudioFadeTimers();
+      audio.pause();
+    }
   }
   bindPlaybackProgressEvents(audio);
   applyVolumeToAudio();
-  audio.src = localUrl;
+  if (!adoptedDeck) audio.src = localUrl;
   schedulePlaybackProgressUi('audio-source', true);
   audio.onended = function(){
     if (token !== trackSwitchToken) return;
@@ -22942,7 +23776,8 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
       return;
     }
     if (playMode === 'single') setTimeout(function(){ playQueueAt(currentIdx, { autoRepeat: true }); }, 0);
-    else setTimeout(nextTrack, 0);
+    // autoAdvance 只由自然播完这条路径带上，手动点下一首不会带，所以只有自动续播才允许无缝接管。
+    else setTimeout(function(){ nextTrack({ autoAdvance: true }); }, 0);
   };
   audio.onloadedmetadata = function(){
     if (token !== trackSwitchToken || playQueue[idx] !== song) return;
@@ -22964,8 +23799,12 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
     song._lastPlaybackError = code;
     console.warn('[LocalPlaybackError]', song.name, song.localFormat || '', code, localUrl);
   };
-  scheduleAudioResumePosition(audio, resolveTrackStartSeconds(song, opts), token);
-  audio.load();
+  // 接管来的 deck 的起播位置已经在 adoptGaplessDeckForSong 里对好了，这里再 seek 一次会多一次可闻的跳动；
+  // load() 更不能调，它会把预解码好的缓冲整个丢掉，无缝接续就白做了。
+  if (!adoptedDeck) {
+    scheduleAudioResumePosition(audio, resolveTrackStartSeconds(song, opts), token);
+    audio.load();
+  }
 
   markPlayPhase('visual-prep');
   try {
@@ -22986,7 +23825,10 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   }
 
   markPlayPhase('audio-start');
-  var playbackStarted = await playAudio({ manual: !!opts.manual, silent: false });
+  // 接管 deck 时禁掉主增益淡入：preparePlaybackFadeIn 会把 gainNode 直接拉到 0，
+  // 那是两个 deck 共用的主音量，交叉会被它一把掐死，纯无缝接续也会重新长出 460 ms 的空档。
+  // 接管路径的电平交给 deckGain 处理（交叉走等功率曲线，无缝走 12 ms 斜坡）。
+  var playbackStarted = await playAudio({ manual: !!opts.manual, silent: false, fade: adoptedDeck ? false : undefined });
   if (token !== trackSwitchToken) return;
   if (!playbackStarted) {
     forcePlaybackControlsInteractive();
@@ -23108,6 +23950,8 @@ async function attemptAudioPlay(opts) {
       await resumeAudioAnalysis();
       switchPlaybackVisualToEmily();
       playing = true; setPlayIcon(true);
+    // play() 已经 resolve，音频真的在走了，这时候补 deck 起播斜坡正好落在第一个可闻样本上。
+    if (typeof settleGaplessDeckStart === 'function') settleGaplessDeckStart();
     if (opts.fade !== false) startPlaybackFadeIn();
     else restorePlaybackGain();
     forcePlaybackControlsInteractive();
@@ -23116,6 +23960,8 @@ async function attemptAudioPlay(opts) {
   } catch (err) {
     console.warn('Audio play blocked:', err && (err.message || err));
     restorePlaybackGain();
+    // 起播失败也要把 deck 增益补回中性 1，否则这个 deck 会一直被 0 增益压着，下次播它就是静音。
+    if (typeof settleGaplessDeckStart === 'function') settleGaplessDeckStart();
     playing = false; setPlayIcon(false);
     hideLoading();
     forcePlaybackControlsInteractive();
@@ -23202,12 +24048,20 @@ function shufflePlayQueueOnce(opts) {
   return playQueue.length > 1;
 }
 
-function nextTrack() {
+/**
+ * 下一首。opts.autoAdvance 只由「自然播完」这条路径显式传入，用来允许无缝接管预取好的 deck。
+ * 按钮、快捷键、媒体会话都不会传（媒体会话回调传的是 {action:'nexttrack'}，取不到该字段），
+ * 所以手动下一首的行为和以前完全一致。
+ * @param {{autoAdvance?: boolean}=} opts 续播选项。
+ * @returns {void}
+ */
+function nextTrack(opts) {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
   currentIdx = (currentIdx + 1) % playQueue.length;
-  Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
+  var advanceOpts = opts && opts.autoAdvance === true ? { autoAdvance: true } : undefined;
+  Promise.resolve(playQueueAt(currentIdx, advanceOpts)).finally(forcePlaybackControlsInteractive);
 }
 function prevTrack() {
   if (!playQueue.length) return;
@@ -26131,6 +26985,9 @@ var PLAYBACK_PROGRESS_EVENT_NAMES = ['loadedmetadata', 'durationchange', 'timeup
 var PLAYBACK_STATE_EVENT_NAMES = ['play', 'playing', 'pause', 'ended', 'emptied', 'abort', 'error'];
 function handlePlaybackProgressEvent(event) {
   schedulePlaybackProgressUi(event && event.type || 'audio-event');
+  // 无缝预取与交叉的触发点挂在 timeupdate 上：它由媒体时钟驱动，
+  // 后台标签页被节流时不会漏掉交叉窗口，暂停时也不会像自建定时器那样空转。
+  if (event && event.type === 'timeupdate' && typeof runGaplessPlaybackWatch === 'function') runGaplessPlaybackWatch(event.target);
 }
 function handlePlaybackStateEvent(event) {
   syncPlaybackStateFromAudioEvent(event && event.type || 'audio-event');
@@ -32949,7 +33806,7 @@ function fxPanelTargetForNode(node, current) {
   if (id === 'fx-lyric-fold') return 'lyrics';
   if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
-  if (id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
+  if (id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
   if (inputId === 'fx-bgopacity' || inputId === 'fx-glassaberration') return 'appearance';
   if (inputId === 'fx-lyricglow') return 'lyrics';
@@ -33009,7 +33866,7 @@ function organizeFxPanel() {
     }
     (pages[target] || pages.presets).appendChild(node);
   });
-  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-volume-fold','fx-advanced'].forEach(function(id){
+  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-volume-fold','fx-advanced'].forEach(function(id){
     var fold = document.getElementById(id);
     if (fold) fold.classList.add('open');
   });
@@ -39518,6 +40375,7 @@ initSongResumeControls();
 initAutoPlaybackControls();
 initReplayGainControls();
 initAudioChainControls();
+initGaplessControls();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 initPluginRuntime();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
