@@ -1,5 +1,26 @@
 ﻿# 发布流程
 
+## v1.7.28 无缝播放（Gapless）与 0~10 秒交叉淡入淡出（Crossfade）
+- 正式发布版本从 `1.7.27` 提升为 `1.7.28`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:591`）与发布工作流默认 tag 保持一致，`1.7.27` → `1.7.28`。
+- 用户原话：「再最新版的基础上继续给 Mineradio 增加无缝播放和 Crossfade。要求：1. 新增 Gapless 开关。2. 支持相邻歌曲无明显停顿。3. 新增 Crossfade，支持 0~10 秒。4. Crossfade = 0 时保持原来的播放逻辑。5. 不影响手动切歌、上一首、下一首。6. 不影响随机播放和自动播放。7. 播放器状态切换时不能出现爆音、重复播放或突然静音。8. 保持现有 UI 风格，只增加必要设置。9. 增加播放切换和边界情况测试。 更新好后发布新版」。
+- **架构定为「双 deck 音频池 + 会移动的全局 `audio` 指针」，因为规范层面别无选择。** `createMediaElementSource(el)` 建好的节点永久绑死那一个 `<audio>`，既不能改指向也不能 disconnect 后换元素，所以只要想让两首歌同时出声，就必须要第二个 `<audio>` 配第二个 source。`audioDeckList` 里常驻两个 deck，各自永久接好 `deck.source → deck.gain → analyser`（`deck.gain` 另并一条到 `beatAnalyser`），共享尾链 `analyser → replayGainNode → audioChain.input → audioChain.output → gainNode → destination` 一行未动。全局 `var audio` 被重指向到当前可闻那个 deck，所以 UI、进度条、听歌统计、media session、桌面歌词、迷你播放器这些消费方**零改动**跟着走。
+- **`deck.gain` 与 `gainNode.gain` 的分工是死规矩。** `gainNode.gain` 继续独占 `targetVolume` 与全部既有淡入淡出（启动 `460ms`、暂停、seek），`deck.gain` 只做接续与交叉，中性值恒为 `1.0`（IEEE754 下位精确透明，所以依旧满足「整条链常驻音频图、绝不运行时改接线」）。第一版把交叉斜坡也写到 `gainNode.gain` 上，两边的 `cancelScheduledValues` 互相削，当场爆音——以后任何新的淡入淡出都要先想清楚该落在哪一层。
+- **需求 2 的「无明显停顿」其实不是解码问题，是淡入问题。** 相邻两首之间那段能听出来的空档 = 自动续播时重跑的 `460ms` 主淡入。预解码只解决延迟那一小半，真正让停顿消失的是接管时不再重跑主淡入（deck 斜坡只有 `HANDOFF_RAMP_SECONDS = 0.012`）。所以「无缝开 + 交叉 0」这一档听起来才是连着的，而它任何时刻都**只有一路出声**。
+- 三档行为契约，改动时逐档确认：无缝关 + 交叉 `0` = 100% 老逻辑（不预取、不换 deck、保留主淡入）；无缝开 + 交叉 `0`（出厂默认）= 预取 + `12ms` deck 斜坡接管；交叉 `> 0` = 等功率 `sin/cos` 交叠。**等功率不能改回线性**，线性交叉在中点会掉约 `3 dB`。
+- **需求 5 / 6 靠「谁有资格接管预取 deck」这一道门实现：** 只有 `opts.autoAdvance` / `opts.autoRepeat` 允许接管，手动切歌 / 上一首 / 下一首一律不接管（否则用户点了别的歌却播出预取那首）；随机播放待洗牌时 `gaplessShufflePending()` 为真则连预取都不做，因为洗牌结果没定、预取必然预错；播完即停时释放预取。
+- **需求 7 里「重复播放」的防线是提交时序：** 起播 → 等 `play()` 真的 resolve → `commitCrossfadeHandoff` 才对交、推进队列、移动 `audio` 指针。`play()` 在 Chromium 里可能 reject（autoplay 策略、解码失败、blob 失效），也可能在某些实现里不返回 Promise，三条分支都走 `abortCrossfadeStart` 原样退回、当前那首继续播、失败 URL 进黑名单不再重试。先推进队列再起播 = 用户看到歌单跳了却没有声音。
+- **「突然静音」的防线是定时器序号守卫。** 交叉进行中用户手动切歌，上一轮的收尾定时器还在飞，不守卫就会把刚接管的那个 deck 停掉或静音（本轮最难复现的一个 bug）。所有收尾定时器都带自增序号，回调里先比序号再动 deck；手动切歌时先把两路都压到 0 再停，不留直角。
+- **`setValueCurveAtTime(curve, now, span)` 在 `now` 已有别的自动化事件时会抛 `NotSupportedError`**，而且这套曲线 API 在某些实现里干脆不存在。`rampAudioDeckGain` 的写法固定为 cancel → curve，抛了再 cancel 一次并退回 `setValueAtTime` + `linearRampToValueAtTime`。
+- 设置存独立 `GAPLESS_STORE_KEY = 'mineradio-gapless-v1'` 并登记进 `PERSISTENT_UI_STATE_KEYS`，**绝不写进视觉预设 `fx`**（`fx` 会随预设与用户档案导入导出，写进去等于别人的预设能改你的播放行为）；`gapless-crossfade` 滑杆不进 `bindFxPanel` 的显式 `ids` 白名单，所以不可能被写成 `fx` 字段。
+- 需求 8：界面只在 `public/index.html` 的 `fx-volume-fold` 与 `fx-eq-fold` 之间新增一个同构折叠区 `fx-gapless-fold`（一个 `fx-toggle` + 一个 `fx-slider` + 两行 `mini-player-collapse-hint`，全部复用既有类名），`fxPanelTargetForNode` 里归到 `advanced`、`organizeFxPanel` 的数组里登记，**`public/app.css` 一行未动**。
+- 已知取舍：`replayGainNode` 只有一个且在 `analyser` 之后，也就是均衡增益作用在两路求和之后，**交叉那几秒两首歌共用同一个 ReplayGain 增益**。要做 per-deck 均衡就得把 `replayGainNode` 拆成两个塞到各自 `deck.gain` 前面，本轮按「够用就不动」没做。
+- 引擎块整段夹在 `var GAPLESS_CROSSFADE_MIN_SECONDS` 与 `var REPLAY_GAIN_PREAMP_MIN` 之间，`tests/gapless-crossfade.test.js` 按这对锚点切进 `node:vm`，所以这段里新增任何裸标识符都会在 vm 里 `ReferenceError`、被调用方的 `.catch` 吞掉（测试全绿但行为错），跨切片调用一律 `typeof x === 'function'` 守卫。两条 vm 老规矩又各踩一次：ES6 简写方法不可 `new`，桩 `new Audio()` 必须写成 `Audio: function () {}`；`require('node:assert/strict')` 把 `deepEqual` 别名成 `deepStrictEqual`，跨 realm 容器断言前必须 `Object.assign({}, x)` / `Array.from` 拷回本 realm。
+- **每加一个启动初始化函数都要去放宽 `tests/auto-playback-startup.test.js` 那条启动顺序正则**（ReplayGain、音效链、无缝各一次，已经第三回）。本轮加的是可选组 `(?:initGaplessControls\(\);\s*)?`，启动顺序现在是 `initAutoPlaybackControls(); initReplayGainControls(); initAudioChainControls(); initGaplessControls();` 再接 `if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);`。`tests/replay-gain-normalization.test.js` 的链路断言也按双 deck 更新（`deck.source.connect(deck.gain)` / `deck.gain.connect(analyser)`）。
+- 需求 9：新增 `tests/gapless-crossfade.test.js` 27 例，覆盖交叉秒数按短歌与脏时长封顶、交叉 `0` 时任何时刻只有一路声音、交叉主路径（确认出声后再对交并推进队列）、预起播被拒时原样退回并进黑名单、`play()` 抛错与不返回 Promise 两条分支、交叉中手动切歌先压到 0 再停、作废的收尾定时器不会停掉新接管的 deck、下一首是自己时预取照做但不交叉、随机待洗牌时既不预取也不交叉、播完即停释放预取、交叉中改秒数不截断正在跑的斜坡、关掉开关立刻释放预取、秒数展示与三档说明文案、面板事件只绑一次且拖动不刷屏、没有 WebAudio 时退回元素音量、等功率曲线不可用时退回线性斜坡、双 deck 接线与各条切歌路径。
+- 发布前全量 Node 回归 `834/834`（`main` 基线 `807`）。`node --check` 过了 `public/app.js`，`git diff --check` 干净。
+- 本轮未启动本机 Electron，**交叉与接续的实际听感未在本机 Electron 里试听过**，全部结论来自桩 AudioContext 下的逐条自动化断言；发布用的安装包由 GitHub Actions 远程构建，本地未做安装冒烟。
+<!--RELEASE_V1728_ASSETS-->
+
 ## v1.7.27 播放统计与断点续播，全局热键接上鼠标中键 / 侧键
 - 正式发布版本从 `1.7.26` 提升为 `1.7.27`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:585`）与发布工作流默认 tag 保持一致，`1.7.26` → `1.7.27`。
 - 用户原话：「继续更新加：最近播放时间 / 累计播放时长 / 播放次数 / 最后播放位置 / 断点续播 /「继续上次播放」/ 最近播放记录清空 / 单曲播放统计　全局快捷键支持鼠标侧键 更新好发布新版本」。九项里前八项是同一套本地收听数据的不同切面，最后一项是独立的输入层改造。

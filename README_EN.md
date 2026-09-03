@@ -75,12 +75,23 @@ Build artifacts are located in `dist/`.
 - Resume playback (each track remembers where you stopped) plus a "resume last playback" action
 - Two-tier clearing of recently-played records (recent only, or counts and listen time as well)
 - Customizable global hotkeys, including the mouse middle button and both side buttons
+- Gapless playback plus a `0~10` second crossfade
 
 ## Changelog
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.7.27 (2026-09-03)
+### Latest release v1.7.28 (2026-09-03)
+
+- New "gapless playback" toggle (on by default): the next track is decoded ahead of time during automatic advance and takes over the instant the previous one ends, so there is no audible gap between adjacent tracks
+- New "crossfade" slider: `0 ~ 10` seconds in `0.5` second steps. Above zero the outgoing and incoming tracks overlap along an equal-power curve, so the midpoint does not dip in loudness
+- With crossfade at `0` the original playback logic is preserved. Manual track changes, previous, next, shuffle and autoplay are all unaffected — only automatic advance and single-track repeat may adopt the prefetched deck
+- No pops, no double playback and no sudden silence across state changes: two permanently wired `<audio>` decks only ever have their gain adjusted, never their connections. A crossfade commits and advances the queue only once the next track is genuinely audible, and if the start is rejected everything rolls back and the current track keeps playing
+- The only UI addition is one collapsible section under the volume block on the settings panel's "Advanced" page (one toggle plus one slider); the stylesheet was not touched
+- Full Node regression suite: `834/834` passing
+
+<details>
+<summary>v1.7.27 — Listening stats, resume playback, mouse-button hotkeys</summary>
 
 - Per-track listening stats: play count, completed plays, accumulated listen time and last-played time are kept per track. The "recently played / most played" lists show a summary under each row, and the song detail dialog has a full "playback stats" section
 - Resume playback: each track remembers where you stopped and picks up there next time. A position is only remembered after 15 seconds of listening and only if at least 20 seconds remain, and it is cleared once the track finishes
@@ -89,6 +100,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Global hotkeys accept the mouse middle button and both side buttons (combinable with `Ctrl` / `Alt` / `Shift` / `Win`); the left and right buttons stay reserved for normal clicking. Note that a system-level mouse hook only *listens*, it cannot swallow the event, so back/forward still act normally in other applications; in-app-only bindings are unaffected
 - The mouse hook is loaded on demand: with no mouse binding the native module is never pulled into the process, and removing the last binding stops the hook immediately. It only reads button and modifier state — no input is recorded, stored or transmitted (see [PRIVACY.md](./PRIVACY.md))
 - Full Node regression suite: `807/807` passing
+
+</details>
 
 <details>
 <summary>v1.7.24 — Library became a top-level tab</summary>

@@ -323,7 +323,9 @@ async function testPrepareFillsMissingTagLater() {
  */
 function testSourceWiring() {
   // 均衡增益挂在 analyser 之后、音效链与 gainNode 之前：可视化仍取原始电平，音量与淡入淡出继续由 gainNode 独占。
-  assert.match(appSource, /source\.connect\(analyser\);/);
+  // 双 deck 时代每个 deck 走 source → deckGain → analyser，deckGain 中性值恒为 1，所以汇入点之后的链路与单元素时代完全一致。
+  assert.match(appSource, /deck\.source\.connect\(deck\.gain\);/);
+  assert.match(appSource, /deck\.gain\.connect\(analyser\);/);
   assert.match(appSource, /analyser\.connect\(replayGainNode\);/);
   assert.match(appSource, /replayGainNode\.connect\(audioChain\.input\);/);
   assert.match(appSource, /audioChain\.output\.connect\(gainNode\);/);
