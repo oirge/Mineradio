@@ -1434,3 +1434,20 @@
 - **新增 IPC handler 的插入位置要避开按锚点切源码的测试。** 两个备份 handler 必须留在 `ipcMain.handle('mineradio-export-json-file'` 之前，因为 `tests/import-json-file-size-limit.test.js` 是按 `mineradio-import-json-file` → `ui-state-read-sync` 这对锚点切片的，插进那段会污染它。新代码块自己也夹在一对锚点里跑 vm，所以**这段里新增任何裸标识符都会 `ReferenceError`**，跨切片调用一律 `typeof` 守卫。
 - **靠「顺序继承」生效的注册要在文档里写明，否则挪一下位置就静默失效。** `fx-backup-fold` 没进 `fxPanelTargetForNode`，它落到「高级」页靠的是 `organizeFxPanel` 里 `current` 从前一个节点（`fx-eq-fold` / `fx-plugin-fold`，都归 advanced）继承下来；一旦被挪到某个非 advanced 折叠区上面，就会跑到别的页去而且没有任何报错。
 - 验证：全量 Node 回归 `864/864`（上一版基线 `846`），新增 `tests/mineradio-backup-export-import.test.js` 18 例（含用手写 JSON 塞 `"__proto__"` 验白名单 —— 对象字面量 `{__proto__:x}` 是设原型、只有 `JSON.parse` 才会造出真自有属性）。发布前补跑过一次本机 Electron 启动冒烟（只杀自己那个 PID，不用 `taskkill /IM electron.exe`）：干净开到 `home-revealed 10963ms`、`app.js` 零报错，日志里唯一那条 `Failed to construct 'URL'` 来自 `node:electron/js2c/renderer_init`（本轮 diff 里 `new URL(` 出现 0 次，产不出它）。**备份面板在真实窗口里的落位、真实文件对话框、导入后重启与真机换机导入仍没有肉眼验证过**，那部分结论全部来自 `node:vm` 跑真实源码 + 源码逐条断言。
+
+### 2026-09-03 - v1.8.2 多格式歌词：分流顺序即语义，KRC / QRC 必须排在 YRC 前面
+
+- 用户原话：「在最新版的基础上继续更新目前歌词： 有显示即可 升级： 多格式歌词 支持： LRC KRC QRC TTML等」。**「有显示即可」被当成明确的范围界定**：新格式解析进原有歌词行结构就算完成，不为它们做新界面 —— 合「能不动 UI 就不动 UI」。
+- **KRC / QRC / YRC 的行头一模一样（`[起点,时长]`），唯一的区分特征是词项分隔符，所以分流顺序本身就是语义的一部分。** KRC 是 `<偏移,时长,0>正文`、QRC 是 `正文(起点,时长)`、YRC 是 `(起点,时长,0)正文`。**`parseYrcText` 认到行头就收，找不到自己那种词项也照样吐 `yrc-line` 整行**，所以 KRC 与 QRC 的嗅探必须排在 `parseYrcText` 之前 —— 排后面的表现不是报错，而是「歌词显示出来了，但没有逐字，正文里还夹着 `<0,400,0>` 这种标记」。第一版就是把两个嗅探写在 YRC 之后，靠读 `parseYrcText` 的回退分支才发现，测试里已钉一条专门的顺序断言。
+- **同一族格式加新成员时，先去读现有那个解析器的「兜底分支」，而不是只读它的正例。** 上一条那个坑的根源就是只看了 YRC 的 happy path。凡是「多个解析器按顺序试、谁返回非空就算谁的」这种分流，排前面的解析器有多宽容，决定了排后面的还有没有机会。
+- **分流要认格式自身的特征，不要认后缀名。** 用户手里的歌词文件后缀经常和内容不符（下载工具乱改、手动改名）。TTML 认 `<tt …><p …>` 标签、QRC 容器认 `LyricContent=` 属性、KRC 加密二进制认 `krc1` 魔数。附带好处：改过后缀的加密 KRC 也能读，而且「正文里带方括号的 TTML」不会被 LRC 抢走。
+- **`DecompressionStream` + `Response` 在 Chromium 和 Node 18+ 都是全局对象**，所以 KRC 的 deflate 解压不用引依赖也不用碰 `node:zlib`，同一份代码在渲染层跑、在 `node:vm` 测试里也跑。带 zlib 头的以 `0x78` 开头先试 `'deflate'`，否则先试 `'deflate-raw'`，两种都试一遍。**解压失败返回空字符串而不是抛异常** —— 歌词坏了不该把整首歌的播放流程带崩。
+- **KRC 的 16 字节异或常量是公开的格式常量，不是凭据**，源码注释里写明了这一点，免得以后被当成硬编码密钥清掉。
+- **「宁可时间粗一点也不丢字」是本轮定下的取舍。** QRC 少数导出工具漏写最后一个词项的时间标记，正文剩一截在标记之外；补成「从上一个词项结束到行尾」而不是丢掉。静默丢字比时间不准严重得多。
+- **`reg.lastIndex` 必须在 `while ((m = reg.exec(s)))` 循环体里就地取，不能等循环结束后再读** —— `exec` 返回 `null` 的那一次会把 `lastIndex` 归零，循环外读到的永远是 `0`。这就是上一条那个补尾逻辑第一版没生效的原因。
+- **TTML 的词项 span 要用负向前查只匹配最内层**（`<span\b([^>]*)>((?:(?!<span\b)[\s\S])*?)<\/span\s*>`），否则外层那个包整行的 span 会把正文再吃一遍、行文本直接翻倍。译文与罗马音靠 `ttm:role="x-translation"` / `x-roman"` 剔除，剔的时候要连同它在 `plainBody` 里的那段一起去掉，否则整行回退路径又把译文捡回来。**整段 TTML 用扫描而不是 `DOMParser`**，因为解析逻辑要能在没有 DOM 的 `node:vm` 切片里跑。
+- **`finalizeLyricLineDurations` 的第二个参数决定「格式明确写出来的时长」保不保得住。** 传 `true` 才跳过 `[0.45, 12]` 那道 LRC 时代的钳制。KRC / QRC 的行头时长是格式写死的，和字幕 cue 同等对待，所以两个都传 `true`；LRC / YRC 的时长是推断出来的，继续走钳制。测试里用一条 20 秒的行钉死这件事。
+- **新歌词后缀要同时进四处清单，少一处就是「某条路径下歌词读不到」而不是报错**：`public/app.js` 的 `LOCAL_LYRIC_FILE_RE`、`desktop/main.js` 的 `LOCAL_LIBRARY_EXTS` + `LOCAL_LIBRARY_MIME`、`server.js` 的 `LOCAL_FILE_MIME`、`public/index.html` 的两个导入 `accept`。测试直接遍历后缀数组去断言这四处，防止以后加第十种格式时漏。**`.krc` 的 MIME 必须是 `application/octet-stream`、不许挂 charset** —— 加密二进制被当文本走一遍解码就废了。
+- **把读文件从「顺手返回字符串」拆成「先拿字节、再决定怎么解码」，是加二进制格式的前提。** 原来的 `readLocalTextFile` 三条读取通道（`file.arrayBuffer` / 桌面 `readLocalFileRange` / `FileReader`）都直接吐文本；抽出 `readLocalTextFileBytes` 之后，歌词走 `readLocalLyricText`（字节 → 认魔数 → 必要时解密 → 解码），其它调用方行为一字不变。**这样一改会挪动按锚点切源码的测试的边界** —— `tests/local-file-range-memory.test.js` 的切片起点要跟着改到新函数名，`tests/local-lyric-cache-residency.test.js` 里的桩函数名要跟着改，两处都是改完才发现红的。
+- 已知边界：**加密的 QRC 网络负载（三重 DES + zlib）本轮不解密**，落到磁盘的 `.qrc` 通常已是明文 XML 或裸 body；同名多份歌词文件仍按文件枚举顺序取第一个，**没有引入按后缀排优先级的规则** —— 那会改掉现有 `.lrc` / `.txt` 的既有行为，超出本轮范围。
+- 验证：全量 Node 回归 `871/871`（上一版基线 `864`），新增 `tests/multi-format-lyrics.test.js` 7 例，全部用 `node:vm` 跑生产源码切片。本轮未启动本机 Electron，**三种新格式的真实歌词文件在窗口里的逐字高亮与桌面歌词表现没有肉眼验证过**，结论全部来自源码逐条断言（含用 `node:zlib` 反向打包出真实 KRC 加密二进制再走生产解码链的往返测试）。

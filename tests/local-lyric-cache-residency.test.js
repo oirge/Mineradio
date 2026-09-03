@@ -779,7 +779,7 @@ async function testLateLyricFileReadDoesNotRestoreOldResidency() {
   const lyricRead = new Promise(captureLyricResolve);
 
   /** @returns {Promise<string>} 返回受控歌词读取任务。 */
-  function readLocalTextFile() { return lyricRead; }
+  function readLocalLyricText() { return lyricRead; }
 
   /** @returns {boolean} 测试使用外置歌词，不读取内嵌字段。 */
   function canReadEmbeddedLyrics() { return false; }
@@ -832,7 +832,7 @@ async function testLateLyricFileReadDoesNotRestoreOldResidency() {
     playQueue: [oldSong, nextSong],
     playlist: [],
     trackSwitchToken: 1,
-    readLocalTextFile,
+    readLocalLyricText,
     canReadEmbeddedLyrics,
     canReadTruncatableEmbeddedLyrics: canReadEmbeddedLyrics,
     embeddedLyricSourceLabel,

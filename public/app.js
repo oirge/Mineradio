@@ -588,7 +588,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.8.1';
+var APP_VERSION = '1.8.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -23653,7 +23653,7 @@ function ensureLocalLyricsForSong(song, opts) {
   song.localLyricLoading = true;
   var embeddedLyricSource = embeddedLyricSourceLabel(song);
   var lyricPromise = song.localLyricFile
-    ? readLocalTextFile(song.localLyricFile).then(function(text){ return { text: text, source: song.localLyricFile.name || 'local lyrics file' }; })
+    ? readLocalLyricText(song.localLyricFile).then(function(text){ return { text: text, source: song.localLyricFile.name || 'local lyrics file' }; })
     : extractEmbeddedLyricsText(song.localFile, { light: !!opts.background }).then(function(text){ return { text: text, source: text ? embeddedLyricSource : '' }; });
   song.localLyricPromise = lyricPromise.then(function(result){
     result = result || {};
@@ -25512,15 +25512,37 @@ function parseAssLyricText(text) {
   return finalizeLyricLineDurations(lines, true);
 }
 /**
- * 自动识别 LRC、SRT、WebVTT 或 ASS 时间轴歌词。
+ * 自动识别 LRC、YRC、KRC、QRC、TTML、SRT、WebVTT 或 ASS 时间轴歌词。
+ * 顺序是「标记语言先分流，再按括号形状分流，最后才轮到字幕格式」：TTML 与 QRC 容器
+ * 靠标签特征认，正文里的方括号就不会被误当成 LRC 时间轴；KRC / QRC 与 YRC 的行头长得
+ * 一模一样，只能靠词项分隔符区分，而且必须排在 YRC 之前。
  * @param {string} text 待解析歌词原文。
  * @returns {Array<object>} 标准化歌词行；没有时间轴时返回空数组。
  */
 function parseTimedLyricText(text) {
   var raw = String(text || '').trim();
   if (!raw) return [];
+  if (TTML_LYRIC_SNIFF_RE.test(raw)) {
+    var ttmlLines = parseTtmlText(raw);
+    if (ttmlLines.length) return ttmlLines;
+  }
+  if (QRC_XML_SNIFF_RE.test(raw)) {
+    var qrcXmlLines = parseQrcText(raw);
+    if (qrcXmlLines.length) return qrcXmlLines;
+  }
   var lrcLines = parseLyricText(raw);
   if (lrcLines.length) return lrcLines;
+  // KRC / QRC / YRC 的行头都是 `[起点,时长]`，YRC 解析器认行头就收，会把另两种当成
+  // 无逐字信息的整行吞掉，所以这两种必须在 YRC 之前分流出去。KRC 用 `<偏移,时长,0>正文`、
+  // QRC 用 `正文(起点,时长)`，都和 YRC 的 `(起点,时长,0)正文` 形状不重叠。
+  if (KRC_WORD_SNIFF_RE.test(raw)) {
+    var krcLines = parseKrcText(raw);
+    if (krcLines.length) return krcLines;
+  }
+  if (QRC_WORD_SNIFF_RE.test(raw)) {
+    var qrcLines = parseQrcText(raw);
+    if (qrcLines.length) return qrcLines;
+  }
   // 外置 YRC 复用在线歌词的逐字解析器，保持同一套字符时间轴结构。
   var yrcLines = parseYrcText(raw);
   if (yrcLines.length) return yrcLines;
@@ -25583,6 +25605,254 @@ function parseYrcText(text) {
     lines.push({ t:lineStartMs / 1000, duration:lineDurMs / 1000, text:fullText, words:words, charCount:Math.max(1, fullText.length), source: words.length ? 'yrc-word' : 'yrc-line' });
   });
   return finalizeLyricLineDurations(lines);
+}
+// KRC / QRC / TTML 的分流特征。KRC 与 QRC 的行头和 YRC 一样是 `[起点,时长]`，
+// 只能靠词项分隔符区分：KRC 用 `<偏移,时长,0>正文`，QRC 用 `正文(起点,时长)`，
+// YRC 用 `(起点,时长,0)正文`。三者的括号形状互不重叠，所以嗅探可以写得很紧。
+var TTML_LYRIC_SNIFF_RE = /<tt[\s>][\s\S]*?<p[\s>]/i;
+var QRC_XML_SNIFF_RE = /<Lyric_\d+\b[^>]*LyricContent\s*=/i;
+var KRC_WORD_SNIFF_RE = /^\s*\[\d+,\d+\][^\n]*<\d+,\d+,\d+>/m;
+var QRC_WORD_SNIFF_RE = /^\s*\[\d+,\d+\][^\n]*\(\d+,\d+\)/m;
+/**
+ * 把逐字词项拼成播放器统一的歌词行结构。
+ * KRC / QRC / TTML 的行内切分方式各不相同，但落到渲染层必须是同一套
+ * `{t, duration, text, words, charCount, source}`，逐字高亮才认得。
+ * @param {number} lineStartMs 行起点毫秒。
+ * @param {number} lineDurMs 行时长毫秒；`<=0` 时留给 finalizeLyricLineDurations 推断。
+ * @param {Array<{text:string,startMs:number,durMs:number}>} rawWords 词项序列，按出现顺序。
+ * @param {string} plainFallback 没有可用词项时的整行正文。
+ * @param {string} wordSource 带逐字时间时的 source 标记。
+ * @param {string} lineSource 只有整行时间时的 source 标记。
+ * @returns {object|null} 标准化歌词行；正文为空时返回 null。
+ */
+function buildWordTimedLyricLine(lineStartMs, lineDurMs, rawWords, plainFallback, wordSource, lineSource) {
+  var words = [], fullText = '';
+  for (var i = 0; i < rawWords.length; i++) {
+    var raw = rawWords[i] || {};
+    var txt = String(raw.text || '').replace(/\s+/g, ' ');
+    if (!txt) continue;
+    var c0 = fullText.length;
+    fullText += txt;
+    words.push({
+      text: txt,
+      t: (Number(raw.startMs) || 0) / 1000,
+      d: Math.max(0.06, (Number(raw.durMs) || 0) / 1000),
+      c0: c0,
+      c1: fullText.length
+    });
+  }
+  if (!fullText) fullText = String(plainFallback || '');
+  var leading = leadingWhitespaceLength(fullText);
+  fullText = fullText.replace(/\s+/g, ' ').trim();
+  if (!fullText) return null;
+  if (words.length) {
+    var compactWords = [];
+    for (var wordIdx = 0; wordIdx < words.length; wordIdx++) {
+      var word = words[wordIdx];
+      word.c0 = Math.max(0, Math.min(fullText.length, word.c0 - leading));
+      word.c1 = Math.max(word.c0, Math.min(fullText.length, word.c1 - leading));
+      if (word.c1 > word.c0) compactWords.push(word);
+    }
+    words = compactWords;
+  }
+  return {
+    t: lineStartMs / 1000,
+    duration: lineDurMs > 0 ? lineDurMs / 1000 : 0,
+    text: fullText,
+    words: words,
+    charCount: Math.max(1, fullText.length),
+    source: words.length ? wordSource : lineSource
+  };
+}
+/**
+ * 解析 QQ 音乐 QRC 逐字歌词。
+ * 两种载体都收：一种是 `<Lyric_1 LyricContent="…"/>` 的 XML 容器，一种是把正文
+ * 直接落成文本的裸 body。词项写法是「正文在前、时间在后」，和 YRC 正好相反。
+ * 加密的 `.qrc` 网络负载不在这里处理，需要先解密成上面两种形态。
+ * @param {string} text QRC 原文。
+ * @returns {Array<object>} 标准化逐字歌词行。
+ */
+function parseQrcText(text) {
+  var raw = String(text || '');
+  var container = /<Lyric_\d+\b[^>]*LyricContent\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(raw);
+  var body = container
+    ? decodeXmlLyricEntities(container[1] != null ? container[1] : (container[2] || ''))
+    : raw;
+  var lines = [];
+  forEachNewlineRow(body, function(line) {
+    var m = /^\s*\[(\d+),(\d+)\](.*)$/.exec(line);
+    if (!m) return;
+    var lineStartMs = parseInt(m[1], 10) || 0;
+    var lineDurMs = parseInt(m[2], 10) || 0;
+    var rest = m[3] || '';
+    var rawWords = [];
+    var reg = /([^()]*)\((\d+),(\d+)\)/g, wm;
+    var consumed = 0, lastEndMs = lineStartMs;
+    while ((wm = reg.exec(rest))) {
+      var rawStart = parseInt(wm[2], 10) || 0;
+      // 少数导出工具把词项起点写成相对行首的偏移，拿行首当基准把两种写法都收下。
+      var wordStartMs = rawStart >= lineStartMs - 500 ? rawStart : lineStartMs + rawStart;
+      var wordDurMs = parseInt(wm[3], 10) || 0;
+      rawWords.push({ text: wm[1] || '', startMs: wordStartMs, durMs: wordDurMs });
+      consumed = reg.lastIndex;
+      lastEndMs = wordStartMs + wordDurMs;
+    }
+    // 最后一个词项漏写时间标记时，把剩下的正文按行尾补上，宁可时间粗一点也不丢字。
+    var tail = rawWords.length ? rest.slice(consumed) : '';
+    if (tail && /\S/.test(tail)) {
+      rawWords.push({
+        text: tail,
+        startMs: lastEndMs,
+        durMs: Math.max(0, lineStartMs + lineDurMs - lastEndMs)
+      });
+    }
+    var built = buildWordTimedLyricLine(
+      lineStartMs, lineDurMs, rawWords, rest.replace(/\(\d+,\d+\)/g, ''), 'qrc-word', 'qrc-line');
+    if (built) lines.push(built);
+  });
+  // 行头的时长是格式明确写死的，和字幕 cue 一样不该被旧 LRC 的 12 秒上限截断。
+  return finalizeLyricLineDurations(lines, true);
+}
+/**
+ * 解析酷狗 KRC 逐字歌词的明文形态。
+ * 行头是 `[起点,时长]`，词项是 `<相对偏移,时长,0>正文`，偏移以行首为基准，
+ * 所以要加上行起点才是绝对时间。加密的 `krc1` 二进制在读取层先还原成这份明文。
+ * @param {string} text KRC 明文。
+ * @returns {Array<object>} 标准化逐字歌词行。
+ */
+function parseKrcText(text) {
+  var lines = [];
+  forEachNewlineRow(text, function(line) {
+    var m = /^\s*\[(\d+),(\d+)\](.*)$/.exec(line);
+    if (!m) return;
+    var lineStartMs = parseInt(m[1], 10) || 0;
+    var lineDurMs = parseInt(m[2], 10) || 0;
+    var rest = m[3] || '';
+    var rawWords = [];
+    var reg = /<(\d+),(\d+),\d+>([^<]*)/g, wm;
+    while ((wm = reg.exec(rest))) {
+      rawWords.push({
+        text: wm[3] || '',
+        startMs: lineStartMs + (parseInt(wm[1], 10) || 0),
+        durMs: parseInt(wm[2], 10) || 0
+      });
+    }
+    var built = buildWordTimedLyricLine(
+      lineStartMs, lineDurMs, rawWords, rest.replace(/<\d+,\d+,\d+>/g, ''), 'krc-word', 'krc-line');
+    if (built) lines.push(built);
+  });
+  return finalizeLyricLineDurations(lines, true);
+}
+/**
+ * 还原 XML 文本：去掉标签、把 `<br/>` 当空格、展开常见实体与数字字符引用。
+ * TTML 与 QRC 容器都只需要纯文本，为此拉一整套 XML 解析器不值得。
+ * @param {string} value 原始片段。
+ * @returns {string} 纯文本。
+ */
+function decodeXmlLyricEntities(value) {
+  return String(value || '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&#x([0-9a-f]+);/gi, function(_all, hex){ return String.fromCharCode(parseInt(hex, 16) || 32); })
+    .replace(/&#(\d+);/g, function(_all, dec){ return String.fromCharCode(parseInt(dec, 10) || 32); })
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&');
+}
+/**
+ * 从标签属性串里取一个属性值，单双引号都认。
+ * @param {string} attrText `<p …>` 里尖括号之间那一段。
+ * @param {string} name 属性名，允许带命名空间前缀。
+ * @returns {string} 属性值；没有该属性时返回空字符串。
+ */
+function xmlLyricAttrValue(attrText, name) {
+  var escaped = String(name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var m = new RegExp('(?:^|\\s)' + escaped + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\')', 'i').exec(String(attrText || ''));
+  if (!m) return '';
+  return decodeXmlLyricEntities(m[1] != null ? m[1] : (m[2] || ''));
+}
+/**
+ * 解析 TTML 时间：既认 `hh:mm:ss.fff` / `mm:ss.fff` 时钟，也认 `12.5s` / `500ms` 这类偏移量。
+ * 帧和 tick 两种单位没有帧率信息无法换算，按无效处理。
+ * @param {string} value 时间字面量。
+ * @returns {number} 毫秒；无法识别时返回 NaN。
+ */
+function ttmlClockToMs(value) {
+  var text = String(value || '').trim();
+  if (!text) return NaN;
+  var offset = /^(\d+(?:\.\d+)?)(ms|h|m|s)$/i.exec(text);
+  if (offset) {
+    var amount = parseFloat(offset[1]);
+    var unit = offset[2].toLowerCase();
+    if (unit === 'ms') return amount;
+    if (unit === 'h') return amount * 3600000;
+    if (unit === 'm') return amount * 60000;
+    return amount * 1000;
+  }
+  var parts = text.split(':');
+  if (parts.length < 2 || parts.length > 3) return NaN;
+  var seconds = parseFloat(parts[parts.length - 1]);
+  var minutes = parseInt(parts[parts.length - 2], 10);
+  var hours = parts.length === 3 ? parseInt(parts[0], 10) : 0;
+  if (!isFinite(seconds) || !isFinite(minutes) || !isFinite(hours)) return NaN;
+  return ((hours * 60 + minutes) * 60 + seconds) * 1000;
+}
+/**
+ * 解析 TTML（Timed Text Markup Language）歌词，Apple Music 一族用的就是这种。
+ * 只取最内层带 `begin` 的 `<span>` 当词项，避免外层整行 span 把正文重复吃一遍；
+ * `ttm:role` 标成 `x-translation` / `x-roman` 的是译文和罗马音，不进正文。
+ * 用扫描而不是 DOM 解析，好处是这段逻辑在没有 DOMParser 的环境里也能跑、也能测。
+ * @param {string} text TTML 原文。
+ * @returns {Array<object>} 标准化歌词行。
+ */
+function parseTtmlText(text) {
+  var raw = String(text || '');
+  var lines = [];
+  var pRe = /<p\b([^>]*)>([\s\S]*?)<\/p\s*>/gi, pm;
+  while ((pm = pRe.exec(raw))) {
+    var attrs = pm[1] || '';
+    var body = pm[2] || '';
+    var lineStartMs = ttmlClockToMs(xmlLyricAttrValue(attrs, 'begin'));
+    var lineEndMs = ttmlClockToMs(xmlLyricAttrValue(attrs, 'end'));
+    var rawWords = [];
+    var plainBody = body;
+    // 只匹配内部再没有 span 的那一层，嵌套的整行 span 就不会连同子串一起被当成词项。
+    var spanRe = /<span\b([^>]*)>((?:(?!<span\b)[\s\S])*?)<\/span\s*>/gi, sm;
+    while ((sm = spanRe.exec(body))) {
+      var spanAttrs = sm[1] || '';
+      var role = xmlLyricAttrValue(spanAttrs, 'ttm:role') || xmlLyricAttrValue(spanAttrs, 'role');
+      if (/^x-(?:translation|roman|lang)/i.test(role)) {
+        plainBody = plainBody.replace(sm[0], ' ');
+        continue;
+      }
+      var spanText = decodeXmlLyricEntities(sm[2]);
+      var spanStart = ttmlClockToMs(xmlLyricAttrValue(spanAttrs, 'begin'));
+      if (!spanText || !isFinite(spanStart)) continue;
+      var spanEnd = ttmlClockToMs(xmlLyricAttrValue(spanAttrs, 'end'));
+      rawWords.push({
+        text: spanText,
+        startMs: spanStart,
+        durMs: isFinite(spanEnd) && spanEnd > spanStart ? spanEnd - spanStart : 0
+      });
+    }
+    // 只写了 begin 的词项按「下一个词项开始」收尾，最后一个退到整行的 end。
+    for (var wi = 0; wi < rawWords.length; wi++) {
+      if (rawWords[wi].durMs > 0) continue;
+      var nextWord = rawWords[wi + 1];
+      var until = nextWord ? nextWord.startMs : lineEndMs;
+      rawWords[wi].durMs = isFinite(until) && until > rawWords[wi].startMs ? until - rawWords[wi].startMs : 0;
+    }
+    if (!isFinite(lineStartMs) && rawWords.length) lineStartMs = rawWords[0].startMs;
+    if (!isFinite(lineStartMs)) continue;
+    var lineDurMs = isFinite(lineEndMs) && lineEndMs > lineStartMs ? lineEndMs - lineStartMs : 0;
+    var built = buildWordTimedLyricLine(
+      lineStartMs, lineDurMs, rawWords, decodeXmlLyricEntities(plainBody), 'ttml-word', 'ttml-line');
+    if (built) lines.push(built);
+  }
+  return finalizeLyricLineDurations(lines, true);
 }
 function renderLyrics() {
   // v8: 歌词渲染由 stageLyrics 在每帧 tickLyricsParticles 里推动
@@ -27582,7 +27852,7 @@ document.addEventListener('visibilitychange', function(){
 // ============================================================
 var LOCAL_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i;
 var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i;
-var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass|yrc)$/i;
+var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass|yrc|krc|qrc|ttml)$/i;
 var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|jpe|jfif|png|webp|avif|gif|bmp|svg)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
 var LOCAL_LIBRARY_NAME_COMPARE = (typeof Intl !== 'undefined' && Intl.Collator)
@@ -27857,25 +28127,95 @@ function decodeLocalTextBuffer(buffer) {
   return text;
 }
 /**
+ * 读取本地文本类文件的原始字节，三条读取通道（File、桌面范围读取、FileReader）统一收口。
+ * @param {object} file 浏览器 File 或桌面本地文件记录。
+ * @returns {Promise<ArrayBuffer|Uint8Array|null>} 文件字节；读不到时返回 null。
+ */
+async function readLocalTextFileBytes(file) {
+  if (!file) return null;
+  if (file.arrayBuffer) return await file.arrayBuffer();
+  var fullPath = localFullPath(file);
+  var api = desktopLocalMusicApi();
+  if (fullPath && api && typeof api.readLocalFileRange === 'function') {
+    return await readLocalFileBytes(file, 0, localFileSize(file) || null);
+  }
+  return new Promise(function(resolve){
+    var reader = new FileReader();
+    reader.onload = function(){ resolve(reader.result); };
+    reader.onerror = function(){ resolve(null); };
+    reader.readAsArrayBuffer(file);
+  });
+}
+/**
  * 读取并解码本地歌词或文本文件；桌面路径直接复用范围读取返回的字节视图。
  * @param {object} file 浏览器 File 或桌面本地文件记录。
  * @returns {Promise<string>} 解码后的文本。
  */
 async function readLocalTextFile(file) {
   if (!file) return '';
-  if (file.arrayBuffer) return decodeLocalTextBuffer(await file.arrayBuffer());
-  var fullPath = localFullPath(file);
-  var api = desktopLocalMusicApi();
-  if (fullPath && api && typeof api.readLocalFileRange === 'function') {
-    var bytes = await readLocalFileBytes(file, 0, localFileSize(file) || null);
-    return decodeLocalTextBuffer(bytes);
+  var bytes = await readLocalTextFileBytes(file);
+  return bytes ? decodeLocalTextBuffer(bytes) : '';
+}
+// 酷狗 KRC 加密二进制的固定头与异或密钥：头 4 字节是 `krc1`，其后整段先按这 16 字节
+// 循环异或，再解 zlib 就还原成明文 KRC。这串是公开的格式常量，不是凭据。
+var KRC_MAGIC = [0x6b, 0x72, 0x63, 0x31];
+var KRC_XOR_KEY = [0x40, 0x47, 0x61, 0x77, 0x5e, 0x32, 0x74, 0x47, 0x51, 0x36, 0x31, 0x2d, 0xce, 0xd2, 0x6e, 0x69];
+/**
+ * 剥掉 KRC 二进制头并还原异或，得到待解压的 deflate 数据。
+ * @param {ArrayBuffer|Uint8Array} buffer 文件原始字节。
+ * @returns {Uint8Array|null} 异或还原后的字节；不是 KRC 二进制时返回 null。
+ */
+function krcEncryptedPayloadBytes(buffer) {
+  var bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer || []);
+  if (bytes.length <= KRC_MAGIC.length) return null;
+  for (var i = 0; i < KRC_MAGIC.length; i++) {
+    if (bytes[i] !== KRC_MAGIC[i]) return null;
   }
-  return new Promise(function(resolve){
-    var reader = new FileReader();
-    reader.onload = function(){ resolve(decodeLocalTextBuffer(reader.result)); };
-    reader.onerror = function(){ resolve(''); };
-    reader.readAsArrayBuffer(file);
-  });
+  var out = new Uint8Array(bytes.length - KRC_MAGIC.length);
+  for (var j = 0; j < out.length; j++) out[j] = bytes[KRC_MAGIC.length + j] ^ KRC_XOR_KEY[j % KRC_XOR_KEY.length];
+  return out;
+}
+/**
+ * 解压 deflate 字节。`DecompressionStream` 在 Chromium 与 Node 18+ 都是全局对象，
+ * 所以这一步既不用新依赖，也能直接单测。
+ * @param {Uint8Array} bytes 压缩数据。
+ * @returns {Promise<Uint8Array|null>} 解压结果；失败时返回 null。
+ */
+async function inflateLyricBytes(bytes) {
+  if (!bytes || !bytes.length || typeof DecompressionStream !== 'function') return null;
+  // 带 zlib 头的以 0x78 开头，没有头的按 raw deflate 再试一次。
+  var formats = bytes[0] === 0x78 ? ['deflate', 'deflate-raw'] : ['deflate-raw', 'deflate'];
+  for (var i = 0; i < formats.length; i++) {
+    try {
+      var source = new Response(bytes).body;
+      if (!source) return null;
+      var out = await new Response(source.pipeThrough(new DecompressionStream(formats[i]))).arrayBuffer();
+      if (out && out.byteLength) return new Uint8Array(out);
+    } catch (e) {}
+  }
+  return null;
+}
+/**
+ * 解码歌词文件字节：KRC 加密二进制先还原成明文，其余一律走通用文本解码。
+ * 按魔数而不是后缀分流，所以改了后缀名的加密 KRC 也能读出来。
+ * @param {ArrayBuffer|Uint8Array} buffer 文件字节。
+ * @returns {Promise<string>} 歌词文本。
+ */
+async function decodeLyricFileBuffer(buffer) {
+  var payload = krcEncryptedPayloadBytes(buffer);
+  if (!payload) return decodeLocalTextBuffer(buffer);
+  var inflated = await inflateLyricBytes(payload);
+  return inflated ? decodeLocalTextBuffer(inflated) : '';
+}
+/**
+ * 读取并解码本地歌词文件。和 readLocalTextFile 只差一处：KRC 加密二进制会先解密解压。
+ * @param {object} file 浏览器 File 或桌面本地文件记录。
+ * @returns {Promise<string>} 歌词文本。
+ */
+async function readLocalLyricText(file) {
+  if (!file) return '';
+  var bytes = await readLocalTextFileBytes(file);
+  return bytes ? await decodeLyricFileBuffer(bytes) : '';
 }
 function readFileAsDataUrl(file) {
   return new Promise(function(resolve){
