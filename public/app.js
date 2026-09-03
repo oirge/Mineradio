@@ -31736,6 +31736,9 @@ var localLibraryWatchSyncTimer = null;
 var localLibraryWatchSyncRunning = false;
 var localLibraryWatchSyncQueued = false;
 var localLibrarySyncBadgeTimer = null;
+var localLibrarySyncBadgePeekHold = false;
+// 由那条全局 mousemove 写入：鼠标此刻是否还在「会把顶部搜索区留住」的那片区域里。
+var localLibrarySyncBadgeSearchZoneHot = false;
 
 /**
  * 给曲库数量加千分位。曲库动辄上万首，`已同步 12431 首歌曲` 读起来太费劲。
@@ -31755,23 +31758,69 @@ function formatLocalLibrarySyncCount(count) {
 }
 
 /**
- * 取右下角同步指示器节点，没有就懒建一个。挂在 body 上，不占 index.html 的静态结构。
+ * 指示器是否正把顶部搜索区按住不放。给 mousemove 那条「鼠标离开顶部就收起搜索区」的分支用：
+ * 指示器现在挂在搜索框下面，搜索区一收它就跟着看不见了。
+ * @returns {boolean} 是否处于按住状态。
+ */
+function localLibrarySyncBadgeHoldingPeek() {
+  return localLibrarySyncBadgePeekHold === true;
+}
+
+/**
+ * 让顶部搜索区探出来把指示器带进可见区，指示器淡出时再放开。
+ * 已经开着的不接管；放开时只在「那条 mousemove 自己也会收」的情况下才收，
+ * 否则会出现鼠标明明停在顶部、搜索区却被收掉、下一次 mousemove 之前一直不回来。
+ * @param {boolean} on true 按住，false 放开。
+ * @returns {void}
+ */
+function holdLocalLibrarySyncBadgePeek(on) {
+  var area = document.getElementById('search-area');
+  if (!area || typeof setPeek !== 'function') return;
+  var peeking = !!(area.classList && area.classList.contains('peek'));
+  if (on) {
+    if (peeking) return;
+    localLibrarySyncBadgePeekHold = true;
+    setPeek(area, true, 'search');
+    // setPeek 自己有拒绝的理由（沉浸模式就一律不给开搜索区）。没真开起来就别记按住状态。
+    if (!(area.classList && area.classList.contains('peek'))) localLibrarySyncBadgePeekHold = false;
+    return;
+  }
+  if (!localLibrarySyncBadgePeekHold) return;
+  localLibrarySyncBadgePeekHold = false;
+  if (!peeking) return;
+  if (localLibrarySyncBadgeSearchZoneHot) return;
+  if (typeof emptyHomeActive !== 'undefined' && emptyHomeActive) return;
+  var input = document.getElementById('search-input');
+  if (input && document.activeElement === input) return;
+  var results = document.getElementById('search-results');
+  if (results && results.classList && results.classList.contains('show')) return;
+  var tip = document.getElementById('upload-tip');
+  if (tip && tip.classList && tip.classList.contains('show')) return;
+  setPeek(area, false, 'search');
+}
+
+/**
+ * 取同步指示器节点，没有就懒建一个。挂进搜索框那一叠（`#search-stack`）里，
+ * 位置、宽度与 stage / simple 各种模式变体全跟着搜索框走，不必另算一份坐标；
+ * 取不到那一叠时退回 body，测试桩和被裁过的 DOM 都还能用。
  * @returns {HTMLElement|null} 指示器节点；文档还没就绪时返回 null。
  */
 function localLibrarySyncBadgeElement() {
   var el = document.getElementById('local-sync-badge');
   if (el) return el;
-  if (!document.body) return null;
+  var host = document.getElementById('search-stack');
+  if (!host || typeof host.appendChild !== 'function') host = document.body;
+  if (!host) return null;
   el = document.createElement('div');
   el.id = 'local-sync-badge';
   el.setAttribute('role', 'status');
   el.setAttribute('aria-live', 'polite');
-  document.body.appendChild(el);
+  host.appendChild(el);
   return el;
 }
 
 /**
- * 在右下角报一次已同步的曲库数量。指示器只读不点，几秒后自己淡出，不抢任何交互。
+ * 在搜索框下面报一次已同步的曲库数量。指示器只读不点，几秒后自己淡出，不抢任何交互。
  * @param {number} count 当前曲库歌曲数量。
  * @returns {string} 实际显示的文本；无法显示时返回空串。
  */
@@ -31781,11 +31830,13 @@ function reportLocalLibrarySyncedCount(count) {
   var text = '已同步 ' + formatLocalLibrarySyncCount(count) + ' 首歌曲';
   el.textContent = text;
   el.classList.add('show');
+  holdLocalLibrarySyncBadgePeek(true);
   if (localLibrarySyncBadgeTimer) clearTimeout(localLibrarySyncBadgeTimer);
   localLibrarySyncBadgeTimer = setTimeout(function(){
     localLibrarySyncBadgeTimer = null;
     var node = document.getElementById('local-sync-badge');
     if (node) node.classList.remove('show');
+    holdLocalLibrarySyncBadgePeek(false);
   }, LOCAL_LIBRARY_SYNC_BADGE_HOLD_MS);
   return text;
 }
@@ -38100,8 +38151,12 @@ window.addEventListener('mousemove', function(e){
     var saRect = sa.getBoundingClientRect();
     inSearchPanel = ex >= saRect.left - 24 && ex <= saRect.right + 24 && ey >= saRect.top - 22 && ey <= saRect.bottom + 42;
   }
-  if (ey < 66 || inSearchPanel || searchFocused || uploadTipOpen) setPeek(sa, true, 'search');
-  else if (saOn && !emptyHomeActive) setPeek(sa, false, 'search');
+  var searchPeekWanted = ey < 66 || inSearchPanel || searchFocused || uploadTipOpen;
+  // 同步指示器挂在搜索框下面，放开按住状态时要知道鼠标是不是还在这片留住区里。
+  localLibrarySyncBadgeSearchZoneHot = searchPeekWanted;
+  if (searchPeekWanted) setPeek(sa, true, 'search');
+  // 指示器按住的那几秒里不能因为鼠标不在顶部就把搜索区收回去，否则它一露头就没了。
+  else if (saOn && !emptyHomeActive && !(typeof localLibrarySyncBadgeHoldingPeek === 'function' && localLibrarySyncBadgeHoldingPeek())) setPeek(sa, false, 'search');
   // 控制台: 右下角触发；一旦面板出现，就按真实面板矩形保留显示
   var fpOn = fp.classList.contains('peek') || fp.classList.contains('show');
   var fab = document.getElementById('fx-fab');

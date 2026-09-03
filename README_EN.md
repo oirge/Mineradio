@@ -68,7 +68,7 @@ Build artifacts are located in `dist/`.
 - Desktop lyrics window
 - Local music library management
 - Smart library categories in a dedicated tab (artist / album / album artist / genre / decade / recently added / recently played / most played / never played)
-- Automatic music folder monitoring with a bottom-right synced-track indicator
+- Automatic music folder monitoring with a theme-aware synced-track indicator below the search box
 - Playlist management
 - Shuffle/repeat playback
 - Per-track listening stats (play count, completed plays, accumulated listen time, last-played time)

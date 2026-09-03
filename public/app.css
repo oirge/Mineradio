@@ -169,7 +169,7 @@ body.splash-active.splash-revealing #top-right{opacity:1;transition:opacity 1100
 #search-area.peek{top:24px;opacity:1;pointer-events:auto}
 #search-area.stage-mode #search-stack{width:min(360px,52vw)}
 #search-area.stage-mode.peek{top:18px}
-#search-stack{width:min(520px,58vw)}
+#search-stack{position:relative;width:min(520px,58vw)}
 #search-box{display:flex;align-items:center;height:58px;border-radius:22px;padding:0 20px;background:var(--glass-bg);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);backdrop-filter:blur(34px) saturate(1.34);-webkit-backdrop-filter:blur(34px) saturate(1.34);transition:border-color .28s,background .28s,box-shadow .28s,transform .28s;cursor:text}
 #search-box:focus-within{border-color:rgba(var(--fc-accent-rgb),.50);background:var(--glass-bg-focus);box-shadow:var(--glass-shadow-focus);transform:translateY(-1px)}
 #search-icon{color:rgba(255,255,255,0.3);margin-right:10px;flex-shrink:0}
@@ -1191,9 +1191,17 @@ body.fx-fab-auto-hide.fx-fab-peek #fx-fab-hide-btn{right:84px;opacity:1;visibili
 body.controls-visible #fx-fab-hide-btn,
 body.desktop-shell.diy-mode.controls-visible #fx-fab-hide-btn{bottom:139px}
 body.immersive-mode #fx-fab-hide-btn{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
-#local-sync-badge{position:fixed;z-index:16;right:24px;bottom:88px;max-width:min(52vw,320px);padding:8px 14px;border-radius:12px;font-size:12px;letter-spacing:.4px;color:rgba(232,240,254,.92);background:rgba(10,12,18,.78);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 44px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(22px) saturate(1.2);-webkit-backdrop-filter:blur(22px) saturate(1.2);opacity:0;transform:translateY(8px);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .24s cubic-bezier(.16,1,.3,1),transform .24s cubic-bezier(.16,1,.3,1),bottom .38s cubic-bezier(.16,1,.3,1)}
+/* 同步指示器：挂在 #search-stack 里、贴着那一叠的底边（`top:100%` + 与 #search-results 同样的 8px 间距），
+   所以搜索框下面没东西时它就在搜索框正下方，结果列表一开就顺到列表下面 —— 绝对定位不占流、不推挤任何东西，
+   也压不到结果列表上（`#search-mode-tabs` 在 local-only 模式下是 display:none 的，不能按它的行高算死坐标）。
+   底色/描边/文字优先走 --th-* 主题令牌（--th-search-bg 就是主题给搜索区那一族的底色），没装主题时回落到
+   --saved-panel-* 那套黄金玻璃，跟紧邻的 #search-box 保持同一种质感；语义色只留在左边那颗强调色圆点上，
+   文字走 --th-text-strong，浅色主题下同样读得清。 */
+#local-sync-badge{position:absolute;z-index:2;top:100%;right:0;margin-top:8px;display:inline-flex;align-items:center;gap:7px;box-sizing:border-box;max-width:100%;height:32px;padding:0 13px;border-radius:999px;font-size:11.5px;letter-spacing:.4px;color:var(--th-text-strong,rgba(232,240,254,.92));background:var(--th-search-bg,var(--th-chip-bg,var(--saved-panel-glass-bg,rgba(10,12,18,.78))));border:1px solid var(--th-chip-border,transparent);box-shadow:var(--th-row-shadow,var(--saved-panel-glass-shadow));backdrop-filter:var(--saved-panel-glass-filter,blur(22px) saturate(1.2));-webkit-backdrop-filter:var(--saved-panel-glass-filter,blur(22px) saturate(1.2));opacity:0;transform:translateY(-6px);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .24s cubic-bezier(.16,1,.3,1),transform .24s cubic-bezier(.16,1,.3,1)}
+/* 玻璃 SVG 就绪时跟着升级到同一支滤镜，但不去动上面那两条长选择器列表。 */
+html.control-glass-svg-ok #local-sync-badge{backdrop-filter:var(--saved-panel-glass-svg-filter);-webkit-backdrop-filter:var(--saved-panel-glass-svg-filter)}
+#local-sync-badge::before{content:'';flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:rgba(var(--fc-accent-rgb),.92);box-shadow:0 0 8px rgba(var(--fc-accent-rgb),.55)}
 #local-sync-badge.show{opacity:1;transform:translateY(0)}
-body.controls-visible #local-sync-badge{bottom:190px}
 body.desktop-shell.diy-mode #fx-panel{top:64px;bottom:132px;max-height:none}
 body.desktop-shell.diy-mode #fx-fab{bottom:24px}
 body.desktop-shell.diy-mode #fx-fab-hide-btn{bottom:37px}
