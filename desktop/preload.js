@@ -58,6 +58,9 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   configureGlobalMouseHotkeys: (payload) => ipcRenderer.invoke('mineradio-hotkeys-configure-global-mouse', payload || {}),
   exportJsonFile: (payload) => ipcRenderer.invoke('mineradio-export-json-file', payload || {}),
   importJsonFile: () => ipcRenderer.invoke('mineradio-import-json-file'),
+  // 整机备份：走独立的 .backup 扩展名通道，和只认 .json 的音效档案 / 插件导入分开。
+  exportBackupFile: (payload) => ipcRenderer.invoke('mineradio-export-backup-file', payload || {}),
+  importBackupFile: () => ipcRenderer.invoke('mineradio-import-backup-file'),
   importPluginFile: () => ipcRenderer.invoke('mineradio-import-plugin-file'),
   backupUiState: (patch) => ipcRenderer.invoke('mineradio-ui-state-write', patch || {}),
   chooseLocalMusicFolder: () => ipcRenderer.invoke('mineradio-local-music-choose-folder'),

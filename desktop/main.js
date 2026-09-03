@@ -4404,6 +4404,65 @@ ipcMain.handle('mineradio-hotkeys-configure-global-mouse', trustedMainFrameHandl
   return configureMineradioGlobalMouseHotkeys(payload);
 }));
 
+/**
+ * 导出 Mineradio 整机备份文件（默认 `mineradio.backup`）。
+ * 和 JSON 存档通道分开注册：备份走自己的扩展名过滤器，不会被强行改写成 `.json`，
+ * 也不与只认 `.json` 的音效档案 / 插件导入互相影响。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件，用于定位对话框宿主窗口。
+ * @param {{defaultName?:string, text?:string}} payload 导出负载。
+ * @returns {Promise<{ok:boolean, filePath?:string, canceled?:boolean, error?:string}>} 导出结果。
+ */
+ipcMain.handle('mineradio-export-backup-file', trustedMainFrameHandler(async (event, payload = {}) => {
+  try {
+    const owner = getSenderWindow(event);
+    const rawName = String(payload.defaultName || 'mineradio.backup').replace(/[\\/:*?"<>|]+/g, '-');
+    const defaultName = rawName.toLowerCase().endsWith('.backup') ? rawName : `${rawName}.backup`;
+    const result = await dialog.showSaveDialog(owner, {
+      title: '导出 Mineradio 备份',
+      defaultPath: defaultName,
+      filters: [
+        { name: 'Mineradio 备份', extensions: ['backup'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    const text = typeof payload.text === 'string' ? payload.text : JSON.stringify(payload.data || {}, null, 2);
+    fs.writeFileSync(result.filePath, text, 'utf8');
+    return { ok: true, filePath: result.filePath, bytes: Buffer.byteLength(text, 'utf8') };
+  } catch (e) {
+    return { ok: false, error: e.message || 'BACKUP_EXPORT_FAILED' };
+  }
+}));
+
+/**
+ * 读回 Mineradio 整机备份文件文本。备份里只有文字（曲库索引 / 歌单 / 配置），
+ * 不含音频与封面缓存，所以 64 MiB 的上限足够，同时仍然先 stat 卡住误选的超大文件。
+ * @param {Electron.IpcMainInvokeEvent} event IPC 调用事件，用于定位对话框宿主窗口。
+ * @returns {Promise<{ok:boolean, filePath?:string, text?:string, canceled?:boolean, error?:string}>} 导入结果。
+ */
+ipcMain.handle('mineradio-import-backup-file', trustedMainFrameHandler(async (event) => {
+  try {
+    const owner = getSenderWindow(event);
+    const result = await dialog.showOpenDialog(owner, {
+      title: '导入 Mineradio 备份',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Mineradio 备份', extensions: ['backup'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true };
+    const filePath = result.filePaths[0];
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return { ok: false, error: 'IMPORT_NOT_A_FILE' };
+    if (stat.size > 64 * 1024 * 1024) return { ok: false, error: 'BACKUP_FILE_TOO_LARGE' };
+    const text = fs.readFileSync(filePath, 'utf8');
+    return { ok: true, filePath, text };
+  } catch (e) {
+    return { ok: false, error: e.message || 'BACKUP_IMPORT_FAILED' };
+  }
+}));
+
 ipcMain.handle('mineradio-export-json-file', trustedMainFrameHandler(async (event, payload = {}) => {
   try {
     const owner = getSenderWindow(event);
