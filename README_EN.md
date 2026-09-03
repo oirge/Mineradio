@@ -76,12 +76,27 @@ Build artifacts are located in `dist/`.
 - Two-tier clearing of recently-played records (recent only, or counts and listen time as well)
 - Customizable global hotkeys, including the mouse middle button and both side buttons
 - Gapless playback plus a `0~10` second crossfade
+- Whole-machine backup: export a `mineradio.backup` (library index / playlists / favourites / listening stats / theme / effects / player settings / music folders) and import it on another computer, where paths are rebuilt automatically; audio files and cover caches are excluded
 
 ## Changelog
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.7.29 (2026-09-03)
+### Latest release v1.8.1 (2026-09-03)
+
+- New **"backup" section** on the settings panel's "Advanced" page, with two buttons: export and import. Export writes a `mineradio.backup` file; import reads it back and overwrites the local data
+- **The backup holds what you built up**: the library index (paths, duration, format, album and artist, date added), every playlist, favourites, listening history and play statistics, plus the theme, lyrics layout, effect chain and effect archives, the 16 player settings covering volume / quality / gapless / crossfade / hotkeys / auto-hide, and the music folder paths
+- **Three things are deliberately left out: audio files, cover caches and temporary files.** Not a single byte of audio goes in, regenerable covers and beat maps stay out, and so do the library snapshot / queue snapshot / resume positions that would point at old paths on another machine — a library of tens of thousands of tracks still backs up to a few MB, small enough for a cloud drive or a USB stick
+- **Moving to a new computer is the intended use, so track identity is stored as "folder + relative path", never an absolute path**: there is no hard-coded drive letter anywhere in the file. On import the full paths are rebuilt against the music folder on the new machine, so playlists and favourites still resolve after `D:\Music` becomes `E:\NewDrive\Music`
+- **Import looks for the backup's music folder first and asks you to pick a new one if it is missing**; cancelling that step abandons the whole import and leaves local data untouched
+- **Import overwrites, so it takes two clicks**: the first click only warns that importing will overwrite local playlists / favourites / settings and restart, and a second click within 12 seconds actually starts it. The app restarts when it finishes and rescans the library against the new paths. No new dialogs were added
+- Backup files use the `.backup` extension on their own read/write channel, separate from the `.json`-only effect-archive and plugin imports; the version field is validated before anything is written, unknown files are rejected outright, and imports are capped at 64 MB
+- The only UI addition is one collapsible section in the settings panel (two button rows plus two hint rows); `public/app.css` was not touched
+- Known limits: per-track custom covers, custom beat maps and custom lyrics count as "cover cache" and are excluded by request this round
+- Full Node regression suite: `864/864` passing
+
+<details>
+<summary>v1.7.29 — Sync indicator moved below the search box, colours follow theme plugins</summary>
 
 - The music-folder auto-sync indicator ("已同步 xx 首歌曲" / "synced xx tracks") moved from the bottom-right corner to **below the search box**: with nothing else under the search box it sits directly beneath it, and as soon as search results appear it slides below the result list instead of covering it — no existing layout is pushed around
 - The indicator now **follows theme plugins**: background, border, shadow and text all read theme tokens first (the same family as the search box), falling back to the player's own glass material when no theme is installed, so it looks like the same material as the adjacent search box. Text stays readable on light themes; only the small accent dot keeps a semantic colour
@@ -89,6 +104,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - No new UI elements; `public/index.html` was not touched
 - Fixed a library-pruning defect that could leave deleted tracks in the library forever: a full scan drops rows it did not see this pass, but "this pass" was marked with a millisecond timestamp, so two scans landing in the same clock tick made stale rows look like they had been seen. The per-root scan stamp is now strictly increasing
 - Full Node regression suite: `846/846` passing
+
+</details>
 
 <details>
 <summary>v1.7.28 — Gapless playback and a 0~10 second crossfade</summary>
