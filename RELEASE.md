@@ -1,5 +1,31 @@
 ﻿# 发布流程
 
+## v1.8.2 多格式歌词 KRC / QRC / TTML：分流顺序就是语义
+- 正式发布版本从 `1.8.1` 提升为 `1.8.2`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:591`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` + `package.json` 版本，**漏一处就会红**。
+- 用户原话：「在最新版的基础上继续更新目前歌词： 有显示即可 升级： 多格式歌词 支持： LRC KRC QRC TTML等」。
+- **「有显示即可」被当成明确的范围界定，不是随口一句。** 三种新格式解析进播放器原有的 `{t, duration, text, words, charCount, source}` 歌词行就算完成，不为它们做任何新界面 —— 逐字高亮、桌面歌词窗口、双行歌词、翻译自动识别全部沿用现成实现。合本仓「能不动 UI 就不动 UI」。LRC 早已支持，本轮真正新增的是 KRC / QRC / TTML。
+- **`parseTimedLyricText` 的分流顺序本身就是语义，不是随手排的：** TTML 标签 → QRC XML 容器 → LRC → **KRC → QRC** → YRC → WebVTT → ASS → SRT。前两步认标记语言，所以 TTML 正文里的方括号不会被 LRC 的时间轴正则抢走。
+- **最关键的一条：KRC 与 QRC 的嗅探绝对不能排在 `parseYrcText` 之后。** 三种逐字格式的行头长得一模一样（`[起点,时长]`），唯一的区别是词项分隔符 —— KRC 是 `<偏移,时长,0>正文`、QRC 是 `正文(起点,时长)`、YRC 是 `(起点,时长,0)正文`。而 `parseYrcText` 认到行头就收，**找不到自己那种词项也照样吐一个 `yrc-line` 整行**，只把 `(\d+,\d+,\d+)` 剥掉。所以排在它后面的表现不是报错，而是「歌词显示出来了、但没有逐字，正文里还夹着 `<0,400,0>` 这种标记」—— 一个只能靠肉眼发现的静默降级。第一版就是把两个嗅探写在 YRC 之后，靠去读 `parseYrcText` 的回退分支才发现；测试里已经钉了一条专门的顺序断言（`'KRC 必须排在 YRC 之前，否则会被当成无逐字的整行'`）。
+- **教训一般化：往「多个解析器按顺序试、谁返回非空算谁的」这种分流里加新成员时，先去读排在前面那些解析器的兜底分支，而不是只读它们的正例。** 排前面的有多宽容，决定了排后面的还有没有机会被叫到。
+- **分流认格式自身特征，不认后缀名。** 用户手里的歌词文件后缀经常和内容不符（下载工具乱改、手动改名）。TTML 认 `<tt[\s>]…<p[\s>]`、QRC 容器认 `LyricContent=` 属性、KRC 加密二进制认 `krc1` 魔数。附带好处是改过后缀的加密 KRC 也读得出来，而且四处后缀清单只管「这个文件要不要当歌词看」，不参与选解析器。
+- **KRC 明文与 `krc1` 加密二进制走同一条入口。** 头 4 字节是 `krc1`，其后整段按格式公开的 16 字节常量循环异或（源码注释里写明了**这是公开的格式常量、不是凭据**，免得以后被当硬编码密钥清掉），还原出来是 deflate 流：`0x78` 开头先试 `'deflate'`、否则先试 `'deflate-raw'`，两种都试一遍。解压用 `DecompressionStream` + `Response` —— 这两个在 Chromium 和 Node 18+ 都是全局对象，所以**没有引入任何新依赖**，同一份代码在渲染层跑、在 `node:vm` 测试里也跑。**解压失败返回空字符串而不是抛异常**：歌词坏了不该把整首歌的播放流程带崩。
+- **KRC 的词项时间是相对行首的偏移，读进来必须加上行起点换成绝对时间**（YRC / QRC 写的是绝对毫秒）。这是三种格式里唯一一处语义差异，看错就是逐字高亮整行往左漂。
+- **QRC 两种载体都收：** `<Lyric_1 LyricType="1" LyricContent="…"/>` 的 XML 容器（属性值里的 `&#10;`、`&amp;` 这类实体要展开）和把正文直接落成文本的裸 body。少数导出工具漏写最后一个词项的时间标记，正文剩一截在标记之外 —— 补成「从上一个词项结束到行尾」，**「宁可时间粗一点也不丢字」是本轮明确定下的取舍**，静默丢字比时间不准严重得多。
+- **`reg.lastIndex` 必须在 `while ((m = reg.exec(s)))` 的循环体里就地取，不能等循环结束后再读。** `exec` 返回 `null` 的那一次会把 `lastIndex` 归零，循环外读到的永远是 `0` —— 上一条那个补尾逻辑第一版没生效就是这个原因，也是本轮唯一一个纯 JS 语义坑。
+- **TTML 的词项 span 用负向前查只匹配最内层**（`<span\b([^>]*)>((?:(?!<span\b)[\s\S])*?)<\/span\s*>`），否则外层那个包整行的 span 会把正文再吃一遍、行文本直接翻倍（测试里有一例嵌套 span 钉着）。`ttm:role="x-translation"` / `x-roman"` 的译文与罗马音不进正文，**剔的时候要连它在 `plainBody` 里的那一段一起去掉**，否则整行回退路径又把译文捡回来。时间既认 `hh:mm:ss.fff` / `mm:ss.fff` 时钟，也认 `12.5s` / `500ms` / `1.5m` / `1h` 偏移量；帧和 tick 没有帧率信息，按无效处理。只写了 `begin` 的词项按下一个词项的开始收尾，最后一个退到整行的 `end`。
+- **整段 TTML 用扫描而不是 `DOMParser`**，因为解析逻辑要能在没有 DOM 的 `node:vm` 切片里跑 —— 本仓的测试全靠切生产源码进 vm，用 DOM API 等于这段代码没法单测。
+- **`finalizeLyricLineDurations` 的第二个参数决定「格式明确写出来的时长」保不保得住。** 传 `true` 才跳过 `[0.45, 12]` 那道 LRC 时代的钳制。KRC / QRC 的行头时长是格式写死的，和字幕 cue 同等对待，所以两个都传 `true`；LRC / YRC 的时长是从下一行推断出来的，继续走钳制。测试里用一条 20 秒的行钉死这件事。
+- **读文件从「顺手返回字符串」拆成「先拿字节、再决定怎么解码」，这是能加二进制格式的前提。** 原来的 `readLocalTextFile` 三条读取通道（`file.arrayBuffer` / 桌面 `readLocalFileRange` / `FileReader`）都直接吐文本；抽出 `readLocalTextFileBytes` 之后，歌词走 `readLocalLyricText`（字节 → 认魔数 → 必要时解密 → 解码），其它调用方行为一字不变，既有内存测试断言的零拷贝性质也保住（字节视图直通 `decodeLocalTextBuffer`）。
+- **这一改会挪动「按锚点切源码」的既有测试的边界，两处都是改完跑测试才红出来的：** `tests/local-file-range-memory.test.js` 的切片起点要跟着改成 `'async function readLocalTextFileBytes('`（旧边界会把新函数留在切片外、`ReferenceError`），`tests/local-lyric-cache-residency.test.js` 里的桩函数名要从 `readLocalTextFile` 改成 `readLocalLyricText`。**凡是重命名或拆分被 vm 切片覆盖的函数，先 grep 一遍 tests 里的锚点字符串。**
+- **`.krc` / `.qrc` / `.ttml` 必须同时进四处清单，少一处是「某条路径下歌词读不到」而不是报错：** `public/app.js` 的 `LOCAL_LYRIC_FILE_RE`、`desktop/main.js` 的 `LOCAL_LIBRARY_EXTS` + `LOCAL_LIBRARY_MIME`、`server.js` 的 `LOCAL_FILE_MIME`、`public/index.html` 的两个导入 `accept`（单文件与文件夹各一个）。新测试直接遍历后缀数组去断言这四处，以后加第十种格式漏一处就会红。**`.krc` 的 MIME 必须是 `application/octet-stream` 且不挂 charset** —— 加密二进制被当文本走一遍解码就废了。
+- 界面一行未动：`public/index.html` 只有两个 `accept` 属性各多三个后缀（`:888` / `:889`），**`public/app.css` 没有改动**。
+- 已知边界：**加密的 QRC 网络负载（三重 DES + zlib）本轮不解密** —— 落到磁盘的 `.qrc` 通常已经是明文 XML 或裸 body，这两种都能直接读；同名多份歌词文件（`歌.lrc` 与 `歌.qrc` 并存）仍按文件枚举顺序取第一个，**没有引入按后缀排优先级的规则**，那会改掉现有 `.lrc` / `.txt` 的既有行为、超出本轮范围。
+- 验证：全量 Node 回归 `871/871` 通过（`main` 基线 `864`），新增 `tests/multi-format-lyrics.test.js` 7 例，全部用 `node:vm` 跑生产源码切片；其中 KRC 加密二进制那一例用 `node:zlib` 反向打包出真实的 `krc1` 文件（zlib 头与 raw deflate 两种）再走生产解码链往返，并单独钉了「损坏数据返回空串不抛异常」。`node --check` 过了 `public/app.js`、`desktop/main.js`、`server.js`，两个 JSON 可解析。
+- **仍未肉眼验证的是新格式自己那条链：** 三种真实歌词文件在窗口里的逐字高亮、桌面歌词窗口与双行布局下的表现，以及真实加密 KRC 文件的读取，本轮都没有在本机 Electron 里看过；结论全部来自源码逐条断言。
+<!--RELEASE_V182_ASSETS-->
+- 遗留未修（自 `v1.7.26` 记到现在）：`release.yml` 的 `Generate SHA256 checksums` 用 pwsh `Out-File -Encoding utf8` 写清单，行尾仍是 **CRLF**，所以在 Linux/Git Bash 下校验必须先 `tr -d '\r'`，直接 `sha256sum -c` 会报格式错。改法是 `[IO.File]::WriteAllText($path, ($lines -join "`n") + "`n")`。
+- **本轮另有一条独立勘误已先行提交（`78eb3c6`）：** 对着旧 tag `v1.7.27` 重新派发过一次 `Build and Release`，`release.yml` checkout 的是传入 tag 而不是 `main`，版本闸因此放行、四个资产被重新构建并 `--clobber` 覆盖。**`Build and Release` 只许对着刚打出来的新 tag 派发**，详见 v1.7.27 小节的勘误段。
+
 ## v1.8.1 整机备份 mineradio.backup：身份存 {folder, rel}，换机重算
 - 正式发布版本从 `1.7.29` 提升为 `1.8.1`（**中间的 `1.7.30` 与 `1.8.0` 都没有发布过安装包**：`1.7.30` 是本轮功能开发期间的内部续版号，用户在发布时点名要 `1.8.1`，于是五处钉点一次性改到 `1.8.1`，两个空号不打 tag、不建 Release）；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:591`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` + `package.json` 版本，**漏一处就会红**。
 - 用户原话：「再最新版的基础上继续更新增加：导出：`mineradio.backup` 包含：`{ version:2, database: { songs, playlists, favorites, history }, config: { theme, eq, player }, paths: { musicFolders } }` 默认不备份：❌ 音频 ❌ 大封面缓存 ❌ 临时文件 然后：新电脑导入。」

@@ -10,7 +10,7 @@
 - 支持单独导入本地音乐文件。
 - 支持音乐文件夹自动监控：新增、删除、改标签、换封面自动同步，不必重启。
 - 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) 播放。
-- 支持同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` 歌词。
+- 支持同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词。
 - 支持 MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 内嵌歌词标签，包括带时间轴的 LRC 歌词。
 - 支持同目录封面图片和音频内嵌封面。
 - 移除本地节奏分析环节。
@@ -41,7 +41,8 @@
 - **DSD (.dsf)** - DSD Stream File 高解析音频
 
 ### 📝 歌词功能
-- ✅ 同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` 歌词文件
+- ✅ 同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词文件
+- ✅ 逐字歌词：YRC（网易云）/ KRC（酷狗，含 `krc1` 加密二进制）/ QRC（QQ 音乐，含 XML 容器）/ TTML（Apple Music 一族）
 - ✅ MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 内嵌歌词标签
 - ✅ 带时间轴的 LRC 格式
 - ✅ 歌词翻译自动识别和显示
@@ -107,7 +108,7 @@ npm run build:win
    - 支持拖拽调整播放顺序
 
 3. **查看歌词**
-   - 歌词文件需与音乐文件同名（`.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc`）
+   - 歌词文件需与音乐文件同名（`.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml`）
    - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 文件可使用内嵌歌词标签
    - 开启桌面歌词窗口显示
 
@@ -142,7 +143,21 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
-### 最新版本 v1.8.1 (2026-09-03)
+### 最新版本 v1.8.2 (2026-09-03)
+
+- 歌词支持从 LRC / YRC / SRT / VTT / ASS 扩到**多格式逐字歌词**：新收 **KRC**（酷狗）、**QRC**（QQ 音乐）、**TTML**（Apple Music 一族），三种都直接进原来那套歌词行结构，逐字高亮、桌面歌词、双行、翻译全部照旧
+- **KRC** 明文与 `krc1` **加密二进制**都能读：加密文件按格式常量异或还原后解 deflate，用浏览器与 Node 都自带的 `DecompressionStream`，没有引入任何新依赖。词项时间是相对行首的偏移，读进来会加上行起点换成绝对时间
+- **QRC** 两种载体都收：`<Lyric_1 LyricType="1" LyricContent="…"/>` 的 XML 容器（会展开 `&#10;` 这类实体）和把正文直接落成文本的裸 body。少数导出工具漏写最后一个词项的时间标记时，剩下的正文按行尾补上，宁可时间粗一点也不丢字
+- **TTML** 取 `<p begin= end=>` 当行、最内层 `<span begin= end=>` 当词项，嵌套的整行 span 不会把正文吃两遍；`ttm:role="x-translation"` / `x-roman"` 的译文与罗马音不进正文；时间既认 `hh:mm:ss.fff` 时钟也认 `12.5s` / `500ms` 偏移量
+- **分流靠格式自身特征，不靠后缀名**：TTML 与 QRC 容器认标签，正文里的方括号不会被误当成 LRC 时间轴；KRC / QRC / YRC 的行头都是 `[起点,时长]`，只能靠词项分隔符区分（`<偏移,时长,0>正文` / `正文(起点,时长)` / `(起点,时长,0)正文`），KRC 与 QRC 必须排在 YRC 之前，否则会被当成没有逐字信息的整行吞掉
+- 行头写明的时长按明确值走，不再被旧 LRC 那条 12 秒上限截断
+- 后缀清单四处同步补上 `.krc` / `.qrc` / `.ttml`：前端歌词匹配、桌面曲库扫描与 MIME、本地文件代理 MIME、两个导入 `accept`。`.krc` 走 `application/octet-stream`，避免加密二进制在解码前被当文本处理坏
+- **界面一行未动**，`public/index.html` 只有两个 `accept` 属性各多三个后缀，`public/app.css` 没有改动
+- 已知边界：**加密的 QRC 网络负载（三重 DES + zlib）本轮不解密**，落到磁盘的 `.qrc` 通常已经是明文 XML 或裸文本，那两种都能直接读
+- 全量 Node 回归 `871/871` 通过（新增 `tests/multi-format-lyrics.test.js` 7 例）
+
+<details>
+<summary>v1.8.1 整机备份：导出 mineradio.backup，换电脑一键搬家</summary>
 
 - 设置面板「高级」页新增**「备份」折叠区**，两个按钮：导出、导入。导出会存下一个 `mineradio.backup` 文件，导入会读回来覆盖本机数据
 - **备份里装的是你攒下来的东西**：曲库索引（路径、时长、格式、专辑与艺术家、入库时间）、全部歌单、收藏、听歌历史与播放统计，加上主题、歌词布局、音效链与音效档案、以及音量 / 音质 / 无缝播放 / 交叉淡入淡出 / 热键 / 自动隐藏这一族 16 项播放器设置，最后是音乐文件夹路径
@@ -154,6 +169,8 @@ npm test
 - 界面只在设置面板里多一个同构折叠区（两行按钮 + 两行说明），`public/app.css` 一行未动
 - 已知边界：每首歌的自定义封面、自定义节拍图与自定义歌词属于「封面缓存」那一类，本轮按要求不进备份
 - 全量 Node 回归 `864/864` 通过
+
+</details>
 
 <details>
 <summary>v1.7.29 「已同步 xx 首歌曲」移到搜索框下面，配色跟着主题插件走</summary>
@@ -225,7 +242,8 @@ npm test
 支持 MP3、MP2、FLAC、M4A、M4B、WAV、OGG、OGA、AAC、Opus、WebM/WebA、AIFF/AIFC、APE、DSD(.dsf) 等格式。
 
 ### 如何添加歌词？
-- 将 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` 歌词文件放在音乐文件同目录，保持文件名一致
+- 将 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词文件放在音乐文件同目录，保持文件名一致
+- 逐字歌词直接认：YRC、KRC（含 `krc1` 加密二进制）、QRC（含 `<Lyric_1 LyricContent="…">` XML 容器）、TTML
 - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 文件可直接使用内嵌歌词标签（如 FLAC/OGG 的 `LYRICS`、MP3 的 `USLT`）
 
 ### 封面图片如何加载？

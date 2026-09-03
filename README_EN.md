@@ -14,7 +14,8 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Smart library categories in their own tab: artist / album / album artist / genre / decade, plus recently added, recently played, most played and never played.
 - Automatic music folder monitoring: new files are indexed, deleted files are pruned, tag and cover edits refresh on their own, no restart required.
 - Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) playback.
-- Support for `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` lyrics files with matching names.
+- Support for `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` lyrics files with matching names.
+- Word-by-word lyrics from YRC, KRC (including `krc1` encrypted binaries), QRC (including the XML container) and TTML.
 - Support for MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags, including timestamped LRC lyrics.
 - Support for automatic lyrics translation recognition and display.
 - Support for cover images in the same directory and embedded audio covers.
@@ -56,7 +57,8 @@ Build artifacts are located in `dist/`.
 - ✅ DSD (.dsf, DSD Stream File)
 
 ### Lyrics Features
-- Matching LRC/TXT/SRT/WebVTT/ASS/YRC lyrics files
+- Matching LRC/TXT/SRT/WebVTT/ASS/YRC/KRC/QRC/TTML lyrics files
+- Word-by-word lyrics: YRC (NetEase), KRC (Kugou, plaintext and `krc1` encrypted binary), QRC (QQ Music, XML container and bare body), TTML (the Apple Music family)
 - Matching JPG/JPEG/JPE/JFIF/PNG/WebP/AVIF/GIF/BMP/SVG cover files
 - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags
 - Automatic lyrics translation recognition
@@ -82,7 +84,21 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.1 (2026-09-03)
+### Latest release v1.8.2 (2026-09-03)
+
+- Lyrics support grows from LRC / YRC / SRT / VTT / ASS into **multi-format word-by-word lyrics**: **KRC** (Kugou), **QRC** (QQ Music) and **TTML** (the Apple Music family) are now read directly into the existing lyric-line structure, so word highlighting, desktop lyrics, dual-line layout and translations all keep working unchanged
+- **KRC** is read both as plaintext and as a `krc1` **encrypted binary**: the encrypted form is XOR-restored with the format's published constant and then inflated using `DecompressionStream`, which both Chromium and Node ship — no new dependency. Word times are offsets relative to the line start and are converted to absolute time on read
+- **QRC** accepts both carriers: the `<Lyric_1 LyricType="1" LyricContent="…"/>` XML container (entities such as `&#10;` are expanded) and a bare text body. When an exporter omits the timing tag on the last word, the remaining text is carried to the end of the line — coarse timing beats losing words
+- **TTML** takes `<p begin= end=>` as the line and the innermost `<span begin= end=>` as words, so a wrapping full-line span never duplicates the text; `ttm:role="x-translation"` / `x-roman` spans stay out of the main text; times accept both `hh:mm:ss.fff` clocks and `12.5s` / `500ms` offsets
+- **Routing is driven by format features, not file extensions**: TTML and the QRC container are recognised by their tags, so square brackets in the text are never mistaken for LRC timestamps. KRC / QRC / YRC all share the `[start,duration]` line head and can only be told apart by their word delimiters (`<offset,dur,0>text` / `text(start,dur)` / `(start,dur,0)text`), so KRC and QRC must be tried before YRC — otherwise YRC swallows them as lines with no word timing
+- A duration written in the line head is now honoured as-is instead of being clipped by the old LRC 12-second ceiling
+- `.krc` / `.qrc` / `.ttml` were added to all four extension lists: front-end lyric matching, desktop library scanning and MIME, the local-file proxy MIME, and both import `accept` attributes. `.krc` is served as `application/octet-stream` so an encrypted binary is not mangled as text before decoding
+- **No UI change**: `public/index.html` only gained three extensions in each of two `accept` attributes, and `public/app.css` was not touched
+- Known limits: **encrypted QRC network payloads (triple-DES + zlib) are not decrypted this round.** A `.qrc` on disk is usually already plaintext XML or a bare body, and both of those read directly
+- Full Node regression suite: `871/871` passing (new `tests/multi-format-lyrics.test.js`, 7 cases)
+
+<details>
+<summary>v1.8.1 — Whole-machine backup: export mineradio.backup, move to a new computer in one go</summary>
 
 - New **"backup" section** on the settings panel's "Advanced" page, with two buttons: export and import. Export writes a `mineradio.backup` file; import reads it back and overwrites the local data
 - **The backup holds what you built up**: the library index (paths, duration, format, album and artist, date added), every playlist, favourites, listening history and play statistics, plus the theme, lyrics layout, effect chain and effect archives, the 16 player settings covering volume / quality / gapless / crossfade / hotkeys / auto-hide, and the music folder paths
@@ -94,6 +110,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - The only UI addition is one collapsible section in the settings panel (two button rows plus two hint rows); `public/app.css` was not touched
 - Known limits: per-track custom covers, custom beat maps and custom lyrics count as "cover cache" and are excluded by request this round
 - Full Node regression suite: `864/864` passing
+
+</details>
 
 <details>
 <summary>v1.7.29 — Sync indicator moved below the search box, colours follow theme plugins</summary>
