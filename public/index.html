@@ -619,6 +619,27 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold" id="fx-backup-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-backup-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>备份</strong><small>换机</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-section-label">整机备份</div>
+      <div class="lyric-color-row">
+        <span>导出备份</span>
+        <strong>mineradio.backup</strong>
+        <button type="button" class="fx-mini-btn ghost" onclick="exportMineradioBackup()" title="把曲库信息、歌单、收藏、听歌历史与全部设置存成 mineradio.backup">导出</button>
+      </div>
+      <div class="lyric-color-row">
+        <span>导入备份</span>
+        <strong>换机恢复</strong>
+        <button type="button" class="fx-mini-btn ghost" onclick="importMineradioBackupFromDialog()" title="读入 mineradio.backup 覆盖本机数据，点两次确认后自动重启">导入</button>
+      </div>
+      <div class="mini-player-collapse-hint">备份只存索引与设置：音频文件、封面缓存和临时文件都不进去，几万首歌也就几 MB。</div>
+      <div class="mini-player-collapse-hint">新电脑导入时会先找备份里的音乐文件夹，找不到就让你重选一个，歌单与收藏按新路径重新挂上。</div>
+    </div>
+  </div>
+
   <div class="fx-advanced" id="fx-advanced">
     <div class="fx-advanced-head" onclick="document.getElementById('fx-advanced').classList.toggle('open')">
       <span>高级参数</span><span class="arrow">▶</span>

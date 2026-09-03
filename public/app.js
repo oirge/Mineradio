@@ -588,7 +588,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.7.29';
+var APP_VERSION = '1.8.1';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -40188,6 +40188,836 @@ function renderPluginList() {
     '</div>';
   }
   box.innerHTML = html;
+}
+/* ---- 整机备份 mineradio.backup ----
+ * 目标是「换电脑接着用」：所以备份里只放文字，且所有歌曲身份都存成
+ * `文件夹序号 + 相对路径`。localKey / pathKey / 引用表键全是绝对路径推导出来的，
+ * 直接搬走在新机器上一条都对不上，必须导入时按新的音乐文件夹重新推导。
+ * 默认不备份：音频文件本身、大封面缓存（IndexedDB mineradio-local-assets-v1 与
+ * custom-covers 的 dataURL）、临时文件（曲库快照 / 索引 / 队列快照 / 续播位置）。 */
+var MINERADIO_BACKUP_VERSION = 2;
+var MINERADIO_BACKUP_FILE_NAME = 'mineradio.backup';
+var MINERADIO_BACKUP_HISTORY_LIMIT = 180;
+var MINERADIO_BACKUP_IMPORT_ARM_MS = 12000;
+/* 会写进 config.player 的键：都是与本机路径无关的播放/界面偏好，原样存 localStorage 文本。
+ * 故意排除：曲库文件夹（进 paths）、曲库快照与索引、队列快照与续播位置（临时文件）、
+ * 歌单与特别喜欢（进 database）、音效链与视觉预设（进 config.eq / config.theme）。 */
+var MINERADIO_BACKUP_PLAYER_KEYS = [
+  VOLUME_STORE_KEY,
+  PLAYBACK_QUALITY_STORE_KEY,
+  DIY_MODE_STORE_KEY,
+  PLAYLIST_PANEL_PIN_STORE_KEY,
+  USER_CAPSULE_AUTO_HIDE_STORE_KEY,
+  FX_FAB_AUTO_HIDE_STORE_KEY,
+  CONTROLS_AUTO_HIDE_STORE_KEY,
+  FREE_CAMERA_STORE_KEY,
+  AUTO_PLAYBACK_STORE_KEY,
+  REPLAY_GAIN_STORE_KEY,
+  GAPLESS_STORE_KEY,
+  HOTKEY_SETTINGS_STORE_KEY,
+  UPDATE_ROUTE_STORE_KEY,
+  VISUAL_GUIDE_SEEN_STORE_KEY,
+  UPLOAD_TIP_STORE_KEY,
+  LOCAL_PLAYBACK_SOURCE_STORE_KEY
+];
+var MINERADIO_BACKUP_PLUGIN_STORE_KEY = 'mineradio-plugins-v1';
+var MINERADIO_BACKUP_PLUGIN_BUILTIN_STORE_KEY = 'mineradio-plugins-builtin-v1';
+var mineradioBackupImportArmedAt = 0;
+var mineradioBackupImportPending = null;
+/**
+ * 判断备份里的路径该用哪种分隔符拼接。Windows 盘符路径必须还原成反斜杠，
+ * 因为 song_key 用的是主进程 path.resolve 的原生分隔符与原始大小写。
+ * @param {string} root 音乐文件夹绝对路径。
+ * @returns {string} 分隔符。
+ */
+function mineradioBackupPathSeparator(root) {
+  var text = String(root || '');
+  if (text.indexOf('\\') >= 0) return '\\';
+  if (/^[a-zA-Z]:$/.test(text) || /^[a-zA-Z]:[\\/]/.test(text)) return '\\';
+  return '/';
+}
+/**
+ * 用音乐文件夹与相对路径还原绝对路径，保持与主进程扫描一致的分隔符风格。
+ * @param {string} root 音乐文件夹绝对路径。
+ * @param {string} rel 备份里的相对路径（始终用 `/`）。
+ * @returns {string} 绝对路径。
+ */
+function mineradioBackupJoinPath(root, rel) {
+  var base = String(root || '').replace(/[\\/]+$/, '');
+  var tail = String(rel || '').replace(/^[\\/]+/, '');
+  if (!base) return tail;
+  if (!tail) return base;
+  var sep = mineradioBackupPathSeparator(base);
+  return base + sep + tail.replace(/\//g, sep);
+}
+/**
+ * 从绝对路径里切出相对音乐文件夹的路径，切不出来就返回空串。
+ * @param {string} root 音乐文件夹绝对路径。
+ * @param {string} absPath 文件绝对路径。
+ * @returns {string} 以 `/` 分隔的相对路径。
+ */
+function mineradioBackupRelPath(root, absPath) {
+  var base = normalizeLocalLibraryPathKey(root).replace(/\/+$/, '');
+  var full = normalizeLocalLibraryPathKey(absPath);
+  if (!base || !full) return '';
+  if (full.indexOf(base + '/') !== 0) return '';
+  var raw = String(absPath || '').replace(/\\/g, '/');
+  return raw.slice(raw.length - (full.length - base.length - 1));
+}
+/**
+ * 把备份里的 `{folder, rel}` 还原成本机的歌曲身份。size / mtime 用备份里的值尽力还原
+ * localKey；即使复制过程改了修改时间，引用表也还能靠 path 通道命中（见 getSpecialLikedSongs）。
+ * @param {object} entry 备份条目。
+ * @param {Array<string>} folders 本机音乐文件夹列表。
+ * @returns {{abs:string, pathKey:string, key:string}|null} 还原后的身份。
+ */
+function mineradioBackupIdentity(entry, folders) {
+  if (!entry) return null;
+  var rel = String(entry.rel || '');
+  if (!rel) return null;
+  var index = Number(entry.folder) || 0;
+  var root = folders && folders[index] ? folders[index] : (folders && folders[0]) || '';
+  if (!root) return null;
+  var abs = mineradioBackupJoinPath(root, rel);
+  if (!abs) return null;
+  return {
+    abs: abs,
+    pathKey: normalizeLocalLibraryPathKey(abs),
+    key: 'local-key:' + abs + ':' + (Number(entry.size) || 0) + ':' + (Number(entry.mtime) || 0)
+  };
+}
+/**
+ * 把一首本地歌曲折成可搬走的 `{folder, rel}`。落在任何已备份文件夹之外就返回 null。
+ * @param {object} song 本地歌曲。
+ * @param {Array<string>} folders 备份里的音乐文件夹列表。
+ * @returns {{folder:number, rel:string}|null} 便携定位。
+ */
+function mineradioBackupLocateSong(song, folders) {
+  var abs = String((song && (song.localFilePathAbsolute || song.localPath)) || '');
+  if (!abs) return null;
+  for (var i = 0; i < folders.length; i++) {
+    var rel = mineradioBackupRelPath(folders[i], abs);
+    if (rel) return { folder: i, rel: rel };
+  }
+  return null;
+}
+/**
+ * 读一个 localStorage 键的原文，不存在返回 null。备份 config.player 用原文，
+ * 免得来回 JSON 解析把未来新增字段吃掉。
+ * @param {string} key 键名。
+ * @returns {string|null} 原文。
+ */
+function mineradioBackupReadRaw(key) {
+  try {
+    var value = localStorage.getItem(key);
+    return value == null ? null : String(value);
+  } catch (e) {
+    return null;
+  }
+}
+/**
+ * 读一个 localStorage 键并解析成 JSON，失败返回 fallback。
+ * @param {string} key 键名。
+ * @param {*} fallback 解析失败时的回退值。
+ * @returns {*} 解析结果。
+ */
+function mineradioBackupReadJson(key, fallback) {
+  var raw = mineradioBackupReadRaw(key);
+  if (raw == null) return fallback;
+  try { return JSON.parse(raw); } catch (e) { return fallback; }
+}
+/**
+ * 收集备份里的音乐文件夹列表。当前实现只维护一个曲库根，数组形式为将来多根留位。
+ * @returns {Array<string>} 音乐文件夹绝对路径列表。
+ */
+function mineradioBackupMusicFolders() {
+  var folders = [];
+  var saved = savedLocalLibraryFolderPath();
+  if (saved) folders.push(String(saved));
+  return folders;
+}
+/**
+ * 用当前内存曲库建一张 `pathKey -> 便携定位` 索引。歌单 / 特别喜欢 / 听歌历史里的
+ * 引用键都能靠它换成大小写正确的相对路径，换机后 song_key 才推得准。
+ * @param {Array<string>} folders 音乐文件夹列表。
+ * @returns {{byPath:object, byKey:object}} 索引。
+ */
+function mineradioBackupBuildLocateIndex(folders) {
+  var byPath = Object.create(null);
+  var byKey = Object.create(null);
+  var songs = localLibrarySongs || [];
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    if (!song || song.type !== 'local') continue;
+    var located = mineradioBackupLocateSong(song, folders);
+    if (!located) continue;
+    var entry = {
+      folder: located.folder,
+      rel: located.rel,
+      size: Number(song.localFileSize) || 0,
+      mtime: Number(song.localFileLastModified) || 0
+    };
+    var pathKey = localLibraryPathKeyFromSong(song);
+    if (pathKey && !byPath[pathKey]) byPath[pathKey] = entry;
+    var refKey = specialLikedSongKey(song);
+    if (refKey && !byKey[refKey]) byKey[refKey] = entry;
+  }
+  return { byPath: byPath, byKey: byKey };
+}
+/**
+ * 把一条引用表记录换成便携形态。命中曲库就存 `{folder, rel}`，
+ * 没命中就原样保留 key / path，宁可留着让新机器自己判定，也不静默丢用户的歌单。
+ * @param {object} ref 引用记录 `{key, path, name, artist}`。
+ * @param {Array<string>} folders 音乐文件夹列表。
+ * @param {{byPath:object, byKey:object}} index 定位索引。
+ * @returns {object} 便携引用。
+ */
+function mineradioBackupPortableRef(ref, folders, index) {
+  var name = String((ref && ref.name) || '');
+  var artist = String((ref && ref.artist) || '');
+  var refPath = String((ref && ref.path) || '');
+  var refKey = String((ref && ref.key) || '');
+  var hit = (refPath && index.byPath[refPath]) || (refKey && index.byKey[refKey]) || null;
+  if (!hit && refPath) {
+    for (var i = 0; i < folders.length && !hit; i++) {
+      var rel = mineradioBackupRelPath(folders[i], refPath);
+      if (rel) hit = { folder: i, rel: rel, size: 0, mtime: 0 };
+    }
+  }
+  if (hit) return { folder: hit.folder, rel: hit.rel, size: hit.size, mtime: hit.mtime, name: name, artist: artist };
+  return { key: refKey, path: refPath, name: name, artist: artist };
+}
+/**
+ * 把听歌统计的键（queueItemKey，前缀 `local:`）换成便携定位。
+ * @param {string} statKey 统计键。
+ * @param {{byPath:object, byKey:object}} index 定位索引。
+ * @returns {object|null} 便携定位。
+ */
+function mineradioBackupPortableStatKey(statKey, index) {
+  var text = String(statKey || '');
+  if (text.indexOf('local:') !== 0) return null;
+  var hit = index.byKey['local-key:' + text.slice(6)];
+  if (!hit) return null;
+  return { folder: hit.folder, rel: hit.rel, size: hit.size, mtime: hit.mtime };
+}
+/**
+ * 收集 database.songs：曲库索引里的可搬走部分 + SQLite 播放统计。
+ * 封面二进制、歌词缓存、指纹与 seen_at 都不进备份，换机后重扫会重新生成。
+ * @param {Array<string>} folders 音乐文件夹列表。
+ * @param {object} stats SQLite 播放统计表（按 song_key）。
+ * @returns {Array<object>} 便携歌曲记录。
+ */
+function mineradioBackupCollectSongs(folders, stats) {
+  var result = [];
+  var songs = localLibrarySongs || [];
+  var addedAt = ensureLocalLibraryAddedAtMap();
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    if (!song || song.type !== 'local') continue;
+    var located = mineradioBackupLocateSong(song, folders);
+    if (!located) continue;
+    var stat = (stats && stats[String(song.localKey || '')]) || null;
+    var pathKey = localLibraryPathKeyFromSong(song);
+    var entry = {
+      folder: located.folder,
+      rel: located.rel,
+      size: Number(song.localFileSize) || 0,
+      mtime: Number(song.localFileLastModified) || 0,
+      name: String(song.name || ''),
+      artist: String(song.artist || ''),
+      album: String(song.album || ''),
+      albumArtist: String(song.albumArtist || ''),
+      genre: String(song.genre || ''),
+      year: String(song.year || ''),
+      trackNumber: String(song.trackNumber || ''),
+      duration: Number(song.duration) || 0,
+      format: String(song.localFormat || ''),
+      bitrateKbps: Number(song.localBitrateKbps) || 0,
+      addedAt: Number(addedAt[pathKey]) || Number(song.localLibraryAddedAt) || 0
+    };
+    if (stat) {
+      entry.plays = Number(stat.plays) || 0;
+      entry.listenMs = Number(stat.listenMs) || 0;
+      entry.completed = Number(stat.completed) || 0;
+      entry.lastPlayedAt = Number(stat.lastPlayedAt) || 0;
+      entry.favorite = !!stat.favorite;
+      entry.favoriteAt = Number(stat.favoriteAt) || 0;
+    }
+    result.push(entry);
+  }
+  return result;
+}
+/**
+ * 收集 database.history：最近播放、单曲画像与歌手画像。
+ * 记录里的 cover 是 blob: / data: 地址，属于大封面缓存，一律剔除。
+ * @param {{byPath:object, byKey:object}} index 定位索引。
+ * @returns {object} 便携听歌历史。
+ */
+function mineradioBackupCollectHistory(index) {
+  var state = ensureListenStatsState();
+  var records = [];
+  var source = Array.isArray(state.history) ? state.history : [];
+  for (var i = 0; i < source.length && records.length < MINERADIO_BACKUP_HISTORY_LIMIT; i++) {
+    var item = source[i];
+    if (!item) continue;
+    var located = mineradioBackupPortableStatKey(item.key, index);
+    var record = {
+      name: String(item.name || ''),
+      artist: String(item.artist || ''),
+      type: String(item.type || ''),
+      source: String(item.source || ''),
+      sourceKey: String(item.sourceKey || ''),
+      playedAt: Number(item.playedAt) || 0,
+      listenMs: Number(item.listenMs) || 0,
+      completed: !!item.completed
+    };
+    if (located) {
+      record.folder = located.folder;
+      record.rel = located.rel;
+      record.size = located.size;
+      record.mtime = located.mtime;
+    } else {
+      record.key = String(item.key || '');
+    }
+    records.push(record);
+  }
+  var songs = [];
+  var statSongs = state.songs || {};
+  for (var key in statSongs) {
+    if (!Object.prototype.hasOwnProperty.call(statSongs, key)) continue;
+    var stat = statSongs[key];
+    if (!stat) continue;
+    var spot = mineradioBackupPortableStatKey(key, index);
+    var songStat = {
+      name: String(stat.name || ''),
+      artist: String(stat.artist || ''),
+      source: String(stat.source || ''),
+      plays: Number(stat.plays) || 0,
+      listenMs: Number(stat.listenMs) || 0,
+      completed: Number(stat.completed) || 0,
+      lastPlayedAt: Number(stat.lastPlayedAt) || 0
+    };
+    if (spot) {
+      songStat.folder = spot.folder;
+      songStat.rel = spot.rel;
+      songStat.size = spot.size;
+      songStat.mtime = spot.mtime;
+    } else {
+      songStat.key = String(key);
+    }
+    songs.push(songStat);
+  }
+  var artists = [];
+  var statArtists = state.artists || {};
+  for (var name in statArtists) {
+    if (!Object.prototype.hasOwnProperty.call(statArtists, name)) continue;
+    var artist = statArtists[name];
+    if (!artist) continue;
+    artists.push({
+      name: String(artist.name || name),
+      plays: Number(artist.plays) || 0,
+      listenMs: Number(artist.listenMs) || 0,
+      lastPlayedAt: Number(artist.lastPlayedAt) || 0
+    });
+  }
+  return { updatedAt: Number(state.updatedAt) || 0, records: records, songs: songs, artists: artists };
+}
+/**
+ * 组装完整的 mineradio.backup 负载。
+ * @returns {Promise<object>} 备份负载。
+ */
+async function collectMineradioBackupPayload() {
+  var folders = mineradioBackupMusicFolders();
+  var index = mineradioBackupBuildLocateIndex(folders);
+  var stats = {};
+  var api = getDesktopWindowApi && getDesktopWindowApi();
+  if (api && typeof api.readLocalLibraryDbStats === 'function') {
+    try {
+      var res = await api.readLocalLibraryDbStats({});
+      if (res && res.ok && res.stats) stats = res.stats;
+    } catch (e) {
+      stats = {};
+    }
+  }
+  var playlists = readLocalPlaylists().map(function(playlist){
+    return {
+      id: String(playlist.id || ''),
+      name: String(playlist.name || ''),
+      createdAt: Number(playlist.createdAt) || 0,
+      updatedAt: Number(playlist.updatedAt) || 0,
+      songRefs: (playlist.songRefs || []).map(function(ref){
+        return mineradioBackupPortableRef(ref, folders, index);
+      })
+    };
+  });
+  var favorites = readSpecialLikedSongRefs().map(function(ref){
+    return mineradioBackupPortableRef(ref, folders, index);
+  });
+  var songs = mineradioBackupCollectSongs(folders, stats);
+  var history = mineradioBackupCollectHistory(index);
+  var player = {};
+  for (var i = 0; i < MINERADIO_BACKUP_PLAYER_KEYS.length; i++) {
+    var key = MINERADIO_BACKUP_PLAYER_KEYS[i];
+    var raw = mineradioBackupReadRaw(key);
+    if (raw != null) player[key] = raw;
+  }
+  var archives = null;
+  try {
+    var record = await readLocalUserStateRecord(LOCAL_USER_STATE_FX_ARCHIVES);
+    if (record && Object.prototype.hasOwnProperty.call(record, 'value')) archives = record.value;
+  } catch (e) {
+    archives = null;
+  }
+  if (archives == null) archives = readUserFxArchives();
+  return {
+    version: MINERADIO_BACKUP_VERSION,
+    meta: {
+      app: 'Mineradio',
+      appVersion: typeof APP_VERSION === 'string' ? APP_VERSION : '',
+      exportedAt: Date.now(),
+      counts: {
+        songs: songs.length,
+        playlists: playlists.length,
+        favorites: favorites.length,
+        history: history.records.length
+      }
+    },
+    database: { songs: songs, playlists: playlists, favorites: favorites, history: history },
+    config: {
+      theme: {
+        plugins: mineradioBackupReadJson(MINERADIO_BACKUP_PLUGIN_STORE_KEY, []),
+        builtin: mineradioBackupReadJson(MINERADIO_BACKUP_PLUGIN_BUILTIN_STORE_KEY, null),
+        lyricLayout: mineradioBackupReadJson(LYRIC_LAYOUT_STORE_KEY, null)
+      },
+      eq: {
+        audioChain: mineradioBackupReadJson(AUDIO_CHAIN_STORE_KEY, null),
+        archives: archives
+      },
+      player: player
+    },
+    paths: { musicFolders: folders }
+  };
+}
+/**
+ * 导出 `mineradio.backup`。桌面端走独立的 .backup 保存对话框，浏览器端回落 Blob 下载。
+ * @returns {Promise<void>}
+ */
+async function exportMineradioBackup() {
+  var payload = null;
+  try {
+    payload = await collectMineradioBackupPayload();
+  } catch (e) {
+    console.warn('[MineradioBackupExport]', e);
+    showToast('备份导出失败');
+    return;
+  }
+  var text = JSON.stringify(payload, null, 2);
+  var counts = payload.meta.counts;
+  var summary = counts.songs + ' 首 / ' + counts.playlists + ' 歌单 / ' + counts.favorites + ' 收藏';
+  var api = getDesktopWindowApi && getDesktopWindowApi();
+  if (api && typeof api.exportBackupFile === 'function') {
+    try {
+      var res = await api.exportBackupFile({ defaultName: MINERADIO_BACKUP_FILE_NAME, text: text });
+      if (res && res.ok) showToast('备份已导出：' + summary);
+      else if (!res || !res.canceled) showToast('备份导出失败');
+    } catch (e2) {
+      showToast('备份导出失败');
+    }
+    return;
+  }
+  var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = MINERADIO_BACKUP_FILE_NAME;
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  showToast('备份已导出：' + summary);
+}
+/**
+ * 解析并校验备份文本。只认 version 2 的四段结构，缺段按空处理，格式不对返回 null。
+ * @param {*} text 备份文件文本。
+ * @returns {object|null} 规范化后的备份负载。
+ */
+function parseMineradioBackupText(text) {
+  var raw = null;
+  try { raw = JSON.parse(String(text || '')); } catch (e) { return null; }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (Number(raw.version) !== MINERADIO_BACKUP_VERSION) return null;
+  var database = raw.database && typeof raw.database === 'object' ? raw.database : {};
+  var config = raw.config && typeof raw.config === 'object' ? raw.config : {};
+  var paths = raw.paths && typeof raw.paths === 'object' ? raw.paths : {};
+  var history = database.history && typeof database.history === 'object' ? database.history : {};
+  var folders = [];
+  var rawFolders = Array.isArray(paths.musicFolders) ? paths.musicFolders : [];
+  for (var i = 0; i < rawFolders.length; i++) {
+    var folder = String(rawFolders[i] || '').trim();
+    if (folder) folders.push(folder);
+  }
+  return {
+    version: MINERADIO_BACKUP_VERSION,
+    meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},
+    database: {
+      songs: Array.isArray(database.songs) ? database.songs : [],
+      playlists: Array.isArray(database.playlists) ? database.playlists : [],
+      favorites: Array.isArray(database.favorites) ? database.favorites : [],
+      history: {
+        updatedAt: Number(history.updatedAt) || 0,
+        records: Array.isArray(history.records) ? history.records : [],
+        songs: Array.isArray(history.songs) ? history.songs : [],
+        artists: Array.isArray(history.artists) ? history.artists : []
+      }
+    },
+    config: {
+      theme: config.theme && typeof config.theme === 'object' ? config.theme : {},
+      eq: config.eq && typeof config.eq === 'object' ? config.eq : {},
+      player: config.player && typeof config.player === 'object' && !Array.isArray(config.player) ? config.player : {}
+    },
+    paths: { musicFolders: folders }
+  };
+}
+/**
+ * 便携记录换算 SQLite 的 song_key。引用表带 `local-key:` 前缀，song_stats 用裸键。
+ * @param {{key:string}} identity mineradioBackupIdentity 结果。
+ * @returns {string} 裸 song_key。
+ */
+function mineradioBackupSongKeyFromIdentity(identity) {
+  var key = String((identity && identity.key) || '');
+  return key.indexOf('local-key:') === 0 ? key.slice(10) : key;
+}
+/**
+ * 把便携引用还原成本机引用表记录。带 `{folder, rel}` 的按新根重算键与路径，
+ * 只剩旧键的原样放回：路径通道还能在新机器上按小写全路径兜底命中。
+ * @param {object} ref 便携引用。
+ * @param {Array<string>} folders 本机音乐文件夹列表。
+ * @returns {object|null} 引用表记录。
+ */
+function mineradioBackupRestoreRef(ref, folders) {
+  if (!ref || typeof ref !== 'object') return null;
+  var name = String(ref.name || '');
+  var artist = String(ref.artist || '');
+  var identity = mineradioBackupIdentity(ref, folders);
+  if (identity) {
+    return {
+      key: identity.key,
+      path: normalizeLocalLibraryPathKey(identity.abs),
+      name: name,
+      artist: artist
+    };
+  }
+  var key = String(ref.key || '').trim();
+  var path = normalizeLocalLibraryPathKey(ref.path || '');
+  if (!key && !path) return null;
+  return { key: key, path: path, name: name, artist: artist };
+}
+/**
+ * 定位导入时该用哪个音乐文件夹。备份里的路径还在就直接用；不在（典型的新电脑）
+ * 就让用户重新挑一个，所有相对路径都会挂到新根上。
+ * @param {Array<string>} list 备份里的文件夹列表。
+ * @param {object|null} api 桌面壳接口。
+ * @returns {Promise<Array<string>|null>} 本机文件夹列表，用户取消返回 null。
+ */
+async function mineradioBackupResolveFolders(list, api) {
+  var folders = Array.isArray(list) ? list.slice() : [];
+  if (!folders.length) return folders;
+  if (!api || typeof api.refreshLocalMusicFiles !== 'function') return folders;
+  var probe = null;
+  try { probe = await api.refreshLocalMusicFiles(folders[0], []); } catch (e) { probe = null; }
+  if (probe && probe.ok && probe.folderPath) {
+    folders[0] = String(probe.folderPath);
+    return folders;
+  }
+  if (typeof api.chooseLocalMusicFolder !== 'function') return folders;
+  showToast('备份里的音乐文件夹不在这台电脑上，请重新选择');
+  var picked = null;
+  try { picked = await api.chooseLocalMusicFolder(); } catch (e) { picked = null; }
+  if (!picked || !picked.ok || !picked.folderPath) return null;
+  folders[0] = String(picked.folderPath);
+  return folders;
+}
+/**
+ * 把备份负载写回本机各层存储，然后重启。不做热重放：曲库扫描、引用解析、
+ * 音效链重建都在启动流程里，重启一次比逐个子系统热更新可靠得多。
+ * @param {object} payload parseMineradioBackupText 结果。
+ * @returns {Promise<boolean>} 是否已提交导入。
+ */
+async function applyMineradioBackup(payload) {
+  var api = getDesktopWindowApi && getDesktopWindowApi();
+  var folders = await mineradioBackupResolveFolders(payload.paths.musicFolders, api);
+  if (!folders) {
+    showToast('已取消导入');
+    return false;
+  }
+  var i = 0;
+  // config.player：只认白名单键，备份文件塞不进任意 localStorage 键。
+  var player = payload.config.player || {};
+  for (i = 0; i < MINERADIO_BACKUP_PLAYER_KEYS.length; i++) {
+    var playerKey = MINERADIO_BACKUP_PLAYER_KEYS[i];
+    if (!Object.prototype.hasOwnProperty.call(player, playerKey)) continue;
+    if (player[playerKey] == null) continue;
+    setPersistentLocalStorageItem(playerKey, String(player[playerKey]));
+  }
+  var theme = payload.config.theme || {};
+  if (Array.isArray(theme.plugins)) setPersistentLocalStorageItem(MINERADIO_BACKUP_PLUGIN_STORE_KEY, JSON.stringify(theme.plugins));
+  if (theme.builtin != null) setPersistentLocalStorageItem(MINERADIO_BACKUP_PLUGIN_BUILTIN_STORE_KEY, JSON.stringify(theme.builtin));
+  if (theme.lyricLayout != null) setPersistentLocalStorageItem(LYRIC_LAYOUT_STORE_KEY, JSON.stringify(theme.lyricLayout));
+  var eq = payload.config.eq || {};
+  if (eq.audioChain != null) setPersistentLocalStorageItem(AUDIO_CHAIN_STORE_KEY, JSON.stringify(eq.audioChain));
+  if (eq.archives != null) {
+    try {
+      await writeLocalUserStateRecord(LOCAL_USER_STATE_FX_ARCHIVES, normalizeUserFxArchives(eq.archives));
+      try { localStorage.removeItem(USER_FX_ARCHIVE_STORE_KEY); } catch (e) {}
+    } catch (e) {}
+  }
+  // 队列快照 / 续播位置 / 曲库快照都是没进备份的临时文件，换机后指向的是旧路径，直接抹掉。
+  try {
+    localStorage.removeItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY);
+    localStorage.removeItem(LOCAL_LIBRARY_INDEX_STORE_KEY);
+  } catch (e) {}
+  removePersistentLocalStorageItem(QUEUE_SNAPSHOT_STORE_KEY);
+  removePersistentLocalStorageItem(PLAYBACK_SESSION_STORE_KEY);
+  removePersistentLocalStorageItem(SONG_RESUME_STORE_KEY);
+  if (folders[0]) saveLocalLibraryFolderPath(folders[0]);
+  var playlists = payload.database.playlists.map(function(playlist){
+    var refs = Array.isArray(playlist && playlist.songRefs) ? playlist.songRefs : [];
+    var restored = [];
+    for (var r = 0; r < refs.length; r++) {
+      var ref = mineradioBackupRestoreRef(refs[r], folders);
+      if (ref) restored.push(ref);
+    }
+    return {
+      id: String((playlist && playlist.id) || ''),
+      name: String((playlist && playlist.name) || ''),
+      createdAt: Number(playlist && playlist.createdAt) || 0,
+      updatedAt: Number(playlist && playlist.updatedAt) || 0,
+      songRefs: restored
+    };
+  });
+  writeLocalPlaylists(playlists);
+  var favorites = [];
+  for (i = 0; i < payload.database.favorites.length; i++) {
+    var favorite = mineradioBackupRestoreRef(payload.database.favorites[i], folders);
+    if (favorite && favorite.key) favorites.push(favorite);
+  }
+  writeSpecialLikedSongRefs(favorites);
+  // database.songs：入库时间回填到 pathKey 映射，播放次数 / 收藏交给 SQLite。
+  var addedAtMap = ensureLocalLibraryAddedAtMap();
+  var statTasks = [];
+  var songs = payload.database.songs;
+  for (i = 0; i < songs.length; i++) {
+    var entry = songs[i];
+    var identity = mineradioBackupIdentity(entry, folders);
+    if (!identity) continue;
+    var addedAt = Number(entry.addedAt) || 0;
+    if (addedAt && identity.pathKey) addedAtMap[identity.pathKey] = addedAt;
+    var plays = Math.max(0, Number(entry.plays) || 0);
+    var listenMs = Math.max(0, Number(entry.listenMs) || 0);
+    var completed = Math.max(0, Number(entry.completed) || 0);
+    var lastPlayedAt = Math.max(0, Number(entry.lastPlayedAt) || 0);
+    if (!plays && !listenMs && !completed && !lastPlayedAt && !entry.favorite) continue;
+    statTasks.push({
+      key: mineradioBackupSongKeyFromIdentity(identity),
+      pathKey: identity.pathKey,
+      plays: plays,
+      listenMs: listenMs,
+      completed: completed,
+      lastPlayedAt: lastPlayedAt,
+      favorite: !!entry.favorite,
+      name: String(entry.name || ''),
+      artist: String(entry.artist || '')
+    });
+  }
+  saveLocalLibraryAddedAtMap();
+  // song_stats 是累加语义，新机器上是空表，所以累加等于赋值；同机重复导入才会翻倍，
+  // 这也是导入前要求二次确认的原因。lastPlayedAt 传 0 会被主进程当成「现在」，
+  // 所以清过最近播放的行统一垫 1ms，保住播放次数又不冒充刚听过。
+  var restoredStats = 0;
+  if (api && typeof api.bumpLocalLibraryDbPlayStat === 'function') {
+    for (i = 0; i < statTasks.length; i++) {
+      var task = statTasks[i];
+      try {
+        if (task.plays || task.listenMs || task.completed || task.lastPlayedAt) {
+          await api.bumpLocalLibraryDbPlayStat({
+            key: task.key,
+            pathKey: task.pathKey,
+            plays: task.plays,
+            listenMs: task.listenMs,
+            completed: task.completed,
+            lastPlayedAt: task.lastPlayedAt || 1,
+            name: task.name,
+            artist: task.artist
+          });
+        }
+        if (task.favorite && typeof api.setLocalLibraryDbFavorite === 'function') {
+          await api.setLocalLibraryDbFavorite({
+            key: task.key,
+            pathKey: task.pathKey,
+            favorite: 1,
+            name: task.name,
+            artist: task.artist
+          });
+        }
+        restoredStats++;
+      } catch (e) {}
+    }
+  }
+  await mineradioBackupRestoreHistory(payload.database.history, folders);
+  flushPersistentUiStateBackup();
+  showToast('备份已导入：' + songs.length + ' 首 / ' + playlists.length + ' 歌单 / ' + favorites.length + ' 收藏 / ' + restoredStats + ' 条统计，正在重启…');
+  setTimeout(function(){
+    try {
+      if (api && typeof api.restartApp === 'function') api.restartApp();
+      else location.reload();
+    } catch (e) {
+      location.reload();
+    }
+  }, 900);
+  return true;
+}
+/**
+ * 便携历史记录换算本机统计键。命中新根就重算，没命中就沿用备份里的旧键。
+ * @param {object} item 便携历史记录。
+ * @param {Array<string>} folders 本机音乐文件夹列表。
+ * @returns {string} 统计键。
+ */
+function mineradioBackupRestoreStatKey(item, folders) {
+  var identity = mineradioBackupIdentity(item, folders);
+  if (identity) return 'local:' + mineradioBackupSongKeyFromIdentity(identity);
+  return String((item && item.key) || '').trim();
+}
+/**
+ * 还原听歌历史到 IndexedDB。cover 是没进备份的大封面缓存，留空让界面回落默认封面。
+ * @param {object} history 备份里的 database.history。
+ * @param {Array<string>} folders 本机音乐文件夹列表。
+ * @returns {Promise<void>}
+ */
+async function mineradioBackupRestoreHistory(history, folders) {
+  var state = createEmptyListenStatsState();
+  state.updatedAt = Number(history && history.updatedAt) || Date.now();
+  var i = 0;
+  var key = '';
+  var records = Array.isArray(history && history.records) ? history.records : [];
+  for (i = 0; i < records.length && state.history.length < MINERADIO_BACKUP_HISTORY_LIMIT; i++) {
+    var item = records[i];
+    if (!item) continue;
+    key = mineradioBackupRestoreStatKey(item, folders);
+    if (!key) continue;
+    state.history.push({
+      key: key,
+      type: String(item.type || 'local'),
+      sourceKey: String(item.sourceKey || ''),
+      name: String(item.name || ''),
+      artist: String(item.artist || ''),
+      cover: '',
+      source: String(item.source || ''),
+      playedAt: Number(item.playedAt) || 0,
+      listenMs: Math.max(0, Number(item.listenMs) || 0),
+      completed: !!item.completed
+    });
+  }
+  var statSongs = Array.isArray(history && history.songs) ? history.songs : [];
+  for (i = 0; i < statSongs.length; i++) {
+    var stat = statSongs[i];
+    if (!stat) continue;
+    key = mineradioBackupRestoreStatKey(stat, folders);
+    if (!key) continue;
+    state.songs[key] = {
+      key: key,
+      name: String(stat.name || ''),
+      artist: String(stat.artist || ''),
+      cover: '',
+      source: String(stat.source || ''),
+      plays: Math.max(0, Number(stat.plays) || 0),
+      listenMs: Math.max(0, Number(stat.listenMs) || 0),
+      completed: Math.max(0, Number(stat.completed) || 0),
+      lastPlayedAt: Math.max(0, Number(stat.lastPlayedAt) || 0)
+    };
+  }
+  var statArtists = Array.isArray(history && history.artists) ? history.artists : [];
+  for (i = 0; i < statArtists.length; i++) {
+    var artist = statArtists[i];
+    if (!artist) continue;
+    var artistName = String(artist.name || '');
+    if (!artistName) continue;
+    state.artists[artistName] = {
+      name: artistName,
+      plays: Math.max(0, Number(artist.plays) || 0),
+      listenMs: Math.max(0, Number(artist.listenMs) || 0),
+      lastPlayedAt: Math.max(0, Number(artist.lastPlayedAt) || 0)
+    };
+  }
+  try {
+    await writeLocalUserStateRecord(LOCAL_USER_STATE_LISTEN_STATS, state);
+    try { localStorage.removeItem(HOME_LISTEN_STATS_KEY); } catch (e) {}
+  } catch (e) {}
+}
+/**
+ * 取备份文本。桌面端走 .backup 专用通道，浏览器端回落 `<input type=file>`。
+ * @returns {Promise<string|null>} 取消返回 null，读失败返回空串。
+ */
+function readMineradioBackupText() {
+  var api = getDesktopWindowApi && getDesktopWindowApi();
+  if (api && typeof api.importBackupFile === 'function') {
+    return api.importBackupFile().then(function(res){
+      if (res && res.ok) return String(res.text || '');
+      if (res && res.canceled) return null;
+      return '';
+    }).catch(function(){ return ''; });
+  }
+  return new Promise(function(resolve){
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.backup,application/json';
+    input.onchange = function(){
+      var file = input.files && input.files[0];
+      if (!file) { resolve(null); return; }
+      var reader = new FileReader();
+      reader.onload = function(e){ resolve(String((e.target && e.target.result) || '')); };
+      reader.onerror = function(){ resolve(''); };
+      reader.readAsText(file, 'utf-8');
+    };
+    input.click();
+  });
+}
+/**
+ * 读文件 → 校验 → 写回本机。
+ * @returns {Promise<void>}
+ */
+async function runMineradioBackupImport() {
+  var text = await readMineradioBackupText();
+  if (text == null) return;
+  if (!text) {
+    showToast('备份文件读取失败');
+    return;
+  }
+  var payload = parseMineradioBackupText(text);
+  if (!payload) {
+    showToast('不是可识别的 mineradio.backup（需要 version ' + MINERADIO_BACKUP_VERSION + '）');
+    return;
+  }
+  await applyMineradioBackup(payload);
+}
+/**
+ * 导入备份入口。第一次点击只武装确认，12 秒内再点一次才真的动手，
+ * 免得误触把本机歌单、收藏和设置整片覆盖掉。
+ * @returns {void}
+ */
+function importMineradioBackupFromDialog() {
+  var now = Date.now();
+  if (mineradioBackupImportPending && (now - mineradioBackupImportPending) < 120000) return;
+  if (!mineradioBackupImportArmedAt || (now - mineradioBackupImportArmedAt) > MINERADIO_BACKUP_IMPORT_ARM_MS) {
+    mineradioBackupImportArmedAt = now;
+    showToast('导入会覆盖本机歌单 / 收藏 / 设置并重启，再点一次「导入备份」确认');
+    return;
+  }
+  mineradioBackupImportArmedAt = 0;
+  mineradioBackupImportPending = now;
+  runMineradioBackupImport().catch(function(e){
+    console.warn('[MineradioBackupImport]', e);
+    showToast('备份导入失败');
+  }).then(function(){
+    mineradioBackupImportPending = null;
+  });
 }
 /**
  * 打开插件管理弹窗。
