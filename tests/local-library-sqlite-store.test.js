@@ -259,6 +259,34 @@ async function testPruneRespectsTruncatedScan() {
 }
 
 /**
+ * 两次扫描落在同一个 `Date.now()` 刻度里时，完整扫描仍然要剔除已删除文件。
+ * 清理靠「seen_at 与本轮时间戳不相等」判定，时间戳撞车会让上一轮留下的行被当成
+ * 「本轮见过」而躲过删除——CI 上真漏过一次（Windows 的 `Date.now()` 粒度可能十几毫秒）。
+ * @returns {Promise<void>}
+ */
+async function testPruneSurvivesFrozenClock() {
+  const realNow = Date.now;
+  Date.now = function () { return 1750000000000; };
+  try {
+    await withStore(async (handle) => {
+      const folderPath = 'D:\\Music';
+      await handle.syncRoot(scanPayload(folderPath, [scanEntry('a.mp3'), scanEntry('b.mp3'), scanEntry('c.mp3')]));
+      const truncated = await handle.syncRoot(scanPayload(folderPath, [scanEntry('a.mp3')], { truncated: true }));
+      assert.equal(truncated.removed, 0);
+
+      const full = await handle.syncRoot(scanPayload(folderPath, [scanEntry('a.mp3'), scanEntry('b.mp3')]));
+      assert.equal(full.removed, 1);
+      const rels = handle.loadRoot(folderPath).files.map((row) => row.rel_path);
+      assert.deepEqual(rels, ['a.mp3', 'b.mp3']);
+      // 时钟不动也要拿到互不相同的扫描代号，否则清理条件失去意义。
+      assert.ok(full.savedAt > truncated.savedAt, '同刻度下本轮时间戳必须抬到高水位之上');
+    });
+  } finally {
+    Date.now = realNow;
+  }
+}
+
+/**
  * 封面以 BLOB 落盘、歌词带上路径键，两类缓存 round-trip 形状不变。
  * @returns {Promise<void>}
  */
@@ -547,6 +575,7 @@ test('指纹一致保留元数据、指纹变化整组清空', testFingerprintRe
 test('索引回写可按文件指纹兜底命中', testIndexFallsBackToFingerprint);
 test('两万首曲库可原样落盘并有序读回', testLargeLibraryRoundTrip);
 test('完整扫描剔除删除文件而截断扫描不剔除', testPruneRespectsTruncatedScan);
+test('两次扫描落在同一时钟刻度时完整扫描仍然剔除删除文件', testPruneSurvivesFrozenClock);
 test('封面 BLOB 与歌词缓存 round-trip 形状不变', testAssetAndLyricRoundTrip);
 test('播放次数累加、最近播放取最大值、收藏可切换', testPlayStatsAndFavorite);
 test('两档清空只归零播放列，收藏和行本身都留着', testClearPlayStats);
