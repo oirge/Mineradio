@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v1.8.6 左下小封面接上歌曲详情
+- 正式发布版本从 `1.8.5` 提升为 `1.8.6`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
+- 用户原话：「你加上一个这个封面可点击进入歌曲详情界面就行了」，指左下角 `#thumb-wrap` 里那张 64px 小封面。改动只有两行：`public/index.html` 的 `#thumb-cover` 加 `onclick="openTrackDetailModal('song')"` 与 `title="歌曲详情"`，`public/app.css` 里 `#thumb-cover` 那条规则加 `cursor:pointer`。
+- **一行 JS 都没新增。** `openTrackDetailModal` 自带 `if (!song) { showToast('先播放或选择一首歌'); return; }`，而且 `#thumb-wrap` 在拿到 `.visible` 之前是 `pointer-events:none`，所以空闲状态下这张封面根本点不到，不需要额外守卫。
+- 中途试过的另一版被用户推翻，已完整还原：原本先把 `#thumb-artist` / `#control-artist` 的 `openTrackDetailModal('artist')` 改成 `'song'`（让上下两行一致），用户回「这个不用改了」，两处现在仍然是歌手详情。**歌名进歌曲详情、歌手行进歌手详情这个分工是设计，不要再顺手改。**
+- 底部控件的 `#control-cover` 没有一起改：它是 `aria-hidden="true"` 的装饰性 `div`，挂点击要连带处理无障碍语义，用户这次只点了左下那张，不扩范围。
+- `#thumb-cover` 规则里那句 `transition:transform .15s ease` 是历史遗留、当前没有任何 `:hover` 规则触发它，本轮**故意没有**补 hover 缩放，`tests/now-playing-detail-click.test.js` 用 `assert.doesNotMatch(appCss, /#thumb-cover:hover/)` 把这个「不加」也钉住了。
+- 验证：全量回归 `916/916` 通过（上一版基线 `912`），新增 `tests/now-playing-detail-click.test.js` 4 例。**四例先在改前源码上对跑过**，封面 `onclick` 与 `cursor:pointer` 两条判红。`public/app.css` 只动了一行（第 573 行加 `cursor:pointer`）；**真实窗口里没有肉眼点过。**
+
 ## v1.8.5 播放统计漏账：结算点、防抖写入、无时长文件、最小化空档
 - 正式发布版本从 `1.8.4` 提升为 `1.8.5`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
 - 用户原话：「修复一下」，指的是歌曲详情里「播放统计」对很多歌一直是空的。查出三个真漏账点加一个连带的持久化漏洞。**45 秒 / 一半进度 / 听完这三条结算门槛是设计，一字未动** —— 跳过的歌不记账，修完之后仍然会有歌显示空态。

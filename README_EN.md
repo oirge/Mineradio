@@ -92,7 +92,15 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.5 (2026-09-04)
+### Latest release v1.8.6 (2026-09-04)
+
+- **The now-playing thumbnail in the bottom-left corner is clickable**: it opens the song details. Previously only the track name beside it responded — the cover itself did nothing
+- The cursor turns into a hand over the cover; the title and artist lines behave exactly as before (title opens song details, the artist line opens artist details)
+- While nothing is playing the whole thumbnail still ignores clicks, unchanged
+- Full Node regression suite: `916/916` passing (new `tests/now-playing-detail-click.test.js`, 4 cases)
+
+<details>
+<summary>v1.8.5 — Play statistics no longer under-count</summary>
 
 - **Closing the window now settles the track you were on**: previously the song playing at exit was never counted, so it could never reach the play statistics
 - **Edits made right before exit are no longer lost**: user state is written 120 ms late, and that write never ran on window close; it is now flushed at unload. Play statistics, custom cover art / lyrics / beat maps and effect presets were all affected
@@ -100,6 +108,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - **Listening while minimised is no longer under-counted**: the timer does not run while the window is minimised and only 4.2 s were credited on return; the whole gap is now credited. Seeking, stalls and pauses still do not count as listening
 - The three accounting gates — finished / 45 s listened / half the track — are unchanged, and there is no UI change
 - Full Node regression suite: `912/912` passing (new `tests/listen-stats-accounting.test.js`, 7 cases)
+
+</details>
 
 <details>
 <summary>v1.8.4 Library maintenance: five checks that spell out what is missing</summary>
