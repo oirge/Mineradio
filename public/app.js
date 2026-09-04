@@ -112,6 +112,7 @@ var localLibraryPlaybackSelection = 'library';
 var CUSTOM_COVER_STORE_KEY = 'mineradio-custom-covers';
 var CUSTOM_LYRIC_STORE_KEY = 'mineradio-custom-lyrics-v1';
 var CUSTOM_LYRIC_PREF_STORE_KEY = 'mineradio-custom-lyric-prefs-v1';
+var LOCAL_LYRIC_PICK_STORE_KEY = 'mineradio-local-lyric-picks-v1';
 var LYRIC_LAYOUT_STORE_KEY = 'mineradio-lyric-layout-v1';
 var VISUAL_PRESET_SCHEMA = 'skull-preset-v2';
 var PLAYBACK_QUALITY_STORE_KEY = 'mineradio-playback-quality-v1';
@@ -241,6 +242,7 @@ var LOCAL_USER_STATE_STORE = 'state';
 var LOCAL_USER_STATE_CUSTOM_COVERS = 'custom-covers';
 var LOCAL_USER_STATE_CUSTOM_LYRICS = 'custom-lyrics';
 var LOCAL_USER_STATE_CUSTOM_LYRIC_PREFS = 'custom-lyric-prefs';
+var LOCAL_USER_STATE_LOCAL_LYRIC_PICKS = 'local-lyric-picks';
 var LOCAL_USER_STATE_LOCAL_BEATMAPS = 'local-beatmaps';
 var LOCAL_USER_STATE_LOCAL_BEAT_PREFS = 'local-beat-prefs';
 var LOCAL_USER_STATE_LISTEN_STATS = 'listen-stats';
@@ -454,6 +456,8 @@ var customLyricMap = {};
 var customLyricMapHydrated = false;
 var customLyricPrefs = {};
 var customLyricPrefsHydrated = false;
+var localLyricPicks = {};
+var localLyricPicksHydrated = false;
 var localBeatMapCache = {};
 var localBeatMapPrefs = {};
 var localBeatMapCacheHydrated = false;
@@ -19310,6 +19314,67 @@ function saveCustomLyricPrefs() {
   ensureCustomLyricPrefs();
   scheduleLocalUserStateWrite(LOCAL_USER_STATE_CUSTOM_LYRIC_PREFS, customLyricPrefs || {}, CUSTOM_LYRIC_PREF_STORE_KEY);
 }
+/**
+ * 读取同名多歌词的手动选择记录。
+ * @returns {object} 歌曲键到歌词文件标识的映射。
+ */
+function readLocalLyricPicks() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_LYRIC_PICK_STORE_KEY) || '{}') || {}; }
+  catch (e) { return {}; }
+}
+/**
+ * 惰性载入同名多歌词选择记录。
+ * @returns {object} 选择记录映射。
+ */
+function ensureLocalLyricPicks() {
+  if (!localLyricPicksHydrated) {
+    localLyricPicks = readLocalLyricPicks();
+    localLyricPicksHydrated = true;
+  }
+  return localLyricPicks;
+}
+/**
+ * 持久化同名多歌词选择记录。
+ * @returns {void}
+ */
+function saveLocalLyricPicks() {
+  ensureLocalLyricPicks();
+  scheduleLocalUserStateWrite(LOCAL_USER_STATE_LOCAL_LYRIC_PICKS, localLyricPicks || {}, LOCAL_LYRIC_PICK_STORE_KEY);
+}
+/**
+ * 生成歌词候选的稳定标识。用相对路径而不是对象引用，重新导入同一文件夹后记录依然对得上。
+ * @param {object} file 歌词文件。
+ * @returns {string} 歌词候选标识。
+ */
+function localLyricPickId(file) {
+  return file ? localFilePath(file).toLowerCase() : '';
+}
+/**
+ * 读取某首歌记住的歌词候选标识。
+ * @param {object} song 本地歌曲。
+ * @returns {string} 歌词候选标识；没有记录时返回空串。
+ */
+function localLyricPickForSong(song) {
+  var key = songCustomLyricKey(song);
+  if (!key) return '';
+  var picks = ensureLocalLyricPicks();
+  return String(picks[key] || '');
+}
+/**
+ * 记住或清除某首歌的同名歌词选择。
+ * @param {object} song 本地歌曲。
+ * @param {string} pickId 歌词候选标识；空串表示恢复自动优先级。
+ * @returns {boolean} 是否写入了记录。
+ */
+function setLocalLyricPickForSong(song, pickId) {
+  var key = songCustomLyricKey(song);
+  if (!key) return false;
+  var picks = ensureLocalLyricPicks();
+  if (pickId) picks[key] = String(pickId);
+  else delete picks[key];
+  saveLocalLyricPicks();
+  return true;
+}
 function songCustomLyricKey(song) {
   return songCustomCoverKey(song);
 }
@@ -19521,6 +19586,95 @@ function setCustomLyricStatus(text, tone) {
   el.classList.toggle('good', tone === 'good');
   el.classList.toggle('fail', tone === 'fail');
 }
+/**
+ * 渲染同名多歌词候选的切换按钮。只有一个候选时整行隐藏，界面保持原样。
+ * @param {object} song 当前歌曲。
+ * @returns {void}
+ */
+function renderLocalLyricPickRow(song) {
+  var row = document.getElementById('local-lyric-pick-row');
+  if (!row) return;
+  var candidates = (song && song.localLyricCandidates) || [];
+  row.textContent = '';
+  if (candidates.length < 2) {
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+  var activeId = localLyricPickId(song.localLyricFile);
+  for (var i = 0; i < candidates.length; i++) {
+    row.appendChild(buildLocalLyricPickButton(song, candidates[i], activeId));
+  }
+}
+/**
+ * 生成单个歌词候选按钮。
+ * @param {object} song 当前歌曲。
+ * @param {object} candidate 候选歌词文件。
+ * @param {string} activeId 当前正在使用的候选标识。
+ * @returns {HTMLElement} 候选按钮。
+ */
+function buildLocalLyricPickButton(song, candidate, activeId) {
+  var btn = document.createElement('button');
+  var pickId = localLyricPickId(candidate);
+  btn.className = pickId && pickId === activeId ? 'modal-btn primary' : 'modal-btn';
+  btn.textContent = candidate.name || '歌词文件';
+  btn.title = (localFilePath(candidate) || candidate.name || '') + ' · ' + (localLyricFileExt(candidate).toUpperCase() || '未知格式');
+  btn.onclick = function(){ useLocalLyricCandidate(song, candidate); };
+  return btn;
+}
+/**
+ * 切换到指定的同名歌词候选：记住选择、清掉旧歌词状态并重新读取。
+ * @param {object} song 当前歌曲。
+ * @param {object} candidate 候选歌词文件。
+ * @returns {void}
+ */
+function useLocalLyricCandidate(song, candidate) {
+  if (!song || !candidate) return;
+  if (song.localLyricFile === candidate) {
+    setCustomLyricStatus('当前用的就是 ' + (candidate.name || '这个歌词文件'), 'good');
+    return;
+  }
+  setLocalLyricPickForSong(song, localLyricPickId(candidate));
+  song.localLyricFile = candidate;
+  song.localLyricFileName = candidate.name || '';
+  song.localLyricText = '';
+  song.localLyricTagName = '';
+  song.localLyricLoaded = false;
+  song.localLyricLightScanned = false;
+  // 换了歌词文件就不能再从 IndexedDB 把上一个文件的歌词读回来，直接标成已水合跳过缓存分支。
+  song.localLyricCacheHydrated = true;
+  song.localLyricResidencyReleased = false;
+  propagateLocalLyricPick(song);
+  renderLocalLyricPickRow(song);
+  setCustomLyricStatus('正在读取 ' + (candidate.name || '所选歌词文件'), '');
+  ensureLocalLyricsForSong(song, { applyCurrent: true, token: trackSwitchToken }).then(function(ok){
+    setCustomLyricStatus(ok ? ('已切换到 ' + (candidate.name || '所选歌词文件')) : '这个歌词文件没读到可用歌词', ok ? 'good' : 'fail');
+    if (ok) showToast('已切换歌词文件：' + (candidate.name || ''));
+    scheduleLocalAssetUiRefresh(song, 'local-lyric-pick');
+  });
+}
+/**
+ * 把新的歌词文件选择同步到同一首歌的其它视图副本，并清掉它们缓存的旧歌词。
+ * @param {object} song 已切换歌词文件的歌曲。
+ * @returns {void}
+ */
+function propagateLocalLyricPick(song) {
+  var lists = [localLibrarySongs, playQueue, playlist];
+  for (var i = 0; i < lists.length; i++) {
+    var list = lists[i] || [];
+    for (var j = 0; j < list.length; j++) {
+      var target = list[j];
+      if (!target || target === song || !target.localKey || target.localKey !== song.localKey) continue;
+      target.localLyricFile = song.localLyricFile;
+      target.localLyricFileName = song.localLyricFileName;
+      target.localLyricText = '';
+      target.localLyricTagName = '';
+      target.localLyricLoaded = false;
+      target.localLyricLightScanned = false;
+      target.localLyricCacheHydrated = true;
+    }
+  }
+}
 function openCustomLyricModal() {
   var song = currentLyricSong();
   if (!song) {
@@ -19535,6 +19689,7 @@ function openCustomLyricModal() {
   if (title) title.textContent = song.name || '当前歌曲';
   if (sub) sub.textContent = (songDisplaySubtitle(song) || '') + (entry ? ' · 已保存自定义歌词' : ' · 可粘贴 LRC 或逐行输入');
   if (input) input.value = entry ? (entry.text || '') : '';
+  renderLocalLyricPickRow(song);
   setCustomLyricStatus(entry ? '已读取本地自定义歌词' : '提示：带 [00:12.00] 时间轴会更精准；纯文本会自动铺开', entry ? 'good' : '');
   openGsapModal(document.getElementById('custom-lyric-modal'));
   setTimeout(function(){ if (input) input.focus(); }, 120);
@@ -23652,17 +23807,46 @@ function ensureLocalLyricsForSong(song, opts) {
   }
   song.localLyricLoading = true;
   var embeddedLyricSource = embeddedLyricSourceLabel(song);
+  /**
+   * 读取内嵌歌词并包成统一结果。
+   * @returns {Promise<object>} 歌词文本与来源标签。
+   */
+  function readEmbeddedLyricResult() {
+    return extractEmbeddedLyricsText(song.localFile, { light: !!opts.background }).then(function(text){
+      return { text: text, source: text ? embeddedLyricSource : '', fromEmbedded: true };
+    });
+  }
+  /**
+   * 外挂歌词文件读空或读失败时回退到内嵌歌词。一个空文件、坏编码或解密失败的
+   * 密文歌词不该把本来能用的内嵌歌词整首挡掉。
+   * @param {string} text 外挂歌词文件内容。
+   * @returns {Promise<object>|object} 歌词文本与来源标签。
+   */
+  function fallbackToEmbeddedLyrics(text) {
+    var fileResult = { text: text, source: song.localLyricFile.name || 'local lyrics file' };
+    if (String(text || '').trim() || !canReadEmbeddedLyrics(song)) return fileResult;
+    return readEmbeddedLyricResult().then(function(embedded){
+      return String(embedded.text || '').trim() ? embedded : fileResult;
+    });
+  }
+  /**
+   * 外挂歌词读取异常时当作空内容，交给内嵌歌词回退。
+   * @returns {string} 空歌词文本。
+   */
+  function readLyricFileFailure() {
+    return '';
+  }
   var lyricPromise = song.localLyricFile
-    ? readLocalLyricText(song.localLyricFile).then(function(text){ return { text: text, source: song.localLyricFile.name || 'local lyrics file' }; })
-    : extractEmbeddedLyricsText(song.localFile, { light: !!opts.background }).then(function(text){ return { text: text, source: text ? embeddedLyricSource : '' }; });
+    ? readLocalLyricText(song.localLyricFile).catch(readLyricFileFailure).then(fallbackToEmbeddedLyrics)
+    : readEmbeddedLyricResult();
   song.localLyricPromise = lyricPromise.then(function(result){
     result = result || {};
     var text = String(result.text || '').trim();
     song.localLyricText = text;
     if (text) song.localLyricResidencyReleased = false;
     if (text) {
-      if (!song.localLyricFile) song.localLyricTagName = result.source || embeddedLyricSource;
-      if (!song.localLyricFile && !song.localLyricFileName) song.localLyricFileName = song.localLyricTagName;
+      if (!song.localLyricFile || result.fromEmbedded) song.localLyricTagName = result.source || embeddedLyricSource;
+      if (!song.localLyricFileName) song.localLyricFileName = song.localLyricTagName;
       song.localLyricLoaded = true;
       song.localLyricLightScanned = false;
     } else if (opts.background && !song.localLyricFile && canReadTruncatableEmbeddedLyrics(song)) {
@@ -25098,8 +25282,55 @@ function withLyricFallback(lines) {
 }
 function lyricTagTimeToSeconds(min, sec, frac) {
   var t = (parseInt(min, 10) || 0) * 60 + (parseInt(sec, 10) || 0);
-  if (frac) t += (parseInt(frac, 10) || 0) / Math.pow(10, Math.min(3, frac.length));
+  if (frac) t += lyricFractionToSeconds(frac);
   return t;
+}
+/**
+ * 小数位转秒。位数按实际长度换算，`[00:01.1234]` 这类四位以上的写法才不会被算成十倍。
+ * @param {string} frac 时间标签里的小数位数字。
+ * @returns {number} 对应的秒数小数部分。
+ */
+function lyricFractionToSeconds(frac) {
+  var digits = String(frac || '');
+  if (!digits) return 0;
+  if (digits.length > 6) digits = digits.slice(0, 6);
+  return (parseInt(digits, 10) || 0) / Math.pow(10, digits.length);
+}
+/**
+ * 解析 LRC 行首时间标签的四个捕获组，一并兼容在野的几种写法：
+ * `[mm:ss]`、`[mm:ss.fff]`、`[mm:ss:cc]`（拿冒号当小数点的老写法）、`[hh:mm:ss.fff]`。
+ * 三段全是冒号时按 `mm:ss:cc` 算 —— 这是 LRC 自己的变体，小时字段只出现在带小数点的四段形式里。
+ * @param {string} g1 第一段。
+ * @param {string} g2 第二段。
+ * @param {string=} g3 第三段（冒号分隔）。
+ * @param {string=} g4 小数点后的小数位。
+ * @returns {number} 秒数。
+ */
+function lyricLineTagToSeconds(g1, g2, g3, g4) {
+  var first = parseInt(g1, 10) || 0;
+  var second = parseInt(g2, 10) || 0;
+  if (g3 === undefined || g3 === null || g3 === '') return first * 60 + second + lyricFractionToSeconds(g4);
+  if (g4 === undefined || g4 === null || g4 === '') return first * 60 + second + lyricFractionToSeconds(g3);
+  return first * 3600 + second * 60 + (parseInt(g3, 10) || 0) + lyricFractionToSeconds(g4);
+}
+/**
+ * 读取 `[offset:±N]` 全局偏移。按 LRC 规范，正值表示歌词提前出现，所以换算成负的秒数增量。
+ * @param {string} text 歌词原文。
+ * @returns {number} 需要叠加到每个时间标签上的秒数。
+ */
+function lyricGlobalOffsetSeconds(text) {
+  var match = /\[\s*offset\s*:\s*([+-]?\d{1,7})\s*\]/i.exec(String(text || ''));
+  return match ? -(parseInt(match[1], 10) || 0) / 1000 : 0;
+}
+/**
+ * 叠加全局偏移并夹到非负区间，避免偏移过大后出现负时间轴。
+ * @param {number} t 原始秒数。
+ * @param {number=} offsetSeconds 全局偏移秒数。
+ * @returns {number} 叠加后的秒数。
+ */
+function shiftLyricTagTime(t, offsetSeconds) {
+  var shifted = (Number(t) || 0) + (Number(offsetSeconds) || 0);
+  return shifted > 0 ? shifted : 0;
 }
 /**
  * 排序歌词并补齐缺失时长；字幕 cue 的明确时长可选择保持原值。
@@ -25189,7 +25420,7 @@ function appendEnhancedLrcSegment(state, rawText, startTime, endTime) {
  * @param {number} lineTime 当前行起始秒数。
  * @returns {{text:string,words:Array<object>}|null} 清理后的正文与逐字时间轴。
  */
-function parseEnhancedLrcBody(body, lineTime) {
+function parseEnhancedLrcBody(body, lineTime, offsetSeconds) {
   body = String(body || '');
   ENHANCED_LRC_WORD_TAG_REG.lastIndex = 0;
   var firstMatch = ENHANCED_LRC_WORD_TAG_REG.exec(body);
@@ -25197,13 +25428,13 @@ function parseEnhancedLrcBody(body, lineTime) {
   var state = { text: '', words: [] };
   var currentStart = firstMatch.index;
   var currentEnd = ENHANCED_LRC_WORD_TAG_REG.lastIndex;
-  var currentTime = lyricTagTimeToSeconds(firstMatch[1], firstMatch[2], firstMatch[3]);
+  var currentTime = shiftLyricTagTime(lyricTagTimeToSeconds(firstMatch[1], firstMatch[2], firstMatch[3]), offsetSeconds);
   if (currentStart > 0) {
     appendEnhancedLrcSegment(state, body.slice(0, currentStart), lineTime, currentTime);
   }
   var nextMatch;
   while ((nextMatch = ENHANCED_LRC_WORD_TAG_REG.exec(body))) {
-    var nextTime = lyricTagTimeToSeconds(nextMatch[1], nextMatch[2], nextMatch[3]);
+    var nextTime = shiftLyricTagTime(lyricTagTimeToSeconds(nextMatch[1], nextMatch[2], nextMatch[3]), offsetSeconds);
     appendEnhancedLrcSegment(state, body.slice(currentEnd, nextMatch.index), currentTime, nextTime);
     currentEnd = ENHANCED_LRC_WORD_TAG_REG.lastIndex;
     currentTime = nextTime;
@@ -25250,18 +25481,19 @@ function rememberLyricBucketText(bucket, text, words) {
  * @returns {Array<object>} 标准化歌词行。
  */
 function parseLyricText(text) {
-  var reg = /\[(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?\]/g;
+  var reg = /\[(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?(?:\.(\d{1,6}))?\]/g;
+  var offsetSeconds = lyricGlobalOffsetSeconds(text);
   var buckets = {};
   var ordered = [];
   forEachNewlineRow(text, function(rawLine) {
     var times = [];
     var m;
     reg.lastIndex = 0;
-    while ((m = reg.exec(rawLine))) times.push(lyricTagTimeToSeconds(m[1], m[2], m[3]));
+    while ((m = reg.exec(rawLine))) times.push(shiftLyricTagTime(lyricLineTagToSeconds(m[1], m[2], m[3], m[4]), offsetSeconds));
     if (!times.length) return;
     reg.lastIndex = 0;
     var body = rawLine.replace(reg, '');
-    var enhanced = parseEnhancedLrcBody(body, times[0]);
+    var enhanced = parseEnhancedLrcBody(body, times[0], offsetSeconds);
     var txt = enhanced ? enhanced.text : body.trim();
     if (!txt) return;
     for (var timeIdx = 0; timeIdx < times.length; timeIdx++) {
@@ -27853,6 +28085,8 @@ document.addEventListener('visibilitychange', function(){
 var LOCAL_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i;
 var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i;
 var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass|yrc|krc|qrc|ttml)$/i;
+// 同一首歌撞上多个歌词文件时的取舍：逐字时间轴信息最全，字幕格式只有整行，纯文本连时间轴都没有。
+var LOCAL_LYRIC_FORMAT_RANK = { qrc: 0, krc: 0, ttml: 0, yrc: 0, lrc: 1, ass: 2, srt: 2, vtt: 2, txt: 3 };
 var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|jpe|jfif|png|webp|avif|gif|bmp|svg)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
 var LOCAL_LIBRARY_NAME_COMPARE = (typeof Intl !== 'undefined' && Intl.Collator)
@@ -27952,8 +28186,9 @@ function isLocalCoverFile(file) {
 }
 /**
  * 构建本地歌词文件索引。大文件夹导入时使用显式循环，避免 forEach 回调在每个文件上分配闭包上下文。
+ * 同名撞车的歌词会全部留在候选列表里，按格式优先级排好序，供自动选择和手动切换共用。
  * @param {FileList|Array<object>} files 导入文件集合。
- * @returns {{byPath: object, byBase: object, byLoose: object}} 歌词匹配索引。
+ * @returns {{byPath: object, byBase: object, byLoose: object}} 歌词匹配索引，每个键对应一组候选。
  */
 function buildLocalLyricMaps(files) {
   var maps = { byPath: {}, byBase: {}, byLoose: {} };
@@ -27961,24 +28196,105 @@ function buildLocalLyricMaps(files) {
   for (var i = 0; i < length; i++) {
     var file = files[i];
     if (!isLocalLyricFile(file)) continue;
-    var pathKey = localPathStem(file);
-    var baseKey = localBaseStem(file);
-    var looseKey = normalizeLocalAssetName(localFileBaseName(file));
-    if (pathKey && !maps.byPath[pathKey]) maps.byPath[pathKey] = file;
-    if (baseKey && !maps.byBase[baseKey]) maps.byBase[baseKey] = file;
-    if (looseKey && !maps.byLoose[looseKey]) maps.byLoose[looseKey] = file;
+    pushLocalLyricCandidate(maps.byPath, localPathStem(file), file);
+    pushLocalLyricCandidate(maps.byBase, localBaseStem(file), file);
+    pushLocalLyricCandidate(maps.byLoose, normalizeLocalAssetName(localFileBaseName(file)), file);
   }
+  sortLocalLyricCandidateBuckets(maps.byPath);
+  sortLocalLyricCandidateBuckets(maps.byBase);
+  sortLocalLyricCandidateBuckets(maps.byLoose);
   return maps;
 }
-function findLocalLyricFile(audioFile, maps) {
+/**
+ * 把歌词文件塞进对应的候选桶。歌词文件名来自用户磁盘，`__proto__` 这类键要挡掉，
+ * 否则赋值会被原型 setter 吞掉、后续 push 反而写到 Object.prototype 上。
+ * @param {object} bucketMap 候选桶集合。
+ * @param {string} key 匹配键。
+ * @param {object} file 歌词文件。
+ * @returns {void}
+ */
+function pushLocalLyricCandidate(bucketMap, key, file) {
+  if (!key || key === '__proto__') return;
+  if (Object.prototype.hasOwnProperty.call(bucketMap, key)) bucketMap[key].push(file);
+  else bucketMap[key] = [file];
+}
+/**
+ * 给每个候选桶排序，最优先的歌词排在最前。
+ * @param {object} bucketMap 候选桶集合。
+ * @returns {void}
+ */
+function sortLocalLyricCandidateBuckets(bucketMap) {
+  var keys = Object.keys(bucketMap);
+  for (var i = 0; i < keys.length; i++) {
+    var list = bucketMap[keys[i]];
+    if (list.length > 1) list.sort(compareLocalLyricCandidates);
+  }
+}
+/**
+ * 取歌词文件的小写后缀。
+ * @param {object} file 歌词文件。
+ * @returns {string} 不带点的后缀名。
+ */
+function localLyricFileExt(file) {
+  var name = String((file && file.name) || '');
+  var dot = name.lastIndexOf('.');
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+/**
+ * 取歌词格式优先级，数字越小越优先：逐字时间轴 > 逐行 LRC > 字幕 > 纯文本 > 未知后缀。
+ * @param {object} file 歌词文件。
+ * @returns {number} 优先级序号。
+ */
+function localLyricFormatRank(file) {
+  var rank = LOCAL_LYRIC_FORMAT_RANK[localLyricFileExt(file)];
+  return typeof rank === 'number' ? rank : 4;
+}
+/**
+ * 比较两个同名歌词候选：先看格式优先级，再按路径排，保证同一批文件每次导入都得到同样的结果。
+ * @param {object} a 候选歌词文件。
+ * @param {object} b 候选歌词文件。
+ * @returns {number} 排序结果。
+ */
+function compareLocalLyricCandidates(a, b) {
+  return (localLyricFormatRank(a) - localLyricFormatRank(b)) || compareLocalFilePath(a, b);
+}
+/**
+ * 取候选桶。键来自用户磁盘上的文件名，`constructor` 这类原型键必须靠自有属性判断挡掉，
+ * 否则 `{}['constructor']` 会把 Object 当成候选数组，凭 `Object.length === 1` 混进一个 undefined 候选。
+ * @param {object} bucketMap 候选桶集合。
+ * @param {string} key 匹配键。
+ * @returns {Array<object>|null} 候选列表；没有该键时返回 null。
+ */
+function localLyricCandidateBucket(bucketMap, key) {
+  if (!bucketMap || !key || !Object.prototype.hasOwnProperty.call(bucketMap, key)) return null;
+  return bucketMap[key];
+}
+/**
+ * 找出与音频对应的全部歌词候选。先精确路径，再同目录同名，最后模糊名，同一层内按格式优先级排序。
+ * @param {object} audioFile 音频文件。
+ * @param {{byPath: object, byBase: object, byLoose: object}} maps 歌词匹配索引。
+ * @returns {Array<object>} 候选歌词文件列表，最优先的排在最前。
+ */
+function findLocalLyricCandidates(audioFile, maps) {
   maps = maps || {};
-  var pathKey = localPathStem(audioFile);
-  var baseKey = localBaseStem(audioFile);
-  var looseKey = normalizeLocalAssetName(localFileBaseName(audioFile));
-  return (maps.byPath && maps.byPath[pathKey]) ||
-    (maps.byBase && maps.byBase[baseKey]) ||
-    (maps.byLoose && maps.byLoose[looseKey]) ||
-    null;
+  var buckets = [
+    localLyricCandidateBucket(maps.byPath, localPathStem(audioFile)),
+    localLyricCandidateBucket(maps.byBase, localBaseStem(audioFile)),
+    localLyricCandidateBucket(maps.byLoose, normalizeLocalAssetName(localFileBaseName(audioFile)))
+  ];
+  var out = [];
+  for (var i = 0; i < buckets.length; i++) {
+    var list = buckets[i];
+    if (!list || !list.length) continue;
+    for (var j = 0; j < list.length; j++) {
+      if (out.indexOf(list[j]) < 0) out.push(list[j]);
+    }
+  }
+  return out;
+}
+function findLocalLyricFile(audioFile, maps) {
+  var candidates = findLocalLyricCandidates(audioFile, maps);
+  return candidates.length ? candidates[0] : null;
 }
 /**
  * 构建本地封面文件索引。大文件夹导入时避免 filter/forEach 链式中间数组，降低导入前主线程分配。
@@ -28036,9 +28352,10 @@ function localSongKeyFromFile(file) {
     (file && file.size || 0) + ':' +
     (file && file.lastModified || 0);
 }
-function makeLocalSongFromFile(file, lyricFile, coverFile) {
+function makeLocalSongFromFile(file, lyricFile, coverFile, lyricCandidates) {
   var info = localTrackInfoFromFile(file);
-  return hydrateCustomCover({
+  var candidates = Array.isArray(lyricCandidates) ? lyricCandidates : [];
+  var song = hydrateCustomCover({
     type: 'local',
     name: info.title,
     artist: info.artist,
@@ -28055,6 +28372,7 @@ function makeLocalSongFromFile(file, lyricFile, coverFile) {
     localUrl: '',
     localLyricFile: lyricFile || null,
     localLyricFileName: lyricFile ? (lyricFile.name || '') : '',
+    localLyricCandidates: candidates.length > 1 ? candidates.slice() : [],
     localLyricTagName: '',
     localLyricText: '',
     localLyricLoaded: false,
@@ -28067,6 +28385,25 @@ function makeLocalSongFromFile(file, lyricFile, coverFile) {
     localMetadataLoaded: false,
     duration: 0
   });
+  return applyStoredLocalLyricPick(song);
+}
+/**
+ * 按用户此前的同名歌词选择改写歌曲要读的歌词文件。没有记录或记录已失效时保留自动匹配结果。
+ * @param {object} song 本地歌曲。
+ * @returns {object} 同一首歌曲对象。
+ */
+function applyStoredLocalLyricPick(song) {
+  var candidates = song && song.localLyricCandidates;
+  if (!candidates || candidates.length < 2) return song;
+  var picked = localLyricPickForSong(song);
+  if (!picked) return song;
+  for (var i = 0; i < candidates.length; i++) {
+    if (localLyricPickId(candidates[i]) !== picked) continue;
+    song.localLyricFile = candidates[i];
+    song.localLyricFileName = candidates[i].name || '';
+    return song;
+  }
+  return song;
 }
 /**
  * 将导入文件转换为本地歌曲列表。筛选、排序和构造拆成显式循环，减少大曲库导入时的临时数组。
@@ -28088,7 +28425,8 @@ function createLocalSongsFromFiles(files, opts) {
   var songs = new Array(audioFiles.length);
   for (var j = 0; j < audioFiles.length; j++) {
     var file = audioFiles[j];
-    songs[j] = makeLocalSongFromFile(file, findLocalLyricFile(file, lyricMaps), findLocalCoverFile(file, coverMaps));
+    var lyricCandidates = findLocalLyricCandidates(file, lyricMaps);
+    songs[j] = makeLocalSongFromFile(file, lyricCandidates[0] || null, findLocalCoverFile(file, coverMaps), lyricCandidates);
   }
   return songs;
 }
@@ -28106,25 +28444,120 @@ function countTextReplacementChars(text) {
   return count;
 }
 /**
- * 解码本地歌词或文本文件。优先 UTF 编码，乱码较多时尝试 gb18030，并复用 TextDecoder 缓存。
+ * 解码本地歌词或文本文件。先认 BOM，再嗅无 BOM 的 UTF-16，然后严格校验 UTF-8；
+ * 只有确认不是合法 UTF-8 才去试各家单双字节编码，并复用 TextDecoder 缓存。
  * @param {ArrayBuffer|Uint8Array} buffer 本地文本字节。
  * @returns {string} 解码后的文本。
  */
 function decodeLocalTextBuffer(buffer) {
   var bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer || []);
-  var decoder = null;
-  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) decoder = localTextDecoder('utf-16le');
-  else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) decoder = localTextDecoder('utf-16be');
-  else decoder = localTextDecoder('utf-8');
+  var bom = localTextBomEncoding(bytes);
+  var utf16 = bom ? '' : sniffBomlessUtf16Encoding(bytes);
+  var decoder = localTextDecoder(bom || utf16 || 'utf-8');
   var text = decoder.decode(bytes).replace(/^\uFEFF/, '');
-  var bad = countTextReplacementChars(text);
-  if (bad && window.TextDecoder) {
+  // BOM 或 UTF-16 已经定论，严格校验通过的 UTF-8 也不用再猜。以前只要冒出一个替换字符
+  // 就整篇改判 gb18030，一个坏字节足以把整首 UTF-8 歌词译成乱码。
+  if (bom || utf16 || isStrictUtf8Bytes(bytes) || !window.TextDecoder) return text;
+  var best = text;
+  var bestScore = countTextReplacementChars(text) + countTextGarbageChars(text);
+  // gb18030 排最前：它几乎不报错，所以同分时按简体中文优先，这也是本地歌词最常见的落盘编码。
+  var candidates = ['gb18030', 'big5', 'shift_jis', 'euc-kr', 'windows-1252'];
+  for (var i = 0; i < candidates.length && bestScore; i++) {
     try {
-      var gbText = localTextDecoder('gb18030').decode(bytes).replace(/^\uFEFF/, '');
-      if (countTextReplacementChars(gbText) < bad) text = gbText;
+      var candidate = stripTextBom(localTextDecoder(candidates[i]).decode(bytes));
+      var score = countTextReplacementChars(candidate) + countTextGarbageChars(candidate);
+      if (score < bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
     } catch (e) {}
   }
-  return text;
+  return best;
+}
+/**
+ * 去掉解码结果开头的 BOM 字符。
+ * @param {string} text 已解码文本。
+ * @returns {string} 去掉 BOM 的文本。
+ */
+function stripTextBom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+/**
+ * 按 BOM 判定编码。
+ * @param {Uint8Array} bytes 文本字节。
+ * @returns {string} 编码名；没有 BOM 时返回空串。
+ */
+function localTextBomEncoding(bytes) {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return 'utf-16le';
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return 'utf-16be';
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return 'utf-8';
+  return '';
+}
+/**
+ * 嗅探没有 BOM 的 UTF-16。歌词里时间标签是 ASCII，UTF-16 下每个 ASCII 字符都带一个 0 字节，
+ * 而且固定落在同一侧；单双字节编码的文本几乎不含 0 字节，两者靠这一点就能分开。
+ * @param {Uint8Array} bytes 文本字节。
+ * @returns {string} 'utf-16le'、'utf-16be' 或空串。
+ */
+function sniffBomlessUtf16Encoding(bytes) {
+  var limit = bytes.length < 1024 ? bytes.length : 1024;
+  if (limit < 8) return '';
+  var evenZero = 0;
+  var oddZero = 0;
+  var pairs = 0;
+  for (var i = 0; i + 1 < limit; i += 2) {
+    pairs++;
+    if (bytes[i] === 0) evenZero++;
+    if (bytes[i + 1] === 0) oddZero++;
+  }
+  if (!pairs) return '';
+  if (oddZero > evenZero * 8 && oddZero * 10 >= pairs * 3) return 'utf-16le';
+  if (evenZero > oddZero * 8 && evenZero * 10 >= pairs * 3) return 'utf-16be';
+  return '';
+}
+/**
+ * 严格校验字节序列是否为合法 UTF-8：拒收过长编码、代理区码位与越界码位。
+ * 末尾被截断的多字节序列不算错，前面全合法就仍按 UTF-8 处理。
+ * @param {Uint8Array} bytes 文本字节。
+ * @returns {boolean} 是否合法 UTF-8。
+ */
+function isStrictUtf8Bytes(bytes) {
+  var len = bytes.length;
+  var i = 0;
+  while (i < len) {
+    var lead = bytes[i];
+    if (lead < 0x80) { i++; continue; }
+    var need;
+    var cp;
+    if (lead >= 0xc2 && lead <= 0xdf) { need = 1; cp = lead & 0x1f; }
+    else if (lead >= 0xe0 && lead <= 0xef) { need = 2; cp = lead & 0x0f; }
+    else if (lead >= 0xf0 && lead <= 0xf4) { need = 3; cp = lead & 0x07; }
+    else return false;
+    if (i + need >= len) return true;
+    for (var k = 1; k <= need; k++) {
+      var next = bytes[i + k];
+      if (next < 0x80 || next > 0xbf) return false;
+      cp = (cp << 6) | (next & 0x3f);
+    }
+    if (need === 2 && (cp < 0x800 || (cp >= 0xd800 && cp <= 0xdfff))) return false;
+    if (need === 3 && (cp < 0x10000 || cp > 0x10ffff)) return false;
+    i += need + 1;
+  }
+  return true;
+}
+/**
+ * 统计明显是乱码的字符：C1 控制字符与私用区码位。歌词正文里这两类一个都不该出现，
+ * 用来在替换字符数打平时区分几种候选编码。
+ * @param {string} text 已解码文本。
+ * @returns {number} 可疑字符数量。
+ */
+function countTextGarbageChars(text) {
+  var count = 0;
+  for (var i = 0; i < text.length; i++) {
+    var code = text.charCodeAt(i);
+    if ((code >= 0x80 && code <= 0x9f) || (code >= 0xe000 && code <= 0xf8ff)) count++;
+  }
+  return count;
 }
 /**
  * 读取本地文本类文件的原始字节，三条读取通道（File、桌面范围读取、FileReader）统一收口。
@@ -28185,27 +28618,384 @@ async function inflateLyricBytes(bytes) {
   if (!bytes || !bytes.length || typeof DecompressionStream !== 'function') return null;
   // 带 zlib 头的以 0x78 开头，没有头的按 raw deflate 再试一次。
   var formats = bytes[0] === 0x78 ? ['deflate', 'deflate-raw'] : ['deflate-raw', 'deflate'];
-  for (var i = 0; i < formats.length; i++) {
-    try {
-      var source = new Response(bytes).body;
-      if (!source) return null;
-      var out = await new Response(source.pipeThrough(new DecompressionStream(formats[i]))).arrayBuffer();
-      if (out && out.byteLength) return new Uint8Array(out);
-    } catch (e) {}
+  var end = bytes.length;
+  for (;;) {
+    var view = end === bytes.length ? bytes : bytes.subarray(0, end);
+    for (var i = 0; i < formats.length; i++) {
+      try {
+        var source = new Response(view).body;
+        if (!source) return null;
+        var out = await new Response(source.pipeThrough(new DecompressionStream(formats[i]))).arrayBuffer();
+        if (out && out.byteLength) return new Uint8Array(out);
+      } catch (e) {}
+    }
+    // QRC 的 3DES 用零填充，解出来的压缩数据尾部会多几个 0，DecompressionStream 见到就报
+    // trailing junk。所以整段解不开时逐个剥掉尾部的 0 重试，最多剥掉一个分组的长度。
+    if (end <= bytes.length - 7 || end < 2 || bytes[end - 1] !== 0) return null;
+    end--;
   }
-  return null;
+}
+// QQ 音乐 QRC 加密歌词用的是一套“形似 DES、实则私有”的分组密码：S 盒带着出厂就有的笔误、
+// PC-2 有 `pos - 27` 这种怪癖、密钥按小端 32 位字寻址、只跑 15 轮加一个半轮且末尾不交换左右。
+// 处处偏离标准，平台自带的 crypto / des-ede3 一律解不开，只能照算法原样移植一份。下面这些表和
+// 三把密钥都是公开的格式常量，不是凭据。参考实现：apoint123/qrc-decoder。
+var QRC_DES_BLOCK_SIZE = 8;
+// "!@#)(*$%" / "123ZXC!@" / "!@#)(NHL" 三把 8 字节密钥的 ASCII 字节。
+var QRC_DES_KEY_1 = [0x21, 0x40, 0x23, 0x29, 0x28, 0x2a, 0x24, 0x25];
+var QRC_DES_KEY_2 = [0x31, 0x32, 0x33, 0x5a, 0x58, 0x43, 0x21, 0x40];
+var QRC_DES_KEY_3 = [0x21, 0x40, 0x23, 0x29, 0x28, 0x4e, 0x48, 0x4c];
+// 八张非标准 S 盒。第 2、4 盒里的重复值（15,2,8,15 与 10,10）是原算法自带的笔误，
+// 照抄才能对上真实密文，改“对”了反而解不开。
+var QRC_DES_S_BOXES = [
+  [14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7, 0, 15, 7, 4, 14, 2, 13, 1, 10, 6, 12, 11, 9, 5, 3, 8,
+    4, 1, 14, 8, 13, 6, 2, 11, 15, 12, 9, 7, 3, 10, 5, 0, 15, 12, 8, 2, 4, 9, 1, 7, 5, 11, 3, 14, 10, 0, 6, 13],
+  [15, 1, 8, 14, 6, 11, 3, 4, 9, 7, 2, 13, 12, 0, 5, 10, 3, 13, 4, 7, 15, 2, 8, 15, 12, 0, 1, 10, 6, 9, 11, 5,
+    0, 14, 7, 11, 10, 4, 13, 1, 5, 8, 12, 6, 9, 3, 2, 15, 13, 8, 10, 1, 3, 15, 4, 2, 11, 6, 7, 12, 0, 5, 14, 9],
+  [10, 0, 9, 14, 6, 3, 15, 5, 1, 13, 12, 7, 11, 4, 2, 8, 13, 7, 0, 9, 3, 4, 6, 10, 2, 8, 5, 14, 12, 11, 15, 1,
+    13, 6, 4, 9, 8, 15, 3, 0, 11, 1, 2, 12, 5, 10, 14, 7, 1, 10, 13, 0, 6, 9, 8, 7, 4, 15, 14, 3, 11, 5, 2, 12],
+  [7, 13, 14, 3, 0, 6, 9, 10, 1, 2, 8, 5, 11, 12, 4, 15, 13, 8, 11, 5, 6, 15, 0, 3, 4, 7, 2, 12, 1, 10, 14, 9,
+    10, 6, 9, 0, 12, 11, 7, 13, 15, 1, 3, 14, 5, 2, 8, 4, 3, 15, 0, 6, 10, 10, 13, 8, 9, 4, 5, 11, 12, 7, 2, 14],
+  [2, 12, 4, 1, 7, 10, 11, 6, 8, 5, 3, 15, 13, 0, 14, 9, 14, 11, 2, 12, 4, 7, 13, 1, 5, 0, 15, 10, 3, 9, 8, 6,
+    4, 2, 1, 11, 10, 13, 7, 8, 15, 9, 12, 5, 6, 3, 0, 14, 11, 8, 12, 7, 1, 14, 2, 13, 6, 15, 0, 9, 10, 4, 5, 3],
+  [12, 1, 10, 15, 9, 2, 6, 8, 0, 13, 3, 4, 14, 7, 5, 11, 10, 15, 4, 2, 7, 12, 9, 5, 6, 1, 13, 14, 0, 11, 3, 8,
+    9, 14, 15, 5, 2, 8, 12, 3, 7, 0, 4, 10, 1, 13, 11, 6, 4, 3, 2, 12, 9, 5, 15, 10, 11, 14, 1, 7, 6, 0, 8, 13],
+  [4, 11, 2, 14, 15, 0, 8, 13, 3, 12, 9, 7, 5, 10, 6, 1, 13, 0, 11, 7, 4, 9, 1, 10, 14, 3, 5, 12, 2, 15, 8, 6,
+    1, 4, 11, 13, 12, 3, 7, 14, 10, 15, 6, 8, 0, 5, 9, 2, 6, 11, 13, 8, 1, 4, 10, 7, 9, 5, 0, 15, 14, 2, 3, 12],
+  [13, 2, 8, 4, 6, 15, 11, 1, 10, 9, 3, 14, 5, 0, 12, 7, 1, 15, 13, 8, 10, 3, 7, 4, 12, 5, 6, 11, 0, 14, 9, 2,
+    7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8, 2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11],
+];
+// P 盒、扩展置换 E 盒、每轮左移位数、PC-1 的 C/D 两半、PC-2、初始置换与逆初始置换。
+var QRC_DES_P_BOX = [16, 7, 20, 21, 29, 12, 28, 17, 1, 15, 23, 26, 5, 18, 31, 10,
+  2, 8, 24, 14, 32, 27, 3, 9, 19, 13, 30, 6, 22, 11, 4, 25];
+var QRC_DES_E_BOX = [32, 1, 2, 3, 4, 5, 4, 5, 6, 7, 8, 9, 8, 9, 10, 11, 12, 13, 12, 13, 14, 15, 16, 17,
+  16, 17, 18, 19, 20, 21, 20, 21, 22, 23, 24, 25, 24, 25, 26, 27, 28, 29, 28, 29, 30, 31, 32, 1];
+var QRC_DES_KEY_RND_SHIFT = [1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1];
+var QRC_DES_KEY_PERM_C = [56, 48, 40, 32, 24, 16, 8, 0, 57, 49, 41, 33, 25, 17,
+  9, 1, 58, 50, 42, 34, 26, 18, 10, 2, 59, 51, 43, 35];
+var QRC_DES_KEY_PERM_D = [62, 54, 46, 38, 30, 22, 14, 6, 61, 53, 45, 37, 29, 21,
+  13, 5, 60, 52, 44, 36, 28, 20, 12, 4, 27, 19, 11, 3];
+var QRC_DES_KEY_COMPRESSION = [13, 16, 10, 23, 0, 4, 2, 27, 14, 5, 20, 9, 22, 18, 11, 3, 25, 7, 15, 6, 26, 19, 12, 1,
+  40, 51, 30, 36, 46, 54, 29, 39, 50, 44, 32, 47, 43, 48, 38, 55, 33, 52, 45, 41, 49, 35, 28, 31];
+var QRC_DES_IP_RULE = [34, 42, 50, 58, 2, 10, 18, 26, 36, 44, 52, 60, 4, 12, 20, 28,
+  38, 46, 54, 62, 6, 14, 22, 30, 40, 48, 56, 64, 8, 16, 24, 32, 33, 41, 49, 57, 1, 9, 17, 25,
+  35, 43, 51, 59, 3, 11, 19, 27, 37, 45, 53, 61, 5, 13, 21, 29, 39, 47, 55, 63, 7, 15, 23, 31];
+var QRC_DES_INV_IP_RULE = [37, 5, 45, 13, 53, 21, 61, 29, 38, 6, 46, 14, 54, 22, 62, 30,
+  39, 7, 47, 15, 55, 23, 63, 31, 40, 8, 48, 16, 56, 24, 64, 32, 33, 1, 41, 9, 49, 17, 57, 25,
+  34, 2, 42, 10, 50, 18, 58, 26, 35, 3, 43, 11, 51, 19, 59, 27, 36, 4, 44, 12, 52, 20, 60, 28];
+// 置换与 S-P 合并查找表建一次要跑二十多万次位运算，而绝大多数会话根本不会碰加密歌词，
+// 所以全部推迟到第一次解密时再建。
+var qrcDesTables = null;
+/**
+ * 把 64 位置换规则展开成“单字节 → 左右各 32 位”的查找表。输入永远只有一个字节非零，
+ * 所以能逐字节预计算，运行时只做 8 次查表加按位或。
+ * @param {Array<number>} rule 1 起的源位下标表，长度 64。
+ * @param {Int32Array} leftTable 高 32 位输出表。
+ * @param {Int32Array} rightTable 低 32 位输出表。
+ * @returns {void}
+ */
+function qrcDesFillPermTable(rule, leftTable, rightTable) {
+  for (var bytePos = 0; bytePos < 8; bytePos++) {
+    var base = 56 - bytePos * 8;
+    for (var byteVal = 0; byteVal < 256; byteVal++) {
+      var left = 0;
+      var right = 0;
+      for (var i = 0; i < 64; i++) {
+        var offset = 64 - rule[i] - base;
+        if (offset < 0 || offset > 7) continue;
+        if (!((byteVal >> offset) & 1)) continue;
+        if (i < 32) left |= 1 << (31 - i);
+        else right |= 1 << (63 - i);
+      }
+      leftTable[(bytePos << 8) | byteVal] = left;
+      rightTable[(bytePos << 8) | byteVal] = right;
+    }
+  }
 }
 /**
- * 解码歌词文件字节：KRC 加密二进制先还原成明文，其余一律走通用文本解码。
- * 按魔数而不是后缀分流，所以改了后缀名的加密 KRC 也能读出来。
+ * 按非标准规则取 S 盒下标：高位保留，中间 5 位右移一位，最低位翻到第 5 位。
+ * @param {number} a 6 位输入。
+ * @returns {number} S 盒下标。
+ */
+function qrcDesSboxIndex(a) {
+  return (a & 0x20) | ((a & 0x1f) >> 1) | ((a & 0x01) << 4);
+}
+/**
+ * 对 32 位中间结果应用 P 盒置换。
+ * @param {number} input S 盒代换后的 32 位值。
+ * @returns {number} 置换结果。
+ */
+function qrcDesPbox(input) {
+  var output = 0;
+  for (var i = 0; i < 32; i++) {
+    if ((input & (1 << (32 - QRC_DES_P_BOX[i]))) !== 0) output |= 1 << (31 - i);
+  }
+  return output;
+}
+/**
+ * 首次解密时建好全部查找表：IP、逆 IP、S-P 合并表与 E 盒展开表。
+ * @returns {object} 查找表集合。
+ */
+function ensureQrcDesTables() {
+  if (qrcDesTables) return qrcDesTables;
+  var tables = {
+    ipLeft: new Int32Array(2048), ipRight: new Int32Array(2048),
+    invIpLeft: new Int32Array(2048), invIpRight: new Int32Array(2048),
+    sp: new Int32Array(512), eboxHigh: new Int32Array(1024), eboxLow: new Int32Array(1024),
+  };
+  qrcDesFillPermTable(QRC_DES_IP_RULE, tables.ipLeft, tables.ipRight);
+  qrcDesFillPermTable(QRC_DES_INV_IP_RULE, tables.invIpLeft, tables.invIpRight);
+  for (var box = 0; box < 8; box++) {
+    for (var input = 0; input < 64; input++) {
+      var nibble = QRC_DES_S_BOXES[box][qrcDesSboxIndex(input)];
+      tables.sp[(box << 6) | input] = qrcDesPbox(nibble << (28 - box * 4));
+    }
+  }
+  for (var chunk = 0; chunk < 4; chunk++) {
+    var shiftIn32 = (3 - chunk) * 8;
+    for (var byteVal = 0; byteVal < 256; byteVal++) {
+      var high24 = 0;
+      var low24 = 0;
+      var expanded = byteVal << shiftIn32;
+      for (var i = 0; i < 48; i++) {
+        if (!((expanded >>> (32 - QRC_DES_E_BOX[i])) & 1)) continue;
+        if (i < 24) high24 |= 1 << (23 - i);
+        else low24 |= 1 << (47 - i);
+      }
+      tables.eboxHigh[(chunk << 8) | byteVal] = high24;
+      tables.eboxLow[(chunk << 8) | byteVal] = low24;
+    }
+  }
+  qrcDesTables = tables;
+  return tables;
+}
+/**
+ * 按 PC-1 的位表从 8 字节密钥里取位。这里的字节寻址是 QQ 音乐特有的：8 字节密钥被当成两个
+ * 小端 32 位字拼起来，所以第 0 位实际落在 key[3] 的最高位。
+ * @param {Array<number>|Uint8Array} key 8 字节密钥。
+ * @param {Array<number>} table 0 起的位下标表，长度 28。
+ * @returns {number} 28 位结果。
+ */
+function qrcDesPermuteKeyBits(key, table) {
+  var output = 0;
+  var mask = 1 << (table.length - 1);
+  for (var i = 0; i < table.length; i++) {
+    var pos = table[i];
+    var bitInWord = pos & 31;
+    var byteIndex = (pos >> 5) * 4 + 3 - (bitInWord >> 3);
+    if ((key[byteIndex] >> (7 - (bitInWord & 7))) & 1) output |= mask;
+    mask >>>= 1;
+  }
+  return output >>> 0;
+}
+/**
+ * 对高位对齐（占 31..4 位）的 28 位密钥半区做循环左移。
+ * @param {number} value 28 位数据。
+ * @param {number} amount 左移位数。
+ * @returns {number} 循环左移结果。
+ */
+function qrcDesRotate28(value, amount) {
+  var val = (value & 0xfffffff0) >>> 0;
+  return (((val << amount) | (val >>> (28 - amount))) & 0xfffffff0) >>> 0;
+}
+/**
+ * 生成 16 个轮密钥，每个拆成高低两个 24 位存进一维数组。解密模式下轮密钥倒序写入，
+ * 于是加解密可以共用同一个分组函数。
+ * @param {Array<number>|Uint8Array} key 8 字节密钥。
+ * @param {boolean} decrypt true 生成解密轮密钥。
+ * @returns {Int32Array} 长度 32 的轮密钥表。
+ */
+function qrcDesKeySchedule(key, decrypt) {
+  var schedule = new Int32Array(32);
+  var c = (qrcDesPermuteKeyBits(key, QRC_DES_KEY_PERM_C) << 4) >>> 0;
+  var d = (qrcDesPermuteKeyBits(key, QRC_DES_KEY_PERM_D) << 4) >>> 0;
+  for (var i = 0; i < 16; i++) {
+    c = qrcDesRotate28(c, QRC_DES_KEY_RND_SHIFT[i]);
+    d = qrcDesRotate28(d, QRC_DES_KEY_RND_SHIFT[i]);
+    var high24 = 0;
+    var low24 = 0;
+    for (var k = 0; k < QRC_DES_KEY_COMPRESSION.length; k++) {
+      var pos = QRC_DES_KEY_COMPRESSION[k];
+      // `pos - 27` 不是笔误，是这套算法自己的规则。
+      var bit = pos < 28 ? (c >>> (31 - pos)) & 1 : (d >>> (31 - (pos - 27))) & 1;
+      if (!bit) continue;
+      if (k < 24) high24 |= 1 << (23 - k);
+      else low24 |= 1 << (47 - k);
+    }
+    var slot = (decrypt ? 15 - i : i) * 2;
+    schedule[slot] = high24;
+    schedule[slot + 1] = low24;
+  }
+  return schedule;
+}
+/**
+ * 轮函数：E 盒扩展 → 与轮密钥异或 → 八次 S-P 合并查表。
+ * @param {number} state 32 位右半区。
+ * @param {number} keyHigh24 轮密钥高 24 位。
+ * @param {number} keyLow24 轮密钥低 24 位。
+ * @param {object} t 查找表集合。
+ * @returns {number} 32 位轮函数输出。
+ */
+function qrcDesRound(state, keyHigh24, keyLow24, t) {
+  var b0 = (state >>> 24) & 0xff;
+  var b1 = (state >>> 16) & 0xff;
+  var b2 = (state >>> 8) & 0xff;
+  var b3 = state & 0xff;
+  var high = (t.eboxHigh[b0] | t.eboxHigh[256 | b1] | t.eboxHigh[512 | b2] | t.eboxHigh[768 | b3]) ^ keyHigh24;
+  var low = (t.eboxLow[b0] | t.eboxLow[256 | b1] | t.eboxLow[512 | b2] | t.eboxLow[768 | b3]) ^ keyLow24;
+  return t.sp[(high >>> 18) & 0x3f] | t.sp[64 | ((high >>> 12) & 0x3f)]
+    | t.sp[128 | ((high >>> 6) & 0x3f)] | t.sp[192 | (high & 0x3f)]
+    | t.sp[256 | ((low >>> 18) & 0x3f)] | t.sp[320 | ((low >>> 12) & 0x3f)]
+    | t.sp[384 | ((low >>> 6) & 0x3f)] | t.sp[448 | (low & 0x3f)];
+}
+/**
+ * 处理一个 8 字节分组：初始置换 → 15 轮 → 最后半轮（不交换左右）→ 逆初始置换。
+ * @param {Uint8Array} input 输入分组。
+ * @param {number} inputOffset 输入起始下标。
+ * @param {Uint8Array} output 输出分组。
+ * @param {number} outputOffset 输出起始下标。
+ * @param {Int32Array} schedule 轮密钥表。
+ * @returns {void}
+ */
+function qrcDesCryptBlock(input, inputOffset, output, outputOffset, schedule) {
+  var t = ensureQrcDesTables();
+  var left = 0;
+  var right = 0;
+  for (var i = 0; i < 8; i++) {
+    var idx = (i << 8) | input[inputOffset + i];
+    left |= t.ipLeft[idx];
+    right |= t.ipRight[idx];
+  }
+  for (var r = 0; r < 15; r++) {
+    var temp = right;
+    right = (left ^ qrcDesRound(right, schedule[r * 2], schedule[r * 2 + 1], t)) >>> 0;
+    left = temp;
+  }
+  left = (left ^ qrcDesRound(right, schedule[30], schedule[31], t)) >>> 0;
+  var outLeft = 0;
+  var outRight = 0;
+  for (var j = 0; j < 4; j++) {
+    var idxL = (j << 8) | ((left >>> (24 - j * 8)) & 0xff);
+    var idxR = ((j + 4) << 8) | ((right >>> (24 - j * 8)) & 0xff);
+    outLeft |= t.invIpLeft[idxL] | t.invIpLeft[idxR];
+    outRight |= t.invIpRight[idxL] | t.invIpRight[idxR];
+  }
+  output[outputOffset] = (outLeft >>> 24) & 0xff;
+  output[outputOffset + 1] = (outLeft >>> 16) & 0xff;
+  output[outputOffset + 2] = (outLeft >>> 8) & 0xff;
+  output[outputOffset + 3] = outLeft & 0xff;
+  output[outputOffset + 4] = (outRight >>> 24) & 0xff;
+  output[outputOffset + 5] = (outRight >>> 16) & 0xff;
+  output[outputOffset + 6] = (outRight >>> 8) & 0xff;
+  output[outputOffset + 7] = outRight & 0xff;
+}
+var qrcDesDecryptSchedules = null;
+/**
+ * 十六进制字符的字节值转半字节。
+ * @param {number} code ASCII 字节值。
+ * @returns {number} 0-15；不是十六进制字符时返回 -1。
+ */
+function qrcHexNibble(code) {
+  if (code >= 0x30 && code <= 0x39) return code - 0x30;
+  if (code >= 0x41 && code <= 0x46) return code - 0x37;
+  if (code >= 0x61 && code <= 0x66) return code - 0x57;
+  return -1;
+}
+/**
+ * 识别 QRC 加密数据并取出待解密字节。两种在野形态都收：接口原样落盘的十六进制文本，
+ * 以及直接写成二进制的密文。判定只看内容，所以后缀被改过也能认出来。
+ * @param {ArrayBuffer|Uint8Array} buffer 文件原始字节。
+ * @returns {Uint8Array|null} 待解密字节；不像 QRC 密文时返回 null。
+ */
+function qrcEncryptedPayloadBytes(buffer) {
+  var bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer || []);
+  if (bytes.length < 2 * QRC_DES_BLOCK_SIZE) return null;
+  // 带 BOM 的一律是文本，不用往密文上猜。
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return null;
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return null;
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return null;
+  var nibbles = 0;
+  var hexOnly = true;
+  var hasControl = false;
+  for (var i = 0; i < bytes.length; i++) {
+    var code = bytes[i];
+    if (code === 0x09 || code === 0x0a || code === 0x0d || code === 0x20) continue;
+    if (hexOnly) {
+      if (qrcHexNibble(code) < 0) hexOnly = false;
+      else nibbles++;
+    }
+    if (code < 0x20) hasControl = true;
+  }
+  if (hexOnly) {
+    if (!nibbles || nibbles % (2 * QRC_DES_BLOCK_SIZE) !== 0) return null;
+    var out = new Uint8Array(nibbles >> 1);
+    var written = 0;
+    var high = -1;
+    for (var j = 0; j < bytes.length; j++) {
+      var nibble = qrcHexNibble(bytes[j]);
+      if (nibble < 0) continue;
+      if (high < 0) { high = nibble; continue; }
+      out[written++] = (high << 4) | nibble;
+      high = -1;
+    }
+    return out;
+  }
+  // 不是十六进制文本时，只有“含控制字符且长度对齐分组”的才当二进制密文看。
+  if (!hasControl || bytes.length % QRC_DES_BLOCK_SIZE !== 0) return null;
+  return bytes;
+}
+/**
+ * 逐分组跑 3DES 解密链 D(K3) → E(K2) → D(K1)。
+ * @param {Uint8Array} bytes 长度为 8 的整数倍的密文。
+ * @returns {Uint8Array} 解密结果。
+ */
+function qrc3desDecryptBytes(bytes) {
+  if (!qrcDesDecryptSchedules) {
+    qrcDesDecryptSchedules = [
+      qrcDesKeySchedule(QRC_DES_KEY_3, true),
+      qrcDesKeySchedule(QRC_DES_KEY_2, false),
+      qrcDesKeySchedule(QRC_DES_KEY_1, true),
+    ];
+  }
+  var out = new Uint8Array(bytes.length);
+  var stage1 = new Uint8Array(QRC_DES_BLOCK_SIZE);
+  var stage2 = new Uint8Array(QRC_DES_BLOCK_SIZE);
+  for (var i = 0; i + QRC_DES_BLOCK_SIZE <= bytes.length; i += QRC_DES_BLOCK_SIZE) {
+    qrcDesCryptBlock(bytes, i, stage1, 0, qrcDesDecryptSchedules[0]);
+    qrcDesCryptBlock(stage1, 0, stage2, 0, qrcDesDecryptSchedules[1]);
+    qrcDesCryptBlock(stage2, 0, out, i, qrcDesDecryptSchedules[2]);
+  }
+  return out;
+}
+/**
+ * 还原 QRC 加密歌词：3DES 解密后解 zlib，并剥掉解压结果自带的 UTF-8 BOM。
+ * @param {ArrayBuffer|Uint8Array} buffer 文件原始字节。
+ * @returns {Promise<Uint8Array|null>} 明文字节；不是 QRC 密文或还原失败时返回 null。
+ */
+async function qrcDecryptedLyricBytes(buffer) {
+  var payload = qrcEncryptedPayloadBytes(buffer);
+  if (!payload) return null;
+  var inflated = await inflateLyricBytes(qrc3desDecryptBytes(payload));
+  if (!inflated || !inflated.length) return null;
+  if (inflated.length >= 3 && inflated[0] === 0xef && inflated[1] === 0xbb && inflated[2] === 0xbf) {
+    return inflated.subarray(3);
+  }
+  return inflated;
+}
+/**
+ * 解码歌词文件字节：KRC 加密二进制先还原成明文，QRC 加密数据先过 3DES 再解压，
+ * 其余一律走通用文本解码。按内容特征而不是后缀分流，所以改了后缀名的加密歌词也能读出来。
  * @param {ArrayBuffer|Uint8Array} buffer 文件字节。
  * @returns {Promise<string>} 歌词文本。
  */
 async function decodeLyricFileBuffer(buffer) {
-  var payload = krcEncryptedPayloadBytes(buffer);
-  if (!payload) return decodeLocalTextBuffer(buffer);
-  var inflated = await inflateLyricBytes(payload);
-  return inflated ? decodeLocalTextBuffer(inflated) : '';
+  var krcPayload = krcEncryptedPayloadBytes(buffer);
+  if (krcPayload) {
+    var krcPlain = await inflateLyricBytes(krcPayload);
+    return krcPlain ? decodeLocalTextBuffer(krcPlain) : '';
+  }
+  var qrcPlain = await qrcDecryptedLyricBytes(buffer);
+  if (qrcPlain) return decodeLocalTextBuffer(qrcPlain);
+  return decodeLocalTextBuffer(buffer);
 }
 /**
  * 读取并解码本地歌词文件。和 readLocalTextFile 只差一处：KRC 加密二进制会先解密解压。
@@ -32604,8 +33394,8 @@ async function handleFiles(files) {
     else if (isLocalCoverFile(f)) imgFile = f;
   }
   if (audioFile) {
-    var lyricFile = findLocalLyricFile(audioFile, buildLocalLyricMaps(list));
-    var singleSong = makeLocalSongFromFile(audioFile, lyricFile, imgFile);
+    var lyricCandidates = findLocalLyricCandidates(audioFile, buildLocalLyricMaps(list));
+    var singleSong = makeLocalSongFromFile(audioFile, lyricCandidates[0] || null, imgFile, lyricCandidates);
     await hydrateLocalAssetCacheForSongs([singleSong]);
     finalizeListenSession(false);
     revokeDiscardedLocalSongObjectUrls(localLibrarySongs, [[singleSong], playlist]);
@@ -41481,6 +42271,15 @@ function startLocalUserStateHydration() {
         customLyricPrefs = next;
         customLyricPrefsHydrated = true;
         if (typeof updateCustomLyricControls === 'function') updateCustomLyricControls();
+      }
+    },
+    {
+      id: LOCAL_USER_STATE_LOCAL_LYRIC_PICKS,
+      legacyKey: LOCAL_LYRIC_PICK_STORE_KEY,
+      readLegacy: readLocalLyricPicks,
+      apply: function(value){
+        localLyricPicks = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        localLyricPicksHydrated = true;
       }
     },
     {

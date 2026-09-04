@@ -312,9 +312,9 @@ const LOCAL_LIBRARY_MIME = {
   '.vtt': 'text/vtt',
   '.ass': 'text/x-ssa',
   '.yrc': 'text/plain',
-  // KRC 明文与加密二进制共用一个后缀，统一按二进制送，解码放在渲染层。
+  // KRC / QRC 的明文与加密二进制共用一个后缀，统一按二进制送，解码放在渲染层。
   '.krc': 'application/octet-stream',
-  '.qrc': 'application/xml',
+  '.qrc': 'application/octet-stream',
   '.ttml': 'application/ttml+xml',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
