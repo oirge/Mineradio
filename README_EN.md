@@ -92,7 +92,17 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.4 (2026-09-04)
+### Latest release v1.8.5 (2026-09-04)
+
+- **Closing the window now settles the track you were on**: previously the song playing at exit was never counted, so it could never reach the play statistics
+- **Edits made right before exit are no longer lost**: user state is written 120 ms late, and that write never ran on window close; it is now flushed at unload. Play statistics, custom cover art / lyrics / beat maps and effect presets were all affected
+- **Files whose duration is not known yet (APE, DSF) are now timed**: listening time used to stay at 0, so only playing a track to the very end counted as a play
+- **Listening while minimised is no longer under-counted**: the timer does not run while the window is minimised and only 4.2 s were credited on return; the whole gap is now credited. Seeking, stalls and pauses still do not count as listening
+- The three accounting gates — finished / 45 s listened / half the track — are unchanged, and there is no UI change
+- Full Node regression suite: `912/912` passing (new `tests/listen-stats-accounting.test.js`, 7 cases)
+
+<details>
+<summary>v1.8.4 Library maintenance: five checks that spell out what is missing</summary>
 
 - **The library home page gains a third card section, "Library maintenance"**: duplicates / missing files / no cover art / no lyrics / tag problems. Each one opens as an ordinary playlist — back, play all, lazy loading all unchanged. All five belong to the same family as the smart categories: computed live from the current library, **never persisted, never written to SQLite**, so results follow the library instead of leaving a stale "last scan result" behind
 - **Duplicate detection groups by normalised "title + artist" but deliberately does not strip `(Live)` / `(Remix)` suffixes** — stripping them would judge a live version and a studio version to be the same track, and under-reporting beats false alarms. After a title+artist collision it re-checks by file size or duration: identical size counts as a duplicate, and a duration differing by more than 2 seconds is dropped from the group — but **nothing is dropped while duration has not been read yet**
@@ -104,6 +114,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - **Zero UI churn: `public/index.html` and `public/app.css` were not touched**, the maintenance cards reuse the existing card, section-label and mini-button styles
 - Known limits: missing-file detection depends on the desktop shell's disk channel, so **in plain browser mode that entry says "this environment does not support disk checks"**; how the five cards look in a real window was not verified visually this round
 - Full Node regression suite: `905/905` passing (new `tests/library-maintenance.test.js`, 24 cases)
+
+</details>
 
 <details>
 <summary>v1.8.3 — Encrypted QRC lyrics, and picking among same-named lyric files</summary>
