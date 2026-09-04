@@ -11,6 +11,26 @@
 - 测试切片锚点：`tests/listen-stats-accounting.test.js` 切 `var LISTEN_TICK_CATCHUP_MAX_MS = ` 到换行加 `var appPerfMarks`（上限从源码里切出来，测试不硬编码）、`function beginListenSession(` 到 `function mostPlayedSong(`（计时与结算拼在同一个 realm 跑，listenMs 是真算出来的）、`function flushPersistentVisualState() {` 到 `window.addEventListener('beforeunload'`、`function runLocalUserStateWrite(` 到 `function hydrateLocalUserStateRecord(`，**重命名或拆分这四处前先 grep 一遍 tests 里的锚点字符串**。
 - 验证：全量回归 `912/912` 通过（上一版基线 `905`），新增 7 例。**新增的七例先在修前源码上对跑过一遍、七例全红**，确认钉子真的拦得住回归。界面零改动，`public/index.html` 与 `public/app.css` 一行未动；**真实窗口里的播放统计本轮没有肉眼验证过**。
 
+
+### 发布记录（v1.8.5）
+
+- 单分支写法：`fix/listen-stats-accounting`。修复提交 `368cbf6 fix: 播放统计漏账（关窗口不结算 / 无时长文件不计时 / 最小化空档只补 4.2 秒）` 只带代码与测试、`APP_VERSION` 仍是旧值（保证单独 checkout 也自洽），版本钉与全部文档压在紧随其后的 `cf39700 chore(release): 1.8.5` 里。
+- PR [#44](https://github.com/oirge/Mineradio/pull/44) → **合并提交** `eec04ed`（CI `verify` run `33853860300`，3m5s 通过）。绝不 squash，否则打在 `cf39700` 上的 tag 会离开 `main` 的可达历史。
+- tag `v1.8.5` 打在 `cf39700` 且是 **annotated**（tag object `726c1e2`），`git describe origin/main` 回 `v1.8.5-1-geec04ed`。
+- `Build and Release` run `33854258862` 成功（`--ref v1.8.5 -f tag=v1.8.5`）。**electron-builder 的双草稿第四次复现**：`382584070` 四项资产齐全、`382584071` 只有 `latest.yml` 与安装器两项，同一秒创建；草稿在 `releases/tags/<tag>` 上会 404，只能枚举 `releases?per_page=8` 比资产清单。删掉资产不全的 `382584071` 后发布 `382584070`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.8.5` 复验，tag object 仍是 `726c1e2`），PATCH 时带 `make_latest=true`，`releases/latest` 已指向 `v1.8.5`。
+- 四项资产全部回下本机复算核对：
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-1.8.5-Setup.exe` | 102298702 | `ba121bc4512593f930ca62c538ab507cfc191e25644023c034f50c1b54026e04` |
+| `Mineradio-1.8.5-Setup.exe.blockmap` | 106442 | `5a63b07b658bfcee63a3222ae5da39f4ffa3c77e7f7b9ef7a098bb4336ebdd43` |
+| `Mineradio-1.8.5-SHA256SUMS.txt` | 273 | `87bc49834370070d5588f349eb470d56e7af9d1df3ed9546bc93f4500455c7b8` |
+| `latest.yml` | 347 | `09714f16d4e9552baf14ec44752498a7354f88a8315fbaa11516233518389545` |
+
+- 清单 `Mineradio-1.8.5-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机复算全中；`latest.yml` 的 `sha512` = `3FEp9sFr73b2Hv7ErGoA/lvJUJfKms8o0hYmBiakTQxlYOattjl6xqOGPeEQzTz/lgXZ+5D1Dn2a/5IRSLa1pw==` 与 `size` = `102298702` 与安装器实测一致，`releaseDate` `2026-09-04T08:41:35.537Z`。
+- Release 正文按用户「更新介绍简单明了不要说废话」的要求写短：四条修复 + 一句「三条门槛不变、界面无改动」+ 安装说明，没有展开工程细节（细节在本文件与 `docs/PROJECT_MEMORY.md` 里）。
+- 资产记录分支 `docs/release-assets-v185`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.8.4 音乐库维护：拿不准的结论必须单独报，不能塞进名单也不能咽掉
 - 正式发布版本从 `1.8.3` 提升为 `1.8.4`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:595`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` 加 `package.json` 版本，**漏一处就会红**。
 - 用户原话：「继续更新发布v1.8.4」加一棵树：`音乐库维护` 下挂 `重复检测` / `失效文件` / `无封面` / `无歌词` / `标签异常`。**五项被当成明确的验收清单**，每项各自配了断言。
