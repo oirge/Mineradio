@@ -92,7 +92,21 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.3 (2026-09-04)
+### Latest release v1.8.4 (2026-09-04)
+
+- **The library home page gains a third card section, "Library maintenance"**: duplicates / missing files / no cover art / no lyrics / tag problems. Each one opens as an ordinary playlist — back, play all, lazy loading all unchanged. All five belong to the same family as the smart categories: computed live from the current library, **never persisted, never written to SQLite**, so results follow the library instead of leaving a stale "last scan result" behind
+- **Duplicate detection groups by normalised "title + artist" but deliberately does not strip `(Live)` / `(Remix)` suffixes** — stripping them would judge a live version and a studio version to be the same track, and under-reporting beats false alarms. After a title+artist collision it re-checks by file size or duration: identical size counts as a duplicate, and a duration differing by more than 2 seconds is dropped from the group — but **nothing is dropped while duration has not been read yet**
+- **Missing files is the one check that must ask the disk**, so it runs only when you open that entry or press "Re-scan". The desktop shell gains a status-code-only channel: the main process confirms each path one by one and returns just "still there / gone / not inside an authorised music folder" — **not a single byte of file content**. "Not authorised" and "deleted" are recorded separately. The renderer asks in batches of 400, so a library of tens of thousands never freezes the UI
+- **Every no-cover / no-lyrics / tag verdict is three-state: yes / no / not known yet.** The "not known yet" share is reported separately as "N to scan" — **never padded into the problem list, never quietly counted as fine**. No image beside the file plus a format that cannot carry embedded art is a verdict with zero disk reads; a `.lrc` that sits right there but reads back empty or fails to decrypt still counts as "no lyrics"
+- **Tag problems check title / artist / album / duration for absence, plus the format of year and track number**; year and track number are only validated when they carry a value. **Right after a fresh import, while tags are still unread, everything is recorded as "to scan" rather than reported as broken**
+- Card subtitles state the counts plainly ("12 tracks · 340 to scan · no embedded or folder cover art"); the missing-files card switches wording by scan state and offers neither "Play all" nor the card's ▶ — the files are gone, playing them would only error — showing "Re-scan" instead
+- All four pure buckets are filled in a single pass and cached against a "library length + first/last key + asset epoch" signature, so a 20,000-track library is walked once; when background cover / lyric scanning reaches a verdict the numbers follow on their own
+- **Zero UI churn: `public/index.html` and `public/app.css` were not touched**, the maintenance cards reuse the existing card, section-label and mini-button styles
+- Known limits: missing-file detection depends on the desktop shell's disk channel, so **in plain browser mode that entry says "this environment does not support disk checks"**; how the five cards look in a real window was not verified visually this round
+- Full Node regression suite: `905/905` passing (new `tests/library-maintenance.test.js`, 24 cases)
+
+<details>
+<summary>v1.8.3 — Encrypted QRC lyrics, and picking among same-named lyric files</summary>
 
 - **Encrypted QRC lyrics can now be read**: both on-disk carriers are accepted — the hex text an API returns verbatim, and the raw binary ciphertext. Detection looks only at content features, so a renamed encrypted QRC is still recognised while existing plaintext QRC / LRC files are never mistaken for ciphertext
 - The chain is 3DES but **not standard 3DES**: the DES port QQ Music uses carries several deviations from the spec (S-box typos, the PC-2 offset, little-endian 32-bit key words, 15 rounds plus a half round, no final swap of the halves), so it had to be transliterated from the in-the-wild implementation. Each block runs `D(K3) → E(K2) → D(K1)`, the result is a zlib stream, and the UTF-8 BOM is stripped after inflating. Inflating still uses `DecompressionStream`, which both Chromium and Node ship — **no new dependency**
@@ -105,6 +119,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Nearly no UI change: `public/index.html` only gained one candidate-button row inside the existing custom-lyrics dialog (reusing the existing `btn-row` class), and **`public/app.css` was not touched**
 - Known limits: **no real encrypted QRC file was available to check against.** Correctness of the chain rests on a big-integer reference implementation compared round by round, six known-answer vectors and one full-chain ciphertext; how real files look in the window was not verified visually this round
 - Full Node regression suite: `881/881` passing (new `tests/lyric-format-hardening.test.js`, 10 cases)
+
+</details>
 
 <details>
 <summary>v1.8.2 — Multi-format lyrics: KRC / QRC / TTML all read, word timing unchanged</summary>
