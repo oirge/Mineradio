@@ -11,6 +11,9 @@
 - 支持音乐文件夹自动监控：新增、删除、改标签、换封面自动同步，不必重启。
 - 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) 播放。
 - 支持同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词。
+- 支持加密歌词：KRC（`krc1`）与 QRC（十六进制文本与二进制密文两种形态）都能直接读。
+- 支持一首歌配多份同名歌词时按格式优先级自动挑，也可以自己挑一份并记住。
+- 支持歌词编码自动识别：UTF-8 / UTF-16 / GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252。
 - 支持 MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 内嵌歌词标签，包括带时间轴的 LRC 歌词。
 - 支持同目录封面图片和音频内嵌封面。
 - 移除本地节奏分析环节。
@@ -42,7 +45,12 @@
 
 ### 📝 歌词功能
 - ✅ 同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词文件
-- ✅ 逐字歌词：YRC（网易云）/ KRC（酷狗，含 `krc1` 加密二进制）/ QRC（QQ 音乐，含 XML 容器）/ TTML（Apple Music 一族）
+- ✅ 逐字歌词：YRC（网易云）/ KRC（酷狗，含 `krc1` 加密二进制）/ QRC（QQ 音乐，含 XML 容器与加密载体）/ TTML（Apple Music 一族）
+- ✅ QRC 加密歌词：接口原样落盘的十六进制文本与直接写成二进制的密文两种形态都收，识别只看内容特征，后缀被改过也认得出来
+- ✅ 同名多份歌词按格式优先级自动挑：逐字时间轴（`.qrc` / `.krc` / `.ttml` / `.yrc`）> 逐行 `.lrc` > 字幕（`.ass` / `.srt` / `.vtt`）> `.txt`
+- ✅ 同名多份歌词也能自己挑：自定义歌词弹窗里列出候选（写着路径与格式），选择会记住，下次重新导入同一批文件仍用你挑的那一份
+- ✅ 歌词编码自动识别：UTF-8 / UTF-16LE / UTF-16BE（含无 BOM）/ GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252
+- ✅ 歌词时间轴兼容在野写法：`[offset:±N]` 全局偏移、`[mm:ss:cc]`、`[hh:mm:ss.fff]`，小数位按实际位数换算
 - ✅ MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 内嵌歌词标签
 - ✅ 带时间轴的 LRC 格式
 - ✅ 歌词翻译自动识别和显示
@@ -260,7 +268,10 @@ npm test
 
 ### 如何添加歌词？
 - 将 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词文件放在音乐文件同目录，保持文件名一致
-- 逐字歌词直接认：YRC、KRC（含 `krc1` 加密二进制）、QRC（含 `<Lyric_1 LyricContent="…">` XML 容器）、TTML
+- 逐字歌词直接认：YRC、KRC（含 `krc1` 加密二进制）、QRC（含 `<Lyric_1 LyricContent="…">` XML 容器与加密载体）、TTML
+- 加密的 QRC 不用先解密：十六进制文本与二进制密文两种形态都能直接放进去，识别看内容不看后缀
+- 一首歌配了多份同名歌词时，默认按格式优先级挑（逐字 > `.lrc` > 字幕 > `.txt`）；想换成另一份就在自定义歌词弹窗里点候选按钮，选择会被记住
+- 歌词文件不是 UTF-8 也没关系：UTF-16、GB18030、Big5、Shift_JIS、EUC-KR、Windows-1252 会自动识别，合法的 UTF-8 一律不重猜
 - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 文件可直接使用内嵌歌词标签（如 FLAC/OGG 的 `LYRICS`、MP3 的 `USLT`）
 
 ### 封面图片如何加载？
