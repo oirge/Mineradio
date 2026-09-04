@@ -1,5 +1,16 @@
 ﻿# 发布流程
 
+## v1.8.5 播放统计漏账：结算点、防抖写入、无时长文件、最小化空档
+- 正式发布版本从 `1.8.4` 提升为 `1.8.5`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
+- 用户原话：「修复一下」，指的是歌曲详情里「播放统计」对很多歌一直是空的。查出三个真漏账点加一个连带的持久化漏洞。**45 秒 / 一半进度 / 听完这三条结算门槛是设计，一字未动** —— 跳过的歌不记账，修完之后仍然会有歌显示空态。
+- **`flushPersistentVisualState` 原本不结算听歌会话。** 它绑在 `beforeunload` / `pagehide` 上，只存歌词布局、自由相机、音量和播放会话，退出前正在听的那一首永远不进统计。补上 `finalizeListenSession(false)`，照既有 `public/app.js:22425` 的写法套 `typeof` 守卫。`finalizeListenSession` 内部会把 `listenSession` 置空，所以两个事件都触发也只结算一次。
+- **顺着查出更前面一层：结算写的那份必然丢。** `scheduleLocalUserStateWrite` 是 120ms 防抖，页面卸载时那个 `setTimeout` 不会再执行。拆出 `runLocalUserStateWrite(id)`（立即执行一条并取消定时器）与 `flushLocalUserStateWrites()`（冲全部），待写载荷改存进 `localUserStatePendingWrites`（原来只活在定时器闭包里，外面冲不出来）。**`function scheduleLocalUserStateWrite(id, value, legacyKey)` 这行签名不能改**，`tests/complete-optimization-gates.test.js:58` 钉着。自定义封面 / 歌词 / 歌词候选 / 节拍图 / 节拍偏好 / 音效档案同一个漏法，一起好了。
+- **不能靠改 hydrate 的取值优先级来兜这个洞。** `hydrateLocalUserStateRecord` 是 IndexedDB 记录优先、legacy `localStorage` 兜底，所以卸载时同步写 `localStorage` 是白写：下次启动照旧读到那份更旧的 IDB 记录。唯一正确的做法是把 IDB 写入本身提前发起。
+- **`updateListenStatsTick` 第一行的 `!audio.duration` 让结算门里的 30 秒兜底成了死代码。** APE/DSF 走虚拟 WAV、元数据没解析出来时 `audio.duration` 是 NaN，一旦在这里早退 `listenMs` 恒为 0，`(!audio || !audio.duration ? session.listenMs >= 30000 : false)` 这条永远不可能成立。门槛改成只看 `audio.paused`，`maxProgress` 那行自己用 `isFinite(duration)` 兜。
+- **最小化空档原本一次只补 4200ms。** `schedulePlaybackTickTimer` 在 `document.hidden && !isLiveBackgroundKeepMode()` 时直接不排 tick，回前台那一次的增量被 `Math.min(..., 4200)` 吃掉，后台听三分钟只记 4.2 秒，等于后台听歌只能靠 `maxProgress >= 0.5` 兜。改成音频与墙钟推进量对得上（差值不超过 `max(1500, paired * 0.25)`）才整段补回，上限 `LISTEN_TICK_CATCHUP_MAX_MS = 1800000`。**关键性质：补账基数始终是 `Math.min(deltaByAudio, deltaByWall)`，两个时钟对得上只提高上限、绝不抬高基数** —— 所以拖进度条（音频跳、墙钟不跳）、卡顿（墙钟跳、音频不跳）、长时间暂停三种情形都不可能被记成收听。原来那句 `delta < 8000` 在 4200 上限下恒真、本就是死代码，跟着去掉。
+- 测试切片锚点：`tests/listen-stats-accounting.test.js` 切 `var LISTEN_TICK_CATCHUP_MAX_MS = ` 到换行加 `var appPerfMarks`（上限从源码里切出来，测试不硬编码）、`function beginListenSession(` 到 `function mostPlayedSong(`（计时与结算拼在同一个 realm 跑，listenMs 是真算出来的）、`function flushPersistentVisualState() {` 到 `window.addEventListener('beforeunload'`、`function runLocalUserStateWrite(` 到 `function hydrateLocalUserStateRecord(`，**重命名或拆分这四处前先 grep 一遍 tests 里的锚点字符串**。
+- 验证：全量回归 `912/912` 通过（上一版基线 `905`），新增 7 例。**新增的七例先在修前源码上对跑过一遍、七例全红**，确认钉子真的拦得住回归。界面零改动，`public/index.html` 与 `public/app.css` 一行未动；**真实窗口里的播放统计本轮没有肉眼验证过**。
+
 ## v1.8.4 音乐库维护：拿不准的结论必须单独报，不能塞进名单也不能咽掉
 - 正式发布版本从 `1.8.3` 提升为 `1.8.4`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:595`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` 加 `package.json` 版本，**漏一处就会红**。
 - 用户原话：「继续更新发布v1.8.4」加一棵树：`音乐库维护` 下挂 `重复检测` / `失效文件` / `无封面` / `无歌词` / `标签异常`。**五项被当成明确的验收清单**，每项各自配了断言。

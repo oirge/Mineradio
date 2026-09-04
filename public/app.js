@@ -249,6 +249,7 @@ var LOCAL_USER_STATE_LISTEN_STATS = 'listen-stats';
 var LOCAL_USER_STATE_FX_ARCHIVES = 'user-fx-archives';
 var localUserStateWriteTimers = Object.create(null);
 var localUserStateWriteTokens = Object.create(null);
+var localUserStatePendingWrites = Object.create(null);
 var localUserStateHydrationStarted = false;
 function openLocalUserStateDb() {
   return new Promise(function(resolve, reject){
@@ -313,27 +314,51 @@ function removeLegacyLocalUserState(key) {
     backupPersistentUiState(patch);
   }
 }
+/**
+ * 立即执行一条待写状态，并取消尚未到点的防抖定时器。
+ * @param {string} id 状态记录标识。
+ * @returns {void}
+ */
+function runLocalUserStateWrite(id) {
+  if (localUserStateWriteTimers[id]) clearTimeout(localUserStateWriteTimers[id]);
+  localUserStateWriteTimers[id] = 0;
+  var job = localUserStatePendingWrites[id];
+  if (!job) return;
+  delete localUserStatePendingWrites[id];
+  var token = job.token;
+  var value = job.value;
+  var legacyKey = job.legacyKey;
+  writeLocalUserStateRecord(id, value).then(function(){
+    if (localUserStateWriteTokens[id] !== token) return;
+    removeLegacyLocalUserState(legacyKey);
+  }).catch(function(){
+    if (localUserStateWriteTokens[id] !== token || !legacyKey) return;
+    try { localStorage.setItem(legacyKey, JSON.stringify(value)); } catch (e) {}
+    if (legacyKey === 'mineradio-user-fx-archives-v1') {
+      var patch = {};
+      patch[legacyKey] = JSON.stringify(value);
+      backupPersistentUiState(patch);
+    }
+  });
+}
 function scheduleLocalUserStateWrite(id, value, legacyKey) {
   id = String(id || '');
   if (!id) return;
   var token = (localUserStateWriteTokens[id] || 0) + 1;
   localUserStateWriteTokens[id] = token;
+  localUserStatePendingWrites[id] = { token: token, value: value, legacyKey: legacyKey || '' };
   if (localUserStateWriteTimers[id]) clearTimeout(localUserStateWriteTimers[id]);
-  localUserStateWriteTimers[id] = setTimeout(function(){
-    localUserStateWriteTimers[id] = 0;
-    writeLocalUserStateRecord(id, value).then(function(){
-      if (localUserStateWriteTokens[id] !== token) return;
-      removeLegacyLocalUserState(legacyKey);
-    }).catch(function(){
-      if (localUserStateWriteTokens[id] !== token || !legacyKey) return;
-      try { localStorage.setItem(legacyKey, JSON.stringify(value)); } catch (e) {}
-      if (legacyKey === 'mineradio-user-fx-archives-v1') {
-        var patch = {};
-        patch[legacyKey] = JSON.stringify(value);
-        backupPersistentUiState(patch);
-      }
-    });
-  }, 120);
+  localUserStateWriteTimers[id] = setTimeout(function(){ runLocalUserStateWrite(id); }, 120);
+}
+/**
+ * 冲掉全部待写状态。关窗口和刷新时防抖定时器不会再触发，必须当场发起写入。
+ * @returns {void}
+ */
+function flushLocalUserStateWrites() {
+  for (var id in localUserStatePendingWrites) {
+    if (!Object.prototype.hasOwnProperty.call(localUserStatePendingWrites, id)) continue;
+    runLocalUserStateWrite(id);
+  }
 }
 function hydrateLocalUserStateRecord(spec) {
   if (!spec || !spec.id || typeof spec.apply !== 'function') return Promise.resolve();
@@ -529,6 +554,8 @@ var activePlaybackContext = null;
 var listenStatsState = createEmptyListenStatsState();
 var listenStatsHydrated = false;
 var listenSession = null;
+// 最小化且未开后台保持时不发播放 tick，回到前台要一次性补回这段真实收听，按单首歌上限收口。
+var LISTEN_TICK_CATCHUP_MAX_MS = 1800000;
 var appPerfMarks = [];
 function markAppPerf(name) {
   try {
@@ -592,7 +619,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.8.4';
+var APP_VERSION = '1.8.5';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2292,11 +2319,15 @@ function updateFreeCamera(dt, frameNow) {
   scheduleFreeCameraStateSave(720);
 }
 function flushPersistentVisualState() {
+  // 关窗口或刷新时把正在听的这首先结算掉，否则退出前那一首永远进不了播放统计。
+  if (typeof finalizeListenSession === 'function') { try { finalizeListenSession(false); } catch (e) {} }
   try { saveLyricLayout(); } catch (e) {}
   try { saveFreeCameraState(); } catch (e) {}
   try { flushVolumePreference(); } catch (e) {}
   try { savePlaybackSession(true); } catch (e) {}
   try { flushPersistentUiStateBackup(); } catch (e) {}
+  // 上面这些 save 走 120ms 防抖，页面卸载时定时器不会再跑，待写队列必须当场冲掉。
+  if (typeof flushLocalUserStateWrites === 'function') { try { flushLocalUserStateWrites(); } catch (e) {} }
 }
 window.addEventListener('beforeunload', flushPersistentVisualState);
 window.addEventListener('pagehide', flushPersistentVisualState);
@@ -16928,22 +16959,33 @@ function beginListenSession(song, context) {
   };
 }
 function updateListenStatsTick(force) {
-  if (!audio || !audio.duration || audio.paused) return;
+  // 不能用 audio.duration 当门槛：APE/DSF 走虚拟 WAV、元数据还没解析出来时时长为 NaN，
+  // 一旦在这里返回，listenMs 永远是 0，结算门里那条「无时长看 30 秒」的兜底就成了死代码。
+  if (!audio || audio.paused) return;
   var song = currentCoverSong();
   if (!song) return;
   var key = queueItemKey(song);
   if (!listenSession || listenSession.key !== key) beginListenSession(song, activePlaybackContext);
   if (!listenSession) return;
   var now = Date.now();
+  var duration = audio.duration;
   var audioTime = isFinite(audio.currentTime) ? audio.currentTime : 0;
   var deltaByAudio = Math.max(0, audioTime - (listenSession.lastAudioTime || 0)) * 1000;
   var deltaByWall = Math.max(0, now - (listenSession.lastWallAt || now));
-  var delta = deltaByAudio > 0 ? Math.min(deltaByAudio, deltaByWall || deltaByAudio, 4200) : 0;
+  var delta = 0;
+  if (deltaByAudio > 0) {
+    // 两个时钟取小：拖进度条只推进音频时间，卡顿只推进墙钟时间，两种都不算听过。
+    var paired = Math.min(deltaByAudio, deltaByWall || deltaByAudio);
+    // 音频与墙钟推进量对得上说明这段是连续播放（含最小化期间没发 tick 的空档），可以整段补回来；
+    // 对不上就退回每次 4200ms 的小步，避免把一次跳转记成收听。
+    var aligned = Math.abs(deltaByAudio - deltaByWall) <= Math.max(1500, paired * 0.25);
+    delta = Math.min(paired, aligned ? LISTEN_TICK_CATCHUP_MAX_MS : 4200);
+  }
   if (force && delta <= 0) delta = Math.min(deltaByWall, 1500);
-  if (delta > 0 && delta < 8000) listenSession.listenMs += delta;
+  if (delta > 0) listenSession.listenMs += delta;
   listenSession.lastWallAt = now;
   listenSession.lastAudioTime = audioTime;
-  listenSession.maxProgress = Math.max(listenSession.maxProgress || 0, audio.duration ? audioTime / audio.duration : 0);
+  listenSession.maxProgress = Math.max(listenSession.maxProgress || 0, duration && isFinite(duration) ? audioTime / duration : 0);
 }
 /**
  * 结算当前听歌会话。该函数会写入听歌画像和 Home 最近播放数据，需保持切歌路径低分配。
