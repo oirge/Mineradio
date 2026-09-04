@@ -84,7 +84,22 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.2 (2026-09-03)
+### Latest release v1.8.3 (2026-09-04)
+
+- **Encrypted QRC lyrics can now be read**: both on-disk carriers are accepted — the hex text an API returns verbatim, and the raw binary ciphertext. Detection looks only at content features, so a renamed encrypted QRC is still recognised while existing plaintext QRC / LRC files are never mistaken for ciphertext
+- The chain is 3DES but **not standard 3DES**: the DES port QQ Music uses carries several deviations from the spec (S-box typos, the PC-2 offset, little-endian 32-bit key words, 15 rounds plus a half round, no final swap of the halves), so it had to be transliterated from the in-the-wild implementation. Each block runs `D(K3) → E(K2) → D(K1)`, the result is a zlib stream, and the UTF-8 BOM is stripped after inflating. Inflating still uses `DecompressionStream`, which both Chromium and Node ship — **no new dependency**
+- **When several lyric files share a track's name, the format now decides** instead of whichever file was enumerated first: word-by-word timing (`.qrc` / `.krc` / `.ttml` / `.yrc`) > line-based `.lrc` > subtitles (`.ass` / `.srt` / `.vtt`) > `.txt` > unknown extensions, with paths breaking ties, so the same batch of files imports identically every time
+- **You can also pick by hand**: when a track has two or more lyric files, the custom-lyrics dialog gains a row of candidate buttons labelled with path and format. The choice is remembered, so **re-importing the same batch keeps the file you picked**; if that file later disappears it falls back to the top-priority match. Switching clears the old lyric cache state and propagates to the same track in the play queue and playlists
+- **Lyric encoding is detected automatically**: UTF-8 / UTF-16LE / UTF-16BE with a BOM are decoded by BOM and the BOM is stripped; BOM-less UTF-16 is sniffed from byte distribution; anything that is neither UTF-16 nor valid UTF-8 is tried as `gb18030` → `big5` → `shift_jis` → `euc-kr` → `windows-1252`, keeping whichever produces the fewest garbage characters. **Valid UTF-8 is never re-guessed**, so existing UTF-8 lyrics are byte-for-byte unchanged
+- **Several in-the-wild timestamp spellings are fixed**: the `[offset:+500]` global offset now applies per the LRC convention (positive is earlier, negative later, and a line pushed past zero clamps to 0 instead of going negative); `[mm:ss:cc]` (the old colon-as-decimal-point form) and `[hh:mm:ss.fff]` (with hours) are both accepted; fractional digits scale by their actual length, so `[00:01.1234]` is no longer read as ten times its value; and minutes widen to three digits, so audio longer than an hour is not truncated
+- Fixed a defect that only triggered on specific filenames: a track named `constructor.mp3` (or `toString` / `valueOf` / `__proto__`) made the candidate lookup pull `Object` itself out as the candidate array and inject an empty candidate off `Object.length === 1`; lookups now check own properties first
+- `.qrc` now serves as `application/octet-stream` instead of `application/xml; charset=utf-8` (in both the local-file proxy and desktop library), otherwise an encrypted binary is mangled as text before decoding
+- Nearly no UI change: `public/index.html` only gained one candidate-button row inside the existing custom-lyrics dialog (reusing the existing `btn-row` class), and **`public/app.css` was not touched**
+- Known limits: **no real encrypted QRC file was available to check against.** Correctness of the chain rests on a big-integer reference implementation compared round by round, six known-answer vectors and one full-chain ciphertext; how real files look in the window was not verified visually this round
+- Full Node regression suite: `881/881` passing (new `tests/lyric-format-hardening.test.js`, 10 cases)
+
+<details>
+<summary>v1.8.2 — Multi-format lyrics: KRC / QRC / TTML all read, word timing unchanged</summary>
 
 - Lyrics support grows from LRC / YRC / SRT / VTT / ASS into **multi-format word-by-word lyrics**: **KRC** (Kugou), **QRC** (QQ Music) and **TTML** (the Apple Music family) are now read directly into the existing lyric-line structure, so word highlighting, desktop lyrics, dual-line layout and translations all keep working unchanged
 - **KRC** is read both as plaintext and as a `krc1` **encrypted binary**: the encrypted form is XOR-restored with the format's published constant and then inflated using `DecompressionStream`, which both Chromium and Node ship — no new dependency. Word times are offsets relative to the line start and are converted to absolute time on read
@@ -96,6 +111,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - **No UI change**: `public/index.html` only gained three extensions in each of two `accept` attributes, and `public/app.css` was not touched
 - Known limits: **encrypted QRC network payloads (triple-DES + zlib) are not decrypted this round.** A `.qrc` on disk is usually already plaintext XML or a bare body, and both of those read directly
 - Full Node regression suite: `871/871` passing (new `tests/multi-format-lyrics.test.js`, 7 cases)
+
+</details>
 
 <details>
 <summary>v1.8.1 — Whole-machine backup: export mineradio.backup, move to a new computer in one go</summary>
