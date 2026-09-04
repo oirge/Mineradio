@@ -15,7 +15,10 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Automatic music folder monitoring: new files are indexed, deleted files are pruned, tag and cover edits refresh on their own, no restart required.
 - Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) playback.
 - Support for `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` lyrics files with matching names.
-- Word-by-word lyrics from YRC, KRC (including `krc1` encrypted binaries), QRC (including the XML container) and TTML.
+- Word-by-word lyrics from YRC, KRC (including `krc1` encrypted binaries), QRC (including the XML container and encrypted payloads) and TTML.
+- Encrypted QRC lyrics are read directly, both as the hex text the API returns and as raw binary ciphertext.
+- When one track has several same-named lyrics files, the best one is picked by format priority — and you can pick a different one yourself, which is remembered.
+- Automatic lyrics encoding detection: UTF-8 / UTF-16 / GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252.
 - Support for MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags, including timestamped LRC lyrics.
 - Support for automatic lyrics translation recognition and display.
 - Support for cover images in the same directory and embedded audio covers.
@@ -58,7 +61,12 @@ Build artifacts are located in `dist/`.
 
 ### Lyrics Features
 - Matching LRC/TXT/SRT/WebVTT/ASS/YRC/KRC/QRC/TTML lyrics files
-- Word-by-word lyrics: YRC (NetEase), KRC (Kugou, plaintext and `krc1` encrypted binary), QRC (QQ Music, XML container and bare body), TTML (the Apple Music family)
+- Word-by-word lyrics: YRC (NetEase), KRC (Kugou, plaintext and `krc1` encrypted binary), QRC (QQ Music, XML container, bare body and encrypted payload), TTML (the Apple Music family)
+- Encrypted QRC: both the hex text the API returns verbatim and raw binary ciphertext are accepted; detection looks at content, not the file extension, so renamed files still work
+- Several same-named lyrics files are ranked by format: word-level timing (`.qrc` / `.krc` / `.ttml` / `.yrc`) > line-level `.lrc` > subtitles (`.ass` / `.srt` / `.vtt`) > `.txt`
+- You can also pick the candidate yourself: the custom-lyrics dialog lists every match with its path and format, and your choice survives a re-import of the same files
+- Automatic encoding detection: UTF-8 / UTF-16LE / UTF-16BE (with or without BOM) / GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252, and valid UTF-8 is never second-guessed
+- Timeline quirks handled: `[offset:±N]` global shift, `[mm:ss:cc]`, `[hh:mm:ss.fff]`, and fractions scaled by their actual digit count
 - Matching JPG/JPEG/JPE/JFIF/PNG/WebP/AVIF/GIF/BMP/SVG cover files
 - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags
 - Automatic lyrics translation recognition
