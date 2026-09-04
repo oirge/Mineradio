@@ -329,6 +329,9 @@ const LOCAL_LIBRARY_MIME = {
 };
 const LOCAL_LIBRARY_SCAN_STAT_CONCURRENCY = 24;
 const LOCAL_LIBRARY_SCAN_VISIT_LIMIT = 60000;
+// 音乐库维护「失效文件」一次最多问 2000 条路径，渲染进程自己按 400 一批切，这里只兜住上限。
+const LOCAL_LIBRARY_PROBE_MAX = 2000;
+const LOCAL_LIBRARY_PROBE_CONCURRENCY = 8;
 const LOCAL_LIBRARY_INCREMENTAL_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const LOCAL_LIBRARY_NAME_COMPARE = new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' }).compare;
 
@@ -675,6 +678,45 @@ async function scanLocalMusicFolder(folderPath, options) {
     if (summary) result.db = summary;
   }
   return result;
+}
+
+/**
+ * 逐条确认一批音频文件还在不在磁盘上，供渲染进程的音乐库维护「失效文件」使用。
+ * 只回状态码，绝不回文件内容：'ok' 还在、'missing' 没了、'blocked' 不在已授权的音乐目录里。
+ * blocked 必须和 missing 分开——授权失败不等于文件被删了，混成一个会误报一整批。
+ * @param {Array<string>} paths 待确认的绝对路径。
+ * @returns {Promise<object>} { ok, checked, states, truncated }。
+ */
+async function probeAuthorizedLocalFiles(paths) {
+  const list = Array.isArray(paths) ? paths : [];
+  const truncated = list.length > LOCAL_LIBRARY_PROBE_MAX;
+  const targets = truncated ? list.slice(0, LOCAL_LIBRARY_PROBE_MAX) : list;
+  const states = new Array(targets.length).fill('missing');
+  let cursor = 0;
+  async function worker() {
+    for (;;) {
+      const index = cursor++;
+      if (index >= targets.length) return;
+      let resolved = '';
+      try {
+        resolved = resolveAuthorizedLocalFile(targets[index]);
+      } catch (e) {
+        states[index] = 'blocked';
+        continue;
+      }
+      try {
+        const stat = await fs.promises.stat(resolved);
+        states[index] = stat.isFile() ? 'ok' : 'missing';
+      } catch (e) {
+        states[index] = 'missing';
+      }
+    }
+  }
+  const workers = [];
+  const width = Math.min(LOCAL_LIBRARY_PROBE_CONCURRENCY, targets.length) || 0;
+  for (let i = 0; i < width; i++) workers.push(worker());
+  await Promise.all(workers);
+  return { ok: true, checked: targets.length, states, truncated };
 }
 
 async function refreshLocalMusicFileEntries(folderPath, snapshotOrFiles) {
@@ -4587,6 +4629,14 @@ ipcMain.handle('mineradio-local-music-refresh-entries', trustedMainFrameHandler(
     return await refreshLocalMusicFileEntries(folderPath, files);
   } catch (e) {
     return { ok: false, error: e.message || 'LOCAL_LIBRARY_REFRESH_FAILED' };
+  }
+}));
+
+ipcMain.handle('mineradio-local-music-probe-entries', trustedMainFrameHandler(async (_event, paths) => {
+  try {
+    return await probeAuthorizedLocalFiles(paths);
+  } catch (e) {
+    return { ok: false, error: e.message || 'LOCAL_LIBRARY_PROBE_FAILED', states: [] };
   }
 }));
 

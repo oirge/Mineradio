@@ -66,6 +66,8 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   chooseLocalMusicFolder: () => ipcRenderer.invoke('mineradio-local-music-choose-folder'),
   scanLocalMusicFolder: (folderPath, options) => ipcRenderer.invoke('mineradio-local-music-scan-folder', folderPath, options || {}),
   refreshLocalMusicFiles: (folderPath, files) => ipcRenderer.invoke('mineradio-local-music-refresh-entries', folderPath, files || []),
+  // 音乐库维护「失效文件」：只问一批路径还在不在，主进程只回状态码，不回任何文件内容。
+  probeLocalMusicFiles: (paths) => ipcRenderer.invoke('mineradio-local-music-probe-entries', Array.isArray(paths) ? paths : []),
   readLocalFileRange: (filePath, start, end) => ipcRenderer.invoke('mineradio-local-file-read-range', filePath, start, end),
   readLocalFileDataUrl: (filePath) => ipcRenderer.invoke('mineradio-local-file-read-data-url', filePath),
   // 本地曲库 SQLite：文件指纹 + 路径索引常驻磁盘，几万首歌启动不再重放整包 JSON。

@@ -541,7 +541,7 @@ test('分类点击钩子排在通用歌单卡兜底之前', () => {
   assert.ok(kindPlay < kindCard, '播放按钮要先于整卡导航命中');
   assert.ok(kindCard < fallback, '分类卡必须挡在 openPlaylistPanelDetail 兜底之前');
   assert.ok(back < fallback);
-  assert.match(handler, /selectLocalPlaylist\(libraryKindCard\.getAttribute\('data-library-kind'\)\)/);
+  assert.match(handler, /var libraryKind = libraryKindCard\.getAttribute\('data-library-kind'\);\n\s*selectLocalPlaylist\(libraryKind\);/);
   assert.match(handler, /playLocalLibrarySong\(0, libraryKindPlay\.getAttribute\('data-library-kind-play'\)\)/);
 });
 

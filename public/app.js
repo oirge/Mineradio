@@ -12501,6 +12501,8 @@ function handoffLocalLyricText(previousSong, nextSong) {
  */
 function syncLocalSongAssetFields(sourceSong) {
   if (!sourceSong || !sourceSong.localKey) return;
+  // 资产结论刚变过一次，音乐库维护那几个现算名单要重新算。
+  if (typeof noteLocalLibraryMaintenanceAssetChange === 'function') noteLocalLibraryMaintenanceAssetChange();
   var lists = [localLibrarySongs, playQueue, playlist];
   var retainedLyricSong = shouldRetainLocalLyricText(sourceSong) ? sourceSong : null;
   // 资产字段仍可跨视图同步，但歌词原文只能写入精确当前对象，避免任一副本阻止大字符串回收。
@@ -17834,6 +17836,9 @@ function normalizeLocalLibraryCategoryKind(kind) {
   if (value.indexOf(LOCAL_LIBRARY_GROUP_KIND) === 0) {
     return localLibraryGroupDefByField(value.slice(LOCAL_LIBRARY_GROUP_KIND.length)) ? value : 'library';
   }
+  if (value.indexOf(LOCAL_LIBRARY_MAINTENANCE_KIND) === 0) {
+    return localLibraryMaintenanceDefById(value.slice(LOCAL_LIBRARY_MAINTENANCE_KIND.length)) ? value : 'library';
+  }
   return parseLocalLibraryValueKind(value) ? value : 'library';
 }
 /* 年代取 year 里的四位数字：标签常写成 2019-03-05 或 2019/03，只认第一段年份。 */
@@ -17891,6 +17896,7 @@ function invalidateLocalLibraryCategoryIndex() {
   localLibraryCategoryCache.categories = null;
   localLibraryCategoryCache.valueKind = '';
   localLibraryCategoryCache.valueSongs = null;
+  invalidateLocalLibraryMaintenanceIndex();
 }
 function localLibraryCategorySignature(songs) {
   var length = songs.length;
@@ -18027,20 +18033,350 @@ function localLibraryCategoryKindSongs(kind) {
   if (kind === LOCAL_LIBRARY_CATEGORY_HOME_KIND) return [];
   if (kind.indexOf(LOCAL_LIBRARY_GROUP_KIND) === 0) return [];
   if (kind.indexOf(LOCAL_LIBRARY_CATEGORY_KIND) === 0) return localLibraryCategorySongs(kind.slice(LOCAL_LIBRARY_CATEGORY_KIND.length));
+  if (kind.indexOf(LOCAL_LIBRARY_MAINTENANCE_KIND) === 0) return localLibraryMaintenanceSongs(kind.slice(LOCAL_LIBRARY_MAINTENANCE_KIND.length));
   var parsed = parseLocalLibraryValueKind(kind);
   return parsed ? localLibraryValueSongs(parsed.field, parsed.value) : [];
+}
+/* ============ 音乐库维护 ============
+ * library-fix:<id> 与智能分类同族，一样按当前曲库现算、不落盘、不进 SQLite。
+ * 重复 / 无封面 / 无歌词 / 标签异常四项只读歌曲对象上已有的字段，一次遍历喂四个桶；
+ * 失效文件必须问磁盘，所以它不跟着曲库现算，单独走一次显式触发的异步探测。 */
+var LOCAL_LIBRARY_MAINTENANCE_KIND = 'library-fix:';
+var LOCAL_LIBRARY_MAINTENANCE_MISSING_ID = 'missing';
+var LOCAL_LIBRARY_MAINTENANCE_PROBE_BATCH = 400;
+/* 归一后的标题里绝不会剩下控制字符，拿它当「标题|艺术家」的分隔符最稳；
+ * 写成 fromCharCode 是为了源码里不出现裸控制字符。 */
+var LOCAL_LIBRARY_MAINTENANCE_KEY_SEP = String.fromCharCode(1);
+var LOCAL_LIBRARY_MAINTENANCE_DEFS = [
+  { id: 'duplicate', title: '重复检测', icon: '▣', hint: '同一首歌导入了多份' },
+  { id: 'missing', title: '失效文件', icon: '✖', hint: '曲库里还在、磁盘上没了' },
+  { id: 'no-cover', title: '无封面', icon: '▢', hint: '内嵌封面与同目录封面都没有' },
+  { id: 'no-lyric', title: '无歌词', icon: '▤', hint: '内嵌歌词与同名歌词都没有' },
+  { id: 'tag-issue', title: '标签异常', icon: '✎', hint: '标题 / 艺术家 / 专辑 / 时长有缺' }
+];
+var localLibraryMaintenanceCache = { signature: '', source: null, lists: null, undetermined: null };
+/* 探测结果按 localKey 记住：state 为空是还没查过，ready 才算有结论。
+ * 曲库变动不清它 —— invalidateLocalLibraryCategoryIndex 每次歌单查表都会被叫到，
+ * 顺手清掉的话这份磁盘结论根本活不过一次渲染；失效的键自然匹配不到歌，会自己掉出去。 */
+var localLibraryMaintenanceProbe = { state: '', folderPath: '', keys: null, checked: 0, total: 0, at: 0, error: '' };
+/* 资产扫描进度不改 localKey，光靠「长度 + 首尾键」的签名认不出内嵌封面 / 歌词刚读完，
+ * 所以另记一个纪元号：syncLocalSongAssetFields 是资产结论的唯一汇流点，在那儿加一。 */
+var localLibraryMaintenanceEpoch = 0;
+function noteLocalLibraryMaintenanceAssetChange() {
+  localLibraryMaintenanceEpoch++;
+}
+function invalidateLocalLibraryMaintenanceIndex() {
+  localLibraryMaintenanceCache.signature = '';
+  localLibraryMaintenanceCache.source = null;
+  localLibraryMaintenanceCache.lists = null;
+  localLibraryMaintenanceCache.undetermined = null;
+}
+function localLibraryMaintenanceDefById(id) {
+  for (var i = 0; i < LOCAL_LIBRARY_MAINTENANCE_DEFS.length; i++) {
+    if (LOCAL_LIBRARY_MAINTENANCE_DEFS[i].id === id) return LOCAL_LIBRARY_MAINTENANCE_DEFS[i];
+  }
+  return null;
+}
+function localLibraryMaintenanceKind(id) { return LOCAL_LIBRARY_MAINTENANCE_KIND + id; }
+function localLibraryMaintenanceSignature(songs) {
+  var length = songs.length;
+  var first = length && songs[0] ? String(songs[0].localKey || '') : '';
+  var last = length && songs[length - 1] ? String(songs[length - 1].localKey || '') : '';
+  return length + '|' + first + '|' + last;
+}
+/* 归一只做大小写、空白与成对符号，不剥 (Live) / (Remix) 这类后缀：剥掉会把现场版
+ * 和录音室版判成同一首，宁可漏报也不误报。 */
+function localLibraryMaintenanceNormalizeText(value) {
+  return String(value == null ? '' : value)
+    .toLowerCase()
+    .replace(/[\s　]+/g, '')
+    .replace(/[·・_\-—–~～!！?？.,，。、;；:：'’“”「」『』《》〈〉()（）\[\]【】]/g, '');
+}
+/* 标签里没有标题时导入阶段会拿文件名兜底，这里再兜一次，免得整批空标题挤成一组。 */
+function localLibraryMaintenanceTitleText(song) {
+  var title = String((song && song.name) || '').trim();
+  if (title) return title;
+  var full = String((song && (song.localPath || song.localFilePathAbsolute)) || '');
+  var base = full.replace(/\\/g, '/').split('/').pop() || '';
+  return base.replace(/\.[^.]+$/, '');
+}
+function localLibraryMaintenanceDuplicateKey(song) {
+  var title = localLibraryMaintenanceNormalizeText(localLibraryMaintenanceTitleText(song));
+  if (!title) return '';
+  return title + LOCAL_LIBRARY_MAINTENANCE_KEY_SEP + localLibraryMaintenanceNormalizeText(song && song.artist);
+}
+/* 标题 + 艺术家撞上之后再用体积或时长复核：两边都读出来且明显不一样的（同名的现场版
+ * 最常见）就摘掉，只留真判不开的。时长还没读出来时不摘，避免扫描进度影响结论。 */
+function localLibraryMaintenanceDuplicateLike(a, b) {
+  var sizeA = Number(a && a.localFileSize) || 0;
+  var sizeB = Number(b && b.localFileSize) || 0;
+  if (sizeA > 0 && sizeA === sizeB) return true;
+  var durA = Math.round(Number(a && a.duration) || 0);
+  var durB = Math.round(Number(b && b.duration) || 0);
+  if (durA > 0 && durB > 0) return Math.abs(durA - durB) <= 2;
+  return true;
+}
+function localLibraryMaintenanceDuplicateGroup(group) {
+  var picked = [];
+  for (var i = 0; i < group.length; i++) {
+    var matched = false;
+    for (var j = 0; j < group.length && !matched; j++) {
+      if (i !== j) matched = localLibraryMaintenanceDuplicateLike(group[i], group[j]);
+    }
+    if (matched) picked.push(group[i]);
+  }
+  return picked.length > 1 ? picked : [];
+}
+/* 封面三态：has / none / unknown。
+ * 「同目录没图 + 这个格式压根读不出内嵌封面」是零 I/O 的定论，直接算 none；
+ * 已经读完一轮确认没有也算 none；剩下的一律记 unknown 进「待扫描」，不进无封面名单。 */
+function localLibraryMaintenanceCoverState(song) {
+  if (!song) return 'unknown';
+  if (song.localCoverThumbDataUrl || song.localCoverDataUrl) return 'has';
+  if (song.customCover) return 'has';
+  if (song.localIndexedCoverStatus === 'ready') return 'has';
+  // localCoverLoaded 为真时缩略图必然已经写进去了，走到这儿就是读完确认没有。
+  if (song.localCoverLoaded) return 'none';
+  if (song.localCoverFile || song.localCoverFileName) return 'has';
+  if (song.localIndexedCoverStatus === 'none') return 'none';
+  if (typeof canReadEmbeddedCover === 'function' && !canReadEmbeddedCover(song)) return 'none';
+  return 'unknown';
+}
+/* 歌词三态同理。localLyricLoaded 排在「有同名歌词文件」前面，
+ * 这样一个空文件或解密失败的密文歌词读完之后照样能被算成没歌词。 */
+function localLibraryMaintenanceLyricState(song) {
+  if (!song) return 'unknown';
+  if (String(song.localLyricText || '').trim()) return 'has';
+  if (song.localLyricTagName) return 'has';
+  if (song.localIndexedLyricStatus === 'ready') return 'has';
+  if (typeof hasCustomLyricForSong === 'function' && hasCustomLyricForSong(song)) return 'has';
+  if (song.localLyricLoaded) return 'none';
+  if (song.localLyricFile || song.localLyricFileName) return 'has';
+  if (song.localIndexedLyricStatus === 'none') return 'none';
+  if (typeof canReadEmbeddedLyrics === 'function' && !canReadEmbeddedLyrics(song)) return 'none';
+  return 'unknown';
+}
+/* 标签还没读出来时返回 null，让调用方记成待扫描：整库刚导入那会儿所有歌的标签都是空的，
+ * 把它们全算成标签异常没有任何意义。 */
+function localLibraryMaintenanceTagFlags(song) {
+  if (!song || !song.localMetadataLoaded) return null;
+  var flags = [];
+  if (!String(song.name || '').trim()) flags.push('无标题');
+  if (!String(song.artist || '').trim()) flags.push('无艺术家');
+  if (!String(song.album || '').trim()) flags.push('无专辑');
+  if (!(Number(song.duration) > 0)) flags.push('时长未知');
+  var year = String(song.year == null ? '' : song.year).trim();
+  if (year && !/^(1[89]\d{2}|20\d{2}|21\d{2})/.test(year)) flags.push('年份异常');
+  var track = String(song.trackNumber == null ? '' : song.trackNumber).trim();
+  if (track && !/^\d{1,3}(\s*\/\s*\d{1,3})?$/.test(track)) flags.push('音轨号异常');
+  return flags;
+}
+/* 桶表一律先验自有属性：v1.8.3 那个 constructor.mp3 的坑同源，
+ * library-fix:constructor 这种 kind 不能把 Object.prototype 上的东西取出来当名单。 */
+function localLibraryMaintenanceBucket(map, id) {
+  return map && Object.prototype.hasOwnProperty.call(map, id) ? map[id] : null;
+}
+function localLibraryMaintenanceStore() {
+  var songs = localSearchPool();
+  var signature = localLibraryMaintenanceSignature(songs) + '|' + localLibraryMaintenanceEpoch;
+  var cache = localLibraryMaintenanceCache;
+  if (cache.source === songs && cache.signature === signature && cache.lists) return cache;
+  buildLocalLibraryMaintenanceStore(songs, signature);
+  return cache;
+}
+/* 重复 / 无封面 / 无歌词 / 标签异常四个桶一趟遍历同时喂满，两万首曲库也只走一遍。 */
+function buildLocalLibraryMaintenanceStore(songs, signature) {
+  var cache = localLibraryMaintenanceCache;
+  var noCover = [];
+  var noLyric = [];
+  var tagIssue = [];
+  var undetermined = Object.create(null);
+  undetermined.duplicate = 0;
+  undetermined['no-cover'] = 0;
+  undetermined['no-lyric'] = 0;
+  undetermined['tag-issue'] = 0;
+  var buckets = Object.create(null);
+  var order = [];
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    if (!song) continue;
+    var coverState = localLibraryMaintenanceCoverState(song);
+    if (coverState === 'none') noCover.push(song);
+    else if (coverState === 'unknown') undetermined['no-cover']++;
+    var lyricState = localLibraryMaintenanceLyricState(song);
+    if (lyricState === 'none') noLyric.push(song);
+    else if (lyricState === 'unknown') undetermined['no-lyric']++;
+    var flags = localLibraryMaintenanceTagFlags(song);
+    if (!flags) undetermined['tag-issue']++;
+    else if (flags.length) tagIssue.push(song);
+    var dupKey = localLibraryMaintenanceDuplicateKey(song);
+    if (!dupKey) { undetermined.duplicate++; continue; }
+    // buckets 是无原型对象，直接取值不会碰到 Object.prototype。
+    if (buckets[dupKey]) { buckets[dupKey].push(song); continue; }
+    buckets[dupKey] = [song];
+    order.push(dupKey);
+  }
+  var duplicate = [];
+  for (var k = 0; k < order.length; k++) {
+    var group = buckets[order[k]];
+    if (group.length < 2) continue;
+    var picked = localLibraryMaintenanceDuplicateGroup(group);
+    for (var p = 0; p < picked.length; p++) duplicate.push(picked[p]);
+  }
+  var lists = Object.create(null);
+  lists.duplicate = duplicate;
+  lists['no-cover'] = noCover;
+  lists['no-lyric'] = noLyric;
+  lists['tag-issue'] = tagIssue;
+  cache.signature = signature;
+  cache.source = songs;
+  cache.lists = lists;
+  cache.undetermined = undetermined;
+  return cache;
+}
+/* 失效文件的名单只从磁盘探测结果里挑，探测没跑过就是空的。
+ * 探测结果按 localKey 记，改过标签的歌 localKey 会变，自然匹配不上、自己掉出去。 */
+function localLibraryMaintenanceMissingSongs() {
+  var probe = localLibraryMaintenanceProbe;
+  if (probe.state !== 'ready' || !probe.keys) return [];
+  var songs = localSearchPool();
+  var picked = [];
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    var key = song && song.localKey ? String(song.localKey) : '';
+    if (!key) continue;
+    if (probe.keys[key] === 'missing') picked.push(song);
+  }
+  return picked;
+}
+function localLibraryMaintenanceSongs(id) {
+  if (id === LOCAL_LIBRARY_MAINTENANCE_MISSING_ID) return localLibraryMaintenanceMissingSongs();
+  if (!localLibraryMaintenanceDefById(id)) return [];
+  return localLibraryMaintenanceBucket(localLibraryMaintenanceStore().lists, id) || [];
+}
+function localLibraryMaintenanceCount(id) {
+  return localLibraryMaintenanceSongs(id).length;
+}
+/* 「待扫描」是这套检测的诚实度所在：结论拿不准的那部分单独报出来，
+ * 而不是塞进名单里冒充异常，也不是当成正常悄悄咽掉。 */
+function localLibraryMaintenanceUndetermined(id) {
+  if (id === LOCAL_LIBRARY_MAINTENANCE_MISSING_ID) {
+    return localLibraryMaintenanceProbe.state === 'ready' ? 0 : localSearchPool().length;
+  }
+  if (!localLibraryMaintenanceDefById(id)) return 0;
+  return localLibraryMaintenanceBucket(localLibraryMaintenanceStore().undetermined, id) || 0;
+}
+function localLibraryMaintenanceCardSub(def) {
+  if (!def) return '';
+  if (def.id === LOCAL_LIBRARY_MAINTENANCE_MISSING_ID) {
+    var probe = localLibraryMaintenanceProbe;
+    if (probe.state === 'running') return '正在检测 ' + probe.checked + ' / ' + probe.total + ' · ' + def.hint;
+    if (probe.state === 'failed') return '检测失败 · ' + (probe.error || def.hint);
+    if (probe.state !== 'ready') return '点击开始检测 · ' + def.hint;
+    return localLibraryMaintenanceMissingSongs().length + ' 首 · 已检测 ' + probe.checked + ' 首';
+  }
+  var count = localLibraryMaintenanceCount(def.id);
+  var pending = localLibraryMaintenanceUndetermined(def.id);
+  return count + ' 首' + (pending ? ' · ' + pending + ' 首待扫描' : '') + ' · ' + def.hint;
+}
+/* 维护卡片上的数字全是现算的，必须整份并进面板签名，否则早退分支会吃掉重绘。 */
+function localLibraryMaintenanceStateSignature() {
+  var probe = localLibraryMaintenanceProbe;
+  var parts = [];
+  for (var i = 0; i < LOCAL_LIBRARY_MAINTENANCE_DEFS.length; i++) {
+    var def = LOCAL_LIBRARY_MAINTENANCE_DEFS[i];
+    if (def.id === LOCAL_LIBRARY_MAINTENANCE_MISSING_ID) continue;
+    parts.push(localLibraryMaintenanceCount(def.id) + '/' + localLibraryMaintenanceUndetermined(def.id));
+  }
+  parts.push(probe.state + '/' + probe.checked + '/' + probe.total + '/' + localLibraryMaintenanceMissingSongs().length);
+  return parts.join(',');
+}
+function resetLocalLibraryMaintenanceProbe() {
+  var probe = localLibraryMaintenanceProbe;
+  probe.state = '';
+  probe.folderPath = '';
+  probe.keys = null;
+  probe.checked = 0;
+  probe.total = 0;
+  probe.at = 0;
+  probe.error = '';
+}
+function localLibraryMaintenanceRefreshPanel() {
+  if (typeof renderLocalLibraryPlaylistPanel === 'function') renderLocalLibraryPlaylistPanel({ animate: false });
+}
+/* 失效文件是唯一必须问磁盘的一项，所以不跟着曲库现算，只在点进这一项或点「重新检测」时跑。
+ * 每批 400 条路径换一次 IPC：几万首的曲库也不会把主进程按住，进度还能一批一批显示出来。
+ * 主进程只回 'ok' / 'missing' / 'blocked'，不回文件内容；越权路径记 blocked 而不是 missing，
+ * 免得把授权失败说成文件被删了。 */
+async function scanLocalLibraryMissingFiles(opts) {
+  opts = opts || {};
+  var probe = localLibraryMaintenanceProbe;
+  if (probe.state === 'running') return false;
+  if (probe.state === 'ready' && !opts.force) return true;
+  var api = typeof desktopLocalMusicApi === 'function' ? desktopLocalMusicApi() : null;
+  if (!api || typeof api.probeLocalMusicFiles !== 'function') {
+    probe.state = 'failed';
+    probe.error = '当前环境不支持磁盘检测';
+    localLibraryMaintenanceRefreshPanel();
+    return false;
+  }
+  var songs = localSearchPool();
+  var paths = [];
+  var keys = [];
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    var path = song ? String(song.localFilePathAbsolute || song.localPath || '') : '';
+    if (!path || !song.localKey) continue;
+    paths.push(path);
+    keys.push(String(song.localKey));
+  }
+  probe.state = 'running';
+  probe.keys = Object.create(null);
+  probe.checked = 0;
+  probe.total = paths.length;
+  probe.error = '';
+  probe.folderPath = typeof savedLocalLibraryFolderPath === 'function' ? savedLocalLibraryFolderPath() : '';
+  localLibraryMaintenanceRefreshPanel();
+  try {
+    for (var offset = 0; offset < paths.length; offset += LOCAL_LIBRARY_MAINTENANCE_PROBE_BATCH) {
+      var batch = paths.slice(offset, offset + LOCAL_LIBRARY_MAINTENANCE_PROBE_BATCH);
+      var result = await api.probeLocalMusicFiles(batch);
+      var states = result && Array.isArray(result.states) ? result.states : null;
+      if (!states || states.length !== batch.length) throw new Error('PROBE_STATES_MISMATCH');
+      for (var s = 0; s < batch.length; s++) {
+        probe.keys[keys[offset + s]] = states[s] === 'missing' ? 'missing' : (states[s] === 'blocked' ? 'blocked' : 'ok');
+      }
+      probe.checked = offset + batch.length;
+      localLibraryMaintenanceRefreshPanel();
+    }
+  } catch (err) {
+    probe.state = 'failed';
+    probe.error = String((err && err.message) || err || '检测失败');
+    localLibraryMaintenanceRefreshPanel();
+    return false;
+  }
+  probe.state = 'ready';
+  probe.at = Date.now();
+  localLibraryMaintenanceRefreshPanel();
+  return true;
 }
 function localLibraryCategoryView(kind) {
   var normalized = normalizeLocalLibraryCategoryKind(kind);
   if (normalized === LOCAL_LIBRARY_CATEGORY_HOME_KIND) {
     return { kind: normalized, mode: 'home', title: '音乐库', icon: '≡',
-      subtitle: '智能分类 · ' + (LOCAL_LIBRARY_CATEGORY_DEFS.length + LOCAL_LIBRARY_GROUP_DEFS.length) + ' 个入口', parent: 'library' };
+      subtitle: '智能分类 · ' + (LOCAL_LIBRARY_CATEGORY_DEFS.length + LOCAL_LIBRARY_GROUP_DEFS.length + LOCAL_LIBRARY_MAINTENANCE_DEFS.length) + ' 个入口', parent: 'library' };
   }
   if (normalized.indexOf(LOCAL_LIBRARY_CATEGORY_KIND) === 0) {
     var def = localLibraryCategoryDefById(normalized.slice(LOCAL_LIBRARY_CATEGORY_KIND.length));
     if (!def) return null;
     return { kind: normalized, mode: 'category', title: def.title, icon: def.icon, hint: def.hint,
       parent: LOCAL_LIBRARY_CATEGORY_HOME_KIND };
+  }
+  if (normalized.indexOf(LOCAL_LIBRARY_MAINTENANCE_KIND) === 0) {
+    var fixDef = localLibraryMaintenanceDefById(normalized.slice(LOCAL_LIBRARY_MAINTENANCE_KIND.length));
+    if (!fixDef) return null;
+    return { kind: normalized, mode: 'fix', title: fixDef.title, icon: fixDef.icon, hint: fixDef.hint,
+      def: fixDef, id: fixDef.id, parent: LOCAL_LIBRARY_CATEGORY_HOME_KIND };
   }
   if (normalized.indexOf(LOCAL_LIBRARY_GROUP_KIND) === 0) {
     var groupDef = localLibraryGroupDefByField(normalized.slice(LOCAL_LIBRARY_GROUP_KIND.length));
@@ -18061,7 +18397,7 @@ function localLibraryCategoryDomSignature(view) {
     var parts = [];
     for (var c = 0; c < LOCAL_LIBRARY_CATEGORY_DEFS.length; c++) parts.push(localLibraryCategorySongs(LOCAL_LIBRARY_CATEGORY_DEFS[c].id).length);
     for (var g = 0; g < LOCAL_LIBRARY_GROUP_DEFS.length; g++) parts.push(localLibraryGroupEntries(LOCAL_LIBRARY_GROUP_DEFS[g].field).length);
-    return 'home|' + localLibraryCategoryCache.signature + '|' + parts.join(',');
+    return 'home|' + localLibraryCategoryCache.signature + '|' + parts.join(',') + '|' + localLibraryMaintenanceStateSignature();
   }
   if (view.mode === 'group') {
     var entries = localLibraryGroupEntries(view.def.field);
@@ -18069,6 +18405,7 @@ function localLibraryCategoryDomSignature(view) {
     var last = entries.length ? entries[entries.length - 1].value + '/' + entries[entries.length - 1].count : '';
     return 'group|' + view.def.field + '|' + localLibraryCategoryCache.signature + '|' + entries.length + '|' + first + '|' + last;
   }
+  if (view.mode === 'fix') return 'fix|' + view.kind + '|' + localLibraryMaintenanceStateSignature();
   return view.mode + '|' + view.kind;
 }
 function localLibraryCategoryTitle(kind) {
@@ -26947,12 +27284,16 @@ function localLibraryCategoryHeadHtml(view, count) {
   if (view.mode === 'home') sub = view.subtitle;
   else if (view.mode === 'group') sub = localLibraryGroupEntries(view.def.field).length + ' ' + view.def.unit + ' · 点击任意项查看歌曲';
   else if (view.mode === 'value') sub = count + ' 首 · ' + (view.def ? view.def.title : '智能分类');
+  else if (view.mode === 'fix') sub = localLibraryMaintenanceCardSub(view.def);
   else sub = count + ' 首 · ' + (view.hint || '智能分类');
   var statMode = localLibraryCategoryStatMode(view);
+  // 失效文件那一项没法「播放全部」（文件已经不在了），换成「重新检测」。
+  var missingView = view.mode === 'fix' && view.id === LOCAL_LIBRARY_MAINTENANCE_MISSING_ID;
   return '<div class="local-playlist-view-head">' +
     '<div style="min-width:0;flex:1"><div class="pl-name">' + escHtml(view.title) + '</div><div class="pl-sub">' + escHtml(sub) + '</div></div>' +
     '<div class="local-playlist-view-actions">' +
-      (directory ? '' : '<button class="fx-mini-btn ghost" type="button" data-selected-playlist-play="1">播放全部</button>') +
+      (directory || missingView ? '' : '<button class="fx-mini-btn ghost" type="button" data-selected-playlist-play="1">播放全部</button>') +
+      (missingView ? '<button class="fx-mini-btn ghost" type="button" data-library-fix-rescan="1">重新检测</button>' : '') +
       (statMode ? '<button class="fx-mini-btn ghost danger" type="button" data-clear-listen-history="1">清空记录</button>' : '') +
       '<button class="fx-mini-btn ghost" type="button" data-library-back="' + escHtml(view.parent) + '">返回</button>' +
     '</div>' +
@@ -26987,6 +27328,15 @@ function localLibraryCategoryHomeCardsHtml() {
       entries.length + ' ' + groupDef.unit + ' · 点击展开',
       entries.length && entries[0].cover ? songCoverSrc(entries[0].cover, 88) : '',
       '');
+  }
+  /* 维护那一组不放封面：卡片说的是「这些歌缺什么」，贴第一首的封面只会误导。
+   * 失效文件也不给 ▶（文件已经不在了），其余四项照常能整份播。 */
+  html += '<div class="pl-section-label">音乐库维护 · ' + LOCAL_LIBRARY_MAINTENANCE_DEFS.length + '</div>';
+  for (var m = 0; m < LOCAL_LIBRARY_MAINTENANCE_DEFS.length; m++) {
+    var fixDef = LOCAL_LIBRARY_MAINTENANCE_DEFS[m];
+    html += localLibraryCategoryCardHtml(localLibraryMaintenanceKind(fixDef.id), fixDef.icon, fixDef.title,
+      localLibraryMaintenanceCardSub(fixDef), '',
+      fixDef.id === LOCAL_LIBRARY_MAINTENANCE_MISSING_ID ? '' : '播放' + fixDef.title);
   }
   return html;
 }
@@ -27087,14 +27437,22 @@ function renderLocalLibraryPlaylistPanel(opts) {
     '</div>';
   }
   if (!songs.length && !categoryDirectory) {
+    var maintenanceView = selectedCategory && selectedCategory.mode === 'fix';
+    var maintenancePending = maintenanceView && selectedCategory.id === LOCAL_LIBRARY_MAINTENANCE_MISSING_ID
+      && localLibraryMaintenanceProbe.state !== 'ready';
     var emptyText = selectedRoot
       ? '还没有本地音乐'
-      : (selectedSpecial ? '特别喜欢歌单还是空的' : (selectedCategory ? '这个分类暂无歌曲' : '这个歌单暂无可播放歌曲'));
+      : (selectedSpecial ? '特别喜欢歌单还是空的'
+        : (maintenancePending ? '还没有检测过磁盘'
+          : (maintenanceView ? '没有查出需要处理的歌曲'
+            : (selectedCategory ? '这个分类暂无歌曲' : '这个歌单暂无可播放歌曲'))));
     var emptyHint = selectedRoot
       ? '<button class="fx-mini-btn ghost" type="button" onclick="openLocalFolderImport()" style="margin-top:10px">导入文件夹</button>'
-      : (selectedCategory
-        ? '<span style="display:inline-block;margin-top:8px;font-size:10.5px">播放过的歌曲会自动出现在最近播放和播放最多里</span>'
-        : '<span style="display:inline-block;margin-top:8px;font-size:10.5px">可从搜索结果、当前队列或播放栏“+”按钮添加歌曲</span>');
+      : (maintenanceView
+        ? '<span style="display:inline-block;margin-top:8px;font-size:10.5px">' + escHtml(localLibraryMaintenanceCardSub(selectedCategory.def)) + '</span>'
+        : (selectedCategory
+          ? '<span style="display:inline-block;margin-top:8px;font-size:10.5px">播放过的歌曲会自动出现在最近播放和播放最多里</span>'
+          : '<span style="display:inline-block;margin-top:8px;font-size:10.5px">可从搜索结果、当前队列或播放栏“+”按钮添加歌曲</span>'));
     html += '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">' + emptyText + '<br>' + emptyHint + '</div>';
   }
   for (var i = 0; i < visibleLength; i++) {
@@ -27236,6 +27594,13 @@ document.getElementById('pl-list').addEventListener('click', function(e){
     selectLocalPlaylist(libraryBack.getAttribute('data-library-back') || 'library');
     return;
   }
+  var libraryFixRescan = e.target && e.target.closest ? e.target.closest('[data-library-fix-rescan]') : null;
+  if (libraryFixRescan) {
+    e.preventDefault();
+    e.stopPropagation();
+    scanLocalLibraryMissingFiles({ force: true });
+    return;
+  }
   var libraryKindPlay = e.target && e.target.closest ? e.target.closest('[data-library-kind-play]') : null;
   if (libraryKindPlay) {
     e.preventDefault();
@@ -27247,7 +27612,13 @@ document.getElementById('pl-list').addEventListener('click', function(e){
   if (libraryKindCard) {
     e.preventDefault();
     e.stopPropagation();
-    selectLocalPlaylist(libraryKindCard.getAttribute('data-library-kind'));
+    var libraryKind = libraryKindCard.getAttribute('data-library-kind');
+    selectLocalPlaylist(libraryKind);
+    // 失效文件必须问磁盘，所以点进来才第一次探测；已经有结论就不重复跑。
+    if (libraryKind === localLibraryMaintenanceKind(LOCAL_LIBRARY_MAINTENANCE_MISSING_ID)
+      && (localLibraryMaintenanceProbe.state === '' || localLibraryMaintenanceProbe.state === 'failed')) {
+      scanLocalLibraryMissingFiles({ force: true });
+    }
     return;
   }
   var specialPlay = e.target && e.target.closest ? e.target.closest('[data-special-liked-play]') : null;
