@@ -9,6 +9,25 @@
 - `#thumb-cover` 规则里那句 `transition:transform .15s ease` 是历史遗留、当前没有任何 `:hover` 规则触发它，本轮**故意没有**补 hover 缩放，`tests/now-playing-detail-click.test.js` 用 `assert.doesNotMatch(appCss, /#thumb-cover:hover/)` 把这个「不加」也钉住了。
 - 验证：全量回归 `916/916` 通过（上一版基线 `912`），新增 `tests/now-playing-detail-click.test.js` 4 例。**四例先在改前源码上对跑过**，封面 `onclick` 与 `cursor:pointer` 两条判红。`public/app.css` 只动了一行（第 573 行加 `cursor:pointer`）；**真实窗口里没有肉眼点过。**
 
+### 发布记录（v1.8.6）
+
+- 单分支写法：`feat/thumb-cover-song-detail`。功能提交 `9d8c90a feat: 左下小封面可点击进入歌曲详情` 只带 `public/index.html`、`public/app.css` 与新测试、`APP_VERSION` 仍是旧值（保证单独 checkout 也自洽），版本钉与全部文档压在紧随其后的 `56789cf chore(release): 1.8.6` 里。
+- PR [#46](https://github.com/oirge/Mineradio/pull/46) → **合并提交** `c5daf7c`（CI `verify` run `33858115753`，8m9s 通过）。绝不 squash，否则打在 `56789cf` 上的 tag 会离开 `main` 的可达历史。
+- tag `v1.8.6` 打在 `56789cf` 且是 **annotated**（tag object `482e668`），`git describe origin/main` 回 `v1.8.6-1-gc5daf7c`。
+- `Build and Release` run `33858921728` 成功（`--ref v1.8.6 -f tag=v1.8.6`）。**electron-builder 的双草稿第五次复现**：`382615797` 四项资产齐全、`382615798` 只有 `latest.yml` 与安装器两项，同一秒创建（两份的安装器字节数还完全一致，只能靠资产条数区分）；草稿在 `releases/tags/<tag>` 上会 404，只能枚举 `releases?per_page=8` 比资产清单。删掉资产不全的 `382615798` 后发布 `382615797`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.8.6` 复验，tag object 仍是 `482e668`），PATCH 时带 `make_latest=true`，`releases/latest` 已指向 `v1.8.6`。
+- 四项资产全部回下本机复算核对：
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-1.8.6-Setup.exe` | 102296745 | `c3f0689db4363945299aa393c238757e80644eba2afd7ce06536bef1f4ad953f` |
+| `Mineradio-1.8.6-Setup.exe.blockmap` | 106455 | `efc90bc824cc3a0f3f32b1be88f35508d1d4b7b566cd0589acb95b9358b87d42` |
+| `Mineradio-1.8.6-SHA256SUMS.txt` | 273 | `a993748d29a52d1045f280f747b951c235f38da4cdfad4ba89e8bdbccc3c28a6` |
+| `latest.yml` | 347 | `5f053cfba1e5921aa95d96f4dc2d92f7c48a4b1b12eae31bac1c8d096b9de71f` |
+
+- 清单 `Mineradio-1.8.6-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机复算全中；`latest.yml` 的 `sha512` = `rwNH3m4Kk1YWCguYz2yuKTWNNuOkWJ86z/LwCXyYyhKbrTESXLjn1ct4SuZ1lfFOr9lMCbHMD6OFhBR+A/cn2w==` 与 `size` = `102296745` 与安装器实测一致，`releaseDate` `2026-09-04T09:40:31.496Z`。
+- Release 正文照旧写短：三条行为说明 + 一句「歌名 / 歌手两行未改」+ 安装说明，工程细节留在本文件与 `docs/PROJECT_MEMORY.md`。
+- 资产记录分支 `docs/release-assets-v186`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.8.5 播放统计漏账：结算点、防抖写入、无时长文件、最小化空档
 - 正式发布版本从 `1.8.4` 提升为 `1.8.5`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
 - 用户原话：「修复一下」，指的是歌曲详情里「播放统计」对很多歌一直是空的。查出三个真漏账点加一个连带的持久化漏洞。**45 秒 / 一半进度 / 听完这三条结算门槛是设计，一字未动** —— 跳过的歌不记账，修完之后仍然会有歌显示空态。
