@@ -22,6 +22,19 @@
 - 验证：全量 Node 回归 `881/881` 通过（`main` 基线 `871`），新增 `tests/lyric-format-hardening.test.js` 10 例，全部用 `node:vm` 跑生产源码切片。`node --check` 过了 `public/app.js`、`desktop/main.js`、`server.js`，两个 JSON 可解析。
 - **测试写法上踩的坑（会再遇到，记一下）：`vm.runInNewContext` 建的是新 realm，往沙箱里注入 `Object` / `Array` 只是遮住全局绑定 —— vm 里用字面量造出来的对象和数组仍然继承 vm realm 的原型。** 所以 `assert/strict` 的 `deepEqual`（等于 `deepStrictEqual`）对着 vm 产物一定失败。解法是先 `{ ...obj }` / `Array.from(arr)` 搬进宿主 realm，或者从 vm 里把 realm 内建原型显式导出来（`this.objectPrototype = Object.getPrototypeOf({})`）再断言。这一轮在格式优先级表和候选清单两处各撞了一次。
 - **另一个坑：Edit 工具的匹配会把反斜杠 u 转义和真实字符看成同一个东西**，所以「把注释里误写的转义序列改回中文」这类修复用它做不了（会报 old/new 完全相同），得用 Python 直接改文件。往源码里写不可见字符（U+FEFF）同理，用 `String.fromCharCode(0xfeff)` 而不是字面量。**在这台机器上，走 bash heredoc 的文本里连续两个反斜杠会被折叠成一个**，所以带反斜杠的正则文本要么单写、要么绕开 Python 源码（本轮的文档片段都是先 `cat` 成文件、再用只含 ASCII 的 Python 拼接）。
+- 发布链路：一个分支 `feat/qrc-lyrics-and-format-hardening` 带两个提交 —— `12a6dec feat: QRC 加密歌词与歌词格式兼容增强`（只带代码与测试，`APP_VERSION` 仍留在 `1.8.2`，因为版本闸只校验传入 tag 与 `package.json` 是否一致，功能提交本身不必先动版本）、`bb55abd chore(release): 1.8.3`（10 个文件 `+103/-11`，五处版本钉一起动）。PR #39 的 CI `verify` 通过（2m9s），走**合并提交** `02ad7a6e5ba31b95004983fa564d9d9ec3f59fa2` 并入 `main`，`git merge-base --is-ancestor bb55abd origin/main` 为真。
+- **tag `v1.8.3` 打在 `bb55abd81af73d585583a668fead95d165837158`，是 annotated tag（tag object `3f5df0bb46e9976fdca02499c240d7bba76f9a6e`，`git cat-file -t v1.8.3` 回 `tag`）。** 打完 `git describe origin/main` = `v1.8.3-1-g02ad7a6`，多出来的那一个提交就是合并提交本身。
+- **`Build and Release` 只对着刚打出来的 `v1.8.3` 派发**（`--ref v1.8.3 -f tag=v1.8.3`），run `33835548298` 成功。
+- **electron-builder 的双草稿又原样来了一次**（`v1.8.2` 已经记过，这轮完全复现）：同一秒 `2026-09-04T04:04:57Z` 建出两个草稿 —— `382473294` 四个资产齐全，`382473295` 只有一份逐字节相同的 `.blockmap` 副本，两个的 `body` 都是 `null`。`gh api repos/oirge/Mineradio/releases/tags/v1.8.3` 对草稿一律返回 404，**只有 `releases?per_page=8` 枚举才看得见它们**。确认 `382473295` 没有任何独占内容后只删这一个 Release，git tag ref 复查仍是 `3f5df0b`，**tag 一个字节都没碰**。
+- 发布动作照旧手工：把 `{name, body, draft:false, make_latest:"true", tag_name}` 在 Python 里拼成 JSON 管给 `gh api -X PATCH repos/oirge/Mineradio/releases/382473294 --input -`，**中文不经 argv**。标题 `Mineradio v1.8.3 QRC 加密歌词能读了，同名多份歌词自己挑`，正文沿用 `v1.8.2` 的三段式（`## 下载` / `## 变更` / `## 歌词怎么放`）。发布后 `releases/latest` 回 `v1.8.3`、`draft=false`。
+- 这一轮**四个资产同样全部回下本机复算过**：四个 SHA256 与 Release API 的 `digest` 逐一相同，`Mineradio-1.8.3-SHA256SUMS.txt` 自校验三行全 `OK`，`latest.yml` 里的 `sha512` 与本机对 exe 复算的一致，合起来 `ALL OK`。
+  - `Mineradio-1.8.3-Setup.exe` `102292559` 字节 `89f13540d9513786b78cccb27834e481935ace7df3848517c61be5f67bf4d81c`
+  - `Mineradio-1.8.3-Setup.exe.blockmap` `106465` 字节 `b5eb09dde6303389b9b5db31f38ead74c54de817b3784ec94f69d6b082108688`
+  - `latest.yml` `347` 字节 `0407cefff30159b63abe32479706a96a2c794e4dffb56aeea256aa0d8e41bc88`
+  - `Mineradio-1.8.3-SHA256SUMS.txt` `273` 字节 `54636485ac71cbd23c63fdec0407b286c27bada546bb3a08ac59b72c7242f17f`
+  - `latest.yml` 里的 exe `sha512` = `+Y1GEec2Y9I8kv6hZV3rHkT4eAKyWSsqrTGOwZXJbjoWxWpSlFQJ3PBfuAawVVst89Hu3AZog5k0DcaGi5+glA==`，`releaseDate` `2026-09-04T04:14:49.248Z`。
+- 遗留未修（自 `v1.7.26` 记到现在，本轮仍未动）：`release.yml` 的 `Generate SHA256 checksums` 用 pwsh 写清单，行尾仍是 **CRLF**，所以在 Linux / Git Bash 下校验必须先 `tr -d '\r'`。
+- **本轮新教训：`json.load(sys.stdin)` 在这台 Windows 上按本地代码页解码，不是 UTF-8。** `gh pr view --json title` 的中文因此显示成乱码，一度让人误判「PR 标题写坏了」；换成 `subprocess.run(...).stdout.decode('utf-8')` 复核后标题一直是对的。核对任何中文字段都别经 `sys.stdin`，`v1.8.2` 那次 PR #38 的「乱码」也是同一个假警报。
 
 ## v1.8.2 多格式歌词 KRC / QRC / TTML：分流顺序就是语义
 - 正式发布版本从 `1.8.1` 提升为 `1.8.2`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:591`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` + `package.json` 版本，**漏一处就会红**。
