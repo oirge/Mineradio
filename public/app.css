@@ -570,7 +570,7 @@ body.desktop-shell.empty-home-active.controls-visible #empty-home{bottom:126px}
 /* ---------- 左下小封面 ---------- */
 #thumb-wrap{position:fixed;z-index:6;left:24px;bottom:24px;display:none;align-items:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .8s ease}
 #thumb-wrap.visible{opacity:1;pointer-events:auto}
-#thumb-cover{width:64px;height:64px;border-radius:8px;object-fit:cover;background:rgba(255,255,255,0.05);box-shadow:0 8px 32px rgba(0,0,0,0.4);transition:transform .15s ease}
+#thumb-cover{width:64px;height:64px;border-radius:8px;object-fit:cover;background:rgba(255,255,255,0.05);box-shadow:0 8px 32px rgba(0,0,0,0.4);cursor:pointer;transition:transform .15s ease}
 #thumb-info{display:flex;flex-direction:column;gap:4px;max-width:250px;min-width:0}
 #thumb-title{font-size:13px;font-weight:500;color:rgba(255,255,255,0.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:color .2s,text-shadow .2s}
 #thumb-artist{font-size:11px;font-weight:300;color:rgba(255,255,255,0.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.5px;cursor:pointer;transition:color .2s,text-shadow .2s}
