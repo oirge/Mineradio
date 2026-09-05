@@ -184,28 +184,38 @@ test('全屏切换的补偿刷新会去重，避免反复重建渲染缓冲', ()
 
 test('退出全屏只做一次窗口边界还原，并立刻把状态推给渲染层', () => {
   const main = readProjectFile('desktop/main.js');
-  const applyBounds = readSourceBlock(main, 'function applyWindowedBounds(', 'function keepMainWindowInsideDisplay(');
-  assert.match(applyBounds, /const settled = current\.x === target\.x/);
-  assert.match(applyBounds, /if \(!settled\) win\.setBounds\(target, false\);/);
+  // 与上游 XxHuberrr/Mineradio 对齐：边界还原只由权威的 leave-full-screen 事件安排一次，
+  // exitFullscreenToWindow 里不再挂 once('leave-full-screen') 和 500ms 兜底。
+  const exitFullscreen = readSourceBlock(main, 'function exitFullscreenToWindow(', 'function toggleFullscreen(');
+  assert.doesNotMatch(exitFullscreen, /once\('leave-full-screen'/);
+  assert.doesNotMatch(exitFullscreen, /setTimeout/);
+  assert.match(exitFullscreen, /setMainWindowFullscreenResizeGuard\(win, false\);\s*\n\s*win\.setFullScreen\(false\);/);
 
+  const applyBounds = readSourceBlock(main, 'function applyWindowedBounds(', '/**');
+  assert.match(applyBounds, /setMainWindowFullscreenResizeGuard\(win, false\);/);
+  assert.match(applyBounds, /win\.setBounds\(getWindowedBounds\(win\), false\);/);
+  assert.doesNotMatch(applyBounds, /const settled =/, '单航班还原之后不再需要 settled 短路');
+
+  // 本仓库比上游多一层全屏遮罩，所以状态要立刻推给渲染层，不能等 50ms 后的边界还原顺带通知。
   const leaveFullscreen = readSourceBlock(main, "mainWindow.on('leave-full-screen'", '});');
   assert.match(leaveFullscreen, /sendWindowState\(mainWindow\);/);
   const leaveHtmlFullscreen = readSourceBlock(main, "mainWindow.on('leave-html-full-screen'", '});');
   assert.match(leaveHtmlFullscreen, /sendWindowState\(mainWindow\);/);
 });
 
-test('边界已经到位时不重复 setBounds，但仍然同步窗口状态', () => {
+test('边界还原按上游无条件执行，并同步窗口状态', () => {
   const main = readProjectFile('desktop/main.js');
   const target = { x: 160, y: 90, width: 1600, height: 900 };
-  const calls = { setBounds: 0, sendWindowState: 0, unmaximize: 0 };
+  const calls = { setBounds: 0, sendWindowState: 0, unmaximize: 0, guard: [] };
   const scope = {
     screen: { getDisplayMatching: () => ({ workArea: target }), getPrimaryDisplay: () => ({ workArea: target }) },
     windowedMinimumSize: () => ({ width: 960, height: 540 }),
     getWindowedBounds: () => ({ ...target }),
+    setMainWindowFullscreenResizeGuard: (_win, fullscreen) => calls.guard.push(fullscreen),
     sendWindowState: () => { calls.sendWindowState += 1; },
   };
   vm.runInNewContext(
-    `${readSourceBlock(main, 'function applyWindowedBounds(', 'function keepMainWindowInsideDisplay(')}
+    `${readSourceBlock(main, 'function applyWindowedBounds(', '/**')}
     this.apply = applyWindowedBounds;`,
     scope,
   );
@@ -221,11 +231,12 @@ test('边界已经到位时不重复 setBounds，但仍然同步窗口状态', (
   };
 
   scope.apply(win);
-  assert.equal(calls.setBounds, 0, '边界一致时不应再 setBounds');
+  assert.equal(calls.setBounds, 1, '上游无条件还原边界');
   assert.equal(calls.sendWindowState, 1);
+  assert.deepEqual(calls.guard, [false], '还原窗口态时必须放开尺寸锁');
 
   bounds.width = 1280;
   scope.apply(win);
-  assert.equal(calls.setBounds, 1, '边界不一致时仍要还原');
+  assert.equal(calls.setBounds, 2);
   assert.equal(calls.sendWindowState, 2);
 });

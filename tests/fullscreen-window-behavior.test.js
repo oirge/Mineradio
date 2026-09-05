@@ -410,7 +410,7 @@ test('Windows 原生移动循环在跨窗口前切换桌面歌词穿透', () => 
   assert.deepEqual(calls, ['begin', 'release', 'state']);
 });
 
-test('透明窗口退出逻辑全屏时仍调用原生退出 API', () => {
+test('只有逻辑全屏标记时按上游走边界还原，不再空调一次原生退出', () => {
   const source = readMainSource();
   const context = createTransparentFullscreenWindow();
   const timers = [];
@@ -419,6 +419,40 @@ test('透明窗口退出逻辑全屏时仍调用原生退出 API', () => {
   const scope = {
     windowFullscreenActive: true,
     htmlFullscreenActive: false,
+    setMainWindowFullscreenResizeGuard: () => {},
+    applyWindowedBounds: () => { context.calls.setBounds += 1; },
+    sendWindowState: () => {},
+    setTimeout: (handler) => { timers.push(handler); return timers.length; },
+    console,
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'exitFullscreenToWindow', 'toggleFullscreen')
+      + '\nthis.exit = exitFullscreenToWindow;',
+    scope,
+  );
+
+  // 上游 exitFullscreenToWindow 只看 isFullScreen()：原生全屏没生效时直接还原边界。
+  scope.exit(context.win);
+
+  assert.deepEqual(context.calls.setFullScreen, []);
+  assert.equal(scope.windowFullscreenActive, false);
+  assert.equal(context.calls.setBounds, 1);
+  assert.equal(events['leave-full-screen'], undefined);
+  assert.equal(timers.length, 0);
+});
+
+test('退出原生全屏只调一次原生 API，不再补第二次延迟还原', () => {
+  const source = readMainSource();
+  const context = createTransparentFullscreenWindow();
+  const guard = [];
+  const timers = [];
+  const events = {};
+  context.win.isFullScreen = () => true;
+  context.win.once = (name, handler) => { events[name] = handler; };
+  const scope = {
+    windowFullscreenActive: true,
+    htmlFullscreenActive: false,
+    setMainWindowFullscreenResizeGuard: (_win, fullscreen) => guard.push(fullscreen),
     applyWindowedBounds: () => { context.calls.setBounds += 1; },
     sendWindowState: () => {},
     setTimeout: (handler) => { timers.push(handler); return timers.length; },
@@ -434,13 +468,38 @@ test('透明窗口退出逻辑全屏时仍调用原生退出 API', () => {
 
   assert.deepEqual(context.calls.setFullScreen, [false]);
   assert.equal(scope.windowFullscreenActive, false);
-  assert.equal(typeof events['leave-full-screen'], 'function');
-  assert.equal(timers.length, 1);
+  assert.deepEqual(guard, [false], '退出前必须先放开尺寸锁');
+  // 权威的 leave-full-screen 事件负责还原边界；这里再补一次会变成 move/resize 风暴。
+  assert.equal(events['leave-full-screen'], undefined);
+  assert.equal(timers.length, 0);
+  assert.equal(context.calls.setBounds, 0);
+});
 
-  events['leave-full-screen']();
-  assert.equal(timers.length, 2);
-  timers.forEach((handler) => handler());
-  assert.equal(context.calls.setBounds, 1);
+test('进入全屏前先把窗口夹回显示器，再锁住尺寸', () => {
+  const source = readMainSource();
+  const context = createTransparentFullscreenWindow();
+  const order = [];
+  const scope = {
+    windowFullscreenActive: false,
+    htmlFullscreenActive: false,
+    keepMainWindowInsideDisplay: () => order.push('clamp'),
+    setMainWindowFullscreenResizeGuard: (_win, fullscreen) => order.push(fullscreen ? 'lock' : 'unlock'),
+    exitFullscreenToWindow: () => order.push('exit'),
+    sendWindowState: () => order.push('state'),
+    console,
+  };
+  vm.runInNewContext(
+    extractFunction(source, 'toggleFullscreen', 'shouldExitWindowFullscreenFromInput')
+      + '\nthis.toggle = toggleFullscreen;',
+    scope,
+  );
+
+  scope.toggle(context.win);
+
+  // 夹回必须发生在置位全屏标记之前，否则 keepMainWindowInsideDisplay 会因为标记直接返回。
+  assert.deepEqual(order, ['clamp', 'lock', 'state']);
+  assert.equal(scope.windowFullscreenActive, true);
+  assert.deepEqual(context.calls.setFullScreen, [true]);
 });
 
 test('Esc 会退出透明窗口的逻辑全屏状态', () => {

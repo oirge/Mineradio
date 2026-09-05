@@ -182,6 +182,8 @@ const miniPlayerRecoverySession = new MiniPlayerRecoverySession({
 const miniPlayerStateCache = new MiniPlayerStateCache(miniPlayerEnabled);
 let htmlFullscreenActive = false;
 let windowFullscreenActive = false;
+let mainWindowFullscreenVisibilityTimer = null;
+let mainWindowIntentionalHide = false;
 let mainWindowStateTimer = null;
 let tray = null;
 let closeToTrayEnabled = true;
@@ -1587,6 +1589,7 @@ function focusMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   miniPlayerActive = false;
   hideMiniPlayerWindow();
+  mainWindowIntentionalHide = false;
   if (mainWindow.isMinimized()) mainWindow.restore();
   if (!mainWindow.isVisible()) mainWindow.show();
   mainWindow.focus();
@@ -2210,19 +2213,34 @@ function getWindowedBounds(win) {
   };
 }
 
+/**
+ * 全屏期间锁住窗口尺寸，退出全屏时再放开。
+ * 与上游 XxHuberrr/Mineradio 的 `setMainWindowFullscreenResizeGuard` 行为一致：
+ * 原生全屏时窗口仍可调整大小，Windows 会把全屏尺寸当成一次用户 resize 反复回灌，
+ * 导致边界还原与原生全屏互相拉扯。
+ * @param {Electron.BrowserWindow} win 当前主窗口。
+ * @param {boolean} fullscreen 目标是否为全屏状态。
+ * @returns {void}
+ */
+function setMainWindowFullscreenResizeGuard(win, fullscreen) {
+  if (!win || win.isDestroyed()) return;
+  const shouldResize = !fullscreen;
+  try {
+    if (typeof win.isResizable === 'function' && win.isResizable() === shouldResize) return;
+    win.setResizable(shouldResize);
+  } catch (e) {
+    console.warn('[WindowResizeGuard]', fullscreen ? 'fullscreen-lock' : 'windowed-restore', e.message || e);
+  }
+}
+
 function applyWindowedBounds(win) {
   if (!win || win.isDestroyed()) return;
+  setMainWindowFullscreenResizeGuard(win, false);
   if (win.isMaximized()) win.unmaximize();
   const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
   const minimum = windowedMinimumSize(display);
   win.setMinimumSize(minimum.width, minimum.height);
-  const target = getWindowedBounds(win);
-  const current = win.getBounds();
-  // 退出全屏时 leave-full-screen 与 exitFullscreenToWindow 都会安排还原，
-  // 边界已经到位就不要再 setBounds：多一次尺寸跳变，渲染层就多压一轮全屏遮罩。
-  const settled = current.x === target.x && current.y === target.y
-    && current.width === target.width && current.height === target.height;
-  if (!settled) win.setBounds(target, false);
+  win.setBounds(getWindowedBounds(win), false);
   sendWindowState(win);
 }
 
@@ -2267,29 +2285,22 @@ function keepMainWindowInsideDisplay(win, options = {}) {
 
 /**
  * 退出主窗口全屏并恢复居中的普通窗口尺寸。
+ * 与上游 XxHuberrr/Mineradio 的 `exitFullscreenToWindow` 一致：只调一次原生退出，
+ * 边界还原交给权威的 leave-full-screen 事件。这里再补一次延迟还原会变成 move/resize 风暴。
  * @param {Electron.BrowserWindow} win 当前主窗口。
  * @returns {void}
  */
 function exitFullscreenToWindow(win) {
   if (!win || win.isDestroyed()) return;
-  const wasFullscreen = win.isFullScreen() || windowFullscreenActive;
   windowFullscreenActive = false;
 
-  if (!wasFullscreen) {
+  if (!win.isFullScreen()) {
     applyWindowedBounds(win);
     return;
   }
 
-  let applied = false;
-  const applyOnce = () => {
-    if (applied || !win || win.isDestroyed() || win.isFullScreen()) return;
-    applied = true;
-    applyWindowedBounds(win);
-  };
-
-  win.once('leave-full-screen', () => setTimeout(applyOnce, 50));
+  setMainWindowFullscreenResizeGuard(win, false);
   win.setFullScreen(false);
-  setTimeout(applyOnce, 500);
 }
 
 /**
@@ -2303,7 +2314,11 @@ function toggleFullscreen(win) {
     exitFullscreenToWindow(win);
     return;
   }
+  // 上游在置位全屏标记之后调 ensureMainWindowInsideDisplay；本仓库的同名工具
+  // keepMainWindowInsideDisplay 会因为全屏标记直接返回，所以必须放在置位之前。
+  keepMainWindowInsideDisplay(win);
   windowFullscreenActive = true;
+  setMainWindowFullscreenResizeGuard(win, true);
   win.setFullScreen(true);
   sendWindowState(win);
 }
@@ -5289,6 +5304,60 @@ async function handleWallpaperStateUpdate(_event, payload) {
 
 ipcMain.handle('mineradio-wallpaper-update', trustedMainFrameHandler(handleWallpaperStateUpdate));
 
+// 全屏可见性看门狗。移植上游 XxHuberrr/Mineradio 的
+// startMainWindowFullscreenVisibilityGuard / restoreUnexpectedFullscreenVisibility：
+// 全屏状态还在、窗口却已经不可见，用户看到的就是一整块黑屏，而且不会自己回来。
+const FULLSCREEN_VISIBILITY_CHECK_MS = 5000;
+
+/**
+ * 停掉全屏可见性看门狗。
+ * @returns {void}
+ */
+function clearMainWindowFullscreenVisibilityGuard() {
+  if (mainWindowFullscreenVisibilityTimer) clearInterval(mainWindowFullscreenVisibilityTimer);
+  mainWindowFullscreenVisibilityTimer = null;
+}
+
+/**
+ * 判断主窗口是否处于「仍在全屏但已经不可见」的异常状态。
+ * 用户自己收进托盘、最小化和退出流程都不算异常，不能把窗口抢回前台。
+ * @param {Electron.BrowserWindow} win 当前主窗口。
+ * @returns {boolean} 需要强制恢复可见性时返回 true。
+ */
+function shouldRestoreUnexpectedFullscreenVisibility(win) {
+  if (!win || win.isDestroyed() || appQuitting || mainWindowIntentionalHide) return false;
+  if (!win.isFullScreen() || win.isMinimized() || win.isVisible()) return false;
+  return true;
+}
+
+/**
+ * 把异常隐藏的全屏主窗口重新显示出来。
+ * @param {Electron.BrowserWindow} win 当前主窗口。
+ * @param {string} [reason] 触发原因，仅用于日志。
+ * @returns {boolean} 实际执行了恢复时返回 true。
+ */
+function restoreUnexpectedFullscreenVisibility(win, reason = 'fullscreen-visibility-guard') {
+  if (!shouldRestoreUnexpectedFullscreenVisibility(win)) return false;
+  console.warn('[WindowRecovery] restoring unexpectedly hidden fullscreen window:', reason);
+  try { win.showInactive(); } catch (_) { try { win.show(); } catch (_) { } }
+  sendWindowState(win);
+  return true;
+}
+
+/**
+ * 进入全屏后启动可见性看门狗，退出全屏时由调用方清掉。
+ * @param {Electron.BrowserWindow} win 当前主窗口。
+ * @returns {void}
+ */
+function startMainWindowFullscreenVisibilityGuard(win) {
+  clearMainWindowFullscreenVisibilityGuard();
+  if (!win || win.isDestroyed()) return;
+  mainWindowFullscreenVisibilityTimer = setInterval(() => {
+    restoreUnexpectedFullscreenVisibility(win, 'fullscreen-watchdog');
+  }, FULLSCREEN_VISIBILITY_CHECK_MS);
+  if (typeof mainWindowFullscreenVisibilityTimer.unref === 'function') mainWindowFullscreenVisibilityTimer.unref();
+}
+
 // 主窗口绘制恢复。迷你播放器早就有 did-fail-load / render-process-gone 兜底，主窗口一直没有：
 // 主渲染进程一崩，`transparent: true` 的无边框窗口就只剩一片全黑，而且永远不会自己回来。
 const MAIN_WINDOW_SHOW_WATCHDOG_MS = 6000;
@@ -5395,6 +5464,8 @@ function scheduleMainWindowPaintRecovery(win, reason) {
 async function createWindow() {
   htmlFullscreenActive = false;
   windowFullscreenActive = false;
+  mainWindowIntentionalHide = false;
+  clearMainWindowFullscreenVisibilityGuard();
   const preferredPort = resolvePreferredServerPort({
     instanceId: INSTANCE_ID,
     port: process.env.MINERADIO_PORT,
@@ -5556,6 +5627,9 @@ async function createWindow() {
     if (canKeepRunning) {
       event.preventDefault();
       miniPlayerActive = !!miniPlayerEnabled;
+      // 用户主动收进托盘：全屏可见性看门狗不能把窗口再抢回前台。
+      mainWindowIntentionalHide = true;
+      clearMainWindowFullscreenVisibilityGuard();
       mainWindow.hide();
       if (miniPlayerActive) showMiniPlayerWindow();
       sendWindowState(mainWindow);
@@ -5571,6 +5645,7 @@ async function createWindow() {
       mainWindowStateTimer = null;
     }
     clearMainWindowShowWatchdog();
+    clearMainWindowFullscreenVisibilityGuard();
     if (mainWindowPaintRecoveryTimer) {
       clearTimeout(mainWindowPaintRecoveryTimer);
       mainWindowPaintRecoveryTimer = null;
@@ -5582,21 +5657,27 @@ async function createWindow() {
   });
   mainWindow.on('enter-full-screen', () => {
     windowFullscreenActive = true;
+    setMainWindowFullscreenResizeGuard(mainWindow, true);
     sendWindowState(mainWindow);
+    startMainWindowFullscreenVisibilityGuard(mainWindow);
   });
   mainWindow.on('leave-full-screen', () => {
     windowFullscreenActive = false;
+    setMainWindowFullscreenResizeGuard(mainWindow, false);
+    clearMainWindowFullscreenVisibilityGuard();
     // 先把"已退出全屏"推给渲染层，别等 50ms 后的边界还原顺带通知，
-    // 否则渲染层的全屏遮罩要多黑这一段才知道可以回亮。
+    // 否则渲染层的全屏遮罩要多黑这一段才知道可以回亮。上游没有这层遮罩，所以没有这一步。
     sendWindowState(mainWindow);
     setTimeout(() => applyWindowedBounds(mainWindow), 50);
   });
   mainWindow.on('enter-html-full-screen', () => {
     htmlFullscreenActive = true;
+    setMainWindowFullscreenResizeGuard(mainWindow, true);
     sendWindowState(mainWindow);
   });
   mainWindow.on('leave-html-full-screen', () => {
     htmlFullscreenActive = false;
+    setMainWindowFullscreenResizeGuard(mainWindow, false);
     sendWindowState(mainWindow);
     setTimeout(() => applyWindowedBounds(mainWindow), 50);
   });
@@ -5662,6 +5743,8 @@ if (!gotSingleInstanceLock) {
     // 主窗口是透明无边框的，合成表面丢了之后 Chromium 不一定自己重新出图 —— 那就是一片全黑。
     powerMonitor.on('resume', () => nudgeMainWindowRepaint('system-resume'));
     powerMonitor.on('unlock-screen', () => nudgeMainWindowRepaint('screen-unlock'));
+    powerMonitor.on('resume', () => restoreUnexpectedFullscreenVisibility(mainWindow, 'system-resume'));
+    powerMonitor.on('unlock-screen', () => restoreUnexpectedFullscreenVisibility(mainWindow, 'screen-unlock'));
     createTray();
     await createWindow();
   });
