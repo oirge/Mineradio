@@ -1646,3 +1646,23 @@
 - 排障时依次核过并**排除**：CSP（全仓库没有）、`webRequest` / 自定义 protocol 拦截（没有）、MIME 与静态路由、vendor 打包完整性、版本是否过旧。**直接看主进程有没有拦导航最快。**
 - 验证：全量回归 **`990/990`** 通过（v1.9.1 基线 `988`，新增 2 例：「可信壁纸子 frame URL 只放行音域回响桥接页」12 条负例、「桥接页路径在主进程白名单与预设 8 之间保持一致」正则双向比对 —— 任一侧改名会立刻红，不会再悄悄黑屏；原来那例导航守卫测试重写成按 Electron 真实签名派发，并对三种参数形态各跑正负用例）。
 
+### 2026-09-05 - 黑屏与卡顿的进程层根因（v1.9.3）
+
+- 用户给的只有一句「再最新版的基础上修复黑屏卡顿问题」 —— 没有复现步骤、没有机型、没有日志。**处理方式：不照着报告改，反过来找「哪些代码路径必然产出这两个症状」。** 找出五处确诊缺陷，其中两处是根因。
+- **「最新版」指远端，不是本地。** 本地 `main`（`11b35b9`，`package.json` 写 `1.8.2`）比 `origin/main`（`2cbf6cd`，`1.9.2`）**落后 47 个提交**，一整轮改动和文档都按错的血脉做完、PR 都开了才从 `gh run list` 看出来（`gh pr checks` 只说 "no checks reported"，不会告诉你基线是旧的）。**以后动手前先 `git fetch --prune` 再 `git rev-list --left-right --count main...origin/main`。** 这次运气好：GPU 开关那一段在两个基线上**逐字节相同**，`git cherry-pick` 干净落地。
+- **根因一：GPU 开关无条件硬闯 Chromium 驱动黑名单。** `ignore-gpu-blocklist` 硬闯的那份名单，装的正是「这些驱动组合渲染不正确」的组合 —— 渲染成全黑的就住在里面。叠上 `use-angle=d3d11`（钉死后端，不让 Chromium 自己退档）和 `force_high_performance_gpu`（双显卡笔记本强推独显 → 跨适配器呈现，黑帧常见来源）。GPU 进程崩 → 退软件合成 → 再崩 = 用户说的卡顿。**「性能开关」和「稳定性」是一对矛盾，无条件全开就是把黑屏风险摊给所有机型。**
+- **根因二：主窗口绘制失败恢复为零。** 迷你播放器早有 `did-fail-load` / `render-process-gone` 兜底，主窗口一处都没有；`transparent: true` + `frame: false` 的窗口在主渲染进程死后就是一片全黑、永远不会自己回来。而 `await mainWindow.loadURL(...)` 没有 try/catch，抛出来时窗口已建好但仍 `show: false` —— 表现是「点了图标什么都没发生」，因为调用方只打一行日志。**排查同类问题的定式：迷你播放器有的兜底，主窗口八成没有 —— 反过来核一遍。**
+- **`desktop/gpu-guard.js`（新文件）三档阶梯 `default` → `compatible` → `software`。** 硬约束：`gpuSwitchesForMode('default')` 必须与改动前的发布列表**逐字节相同**（`tests/gpu-guard.test.js` 存了一份 `LEGACY_SWITCHES` 逐项比对），否则这次改动就不是「加了回退」而是「顺手改了默认行为」。**以后改 GPU 开关先看这条测试。**
+- **GPU 开关只能在 `app.whenReady()` 之前追加，运行中改不了 —— 所以降档必须配 `app.relaunch()` + `app.quit()`。** 三条硬约束：写盘失败**就地停手**（记不下来还重启 = 每次开机重新崩一遍再重启一遍 = 重启循环）；`relaunch()` 抛异常时**不 `quit()`** 并把 `gpuGuardRelaunching` 退回去（否则用户看到「软件自己关了再也不开」）；`gpuGuardRelaunching` 置位后重复事件不再触发第二次重启。
+- **失败计数按档位分开记**（`gpuFailureMode` 不匹配就归零，别把上一档的账算到下一档），降档时计数归零，`software` 是最低档、到底只累计。阈值 2 —— 单次崩溃多半是驱动瞬时抽风，为此重启一次应用比黑屏还烦人。**档案里记 `appVersion`，换版本自动退回 `default` 重试**（不让一次抽风把机器永久钉在软件渲染上）；没有 `appVersion` 的老档案**不**重试。
+- **`MINERADIO_GPU_MODE=default|compatible|software` 是唯一手动杠杆，显式指定时永不自动降档、连计数都不写**（档案里不留假结论）。**没有加任何界面开关：正对着黑屏的用户点不到设置项**，所以恢复必须自动 —— 这条同时也是「能不动 UI 就不动 UI」。
+- **Electron 43 没有 `gpu-process-crashed`，只有 `app.on('child-process-gone')`，必须过滤 `details.type === 'GPU'`** —— 工具进程、音频服务、插件进程走同一个事件，不过滤就把无关崩溃算进降档计数。
+- **`webContents.invalidate()` 与 `reload()` 是两条不能混的路。** `invalidate()` 强制重画、便宜得多、**不打断播放** → 接 `powerMonitor` 的 `resume` / `unlock-screen` 与 `screen` 的 `display-metrics-changed`（睡眠回来和切显示器是黑屏另一大来源，此前 `powerMonitor` 只接了迷你播放器）；`reload()` 只用于真加载失败 / 渲染进程死了，它重建渲染进程但**不动窗口位置与置顶状态**（比重建 `BrowserWindow` 好得多）。`invalidate()` 不是所有版本都有，缺了当「不能重画」跳过而不是抛异常。
+- **恢复调度必须是单航班的**：`did-fail-load` 和 `render-process-gone` 常常一起来，不去重就一次事故吃两份配额。退避 `Math.min(2400, 200 × n²)`、上限 3 次、`did-finish-load` 成功即清零。**`errorCode === -3`（`ERR_ABORTED`）必须排除** —— 切歌换页的正常导航打断也报这个，当失败会白白吃掉配额。上限之后只留一行日志：**无限重载一个加载不起来的页面只会把「黑屏」换成「黑屏 + 满负载」。**
+- **`ready-to-show` 的 6 秒看门狗必须在 `once('ready-to-show')` 之前布置**（否则同步触发的场景会漏），事件到了第一行就撤；`reload()` 之后一样可能等不到，所以恢复动作跑完要把看门狗重新上。**所有定时器 `.unref()`** —— 不 unref 会把进程按住 6 秒不退。窗口 `closed` 时两个定时器 + 失败计数一起清（不清零下次开窗口只剩残余配额）。
+- **`unresponsive` 故意只记日志，不重载。** 卡一下通常自己缓过来（`responsive` 也记一行），重载反而把播放状态弄丢。测试里专门钉了「这个 handler 不许出现 `scheduleMainWindowPaintRecovery` 或 `reload()`」。
+- **故意没动 `transparent: true`** —— 那是重写视觉系统，不在这次范围里，规则也写着不许（除非明确点名）。
+- **`vm` 切片测试第三条房规：`vm.runInContext` 脚本里的顶层 `let`/`const` 是 script 作用域，不会变成上下文对象的属性** —— 只有 `function` 声明和 `var` 会。读实现里的常量/计数器要追一段尾巴挂到 `globalThis`（计数器用 getter 才读到当前值），`ctx.MAIN_WINDOW_PAINT_RECOVERY_LIMIT` 恒 `undefined`。（前两条：ES6 简写方法不能 `new`；跨 realm 容器要先拷回本 realm 再 `deepEqual`。）
+- **切片测试可以注入真依赖**：`tests/gpu-guard-main-wiring.test.js` 切 `handleGpuProcessGone`，注入**真实**的 `noteGpuFailure`/`describeGpuMode`，只假 `app` 与磁盘 I/O —— 纯逻辑自己有一份直接 `require` 的测试，接线测试就只测接线。
+- 验证：全量回归 **`1032/1032`** 通过（`origin/main` 基线 `990`，新增 42 例：GPU 阶梯纯逻辑 11、主进程降档接线 9、主窗口绘制恢复 22 —— 其中 6 例是源码接线断言，因为「实现写得再对，没挂到事件上也救不了黑屏」）；`node --check` 在 `desktop/main.js` / `desktop/gpu-guard.js` / `public/app.js` / `server.js` 全清。改动碰了 `ready-to-show`、`closed`、`loadURL`、`display-metrics-changed`、`powerMonitor` 五处，**没有一个既有 `vm` 切片测试被打断**。
+
