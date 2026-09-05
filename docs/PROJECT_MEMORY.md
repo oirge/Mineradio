@@ -1666,3 +1666,15 @@
 - **切片测试可以注入真依赖**：`tests/gpu-guard-main-wiring.test.js` 切 `handleGpuProcessGone`，注入**真实**的 `noteGpuFailure`/`describeGpuMode`，只假 `app` 与磁盘 I/O —— 纯逻辑自己有一份直接 `require` 的测试，接线测试就只测接线。
 - 验证：全量回归 **`1032/1032`** 通过（`origin/main` 基线 `990`，新增 42 例：GPU 阶梯纯逻辑 11、主进程降档接线 9、主窗口绘制恢复 22 —— 其中 6 例是源码接线断言，因为「实现写得再对，没挂到事件上也救不了黑屏」）；`node --check` 在 `desktop/main.js` / `desktop/gpu-guard.js` / `public/app.js` / `server.js` 全清。改动碰了 `ready-to-show`、`closed`、`loadURL`、`display-metrics-changed`、`powerMonitor` 五处，**没有一个既有 `vm` 切片测试被打断**。
 
+### 2026-09-05 - 二创版与原项目同时安装、同时运行
+
+- **用户要求（原话）：「让我这个本地播放器和原项目的播放器可以同时使用互不影响」。** 两条选择是用户拍定的，以后不要反着改：①命名走「Mineradio 二创」（开始菜单 / 托盘 / 任务栏显示 `Mineradio 二创`，安装目录 `D:\Mineradio-oirge`，进程 `Mineradio-oirge.exe`，`appId` `com.mineradio.desktop.oirge`）；②新安装器检测到换身份之前的老安装就提示，用户点头才卸。
+- **当时给用户的承诺，必须一直成立：应用内的界面文案和视觉不动，数据目录也不动，现有曲库设置不会丢。** 所以 `desktop/main.js` 的 `APP_NAME = 'Mineradio'` 和 `PRIMARY_PROFILE_ID = 'oirge'` 是**数据地址**（`%APPDATA%\Mineradio-oirge` 由这两个拼出来），永远不要碰；面向 Windows 的显示身份另开一个常量 `APP_DISPLAY_NAME = 'Mineradio 二创'`。托盘 tooltip 和桌面快捷方式名用后者，`'显示 Mineradio'` 菜单项和迷你播放器标题兜底属于应用内文案，故意没动。
+- **根因是两个仓库的安装身份曾经逐字节相同**（`name` / `productName` / `appId` / `win.executableName` / `nsis.shortcutName` / `nsis.artifactName` 全一样），于是 NSIS 卸载 GUID、安装目录、开始菜单项、进程名全撞在一起，谁装谁把对方当成升级覆盖。运行期的数据隔离早就由本仓库独有的 `desktop/instance-isolation.js` 解决了（userData / sessionData / 单实例锁 / AppUserModelId / HTTP 端口 / WE 临时目录 / 更新目录都按 profile 分开），**这一轮动的只有安装身份**。
+- **`9733721a-009e-52bc-b705-49059cd80258` 是换身份之前本仓库留下的卸载注册表 GUID（实测取自本机 `HKCU`），原项目用的是同一个**，所以只靠这个键判断会误伤原项目的安装。`installer.nsh` 的 `MineradioOfferLegacyUninstall` 用三重门禁：`DisplayVersion` 必须以 `1.` 开头（`2.x` 是原项目的版本线）、目录里必须有本仓库写的 `.mineradio-install-root`、新目录不能嵌在旧目录里（否则卸旧版会删掉刚装好的文件），最后仍是 `MB_DEFBUTTON2` + `/SD IDNO` 由用户点头，且绝不传删数据的开关。**electron-builder 怎么从 appId 推出这个 GUID 一直没复现出来，所以只硬编码了实测到的旧 GUID，不要去猜新的。**
+- **那条旧卸载记录没有 `InstallLocation`**，只能从 `DisplayIcon`（卸载器同目录的图标）用 `${GetParent}` 反推安装根目录。
+- **`build/after-pack.js` 差点让每次 Windows 构建都失败**：它原来按 `appInfo.productFilename` 找 exe，那个跟的是 `productName`（现在含中文），和 `win.executableName` 已经不一致。现在优先读 `platformSpecificBuildOptions.executableName` 并逐个 `existsSync` 兜底；`FileDescription` / `ProductName` 跟 `productName`，任务管理器里才和原项目分得开。
+- **`D:\MineradioCache\beatmaps` 是故意和原项目共用的**（谱面重算很贵），但 `writeBeatMapCache` 的临时名必须带 `process.pid`，否则两个播放器同时分析同一首歌会抢同一个 `.tmp`，`rename` 互相打断。
+- **仍然无法消除的相互影响（不是缺陷，别再花时间修）**：全局热键是操作系统独占的，先注册的赢；`uiohook-napi` 的鼠标侧键会同时投给两个实例；Wallpaper Engine 壁纸、桌面歌词、桌面图标共用同一个 `Progman` / `WorkerW` 宿主，只能一个占着；原项目的安装器很可能按进程名结束进程，装它的时候会顺手关掉二创版。
+- 回归：新增 `tests/coexist-with-upstream-install.test.js` 11 例，把 `appId` / exe 名 / 快捷方式名 / 安装包名 / NSIS 叶子名与默认目录 / 进程筛选名 / 三重门禁 / 登录项值名 / 谱面 `.tmp` / after-pack 找 exe / 工作流资产名逐条钉住，并**反向**钉住 `APP_NAME` 与 `PRIMARY_PROFILE_ID` 不许变。
+

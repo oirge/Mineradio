@@ -13,8 +13,8 @@
     "build:win:dir": "electron-builder --win dir"
   },
   "build": {
-    "appId": "com.mineradio.desktop",
-    "productName": "Mineradio",
+    "appId": "com.mineradio.desktop.oirge",
+    "productName": "Mineradio 二创",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -41,7 +41,7 @@
       "node_modules/uiohook-napi/**"
     ],
     "win": {
-      "executableName": "Mineradio",
+      "executableName": "Mineradio-oirge",
       "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "target": [
@@ -59,14 +59,14 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Mineradio",
+      "shortcutName": "Mineradio 二创",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/installerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",
       "include": "build/installer.nsh",
-      "artifactName": "Mineradio-${version}-Setup.${ext}"
+      "artifactName": "Mineradio-oirge-${version}-Setup.${ext}"
     },
     "publish": [
       {

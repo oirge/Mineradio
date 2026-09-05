@@ -1554,7 +1554,10 @@ class WallpaperEngineRuntime {
     this.nativeTempPath = path.resolve(String(
       options.nativeTempPath
       || process.env.MINERADIO_NATIVE_TEMP_DIR
-      || path.join(process.env.LOCALAPPDATA || process.env.APPDATA || process.cwd(), 'Mineradio', 'native-helper-temp')
+      // 打包后主进程一定会传 nativeTempPath（userData 下的 native/），这条只是兜底；
+      // 带上 -oirge 是因为原项目 XxHuberrr/Mineradio 会用同一个 %LOCALAPPDATA%\Mineradio，
+      // 两边同时往里写 PowerShell 辅助脚本会互相覆盖。
+      || path.join(process.env.LOCALAPPDATA || process.env.APPDATA || process.cwd(), 'Mineradio-oirge', 'native-helper-temp')
     ));
     fs.mkdirSync(this.nativeTempPath, { recursive: true });
     this.nativeExecFile = options.nativeExecFile || childProcess.execFile;
