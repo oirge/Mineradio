@@ -4182,6 +4182,114 @@ var ripples = [];
 for (var ri = 0; ri < RIPPLE_MAX; ri++) ripples.push({ x:0, y:0, age:-10, str:0 });
 var rippleNeedsSync = true;
 
+// 音域回响数据纹理 (频段 × 历史, RGBA: 归一幅度, 包络, 瞬态, 节拍能量)
+//   每次推进都把新一帧频谱写进第 0 行并把旧行整体下移，于是"时间"沿 v 轴展开。
+//   预设 7 用半径去采样这张历史图，当前音域就会像混响一样一圈圈朝外扩散、衰减。
+var SPECTRUM_ECHO_PRESET_INDEX = 7;
+var SPECTRUM_ECHO_BANDS = 64;
+var SPECTRUM_ECHO_HISTORY = 64;
+var SPECTRUM_ECHO_ROW_BYTES = SPECTRUM_ECHO_BANDS * 4;
+var SPECTRUM_ECHO_PUSH_INTERVAL = 1 / 48;    // 行推进节奏与帧率解耦, 64 行 ≈ 1.33s 回响
+var spectrumEchoData = new Uint8Array(SPECTRUM_ECHO_ROW_BYTES * SPECTRUM_ECHO_HISTORY);
+var spectrumEchoTex = new THREE.DataTexture(spectrumEchoData, SPECTRUM_ECHO_BANDS, SPECTRUM_ECHO_HISTORY, THREE.RGBAFormat);
+spectrumEchoTex.magFilter = THREE.LinearFilter; spectrumEchoTex.minFilter = THREE.LinearFilter;
+spectrumEchoTex.wrapS = THREE.ClampToEdgeWrapping; spectrumEchoTex.wrapT = THREE.ClampToEdgeWrapping;
+spectrumEchoTex.needsUpdate = true;
+var spectrumEchoBandRaw = new Float32Array(SPECTRUM_ECHO_BANDS);
+var spectrumEchoBandEnv = new Float32Array(SPECTRUM_ECHO_BANDS);
+var spectrumEchoBinStarts = new Int32Array(SPECTRUM_ECHO_BANDS + 1);
+var spectrumEchoBinLength = -1;
+var spectrumEchoPeak = 0.14;
+var spectrumEchoPushAccum = 0;
+
+/**
+ * 建立对数频段边界: 低音区线性铺开, 高频用几何步长, 64 条频段覆盖整个可听区。
+ * @param {number} len 频谱 bin 数
+ * @returns {void}
+ */
+function ensureSpectrumEchoBins(len) {
+  if (spectrumEchoBinLength === len) return;
+  spectrumEchoBinLength = len;
+  var minBin = 2;
+  var maxBin = Math.max(minBin + SPECTRUM_ECHO_BANDS, Math.floor(len * 0.55));
+  var ratio = Math.log(maxBin / minBin) / SPECTRUM_ECHO_BANDS;
+  var prev = minBin;
+  spectrumEchoBinStarts[0] = minBin;
+  for (var b = 1; b <= SPECTRUM_ECHO_BANDS; b++) {
+    var next = Math.max(prev + 1, Math.round(minBin * Math.exp(ratio * b)));
+    if (next > len) next = len;
+    spectrumEchoBinStarts[b] = next;
+    prev = next;
+  }
+}
+
+/**
+ * 把当前频谱压进回响历史纹理。只在音域回响预设生效, 其他预设完全不付代价。
+ * @param {boolean} sampled 本帧是否真的取到了新频谱
+ * @param {number} dt 帧间隔(秒)
+ * @param {number} beat 节拍脉冲 0..1
+ * @param {number} energy 整体能量 0..1
+ * @returns {void}
+ */
+function updateSpectrumEchoField(sampled, dt, beat, energy) {
+  if (!fx || fx.preset !== SPECTRUM_ECHO_PRESET_INDEX) return;
+  spectrumEchoPushAccum += dt;
+  if (spectrumEchoPushAccum < SPECTRUM_ECHO_PUSH_INTERVAL) return;
+  // 掉帧时最多补一行, 不做追赶式连推, 否则回响会突然抽一下。
+  spectrumEchoPushAccum = Math.min(spectrumEchoPushAccum - SPECTRUM_ECHO_PUSH_INTERVAL, SPECTRUM_ECHO_PUSH_INTERVAL);
+  var b = 0;
+  if (sampled && frequencyData && frequencyData.length > 8) {
+    var binCount = frequencyData.length;
+    ensureSpectrumEchoBins(binCount);
+    var frameMax = 0;
+    for (b = 0; b < SPECTRUM_ECHO_BANDS; b++) {
+      var from = spectrumEchoBinStarts[b];
+      var to = Math.max(from + 1, spectrumEchoBinStarts[b + 1]);
+      if (to > binCount) to = binCount;
+      var sum = 0;
+      for (var i = from; i < to; i++) sum += frequencyData[i];
+      var avg = to > from ? sum / (to - from) * AUDIO_FREQUENCY_SCALE : 0;
+      spectrumEchoBandRaw[b] = avg;
+      if (avg > frameMax) frameMax = avg;
+    }
+    spectrumEchoPeak = Math.max(frameMax, spectrumEchoPeak * 0.992, 0.10);
+  } else {
+    for (b = 0; b < SPECTRUM_ECHO_BANDS; b++) spectrumEchoBandRaw[b] = 0;
+    spectrumEchoPeak = Math.max(0.10, spectrumEchoPeak * 0.96);
+  }
+  // 旧行整体下移一行: v 越大 = 越久之前, 于是频谱形状随半径向外传播。
+  spectrumEchoData.copyWithin(SPECTRUM_ECHO_ROW_BYTES, 0, spectrumEchoData.length - SPECTRUM_ECHO_ROW_BYTES);
+  var peakRef = Math.max(0.10, spectrumEchoPeak * 0.74);
+  var rowBeat = Math.round(clamp01(beat * 0.78 + energy * 0.46) * 255);
+  for (b = 0; b < SPECTRUM_ECHO_BANDS; b++) {
+    var norm = clamp01(Math.pow(spectrumEchoBandRaw[b] / peakRef, 0.82));
+    var env = spectrumEchoBandEnv[b];
+    // 起振快、收尾慢: 单帧就已经带一点"余韵", 历史纹理再把它铺成一圈圈回响。
+    env += (norm - env) * (norm > env ? 0.55 : 0.16);
+    spectrumEchoBandEnv[b] = env;
+    var transient = clamp01((norm - env) * 2.6);
+    var o = b * 4;
+    spectrumEchoData[o]     = Math.round(norm * 255);
+    spectrumEchoData[o + 1] = Math.round(clamp01(env) * 255);
+    spectrumEchoData[o + 2] = Math.round(transient * 255);
+    spectrumEchoData[o + 3] = rowBeat;
+  }
+  spectrumEchoTex.needsUpdate = true;
+}
+
+/**
+ * 离开或进入音域回响预设时清空历史, 避免下次进入闪一帧陈旧频谱。
+ * @returns {void}
+ */
+function resetSpectrumEchoField() {
+  spectrumEchoData.fill(0);
+  spectrumEchoBandEnv.fill(0);
+  spectrumEchoBandRaw.fill(0);
+  spectrumEchoPeak = 0.14;
+  spectrumEchoPushAccum = 0;
+  spectrumEchoTex.needsUpdate = true;
+}
+
 // 封面纹理 + 边缘/深度纹理
 var coverTex = new THREE.Texture();
 coverTex.minFilter = THREE.LinearFilter; coverTex.magFilter = THREE.LinearFilter;
@@ -4238,6 +4346,7 @@ var uniforms = {
   uEdgeTex:    { value: coverEdgeTex },
   uRippleTex:  { value: rippleTex },
   uRippleCount:{ value: 0 },
+  uSpectrumTex:{ value: spectrumEchoTex },   // 音域回响: 频段 × 历史
   uDotTex:     { value: dotTexture },
   uHasCover:   { value: 0 },
   uHasDepth:   { value: 0 },
@@ -4267,7 +4376,7 @@ uniform float uVinylSpin;
 uniform float uColorBoost, uScatter, uCoverRes, uBgFade;
 uniform float uHasCover, uHasDepth, uEdgeEnabled, uAiBoost;
 uniform float uMouseActive, uPixel, uColorMixT, uLoading;
-uniform sampler2D uCoverTex, uPrevCoverTex, uEdgeTex, uRippleTex;
+uniform sampler2D uCoverTex, uPrevCoverTex, uEdgeTex, uRippleTex, uSpectrumTex;
 uniform int uRippleCount;
 uniform vec2 uMouseXY, uHandXY;
 uniform float uHandActive, uGestureGrip;
@@ -4533,11 +4642,11 @@ void main(){
   }
 
   // ====================================================
-  //  Preset 5: WALLPAPER PULSE
+  //  Preset 5 / 6: WALLPAPER PULSE
   //  Layered music-particle wallpaper: aurora ribbons, depth sparks,
   //  and cover-colored audio flow.
   // ====================================================
-  else {
+  else if (uPreset < 6.5) {
     float bassGlow = smoothstep(0.07, 0.78, uBass) * 0.34 + uBeat * 0.014;
     float midGlow = smoothstep(0.07, 0.62, uMid) * 0.42;
     float highGlow = smoothstep(0.04, 0.46, uTreble) * 0.46;
@@ -4609,6 +4718,72 @@ void main(){
   }
 
   // ====================================================
+  //  Preset 7: SPECTRUM ECHO — 音域回响
+  //  极坐标: 角度 = 音域(镜像频谱), 半径 = 时间(越外越久)。
+  //  半径直接采样频谱历史纹理, 当下的音域就沿半径一圈圈向外回响、衰减。
+  // ====================================================
+  else {
+    float lane = aUv.y;
+    float transition = clamp(uBurstAmt, 0.0, 1.0);
+    // 镜像频段: aUv.x=0.5 是低音(正下方), 向两侧升到高音, 首尾无缝。
+    float bandN = abs(aUv.x * 2.0 - 1.0);
+    float ang = aUv.x * PI * 2.0 + PI * 0.5 + t * 0.018 + (hash11(aRand * 91.7) - 0.5) * 0.055;
+
+    if (lane < 0.86) {
+      float age = lane / 0.86;                       // 0 = 当下, 1 = 回响末端
+      float rowJitter = (hash11(aRand * 57.3) - 0.5) * 0.014;
+      vec4 echo = texture2D(uSpectrumTex, vec2(clamp(bandN, 0.004, 0.996), clamp(age + rowJitter, 0.0, 1.0)));
+      float amp = echo.r;
+      float env = echo.g;
+      float onset = echo.b;
+      float rowBeat = echo.a;
+
+      // 越旧的回响越弱也越开: 半径基线随年龄外扩, 幅度随年龄衰减。
+      float decay = pow(1.0 - age, 1.35);
+      float baseR = 1.02 + age * 3.55;
+      float lift = (amp * 0.62 + env * 0.46) * decay * K * 1.15;
+      float ringR = baseR + lift + onset * decay * 0.34;
+      // 每条频段内再散一层厚度, 避免回响圈变成一根细线。
+      float thick = (hash11(aRand * 211.7) - 0.5) * (0.085 + amp * 0.16 + age * 0.05);
+      float r = ringR + thick;
+
+      pos.x = cos(ang) * r;
+      pos.y = sin(ang) * r * 0.86;
+      // 回响向后沉成漏斗纵深, 瞬态把当下这圈往前顶。
+      pos.z = -age * 3.9 + (amp * 0.72 + onset * 0.55) * decay - 0.35;
+
+      // 低音偏暖、高音偏冷的频谱渐变, 再和封面色混合保持整体调性。
+      vec3 spectral = mix(vec3(1.0, 0.52, 0.42), vec3(0.44, 0.78, 1.0), sqrt(bandN));
+      spectral = mix(spectral, vec3(0.72, 0.60, 1.0), onset * 0.55);
+      vColor = mix(mix(coverColor, spectral, 0.66 + bandN * 0.10), spectral, decay * 0.24);
+      vColor *= 0.72 + amp * 0.86 + onset * 0.52 + rowBeat * 0.16;
+
+      float thin = 1.0 - smoothstep(0.0, 0.28 + amp * 0.34, abs(thick));
+      vAlpha = (0.055 + amp * 0.62 + env * 0.20 + onset * 0.34) * decay * (0.34 + thin * 0.72) * (0.94 + transition * 0.06);
+      maxRippleAmp = max(maxRippleAmp, (amp * 0.30 + onset * 0.42 + rowBeat * 0.12) * decay);
+    } else {
+      // 外圈空气尘: 只吃高频, 让画面边缘有呼吸而不是硬切。
+      float q = (lane - 0.86) / 0.14;
+      float seed = hash11(aRand * 733.0 + floor(q * 120.0));
+      float dustAng = seed * PI * 2.0 + t * (0.010 + seed * 0.016);
+      float dustR = 3.9 + seed * 4.6 + sin(t * (0.05 + seed * 0.08) + aRand * 9.0) * 0.42;
+      float twinkle = pow(0.5 + 0.5 * sin(t * (0.30 + seed * 0.46) + aRand * 21.0), 4.0);
+      pos = vec3(cos(dustAng) * dustR, sin(dustAng) * dustR * 0.82, -5.4 - seed * 7.5 + twinkle * 0.5);
+      vColor = mix(coverColor, vec3(0.80, 0.90, 1.0), 0.66 + twinkle * 0.16);
+      vAlpha = (0.05 + twinkle * 0.30 + uTreble * 0.20) * (1.0 - q * 0.24);
+      maxRippleAmp = max(maxRippleAmp, twinkle * uTreble * 0.10);
+    }
+
+    if (transition > 0.001) {
+      float bloom = smoothstep(0.0, 1.0, transition);
+      pos.xy *= 1.0 + bloom * 0.030;
+      pos.z += (hash11(aRand * 149.0) - 0.5) * bloom * 0.26;
+      vAlpha *= 0.88 + bloom * 0.20;
+      maxRippleAmp = max(maxRippleAmp, bloom * 0.10);
+    }
+  }
+
+  // ====================================================
   //  鼠标交互 (仅 SILK)
   // ====================================================
   if (uMouseActive > 0.5 && uPreset < 0.5) {
@@ -4671,7 +4846,9 @@ void main(){
   vColor = mix(vColor, tintedColor, clamp(uTintStrength, 0.0, 1.0) * (1.0 - blackParticleGuard));
 
   vBright = 0.82 + maxRippleAmp * 0.55 + uBass * 0.10 + edgeBoost * 0.30 + uEnergy * 0.05 + uBurstAmt * 0.40;
-  if (uPreset > 4.5) {
+  if (uPreset > 6.5) {
+    vBright = 0.90 + maxRippleAmp * 0.66 + uBass * 0.06 + uEnergy * 0.05 + uBeat * 0.12 + uBurstAmt * 0.14;
+  } else if (uPreset > 4.5) {
     vBright = 0.94 + maxRippleAmp * 0.34 + uBass * 0.020 + uEnergy * 0.026 + uBurstAmt * 0.025;
   } else if (uPreset > 3.5) {
     vBright = 0.94 + maxRippleAmp * 0.64 + uBass * 0.08 + edgeBoost * 0.12 + uEnergy * 0.05 + uBeat * 0.16 + uBurstAmt * 0.16;
@@ -4718,7 +4895,10 @@ void main(){
   float depthSize = 36.0 / max(0.5, -mvPos.z);
   float audioBoost = 1.0 + maxRippleAmp * 0.7 + edgeBoost * 0.55 + uBeat * 0.30 + uBurstAmt * 0.5;
   float sz = clamp(depthSize * audioBoost, 1.05, 4.95);
-  if (uPreset > 4.5) {
+  if (uPreset > 6.5) {
+    float echoDrive = uBass * 0.16 + uMid * 0.14 + uTreble * 0.18 + uBeat * 0.22 + uBurstAmt * 0.10;
+    sz = clamp(depthSize * (0.94 + echoDrive * 0.70), 1.02, 4.30);
+  } else if (uPreset > 4.5) {
     float flowDrive = uBass * 0.070 + uMid * 0.046 + uTreble * 0.060 + uBurstAmt * 0.090 + uBeat * 0.055;
     sz = clamp(depthSize * (1.05 + flowDrive), 1.00, 5.45);
   } else if (uPreset > 3.5) {
@@ -33864,6 +34044,7 @@ var presetMeta = [
   { name: '唱片', desc: '唱片 · 圆形封面' },
   { name: '星河', desc: '壁纸粒子 · 音乐律动' },
   { name: '安魂', desc: '骷髅·YUI7W', descHtml: '骷髅·<span class="pc-yui7w">YUI7W</span>' },
+  { name: '音域回响', desc: '频谱回响 · 致敬 CmzYa' },
 ];
 var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 14c3-2 5-2 8 0s5 2 8 0M3 10c3-2 5-2 8 0s5 2 8 0M3 18c3-2 5-2 8 0s5 2 8 0"/></svg>',
@@ -33873,8 +34054,9 @@ var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.4"/><path d="M16.5 5.2c2.1.9 3.4 2.4 4 4.5"/><path d="M18.8 3.2l1.5 4.8"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 15c2.2-4.4 4.4-4.4 6.6 0s4.4 4.4 6.6 0S20.6 10.6 23 15"/><path d="M3 9c2.2 2.2 4.4 2.2 6.6 0s4.4-2.2 6.6 0S20.6 11.2 23 9"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.2h4v6.2h4.2v3.8H14v7.6h-4v-7.6H5.8V9.4H10z"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 12.4V7.6"/><path d="M9 12.4V9.8"/><path d="M15 12.4V9.1"/><path d="M6.5 15.1a7.2 7.2 0 0 1 11 0"/><path d="M3.5 18a11 11 0 0 1 17 0"/></svg>',
 ];
-var presetDisplayOrder = [0, 6, 5, 4, 2, 1, 3];
+var presetDisplayOrder = [0, 7, 6, 5, 4, 2, 1, 3];
 var lyricColorPresets = [
   { name:'雾蓝', color:'#a9b8c8' },
   { name:'银蓝', color:'#9db8cf' },
@@ -34955,17 +35137,21 @@ function refreshPresetGrid() {
     el.classList.toggle('active', Number(el.dataset.preset) === fx.preset);
   });
 }
+function isSoftFlowPreset(preset) {
+  // 星河和音域回响都是铺满视野的连续场, 硬炸开会撕碎整片粒子, 只给极轻的一下。
+  return preset === 5 || preset === SPECTRUM_ECHO_PRESET_INDEX;
+}
 function triggerPresetParticleTransition(fromPreset, toPreset) {
+  var softFlow = isSoftFlowPreset(toPreset);
   presetTransition.active = true;
   presetTransition.start = uniforms.uTime.value;
-  presetTransition.duration = toPreset === 5 ? 0.30 : 0.24;
+  presetTransition.duration = softFlow ? 0.30 : 0.24;
   presetTransition.from = fromPreset;
   presetTransition.to = toPreset;
   var newVisual = toPreset >= 4;
-  var wallpaperFlow = toPreset === 5;
-  uniforms.uScatter.value = Math.max(uniforms.uScatter.value, fx.scatter + (newVisual ? (wallpaperFlow ? 0.008 : 0.024) : 0.12));
-  uniforms.uBurstAmt.value = Math.max(uniforms.uBurstAmt.value, wallpaperFlow ? 0.05 : 0.15);
-  camPunch = Math.max(camPunch, wallpaperFlow ? 0.04 : 0.12);
+  uniforms.uScatter.value = Math.max(uniforms.uScatter.value, fx.scatter + (newVisual ? (softFlow ? 0.008 : 0.024) : 0.12));
+  uniforms.uBurstAmt.value = Math.max(uniforms.uBurstAmt.value, softFlow ? 0.05 : 0.15);
+  camPunch = Math.max(camPunch, softFlow ? 0.04 : 0.12);
   for (var i = 0; i < 3; i++) {
     triggerRipple((Math.random() - 0.5) * 3.4, (Math.random() - 0.5) * 3.4, 0.58 + Math.random() * 0.32);
   }
@@ -34983,10 +35169,10 @@ function tickPresetTransition() {
   var t = Math.max(0, Math.min(1, raw));
   var wave = Math.sin(t * Math.PI);
   var newVisual = presetTransition.to >= 4;
-  var wallpaperFlow = presetTransition.to === 5;
-  uniforms.uScatter.value = Math.max(uniforms.uScatter.value, fx.scatter + wave * (newVisual ? (wallpaperFlow ? 0.008 : 0.026) : 0.16));
-  uniforms.uBurstAmt.value = Math.max(uniforms.uBurstAmt.value, wave * (wallpaperFlow ? 0.045 : (newVisual ? 0.12 : 0.15)));
-  uniforms.uPointScale.value = fx.point * (1 + wave * (wallpaperFlow ? 0.016 : 0.048));
+  var softFlow = isSoftFlowPreset(presetTransition.to);
+  uniforms.uScatter.value = Math.max(uniforms.uScatter.value, fx.scatter + wave * (newVisual ? (softFlow ? 0.008 : 0.026) : 0.16));
+  uniforms.uBurstAmt.value = Math.max(uniforms.uBurstAmt.value, wave * (softFlow ? 0.045 : (newVisual ? 0.12 : 0.15)));
+  uniforms.uPointScale.value = fx.point * (1 + wave * (softFlow ? 0.016 : 0.048));
   if (raw >= 1) {
     presetTransition.active = false;
     syncFxUniforms();
@@ -35000,6 +35186,8 @@ function setPreset(p, opts) {
   fx.preset = p;
   if (changed && prev === SKULL_PRESET_INDEX && p !== SKULL_PRESET_INDEX) clearSkullPresetResidue();
   if (p === SKULL_PRESET_INDEX) loadSkullParticleAsset();
+  // 进出音域回响都把历史清空: 否则再次进入会先闪一帧上次残留的频谱。
+  if (changed && (p === SPECTRUM_ECHO_PRESET_INDEX || prev === SPECTRUM_ECHO_PRESET_INDEX)) resetSpectrumEchoField();
   uniforms.uPreset.value = p;
   refreshPresetGrid();
   if (changed && !opts.skipTransition) triggerPresetParticleTransition(prev, p);
@@ -35011,6 +35199,7 @@ function setPreset(p, opts) {
     else if (p === 4) { orbit.userRadius = 6.5; orbit.userPhi = 0.04; orbit.userTheta = 0.0; orbit.baselineRadius = 6.5; orbit.baselinePhi = 0.04; }
     else if (p === 5) { orbit.userRadius = 9.4; orbit.userPhi = 0.34; orbit.userTheta = -0.52; orbit.baselineRadius = 9.4; orbit.baselinePhi = 0.34; }
     else if (p === 6) { orbit.userRadius = 7.4; orbit.userPhi = 0.10; orbit.userTheta = 0.18; orbit.baselineRadius = 7.4; orbit.baselinePhi = 0.10; }
+    else if (p === 7) { orbit.userRadius = 8.6; orbit.userPhi = 0.16; orbit.userTheta = 0.0; orbit.baselineRadius = 8.6; orbit.baselinePhi = 0.16; }
     else              { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
     orbit.baselineTheta = p === 5 ? -0.52 : (p === 6 ? 0.18 : 0.0);
   }
@@ -39360,10 +39549,17 @@ function refreshMainRendererViewport(reason) {
     requestStageLyricCameraSnap(reason === 'resize' ? 4 : 10);
   }
 }
+var mainRendererViewportRefreshTimers = [];
 function scheduleMainRendererViewportRefresh(reason) {
   refreshMainRendererViewport(reason || 'sync');
+  // 全屏切换会连发几十次 resize，旧实现每次都再排 3 个补偿刷新，
+  // renderer.setPixelRatio/setSize 就在窗口尺寸跳变时被反复调用，卡顿正是这么来的。
+  // 补偿刷新只需要最后一次，重排时先撤掉上一批。
+  while (mainRendererViewportRefreshTimers.length) clearTimeout(mainRendererViewportRefreshTimers.pop());
   [48, 140, 320].forEach(function(delay){
-    setTimeout(function(){ refreshMainRendererViewport(reason || 'sync'); }, delay);
+    mainRendererViewportRefreshTimers.push(setTimeout(function(){
+      refreshMainRendererViewport(reason || 'sync');
+    }, delay));
   });
 }
 window.addEventListener('resize', function(){
@@ -41062,10 +41258,15 @@ var fullscreenTransitionState = {
   expected: false,
   startWidth: 0,
   startHeight: 0,
+  revealDue: 0,
   actionTimer: 0,
   revealTimer: 0,
+  deadlineTimer: 0,
   cleanupTimer: 0
 };
+// 遮罩最多压住的时长。退出全屏时主进程先原生还原再 setBounds，resize/state 信号一路连发，
+// 只靠"等尺寸稳定"会让遮罩跟着整段窗口还原动画一起变长，所以必须给一个确定的天花板。
+var FULLSCREEN_TRANSITION_MAX_COVER_MS = 320;
 
 function prefersReducedFullscreenMotion() {
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -41079,8 +41280,10 @@ function cleanupFullscreenTransition(token) {
   if (token !== fullscreenTransitionState.token) return;
   clearFullscreenTransitionTimer('actionTimer');
   clearFullscreenTransitionTimer('revealTimer');
+  clearFullscreenTransitionTimer('deadlineTimer');
   clearFullscreenTransitionTimer('cleanupTimer');
   fullscreenTransitionState.active = false;
+  fullscreenTransitionState.revealDue = 0;
   document.body.classList.remove(
     'fullscreen-transitioning',
     'fullscreen-transition-covered',
@@ -41092,20 +41295,28 @@ function cleanupFullscreenTransition(token) {
 function revealFullscreenTransition(token) {
   if (!fullscreenTransitionState.active || token !== fullscreenTransitionState.token) return;
   clearFullscreenTransitionTimer('revealTimer');
+  clearFullscreenTransitionTimer('deadlineTimer');
+  fullscreenTransitionState.revealDue = 0;
   document.body.classList.add('fullscreen-transition-revealing');
   document.body.classList.remove('fullscreen-transition-covered');
   fullscreenTransitionState.cleanupTimer = setTimeout(function(){
     cleanupFullscreenTransition(token);
-  }, prefersReducedFullscreenMotion() ? 80 : 240);
+  }, prefersReducedFullscreenMotion() ? 80 : 220);
 }
 function scheduleFullscreenTransitionReveal(isFullscreen, reason) {
   if (!fullscreenTransitionState.active || fullscreenTransitionState.expected !== !!isFullscreen) return;
   var viewportChanged = Math.abs(innerWidth - fullscreenTransitionState.startWidth) > 2
     || Math.abs(innerHeight - fullscreenTransitionState.startHeight) > 2;
+  var delay = prefersReducedFullscreenMotion() ? 30 : ((reason === 'resize' || viewportChanged) ? 50 : 110);
+  var due = Date.now() + delay;
+  // 只允许把回亮提前，不允许推后：同一次退出全屏会连发多轮 resize 和窗口状态推送，
+  // 逐次重排等于让遮罩一直等到最后一个信号，黑屏就被拉成整段还原动画。
+  if (fullscreenTransitionState.revealDue && due >= fullscreenTransitionState.revealDue) return;
+  fullscreenTransitionState.revealDue = due;
   clearFullscreenTransitionTimer('revealTimer');
   fullscreenTransitionState.revealTimer = setTimeout(function(){
     revealFullscreenTransition(fullscreenTransitionState.token);
-  }, prefersReducedFullscreenMotion() ? 30 : ((reason === 'resize' || viewportChanged) ? 70 : 150));
+  }, delay);
 }
 function beginFullscreenTransition(expectedFullscreen, action) {
   if (fullscreenTransitionState.active || typeof action !== 'function') return false;
@@ -41114,6 +41325,7 @@ function beginFullscreenTransition(expectedFullscreen, action) {
   fullscreenTransitionState.expected = !!expectedFullscreen;
   fullscreenTransitionState.startWidth = innerWidth;
   fullscreenTransitionState.startHeight = innerHeight;
+  fullscreenTransitionState.revealDue = 0;
   document.body.classList.remove('fullscreen-transition-covered', 'fullscreen-transition-revealing', 'fullscreen-transition-enter', 'fullscreen-transition-exit');
   document.body.classList.add('fullscreen-transitioning');
   var transitionLayer = document.getElementById('fullscreen-transition-layer');
@@ -41136,11 +41348,14 @@ function beginFullscreenTransition(expectedFullscreen, action) {
         revealFullscreenTransition(token);
       });
     }
-    clearFullscreenTransitionTimer('revealTimer');
-    fullscreenTransitionState.revealTimer = setTimeout(function(){
+    // 硬上限单独占一个计时器槽：resize/state 只会重排 revealTimer，抢不掉这个兜底，
+    // 遮罩时长因此有确定上界，而不是跟着窗口还原事件无限顺延。
+    clearFullscreenTransitionTimer('deadlineTimer');
+    fullscreenTransitionState.deadlineTimer = setTimeout(function(){
+      fullscreenTransitionState.deadlineTimer = 0;
       revealFullscreenTransition(token);
-    }, prefersReducedFullscreenMotion() ? 90 : 480);
-  }, prefersReducedFullscreenMotion() ? 20 : 115);
+    }, prefersReducedFullscreenMotion() ? 90 : FULLSCREEN_TRANSITION_MAX_COVER_MS);
+  }, prefersReducedFullscreenMotion() ? 20 : 110);
   return true;
 }
 function isFullscreenUiActive() {
@@ -43235,6 +43450,7 @@ function animate() {
   uniforms.uTreble.value = treble;
   uniforms.uBeat.value   = beatPulse;
   uniforms.uEnergy.value = audioEnergy;
+  updateSpectrumEchoField(shouldAnalyzeAudio && analysisDt > 0, dt, beatPulse, audioEnergy);
   uniforms.uMouseXY.value.set(mouseWorld.x, mouseWorld.y);
   uniforms.uMouseActive.value = mouseActive ? 1 : 0;
   // 通用转场脉冲: 只作为切换预设时的短促提亮。

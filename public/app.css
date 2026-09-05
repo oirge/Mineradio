@@ -20,13 +20,14 @@ body::after,#desktop-window-shell::after{content:none}
 body.desktop-shell{background:transparent}
 body.desktop-shell #desktop-window-shell{display:block;position:fixed;inset:0;overflow:hidden;border-radius:34px;clip-path:inset(0 round 34px);background:transparent;box-shadow:0 24px 80px rgba(0,0,0,.46);transform:translateZ(0)}
 body.desktop-shell.desktop-maximized #desktop-window-shell,body.desktop-shell.desktop-fullscreen #desktop-window-shell,html:fullscreen body.desktop-shell #desktop-window-shell{border-radius:0!important;clip-path:none!important;box-shadow:none!important}
-#fullscreen-transition-layer{position:fixed;inset:0;z-index:2000;pointer-events:none;opacity:0;visibility:hidden;background:rgba(0,0,0,.78);transition:opacity .18s cubic-bezier(.4,0,.2,1),visibility 0s linear .24s}
-body.fullscreen-transitioning #fullscreen-transition-layer{visibility:visible;transition:opacity .18s cubic-bezier(.4,0,.2,1),visibility 0s}
+#fullscreen-transition-layer{position:fixed;inset:0;z-index:2000;pointer-events:none;opacity:0;visibility:hidden;background:rgba(0,0,0,.62);transition:opacity .16s cubic-bezier(.4,0,.2,1),visibility 0s linear .22s}
+body.fullscreen-transitioning #fullscreen-transition-layer{visibility:visible;transition:opacity .1s cubic-bezier(.4,0,.2,1),visibility 0s}
+body.fullscreen-transitioning.fullscreen-transition-revealing #fullscreen-transition-layer{transition:opacity .2s cubic-bezier(.22,1,.36,1),visibility 0s}
 body.fullscreen-transition-covered #fullscreen-transition-layer{opacity:1}
-body.fullscreen-transitioning #desktop-window-shell{transition:transform .22s cubic-bezier(.16,1,.3,1),filter .18s ease;will-change:transform,filter}
-body.fullscreen-transitioning.fullscreen-transition-enter:not(.fullscreen-transition-revealing) #desktop-window-shell{transform:translateZ(0) scale(.988);filter:brightness(.74) saturate(.9)}
-body.fullscreen-transitioning.fullscreen-transition-exit:not(.fullscreen-transition-revealing) #desktop-window-shell{transform:translateZ(0) scale(1.012);filter:brightness(.74) saturate(.9)}
-body.fullscreen-transitioning.fullscreen-transition-revealing #desktop-window-shell{transform:translateZ(0) scale(1);filter:none}
+body.fullscreen-transitioning #desktop-window-shell{transition:transform .2s cubic-bezier(.16,1,.3,1);will-change:transform}
+body.fullscreen-transitioning.fullscreen-transition-enter:not(.fullscreen-transition-revealing) #desktop-window-shell{transform:translateZ(0) scale(.988)}
+body.fullscreen-transitioning.fullscreen-transition-exit:not(.fullscreen-transition-revealing) #desktop-window-shell{transform:translateZ(0) scale(1.008)}
+body.fullscreen-transitioning.fullscreen-transition-revealing #desktop-window-shell{transform:translateZ(0) scale(1)}
 @media (prefers-reduced-motion:reduce){#fullscreen-transition-layer,body.fullscreen-transitioning #desktop-window-shell{transition-duration:.06s!important}}
 body.mini-collapsing #desktop-window-shell{transform-origin:var(--mini-collapse-x,92%) var(--mini-collapse-y,96%);transition:transform .2s cubic-bezier(.3,0,.8,.15),opacity .17s cubic-bezier(.4,0,.9,.4) .02s,filter .18s ease;will-change:transform,opacity,filter}
 body.mini-collapsing.desktop-maximized #desktop-window-shell{border-radius:26px!important}
