@@ -4803,6 +4803,32 @@ function isTrustedMainDocumentUrl(value) {
 }
 
 /**
+ * 音域回响（视觉预设 8）壁纸桥接页路径：整幅画面跑在这一个子 frame 里。
+ * @type {string}
+ */
+const TRUSTED_WALLPAPER_FRAME_PATH = '/vendor/sonic-workshop/mineradio-bridge.html';
+
+/**
+ * 可信壁纸子 frame URL：仅放行当前 127.0.0.1 本地服务下音域回响原作的桥接页。
+ * 放行只针对「让这一页加载出来」，不给任何特权：isTrustedMainFrameSender 仍按 frame.parent
+ * 拒绝一切子 frame 的高权限 IPC，所以这道口子进不了主进程能力面。
+ * @param {string} value 待校验的 URL。
+ * @returns {boolean} 属于可信壁纸子 frame 时返回 true。
+ */
+function isTrustedWallpaperFrameUrl(value) {
+  try {
+    const parsed = new URL(String(value || ''));
+    if (parsed.protocol !== 'http:') return false;
+    if (parsed.hostname !== '127.0.0.1') return false;
+    const expectedPort = Number(mainServerPort || 3000);
+    if (!expectedPort || Number(parsed.port || 0) !== expectedPort) return false;
+    return String(parsed.pathname || '') === TRUSTED_WALLPAPER_FRAME_PATH;
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
  * 统一可信主 frame IPC 校验：sender 必须是当前主窗口 webContents 的主 frame，
  * 且当前文档只能是可信主文档（127.0.0.1 本地服务的 / 或 /index.html）。
  * 所有高权限 IPC handler 必须先过这一道门，防止主窗口被导航到外部页面后继续调用特权 API。
@@ -4840,31 +4866,69 @@ function trustedMainFrameHandler(handler) {
 }
 
 /**
+ * 归一化导航事件参数。Electron 派发 `will-frame-navigate` 时第一个参数既是事件也是详情
+ * （自带 url / isMainFrame / frame），第二个位置参数才是 url 字符串；早期写法则把详情放在第二个参数里。
+ * 三种形态一起认，避免签名对不上时读不到目标 URL，把本该放行的导航一并误拦。
+ * @param {object} event 导航事件对象。
+ * @param {Array<any>} rest 其余位置参数。
+ * @returns {{url: string, isMainFrame: (boolean|null), frame: (object|null)}} 归一化后的导航信息。
+ */
+function readFrameNavigationDetails(event, rest) {
+  const source = event && typeof event === 'object' ? event : {};
+  const positional = Array.isArray(rest) ? rest : [];
+  const detail = positional.find((item) => item && typeof item === 'object' && typeof item.url === 'string') || null;
+  const pick = (key) => {
+    if (source[key] !== undefined && source[key] !== null) return source[key];
+    if (detail && detail[key] !== undefined && detail[key] !== null) return detail[key];
+    return undefined;
+  };
+  const picked = pick('url');
+  const positionalUrl = positional.find((item) => typeof item === 'string' && item);
+  const url = typeof picked === 'string' && picked ? picked : (positionalUrl ? String(positionalUrl) : '');
+  const frame = pick('frame') || null;
+  let isMainFrame = null;
+  if (frame && typeof frame === 'object' && 'parent' in frame) isMainFrame = !frame.parent;
+  else if (typeof pick('isMainFrame') === 'boolean') isMainFrame = pick('isMainFrame');
+  else if (typeof positional[0] === 'string' && typeof positional[2] === 'boolean') isMainFrame = positional[2];
+  return { url, isMainFrame, frame };
+}
+
+/**
+ * 判定一次 frame 导航是否放行：主 frame 只允许可信主文档，子 frame 只允许主 frame 直属的
+ * 音域回响壁纸桥接页，更深一层的嵌套 frame 与其余目标一律拦截。
+ * @param {{url: string, isMainFrame: (boolean|null), frame: (object|null)}} info 归一化导航信息。
+ * @returns {boolean} 允许导航时返回 true。
+ */
+function isAllowedFrameNavigation(info) {
+  const url = info && typeof info.url === 'string' ? info.url : '';
+  const frame = info && info.frame && typeof info.frame === 'object' ? info.frame : null;
+  const parent = frame && frame.parent && typeof frame.parent === 'object' ? frame.parent : null;
+  if (parent && parent.parent) return false;
+  if (info && info.isMainFrame === true) return isTrustedMainDocumentUrl(url);
+  if (info && info.isMainFrame === false) return isTrustedWallpaperFrameUrl(url);
+  return isTrustedMainDocumentUrl(url) || isTrustedWallpaperFrameUrl(url);
+}
+
+/**
  * 安装主窗口导航守卫：主 frame 只允许停留在当前 127.0.0.1 服务的 / 或 /index.html，
- * 其余主 frame 导航与一切子 frame 导航一律拦截，配合可信主 frame IPC 校验形成完整信任边界。
+ * 子 frame 只放行音域回响（视觉预设 8）的壁纸桥接页，其余 frame 导航一律拦截，
+ * 配合可信主 frame IPC 校验形成完整信任边界。
  * @param {Electron.BrowserWindow} win 主窗口。
  * @returns {void}
  */
 function installMainWindowNavigationGuard(win) {
   if (!win || !win.webContents || typeof win.webContents.on !== 'function') return;
-  win.webContents.on('will-navigate', (event, details, _url, _isInPlace, isMainFrame) => {
-    const url = details && typeof details === 'object' ? details.url : String(details || '');
-    const fromMainFrame = details && typeof details === 'object' && 'isMainFrame' in details
-      ? details.isMainFrame
-      : isMainFrame !== false;
-    if (fromMainFrame && isTrustedMainDocumentUrl(url)) return;
-    event.preventDefault();
-  });
-  win.webContents.on('will-frame-navigate', (event, details) => {
-    const url = details && typeof details === 'object' ? details.url : String(details || '');
-    const frame = details && typeof details === 'object' ? (details.frame || null) : null;
-    if (frame && typeof frame.parent !== 'undefined' && frame.parent) {
-      event.preventDefault();
-      return;
+  const guard = (event, ...rest) => {
+    let allowed = false;
+    try {
+      allowed = isAllowedFrameNavigation(readFrameNavigationDetails(event, rest));
+    } catch (_e) {
+      allowed = false;
     }
-    if (details && typeof details === 'object' && details.isMainFrame === true && isTrustedMainDocumentUrl(url)) return;
-    event.preventDefault();
-  });
+    if (!allowed && event && typeof event.preventDefault === 'function') event.preventDefault();
+  };
+  win.webContents.on('will-navigate', guard);
+  win.webContents.on('will-frame-navigate', guard);
 }
 
 

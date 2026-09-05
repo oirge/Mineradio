@@ -92,14 +92,25 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.9.1 (2026-09-05)
+### Latest release v1.9.2 (2026-09-05)
+
+- **Fixed preset 8 "Sonic Echo · Wallpaper Engine" (original by CmzYa) rendering the whole window pure black in the desktop client**: this is a different defect from the washed-out white the previous release fixed — the black happens one step earlier, because the wallpaper page was never allowed to load at all
+- The root cause is in the desktop main process: to stop the window navigating to external pages, the main-window navigation guard was written to block *every* subframe navigation — and this preset's entire picture runs inside an iframe. So that iframe stayed on `about:blank` and its black backdrop filled the window; with this preset selected the cover-particle layer is collapsed too, so the result looked like plain black
+- The guard predates the preset by four releases, which means **this preset had never once rendered inside the packaged client** (running the sources in a browser was fine), so the palette work of the last few releases was invisible there
+- Subframes may now load only this preset's own bridge page (same port, exact path); every other subframe is still blocked, and the main frame is still restricted to the local `/` or `/index.html`. **Allowing the load grants no privilege** — every privileged IPC path still rejects any sender frame that has a parent
+- Also fixed how the guard read its arguments: Electron puts the navigation details on the event object itself, while the old code read them from the second argument, which is the URL string — so its checks never matched and it fell through to "block". The old test called it with a signature Electron does not use, which is why it stayed green
+- Verified by capturing frames from a real Electron window this time: before the fix the subframe sat on `about:blank` with no canvas and 4.4% lit pixels; after it, a 1280×720 WebGL2 canvas with 89% lit pixels and a normal picture
+- Full Node regression suite: `990/990` passing (two new cases: the bridge-page allowlist, and keeping that allowlisted path in sync with preset 8's iframe source; the navigation-guard case now dispatches with Electron's real signature)
+
+### v1.9.1 (2026-09-05)
 
 - **Fixed preset 8 ("Sonic Echo · Wallpaper Engine", original by CmzYa) washing out into a flat, near-white haze while nothing is playing**: switching it to the raw cover colours last release was right, but the fallback chain still ended on the lyric text colours — those are deliberately brightened so they stay readable on top of cover art, and their idle defaults are the near-white `#d6f8ff` / `#9cffdf` / `#eef7ff`. So with no track playing, no cover art, or the cover scan not yet finished, all eight wallpaper colours were pushed to near-white, with the cool, ripple and peak roles collapsing onto the same value — leaving the picture with no light-and-dark structure at all
 - With no cover colours available it now uses the original's own fallback palette (coral-mirage: primary `#cb6c89`, cool `#99c4ff`, ripple `#f8d8ff`, near-black base `#16060f`). **When cover colours are available the chain matches upstream item for item, so the picture is unchanged from the previous release**
 - Preset 7 ("ported from Ajin") is unaffected and untouched in this release
 - Full Node regression suite: `988/988` passing (one new case: it pins the palette's initial literals and forbids the colour chain from falling back to the lyric text colours again)
 
-### v1.9.0 (2026-09-05)
+<details>
+<summary>v1.9.0 — both Sonic Echo presets aligned with the original project</summary>
 
 - **Both "Sonic Echo" presets used to look different from the original project — this release aligns them**: checked item by item against upstream [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) (commit `89c0d23`); five discrepancies were found and all five now follow upstream
 - **Preset 7 ("ported from Ajin") finally gets a real eight-band spectrum and kick envelope**: upstream's audio monitor layer is now ported over (new file `public/sonic-audio-monitor.js`), splitting bands by hertz (32–58 / 58–118 / 118–260 / 260–720 / 720–1800 / 1800–4200 / 4200–9000 / 9000–16000 Hz) and tracking the kick across six candidate windows with an adaptive noise floor. Previously the eight bands were inferred from five coarse values, which is why the terrain's rise-and-fall distribution and the ripple timing were the most visibly wrong part
@@ -111,6 +122,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Preset 8 no longer reads the global theme tint; its colours follow the cover only, as in the original
 - Full Node regression suite: `987/987` passing (new `tests/sonic-audio-monitor.test.js` with 12 cases and `tests/lyric-cover-palette-split.test.js` with 9)
 - **Known boundary**: this release was verified item by item against upstream's source, not by comparing frames side by side with the original in a real window. If something still looks off, say which preset, which part of the picture, and whether the track is fast or slow
+
+</details>
 
 <details>
 <summary>v1.8.9 — Sonic Echo gained the Wallpaper Engine original</summary>
