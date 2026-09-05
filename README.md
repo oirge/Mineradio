@@ -151,7 +151,19 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
-### 最新版本 v1.8.8 (2026-09-05)
+### 最新版本 v1.8.9 (2026-09-05)
+
+- **补上原项目里我这边还缺的那个视觉预设**：上游 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) 有两条「音域回响」，v1.8.8 只搬了 three.js 重写，这一版把另一条也搬齐
+- **新增第 9 个视觉预设「音域回响 Wallpaper Engine」**（原作 CmzYa）：`public/vendor/sonic-workshop/` 下是 CmzYa 的 Wallpaper Engine 作品《音域回响》的构建产物，原样嵌在铺满窗口的 iframe 里，整幅画面由原作渲染，本仓库只负责喂数据
+- 预设面板里两个「音域回响」并排：预设 7 标「移植 Ajin」，预设 8 标「原作 CmzYa」
+- 壁纸层点不穿（整层与层内每个元素都是 `pointer-events:none`，另带 `inert` / `aria-hidden`），鼠标、键盘焦点、读屏一律落到播放器上；选这个预设时封面粒子整层收起，只留壁纸
+- 实时喂进去的是本项目的数据：33 毫秒一次 512 段频谱、250 毫秒一次曲目信息与封面、1000 毫秒一次配色，换歌或改设置当场推
+- 配色跟着当前封面走（主色作冷色、副色作暖色、高光色作涟漪），认不出颜色时退回原作的深蓝配暖橙
+- 画质档位决定网格精度（省电 224 / 均衡 288 / 高 320 / 极致 384），默认的「高」正好是原作 `project.json` 里的 320
+- vendor 的四个文件与上游 commit `89c0d23` 逐字节一致，版权与出处见 [NOTICE.md](NOTICE.md)；这份第三方产物经检查不联网、不写本地存储、不含 `eval`，并把结论钉成了回归测试
+- 全量 Node 回归 `965/965` 通过（新增 `tests/sonic-workshop-preset.test.js` 26 例）
+
+### v1.8.8 (2026-09-05)
 
 - **视觉预设「音域回响」改成移植实现**（音域地形 · 移植 CmzYa）：一片方柱地形跟着八段频谱起伏，底鼓打出蓝色涟漪、军鼓与高频打出白色细涟漪，偶尔坠下流星，落地炸开一圈涟漪并撒出尾迹；上方悬浮方块跟着底鼓的包络缩放自转
 - 视觉算法移植自社区分支 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)（GPL-3.0），原始创意出自 CmzYa 的 Wallpaper Engine 作品《音域回响》，出处与许可见 [NOTICE.md](NOTICE.md)
@@ -159,13 +171,16 @@ npm test
 - 在画布上单击（不是拖动）会在指针落点打一道涟漪，按得越久越强
 - 全量 Node 回归 `939/939` 通过（新增 `tests/sonic-topography-preset.test.js` 16 例）
 
-### v1.8.7 (2026-09-05)
+<details>
+<summary>v1.8.7 新增音域回响视觉预设，全屏退出不再黑屏卡顿</summary>
 
 - **新增第 8 个视觉预设「音域回响」**（当时是自研的频谱环，已在 v1.8.8 里替换为移植实现）
 - 预设面板里排在第二位；不选它的时候没有任何额外开销，切进切出也不会闪上一次的残影
 - **退出全屏不再黑一下再卡回来**：遮罩铺好才调原生退出，尺寸跳完立刻回亮，后到的重复 resize 只能提前不能推迟，另有 320 毫秒硬上限兜底
 - 过渡不再对承载 WebGL 画布的窗口壳加 `filter`（那会让整窗每帧重新合成）
 - 全量 Node 回归 `932/932` 通过
+
+</details>
 
 <details>
 <summary>v1.8.6 点左下小封面就能看歌曲详情</summary>

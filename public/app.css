@@ -105,11 +105,20 @@ body.custom-background-override #theme-bg-tint,body.wallpaper-engine-active #the
 #wallpaper-board.active{opacity:1}
 body.desktop-shell #wallpaper-board{border-radius:34px;clip-path:inset(0 round 34px)}
 body.desktop-shell.desktop-maximized #wallpaper-board,body.desktop-shell.desktop-fullscreen #wallpaper-board,html:fullscreen body.desktop-shell #wallpaper-board{border-radius:0!important;clip-path:none!important}
+/* 音域回响 (预设 8) 的壁纸层：iframe 里跑 CmzYa 的 Wallpaper Engine 原作。整层与内部一律禁止命中，
+   指针事件必须穿透到画布，否则拖动视角、点界面都会被这层吃掉。位置在画布之下、其余背景之上。 */
+#sonic-workshop-layer{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none!important;background:#000;opacity:0;transition:opacity 520ms cubic-bezier(.16,1,.3,1);-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+#sonic-workshop-layer iframe{position:absolute;inset:0;display:block;width:100%;height:100%;border:0;background:#000;pointer-events:none!important;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+#sonic-workshop-layer,#sonic-workshop-layer *{pointer-events:none!important}
+/* 壁纸自己就是整幅画面，其余背景层同时亮着只会互相糊掉，启用时一起让位。 */
+body.sonic-workshop-active #album-bg,body.sonic-workshop-active #custom-bg,body.sonic-workshop-active #theme-bg-tint,body.sonic-workshop-active #wallpaper-board{opacity:0!important}
+body.desktop-shell #sonic-workshop-layer{border-radius:34px;clip-path:inset(0 round 34px)}
+body.desktop-shell.desktop-maximized #sonic-workshop-layer,body.desktop-shell.desktop-fullscreen #sonic-workshop-layer,html:fullscreen body.desktop-shell #sonic-workshop-layer{border-radius:0!important;clip-path:none!important}
 #canvas-container{position:fixed;inset:0;z-index:1;transition:opacity 1450ms cubic-bezier(.16,1,.3,1),transform 1450ms cubic-bezier(.16,1,.3,1)}
 #canvas-container canvas{display:block;width:100%!important;height:100%!important}
 #canvas-container:focus,#canvas-container:focus-visible,#canvas-container canvas:focus,#canvas-container canvas:focus-visible,html:focus,html:focus-visible,body:focus,body:focus-visible{outline:none!important;box-shadow:none!important}
 #canvas-container canvas{outline:none!important;border:0!important}
-body.render-deep-sleep #canvas-container,body.render-deep-sleep #idle-guide-canvas,body.render-deep-sleep #splash-canvas,body.render-deep-sleep #hand-canvas{opacity:0!important;visibility:hidden!important}
+body.render-deep-sleep #canvas-container,body.render-deep-sleep #sonic-workshop-layer,body.render-deep-sleep #idle-guide-canvas,body.render-deep-sleep #splash-canvas,body.render-deep-sleep #hand-canvas{opacity:0!important;visibility:hidden!important}
 body.splash-active:not(.splash-revealing) #canvas-container{opacity:.16;transform:scale(1)}
 body.splash-active.splash-revealing #canvas-container{opacity:1;transform:scale(1)}
 #idle-guide-canvas{position:fixed;inset:0;z-index:2;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .7s cubic-bezier(.22,1,.36,1)}
@@ -1260,6 +1269,11 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .preset-card .pc-name{font-size:13px;font-weight:700;color:rgba(255,255,255,.92);letter-spacing:.3px}
 .preset-card .pc-desc{font-size:10px;color:rgba(255,255,255,.44);margin-top:4px;letter-spacing:.3px;line-height:1.35}
 .preset-card.active .pc-name{color:#fff}
+/* 预设 7 / 8 都叫「音域回响」，靠后缀区分是 three.js 移植还是 Wallpaper Engine 原作。 */
+.preset-card[data-preset="7"] .pc-name,.preset-card[data-preset="8"] .pc-name{display:flex;align-items:baseline;flex-wrap:wrap;column-gap:5px;row-gap:1px}
+.preset-card .pc-name-en{color:rgba(255,255,255,.48);font-size:9px;font-weight:520;line-height:1.2;letter-spacing:.15px;white-space:nowrap}
+.preset-card .pc-author-ajin{color:#f59e0b;font-weight:650}
+.preset-card .pc-author-cmzya{color:#7dd3fc;font-weight:650}
 .preset-card[data-preset="6"] .pc-name,
 .preset-card[data-preset="6"] .pc-desc{font-family:"黑体","SimHei","Microsoft YaHei","Noto Sans SC",Arial,sans-serif;font-weight:800;letter-spacing:.4px}
 .preset-card[data-preset="6"] .pc-name{font-size:14px}
