@@ -1,5 +1,21 @@
 ﻿# 发布流程
 
+## v1.8.9 音域回响补上 Wallpaper Engine 原作
+
+- 正式发布版本从 `1.8.8` 提升为 `1.8.9`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
+- **这一版结掉的是 v1.8.8 留下的那条待定项。** 用户的指令是「把我没有的原项目有的视觉预设都移过来」，对着上游 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)（commit `89c0d23`）逐个比对，缺口只有一个：它的 `public/sonic-workshop-preset.js` + `public/vendor/sonic-workshop/`，也就是 CmzYa 的 Wallpaper Engine 作品《音域回响》本体（Workshop 物品号 `3747222633`）。上游那份 three.js 重写已在 v1.8.8 落成预设 7，这一版落的是预设 8，**两个预设是同一件作品的两条实现，不是重复功能**。
+- **预设 8 不是着色器，是 iframe 里的一份第三方构建产物。** `public/vendor/sonic-workshop/` 四个文件（`mineradio-bridge.html` 13,909 B、`project.json` 8,615 B、`assets/index-Z-j1MQ-r.js` 1,262,837 B、`assets/index-Bhwp8mwk.css` 9,754 B，合计约 1.3 MB）**逐字节复制自上游、一个字节都没改**，发版前用 `sha256sum` 对着 `/tmp/upstream-mineradio` 的同名文件逐个核过。版权属 CmzYa，出处链补在 `NOTICE.md` 的 `## Community Contributions`（拆成「预设 7 / 预设 8」两块）与 `public/sonic-workshop-preset.js` 的文件头——**上游自己的 NOTICE 里既没有这份产物的出处、也没有 Ajin 的名字，两条都由本仓库补记。**
+- **vendor 第三方产物前先做了安全审计，并把结论钉成了回归测试。** 1.26 MB 那份 JS 里 `XMLHttpRequest` / `fetch` 的网络出口、`WebSocket` / `EventSource` / `sendBeacon` / `importScripts` / `eval(` / `new Function` / `localStorage` / `sessionStorage` / `indexedDB` / `document.cookie` / `navigator.geolocation` 共 12 个记号零命中，外链主机只有 `w3.org` / `react.dev` / `tailwindcss.com` / `jcgt.org` / `github.com` / `docs.pmnd.rs` 六个文档域名。`tests/sonic-workshop-preset.test.js` 把这 12 个记号与这份主机白名单都写成断言，**将来重新 vendor 一份会联网的包，是 CI 失败而不是静默发货**。
+- **宿主侧只有 `public/sonic-workshop-preset.js`（845 行，IIFE 挂 `window.MineradioSonicWorkshop`，导出 `{INDEX, isActive, update, clear, pushProperties, onPresetChange}`）。** 桥接页把 Wallpaper Engine 的宿主 API 整套 shim 掉（`wallpaperRegisterAudioListener` / `…MediaPropertiesListener` / `…ThumbnailListener` / `…PlaybackListener` / `…TimelineListener` / `wallpaperMediaIntegration` / `wallpaperReady` / `wallpaperPropertyListener.applyUserProperties`），并暴露 `__mineradioApplyAudio` / `__mineradioApplyMedia` / `__mineradioApplyProperties` 三个入口；模块优先直调这三个函数，`contentWindow` 上没有时才退回 `frame.postMessage({type,…}, '*')`。**这两条路都被测试走过一遍，postMessage 那条还断言了三种消息类型的名字确实出现在桥接页里**，免得改了一边忘了另一边。
+- **`#sonic-workshop-layer` 插在 `#canvas-container` 前面的同一个父节点里，位置是有讲究的**：两者都在 `z-index:0/1` 这一层，DOM 里作为最后一个 `z-index:0` 兄弟，画面上就压在 `#wallpaper-board` / `#custom-bg` / `#album-bg` / `#theme-bg-tint` 之上、粒子画布之下。整层与层内每个后代都是 `pointer-events:none !important`，另加 `inert` / `aria-hidden="true"` / `tabIndex=-1` / `draggable=false`，鼠标、拖拽、键盘焦点、读屏全部穿过去；`body.sonic-workshop-active` 再给上层界面让路。深度睡眠时这一层跟着隐藏。
+- 选中这个预设时封面粒子整层收起（`particles.visible = !skullPresetActive && !workshopPresetActive`，`bloomParticles` / `floatGroup` / `backCoverGroup` 同步），和上游一致——壁纸本身是一幅完成品，叠粒子会脏。`skullBackdropDim` 在预设 8 下取 `0.82`，与预设 7 同一档。
+- **推送分三档节流，全部保持上游原值**：音频 `33ms`、媒体 `250ms`、属性 `1000ms`，各自按内容键去重，所以换歌或改配色是**当场**推一次、不等窗口到点。淡入速率 `7.5`、淡出 `5.0`，透明度 `≤0.01` 时整层从 DOM 摘掉。音频整形系数（`TARGET_MAX_SAMPLE 0.52` / `BODY_GAIN 0.33` / `PEAK_GAIN 0.12` / `GAMMA 1.55` / `MIN_FLOOR 0.035` / `LOW_LIFT 0.035` / 暂停 `×0.12`）也一个都没动，只有输入增益暴露成设置项（默认 82，夹在 40~100）。
+- **本机适配只有三处，都写在模块文件头**：① 配色取 `stageLyrics.coverPalette` 的 `primary/secondary/highlight`，角色分工与预设 7 对齐（冷色=主色、暖色=副色、涟漪与峰值=高光色），认不出颜色退回原作深蓝配暖橙；② 地形基色自己压暗，不跟封面副色走——本仓库的调色板是给歌词用的，没有暗部区域色；③ `gridSize` 跟画质档位联动 `{eco:224, balanced:288, high:320, ultra:384}`，**默认档 `high` 取 320 = 原作 `project.json` 的默认值，开箱即与原作一致**，省电档降下来护住弱机（壁纸在 iframe 里自带一套 three.js，和主渲染器叠着吃 GPU）。`showPlayerController` 保持 `false`：播放器 UI 是本仓库自己的，原作那套不显示。
+- 预设数量是数据驱动的，**这一版没有改任何数字**：夹取用的是 `presetMeta.length - 1`（`public/app.js:6149`、`:35036`），加第 9 条 `presetMeta` 就够。面板文案 `presetMeta[7] = 移植 Ajin`、`presetMeta[8] = 原作 CmzYa`，`presetDisplayOrder` 改成 `[0, 7, 8, 6, 5, 4, 2, 1, 3]`，两条并排。
+- 打包不用动：`build.files` 本来就是 `public/**/*`，vendor 目录自动进包（测试也断言了这一条）。`public/index.html` 里 `<script src="sonic-workshop-preset.js"></script>` **必须排在 `app.js` 之前**，`app.js` 用 `typeof MineradioSonicWorkshop !== 'undefined'` 取模块。
+- 验证：全量回归 `965/965` 通过（v1.8.8 基线 `939`，新增 `tests/sonic-workshop-preset.test.js` 26 例）。新测试不是读源码字符串凑数——它用 `vm` + 一套假 DOM **真跑一遍 `update()`**，钉住插入位置、点不穿、淡入淡出生命周期、三档节流（在假时钟上走 10ms → 无推送、+40ms → 音频、+300ms → 媒体、+800ms → 属性）、以及整形后的确切采样值（全 255 频谱 → `(0.28+0.12)×0.82 = 0.328`，静音恒 `0`）。顺带修了 `tests/sonic-topography-preset.test.js` 里被预设 8 接线打红的 4 条断言（预设名单、图标数、`skullBackdropDim`、`isSoftFlowPreset`），16/16 恢复。
+- **已知边界：壁纸层的实际观感没有在真实窗口里逐帧核对过。** 逻辑由 26 例测试钉住、`node --check` 干净、`965/965` 全绿，但「壁纸跟着封面换色好不好看」「频谱幅度合不合适」这类只能靠肉眼，发版时仍是未确认状态。用户的指令是「更新好后发布新版」，所以按移植的忠实度发出去。
+
 ## v1.8.8 音域回响改成移植上游的地形实现
 
 - 正式发布版本从 `1.8.7` 提升为 `1.8.8`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。**注意 v1.8.7 的 GitHub Release 已经不在了**（tag `v1.8.7` 仍在远端、`releases/tags/v1.8.7` 返回 404、草稿 0 个），所以本版发布时 `releases/latest` 是从 `v1.8.6` 直接跳到 `v1.8.8`；停在 `1.8.6` 的客户端会一步更新到这里。
@@ -16,7 +32,7 @@
 - 打包不用改：`build.files` 本来就是 `public/**/*`，新脚本自动进包；没有任何测试去扫 `index.html` 的 script 标签，新测试把这条也写成断言。
 - 验证：全量回归 `939/939` 通过（v1.8.7 基线 `932`，新增 `tests/sonic-topography-preset.test.js` 16 例，删掉已经失效的 `tests/spectrum-echo-preset.test.js` 9 例）。测试用一份 THREE stub 直接读实例矩阵，钉住的是行为而不是数值凑数：流星未激活时藏在 `y = -1000` 且缩放 0、落地正好撒 10 粒尾迹、尾迹一秒内过期、切走预设整层显存释放、冷启动在预设 5 时一个实例都不分配。
 - **已知边界：地形的实际观感没有在真实窗口里逐帧核对过。** `node --check` 干净、逻辑由 16 例测试钉住、`939/939` 全绿，但涟漪强度、配色跟封面的搭配这类观感项目只能靠肉眼，发版时仍是未确认状态——用户的指令是「更新好后发布新版」，所以按移植的忠实度发出去，观感问题留待反馈再调。
-- 待定：上游仓库里还带着一份 CmzYa 的 WE 打包产物（约 1.26 MB，没有署名文件）与一个桥接页。本轮**没有**把它 vendor 进来，只搬了原生地形层。
+- 待定：上游仓库里还带着一份 CmzYa 的 WE 打包产物（约 1.26 MB，没有署名文件）与一个桥接页。本轮**没有**把它 vendor 进来，只搬了原生地形层。（后续：这条已在 v1.8.9 结掉，产物按字节 vendor 进来落成预设 8，见文首小节。）
 
 ### 发布记录（v1.8.8）
 

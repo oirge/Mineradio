@@ -92,7 +92,19 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.8 (2026-09-05)
+### Latest release v1.8.9 (2026-09-05)
+
+- **The one visual preset this repo was still missing from the original project is now here**: the upstream fork [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) ships two "Sonic Echo" presets; v1.8.8 only brought over the three.js rewrite, and this release brings the other one
+- **New 9th visual preset, "Sonic Echo · Wallpaper Engine"** (original by CmzYa): `public/vendor/sonic-workshop/` holds the build output of CmzYa's Wallpaper Engine piece, embedded as-is in a full-window iframe. The entire picture is rendered by the original — this repo only feeds it data
+- Two "Sonic Echo" entries now sit side by side in the preset panel: preset 7 is labelled "ported from Ajin", preset 8 "original by CmzYa"
+- The wallpaper layer cannot be clicked through (the layer and every element inside it are `pointer-events:none`, plus `inert` and `aria-hidden`), so mouse, keyboard focus and screen readers all land on the player instead. Picking this preset folds the cover particle layer away and leaves only the wallpaper
+- It is fed live data from this app: a 512-band spectrum every 33 ms, track info and cover art every 250 ms, palette properties every 1000 ms — and immediately on a track or settings change
+- Colours follow the current cover art (primary as the cool tone, secondary as the warm one, highlight as the ripples), falling back to the original's deep blue and warm orange when the cover yields nothing
+- The quality tier picks the grid resolution (eco 224 / balanced 288 / high 320 / ultra 384); the default "high" is exactly the 320 in the original's `project.json`
+- All four vendored files are byte-identical to upstream commit `89c0d23`; copyright and attribution are in [NOTICE.md](NOTICE.md). The third-party bundle was audited — no network calls, no local storage writes, no `eval` — and that conclusion is now pinned by a regression test
+- Full Node regression suite: `965/965` passing (new `tests/sonic-workshop-preset.test.js` with 26 cases)
+
+### v1.8.8 (2026-09-05)
 
 - **The "Sonic Topography" visual preset is now a port**: a field of pillars rises with eight spectrum bands, kicks fire blue ripples, snares and highs fire thin white ones, meteors occasionally fall and burst into a ripple plus a spray of trails, and floating blocks above pulse and tumble with the kick envelope
 - The visual algorithm is ported from the community fork [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) (GPL-3.0); the original concept is CmzYa's Wallpaper Engine piece. Attribution and licensing are in [NOTICE.md](NOTICE.md)
@@ -100,13 +112,16 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Clicking (not dragging) on the canvas drops a ripple at the pointer; hold longer for a stronger one
 - Full Node regression suite: `939/939` passing (new `tests/sonic-topography-preset.test.js` with 16 cases)
 
-### v1.8.7 (2026-09-05)
+<details>
+<summary>v1.8.7 — New Sonic Echo visual preset, no more black flash when leaving fullscreen</summary>
 
 - **New 8th visual preset** (at the time a self-written spectrum ring; replaced by the port in v1.8.8)
 - It sits second in the preset panel; picking anything else costs nothing extra, and entering or leaving it never flashes the previous session's spectrum
 - **Leaving fullscreen no longer flashes black and stutters**: the cover is laid down before the native exit is called, reveal fires as soon as the viewport has settled, later duplicate resize signals may only pull the reveal earlier — never push it back — and a 320 ms hard ceiling backs it up
 - The transition no longer puts a `filter` on the window shell that hosts the WebGL canvas (it forces the whole window to recomposite every frame)
 - Full Node regression suite: `932/932` passing
+
+</details>
 
 <details>
 <summary>v1.8.6 — Click the bottom-left thumbnail for song details</summary>
