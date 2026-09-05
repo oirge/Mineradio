@@ -54,6 +54,9 @@ const {
 registerWallpaperEngineScheme(protocol);
 
 const APP_NAME = 'Mineradio';
+// APP_NAME / PRIMARY_PROFILE_ID 决定数据目录（%APPDATA%\Mineradio-oirge），改了就等于丢曲库和设置，永远不要动。
+// 面向 Windows 的显示身份（开始菜单、托盘、桌面快捷方式）单独放这里，好和原项目 XxHuberrr/Mineradio 区分开。
+const APP_DISPLAY_NAME = 'Mineradio 二创';
 const BASE_APP_USER_MODEL_ID = 'com.mineradio.desktop';
 const PRIMARY_PROFILE_ID = 'oirge';
 const APP_DATA_PATH = app.getPath('appData');
@@ -80,7 +83,9 @@ const LEGACY_PATH_PROFILES = INSTANCE_PROFILE.primary
   ? discoverLegacyPathProfiles({ appDataPath: APP_DATA_PATH, appName: APP_NAME })
   : [];
 const DESKTOP_SHORTCUT_NAME = resolveDesktopShortcutName({
-  shortcutName: process.env.MINERADIO_SHORTCUT_NAME,
+  // 安装器建的桌面快捷方式叫「Mineradio 二创」（nsis.shortcutName）；这里必须跟它同名，
+  // 否则应用自建的快捷方式会按 exe 名叫 Mineradio-oirge，桌面上留两个图标。
+  shortcutName: process.env.MINERADIO_SHORTCUT_NAME || (INSTANCE_PROFILE.primary ? APP_DISPLAY_NAME : ''),
   execPath: process.execPath,
   defaultName: APP_NAME,
 });
@@ -1993,12 +1998,40 @@ function setStartupEnabled(enabled) {
   }
   app.setLoginItemSettings({
     openAtLogin: !!enabled,
+    // 值名显式跟着 AppUserModelId（也是 Electron 的默认值），保证和原项目的登录项互不覆盖。
+    name: APP_USER_MODEL_ID,
     path: process.execPath,
     args: [],
   });
   const result = { ok: true, enabled: isStartupEnabled() };
   broadcastDesktopShellSettingsChanged();
   return result;
+}
+
+/**
+ * 换安装身份后，Run 键里可能残留一条指向旧安装位置的登录项（值名是同一个 AppUserModelId）。
+ * 启动时对一次账：登录项还在但指向的不是当前程序，就按当前路径重写，避免界面显示已开启却起不来。
+ * @returns {boolean} 是否重写过登录项。
+ */
+function reconcileStartupEntryPath() {
+  if (process.platform !== 'win32') return false;
+  if (!app.isPackaged || !INSTANCE_PROFILE.primary) return false;
+  try {
+    const settings = app.getLoginItemSettings();
+    if (!settings || !settings.openAtLogin) return false;
+    if (settings.executableWillLaunchAtLogin !== false) return false;
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      name: APP_USER_MODEL_ID,
+      path: process.execPath,
+      args: [],
+    });
+    console.log('[Startup] 登录项指向旧安装位置，已按当前程序路径重写');
+    return true;
+  } catch (e) {
+    console.warn('[Startup] 登录项校正失败：', e && e.message ? e.message : e);
+    return false;
+  }
 }
 
 /**
@@ -2077,7 +2110,7 @@ function createTray() {
   try {
     const icon = fs.existsSync(APP_ICON_ICO) ? APP_ICON_ICO : process.execPath;
     const nextTray = new Tray(icon);
-    nextTray.setToolTip(APP_NAME);
+    nextTray.setToolTip(APP_DISPLAY_NAME);
     nextTray.on('click', focusMainWindow);
     nextTray.on('double-click', focusMainWindow);
     tray = nextTray;
@@ -5708,6 +5741,7 @@ if (!gotSingleInstanceLock) {
     cleanupProfileSessionStaging(PROFILE_STATE_MIGRATION_STAGING_ROOT);
     migratePrimaryDesktopShellSettings();
     applySavedDesktopShellSettings();
+    reconcileStartupEntryPath();
     wallpaperEngineBridge.configureSessionPermissions();
     await wallpaperEngineBridge.installProtocol(protocol);
     screen.on('display-metrics-changed', () => {

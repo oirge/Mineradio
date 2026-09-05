@@ -26,7 +26,15 @@ test('GitHub Actions verifies the release branch and default branch', () => {
  * @returns {void}
  */
 test('发布工作流清单覆盖全部自动更新资产', () => {
-  assert.match(releaseWorkflow, /Mineradio-\$version-Setup\.exe\.blockmap/);
+  // 资产名跟着 build.nsis.artifactName（二创版带 -oirge），从 package.json 推导，避免两边各写死一份。
+  // 用函数式替换：字符串替换值里的 `$` 会被当成特殊记号。
+  const setupAsset = packageJson.build.nsis.artifactName
+    .replace('${version}', () => '$version')
+    .replace('${ext}', () => 'exe');
+  assert.ok(
+    releaseWorkflow.includes(`${setupAsset}.blockmap`),
+    `发布工作流缺少 blockmap 资产 ${setupAsset}.blockmap`,
+  );
   assert.match(releaseWorkflow, /"latest\.yml"/);
   assert.match(releaseWorkflow, /\$lines = foreach \(\$file in \$files\)/);
   assert.match(releaseWorkflow, /"\$hash \*\$file"/);

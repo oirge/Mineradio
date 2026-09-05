@@ -58,6 +58,9 @@ const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || 'D:\\Mineradio
 const APP_PACKAGE = readPackageInfo();
 const APP_VERSION = process.env.MINERADIO_VERSION || APP_PACKAGE.version || '0.9.11';
 const UPDATE_CONFIG = readUpdateConfig(APP_PACKAGE);
+// 二创版的安装包文件名（package.json 的 build.nsis.artifactName）。仅在 Release 资产名和
+// latest.yml 都读不到时兜底拼下载地址，务必和打包产物保持一致。
+const UPDATE_ASSET_NAME_PREFIX = 'Mineradio-oirge';
 const PATCH_MAX_BYTES = 12 * 1024 * 1024;
 const UPDATE_INSTALLER_MAX_BYTES = 512 * 1024 * 1024;
 const UPDATE_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -795,7 +798,7 @@ function normalizeManifestUpdateInfo(data) {
   const notes = explicitNotes.length ? explicitNotes : (bodyNotes.length ? bodyNotes : UPDATE_FALLBACK_NOTES);
   const summaryNotes = normalizeReleaseNotes([release.summary || data.summary || '']);
   const assetInfo = downloadUrl ? {
-    name: asset.name || updateAssetNameFromUrl(downloadUrl) || `Mineradio-${latestVersion}-Setup.exe`,
+    name: asset.name || updateAssetNameFromUrl(downloadUrl) || `${UPDATE_ASSET_NAME_PREFIX}-${latestVersion}-Setup.exe`,
     size: Number(asset.size || 0) || 0,
     contentType: asset.contentType || asset.content_type || '',
     downloadUrl,
@@ -907,7 +910,9 @@ function writeBeatMapCache(body) {
   if (!payload) return { ok: false, error: 'INVALID_BEATMAP_CACHE_PAYLOAD' };
   const file = safeBeatMapCacheFile(payload.key);
   if (!file) return { ok: false, error: 'INVALID_BEATMAP_CACHE_KEY' };
-  const tmp = file + '.tmp';
+  // 缓存目录 D:\MineradioCache\beatmaps 是二创版和原项目共用的（谱面重算很贵，故意共享）。
+  // 临时名必须带进程号，否则两个播放器同时分析同一首歌会抢同一个 .tmp，rename 互相打断。
+  const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(payload));
   fs.renameSync(tmp, file);
   return { ok: true, key: payload.key, savedAt: payload.savedAt, dir: path.dirname(file) };
@@ -1109,7 +1114,7 @@ function githubReleaseDownloadUrl(version, fileName) {
 }
 function parseLatestYmlUpdateInfo(text, reason) {
   const latestVersion = normalizeVersion(yamlScalar(text, 'version') || APP_VERSION) || APP_VERSION;
-  const assetPath = yamlScalar(text, 'path') || yamlScalar(text, 'url') || `Mineradio-${latestVersion}-Setup.exe`;
+  const assetPath = yamlScalar(text, 'path') || yamlScalar(text, 'url') || `${UPDATE_ASSET_NAME_PREFIX}-${latestVersion}-Setup.exe`;
   const sha512 = normalizeDigest(yamlScalar(text, 'sha512'), 'sha512');
   const size = Number(yamlScalar(text, 'size') || 0) || 0;
   const releaseDate = yamlScalar(text, 'releaseDate');

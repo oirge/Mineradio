@@ -61,8 +61,8 @@ jobs:
           cd dist
           $version = "${{ steps.release_meta.outputs.VERSION }}"
           $files = @(
-            "Mineradio-$version-Setup.exe",
-            "Mineradio-$version-Setup.exe.blockmap",
+            "Mineradio-oirge-$version-Setup.exe",
+            "Mineradio-oirge-$version-Setup.exe.blockmap",
             "latest.yml"
           )
           $lines = foreach ($file in $files) {
@@ -72,7 +72,7 @@ jobs:
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash *$file"
           }
-          $lines | Out-File -FilePath "Mineradio-$version-SHA256SUMS.txt" -Encoding utf8
+          $lines | Out-File -FilePath "Mineradio-oirge-$version-SHA256SUMS.txt" -Encoding utf8
         shell: pwsh
       
       - name: Upload release assets
@@ -82,24 +82,24 @@ jobs:
           $tag = "${{ steps.release_meta.outputs.TAG }}"
           $version = "${{ steps.release_meta.outputs.VERSION }}"
           $assets = @(
-            "dist/Mineradio-$version-Setup.exe",
-            "dist/Mineradio-$version-Setup.exe.blockmap",
+            "dist/Mineradio-oirge-$version-Setup.exe",
+            "dist/Mineradio-oirge-$version-Setup.exe.blockmap",
             "dist/latest.yml",
-            "dist/Mineradio-$version-SHA256SUMS.txt"
+            "dist/Mineradio-oirge-$version-SHA256SUMS.txt"
           )
           foreach ($asset in $assets) {
             if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
               throw "待上传资产缺失：$asset"
             }
           }
-          
+
           Write-Host "Uploading assets to release $tag..."
-          
+
           gh release upload $tag `
-            "dist/Mineradio-$version-Setup.exe" `
-            "dist/Mineradio-$version-Setup.exe.blockmap" `
+            "dist/Mineradio-oirge-$version-Setup.exe" `
+            "dist/Mineradio-oirge-$version-Setup.exe.blockmap" `
             "dist/latest.yml" `
-            "dist/Mineradio-$version-SHA256SUMS.txt" `
+            "dist/Mineradio-oirge-$version-SHA256SUMS.txt" `
             --clobber
 
           if ($LASTEXITCODE -ne 0) {

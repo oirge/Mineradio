@@ -42,8 +42,8 @@
 
 `dist` 根部只保留当前可发布资产。发布前必须确认安装包、blockmap、`latest.yml`、版本号和 GitHub Release 资产一致：
 
-- `Mineradio-<version>-Setup.exe`
-- `Mineradio-<version>-Setup.exe.blockmap`
+- `Mineradio-oirge-<version>-Setup.exe`
+- `Mineradio-oirge-<version>-Setup.exe.blockmap`
 - `Mineradio-<from>-to-<to>.patch.json`
 
 其它内容放到：
