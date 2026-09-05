@@ -16,6 +16,28 @@
 - 验证：全量回归 `965/965` 通过（v1.8.8 基线 `939`，新增 `tests/sonic-workshop-preset.test.js` 26 例）。新测试不是读源码字符串凑数——它用 `vm` + 一套假 DOM **真跑一遍 `update()`**，钉住插入位置、点不穿、淡入淡出生命周期、三档节流（在假时钟上走 10ms → 无推送、+40ms → 音频、+300ms → 媒体、+800ms → 属性）、以及整形后的确切采样值（全 255 频谱 → `(0.28+0.12)×0.82 = 0.328`，静音恒 `0`）。顺带修了 `tests/sonic-topography-preset.test.js` 里被预设 8 接线打红的 4 条断言（预设名单、图标数、`skullBackdropDim`、`isSoftFlowPreset`），16/16 恢复。
 - **已知边界：壁纸层的实际观感没有在真实窗口里逐帧核对过。** 逻辑由 26 例测试钉住、`node --check` 干净、`965/965` 全绿，但「壁纸跟着封面换色好不好看」「频谱幅度合不合适」这类只能靠肉眼，发版时仍是未确认状态。用户的指令是「更新好后发布新版」，所以按移植的忠实度发出去。
 
+### 发布记录（v1.8.9）
+
+- 单分支写法：`feat/sonic-workshop-we-original`。功能提交 `b7527d6 feat: 补上音域回响的 Wallpaper Engine 原作（视觉预设 8）` 带新文件 `public/sonic-workshop-preset.js`、vendor 目录 `public/vendor/sonic-workshop/` 四个文件、`public/app.js` / `public/app.css` / `public/index.html` 的接线、新测试 `tests/sonic-workshop-preset.test.js`、修好的 `tests/sonic-topography-preset.test.js` 与 `NOTICE.md`，`APP_VERSION` 仍留 `1.8.8`（保证单独 checkout 也自洽）；五处版本钉与全部文档压在紧随其后的 `e6b2d16 chore(release): 1.8.9` 里。
+- PR [#53](https://github.com/oirge/Mineradio/pull/53) → **合并提交** `93fb6ab`（CI `Verify` run `33948043742` 过 PR、`33948050983` 过 push）。绝不 squash，否则打在 `e6b2d16` 上的 tag 会离开 `main` 的可达历史。
+- tag `v1.8.9` 打在 `e6b2d16` 且是 **annotated**（tag object `f6c0d70131985bea87a44af7fa0c11044635bd2d`），`git describe origin/main` 回 `v1.8.9-1-g93fb6ab`。
+- `Build and Release` run `33948090282` 成功（`--ref v1.8.9 -f tag=v1.8.9`）。**electron-builder 的双草稿第八次复现**：`383148827` 四项资产齐全、`383148828` 只有 blockmap 一个；删掉资产不全的 `383148828` 后发布 `383148827`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.8.9` 复验 tag object 仍在），PATCH 时带 `make_latest="true"`。
+- 发布前 `releases/latest` 是 `v1.8.8`，发布后指向 `v1.8.9`；停在 `1.8.6` 的客户端（v1.8.7 的 Release 已不在线）仍是一步跳到最新。
+- 四项资产全部回下本机复算核对：
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-1.8.9-Setup.exe` | 102594457 | `a5e669a2bdaf2a8c18b9aa69fe093f777f0196a49aeb35b86ac1b9bc45b6570e` |
+| `Mineradio-1.8.9-Setup.exe.blockmap` | 106601 | `60b833c358c3c76bd6db32435292bbfeff2f0b77c6dbd333f37d3ff9067335ad` |
+| `Mineradio-1.8.9-SHA256SUMS.txt` | 273 | `fec43c4126a765d32ed0a9381712cbe26159ab316032a3b5283af4cea433403f` |
+| `latest.yml` | 347 | `1cd12ee7c9bf7d24db120a9586849549951c192439dd9b72c9359e4922a96fc2` |
+
+- 清单 `Mineradio-1.8.9-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机复算全中；`latest.yml` 的 `sha512` = `gq0VMwxaeeYw1CIRA0xnMS6WZfmomHb06lOw04EavfYoWKTYRkvg1i27+dd1bgaSwVg+Gnexwr/0IBy406WNJA==` 与 `size` = `102594457` 与安装器实测一致，`releaseDate` `2026-09-05T05:49:43.701Z`。
+- 安装器比 v1.8.8 大了 `284,909` 字节，正好是 vendor 进来的那份 WE 产物（约 1.3 MB 源文件，asar 压缩后的增量）——**vendor 第三方产物会直接抬高安装包体积，这一项以后要一起看**。
+- 遗留未修（自 `v1.7.26` 记到现在，本轮仍未动）：`SHA256SUMS.txt` 行尾是 **CRLF**，`sha256sum -c` 直接跑会报 `'…Setup.exe'\r': No such file or directory`，必须先 `tr -d '\r' < Mineradio-1.8.9-SHA256SUMS.txt > /tmp/sums.txt && sha256sum -c /tmp/sums.txt`。
+- **v1.8.8 那条 NSIS 静默安装坑仍然有效**（`allowToChangeInstallationDirectory: false` 的 `/S` 装进「上次记住的目录」、真实目录读注册表 `UninstallString`、`/D=` 必须最后且不加引号、快捷方式要自己改 `TargetPath`），见下一节 v1.8.8 的发布记录。本轮**没有**动本机安装（`D:\Mineradio` 还停在 `1.8.8`，用户没要求这一版跟着更）。
+- 资产记录分支 `docs/release-assets-v189`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.8.8 音域回响改成移植上游的地形实现
 
 - 正式发布版本从 `1.8.7` 提升为 `1.8.8`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。**注意 v1.8.7 的 GitHub Release 已经不在了**（tag `v1.8.7` 仍在远端、`releases/tags/v1.8.7` 返回 404、草稿 0 个），所以本版发布时 `releases/latest` 是从 `v1.8.6` 直接跳到 `v1.8.8`；停在 `1.8.6` 的客户端会一步更新到这里。
@@ -55,7 +77,7 @@
 - **本地安装踩坑（用户要求把 `D:\Mineradio` 更到最新版时发现）：`allowToChangeInstallationDirectory: false` 的 NSIS 静默安装会装到「上次记住的目录」，不是你以为的那个目录。** `Mineradio-1.8.8-Setup.exe /S` 连跑三次都 `exitCode=0`，而 `D:\Mineradio\Mineradio.exe` 的 `ProductVersion` 一直是 `1.8.7`——因为它实际装进了 `D:\222\Mineradio`。**判断办法是读注册表卸载项**：`HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\<guid>` 的 `DisplayVersion` 已经是 `1.8.8`，`UninstallString` 指向的才是真实目录（`InstallLocation` 是空的，别指望它）。要指定目录得加 `/D=`，且**它必须是最后一个参数、不能加引号**：`Setup.exe /S /D=D:\Mineradio`。
 - **`/D=` 从 Git Bash 直接传会被 MSYS 改写路径**，稳的写法是把 `@echo off` + 整条命令写进一个 `.bat`，再用 `cmd //c '<绝对 Windows 路径>\x.bat'` 跑；`cmd //c x.bat` 配 `cd` 到该目录**找不到文件**（工作目录没传过去），必须给绝对路径。
 - 装完还要**自己把快捷方式改回来**：`createDesktopShortcut: true` 只在快捷方式不存在时创建，已经指向旧目录的桌面 / 开始菜单 `Mineradio.lnk` 不会被重写，得用 `WScript.Shell` 改 `TargetPath` / `WorkingDirectory` / `IconLocation`。
-- 资产记录分支 `docs/release-assets-v188`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+- 资产记录分支 `docs/release-assets-v188` → PR [#52](https://github.com/oirge/Mineradio/pull/52) → **合并提交** `2d1d76a`。
 
 ## v1.8.7 音域回响视觉预设 + 全屏退出不再黑屏卡顿
 
