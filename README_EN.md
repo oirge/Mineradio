@@ -92,7 +92,18 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.9.2 (2026-09-05)
+### Latest release v1.9.3 (2026-09-05)
+
+- **Fixed the black screen and the stuttering**: both symptoms come from one root cause — the desktop app used to *unconditionally* tell Chromium to ignore its own driver blocklist, and the driver combinations that render everything black are exactly what that list is for. On top of that it pinned the rendering backend and forced the discrete GPU on hybrid laptops. GPU process crashes → falls back to software compositing → crashes again, which is what the stutter looks like from outside
+- **There are now three GPU tiers and the app steps down on its own**: `default` → `compatible` (no longer overrides the blocklist, no longer forces the discrete GPU) → `software`. Two consecutive GPU-process crashes on the same tier drop it one step and relaunch once (GPU switches only take effect at startup and cannot be changed at runtime, so a relaunch is unavoidable). **On healthy machines the default tier's switch list is byte-identical to the previous release, so nothing changes**
+- **Installing a new version retries the top tier automatically**, so one transient driver hiccup cannot pin a machine to software rendering forever
+- **The main window finally has paint recovery**: the mini player had it, the main window had none — when the main renderer died, the frameless transparent window was just black, permanently, with no way back. Load failures, renderer exits and a throwing initial load now retry automatically (up to 3 times, increasing backoff, cleared on a successful load), and the retry reloads the page rather than rebuilding the window, so **window position and always-on-top survive**
+- **A 6-second fallback shows the window if it never signals ready**: previously, if the first load threw, the window existed but stayed hidden — which looks exactly like "I clicked the icon and nothing happened"
+- **Waking from sleep, unlocking the screen and display changes now force one repaint**, another major source of black screens. The repaint **does not interrupt playback** (unlike a reload)
+- **No UI switch was added**: someone staring at a black screen cannot click a settings toggle, so recovery is fully automatic. To pin a tier by hand there is `MINERADIO_GPU_MODE=default|compatible|software`, and an explicitly chosen tier is never overridden by the automatic step-down
+- Full Node regression suite: `1032/1032` passing (42 new cases: 11 for the GPU tier ladder, 9 for the main-process step-down wiring, 22 for main-window paint recovery)
+
+### v1.9.2 (2026-09-05)
 
 - **Fixed preset 8 "Sonic Echo · Wallpaper Engine" (original by CmzYa) rendering the whole window pure black in the desktop client**: this is a different defect from the washed-out white the previous release fixed — the black happens one step earlier, because the wallpaper page was never allowed to load at all
 - The root cause is in the desktop main process: to stop the window navigating to external pages, the main-window navigation guard was written to block *every* subframe navigation — and this preset's entire picture runs inside an iframe. So that iframe stayed on `about:blank` and its black backdrop filled the window; with this preset selected the cover-particle layer is collapsed too, so the result looked like plain black
@@ -102,12 +113,15 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Verified by capturing frames from a real Electron window this time: before the fix the subframe sat on `about:blank` with no canvas and 4.4% lit pixels; after it, a 1280×720 WebGL2 canvas with 89% lit pixels and a normal picture
 - Full Node regression suite: `990/990` passing (two new cases: the bridge-page allowlist, and keeping that allowlisted path in sync with preset 8's iframe source; the navigation-guard case now dispatches with Electron's real signature)
 
-### v1.9.1 (2026-09-05)
+<details>
+<summary>v1.9.1 — preset 8 no longer washes out to near-white</summary>
 
 - **Fixed preset 8 ("Sonic Echo · Wallpaper Engine", original by CmzYa) washing out into a flat, near-white haze while nothing is playing**: switching it to the raw cover colours last release was right, but the fallback chain still ended on the lyric text colours — those are deliberately brightened so they stay readable on top of cover art, and their idle defaults are the near-white `#d6f8ff` / `#9cffdf` / `#eef7ff`. So with no track playing, no cover art, or the cover scan not yet finished, all eight wallpaper colours were pushed to near-white, with the cool, ripple and peak roles collapsing onto the same value — leaving the picture with no light-and-dark structure at all
 - With no cover colours available it now uses the original's own fallback palette (coral-mirage: primary `#cb6c89`, cool `#99c4ff`, ripple `#f8d8ff`, near-black base `#16060f`). **When cover colours are available the chain matches upstream item for item, so the picture is unchanged from the previous release**
 - Preset 7 ("ported from Ajin") is unaffected and untouched in this release
 - Full Node regression suite: `988/988` passing (one new case: it pins the palette's initial literals and forbids the colour chain from falling back to the lyric text colours again)
+
+</details>
 
 <details>
 <summary>v1.9.0 — both Sonic Echo presets aligned with the original project</summary>

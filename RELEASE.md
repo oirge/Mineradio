@@ -1,5 +1,27 @@
 ﻿# 发布流程
 
+## v1.9.3 修掉黑屏与卡顿的进程层根因
+
+- 正式发布版本从 `1.9.2` 提升为 `1.9.3`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。走 patch 是因为这一版只修缺陷、不加功能、不动界面。
+- **起因是用户的一句话：「再最新版的基础上修复黑屏卡顿问题」** —— 没有复现步骤、没有机型、没有日志。所以这一版不是照着报告改，而是反过来找「哪些代码路径必然产出这两个症状」，改掉那几条。
+- **第一条根因：GPU 开关硬闯 Chromium 的驱动黑名单，而且没有任何失败计数或回退。** 主进程此前无条件追加 `ignore-gpu-blocklist` —— 那份名单里装的正是「这些驱动组合渲染不正确」的组合，渲染成全黑的就住在里面。同时追加的 `use-angle=d3d11` 把后端钉死（不让 Chromium 自己退到 D3D9/软件），`force_high_performance_gpu` 在双显卡笔记本上强推独显（跨适配器呈现是黑帧的常见来源）。GPU 进程崩 → 退到软件合成 → 再崩 → 再退，肉眼看到的就是「黑一下、卡一阵」。
+- **改法：`desktop/gpu-guard.js`（新文件，175 行，纯函数、不 import Electron）+ 主进程接线。** 三档阶梯 `default` → `compatible` → `software`：`default` 的开关列表与此前发布版**逐字节相同**（`tests/gpu-guard.test.js` 里存了一份改动前的 `LEGACY_SWITCHES` 逐项比对 —— 否则这次改动就不是「加了回退」而是「顺手改了默认行为」），`compatible` 摘掉 `ignore-gpu-blocklist` / `force_high_performance_gpu` / `use-angle` 与几项激进光栅化，`software` 再加 `disable-gpu-compositing` 并调 `app.disableHardwareAcceleration()`。
+- **降档必须配一次真重启。** GPU 开关只能在 `app.whenReady()` 之前追加、运行中改不了，所以 `handleGpuProcessGone` 写盘成功后走 `app.relaunch()` + `app.quit()`；**写盘失败就地停手**（记不下来还重启 = 每次开机重新崩一遍再重启一遍，直接变成重启循环），`relaunch()` 抛异常时不 `quit()` 并把 `gpuGuardRelaunching` 退回去（否则用户看到的是「软件自己关了再也不开」）。
+- **计数是按档位分开记的。** `gpuFailureMode` 与当前档位不一致时计数归零，别把上一档的账算到下一档头上；降档写盘时计数一并归零；`software` 是最低档，到底后只累计不再降。阈值 2 次 —— 单次崩溃多半只是驱动瞬时抽风，为此重启一次应用比黑屏还烦人。
+- **换版本自动退回 `default` 重试。** 档案里记 `appVersion`，装了新版就当作「这个缺陷可能已经修了」，从最高档重新试；没有 `appVersion` 的老档案不触发重试（不知道是哪一版记的，不能假设）。
+- **手动逃生口 `MINERADIO_GPU_MODE=default|compatible|software`。** 显式指定的档位**永不**被自动降档覆盖、**连计数都不写**（档案里不留假结论）。**没有加任何界面开关** —— 正对着黑屏的用户点不到设置项，所以恢复必须是自动的，这也符合「能不动 UI 就不动 UI」。
+- **`child-process-gone` 严格过滤 `details.type === 'GPU'`。** 工具进程、音频服务、插件进程走同一个事件，不过滤就会把无关崩溃算进 GPU 降档计数。Electron 43 已经没有 `gpu-process-crashed` 了，这是唯一的路。
+- **第二条根因：主窗口完全没有绘制失败恢复。** 迷你播放器早就有 `did-fail-load` / `render-process-gone` → `scheduleMiniPlayerWindowRecovery`，主窗口一直是零 —— 主渲染进程一崩，`transparent: true` + `frame: false` 的主窗口就只剩一片全黑，而且永远不会自己回来（`transparent` 这条本身没动：那是重写视觉系统，不在这次范围里）。而 `await mainWindow.loadURL(...)` 此前没有 try/catch，抛出来时窗口已经建好但还是 `show: false`，表现是「点了图标什么都没发生」。
+- **改法：四个恢复辅助函数，紧贴 `createWindow()` 之前。** `scheduleMainWindowPaintRecovery(win, reason)` 单航班（`did-fail-load` 和 `render-process-gone` 常常一起来，只算一次）、退避 `Math.min(2400, 200 × n²)`、上限 3 次、`did-finish-load` 成功即清零；`errorCode === -3`（`ERR_ABORTED`，切歌换页的正常导航打断）与非主 frame 一律不计入，不然正常使用就把配额吃光了。恢复动作走 `webContents.reload()` —— 它能重建死掉的渲染进程、也能重试失败的加载，**而且不动窗口位置和置顶状态**；只有 `reload()` 自己抛异常才回落到 `loadURL('http://127.0.0.1:<port>')`，那一步再失败也只多记一行日志。
+- **`armMainWindowShowWatchdog()` 给 `ready-to-show` 兜 6 秒底。** 窗口是 `show: false` 建的，这个事件不来就等于「点了图标什么都没发生」；看门狗在 `once('ready-to-show')` **之前**布置（否则同步触发的场景会漏），事件到了第一行就撤。重载之后一样可能等不到，所以恢复动作跑完会把看门狗重新上。所有定时器都 `.unref()`（不 unref 会把进程按住 6 秒不退），窗口 `closed` 时两个定时器和失败计数一起清干净。
+- **`nudgeMainWindowRepaint(reason)` 只强制重画，不重载。** 走 `webContents.invalidate()`，接在 `powerMonitor` 的 `resume` / `unlock-screen` 和 `screen` 的 `display-metrics-changed` 上 —— 睡眠回来和切显示器是黑屏的另一大来源，而 `invalidate()` 比重载便宜得多、**并且不打断播放**，这是这两条路径必须分开的唯一理由。`invalidate()` 不是所有 Electron 版本都有，缺了当作「不能重画」安静跳过而不是抛异常。此前 `powerMonitor` 只接了迷你播放器。
+- **`unresponsive` 只记一行日志，故意不重载。** 卡一下通常会自己缓过来（`responsive` 也记一行），重载反而把播放状态弄丢。缺了这个监听就永远不知道渲染进程卡死过。
+- 全量 Node 回归 `1032/1032` 通过（`npm test`，`node --test --test-concurrency=1`，无路径参数），`node --check` 在 `desktop/main.js` / `desktop/gpu-guard.js` / `public/app.js` / `server.js` 四个入口全清。新增三个测试文件共 42 例：`tests/gpu-guard.test.js` 11 例（纯逻辑，直接 `require`）、`tests/gpu-guard-main-wiring.test.js` 9 例（`vm` 切片跑真实 `handleGpuProcessGone`，注入**真实**的 `noteGpuFailure`/`describeGpuMode`，只假 `app` 和磁盘 I/O）、`tests/main-window-paint-recovery.test.js` 22 例（16 例行为 + 6 例源码接线，后者盯的是「实现写得再对，没挂到事件上也救不了黑屏」）。
+- **`vm` 切片测试的第三条房规**（前两条：ES6 简写方法不能 `new`；跨 realm 容器要先拷回本 realm 再 `deepEqual`）：`vm.runInContext` 脚本里的顶层 `let`/`const` 是 **script 作用域**的，**不会**变成上下文对象的属性 —— 只有 `function` 声明和 `var` 会。所以读实现里的常量和计数器必须追一段尾巴把它们挂到 `globalThis`（计数器用 getter，读到的才是当前值），`ctx.MAIN_WINDOW_PAINT_RECOVERY_LIMIT` 恒为 `undefined`。
+- **本地仓库落后 47 个提交这件事是中途才发现的。** 一开始按本地 `main`（`11b35b9`，`package.json` 写着 `1.8.2`）做，PR 都开了才从 `gh run list` 看出远端已经在 `v1.9.2`；`git fetch --prune` 后 `git rev-list --left-right --count main...origin/main` 是 `0 47`。核对过缺陷仍然存在且没被别人修掉：`origin/main` 没有 `desktop/gpu-guard.js`、`CHROMIUM_PERFORMANCE_SWITCHES` 仍带那三项、恢复辅助函数 0 处命中，而且 **GPU 开关那一段在两个基线上逐字节相同**，所以整套改动 cherry-pick 到 `origin/main` 上干净落地。**教训：动手前先 `git fetch` 再比 `origin/main`，「最新版」指的是远端而不是本地。**
+
+<!--RELEASE_V193_ASSETS-->
+
 ## v1.9.2 修好音域回响壁纸版在客户端里整幅全黑
 
 - 正式发布版本从 `1.9.1` 提升为 `1.9.2`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。走 patch 是因为这一版只修一个缺陷、不加功能。
