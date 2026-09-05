@@ -20,7 +20,24 @@
 - **`vm` 切片测试的第三条房规**（前两条：ES6 简写方法不能 `new`；跨 realm 容器要先拷回本 realm 再 `deepEqual`）：`vm.runInContext` 脚本里的顶层 `let`/`const` 是 **script 作用域**的，**不会**变成上下文对象的属性 —— 只有 `function` 声明和 `var` 会。所以读实现里的常量和计数器必须追一段尾巴把它们挂到 `globalThis`（计数器用 getter，读到的才是当前值），`ctx.MAIN_WINDOW_PAINT_RECOVERY_LIMIT` 恒为 `undefined`。
 - **本地仓库落后 47 个提交这件事是中途才发现的。** 一开始按本地 `main`（`11b35b9`，`package.json` 写着 `1.8.2`）做，PR 都开了才从 `gh run list` 看出远端已经在 `v1.9.2`；`git fetch --prune` 后 `git rev-list --left-right --count main...origin/main` 是 `0 47`。核对过缺陷仍然存在且没被别人修掉：`origin/main` 没有 `desktop/gpu-guard.js`、`CHROMIUM_PERFORMANCE_SWITCHES` 仍带那三项、恢复辅助函数 0 处命中，而且 **GPU 开关那一段在两个基线上逐字节相同**，所以整套改动 cherry-pick 到 `origin/main` 上干净落地。**教训：动手前先 `git fetch` 再比 `origin/main`，「最新版」指的是远端而不是本地。**
 
-<!--RELEASE_V193_ASSETS-->
+### 发布记录（v1.9.3）
+
+- 提交拆两个：`d7b47cd` `fix:`（代码 + 测试）、`4e44d2f` `chore(release): 1.9.3`（五处版本钉 + 文档），两个都带 `Co-Authored-By` 尾注。
+- **中途换了分支和 PR。** 先按落后 47 个提交的本地 `main` 开了 `fix/black-screen-gpu-guard` 与 PR #61（版本钉写 `1.8.3`，相对真实的 `1.9.2` 是**降级**）；发现后把整套改动 `cherry-pick` 到 `origin/main` 上的新分支 `fix/black-screen-gpu-guard-v193`，重开 PR #62，**关掉 #61 并删掉旧分支**（关闭时留了指向 #62 的说明）。**`cherry-pick` 也要带身份参数** —— 仓库没有全局 git 身份，`cherry-pick` 的合并步骤会成功、提交步骤会报 `Committer identity unknown`，必须 `git -c user.name=… -c user.email=… cherry-pick --continue`。
+- PR #62 的 `verify` 通过（run `33965634085`，1 分 12 秒），**用合并提交合的**（`--merge`，绝不 squash —— squash 会把发布 tag 从 `main` 的祖先链里挤出去），合并提交 `ddaa4d7`。
+- 标注 tag `v1.9.3` = tag object `f08d111155dc57225ce81fce1c04ec6d4513e121`，指向 `ddaa4d7`。
+- `Build and Release` run `33965739115` 成功（`--ref v1.9.3 -f tag=v1.9.3`，`12:20:05Z` 起 `12:22:22Z` 止，2 分 17 秒）。**electron-builder 的双草稿第十一次复现**：`383238980` 四项资产齐全、`383238981` 只有 blockmap 一项；删掉资产不全的 `383238981` 后发布 `383238980`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.9.3` 复验 tag object `f08d1111…` 仍在）。PATCH 时带 `draft=false` + `make_latest=true`，`published_at` `12:23:42Z`，`releases/latest` 复验指向 `v1.9.3`。
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-1.9.3-Setup.exe` | 102610488 | `dde9fb5648d1ff3440342d994a467df43e4a7672b6311c1ea4ec83486ae676ee` |
+| `Mineradio-1.9.3-Setup.exe.blockmap` | 106739 | `ba8b817cdde9645b524791c95e5d0264157cd87b91027f0cc1e5d316fa7aa295` |
+| `Mineradio-1.9.3-SHA256SUMS.txt` | 273 | `1e7bfdc1b13b5a1dae13b393ac0765c4103019f55628dc9dd03098c6dec06611` |
+| `latest.yml` | 347 | `59109ef0c682b9b089db2a33dd8b616e36032b27fb9671fe857f3acf4c6243a3` |
+
+- 三路复验都过：① API 资产清单四项 `state: uploaded`、字节数与本机下载一致；② 清单 `Mineradio-1.9.3-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机 `sha256sum` 全中；③ `latest.yml` 的 `sha512` = `cPOUXfT7lTiAkVwX7gHUgLJVrMnBn2tepQfxcRkriZZhopIPmhzuYlnHVIDGiQ52g7/+hci6xbZGsOIhCO7qwQ==` 与 `size` = `102610488` 与安装器实测一致（`sha512sum` 的十六进制先 `xxd -r -p` 再 `base64 -w0` 才能和 `latest.yml` 直接比），`releaseDate` `2026-09-05T12:22:08.788Z`。
+- 102 MB 的安装器用 `curl -sSL -C - --retry 5` 拉（断点续传，代理走 `http://127.0.0.1:7897`）。
+- 遗留未修（自 `v1.7.26` 记到现在，本轮仍未动）：`SHA256SUMS.txt` 行尾是 **CRLF**，`sha256sum -c` 直接跑会报 `'…Setup.exe'\r': No such file or directory`，必须先 `tr -d '\r' < Mineradio-1.9.3-SHA256SUMS.txt > /tmp/sums.lf && sha256sum -c /tmp/sums.lf`。**只是 CRLF、没有 BOM**：清单 273 字节、去掉 3 个 `\r` 正好 270，首字节就是哈希的 `d`。
 
 ## v1.9.2 修好音域回响壁纸版在客户端里整幅全黑
 
