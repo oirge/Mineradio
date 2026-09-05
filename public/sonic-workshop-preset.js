@@ -11,24 +11,14 @@
  * (GPL-3.0, 与本仓库同许可) —— 上游没有给这份 WE 产物写出处, 本仓库补在 NOTICE.md 里。
  * 预设 7 是另一条路: 那是 yin-yizhen/sonic-topography 对同一作品的 three.js 重实现。
  *
- * 本机适配三处 (上游没做, 因为它的封面调色板字段和这里不一样):
- *   1. 配色取 stageLyrics.coverPalette 的 primary/secondary/highlight, 角色分工与预设 7 对齐
- *      (冷色=主色、暖色=副色、涟漪=高光色), 认不出颜色时退回原作的深蓝配暖橙;
- *   2. 地形基色自己压暗, 不跟着封面副色走 —— 本仓库的调色板是给歌词用的, 没有暗部区域色;
- *   3. gridSize 跟画质档位联动, 默认档 (high) 就是原作的 320, 省电档降下来护住弱机。
- * 其余参数、音频整形系数、推送节奏全部保持上游原值。
+ * 本机适配一处: 本仓库没有上游的 sonic-workshop 设置面板, 所以壁纸的自定义颜色区域
+ * (sonicWorkshopBaseColor 等 fx 键) 只有在别处写入时才生效, 缺省一律走封面取色。
+ * 配色链、gridSize、音频整形系数、推送节奏全部保持上游原值。
  */
 'use strict';
 
 (function (global) {
   var INDEX = 8;
-  // 壁纸跑在 iframe 里自带一套 three.js, 和主渲染器叠着吃 GPU, 所以按画质档位限一下网格。
-  // high 是本仓库的默认档, 取 320 = 原作 project.json 的默认值, 开箱即与原作一致。
-  var QUALITY_GRID_SIZE = { eco: 224, balanced: 288, high: 320, ultra: 384 };
-  var COVER_FALLBACK_PRIMARY = '#62d6ff';
-  var COVER_FALLBACK_WARM = '#ff8f4a';
-  var COVER_FALLBACK_RIPPLE = '#33e6ff';
-  var COVER_FALLBACK_BASE = '#05070c';
   var BRIDGE_SRC = 'vendor/sonic-workshop/mineradio-bridge.html';
   var MOUNT_ID = 'sonic-workshop-layer';
   var AUDIO_PUSH_INTERVAL_MS = 33;
@@ -233,26 +223,22 @@
   };
 
   /**
-   * 按角色取封面色。本仓库的 stageLyrics.coverPalette 只有 primary/secondary/highlight
-   * (给歌词排版用的三色), 没有上游那套 rawArea* 区域色, 所以这里自己定角色分工,
-   * 和预设 7 的 sonicCoverGroundTheme 保持一致: 冷色=主色、暖色=副色、涟漪=高光色。
+   * 按角色取封面色, 链条与上游逐项一致: 优先面积色 (rawArea*), 退回逐点色 (raw*),
+   * 最后才用歌词文字三色兜底 —— 文字色被抬过亮度, 直接当地形色会偏白。
    * @param {string} role primary | base | warm | cool | ripple | peak
    * @returns {string} #rrggbb
    */
   function workshopCoverHex(role) {
     var pal = global.stageLyrics && (global.stageLyrics.coverPalette || global.stageLyrics.palette) || {};
-    var tint = cssColorToHex(global.fx && global.fx.visualTintColor, COVER_FALLBACK_PRIMARY);
     role = String(role || 'primary');
-    var primary = cssColorToHex(pal.primary || pal.highlight || pal.secondary, tint);
-    if (role === 'base') {
-      // 调色板里没有暗部色, 自己把主色压到近黑, 免得地形基面被歌词用的亮色顶起来。
-      return mixHex(COVER_FALLBACK_BASE, primary, 0.16);
-    }
-    if (role === 'warm') return cssColorToHex(pal.secondary || pal.primary, COVER_FALLBACK_WARM);
-    if (role === 'cool') return primary;
-    if (role === 'ripple') return cssColorToHex(pal.highlight || pal.glowColor || pal.primary, COVER_FALLBACK_RIPPLE);
-    if (role === 'peak') return cssColorToHex(pal.highlight || pal.secondary || pal.primary, COVER_FALLBACK_RIPPLE);
-    return primary;
+    var fallback = role === 'base' ? '#16060f' : (role === 'cool' || role === 'peak' ? '#99c4ff' : (role === 'ripple' ? '#f8d8ff' : '#cb6c89'));
+    var value = pal.rawAreaPrimary || pal.rawPrimary || pal.primary || pal.highlight || pal.secondary;
+    if (role === 'base') value = pal.rawAreaBase || pal.rawDark || pal.rawAverage || pal.secondary || pal.rawAreaPrimary || pal.rawPrimary || pal.primary;
+    else if (role === 'warm') value = pal.rawAreaWarm || pal.rawAreaPrimary || pal.rawWarm || pal.rawPrimary || pal.secondary || pal.primary || pal.highlight;
+    else if (role === 'cool') value = pal.rawAreaCool || pal.rawAreaLight || pal.rawCool || pal.rawLight || pal.highlight || pal.rawAreaPrimary || pal.rawPrimary || pal.primary;
+    else if (role === 'ripple') value = pal.rawAreaLight || pal.rawAreaAccent || pal.rawLight || pal.rawAccent || pal.rawAreaCool || pal.rawCool || pal.highlight || pal.primary;
+    else if (role === 'peak') value = pal.rawAreaAccent || pal.rawAreaCool || pal.rawAreaLight || pal.rawCool || pal.rawAccent || pal.rawLight || pal.highlight || pal.primary;
+    return cssColorToHex(value, fallback);
   }
 
   function colorDistance(a, b) {
@@ -270,11 +256,23 @@
     if (Array.isArray(pal.sonicWorkshopColors)) values = values.concat(pal.sonicWorkshopColors);
     if (Array.isArray(pal.coverColors)) values = values.concat(pal.coverColors);
     [
+      pal.rawAreaPrimary,
+      pal.rawAreaBase,
+      pal.rawAreaWarm,
+      pal.rawAreaCool,
+      pal.rawAreaLight,
+      pal.rawAreaAccent,
+      pal.rawPrimary,
+      pal.rawWarm,
+      pal.rawCool,
+      pal.rawLight,
+      pal.rawDark,
+      pal.rawAccent,
+      pal.rawAverage,
       pal.primary,
       pal.secondary,
       pal.highlight,
-      pal.glowColor,
-      pal.glow
+      pal.glowColor
     ].forEach(function (value) { if (value) values.push(value); });
     var out = [];
     values.forEach(function (value) {
@@ -622,8 +620,6 @@
     fx = fx || {};
     var coverHexes = workshopPaletteHexesFromCover();
     var props = Object.assign({}, WORKSHOP_DEFAULT_PROPERTIES);
-    // 画质档位决定壁纸网格精度; 认不出档位就按原作默认的 320 走。
-    props.gridSize = QUALITY_GRID_SIZE[fx.performanceQuality] || WORKSHOP_DEFAULT_PROPERTIES.gridSize;
     props.audioIntensity = clamp(fx.sonicWorkshopAudioIntensity == null ? props.audioIntensity : Number(fx.sonicWorkshopAudioIntensity), 0.3, 2.5);
     props.responseRange = clamp(fx.sonicWorkshopResponseRange == null ? props.responseRange : Number(fx.sonicWorkshopResponseRange), 0.3, 2);
     props.peakColorIntensity = clamp(fx.sonicWorkshopPeakIntensity == null ? props.peakColorIntensity : Number(fx.sonicWorkshopPeakIntensity), 0, 1.4);

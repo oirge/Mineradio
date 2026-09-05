@@ -619,7 +619,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.8.9';
+var APP_VERSION = '1.9.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -4215,15 +4215,27 @@ function sonicWorkshopModule() {
   return (typeof MineradioSonicWorkshop !== 'undefined' && MineradioSonicWorkshop) ? MineradioSonicWorkshop : null;
 }
 
+/**
+ * 取音域监视器模块 (窗口全局 MineradioSonicAudio); 脚本没加载上时返回 null。
+ * 它产出的细粒度帧只喂视觉预设 7, 不参与本文件其它音频派生量。
+ * @returns {object|null}
+ */
+function sonicAudioMonitorModule() {
+  return (typeof MineradioSonicAudio !== 'undefined' && MineradioSonicAudio) ? MineradioSonicAudio : null;
+}
+
 // 每帧传给地形层的上下文, 预分配复用 (animate 里逐帧填字段, 避免 60fps 造垃圾)。
 // scene / particles / orbit 声明在本行之后, 所以这里只留空壳, 不在声明处取值。
+// audio 有两种来源: 监视器开着时直接换成它产出的细粒度帧 (八段 + 真 kick 包络),
+// 关掉或脚本缺失时退回下面这个粗粒度壳 —— 与上游同一条 fallback。
+var sonicTopographyCoarseAudio = { bass: 0, mid: 0, treble: 0, beat: 0, energy: 0 };
 var sonicTopographyCtx = {
   scene: null,
   fx: null,
   time: 0,
   visualRotation: null,
   visualRotationActive: false,
-  audio: { bass: 0, mid: 0, treble: 0, beat: 0, energy: 0 }
+  audio: sonicTopographyCoarseAudio
 };
 
 // 壁纸版音域回响的每帧上下文, 同样预分配复用; 它只读 fx / audio, 不碰 scene。
@@ -8415,6 +8427,183 @@ function lyricTextPaletteFromHsl(hsl, avgL, chroma) {
     glow: rgbCss(c1, lightText ? 0.24 : 0.14),
   };
 }
+/** 上游的高冲击色调换算: 把采样色的饱和度顶到 minS 以上、亮度抬到 0.70 以上。 */
+function lyricHighImpactTextHsl(hsl, opts) {
+  opts = opts || {};
+  hsl = hsl || { h: 0.52, s: 0.72, l: 0.72 };
+  var avgL = opts.avgL == null ? hsl.l : Number(opts.avgL);
+  var neutral = hsl.s < (opts.neutralCutoff == null ? 0.035 : opts.neutralCutoff);
+  var sampledBright = hsl.l >= 0.62 || avgL >= 0.64 || opts.sampledBright === true;
+  var minS = opts.minS == null ? 0.88 : Number(opts.minS);
+  var s = neutral ? 0 : (sampledBright
+    ? clampRange(Math.max(hsl.s, minS), 0, 1)
+    : clampRange(Math.max(hsl.s * 1.20, minS), 0, 1));
+  var l = sampledBright
+    ? clampRange(Math.max(hsl.l, 0.70), 0.66, 0.94)
+    : clampRange(Math.max(hsl.l + 0.30, 0.74), 0.70, 0.90);
+  return { h: hsl.h, s: s, l: l, neutral: neutral, sampledBright: sampledBright };
+}
+/**
+ * 视觉预设 7 (音域回响·移植 Ajin) 专用的封面配色。
+ * 逐项照抄上游 XxHuberrr/Mineradio 现行的 lyricTextPaletteFromHsl —— 上游拿同一份颜色
+ * 既画歌词又画地形; 本仓库的歌词配色是更早一代 (亮封面改深色字护可读性), 所以这里单算一份
+ * 只喂给地形层: 预设效果与原项目一致, 歌词 UI 不动。
+ * @returns {{primary:string, secondary:string, highlight:string}}
+ */
+function lyricGroundPaletteFromHsl(hsl, avgL, chroma, opts) {
+  opts = opts || {};
+  hsl = hsl || { h: 0.52, s: 0, l: 0.7 };
+  var sampleChroma = isFinite(Number(chroma)) ? Number(chroma) : 0;
+  var avgChroma = isFinite(Number(opts.avgChroma)) ? Number(opts.avgChroma) : sampleChroma;
+  var maxChroma = isFinite(Number(opts.maxChroma)) ? Number(opts.maxChroma) : sampleChroma;
+  var colorfulRatio = isFinite(Number(opts.colorfulRatio)) ? Number(opts.colorfulRatio) : (sampleChroma > 0.055 ? 1 : 0);
+  if (opts.monochrome === true || avgL < 0.16 || sampleChroma < 0.055 || avgChroma < 0.026 || maxChroma < 0.095 || colorfulRatio < 0.014 || hsl.s < 0.060) {
+    return silverBlueLyricPalette();
+  }
+  var hue = hsl.h;
+  if (avgL < 0.30 && (hue < 0.06 || hue > 0.86 || (hue > 0.75 && hue < 0.86))) return silverBlueLyricPalette();
+  var tone = lyricHighImpactTextHsl(hsl, { avgL: avgL, minS: 0.90, sampledBright: avgL > 0.66 || hsl.l > 0.62 });
+  var c1 = hslToRgb(tone.h, tone.s, tone.l);
+  var c2 = hslToRgb((tone.h + 0.08) % 1, clampRange(Math.max(tone.s * 0.90, 0.78), 0, 1), clampRange(tone.l - 0.10, 0.58, 0.86));
+  return {
+    primary: rgbCss(c1),
+    secondary: rgbCss(c2),
+    highlight: rgbCss(hslToRgb((tone.h + 0.03) % 1, clampRange(Math.max(tone.s * 0.82, 0.72), 0, 1), clampRange(tone.l + 0.12, 0.80, 0.96))),
+    shadow: 'rgba(0,6,10,0.48)',
+    glow: rgbCss(c1, 0.30),
+  };
+}
+/**
+ * 把一个封面采样点转成 CSS 颜色; 没采到 (score < 0) 时用 fallback。
+ * 与上游同名函数一致, 视觉预设 7 / 8 的配色链靠它取原始封面色。
+ * @returns {string}
+ */
+function lyricCoverSampleCss(sample, fallback) {
+  if (!sample || !isFinite(Number(sample.score)) || Number(sample.score) < 0) return fallback || '#d6f8ff';
+  return rgbCss({
+    r: Math.round(clampRange(Number(sample.r) || 0, 0, 255)),
+    g: Math.round(clampRange(Number(sample.g) || 0, 0, 255)),
+    b: Math.round(clampRange(Number(sample.b) || 0, 0, 255))
+  });
+}
+function lyricCoverSample(r, g, b, score, lum, chroma, hsl) {
+  return { score: score, r: r, g: g, b: b, lum: lum, chroma: chroma, hsl: hsl || rgbToHsl(r, g, b) };
+}
+/** 封面几乎没有彩色时告诉调用方别硬取暖 / 冷色, 否则会从噪点里挑出假颜色。 */
+function lyricCoverLooksMonochrome(stats) {
+  stats = stats || {};
+  var avgChroma = Number(stats.avgChroma) || 0;
+  var maxChroma = Number(stats.maxChroma) || 0;
+  var colorfulRatio = Number(stats.colorfulRatio) || 0;
+  var usableColorfulRatio = Number(stats.usableColorfulRatio) || 0;
+  return maxChroma < 0.095 || avgChroma < 0.026 || colorfulRatio < 0.014 || usableColorfulRatio < 0.006;
+}
+function lyricCoverPushUniqueColor(list, value) {
+  value = String(value || '').trim();
+  if (!value) return;
+  var key = value.replace(/\s+/g, '').toLowerCase();
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i] || '').replace(/\s+/g, '').toLowerCase() === key) return;
+  }
+  list.push(value);
+}
+function lyricCoverAreaDistance(a, b) {
+  if (!a || !b) return 1;
+  var dr = ((Number(a.r) || 0) - (Number(b.r) || 0)) / 255;
+  var dg = ((Number(a.g) || 0) - (Number(b.g) || 0)) / 255;
+  var db = ((Number(a.b) || 0) - (Number(b.b) || 0)) / 255;
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+/** 24 一档把采样点丢进颜色桶, 桶里点数就是这块颜色在封面上的面积权重。 */
+function lyricCoverAddAreaBucket(buckets, r, g, b) {
+  var step = 24;
+  var key = [Math.round(r / step), Math.round(g / step), Math.round(b / step)].join(':');
+  var item = buckets[key];
+  if (!item) item = buckets[key] = { r: 0, g: 0, b: 0, count: 0 };
+  item.r += r;
+  item.g += g;
+  item.b += b;
+  item.count += 1;
+}
+function lyricCoverAreaBucketList(buckets) {
+  return Object.keys(buckets || {}).map(function (key) {
+    var item = buckets[key];
+    var count = Math.max(1, Number(item.count) || 1);
+    var sample = {
+      r: Math.round(item.r / count),
+      g: Math.round(item.g / count),
+      b: Math.round(item.b / count),
+      count: count,
+      score: count
+    };
+    sample.lum = (sample.r * 0.299 + sample.g * 0.587 + sample.b * 0.114) / 255;
+    sample.hsl = rgbToHsl(sample.r, sample.g, sample.b);
+    sample.chroma = (Math.max(sample.r, sample.g, sample.b) - Math.min(sample.r, sample.g, sample.b)) / 255;
+    return sample;
+  }).sort(function (a, b) {
+    if (b.count !== a.count) return b.count - a.count;
+    return b.chroma - a.chroma;
+  });
+}
+function lyricCoverPickAreaColor(list, test, fallback, avoid, minDistance) {
+  list = Array.isArray(list) ? list : [];
+  for (var i = 0; i < list.length; i++) {
+    var item = list[i];
+    if (test && !test(item)) continue;
+    if (avoid && lyricCoverAreaDistance(item, avoid) < (minDistance || 0.06)) continue;
+    return item;
+  }
+  return fallback || list[0] || null;
+}
+/**
+ * 从颜色桶里按面积挑出六个角色色 (主 / 暗部 / 暖 / 冷 / 亮 / 强调) 与前十色列表。
+ * 面积色和逐点最优色不一样: 这里挑的是"画面里占地最大"的颜色, 壁纸地形要的是这种。
+ * @returns {object|null}
+ */
+function lyricCoverAreaPaletteFromBuckets(buckets) {
+  var list = lyricCoverAreaBucketList(buckets);
+  if (!list.length) return null;
+  var primary = lyricCoverPickAreaColor(list, function (item) {
+    return item.lum > 0.035 && item.lum < 0.965;
+  }, list[0]);
+  var base = lyricCoverPickAreaColor(list, function (item) {
+    return item.lum < Math.min(0.46, (primary && primary.lum || 0.5) + 0.10);
+  }, primary);
+  var warm = lyricCoverPickAreaColor(list, function (item) {
+    return item.chroma > 0.055 && item.hsl.s > 0.08 && (item.hsl.h < 0.18 || item.hsl.h > 0.90);
+  }, primary);
+  var cool = lyricCoverPickAreaColor(list, function (item) {
+    return item.chroma > 0.055 && item.hsl.s > 0.08 && item.hsl.h > 0.42 && item.hsl.h < 0.78;
+  }, primary, warm, 0.055);
+  var light = lyricCoverPickAreaColor(list, function (item) {
+    return item.lum > 0.52;
+  }, primary);
+  var accent = lyricCoverPickAreaColor(list, function (item) {
+    return item.chroma > 0.075 && item.hsl.s > 0.10 && item.lum > 0.10 && item.lum < 0.92;
+  }, light || primary, primary, 0.075);
+  return {
+    primary: primary,
+    base: base,
+    warm: warm,
+    cool: cool,
+    light: light,
+    accent: accent,
+    colors: list.slice(0, 10).map(function (item) { return lyricCoverSampleCss(item, ''); }).filter(Boolean)
+  };
+}
+/** 当前封面的身份串, 壁纸层靠它判断"封面换了没有"。 */
+function lyricCurrentCoverPaletteKey() {
+  try {
+    var song = null;
+    if (Array.isArray(playQueue) && currentIdx >= 0 && currentIdx < playQueue.length) song = playQueue[currentIdx];
+    else if (Array.isArray(playlist) && currentIdx >= 0 && currentIdx < playlist.length) song = playlist[currentIdx];
+    if (!song) return '';
+    if (typeof songCoverSrc === 'function') return String(songCoverSrc(song, 400) || song.cover || song.id || '');
+    return String(song.cover || song.customCover || song.id || song.name || '');
+  } catch (e) {
+    return '';
+  }
+}
 function updateLyricPaletteFromCover(coverCanvas) {
   if (!coverCanvas) return;
   try {
@@ -8422,7 +8611,15 @@ function updateLyricPaletteFromCover(coverCanvas) {
     var img = ctx.getImageData(0, 0, coverCanvas.width, coverCanvas.height).data;
     var w = coverCanvas.width, h = coverCanvas.height;
     var sumR = 0, sumG = 0, sumB = 0, count = 0;
+    var sumChroma = 0, maxChroma = 0, colorfulCount = 0, usableColorfulCount = 0;
     var best = { score:-1, r:143, g:233, b:255 };
+    // 下面五个角色色只服务视觉预设 7 / 8 的原始封面取色, 不参与歌词文字配色。
+    var warm = { score: -1, r: 203, g: 108, b: 137 };
+    var cool = { score: -1, r: 102, g: 217, b: 255 };
+    var light = { score: -1, r: 238, g: 247, b: 255 };
+    var dark = { score: -1, r: 18, g: 22, b: 30 };
+    var accent = { score: -1, r: 255, g: 154, b: 190 };
+    var areaBuckets = {};
     for (var y = 0; y < h; y += 8) {
       for (var x = 0; x < w; x += 8) {
         var di = (y * w + x) * 4;
@@ -8433,15 +8630,109 @@ function updateLyricPaletteFromCover(coverCanvas) {
         var chroma = (maxC - minC) / 255;
         var edgePenalty = Math.abs(lum - 0.5);
         var score = chroma * 1.6 + (0.5 - edgePenalty) * 0.45;
+        var pxHsl = rgbToHsl(r, g, b);
+        var warmHue = pxHsl.h < 0.18 || pxHsl.h > 0.90 ? 1 : Math.max(0, 1 - Math.min(Math.abs(pxHsl.h - 0.08), Math.abs(pxHsl.h - 0.98)) / 0.26);
+        var coolHue = pxHsl.h > 0.42 && pxHsl.h < 0.78 ? 1 : Math.max(0, 1 - Math.abs(pxHsl.h - 0.58) / 0.30);
+        var satScore = chroma * (0.72 + a * 0.28);
         sumR += r; sumG += g; sumB += b; count++;
+        sumChroma += chroma;
+        if (chroma > maxChroma) maxChroma = chroma;
+        if (chroma > 0.055 && pxHsl.s > 0.075) colorfulCount++;
+        if (chroma > 0.080 && pxHsl.s > 0.10 && lum > 0.08 && lum < 0.92) usableColorfulCount++;
+        lyricCoverAddAreaBucket(areaBuckets, r, g, b);
         if (lum > 0.08 && lum < 0.92 && score > best.score) best = { score:score, r:r, g:g, b:b };
+        if (lum > 0.10 && lum < 0.92 && chroma > 0.045 && score + warmHue * 0.88 + satScore * 0.45 > warm.score) warm = lyricCoverSample(r, g, b, score + warmHue * 0.88 + satScore * 0.45, lum, chroma, pxHsl);
+        if (lum > 0.10 && lum < 0.92 && chroma > 0.045 && score + coolHue * 0.88 + satScore * 0.45 > cool.score) cool = lyricCoverSample(r, g, b, score + coolHue * 0.88 + satScore * 0.45, lum, chroma, pxHsl);
+        if (lum > 0.46 && score + lum * 0.82 + satScore * 0.28 > light.score) light = lyricCoverSample(r, g, b, score + lum * 0.82 + satScore * 0.28, lum, chroma, pxHsl);
+        if (lum < 0.48 && score + (1 - lum) * 0.68 + satScore * 0.24 > dark.score) dark = lyricCoverSample(r, g, b, score + (1 - lum) * 0.68 + satScore * 0.24, lum, chroma, pxHsl);
+        if (lum > 0.12 && lum < 0.88 && chroma > 0.060 && score + satScore * 0.88 > accent.score) accent = lyricCoverSample(r, g, b, score + satScore * 0.88, lum, chroma, pxHsl);
       }
     }
     if (!count) return;
+    var avgR = Math.round(sumR / count);
+    var avgG = Math.round(sumG / count);
+    var avgB = Math.round(sumB / count);
     var avgL = (sumR / count * 0.299 + sumG / count * 0.587 + sumB / count * 0.114) / 255;
+    var avgChroma = sumChroma / count;
+    var colorfulRatio = colorfulCount / count;
+    var usableColorfulRatio = usableColorfulCount / count;
+    var avgSample = lyricCoverSample(avgR, avgG, avgB, count, avgL, avgChroma, rgbToHsl(avgR, avgG, avgB));
+    var monoCover = lyricCoverLooksMonochrome({
+      avgChroma: avgChroma,
+      maxChroma: maxChroma,
+      colorfulRatio: colorfulRatio,
+      usableColorfulRatio: usableColorfulRatio
+    });
+    if (monoCover) {
+      warm = avgSample;
+      cool = avgSample;
+      accent = avgSample;
+    }
     var hsl = rgbToHsl(best.r, best.g, best.b);
-    stageLyrics.coverPalette = lyricTextPaletteFromHsl(hsl, avgL, Math.max(0, best.score));
+    // 文字配色照旧: 仍拿 best.score 当彩度、也不做 avgSample 兜底, 只在结果对象上追加原始封面色。
+    var palette = lyricTextPaletteFromHsl(hsl, avgL, Math.max(0, best.score));
+    var rawBest = best.score >= 0 ? best : avgSample;
+    var groundStats = {
+      avgChroma: avgChroma,
+      maxChroma: maxChroma,
+      colorfulRatio: colorfulRatio,
+      usableColorfulRatio: usableColorfulRatio,
+      monochrome: monoCover
+    };
+    // 地形层 (预设 7) 走上游那份高饱和配色, 和歌词文字色分开算。
+    var groundHsl = rawBest.hsl || rgbToHsl(rawBest.r, rawBest.g, rawBest.b);
+    var groundChroma = rawBest.chroma == null
+      ? (Math.max(rawBest.r, rawBest.g, rawBest.b) - Math.min(rawBest.r, rawBest.g, rawBest.b)) / 255
+      : rawBest.chroma;
+    var groundPalette = lyricGroundPaletteFromHsl(groundHsl, avgL, Math.max(0, groundChroma), groundStats);
+    palette.groundPrimary = groundPalette.primary;
+    palette.groundSecondary = groundPalette.secondary;
+    palette.groundHighlight = groundPalette.highlight;
+    var areaPalette = lyricCoverAreaPaletteFromBuckets(areaBuckets);
+    palette.rawPrimary = lyricCoverSampleCss(rawBest, palette.primary);
+    palette.rawWarm = lyricCoverSampleCss(warm, palette.secondary);
+    palette.rawCool = lyricCoverSampleCss(cool, palette.primary);
+    palette.rawLight = lyricCoverSampleCss(light, palette.highlight);
+    palette.rawDark = lyricCoverSampleCss(dark, palette.secondary);
+    palette.rawAccent = lyricCoverSampleCss(accent, palette.highlight);
+    palette.rawAverage = rgbCss(avgSample);
+    palette.coverIsMonochrome = monoCover;
+    palette.coverAverageChroma = avgChroma;
+    palette.coverMaxChroma = maxChroma;
+    palette.coverColorfulRatio = colorfulRatio;
+    if (areaPalette) {
+      palette.rawAreaPrimary = lyricCoverSampleCss(areaPalette.primary, palette.rawPrimary);
+      palette.rawAreaBase = lyricCoverSampleCss(areaPalette.base, palette.rawDark || palette.rawAverage);
+      palette.rawAreaWarm = lyricCoverSampleCss(areaPalette.warm, palette.rawWarm || palette.rawPrimary);
+      palette.rawAreaCool = lyricCoverSampleCss(areaPalette.cool, palette.rawCool || palette.rawPrimary);
+      palette.rawAreaLight = lyricCoverSampleCss(areaPalette.light, palette.rawLight || palette.rawPrimary);
+      palette.rawAreaAccent = lyricCoverSampleCss(areaPalette.accent, palette.rawAccent || palette.rawLight);
+      palette.sonicWorkshopColors = areaPalette.colors || [];
+    }
+    palette.coverSourceKey = lyricCurrentCoverPaletteKey();
+    palette.sonicWorkshopCoverKey = palette.coverSourceKey;
+    palette.coverColors = [];
+    [
+      palette.rawAreaPrimary,
+      palette.rawAreaBase,
+      palette.rawAreaWarm,
+      palette.rawAreaCool,
+      palette.rawAreaLight,
+      palette.rawAreaAccent,
+      palette.rawPrimary,
+      palette.rawWarm,
+      palette.rawCool,
+      palette.rawLight,
+      palette.rawDark,
+      palette.rawAccent,
+      palette.rawAverage,
+      palette.primary,
+      palette.secondary,
+      palette.highlight
+    ].forEach(function (color) { lyricCoverPushUniqueColor(palette.coverColors, color); });
+    stageLyrics.coverPalette = palette;
     if (fx.lyricColorMode !== 'custom') setStageLyricPalette(stageLyrics.coverPalette);
+    if (typeof MineradioSonicWorkshop !== 'undefined' && MineradioSonicWorkshop && typeof MineradioSonicWorkshop.pushProperties === 'function') MineradioSonicWorkshop.pushProperties(true);
   } catch (e) {}
 }
 
@@ -8515,6 +8806,21 @@ function lyricThreeColor(css, fallback, minLum) {
     c.b = Math.min(1, c.b + lift);
   }
   return c;
+}
+
+/**
+ * 把任意 CSS 颜色规范成 #rrggbb, 顺带把太暗的颜色抬到 minLum 亮度之上。
+ * 视觉预设 7 的配色链要用它 (上游同名函数), 深色封面才不会糊成一团黑。
+ * @returns {string} #rrggbb
+ */
+function lyricPaletteColorToHex(value, fallback, minLum) {
+  if (typeof lyricThreeColor === 'function') {
+    try {
+      var c = lyricThreeColor(value, fallback || '#9db8cf', minLum == null ? 0.36 : minLum);
+      if (c && c.getHexString) return '#' + c.getHexString();
+    } catch (e) { }
+  }
+  return normalizeHexColor(value || fallback || '#9db8cf', fallback || '#9db8cf');
 }
 
 var STAGE_LYRIC_MAX_LINES = 2;
@@ -43154,6 +43460,7 @@ function animate() {
   // 真正的 mid 乐器/和声: 3000-6000Hz → bin 140-280
   // treble: 6000Hz+ → bin 280+
   beatOnsetFlag = false;
+  var sonicAudioFrame = null;
   var shouldAnalyzeAudio = !!(analyser && playing && audio && !audio.paused);
   var analysisDt = shouldAnalyzeAudio ? consumeAudioAnalysisDelta(now, dt) : 0;
   if (shouldAnalyzeAudio && analysisDt > 0) {
@@ -43258,6 +43565,21 @@ function animate() {
     if (scheduledBeatPulse > beatPulse) beatPulse = scheduledBeatPulse;
     scheduledBeatPulse *= Math.pow(0.32, analysisDt);
 
+    // 音域监视器: 从同一份 frequencyData 里算八段 Hz 频段与底鼓包络, 只供视觉预设 7。
+    // 插入点与上游一致 —— beatPulse 已经合并完, 监视器把它当 kick 包络的下限。
+    var sonicMonitor = sonicAudioMonitorModule();
+    if (sonicMonitor) {
+      var sonicMonitorFrame = sonicMonitor.step(frequencyData, analysisDt, {
+        fx: fx,
+        playing: true,
+        beat: beatPulse,
+        sampleRate: (audioCtx && audioCtx.sampleRate) || 44100,
+        fftSize: (analyser && analyser.fftSize) || len * 2,
+        currentTime: (audio && audio.currentTime) || 0
+      });
+      if (fx.sonicAudioMonitorEnabled !== false) sonicAudioFrame = sonicMonitorFrame;
+    }
+
     // smoothBass 主要由 kick 驱动 (不被人声干扰)
     smoothBass  = smoothAnalysisEnvelope(smoothBass, Math.min(0.82, rb * 0.78 + re * 0.025), 0.28, 0.075);
     // smoothMid 用 中高乐器, 不再混入人声
@@ -43290,6 +43612,12 @@ function animate() {
   } else if (!shouldAnalyzeAudio) {
     audioAnalysisLastAt = 0;
     smoothBass *= 0.91; smoothMid *= 0.91; smoothTreb *= 0.91; smoothEnergy *= 0.91; beatPulse *= 0.82;
+    var idleSonicMonitor = sonicAudioMonitorModule();
+    // 暂停时让监视器把上一帧衰减掉, 地形平滑落回去而不是卡在最后一拍。
+    if (idleSonicMonitor) {
+      var idleSonicFrame = idleSonicMonitor.step(null, dt, { fx: fx, playing: false });
+      if (idleSonicFrame && fx.sonicAudioMonitorEnabled !== false) sonicAudioFrame = idleSonicFrame;
+    }
     liveCamAvg *= 0.94;
     liveCamPeak = Math.max(0.28, liveCamPeak * 0.98);
     liveCamLastRaw *= 0.80;
@@ -43385,7 +43713,8 @@ function animate() {
   }
   updateSkullParticleLayer(dt, frameShelfState);
   // 音域回响地形层: 放在粒子旋转同步之后, 让地形跟着同一份 particles.rotation 走。
-  // beat 乘 1.35 是量纲适配 —— 本项目 beatPulse 峰值约 0.62~0.92, 原项目的涟漪阈值是 0.58。
+  // 音频优先用监视器的细粒度帧 (八段 Hz + 真 kick 包络), 与上游默认路径一致;
+  // 监视器关掉时才退回 bass/mid/treble/beat/energy 粗粒度壳, beat 传原值不做放大。
   var sonicMod = sonicTopographyModule();
   if (sonicMod) {
     sonicTopographyCtx.scene = scene;
@@ -43393,11 +43722,12 @@ function animate() {
     sonicTopographyCtx.time = uniforms.uTime.value;
     sonicTopographyCtx.visualRotation = particles ? particles.rotation : null;
     sonicTopographyCtx.visualRotationActive = !!(orbit && orbit.rotating);
-    sonicTopographyCtx.audio.bass = bass;
-    sonicTopographyCtx.audio.mid = mid;
-    sonicTopographyCtx.audio.treble = treble;
-    sonicTopographyCtx.audio.beat = Math.min(1, beatPulse * 1.35);
-    sonicTopographyCtx.audio.energy = audioEnergy;
+    sonicTopographyCoarseAudio.bass = bass;
+    sonicTopographyCoarseAudio.mid = mid;
+    sonicTopographyCoarseAudio.treble = treble;
+    sonicTopographyCoarseAudio.beat = beatPulse;
+    sonicTopographyCoarseAudio.energy = audioEnergy;
+    sonicTopographyCtx.audio = sonicAudioFrame || sonicTopographyCoarseAudio;
     sonicMod.update(dt, sonicTopographyCtx);
   }
   // 壁纸版音域回响: 只往 iframe 里推音频 / 媒体 / 配色, 自己不占主渲染器一点开销。

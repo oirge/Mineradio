@@ -293,21 +293,22 @@ function propsFor(globals) {
   return { h, props };
 }
 
-test('网格精度跟画质档位联动，默认档就是原作 project.json 的 320', () => {
-  const expected = { eco: 224, balanced: 288, high: 320, ultra: 384 };
-  Object.keys(expected).forEach((quality) => {
+test('网格精度固定在原作 project.json 的 320，不跟画质档位联动', () => {
+  // 曾经按画质档位改过 (eco 224 / ultra 384), 但原作的地形密度、涟漪半径、流星尺度
+  // 都是照 320 调的, 一改网格数整个画面比例就跟 CmzYa 那份不一样了。
+  ['eco', 'balanced', 'high', 'ultra', 'turbo'].forEach((quality) => {
     const { props } = propsFor({ fx: { preset: 8, performanceQuality: quality } });
-    assert.equal(props.gridSize, expected[quality], `${quality} 档的网格数不对`);
+    assert.equal(props.gridSize, 320, `${quality} 档不该改网格数`);
   });
-  const { props: unknown } = propsFor({ fx: { preset: 8, performanceQuality: 'turbo' } });
-  assert.equal(unknown.gridSize, 320, '认不出档位就按原作默认走');
   // 默认档必须等于原作自己的默认值, 否则开箱效果就不是 CmzYa 那份了。
   const project = JSON.parse(readProjectFile(`${VENDOR_DIR}/project.json`));
   assert.equal(project.general.properties.gridSize.value, 320);
   assert.equal(String(project.workshopid), '3747222633');
+  // 画质档位不再参与属性推导, 源码里不该再留档位到网格数的映射表。
+  assert.doesNotMatch(presetSource, /QUALITY_GRID_SIZE/);
 });
 
-test('除了本机适配的三处，其余参数保持原作原值', () => {
+test('除了本机适配的一处，其余参数保持原作原值', () => {
   const { props } = propsFor();
   assert.equal(props.audioIntensity, 1.15);
   assert.equal(props.responseRange, 1.3);
@@ -357,20 +358,27 @@ test('音频与响应强度按 WE 的合法区间夹住', () => {
   assert.equal(low.peakColorIntensity, 0);
 });
 
-test('配色按封面调色板分角色，分工与预设 7 对齐，地形基面自己压暗', () => {
-  const { props } = propsFor({
-    stageLyrics: { coverPalette: { primary: '#3aa0ff', secondary: '#ff7a2f', highlight: '#7ef9ff' } },
-  });
+// 上游 app.js 交给壁纸层的是原始封面取色 (raw*), 不是给歌词用的可读性调整色。
+const RAW_COVER_PALETTE = {
+  // 歌词文字色: 本仓库为了可读性会抬亮/压深, 壁纸层只能拿它们兜底。
+  primary: '#8fd0ff', secondary: '#ffc9a8', highlight: '#d9f4ff',
+  // 原始封面色: 加权采样出来的五个角色 + 平均色。
+  rawPrimary: '#3aa0ff', rawWarm: '#ff7a2f', rawCool: '#7ef9ff',
+  rawLight: '#eef7ff', rawDark: '#12161e', rawAccent: '#ff9abe', rawAverage: '#5a6472',
+};
+
+test('配色吃原始封面取色而不是歌词可读性色，分角色与上游一致', () => {
+  const { props } = propsFor({ stageLyrics: { coverPalette: RAW_COVER_PALETTE } });
   assert.equal(props.theme, 'mineradio-custom', '配色是本项目算出来的, 不走 WE 自带的十套主题');
   const theme = props.mineradioCustomTheme;
-  // 冷色=主色、暖色=副色、涟漪与峰值=高光色 —— 与 sonic-topography 的 sonicCoverGroundTheme 一致。
-  assert.equal(theme.uCoolCore, '#3aa0ff');
+  // 冷色=rawCool、暖色=rawWarm、涟漪=rawLight、峰值=rawCool —— 与上游 workshopCoverHex 的链一致。
+  assert.equal(theme.uCoolCore, '#7ef9ff');
   assert.equal(theme.uWarmCore, '#ff7a2f');
-  assert.equal(theme.uRippleColor, '#7ef9ff');
+  assert.equal(theme.uRippleColor, '#eef7ff');
   assert.equal(theme.uPeakColor, '#7ef9ff');
-  assert.equal(theme.__primaryColor, '#3aa0ff');
+  assert.equal(theme.__primaryColor, '#3aa0ff', '主色取 rawPrimary, 不是被抬亮过的 primary');
   assert.equal(props.__mineradioColorHex, '#3aa0ff');
-  // 本仓库的调色板是给歌词用的亮色, 直接拿去当基面会把地形顶白, 所以自己压到近黑。
+  // 基面走 rawDark (封面里最暗的一块) 再压到两成, 于是天然是近黑的夜景底。
   assert.ok(luminance(theme.uBaseColor1) < 0.05, `基面第一层太亮: ${theme.uBaseColor1}`);
   assert.ok(luminance(theme.uBaseColor2) < 0.3, `基面第二层太亮: ${theme.uBaseColor2}`);
   assert.ok(luminance(theme.uCoolEdge) < luminance(theme.uCoolCore), '边缘要比核心暗');
@@ -384,17 +392,40 @@ test('配色按封面调色板分角色，分工与预设 7 对齐，地形基�
   assert.equal(props.__mineradioNearestTheme, 'arctic-aurora');
 });
 
-test('认不出封面颜色就退回原作的深蓝配暖橙，也认 rgb() 写法的主题色', () => {
-  const bare = propsFor().props.mineradioCustomTheme;
-  assert.equal(bare.uCoolCore, '#62d6ff');
-  assert.equal(bare.uWarmCore, '#ff8f4a');
-  assert.equal(bare.uRippleColor, '#33e6ff');
+test('封面分区取色 (rawArea*) 优先于全图加权取色', () => {
+  const { props } = propsFor({
+    stageLyrics: {
+      coverPalette: Object.assign({}, RAW_COVER_PALETTE, {
+        rawAreaPrimary: '#00c2a8', rawAreaBase: '#0a0f14', rawAreaWarm: '#ffb300',
+        rawAreaCool: '#4d7cff', rawAreaLight: '#fff2e0', rawAreaAccent: '#ff4d94',
+      }),
+    },
+  });
+  const theme = props.mineradioCustomTheme;
+  assert.equal(theme.__primaryColor, '#00c2a8');
+  assert.equal(theme.uWarmCore, '#ffb300');
+  assert.equal(theme.uCoolCore, '#4d7cff');
+  assert.equal(theme.uRippleColor, '#fff2e0');
+  assert.equal(theme.uPeakColor, '#ff4d94', '峰值优先 rawAreaAccent');
+  assert.ok(luminance(theme.uBaseColor1) < 0.05);
+});
 
+test('认不出封面颜色就退回原作那套兜底色，主题色不再插手壁纸配色', () => {
+  const bare = propsFor().props.mineradioCustomTheme;
+  // 这四个兜底值直接抄上游: 主色/暖色 #cb6c89、冷色与峰值 #99c4ff、涟漪 #f8d8ff、基面 #16060f。
+  assert.equal(bare.__primaryColor, '#cb6c89');
+  assert.equal(bare.uCoolCore, '#99c4ff');
+  assert.equal(bare.uWarmCore, '#cb6c89');
+  assert.equal(bare.uRippleColor, '#f8d8ff');
+  assert.equal(bare.uPeakColor, '#99c4ff');
+  assert.ok(luminance(bare.uBaseColor1) < 0.05, '基面兜底 #16060f 压两成, 还是近黑');
+
+  // 上游的取色链不看 visualTintColor, 本仓库也不许偷偷掺进去, 否则换个主题色就跟原作不一样了。
   const tinted = propsFor({
     fx: { preset: 8, performanceQuality: 'high', visualTintColor: 'rgb(255, 0, 128)' },
   }).props.mineradioCustomTheme;
-  assert.equal(tinted.uCoolCore, '#ff0080', '主题色用 rgb() 写法也要认出来');
-  assert.equal(tinted.uWarmCore, '#ff8f4a', '封面没有副色时暖色仍走原作兜底');
+  assert.equal(JSON.stringify(tinted), JSON.stringify(bare), '全局主题色不该影响壁纸层配色');
+  assert.doesNotMatch(presetSource, /visualTint/);
 
   // 只有一个颜色的调色板也不能崩, 缺的角色各自兜底。
   const single = propsFor({ stageLyrics: { coverPalette: { primary: '#7ef9ff' } } }).props.mineradioCustomTheme;
@@ -541,10 +572,17 @@ test('配置一改就立刻生效，不用等下一个节流窗口', () => {
   run(h, 1);
   h.reset();
   h.clock.now += 5;
+  h.sandbox.fx.sonicWorkshopAudioIntensity = 2;
+  h.mod.update(1 / 60, { fx: h.sandbox.fx, audio: {} });
+  assert.equal(h.recorder.properties.length, 1, '参数一改要马上推下去');
+  assert.equal(h.recorder.properties[0].audioIntensity, 2);
+
+  // 画质档位对这一层没有意义 (整层都在 iframe 里, 主渲染器一分钱不花), 改了不该惊动推送。
+  h.reset();
+  h.clock.now += 5;
   h.sandbox.fx.performanceQuality = 'eco';
   h.mod.update(1 / 60, { fx: h.sandbox.fx, audio: {} });
-  assert.equal(h.recorder.properties.length, 1, '画质档一改要马上推下去');
-  assert.equal(h.recorder.properties[0].gridSize, 224);
+  assert.equal(h.recorder.properties.length, 0, '画质档不参与属性推导, 别白推一轮');
 
   h.reset();
   h.clock.now += 5;
