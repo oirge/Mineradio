@@ -356,6 +356,23 @@ test('配色默认跟着封面调色板走，也认自定义色', () => {
   assert.ok(u.uBaseColor1.value.r < 0.25 && u.uBaseColor1.value.g < 0.25, '底色永远压得很暗, 地形才有夜景感');
   assert.equal(layers(h).trails.material.color.b > 0.8, true, '尾迹跟涟漪同色');
 
+  // 有 ground* 三色时必须优先用它们: 那才是 app.js 按上游公式单算的高饱和地形色,
+  // primary/secondary/highlight 是本仓库更保守的歌词文字色, 只能当兜底。
+  const ground = loadTopography({
+    random: () => 0.5,
+    stageLyrics: {
+      coverPalette: {
+        primary: '#ff2200', secondary: '#22ff00', highlight: '#0022ff',
+        groundPrimary: '#00ff88', groundSecondary: '#8800ff', groundHighlight: '#ffcc00',
+      },
+    },
+  });
+  for (let i = 0; i < 240; i++) frame(ground, fx, silent);
+  const gu = layers(ground).terrain.material.uniforms;
+  assert.ok(gu.uCoolCore.value.g > 0.8 && gu.uCoolCore.value.r < 0.2, '冷色走 groundPrimary 而不是 primary');
+  assert.ok(gu.uWarmCore.value.b > 0.6 && gu.uWarmCore.value.g < 0.4, '暖色走 groundSecondary');
+  assert.ok(gu.uRippleColor.value.r > 0.8 && gu.uRippleColor.value.b < 0.25, '涟漪走 groundHighlight');
+
   const custom = loadTopography({ random: () => 0.5 });
   const customFx = {
     preset: 7,
@@ -465,7 +482,11 @@ test('主循环把地形层挂在粒子旋转之后，音频帧按本项目的�
   assert.ok(animate.indexOf('particles.rotation.x +=') < animate.indexOf('sonicMod.update(dt, sonicTopographyCtx)'));
   assert.match(animate, /sonicTopographyCtx\.visualRotation = particles \? particles\.rotation : null;/);
   assert.match(animate, /sonicTopographyCtx\.visualRotationActive = !!\(orbit && orbit\.rotating\);/);
-  assert.match(animate, /sonicTopographyCtx\.audio\.beat = Math\.min\(1, beatPulse \* 1\.35\);/);
+  // 和上游一致: 优先喂监视器的细粒度帧, 只有监视器缺席 / 被关掉才退回粗粒度壳。
+  assert.match(animate, /sonicTopographyCtx\.audio = sonicAudioFrame \|\| sonicTopographyCoarseAudio;/);
+  assert.match(animate, /sonicTopographyCoarseAudio\.beat = beatPulse;/);
+  // beat 不再乘 1.35 —— 上游把原值直接交给地形层, 放大会让涟漪门槛整体偏早。
+  assert.doesNotMatch(animate, /beatPulse \* 1\.35/);
   assert.match(animate, /sonicTopographyCtx\.time = uniforms\.uTime\.value;/);
   // 上下文预分配, 60fps 下不能每帧新建对象。
   assert.doesNotMatch(animate, /sonicMod\.update\(dt, \{/);

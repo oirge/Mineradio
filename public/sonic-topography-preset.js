@@ -6,11 +6,15 @@
  * 原始创意、配色与玩法出自 CmzYa 的 Wallpaper Engine 作品「音域回响」(workshopid 3747222633)。
  * 这里只搬视觉层, 播放器 / 歌词 / 服务端仍然是本仓库自己的实现。
  *
- * 本机适配三处:
- *   1. 音频帧走 app.js 现成的 bass/mid/treble/beat/energy 粗粒度分析
- *      (上游关掉音域监视器时同样走这条 fallback), 不再单独建一套频段监视器;
- *   2. 旋转绑到 particles.rotation 与 orbit, 和其他预设共享同一套手势;
- *   3. 配色取 stageLyrics.coverPalette, 没有封面色时退回原作的深蓝/暖橙。
+ * 本机适配两处:
+ *   1. 旋转绑到 particles.rotation 与 orbit, 和其他预设共享同一套手势 (上游是同作用域直接读全局,
+ *      这里是独立脚本, 所以由 app.js 通过 ctx.visualRotation / ctx.visualRotationActive 注入);
+ *   2. 配色取 stageLyrics.coverPalette 的 groundPrimary/groundSecondary/groundHighlight ——
+ *      那是 app.js 按上游现行公式单算的高饱和封面色。上游用同一份颜色同时画歌词和地形,
+ *      本仓库的歌词配色是更早一代 (亮封面改深色字护可读性), 所以拆成两份: 地形与原项目一致,
+ *      歌词 UI 不动。没有封面色时退回原作的深蓝/暖橙。
+ * 音频帧与上游一致走音域监视器的细粒度帧 (public/sonic-audio-monitor.js, 八段 Hz +
+ * 真 kick 包络), 监视器关掉时才退回 bass/mid/treble/beat/energy 粗粒度 fallback。
  * 面板参数 (sonicGround*) 全部走默认值, 没有接控制台 UI。
  */
 (function (global) {
@@ -145,6 +149,11 @@
    * @returns {string}
    */
   function sonicPaletteHex(value, fallback) {
+    // 优先走 app.js 的调色板归一化 (会把过暗的封面色抬到 0.42 亮度之上, 与上游一致);
+    // 脚本单独加载时退回下面的内联解析。
+    if (typeof global.lyricPaletteColorToHex === 'function') {
+      return global.lyricPaletteColorToHex(value, fallback, 0.42);
+    }
     value = value == null ? '' : String(value).trim();
     if (/^#[0-9a-fA-F]{6}$/.test(value)) return value;
     if (/^#[0-9a-fA-F]{3}$/.test(value)) {
@@ -165,15 +174,17 @@
 
   /**
    * 默认配色: 跟着封面色走, 冷色取主色、暖色取副色、涟漪取高光色。
+   * groundPrimary/Secondary/Highlight 是 app.js 为本层单算的上游高饱和配色 (见
+   * lyricGroundPaletteFromHsl); 缺失时退回歌词三色, 脚本单独加载时也能出图。
    * @returns {object}
    */
   function sonicCoverGroundTheme(fx) {
     var stage = global.stageLyrics || {};
     var palette = stage.coverPalette || stage.palette || {};
     var tint = sonicHex(fx, 'visualTintColor', '#62d6ff');
-    var primary = new THREE.Color(sonicPaletteHex(palette.primary, tint));
-    var secondary = new THREE.Color(sonicPaletteHex(palette.secondary, DEFAULT_GROUND_COOL_COLOR));
-    var highlight = new THREE.Color(sonicPaletteHex(palette.highlight, DEFAULT_GROUND_ACCENT_COLOR));
+    var primary = new THREE.Color(sonicPaletteHex(palette.groundPrimary || palette.primary, tint));
+    var secondary = new THREE.Color(sonicPaletteHex(palette.groundSecondary || palette.secondary, DEFAULT_GROUND_COOL_COLOR));
+    var highlight = new THREE.Color(sonicPaletteHex(palette.groundHighlight || palette.highlight, DEFAULT_GROUND_ACCENT_COLOR));
     var base1 = primary.clone().lerp(new THREE.Color(DEFAULT_GROUND_BASE_COLOR), 0.84);
     var base2 = base1.clone().lerp(highlight, 0.14);
     return {
@@ -246,8 +257,9 @@
   }
   /**
    * 把 app.js 的音频帧归一成八段 + 三个纹理参数。
-   * 细粒度帧 (上游音域监视器) 走第一条分支; 本仓库只喂 bass/mid/treble/beat/energy,
-   * 走第二条 fallback —— 这也是上游关掉监视器时走的同一条路。
+   * 细粒度帧 (音域监视器) 走第一条分支, 这是默认路径;
+   * 监视器关掉时只有 bass/mid/treble/beat/energy 五个粗值, 走第二条 fallback ——
+   * 这也是上游关掉监视器时走的同一条路。
    * @returns {object}
    */
   function readMineradioAudio(raw) {
