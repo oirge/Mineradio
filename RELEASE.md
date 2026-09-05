@@ -1,6 +1,34 @@
 ﻿# 发布流程
 
+## v1.8.3 黑屏卡顿：GPU 档位阶梯与主窗口绘制恢复
+- 正式发布版本从 `1.8.2` 提升为 `1.8.3`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:591`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` + `package.json` 版本，**漏一处就会红**。
+- 用户原话：「再最新版的基础上修复黑屏卡顿问题」。**没有复现步骤、没有机型、没有日志**，所以本轮不是照着报告修，而是把「什么代码路径必然产生这两个症状」找出来修。
+- **结论是这两个症状同一个根因，不是两件事。** 主进程过去无条件把 `ignore-gpu-blocklist` 拍上去，强行越过 Chromium 对已知会渲染错误的驱动组合的屏蔽 —— 那份名单里躺着的正是会把画面渲染成全黑的组合；再叠 `use-angle=d3d11` 钉死后端、`force_high_performance_gpu` 在双显卡机器上强选独显（独显渲染、核显输出的跨适配器呈现是黑帧的常见来源）。GPU 进程崩了退回软件合成、再崩再退，这个反复过程就是卡顿。而 `transparent: true` + `frame: false` 是 Windows 上最脆的窗口形态，主渲染进程一崩就只剩全黑。**最要命的是没有任何回退：没有失败计数、没有更保守的档位、没有逃生门 —— 崩一次崩一辈子。**
+- 一共认定并修掉五个缺陷，全部靠读源码确认，不是猜的：（1）GPU 开关无条件越过屏蔽名单且无回退；（2）主窗口**零**绘制失败兜底 —— 迷你播放器早有 `did-fail-load` + `render-process-gone` → `scheduleMiniPlayerWindowRecovery`，主窗口这两个事件的挂钩数是 **0**；（3）`await mainWindow.loadURL(...)` 裸着，抛异常就留下一个 `show: false` 的窗口永远不显示（用户视角就是「点了图标什么都没发生」）；（4）全仓库没有任何 `unresponsive` 检测；（5）`powerMonitor` 的四个挂钩只服务迷你播放器，透明主窗口的合成表面在睡眠 / 解锁 / DPI 变化后可能已失效却没人叫它重画。
+- **新文件 `desktop/gpu-guard.js` 是纯函数、零 Electron 依赖**，跟着 `desktop/desktop-overlay-state-cache.js` 的写法（`'use strict'`、中文 JSDoc、末尾 `module.exports = { … }`）。三档 `default` → `compatible` → `software`，档位阶梯、失败计数、版本比对、开关清单全在这里，主进程只负责接线。这样切开的唯一理由是**可测**：GPU 开关必须在 `app.whenReady()` 之前拍上去、运行中改不了，这段逻辑没法在跑起来的 Electron 里验证。
+- **`default` 档的开关列表与 v1.8.2 及以前逐字节相同，这是本轮的红线。** `tests/gpu-guard.test.js` 里抄了一份 v1.8.2 的 `CHROMIUM_PERFORMANCE_SWITCHES` 原样清单叫 `LEGACY_SWITCHES`，用 `assert.deepEqual(gpuSwitchesForMode('default'), LEGACY_SWITCHES)` 逐项比对 —— 这条断言存在的意义是：一旦有人顺手改了默认档，这次改动就从「加了回退」变成「改了默认行为」，那是两个完全不同的风险等级。
+- **`autoplay-policy` 必须三档都保留。** 它是功能开关不是性能开关，跟着降级被摘掉就变成「降级后不自动起播」。`BASE_SWITCHES` 单独拎出来正是为此，测试里三档各钉了一遍。
+- **`software` 档除了 `app.disableHardwareAcceleration()` 还要显式 `disable-gpu-compositing`。** 只调前者有可能仍留在半 GPU 的合成路径上，而透明无边框窗口正是在那条路径上变黑的 —— 降到最低档还黑，等于这个阶梯白做。
+- **降档必须配一次 `app.relaunch()`。** GPU 开关只在 app ready 之前生效，运行中改不了，所以「改了档位但不重启」等于什么都没做。两条失败路径都单独钉了测试：`writeDesktopShellSettings` 抛异常时就地 `return` 不重启（记不下来还重启 = 每次开机重新崩一遍再重启一遍 = 重启循环）；`app.relaunch()` 抛异常时不 `quit()` 并把 `gpuGuardRelaunching` 退回 `false`（relaunch 没成功还 quit，用户看到的是「软件自己关了再也不开」）。
+- **失败计数按档位归零**（`gpuFailureMode` 与当前档位不符就从 0 起算），否则「default 崩了 2 次降到 compatible」之后，compatible 只要再崩 1 次就被连带判死，一路滑到 software。阈值定 2 是因为单次崩溃多半是驱动瞬时抽风。`software` 是终点，反复崩只累计不再降。
+- **`appVersion` 变了就退回 `default` 重试一次。** 换了 Electron 或换了显卡驱动之后原来的黑屏可能已经不存在，不重试会把用户永久钉在软件渲染上 —— 那本身就是卡顿。**记录里没有 `appVersion` 的老档案（v1.8.2 之前写下的）不触发重试**，否则每次启动都白白重试一遍。
+- **`MINERADIO_GPU_MODE=default|compatible|software` 优先级最高、不写盘，而且会让自动降级彻底让路。** `handleGpuProcessGone` 一进来就查 `gpuGuardDecision.forced`，为真只记一行日志 —— 用户显式点定的档位不许被偷偷换掉，否则环境变量就成了空话。取值写错当作没写（继续沿用存档结论），不会把人踢回 `default`。命名跟着仓库既有的 `MINERADIO_*` 约定；`process.argv` 在 `main.js` 里一处都没用过，所以没走命令行参数。
+- **`app.on('child-process-gone')` 必须过滤 `details.type !== 'GPU'`。** 工具进程、音频服务、插件进程都走同一个事件，不过滤会把无关崩溃算进 GPU 降档计数。Electron 43 里 `gpu-process-crashed` 已经移除，`child-process-gone` 是唯一正确入口。
+- **主窗口的四个新挂钩全部汇到同一条恢复调度 `scheduleMainWindowPaintRecovery`**：`did-fail-load`、`render-process-gone`、首次 `loadURL` 的 `catch`，加上恢复自身失败时的 `loadURL` 回落。**单航班**（`did-fail-load` 和 `render-process-gone` 常常一起来，不许攒出两次重载）、`Math.min(2400, 200 * n²)` 退避、`MAIN_WINDOW_PAINT_RECOVERY_LIMIT = 3` 后只留日志 —— 无限重载一个加载不起来的页面只会把「黑屏」换成「黑屏 + 满负载」。`did-finish-load` 成功就把计数清零，一次开机时序抖动不会永久吃掉后面的恢复配额。
+- **恢复用 `contents.reload()` 而不是重建 `BrowserWindow`。** `reload()` 能重建死掉的渲染进程、也能重试失败的加载，两种情况都不用动窗口，位置与置顶状态因此不会被打乱；只有 `reload()` 本身抛异常才回落到 `contents.loadURL('http://127.0.0.1:' + mainServerPort)`。
+- **`did-fail-load` 必须滤掉 `errorCode === -3`（ERR_ABORTED）与 `isMainFrame === false`。** 切歌换页时的正常导航打断也会报这个码，当失败处理会白白吃掉三次配额里的一次。
+- **6 秒兜底显示看门狗（`MAIN_WINDOW_SHOW_WATCHDOG_MS`）。** 透明无边框窗口的 `ready-to-show` 在 Windows 上并不保证触发，而窗口是 `show: false` 建的。`armMainWindowShowWatchdog(mainWindow)` 必须写在 `mainWindow.once('ready-to-show', …)` **之前**（先布置再监听，同步触发的场景才不会漏），`ready-to-show` 回调第一件事就是 `clearMainWindowShowWatchdog()`。每次 `reload()` 之后重新上一只，因为 reload 一样可能等不到这个事件。
+- **睡眠 / 解锁 / 显示器变化只走 `webContents.invalidate()`。** 比 `reload()` 便宜得多，**而且不打断播放** —— 这是这两条路径必须分开的唯一理由。`invalidate` 不是所有 Electron 版本都有，用 `typeof contents.invalidate === 'function'` 守住，缺了当作「不能重画」而不是抛异常。
+- **`unresponsive` 只记日志，刻意不重载。** 卡死的渲染进程重载一次就把播放状态丢了。`tests/main-window-paint-recovery.test.js` 里有一条断言钉死这个取舍：`unresponsive` 处理体内不许出现 `scheduleMainWindowPaintRecovery` 或 `reload()`。
+- **`mainWindow.on('closed')` 里两个定时器和计数器都要清干净**（看门狗 + 恢复定时器 + `mainWindowPaintFailureCount = 0`），所有定时器都 `.unref()` —— 不 unref 的话看门狗会把进程按住 6 秒不退。
+- 界面一行未动：`public/index.html` 与 `public/app.css` 都没有改动，也没有为档位加任何设置项。**盯着黑屏的用户点不到设置面板**，所以恢复必须全自动，手动杠杆只能放在环境变量上。同理没有去动 `transparent: true` —— 那属于重写视觉系统，本仓明确不许在没被点名时碰。
+- 测试三份、共 42 例：`tests/gpu-guard.test.js` 11 例直接 `require` 纯模块；`tests/main-window-paint-recovery.test.js` 22 例按锚点 `'const MAIN_WINDOW_SHOW_WATCHDOG_MS'` → `'async function createWindow('` 把四个助手切进 `node:vm` 跑真实源码，配可控定时器台面与假窗口，另有 6 例是接线断言（事件挂钩、看门狗先后顺序、`closed` 清理、`powerMonitor` 三处、`unresponsive` 不重载、`child-process-gone` 过滤）；`tests/gpu-guard-main-wiring.test.js` 9 例按 `'function handleGpuProcessGone('` → `"app.on('child-process-gone'"` 切片，接**真实**的档位阶梯跑，钉住降档写盘 + relaunch、两条失败路径、强制档位让路、最低档只累计。**`let`/`const` 在 `vm.runInContext` 里是 script 作用域、不挂到全局对象上**，所以两份切片测试都追了一段尾巴把常量与计数器用 getter 暴露出来 —— 直接读 `ctx.MAIN_WINDOW_PAINT_RECOVERY_LIMIT` 会是 `undefined`。
+- 全量回归 `913/913`（`871` + 42）。`node --check` 过 `desktop/main.js`、`desktop/gpu-guard.js`、`public/app.js`、`server.js`。`desktop/**/*` 本来就在 `package.json` 的 `build.files` 里，新文件自动进包，`tests/packaging-file-whitelist.test.js` 走 `require()` 图确认过（v1.7.0 就是这里漏了 `plugin-proxy.js` 出的事）。
+- 已知边界：**降档结论只在真的看到 GPU 进程异常退出时才写下来。** 有些驱动会把画面渲染成全黑但 GPU 进程一次都不崩，那种情况自动阶梯不触发，仍要靠 `MINERADIO_GPU_MODE` 手动降档。三档在真实黑屏机器上的效果没有条件验证，本轮结论全部来自源码与单测。
+<!--RELEASE_V183_ASSETS-->
+
 ## v1.8.2 多格式歌词 KRC / QRC / TTML：分流顺序就是语义
+
 - 正式发布版本从 `1.8.1` 提升为 `1.8.2`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:591`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` + `package.json` 版本，**漏一处就会红**。
 - 用户原话：「在最新版的基础上继续更新目前歌词： 有显示即可 升级： 多格式歌词 支持： LRC KRC QRC TTML等」。
 - **「有显示即可」被当成明确的范围界定，不是随口一句。** 三种新格式解析进播放器原有的 `{t, duration, text, words, charCount, source}` 歌词行就算完成，不为它们做任何新界面 —— 逐字高亮、桌面歌词窗口、双行歌词、翻译自动识别全部沿用现成实现。合本仓「能不动 UI 就不动 UI」。LRC 早已支持，本轮真正新增的是 KRC / QRC / TTML。

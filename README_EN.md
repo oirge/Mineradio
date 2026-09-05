@@ -84,7 +84,23 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.2 (2026-09-03)
+### Latest release v1.8.3 (2026-09-05)
+
+- **Fixed the process-level root cause behind black screens and stuttering.** They were two faces of one bug: on startup the player unconditionally forced its way past Chromium's own GPU blocklist — and that list is exactly where the driver combinations that render everything black live. The GPU process would crash, fall back to software rendering, crash again, and that repeated churn is the stutter you could see
+- **New three-tier GPU ladder that degrades on its own:** standard (**byte-for-byte identical** to before, so nothing changes on a healthy machine) → compatible (stops specifying anything about the GPU and respects Chromium's blocklist) → software rendering. **Two consecutive GPU crashes are required before dropping a tier** — a single crash is usually a momentary driver hiccup, and relaunching the app over one of those is more annoying than the black screen
+- **After an app upgrade or a driver change it automatically returns to the standard tier for one retry**, so you are never pinned to software rendering forever — that is itself a form of stuttering
+- **Manual escape hatch for a black screen: `MINERADIO_GPU_MODE=default|compatible|software`.** Run `set MINERADIO_GPU_MODE=software` before launching to get the UI back. It takes precedence over everything, is **never written to the config**, and once you have pinned a tier this way the automatic degradation stays out of the way
+- **The main window finally has paint-failure recovery.** Previously only the mini player handled renderer crashes and load failures; when the main renderer died, the transparent frameless window was simply black forever. Load failures, renderer crashes and a throwing first load now all retry automatically: **only one retry in flight at a time**, with a growing delay, and it **stops after 3 attempts** and just logs — endlessly reloading a page that will not load only turns "black screen" into "black screen at full load"
+- Recovery reloads the page instead of rebuilding the window, **so window position and always-on-top are left untouched**
+- **New startup fallback: if the window has not appeared after 6 seconds, show it anyway.** The "ready to show" event is not guaranteed to fire for a frameless transparent window on Windows, and the window is created hidden — no event means "I double-clicked the icon and nothing happened"
+- **After waking from sleep, unlocking the screen or changing displays, the main window is forced to repaint.** A transparent window's drawing surface can be lost at those moments, and a repaint is far cheaper than a reload — **it does not interrupt playback**
+- When the renderer hangs, it is only logged and **not reloaded** — a reload would lose playback state, and that trade-off is deliberate
+- **No UI change**, and no setting was added for the tiers: someone staring at a black screen cannot click into the settings panel, so recovery has to be fully automatic
+- Full Node regression suite: `913/913` passing (42 new cases)
+- Known limits: degradation only triggers when a GPU process actually crashes. **Some drivers render everything black without ever crashing the GPU process**; those still need `MINERADIO_GPU_MODE` set by hand
+
+<details>
+<summary>v1.8.2 — Multi-format lyrics: KRC / QRC / TTML all read</summary>
 
 - Lyrics support grows from LRC / YRC / SRT / VTT / ASS into **multi-format word-by-word lyrics**: **KRC** (Kugou), **QRC** (QQ Music) and **TTML** (the Apple Music family) are now read directly into the existing lyric-line structure, so word highlighting, desktop lyrics, dual-line layout and translations all keep working unchanged
 - **KRC** is read both as plaintext and as a `krc1` **encrypted binary**: the encrypted form is XOR-restored with the format's published constant and then inflated using `DecompressionStream`, which both Chromium and Node ship — no new dependency. Word times are offsets relative to the line start and are converted to absolute time on read
@@ -96,6 +112,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - **No UI change**: `public/index.html` only gained three extensions in each of two `accept` attributes, and `public/app.css` was not touched
 - Known limits: **encrypted QRC network payloads (triple-DES + zlib) are not decrypted this round.** A `.qrc` on disk is usually already plaintext XML or a bare body, and both of those read directly
 - Full Node regression suite: `871/871` passing (new `tests/multi-format-lyrics.test.js`, 7 cases)
+
+</details>
 
 <details>
 <summary>v1.8.1 — Whole-machine backup: export mineradio.backup, move to a new computer in one go</summary>

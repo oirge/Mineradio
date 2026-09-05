@@ -1453,3 +1453,27 @@
 - 验证：全量 Node 回归 `871/871`（上一版基线 `864`），新增 `tests/multi-format-lyrics.test.js` 7 例，全部用 `node:vm` 跑生产源码切片。本轮未启动本机 Electron，**三种新格式的真实歌词文件在窗口里的逐字高亮与桌面歌词表现没有肉眼验证过**，结论全部来自源码逐条断言（含用 `node:zlib` 反向打包出真实 KRC 加密二进制再走生产解码链的往返测试）。
 - **发布环节新记一条：Release 不是 `release.yml` 建的，是 electron-builder 建的，而它会抢出两个草稿。** 工作流里只有 `gh release upload … --clobber`，没有 `gh release create`；真正建 Release 的是 `npm run build:win` 那步带了 `GH_TOKEN` 之后 electron-builder 的自动发布器，它按资产并发上传时会并发建草稿。`v1.8.2` 这轮就同时躺了两个 `draft:true`、同一秒创建、同名 `1.8.2`、同 tag 的 Release：`382099367` 四个资产齐全，`382099368` 只有一个字节相同的重复 `.blockmap`。**草稿查不到不等于没有 —— `gh api …/releases/tags/vX.Y.Z` 对草稿只回 404**，必须用 `gh api "…/releases?per_page=8"` 枚举。发布前先枚举、确认多出来那个没有独有内容（`body` 为 `null`、资产 digest 与正式那个重复）再删；**同一个 tag 上留着第二个草稿会让下一次 `gh release upload` 认错目标**。删 Release 不动 git tag。
 - **标题与正文也是手工设的**：`gh api -X PATCH …/releases/<id> -f name=… -F draft=false -F make_latest=true -f body="$(cat 临时文件)"`，正文按 `v1.8.1` 的三段式（`## 下载` / `## 变更` / `## 歌词怎么放`）先写进一个不进版本库的临时文件，发完删掉。**102 MB 安装包一次 `curl` 会超时**（本轮拉到 83 MB 断），先单独拉三个小资产、再 `curl -sSL -C - --retry 5` 续传补完 exe。
+
+### 2026-09-05 - v1.8.3 黑屏与卡顿同源：越过 GPU 屏蔽名单没有回退，主窗口没有兜底
+
+- 用户原话：「再最新版的基础上修复黑屏卡顿问题」。**没有复现步骤、没有机型、没有日志。** 这种报告不能照着修，只能反过来问「什么代码路径必然产生这两个症状」，然后修那条路径。本轮认定五个缺陷，全部靠读源码确认。
+- **黑屏和卡顿是同一个根因的两种表现，这个判断是整轮的支点。** 主进程无条件拍 `ignore-gpu-blocklist`，强行越过 Chromium 对已知会渲染错误的驱动组合的屏蔽 —— **那份名单里躺着的正是会把画面渲染成全黑的驱动组合**，越过它就是主动踩雷；再叠 `use-angle=d3d11` 钉死后端、`force_high_performance_gpu` 在双显卡机器上强选独显（独显渲染、核显输出的跨适配器呈现是黑帧常见来源）。GPU 进程崩了退回软件合成、再崩再退，这个反复过程就是肉眼看到的持续卡顿。**所以「黑屏」和「卡顿」这两个词凑在一句话里出现，本身就是指向 GPU 层的强信号。**
+- **性能开关一律要配回退档位。** 一次性拍上一堆激进开关、没有失败计数、没有更保守的档位、没有逃生门，等于「崩一次崩一辈子」。以后再往 `app.commandLine.appendSwitch` 里加 GPU 相关开关，必须同时回答「它崩了之后怎么办」。
+- **改默认行为和加回退是两个风险等级，必须在测试里划清界限。** `tests/gpu-guard.test.js` 抄了一份 v1.8.2 的 `CHROMIUM_PERFORMANCE_SWITCHES` 原样清单叫 `LEGACY_SWITCHES`，用 `deepEqual` 钉住 `default` 档逐项相同。这条断言不是为了测代码，是为了**把「这次没动默认行为」这个承诺写成可执行的形式**。往后凡是「加降级 / 加回退 / 加兜底」的改动都值得配一条同形状的断言。
+- **降级时要分清功能开关和性能开关。** `autoplay-policy=no-user-gesture-required` 决定的是能不能自动起播，跟着性能开关一起被摘掉就变成「降级后不自动起播」—— 用户会认为降级本身是个新 bug。`BASE_SWITCHES` 单独拎出来正是为此。
+- **GPU 开关只在 `app.whenReady()` 之前生效、运行中改不了，所以「换档位」必然等于 `app.relaunch()` + `app.quit()`。** 推论有两条，都单独钉了测试：**写盘失败就不许重启**（记不下来还重启 = 每次开机重新崩一遍再重启一遍 = 重启循环），**`relaunch()` 抛异常就不许 `quit()` 且要把重启标记退回去**（relaunch 没成功还 quit，用户看到的是「软件自己关了再也不开」）。凡是「改配置 + 重启生效」的机制都要走一遍这两个问句。
+- **自动降级的失败计数必须按档位归零。** 不归零的话「default 崩 2 次降到 compatible」之后，compatible 只要再崩 1 次就到阈值、被连带判死，一路滑到最低档。阈值定 2 是因为单次崩溃多半只是驱动瞬时抽风。
+- **任何「自动降级」都要配一条自动退回的路。** `appVersion` 变了就退回 `default` 重试一次 —— 换了 Electron 或换了显卡驱动之后原来的黑屏可能已经不存在，不重试等于把用户永久钉在软件渲染上，**而那本身就是卡顿**，症状从「黑屏」变成「一直慢」并不算修好。老档案里没有 `appVersion` 时不触发重试，否则每次启动都白重试一遍。
+- **给「界面完全看不见」的故障留逃生门，只能用环境变量，不能用设置项。** `MINERADIO_GPU_MODE=default|compatible|software`：**盯着黑屏的用户点不到设置面板**。它优先级最高、不写盘，而且被它点定档位时自动降级完全让路（`handleGpuProcessGone` 一进来就查 `gpuGuardDecision.forced`）—— 用户显式指定的选择不许被偷偷换掉，否则环境变量就成了空话。取值写错当作没写，继续沿用存档结论，不把人踢回 `default`。命名跟着仓库既有的 `MINERADIO_*` 约定；`main.js` 里一处都没用过 `process.argv`，所以没走命令行参数。
+- **`app.on('child-process-gone')` 必须过滤 `details.type !== 'GPU'`。** 工具进程、音频服务、插件进程都走同一个事件，不过滤会把无关崩溃算进 GPU 降档计数。Electron 43 已移除 `gpu-process-crashed`，`child-process-gone` 是唯一入口。
+- **两个窗口的健壮性不该差这么远。** 迷你播放器很早就有 `did-fail-load` + `render-process-gone` → `scheduleMiniPlayerWindowRecovery`，主窗口这两个事件的挂钩数是 **0**；`powerMonitor` 的四个挂钩也只服务迷你播放器。**给某一个窗口加兜底的时候，顺手数一下另一个窗口有没有 —— 差异往往不是设计，是遗漏。**
+- **`transparent: true` + `frame: false` 是 Windows 上最脆的窗口形态**，主渲染进程一崩就只剩全黑，而且合成表面在睡眠 / 解锁 / DPI 变化后可能直接失效。这个形态是本仓的视觉基础、不许在没被点名时改动，所以只能在它周围补兜底：失败重载、兜底显示、强制重画。
+- **`webContents.invalidate()` 和 `reload()` 是两条不能混用的路。** 睡眠回来、解锁、显示器变化只需要重画一次，`invalidate()` 比 `reload()` 便宜得多**而且不打断播放**；真的加载失败或渲染进程死了才用 `reload()`。**同理 `unresponsive` 刻意只记日志不重载** —— 卡死的渲染进程重载一次就把播放状态丢了，这个取舍在测试里钉住了（`unresponsive` 处理体内不许出现 `scheduleMainWindowPaintRecovery` 或 `reload()`）。`invalidate` 不是所有 Electron 版本都有，用 `typeof` 守住。
+- **自动重试必须有上限。** `MAIN_WINDOW_PAINT_RECOVERY_LIMIT = 3`、`Math.min(2400, 200 * n²)` 退避、单航班（`did-fail-load` 和 `render-process-gone` 常常一起来）。**无限重载一个加载不起来的页面只会把「黑屏」换成「黑屏 + 满负载」** —— 后者更难诊断。`did-finish-load` 成功要清零，否则一次开机时序抖动会永久吃掉后面的恢复配额。
+- **恢复优先 `contents.reload()` 而不是重建 `BrowserWindow`。** `reload()` 能重建死掉的渲染进程、也能重试失败的加载，两种情况都不用动窗口，**位置与置顶状态因此不会被打乱**；只有它自己抛异常才回落到 `loadURL`。
+- **`did-fail-load` 一定要滤掉 `errorCode === -3`（ERR_ABORTED）与 `isMainFrame === false`。** 切歌换页时的正常导航打断也报这个码，当失败处理会白白吃掉三次配额里的一次。
+- **`ready-to-show` 在透明无边框窗口上并不保证触发，而窗口是 `show: false` 建的 —— 事件不来就等于「双击图标什么都没发生」。** 兜底看门狗 6 秒，`armMainWindowShowWatchdog(mainWindow)` 必须写在 `mainWindow.once('ready-to-show', …)` **之前**（先布置再监听，同步触发的场景才不会漏），回调第一件事是撤掉它，每次 `reload()` 之后重新上一只。`mainWindow.on('closed')` 里两个定时器和计数器都要清干净，所有定时器 `.unref()` —— 不 unref 的话看门狗会把进程按住 6 秒不退。
+- **`let` / `const` 在 `vm.runInContext` 里是 script 作用域、不会挂到全局对象上，只有 `function` 声明和 `var` 会。** 所以切片测试想读实现里的常量或计数器，必须在切片后面追一段尾巴把它们（计数器用 getter）挂到 `globalThis`；直接读 `ctx.MAIN_WINDOW_PAINT_RECOVERY_LIMIT` 是 `undefined`。**这是本仓 vm 切片测试的第三条常识**，前两条是「ES6 简写方法不可 `new`」和「跨 realm 容器断言前要拷回本 realm」。
+- **切片测试可以接真实依赖。** `tests/gpu-guard-main-wiring.test.js` 把 `handleGpuProcessGone` 切进 vm，但注入的是**真实**的 `gpu-guard` 模块函数，只假掉 `app` 和读写盘 —— 这样测的是「主进程有没有把纯逻辑接对」，而纯逻辑本身另有一份直接 `require` 的测试。纯函数与接线分两份测，比塞进一份里更容易定位问题。
+- 验证：全量 Node 回归 `913/913`（上一版基线 `871`），新增 42 例（`tests/gpu-guard.test.js` 11、`tests/main-window-paint-recovery.test.js` 22、`tests/gpu-guard-main-wiring.test.js` 9）。`node --check` 过四个入口文件。**本轮未启动本机 Electron，三档在真实黑屏机器上的效果没有条件验证**，结论全部来自源码与单测。已知边界：**降档只在真的看到 GPU 进程异常退出时才触发** —— 有些驱动会把画面渲染成全黑但 GPU 进程一次都不崩，那种情况仍要靠 `MINERADIO_GPU_MODE` 手动降档。
+
