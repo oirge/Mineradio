@@ -100,6 +100,7 @@ function loadTrustCore() {
   vm.runInNewContext(extractTrustCore(), context);
   return {
     isTrustedMainDocumentUrl: context.isTrustedMainDocumentUrl,
+    isTrustedWallpaperFrameUrl: context.isTrustedWallpaperFrameUrl,
     isTrustedMainFrameSender: context.isTrustedMainFrameSender,
     trustedMainFrameHandler: context.trustedMainFrameHandler,
     installMainWindowNavigationGuard: context.installMainWindowNavigationGuard,
@@ -157,34 +158,85 @@ function makeFakeWebContents() {
 }
 
 /**
- * 触发导航事件并返回是否被拦截。
+ * 触发导航事件并返回是否被拦截。默认按 Electron 真实签名派发：第一个参数既是事件也是详情
+ * （自带 url / isMainFrame / frame），后面跟着已废弃的位置参数。
  * @param {object} webContents 假 webContents。
  * @param {string} eventName 事件名。
  * @param {string} url 目标 URL。
- * @param {object} options 额外事件参数。
+ * @param {object} options 额外参数：isMainFrame / frame / shape（electron | positional | detail）。
  * @returns {boolean} 导航被拦截时返回 true。
  */
 function navigate(webContents, eventName, url, options = {}) {
   let prevented = false;
-  const event = {
-    preventDefault() { prevented = true; },
-  };
+  const event = { preventDefault() { prevented = true; } };
+  const isMainFrame = options.isMainFrame !== false;
+  const frame = 'frame' in options
+    ? options.frame
+    : (isMainFrame ? { parent: null } : { parent: { parent: null } });
   const handler = webContents.listeners[eventName];
   assert.equal(typeof handler, 'function', '导航守卫未安装：' + eventName);
-  if (eventName === 'will-navigate') {
-    handler(event, { url, isMainFrame: options.isMainFrame !== false }, url, false, options.isMainFrame !== false);
+  if (options.shape === 'positional') {
+    handler(event, url, false, isMainFrame, 4, 4);
+  } else if (options.shape === 'detail') {
+    handler(event, { url, isMainFrame, frame });
   } else {
-    handler(event, {
-      url,
-      isMainFrame: options.isMainFrame !== false,
-      frame: options.frame || null,
-    });
+    Object.assign(event, { url, isSameDocument: false, isMainFrame, processId: 4, routingId: 4, frame, initiator: null });
+    handler(event, url, false, isMainFrame, 4, 4);
   }
   return prevented;
 }
 
+const BRIDGE_URL = 'http://127.0.0.1:3000/vendor/sonic-workshop/mineradio-bridge.html';
+
 /**
- * 验证主窗口导航守卫：外部页面、错误端口、其它路径与一切子 frame 导航都被拦截。
+ * 验证可信壁纸子 frame URL 白名单：只放行当前本地服务下音域回响的桥接页。
+ * @returns {void}
+ */
+function testTrustedWallpaperFrameUrl() {
+  const { isTrustedWallpaperFrameUrl } = loadTrustCore();
+
+  for (const url of [BRIDGE_URL, BRIDGE_URL + '?v=2', BRIDGE_URL + '#x']) {
+    assert.equal(isTrustedWallpaperFrameUrl(url), true, '应放行壁纸桥接页：' + url);
+  }
+
+  for (const url of [
+    'http://127.0.0.1:3000/index.html',
+    'http://127.0.0.1:3000/vendor/sonic-workshop/',
+    'http://127.0.0.1:3000/vendor/sonic-workshop/mineradio-bridge.html.evil',
+    'http://127.0.0.1:3000/vendor/sonic-workshop/mineradio-bridge.html/',
+    'http://127.0.0.1:3000/vendor/sonic-workshop/mineradio-bridge.html/../../../index.html',
+    'https://127.0.0.1:3000/vendor/sonic-workshop/mineradio-bridge.html',
+    'http://127.0.0.1:3001/vendor/sonic-workshop/mineradio-bridge.html',
+    'http://localhost:3000/vendor/sonic-workshop/mineradio-bridge.html',
+    'https://evil.example.com/vendor/sonic-workshop/mineradio-bridge.html',
+    'file:///C:/x/public/vendor/sonic-workshop/mineradio-bridge.html',
+    '',
+    null,
+  ]) {
+    assert.equal(isTrustedWallpaperFrameUrl(url), false, '应拦截非壁纸桥接页：' + url);
+  }
+}
+
+/**
+ * 钉住桥接页路径两端一致：主进程白名单与预设 8 的 iframe src 必须指向同一个真实存在的文件，
+ * 任一侧改名都会让壁纸子 frame 重新被守卫拦成整层黑屏。
+ * @returns {void}
+ */
+function testWallpaperBridgePathStaysInSync() {
+  const whitelist = /const TRUSTED_WALLPAPER_FRAME_PATH = '([^']+)';/.exec(readMainSource());
+  assert.ok(whitelist, '未找到壁纸桥接页白名单常量');
+  const preset = fs.readFileSync(path.join(__dirname, '..', 'public', 'sonic-workshop-preset.js'), 'utf8');
+  const src = /var BRIDGE_SRC = '([^']+)';/.exec(preset);
+  assert.ok(src, '未找到预设 8 的桥接页地址');
+  assert.equal(whitelist[1], '/' + src[1], '主进程白名单必须与预设 8 的 iframe src 一致');
+  assert.ok(
+    fs.existsSync(path.join(__dirname, '..', 'public', ...src[1].split('/'))),
+    '桥接页文件必须存在：' + src[1],
+  );
+}
+
+/**
+ * 验证主窗口导航守卫：主 frame 只停可信主文档，子 frame 只放行音域回响壁纸桥接页，其余一律拦截。
  * @returns {void}
  */
 function testNavigationGuard() {
@@ -192,30 +244,37 @@ function testNavigationGuard() {
   const win = { webContents: makeFakeWebContents() };
   installMainWindowNavigationGuard(win);
 
-  assert.equal(navigate(win.webContents, 'will-navigate', 'http://127.0.0.1:3000/'), false);
-  assert.equal(navigate(win.webContents, 'will-navigate', 'http://127.0.0.1:3000/index.html'), false);
-  assert.equal(navigate(win.webContents, 'will-navigate', 'https://evil.example.com/'), true);
-  assert.equal(navigate(win.webContents, 'will-navigate', 'http://127.0.0.1:3000/other.html'), true);
-  assert.equal(navigate(win.webContents, 'will-navigate', 'http://127.0.0.1:9999/index.html'), true);
-  assert.equal(navigate(win.webContents, 'will-navigate', 'http://localhost:3000/index.html'), true);
+  for (const eventName of ['will-navigate', 'will-frame-navigate']) {
+    assert.equal(navigate(win.webContents, eventName, 'http://127.0.0.1:3000/'), false);
+    assert.equal(navigate(win.webContents, eventName, 'http://127.0.0.1:3000/index.html'), false);
+    assert.equal(navigate(win.webContents, eventName, 'https://evil.example.com/'), true);
+    assert.equal(navigate(win.webContents, eventName, 'http://127.0.0.1:3000/other.html'), true);
+    assert.equal(navigate(win.webContents, eventName, 'http://127.0.0.1:9999/index.html'), true);
+    assert.equal(navigate(win.webContents, eventName, 'http://localhost:3000/index.html'), true);
+    assert.equal(navigate(win.webContents, eventName, BRIDGE_URL), true, '主 frame 不允许被导航到壁纸桥接页');
+  }
 
-  assert.equal(navigate(win.webContents, 'will-frame-navigate', 'http://127.0.0.1:3000/index.html', { isMainFrame: true }), false);
-  assert.equal(navigate(win.webContents, 'will-frame-navigate', 'https://evil.example.com/', { isMainFrame: true }), true);
+  const sub = { isMainFrame: false };
+  assert.equal(navigate(win.webContents, 'will-frame-navigate', BRIDGE_URL, sub), false, '壁纸桥接页必须放行，否则预设 8 整层黑屏');
+  assert.equal(navigate(win.webContents, 'will-frame-navigate', BRIDGE_URL + '#x', sub), false);
+  assert.equal(navigate(win.webContents, 'will-frame-navigate', 'http://127.0.0.1:3000/index.html', sub), true, '除桥接页外的本地子 frame 仍要拦截');
+  assert.equal(navigate(win.webContents, 'will-frame-navigate', 'http://127.0.0.1:3000/vendor/sonic-workshop/mineradio-bridge.html/../../../index.html', sub), true);
+  assert.equal(navigate(win.webContents, 'will-frame-navigate', 'https://evil.example.com/', sub), true);
   assert.equal(
-    navigate(win.webContents, 'will-frame-navigate', 'http://127.0.0.1:3000/index.html', {
+    navigate(win.webContents, 'will-frame-navigate', BRIDGE_URL, {
       isMainFrame: false,
-      frame: { parent: {} },
+      frame: { parent: { parent: { parent: null } } },
     }),
     true,
-    '非可信子 frame 即使指向本地页面也必须拦截',
+    '更深一层的嵌套 frame 即使指向桥接页也必须拦截',
   );
-  assert.equal(
-    navigate(win.webContents, 'will-frame-navigate', 'https://evil.example.com/', {
-      isMainFrame: false,
-      frame: { parent: {} },
-    }),
-    true,
-  );
+
+  for (const shape of ['electron', 'positional', 'detail']) {
+    assert.equal(navigate(win.webContents, 'will-frame-navigate', BRIDGE_URL, { isMainFrame: false, shape }), false, '桥接页放行：' + shape);
+    assert.equal(navigate(win.webContents, 'will-frame-navigate', 'https://evil.example.com/', { isMainFrame: false, shape }), true, '子 frame 外部页拦截：' + shape);
+    assert.equal(navigate(win.webContents, 'will-frame-navigate', 'http://127.0.0.1:3000/index.html', { shape }), false, '主 frame 本地页放行：' + shape);
+    assert.equal(navigate(win.webContents, 'will-frame-navigate', 'https://evil.example.com/', { shape }), true, '主 frame 外部页拦截：' + shape);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -584,6 +643,8 @@ function testHighPrivilegeIpcWiring() {
 }
 
 test('可信主文档 URL 只放行本地服务 / 与 /index.html', testTrustedMainDocumentUrl);
+test('可信壁纸子 frame URL 只放行音域回响桥接页', testTrustedWallpaperFrameUrl);
+test('壁纸桥接页路径在主进程白名单与预设 8 之间保持一致', testWallpaperBridgePathStaysInSync);
 test('主窗口导航守卫拦截外部页面与非法 frame', testNavigationGuard);
 test('统一可信主 frame 校验拒绝非法 sender', testTrustedMainFrameSender);
 test('非法 sender 不能扩大本地文件授权范围', testUntrustedSenderCannotExpandAuthorization);
