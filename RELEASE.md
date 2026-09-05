@@ -15,6 +15,29 @@
 - **回归结果 `987/987` 全绿**（`npm test`，`node --test --test-concurrency=1`），新增 21 例：`tests/sonic-audio-monitor.test.js` 12 例（八段边界按赫兹换算、`BEAT_WINDOWS` 自动跟踪与自适应噪声底、`reset()` 清瞬态、停播衰减、`sampleRate`/`fftSize` 变化、`settings` 默认值），`tests/lyric-cover-palette-split.test.js` 9 例（歌词那五个字段的逐字节回归、地形三字段走上游公式、七条兜底门槛、`lyricHighImpactTextHsl` 的 `minS` 与钳位、面积桶取色与 10 色上限、纯色封面端到端、灰封面双路分叉、`lyricColorMode: 'custom'`、源码级分工守卫）。另有 `tests/sonic-topography-preset.test.js`（14 例）与 `tests/sonic-workshop-preset.test.js`（29 例）扩写，三条负向守卫 `doesNotMatch(/QUALITY_GRID_SIZE/)`、`doesNotMatch(/visualTint/)`、`doesNotMatch(/beatPulse \* 1\.35/)` 专门防本机适配长回来。`node --check` 过了四个改动过的 `public/*.js`。
 - **已知边界（照实说）：** 这一版是**逐项对着上游源码核**改出来的 —— 常量、公式、接线顺序、兜底分支都比对过并写进测试；但**没有在真实窗口里逐帧对着原项目比过观感**。「像不像」这件事最终只能人眼判，如果哪一处仍然不像，需要的是具体描述（哪个预设、哪个部位、快歌还是慢歌）而不是再核一遍源码。
 
+### 发布记录（v1.9.0）
+
+- 单分支写法：`fix/sonic-preset-upstream-parity`。这一版**只有一个提交** `7e5702a fix: 两个音域回响预设对齐原项目（v1.9.0）` —— 代码（新文件 `public/sonic-audio-monitor.js`、`public/app.js` 的调色板拆分与接线、两个预设脚本、`public/index.html` 的脚本顺序）、新测试（`tests/sonic-audio-monitor.test.js`、`tests/lyric-cover-palette-split.test.js`）、五处版本钉与全部文档压在同一个提交里。**没有沿用 v1.8.9 那种「功能提交留旧 `APP_VERSION` + 紧随一个 `chore(release)`」的两段写法**，因为这一版没有「功能可以单独 checkout」的需求，五处钉子一次动完更省事；tag 直接打在这个功能提交上。
+- PR [#55](https://github.com/oirge/Mineradio/pull/55) → **合并提交** `a05b162`（CI `Verify` run `33953815152` 过 PR、`33953830715` 过 push）。绝不 squash，否则打在 `7e5702a` 上的 tag 会离开 `main` 的可达历史。
+- tag `v1.9.0` 打在 `7e5702a` 且是 **annotated**（tag object `9f666f9d72f47ca6765a14433737eb7dda78adf7`），`git describe origin/main` 回 `v1.9.0-1-ga05b162`。
+- `Build and Release` run `33953854308` 成功（`--ref v1.9.0 -f tag=v1.9.0`，`07:55:14Z` 起 `07:57:27Z` 止，2 分 13 秒）。**electron-builder 的双草稿第九次复现**：`383176263` 四项资产齐全、`383176264` 只有 `latest.yml` 与安装器两项；删掉资产不全的 `383176264` 后发布 `383176263`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.9.0` 复验 tag object 仍在），PATCH 时带 `make_latest="true"`。
+- 发布前 `releases/latest` 是 `v1.8.9`，发布后指向 `v1.9.0`（`target_commitish` = `main`）。
+- 四项资产全部回下本机复算核对：
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-1.9.0-Setup.exe` | 102608205 | `f64cb13eb4ea96c178064c025a3b8e17ae4c3269c36d8e7f28ea6eee053169d6` |
+| `Mineradio-1.9.0-Setup.exe.blockmap` | 106644 | `ef0b5af5e032c464e1be08e2099062f92cf97c0bf42aeb61717a24e88722dd3b` |
+| `Mineradio-1.9.0-SHA256SUMS.txt` | 273 | `774b5bdd7712b1950fd8a434d80024078b031afdd48d01bdb0d797bf65ab32ba` |
+| `latest.yml` | 347 | `6770229f62a1b49a46f695d65a3a02aeddd34ceb171ea23b2d40b8bd6e4ea42c` |
+
+- 清单 `Mineradio-1.9.0-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机 `sha256sum -c` 全中；`latest.yml` 的 `sha512` = `EuTZ9vRNk0UCPxve/Ohld4olVn63ISgQ62nxdoofnHFhoXTP9fg0Zg3saMcg4jWH3hsuQfk51vGWIuJEAZC5Ig==` 与 `size` = `102608205` 与安装器实测一致（`sha512sum` 的十六进制先 `xxd -r -p` 再 `base64 -w0` 才能和 `latest.yml` 直接比），`releaseDate` `2026-09-05T07:57:14.308Z`。
+- 安装器只比 v1.8.9 大了 `13,748` 字节（102,594,457 → 102,608,205），跟 v1.8.9 那次 `+284,909` 的量级完全不同 —— **这一版是纯代码改动，没有新 vendor 任何第三方产物**，体积增量对得上。
+- 遗留未修（自 `v1.7.26` 记到现在，本轮仍未动）：`SHA256SUMS.txt` 行尾是 **CRLF**，`sha256sum -c` 直接跑会报 `'…Setup.exe'\r': No such file or directory`，必须先 `tr -d '\r' < Mineradio-1.9.0-SHA256SUMS.txt > /tmp/sums.lf && sha256sum -c /tmp/sums.lf`。**只是 CRLF，没有 BOM**：清单 273 字节、去掉 3 个 `\r` 正好 270，首字节就是哈希的 `f`（工作流第 75 行 `Out-File -Encoding utf8` 跑在 GitHub Actions 的 PowerShell 7 上，`utf8` 不带 BOM；换成 Windows PowerShell 5.1 才会多出 `EF BB BF`）。
+- **v1.8.8 那条 NSIS 静默安装坑仍然有效**（`allowToChangeInstallationDirectory: false` 的 `/S` 装进「上次记住的目录」、真实目录读注册表 `UninstallString`、`/D=` 必须最后且不加引号、快捷方式要自己改 `TargetPath`），见 v1.8.8 的发布记录。本轮**没有**动本机安装（`D:\Mineradio` 与 `D:\222\Mineradio` 都还停在 `1.8.8`，用户没要求这一版跟着更）。
+- 补记上一版的尾巴：v1.8.9 的资产记录分支 `docs/release-assets-v189` → PR [#54](https://github.com/oirge/Mineradio/pull/54) → **合并提交** `2ea0b50`（记录提交 `f08ff35`，CI `Verify` run `33948589177` / `33948652747`）。
+- 资产记录分支 `docs/release-assets-v190`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.8.9 音域回响补上 Wallpaper Engine 原作
 
 - 正式发布版本从 `1.8.8` 提升为 `1.8.9`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
