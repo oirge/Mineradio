@@ -20,6 +20,26 @@
 - CSS 只动了必须动的：**窗口壳过渡不能带 `filter`**（`#desktop-window-shell` 承载 WebGL 画布，加 filter 会让整窗每帧重新合成），只留 `will-change:transform`；遮罩层 `#fullscreen-transition-layer` 用 `rgba(0,0,0,.62)`，回亮 `transition:opacity .2s`。
 - 验证：全量回归 `932/932` 通过（v1.8.6 基线 `916`，本轮新增 16 例：`tests/spectrum-echo-preset.test.js` 9 例 + `tests/fullscreen-exit-transition.test.js` 7 例）。着色器**在真实 GLSL 编译器上编译链接过**——Electron + SwiftShader 跑了一遍 vs/fs/bloomVs/bloomFs，两个 program 都 link 成功，`uSpectrumTex` 是 ACTIVE_UNIFORM（证明它真的被用上、没被优化掉）。**但这个预设和重调后的全屏过渡都没有在真实窗口里肉眼看过。**
 
+### 发布记录（v1.8.7）
+
+- 单分支写法：`feat/spectrum-echo-preset`。功能提交 `b9c0a73 feat: 新增音域回响视觉预设并消除全屏退出黑屏卡顿` 带 `public/app.js`、`public/app.css`、`desktop/main.js` 与两个新测试文件、`APP_VERSION` 仍是旧值（保证单独 checkout 也自洽）；版本钉与全部文档压在紧随其后的 `c0b1b1e chore(release): 1.8.7` 里。两件事共用一个功能提交是因为它们在 `public/app.js` 里各占一段、拆提交要靠交互式暂存，本环境不支持 `git add -i`。
+- PR [#49](https://github.com/oirge/Mineradio/pull/49) → **合并提交** `ba9cf40`（CI `verify` run `33938412938` 通过）。绝不 squash，否则打在 `c0b1b1e` 上的 tag 会离开 `main` 的可达历史。
+- tag `v1.8.7` 打在 `c0b1b1e` 且是 **annotated**（tag object `929ed72`），`git describe origin/main` 回 `v1.8.7-1-gba9cf40`。
+- `Build and Release` run `33938522336` 成功（`--ref v1.8.7 -f tag=v1.8.7`）。**electron-builder 的双草稿第六次复现**：`383104376` 四项资产齐全、`383104377` 只有 `Mineradio-1.8.7-Setup.exe.blockmap` 一项，两份都记在 `2026-09-05T02:14:24Z`；草稿在 `releases/tags/<tag>` 上会 404，只能枚举 `releases?per_page=8` 比资产清单。删掉资产不全的 `383104377` 后发布 `383104376`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.8.7` 复验，tag object 仍是 `929ed72`），PATCH 时带 `make_latest=true`，`releases/latest` 已指向 `v1.8.7`。
+- **新踩坑：`gh api` 没有 `--output` 参数**（那是 `gh release download` 的），回下资产只能把 stdout 重定向到文件（`subprocess.check_call([...], stdout=fh)`）。第一版校验脚本用了 `--output`，直接吐 usage 退 1。
+- 四项资产全部回下本机复算核对：
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-1.8.7-Setup.exe` | 102299619 | `cee716c827b0cb2e6f3dfcf78ed6b18f65c83ea4683292d6200acea4c8709781` |
+| `Mineradio-1.8.7-Setup.exe.blockmap` | 106442 | `5ea176942f8852d66f4a8b4352c2a9c8a852c32eb3d2139305c3850706f27c39` |
+| `Mineradio-1.8.7-SHA256SUMS.txt` | 273 | `61dfd378a169b8c469a4f47e21a93e76f584a7e9a1cb62c03ae4a950a6ebcfcc` |
+| `latest.yml` | 347 | `460c556845359366b338feb26e4fb9f174adce16a5001bc949ae3e7da1fa5e91` |
+
+- 清单 `Mineradio-1.8.7-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机复算全中；`latest.yml` 的 `sha512` = `SKgjuXuFfQX8YGCvU5MRx8rGTD1z8cyM/+NQzLSTL5PoyarCfJvivwPsQa0a3wjfISkn08+cXTyziCkcfmE77Q==` 与 `size` = `102299619` 与安装器实测一致，`releaseDate` `2026-09-05T02:16:49.212Z`。
+- Release 正文照旧写短：预设三条 + 全屏三条 + 安装说明，并明确写了「这是原创预设、不是移植原壁纸」与「装了原作可以走现有壁纸功能」，工程细节留在本文件与 `docs/PROJECT_MEMORY.md`。
+- 资产记录分支 `docs/release-assets-v187`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.8.6 左下小封面接上歌曲详情
 - 正式发布版本从 `1.8.5` 提升为 `1.8.6`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
 - 用户原话：「你加上一个这个封面可点击进入歌曲详情界面就行了」，指左下角 `#thumb-wrap` 里那张 64px 小封面。改动只有两行：`public/index.html` 的 `#thumb-cover` 加 `onclick="openTrackDetailModal('song')"` 与 `title="歌曲详情"`，`public/app.css` 里 `#thumb-cover` 那条规则加 `cursor:pointer`。
@@ -46,7 +66,7 @@
 
 - 清单 `Mineradio-1.8.6-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机复算全中；`latest.yml` 的 `sha512` = `rwNH3m4Kk1YWCguYz2yuKTWNNuOkWJ86z/LwCXyYyhKbrTESXLjn1ct4SuZ1lfFOr9lMCbHMD6OFhBR+A/cn2w==` 与 `size` = `102296745` 与安装器实测一致，`releaseDate` `2026-09-04T09:40:31.496Z`。
 - Release 正文照旧写短：三条行为说明 + 一句「歌名 / 歌手两行未改」+ 安装说明，工程细节留在本文件与 `docs/PROJECT_MEMORY.md`。
-- 资产记录分支 `docs/release-assets-v186`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+- 资产记录分支 `docs/release-assets-v186` → PR [#47](https://github.com/oirge/Mineradio/pull/47) → **合并提交** `e2b10ce`。
 
 ## v1.8.5 播放统计漏账：结算点、防抖写入、无时长文件、最小化空档
 - 正式发布版本从 `1.8.4` 提升为 `1.8.5`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
@@ -77,7 +97,7 @@
 
 - 清单 `Mineradio-1.8.5-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机复算全中；`latest.yml` 的 `sha512` = `3FEp9sFr73b2Hv7ErGoA/lvJUJfKms8o0hYmBiakTQxlYOattjl6xqOGPeEQzTz/lgXZ+5D1Dn2a/5IRSLa1pw==` 与 `size` = `102298702` 与安装器实测一致，`releaseDate` `2026-09-04T08:41:35.537Z`。
 - Release 正文按用户「更新介绍简单明了不要说废话」的要求写短：四条修复 + 一句「三条门槛不变、界面无改动」+ 安装说明，没有展开工程细节（细节在本文件与 `docs/PROJECT_MEMORY.md` 里）。
-- 资产记录分支 `docs/release-assets-v185`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+- 资产记录分支 `docs/release-assets-v185` → PR [#45](https://github.com/oirge/Mineradio/pull/45) → **合并提交** `3d996df`。
 
 ## v1.8.4 音乐库维护：拿不准的结论必须单独报，不能塞进名单也不能咽掉
 - 正式发布版本从 `1.8.3` 提升为 `1.8.4`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:595`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` 加 `package.json` 版本，**漏一处就会红**。
@@ -98,7 +118,7 @@
 - `Build and Release` run `33844427366` 成功（`--ref v1.8.4 -f tag=v1.8.4`，约 2 分钟）。**electron-builder 的双草稿第三次复现**：`382519938`（四项资产齐全）与 `382519939`（只有 `latest.yml` 与 `Setup.exe` 两项）同一秒创建，草稿在 `releases/tags/v1.8.4` 上会 404，只能用 `gh api "repos/oirge/Mineradio/releases?per_page=8"` 枚举出来比资产清单。删掉资产不全的 `382519939`（**用 `gh api -X DELETE .../releases/<id>` 只删 Release，绝不碰 git tag**，删完 `git ls-remote --tags origin v1.8.4` 复验 tag 还在），发布 `382519938`。
 - 标题与正文照旧手工设：Python 拼 UTF-8 JSON 管进 `gh api -X PATCH .../releases/382519938 --input -`，带 `{name, body, draft:false, prerelease:false, make_latest:"true", tag_name}`；`releases/latest` 复验回 `v1.8.4`。**中文绝不走 argv**。
 - 四项资产已全部回下本机复算核对（`Mineradio-1.8.4-Setup.exe` `102297421` 字节 SHA256 `c97e040a0caea82f7cc2e67d2d724f97d492c6f57a8cc3b668a47689b3de0f4a`、`Mineradio-1.8.4-Setup.exe.blockmap` `106477` 字节 SHA256 `2555d1ba5b17c651a7a61bd0f51ad3f8470a5c4b364725212b6600a8c30c71ab`、`latest.yml` `347` 字节 SHA256 `c622e60706e68d0b965c5120c9fc337c9e93ed3f2c4e4f50fc2b966d27aa412d`、`Mineradio-1.8.4-SHA256SUMS.txt` `273` 字节 SHA256 `5aa29dcf9eac62bfd2d112f9d2fe3d9eff1aa2cf7ebf00a1312f4f2b190fa031`）：清单里三条自校验全中，`latest.yml` 的 `sha512` `CNrRZTMi3ECGc0XDJ5bNxVVw3NdnpKoR/ReqvZ5/KSqQcEgSYkBKaMScF3T8/k4DxLqP6AnzHJdZAcqjZQ/2TQ==` 与 `size` 也和安装器实测一致。
-- 资产记录分支 `docs/release-assets-v184`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+- 资产记录分支 `docs/release-assets-v184` → PR [#43](https://github.com/oirge/Mineradio/pull/43) → **合并提交** `7d7b50d`。
 
 ## v1.8.3 QRC 加密歌词：非标准 3DES 只能靠已知答案钉住
 - 正式发布版本从 `1.8.2` 提升为 `1.8.3`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:595`）与发布工作流默认 tag 保持一致。`tests/version-consistency.test.js` 钉前三处，`tests/github-actions-ci.test.js` 钉 `release.yml` 里的 `description` 与 `default` 必须等于 `v` + `package.json` 版本，**漏一处就会红**。
