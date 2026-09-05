@@ -11,9 +11,12 @@
  * (GPL-3.0, 与本仓库同许可) —— 上游没有给这份 WE 产物写出处, 本仓库补在 NOTICE.md 里。
  * 预设 7 是另一条路: 那是 yin-yizhen/sonic-topography 对同一作品的 three.js 重实现。
  *
- * 本机适配一处: 本仓库没有上游的 sonic-workshop 设置面板, 所以壁纸的自定义颜色区域
- * (sonicWorkshopBaseColor 等 fx 键) 只有在别处写入时才生效, 缺省一律走封面取色。
- * 配色链、gridSize、音频整形系数、推送节奏全部保持上游原值。
+ * 本机适配两处:
+ *   1. 本仓库没有上游的 sonic-workshop 设置面板, 所以壁纸的自定义颜色区域
+ *      (sonicWorkshopBaseColor 等 fx 键) 只有在别处写入时才生效, 缺省一律走封面取色;
+ *   2. 取色链末尾不含歌词文字三色。上游拿同一份颜色既画歌词又画地形, 本仓库的歌词色是
+ *      为可读性抬亮过的另一代配色, 顶上去整幅泛白, 详见 workshopCoverHex。
+ * gridSize、音频整形系数、推送节奏全部保持上游原值。
  */
 'use strict';
 
@@ -223,8 +226,14 @@
   };
 
   /**
-   * 按角色取封面色, 链条与上游逐项一致: 优先面积色 (rawArea*), 退回逐点色 (raw*),
-   * 最后才用歌词文字三色兜底 —— 文字色被抬过亮度, 直接当地形色会偏白。
+   * 按角色取封面色: 优先面积色 (rawArea*), 退回逐点色 (raw*), 都没有就用原作的兜底色。
+   *
+   * 链条里刻意不含 pal.primary / pal.highlight / pal.secondary。上游拿同一份颜色既画歌词
+   * 又画地形, 所以它的链末尾就是这三个; 本仓库的这三个是**歌词文字色** —— 为了在封面上读得清
+   * 一律抬过亮度 (stageLyrics.coverPalette 在 app.js 里的初值就是近白的 #d6f8ff/#9cffdf/#eef7ff)。
+   * 把它们当地形色, 八个 uniform 会一起挤到近白, 整幅壁纸糊成一片惨白 —— v1.9.0 的实际故障。
+   * 没有封面色时 (没在放歌 / 这首歌不带封面 / 取色还没跑完) 走兜底色, 出来正好是原作的
+   * coral-mirage: 主色 #cb6c89、冷色 #99c4ff、涟漪 #f8d8ff、基面近黑 #16060f。
    * @param {string} role primary | base | warm | cool | ripple | peak
    * @returns {string} #rrggbb
    */
@@ -232,12 +241,12 @@
     var pal = global.stageLyrics && (global.stageLyrics.coverPalette || global.stageLyrics.palette) || {};
     role = String(role || 'primary');
     var fallback = role === 'base' ? '#16060f' : (role === 'cool' || role === 'peak' ? '#99c4ff' : (role === 'ripple' ? '#f8d8ff' : '#cb6c89'));
-    var value = pal.rawAreaPrimary || pal.rawPrimary || pal.primary || pal.highlight || pal.secondary;
-    if (role === 'base') value = pal.rawAreaBase || pal.rawDark || pal.rawAverage || pal.secondary || pal.rawAreaPrimary || pal.rawPrimary || pal.primary;
-    else if (role === 'warm') value = pal.rawAreaWarm || pal.rawAreaPrimary || pal.rawWarm || pal.rawPrimary || pal.secondary || pal.primary || pal.highlight;
-    else if (role === 'cool') value = pal.rawAreaCool || pal.rawAreaLight || pal.rawCool || pal.rawLight || pal.highlight || pal.rawAreaPrimary || pal.rawPrimary || pal.primary;
-    else if (role === 'ripple') value = pal.rawAreaLight || pal.rawAreaAccent || pal.rawLight || pal.rawAccent || pal.rawAreaCool || pal.rawCool || pal.highlight || pal.primary;
-    else if (role === 'peak') value = pal.rawAreaAccent || pal.rawAreaCool || pal.rawAreaLight || pal.rawCool || pal.rawAccent || pal.rawLight || pal.highlight || pal.primary;
+    var value = pal.rawAreaPrimary || pal.rawPrimary;
+    if (role === 'base') value = pal.rawAreaBase || pal.rawDark || pal.rawAverage || pal.rawAreaPrimary || pal.rawPrimary;
+    else if (role === 'warm') value = pal.rawAreaWarm || pal.rawAreaPrimary || pal.rawWarm || pal.rawPrimary;
+    else if (role === 'cool') value = pal.rawAreaCool || pal.rawAreaLight || pal.rawCool || pal.rawLight || pal.rawAreaPrimary || pal.rawPrimary;
+    else if (role === 'ripple') value = pal.rawAreaLight || pal.rawAreaAccent || pal.rawLight || pal.rawAccent || pal.rawAreaCool || pal.rawCool;
+    else if (role === 'peak') value = pal.rawAreaAccent || pal.rawAreaCool || pal.rawAreaLight || pal.rawCool || pal.rawAccent || pal.rawLight;
     return cssColorToHex(value, fallback);
   }
 

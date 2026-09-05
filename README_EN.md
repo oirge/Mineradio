@@ -92,7 +92,14 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.9.0 (2026-09-05)
+### Latest release v1.9.1 (2026-09-05)
+
+- **Fixed preset 8 ("Sonic Echo · Wallpaper Engine", original by CmzYa) washing out into a flat, near-white haze while nothing is playing**: switching it to the raw cover colours last release was right, but the fallback chain still ended on the lyric text colours — those are deliberately brightened so they stay readable on top of cover art, and their idle defaults are the near-white `#d6f8ff` / `#9cffdf` / `#eef7ff`. So with no track playing, no cover art, or the cover scan not yet finished, all eight wallpaper colours were pushed to near-white, with the cool, ripple and peak roles collapsing onto the same value — leaving the picture with no light-and-dark structure at all
+- With no cover colours available it now uses the original's own fallback palette (coral-mirage: primary `#cb6c89`, cool `#99c4ff`, ripple `#f8d8ff`, near-black base `#16060f`). **When cover colours are available the chain matches upstream item for item, so the picture is unchanged from the previous release**
+- Preset 7 ("ported from Ajin") is unaffected and untouched in this release
+- Full Node regression suite: `988/988` passing (one new case: it pins the palette's initial literals and forbids the colour chain from falling back to the lyric text colours again)
+
+### v1.9.0 (2026-09-05)
 
 - **Both "Sonic Echo" presets used to look different from the original project — this release aligns them**: checked item by item against upstream [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) (commit `89c0d23`); five discrepancies were found and all five now follow upstream
 - **Preset 7 ("ported from Ajin") finally gets a real eight-band spectrum and kick envelope**: upstream's audio monitor layer is now ported over (new file `public/sonic-audio-monitor.js`), splitting bands by hertz (32–58 / 58–118 / 118–260 / 260–720 / 720–1800 / 1800–4200 / 4200–9000 / 9000–16000 Hz) and tracking the kick across six candidate windows with an adaptive noise floor. Previously the eight bands were inferred from five coarse values, which is why the terrain's rise-and-fall distribution and the ripple timing were the most visibly wrong part
@@ -105,7 +112,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Full Node regression suite: `987/987` passing (new `tests/sonic-audio-monitor.test.js` with 12 cases and `tests/lyric-cover-palette-split.test.js` with 9)
 - **Known boundary**: this release was verified item by item against upstream's source, not by comparing frames side by side with the original in a real window. If something still looks off, say which preset, which part of the picture, and whether the track is fast or slow
 
-### v1.8.9 (2026-09-05)
+<details>
+<summary>v1.8.9 — Sonic Echo gained the Wallpaper Engine original</summary>
 
 - **The one visual preset this repo was still missing from the original project is now here**: the upstream fork [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) ships two "Sonic Echo" presets; v1.8.8 only brought over the three.js rewrite, and this release brings the other one
 - **New 9th visual preset, "Sonic Echo · Wallpaper Engine"** (original by CmzYa): `public/vendor/sonic-workshop/` holds the build output of CmzYa's Wallpaper Engine piece, embedded as-is in a full-window iframe. The entire picture is rendered by the original — this repo only feeds it data
@@ -116,6 +124,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - The quality tier picks the grid resolution (eco 224 / balanced 288 / high 320 / ultra 384); the default "high" is exactly the 320 in the original's `project.json` (v1.9.0 pinned it to 320 for every tier)
 - All four vendored files are byte-identical to upstream commit `89c0d23`; copyright and attribution are in [NOTICE.md](NOTICE.md). The third-party bundle was audited — no network calls, no local storage writes, no `eval` — and that conclusion is now pinned by a regression test
 - Full Node regression suite: `965/965` passing (new `tests/sonic-workshop-preset.test.js` with 26 cases)
+
+</details>
 
 <details>
 <summary>v1.8.8 — Sonic Topography became a port</summary>
