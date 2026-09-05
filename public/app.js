@@ -4029,10 +4029,19 @@ window.addEventListener('mousemove', function(e){
   }
   queueParticlePointerFrame(e.clientX, e.clientY);
 });
-window.addEventListener('mouseup', function(){
+window.addEventListener('mouseup', function(e){
   orbit.rotating = false;
   particlePointerSpin.active = false;
   idleGuidePointerUp();
+  // 音域回响: 在画布上单击 (不是拖动) 就往地形上打一道涟漪, 按得越久越强。
+  var sonicMod = sonicTopographyModule();
+  if (sonicMod && sonicMod.isActive(fx) && e && !mouseDownAt.hadDrag && !isPointerOverUi(e)) {
+    var pressMs = Math.max(0, performance.now() - (mouseDownAt.t || 0));
+    var strength = Math.min(0.25 + (pressMs / 1000) * 2.6, 3.0);
+    var nx = (e.clientX / Math.max(1, innerWidth) - 0.5) * 34;
+    var nz = (0.5 - e.clientY / Math.max(1, innerHeight)) * 34;
+    sonicMod.pointerRipple(nx, nz, strength);
+  }
 });
 renderer.domElement.addEventListener('mouseleave', function(){
   particlePointerFrame.dirty = false;
@@ -4182,113 +4191,28 @@ var ripples = [];
 for (var ri = 0; ri < RIPPLE_MAX; ri++) ripples.push({ x:0, y:0, age:-10, str:0 });
 var rippleNeedsSync = true;
 
-// 音域回响数据纹理 (频段 × 历史, RGBA: 归一幅度, 包络, 瞬态, 节拍能量)
-//   每次推进都把新一帧频谱写进第 0 行并把旧行整体下移，于是"时间"沿 v 轴展开。
-//   预设 7 用半径去采样这张历史图，当前音域就会像混响一样一圈圈朝外扩散、衰减。
-var SPECTRUM_ECHO_PRESET_INDEX = 7;
-var SPECTRUM_ECHO_BANDS = 64;
-var SPECTRUM_ECHO_HISTORY = 64;
-var SPECTRUM_ECHO_ROW_BYTES = SPECTRUM_ECHO_BANDS * 4;
-var SPECTRUM_ECHO_PUSH_INTERVAL = 1 / 48;    // 行推进节奏与帧率解耦, 64 行 ≈ 1.33s 回响
-var spectrumEchoData = new Uint8Array(SPECTRUM_ECHO_ROW_BYTES * SPECTRUM_ECHO_HISTORY);
-var spectrumEchoTex = new THREE.DataTexture(spectrumEchoData, SPECTRUM_ECHO_BANDS, SPECTRUM_ECHO_HISTORY, THREE.RGBAFormat);
-spectrumEchoTex.magFilter = THREE.LinearFilter; spectrumEchoTex.minFilter = THREE.LinearFilter;
-spectrumEchoTex.wrapS = THREE.ClampToEdgeWrapping; spectrumEchoTex.wrapT = THREE.ClampToEdgeWrapping;
-spectrumEchoTex.needsUpdate = true;
-var spectrumEchoBandRaw = new Float32Array(SPECTRUM_ECHO_BANDS);
-var spectrumEchoBandEnv = new Float32Array(SPECTRUM_ECHO_BANDS);
-var spectrumEchoBinStarts = new Int32Array(SPECTRUM_ECHO_BANDS + 1);
-var spectrumEchoBinLength = -1;
-var spectrumEchoPeak = 0.14;
-var spectrumEchoPushAccum = 0;
+// 音域回响 (预设 7) 的地形层住在独立脚本 public/sonic-topography-preset.js
+// (窗口全局 MineradioSonicTopography), 这里只留预设序号给相机 / 星河粒子等分支用。
+var SONIC_TOPOGRAPHY_PRESET_INDEX = 7;
 
 /**
- * 建立对数频段边界: 低音区线性铺开, 高频用几何步长, 64 条频段覆盖整个可听区。
- * @param {number} len 频谱 bin 数
- * @returns {void}
+ * 取音域回响模块; 脚本没加载上 (例如插件裁剪过 public) 时返回 null, 调用方直接跳过。
+ * @returns {object|null}
  */
-function ensureSpectrumEchoBins(len) {
-  if (spectrumEchoBinLength === len) return;
-  spectrumEchoBinLength = len;
-  var minBin = 2;
-  var maxBin = Math.max(minBin + SPECTRUM_ECHO_BANDS, Math.floor(len * 0.55));
-  var ratio = Math.log(maxBin / minBin) / SPECTRUM_ECHO_BANDS;
-  var prev = minBin;
-  spectrumEchoBinStarts[0] = minBin;
-  for (var b = 1; b <= SPECTRUM_ECHO_BANDS; b++) {
-    var next = Math.max(prev + 1, Math.round(minBin * Math.exp(ratio * b)));
-    if (next > len) next = len;
-    spectrumEchoBinStarts[b] = next;
-    prev = next;
-  }
+function sonicTopographyModule() {
+  return (typeof MineradioSonicTopography !== 'undefined' && MineradioSonicTopography) ? MineradioSonicTopography : null;
 }
 
-/**
- * 把当前频谱压进回响历史纹理。只在音域回响预设生效, 其他预设完全不付代价。
- * @param {boolean} sampled 本帧是否真的取到了新频谱
- * @param {number} dt 帧间隔(秒)
- * @param {number} beat 节拍脉冲 0..1
- * @param {number} energy 整体能量 0..1
- * @returns {void}
- */
-function updateSpectrumEchoField(sampled, dt, beat, energy) {
-  if (!fx || fx.preset !== SPECTRUM_ECHO_PRESET_INDEX) return;
-  spectrumEchoPushAccum += dt;
-  if (spectrumEchoPushAccum < SPECTRUM_ECHO_PUSH_INTERVAL) return;
-  // 掉帧时最多补一行, 不做追赶式连推, 否则回响会突然抽一下。
-  spectrumEchoPushAccum = Math.min(spectrumEchoPushAccum - SPECTRUM_ECHO_PUSH_INTERVAL, SPECTRUM_ECHO_PUSH_INTERVAL);
-  var b = 0;
-  if (sampled && frequencyData && frequencyData.length > 8) {
-    var binCount = frequencyData.length;
-    ensureSpectrumEchoBins(binCount);
-    var frameMax = 0;
-    for (b = 0; b < SPECTRUM_ECHO_BANDS; b++) {
-      var from = spectrumEchoBinStarts[b];
-      var to = Math.max(from + 1, spectrumEchoBinStarts[b + 1]);
-      if (to > binCount) to = binCount;
-      var sum = 0;
-      for (var i = from; i < to; i++) sum += frequencyData[i];
-      var avg = to > from ? sum / (to - from) * AUDIO_FREQUENCY_SCALE : 0;
-      spectrumEchoBandRaw[b] = avg;
-      if (avg > frameMax) frameMax = avg;
-    }
-    spectrumEchoPeak = Math.max(frameMax, spectrumEchoPeak * 0.992, 0.10);
-  } else {
-    for (b = 0; b < SPECTRUM_ECHO_BANDS; b++) spectrumEchoBandRaw[b] = 0;
-    spectrumEchoPeak = Math.max(0.10, spectrumEchoPeak * 0.96);
-  }
-  // 旧行整体下移一行: v 越大 = 越久之前, 于是频谱形状随半径向外传播。
-  spectrumEchoData.copyWithin(SPECTRUM_ECHO_ROW_BYTES, 0, spectrumEchoData.length - SPECTRUM_ECHO_ROW_BYTES);
-  var peakRef = Math.max(0.10, spectrumEchoPeak * 0.74);
-  var rowBeat = Math.round(clamp01(beat * 0.78 + energy * 0.46) * 255);
-  for (b = 0; b < SPECTRUM_ECHO_BANDS; b++) {
-    var norm = clamp01(Math.pow(spectrumEchoBandRaw[b] / peakRef, 0.82));
-    var env = spectrumEchoBandEnv[b];
-    // 起振快、收尾慢: 单帧就已经带一点"余韵", 历史纹理再把它铺成一圈圈回响。
-    env += (norm - env) * (norm > env ? 0.55 : 0.16);
-    spectrumEchoBandEnv[b] = env;
-    var transient = clamp01((norm - env) * 2.6);
-    var o = b * 4;
-    spectrumEchoData[o]     = Math.round(norm * 255);
-    spectrumEchoData[o + 1] = Math.round(clamp01(env) * 255);
-    spectrumEchoData[o + 2] = Math.round(transient * 255);
-    spectrumEchoData[o + 3] = rowBeat;
-  }
-  spectrumEchoTex.needsUpdate = true;
-}
-
-/**
- * 离开或进入音域回响预设时清空历史, 避免下次进入闪一帧陈旧频谱。
- * @returns {void}
- */
-function resetSpectrumEchoField() {
-  spectrumEchoData.fill(0);
-  spectrumEchoBandEnv.fill(0);
-  spectrumEchoBandRaw.fill(0);
-  spectrumEchoPeak = 0.14;
-  spectrumEchoPushAccum = 0;
-  spectrumEchoTex.needsUpdate = true;
-}
+// 每帧传给地形层的上下文, 预分配复用 (animate 里逐帧填字段, 避免 60fps 造垃圾)。
+// scene / particles / orbit 声明在本行之后, 所以这里只留空壳, 不在声明处取值。
+var sonicTopographyCtx = {
+  scene: null,
+  fx: null,
+  time: 0,
+  visualRotation: null,
+  visualRotationActive: false,
+  audio: { bass: 0, mid: 0, treble: 0, beat: 0, energy: 0 }
+};
 
 // 封面纹理 + 边缘/深度纹理
 var coverTex = new THREE.Texture();
@@ -4346,7 +4270,6 @@ var uniforms = {
   uEdgeTex:    { value: coverEdgeTex },
   uRippleTex:  { value: rippleTex },
   uRippleCount:{ value: 0 },
-  uSpectrumTex:{ value: spectrumEchoTex },   // 音域回响: 频段 × 历史
   uDotTex:     { value: dotTexture },
   uHasCover:   { value: 0 },
   uHasDepth:   { value: 0 },
@@ -4376,7 +4299,7 @@ uniform float uVinylSpin;
 uniform float uColorBoost, uScatter, uCoverRes, uBgFade;
 uniform float uHasCover, uHasDepth, uEdgeEnabled, uAiBoost;
 uniform float uMouseActive, uPixel, uColorMixT, uLoading;
-uniform sampler2D uCoverTex, uPrevCoverTex, uEdgeTex, uRippleTex, uSpectrumTex;
+uniform sampler2D uCoverTex, uPrevCoverTex, uEdgeTex, uRippleTex;
 uniform int uRippleCount;
 uniform vec2 uMouseXY, uHandXY;
 uniform float uHandActive, uGestureGrip;
@@ -4642,11 +4565,12 @@ void main(){
   }
 
   // ====================================================
-  //  Preset 5 / 6: WALLPAPER PULSE
+  //  Preset 5 / 6 / 7: WALLPAPER PULSE
   //  Layered music-particle wallpaper: aurora ribbons, depth sparks,
   //  and cover-colored audio flow.
+  //  预设 7 (音域回响) 的地形层是独立的 InstancedMesh, 这里的粒子只当背景星河。
   // ====================================================
-  else if (uPreset < 6.5) {
+  else {
     float bassGlow = smoothstep(0.07, 0.78, uBass) * 0.34 + uBeat * 0.014;
     float midGlow = smoothstep(0.07, 0.62, uMid) * 0.42;
     float highGlow = smoothstep(0.04, 0.46, uTreble) * 0.46;
@@ -4718,72 +4642,6 @@ void main(){
   }
 
   // ====================================================
-  //  Preset 7: SPECTRUM ECHO — 音域回响
-  //  极坐标: 角度 = 音域(镜像频谱), 半径 = 时间(越外越久)。
-  //  半径直接采样频谱历史纹理, 当下的音域就沿半径一圈圈向外回响、衰减。
-  // ====================================================
-  else {
-    float lane = aUv.y;
-    float transition = clamp(uBurstAmt, 0.0, 1.0);
-    // 镜像频段: aUv.x=0.5 是低音(正下方), 向两侧升到高音, 首尾无缝。
-    float bandN = abs(aUv.x * 2.0 - 1.0);
-    float ang = aUv.x * PI * 2.0 + PI * 0.5 + t * 0.018 + (hash11(aRand * 91.7) - 0.5) * 0.055;
-
-    if (lane < 0.86) {
-      float age = lane / 0.86;                       // 0 = 当下, 1 = 回响末端
-      float rowJitter = (hash11(aRand * 57.3) - 0.5) * 0.014;
-      vec4 echo = texture2D(uSpectrumTex, vec2(clamp(bandN, 0.004, 0.996), clamp(age + rowJitter, 0.0, 1.0)));
-      float amp = echo.r;
-      float env = echo.g;
-      float onset = echo.b;
-      float rowBeat = echo.a;
-
-      // 越旧的回响越弱也越开: 半径基线随年龄外扩, 幅度随年龄衰减。
-      float decay = pow(1.0 - age, 1.35);
-      float baseR = 1.02 + age * 3.55;
-      float lift = (amp * 0.62 + env * 0.46) * decay * K * 1.15;
-      float ringR = baseR + lift + onset * decay * 0.34;
-      // 每条频段内再散一层厚度, 避免回响圈变成一根细线。
-      float thick = (hash11(aRand * 211.7) - 0.5) * (0.085 + amp * 0.16 + age * 0.05);
-      float r = ringR + thick;
-
-      pos.x = cos(ang) * r;
-      pos.y = sin(ang) * r * 0.86;
-      // 回响向后沉成漏斗纵深, 瞬态把当下这圈往前顶。
-      pos.z = -age * 3.9 + (amp * 0.72 + onset * 0.55) * decay - 0.35;
-
-      // 低音偏暖、高音偏冷的频谱渐变, 再和封面色混合保持整体调性。
-      vec3 spectral = mix(vec3(1.0, 0.52, 0.42), vec3(0.44, 0.78, 1.0), sqrt(bandN));
-      spectral = mix(spectral, vec3(0.72, 0.60, 1.0), onset * 0.55);
-      vColor = mix(mix(coverColor, spectral, 0.66 + bandN * 0.10), spectral, decay * 0.24);
-      vColor *= 0.72 + amp * 0.86 + onset * 0.52 + rowBeat * 0.16;
-
-      float thin = 1.0 - smoothstep(0.0, 0.28 + amp * 0.34, abs(thick));
-      vAlpha = (0.055 + amp * 0.62 + env * 0.20 + onset * 0.34) * decay * (0.34 + thin * 0.72) * (0.94 + transition * 0.06);
-      maxRippleAmp = max(maxRippleAmp, (amp * 0.30 + onset * 0.42 + rowBeat * 0.12) * decay);
-    } else {
-      // 外圈空气尘: 只吃高频, 让画面边缘有呼吸而不是硬切。
-      float q = (lane - 0.86) / 0.14;
-      float seed = hash11(aRand * 733.0 + floor(q * 120.0));
-      float dustAng = seed * PI * 2.0 + t * (0.010 + seed * 0.016);
-      float dustR = 3.9 + seed * 4.6 + sin(t * (0.05 + seed * 0.08) + aRand * 9.0) * 0.42;
-      float twinkle = pow(0.5 + 0.5 * sin(t * (0.30 + seed * 0.46) + aRand * 21.0), 4.0);
-      pos = vec3(cos(dustAng) * dustR, sin(dustAng) * dustR * 0.82, -5.4 - seed * 7.5 + twinkle * 0.5);
-      vColor = mix(coverColor, vec3(0.80, 0.90, 1.0), 0.66 + twinkle * 0.16);
-      vAlpha = (0.05 + twinkle * 0.30 + uTreble * 0.20) * (1.0 - q * 0.24);
-      maxRippleAmp = max(maxRippleAmp, twinkle * uTreble * 0.10);
-    }
-
-    if (transition > 0.001) {
-      float bloom = smoothstep(0.0, 1.0, transition);
-      pos.xy *= 1.0 + bloom * 0.030;
-      pos.z += (hash11(aRand * 149.0) - 0.5) * bloom * 0.26;
-      vAlpha *= 0.88 + bloom * 0.20;
-      maxRippleAmp = max(maxRippleAmp, bloom * 0.10);
-    }
-  }
-
-  // ====================================================
   //  鼠标交互 (仅 SILK)
   // ====================================================
   if (uMouseActive > 0.5 && uPreset < 0.5) {
@@ -4846,9 +4704,7 @@ void main(){
   vColor = mix(vColor, tintedColor, clamp(uTintStrength, 0.0, 1.0) * (1.0 - blackParticleGuard));
 
   vBright = 0.82 + maxRippleAmp * 0.55 + uBass * 0.10 + edgeBoost * 0.30 + uEnergy * 0.05 + uBurstAmt * 0.40;
-  if (uPreset > 6.5) {
-    vBright = 0.90 + maxRippleAmp * 0.66 + uBass * 0.06 + uEnergy * 0.05 + uBeat * 0.12 + uBurstAmt * 0.14;
-  } else if (uPreset > 4.5) {
+  if (uPreset > 4.5) {
     vBright = 0.94 + maxRippleAmp * 0.34 + uBass * 0.020 + uEnergy * 0.026 + uBurstAmt * 0.025;
   } else if (uPreset > 3.5) {
     vBright = 0.94 + maxRippleAmp * 0.64 + uBass * 0.08 + edgeBoost * 0.12 + uEnergy * 0.05 + uBeat * 0.16 + uBurstAmt * 0.16;
@@ -4895,10 +4751,7 @@ void main(){
   float depthSize = 36.0 / max(0.5, -mvPos.z);
   float audioBoost = 1.0 + maxRippleAmp * 0.7 + edgeBoost * 0.55 + uBeat * 0.30 + uBurstAmt * 0.5;
   float sz = clamp(depthSize * audioBoost, 1.05, 4.95);
-  if (uPreset > 6.5) {
-    float echoDrive = uBass * 0.16 + uMid * 0.14 + uTreble * 0.18 + uBeat * 0.22 + uBurstAmt * 0.10;
-    sz = clamp(depthSize * (0.94 + echoDrive * 0.70), 1.02, 4.30);
-  } else if (uPreset > 4.5) {
+  if (uPreset > 4.5) {
     float flowDrive = uBass * 0.070 + uMid * 0.046 + uTreble * 0.060 + uBurstAmt * 0.090 + uBeat * 0.055;
     sz = clamp(depthSize * (1.05 + flowDrive), 1.00, 5.45);
   } else if (uPreset > 3.5) {
@@ -34044,7 +33897,7 @@ var presetMeta = [
   { name: '唱片', desc: '唱片 · 圆形封面' },
   { name: '星河', desc: '壁纸粒子 · 音乐律动' },
   { name: '安魂', desc: '骷髅·YUI7W', descHtml: '骷髅·<span class="pc-yui7w">YUI7W</span>' },
-  { name: '音域回响', desc: '频谱回响 · 致敬 CmzYa' },
+  { name: '音域回响', desc: '音域地形 · 移植 CmzYa' },
 ];
 var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 14c3-2 5-2 8 0s5 2 8 0M3 10c3-2 5-2 8 0s5 2 8 0M3 18c3-2 5-2 8 0s5 2 8 0"/></svg>',
@@ -35139,7 +34992,7 @@ function refreshPresetGrid() {
 }
 function isSoftFlowPreset(preset) {
   // 星河和音域回响都是铺满视野的连续场, 硬炸开会撕碎整片粒子, 只给极轻的一下。
-  return preset === 5 || preset === SPECTRUM_ECHO_PRESET_INDEX;
+  return preset === 5 || preset === SONIC_TOPOGRAPHY_PRESET_INDEX;
 }
 function triggerPresetParticleTransition(fromPreset, toPreset) {
   var softFlow = isSoftFlowPreset(toPreset);
@@ -35186,8 +35039,11 @@ function setPreset(p, opts) {
   fx.preset = p;
   if (changed && prev === SKULL_PRESET_INDEX && p !== SKULL_PRESET_INDEX) clearSkullPresetResidue();
   if (p === SKULL_PRESET_INDEX) loadSkullParticleAsset();
-  // 进出音域回响都把历史清空: 否则再次进入会先闪一帧上次残留的频谱。
-  if (changed && (p === SPECTRUM_ECHO_PRESET_INDEX || prev === SPECTRUM_ECHO_PRESET_INDEX)) resetSpectrumEchoField();
+  // 进出音域回响都让地形层重建 / 释放: 留着旧实例会先闪一帧上次的地形。
+  if (changed && (p === SONIC_TOPOGRAPHY_PRESET_INDEX || prev === SONIC_TOPOGRAPHY_PRESET_INDEX)) {
+    var sonicMod = sonicTopographyModule();
+    if (sonicMod) sonicMod.onPresetChange(prev, p, { scene: scene, fx: fx });
+  }
   uniforms.uPreset.value = p;
   refreshPresetGrid();
   if (changed && !opts.skipTransition) triggerPresetParticleTransition(prev, p);
@@ -35199,7 +35055,7 @@ function setPreset(p, opts) {
     else if (p === 4) { orbit.userRadius = 6.5; orbit.userPhi = 0.04; orbit.userTheta = 0.0; orbit.baselineRadius = 6.5; orbit.baselinePhi = 0.04; }
     else if (p === 5) { orbit.userRadius = 9.4; orbit.userPhi = 0.34; orbit.userTheta = -0.52; orbit.baselineRadius = 9.4; orbit.baselinePhi = 0.34; }
     else if (p === 6) { orbit.userRadius = 7.4; orbit.userPhi = 0.10; orbit.userTheta = 0.18; orbit.baselineRadius = 7.4; orbit.baselinePhi = 0.10; }
-    else if (p === 7) { orbit.userRadius = 8.6; orbit.userPhi = 0.16; orbit.userTheta = 0.0; orbit.baselineRadius = 8.6; orbit.baselinePhi = 0.16; }
+    else if (p === 7) { orbit.userRadius = 8.4; orbit.userPhi = 0.18; orbit.userTheta = 0.0; orbit.baselineRadius = 8.4; orbit.baselinePhi = 0.18; }
     else              { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
     orbit.baselineTheta = p === 5 ? -0.52 : (p === 6 ? 0.18 : 0.0);
   }
@@ -43450,7 +43306,6 @@ function animate() {
   uniforms.uTreble.value = treble;
   uniforms.uBeat.value   = beatPulse;
   uniforms.uEnergy.value = audioEnergy;
-  updateSpectrumEchoField(shouldAnalyzeAudio && analysisDt > 0, dt, beatPulse, audioEnergy);
   uniforms.uMouseXY.value.set(mouseWorld.x, mouseWorld.y);
   uniforms.uMouseActive.value = mouseActive ? 1 : 0;
   // 通用转场脉冲: 只作为切换预设时的短促提亮。
@@ -43462,7 +43317,8 @@ function animate() {
   if (shelfManager) shelfManager.update(dt, now, frameShelfState);
   // 歌单架更新会推进可见度；组合状态复用同一份 getter 快照，只重新计算依赖可见度的布尔值。
   frameShelfState.skullComposition = !!(fx && fx.preset === SKULL_PRESET_INDEX && frameShelfState.side && (shelfPinnedOpen || shelfVisibility > 0.18 || frameShelfState.contentOpen));
-  var skullBackdropDim = fx && fx.preset === SKULL_PRESET_INDEX ? 0.58 : 1;
+  // 音域回响的地形层自己就很亮, 背景星河压暗一点才不会糊成一片 (跟原项目一致的 0.82)。
+  var skullBackdropDim = fx && fx.preset === SKULL_PRESET_INDEX ? 0.58 : (fx && fx.preset === SONIC_TOPOGRAPHY_PRESET_INDEX ? 0.82 : 1);
   var shelfDimTarget = shouldDimWallpaperForShelf(frameShelfState) ? 0.48 : skullBackdropDim;
   var shelfDimEase = shelfDimTarget < uniforms.uParticleDim.value ? 0.18 : 0.10;
   uniforms.uParticleDim.value += (shelfDimTarget - uniforms.uParticleDim.value) * Math.min(1, shelfDimEase * Math.max(1, dt * 60));
@@ -43497,6 +43353,22 @@ function animate() {
     backCoverGroup.rotation.copy(particles.rotation);
   }
   updateSkullParticleLayer(dt, frameShelfState);
+  // 音域回响地形层: 放在粒子旋转同步之后, 让地形跟着同一份 particles.rotation 走。
+  // beat 乘 1.35 是量纲适配 —— 本项目 beatPulse 峰值约 0.62~0.92, 原项目的涟漪阈值是 0.58。
+  var sonicMod = sonicTopographyModule();
+  if (sonicMod) {
+    sonicTopographyCtx.scene = scene;
+    sonicTopographyCtx.fx = fx;
+    sonicTopographyCtx.time = uniforms.uTime.value;
+    sonicTopographyCtx.visualRotation = particles ? particles.rotation : null;
+    sonicTopographyCtx.visualRotationActive = !!(orbit && orbit.rotating);
+    sonicTopographyCtx.audio.bass = bass;
+    sonicTopographyCtx.audio.mid = mid;
+    sonicTopographyCtx.audio.treble = treble;
+    sonicTopographyCtx.audio.beat = Math.min(1, beatPulse * 1.35);
+    sonicTopographyCtx.audio.energy = audioEnergy;
+    sonicMod.update(dt, sonicTopographyCtx);
+  }
   updateStageLyrics3D(dt, frameShelfState);
 
   renderer.render(scene, camera);
