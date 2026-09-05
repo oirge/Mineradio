@@ -1570,4 +1570,5 @@
 - `tests/sonic-topography-preset.test.js` 16 例：自建 THREE stub（`InstancedMesh` 把 `setMatrixAt` 记成 `matrices[i] = {pos, scale}`），`Math.random` 注入以便确定性，钉的是行为而不是数值——流星未激活时藏在 `y = -1000` 且缩放 0、落地正好撒 10 粒尾迹、尾迹一秒内过期、切走预设整层释放显存、冷启动停在预设 5 时一个实例都不分配、涟漪 N+1 帧可见。**three.js r128 的 `Color` 不做 sRGB→linear 转换**，所以 stub 直接按十六进制解析、不要加伽马。
 - 验证：`node --check` 干净，全量回归 `939/939` 通过（v1.8.7 基线 `932`，新增 16 例、删掉失效的 9 例）。**地形层没有在真实窗口里逐帧核对过**——涟漪强度、配色跟封面的搭配这类观感项只能靠肉眼，发 v1.8.8 时仍是未确认状态，按移植的忠实度发出去、留给反馈再调。
 - 悬而未决：上游仓库里还带着一份 CmzYa 的 WE 打包产物（约 1.26 MB，上游没有附署名文件）与一个 `mineradio-bridge.html` 桥接页。本轮**只搬了原生地形层，没有 vendor 那份产物**。
+- v1.8.8 的四项资产校验值、双草稿第七次复现、以及发布后把本机 `D:\Mineradio` 更到 1.8.8 时踩的 NSIS 坑，都记在 `RELEASE.md` 的「发布记录（v1.8.8）」一节。那个 NSIS 坑值得单独记一句，因为它会让人误判成「安装器坏了」：**`allowToChangeInstallationDirectory: false` 的静默安装装的是「上次记住的目录」**，`Setup.exe /S` 连跑三次都 `exitCode=0` 而 `D:\Mineradio` 纹丝不动，实际是装进了 `D:\222\Mineradio`；真实目录要从注册表卸载项的 `UninstallString` 读（`InstallLocation` 是空的），指定目录得用 `/D=`（必须最后一个参数、不加引号），而且已存在的快捷方式不会被重写、要自己改 `TargetPath`。
 

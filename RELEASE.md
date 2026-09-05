@@ -18,6 +18,29 @@
 - **已知边界：地形的实际观感没有在真实窗口里逐帧核对过。** `node --check` 干净、逻辑由 16 例测试钉住、`939/939` 全绿，但涟漪强度、配色跟封面的搭配这类观感项目只能靠肉眼，发版时仍是未确认状态——用户的指令是「更新好后发布新版」，所以按移植的忠实度发出去，观感问题留待反馈再调。
 - 待定：上游仓库里还带着一份 CmzYa 的 WE 打包产物（约 1.26 MB，没有署名文件）与一个桥接页。本轮**没有**把它 vendor 进来，只搬了原生地形层。
 
+### 发布记录（v1.8.8）
+
+- 单分支写法：`feat/sonic-topography-port`。功能提交 `2d05d20 feat: 音域回响改为移植上游地形实现` 带新文件 `public/sonic-topography-preset.js`、`public/index.html` 那一行 script、`public/app.js` 的删旧 + 接钩子、新测试 `tests/sonic-topography-preset.test.js`，同时删掉 `tests/spectrum-echo-preset.test.js`，`APP_VERSION` 仍留 `1.8.7`（保证单独 checkout 也自洽）；五处版本钉与全部文档压在紧随其后的 `e8c0c9a chore(release): 1.8.8` 里。
+- PR [#51](https://github.com/oirge/Mineradio/pull/51) → **合并提交** `77d2302`（CI `verify` run `33944120388` 通过）。绝不 squash，否则打在 `e8c0c9a` 上的 tag 会离开 `main` 的可达历史。
+- tag `v1.8.8` 打在 `e8c0c9a` 且是 **annotated**（tag object `f68b0e6c9ee7e13a9b6f666b4d99d978c63f92b4`），`git describe origin/main` 回 `v1.8.8-1-g77d2302`。
+- `Build and Release` run `33944212605` 成功（`--ref v1.8.8 -f tag=v1.8.8`）。**electron-builder 的双草稿第七次复现**：`383131750` 四项资产齐全、`383131751` 不全；删掉资产不全的 `383131751` 后发布 `383131750`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.8.8` 复验 tag object 仍在），PATCH 时带 `make_latest="true"`。
+- **发布前 `releases/latest` 停在 `v1.8.6`**（v1.8.7 的 Release 已不在线，见本节第 1 条），所以这一版对外是 `1.8.6 → 1.8.8` 的直跳；发布后 `releases/latest` 指向 `v1.8.8`。
+- 四项资产全部回下本机复算核对：
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-1.8.8-Setup.exe` | 102309548 | `2318b503d461c9e265212abf76e036c72d9cbf45d525f691bbf5551c976af352` |
+| `Mineradio-1.8.8-Setup.exe.blockmap` | 106576 | `9c8add6b67ba16898c1ccb17dac6b97ebb400dff3994aa87ec3e43c251b9bf30` |
+| `Mineradio-1.8.8-SHA256SUMS.txt` | 273 | `97edd918a7ef542ed7c45d065c25bb2d9688cb456f7a1c8c397d6f0c8ccba80f` |
+| `latest.yml` | 347 | `e66bde4f8809c34c2fa467eb0e598867624d67b15959c1bc8ea7ab4f7a177cf2` |
+
+- 清单 `Mineradio-1.8.8-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机复算全中；`latest.yml` 的 `sha512` = `sPc4LaBS1j3I11s8QrUbmAmcnxX6OmqP3WzuBGNa/Q3vjW6viRssPbHk5e6lxSSZCCgAflBJLEUN3JWmdW1y2w==` 与 `size` = `102309548` 与安装器实测一致，`releaseDate` `2026-09-05T04:21:14.957Z`。
+- 遗留未修（自 `v1.7.26` 记到现在，本轮仍未动）：`SHA256SUMS.txt` 行尾是 **CRLF**，`sha256sum -c` 直接跑会报 `'…Setup.exe'\r': No such file or directory`，必须先 `tr -d '\r' < Mineradio-1.8.8-SHA256SUMS.txt > /tmp/sums.txt && sha256sum -c /tmp/sums.txt`。
+- **本地安装踩坑（用户要求把 `D:\Mineradio` 更到最新版时发现）：`allowToChangeInstallationDirectory: false` 的 NSIS 静默安装会装到「上次记住的目录」，不是你以为的那个目录。** `Mineradio-1.8.8-Setup.exe /S` 连跑三次都 `exitCode=0`，而 `D:\Mineradio\Mineradio.exe` 的 `ProductVersion` 一直是 `1.8.7`——因为它实际装进了 `D:\222\Mineradio`。**判断办法是读注册表卸载项**：`HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\<guid>` 的 `DisplayVersion` 已经是 `1.8.8`，`UninstallString` 指向的才是真实目录（`InstallLocation` 是空的，别指望它）。要指定目录得加 `/D=`，且**它必须是最后一个参数、不能加引号**：`Setup.exe /S /D=D:\Mineradio`。
+- **`/D=` 从 Git Bash 直接传会被 MSYS 改写路径**，稳的写法是把 `@echo off` + 整条命令写进一个 `.bat`，再用 `cmd //c '<绝对 Windows 路径>\x.bat'` 跑；`cmd //c x.bat` 配 `cd` 到该目录**找不到文件**（工作目录没传过去），必须给绝对路径。
+- 装完还要**自己把快捷方式改回来**：`createDesktopShortcut: true` 只在快捷方式不存在时创建，已经指向旧目录的桌面 / 开始菜单 `Mineradio.lnk` 不会被重写，得用 `WScript.Shell` 改 `TargetPath` / `WorkingDirectory` / `IconLocation`。
+- 资产记录分支 `docs/release-assets-v188`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.8.7 音域回响视觉预设 + 全屏退出不再黑屏卡顿
 
 > 补记（后于本节写下）：**本节关于「音域回响」的判断是错的，见文首 v1.8.8 一节。** 「原项目」指的是上游社区分支 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)，源码公开且同为 GPL-3.0；v1.8.7 发出去的是自研频谱环，已在 v1.8.8 里整体换成移植实现。下面第 5～12 条（`**新数据通路是这一版的技术核心。**` 那条起到 `转场与相机` 那条止）关于 `DataTexture` / `uSpectrumTex` / `uPreset > 6.5` 的实现细节，以及最后一条验证记录里 `uSpectrumTex` 是 ACTIVE_UNIFORM 那半句，都只作为历史记录保留，源码里已经没有了。第 4 条（WE 集成那条路）仍然有效。全屏退出那半（本节倒数第 5 条到倒数第 2 条）不受影响，仍然有效。
@@ -58,7 +81,7 @@
 
 - 清单 `Mineradio-1.8.7-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机复算全中；`latest.yml` 的 `sha512` = `SKgjuXuFfQX8YGCvU5MRx8rGTD1z8cyM/+NQzLSTL5PoyarCfJvivwPsQa0a3wjfISkn08+cXTyziCkcfmE77Q==` 与 `size` = `102299619` 与安装器实测一致，`releaseDate` `2026-09-05T02:16:49.212Z`。
 - Release 正文照旧写短：预设三条 + 全屏三条 + 安装说明，并明确写了「这是原创预设、不是移植原壁纸」与「装了原作可以走现有壁纸功能」，工程细节留在本文件与 `docs/PROJECT_MEMORY.md`。
-- 资产记录分支 `docs/release-assets-v187`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+- 资产记录分支 `docs/release-assets-v187` → PR [#50](https://github.com/oirge/Mineradio/pull/50) → 合并提交 `5965b3a`。
 
 ## v1.8.6 左下小封面接上歌曲详情
 - 正式发布版本从 `1.8.5` 提升为 `1.8.6`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
