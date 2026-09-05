@@ -42,6 +42,15 @@ const {
   normalizeStorePathKey,
 } = require('./local-library-store');
 const { createLocalLibraryWatcher } = require('./local-library-watcher');
+const {
+  DEFAULT_GPU_FAILURE_THRESHOLD,
+  describeGpuMode,
+  gpuSwitchesForMode,
+  noteGpuFailure,
+  normalizeGpuMode,
+  resolveGpuMode,
+  shouldDisableHardwareAcceleration,
+} = require('./gpu-guard');
 registerWallpaperEngineScheme(protocol);
 
 const APP_NAME = 'Mineradio';
@@ -228,21 +237,90 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-upload-tip-seen',
 ]);
 
-const CHROMIUM_PERFORMANCE_SWITCHES = [
-  ['autoplay-policy', 'no-user-gesture-required'],
-  ['ignore-gpu-blocklist'],
-  ['enable-gpu-rasterization'],
-  ['enable-oop-rasterization'],
-  ['enable-zero-copy'],
-  ['enable-accelerated-2d-canvas'],
-  ['force_high_performance_gpu'],
-  ['use-angle', 'd3d11'],
-];
-for (const [name, value] of CHROMIUM_PERFORMANCE_SWITCHES) {
+// GPU 守卫。历史上这里无条件拍上全部性能开关，其中 `ignore-gpu-blocklist` 会强行越过
+// Chromium 对已知有问题的驱动组合的屏蔽 —— 而主窗口是 `transparent: true` 的无边框窗口，
+// 恰好是那些驱动最容易渲染成全黑的形态；GPU 进程反复崩溃再退回软件合成就是肉眼的卡顿。
+// 现在按持久化的档位决定加哪些开关，GPU 进程连续异常退出会自动降档并重启一次。
+// 用户可以用 `MINERADIO_GPU_MODE=default|compatible|software` 一次性覆盖，不写盘。
+const GPU_GUARD_ENV_MODE = normalizeGpuMode(process.env.MINERADIO_GPU_MODE);
+const gpuGuardDecision = resolveGpuMode(readDesktopShellSettings(), {
+  envMode: GPU_GUARD_ENV_MODE,
+  appVersion: app.getVersion(),
+});
+let activeGpuMode = gpuGuardDecision.mode;
+let gpuGuardRelaunching = false;
+console.log(`GPU 档位：${describeGpuMode(activeGpuMode, gpuGuardDecision.reason)}`);
+for (const [name, value] of gpuSwitchesForMode(activeGpuMode)) {
   if (value == null) app.commandLine.appendSwitch(name);
   else app.commandLine.appendSwitch(name, value);
 }
+if (shouldDisableHardwareAcceleration(activeGpuMode)) app.disableHardwareAcceleration();
+if (gpuGuardDecision.resetOnVersionChange) {
+  // 换过版本就把上一次的降级结论清掉重试一次：Electron 或驱动升级后原来的黑屏可能已经没了，
+  // 不重试会把用户永久钉在软件渲染上，那本身就是卡顿。
+  try {
+    writeDesktopShellSettings({
+      gpuMode: activeGpuMode,
+      gpuFailureMode: activeGpuMode,
+      gpuFailureCount: 0,
+      appVersion: app.getVersion(),
+    });
+  } catch (e) {
+    console.warn('GPU 档位重置写盘失败：', e.message);
+  }
+}
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+/**
+ * 处理一次 GPU 进程异常退出：累计次数，达到阈值就降档写盘并立刻重启一次。
+ * 只有重启才能真正换掉 Chromium 的 GPU 开关 —— 这些开关必须在 app ready 之前就位，
+ * 运行中改不了，所以降档之后不重启等于什么都没做。
+ * @param {string} reason GPU 进程退出原因，写进记录用于排查。
+ * @param {number} [exitCode] 退出码。
+ * @returns {void}
+ */
+function handleGpuProcessGone(reason, exitCode) {
+  if (appQuitting || gpuGuardRelaunching) return;
+  if (gpuGuardDecision.forced) {
+    // 用户用环境变量显式点了档位，就不要自作主张改他的选择，只留一行日志。
+    console.warn(`GPU 进程异常退出（${reason || 'unknown'}），当前档位由 MINERADIO_GPU_MODE 指定，不自动降档。`);
+    return;
+  }
+  let result = null;
+  try {
+    result = noteGpuFailure(readDesktopShellSettings(), {
+      mode: activeGpuMode,
+      appVersion: app.getVersion(),
+      threshold: DEFAULT_GPU_FAILURE_THRESHOLD,
+      at: Date.now(),
+      reason: `${reason || 'unknown'}:${exitCode == null ? '' : exitCode}`,
+    });
+    writeDesktopShellSettings(result.state);
+  } catch (e) {
+    console.warn('GPU 失败计数写盘失败：', e.message);
+    return;
+  }
+  if (!result.escalated) {
+    console.warn(`GPU 进程异常退出（${reason || 'unknown'}），当前档位 ${activeGpuMode} 累计 ${result.failureCount} 次。`);
+    return;
+  }
+  activeGpuMode = result.mode;
+  gpuGuardRelaunching = true;
+  console.warn(`GPU 进程连续异常退出，降档到 ${describeGpuMode(result.mode, 'auto')} 并重启。`);
+  try {
+    app.relaunch();
+  } catch (e) {
+    console.warn('GPU 降档重启失败：', e.message);
+    gpuGuardRelaunching = false;
+    return;
+  }
+  app.quit();
+}
+
+app.on('child-process-gone', (_event, details) => {
+  if (!details || details.type !== 'GPU') return;
+  handleGpuProcessGone(details.reason, details.exitCode);
+});
 
 function findOpenPort(startPort) {
   return new Promise((resolve, reject) => {
@@ -5211,6 +5289,109 @@ async function handleWallpaperStateUpdate(_event, payload) {
 
 ipcMain.handle('mineradio-wallpaper-update', trustedMainFrameHandler(handleWallpaperStateUpdate));
 
+// 主窗口绘制恢复。迷你播放器早就有 did-fail-load / render-process-gone 兜底，主窗口一直没有：
+// 主渲染进程一崩，`transparent: true` 的无边框窗口就只剩一片全黑，而且永远不会自己回来。
+const MAIN_WINDOW_SHOW_WATCHDOG_MS = 6000;
+const MAIN_WINDOW_PAINT_RECOVERY_LIMIT = 3;
+let mainWindowPaintRecoveryTimer = null;
+let mainWindowPaintFailureCount = 0;
+let mainWindowShowWatchdogTimer = null;
+
+/**
+ * 取消主窗口兜底显示的看门狗。
+ * @returns {void}
+ */
+function clearMainWindowShowWatchdog() {
+  if (!mainWindowShowWatchdogTimer) return;
+  clearTimeout(mainWindowShowWatchdogTimer);
+  mainWindowShowWatchdogTimer = null;
+}
+
+/**
+ * 布置兜底显示看门狗。透明无边框窗口的 `ready-to-show` 在 Windows 上并不保证触发，
+ * 而窗口是 `show: false` 建的 —— 事件不来就等于「双击图标什么都没发生」。
+ * @param {Electron.BrowserWindow} win 主窗口实例。
+ * @returns {void}
+ */
+function armMainWindowShowWatchdog(win) {
+  clearMainWindowShowWatchdog();
+  mainWindowShowWatchdogTimer = setTimeout(() => {
+    mainWindowShowWatchdogTimer = null;
+    if (appQuitting || !win || win.isDestroyed() || win !== mainWindow || win.isVisible()) return;
+    console.warn('主窗口 ready-to-show 超时，兜底显示一次。');
+    try {
+      win.show();
+      sendWindowState(win);
+    } catch (e) {
+      console.warn('主窗口兜底显示失败：', e.message);
+    }
+  }, MAIN_WINDOW_SHOW_WATCHDOG_MS);
+  if (typeof mainWindowShowWatchdogTimer.unref === 'function') mainWindowShowWatchdogTimer.unref();
+}
+
+/**
+ * 强制主窗口重画一次。从睡眠或锁屏回来之后，透明窗口的合成表面可能已经失效，
+ * Chromium 不一定自己重新出图；`invalidate()` 比 reload 便宜得多，也不会打断播放。
+ * @param {string} reason 触发原因，仅用于日志。
+ * @returns {boolean} 实际发出重画请求时返回 true。
+ */
+function nudgeMainWindowRepaint(reason) {
+  if (appQuitting || !mainWindow || mainWindow.isDestroyed()) return false;
+  const contents = mainWindow.webContents;
+  if (!contents || contents.isDestroyed() || typeof contents.invalidate !== 'function') return false;
+  try {
+    contents.invalidate();
+    if (reason) console.log(`主窗口重画：${reason}`);
+    return true;
+  } catch (e) {
+    console.warn('主窗口重画失败：', e.message);
+    return false;
+  }
+}
+
+/**
+ * 调度一次主窗口绘制恢复。反复失败按次数退避，达到上限就停手只留日志 ——
+ * 无限重载一个加载不起来的页面只会把「黑屏」换成「黑屏 + 满负载」。
+ * @param {Electron.BrowserWindow} win 出问题的主窗口实例。
+ * @param {string} reason 触发原因，写进日志用于排查。
+ * @returns {boolean} 实际布置了恢复调度时返回 true。
+ */
+function scheduleMainWindowPaintRecovery(win, reason) {
+  if (appQuitting || gpuGuardRelaunching) return false;
+  if (!win || win.isDestroyed() || win !== mainWindow) return false;
+  if (mainWindowPaintRecoveryTimer) return false;
+  if (mainWindowPaintFailureCount >= MAIN_WINDOW_PAINT_RECOVERY_LIMIT) {
+    console.warn(`主窗口恢复已达上限（${MAIN_WINDOW_PAINT_RECOVERY_LIMIT} 次），停止重试：${reason || 'unknown'}`);
+    return false;
+  }
+  mainWindowPaintFailureCount += 1;
+  const attempt = mainWindowPaintFailureCount;
+  const delay = Math.min(2400, 200 * attempt * attempt);
+  console.warn(`主窗口恢复调度（第 ${attempt} 次，${delay}ms 后）：${reason || 'unknown'}`);
+  mainWindowPaintRecoveryTimer = setTimeout(() => {
+    mainWindowPaintRecoveryTimer = null;
+    if (appQuitting || gpuGuardRelaunching) return;
+    if (!win || win.isDestroyed() || win !== mainWindow) return;
+    const contents = win.webContents;
+    if (!contents || contents.isDestroyed()) return;
+    armMainWindowShowWatchdog(win);
+    try {
+      // 渲染进程没了的时候 reload() 会重建它；加载失败的时候 reload() 就是重试。
+      // 两种情况都不需要重建 BrowserWindow，窗口位置和置顶状态因此不会被打乱。
+      contents.reload();
+    } catch (e) {
+      console.warn('主窗口重载失败：', e.message);
+      try {
+        contents.loadURL(`http://127.0.0.1:${mainServerPort}`);
+      } catch (loadError) {
+        console.warn('主窗口重新加载地址失败：', loadError.message);
+      }
+    }
+  }, delay);
+  if (typeof mainWindowPaintRecoveryTimer.unref === 'function') mainWindowPaintRecoveryTimer.unref();
+  return true;
+}
+
 async function createWindow() {
   htmlFullscreenActive = false;
   windowFullscreenActive = false;
@@ -5286,6 +5467,30 @@ async function createWindow() {
     sendWindowState(mainWindow);
   });
 
+  // 加载成功就把恢复计数清零，否则一次开机时序抖动会永久吃掉后面的恢复配额。
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindowPaintFailureCount = 0;
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _url, isMainFrame) => {
+    // errorCode -3 是 ERR_ABORTED，正常导航打断也会报，不算失败。
+    if (isMainFrame === false || errorCode === -3) return;
+    scheduleMainWindowPaintRecovery(mainWindow, `load-failed:${errorCode}:${errorDescription}`);
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    scheduleMainWindowPaintRecovery(mainWindow, `renderer-gone:${(details && details.reason) || 'unknown'}`);
+  });
+
+  mainWindow.on('unresponsive', () => {
+    // 卡死的渲染进程不直接重载：这会丢掉播放状态。先记一笔，等 responsive 没回来再说。
+    console.warn('主窗口渲染进程无响应。');
+  });
+
+  mainWindow.on('responsive', () => {
+    console.log('主窗口渲染进程已恢复响应。');
+  });
+
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (shouldExitWindowFullscreenFromInput(input, mainWindow)) {
       event.preventDefault();
@@ -5293,7 +5498,9 @@ async function createWindow() {
     }
   });
 
+  armMainWindowShowWatchdog(mainWindow);
   mainWindow.once('ready-to-show', () => {
+    clearMainWindowShowWatchdog();
     mainWindow.show();
     sendWindowState(mainWindow);
   });
@@ -5363,6 +5570,12 @@ async function createWindow() {
       clearTimeout(mainWindowStateTimer);
       mainWindowStateTimer = null;
     }
+    clearMainWindowShowWatchdog();
+    if (mainWindowPaintRecoveryTimer) {
+      clearTimeout(mainWindowPaintRecoveryTimer);
+      mainWindowPaintRecoveryTimer = null;
+    }
+    mainWindowPaintFailureCount = 0;
     closeOverlayWindows();
     miniPlayerActive = false;
     mainWindow = null;
@@ -5389,7 +5602,14 @@ async function createWindow() {
   });
 
   wallpaperEngineBridge.attachWindow(mainWindow);
-  await mainWindow.loadURL(`http://127.0.0.1:${port}`);
+  try {
+    await mainWindow.loadURL(`http://127.0.0.1:${port}`);
+  } catch (e) {
+    // loadURL 抛出来的时候窗口已经建好但还是 show: false，就这么放着等于「点了图标什么都没发生」。
+    // 这里不能把异常往上抛：createWindow 的调用方只会打一行日志，窗口会永远留在隐藏状态。
+    console.warn('主窗口首次加载失败：', e.message);
+    scheduleMainWindowPaintRecovery(mainWindow, `initial-load-failed:${e.message}`);
+  }
 }
 
 if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
@@ -5417,6 +5637,8 @@ if (!gotSingleInstanceLock) {
       handleMiniPlayerDisplayTopologyChanged();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
+      // 改分辨率或改缩放会让透明窗口的合成表面失效，和睡眠回来是同一类黑屏。
+      nudgeMainWindowRepaint('display-metrics-changed');
     });
     screen.on('display-added', () => {
       keepMainWindowInsideDisplay(mainWindow);
@@ -5436,6 +5658,10 @@ if (!gotSingleInstanceLock) {
     powerMonitor.on('lock-screen', handleMiniPlayerScreenLock);
     powerMonitor.on('resume', handleMiniPlayerSystemResume);
     powerMonitor.on('unlock-screen', handleMiniPlayerScreenUnlock);
+    // 睡眠 / 锁屏回来之后主窗口也要重画一次。此前这四个事件只接了迷你播放器，
+    // 主窗口是透明无边框的，合成表面丢了之后 Chromium 不一定自己重新出图 —— 那就是一片全黑。
+    powerMonitor.on('resume', () => nudgeMainWindowRepaint('system-resume'));
+    powerMonitor.on('unlock-screen', () => nudgeMainWindowRepaint('screen-unlock'));
     createTray();
     await createWindow();
   });
