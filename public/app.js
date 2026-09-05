@@ -1146,7 +1146,7 @@ var MINI_PLAYER_EFFECT_STRENGTH_MAX = 3;
 // 只有带本 schema 的存档才代表用户在新版里真的开过壁纸模式。
 var WALLPAPER_SURFACE_SCHEMA = 'wallpaper-surface-v1';
 var fxDefaults = {
-  preset: 0,            // 0=emily cover, 1=tunnel, 2=orbit, 3=void, 4=vinyl, 5=wallpaper, 6=skull
+  preset: 0,            // 0=emily cover, 1=tunnel, 2=orbit, 3=void, 4=vinyl, 5=wallpaper, 6=skull, 7=sonic topography, 8=sonic workshop
   intensity: 0.85,
   cinemaShake: 0.5,
   depth: 1.0,
@@ -4203,6 +4203,18 @@ function sonicTopographyModule() {
   return (typeof MineradioSonicTopography !== 'undefined' && MineradioSonicTopography) ? MineradioSonicTopography : null;
 }
 
+// 音域回响 (预设 8) 是 CmzYa 的 Wallpaper Engine 原作, 整幅画面跑在 iframe 里,
+// 桥接层住在 public/sonic-workshop-preset.js (窗口全局 MineradioSonicWorkshop)。
+var SONIC_WORKSHOP_PRESET_INDEX = 8;
+
+/**
+ * 取音域回响壁纸模块; 脚本没加载上时返回 null, 调用方直接跳过。
+ * @returns {object|null}
+ */
+function sonicWorkshopModule() {
+  return (typeof MineradioSonicWorkshop !== 'undefined' && MineradioSonicWorkshop) ? MineradioSonicWorkshop : null;
+}
+
 // 每帧传给地形层的上下文, 预分配复用 (animate 里逐帧填字段, 避免 60fps 造垃圾)。
 // scene / particles / orbit 声明在本行之后, 所以这里只留空壳, 不在声明处取值。
 var sonicTopographyCtx = {
@@ -4211,6 +4223,14 @@ var sonicTopographyCtx = {
   time: 0,
   visualRotation: null,
   visualRotationActive: false,
+  audio: { bass: 0, mid: 0, treble: 0, beat: 0, energy: 0 }
+};
+
+// 壁纸版音域回响的每帧上下文, 同样预分配复用; 它只读 fx / audio, 不碰 scene。
+var sonicWorkshopCtx = {
+  scene: null,
+  fx: null,
+  time: 0,
   audio: { bass: 0, mid: 0, treble: 0, beat: 0, energy: 0 }
 };
 
@@ -33897,7 +33917,9 @@ var presetMeta = [
   { name: '唱片', desc: '唱片 · 圆形封面' },
   { name: '星河', desc: '壁纸粒子 · 音乐律动' },
   { name: '安魂', desc: '骷髅·YUI7W', descHtml: '骷髅·<span class="pc-yui7w">YUI7W</span>' },
-  { name: '音域回响', desc: '音域地形 · 移植 CmzYa' },
+  // 7 与 8 是同一件作品的两条实现: 7 是 Ajin 的 three.js 重写, 8 是 CmzYa 的 Wallpaper Engine 原作。
+  { name: '音域回响', nameHtml: '音域回响 <span class="pc-name-en">Sonic-Topography</span>', desc: '移植 Ajin', descHtml: '移植 <span class="pc-author-ajin">Ajin</span>' },
+  { name: '音域回响', nameHtml: '音域回响 <span class="pc-name-en">Wallpaper Engine</span>', desc: '原作 CmzYa', descHtml: '原作 <span class="pc-author-cmzya">CmzYa</span>' },
 ];
 var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 14c3-2 5-2 8 0s5 2 8 0M3 10c3-2 5-2 8 0s5 2 8 0M3 18c3-2 5-2 8 0s5 2 8 0"/></svg>',
@@ -33908,8 +33930,9 @@ var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 15c2.2-4.4 4.4-4.4 6.6 0s4.4 4.4 6.6 0S20.6 10.6 23 15"/><path d="M3 9c2.2 2.2 4.4 2.2 6.6 0s4.4-2.2 6.6 0S20.6 11.2 23 9"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.2h4v6.2h4.2v3.8H14v7.6h-4v-7.6H5.8V9.4H10z"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 12.4V7.6"/><path d="M9 12.4V9.8"/><path d="M15 12.4V9.1"/><path d="M6.5 15.1a7.2 7.2 0 0 1 11 0"/><path d="M3.5 18a11 11 0 0 1 17 0"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M5 15c1.4-4 2.8-4 4.2 0s2.8 4 4.2 0 2.8-4 4.6 0"/><path d="M4 10c2-2 4-2 6 0s4 2 6 0 3-2 4 0"/><path d="M7 6h10"/><circle cx="18.2" cy="5.8" r="1.35" fill="currentColor"/></svg>',
 ];
-var presetDisplayOrder = [0, 7, 6, 5, 4, 2, 1, 3];
+var presetDisplayOrder = [0, 7, 8, 6, 5, 4, 2, 1, 3];
 var lyricColorPresets = [
   { name:'雾蓝', color:'#a9b8c8' },
   { name:'银蓝', color:'#9db8cf' },
@@ -34977,9 +35000,10 @@ function buildPresetGrid() {
   grid.innerHTML = order.map(function(i){
     var p = presetMeta[i];
     var desc = p.descHtml || p.desc;
+    var name = p.nameHtml || p.name;
     return '<div class="preset-card" data-preset="' + i + '" onclick="setPreset(' + i + ')">' +
       '<div class="pc-icon">' + presetIcons[i] + '</div>' +
-      '<div class="pc-name">' + p.name + '</div>' +
+      '<div class="pc-name">' + name + '</div>' +
       '<div class="pc-desc">' + desc + '</div>' +
     '</div>';
   }).join('');
@@ -34991,8 +35015,8 @@ function refreshPresetGrid() {
   });
 }
 function isSoftFlowPreset(preset) {
-  // 星河和音域回响都是铺满视野的连续场, 硬炸开会撕碎整片粒子, 只给极轻的一下。
-  return preset === 5 || preset === SONIC_TOPOGRAPHY_PRESET_INDEX;
+  // 星河和两版音域回响都是铺满视野的连续场, 硬炸开会撕碎整片粒子, 只给极轻的一下。
+  return preset === 5 || preset === SONIC_TOPOGRAPHY_PRESET_INDEX || preset === SONIC_WORKSHOP_PRESET_INDEX;
 }
 function triggerPresetParticleTransition(fromPreset, toPreset) {
   var softFlow = isSoftFlowPreset(toPreset);
@@ -35043,6 +35067,11 @@ function setPreset(p, opts) {
   if (changed && (p === SONIC_TOPOGRAPHY_PRESET_INDEX || prev === SONIC_TOPOGRAPHY_PRESET_INDEX)) {
     var sonicMod = sonicTopographyModule();
     if (sonicMod) sonicMod.onPresetChange(prev, p, { scene: scene, fx: fx });
+  }
+  // 壁纸版音域回响同理: 进来就挂 iframe 并立刻推一次状态, 走开让它把整层显存释放掉。
+  if (changed && (p === SONIC_WORKSHOP_PRESET_INDEX || prev === SONIC_WORKSHOP_PRESET_INDEX)) {
+    var workshopMod = sonicWorkshopModule();
+    if (workshopMod) workshopMod.onPresetChange(prev, p, { scene: scene, fx: fx });
   }
   uniforms.uPreset.value = p;
   refreshPresetGrid();
@@ -43318,7 +43347,7 @@ function animate() {
   // 歌单架更新会推进可见度；组合状态复用同一份 getter 快照，只重新计算依赖可见度的布尔值。
   frameShelfState.skullComposition = !!(fx && fx.preset === SKULL_PRESET_INDEX && frameShelfState.side && (shelfPinnedOpen || shelfVisibility > 0.18 || frameShelfState.contentOpen));
   // 音域回响的地形层自己就很亮, 背景星河压暗一点才不会糊成一片 (跟原项目一致的 0.82)。
-  var skullBackdropDim = fx && fx.preset === SKULL_PRESET_INDEX ? 0.58 : (fx && fx.preset === SONIC_TOPOGRAPHY_PRESET_INDEX ? 0.82 : 1);
+  var skullBackdropDim = fx && fx.preset === SKULL_PRESET_INDEX ? 0.58 : ((fx && (fx.preset === SONIC_TOPOGRAPHY_PRESET_INDEX || fx.preset === SONIC_WORKSHOP_PRESET_INDEX)) ? 0.82 : 1);
   var shelfDimTarget = shouldDimWallpaperForShelf(frameShelfState) ? 0.48 : skullBackdropDim;
   var shelfDimEase = shelfDimTarget < uniforms.uParticleDim.value ? 0.18 : 0.10;
   uniforms.uParticleDim.value += (shelfDimTarget - uniforms.uParticleDim.value) * Math.min(1, shelfDimEase * Math.max(1, dt * 60));
@@ -43334,10 +43363,12 @@ function animate() {
   // v7.2 旋转 = 头部+眼球追踪 + 鼠标/手势拖动 + 惯性
   tickGestureRotation(dt, now);
   var skullPresetActive = fx && fx.preset === SKULL_PRESET_INDEX;
-  particles.visible = !skullPresetActive;
-  if (bloomParticles) bloomParticles.visible = !skullPresetActive && fx.bloom && fx.bloomStrength > 0.01;
-  if (floatGroup) floatGroup.visible = !skullPresetActive;
-  if (backCoverGroup) backCoverGroup.visible = !skullPresetActive;
+  // 壁纸版音域回响是一整幅完成品, 原项目在这个预设下把封面粒子整层收起来, 只留壁纸本身。
+  var workshopPresetActive = fx && fx.preset === SONIC_WORKSHOP_PRESET_INDEX;
+  particles.visible = !skullPresetActive && !workshopPresetActive;
+  if (bloomParticles) bloomParticles.visible = !skullPresetActive && !workshopPresetActive && fx.bloom && fx.bloomStrength > 0.01;
+  if (floatGroup) floatGroup.visible = !skullPresetActive && !workshopPresetActive;
+  if (backCoverGroup) backCoverGroup.visible = !skullPresetActive && !workshopPresetActive;
   var targetRotY = orbit.centerLocked ? 0 : (headParallax.active ? headParallax.x * 0.5 : 0) + gestureRotation.y;
   var targetRotX = orbit.centerLocked ? 0 : (headParallax.active ? -headParallax.y * 0.35 : 0) + gestureRotation.x;
   particles.rotation.y += (targetRotY - particles.rotation.y) * 0.055;
@@ -43368,6 +43399,19 @@ function animate() {
     sonicTopographyCtx.audio.beat = Math.min(1, beatPulse * 1.35);
     sonicTopographyCtx.audio.energy = audioEnergy;
     sonicMod.update(dt, sonicTopographyCtx);
+  }
+  // 壁纸版音域回响: 只往 iframe 里推音频 / 媒体 / 配色, 自己不占主渲染器一点开销。
+  var workshopMod = sonicWorkshopModule();
+  if (workshopMod) {
+    sonicWorkshopCtx.scene = scene;
+    sonicWorkshopCtx.fx = fx;
+    sonicWorkshopCtx.time = uniforms.uTime.value;
+    sonicWorkshopCtx.audio.bass = bass;
+    sonicWorkshopCtx.audio.mid = mid;
+    sonicWorkshopCtx.audio.treble = treble;
+    sonicWorkshopCtx.audio.beat = beatPulse;
+    sonicWorkshopCtx.audio.energy = audioEnergy;
+    workshopMod.update(dt, sonicWorkshopCtx);
   }
   updateStageLyrics3D(dt, frameShelfState);
 

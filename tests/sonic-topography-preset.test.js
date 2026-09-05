@@ -192,11 +192,12 @@ function activeRipples(terrain) {
 test('音域回响登记为第 8 个视觉预设，并在预设面板里排到前面', () => {
   const meta = readSourceBlock(app, 'var presetMeta = [', 'var lyricColorPresets');
   const names = meta.match(/name: '([^']+)'/g).map((s) => s.slice(7, -1));
-  assert.deepEqual(names, ['emily专辑封面', '滚筒', '星球', '虚空', '唱片', '星河', '安魂', '音域回响']);
+  assert.deepEqual(names, ['emily专辑封面', '滚筒', '星球', '虚空', '唱片', '星河', '安魂', '音域回响', '音域回响']);
   const icons = readSourceBlock(meta, 'var presetIcons = [', 'var presetDisplayOrder');
   assert.equal((icons.match(/<svg /g) || []).length, names.length, '每个预设都要有自己的图标');
-  assert.match(meta, /\{ name: '音域回响', desc: '音域地形 · 移植 CmzYa' \}/);
-  assert.match(meta, /var presetDisplayOrder = \[0, 7, 6, 5, 4, 2, 1, 3\]/);
+  // 预设 7 是 Ajin 的 three.js 重写, 预设 8 才是 CmzYa 的 Wallpaper Engine 原作, 署名不能串。
+  assert.match(meta, /nameHtml: '音域回响 <span class="pc-name-en">Sonic-Topography<\/span>', desc: '移植 Ajin'/);
+  assert.match(meta, /var presetDisplayOrder = \[0, 7, 8, 6, 5, 4, 2, 1, 3\]/);
   assert.match(app, /var SONIC_TOPOGRAPHY_PRESET_INDEX = 7;/);
 });
 
@@ -469,8 +470,8 @@ test('主循环把地形层挂在粒子旋转之后，音频帧按本项目的�
   // 上下文预分配, 60fps 下不能每帧新建对象。
   assert.doesNotMatch(animate, /sonicMod\.update\(dt, \{/);
   assert.match(app, /var sonicTopographyCtx = \{/);
-  // 地形自己够亮, 背景星河压到 0.82 (跟上游一致)。
-  assert.match(animate, /var skullBackdropDim = fx && fx\.preset === SKULL_PRESET_INDEX \? 0\.58 : \(fx && fx\.preset === SONIC_TOPOGRAPHY_PRESET_INDEX \? 0\.82 : 1\);/);
+  // 地形自己够亮, 背景星河压到 0.82 (跟上游一致); 壁纸版预设 8 同一档。
+  assert.match(animate, /var skullBackdropDim = fx && fx\.preset === SKULL_PRESET_INDEX \? 0\.58 : \(\(fx && \(fx\.preset === SONIC_TOPOGRAPHY_PRESET_INDEX \|\| fx\.preset === SONIC_WORKSHOP_PRESET_INDEX\)\) \? 0\.82 : 1\);/);
 });
 
 test('单击画布转成地形涟漪，进出预设都重建地形层', () => {
@@ -487,7 +488,7 @@ test('单击画布转成地形涟漪，进出预设都重建地形层', () => {
   assert.match(setPreset, /else if \(p === 7\) \{ orbit\.userRadius = 8\.4; orbit\.userPhi = 0\.18;/);
 
   const trigger = readSourceBlock(app, 'function isSoftFlowPreset(', 'function tickPresetTransition()');
-  assert.match(trigger, /return preset === 5 \|\| preset === SONIC_TOPOGRAPHY_PRESET_INDEX;/);
+  assert.match(trigger, /return preset === 5 \|\| preset === SONIC_TOPOGRAPHY_PRESET_INDEX \|\| preset === SONIC_WORKSHOP_PRESET_INDEX;/);
   assert.doesNotMatch(app, /wallpaperFlow/);
 });
 
