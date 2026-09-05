@@ -1,5 +1,25 @@
 ﻿# 发布流程
 
+## v1.8.7 音域回响视觉预设 + 全屏退出不再黑屏卡顿
+
+- 正式发布版本从 `1.8.6` 提升为 `1.8.7`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
+- 用户原话（issue 形状，两件事）：「增加视觉预设：希望增加音域回响视觉预设（Wallpaper Engine)(作者CmzYa）。全屏模式退出时，有明显的黑屏卡顿问题。」建议里写的是「可以从原项目的项目代码去接入实现」。
+- **原壁纸源码不在本机，所以这一版不是移植。** 后台把 `/c /d /e /f` 全盘扫过一遍找 Steam Workshop 目录 `431960`，零匹配；WebSearch 也没能定位到这件作品。加上直接搬 Workshop 作品的代码/素材本身有授权与署名问题，最终在 Mineradio 自己的 shader 框架里做了一个原创的同名同气质预设，`presetMeta` 里写成 `频谱回响 · 致敬 CmzYa`（致敬，不是移植）。
+- 另一条路本来就通：项目已有 Wallpaper Engine 集成（`desktop/wallpaper-engine-library.js`，`WALLPAPER_ENGINE_APP_ID = '431960'`，扫 `steamapps/workshop/content/431960` 与 `steamapps/common/wallpaper_engine/projects/myprojects`），用户在 WE 里装了「音域回响」就能直接把真作品当桌面壁纸层或播放器背景板跑。两条路互不影响。
+- **新数据通路是这一版的技术核心。** 着色器原本只拿到 `uBass/uMid/uTreble/uBeat/uEnergy` 五个标量，做不出「音域」，所以加了一张 64 频段 × 64 历史行的 RGBA8 `DataTexture`（`spectrumEchoTex`，16 KB，60fps 下约 1 MB/s 上传）：每次推进先 `copyWithin` 把旧行整体下移一行，再把当前频谱写进第 0 行。**故意不用环形索引**——`LinearFilter` 会在环绕处插出一道缝。`DataTexture.flipY = false`，所以纹理 `v = 0` 就是最新行。四个通道：R 归一幅度、G 起振快收尾慢的包络、B 瞬态、A 该行的节拍能量。
+- 着色器把角度当音域（`bandN = abs(aUv.x * 2 - 1)`，低音在正下方、两侧升到高音、首尾无缝）、半径当时间（`age = lane / 0.86`），直接用半径去采样这张历史图，于是当下的频谱会一圈圈向外扩散、`decay = pow(1 - age, 1.35)` 衰减、`pos.z = -age * 3.9 + ...` 沉成漏斗纵深。外圈 14% 的 lane 留给只吃高频的空气尘，避免画面边缘硬切。
+- 分频是对数桶：`ensureSpectrumEchoBins` 从 bin 2 起、以 `len * 0.55` 为上界按几何步长铺 64 段，保证严格递增且每段至少一个 bin，低频窄高频宽。行推进 `SPECTRUM_ECHO_PUSH_INTERVAL = 1/48`（64 行 ≈ 1.33s 回响），**掉帧时最多补一行、不做追赶式连推**，否则回响会突然抽一下。
+- 其他 7 个预设一分开销都没有：`updateSpectrumEchoField` 第一行就是 `if (!fx || fx.preset !== SPECTRUM_ECHO_PRESET_INDEX) return;`；进出这个预设都 `resetSpectrumEchoField()`，否则再次进入会先闪一帧上次残留的频谱。停播后不再取样但历史继续推进，旧回响一路走到外圈自然散尽，而不是冻在最后一帧。
+- 着色器分支的三条硬约束：① 星河/安魂那支收成 `else if (uPreset < 6.5)`，预设 7 用最后的 `else`；② `vBright` 与 `gl_PointSize` 里 `uPreset > 6.5` 的分支**必须排在 `> 4.5` 之前**，否则会被星河那一支吃掉；③ 唱片专属的 `vinylHiResGuard` 用 `step(3.5, uPreset) * (1.0 - step(4.5, uPreset))` 夹住，不许溢到 7。
+- **新 sampler 只能挂在 `uniform sampler2D uCoverTex, uPrevCoverTex, uEdgeTex, uRippleTex, uSpectrumTex;` 那一行。** `bloomVs` 是由 `vs` 做两次精确字符串替换派生的（`'uniform float uMouseActive, uPixel, uColorMixT, uLoading;'` 与 `'gl_PointSize = sz * uPixel * uPointScale;'`），这两句必须保持逐字节不变。
+- **本轮唯一真实踩坑：`var len = frequencyData.length;` 在 `public/app.js` 里必须唯一。** `tests/audio-analysis-hot-path.test.js:139` 拿它当切片起锚，我第一版在 `updateSpectrumEchoField` 里也声明了同名局部变量、而且位置更靠前（4242 行 vs 43278 行），`indexOf` 直接切到我的函数上，那条常驻测试的「单次扫描只能有一个 for」当场变成 2。改名 `binCount` 才修好。**帧循环钩子也因此只放在 `uniforms.uEnergy.value = audioEnergy;` 之后**，绝不进被钉住的单次扫描区。
+- 转场与相机：`wallpaperFlow` 提成共享谓词 `isSoftFlowPreset(preset)`（覆盖 5 和 7），铺满视野的连续场只给极轻的一下（`duration 0.30`、`uBurstAmt 0.05`、`camPunch 0.04`），硬炸开会撕碎整片粒子。`setPreset` 给 `p === 7` 的基线是 radius `8.6` / phi `0.16` / theta `0`（`orbit.baselineTheta` 那行没动）。
+- **全屏退出黑屏卡顿的根因是遮罩被后到的信号一路顺延。** 退出时窗口尺寸跳变、边界还原、`leave-full-screen` 状态推送会连发好几轮，原本每一轮都重排回亮计时器，等于让遮罩一直等最后一个信号，看上去就是一段黑屏。现在 `scheduleFullscreenTransitionReveal` 只允许提前（`if (revealDue && due >= revealDue) return;`），resize 或尺寸已跳变用 50ms、只有状态推送用 110ms。
+- 硬上限 `FULLSCREEN_TRANSITION_MAX_COVER_MS = 320` **独占 `deadlineTimer` 一个计时器槽**，resize/state 只能重排 `revealTimer`、抢不掉它，所以遮罩时长有确定上界。动作前摇 110ms（遮罩铺好才调原生退出）、收尾 220ms；降低动效偏好下是 20 / 90 / 30 / 80。
+- `desktop/main.js` 的 `applyWindowedBounds` 边界已经到位时不再重复 `setBounds`（`const settled = current.x === target.x && ...`），但仍然 `sendWindowState(mainWindow)`；`leave-full-screen` 与 `leave-html-full-screen` 都立刻把状态推给渲染层。
+- CSS 只动了必须动的：**窗口壳过渡不能带 `filter`**（`#desktop-window-shell` 承载 WebGL 画布，加 filter 会让整窗每帧重新合成），只留 `will-change:transform`；遮罩层 `#fullscreen-transition-layer` 用 `rgba(0,0,0,.62)`，回亮 `transition:opacity .2s`。
+- 验证：全量回归 `932/932` 通过（v1.8.6 基线 `916`，本轮新增 16 例：`tests/spectrum-echo-preset.test.js` 9 例 + `tests/fullscreen-exit-transition.test.js` 7 例）。着色器**在真实 GLSL 编译器上编译链接过**——Electron + SwiftShader 跑了一遍 vs/fs/bloomVs/bloomFs，两个 program 都 link 成功，`uSpectrumTex` 是 ACTIVE_UNIFORM（证明它真的被用上、没被优化掉）。**但这个预设和重调后的全屏过渡都没有在真实窗口里肉眼看过。**
+
 ## v1.8.6 左下小封面接上歌曲详情
 - 正式发布版本从 `1.8.5` 提升为 `1.8.6`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
 - 用户原话：「你加上一个这个封面可点击进入歌曲详情界面就行了」，指左下角 `#thumb-wrap` 里那张 64px 小封面。改动只有两行：`public/index.html` 的 `#thumb-cover` 加 `onclick="openTrackDetailModal('song')"` 与 `title="歌曲详情"`，`public/app.css` 里 `#thumb-cover` 那条规则加 `cursor:pointer`。
