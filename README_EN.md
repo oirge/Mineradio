@@ -92,13 +92,21 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.7 (2026-09-05)
+### Latest release v1.8.8 (2026-09-05)
 
-- **New 8th visual preset, "Spectrum Echo"** (spectrum reverb, an homage to CmzYa): angle is pitch, radius is time — the current spectrum lands on the innermost ring, then drifts outward ring by ring, dimming and sinking into depth like reverb tail
+- **The "Sonic Topography" visual preset is now a port**: a field of pillars rises with eight spectrum bands, kicks fire blue ripples, snares and highs fire thin white ones, meteors occasionally fall and burst into a ripple plus a spray of trails, and floating blocks above pulse and tumble with the kick envelope
+- The visual algorithm is ported from the community fork [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) (GPL-3.0); the original concept is CmzYa's Wallpaper Engine piece. Attribution and licensing are in [NOTICE.md](NOTICE.md)
+- The same-named preset shipped in v1.8.7 was my own spectrum ring and did not match the original project, so it has been replaced wholesale
+- Clicking (not dragging) on the canvas drops a ripple at the pointer; hold longer for a stronger one
+- Full Node regression suite: `939/939` passing (new `tests/sonic-topography-preset.test.js` with 16 cases)
+
+### v1.8.7 (2026-09-05)
+
+- **New 8th visual preset** (at the time a self-written spectrum ring; replaced by the port in v1.8.8)
 - It sits second in the preset panel; picking anything else costs nothing extra, and entering or leaving it never flashes the previous session's spectrum
 - **Leaving fullscreen no longer flashes black and stutters**: the cover is laid down before the native exit is called, reveal fires as soon as the viewport has settled, later duplicate resize signals may only pull the reveal earlier — never push it back — and a 320 ms hard ceiling backs it up
 - The transition no longer puts a `filter` on the window shell that hosts the WebGL canvas (it forces the whole window to recomposite every frame)
-- Full Node regression suite: `932/932` passing (new `tests/spectrum-echo-preset.test.js` with 9 cases and `tests/fullscreen-exit-transition.test.js` with 7)
+- Full Node regression suite: `932/932` passing
 
 <details>
 <summary>v1.8.6 — Click the bottom-left thumbnail for song details</summary>

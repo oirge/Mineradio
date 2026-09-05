@@ -1,10 +1,30 @@
 ﻿# 发布流程
 
+## v1.8.8 音域回响改成移植上游的地形实现
+
+- 正式发布版本从 `1.8.7` 提升为 `1.8.8`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。**注意 v1.8.7 的 GitHub Release 已经不在了**（tag `v1.8.7` 仍在远端、`releases/tags/v1.8.7` 返回 404、草稿 0 个），所以本版发布时 `releases/latest` 是从 `v1.8.6` 直接跳到 `v1.8.8`；停在 `1.8.6` 的客户端会一步更新到这里。
+- **v1.8.7 那一版的判断错在「原项目」指谁。** 我把它读成 CmzYa 的 Wallpaper Engine 作品，扫盘找不到 Workshop 目录就断定「源码不在本机、只能做原创致敬」。用户纠正：「和原项目的回响不一样这是原项目 https://github.com/XxHuberrr/Mineradio」——原项目是本仓库的上游社区分支，它的 `public/sonic-topography-preset.js` 是公开源码，GPL-3.0，和本仓库同许可，本来就该直接移植。
+- 现在预设 7 的地形层是**照上游那份 1081 行模块逐段移植**的，落在新文件 `public/sonic-topography-preset.js`（1083 行）。出处链写在文件头与 `NOTICE.md`：上游 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)（commit `89c0d23`）→ 它标注的 [yin-yizhen/sonic-topography](https://github.com/yin-yizhen/sonic-topography) 1.1.1（commit `3ff303e`）→ 原始创意 CmzYa 的 WE 作品（Workshop 物品号 `3747222633`）。
+- **移植成独立兄弟脚本、不塞进 `app.js`，是为了不碰着色器字符串机器。** `bloomVs` 由 `vs` 做两次逐字节精确替换派生（锚点 `'uniform float uMouseActive, uPixel, uColorMixT, uLoading;'` 与 `'gl_PointSize = sz * uPixel * uPointScale;'`），地形层用自己的 `ShaderMaterial`，那两句一个字节都不用动。`public/index.html` 在 `app.js` 之前多一行 `<script src="sonic-topography-preset.js"></script>`——必须在前，`window.MineradioSonicTopography` 要先注册。
+- 渲染结构：四个 `InstancedMesh`，地形 `BoxGeometry(boxWidth,1,boxWidth)` × gridSize²、悬浮方块 80、流星 20、尾迹 200，全部 `frustumCulled = false`，每帧只写实例矩阵。精度按画质档位封顶 `{省电 112, 均衡 160, 高 192, 极致 224}`，默认密度 46 算出 156×156；`spacing = 168 / gridSize`，柱宽 = `spacing * (0.9/1.05)`。
+- **音频量纲是唯一需要适配的地方。** 上游有一套细粒度频谱监听，本项目只有 `{bass, mid, treble, beat, energy}` 五个标量，所以回落成 `readMineradioAudio` 从这五个值里推 8 段频谱与 `kickEnvelope`。上游的涟漪阈值是 `kickEnvelope > 0.58`（0.32 复位）、流星 `> 0.62 且 random < 0.045`，而本项目 `beatPulse` 峰值大约 `0.62~0.92`，所以帧循环里传 `beat: Math.min(1, beatPulse * 1.35)`，不改模块里的阈值。
+- **帧钩子的位置是有讲究的：必须排在 `updateSkullParticleLayer(dt, frameShelfState);` 之后**，也就是 `particles.rotation.x/y +=` 已经加完的地方，地形才跟主粒子层共用同一帧的旋转，和上游的顺序一致。每帧传入的 ctx 是模块外预分配、逐帧填字段的（`scene` 1739 行、`orbit` 1951 行、`particles` 4812 行都声明在 ctx 之后，所以声明处只能留空壳），60fps 下不造垃圾。
+- 涟漪的 uniform 打包沿用上游：`vec4(x, z, start, ±strength)`，**w 取负号表示白色细涟漪**（军鼓与高频），正号是底鼓的蓝涟漪。`RIPPLE_MAX 10`、`RIPPLE_LIFETIME 4.8`、软淡出从 `2.1` 秒起——这两个常量是插值进 GLSL 的（着色器里出现 `2.10,4.80`）。`syncRippleUniforms` 排在 `updateAudioTriggers` 之前，所以第 N 帧新增的涟漪要到第 N+1 帧才进 uniform，测试把这条也钉住了。
+- **画布上单击（不是拖动）会打一道涟漪**：`mouseup` 里判 `!mouseDownAt.hadDrag && !isPointerOverUi(e)`，按压时长换强度（`0.25 + 秒数*2.6`，上限 `3.0`），屏幕坐标映射到 ±17 的世界范围。点界面元素、拖视角都不触发。
+- 背景星河在这个预设下压到 `0.82`（`skullBackdropDim`），和上游一致——地形本身够亮，不压会糊成一片。转场谓词 `isSoftFlowPreset` 仍覆盖 5 与 7；相机基线改成 radius `8.4` / phi `0.18`（原来是 `8.6` / `0.16`）。
+- **删干净了上一版的自研子系统**：`SPECTRUM_ECHO_PRESET_INDEX`、`updateSpectrumEchoField`、64×64 `DataTexture`（`spectrumEchoTex`）、`uSpectrumTex` uniform 与 sampler 声明、着色器里 `uPreset > 6.5` 的两处分支全部移除，`else if (uPreset < 6.5)` 放宽成 `else`。`grep -n 'spectrumEcho|SPECTRUM_ECHO|uSpectrumTex'` 零命中。`presetMeta[7]` 的说明从 `频谱回响 · 致敬 CmzYa` 改成 `音域地形 · 移植 CmzYa`。
+- 打包不用改：`build.files` 本来就是 `public/**/*`，新脚本自动进包；没有任何测试去扫 `index.html` 的 script 标签，新测试把这条也写成断言。
+- 验证：全量回归 `939/939` 通过（v1.8.7 基线 `932`，新增 `tests/sonic-topography-preset.test.js` 16 例，删掉已经失效的 `tests/spectrum-echo-preset.test.js` 9 例）。测试用一份 THREE stub 直接读实例矩阵，钉住的是行为而不是数值凑数：流星未激活时藏在 `y = -1000` 且缩放 0、落地正好撒 10 粒尾迹、尾迹一秒内过期、切走预设整层显存释放、冷启动在预设 5 时一个实例都不分配。
+- **已知边界：地形的实际观感没有在真实窗口里逐帧核对过。** `node --check` 干净、逻辑由 16 例测试钉住、`939/939` 全绿，但涟漪强度、配色跟封面的搭配这类观感项目只能靠肉眼，发版时仍是未确认状态——用户的指令是「更新好后发布新版」，所以按移植的忠实度发出去，观感问题留待反馈再调。
+- 待定：上游仓库里还带着一份 CmzYa 的 WE 打包产物（约 1.26 MB，没有署名文件）与一个桥接页。本轮**没有**把它 vendor 进来，只搬了原生地形层。
+
 ## v1.8.7 音域回响视觉预设 + 全屏退出不再黑屏卡顿
+
+> 补记（后于本节写下）：**本节关于「音域回响」的判断是错的，见文首 v1.8.8 一节。** 「原项目」指的是上游社区分支 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)，源码公开且同为 GPL-3.0；v1.8.7 发出去的是自研频谱环，已在 v1.8.8 里整体换成移植实现。下面第 5～12 条（`**新数据通路是这一版的技术核心。**` 那条起到 `转场与相机` 那条止）关于 `DataTexture` / `uSpectrumTex` / `uPreset > 6.5` 的实现细节，以及最后一条验证记录里 `uSpectrumTex` 是 ACTIVE_UNIFORM 那半句，都只作为历史记录保留，源码里已经没有了。第 4 条（WE 集成那条路）仍然有效。全屏退出那半（本节倒数第 5 条到倒数第 2 条）不受影响，仍然有效。
 
 - 正式发布版本从 `1.8.6` 提升为 `1.8.7`；`package.json`、`package-lock.json`（两处 `version`）、前端 `APP_VERSION`（`public/app.js:622`）与发布工作流默认 tag 保持一致，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。
 - 用户原话（issue 形状，两件事）：「增加视觉预设：希望增加音域回响视觉预设（Wallpaper Engine)(作者CmzYa）。全屏模式退出时，有明显的黑屏卡顿问题。」建议里写的是「可以从原项目的项目代码去接入实现」。
-- **原壁纸源码不在本机，所以这一版不是移植。** 后台把 `/c /d /e /f` 全盘扫过一遍找 Steam Workshop 目录 `431960`，零匹配；WebSearch 也没能定位到这件作品。加上直接搬 Workshop 作品的代码/素材本身有授权与署名问题，最终在 Mineradio 自己的 shader 框架里做了一个原创的同名同气质预设，`presetMeta` 里写成 `频谱回响 · 致敬 CmzYa`（致敬，不是移植）。
+- ~~**原壁纸源码不在本机，所以这一版不是移植。**~~（**这条判断错了**：用户说的「原项目」是上游社区分支 `XxHuberrr/Mineradio`，不是 Workshop 作品本体，那份地形源码一直是公开的。）后台把 `/c /d /e /f` 全盘扫过一遍找 Steam Workshop 目录 `431960`，零匹配；WebSearch 也没能定位到这件作品。加上直接搬 Workshop 作品的代码/素材本身有授权与署名问题，最终在 Mineradio 自己的 shader 框架里做了一个原创的同名同气质预设，`presetMeta` 里写成 `频谱回响 · 致敬 CmzYa`（致敬，不是移植）。**开发版已改为移植上游实现。**
 - 另一条路本来就通：项目已有 Wallpaper Engine 集成（`desktop/wallpaper-engine-library.js`，`WALLPAPER_ENGINE_APP_ID = '431960'`，扫 `steamapps/workshop/content/431960` 与 `steamapps/common/wallpaper_engine/projects/myprojects`），用户在 WE 里装了「音域回响」就能直接把真作品当桌面壁纸层或播放器背景板跑。两条路互不影响。
 - **新数据通路是这一版的技术核心。** 着色器原本只拿到 `uBass/uMid/uTreble/uBeat/uEnergy` 五个标量，做不出「音域」，所以加了一张 64 频段 × 64 历史行的 RGBA8 `DataTexture`（`spectrumEchoTex`，16 KB，60fps 下约 1 MB/s 上传）：每次推进先 `copyWithin` 把旧行整体下移一行，再把当前频谱写进第 0 行。**故意不用环形索引**——`LinearFilter` 会在环绕处插出一道缝。`DataTexture.flipY = false`，所以纹理 `v = 0` 就是最新行。四个通道：R 归一幅度、G 起振快收尾慢的包络、B 瞬态、A 该行的节拍能量。
 - 着色器把角度当音域（`bandN = abs(aUv.x * 2 - 1)`，低音在正下方、两侧升到高音、首尾无缝）、半径当时间（`age = lane / 0.86`），直接用半径去采样这张历史图，于是当下的频谱会一圈圈向外扩散、`decay = pow(1 - age, 1.35)` 衰减、`pos.z = -age * 3.9 + ...` 沉成漏斗纵深。外圈 14% 的 lane 留给只吃高频的空气尘，避免画面边缘硬切。
