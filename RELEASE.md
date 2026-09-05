@@ -13,6 +13,30 @@
 - 复现环境上的两条坑（不是产品缺陷）：预览窗格切后台会把 `document.hidden` 置真 → `body.render-deep-sleep`（`public/app.css:121`）把整层算成 `opacity:0`，且 iframe 画布卡在 `300×150`；`!important` 强改不管用，因为 `update()` 每帧重写 `layer.style.opacity`、`ensureLayer()` 还会重置成 `'0'` —— 办法是先截一次图把窗格拉到前台，再等那 `520ms` 淡入跑完，画布自己长回 `1280×720`。另外**用户的播放器正开着 5 个 `Mineradio.exe`，`desktop/main.js:245` 的 `requestSingleInstanceLock()` 让 Electron 侧复现走不通，不能杀进程腾位置**。
 - **这一版的画面是在真实渲染里看过的**（停播态与注入封面色两种情形都看了，并把推下去的 uniform 读回来核过），不像 v1.9.0 那样只有源码比对；但仍**没有跟原作在同一屏上逐帧比过观感**，「像不像」这件事的边界和 v1.9.0 一样照实留着。
 
+### 发布记录（v1.9.1）
+
+- 单分支写法：`fix/sonic-workshop-idle-palette`，沿用 v1.9.0 的**单提交**形状 —— `12ca1fc fix: 音域回响壁纸版没在放歌时糊成一片惨白（v1.9.1）` 一个提交里装齐代码（`public/sonic-workshop-preset.js`）、测试（`tests/sonic-workshop-preset.test.js`）、五处版本钉与全部文档（`CHANGELOG.md` / `RELEASE.md` / `README.md` / `README_EN.md` / `AGENTS.md` / `docs/PROJECT_MEMORY.md`），共 12 个文件 `+134 / -27`，tag 直接打在这个提交上。
+- PR [#58](https://github.com/oirge/Mineradio/pull/58) → **合并提交** `4cb9470`（CI `Verify` run `33956804719` 过 PR、`33956901206` 过 push）。绝不 squash，否则打在 `12ca1fc` 上的 tag 会离开 `main` 的可达历史。
+- tag `v1.9.1` 打在 `12ca1fc` 且是 **annotated**（tag object `cf9d1338d1cb274ad270d2f3c40c3fa0581d33d4`），`git describe origin/main` 回 `v1.9.1-1-g4cb9470`。
+- `Build and Release` run `33956920160` 成功（`--ref v1.9.1 -f tag=v1.9.1`，`09:03:02Z` 起 `09:05:29Z` 止，2 分 27 秒）。**electron-builder 的双草稿第十次复现**：`383193817` 四项资产齐全、`383193819` 只有 blockmap 一项；删掉资产不全的 `383193819` 后发布 `383193817`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.9.1` 复验 tag object `cf9d1338…` 仍在）。
+- **这一版踩到一个新坑：`make_latest` 和 `draft` 挤在同一次 PATCH 里会不生效。** 第一次 `gh api -X PATCH … -f draft=false -f make_latest=true` 之后 `releases/latest` 仍指着 `v1.9.0`；改用 UTF-8 JSON 文件 `--input`（`{"draft": false, "make_latest": "true", "name": …, "body": …}`）再 PATCH 一次才切过去。**发布后一定要复查 `gh api repos/oirge/Mineradio/releases/latest`**，别以为 PATCH 返回 200 就切好了 —— 不切的话老客户端的更新检查看不到新版。顺带一提，工作流建出来的 Release 名字只有裸版本号 `1.9.1`，标题与正文都得在这次 PATCH 里一起写。
+- 发布前 `releases/latest` 是 `v1.9.0`，发布后指向 `v1.9.1`（`target_commitish` = `main`，`published_at` `2026-09-05T09:06:04Z`）。
+- 四项资产全部回下本机复算核对：
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-1.9.1-Setup.exe` | 102606959 | `454b6fa1b559cb6f14f788327d5d3666315d9395ae12553029bda230464c4cf3` |
+| `Mineradio-1.9.1-Setup.exe.blockmap` | 106677 | `5093e4cde16f7ebbde3d892940929a117e95fcdb447030490ccc22a0b9f27082` |
+| `Mineradio-1.9.1-SHA256SUMS.txt` | 273 | `35d0ee76ec48ea41982d7b2aeb7a7f70663ee75aa5193c6d57fae2b78daf32c8` |
+| `latest.yml` | 347 | `7f0238052d10291ef6f526b1a44b25fff5fd78e7b7532bdbb0dc9bbcdbab578f` |
+
+- 清单 `Mineradio-1.9.1-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）与本机 `sha256sum -c` 全中；`latest.yml` 的 `sha512` = `YcxJFxCg9yVbhPmPMY/XGEfdJ4PqdtRtBbVUMTBvUfOJcShzJmTFohm/U6EwIBYEd4MUadC5ZXAKg3iT4xK0gg==` 与 `size` = `102606959` 与安装器实测一致（`sha512sum` 的十六进制先 `xxd -r -p` 再 `base64 -w0` 才能和 `latest.yml` 直接比），`releaseDate` `2026-09-05T09:05:14.231Z`。
+- 安装器比 v1.9.0 **小了 `1,246` 字节**（102,608,205 → 102,606,959）—— 这一版只是把 `workshopCoverHex` 的取色链删短，没加任何东西，体积略降对得上。
+- 遗留未修（自 `v1.7.26` 记到现在，本轮仍未动）：`SHA256SUMS.txt` 行尾是 **CRLF**，`sha256sum -c` 直接跑会报 `'…Setup.exe'\r': No such file or directory`，必须先 `tr -d '\r' < Mineradio-1.9.1-SHA256SUMS.txt > /tmp/sums.lf && sha256sum -c /tmp/sums.lf`。**只是 CRLF、没有 BOM**：清单 273 字节、去掉 3 个 `\r` 正好 270，首字节就是哈希的 `4`。
+- **v1.8.8 那条 NSIS 静默安装坑仍然有效**（`allowToChangeInstallationDirectory: false` 的 `/S` 装进「上次记住的目录」、真实目录读注册表 `UninstallString`、`/D=` 必须最后且不加引号、快捷方式要自己改 `TargetPath`），见 v1.8.8 的发布记录。本轮**没有**动本机安装（`D:\Mineradio` 与 `D:\222\Mineradio` 都还停在 `1.8.8`，早于预设 8，用户没要求这一版跟着更）。
+- 补记上一版的尾巴：v1.9.0 的资产记录分支 `docs/release-assets-v190` → PR [#57](https://github.com/oirge/Mineradio/pull/57) → **合并提交** `8a50290`（记录提交 `10ec130`，CI `Verify` run `33954446193` 过 PR、`33954530785` 过 push）。
+- 资产记录分支 `docs/release-assets-v191`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.9.0 两个音域回响预设对齐原项目
 
 - 正式发布版本从 `1.8.9` 提升为 `1.9.0`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。走 minor 是因为这一版新增了一个模块层（`public/sonic-audio-monitor.js`）并改了两个预设的观感，不只是修 bug。
