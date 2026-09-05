@@ -428,10 +428,52 @@ test('认不出封面颜色就退回原作那套兜底色，主题色不再插�
   assert.doesNotMatch(presetSource, /visualTint/);
 
   // 只有一个颜色的调色板也不能崩, 缺的角色各自兜底。
-  const single = propsFor({ stageLyrics: { coverPalette: { primary: '#7ef9ff' } } }).props.mineradioCustomTheme;
+  const single = propsFor({ stageLyrics: { coverPalette: { rawPrimary: '#7ef9ff' } } }).props.mineradioCustomTheme;
   assert.equal(single.uCoolCore, '#7ef9ff');
   assert.equal(single.uWarmCore, '#7ef9ff');
-  assert.equal(single.uRippleColor, '#7ef9ff');
+  assert.equal(single.uRippleColor, '#f8d8ff', '涟漪链里没有主色这一档, 缺光色就用原作的 #f8d8ff');
+});
+
+// v1.9.0 的实际故障: 没在放歌时 stageLyrics.coverPalette 是 app.js 里那份初值 ——
+// 只有歌词文字三色, 而且为了压在封面上读得清一律近白。上游的取色链末尾正是这三个字段
+// (上游拿同一份颜色既画歌词又画地形), 照搬过来就把八个 uniform 一起顶到近白, 壁纸糊成一片惨白。
+test('歌词文字色永远不许当地形色：没封面就走原作兜底，不许泛白', () => {
+  // 与 public/app.js 里 stageLyrics.coverPalette 的初值逐字一致。
+  const IDLE_LYRIC_PALETTE = {
+    primary: '#d6f8ff',
+    secondary: '#9cffdf',
+    highlight: '#eef7ff',
+    shadow: 'rgba(2,8,12,0.42)',
+    glow: 'rgba(143,233,255,0.34)',
+  };
+  const initial = readSourceBlock(app, '  coverPalette: {', '  },');
+  Object.keys(IDLE_LYRIC_PALETTE).forEach((key) => {
+    assert.ok(
+      initial.includes(`${key}: '${IDLE_LYRIC_PALETTE[key]}'`),
+      `app.js 的 coverPalette 初值变了 (${key}), 这条守卫要跟着更新`,
+    );
+  });
+
+  const idle = propsFor({ stageLyrics: { coverPalette: IDLE_LYRIC_PALETTE } }).props.mineradioCustomTheme;
+  const bare = propsFor().props.mineradioCustomTheme;
+  assert.equal(JSON.stringify(idle), JSON.stringify(bare), '没有 raw* 封面色就该和空调色板走同一套兜底');
+  assert.equal(idle.__primaryColor, '#cb6c89');
+  assert.equal(idle.uCoolCore, '#99c4ff');
+  assert.equal(idle.uRippleColor, '#f8d8ff');
+  assert.ok(luminance(idle.uBaseColor1) < 0.05, `基面被歌词色顶亮了: ${idle.uBaseColor1}`);
+  // 惨白现场的两层基面亮度分别约 0.17 / 0.91, 这两条就是那次故障的直接判据。
+  assert.ok(luminance(idle.uBaseColor2) < 0.4, `基面第二层被歌词色顶亮了: ${idle.uBaseColor2}`);
+  // 故障时 冷色/涟漪/峰值 会同时取到歌词高光色, 三个挤成同一个近白值。
+  assert.notEqual(idle.uCoolCore, idle.uRippleColor, '冷色与涟漪撞成同一个值');
+  assert.notEqual(idle.uWarmCore, idle.uCoolCore, '暖色与冷色撞成同一个值');
+  // 只剩歌词色时地形至少还得有明暗层次, 不能全是同一片。
+  assert.ok(luminance(idle.uCoolCore) - luminance(idle.uBaseColor1) > 0.3, '地形没有明暗层次');
+
+  // 取色链里不许再出现歌词文字三色 —— 只要它们回来, 惨白就会复发。
+  const chain = readSourceBlock(presetSource, '  function workshopCoverHex(role)', '  function colorDistance');
+  assert.doesNotMatch(chain, /pal\.primary/, '取色链不许退到歌词主色');
+  assert.doesNotMatch(chain, /pal\.highlight/, '取色链不许退到歌词高光色');
+  assert.doesNotMatch(chain, /pal\.secondary/, '取色链不许退到歌词副色');
 });
 
 test('自定义配色压过封面：整体色改主色，分区色各改各的', () => {

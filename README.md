@@ -151,7 +151,14 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
-### 最新版本 v1.9.0 (2026-09-05)
+### 最新版本 v1.9.1 (2026-09-05)
+
+- **修好了预设 8「音域回响 Wallpaper Engine」（原作 CmzYa）没在放歌时糊成一片惨白的问题**：上一版把它的配色改成直接吃封面原始取色是对的，但取色链最后一档还留着歌词文字色 —— 歌词色为了压在封面上读得清一律抬过亮度，缺省就是近白的 `#d6f8ff` / `#9cffdf` / `#eef7ff`，于是没在放歌、或这首歌不带封面、或封面取色还没跑完时，壁纸的八个颜色一起被顶到近白，冷色、涟漪、峰值三个还挤成同一个色，画面就没了明暗层次
+- 现在没有封面色就直接用原作自己的兜底配色（coral-mirage：主色 `#cb6c89`、冷色 `#99c4ff`、涟漪 `#f8d8ff`、基面近黑 `#16060f`）；**有封面色时的取色链和上游逐项一致，画面和上一版一样**
+- 预设 7「移植 Ajin」不受影响，这一版没动它
+- 全量 Node 回归 `988/988` 通过（新增 1 例：钉住调色板初值，并从源码级禁止取色链再退回歌词文字色）
+
+### v1.9.0 (2026-09-05)
 
 - **两个「音域回响」的画面之前和原项目不一样，这一版对齐了**：对着上游 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)（commit `89c0d23`）逐项核，差异一共五处，全部改成上游的行为
 - **预设 7「移植 Ajin」现在拿到真正的八段频谱和底鼓包络**：上游那层音频监视器整个移植过来（新文件 `public/sonic-audio-monitor.js`），按赫兹切八段（32–58 / 58–118 / 118–260 / 260–720 / 720–1800 / 1800–4200 / 4200–9000 / 9000–16000 Hz），底鼓走六个候选窗口自动跟踪加自适应噪声底；以前只有 5 个粗粒度值反推八段，地形起伏的分布和涟漪的时机因此最明显地不像
@@ -164,7 +171,8 @@ npm test
 - 全量 Node 回归 `987/987` 通过（新增 `tests/sonic-audio-monitor.test.js` 12 例、`tests/lyric-cover-palette-split.test.js` 9 例）
 - **已知边界**：这一版是逐项对着上游源码核出来的，没有在真实窗口里逐帧对着原项目比过观感；如果还有哪里不像，说清楚是哪个预设、哪个部位、快歌还是慢歌
 
-### v1.8.9 (2026-09-05)
+<details>
+<summary>v1.8.9 音域回响补上 Wallpaper Engine 原作</summary>
 
 - **补上原项目里我这边还缺的那个视觉预设**：上游 [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) 有两条「音域回响」，v1.8.8 只搬了 three.js 重写，这一版把另一条也搬齐
 - **新增第 9 个视觉预设「音域回响 Wallpaper Engine」**（原作 CmzYa）：`public/vendor/sonic-workshop/` 下是 CmzYa 的 Wallpaper Engine 作品《音域回响》的构建产物，原样嵌在铺满窗口的 iframe 里，整幅画面由原作渲染，本仓库只负责喂数据
@@ -175,6 +183,8 @@ npm test
 - 画质档位决定网格精度（省电 224 / 均衡 288 / 高 320 / 极致 384），默认的「高」正好是原作 `project.json` 里的 320（v1.9.0 起固定回 320，不再跟档位联动）
 - vendor 的四个文件与上游 commit `89c0d23` 逐字节一致，版权与出处见 [NOTICE.md](NOTICE.md)；这份第三方产物经检查不联网、不写本地存储、不含 `eval`，并把结论钉成了回归测试
 - 全量 Node 回归 `965/965` 通过（新增 `tests/sonic-workshop-preset.test.js` 26 例）
+
+</details>
 
 <details>
 <summary>v1.8.8 音域回响改成移植实现</summary>
