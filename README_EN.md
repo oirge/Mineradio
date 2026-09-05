@@ -92,12 +92,23 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.8.6 (2026-09-04)
+### Latest release v1.8.7 (2026-09-05)
+
+- **New 8th visual preset, "Spectrum Echo"** (spectrum reverb, an homage to CmzYa): angle is pitch, radius is time — the current spectrum lands on the innermost ring, then drifts outward ring by ring, dimming and sinking into depth like reverb tail
+- It sits second in the preset panel; picking anything else costs nothing extra, and entering or leaving it never flashes the previous session's spectrum
+- **Leaving fullscreen no longer flashes black and stutters**: the cover is laid down before the native exit is called, reveal fires as soon as the viewport has settled, later duplicate resize signals may only pull the reveal earlier — never push it back — and a 320 ms hard ceiling backs it up
+- The transition no longer puts a `filter` on the window shell that hosts the WebGL canvas (it forces the whole window to recomposite every frame)
+- Full Node regression suite: `932/932` passing (new `tests/spectrum-echo-preset.test.js` with 9 cases and `tests/fullscreen-exit-transition.test.js` with 7)
+
+<details>
+<summary>v1.8.6 — Click the bottom-left thumbnail for song details</summary>
 
 - **The now-playing thumbnail in the bottom-left corner is clickable**: it opens the song details. Previously only the track name beside it responded — the cover itself did nothing
 - The cursor turns into a hand over the cover; the title and artist lines behave exactly as before (title opens song details, the artist line opens artist details)
 - While nothing is playing the whole thumbnail still ignores clicks, unchanged
 - Full Node regression suite: `916/916` passing (new `tests/now-playing-detail-click.test.js`, 4 cases)
+
+</details>
 
 <details>
 <summary>v1.8.5 — Play statistics no longer under-count</summary>

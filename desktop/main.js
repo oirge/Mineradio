@@ -2138,7 +2138,13 @@ function applyWindowedBounds(win) {
   const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
   const minimum = windowedMinimumSize(display);
   win.setMinimumSize(minimum.width, minimum.height);
-  win.setBounds(getWindowedBounds(win), false);
+  const target = getWindowedBounds(win);
+  const current = win.getBounds();
+  // 退出全屏时 leave-full-screen 与 exitFullscreenToWindow 都会安排还原，
+  // 边界已经到位就不要再 setBounds：多一次尺寸跳变，渲染层就多压一轮全屏遮罩。
+  const settled = current.x === target.x && current.y === target.y
+    && current.width === target.width && current.height === target.height;
+  if (!settled) win.setBounds(target, false);
   sendWindowState(win);
 }
 
@@ -5303,6 +5309,9 @@ async function createWindow() {
   });
   mainWindow.on('leave-full-screen', () => {
     windowFullscreenActive = false;
+    // 先把"已退出全屏"推给渲染层，别等 50ms 后的边界还原顺带通知，
+    // 否则渲染层的全屏遮罩要多黑这一段才知道可以回亮。
+    sendWindowState(mainWindow);
     setTimeout(() => applyWindowedBounds(mainWindow), 50);
   });
   mainWindow.on('enter-html-full-screen', () => {
@@ -5311,6 +5320,7 @@ async function createWindow() {
   });
   mainWindow.on('leave-html-full-screen', () => {
     htmlFullscreenActive = false;
+    sendWindowState(mainWindow);
     setTimeout(() => applyWindowedBounds(mainWindow), 50);
   });
 
