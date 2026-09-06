@@ -49,6 +49,18 @@ test('数据目录身份保持不变，曲库和设置不会被孤立', () => {
   assert.equal(PKG.name, 'mineradio');
 });
 
+/**
+ * 按函数名切出 NSIS 函数体（含 FunctionEnd）。
+ * @param {string} name 函数名。
+ * @returns {string} 函数源码。
+ */
+function nsisFunction(name) {
+  const start = NSH.indexOf(`Function ${name}`);
+  assert.ok(start >= 0, `缺少 NSIS 函数 ${name}`);
+  const end = NSH.indexOf('FunctionEnd', start);
+  return NSH.slice(start, end + 'FunctionEnd'.length);
+}
+
 test('NSIS 安装目录叶子名带 oirge，不会落进原项目的目录', () => {
   assert.match(NSH, /!define MINERADIO_INSTALL_DIR_NAME "Mineradio-oirge"/);
   assert.match(NSH, /!define MINERADIO_INSTALL_DIR_NAME_LOWER "mineradio-oirge"/);
@@ -56,8 +68,25 @@ test('NSIS 安装目录叶子名带 oirge，不会落进原项目的目录', () 
   // 任何残留的 "D:\Mineradio" 字面量都会把两个项目装到同一个目录里。
   assert.doesNotMatch(NSH, /"D:\\Mineradio"/);
   assert.match(NSH, /StrCpy \$INSTDIR "\$\{MINERADIO_DEFAULT_INSTALL_DIR\}"/);
-  assert.match(NSH, /\$\{If\} \$2 != "\$\{MINERADIO_INSTALL_DIR_NAME\}"/);
-  assert.match(NSH, /\$\{AndIf\} \$2 != "\$\{MINERADIO_INSTALL_DIR_NAME_LOWER\}"/);
+
+  const normalize = nsisFunction('MineradioNormalizeInstallDir');
+  assert.match(normalize, /\$\{ElseIf\} \$2 != "\$\{MINERADIO_INSTALL_DIR_NAME\}"/);
+  assert.match(normalize, /\$\{AndIf\} \$2 != "\$\{MINERADIO_INSTALL_DIR_NAME_LOWER\}"/);
+  // 叶子名是旧身份 / 原项目的 Mineradio 时改到旁边（D:\Mineradio → D:\Mineradio-oirge），
+  // 绝不能嵌进去：旧版卸载器是 RMDir /r，整目录连新版一起删。
+  assert.match(NSH, /!define MINERADIO_LEGACY_INSTALL_DIR_NAME "Mineradio"/);
+  assert.match(
+    normalize,
+    /\$\{If\} \$2 == "\$\{MINERADIO_LEGACY_INSTALL_DIR_NAME\}"[\s\S]*?\$\{GetParent\} "\$0" \$3[\s\S]*?StrCpy \$0 "\$0\\\$\{MINERADIO_INSTALL_DIR_NAME\}"/,
+  );
+
+  // 没有 D 盘时 $INSTDIR 还是 electron-builder 的默认目录，静默安装不经过目录页，必须在这里归一化。
+  const preferred = nsisFunction('MineradioUsePreferredInstallDir');
+  assert.match(
+    preferred,
+    /StrCpy \$INSTDIR "\$\{MINERADIO_DEFAULT_INSTALL_DIR\}"[\s\S]*?Push "\$INSTDIR"\s*\n\s*Call MineradioNormalizeInstallDir\s*\n\s*Pop \$INSTDIR/,
+  );
+
   // 卸载安全门也必须认新叶子名，否则卸载会被自己挡下来。
   assert.match(NSH, /\$\{If\} \$0 != "\$\{MINERADIO_INSTALL_DIR_NAME\}"/);
 });
@@ -70,22 +99,44 @@ test('安装器只结束二创版自己的进程', () => {
 });
 
 test('旧身份安装的卸载提示有三重门禁，且不碰用户数据', () => {
-  const start = NSH.indexOf('Function MineradioOfferLegacyUninstall');
-  const end = NSH.indexOf('FunctionEnd', start);
-  assert.ok(start > 0 && end > start, '缺少旧身份卸载提示');
-  const fn = NSH.slice(start, end);
+  const fn = nsisFunction('MineradioOfferLegacyUninstall');
 
-  assert.match(NSH, /!define MINERADIO_LEGACY_UNINSTALL_KEY "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\9733721a-009e-52bc-b705-49059cd80258"/);
+  // 这个 GUID 是实测取自本机注册表的旧身份卸载键；原项目用的是同一个，所以它只能当线索。
+  assert.match(NSH, /!define MINERADIO_LEGACY_GUID "9733721a-009e-52bc-b705-49059cd80258"/);
+  assert.match(NSH, /!define MINERADIO_LEGACY_APP_KEY "Software\\\$\{MINERADIO_LEGACY_GUID\}"/);
+  assert.match(NSH, /!define MINERADIO_LEGACY_UNINSTALL_KEY "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\\$\{MINERADIO_LEGACY_GUID\}"/);
   assert.match(fn, /ReadRegStr \$0 HKCU "\$\{MINERADIO_LEGACY_UNINSTALL_KEY\}" "QuietUninstallString"/);
-  // 门禁一：只有 1.x 才是本仓库的版本线，原项目的 2.x 一律放过。
-  assert.match(fn, /"DisplayVersion"/);
-  assert.match(fn, /\$\{If\} \$2 != "1\."/);
-  // 门禁二：目录里必须有本仓库写的安全标记（该卸载记录没有 InstallLocation，只能从 DisplayIcon 反推）。
-  assert.match(fn, /"DisplayIcon"/);
-  assert.match(fn, /IfFileExists "\$4\\\$\{MINERADIO_INSTALL_MARKER\}" 0 legacyDone/);
+
+  // 安装根目录先取 HKCU\Software\<GUID>\InstallLocation（实测存在），再退到 DisplayIcon 反推。
+  assert.match(fn, /ReadRegStr \$4 HKCU "\$\{MINERADIO_LEGACY_APP_KEY\}" "InstallLocation"/);
+  assert.match(fn, /"DisplayIcon"[\s\S]*?\$\{GetParent\} "\$3" \$4/);
+  assert.ok(fn.indexOf('"InstallLocation"') < fn.indexOf('"DisplayIcon"'), 'InstallLocation 必须优先于 DisplayIcon');
+
+  // 门禁一：目录里必须有安装标记，旧卸载器自己的安全门才过得去。
+  assert.match(fn, /\$\{IfNot\} \$\{FileExists\} "\$4\\\$\{MINERADIO_INSTALL_MARKER\}"/);
+
+  // 门禁二：原项目 XxHuberrr/Mineradio 的 GUID、安装标记、1.x 版本号全都撞车，
+  // 唯一可靠的区分是 electron-builder 写进 resources\app-update.yml 的发布源。
+  assert.match(NSH, /!define MINERADIO_UPDATE_OWNER_LINE "owner: oirge"/);
+  const isOurs = nsisFunction('MineradioLegacyInstallIsOurs');
+  assert.match(isOurs, /FileOpen \$2 "\$0\\resources\\app-update\.yml" r/);
+  // ${TrimNewLines} 在 TextFunc.nsh 里，不在 FileFunc.nsh —— 本地 makensis 实测报 Invalid command。
+  assert.match(NSH, /^!include TextFunc\.nsh$/m);
+  assert.match(isOurs, /\$\{TrimNewLines\} "\$3" \$3/);
+  assert.match(isOurs, /\$\{If\} \$3 == "\$\{MINERADIO_UPDATE_OWNER_LINE\}"/);
+  assert.match(fn, /Push "\$4"\s*\n\s*Call MineradioLegacyInstallIsOurs\s*\n\s*Pop \$2\s*\n\s*\$\{If\} \$2 != "1"/);
+  // 版本号不再当门禁：原项目也发过 v1.1.1。
+  assert.doesNotMatch(fn, /!= "1\."/);
+
   // 门禁三：新目录嵌在旧目录里时不能卸，否则会把刚装好的文件一起删掉。
-  assert.match(fn, /StrLen \$5 "\$4"/);
-  assert.match(fn, /StrCpy \$2 "\$INSTDIR" \$5/);
+  // 前缀比较两边都要补反斜杠，否则默认的 D:\Mineradio-oirge 会被 D:\Mineradio 误判成子目录，提示永远不出现。
+  assert.match(fn, /StrCpy \$3 "\$4\\"\s*\n\s*StrLen \$5 "\$3"\s*\n\s*StrCpy \$2 "\$INSTDIR\\" \$5\s*\n\s*\$\{If\} \$2 == "\$3"/);
+  const legacyRoot = 'D:\\Mineradio';
+  const nestedPrefix = (dir) => (dir + '\\').slice(0, (legacyRoot + '\\').length) === legacyRoot + '\\';
+  assert.equal(nestedPrefix('D:\\Mineradio-oirge'), false);
+  assert.equal(nestedPrefix('D:\\Mineradio\\Mineradio-oirge'), true);
+  assert.equal(nestedPrefix('D:\\Mineradio'), true);
+
   // 最终仍由用户点头，默认按钮是「否」，静默安装一律不卸。
   assert.match(fn, /MB_YESNO\|MB_ICONQUESTION\|MB_DEFBUTTON2/);
   assert.match(fn, /\/SD IDNO IDYES doLegacyUninstall/);
@@ -94,6 +145,14 @@ test('旧身份安装的卸载提示有三重门禁，且不碰用户数据', ()
   assert.doesNotMatch(fn, /--delete-app-data/);
   // 文件装完之后才问，用户中途取消安装就什么都没发生。
   assert.match(NSH, /Call MineradioWriteInstallMarker\s*\n\s*Call MineradioOfferLegacyUninstall/);
+
+  // 真机静默验证靠这个探针：环境变量为空时不写任何东西。
+  assert.match(NSH, /!define MINERADIO_LEGACY_PROBE_ENV "MINERADIO_INSTALLER_LEGACY_PROBE"/);
+  const probe = nsisFunction('MineradioLegacyProbe');
+  assert.match(probe, /ReadEnvStr \$1 "\$\{MINERADIO_LEGACY_PROBE_ENV\}"\s*\n\s*\$\{If\} \$1 != ""/);
+  for (const stage of ['legacy=absent', 'legacy=no-marker', 'legacy=not-ours', 'legacy=nested', 'legacy=prompt', 'legacy=declined', 'legacy=uninstall']) {
+    assert.ok(fn.includes(stage), `探针缺少阶段 ${stage}`);
+  }
 });
 
 test('托盘与桌面快捷方式用显示身份，不会和原项目重名或多出图标', () => {
@@ -128,7 +187,7 @@ test('共享谱面缓存的临时文件带进程号，两个播放器不会互�
 
 test('afterPack 按 executableName 找 exe，任务管理器显示名跟随 productName', () => {
   const afterPack = read('build/after-pack.js');
-  // productFilename 跟的是含中文的 productName，和实际 exe 名不再一致。
+  // exe 名以 win.executableName 为准，不依赖 electron-builder 内部的 productFilename 约定。
   assert.match(afterPack, /platformOptions\.executableName/);
   assert.match(afterPack, /'FileDescription', productName/);
   assert.doesNotMatch(afterPack, /'FileDescription', 'Mineradio'/);

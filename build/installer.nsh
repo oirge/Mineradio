@@ -33,6 +33,8 @@
 
 !include LogicLib.nsh
 !include FileFunc.nsh
+; ${TrimNewLines} 在 TextFunc.nsh 里，不在 FileFunc.nsh；少了这一行 makensis 会报 Invalid command。
+!include TextFunc.nsh
 !include nsDialogs.nsh
 !include WinMessages.nsh
 
@@ -47,8 +49,16 @@
 !define MINERADIO_DEFAULT_INSTALL_DIR "D:\${MINERADIO_INSTALL_DIR_NAME}"
 !define MINERADIO_PROCESS_EXE_NAME "Mineradio-oirge.exe"
 ; 换身份之前（appId com.mineradio.desktop）本仓库留下的卸载记录 GUID，实测取自本机注册表。
-; 原项目用的是同一个 appId，所以只靠这个键判断会误伤原项目的安装，必须再按版本号和安装标记二次确认。
-!define MINERADIO_LEGACY_UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\9733721a-009e-52bc-b705-49059cd80258"
+; 原项目 XxHuberrr/Mineradio 用同一个 appId、同一个 GUID、同一个安装标记，甚至也发过 1.x 版本，
+; 所以这个键只能当线索；真正的归属看安装目录里 electron-builder 写的 resources\app-update.yml 的 owner 字段。
+!define MINERADIO_LEGACY_GUID "9733721a-009e-52bc-b705-49059cd80258"
+!define MINERADIO_LEGACY_APP_KEY "Software\${MINERADIO_LEGACY_GUID}"
+!define MINERADIO_LEGACY_UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${MINERADIO_LEGACY_GUID}"
+; 旧身份和原项目共用的安装目录叶子名：新版绝不能装进这种目录里面，只能装到它旁边。
+!define MINERADIO_LEGACY_INSTALL_DIR_NAME "Mineradio"
+!define MINERADIO_UPDATE_OWNER_LINE "owner: oirge"
+; 仅供自动化验证：设置该环境变量后，旧版本检测的每一步结论会追加写入它指向的文件；日常安装不会触发。
+!define MINERADIO_LEGACY_PROBE_ENV "MINERADIO_INSTALLER_LEGACY_PROBE"
 
 ; electron-builder 26.15.3 允许通过 customCheckAppRunning 覆盖安装和升级卸载阶段的进程检查。
 ; 默认实现可能退回按进程名终止；这里固定按当前安装目录、当前会话和 Mineradio-oirge.exe 精确筛选。
@@ -276,6 +286,11 @@ Function MineradioUsePreferredInstallDir
     IfFileExists "$INSTDIR\${MINERADIO_INSTALL_MARKER}" preserveExistingInstall 0
     IfFileExists "D:\*.*" 0 +2
     StrCpy $INSTDIR "${MINERADIO_DEFAULT_INSTALL_DIR}"
+    ; 没有 D 盘时 $INSTDIR 还是 electron-builder 的默认目录（叶子名由它内部约定决定，目前恰好等于 productFilename），
+    ; 静默安装不会经过目录页，这里统一归一化，不依赖那个巧合，卸载安全门才不会把自己挡下来。
+    Push "$INSTDIR"
+    Call MineradioNormalizeInstallDir
+    Pop $INSTDIR
   ${EndIf}
   Return
 
@@ -310,7 +325,15 @@ Function MineradioNormalizeInstallDir
     ${EndIf}
   ${Else}
     ${GetFileName} "$0" $2
-    ${If} $2 != "${MINERADIO_INSTALL_DIR_NAME}"
+    ${If} $2 == "${MINERADIO_LEGACY_INSTALL_DIR_NAME}"
+      ; 叶子名是旧身份 / 原项目的 Mineradio：装进去等于住进别人的卸载范围（旧版卸载器会整目录删掉），
+      ; 所以改到它旁边的专用目录，例如 D:\Mineradio → D:\Mineradio-oirge。
+      ${GetParent} "$0" $3
+      ${If} $3 != ""
+        StrCpy $0 "$3"
+      ${EndIf}
+      StrCpy $0 "$0\${MINERADIO_INSTALL_DIR_NAME}"
+    ${ElseIf} $2 != "${MINERADIO_INSTALL_DIR_NAME}"
     ${AndIf} $2 != "${MINERADIO_INSTALL_DIR_NAME_LOWER}"
       StrCpy $0 "$0\${MINERADIO_INSTALL_DIR_NAME}"
     ${EndIf}
@@ -330,10 +353,67 @@ Function MineradioWriteInstallMarker
   FileClose $0
 FunctionEnd
 
-; 换身份之前装过的旧版本（appId com.mineradio.desktop、安装在 D:\Mineradio）不会被新安装器当成升级，
+; 仅供自动化验证：把栈顶那一行结论追加到 ${MINERADIO_LEGACY_PROBE_ENV} 指向的文件；环境变量为空时什么都不做。
+; 静默安装里 MessageBox 会被 /SD 自动作答、DetailPrint 也看不见，只有这样才能在真机上核对检测走到了哪一步。
+Function MineradioLegacyProbe
+  Exch $0
+  Push $1
+  Push $2
+  ReadEnvStr $1 "${MINERADIO_LEGACY_PROBE_ENV}"
+  ${If} $1 != ""
+    ClearErrors
+    FileOpen $2 "$1" a
+    ${IfNot} ${Errors}
+      FileSeek $2 0 END
+      FileWrite $2 "$0$\r$\n"
+      FileClose $2
+    ${EndIf}
+  ${EndIf}
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+
+; 判断栈顶那个安装根目录是不是本仓库（oirge）发布的：electron-builder 会把发布源写进 resources\app-update.yml，
+; 原项目那份是 owner: XxHuberrr。返回 "1" / "0"。文件不存在或读不到一律按「不是」处理。
+Function MineradioLegacyInstallIsOurs
+  Exch $0
+  Push $1
+  Push $2
+  Push $3
+  StrCpy $1 "0"
+  ClearErrors
+  FileOpen $2 "$0\resources\app-update.yml" r
+  ${If} ${Errors}
+    Goto done
+  ${EndIf}
+readLine:
+  ClearErrors
+  FileRead $2 $3
+  ${If} ${Errors}
+    Goto closeFile
+  ${EndIf}
+  ${TrimNewLines} "$3" $3
+  ${If} $3 == "${MINERADIO_UPDATE_OWNER_LINE}"
+    StrCpy $1 "1"
+    Goto closeFile
+  ${EndIf}
+  Goto readLine
+closeFile:
+  FileClose $2
+done:
+  StrCpy $0 "$1"
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
+; 换身份之前装过的旧版本（appId com.mineradio.desktop、默认在 D:\Mineradio）不会被新安装器当成升级，
 ; 会变成两份共存。这里在文件装完后问一次用户，同意才调用旧版自带的卸载器。
-; 判断必须足够严：原项目 XxHuberrr/Mineradio 用的是同一个 appId、同一个卸载 GUID，
-; 只有版本号是 1.x（本仓库的版本线）且目录里有本仓库写的安全标记时才敢提示，最终仍由用户确认。
+; 三道门禁：目录里有安装标记（确实是一份 Mineradio 安装）、resources\app-update.yml 的 owner 是 oirge
+; （不是原项目的安装 —— 原项目 GUID、标记、1.x 版本号全都撞车，只有这个字段可靠）、新目录不在旧目录里面。
+; 最终仍由用户确认，默认按钮是「否」，静默安装一律不卸；调用旧卸载器时绝不带删数据的开关。
 Function MineradioOfferLegacyUninstall
   Push $0
   Push $1
@@ -346,33 +426,59 @@ Function MineradioOfferLegacyUninstall
   ${If} $0 == ""
     ReadRegStr $0 HKCU "${MINERADIO_LEGACY_UNINSTALL_KEY}" "UninstallString"
     ${If} $0 == ""
+      Push "legacy=absent"
+      Call MineradioLegacyProbe
       Goto legacyDone
     ${EndIf}
     StrCpy $0 "$0 /S"
   ${EndIf}
 
   ReadRegStr $1 HKCU "${MINERADIO_LEGACY_UNINSTALL_KEY}" "DisplayVersion"
-  StrCpy $2 "$1" 2
-  ${If} $2 != "1."
-    ; 2.x 是原项目的版本线，绝不能碰。
-    Goto legacyDone
-  ${EndIf}
 
-  ; 该卸载记录没有 InstallLocation，只能从 DisplayIcon（卸载器同目录的图标）反推安装根目录。
-  ReadRegStr $3 HKCU "${MINERADIO_LEGACY_UNINSTALL_KEY}" "DisplayIcon"
-  ${If} $3 == ""
-    Goto legacyDone
-  ${EndIf}
-  ${GetParent} "$3" $4
+  ; 安装根目录优先取 electron-builder 记在 HKCU\Software\<GUID> 下的 InstallLocation；
+  ; 卸载记录本身没有这个值，退而从 DisplayIcon（卸载器同目录的图标）反推。
+  ReadRegStr $4 HKCU "${MINERADIO_LEGACY_APP_KEY}" "InstallLocation"
   ${If} $4 == ""
+    ReadRegStr $3 HKCU "${MINERADIO_LEGACY_UNINSTALL_KEY}" "DisplayIcon"
+    ${If} $3 != ""
+      ${GetParent} "$3" $4
+    ${EndIf}
+  ${EndIf}
+  StrCpy $2 "$4" 1 -1
+  ${If} $2 == "\"
+    StrCpy $4 "$4" -1
+  ${EndIf}
+  ${If} $4 == ""
+    Push "legacy=no-root version=$1"
+    Call MineradioLegacyProbe
     Goto legacyDone
   ${EndIf}
-  IfFileExists "$4\${MINERADIO_INSTALL_MARKER}" 0 legacyDone
 
-  ; 新目录如果就在旧目录里面（例如用户手动选了 D:\Mineradio 作为父目录），卸载旧版会把刚装好的一起删掉。
-  StrLen $5 "$4"
-  StrCpy $2 "$INSTDIR" $5
-  ${If} $2 == "$4"
+  ; 门禁一：目录里必须有安装标记，旧卸载器自己的安全门才过得去，也说明这确实是一份 Mineradio 安装。
+  ${IfNot} ${FileExists} "$4\${MINERADIO_INSTALL_MARKER}"
+    Push "legacy=no-marker root=$4 version=$1"
+    Call MineradioLegacyProbe
+    Goto legacyDone
+  ${EndIf}
+
+  ; 门禁二：必须是本仓库发布的，原项目的安装一律不碰。
+  Push "$4"
+  Call MineradioLegacyInstallIsOurs
+  Pop $2
+  ${If} $2 != "1"
+    Push "legacy=not-ours root=$4 version=$1"
+    Call MineradioLegacyProbe
+    Goto legacyDone
+  ${EndIf}
+
+  ; 门禁三：新目录不能就在旧目录里面，否则卸载旧版会把刚装好的一起删掉。
+  ; 两边都补上反斜杠再比前缀，D:\Mineradio-oirge 才不会被 D:\Mineradio 误判成子目录。
+  StrCpy $3 "$4\"
+  StrLen $5 "$3"
+  StrCpy $2 "$INSTDIR\" $5
+  ${If} $2 == "$3"
+    Push "legacy=nested root=$4 instdir=$INSTDIR"
+    Call MineradioLegacyProbe
     Goto legacyDone
   ${EndIf}
 
@@ -381,10 +487,16 @@ Function MineradioOfferLegacyUninstall
     StrCpy $2 "Mineradio"
   ${EndIf}
 
-  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "检测到换身份之前安装的旧版本：$\r$\n$2（$1）$\r$\n$4$\r$\n$\r$\n${MINERADIO_DISPLAY_NAME} 已安装到 $INSTDIR，拥有独立的开始菜单项、进程名和卸载入口，可以和原项目的 Mineradio 同时使用。$\r$\n$\r$\n要现在卸载上面这个旧版本吗？曲库、设置和播放记录都保存在别处，不会被删除。$\r$\n如果它其实是原项目（XxHuberrr/Mineradio）的安装，请选择「否」。" /SD IDNO IDYES doLegacyUninstall
+  Push "legacy=prompt root=$4 version=$1 instdir=$INSTDIR"
+  Call MineradioLegacyProbe
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "检测到换身份之前安装的旧版本（本仓库发布，不是原项目的安装）：$\r$\n$2（$1）$\r$\n$4$\r$\n$\r$\n${MINERADIO_DISPLAY_NAME} 已安装到 $INSTDIR，开始菜单、桌面快捷方式、进程名和卸载入口都是独立的，以后只需要更新这一个。$\r$\n$\r$\n要现在卸载上面这个旧版本吗？曲库、设置和播放记录保存在别处，不会被删除。" /SD IDNO IDYES doLegacyUninstall
+  Push "legacy=declined"
+  Call MineradioLegacyProbe
   Goto legacyDone
 
 doLegacyUninstall:
+  Push "legacy=uninstall command=$0"
+  Call MineradioLegacyProbe
   DetailPrint "正在卸载旧版本：$4"
   ExecWait '$0'
 
