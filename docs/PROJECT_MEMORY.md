@@ -1681,3 +1681,11 @@
 - **仍然无法消除的相互影响（不是缺陷，别再花时间修）**：全局热键是操作系统独占的，先注册的赢；`uiohook-napi` 的鼠标侧键会同时投给两个实例；Wallpaper Engine 壁纸、桌面歌词、桌面图标共用同一个 `Progman` / `WorkerW` 宿主，只能一个占着。
 - 回归：新增 `tests/coexist-with-upstream-install.test.js` 11 例，把 `appId` / exe 名 / 快捷方式名 / 安装包名 / NSIS 叶子名与默认目录 / 进程筛选名 / 三重门禁 / 登录项值名 / 谱面 `.tmp` / after-pack 找 exe / 工作流资产名逐条钉住，并**反向**钉住 `APP_NAME` 与 `PRIMARY_PROFILE_ID` 不许变。
 
+### 2026-09-06 - v1.10.0 发布收尾：双草稿第十二次、`-F` 与 `-f` 的差别、发布记录的补写代价
+
+- **`draft` + `make_latest` 同一次 PATCH 到底行不行，取决于 `gh api` 的参数形式。** 本轮 `gh api -X PATCH …/releases/<id> -F draft=false -F make_latest=true` **一次就生效**（`releases/latest` 立刻切到 `v1.10.0`）；v1.9.1 那次用 `-f`（一律当字符串）返回 200 但没切。`-F` 送类型化值、`-f` 送字符串，这是唯一的区别。**规矩不变：发完必须复查 `gh api repos/oirge/Mineradio/releases/latest`**，没切就用 UTF-8 JSON `--input` 再 PATCH 一次（`make_latest` 写成字符串 `"true"`）。
+- **工作流建出来的 Release 是「半成品」：`name` 只有裸版本号（本轮 `1.10.0`）、`body` 是 `null`。** 标题和面向用户的正文永远要另外 PATCH 一次，正文临时文件放仓库外（`D:\tmp`），用 `node` 生成 UTF-8 JSON 再 `--input`，发完复验 `name` / `body` 长度 / 资产条数。**双草稿第十二次复现**（`383415798` 四项齐全、`383415799` 只有 `latest.yml` 与安装器两项，同一秒创建）；处理办法照旧 —— 只删资产不全的那个 Release，绝不碰 git tag，删完 `git ls-remote --tags origin <tag>` 复验 tag object 仍在。
+- **本机打包产物和 CI 产物字节数不同是正常的**（本轮本地 `102318993`、CI `102616378`）。electron-builder 的输出不可复现（Electron 缓存版本、依赖树、压缩时序都参与），**不要拿本地那份的哈希去核对 Release 资产**，本地那份只用来跑静默 E2E。
+- **`SHA256SUMS.txt` 的 CRLF 遗留自 v1.7.26 记到现在仍未修**：本轮 287 字节、3 个 `\r`、去掉正好 284、**没有 BOM**（首字节就是哈希的 `7`）。`sha256sum -c` 前必须 `tr -d '\r'`。资产名带上 `-oirge` 后清单比上一版长 14 字节。
+- **发布记录必须在发布当轮写完，补写拿不回全部事实。** 复核时发现两处历史欠账：v1.9.3 的资产记录提交 `cc3bb1b` 是**直接推到 `main`** 的（`gh api …/commits/cc3bb1b/pulls` 返回空数组），违反本仓库「资产记录走 `docs/release-assets-vXXX` 分支 + PR」和「不直接 push `main`」两条规矩；v1.9.2 更是**整节发布记录都没写**。v1.9.2 那节已按 API 补齐（PR #60 → 合并提交 `2cbf6cd`、tag object `9e00b243…`、run `33959417757`、Release `383206778`、四项资产字节与 API `digest`），但**「双草稿有没有出现」「有没有回下本机复算」这类只存在于当时终端里的事实永久丢失**，那节里已如实标注等级。
+
