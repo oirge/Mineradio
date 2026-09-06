@@ -43,8 +43,9 @@ function resolveRcedit(projectDir) {
 module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== 'win32') return;
 
-  // 二创版把 win.executableName 改成了 Mineradio-oirge，好和原项目的 Mineradio.exe 共存；
-  // productFilename 跟的是 productName（含中文），和实际 exe 名不再一致，必须优先用 executableName。
+  // 二创版把 win.executableName 改成了 Mineradio-oirge，好和原项目的 Mineradio.exe 共存。
+  // exe 名以 win.executableName 为准（本地打包实测 appInfo.productFilename 也跟着它走，
+  // 但那是 electron-builder 的内部约定），这里显式按 executableName 找，并逐个确认文件真的存在。
   const platformOptions = context.packager.platformSpecificBuildOptions || {};
   const productName = context.packager.appInfo.productName || 'Mineradio';
   const exeCandidates = [platformOptions.executableName, context.packager.appInfo.productFilename, 'Mineradio']

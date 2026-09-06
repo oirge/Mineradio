@@ -30,8 +30,9 @@
 - 自定义目录页必须保留可编辑输入框和 `浏览...` 按钮。
 - 安装身份必须和原项目 `XxHuberrr/Mineradio` 分开（见 `tests/coexist-with-upstream-install.test.js`）：安装目录叶子名、进程名、显示名统一写在 `installer.nsh` 顶部的 `MINERADIO_*` 定义里，不要再往页面里写字面量。
 - 默认路径通过 `MineradioUsePreferredInstallDir` 设置为 `D:\Mineradio-oirge`；命令行 `/D=` 参数仍可覆盖。
-- 用户选择盘符根目录时，通过 `MineradioNormalizeInstallDir` 自动补成 `盘符:\Mineradio-oirge`。
-- 文件安装完成后 `MineradioOfferLegacyUninstall` 会检测换身份之前留下的旧安装（版本号 1.x + 目录内有安装标记 + 不是新目录的父目录），询问用户后才调用旧卸载器，且绝不删用户数据。
+- 用户选择盘符根目录时，通过 `MineradioNormalizeInstallDir` 自动补成 `盘符:\Mineradio-oirge`；叶子名是旧身份 / 原项目的 `Mineradio` 时改到旁边（`D:\Mineradio` → `D:\Mineradio-oirge`），绝不嵌进去 —— 旧版卸载器是整目录递归删除。没有 D 盘时 `MineradioUsePreferredInstallDir` 也会把 electron-builder 的默认目录归一化到专用叶子名，静默安装不经过目录页也不会被卸载安全门挡住。
+- 文件安装完成后 `MineradioOfferLegacyUninstall` 会检测换身份之前留下的旧安装，三道门禁都过才提示：目录内有安装标记、`resources\app-update.yml` 里是 `owner: oirge`（原项目 `XxHuberrr/Mineradio` 的 GUID、安装标记、1.x 版本号全都撞车，只有这个字段可靠）、新目录不在旧目录里面；询问用户后才调用旧卸载器，且绝不删用户数据。安装根目录先读 `HKCU\Software\<旧 GUID>\InstallLocation`，再退到 `DisplayIcon` 反推。
+- 真机静默验证：设置环境变量 `MINERADIO_INSTALLER_LEGACY_PROBE=<文件路径>` 后运行 `Setup.exe /S /D=<临时目录>`，检测的每一步结论会追加写进该文件（`legacy=prompt …` 表示走到了弹窗、静默下自动作答「否」）。不设该变量时安装器不写任何东西。
 
 ## 发布前验证
 
