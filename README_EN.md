@@ -92,7 +92,17 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v1.9.3 (2026-09-05)
+### Latest release v1.10.0 (2026-09-06)
+
+- **Can now be installed side by side with the original project [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio) and run at the same time**: both builds used to share an identical install identity, so Windows treated them as one program and whichever was installed last overwrote the other
+- **New install identity**: Start menu, tray, taskbar and desktop shortcut show "Mineradio 二创", the process is `Mineradio-oirge.exe`, the installer is `Mineradio-oirge-x.y.z-Setup.exe`, and the default location is `D:\Mineradio-oirge`
+- **Nothing inside the app changed**: UI text, visuals and the data directory are untouched — your library, settings and history carry over as-is
+- **Upgrading from an older release installs into the new directory and then asks once whether to remove the old copy**; the default is "No", and your data is safe either way. The check only recognises this repository's own previous releases — an installation of the original project is never touched
+- **The installer only closes its own process**, so upgrading no longer kills the original project's player while it is playing
+- Known and unavoidable interference: global hotkeys go to whichever instance registers first; mouse side buttons reach both players; the Wallpaper Engine wallpaper, desktop lyrics and desktop-icon layers share one desktop host, so only one instance can hold it
+- Full Node regression suite: `1058/1058` passing (11 new cases pin the install identity); a real local build was installed and uninstalled silently to verify the new directory, the separate uninstall entry and the legacy-install check
+
+### v1.9.3 (2026-09-05)
 
 - **Fixed the black screen and the stuttering**: both symptoms come from one root cause — the desktop app used to *unconditionally* tell Chromium to ignore its own driver blocklist, and the driver combinations that render everything black are exactly what that list is for. On top of that it pinned the rendering backend and forced the discrete GPU on hybrid laptops. GPU process crashes → falls back to software compositing → crashes again, which is what the stutter looks like from outside
 - **There are now three GPU tiers and the app steps down on its own**: `default` → `compatible` (no longer overrides the blocklist, no longer forces the discrete GPU) → `software`. Two consecutive GPU-process crashes on the same tier drop it one step and relaunch once (GPU switches only take effect at startup and cannot be changed at runtime, so a relaunch is unavoidable). **On healthy machines the default tier's switch list is byte-identical to the previous release, so nothing changes**
@@ -103,7 +113,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - **No UI switch was added**: someone staring at a black screen cannot click a settings toggle, so recovery is fully automatic. To pin a tier by hand there is `MINERADIO_GPU_MODE=default|compatible|software`, and an explicitly chosen tier is never overridden by the automatic step-down
 - Full Node regression suite: `1032/1032` passing (42 new cases: 11 for the GPU tier ladder, 9 for the main-process step-down wiring, 22 for main-window paint recovery)
 
-### v1.9.2 (2026-09-05)
+<details>
+<summary>v1.9.2 — preset 8 no longer renders pure black in the desktop client</summary>
 
 - **Fixed preset 8 "Sonic Echo · Wallpaper Engine" (original by CmzYa) rendering the whole window pure black in the desktop client**: this is a different defect from the washed-out white the previous release fixed — the black happens one step earlier, because the wallpaper page was never allowed to load at all
 - The root cause is in the desktop main process: to stop the window navigating to external pages, the main-window navigation guard was written to block *every* subframe navigation — and this preset's entire picture runs inside an iframe. So that iframe stayed on `about:blank` and its black backdrop filled the window; with this preset selected the cover-particle layer is collapsed too, so the result looked like plain black
@@ -112,6 +123,8 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 - Also fixed how the guard read its arguments: Electron puts the navigation details on the event object itself, while the old code read them from the second argument, which is the URL string — so its checks never matched and it fell through to "block". The old test called it with a signature Electron does not use, which is why it stayed green
 - Verified by capturing frames from a real Electron window this time: before the fix the subframe sat on `about:blank` with no canvas and 4.4% lit pixels; after it, a 1280×720 WebGL2 canvas with 89% lit pixels and a normal picture
 - Full Node regression suite: `990/990` passing (two new cases: the bridge-page allowlist, and keeping that allowlisted path in sync with preset 8's iframe source; the navigation-guard case now dispatches with Electron's real signature)
+
+</details>
 
 <details>
 <summary>v1.9.1 — preset 8 no longer washes out to near-white</summary>
