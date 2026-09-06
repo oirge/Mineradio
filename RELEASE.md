@@ -15,6 +15,28 @@
 - 无法消除的相互影响（不是缺陷）：全局热键 OS 独占；`uiohook-napi` 鼠标侧键双投；WE 壁纸 / 桌面歌词 / 桌面图标共用 `Progman` / `WorkerW` 宿主。
 - 全量 Node 回归 **`1058/1058`** 通过（基线 `1047`，新增 `tests/coexist-with-upstream-install.test.js` 11 例；`tests/github-actions-ci.test.js` 的 blockmap 资产名改成从 `build.nsis.artifactName` 推导）。本地 `electron-builder --win` 真打包 + 静默 E2E：`Setup.exe /S /D=<临时目录>` 装进 `<临时目录>\Mineradio-oirge`，探针记录 `legacy=prompt root=D:\Mineradio version=1.9.3` → `legacy=declined`（静默默认「否」），新卸载入口、开始菜单与桌面快捷方式各自独立，旧安装 `D:\Mineradio` 及其注册表原样未动；随后 `Uninstall … /S /currentuser` 静默卸载，目录、注册表、快捷方式全部清干净。
 
+### 发布记录（v1.10.0）
+
+- 拆成两个 PR，都用**合并提交**合（`--merge`，绝不 squash —— squash 会把发布 tag 从 `main` 的祖先链里挤出去）：[#64](https://github.com/oirge/Mineradio/pull/64) `feat/coexist-with-upstream-install`（提交 `fbca80a`，安装身份整套换掉，`Verify` run `33975036364` 过 PR、`33975131384` 过 push）→ 合并提交 `09b78fc`；[#65](https://github.com/oirge/Mineradio/pull/65) `release/1.10.0-coexist`（两个提交：`9713e04` 把旧安装检测改按发布源判断并修掉嵌套前缀比较，`88b8d75` `chore(release): 1.10.0`，`Verify` run `34001333189` 过 PR、`34001407877` 过 push）→ 合并提交 `c12f3c9`。两个提交都带 `Co-Authored-By` 尾注，都显式传 `-c user.name` / `-c user.email`（仓库没有全局 git 身份）。
+- 标注 tag `v1.10.0` = tag object `dd6692c5a540222461eac152732702fd854d7b97`，指向 `c12f3c9`。
+- `Build and Release` run `34001414371` 成功（`--ref v1.10.0 -f tag=v1.10.0`，`00:29:27Z` 起 `00:31:58Z` 止，2 分 31 秒）。**electron-builder 的双草稿第十二次复现**：`383415798` 四项资产齐全、`383415799` 只有 `latest.yml` 与安装器两项（两个草稿的 `created_at` 都是 `00:29:12Z`）；删掉资产不全的 `383415799` 后发布 `383415798`（**只删 Release、绝不碰 git tag**，删完用 `git ls-remote --tags origin v1.10.0` 复验 tag object `dd6692c5…` 仍在）。PATCH 时带 `draft=false` + `make_latest=true`，`published_at` `00:32:52Z`，`releases/latest` 复验指向 `v1.10.0`。
+- **`draft` 和 `make_latest` 挤在同一次 PATCH 里这回生效了，和 v1.9.1 那条记录不一样。** 区别在参数形式：这轮用的是 `gh api -X PATCH … -F draft=false -F make_latest=true`（`-F` 送类型化值），v1.9.1 那次用的是 `-f`（一律当字符串），返回 200 但 `releases/latest` 没切。所以**规矩不变：发完必须 `gh api repos/oirge/Mineradio/releases/latest` 复查**，不切就用 UTF-8 JSON `--input` 再 PATCH 一次（`make_latest` 写成字符串 `"true"`）。
+- **工作流建出来的 Release 标题只有裸版本号 `1.10.0`、正文是 `null`，标题和正文要另外补。** 这一轮补的是 `name` `Mineradio v1.10.0 —— 二创版与原项目可以同时装、同时用` + 一份面向用户的正文（改了什么 / 没法完全隔离的三件事 / 验证 / 下载），走 `node` 生成 UTF-8 JSON 再 `gh api -X PATCH … --input`（正文临时文件放在仓库外的 `D:\tmp`，不进版本库），发完复验 `body` 1581 字符、`name` 已生效、`releases/latest` 仍是 `v1.10.0` 且四项资产在位。
+- 四项资产全部回下本机复算核对：
+
+| 资产 | 字节 | SHA256 |
+| --- | --- | --- |
+| `Mineradio-oirge-1.10.0-Setup.exe` | 102616378 | `7259228b54be8cb061aa6ca819e65a6e882371c6cf0a937969188e4bd5949b05` |
+| `Mineradio-oirge-1.10.0-Setup.exe.blockmap` | 106792 | `dc5acdd58d1774c18377d55c618d707105a7c32bb33cc60c758a3fa59ff4676d` |
+| `Mineradio-oirge-1.10.0-SHA256SUMS.txt` | 287 | `e38bcc027f081f405a0d49742fb5d89547ad1dc0fe27a942a9cc406a4b6c5883` |
+| `latest.yml` | 362 | `2ce38be09a010550c2d14bf0295cc2cfab3a5624641858d3cce34514a592ea61` |
+
+- 三路复验都过：① API 资产清单四项 `state: uploaded`，四个 `digest` 与本机 `sha256sum` **逐字相同**、字节数一致；② 清单 `Mineradio-oirge-1.10.0-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）`sha256sum -c` 全中；③ `latest.yml` 的 `sha512` = `R2UJFXt901J63AoiqwGbSujMQYR8nEhzgdaIZ1f4ilkxp17lI4I0UKmLGWBD1HndcLEyzMq7Gg2Fnwl07kCcSg==`（`files[0].sha512` 与顶层 `sha512` 同值）与 `size` = `102616378` 与安装器实测一致（`sha512sum` 的十六进制先 `xxd -r -p` 再 `base64 -w0` 才能和 `latest.yml` 直接比），`releaseDate` `2026-09-06T00:31:38.383Z`。资产名四项全部带 `-oirge`，`latest.yml` 里的 `url` / `path` 也都指向 `Mineradio-oirge-1.10.0-Setup.exe` —— 更新器认的就是这个名字。
+- **本机那份打包产物和 CI 的产物字节数不同**（本地 `102318993`、CI `102616378`）。electron-builder 的输出本来就不可复现（Electron 缓存版本、依赖树、压缩时序都参与），这不是异常；能核对的是 CI 那份自身三路自洽，本地那份只用来跑静默 E2E。
+- 遗留未修（自 `v1.7.26` 记到现在，本轮仍未动）：`SHA256SUMS.txt` 行尾是 **CRLF**，`sha256sum -c` 直接跑会报 `'…Setup.exe'\r': No such file or directory`，必须先 `tr -d '\r' < Mineradio-oirge-1.10.0-SHA256SUMS.txt > /tmp/sums.lf && sha256sum -c /tmp/sums.lf`。**只是 CRLF、没有 BOM**：清单 287 字节（比上一版多 14 —— 三行文件名各多 `-oirge`、少一处路径差），去掉 3 个 `\r` 正好 284，首字节就是哈希的 `7`。
+- 补记前两版的尾巴：v1.9.1 的资产记录分支 `docs/release-assets-v191` → PR [#59](https://github.com/oirge/Mineradio/pull/59) → **合并提交** `ef4a3f0`（记录提交 `0e1eda9`）。**v1.9.3 的资产记录提交 `cc3bb1b` 是直接推到 `main` 的** —— 没走 `docs/release-assets-vXXX` 分支 + PR，违反本仓库自己的规矩（`gh api repos/.../commits/cc3bb1b/pulls` 返回空数组即是证据），这一版改回正轨。v1.9.2 当初整节发布记录都没写，一并补在下面。
+- 资产记录分支 `docs/release-assets-v1100`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.9.3 修掉黑屏与卡顿的进程层根因
 
 - 正式发布版本从 `1.9.2` 提升为 `1.9.3`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动，`tests/version-consistency.test.js` 与 `tests/github-actions-ci.test.js` 各钉一半。走 patch 是因为这一版只修缺陷、不加功能、不动界面。
@@ -66,6 +88,23 @@
 - **验证是在真实 Electron 窗口里做的**（离屏渲染探针，临时目录里的独立最小 app，不申请单实例锁、不碰用户正开着的 5 个 `Mineradio.exe`）：把仓库 `desktop/main.js` 的信任核心原样 `vm` 装进去、用真实 `public/` 起静态服务、加载真实 `index.html`、`window.fx.preset = 8` 再 `MineradioSonicWorkshop.onPresetChange(0, 8)`，最后抓离屏帧统计亮度。**修好前**：子 frame 停在 `about:blank`、canvas 不存在、整帧亮像素 `4.38%`、平均通道 `6.66`（就是纯黑）。**修好后**：桥接页 `readyState: complete`、WebGL2 画布 `1280×720`、亮像素 `89.0%`、平均通道 `44.78`，画面是原作默认主题 coral-mirage 的方柱地形（探针里没有导入歌曲，正好同时复验了 v1.9.1 的兜底配色不发白）。另一组探针还确认：主 frame 想跳 `/other.html` 或换 host 到 `localhost` 都仍被拦住，已加载的桥接 iframe 被改 `src` 到别处也拦得住。
 - **一条对排障有用的实测**：`will-frame-navigate` 对 iframe 的**首次**加载就会触发（`frame.url` 那时还是空串、`frame.parent.url` 是父页），所以 `preventDefault()` 直接掐死初始加载，不只是掐后续跳转 —— 这也是为什么表现是「iframe 停在 about:blank」而不是「先加载再被弹回」。
 - 全量 Node 回归 `990/990` 通过（`npm test`，`node --test --test-concurrency=1`）。`tests/main-window-navigation-ipc-trust.test.js` 从 7 例长到 9 例：新增「可信壁纸子 frame URL 只放行音域回响桥接页」（12 条负例，含 `https://`、错端口、`localhost`、`file://`、`…bridge.html.evil`、`../` 归一化后逃出）与「桥接页路径在主进程白名单与预设 8 之间保持一致」（正则读 `TRUSTED_WALLPAPER_FRAME_PATH` 与 `BRIDGE_SRC` 比对，并确认文件真的在 —— 任一侧改名都会立刻红，不会再悄悄黑屏）；原来那例「主窗口导航守卫拦截外部页面与非法 frame」重写成**按 Electron 真实签名派发**，并对三种参数形态各跑一遍正负用例。
+
+### 发布记录（v1.9.2）
+
+- **这一节是 v1.10.0 那轮补写的** —— v1.9.2 当初发完没记，只有正文没有发布记录。下面每一条都是事后按 GitHub API 与远端 git ref 复核出来的，**不是当时的现场记录**。
+- PR [#60](https://github.com/oirge/Mineradio/pull/60) `fix/sonic-workshop-frame-guard`（提交 `d0ff0a7`），`Verify` run `33959300526` 过 PR、`33959368977` 过 push，**合并提交** `2cbf6cd`（`--merge`）。
+- 标注 tag `v1.9.2` = tag object `9e00b2437ee4bf2c5b605b0e631858b08850c115`，指向 `2cbf6cd`（`git/tags` 复核 `object.type: commit`）。
+- `Build and Release` run `33959417757` 成功（`09:59:00Z` 起 `10:01:33Z` 止，2 分 33 秒）。Release `383206778`，`published_at` `2026-09-05T10:03:25Z`，四项资产齐全、`draft=false`。**双草稿这一版有没有复现无从考证** —— 资产不全的草稿如果当时存在，删掉后 API 上不留任何痕迹，所以这里不写次数。
+- 四项资产（**这四个 SHA256 取自 API 的 `digest` 字段，没有回下本机复算**，与其他版本的记录不同等级）：
+
+| 资产 | 字节 | SHA256（API digest） |
+| --- | --- | --- |
+| `Mineradio-1.9.2-Setup.exe` | 102607429 | `6af01312f489a87e506e9639483f976e3c0aca700e3fd5338b4c6a96eeab2533` |
+| `Mineradio-1.9.2-Setup.exe.blockmap` | 106690 | `37c4d8fb972e4485524860ba826bc335fd43da9a2b08e1d3a532b47f052f1be4` |
+| `Mineradio-1.9.2-SHA256SUMS.txt` | 273 | `40eb0463cfd7e269ae1ccce9a36bc9c2743f1f82c028c04c32b1669cc5f796cc` |
+| `latest.yml` | 347 | `e673f1e8185b1bf47ff25cd62c4870a76eb8f40a5bb3f1c2fb3c4f0c30bf482a` |
+
+- **教训**：发布记录要在发布当轮写完。补写能拿回 PR / run / tag / 资产字节与 API digest，但拿不回「双草稿有没有出现」「本机复算过没有」这类只存在于当时终端里的事实。
 
 ## v1.9.1 修好音域回响壁纸版没在放歌时糊成一片惨白
 
