@@ -115,6 +115,9 @@ var CUSTOM_LYRIC_PREF_STORE_KEY = 'mineradio-custom-lyric-prefs-v1';
 var LOCAL_LYRIC_PICK_STORE_KEY = 'mineradio-local-lyric-picks-v1';
 var LYRIC_LAYOUT_STORE_KEY = 'mineradio-lyric-layout-v1';
 var VISUAL_PRESET_SCHEMA = 'skull-preset-v2';
+// 启动读档发生在 presetMeta 声明之前；这里保留一份启动期上限，
+// 运行到面板代码后由 maxVisualPresetIndex() 自动切回数据驱动的长度。
+var VISUAL_PRESET_BOOT_MAX_INDEX = 8;
 var PLAYBACK_QUALITY_STORE_KEY = 'mineradio-playback-quality-v1';
 var UPLOAD_TIP_STORE_KEY = 'mineradio-upload-tip-seen';
 var DIY_MODE_STORE_KEY = 'mineradio-diy-player-mode-v1';
@@ -619,7 +622,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '1.10.0';
+var APP_VERSION = '2.0.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -1330,13 +1333,23 @@ function normalizeDevelopmentLockedFxState() {
     if (DEVELOPMENT_LOCKED_FX[key]) fx[key] = false;
   });
 }
+function maxVisualPresetIndex() {
+  if (typeof presetMeta !== 'undefined' && Array.isArray(presetMeta) && presetMeta.length) {
+    return presetMeta.length - 1;
+  }
+  return VISUAL_PRESET_BOOT_MAX_INDEX;
+}
+function normalizeSavedVisualPreset(raw) {
+  raw = raw || {};
+  var savedPreset = clampRange(Number(raw.preset) || 0, 0, maxVisualPresetIndex());
+  if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) savedPreset = 5;
+  return savedPreset;
+}
 function readSavedPlaybackVisualPreset() {
   try {
     var raw = JSON.parse(localStorage.getItem(LYRIC_LAYOUT_STORE_KEY) || '{}') || {};
     if (!Object.prototype.hasOwnProperty.call(raw, 'preset')) return fxDefaults.preset;
-    var savedPreset = clampRange(Number(raw.preset) || 0, 0, 6);
-    if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) savedPreset = 5;
-    return savedPreset;
+    return normalizeSavedVisualPreset(raw);
   } catch (e) {
     return fxDefaults.preset;
   }
@@ -6062,10 +6075,7 @@ function readSavedLyricLayout() {
   try {
     var savedLayoutRaw = localStorage.getItem(LYRIC_LAYOUT_STORE_KEY);
     var raw = savedLayoutRaw ? (JSON.parse(savedLayoutRaw) || {}) : packagedDefaultLyricLayoutRaw();
-    var savedPreset = clampRange(Number(raw.preset) || 0, 0, 6);
-    if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) {
-      savedPreset = 5;
-    }
+    var savedPreset = normalizeSavedVisualPreset(raw);
     var savedBgColor = normalizeHexColor(raw.backgroundColor || '#000000', '#000000');
     var savedBgOpacity = clampRange(raw.backgroundOpacity == null ? fxDefaults.backgroundOpacity : Number(raw.backgroundOpacity), 0, 1);
     var savedGlassOffset = clampRange(raw.controlGlassChromaticOffset == null ? fxDefaults.controlGlassChromaticOffset : Number(raw.controlGlassChromaticOffset), 0, 140);
@@ -34273,8 +34283,7 @@ function archiveMode(raw, key, pattern, fallback) {
 }
 function normalizeFxArchiveSnapshot(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  var savedPreset = clampRange(Number(raw.preset) || 0, 0, presetMeta.length - 1);
-  if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) savedPreset = 5;
+  var savedPreset = normalizeSavedVisualPreset(raw);
   return {
     visualPresetSchema: VISUAL_PRESET_SCHEMA,
     preset: savedPreset,
