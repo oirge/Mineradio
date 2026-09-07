@@ -1,5 +1,15 @@
 ﻿# 发布流程
 
+## v2.0.0 视觉预设切换与读档恢复一致
+
+- 正式发布版本从 `1.10.0` 提升为 `2.0.0`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。major 版本号由用户明确指定，数据 schema、安装身份与界面没有重置。
+- **起因是用户报告「视觉预设切换有明显异常」。** 现场不是预设 7/8 的渲染器再次坏掉：面板里点选、当场切换、写入存档都正常，异常出现在播放器重启和布局恢复之后。
+- **根因是持久化读取范围停在旧时代。** `readSavedPlaybackVisualPreset()` 与 `readSavedLyricLayout()` 都写死 `clampRange(..., 0, 6)`，而当前 `presetMeta` 已有 9 项、合法索引是 `0..8`。所以启动读档时 7/8 必然截成 6；`normalizeFxArchiveSnapshot()` 却已经按 `presetMeta.length - 1` 读取，视觉存档导入当场正确、下次启动又错误，三条恢复链得出不同答案。
+- **修法是把索引归一化收口。** 新增 `maxVisualPresetIndex()` 与 `normalizeSavedVisualPreset(raw)`，启动阶段 `presetMeta` 还没执行时用 `VISUAL_PRESET_BOOT_MAX_INDEX = 8`，初始化完成后改用 `presetMeta.length - 1`；播放视觉读档、布局读档、用户视觉存档三条路径全部调用同一个入口。
+- **旧存档兼容规则没动。** `preset === 3` 且 `visualPresetSchema !== 'skull-preset-v2'` 时继续迁移到 5；非法负数、过大索引和非数字仍按原有夹取语义处理。启动期上限与 `presetMeta` 数量由测试交叉核对，后续再加预设却忘记同步会直接判红。
+- `setPreset()` 与 `saveLyricLayout()` 本来就按 `presetMeta.length - 1`，预设 7/8 的 `onPresetChange` 接线、启动恢复、播放态切换与 Home 预览也逐条复核过，没有第二处把它们覆盖回 6。本轮不动 shader、iframe、GPU、颜色、相机、转场或 UI。
+- 全量 Node 回归 `1063/1063` 通过（v1.10.0 基线 `1058`，新增 `tests/visual-preset-persistence.test.js` 5 例），`node --check` 与 `git diff --check` 全清。按用户要求不启动本机 Electron、不关闭或重启正在使用的播放器；Windows 安装包交给 GitHub Actions 远程构建。
+
 ## v1.10.0 二创版与原项目可同时安装、同时运行
 
 - 正式发布版本从 `1.9.3` 提升为 `1.10.0`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。走 minor 是因为安装身份整套换掉，升级路径肉眼可见地变了（新目录、新开始菜单项、装完多一个弹窗）。

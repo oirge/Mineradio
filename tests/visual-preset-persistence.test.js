@@ -57,7 +57,7 @@ test('预设表初始化后上限继续跟随表长度', () => {
   assert.equal(context.readSavedPlaybackVisualPreset(), 9);
 });
 
-test('两条读档链路共用同一个视觉预设归一化入口', () => {
+test('三条读档链路共用同一个视觉预设归一化入口', () => {
   const playbackReader = playbackReaderSource;
   const layoutReader = readSourceBlock('function readSavedLyricLayout() {', 'function saveLyricLayout() {');
   const archiveReader = readSourceBlock('function normalizeFxArchiveSnapshot(raw) {', 'function normalizeUserFxArchives(value) {');
