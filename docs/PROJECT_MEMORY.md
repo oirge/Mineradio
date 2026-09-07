@@ -4,7 +4,7 @@
 
 ## Stable Project Facts
 
-- 当前源码续版：`v2.0.0`（**视觉预设 7/8 的切换、保存和恢复终于使用同一套索引范围**。此前两条启动/布局读档路径仍写死 `0..6`，所以 7/8 当场能切、存档也写得进去，但重启或布局恢复时会被截成 6；第三条归档链已经按 `presetMeta.length - 1`，视觉存档导入当场正确、下一次启动却错误。现在统一走 `normalizeSavedVisualPreset()`：启动早于预设表初始化时上限 8，初始化后自动跟随 `presetMeta.length - 1`，旧预设 3 schema 迁移不动。静态复核没有第二处覆盖 7/8，回归 `1063/1063`。本版不改视觉算法、UI、安装身份或数据目录，major 版本号由用户明确指定。）
+- 当前源码续版：`v2.0.1`（**视觉预设 6「安魂」与预设 8「音域回响 Wallpaper Engine」切换时的短暂透明已修**。根因是主粒子层在进入预设时立即让位，而专属层还在异步加载或淡入。现在两侧都以 `0.99` 作为 opaque 阈值，主循环等专属层真正盖住再收粒子，资产失败时继续兜底；预设 8 的 CSS 与模块双重淡入也收敛到模块单点驱动。回归 `1065/1065`，本版不改视觉算法、配色、预设顺序、安装身份或数据目录。）
 - 从下一条起是历史续版快照；旧条目里的“当前源码续版”只表示它写下时的状态。
 - 当前源码续版：`v1.9.2`（**主窗口导航守卫拦掉了预设 8 自己的 iframe，所以这个预设在打包客户端里一次都没显示过**。用户报「这个是黑的还是没修好啊」加两张截图：预设 8 选中、整幅纯黑 —— 和 v1.9.1 的惨白是两个缺陷，全黑发生在更前面一步：`desktop/main.js` 的 `installMainWindowNavigationGuard` 在 `will-frame-navigate` 上写着「一切子 frame 导航一律拦截」，而预设 8 的整幅画面跑在 `<iframe src="vendor/sonic-workshop/mineradio-bridge.html">` 里（`public/sonic-workshop-preset.js:25` 的 `BRIDGE_SRC`），iframe 永远停在 `about:blank`，`public/app.css:110-111` 的 `background:#000` 铺满窗口，选这个预设时封面粒子整层又是收起的。守卫来自 `cd1a75a`（v1.5.2），比预设 8（v1.8.9）早四个版本，**v1.8.9 / v1.9.0 / v1.9.1 对它的调色改动在客户端里全看不出效果**。同时修掉签名错：Electron 派发 `will-frame-navigate` 的实测形状是 `(event, url, isSameDocument, isMainFrame, processId, routingId)`，**详情挂在第一个参数（事件）自己身上**（`url` / `isMainFrame` / `frame` / `initiator`），老代码从第二个参数读，那里是 url 字符串，判断恒不成立，一路走到「拦」；**旧测试按一个 Electron 不存在的签名调用，所以一直是绿的**。现在 `desktop/main.js:4809` `TRUSTED_WALLPAPER_FRAME_PATH`、`:4818` `isTrustedWallpaperFrameUrl`（同端口 `127.0.0.1` + `pathname` 全等）、`:4876` `readFrameNavigationDetails`（认三种参数形态）、`:4902` `isAllowedFrameNavigation`（主 frame 只能停 `/` 或 `/index.html`；子 frame 只放行桥接页且必须是主 frame 直接子级）、`:4919` 一份 `guard` 同挂 `will-navigate` 与 `will-frame-navigate`。新 helper **必须**落在 `tests/main-window-navigation-ipc-trust.test.js` 的 `extractTrustCore()` 切片内（`isCurrentMainWindowSender` → `isCurrentDesktopLyricsWindowSender`）。放行只是让这一页加载出来、没放开任何权限：`isTrustedMainFrameSender` 仍一见 `frame.parent` 就拒；全仓库没 CSP、没 `webRequest` 拦截，守卫是唯一那道门。`installMiniPlayerNavigationGuard`（`:3756`）有同样的签名错，那边没 iframe、无可见后果，故意没动。**验证方式换了**：v1.9.1 只在浏览器里验，验不出主进程守卫的问题；这次用离屏 Electron 探针 A/B —— 旧守卫 `about:blank`/无 canvas/亮像素 `4.38%`，新守卫 WebGL2 `1280×720`/亮像素 `89.0%`。回归 `990/990`。）
 - 上一续版：`v1.9.1`（**歌词文字色永远不许当地形色用**。v1.9.0 让预设 8 吃封面原始取色是对的，但 `public/sonic-workshop-preset.js` 的 `workshopCoverHex` 链尾照搬了上游的 `pal.primary || pal.highlight || pal.secondary` —— **上游用同一份调色板既画歌词又画地形，本仓库不是**：这三个字段是**歌词文字色**，为可读性一律抬过亮度，`public/app.js:5699`（`palette`）与 `:5706`（`coverPalette`）的初值就是近白的 `#d6f8ff` / `#9cffdf` / `#eef7ff`，全 `public/` 只有 `:8733` 一处写 `coverPalette`。于是没在放歌 / 没封面 / 取色还没跑完时八个 uniform 一起被顶到近白（`uBaseColor2` 亮度 `0.91`，`uCoolCore`=`uRippleColor`=`uPeakColor`=`#eef7ff`），整幅糊成没有层次的惨白 —— 用户报的「预设 8 无法正常显示」就是这个。修法：链尾只留 `rawArea*` → `raw*`，全缺就落原作字面量（`#16060f` / `#99c4ff` / `#f8d8ff` / `#cb6c89`，即原作默认主题 `coral-mirage`）。**预设 7 有同样的歌词兜底但没病，故意没动**：`public/sonic-topography-preset.js:181-197` 的 `base1` 会 `lerp(DEFAULT_GROUND_BASE_COLOR, 0.84)` 强行拉暗基面。回归 `988/988`。）
@@ -50,6 +50,13 @@
 - 根目录 `AGENTS.md` 负责给新对话指路；项目内 `AGENTS.md` 负责项目规则。
 
 ## Release Memory
+
+## v2.0.1 安魂与壁纸版回响切换不再漏透明
+
+- 日期：2026-09-07。用户在 v2.0.0 发布后继续报告「切换视觉预设时会透明一下」和「视觉预设安魂也有 bug」。
+- 根因：主粒子层一进预设 6/8 就被隐藏；安魂点云异步加载并淡入，预设 8 壁纸层也逐帧淡满，透明窗口在交接空档露出桌面。
+- 修复：主粒子层等专属层 `opacity >= 0.99` 再让位；资产失败继续兜底。预设 8 的 CSS opacity 过渡移除，淡入由模块单点驱动。
+- 验证边界：只跑串行 Node 测试和静态检查，不启动 Electron、不关闭或重启用户正在使用的 Mineradio；安装包由 GitHub Actions 远程构建。回归 `1065/1065`。
 
 ## v2.0.0 视觉预设切换与读档恢复一致
 
