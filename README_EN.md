@@ -92,7 +92,15 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v2.0.0 (2026-09-07)
+### Latest release v2.0.1 (2026-09-07)
+
+- **Fixed a brief transparent flash when switching to visual preset 6 or preset 8**: the main particle layer was hidden immediately, while the dedicated visual layer was still loading or fading in
+- The main particle layer now waits until the skull cloud or wallpaper layer is actually opaque (opacity `0.99`); if the asset fails to load, the particle layer remains as a fallback
+- Preset 8 now uses one module-driven fade path instead of layering CSS and per-frame opacity transitions
+- This patch only fixes the handoff window; visuals, colors, preset order, install identity and data location are unchanged
+- Full Node regression suite: `1065/1065` passing; the Windows x64 installer is built remotely by GitHub Actions
+
+### v2.0.0 (2026-09-07)
 
 - **Fixed visual presets 7 and 8 not surviving a restart**: switching worked immediately, but restarting the player or restoring the layout clamped the selection back to preset 6
 - Two legacy restore paths still hard-coded the valid preset range as `0..6`, while visual-archive imports already accepted `0..8`; all three restore paths now share one table-aware normalizer

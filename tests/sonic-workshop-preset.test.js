@@ -206,7 +206,7 @@ function luminance(hex) {
 test('壁纸层登记成预设 8，只在这个预设上活跃，加载本身不碰页面', () => {
   const h = bootstrap();
   assert.equal(h.mod.INDEX, 8);
-  assert.deepEqual(Object.keys(h.mod).sort(), ['INDEX', 'clear', 'isActive', 'onPresetChange', 'pushProperties', 'update']);
+  assert.deepEqual(Object.keys(h.mod).sort(), ['INDEX', 'clear', 'isActive', 'isOpaque', 'onPresetChange', 'pushProperties', 'update']);
   assert.equal(h.mod.isActive({ preset: 8 }), true);
   assert.equal(h.mod.isActive({ preset: '8' }), true);
   assert.equal(h.mod.isActive({ preset: 7 }), false, '预设 7 是 three.js 移植版, 两层不能同时亮');
@@ -238,7 +238,7 @@ test('壁纸层紧贴在画布之前，整层与 iframe 一律不可命中', () 
   assert.equal(iframe.getAttribute('aria-hidden'), 'true');
   assert.equal(iframe.getAttribute('tabindex'), '-1');
   assert.equal(iframe.draggable, false, 'iframe 可拖会被拖出一张幽灵图');
-  assert.equal(h.dom.body.classList.contains('sonic-workshop-active'), true);
+  assert.equal(h.dom.body.classList.contains('sonic-workshop-active'), false, '壁纸层没盖住前, 背景不能先让位');
 });
 
 test('淡入淡出到位后整层摘掉，WE 那套 three.js 不留在后台空转', () => {
@@ -246,8 +246,11 @@ test('淡入淡出到位后整层摘掉，WE 那套 three.js 不留在后台空�
   run(h, 1);
   const first = opacity(h);
   assert.ok(first > 0 && first < 1, `第一帧只该淡入一部分, 实际 ${first}`);
+  assert.equal(h.mod.isOpaque(), false, '还没盖住前不许收粒子或背景');
   run(h, 60);
   assert.ok(opacity(h) > 0.99, '一秒内要淡满');
+  assert.equal(h.mod.isOpaque(), true, '淡满后才算盖住');
+  assert.equal(h.dom.body.classList.contains('sonic-workshop-active'), true, '壁纸盖住后背景再让位');
 
   h.sandbox.fx.preset = 0;
   run(h, 1);
@@ -265,10 +268,11 @@ test('切进预设 8 当帧就挂层补推全量，切走留给淡出收尾', ()
   assert.equal(h.recorder.properties.length, 1);
   assert.equal(h.recorder.media.length, 1);
   assert.equal(h.recorder.audio.length, 1);
-  assert.equal(h.dom.body.classList.contains('sonic-workshop-active'), true);
+  assert.equal(h.dom.body.classList.contains('sonic-workshop-active'), false, '切换当帧不能先把背景清掉');
 
   h.mod.onPresetChange(8, 0, { fx: h.sandbox.fx });
   assert.ok(h.layer(), '切走时留着让它淡出, 由 update 收尾');
+  assert.equal(h.dom.body.classList.contains('sonic-workshop-active'), false, '切走当帧背景就要回来');
 
   h.mod.clear();
   assert.equal(h.layer(), null);
@@ -717,7 +721,7 @@ test('壁纸层是独立脚本，必须先于 app.js 求值，且 app.js 只通�
   assert.doesNotMatch(app, /mineradio-bridge\.html/);
 });
 
-test('主循环只给壁纸层喂数据，粒子层整体让位', () => {
+test('主循环只给壁纸层喂数据，粒子层等专属层盖住再让位', () => {
   const animate = readSourceBlock(app, 'function animate() {', "resumeMainRenderLoop('startup');");
   assert.match(animate, /workshopMod\.update\(dt, sonicWorkshopCtx\);/);
   // 上下文预分配, 60fps 下不能每帧新建对象。
@@ -726,9 +730,11 @@ test('主循环只给壁纸层喂数据，粒子层整体让位', () => {
   assert.match(animate, /sonicWorkshopCtx\.audio\.beat = beatPulse;/);
   // 壁纸本身就是一整幅完成品, 原项目在这个预设下把封面粒子整层收起来。
   assert.match(animate, /var workshopPresetActive = fx && fx\.preset === SONIC_WORKSHOP_PRESET_INDEX;/);
-  assert.match(animate, /particles\.visible = !skullPresetActive && !workshopPresetActive;/);
-  assert.match(animate, /if \(floatGroup\) floatGroup\.visible = !skullPresetActive && !workshopPresetActive;/);
-  assert.match(animate, /if \(backCoverGroup\) backCoverGroup\.visible = !skullPresetActive && !workshopPresetActive;/);
+  assert.match(animate, /var workshopLayerOpaque = !!\(workshopMod && typeof workshopMod\.isOpaque === 'function' && workshopMod\.isOpaque\(\)\);/);
+  assert.match(animate, /var particleLayersVisible = \(!skullPresetActive \|\| !skullLayerOpaque\) && \(!workshopPresetActive \|\| !workshopLayerOpaque\);/);
+  assert.match(animate, /particles\.visible = particleLayersVisible;/);
+  assert.match(animate, /if \(floatGroup\) floatGroup\.visible = particleLayersVisible;/);
+  assert.match(animate, /if \(backCoverGroup\) backCoverGroup\.visible = particleLayersVisible;/);
 
   const setPreset = readSourceBlock(app, 'function setPreset(p, opts) {', 'function syncFxUniforms()');
   assert.match(setPreset, /if \(changed && \(p === SONIC_WORKSHOP_PRESET_INDEX \|\| prev === SONIC_WORKSHOP_PRESET_INDEX\)\)/);
@@ -741,6 +747,7 @@ test('样式上整层穿透指针，壁纸亮着时其余背景层让位', () =>
   assert.match(layerRule, /inset:0/);
   assert.match(layerRule, /z-index:0/, '要压在粒子画布 (z-index:1) 之下');
   assert.match(layerRule, /pointer-events:none!important/);
+  assert.match(layerRule, /transition:none/, '淡入由模块逐帧驱动, 不再叠一层 CSS 过渡');
   // 整层连后代一起禁止命中: 少了这条, 拖视角和点界面都会被 iframe 吃掉。
   assert.match(appCss, /#sonic-workshop-layer,#sonic-workshop-layer \*\{pointer-events:none!important\}/);
   assert.match(appCss, /#sonic-workshop-layer iframe\{[^}]*pointer-events:none!important/);

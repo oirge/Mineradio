@@ -1,5 +1,13 @@
 ﻿# 发布流程
 
+## v2.0.1 安魂与壁纸版回响切换不再漏透明
+
+- 正式发布版本从 `2.0.0` 提升为 `2.0.1`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。走 patch 是因为这一版只修缺陷、不加功能、不改视觉参数。
+- **起因是用户报告「视觉预设安魂也有 bug」；上一轮已确认预设 8 切换时会短暂透明。** 两个症状同属一层交接问题：`animate()` 一看到预设 6/8 就立即收起主粒子，但安魂点云还要异步加载再淡入，预设 8 的 iframe 壁纸层也要逐帧淡满；透明 Electron 窗口在这段空档里会露出桌面。
+- 修法是给专属层补 opaque 判定：`isSkullParticleLayerOpaque()` 要求点云存在、可见且 `skullParticleOpacity >= 0.99`；`MineradioSonicWorkshop.isOpaque()` 要求壁纸层 `opacity >= 0.99`。主循环统一按 `particleLayersVisible` 交接，资产加载失败时主粒子不让位。
+- 预设 8 的 `#sonic-workshop-layer` 去掉 CSS `opacity` 过渡，淡入只由模块逐帧驱动，避免两层动画叠加；`body.sonic-workshop-active` 也等壁纸盖住后再加、切走当帧即移除。
+- 全量 Node 回归 `1065/1065` 通过，新增 `tests/visual-preset-layer-handoff.test.js` 并扩展 `tests/sonic-workshop-preset.test.js`；`node --check` 与 `git diff --check` 全清。按用户要求不启动本机 Electron、不关闭或重启正在使用的播放器；Windows 安装包交给 GitHub Actions 远程构建。
+
 ## v2.0.0 视觉预设切换与读档恢复一致
 
 - 正式发布版本从 `1.10.0` 提升为 `2.0.0`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。major 版本号由用户明确指定，数据 schema、安装身份与界面没有重置。

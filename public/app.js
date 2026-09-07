@@ -622,7 +622,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.0.0';
+var APP_VERSION = '2.0.1';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -5426,6 +5426,11 @@ function clearSkullPresetResidue() {
     if (skullParticleGroup.material.uniforms.uSkullFlash) skullParticleGroup.material.uniforms.uSkullFlash.value = 0;
   }
 }
+
+function isSkullParticleLayerOpaque() {
+  return !!(skullParticleGroup && skullParticleGroup.visible && skullParticleOpacity >= 0.99);
+}
+
 function resetSkullPresetView(immediate, opts) {
   opts = opts || {};
   if (!(fx && fx.preset === SKULL_PRESET_INDEX)) return;
@@ -43700,12 +43705,18 @@ function animate() {
   // v7.2 旋转 = 头部+眼球追踪 + 鼠标/手势拖动 + 惯性
   tickGestureRotation(dt, now);
   var skullPresetActive = fx && fx.preset === SKULL_PRESET_INDEX;
+  // 安魂点云是异步加载再淡入, 主粒子要等它真的盖住再让位。
+  var skullLayerOpaque = isSkullParticleLayerOpaque();
   // 壁纸版音域回响是一整幅完成品, 原项目在这个预设下把封面粒子整层收起来, 只留壁纸本身。
+  // 入场时等壁纸层真的盖住再收粒子, 否则透明窗口会先漏一帧桌面。
+  var workshopMod = sonicWorkshopModule();
   var workshopPresetActive = fx && fx.preset === SONIC_WORKSHOP_PRESET_INDEX;
-  particles.visible = !skullPresetActive && !workshopPresetActive;
-  if (bloomParticles) bloomParticles.visible = !skullPresetActive && !workshopPresetActive && fx.bloom && fx.bloomStrength > 0.01;
-  if (floatGroup) floatGroup.visible = !skullPresetActive && !workshopPresetActive;
-  if (backCoverGroup) backCoverGroup.visible = !skullPresetActive && !workshopPresetActive;
+  var workshopLayerOpaque = !!(workshopMod && typeof workshopMod.isOpaque === 'function' && workshopMod.isOpaque());
+  var particleLayersVisible = (!skullPresetActive || !skullLayerOpaque) && (!workshopPresetActive || !workshopLayerOpaque);
+  particles.visible = particleLayersVisible;
+  if (bloomParticles) bloomParticles.visible = particleLayersVisible && fx.bloom && fx.bloomStrength > 0.01;
+  if (floatGroup) floatGroup.visible = particleLayersVisible;
+  if (backCoverGroup) backCoverGroup.visible = particleLayersVisible;
   var targetRotY = orbit.centerLocked ? 0 : (headParallax.active ? headParallax.x * 0.5 : 0) + gestureRotation.y;
   var targetRotX = orbit.centerLocked ? 0 : (headParallax.active ? -headParallax.y * 0.35 : 0) + gestureRotation.x;
   particles.rotation.y += (targetRotY - particles.rotation.y) * 0.055;
@@ -43740,7 +43751,6 @@ function animate() {
     sonicMod.update(dt, sonicTopographyCtx);
   }
   // 壁纸版音域回响: 只往 iframe 里推音频 / 媒体 / 配色, 自己不占主渲染器一点开销。
-  var workshopMod = sonicWorkshopModule();
   if (workshopMod) {
     sonicWorkshopCtx.scene = scene;
     sonicWorkshopCtx.fx = fx;
