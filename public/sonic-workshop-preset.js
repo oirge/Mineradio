@@ -625,6 +625,10 @@
     if (document && document.body) document.body.classList.toggle('sonic-workshop-active', !!active);
   }
 
+  function isOpaque() {
+    return state.opacity >= 0.99;
+  }
+
   function deriveProperties(fx) {
     fx = fx || {};
     var coverHexes = workshopPaletteHexesFromCover();
@@ -792,7 +796,7 @@
     ctx = ctx || {};
     var targetActive = isActive(ctx.fx || global.fx);
     state.active = targetActive;
-    bodyClass(targetActive || state.opacity > 0.02);
+    bodyClass(targetActive && isOpaque());
     if (targetActive) ensureLayer();
     var targetOpacity = targetActive ? 1 : 0;
     var rate = targetOpacity > state.opacity ? 7.5 : 5.0;
@@ -819,13 +823,13 @@
     if (Number(next) === INDEX) {
       ensureLayer();
       state.opacity = Math.max(state.opacity, 0.001);
-      bodyClass(true);
+      bodyClass(isOpaque());
       pushProperties(true);
       pushMedia(true);
       pushAudio(true, opts && opts.audio);
     } else if (Number(prev) === INDEX) {
       state.active = false;
-      bodyClass(true);
+      bodyClass(false);
     }
   }
 
@@ -842,6 +846,7 @@
   global.MineradioSonicWorkshop = {
     INDEX: INDEX,
     isActive: isActive,
+    isOpaque: isOpaque,
     update: update,
     clear: clear,
     pushProperties: function (force) { pushProperties(force === true); },
