@@ -57,6 +57,8 @@
 - 根因：`readSavedPlaybackVisualPreset()` 与 `readSavedLyricLayout()` 把预设夹到 `0..6`，当前表却是 `0..8`；预设 7/8 只有读档时被改成 6，当场切换和保存本身正常。
 - 修复：共享 `maxVisualPresetIndex()` / `normalizeSavedVisualPreset()`；启动期上限 8，初始化后跟随 `presetMeta.length - 1`；三条恢复链统一，旧 schema 迁移保留。
 - 验证边界：只跑低优先级、串行 Node 测试和静态检查，不启动 Electron、不关闭或重启用户正在使用的 Mineradio；安装包由 GitHub Actions 远程构建。
+- 发布：分支 `codex/release-v2.0.0` 两提交 `9ab071e` / `ac242db`，PR #67 → merge commit `4127d22`；annotated tag object `f51c2a9…` 指向 `ac242db`；Build and Release run `34078489791` 成功。双草稿中删掉资产不全的 `383806968`，正式发布 `383806967` 并复验 Latest=`v2.0.0`。
+- 资产：安装器 `102617004` 字节，SHA256 `44f22bbcf1b1eef716ddb62bdec5dc6a675413c3670b12eb5d0f0114b402448f`；blockmap `106805` / `41f79c…`；`latest.yml` `359` / `95f664…`；清单 `285` / `c60f1d…`。四项 API digest、本机 SHA256、清单三条与 `latest.yml` SHA512/size 全部一致。
 
 ## v1.7.25 全局快捷键自定义 + 播放队列工作台
 

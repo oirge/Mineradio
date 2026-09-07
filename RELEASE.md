@@ -10,6 +10,27 @@
 - `setPreset()` 与 `saveLyricLayout()` 本来就按 `presetMeta.length - 1`，预设 7/8 的 `onPresetChange` 接线、启动恢复、播放态切换与 Home 预览也逐条复核过，没有第二处把它们覆盖回 6。本轮不动 shader、iframe、GPU、颜色、相机、转场或 UI。
 - 全量 Node 回归 `1063/1063` 通过（v1.10.0 基线 `1058`，新增 `tests/visual-preset-persistence.test.js` 5 例），`node --check` 与 `git diff --check` 全清。按用户要求不启动本机 Electron、不关闭或重启正在使用的播放器；Windows 安装包交给 GitHub Actions 远程构建。
 
+### 发布记录（v2.0.0）
+
+- 单分支 `codex/release-v2.0.0`，两个提交：`9ab071e fix: 修复视觉预设 7/8 读档后被截回 6` 与 `ac242db chore(release): 2.0.0`。PR [#67](https://github.com/oirge/Mineradio/pull/67) 用 merge commit 合入 `main`，合并提交 `4127d22`；两路 `Verify` run `34078239457` / `34078268287` 均通过。
+- annotated tag `v2.0.0` = tag object `f51c2a9b6d1f485c6a4b806e044a06097694ba09`，指向 release commit `ac242db66acab59488e8146ad954b1785986ee21`；该提交是 `origin/main` 的祖先。
+- `Build and Release` run `34078489791` 成功（2 分 23 秒），Windows x64 NSIS 在 GitHub Actions 远程构建。用户要求后台测试不影响电脑，所以本轮没有在本机跑 electron-builder、没有启动 Electron、没有安装或执行下载回来的安装包。
+- electron-builder 的双草稿第十三次复现：完整 Release `383806967` 有四项资产，重复草稿 `383806968` 只有安装器与 `latest.yml`。只删除不完整的 `383806968`，随后复验 git tag 仍是 annotated tag object `f51c2a9…`。
+- 正式发布 Release `383806967`，标题 `Mineradio v2.0.0：视觉预设切换不再回退`，`published_at` `2026-09-07T03:11:12Z`，非 draft / 非 prerelease；`releases/latest` 已复验指向 `v2.0.0`。
+- 四项资产全部回下载到临时目录复算：
+
+| 资产 | 字节 | SHA256 |
+| --- | ---: | --- |
+| `Mineradio-oirge-2.0.0-Setup.exe` | 102617004 | `44f22bbcf1b1eef716ddb62bdec5dc6a675413c3670b12eb5d0f0114b402448f` |
+| `Mineradio-oirge-2.0.0-Setup.exe.blockmap` | 106805 | `41f79c259d2076658e8d4a748c966a87475ecf29e996bda0f18c2fe70c3a6547` |
+| `Mineradio-oirge-2.0.0-SHA256SUMS.txt` | 285 | `c60f1d4d83ffbd7977b80d51209a4f53e094660ecdeeeb9ee27171877fd1a317` |
+| `latest.yml` | 359 | `95f664717f1ac1101199d9f56ebd1810a3d07a83351fd8ea3442602936d7cbc6` |
+
+- 三路校验全部通过：GitHub API 的四个 `digest` 与本机 SHA256 逐字相同；SHA256 清单内安装器 / blockmap / `latest.yml` 三条全部匹配；`latest.yml` 的 `version` / `path` 为 `2.0.0` / `Mineradio-oirge-2.0.0-Setup.exe`，`files[0].size` `102617004` 与安装器字节数相同，文件项与顶层 SHA512 都是 `tZl2DLkMwhFPLipgh2vmu6E7JG6phn/xaKq7GzYx1fUDw9zjr3uQnWu8E9fhjBulKj1OKoo0QzpzCYGzY3hIAA==`，与流式复算一致；`releaseDate` `2026-09-07T03:08:32.753Z`。
+- `SHA256SUMS.txt` 的 CRLF 遗留仍在：285 字节、3 个 `\r`、无 BOM。这个格式问题不影响 Windows 更新与 GitHub API digest，本轮不顺手改工作流。
+- GitHub Actions 给 `actions/checkout@v4` / `actions/setup-node@v4` 留了一条 Node.js 20 deprecated、强制转 Node.js 24 的 annotation，构建仍成功；后续可独立升级 action major，不和本次视觉修复混在一起。
+- 资产记录分支 `codex/docs-release-assets-v200`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
+
 ## v1.10.0 二创版与原项目可同时安装、同时运行
 
 - 正式发布版本从 `1.9.3` 提升为 `1.10.0`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。走 minor 是因为安装身份整套换掉，升级路径肉眼可见地变了（新目录、新开始菜单项、装完多一个弹窗）。
