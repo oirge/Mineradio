@@ -92,13 +92,14 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v2.0.1 (2026-09-07)
+### Latest release v2.0.2 (2026-09-08)
 
-- **Fixed a brief transparent flash when switching to visual preset 6 or preset 8**: the main particle layer was hidden immediately, while the dedicated visual layer was still loading or fading in
-- The main particle layer now waits until the skull cloud or wallpaper layer is actually opaque (opacity `0.99`); if the asset fails to load, the particle layer remains as a fallback
-- Preset 8 now uses one module-driven fade path instead of layering CSS and per-frame opacity transitions
-- This patch only fixes the handoff window; visuals, colors, preset order, install identity and data location are unchanged
-- Full Node regression suite: `1065/1065` passing; the Windows x64 installer is built remotely by GitHub Actions
+- Smoother entering and leaving fullscreen: the window aligns to the target display before the native fullscreen switch and restores to the original display when leaving, reducing stretching, jumping and dropped frames
+- Smoother fullscreen transitions: main rendering pauses, duplicate resize work is merged, and layout / render-buffer rebuilds wait until just before the cover is revealed, avoiding a second visible rescale
+- Fixed a brief transparent flash when switching visual presets, especially Requiem and Sonic Echo Wallpaper Engine; the picture now stays continuously covered during handoff
+- Fixed the Requiem composition: the skull is centered and resized, lyrics stay at stage center, playlist and detail panels sit closer to regular presets, and Sonic Echo's occasionally sparse falling points are improved
+
+Full Node regression suite: `1070/1070` passing; the Windows x64 installer is built remotely by GitHub Actions.
 
 ### v2.0.0 (2026-09-07)
 

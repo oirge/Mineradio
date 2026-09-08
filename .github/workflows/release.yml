@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v2.0.1)'
+        description: 'Release tag (e.g. v2.0.2)'
         required: true
-        default: 'v2.0.1'
+        default: 'v2.0.2'
 
 jobs:
   build-windows:
