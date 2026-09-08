@@ -36,6 +36,8 @@ test('全屏 DIY 与退出按钮固定在 Home 左侧', () => {
   const context = {
     innerWidth: 1920,
     innerHeight: 1080,
+    isFullscreenTransitionCovered: () => false,
+    deferFullscreenTransitionWork: () => {},
     document: {
       getElementById(id) {
         if (id === 'home-btn') return { getBoundingClientRect: () => homeRect };
@@ -68,6 +70,8 @@ test('窄屏下仍保留 Home 与全屏按钮间距', () => {
   const context = {
     innerWidth: 700,
     innerHeight: 720,
+    isFullscreenTransitionCovered: () => false,
+    deferFullscreenTransitionWork: () => {},
     document: {
       getElementById(id) {
         return id === 'home-btn' ? { getBoundingClientRect: () => homeRect } : null;

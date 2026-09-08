@@ -11,11 +11,12 @@
  * (GPL-3.0, 与本仓库同许可) —— 上游没有给这份 WE 产物写出处, 本仓库补在 NOTICE.md 里。
  * 预设 7 是另一条路: 那是 yin-yizhen/sonic-topography 对同一作品的 three.js 重实现。
  *
- * 本机适配两处:
+ * 本机适配三处:
  *   1. 本仓库没有上游的 sonic-workshop 设置面板, 所以壁纸的自定义颜色区域
  *      (sonicWorkshopBaseColor 等 fx 键) 只有在别处写入时才生效, 缺省一律走封面取色;
  *   2. 取色链末尾不含歌词文字三色。上游拿同一份颜色既画歌词又画地形, 本仓库的歌词色是
  *      为可读性抬亮过的另一代配色, 顶上去整幅泛白, 详见 workshopCoverHex。
+ *   3. Meteor 灵敏度用 0.4。双 deck 音频图的上升沿比上游单 deck 稍弱, 0.3 会偶发少流星。
  * gridSize、音频整形系数、推送节奏全部保持上游原值。
  */
 'use strict';
@@ -49,7 +50,7 @@
     pulseSensitivity: 0.05,
     pulseCooldown: 0,
     meteorEnabled: true,
-    meteorSensitivity: 0.3,
+    meteorSensitivity: 0.4,
     meteorCooldown: 60,
     meteorClickEnabled: true,
     idleWaveEnabled: true,

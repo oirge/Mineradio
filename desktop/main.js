@@ -187,6 +187,7 @@ const miniPlayerRecoverySession = new MiniPlayerRecoverySession({
 const miniPlayerStateCache = new MiniPlayerStateCache(miniPlayerEnabled);
 let htmlFullscreenActive = false;
 let windowFullscreenActive = false;
+let windowFullscreenDisplayId = null;
 let mainWindowFullscreenVisibilityTimer = null;
 let mainWindowIntentionalHide = false;
 let mainWindowStateTimer = null;
@@ -2195,6 +2196,28 @@ function boundsHasReachableArea(bounds, area) {
   return visibleWidth >= Math.min(width, 160) && visibleHeight >= Math.min(height, 96);
 }
 
+function getWindowDisplay(win) {
+  if (!win || win.isDestroyed()) return screen.getPrimaryDisplay();
+  try {
+    const bounds = win.getBounds();
+    if (typeof screen.getDisplayNearestPoint === 'function') {
+      return screen.getDisplayNearestPoint({
+        x: Math.round(bounds.x + bounds.width / 2),
+        y: Math.round(bounds.y + bounds.height / 2),
+      });
+    }
+    return screen.getDisplayMatching(bounds);
+  } catch (_error) {
+    return screen.getPrimaryDisplay();
+  }
+}
+
+function getFullscreenTargetDisplay(win) {
+  const displays = screen.getAllDisplays();
+  const remembered = displays.find((display) => String(display && display.id) === String(windowFullscreenDisplayId));
+  return remembered || getWindowDisplay(win);
+}
+
 function windowedMinimumSize(display) {
   const area = displayWorkArea(display);
   return {
@@ -2203,10 +2226,8 @@ function windowedMinimumSize(display) {
   };
 }
 
-function getWindowedBounds(win) {
-  const display = win && !win.isDestroyed()
-    ? screen.getDisplayMatching(win.getBounds())
-    : screen.getPrimaryDisplay();
+function getWindowedBounds(win, displayOverride = null) {
+  const display = displayOverride || getWindowDisplay(win);
   const area = displayWorkArea(display);
   const minimum = windowedMinimumSize(display);
   const maxWidth = Math.max(minimum.width, Math.floor(area.width - WINDOWED_MARGIN));
@@ -2266,14 +2287,14 @@ function setMainWindowFullscreenResizeGuard(win, fullscreen) {
   }
 }
 
-function applyWindowedBounds(win) {
+function applyWindowedBounds(win, displayOverride = null) {
   if (!win || win.isDestroyed()) return;
   setMainWindowFullscreenResizeGuard(win, false);
   if (win.isMaximized()) win.unmaximize();
   const display = screen.getDisplayMatching(win.getBounds()) || screen.getPrimaryDisplay();
   const minimum = windowedMinimumSize(display);
   win.setMinimumSize(minimum.width, minimum.height);
-  win.setBounds(getWindowedBounds(win), false);
+  win.setBounds(getWindowedBounds(win, displayOverride), false);
   sendWindowState(win);
 }
 
@@ -2347,10 +2368,22 @@ function toggleFullscreen(win) {
     exitFullscreenToWindow(win);
     return;
   }
-  // 上游在置位全屏标记之后调 ensureMainWindowInsideDisplay；本仓库的同名工具
-  // keepMainWindowInsideDisplay 会因为全屏标记直接返回，所以必须放在置位之前。
-  keepMainWindowInsideDisplay(win);
+  const display = getWindowDisplay(win);
+  const targetBounds = display && display.bounds;
+  windowFullscreenDisplayId = display ? display.id : null;
   windowFullscreenActive = true;
+  if (targetBounds && targetBounds.width > 0 && targetBounds.height > 0) {
+    // 先把窗口铺到目标显示器，再进原生全屏；否则 Windows 要在原生全屏动画里
+    // 同时拉伸透明窗口和 WebGL backing buffer，观感就是一顿一顿。
+    win.setBounds({
+      x: Math.round(targetBounds.x),
+      y: Math.round(targetBounds.y),
+      width: Math.round(targetBounds.width),
+      height: Math.round(targetBounds.height),
+    }, false);
+  } else {
+    keepMainWindowInsideDisplay(win);
+  }
   setMainWindowFullscreenResizeGuard(win, true);
   win.setFullScreen(true);
   sendWindowState(win);
@@ -5701,7 +5734,11 @@ async function createWindow() {
     // 先把"已退出全屏"推给渲染层，别等 50ms 后的边界还原顺带通知，
     // 否则渲染层的全屏遮罩要多黑这一段才知道可以回亮。上游没有这层遮罩，所以没有这一步。
     sendWindowState(mainWindow);
-    setTimeout(() => applyWindowedBounds(mainWindow), 50);
+    setTimeout(() => {
+      const targetDisplay = getFullscreenTargetDisplay(mainWindow);
+      applyWindowedBounds(mainWindow, targetDisplay);
+      windowFullscreenDisplayId = null;
+    }, 50);
   });
   mainWindow.on('enter-html-full-screen', () => {
     htmlFullscreenActive = true;

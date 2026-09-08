@@ -773,6 +773,15 @@ function layoutFullscreenDiyZone() {
   var rightInset = innerWidth < 720 ? 12 : 24;
   var left = innerWidth - rightInset - 44 - gap - width;
   var top = innerWidth < 720 ? 22 : 20;
+  if (isFullscreenTransitionCovered()) {
+    deferFullscreenTransitionWork('diyZone');
+    return {
+      left: Math.max(12, Math.min(innerWidth - width - 12, left)),
+      top: Math.max(8, Math.min(innerHeight - height - 8, top)),
+      width: width,
+      height: height
+    };
+  }
   var anchor = document.getElementById('home-btn') || document.getElementById('top-right');
   if (anchor) {
     var rect = anchor.getBoundingClientRect();
@@ -5006,8 +5015,10 @@ function destroyFloatLayer() {
 var SKULL_PRESET_INDEX = 6;
 var SKULL_MODEL_BASE_ROTATION_X = -0.26;
 var SKULL_MODEL_BASE_ROTATION_Y = 0.00;
-var SKULL_MODEL_SCALE = 2.34;
-var SKULL_MODEL_BASE_POSITION = { x: 0, y: 0.22, z: 0.10 };
+var SKULL_MODEL_SCALE = 2.00;
+var SKULL_MODEL_BASE_POSITION = { x: 0, y: 0.28, z: 0.10 };
+var SKULL_SHELF_SCALE = 2.25;
+var SKULL_SHELF_POSITION = { x: 0, y: 0.38, z: 0.10 };
 var skullAmpPulse = 0;
 var skullBeatFlash = 0;
 var skullJawOpen = 0;
@@ -5021,6 +5032,9 @@ var skullCameraBaseLook = new THREE.Vector3();
 var skullCameraShelfPos = new THREE.Vector3();
 var skullCameraShelfLook = new THREE.Vector3();
 var skullCameraMixedLook = new THREE.Vector3();
+var skullCameraCinemaRight = new THREE.Vector3();
+var skullCameraCinemaUp = new THREE.Vector3();
+var skullCameraCinemaForward = new THREE.Vector3();
 var skullShelfCameraMix = 0;
 var skullLyricMouthLocal = new THREE.Vector3(0.025, -0.72, 0.62);
 var skullLyricMouthTarget = new THREE.Vector3();
@@ -5442,8 +5456,12 @@ function resetSkullPresetView(immediate, opts) {
   if (!immediate || !skullParticleGroup) return;
   var shelfComposition = isSkullShelfCompositionActive();
   skullShelfCameraMix = shelfComposition ? 1 : 0;
-  skullParticleGroup.position.set(shelfComposition ? -1.18 : SKULL_MODEL_BASE_POSITION.x, shelfComposition ? 0.32 : SKULL_MODEL_BASE_POSITION.y, SKULL_MODEL_BASE_POSITION.z);
-  skullParticleGroup.scale.setScalar(shelfComposition ? 3.02 : SKULL_MODEL_SCALE);
+  skullParticleGroup.position.set(
+    shelfComposition ? SKULL_SHELF_POSITION.x : SKULL_MODEL_BASE_POSITION.x,
+    shelfComposition ? SKULL_SHELF_POSITION.y : SKULL_MODEL_BASE_POSITION.y,
+    shelfComposition ? SKULL_SHELF_POSITION.z : SKULL_MODEL_BASE_POSITION.z
+  );
+  skullParticleGroup.scale.setScalar(shelfComposition ? SKULL_SHELF_SCALE : SKULL_MODEL_SCALE);
   skullParticleGroup.rotation.set(SKULL_MODEL_BASE_ROTATION_X, SKULL_MODEL_BASE_ROTATION_Y, 0);
   skullParticleGroup.updateMatrixWorld(true);
   if (camera && typeof setSkullCameraTargetVectors === 'function') {
@@ -5471,8 +5489,31 @@ function setSkullCameraTargetVectors(pos, look, portrait, shelfComposition, zoom
     look.set(portrait ? -0.04 : 0.00, portrait ? -0.26 : -0.20, 0.03);
     return;
   }
-  pos.set(0.00, portrait ? -2.38 : -2.52, (portrait ? 4.92 : 4.98) + zoom);
+  pos.set(0.00, portrait ? -2.38 : -2.52, (portrait ? 5.04 : 5.08) + zoom);
   look.set(0.00, portrait ? -0.28 : -0.20, 0.02);
+}
+function applySkullCameraCinemaMotion(portrait, shelfComposition) {
+  if (!camera || !fx || !fx.cinema) return;
+  var shake = clampRange(Number(fx.cinemaShake) || 0, 0, 1.8);
+  if (shake <= 0.001) return;
+  var shelfDamp = shelfComposition ? 0.52 : 1.0;
+  var idleDamp = (orbit && orbit.rotating ? 0.24 : 1.0) * shelfDamp * shake;
+  var beatDamp = shelfDamp * shake;
+  skullCameraCinemaRight.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+  skullCameraCinemaUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+  camera.getWorldDirection(skullCameraCinemaForward).normalize();
+  var lateral = Math.sin(cinemaT * 0.08) * 0.030 * idleDamp + beatCam.thetaKick * 0.78 * beatDamp;
+  var vertical = Math.sin(cinemaT * 0.06 + 1.0) * 0.024 * idleDamp + beatCam.phiKick * 0.68 * beatDamp;
+  var depth = Math.sin(cinemaT * 0.04 + 2.0) * 0.075 * idleDamp - beatCam.radiusKick * 0.58 * beatDamp;
+  if (portrait) {
+    lateral *= 0.72;
+    vertical *= 0.88;
+  }
+  camera.position.addScaledVector(skullCameraCinemaRight, lateral);
+  camera.position.addScaledVector(skullCameraCinemaUp, vertical);
+  camera.position.addScaledVector(skullCameraCinemaForward, depth);
+  camera.lookAt(skullCameraMixedLook);
+  camera.rotation.z += beatCam.rollKick * beatDamp * (shelfComposition ? 0.42 : 0.70);
 }
 /**
  * 推进 Skull 预设相机姿态，并复用当前帧的歌单组合状态。
@@ -5502,6 +5543,7 @@ function applySkullCameraPose(dt, frameShelfState) {
   camera.position.lerp(skullCameraTargetPos, skullCameraBlend);
   skullCameraMixedLook.set(orbit.lookAt.x, orbit.lookAt.y, orbit.lookAt.z).lerp(skullCameraTargetLook, skullCameraBlend);
   camera.lookAt(skullCameraMixedLook);
+  applySkullCameraCinemaMotion(portrait, shelfComposition);
 }
 /**
  * 更新 Skull 粒子层动画，并复用当前帧的歌单组合状态。
@@ -5538,13 +5580,10 @@ function updateSkullParticleLayer(dt, frameShelfState) {
   var drift = skullBreathOffset(uniforms.uTime.value, shelfComposition);
   var ampTarget = clampRange(bass * 0.006 + mid * 0.004 + skullBeatFlash * 0.070, 0, 0.090);
   skullAmpPulse += (ampTarget - skullAmpPulse) * Math.min(1, dt * (ampTarget > skullAmpPulse ? 11.0 : 4.0));
-  var shelfScale = 3.02;
-  var targetScale = (SKULL_MODEL_SCALE + (shelfScale - SKULL_MODEL_SCALE) * shelfMix) * (1 + skullAmpPulse) * clampRange(1 - skullWheelZoom * 0.055, 0.92, 1.08);
-  var shelfX = -1.18;
-  var shelfY = 0.32;
-  var targetX = (SKULL_MODEL_BASE_POSITION.x + (shelfX - SKULL_MODEL_BASE_POSITION.x) * shelfMix) + drift.x;
-  var targetY = (SKULL_MODEL_BASE_POSITION.y + (shelfY - SKULL_MODEL_BASE_POSITION.y) * shelfMix) + drift.y;
-  var targetZ = SKULL_MODEL_BASE_POSITION.z + drift.z;
+  var targetScale = (SKULL_MODEL_SCALE + (SKULL_SHELF_SCALE - SKULL_MODEL_SCALE) * shelfMix) * (1 + skullAmpPulse) * clampRange(1 - skullWheelZoom * 0.055, 0.92, 1.08);
+  var targetX = (SKULL_MODEL_BASE_POSITION.x + (SKULL_SHELF_POSITION.x - SKULL_MODEL_BASE_POSITION.x) * shelfMix) + drift.x;
+  var targetY = (SKULL_MODEL_BASE_POSITION.y + (SKULL_SHELF_POSITION.y - SKULL_MODEL_BASE_POSITION.y) * shelfMix) + drift.y;
+  var targetZ = (SKULL_MODEL_BASE_POSITION.z + (SKULL_SHELF_POSITION.z - SKULL_MODEL_BASE_POSITION.z) * shelfMix) + drift.z;
   skullParticleGroup.position.x += (targetX - skullParticleGroup.position.x) * Math.min(1, dt * 4.2);
   skullParticleGroup.position.y += (targetY - skullParticleGroup.position.y) * Math.min(1, dt * 4.8);
   skullParticleGroup.position.z += (targetZ - skullParticleGroup.position.z) * Math.min(1, dt * 4.2);
@@ -8274,6 +8313,10 @@ function bindColorLabRows() {
   });
 }
 function repositionFxFloatingPanels() {
+  if (isFullscreenTransitionCovered()) {
+    deferFullscreenTransitionWork('floatingPanels');
+    return;
+  }
   var colorPop = document.getElementById('color-lab-pop');
   if (colorPop && colorPop.classList.contains('show') && colorLabState.picker) {
     placeFxFloatingPanel(colorPop, colorLabState.picker.closest('.lyric-color-row') || colorLabState.picker, { gap: 12, pad: 14 });
@@ -9579,7 +9622,8 @@ function updateStageLyrics3D(dt, frameShelfState) {
   var layoutZ = clampRange(Number(fx.lyricOffsetZ) || 0, -1.6, 1.6);
   var layoutTiltX = clampRange(Number(fx.lyricTiltX) || 0, -42, 42);
   var layoutTiltY = clampRange(Number(fx.lyricTiltY) || 0, -42, 42);
-  var skullMouthLyrics = !!(camera && fx && fx.preset === SKULL_PRESET_INDEX && skullParticleGroup && skullParticleGroup.visible);
+  // 安魂不再把歌词锁在嘴部；模型缩放调整时歌词保持舞台中心。
+  var skullMouthLyrics = false;
   frameShelfState = frameShelfState || refreshShelfRenderFrameState();
   var shelfMode = frameShelfState.mode;
   var shelfSideMode = frameShelfState.side;
@@ -13947,6 +13991,7 @@ var shelfLayoutProfileCache = {
 function shelfLayoutProfile(shelfCtl) {
   var portrait = isPortraitShelfViewport();
   var narrow = !portrait && innerWidth < 980;
+  // 安魂取上游紧凑构图与其他预设常规构图之间的中档横向位置。
   var skullShelf = shouldUseSkullSafeShelfCamera();
   var detailScale = portrait ? clampRange(innerWidth / 820, 0.70, 0.86) : (narrow ? 0.92 : 1.04);
   shelfCtl = shelfCtl || shelfSettings();
@@ -13954,30 +13999,30 @@ function shelfLayoutProfile(shelfCtl) {
   var detail = cache.detail;
   cache.portrait = portrait;
   cache.narrow = narrow;
-  cache.sideX = (skullShelf ? (portrait ? 0.22 : (narrow ? 0.46 : 0.76)) : (portrait ? 1.56 : (narrow ? 2.48 : 3.18))) + shelfCtl.x;
-  cache.sideY = (skullShelf ? (portrait ? -0.22 : (narrow ? -0.30 : -0.34)) : 0) + shelfCtl.y;
-  cache.sideXStep = skullShelf ? (portrait ? 0.018 : 0.034) : (portrait ? 0.018 : 0.040);
-  cache.sideYStep = skullShelf ? (portrait ? 0.46 : 0.62) : (portrait ? 0.52 : 0.68);
-  cache.sideZ = (skullShelf ? (portrait ? 0.86 : 0.92) : (portrait ? 0.78 : 0.86)) + shelfCtl.z;
-  cache.sideZStep = skullShelf ? (portrait ? 0.108 : 0.158) : (portrait ? 0.118 : 0.170);
-  cache.sideEntryX = skullShelf ? (portrait ? 0.30 : 0.50) : (portrait ? 0.38 : 0.82);
-  cache.sideDetailShift = skullShelf ? (portrait ? 0.00 : 0.00) : (portrait ? 0.38 : 0.82);
-  cache.sideScale = (skullShelf ? (portrait ? 0.84 : (narrow ? 1.04 : 1.22)) : (portrait ? 0.70 : (narrow ? 0.86 : 1))) * shelfCtl.size;
-  cache.sideRotY = (skullShelf ? (portrait ? -0.085 : -0.190) : (portrait ? 0.12 : 0.28)) + shelfCtl.angle;
-  cache.sideRotX = skullShelf ? (portrait ? 0.018 : 0.030) : (portrait ? 0.022 : 0.042);
+  cache.sideX = (skullShelf ? (portrait ? 0.95 : (narrow ? 1.70 : 2.20)) : (portrait ? 1.56 : (narrow ? 2.48 : 3.18))) + shelfCtl.x;
+  cache.sideY = (shelfCtl.y || 0);
+  cache.sideXStep = portrait ? 0.018 : 0.040;
+  cache.sideYStep = portrait ? 0.52 : 0.68;
+  cache.sideZ = (portrait ? 0.78 : 0.86) + shelfCtl.z;
+  cache.sideZStep = portrait ? 0.118 : 0.170;
+  cache.sideEntryX = portrait ? 0.38 : 0.82;
+  cache.sideDetailShift = portrait ? 0.38 : 0.82;
+  cache.sideScale = (portrait ? 0.70 : (narrow ? 0.86 : 1)) * shelfCtl.size;
+  cache.sideRotY = (portrait ? 0.12 : 0.28) + shelfCtl.angle;
+  cache.sideRotX = portrait ? 0.022 : 0.042;
   cache.stageX = shelfCtl.x;
   cache.stageXStep = portrait ? 0.92 : (narrow ? 1.22 : 1.55);
   cache.stageY = (portrait ? -2.46 : -2.20) + shelfCtl.y;
   cache.stageZ = (portrait ? 0.84 : 1.0) + shelfCtl.z;
   cache.stageScale = (portrait ? 0.72 : (narrow ? 0.86 : 1)) * shelfCtl.size;
-  detail.x = (skullShelf ? (portrait ? 0.16 : (narrow ? 0.40 : 0.64)) : (portrait ? 0.38 : (narrow ? 0.96 : 1.28))) + shelfCtl.x * 0.62;
-  detail.y = (skullShelf ? (portrait ? -0.40 : -0.68) : (portrait ? 0.10 : 0.18)) + shelfCtl.y * 0.55;
-  detail.z = (skullShelf ? (portrait ? 1.10 : 1.22) : (portrait ? 1.28 : 1.36)) + shelfCtl.z * 0.45;
-  detail.rx = skullShelf ? (portrait ? 0.006 : 0.014) : (portrait ? -0.004 : -0.008);
-  detail.ry = (skullShelf ? (portrait ? -0.070 : -0.165) : (portrait ? 0.00 : 0.020)) + shelfCtl.angle * 0.55;
-  detail.scale = (skullShelf ? detailScale * (portrait ? 0.88 : 1.02) : detailScale) * shelfCtl.size;
-  detail.rowStep = skullShelf ? (portrait ? 0.37 : 0.43) : (portrait ? 0.36 : 0.42);
-  detail.rowScale = skullShelf ? (portrait ? 0.90 : 1.02) : (portrait ? 0.88 : (narrow ? 0.96 : 1.00));
+  detail.x = (skullShelf ? (portrait ? 0.34 : (narrow ? 0.82 : 1.05)) : (portrait ? 0.38 : (narrow ? 0.96 : 1.28))) + shelfCtl.x * 0.62;
+  detail.y = (portrait ? 0.10 : 0.18) + shelfCtl.y * 0.55;
+  detail.z = (portrait ? 1.28 : 1.36) + shelfCtl.z * 0.45;
+  detail.rx = portrait ? -0.004 : -0.008;
+  detail.ry = (portrait ? 0.00 : 0.020) + shelfCtl.angle * 0.55;
+  detail.scale = detailScale * shelfCtl.size;
+  detail.rowStep = portrait ? 0.36 : 0.42;
+  detail.rowScale = portrait ? 0.88 : (narrow ? 0.96 : 1.00);
   return cache;
 }
 function shelfHotZoneWidth() {
@@ -14712,7 +14757,8 @@ function makeShelfManager() {
       var paneRaw = Math.max(0, Math.min(1, (nowT - paneSwitchAt - absD * 0.030) / 0.72));
       var paneEase = 1 - paneRaw * paneRaw * (3 - 2 * paneRaw);
       var wallpaperShelfPose = framePose ? framePose.wallpaper : shouldUseWallpaperSafeShelfCamera();
-      var skullShelfPose = framePose ? framePose.skull : shouldUseSkullSafeShelfCamera();
+      // 卡片姿态也走普通预设路径；骷髅只接管场景相机。
+      var skullShelfPose = false;
       var safeShelfPose = wallpaperShelfPose || skullShelfPose;
       var px = layout.sideX + absD * layout.sideXStep - (detailOpenSide ? layout.sideDetailShift : 0) + entry * layout.sideEntryX;
       var py = (layout.sideY || 0) - delta * layout.sideYStep + (1 - reveal) * (delta < 0 ? -0.18 : 0.18);
@@ -15911,7 +15957,8 @@ function makeContentListManager() {
     var parWeight = Math.max(0, 1 - absD * 0.12);
     var pulse = row.fxPulse || 0;
     var settle = group && group.userData ? (group.userData.rowSettle || 0) : 0;
-    var skullDetail = shouldUseSkullSafeShelfCamera();
+    // 歌单详情行使用与其他预设一致的基础位置。
+    var skullDetail = false;
     var rowBaseX = skullDetail ? 0.22 : -0.04;
     var rowSpreadX = skullDetail ? 0.030 : 0.014;
     var rowIntroX = skullDetail ? 0.58 : 0.38;
@@ -16060,11 +16107,11 @@ function makeContentListManager() {
       var openCoverRy = particles && particles.rotation ? particles.rotation.y : 0;
       var openCoverRz = particles && particles.rotation ? particles.rotation.z : 0;
       group.userData.detailIntro = 1;
-      group.position.set(openLayout.x + (openSkullDetail ? 0.10 : 0.16), openLayout.y - (openSkullDetail ? 0.02 : 0.024), openLayout.z - (openSkullDetail ? 0.05 : 0.070));
+      group.position.set(openLayout.x + 0.16, openLayout.y - 0.024, openLayout.z - 0.070);
       if ((openSkullDetail || openDynamicDetail) && camera) {
         group.quaternion.copy(camera.quaternion);
         group.rotateX(openLayout.rx);
-        group.rotateY(openLayout.ry + (openSkullDetail ? 0.014 : 0.018));
+        group.rotateY(openLayout.ry + 0.018);
       } else {
         group.rotation.y = openCoverRy * 0.82 + openLayout.ry + 0.018;
         group.rotation.x = openCoverRx * 0.72 + openLayout.rx;
@@ -16176,9 +16223,9 @@ function makeContentListManager() {
       var coverBindY = coverBoundDetail ? particles.rotation.x * -0.16 : 0;
       var coverBindZ = coverBoundDetail ? Math.abs(particles.rotation.y) * 0.030 : 0;
       setContentGroupPosition(
-        layout.x + coverBindX + intro * (skullDetail ? 0.10 : 0.16) + parX * (skullDetail ? 0.024 : 0.030),
-        layout.y + coverBindY - intro * (skullDetail ? 0.02 : 0.024) + parY * (skullDetail ? 0.026 : 0.026),
-        layout.z + coverBindZ - intro * (skullDetail ? 0.05 : 0.070) + parY * (skullDetail ? 0.014 : 0.016) - parX * (skullDetail ? 0.010 : 0.010)
+        layout.x + coverBindX + intro * 0.16 + parX * 0.030,
+        layout.y + coverBindY - intro * 0.024 + parY * 0.026,
+        layout.z + coverBindZ - intro * 0.070 + parY * 0.016 - parX * 0.010
       );
       if (skullDetail && camera) {
         group.quaternion.copy(camera.quaternion);
@@ -16199,7 +16246,7 @@ function makeContentListManager() {
         var nextRotationZ = group.rotation.z + ((coverRz * 0.70) - group.rotation.z) * 0.14;
         setContentGroupRotation(nextRotationX, nextRotationY, nextRotationZ);
       }
-      setContentGroupScale(layout.scale * (1 - intro * (skullDetail ? 0.020 : 0.035)));
+      setContentGroupScale(layout.scale * (1 - intro * 0.035));
       centerSmooth += (centerTarget - centerSmooth) * 0.18;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       syncRenderedRows(false, shelfLook);
@@ -25770,6 +25817,10 @@ function nodeTouchesSearchPill(node) {
   return false;
 }
 function scheduleGlassDisplacementMapUpdate(target) {
+  if (isFullscreenTransitionCovered()) {
+    deferFullscreenTransitionWork('glassMap');
+    return;
+  }
   var key = target ? ('glass-map-' + target) : 'glass-map-all';
   scheduleNamedAnimationFrame(key, function(){
     if (!target || target === 'control') updateControlGlassDisplacementMap();
@@ -39469,6 +39520,10 @@ function stopGestureControl() {
 
 function resizeHandCanvas() {
   if (!handCanvas) return;
+  if (isFullscreenTransitionCovered()) {
+    deferFullscreenTransitionWork('handCanvas');
+    return;
+  }
   var dpr = Math.min(devicePixelRatio || 1, 2);
   handCanvas.width = innerWidth * dpr;
   handCanvas.height = innerHeight * dpr;
@@ -39755,17 +39810,29 @@ function refreshMainRendererViewport(reason) {
   }
 }
 var mainRendererViewportRefreshTimers = [];
-function scheduleMainRendererViewportRefresh(reason) {
-  refreshMainRendererViewport(reason || 'sync');
-  // 全屏切换会连发几十次 resize，旧实现每次都再排 3 个补偿刷新，
-  // renderer.setPixelRatio/setSize 就在窗口尺寸跳变时被反复调用，卡顿正是这么来的。
-  // 补偿刷新只需要最后一次，重排时先撤掉上一批。
+var mainRendererViewportRefreshFrame = 0;
+var mainRendererViewportRefreshReason = 'sync';
+function scheduleMainRendererViewportRefresh(reason, immediate) {
+  mainRendererViewportRefreshReason = reason || 'sync';
   while (mainRendererViewportRefreshTimers.length) clearTimeout(mainRendererViewportRefreshTimers.pop());
-  [48, 140, 320].forEach(function(delay){
-    mainRendererViewportRefreshTimers.push(setTimeout(function(){
-      refreshMainRendererViewport(reason || 'sync');
-    }, delay));
+  // 回亮前必须同步刷新：renderer.setSize 的缓冲分配发生在遮罩仍盖住时，
+  // 揭开后第一帧就是成品，不再把重建开销露给用户。
+  if (immediate || (typeof isDeepBackgroundMode === 'function' && isDeepBackgroundMode())) {
+    refreshMainRendererViewport(mainRendererViewportRefreshReason);
+    [140, 320].forEach(armFullscreenViewportCompensation);
+    return;
+  }
+  if (mainRendererViewportRefreshFrame) return;
+  mainRendererViewportRefreshFrame = requestAnimationFrame(function(){
+    mainRendererViewportRefreshFrame = 0;
+    refreshMainRendererViewport(mainRendererViewportRefreshReason);
+    [140, 320].forEach(armFullscreenViewportCompensation);
   });
+}
+function armFullscreenViewportCompensation(delay) {
+  mainRendererViewportRefreshTimers.push(setTimeout(function(){
+    refreshMainRendererViewport(mainRendererViewportRefreshReason);
+  }, delay));
 }
 window.addEventListener('resize', function(){
   scheduleMainRendererViewportRefresh('resize');
@@ -41464,6 +41531,9 @@ var fullscreenTransitionState = {
   startWidth: 0,
   startHeight: 0,
   revealDue: 0,
+  renderLoopPaused: false,
+  deferredWork: null,
+  flushingWork: false,
   actionTimer: 0,
   revealTimer: 0,
   deadlineTimer: 0,
@@ -41481,6 +41551,46 @@ function clearFullscreenTransitionTimer(name) {
   if (timer) clearTimeout(timer);
   fullscreenTransitionState[name] = 0;
 }
+function pauseFullscreenTransitionRenderLoop() {
+  if (fullscreenTransitionState.renderLoopPaused) return;
+  fullscreenTransitionState.renderLoopPaused = true;
+  if (typeof suspendMainRenderLoop === 'function') suspendMainRenderLoop('fullscreen-transition-cover');
+}
+function resumeFullscreenTransitionRenderLoop() {
+  if (!fullscreenTransitionState.renderLoopPaused) return;
+  fullscreenTransitionState.renderLoopPaused = false;
+  if (typeof resumeMainRenderLoop === 'function') resumeMainRenderLoop('fullscreen-transition-reveal');
+}
+function isFullscreenTransitionCovered() {
+  return !!(fullscreenTransitionState
+    && fullscreenTransitionState.active
+    && fullscreenTransitionState.renderLoopPaused
+    && !fullscreenTransitionState.flushingWork);
+}
+function deferFullscreenTransitionWork(name) {
+  if (!fullscreenTransitionState) return;
+  if (!fullscreenTransitionState.deferredWork) fullscreenTransitionState.deferredWork = {};
+  fullscreenTransitionState.deferredWork[name] = true;
+}
+function flushFullscreenTransitionDeferredWork() {
+  if (!fullscreenTransitionState) return;
+  var work = fullscreenTransitionState.deferredWork;
+  fullscreenTransitionState.deferredWork = null;
+  if (!work) return;
+  fullscreenTransitionState.flushingWork = true;
+  try {
+  if (work.diyZone && typeof layoutFullscreenDiyZone === 'function') layoutFullscreenDiyZone();
+  if (work.floatingPanels && typeof repositionFxFloatingPanels === 'function') repositionFxFloatingPanels();
+  if (work.handCanvas && typeof resizeHandCanvas === 'function') resizeHandCanvas();
+  if (work.glassMap) {
+    if (typeof updateControlGlassDisplacementMap === 'function') updateControlGlassDisplacementMap();
+    if (typeof updateSearchBoxGlassDisplacementMap === 'function') updateSearchBoxGlassDisplacementMap();
+    if (typeof updateSearchPillGlassDisplacementMap === 'function') updateSearchPillGlassDisplacementMap();
+  }
+  } finally {
+    fullscreenTransitionState.flushingWork = false;
+  }
+}
 function cleanupFullscreenTransition(token) {
   if (token !== fullscreenTransitionState.token) return;
   clearFullscreenTransitionTimer('actionTimer');
@@ -41489,6 +41599,7 @@ function cleanupFullscreenTransition(token) {
   clearFullscreenTransitionTimer('cleanupTimer');
   fullscreenTransitionState.active = false;
   fullscreenTransitionState.revealDue = 0;
+  resumeFullscreenTransitionRenderLoop();
   document.body.classList.remove(
     'fullscreen-transitioning',
     'fullscreen-transition-covered',
@@ -41502,6 +41613,11 @@ function revealFullscreenTransition(token) {
   clearFullscreenTransitionTimer('revealTimer');
   clearFullscreenTransitionTimer('deadlineTimer');
   fullscreenTransitionState.revealDue = 0;
+  flushFullscreenTransitionDeferredWork();
+  if (typeof scheduleMainRendererViewportRefresh === 'function') {
+    scheduleMainRendererViewportRefresh('fullscreen-transition-reveal', true);
+  }
+  resumeFullscreenTransitionRenderLoop();
   document.body.classList.add('fullscreen-transition-revealing');
   document.body.classList.remove('fullscreen-transition-covered');
   fullscreenTransitionState.cleanupTimer = setTimeout(function(){
@@ -41512,11 +41628,15 @@ function scheduleFullscreenTransitionReveal(isFullscreen, reason) {
   if (!fullscreenTransitionState.active || fullscreenTransitionState.expected !== !!isFullscreen) return;
   var viewportChanged = Math.abs(innerWidth - fullscreenTransitionState.startWidth) > 2
     || Math.abs(innerHeight - fullscreenTransitionState.startHeight) > 2;
-  var delay = prefersReducedFullscreenMotion() ? 30 : ((reason === 'resize' || viewportChanged) ? 50 : 110);
+  var delay = prefersReducedFullscreenMotion()
+    ? 25
+    : (fullscreenTransitionState.expected
+      ? ((reason === 'resize' || viewportChanged) ? 35 : 70)
+      : ((reason === 'resize' || viewportChanged) ? 50 : 110));
   var due = Date.now() + delay;
-  // 只允许把回亮提前，不允许推后：同一次退出全屏会连发多轮 resize 和窗口状态推送，
-  // 逐次重排等于让遮罩一直等到最后一个信号，黑屏就被拉成整段还原动画。
-  if (fullscreenTransitionState.revealDue && due >= fullscreenTransitionState.revealDue) return;
+  // 每个新信号都重排回亮点。退出全屏时 leave-full-screen 后 50ms 才恢复普通窗口
+  // 边界；旧逻辑只提前不推后，可能在二次 setBounds 前揭开遮罩，把缩放暴露出来。
+  // 320ms deadlineTimer 仍然是硬上限，不会无限等待。
   fullscreenTransitionState.revealDue = due;
   clearFullscreenTransitionTimer('revealTimer');
   fullscreenTransitionState.revealTimer = setTimeout(function(){
@@ -41531,12 +41651,16 @@ function beginFullscreenTransition(expectedFullscreen, action) {
   fullscreenTransitionState.startWidth = innerWidth;
   fullscreenTransitionState.startHeight = innerHeight;
   fullscreenTransitionState.revealDue = 0;
+  fullscreenTransitionState.renderLoopPaused = false;
+  fullscreenTransitionState.deferredWork = null;
+  fullscreenTransitionState.flushingWork = false;
   document.body.classList.remove('fullscreen-transition-covered', 'fullscreen-transition-revealing', 'fullscreen-transition-enter', 'fullscreen-transition-exit');
   document.body.classList.add('fullscreen-transitioning');
   var transitionLayer = document.getElementById('fullscreen-transition-layer');
   if (transitionLayer) void transitionLayer.offsetWidth;
   else void document.body.offsetWidth;
   document.body.classList.add(expectedFullscreen ? 'fullscreen-transition-enter' : 'fullscreen-transition-exit', 'fullscreen-transition-covered');
+  pauseFullscreenTransitionRenderLoop();
   fullscreenTransitionState.actionTimer = setTimeout(function(){
     fullscreenTransitionState.actionTimer = 0;
     var result;
@@ -41560,7 +41684,7 @@ function beginFullscreenTransition(expectedFullscreen, action) {
       fullscreenTransitionState.deadlineTimer = 0;
       revealFullscreenTransition(token);
     }, prefersReducedFullscreenMotion() ? 90 : FULLSCREEN_TRANSITION_MAX_COVER_MS);
-  }, prefersReducedFullscreenMotion() ? 20 : 110);
+  }, prefersReducedFullscreenMotion() ? 20 : (expectedFullscreen ? 45 : 110));
   return true;
 }
 function isFullscreenUiActive() {

@@ -475,13 +475,18 @@ test('退出原生全屏只调一次原生 API，不再补第二次延迟还原'
   assert.equal(context.calls.setBounds, 0);
 });
 
-test('进入全屏前先把窗口夹回显示器，再锁住尺寸', () => {
+test('进入全屏前先铺满目标显示器，再锁住尺寸并进原生全屏', () => {
   const source = readMainSource();
   const context = createTransparentFullscreenWindow();
   const order = [];
+  context.win.setBounds = () => {
+    context.calls.setBounds += 1;
+    order.push('bounds');
+  };
   const scope = {
     windowFullscreenActive: false,
     htmlFullscreenActive: false,
+    getWindowDisplay: () => context.display,
     keepMainWindowInsideDisplay: () => order.push('clamp'),
     setMainWindowFullscreenResizeGuard: (_win, fullscreen) => order.push(fullscreen ? 'lock' : 'unlock'),
     exitFullscreenToWindow: () => order.push('exit'),
@@ -496,9 +501,9 @@ test('进入全屏前先把窗口夹回显示器，再锁住尺寸', () => {
 
   scope.toggle(context.win);
 
-  // 夹回必须发生在置位全屏标记之前，否则 keepMainWindowInsideDisplay 会因为标记直接返回。
-  assert.deepEqual(order, ['clamp', 'lock', 'state']);
+  assert.deepEqual(order, ['bounds', 'lock', 'state']);
   assert.equal(scope.windowFullscreenActive, true);
+  assert.equal(context.calls.setBounds, 1);
   assert.deepEqual(context.calls.setFullScreen, [true]);
 });
 
