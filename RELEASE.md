@@ -9,6 +9,24 @@
 - **视觉侧修复：** 安魂预设骷髅模型缩放为 `2.00`、歌单架组合缩放 `2.25`，位置居中；歌词不再绑定嘴部，保持舞台中心；歌单 / 详情采用常规预设与紧凑构图之间的中档位置。预设 8 的 `meteorSensitivity` 从 `0.3` 提到 `0.4`，双 deck 音频下落点触发更接近上游观感。
 - 全量 Node 回归 `1070/1070` 通过（新增 / 扩展全屏过渡、窗口行为、启动期防护、布局夹具与预设 8 参数测试）；`node --check desktop/main.js public/app.js desktop/overlay-preload.js server.js` 与 `git diff --check` 全清。按用户要求，本轮不在本机启动 Electron、不杀用户进程；Windows 安装包交给 GitHub Actions 远程构建。
 
+### 发布记录（v2.0.2）
+
+- 单分支 `codex/release-v2.0.2`，两个提交：`560fbde fix: smooth fullscreen transitions and preset layouts` 与 `0305d2d chore(release): 2.0.2`。PR [#71](https://github.com/oirge/Mineradio/pull/71) 用 merge commit 合入 `main`，合并提交 `ade04c6`；两路 `Verify` run `34195700003` / `34195731449` 均通过。
+- annotated tag `v2.0.2` = tag object `d08d5d9e414b8e28564e14e04ffb423b80cec8dc`，指向 release commit `0305d2d792bc9084defe225e788ad52bf64e3e56`；GitHub API 复验该提交是 `origin/main` 祖先。
+- `Build and Release` run `34195967333` 成功（2 分 25 秒），Windows x64 NSIS 在 GitHub Actions 远程构建。本轮没有在本机启动 Electron、没有关闭或重启正在使用的 Mineradio，也没有执行安装包。
+- electron-builder 的双草稿再次复现：完整 Release `384498028` 有四项资产，重复草稿 `384498029` 只有 blockmap。只删除不完整的 `384498029`，未触碰 git tag。
+- 正式发布 Release `384498028`，标题 `Mineradio v2.0.2：全屏切换更顺滑`，`published_at` `2026-09-08T06:47:32Z`，非 draft / 非 prerelease；`releases/latest` 已复验指向 `v2.0.2`。
+- 四项资产全部回下载到系统临时目录复算：
+
+| 资产 | 字节 | SHA256 |
+| --- | ---: | --- |
+| `Mineradio-oirge-2.0.2-Setup.exe` | 102618746 | `9053f328c26e7a73762c20c1d2a5cf3652f1fd19c445e62117f75d2432aa8d66` |
+| `Mineradio-oirge-2.0.2-Setup.exe.blockmap` | 106802 | `d08a0cff97fb2bb86f1fa57c29ca04ee3b40e62edfc8e22a382181fa05c8ffe1` |
+| `Mineradio-oirge-2.0.2-SHA256SUMS.txt` | 285 | `1a52bcb97129db397bbec3692cb1e202f1d102c735adcff35fd01735ecafbed8` |
+| `latest.yml` | 359 | `b1a52159290afe5d4c1ab63d18d7a5dcec76c8d8da184595f974a9603fe345cf` |
+
+- 三路校验全部通过：GitHub API 的四个 `digest` 与本机 SHA256 逐字相同；SHA256 清单内安装器 / blockmap / `latest.yml` 三条全部匹配；`latest.yml` 的 `version` / `path` 为 `2.0.2` / `Mineradio-oirge-2.0.2-Setup.exe`，`files[0].size` `102618746` 与安装器字节数相同，文件项与顶层 SHA512 都是 `zwzy2UEeCE+2O3ZCdj9jtPWd3IXI8gOiPun8e87K2Agjkq+jJhB9amSPZo00iCeysiqYnL3KbF2AhYwqoPuOvA==`，与本机复算一致；`releaseDate` `2026-09-08T06:46:16.945Z`。
+
 ## v2.0.1 安魂与壁纸版回响切换不再漏透明
 
 - 正式发布版本从 `2.0.0` 提升为 `2.0.1`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。走 patch 是因为这一版只修缺陷、不加功能、不改视觉参数。
