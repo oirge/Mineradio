@@ -323,6 +323,8 @@ test('除了本机适配的一处，其余参数保持原作原值', () => {
   assert.equal(props.cameraAngleY, 30);
   assert.equal(props.pulseEnabled, true);
   assert.equal(props.meteorEnabled, true);
+  // 双 deck 音频图的上升沿略弱, 这里比原作默认 0.3 稍微更容易触发流星。
+  assert.equal(props.meteorSensitivity, 0.4);
   assert.equal(props.idleWaveEnabled, true);
   assert.equal(props.showAlbumCover, true);
   // 壁纸自带的播放器控件要关掉: 本项目有自己的播放器, 两套叠着是重影。

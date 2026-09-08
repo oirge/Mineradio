@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v2.0.2 全屏切换更顺滑与预设构图修复
+
+- 发布版本从 `2.0.1` 提升为 `2.0.2`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。本版只做性能过渡、视觉构图与回归修复，不改安装身份、数据目录、播放逻辑、歌词主逻辑、预设顺序或自动更新线路。
+- **全屏原生路径对齐上游关键行为：** 进入全屏前先按目标显示器 `setBounds` 铺满，再 `setFullScreen(true)`；退出时记录进入前所在显示器，`leave-full-screen` 后 50ms 按该显示器恢复窗口边界。这样 Windows 原生动画不用同时拉伸窗口和 WebGL backing buffer，跨屏退出也不会跳回主屏。
+- **全屏遮罩期间降载：** 主渲染循环暂停；重复 resize 合并为下一帧视口刷新；DIY 区布局、浮动面板、手绘画布、玻璃 displacement map 等工作挂起，回亮前一次性补齐并同步刷新渲染缓冲。回亮仍保留 320ms 硬上限，resize 风暴不能把遮罩无限顺延。
+- **启动期播放回归修复：** `fullscreenTransitionState` 在 `public/app.js` 后半段初始化，而启动早期搜索布局可能触发 `scheduleGlassDisplacementMapUpdate()`。抑制函数现在对未初始化状态安静返回 false，避免异常打断渲染层脚本和播放事件绑定。
+- **视觉侧修复：** 安魂预设骷髅模型缩放为 `2.00`、歌单架组合缩放 `2.25`，位置居中；歌词不再绑定嘴部，保持舞台中心；歌单 / 详情采用常规预设与紧凑构图之间的中档位置。预设 8 的 `meteorSensitivity` 从 `0.3` 提到 `0.4`，双 deck 音频下落点触发更接近上游观感。
+- 全量 Node 回归 `1070/1070` 通过（新增 / 扩展全屏过渡、窗口行为、启动期防护、布局夹具与预设 8 参数测试）；`node --check desktop/main.js public/app.js desktop/overlay-preload.js server.js` 与 `git diff --check` 全清。按用户要求，本轮不在本机启动 Electron、不杀用户进程；Windows 安装包交给 GitHub Actions 远程构建。
+
 ## v2.0.1 安魂与壁纸版回响切换不再漏透明
 
 - 正式发布版本从 `2.0.0` 提升为 `2.0.1`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。走 patch 是因为这一版只修缺陷、不加功能、不改视觉参数。

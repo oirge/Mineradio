@@ -25,6 +25,7 @@ function createTransitionHarness() {
   const classes = new Set();
   const timers = new Map();
   const clock = { now: 0 };
+  const renderLoopCalls = [];
   let nextTimer = 1;
   const context = {
     Date: { now: () => clock.now },
@@ -41,6 +42,9 @@ function createTransitionHarness() {
     },
     innerWidth: 3840,
     innerHeight: 2160,
+    suspendMainRenderLoop: (reason) => renderLoopCalls.push(['suspend', reason]),
+    resumeMainRenderLoop: (reason) => renderLoopCalls.push(['resume', reason]),
+    refreshMainRendererViewport: () => {},
     requestAnimationFrame: (callback) => callback(),
     setTimeout: (callback, delay) => {
       const id = nextTimer++;
@@ -71,10 +75,11 @@ function createTransitionHarness() {
       timers.delete(id);
       timer.callback();
     },
+    renderLoopCalls,
   };
 }
 
-test('退出全屏时连发的 resize/state 只能把回亮提前，不能把遮罩一路顺延', () => {
+test('退出全屏时连发的 resize/state 会重排回亮，但硬上限兜底', () => {
   const h = createTransitionHarness();
 
   h.at(0);
@@ -93,7 +98,7 @@ test('退出全屏时连发的 resize/state 只能把回亮提前，不能把遮
   const afterState = h.context.state.revealDue;
   assert.equal(afterState, 260);
 
-  // 原生还原带来第一次 resize：尺寸已经跳完，回亮被提前。
+  // 原生还原带来第一次 resize：尺寸已经跳完，回亮点跟随最新边界。
   h.at(170);
   h.context.innerWidth = 1600;
   h.context.innerHeight = 900;
@@ -101,17 +106,19 @@ test('退出全屏时连发的 resize/state 只能把回亮提前，不能把遮
   assert.equal(h.context.state.revealDue, 220);
   const armedReveal = h.context.state.revealTimer;
 
-  // 之后 setBounds 与重复状态推送仍会连发，但不允许再把遮罩往后推。
+  // 之后 setBounds 与重复状态推送仍会连发；每次重排都换新计时器。
   h.at(210);
   h.context.sync(false, 'resize');
+  assert.equal(h.context.state.revealDue, 260);
+  assert.notEqual(h.context.state.revealTimer, armedReveal);
+  assert.equal(h.timers.has(armedReveal), false);
   h.at(230);
   h.context.sync(false, 'state');
   h.at(260);
   h.context.sync(false, 'resize');
-  assert.equal(h.context.state.revealDue, 220);
-  assert.equal(h.context.state.revealTimer, armedReveal, '回亮计时器不应被后来的信号重排');
+  assert.equal(h.context.state.revealDue, 310);
 
-  h.fire(armedReveal);
+  h.fire(h.context.state.revealTimer);
   assert.equal(h.classes.has('fullscreen-transition-covered'), false);
   assert.equal(h.classes.has('fullscreen-transition-revealing'), true);
 });
@@ -140,6 +147,23 @@ test('resize 风暴抢不掉硬上限，遮罩时长有确定天花板', () => {
   }
 });
 
+test('全屏遮罩盖住时暂停主渲染，回亮前再恢复', () => {
+  const h = createTransitionHarness();
+
+  h.at(0);
+  h.context.begin(false, () => {});
+  assert.equal(h.context.state.renderLoopPaused, true);
+  assert.deepEqual(h.renderLoopCalls, [['suspend', 'fullscreen-transition-cover']]);
+
+  h.fire(h.context.state.actionTimer);
+  h.fire(h.context.state.deadlineTimer);
+  assert.equal(h.context.state.renderLoopPaused, false);
+  assert.deepEqual(h.renderLoopCalls, [
+    ['suspend', 'fullscreen-transition-cover'],
+    ['resume', 'fullscreen-transition-reveal'],
+  ]);
+});
+
 test('完全收不到任何回亮信号时，兜底计时器仍会揭开遮罩并收尾', () => {
   const h = createTransitionHarness();
 
@@ -166,20 +190,73 @@ test('过渡不再对承载 WebGL 画布的窗口壳加 filter', () => {
   shellRules.forEach((rule) => {
     assert.doesNotMatch(rule, /filter:/, '窗口壳过渡不能带 filter：会让整窗每帧重新合成');
     assert.doesNotMatch(rule, /will-change:[^;}]*filter/);
+    assert.doesNotMatch(rule, /scale\(/, '进入/退出全屏都不再缩放承载 WebGL 的窗口壳');
   });
   assert.match(css, /body\.fullscreen-transitioning #desktop-window-shell\{[^}]*will-change:transform\}/);
+  assert.match(
+    css,
+    /body\.fullscreen-transitioning\.fullscreen-transition-exit:not\(\.fullscreen-transition-revealing\) #desktop-window-shell\{[^}]*transition:none[^}]*will-change:auto\}/,
+  );
+  const exitRule = css.match(/^body\.fullscreen-transitioning\.fullscreen-transition-exit:not\(\.fullscreen-transition-revealing\) #desktop-window-shell\{[^}]*\}$/m);
+  assert.ok(exitRule, '缺少退出全屏的窗口壳规则');
+  const enterRule = css.match(/^body\.fullscreen-transitioning\.fullscreen-transition-enter:not\(\.fullscreen-transition-revealing\) #desktop-window-shell\{[^}]*\}$/m);
+  assert.ok(enterRule, '缺少进入全屏的窗口壳规则');
   assert.match(css, /#fullscreen-transition-layer\{[^}]*background:rgba\(0,0,0,\.62\)/);
   assert.match(
     css,
-    /body\.fullscreen-transitioning\.fullscreen-transition-revealing #fullscreen-transition-layer\{transition:opacity \.2s/,
+    /body\.fullscreen-transitioning\.fullscreen-transition-revealing #fullscreen-transition-layer\{transition:opacity \.16s/,
   );
 });
 
 test('全屏切换的补偿刷新会去重，避免反复重建渲染缓冲', () => {
   const app = readProjectFile('public/app.js');
-  const block = readSourceBlock(app, 'function scheduleMainRendererViewportRefresh(', 'window.addEventListener(\'resize\'');
-  assert.match(block, /clearTimeout\(mainRendererViewportRefreshTimers\.pop\(\)\)/);
-  assert.match(block, /mainRendererViewportRefreshTimers\.push\(setTimeout\(/);
+  const block = readSourceBlock(app, 'var mainRendererViewportRefreshTimers = [];', 'window.addEventListener(\'resize\'');
+  assert.match(block, /requestAnimationFrame\(function\(\)\{/);
+  assert.match(block, /\[140, 320\]\.forEach\(armFullscreenViewportCompensation\)/);
+  assert.match(block, /if \(mainRendererViewportRefreshFrame\) return;/);
+});
+
+test('同一轮 resize 事件只做一次下一帧视口刷新', () => {
+  const app = readProjectFile('public/app.js');
+  const block = readSourceBlock(app, 'var mainRendererViewportRefreshTimers = [];', 'window.addEventListener(\'resize\'');
+  const classes = new Set();
+  const timers = new Map();
+  const frames = [];
+  let nextTimer = 1;
+  let refreshCalls = 0;
+  const context = {
+    window: {},
+    document: { body: { classList: classes } },
+    isDeepBackgroundMode: () => false,
+    requestStageLyricCameraSnap: () => {},
+    refreshMainRendererViewport: () => { refreshCalls += 1; },
+    requestAnimationFrame: (callback) => {
+      const id = frames.length + 1;
+      frames.push({ id, callback });
+      return id;
+    },
+    setTimeout: (callback, delay) => {
+      const id = nextTimer++;
+      timers.set(id, { callback, delay });
+      return id;
+    },
+    clearTimeout: (id) => timers.delete(id),
+  };
+  vm.runInNewContext(`${block}\nthis.schedule = scheduleMainRendererViewportRefresh;`, context);
+
+  context.schedule('resize-1');
+  context.schedule('resize-2');
+  context.schedule('resize-3');
+  assert.equal(frames.length, 1, '同帧 resize 必须合并成一个 rAF');
+  assert.equal(refreshCalls, 0, '不能在每个 resize 事件里立即 setSize');
+
+  frames.shift().callback();
+  assert.equal(refreshCalls, 1);
+  assert.equal(timers.size, 2, '只保留两个最终尺寸补偿点');
+
+  context.schedule('resize-4');
+  assert.equal(frames.length, 1);
+  assert.equal(timers.size, 0, '新 resize 先撤掉上一批补偿定时器');
 });
 
 test('退出全屏只做一次窗口边界还原，并立刻把状态推给渲染层', () => {
@@ -193,7 +270,7 @@ test('退出全屏只做一次窗口边界还原，并立刻把状态推给渲�
 
   const applyBounds = readSourceBlock(main, 'function applyWindowedBounds(', '/**');
   assert.match(applyBounds, /setMainWindowFullscreenResizeGuard\(win, false\);/);
-  assert.match(applyBounds, /win\.setBounds\(getWindowedBounds\(win\), false\);/);
+  assert.match(applyBounds, /win\.setBounds\(getWindowedBounds\(win, displayOverride\), false\);/);
   assert.doesNotMatch(applyBounds, /const settled =/, '单航班还原之后不再需要 settled 短路');
 
   // 本仓库比上游多一层全屏遮罩，所以状态要立刻推给渲染层，不能等 50ms 后的边界还原顺带通知。
