@@ -59,6 +59,7 @@
 - 播放回归：启动早期 `fullscreenTransitionState` 尚未初始化，玻璃贴图调度读它导致异常并打断渲染层；抑制函数与延后 / 回收函数全部加初始化防护。
 - 视觉修复：安魂模型 `SKULL_MODEL_SCALE=2.00`、歌单架 `SKULL_SHELF_SCALE=2.25` 并居中；歌词不再绑嘴部；歌单 / 详情取常规构图与上游紧凑构图的中档位置；预设 8 `meteorSensitivity=0.4`。
 - 验证：全量 Node 回归 `1070/1070`；语法检查与 `git diff --check` 通过。不启动本机 Electron、不杀用户进程；安装包由 GitHub Actions 远程构建。
+- 发布：分支 `codex/release-v2.0.2` 两提交 `560fbde` / `0305d2d`，PR #71 → merge commit `ade04c6`；annotated tag object `d08d5d9…` 指向 `0305d2d`；Build and Release run `34195967333` 成功。双草稿中删掉资产不全的 `384498029`，正式发布 `384498028` 并复验 Latest=`v2.0.2`。安装器 SHA256 `9053f328c26e7a73762c20c1d2a5cf3652f1fd19c445e62117f75d2432aa8d66`，四资产哈希、清单与 `latest.yml` 三路校验通过。
 
 ## v2.0.1 安魂与壁纸版回响切换不再漏透明
 
