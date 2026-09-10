@@ -4,10 +4,9 @@
 
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
-- 当前可写代码/Git 仓库：`C:\Users\Administrator\Desktop\Mineradio-main`
-- 当前环境未找到旧运行目录：`E:\桌面\播放器软件\Mineradio\resources\app`
+- Git 仓库以远端 `https://github.com/oirge/Mineradio.git` 为准，本地检出路径随机器变化；不要沿用旧文档里的 `C:\Users\Administrator\Desktop\...` 或 `C:\Users\oirg\Desktop\mok\Mineradio-sync`。
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
-- 当前源码续版：`v2.0.3`（**SSA 歌词与发布链路加固，尚未发布**。`.ssa` 与 `.ass` 共用动态 `Format:` 解析和字幕优先级，兼容 SSA v4 的 `Marked` 首列；发布构建加 `--publish never`，显式创建或复用唯一同 tag 草稿 Release，重跑用 `--clobber`，多个同 tag Release 时安全失败；Actions 升 v5；SHA256 清单改为 LF、无 BOM UTF-8。回归 `1071/1071`。）
+- 当前源码续版：`v2.0.3`（**SSA 歌词与发布链路加固，已发布**。`.ssa` 与 `.ass` 共用动态 `Format:` 解析和字幕优先级，兼容 SSA v4 的 `Marked` 首列；发布构建加 `--publish never`，显式创建或复用唯一同 tag 草稿 Release，重跑用 `--clobber`，多个同 tag Release 时安全失败；Actions 升 v5；SHA256 清单改为 LF、无 BOM UTF-8。回归 `1071/1071`。tag `v2.0.3` = tag object `ac634a30…` 指向 `30b3ba5`，Release `386043356` 已设 Latest。）
 - 上一续版：`v2.0.2`（**全屏进入 / 退出过渡与视觉预设构图修复**。主进程先按目标显示器铺满窗口再进原生全屏，退出按进入时所在显示器恢复；渲染层遮罩期间暂停主循环、合并 resize，并把布局、玻璃贴图与渲染缓冲重建延后到回亮前；启动期全屏状态未初始化时安静放行，避免播放事件绑定被打断。安魂预设骷髅居中缩放、歌词保持舞台中心、歌单详情中档布局；预设 8 `meteorSensitivity=0.4`。回归 `1070/1070`。）
 - 从下一条起是历史续版快照；旧条目里的“当前源码续版”只表示它写下时的状态，不再代表仓库现状。
 - **安装身份与原项目 `XxHuberrr/Mineradio` 必须永久分开（用户拍定，不要反着改）**：`appId` `com.mineradio.desktop.oirge`、`productName` / `nsis.shortcutName` `Mineradio 二创`、`win.executableName` `Mineradio-oirge`、安装包 `Mineradio-oirge-<版本>-Setup.exe`、默认安装目录 `D:\Mineradio-oirge`。**数据身份反过来永远不许动**：`desktop/main.js` 的 `APP_NAME = 'Mineradio'` + `PRIMARY_PROFILE_ID = 'oirge'` 拼出用户数据目录 `%APPDATA%\Mineradio-oirge`，改一个字曲库和设置就丢；面向 Windows 的显示名走单独的 `APP_DISPLAY_NAME`。应用内文案和视觉不跟着改。全部由 `tests/coexist-with-upstream-install.test.js` 钉住。

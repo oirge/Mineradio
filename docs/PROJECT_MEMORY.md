@@ -4,7 +4,7 @@
 
 ## Stable Project Facts
 
-- 当前源码续版：`v2.0.3`（**SSA 歌词与发布链路加固，尚未发布**。`.ssa` 与 `.ass` 共用动态 `Format:` 解析和字幕优先级，兼容 SSA v4 的 `Marked` 首列；发布构建加 `--publish never`，显式创建或复用唯一同 tag 草稿 Release，重跑用 `--clobber`，多个同 tag Release 时安全失败；Actions 升 v5；SHA256 清单改为 LF、无 BOM UTF-8。回归 `1071/1071`。）
+- 当前源码续版：`v2.0.3`（**SSA 歌词与发布链路加固，已发布**。`.ssa` 与 `.ass` 共用动态 `Format:` 解析和字幕优先级，兼容 SSA v4 的 `Marked` 首列；发布构建加 `--publish never`，显式创建或复用唯一同 tag 草稿 Release，重跑用 `--clobber`，多个同 tag Release 时安全失败；Actions 升 v5；SHA256 清单改为 LF、无 BOM UTF-8。回归 `1071/1071`。tag `v2.0.3` = tag object `ac634a30…` 指向 `30b3ba5`，Release `386043356` 已设 Latest。）
 - 上一续版：`v2.0.2`（**全屏进入 / 退出过渡与视觉预设构图修复**。主进程先按目标显示器铺满窗口再进原生全屏，退出按进入时所在显示器恢复；渲染层遮罩期间暂停主循环、合并 resize，并把布局、玻璃贴图与渲染缓冲重建延后到回亮前；启动期全屏状态未初始化时安静放行，避免播放事件绑定被打断。安魂预设骷髅居中缩放、歌词保持舞台中心、歌单详情中档布局；预设 8 `meteorSensitivity=0.4`。回归 `1070/1070`。）
 - 从下一条起是历史续版快照；旧条目里的“当前源码续版”只表示它写下时的状态。
 - 当前源码续版：`v1.9.2`（**主窗口导航守卫拦掉了预设 8 自己的 iframe，所以这个预设在打包客户端里一次都没显示过**。用户报「这个是黑的还是没修好啊」加两张截图：预设 8 选中、整幅纯黑 —— 和 v1.9.1 的惨白是两个缺陷，全黑发生在更前面一步：`desktop/main.js` 的 `installMainWindowNavigationGuard` 在 `will-frame-navigate` 上写着「一切子 frame 导航一律拦截」，而预设 8 的整幅画面跑在 `<iframe src="vendor/sonic-workshop/mineradio-bridge.html">` 里（`public/sonic-workshop-preset.js:25` 的 `BRIDGE_SRC`），iframe 永远停在 `about:blank`，`public/app.css:110-111` 的 `background:#000` 铺满窗口，选这个预设时封面粒子整层又是收起的。守卫来自 `cd1a75a`（v1.5.2），比预设 8（v1.8.9）早四个版本，**v1.8.9 / v1.9.0 / v1.9.1 对它的调色改动在客户端里全看不出效果**。同时修掉签名错：Electron 派发 `will-frame-navigate` 的实测形状是 `(event, url, isSameDocument, isMainFrame, processId, routingId)`，**详情挂在第一个参数（事件）自己身上**（`url` / `isMainFrame` / `frame` / `initiator`），老代码从第二个参数读，那里是 url 字符串，判断恒不成立，一路走到「拦」；**旧测试按一个 Electron 不存在的签名调用，所以一直是绿的**。现在 `desktop/main.js:4809` `TRUSTED_WALLPAPER_FRAME_PATH`、`:4818` `isTrustedWallpaperFrameUrl`（同端口 `127.0.0.1` + `pathname` 全等）、`:4876` `readFrameNavigationDetails`（认三种参数形态）、`:4902` `isAllowedFrameNavigation`（主 frame 只能停 `/` 或 `/index.html`；子 frame 只放行桥接页且必须是主 frame 直接子级）、`:4919` 一份 `guard` 同挂 `will-navigate` 与 `will-frame-navigate`。新 helper **必须**落在 `tests/main-window-navigation-ipc-trust.test.js` 的 `extractTrustCore()` 切片内（`isCurrentMainWindowSender` → `isCurrentDesktopLyricsWindowSender`）。放行只是让这一页加载出来、没放开任何权限：`isTrustedMainFrameSender` 仍一见 `frame.parent` 就拒；全仓库没 CSP、没 `webRequest` 拦截，守卫是唯一那道门。`installMiniPlayerNavigationGuard`（`:3756`）有同样的签名错，那边没 iframe、无可见后果，故意没动。**验证方式换了**：v1.9.1 只在浏览器里验，验不出主进程守卫的问题；这次用离屏 Electron 探针 A/B —— 旧守卫 `about:blank`/无 canvas/亮像素 `4.38%`，新守卫 WebGL2 `1280×720`/亮像素 `89.0%`。回归 `990/990`。）
@@ -52,13 +52,15 @@
 
 ## Release Memory
 
-## v2.0.3 SSA 歌词与发布链路加固（源码准备中）
+## v2.0.3 SSA 歌词与发布链路加固
 
-- 日期：2026-09-10。源码准备和本地验证已完成，进入分支推送阶段；尚未创建 PR、tag、GitHub Release、工作流运行或发布资产。
+- 日期：2026-09-10。发布版本从 `2.0.2` 提升为 `2.0.3`，五处版本钉一起动；已正式发布并设为 Latest。
 - SSA 歌词：本地扫描、两处文件导入、同名歌词候选与 MIME 映射均识别 `.ssa`；与 ASS 共用按 `Format:` 动态定位字段的解析器及标准化来源 `ass`，兼容 SSA v4 的首列 `Marked`。
 - 发布链路：electron-builder 使用 `--publish never`；工作流显式创建或复用唯一同 tag 草稿 Release，多个同 tag Release 时安全失败；同 tag 任务串行，重跑上传用 `--clobber`；`GH_TOKEN` 仅交给 Release 管理步骤。
-- 工作流与清单：`actions/checkout` / `actions/setup-node` 升到 v5；SHA256 清单写为 LF 行尾、无 BOM UTF-8。
-- 验证：SSA、发布工作流及版本一致性定向回归 `25/25`；全量 Node 回归 `1071/1071`；相关 JavaScript 语法检查通过。当前环境没有 Ruby 或 PowerShell，因此未在本地执行 YAML / 内嵌 PowerShell 解析，也未触发远程工作流。
+- 工作流与清单：`actions/checkout` / `actions/setup-node` 升到 v5；SHA256 清单写为 LF 行尾、无 BOM UTF-8，`sha256sum -c` 可直接跑（CRLF 遗留作废）。
+- 验证：SSA、发布工作流及版本一致性定向回归 `25/25`；全量 Node 回归 `1071/1071`；相关 JavaScript 语法检查通过。
+- 发布：分支 `codex/release-v2.0.3`，提交 `30b3ba5` / `5bae4cf`，PR #73（merge `d576231`）+ #74（merge `44b39d5`）；annotated tag object `ac634a30…` 指向 `30b3ba5`。**第一次 `Build and Release`（run `34442721960`）失败在「Upload release assets」**：`Generate SHA256 checksums` 里 `cd dist` 后用裸相对名写清单，.NET 工作目录与 PowerShell 位置不一致导致清单没落进 `dist`；`5bae4cf` 改用 `Join-Path (Get-Location)` 后 run `34444159148` 成功。Release `386043356`，`published_at` `2026-09-10T06:22:41Z`，四项资产齐全，Latest=`v2.0.3`；**没有出现双草稿**（`--publish never` + 显式 Release 管理）。四资产回下载三路校验通过（安装器 `102617620` / `3f3527dc…`、blockmap `106795` / `c232dc21…`、清单 `282` / `90c39e20…`、`latest.yml` `359` / `0fb332de…`；`latest.yml` size `102617620`、sha512 `7Eps3b5z…` 与安装器一致，`releaseDate` `2026-09-10T06:14:07.072Z`）。
+- 文档回填附带修复：`RELEASE.md` 自 v1.2.61 起被损坏的编码（含换行丢失）已按 `95a36fb` 干净底本修复，`Verify` 增加文档 UTF-8 / 无替换字符门禁，防止复发。
 
 ## v2.0.2 全屏切换更顺滑与预设构图修复
 

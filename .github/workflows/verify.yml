@@ -25,6 +25,8 @@ jobs:
           node-version: 22.x
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Check document encoding
+        run: node --test tests/doc-encoding-integrity.test.js
       - run: node --test --test-concurrency=1
       - run: |
           node --check desktop/main.js

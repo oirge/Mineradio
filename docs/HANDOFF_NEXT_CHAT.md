@@ -1,13 +1,13 @@
 # Mineradio Next Chat Handoff
 
-更新时间：2026-07-26
+更新时间：2026-09-10
 
 ## 新对话先执行
 
-当前可用工作区：
+**仓库以 GitHub `https://github.com/oirge/Mineradio` 为准，本地路径随机器变化**；旧文档里的 `C:\Users\oirg\Desktop\mok\Mineradio-sync`、`C:\Users\Administrator\Desktop\Mineradio-main` 在当前环境都不存在。先确认仓库再读文档：
 
 ```powershell
-cd C:\Users\oirg\Desktop\mok\Mineradio-sync
+git remote -v
 git status --short --branch
 git log --oneline -5 --decorate
 Get-Content AGENTS.md -Encoding UTF8
@@ -27,44 +27,34 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前可写代码/Git 仓库：`C:\Users\oirg\Desktop\mok\Mineradio-sync`
-- 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
-- 当前版本：`v1.2.44`
-- GitHub 仓库：`https://github.com/oirge/Mineradio`
-- 当前分支：`codex/release-1.2.44-memory`
-- 当前提交：`9bba136 release: finalize 1.2.44 local asset and desktop memory ownership`（已推送到远端同名分支）。
-- 正式发布基线：远端 tag `v1.2.44`（提交 `9bba136`），已是 GitHub Latest；远端旧 `main` 仍停在 `v1.2.34`，不要从旧 `main` 发布。
-- `v1.2.44` 是把内存优化移植到 `v1.2.43` 基线后完成并发布的提交。
-- 当前工作树只剩本轮文档回填（`docs/PROJECT_MEMORY.md`、本文件、`AI_HANDOFF.md`）待提交；代码、tag 和 GitHub Release 均已完成。
+- 当前版本：`v2.0.3`（SSA 歌词与发布链路加固），已发布并设为 GitHub Latest。
+- GitHub 仓库：`https://github.com/oirge/Mineradio`。`package.json` 发布配置 owner/repo 为 `oirge/Mineradio`。
+- 正式发布基线：远端 annotated tag `v2.0.3` = tag object `ac634a30…`，指向 release commit `30b3ba5f…`（是 `origin/main` 的祖先）；Release `386043356`，`published_at` `2026-09-10T06:22:41Z`，非 draft / 非 prerelease。
+- `main` 是发布线，发版走 `codex/release-vX.Y.Z` 分支 + PR（**用 merge commit 合，绝不 squash**，否则 tag 会离开 `main` 可达历史），tag 打在 release commit 上。
 - `package.json` 发布配置 owner/repo 已是 `oirge/Mineradio`。
 
 ## 最近完成
 
-- 2026-07-26：完成 `v1.2.44` 本地资产与桌面状态内存优化。已播放歌词原文由精确当前队列对象持有播放租约；切歌、清队列、同 key 接管和迟到异步结果均校验对象所有权，释放后的 `ready` 摘要保持可恢复，不会错误退回 `pending`。
-- 2026-07-26：修复空曲库后台资产任务取消和旧 token 污染；本地曲库持久内存按当前文件夹所有权隔离，阻止 A→B→A 旧异步读取回填；本地封面、Object URL、内嵌封面 Blob、文件范围读取和缓存生命周期改为受限驻留。
-- 2026-07-26：桌面歌词、壁纸和迷你播放器加入状态缓存及窗口/renderer/PowerShell 进程所有权门禁；新增 3 个桌面状态模块和 35 个纯 Node 回归测试。`scripts/test-mini-player-memory.ps1` 已改为 AST-only 源码门禁，不启动 Electron。
-- 2026-07-26：`npm run build:win` 成功生成 `dist\Mineradio-1.2.44-Setup.exe`（104747336 字节）、blockmap、Portable ZIP 与 `latest.yml`；`latest.yml` 已确认版本为 `1.2.44`。已生成 `dist\Mineradio-1.2.44-SHA256SUMS.txt`（4 项）和 `dist\Mineradio-1.2.43-to-1.2.44.patch.json`（2401785 字节，7 个运行时文件）。
-- 2026-07-24：发布 `v1.2.43`，将本地音质显示切换为网易云风格中文档位，作为本轮正式基线。
-- 2026-07-04：发布 `v1.2.11`，继续低风险性能优化：本地封面/歌词缓存补水改为按范围读取，分块阶段不再反复 `slice`；后台资产预载候选、播放队列位置映射和排序队列减少中间数组并复用同一轮候选；列表入场动画只收集实际需要动画的前几项。左侧歌单显示/隐藏/固定按钮和 3D 歌单架“自动隐藏/常驻”选项保持不变。
-- 2026-07-04：发布 `v1.2.10`，继续做多维性能优化：启动阶段自定义封面/歌词/用户视觉存档按需解析，Home 听歌画像按需水合并单次扫描，3D 歌单架大队列虚拟取项，队列/搜索/歌单详情 HTML 减少中间数组，本地搜索池和索引预热复用纯本地数组，本地曲库快照/索引保存改为单次循环；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
-- 2026-07-04：发布 `v1.2.9`，继续优化 3D 歌单架交互性能：同一指针事件复用 Raycaster/卡片命中结果，详情行、面板和卡片屏幕命中复用临时对象，滚轮路径延迟射线检测，鼠标移动只在面板可见或需要时读取矩形；左侧歌单常开/自动隐藏逻辑和 3D 歌单架“自动隐藏/常驻”选项保持不变。
-- 2026-07-03：将渲染进程 UI 状态备份从每次立即 IPC/写盘，改为 180ms 合并写入；首次全量同步仍立即写，`beforeunload` / `pagehide` 前会 flush，降低连续拖动视觉滑条和设置切换时的主进程写盘抖动。
-- 2026-07-03：交接文档从旧 `v1.1.0 / XxHuberrr` 发布线更新到当前 `v1.2.8 / oirge` 工作区，避免后续接手走错仓库。
+- 2026-09-10：发布 `v2.0.3`。SSA 歌词补齐（`.ssa` 与 `.ass` 共用解析）；发布链路改为显式管理单个同 tag Release（`--publish never` + `gh release upload --clobber`），不再由 electron-builder 隐式建双草稿；Actions 升 v5；SHA256 清单改为 LF、无 BOM UTF-8。分支 `codex/release-v2.0.3`，提交 `30b3ba5` / `5bae4cf`，PR #73（merge `d576231`）+ #74（merge `44b39d5`）；首次构建 run `34442721960` 因清单落盘路径失败，`5bae4cf` 修复后 run `34444159148` 成功。四资产回下载三路校验通过。
+- 2026-09-10：修复 `RELEASE.md` 自 v1.2.61 起被损坏的编码（GBK 乱码 + 换行丢失），以 `95a36fb` 为干净底本恢复；给 `Verify` 加文档编码门禁。
+- 2026-09-08：发布 `v2.0.2`，全屏进入 / 退出过渡与视觉预设构图修复。
+- 2026-09-07：发布 `v2.0.1`（视觉预设 6/8 切换不再漏透明）与 `v2.0.0`（视觉预设 7/8 读档不再截回 6）。
+- 2026-09-06：发布 `v1.10.0`，安装身份换到 `com.mineradio.desktop.oirge`，与原项目可同时安装、同时运行。
+- 更早的 `v1.2.x` / `v1.3+` 内存与性能优化历史保留在 `AI_HANDOFF.md` 的工作日志和 `docs/PROJECT_MEMORY.md`，本文件不再重复。
 
 ## 已知验证
 
-- 旧基线回归曾复现 12 通过 / 1 失败的 `ready`→`pending` 回归；修复后目标回归为 13/13 通过。
-- 移植到 `v1.2.43` 基线后的完整 Node 测试：95/95 通过。
-- `desktop/main.js`、`server.js`、`desktop/` 与 `tests/` 全部 JavaScript `node --check` 通过；`public/index.html` 4 个内联脚本解析通过。
-- AST-only 内存门禁、`git diff --check`、冲突标记扫描和调试标记扫描通过。
-- 所有测试使用 `BelowNormal` 与 `--test-concurrency=1`；本轮没有启动 Electron、浏览器、服务、PowerShell 轮询或后台 GUI，避免影响用户正常使用电脑。
-- Windows 构建使用代理 `127.0.0.1:7897`（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 均为 `http://127.0.0.1:7897`）；构建、推送与 `gh release create` 均成功。
-- 已核对远端 Release：5 个资产（安装包、blockmap、`latest.yml`、SHA256 清单、快速补丁）状态均为 uploaded，大小与本地一致；重新下载安装包与 `latest.yml` 校验 SHA256 与本地字节级一致，`v1.2.44` 已是 Latest。
+- 全量 Node 回归 `1076/1076` 通过（`npm test`，即 `node --test --test-concurrency=1`）；`v2.0.3` 发布时基线为 `1071`，其后新增 5 例文档编码门禁。
+- 文档编码门禁：`tests/doc-encoding-integrity.test.js` 检查 `RELEASE.md` / `CHANGELOG.md` / `README*.md` / `AGENTS.md` / `NOTICE.md` / `AI_HANDOFF.md` / `docs/PROJECT_MEMORY.md` / `docs/HANDOFF_NEXT_CHAT.md` 必须是合法 UTF-8、无 U+FFFD、无 GBK 乱码、无 BOM，已接入 `Verify`。
+- `desktop/main.js`、`public/app.js`、`server.js` 等入口 `node --check` 通过。
+- 发布工作流 `Generate SHA256 checksums` 的清单必须用绝对路径（`Join-Path (Get-Location)`）落盘再上传，相对名会因 .NET 工作目录与 PowerShell 位置不一致而失败（v2.0.3 首次构建已踩过）。
+- 所有测试保持低优先级、串行、无 Electron/GUI；除非用户明确要求，不启动会占用桌面的长期测试进程。
 
 ## 后续优先级
 
-- `v1.2.44` 已发布并核对远端资产；剩余动作是提交本轮文档回填（`docs/PROJECT_MEMORY.md`、本文件、`AI_HANDOFF.md`）。
-- 继续处理两个已知内存方向：IndexedDB `assets` 拆分 `lyrics` store 并做 v2→v3 流式迁移；外置封面改走 `/api/local-file` 流式 URL，避免主进程完整 Buffer/base64 和 renderer data URL。
+- 无未完成的发布动作；`v2.0.3` 资产与文档都已回填。下一版起沿用 `codex/release-vX.Y.Z` 分支 + PR 的流程。
+- 长期方向（未排期）：IndexedDB `assets` 拆分 `lyrics` store 并做流式迁移；外置封面改走 `/api/local-file` 流式 URL，避免主进程完整 Buffer/base64 和 renderer data URL。
+- 观察项：`docs/HANDOFF_NEXT_CHAT.md` / `AI_HANDOFF.md` 的本地路径描述随机器变化，接手时先 `git remote -v` 核对，不要照抄旧路径。
 
 ## 不要做
 
