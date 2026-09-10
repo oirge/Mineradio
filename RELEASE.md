@@ -1,5 +1,18 @@
 # 发布流程
 
+## v2.0.4 文档编码修复与发布记录回填
+
+- 发布版本从 `2.0.3` 提升为 `2.0.4`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。**本版不含任何运行时行为改动**，只做文档、回归与发布链路维护，版本号用于标记这次维护性发布；安装身份、数据目录与自动更新线路保持不变。
+- **修复 `RELEASE.md` 的 GBK 编码损坏：** 自 v1.2.61 起（引入点提交 `d0e2613`）有一整段约 165 行发布说明被按 GBK 误解码成乱码，部分行还丢了换行。以干净底本 `95a36fb`（`d0e2613` 的父提交）恢复 v1.2.60 及更早小节，并按干净的 `CHANGELOG.md` 重建被误标成 v1.2.61 的那一节（真实身份是 v1.2.60 的「桌面歌词滚轮缩放与更小字号」）。顺带去掉了 `RELEASE.md` 的历史 BOM。
+- **新增文档编码门禁：** `tests/doc-encoding-integrity.test.js` 检查核心文档必须是合法 UTF-8、无 U+FFFD 替换字符、无 GBK 乱码、无 BOM，通过反向变换（按 GBK 编码再按 UTF-8 解码）识别乱码；已接入 `Verify`。对损坏的 `RELEASE.md` 命中 121 行，对修复后的文件命中 0 行。
+- **回填 v2.0.3 发布记录**并统一「准备中 / 尚未发布」措辞；修正项目记忆里过期的本机路径、最近发布基线（`v1.6.1` → `v2.0.3`）和自称当前版本的历史快照；交接文档从 `v1.2.44` 更新到 v2 线；修掉 `CHANGELOG.md` 里一个内容已发布却仍标 `## Unreleased` 的错标小节。
+- 验证：全量 Node 回归 `1076/1076` 通过；`node --check desktop/main.js desktop/overlay-preload.js server.js public/app.js` 与 `git diff --check` 全清。
+
+### 发布记录（v2.0.4）
+
+- 单分支 `codex/release-v2.0.4`。承接上一版资产记录分支 `docs/release-assets-v203-fix` → PR [#75](https://github.com/oirge/Mineradio/pull/75) → merge commit `0380ce2`（三个提交：`c091708` 编码修复与资产回填、`0a76e03` 项目记忆修正、`ba5a958` AGENTS 路径修正；`Verify` run `34478977406` / `34480225831` / `34480702584` / `34481205534` 均通过）。
+- 本节其余发布事实（tag object、`Build and Release` run、四项资产字节与 SHA256）在发布当轮补记；本仓库规矩是发布记录当轮写完，不留事后补写。
+
 ## v2.0.3 SSA 歌词与发布链路加固
 
 - 发布版本从 `2.0.2` 提升为 `2.0.3`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
