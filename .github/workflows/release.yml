@@ -73,7 +73,7 @@ jobs:
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash *$file"
           }
-          $checksumPath = "Mineradio-oirge-$version-SHA256SUMS.txt"
+          $checksumPath = Join-Path (Get-Location) "Mineradio-oirge-$version-SHA256SUMS.txt"
           $content = ($lines -join "`n") + "`n"
           [IO.File]::WriteAllText(
             $checksumPath,
