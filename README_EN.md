@@ -14,7 +14,7 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Smart library categories in their own tab: artist / album / album artist / genre / decade, plus recently added, recently played, most played and never played.
 - Automatic music folder monitoring: new files are indexed, deleted files are pruned, tag and cover edits refresh on their own, no restart required.
 - Support for MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) playback.
-- Support for `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` lyrics files with matching names.
+- Support for `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.ssa` / `.yrc` / `.krc` / `.qrc` / `.ttml` lyrics files with matching names.
 - Word-by-word lyrics from YRC, KRC (including `krc1` encrypted binaries), QRC (including the XML container and encrypted payloads) and TTML.
 - Encrypted QRC lyrics are read directly, both as the hex text the API returns and as raw binary ciphertext.
 - When one track has several same-named lyrics files, the best one is picked by format priority — and you can pick a different one yourself, which is remembered.
@@ -60,10 +60,10 @@ Build artifacts are located in `dist/`.
 - ✅ DSD (.dsf, DSD Stream File)
 
 ### Lyrics Features
-- Matching LRC/TXT/SRT/WebVTT/ASS/YRC/KRC/QRC/TTML lyrics files
+- Matching LRC/TXT/SRT/WebVTT/ASS/SSA/YRC/KRC/QRC/TTML lyrics files
 - Word-by-word lyrics: YRC (NetEase), KRC (Kugou, plaintext and `krc1` encrypted binary), QRC (QQ Music, XML container, bare body and encrypted payload), TTML (the Apple Music family)
 - Encrypted QRC: both the hex text the API returns verbatim and raw binary ciphertext are accepted; detection looks at content, not the file extension, so renamed files still work
-- Several same-named lyrics files are ranked by format: word-level timing (`.qrc` / `.krc` / `.ttml` / `.yrc`) > line-level `.lrc` > subtitles (`.ass` / `.srt` / `.vtt`) > `.txt`
+- Several same-named lyrics files are ranked by format: word-level timing (`.qrc` / `.krc` / `.ttml` / `.yrc`) > line-level `.lrc` > subtitles (`.ass` / `.ssa` / `.srt` / `.vtt`) > `.txt`
 - You can also pick the candidate yourself: the custom-lyrics dialog lists every match with its path and format, and your choice survives a re-import of the same files
 - Automatic encoding detection: UTF-8 / UTF-16LE / UTF-16BE (with or without BOM) / GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252, and valid UTF-8 is never second-guessed
 - Timeline quirks handled: `[offset:±N]` global shift, `[mm:ss:cc]`, `[hh:mm:ss.fff]`, and fractions scaled by their actual digit count
@@ -92,14 +92,14 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Latest release v2.0.2 (2026-09-08)
+### Current source v2.0.3 (in preparation, 2026-09-10)
 
-- Smoother entering and leaving fullscreen: the window aligns to the target display before the native fullscreen switch and restores to the original display when leaving, reducing stretching, jumping and dropped frames
-- Smoother fullscreen transitions: main rendering pauses, duplicate resize work is merged, and layout / render-buffer rebuilds wait until just before the cover is revealed, avoiding a second visible rescale
-- Fixed a brief transparent flash when switching visual presets, especially Requiem and Sonic Echo Wallpaper Engine; the picture now stays continuously covered during handoff
-- Fixed the Requiem composition: the skull is centered and resized, lyrics stay at stage center, playlist and detail panels sit closer to regular presets, and Sonic Echo's occasionally sparse falling points are improved
+- Added matching `.ssa` lyrics, sharing the ASS parser and subtitle priority while supporting the SSA v4 `Marked` field
+- Disabled electron-builder's implicit publishing; the release workflow now explicitly creates or reuses one draft Release for the tag and replaces same-name assets on reruns
+- Upgraded GitHub Actions to `actions/checkout@v5` and `actions/setup-node@v5`; SHA256 manifests now use LF line endings and UTF-8 without a BOM
+- This section describes the current source preparation state; no tag, GitHub Release, or release assets have been created
 
-Full Node regression suite: `1070/1070` passing; the Windows x64 installer is built remotely by GitHub Actions.
+Full Node regression suite: `1071/1071` passing; the Windows x64 installer remains a remote GitHub Actions build.
 
 ### v2.0.0 (2026-09-07)
 

@@ -4,19 +4,22 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v2.0.2)'
+        description: 'Release tag (e.g. v2.0.3)'
         required: true
-        default: 'v2.0.2'
+        default: 'v2.0.3'
 
 jobs:
   build-windows:
     runs-on: windows-latest
+    concurrency:
+      group: release-${{ github.event.inputs.tag || github.ref_name }}
+      cancel-in-progress: false
     permissions:
       contents: write
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
@@ -41,7 +44,7 @@ jobs:
           "TAG=$tag" >> $env:GITHUB_OUTPUT
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -50,9 +53,7 @@ jobs:
         run: npm ci
       
       - name: Build Windows installer
-        run: npm run build:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:win -- --publish never
       
       - name: Generate SHA256 checksums
         run: |
@@ -72,7 +73,13 @@ jobs:
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash *$file"
           }
-          $lines | Out-File -FilePath "Mineradio-oirge-$version-SHA256SUMS.txt" -Encoding utf8
+          $checksumPath = "Mineradio-oirge-$version-SHA256SUMS.txt"
+          $content = ($lines -join "`n") + "`n"
+          [IO.File]::WriteAllText(
+            $checksumPath,
+            $content,
+            [Text.UTF8Encoding]::new($false)
+          )
         shell: pwsh
       
       - name: Upload release assets
@@ -91,6 +98,34 @@ jobs:
             if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
               throw "待上传资产缺失：$asset"
             }
+          }
+
+          function Get-TagReleases {
+            $releaseIds = @(
+              gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" `
+                --jq ".[] | select(.tag_name == `"$tag`") | .id"
+            )
+            if ($LASTEXITCODE -ne 0) {
+              throw "查询 Release 失败，退出码：$LASTEXITCODE"
+            }
+            return @($releaseIds | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+          }
+
+          $releases = @(Get-TagReleases)
+          if ($releases.Count -gt 1) {
+            throw "标签 $tag 已有 $($releases.Count) 个 Release，请先人工合并重复项"
+          }
+          if ($releases.Count -eq 0) {
+            gh release create $tag `
+              --draft `
+              --verify-tag `
+              --title $tag `
+              --generate-notes
+            if ($LASTEXITCODE -ne 0) {
+              throw "gh release create 失败，退出码：$LASTEXITCODE"
+            }
+          } else {
+            Write-Host "Reusing existing release $tag..."
           }
 
           Write-Host "Uploading assets to release $tag..."

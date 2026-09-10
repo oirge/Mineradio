@@ -622,7 +622,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.0.2';
+var APP_VERSION = '2.0.3';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -26548,7 +26548,7 @@ function parseAssLyricText(text) {
   return finalizeLyricLineDurations(lines, true);
 }
 /**
- * 自动识别 LRC、YRC、KRC、QRC、TTML、SRT、WebVTT 或 ASS 时间轴歌词。
+ * 自动识别 LRC、YRC、KRC、QRC、TTML、SRT、WebVTT 或 ASS/SSA 时间轴歌词。
  * 顺序是「标记语言先分流，再按括号形状分流，最后才轮到字幕格式」：TTML 与 QRC 容器
  * 靠标签特征认，正文里的方括号就不会被误当成 LRC 时间轴；KRC / QRC 与 YRC 的行头长得
  * 一模一样，只能靠词项分隔符区分，而且必须排在 YRC 之前。
@@ -28922,9 +28922,9 @@ document.addEventListener('visibilitychange', function(){
 // ============================================================
 var LOCAL_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i;
 var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i;
-var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass|yrc|krc|qrc|ttml)$/i;
+var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt|srt|vtt|ass|ssa|yrc|krc|qrc|ttml)$/i;
 // 同一首歌撞上多个歌词文件时的取舍：逐字时间轴信息最全，字幕格式只有整行，纯文本连时间轴都没有。
-var LOCAL_LYRIC_FORMAT_RANK = { qrc: 0, krc: 0, ttml: 0, yrc: 0, lrc: 1, ass: 2, srt: 2, vtt: 2, txt: 3 };
+var LOCAL_LYRIC_FORMAT_RANK = { qrc: 0, krc: 0, ttml: 0, yrc: 0, lrc: 1, ass: 2, ssa: 2, srt: 2, vtt: 2, txt: 3 };
 var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|jpe|jfif|png|webp|avif|gif|bmp|svg)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
 var LOCAL_LIBRARY_NAME_COMPARE = (typeof Intl !== 'undefined' && Intl.Collator)

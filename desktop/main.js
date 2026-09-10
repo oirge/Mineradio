@@ -366,7 +366,7 @@ function waitForServer(server) {
 const LOCAL_LIBRARY_EXTS = new Set([
   '.mp3', '.mp2', '.flac', '.m4a', '.m4b', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba', '.aif', '.aiff', '.aifc',
   '.ape', '.dsf',
-  '.lrc', '.txt', '.srt', '.vtt', '.ass', '.yrc', '.krc', '.qrc', '.ttml',
+  '.lrc', '.txt', '.srt', '.vtt', '.ass', '.ssa', '.yrc', '.krc', '.qrc', '.ttml',
   '.jpg', '.jpeg', '.jpe', '.jfif', '.png', '.webp', '.avif', '.gif', '.bmp', '.svg',
 ]);
 // 曲库快照同时包含音频、歌词和封面文件；只有音频才计入 SQLite 的 audio 计数与曲库签名。
@@ -397,6 +397,7 @@ const LOCAL_LIBRARY_MIME = {
   '.srt': 'application/x-subrip',
   '.vtt': 'text/vtt',
   '.ass': 'text/x-ssa',
+  '.ssa': 'text/x-ssa',
   '.yrc': 'text/plain',
   // KRC / QRC 的明文与加密二进制共用一个后缀，统一按二进制送，解码放在渲染层。
   '.krc': 'application/octet-stream',

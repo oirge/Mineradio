@@ -135,7 +135,7 @@ function loadLocalContentType() {
   return context.localContentTypeForPath;
 }
 
-test('SRT、VTT、ASS 歌词转换为统一时间轴行', () => {
+test('SRT、VTT、ASS、SSA 歌词转换为统一时间轴行', () => {
   const parser = createTimedLyricParser();
   const srt = parser.parseTimedLyricText(
     '1\n00:00:01,000 --> 00:00:03,500\n<i>第一句</i>\n\n'
@@ -169,6 +169,16 @@ test('SRT、VTT、ASS 歌词转换为统一时间轴行', () => {
     [{ t: 2, duration: 2.5, text: '你好\n世界,继续', source: 'ass' }],
   );
 
+  const ssa = parser.parseTimedLyricText(
+    '[Script Info]\nScriptType: v4.00\n\n[Events]\n'
+      + 'Format: Marked, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+      + 'Dialogue: Marked=0,0:00:05.00,0:00:07.00,Default,,0000,0000,0000,,旧式 SSA\\N第二行',
+  );
+  assert.deepEqual(
+    Array.from(ssa, line => ({ t: line.t, duration: line.duration, text: line.text, source: line.source })),
+    [{ t: 5, duration: 2, text: '旧式 SSA\n第二行', source: 'ass' }],
+  );
+
   const longCue = parser.parseTimedLyricText('1\n00:00:01,000 --> 00:00:21,000\n长段歌词');
   assert.equal(longCue[0].duration, 20, '字幕明确时长不得被旧 LRC 的 12 秒上限截断');
 
@@ -190,7 +200,7 @@ test('本地媒体格式清单包含新增音频、封面和歌词后缀', () =>
   for (const ext of ['mp2', 'aac', 'opus', 'webm', 'oga', 'weba', 'm4b', 'aif', 'aiff', 'aifc']) {
     assert.equal(classifier.isLocalAudioFile({ name: `track.${ext}`, type: '' }, true), true);
   }
-  for (const ext of ['srt', 'vtt', 'ass', 'yrc']) {
+  for (const ext of ['srt', 'vtt', 'ass', 'ssa', 'yrc']) {
     assert.equal(classifier.isLocalLyricFile({ name: `track.${ext}`, type: '' }), true);
   }
   for (const ext of ['avif', 'gif', 'bmp', 'svg', 'jpe', 'jfif']) {
@@ -204,7 +214,7 @@ test('本地媒体格式清单包含新增音频、封面和歌词后缀', () =>
   assert.equal(classifier.findLocalLyricFile(audioFile, classifier.buildLocalLyricMaps([lyricFile])), lyricFile);
   assert.equal(classifier.findLocalCoverFile(audioFile, classifier.buildLocalCoverMaps([coverFile])), coverFile);
 
-  for (const ext of ['mp2', 'aac', 'opus', 'webm', 'oga', 'weba', 'm4b', 'aif', 'aiff', 'aifc', 'srt', 'vtt', 'ass', 'yrc', 'avif', 'gif', 'bmp', 'svg', 'jpe', 'jfif']) {
+  for (const ext of ['mp2', 'aac', 'opus', 'webm', 'oga', 'weba', 'm4b', 'aif', 'aiff', 'aifc', 'srt', 'vtt', 'ass', 'ssa', 'yrc', 'avif', 'gif', 'bmp', 'svg', 'jpe', 'jfif']) {
     assert.match(index, new RegExp(`\\.${ext}`));
     assert.match(main, new RegExp(`['"]\\.${ext}['"]`));
     assert.match(server, new RegExp(`['"]\\.${ext}['"]\\s*:`));
@@ -228,6 +238,7 @@ test('桌面扫描和本地文件代理返回新增格式的正确 MIME', async 
     'track.srt': 'application/x-subrip',
     'track.vtt': 'text/vtt',
     'track.ass': 'text/x-ssa',
+    'track.ssa': 'text/x-ssa',
     'track.yrc': 'text/plain',
     'cover.avif': 'image/avif',
     'cover.gif': 'image/gif',

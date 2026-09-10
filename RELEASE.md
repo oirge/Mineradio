@@ -1,5 +1,14 @@
 ﻿# 发布流程
 
+## v2.0.3 SSA 歌词与发布链路加固（准备中）
+
+- 源码版本从 `2.0.2` 提升为 `2.0.3`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
+- **SSA 歌词补齐：** 本地扫描、文件导入、同名歌词候选与 MIME 映射均识别 `.ssa`。SSA 与 ASS 共用解析器和标准化来源 `ass`；解析器按 `Format:` 动态定位 `Start` / `End` / `Text`，兼容 SSA v4 的首列 `Marked` 与 `Dialogue: Marked=0,...`。
+- **发布目标改为单一显式入口：** 构建步骤使用 `npm run build:win -- --publish never`，不再让 electron-builder 隐式创建 Release；上传步骤枚举同 tag Release，无记录时创建一个草稿、恰有一个时复用、超过一个时停止并要求人工处理，不自动删除任何 Release。
+- **重复执行保持幂等：** 同 tag 的工作流由 concurrency 串行化，`gh release upload --clobber` 替换同名资产。`GH_TOKEN` 只交给显式 Release 管理步骤，不进入构建步骤。
+- **工作流与清单格式更新：** `actions/checkout` / `actions/setup-node` 升到 v5；SHA256 清单通过 `WriteAllText` 写成 LF 行尾、无 BOM 的 UTF-8，不再使用 `Out-File`。
+- 验证：SSA 定向回归、发布工作流回归、版本一致性、语法检查与全量 Node 回归均通过；全量结果为 `1071/1071`。本节记录推送前源码状态；尚未创建 PR、tag、GitHub Release、工作流运行或发布资产。
+
 ## v2.0.2 全屏切换更顺滑与预设构图修复
 
 - 发布版本从 `2.0.1` 提升为 `2.0.2`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。本版只做性能过渡、视觉构图与回归修复，不改安装身份、数据目录、播放逻辑、歌词主逻辑、预设顺序或自动更新线路。
