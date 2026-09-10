@@ -92,14 +92,13 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### Current source v2.0.3 (in preparation, 2026-09-10)
+### v2.0.3 (2026-09-10)
 
 - Added matching `.ssa` lyrics, sharing the ASS parser and subtitle priority while supporting the SSA v4 `Marked` field
 - Disabled electron-builder's implicit publishing; the release workflow now explicitly creates or reuses one draft Release for the tag and replaces same-name assets on reruns
 - Upgraded GitHub Actions to `actions/checkout@v5` and `actions/setup-node@v5`; SHA256 manifests now use LF line endings and UTF-8 without a BOM
-- This section describes the current source preparation state; no tag, GitHub Release, or release assets have been created
 
-Full Node regression suite: `1071/1071` passing; the Windows x64 installer remains a remote GitHub Actions build.
+Full Node regression suite: `1071/1071` passing; the Windows x64 installer is built remotely by GitHub Actions, and the [Release](https://github.com/oirge/Mineradio/releases/tag/v2.0.3) is published with four assets and marked Latest.
 
 ### v2.0.0 (2026-09-07)
 

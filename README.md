@@ -151,14 +151,13 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
-### 当前源码 v2.0.3（准备中，2026-09-10）
+### v2.0.3 (2026-09-10)
 
 - 本地同名歌词新增 `.ssa` 支持，与 `.ass` 共用解析和字幕优先级，并兼容 SSA v4 的 `Marked` 字段
 - 发布工作流禁用 electron-builder 隐式发布，改为显式创建或复用单个同 tag 草稿 Release，重复执行会覆盖同名资产
 - GitHub Actions 升级到 `actions/checkout@v5` / `actions/setup-node@v5`，SHA256 清单改为 LF 行尾、无 BOM 的 UTF-8
-- 本节描述当前源码准备状态；尚未创建 tag、GitHub Release 或发布资产
 
-全量 Node 回归 `1071/1071` 通过，Windows x64 安装包仍由 GitHub Actions 远程构建。
+全量 Node 回归 `1071/1071` 通过，Windows x64 安装包由 GitHub Actions 远程构建；[Release](https://github.com/oirge/Mineradio/releases/tag/v2.0.3) 已发布四项资产并设为 Latest。
 
 ### v2.0.0 (2026-09-07)
 

@@ -2,15 +2,14 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
-## 当前权威入口（2026-07-26）
+## 当前权威入口（2026-09-10）
 
-- 当前可写代码/Git 仓库是 `C:\Users\oirg\Desktop\mok\Mineradio-sync`。
-- 本轮检查时旧规则里的 `E:\桌面\播放器软件\Mineradio\resources\app` 不存在；不要盲目切去旧路径。
-- 当前源码版本是 `v1.2.44`，最新提交以 `git log --oneline -5 --decorate` 为准。
-- `v1.2.44` 已发布到 GitHub Release 并设为 Latest：`https://github.com/oirge/Mineradio/releases/tag/v1.2.44`（tag 提交 `9bba136`，分支 `codex/release-1.2.44-memory` 已推送）；远端资产已核对一致。
+- **仓库以 GitHub `https://github.com/oirge/Mineradio` 为准，本地路径随机器变化**。旧规则里的 `C:\Users\oirg\Desktop\mok\Mineradio-sync`、`C:\Users\Administrator\Desktop\Mineradio-main`、`E:\桌面\播放器软件\Mineradio\resources\app` 在当前环境都不存在，别盲目切过去；先 `git remote -v` + `git log --oneline -1` 确认。
+- 当前源码版本是 `v2.0.3`，最新提交以 `git log --oneline -5 --decorate` 为准。
+- `v2.0.3` 已发布到 GitHub Release 并设为 Latest：`https://github.com/oirge/Mineradio/releases/tag/v2.0.3`（annotated tag object `ac634a30…` 指向 release commit `30b3ba5`，Release `386043356`，`published_at` `2026-09-10T06:22:41Z`）；四项资产已回下载核对一致。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
-- 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录，不能覆盖上述文件的当前结论。
+- 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录（只到 `v1.2.44`），不能覆盖上述文件的当前结论。
 
 ## 用户偏好
 
@@ -73,6 +72,15 @@
 这个目录是人工归档区，不参与软件更新流程。
 
 ## 已完成工作日志
+
+### 2026-09-10（v2.0.3 已发布 + RELEASE.md 编码损坏修复）
+
+- 确认 `v2.0.3`（SSA 歌词与发布链路加固）已完整发布：Release `386043356` 四项资产齐全并设为 Latest，annotated tag object `ac634a30…` 指向 `30b3ba5`；本机回下载四资产三路校验通过（安装器 `3f3527dc…`、blockmap `c232dc21…`、清单 `90c39e20…`、`latest.yml` `0fb332de…`）。
+- 发现并修复 `RELEASE.md` 自 v1.2.61 起被损坏的编码（约 165 行发布说明变成 GBK 乱码、部分换行丢失）。引入点是 `d0e2613`（2026-08-01），父提交 `95a36fb` 仍是干净文本；修复以 `95a36fb` 为底本恢复 v1.2.60 及更早小节，并按干净 `CHANGELOG.md` 重建 v1.2.61 那一节。仓库其余文本文件无此问题。
+- 把 v2.0.3 的「准备中 / 尚未发布」措辞统一改为已发布：`RELEASE.md`、`README.md`、`README_EN.md`、`AGENTS.md`、`docs/PROJECT_MEMORY.md`，并补上 `### 发布记录（v2.0.3）`（含第一次 `Build and Release` 失败于清单落盘路径、`5bae4cf` 修复后重跑成功）。
+- 给 `Verify` 增加文档编码门禁（`tests/doc-encoding-integrity.test.js`：反向 GBK 变换检测乱码 + 无 U+FFFD + 无 BOM），防止同类损坏再次穿过 CI。
+- 全量 Node 回归 `1076/1076` 通过（v2.0.3 发布基线 `1071` + 新增 5 例编码门禁）；`node --check` 五个入口与 `git diff --check` 全清。未启动本机 Electron、未杀用户进程。
+- 改动走 PR [#75](https://github.com/oirge/Mineradio/pull/75)（分支 `docs/release-assets-v203-fix`），`Verify` run `34478977406` 通过。
 
 ### 2026-07-19
 
