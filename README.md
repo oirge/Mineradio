@@ -10,7 +10,7 @@
 - 支持单独导入本地音乐文件。
 - 支持音乐文件夹自动监控：新增、删除、改标签、换封面自动同步，不必重启。
 - 支持 MP3 / MP2 / FLAC / M4A / M4B / WAV / OGG / OGA / AAC / Opus / WebM / WebA / AIFF / APE / DSD(.dsf) 播放。
-- 支持同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词。
+- 支持同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.ssa` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词。
 - 支持加密歌词：KRC（`krc1`）与 QRC（十六进制文本与二进制密文两种形态）都能直接读。
 - 支持一首歌配多份同名歌词时按格式优先级自动挑，也可以自己挑一份并记住。
 - 支持歌词编码自动识别：UTF-8 / UTF-16 / GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252。
@@ -44,10 +44,10 @@
 - **DSD (.dsf)** - DSD Stream File 高解析音频
 
 ### 📝 歌词功能
-- ✅ 同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词文件
+- ✅ 同名 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.ssa` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词文件
 - ✅ 逐字歌词：YRC（网易云）/ KRC（酷狗，含 `krc1` 加密二进制）/ QRC（QQ 音乐，含 XML 容器与加密载体）/ TTML（Apple Music 一族）
 - ✅ QRC 加密歌词：接口原样落盘的十六进制文本与直接写成二进制的密文两种形态都收，识别只看内容特征，后缀被改过也认得出来
-- ✅ 同名多份歌词按格式优先级自动挑：逐字时间轴（`.qrc` / `.krc` / `.ttml` / `.yrc`）> 逐行 `.lrc` > 字幕（`.ass` / `.srt` / `.vtt`）> `.txt`
+- ✅ 同名多份歌词按格式优先级自动挑：逐字时间轴（`.qrc` / `.krc` / `.ttml` / `.yrc`）> 逐行 `.lrc` > 字幕（`.ass` / `.ssa` / `.srt` / `.vtt`）> `.txt`
 - ✅ 同名多份歌词也能自己挑：自定义歌词弹窗里列出候选（写着路径与格式），选择会记住，下次重新导入同一批文件仍用你挑的那一份
 - ✅ 歌词编码自动识别：UTF-8 / UTF-16LE / UTF-16BE（含无 BOM）/ GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252
 - ✅ 歌词时间轴兼容在野写法：`[offset:±N]` 全局偏移、`[mm:ss:cc]`、`[hh:mm:ss.fff]`，小数位按实际位数换算
@@ -116,7 +116,7 @@ npm run build:win
    - 支持拖拽调整播放顺序
 
 3. **查看歌词**
-   - 歌词文件需与音乐文件同名（`.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml`）
+   - 歌词文件需与音乐文件同名（`.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.ssa` / `.yrc` / `.krc` / `.qrc` / `.ttml`）
    - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 文件可使用内嵌歌词标签
    - 开启桌面歌词窗口显示
 
@@ -151,14 +151,14 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
-### 最新版本 v2.0.2 (2026-09-08)
+### 当前源码 v2.0.3（准备中，2026-09-10）
 
-- 优化进入 / 退出全屏的流畅度：窗口先对齐目标屏幕再切换原生全屏，退出时按原屏幕恢复位置，减少拉伸、跳动和掉帧
-- 优化全屏过渡过程：切换期间暂停主渲染、合并重复 resize，并把布局与渲染缓冲重建推迟到揭开遮罩前完成，避免画面二次缩放
-- 修复视觉预设切换时短暂透明的问题，尤其是「安魂」和「音域回响 Wallpaper Engine」，切换过程中画面保持连续覆盖
-- 修复「安魂」预设构图问题：骷髅头居中并调整大小，歌词保持舞台中心，歌单和详情面板位置更接近常规预设；同时优化「音域回响」落点偶发偏少的情况
+- 本地同名歌词新增 `.ssa` 支持，与 `.ass` 共用解析和字幕优先级，并兼容 SSA v4 的 `Marked` 字段
+- 发布工作流禁用 electron-builder 隐式发布，改为显式创建或复用单个同 tag 草稿 Release，重复执行会覆盖同名资产
+- GitHub Actions 升级到 `actions/checkout@v5` / `actions/setup-node@v5`，SHA256 清单改为 LF 行尾、无 BOM 的 UTF-8
+- 本节描述当前源码准备状态；尚未创建 tag、GitHub Release 或发布资产
 
-全量 Node 回归 `1070/1070` 通过，Windows x64 安装包由 GitHub Actions 远程构建。
+全量 Node 回归 `1071/1071` 通过，Windows x64 安装包仍由 GitHub Actions 远程构建。
 
 ### v2.0.0 (2026-09-07)
 
@@ -422,7 +422,7 @@ npm test
 支持 MP3、MP2、FLAC、M4A、M4B、WAV、OGG、OGA、AAC、Opus、WebM/WebA、AIFF/AIFC、APE、DSD(.dsf) 等格式。
 
 ### 如何添加歌词？
-- 将 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词文件放在音乐文件同目录，保持文件名一致
+- 将 `.lrc` / `.txt` / `.srt` / `.vtt` / `.ass` / `.ssa` / `.yrc` / `.krc` / `.qrc` / `.ttml` 歌词文件放在音乐文件同目录，保持文件名一致
 - 逐字歌词直接认：YRC、KRC（含 `krc1` 加密二进制）、QRC（含 `<Lyric_1 LyricContent="…">` XML 容器与加密载体）、TTML
 - 加密的 QRC 不用先解密：十六进制文本与二进制密文两种形态都能直接放进去，识别看内容不看后缀
 - 一首歌配了多份同名歌词时，默认按格式优先级挑（逐字 > `.lrc` > 字幕 > `.txt`）；想换成另一份就在自定义歌词弹窗里点候选按钮，选择会被记住

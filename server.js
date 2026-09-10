@@ -138,6 +138,7 @@ const LOCAL_FILE_MIME = {
   '.srt': 'application/x-subrip; charset=utf-8',
   '.vtt': 'text/vtt; charset=utf-8',
   '.ass': 'text/x-ssa; charset=utf-8',
+  '.ssa': 'text/x-ssa; charset=utf-8',
   '.yrc': 'text/plain; charset=utf-8',
   // KRC / QRC 可能是加密二进制，不能挂 charset，否则解码前就被当文本处理坏了。
   '.krc': 'application/octet-stream',

@@ -1,3 +1,10 @@
+## v2.0.3 SSA 歌词与发布链路加固
+
+- 本地同名歌词新增 `.ssa` 支持，与 `.ass` 共用解析和字幕优先级；兼容 SSA v4 的 `Marked` 字段与 `Dialogue: Marked=0,...` 写法。
+- GitHub Actions 发布构建显式禁用 electron-builder 自动发布，只创建或复用一个对应 tag 的草稿 Release；重复执行会覆盖同名资产，遇到多个同 tag Release 则安全失败并留给人工处理。
+- 发布工作流升级到 `actions/checkout@v5` / `actions/setup-node@v5`，SHA256 清单改为 LF 行尾、无 BOM 的 UTF-8，便于 Windows 与 Unix 工具直接校验。
+- 全量 Node 回归 `1071/1071` 通过；安装身份、数据目录和自动更新线路保持不变。
+
 ## v2.0.2 更新日志
 
 - 优化进入 / 退出全屏的流畅度：窗口先对齐目标屏幕再切换原生全屏，退出时按原屏幕恢复位置，减少拉伸、跳动和掉帧。

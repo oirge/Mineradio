@@ -38,6 +38,26 @@ test('发布工作流清单覆盖全部自动更新资产', () => {
   assert.match(releaseWorkflow, /"latest\.yml"/);
   assert.match(releaseWorkflow, /\$lines = foreach \(\$file in \$files\)/);
   assert.match(releaseWorkflow, /"\$hash \*\$file"/);
+  assert.match(releaseWorkflow, /\[IO\.File\]::WriteAllText\(/);
+  assert.match(releaseWorkflow, /\[Text\.UTF8Encoding\]::new\(\$false\)/);
+  assert.match(releaseWorkflow, /\(\$lines -join "`n"\) \+ "`n"/);
+  assert.doesNotMatch(releaseWorkflow, /Out-File/);
+});
+
+test('发布工作流禁用构建器发布并只创建或复用一个 Release', () => {
+  assert.match(releaseWorkflow, /uses: actions\/checkout@v5/);
+  assert.match(releaseWorkflow, /uses: actions\/setup-node@v5/);
+  assert.match(releaseWorkflow, /npm run build:win -- --publish never/);
+  assert.match(releaseWorkflow, /concurrency:/);
+  assert.match(releaseWorkflow, /function Get-TagReleases/);
+  assert.match(releaseWorkflow, /\$releases\.Count -gt 1/);
+  assert.match(releaseWorkflow, /\$releases\.Count -eq 0/);
+  assert.match(releaseWorkflow, /gh release create \$tag/);
+  assert.match(releaseWorkflow, /--draft/);
+  assert.match(releaseWorkflow, /--verify-tag/);
+  assert.ok(releaseWorkflow.indexOf('gh release create') < releaseWorkflow.indexOf('gh release upload'));
+  assert.match(releaseWorkflow, /gh release upload \$tag[\s\S]*--clobber/);
+  assert.equal((releaseWorkflow.match(/^\s+gh release create \$tag/gm) || []).length, 1);
 });
 
 test('发布工作流默认标签跟随当前 package 版本', () => {

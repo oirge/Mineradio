@@ -556,10 +556,11 @@ test('同名多歌词按格式优先级排序并给出候选清单', () => {
   const classifier = createLocalFileClassifier();
   // 逐字时间轴排最前，逐行 LRC 次之，字幕再次之，纯文本兜底，未知后缀最后。
   assert.deepEqual({ ...classifier.LOCAL_LYRIC_FORMAT_RANK }, {
-    qrc: 0, krc: 0, ttml: 0, yrc: 0, lrc: 1, ass: 2, srt: 2, vtt: 2, txt: 3,
+    qrc: 0, krc: 0, ttml: 0, yrc: 0, lrc: 1, ass: 2, ssa: 2, srt: 2, vtt: 2, txt: 3,
   });
   assert.equal(classifier.localLyricFormatRank(createFileStub('a/song.qrc')), 0);
   assert.equal(classifier.localLyricFormatRank(createFileStub('a/song.lrc')), 1);
+  assert.equal(classifier.localLyricFormatRank(createFileStub('a/song.ssa')), 2);
   assert.equal(classifier.localLyricFormatRank(createFileStub('a/song.srt')), 2);
   assert.equal(classifier.localLyricFormatRank(createFileStub('a/song.txt')), 3);
   assert.equal(classifier.localLyricFormatRank(createFileStub('a/song.lyric')), 4);

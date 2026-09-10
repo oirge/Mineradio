@@ -289,7 +289,7 @@ test('本地歌词入口把新格式转换成 local- 来源标记', () => {
   );
 });
 
-test('KRC、QRC、TTML 进入本地格式清单与各层 MIME 映射', () => {
+test('多格式歌词进入本地格式清单与各层 MIME 映射', () => {
   const app = fs.readFileSync(APP_PATH, 'utf8');
   const index = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
@@ -297,7 +297,7 @@ test('KRC、QRC、TTML 进入本地格式清单与各层 MIME 映射', () => {
   const lyricRe = /var LOCAL_LYRIC_FILE_RE = (\/[^\n]+\/i);/.exec(app);
   assert.ok(lyricRe, '未找到本地歌词后缀清单');
   const matchesExt = new RegExp(lyricRe[1].slice(1, -2), 'i');
-  for (const ext of ['lrc', 'txt', 'srt', 'vtt', 'ass', 'yrc', 'krc', 'qrc', 'ttml']) {
+  for (const ext of ['lrc', 'txt', 'srt', 'vtt', 'ass', 'ssa', 'yrc', 'krc', 'qrc', 'ttml']) {
     assert.equal(matchesExt.test(`.${ext}`), true, `歌词后缀清单缺少 .${ext}`);
     assert.match(main, new RegExp(`['"]\\.${ext}['"]`), `desktop/main.js 缺少 .${ext}`);
     assert.match(server, new RegExp(`['"]\\.${ext}['"]\\s*:`), `server.js 缺少 .${ext}`);
