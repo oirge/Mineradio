@@ -10,8 +10,25 @@
 
 ### 发布记录（v2.0.4）
 
-- 单分支 `codex/release-v2.0.4`。承接上一版资产记录分支 `docs/release-assets-v203-fix` → PR [#75](https://github.com/oirge/Mineradio/pull/75) → merge commit `0380ce2`（三个提交：`c091708` 编码修复与资产回填、`0a76e03` 项目记忆修正、`ba5a958` AGENTS 路径修正；`Verify` run `34478977406` / `34480225831` / `34480702584` / `34481205534` 均通过）。
-- 本节其余发布事实（tag object、`Build and Release` run、四项资产字节与 SHA256）在发布当轮补记；本仓库规矩是发布记录当轮写完，不留事后补写。
+- 上一版资产记录先收尾：`docs/release-assets-v203-fix` → PR [#75](https://github.com/oirge/Mineradio/pull/75) → merge commit `0380ce2`（三个提交 `c091708` / `0a76e03` / `ba5a958`；`Verify` run `34478977406` / `34480225831` / `34480702584` / `34481205534` 均通过）。
+- 本版单分支 `codex/release-v2.0.4`，单个提交 `4982e8c chore(release): 2.0.4`；PR [#76](https://github.com/oirge/Mineradio/pull/76) 用 merge commit 合入 `main`，合并提交 `76dd6d4`；`Verify` run `34482336528` / `34482364819` 过 PR、`34482576523` 过 `main`（`13:25:45Z`），均通过。
+- annotated tag `v2.0.4` = tag object `dd3d39eba43ae1c051b9c89af8c810355fe9b2c7`，指向 release commit `4982e8c5afb6697ee8001be394f2c3fd5883a261`；`git merge-base --is-ancestor` 复验该提交是 `origin/main` 祖先（打 tag 前 `git describe origin/main` 回 `v2.0.3-9-g76dd6d4`，符合「上一个 tag 之后 9 个提交」）。
+- `Build and Release` run `34482743650` 成功（`--ref v2.0.4 -f tag=v2.0.4`，`13:27:21Z` 起 `13:29:40Z` 止），Windows x64 NSIS 在 GitHub Actions 远程构建；`Validate release metadata` 校验 tag 与 `package.json` 版本一致，`Generate SHA256 checksums` 与 `Upload release assets` 全成功。本轮没有在本机启动 Electron、没有关闭或重启正在使用的 Mineradio，也没有执行安装包。
+- **没有出现 electron-builder 双草稿。** 工作流先用 `--publish never` 构建，上传步骤枚举同 tag Release：无记录时只创建一个草稿（`386309149`）并上传四项资产，复验仓库草稿数为 `1`（该 tag 下），发布后为 `0`。
+- 正式发布 Release `386309149`，标题 `Mineradio v2.0.4：文档修复与发布链路维护`，`published_at` `2026-09-10T13:30:49Z`，非 draft / 非 prerelease；`releases/latest` 已复验指向 `v2.0.4`。
+- 四项资产全部回下载到系统临时目录复算（blockmap 与 `latest.yml` 因刚发布时 CDN 尚未就绪、改用 API asset 端点取回；安装器与清单从下载 URL 直接取回）：
+
+| 资产 | 字节 | SHA256 |
+| --- | ---: | --- |
+| `Mineradio-oirge-2.0.4-Setup.exe` | 102618034 | `919f415dd784a4caf097ddb6fc91d49981857fb89b8ffda7e4ae433477163920` |
+| `Mineradio-oirge-2.0.4-Setup.exe.blockmap` | 106723 | `e67841aa2a28d603c008744e20acba10a4c2307ec509139170d5f85b90026375` |
+| `Mineradio-oirge-2.0.4-SHA256SUMS.txt` | 282 | `0bac8ba004e9a3f18fdf6e341b4e5c88845a67f9769b00b6a6a18555b461002d` |
+| `latest.yml` | 359 | `fb258fb8751ddff9bf47a4c72ae60646c5d2f16c2486203f275cf6f3fd02ce97` |
+
+- 三路校验全部通过：① GitHub API 的四个 `digest` 与本机 SHA256 逐字相同、字节数一致；② 清单 `Mineradio-oirge-2.0.4-SHA256SUMS.txt` 里三条（安装器 / blockmap / `latest.yml`）`sha256sum -c` 全中；③ `latest.yml` 的 `version` / `path` 为 `2.0.4` / `Mineradio-oirge-2.0.4-Setup.exe`，`files[0].size` `102618034` 与安装器字节数相同，文件项与顶层 SHA512 都是 `aomwZODFBaflXufduID6/zctarU11BLscEarRpq7y+SiWJEuXD7kuyyOidzVODyoe93q2kfw5ufH8w/qBvcOpQ==`（`sha512sum` 十六进制先 `xxd -r -p` 再 `base64 -w0` 复算一致），`releaseDate` `2026-09-10T13:29:24.481Z`。
+- `SHA256SUMS.txt` 依旧是真 LF、无 BOM（`cat -A` 只见行尾 `$`、无 `^M`），`sha256sum -c` 可直接跑。
+- 安装器比 v2.0.3 大了 `414` 字节（102,617,620 → 102,618,034）；这一版只改了文档与版本字符串，体积几乎不变，符合预期。
+- 资产记录分支 `docs/release-assets-v204`（本条记录自己就在这个分支上，PR 与合并提交号下一版补记）。
 
 ## v2.0.3 SSA 歌词与发布链路加固
 
