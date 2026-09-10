@@ -6,7 +6,8 @@
 
 - **仓库以 GitHub `https://github.com/oirge/Mineradio` 为准，本地路径随机器变化**。旧规则里的 `C:\Users\oirg\Desktop\mok\Mineradio-sync`、`C:\Users\Administrator\Desktop\Mineradio-main`、`E:\桌面\播放器软件\Mineradio\resources\app` 在当前环境都不存在，别盲目切过去；先 `git remote -v` + `git log --oneline -1` 确认。
 - 当前源码版本是 `v2.0.4`（文档编码修复与发布记录回填，纯维护版、无运行时改动），最新提交以 `git log --oneline -5 --decorate` 为准。
-- 发布基线：`v2.0.3` 已发布到 GitHub Release 并设为 Latest：`https://github.com/oirge/Mineradio/releases/tag/v2.0.3`（annotated tag object `ac634a30…` 指向 release commit `30b3ba5`，Release `386043356`，`published_at` `2026-09-10T06:22:41Z`）；四项资产已回下载核对一致。
+- `v2.0.4` 已发布到 GitHub Release 并设为 Latest：`https://github.com/oirge/Mineradio/releases/tag/v2.0.4`（annotated tag object `dd3d39eb…` 指向 release commit `4982e8c`，Release `386309149`，`published_at` `2026-09-10T13:30:49Z`）；四项资产已回下载核对一致。
+- 上一版 `v2.0.3`（SSA 歌词与发布链路加固）= annotated tag object `ac634a30…` 指向 `30b3ba5f…`，Release `386043356`。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
 - 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录（只到 `v1.2.44`），不能覆盖上述文件的当前结论。
@@ -75,8 +76,9 @@
 
 ### 2026-09-10（v2.0.4 文档维护版）
 
-- 发布 `v2.0.4`（纯维护版、无运行时行为改动）：修复 `RELEASE.md` 自 v1.2.61 起被 GBK 误解码损坏的约 165 行发布说明（以 `95a36fb` 为干净底本，按 `CHANGELOG.md` 重建被误标的 v1.2.61 节）；新增 `tests/doc-encoding-integrity.test.js` 文档编码门禁并接入 `Verify`；回填 v2.0.3 资产记录、统一「准备中/尚未发布」措辞、修正项目记忆与交接文档里过期的路径、最近发布基线与自称当前版本的历史快照；修掉 `CHANGELOG.md` 里内容已发布却仍标 `## Unreleased` 的错标小节。
-- 上一版资产记录分支 `docs/release-assets-v203-fix` → PR [#75](https://github.com/oirge/Mineradio/pull/75) → merge commit `0380ce2`；本版走 `codex/release-v2.0.4`。
+- 发布 `v2.0.4`（纯维护版、无运行时行为改动）并设为 Latest。分支 `codex/release-v2.0.4` 单提交 `4982e8c` → PR [#76](https://github.com/oirge/Mineradio/pull/76) → merge commit `76dd6d4`；annotated tag object `dd3d39eb…`；`Build and Release` run `34482743650` 成功，无双草稿。四资产回下载三路校验通过（安装器 `919f415d…`）。
+- 内容：修复 `RELEASE.md` 自 v1.2.61 起被 GBK 误解码损坏的约 165 行发布说明（以 `95a36fb` 为干净底本，按 `CHANGELOG.md` 重建被误标的 v1.2.61 节）；新增 `tests/doc-encoding-integrity.test.js` 文档编码门禁并接入 `Verify`；回填 v2.0.3 资产记录、统一「准备中/尚未发布」措辞、修正项目记忆与交接文档里过期的路径与基线；修掉 `CHANGELOG.md` 里内容已发布却仍标 `## Unreleased` 的错标小节。
+- 上一版资产记录分支 `docs/release-assets-v203-fix` → PR [#75](https://github.com/oirge/Mineradio/pull/75) → merge commit `0380ce2`。
 - 全量 Node 回归 `1076/1076` 通过（发布基线 `1071` + 新增 5 例编码门禁）；`node --check` 五个入口与 `git diff --check` 全清。未启动本机 Electron、未杀用户进程。
 
 ### 2026-09-10（v2.0.3 已发布 + RELEASE.md 编码损坏修复）

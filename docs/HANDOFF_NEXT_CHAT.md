@@ -27,9 +27,9 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前版本：`v2.0.4`（文档编码修复与发布记录回填，纯维护版、无运行时改动）。上一版 `v2.0.3`（SSA 歌词与发布链路加固）。
+- 当前版本：`v2.0.4`（文档编码修复与发布记录回填，纯维护版、无运行时改动），已发布并设为 GitHub Latest。上一版 `v2.0.3`（SSA 歌词与发布链路加固）。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`。`package.json` 发布配置 owner/repo 为 `oirge/Mineradio`。
-- 发布基线：`v2.0.3` 已发布并设为 Latest（annotated tag object `ac634a30…` 指向 `30b3ba5f…`，Release `386043356`）。`v2.0.4` 为纯文档维护版。
+- 发布基线：`v2.0.4` = annotated tag object `dd3d39eb…` 指向 release commit `4982e8c`，Release `386309149`；上一版 `v2.0.3` = tag object `ac634a30…` 指向 `30b3ba5f…`，Release `386043356`。
 - `main` 是发布线，发版走 `codex/release-vX.Y.Z` 分支 + PR（**用 merge commit 合，绝不 squash**，否则 tag 会离开 `main` 可达历史），tag 打在 release commit 上。
 - `package.json` 发布配置 owner/repo 已是 `oirge/Mineradio`。
 
