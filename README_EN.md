@@ -92,6 +92,14 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.0.7 (2026-09-11)
+
+- The 3D playlist shelf gains a "Stage" mode: switch between "Side" and "Stage" from the visual console or the new button in the bottom bar, and the choice is remembered
+- Stage reproduces the upstream motion: the detail panel tracks the camera, plus the original open/close timing, card stagger and parallax, and camera enter/exit speed
+- Side keeps its original feel and position; the two modes store their settings separately, so they don't affect each other
+
+Full Node regression suite: `1136/1136` passing.
+
 ### v2.0.6 (2026-09-11)
 
 - The main-bar volume popover is now a quick panel embedding playback speed and sleep timer, plus gapless and ReplayGain toggles

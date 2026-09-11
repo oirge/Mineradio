@@ -54,7 +54,7 @@ function testLyricParticleFrameCache() {
  */
 function testShelfFrameStateCache() {
   const source = readRendererSource();
-  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nvar shelfManagerDefault = makeShelfManager();');
   const updateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow, frameShelfState) {', '\n    onCoverChange: function()');
   const placeCardSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
   assert.match(updateSource, /var contentOpen = frameShelfState \? frameShelfState\.contentOpen : !!\(contentList && contentList\.isOpen\(\)\);/);
@@ -111,7 +111,7 @@ function testShelfRenderFrameSnapshotGetterReuse() {
   const source = readRendererSource();
   const snapshotSource = readSourceBetween(source, 'function refreshShelfRenderFrameState() {', '\nfunction isPortraitShelfViewport');
   const animateSource = readSourceBetween(source, 'function animate() {', "\nresumeMainRenderLoop('startup');");
-  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nvar shelfManagerDefault = makeShelfManager();');
   const managerUpdateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow, frameShelfState) {', '\n    onCoverChange: function()');
   const skullCameraSource = readSourceBetween(source, 'function applySkullCameraPose(dt, frameShelfState) {', '\nfunction updateSkullParticleLayer');
   const skullParticleSource = readSourceBetween(source, 'function updateSkullParticleLayer(dt, frameShelfState) {', '\nvar BACK_COVER_COUNT = 3000;');
@@ -149,7 +149,7 @@ function testStageLyricsShelfStateReuse() {
  */
 function testShelfFrameSettingsReuse() {
   const source = readRendererSource();
-  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nvar shelfManagerDefault = makeShelfManager();');
   const updateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow, frameShelfState) {', '\n    onCoverChange: function()');
   const layoutSource = readSourceBetween(source, 'function shelfLayoutProfile(', '\nfunction shelfHotZoneWidth()');
   assert.match(layoutSource, /function shelfLayoutProfile\(shelfCtl\)/);
@@ -164,7 +164,7 @@ function testShelfFrameSettingsReuse() {
  */
 function testShelfContentFrameSnapshotReuse() {
   const source = readRendererSource();
-  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nvar shelfManagerDefault = makeShelfManager();');
   const contentSource = readSourceBetween(source, 'function makeContentListManager() {', '\nfunction compactCount');
   const updateSource = readSourceBetween(contentSource, '    update: function(dt, frameLayout, frameShelfLook) {', '\n    next: function()');
   const panelSource = readSourceBetween(contentSource, '  function drawPanel(', '\n\n  function disposePanelObject');
@@ -198,7 +198,7 @@ function testShelfContentFrameSnapshotReuse() {
  */
 function testShelfCardFrameSnapshotReuse() {
   const source = readRendererSource();
-  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nvar shelfManagerDefault = makeShelfManager();');
   const signatureSource = readSourceBetween(managerSource, 'function cardDrawSignature(', '\n\n  /**\n   * 绘制歌单架卡片纹理');
   const drawSource = readSourceBetween(managerSource, 'function drawCard(', '\n\n  function buildOneCard');
   const placeSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
@@ -222,7 +222,7 @@ function testShelfCardFrameSnapshotReuse() {
  */
 function testShelfCardPropertyWriteCache() {
   const source = readRendererSource();
-  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nshelfManager = makeShelfManager();');
+  const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nvar shelfManagerDefault = makeShelfManager();');
   const placeCardSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
 
   assert.match(managerSource, /function setShelfCardPosition\(card, x, y, z\)/);

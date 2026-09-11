@@ -632,7 +632,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.0.6';
+var APP_VERSION = '2.0.7';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -1245,6 +1245,27 @@ var fxDefaults = {
   shelfOpacity: 1,
   shelfBgOpacity: 0.90,
   shelfAccentColor: '#ffffff',
+  // 舞台歌单架（上游原版）专属参数，默认值照上游 XxHuberrr/Mineradio 的 00-state/04-fx-defaults.js。
+  shelfDetailOffsetX: 0,
+  shelfDetailOffsetY: 0,
+  shelfDetailOffsetZ: 0,
+  shelfDetailScale: 1.35,
+  shelfDetailAngleX: 0,
+  shelfDetailAngleY: -13,
+  shelfDetailRowGap: 1,
+  shelfDetailOpenDuration: 0.6,
+  shelfDetailCloseDuration: 0.18,
+  shelfDetailRowDuration: 0.72,
+  shelfDetailIntroStrength: 1,
+  shelfDetailParallax: 1,
+  shelfSummonOpenDuration: 0.91,
+  shelfSummonCloseDuration: 0.46,
+  shelfSummonSlide: 1.9,
+  shelfSummonStagger: 1,
+  shelfSummonScale: 1,
+  shelfSummonParallax: 1,
+  shelfCameraEnterSpeed: 0.24,
+  shelfCameraExitSpeed: 0.24,
   performanceBackground: 'auto',
   performanceQuality: 'high',
   liveBackgroundKeep: false,
@@ -3470,12 +3491,30 @@ function updateCamera() {
     focusEase = Math.max(focusEase, 0.12 + beatCam.punch * 0.12);
     radiusEase = Math.max(radiusEase, 0.09 + beatCam.punch * 0.12);
   }
+  var shelfFocusType = orbit.focus.shelfClassic === true && /^shelf-/.test(String(orbit.focus.type || ''));
+  if (shelfFocusType) {
+    var shelfFocusWanted = typeof focusHover !== 'undefined' && focusHover ? focusHover.wantType : null;
+    if (fa || !shelfFocusWanted) {
+      var shelfCameraSpeed = normalizedShelfNumber(fa ? 'shelfCameraEnterSpeed' : 'shelfCameraExitSpeed', 0.24, 0.2, 1.5);
+      focusEase = clampRange(focusEase * shelfCameraSpeed, 0.018, 0.42);
+      radiusEase = clampRange(radiusEase * shelfCameraSpeed, 0.014, 0.36);
+    }
+  }
   orbit.theta  += (targetTheta  - orbit.theta)  * focusEase;
   orbit.phi    += (targetPhi    - orbit.phi)    * focusEase;
   orbit.radius += (targetRadius - orbit.radius) * radiusEase;
   orbit.lookAt.x += (tLookAt.x - orbit.lookAt.x) * focusEase;
   orbit.lookAt.y += (tLookAt.y - orbit.lookAt.y) * focusEase;
   orbit.lookAt.z += (tLookAt.z - orbit.lookAt.z) * focusEase;
+  if (shelfFocusType && !fa) {
+    var lookDx = tLookAt.x - orbit.lookAt.x, lookDy = tLookAt.y - orbit.lookAt.y, lookDz = tLookAt.z - orbit.lookAt.z;
+    var thetaDelta = Math.atan2(Math.sin(targetTheta - orbit.theta), Math.cos(targetTheta - orbit.theta));
+    if (Math.abs(thetaDelta) < 0.003 && Math.abs(orbit.phi - targetPhi) < 0.003 &&
+      Math.abs(orbit.radius - targetRadius) < 0.030 && lookDx * lookDx + lookDy * lookDy + lookDz * lookDz < 0.0009) {
+      orbit.focus.type = null;
+      orbit.focus.shelfClassic = false;
+    }
+  }
 
   var cy = Math.cos(orbit.phi), sy = Math.sin(orbit.phi);
   var ct = Math.cos(orbit.theta), st = Math.sin(orbit.theta);
@@ -3544,6 +3583,7 @@ function activateFocusZone(type) {
   unlockCenteredView();
   orbit.focus.active = true;
   orbit.focus.type = type;
+  orbit.focus.shelfClassic = /^shelf-/.test(String(type || '')) && typeof shelfEngineIsClassic === 'function' && shelfEngineIsClassic();
   var shelfProfile = shelfLayoutProfile();
   if (type === 'shelf-side') {
     if (shouldUseWallpaperSafeShelfCamera()) {
@@ -6145,7 +6185,7 @@ function readSavedLyricLayout() {
     var savedShelfAngle = savedShelfAngleManual
       ? clampRange(raw.shelfAngleY == null ? shelfDefaultAngleForCameraMode(savedShelfCameraMode) : Number(raw.shelfAngleY), -30, 30)
       : shelfDefaultAngleForCameraMode(savedShelfCameraMode);
-    return {
+    var result = {
       preset: savedPreset,
       intensity: clampRange(Number(raw.intensity) || fxDefaults.intensity, 0.2, 1.6),
       cinemaShake: clampRange(Number(raw.cinemaShake) || fxDefaults.cinemaShake, 0, 1.8),
@@ -6234,6 +6274,9 @@ function readSavedLyricLayout() {
       shelfAccentColor: normalizeHexColor(raw.shelfAccentColor || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor),
       cam: /^(off|gesture)$/.test(String(raw.cam || '')) ? raw.cam : fxDefaults.cam
     };
+    var classicShelfFx = normalizeClassicShelfFx(raw);
+    for (var classicKey in classicShelfFx) result[classicKey] = classicShelfFx[classicKey];
+    return normalizeShelfProfiles(result, raw);
   } catch (e) {
     return {};
   }
@@ -6335,6 +6378,9 @@ function saveLyricLayout() {
       shelfAccentColor: normalizeHexColor(fx.shelfAccentColor || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor),
       cam: /^(off|gesture)$/.test(String(fx.cam || '')) ? fx.cam : fxDefaults.cam
     };
+    var classicShelfFxSave = normalizeClassicShelfFx(fx);
+    for (var classicSaveKey in classicShelfFxSave) layoutPayload[classicSaveKey] = classicShelfFxSave[classicSaveKey];
+    normalizeShelfProfiles(layoutPayload, fx);
     setPersistentLocalStorageItem(LYRIC_LAYOUT_STORE_KEY, JSON.stringify(layoutPayload));
   } catch (e) {}
 }
@@ -6397,6 +6443,76 @@ function applyShelfCameraDefaultAngle(force) {
 }
 function normalizeShelfPresence(value) {
   return String(value || '') === 'always' ? 'always' : 'auto';
+}
+// 舞台歌单架（上游原版）专属参数的合法范围，导入/导出/存档共用同一份夹取。
+var CLASSIC_SHELF_FX_RANGES;
+function classicShelfFxRanges() {
+  if (CLASSIC_SHELF_FX_RANGES) return CLASSIC_SHELF_FX_RANGES;
+  return (CLASSIC_SHELF_FX_RANGES = {
+  shelfDetailOffsetX: [-4.8, 4.8], shelfDetailOffsetY: [-3.6, 3.6], shelfDetailOffsetZ: [-3.6, 3.6],
+  shelfDetailScale: [0.72, 1.35], shelfDetailAngleX: [-24, 24], shelfDetailAngleY: [-28, 28], shelfDetailRowGap: [0.72, 1.32],
+  shelfDetailOpenDuration: [0.12, 1.2], shelfDetailCloseDuration: [0.08, 0.8], shelfDetailRowDuration: [0.16, 1.6],
+  shelfDetailIntroStrength: [0, 1.8], shelfDetailParallax: [0, 1.8],
+  shelfSummonOpenDuration: [0.08, 2], shelfSummonCloseDuration: [0.08, 1.6], shelfSummonSlide: [0, 4],
+  shelfSummonStagger: [0, 3], shelfSummonScale: [0, 3], shelfSummonParallax: [0, 2.5],
+  shelfCameraEnterSpeed: [0.2, 1.5], shelfCameraExitSpeed: [0.2, 1.5]
+  });
+}
+// 从任意来源（raw 存档 / fx）归一化出舞台歌单架的全部参数，供导入/导出/存档复用。
+function normalizeClassicShelfFx(source) {
+  var out = {};
+  classicShelfFxRanges();
+  for (var k in CLASSIC_SHELF_FX_RANGES) {
+    if (!Object.prototype.hasOwnProperty.call(CLASSIC_SHELF_FX_RANGES, k)) continue;
+    var range = CLASSIC_SHELF_FX_RANGES[k];
+    var value = source && source[k] != null ? Number(source[k]) : fxDefaults[k];
+    if (!isFinite(value)) value = fxDefaults[k];
+    out[k] = clampRange(value, range[0], range[1]);
+  }
+  return out;
+}
+// 基础滑条仍编辑 fx.shelf*，但两种布局各保存一份；旧存档只迁移到侧栏。
+function classicShelfBaseDefaults() {
+  return {
+    shelfCameraMode: 'dynamic', shelfPresence: 'auto',
+    shelfSize: 0.92, shelfOffsetX: -0.34, shelfOffsetY: -0.2, shelfOffsetZ: 0.12,
+    shelfAngleY: -11, shelfAngleYManual: true, shelfOpacity: 1,
+    shelfBgOpacity: 0.79, shelfAccentColor: '#ffffff'
+  };
+}
+function normalizeShelfBaseSettings(source, stage) {
+  source = source || {};
+  var defaults = stage ? classicShelfBaseDefaults() : fxDefaults;
+  var ranges = { shelfSize: [0.65, 1.45], shelfOffsetX: [-1.2, 1.2],
+    shelfOffsetY: [-0.9, 0.9], shelfOffsetZ: [-0.9, 0.9], shelfAngleY: [-30, 30],
+    shelfOpacity: [0.25, 1], shelfBgOpacity: [0.25, 0.98] };
+  var out = {};
+  for (var key in ranges) {
+    var value = source[key] == null ? defaults[key] : Number(source[key]);
+    out[key] = clampRange(isFinite(value) ? value : defaults[key], ranges[key][0], ranges[key][1]);
+  }
+  out.shelfCameraMode = normalizeShelfCameraMode(source.shelfCameraMode || defaults.shelfCameraMode);
+  out.shelfPresence = normalizeShelfPresence(source.shelfPresence || defaults.shelfPresence);
+  out.shelfAngleYManual = source.shelfAngleYManual == null ? defaults.shelfAngleYManual === true : source.shelfAngleYManual === true;
+  if (!out.shelfAngleYManual) out.shelfAngleY = shelfDefaultAngleForCameraMode(out.shelfCameraMode);
+  out.shelfAccentColor = normalizeHexColor(source.shelfAccentColor || defaults.shelfAccentColor, defaults.shelfAccentColor);
+  return out;
+}
+function normalizeShelfProfiles(target, source) {
+  source = source || {};
+  var active = source.shelfSettingsMode === 'stage' ? 'stage' : 'side';
+  target.shelfSideSettings = normalizeShelfBaseSettings(active === 'side' ? source : source.shelfSideSettings, false);
+  target.shelfStageSettings = normalizeShelfBaseSettings(active === 'stage' ? source : source.shelfStageSettings, true);
+  target.shelfSettingsMode = target.shelf === 'stage' ? 'stage' : 'side';
+  Object.assign(target, target.shelfSettingsMode === 'stage' ? target.shelfStageSettings : target.shelfSideSettings);
+  return target;
+}
+function switchEffectiveShelfSettings(mode) {
+  var active = fx.shelfSettingsMode === 'stage' ? 'stage' : 'side';
+  var next = mode === 'stage' ? 'stage' : 'side';
+  fx[active === 'stage' ? 'shelfStageSettings' : 'shelfSideSettings'] = normalizeShelfBaseSettings(fx, active === 'stage');
+  if (next !== active) Object.assign(fx, normalizeShelfBaseSettings(fx[next === 'stage' ? 'shelfStageSettings' : 'shelfSideSettings'], next === 'stage'));
+  fx.shelfSettingsMode = next;
 }
 function normalizedShelfNumber(key, fallback, min, max) {
   var value = fx && fx[key] != null ? Number(fx[key]) : fallback;
@@ -15298,7 +15414,259 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     canInteract: function() { return mode !== 'off' && allItems.length > 0; }
   };
 }
-shelfManager = makeShelfManager();
+var shelfManagerDefault = makeShelfManager();
+var shelfManagerClassic = null;
+shelfManager = shelfManagerDefault;
+// ---- 歌单架实现切换：现有精修版（default）与上游原版（classic） ----
+function shelfClassicModule() {
+  return (typeof MineradioShelfClassic !== 'undefined' && MineradioShelfClassic) ? MineradioShelfClassic : null;
+}
+function shelfEngineIsClassic() {
+  // 舞台模式使用上游原版歌单架；侧栏 / 关闭使用本仓库现有版。
+  return shelfModeValue() === 'stage' && !!shelfClassicModule();
+}
+function deactivateShelfEngine() {
+  if (shelfManager) {
+    var content = shelfManager.getContentList && shelfManager.getContentList();
+    if (content && content.dispose) content.dispose();
+    if (shelfManager.clearSelected) shelfManager.clearSelected();
+    if (shelfManager.setMode) shelfManager.setMode('off');
+  }
+  shelfPinnedOpen = false;
+  shelfVisibility = 0;
+  shelfOpenAnimAt = -10;
+  if (shelfHoverCue) {
+    shelfHoverCue.target = 0; shelfHoverCue.value = 0; shelfHoverCue.zoneActive = false;
+    shelfHoverCue.enteredAt = 0; shelfHoverCue.guide = false;
+  }
+  if (typeof shelfPlaybackSwitchGuardUntil !== 'undefined') shelfPlaybackSwitchGuardUntil = 0;
+  if (typeof focusHover !== 'undefined' && focusHover && /^shelf-/.test(String(focusHover.wantType || (orbit.focus && orbit.focus.type) || ''))) {
+    if (focusHover.pendingTimer) clearTimeout(focusHover.pendingTimer);
+    if (focusHover.exitTimer) clearTimeout(focusHover.exitTimer);
+    focusHover.pendingTimer = null; focusHover.exitTimer = null; focusHover.wantType = null;
+    orbit.focus.active = false; // 保留所属 stage 标记，退出镜头仍按原速率回落。
+  }
+  controlsShelfSuppressUntil = 0;
+  var hint = document.getElementById('rotate-hint');
+  if (hint) hint.classList.remove('shelf-hidden');
+}
+function restoreClassicShelfBottomControls() {
+  controlsShelfSuppressUntil = 0;
+  if (hasActivePlaybackControls()) revealBottomControls(900);
+}
+function applyShelfEngineForMode(mode) {
+  var wantClassic = (mode === 'stage') && !!shelfClassicModule();
+  var switching = wantClassic ? shelfManager !== shelfManagerClassic : shelfManager !== shelfManagerDefault;
+  // 先停旧实例（包括详情与 hover/focus），它只能看到旧布局。
+  if (switching) deactivateShelfEngine();
+  switchEffectiveShelfSettings(mode);
+  fx.shelf = mode;
+  if (wantClassic) shelfManager = createClassicShelfEngineIfNeeded() || shelfManagerDefault;
+  else shelfManager = shelfManagerDefault;
+  if (shelfManager && typeof shelfManager.setMode === 'function') shelfManager.setMode(mode);
+  updateShelfClassicParamsVisibility();
+}
+function updateShelfClassicParamsVisibility() {
+  var params = document.getElementById('shelf-classic-params');
+  if (params) params.style.display = shelfEngineIsClassic() ? '' : 'none';
+}
+function shelfModeValue() {
+  return (fx && /^(off|side|stage)$/.test(String(fx.shelf || ''))) ? fx.shelf : 'side';
+}
+// 原版歌单架取数：复用本仓库的「特别喜欢 / 独立歌单 / 全部音乐 / 队列」。
+function shelfClassicItems() {
+  var items = [];
+  if (!(typeof isPlaylistListTab === 'function' && isPlaylistListTab()) && playQueue.length) {
+    return { length: playQueue.length, queue: playQueue };
+  }
+  var liked = typeof getSpecialLikedSongs === 'function' ? getSpecialLikedSongs() : [];
+  items.push({ type: 'playlist', title: '特别喜欢', sub: (liked && liked.length || 0) + ' 首', cover: liked && liked[0] ? songCoverSrc(liked[0], 360) : '', tag: '收藏', playlistId: SPECIAL_LIKED_PLAYLIST_ID });
+  var lists = typeof readLocalPlaylists === 'function' ? readLocalPlaylists() : [];
+  for (var li = 0; li < lists.length; li++) {
+    var pl = lists[li];
+    var refs = (pl && pl.songRefs) || [];
+    items.push({ type: 'playlist', title: pl.name, sub: refs.length + ' 首', cover: pl.cover || '', tag: '我的歌单', playlistId: pl.id });
+  }
+  var pool = typeof localSearchPool === 'function' ? localSearchPool() : [];
+  items.push({ type: 'playlist', title: '全部音乐', sub: (pool && pool.length || 0) + ' 首', cover: '', tag: '音乐库', playlistId: 'library' });
+  return items;
+}
+function shelfClassicItemAt(items, index) {
+  if (!items.queue) return items[index];
+  var song = items.queue[index];
+  if (!song) return null;
+  return { type: 'queue', key: queueItemKey(song), title: song.name, sub: song.artist || '未知歌手',
+    cover: songCoverSrc(song, 360), tag: index === currentIdx ? '正在播放' : ('#' + (index + 1)), queueIndex: index };
+}
+function shelfClassicHashValue(hash, value) {
+  var text = String(value == null ? '' : value);
+  // 长度前缀避免不同字段分隔方式生成同一输入；只保留紧凑摘要，不保留完整曲库字符串。
+  var prefix = text.length + ':';
+  for (var i = 0; i < prefix.length; i++) hash = Math.imul(hash ^ prefix.charCodeAt(i), 16777619);
+  for (var j = 0; j < text.length; j++) hash = Math.imul(hash ^ text.charCodeAt(j), 16777619);
+  return hash;
+}
+function shelfClassicHashSongs(hash, songs) {
+  hash = shelfClassicHashValue(hash, songs.length);
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i] || {};
+    hash = shelfClassicHashValue(hash, queueItemKey(song));
+    hash = shelfClassicHashValue(hash, song.name);
+    hash = shelfClassicHashValue(hash, song.artist);
+    hash = shelfClassicHashValue(hash, songCoverSignature(song));
+  }
+  return hash;
+}
+function shelfClassicSignature(items) {
+  var hash = shelfClassicHashValue(2166136261, currentIdx);
+  if (items.queue) return 'queue:' + items.length + ':' + (shelfClassicHashSongs(hash, items.queue) >>> 0);
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    hash = shelfClassicHashValue(hash, item.playlistId);
+    hash = shelfClassicHashValue(hash, item.title);
+    hash = shelfClassicHashValue(hash, item.sub);
+    hash = shelfClassicHashValue(hash, item.cover);
+    hash = shelfClassicHashSongs(hash, localPlaylistSongs(normalizeLocalPlaylistKind(item.playlistId)));
+  }
+  return 'playlists:' + items.length + ':' + (hash >>> 0);
+}
+function shelfClassicLive() {
+  return {
+    playQueue: playQueue, currentIdx: currentIdx, bass: bass, beatPulse: beatPulse, playing: playing,
+    particles: particles, camera: camera, scene: scene, uniforms: uniforms, pointerParallax: pointerParallax,
+    playlistCoverCache: playlistCoverCache, fx: fx,
+    pinnedOpen: shelfPinnedOpen, visibility: shelfVisibility, openAnimAt: shelfOpenAnimAt,
+    userPlaylists: (typeof userPlaylists !== 'undefined' && userPlaylists) || [],
+    visualGuideActive: !!visualGuideActive, emptyHomeActive: !!emptyHomeActive, homeForcedOpen: !!homeForcedOpen
+  };
+}
+function shelfClassicPushShared(s) {
+  if (!s) return;
+  shelfPinnedOpen = !!s.pinnedOpen;
+  shelfVisibility = Number(s.visibility) || 0;
+  shelfOpenAnimAt = s.openAnimAt != null && isFinite(Number(s.openAnimAt)) ? Number(s.openAnimAt) : -10;
+}
+function shelfClassicDeps() {
+  return {
+    THREE: typeof THREE !== 'undefined' ? THREE : null,
+    scene: scene, camera: camera, renderer: renderer, uniforms: uniforms,
+    particles: particles, pointerParallax: pointerParallax, fx: fx,
+    songCoverSrc: songCoverSrc,
+    queueItemKey: typeof queueItemKey === 'function' ? queueItemKey : function () { return ''; },
+    compactCount: typeof compactCount === 'function' ? compactCount : function (n) { return String(Number(n) || 0); },
+    requestPlaylistCover: typeof requestPlaylistCover === 'function' ? requestPlaylistCover : function () {},
+    readableInkForHex: typeof readableInkForHex === 'function' ? readableInkForHex : function () { return '#0b0f14'; },
+    shelfAccentHex: shelfAccentHex, shelfAccentRgba: shelfAccentRgba,
+    shelfSettings: shelfSettings, shelfAlwaysVisible: shelfAlwaysVisible,
+    shouldUseWallpaperSafeShelfCamera: shouldUseWallpaperSafeShelfCamera,
+    shouldUseSkullSafeShelfCamera: shouldUseSkullSafeShelfCamera,
+    shouldUseShelfDynamicCamera: shouldUseShelfDynamicCamera,
+    hasAnyPlatformLogin: typeof hasAnyPlatformLogin === 'function' ? hasAnyPlatformLogin : function () { return false; },
+    pulseObjectValue: typeof pulseObjectValue === 'function' ? pulseObjectValue : function () {},
+    showToast: typeof showToast === 'function' ? showToast : function () {},
+    playShelfSelectTick: typeof playShelfSelectTick === 'function' ? playShelfSelectTick : function () {},
+    setFocusZone: typeof setFocusZone === 'function' ? setFocusZone : function () {},
+    setPeek: typeof setPeek === 'function' ? setPeek : function () {},
+    updateEmptyHomeVisibility: typeof updateEmptyHomeVisibility === 'function' ? updateEmptyHomeVisibility : function () {},
+    loadPlaylistIntoQueueById: loadPlaylistIntoQueueById, playQueueAt: playQueueAt,
+    setShelfMode: setShelfMode, togglePlaylistPanel: togglePlaylistPanel,
+    suppressBottomControlsForShelf: typeof suppressBottomControlsForShelf === 'function' ? suppressBottomControlsForShelf : function () {},
+    clampRange: clampRange,
+    getShelfItems: shelfClassicItems, shelfItemAt: shelfClassicItemAt, getShelfSignature: shelfClassicSignature,
+    snapshotLive: shelfClassicLive, pushShared: shelfClassicPushShared,
+    saveLyricLayout: saveLyricLayout,
+    restoreBottomControlsAfterShelfExit: restoreClassicShelfBottomControls,
+    isPointerOverUi: isPointerOverUi,
+    safeShelfCloseContent: safeShelfCloseContent,
+    makeContentListManager: function () { return makeContentListManager({ classic: true }); }
+  };
+}
+function createClassicShelfEngineIfNeeded() {
+  if (!shelfManagerClassic) {
+    var mod = shelfClassicModule();
+    if (mod && typeof mod.createClassicShelfEngine === 'function') {
+      shelfManagerClassic = mod.createClassicShelfEngine(shelfClassicDeps());
+    }
+  }
+  return shelfManagerClassic;
+}
+function applyShelfEngineSelection() {
+  applyShelfEngineForMode(shelfModeValue());
+}
+function updateShelfClassicParamsSync() {
+  updateShelfClassicParamsVisibility();
+}
+// 主界面底部「侧栏 / 舞台」切换：在侧栏与舞台之间来回切。
+function updateBottomShelfToggle() {
+  var btn = document.getElementById('shelf-view-btn');
+  if (!btn) return;
+  var stage = shelfModeValue() === 'stage';
+  btn.classList.toggle('active', stage);
+  btn.setAttribute('aria-pressed', stage ? 'true' : 'false');
+}
+function toggleShelfStageMode() {
+  var goingToStage = shelfModeValue() !== 'stage';
+  setShelfMode(goingToStage ? 'stage' : 'side');
+  showToast(goingToStage ? '3D歌单架: 舞台' : '3D歌单架: 侧栏');
+}
+// 把 fx 里的原版参数回填到 DIY 分组里的 [data-classicfx] 滑条。
+function syncClassicShelfSliders() {
+  var inputs = document.querySelectorAll('#shelf-classic-params [data-classicfx]');
+  if (!inputs.length) return;
+  var values = normalizeClassicShelfFx(fx);
+  inputs.forEach(function (el) {
+    var key = el.getAttribute('data-classicfx');
+    if (!Object.prototype.hasOwnProperty.call(values, key)) return;
+    var num = Number(values[key]);
+    el.value = String(num);
+    var out = el.parentElement && el.parentElement.querySelector('output');
+    if (out) out.textContent = (key.indexOf('Angle') >= 0 || key === 'shelfDetailRowGap') ? String(Math.round(num * 100) / 100) : num.toFixed(2);
+  });
+}
+// 绑定原版参数滑条（舞台模式下的详情页/唤出/镜头参数）。启动时调用一次。
+function initShelfEngineControls() {
+  document.querySelectorAll('#shelf-classic-params [data-classicfx]').forEach(function (el) {
+    el.addEventListener('input', function () {
+      var key = el.getAttribute('data-classicfx');
+      var range = CLASSIC_SHELF_FX_RANGES[key];
+      if (!range) return;
+      fx[key] = clampRange(parseFloat(el.value), range[0], range[1]);
+      var out = el.parentElement && el.parentElement.querySelector('output');
+      if (out) out.textContent = (key.indexOf('Angle') >= 0 || key === 'shelfDetailRowGap') ? String(Math.round(fx[key] * 100) / 100) : fx[key].toFixed(2);
+      if (shelfManager && shelfManager.refreshTheme) shelfManager.refreshTheme();
+      saveLyricLayout();
+    });
+  });
+}
+// classic 档把顶层几何/手感函数分派到原版实现；默认档逐字节走原实现。
+function shelfWrapGeometry(name, orig) {
+  return function () {
+    if (shelfEngineIsClassic()) {
+      var mod = shelfClassicModule();
+      if (mod && typeof mod[name] === 'function') return mod[name].apply(null, arguments);
+    }
+    return orig.apply(null, arguments);
+  };
+}
+shelfLayoutProfile = shelfWrapGeometry('shelfLayoutProfile', shelfLayoutProfile);
+shelfHotZoneWidth = shelfWrapGeometry('shelfHotZoneWidth', shelfHotZoneWidth);
+shelfPreviewUseZoneWidth = shelfWrapGeometry('shelfPreviewUseZoneWidth', shelfPreviewUseZoneWidth);
+shelfWheelZoneWidth = shelfWrapGeometry('shelfWheelZoneWidth', shelfWheelZoneWidth);
+isShelfClickZone = shelfWrapGeometry('isShelfClickZone', isShelfClickZone);
+isShelfPreviewUseZone = shelfWrapGeometry('isShelfPreviewUseZone', isShelfPreviewUseZone);
+isShelfWheelZone = shelfWrapGeometry('isShelfWheelZone', isShelfWheelZone);
+canUseSideShelfWithoutPinnedOpen = shelfWrapGeometry('canUseSideShelfWithoutPinnedOpen', canUseSideShelfWithoutPinnedOpen);
+shelfPreviewIsVisible = shelfWrapGeometry('shelfPreviewIsVisible', shelfPreviewIsVisible);
+shelfAutoHiddenInputReady = shelfWrapGeometry('shelfAutoHiddenInputReady', shelfAutoHiddenInputReady);
+canShowShelfHoverCueAt = shelfWrapGeometry('canShowShelfHoverCueAt', canShowShelfHoverCueAt);
+shelfCueRect = shelfWrapGeometry('shelfCueRect', shelfCueRect);
+shelfCueCenter = shelfWrapGeometry('shelfCueCenter', shelfCueCenter);
+setShelfGuideCueActive = shelfWrapGeometry('setShelfGuideCueActive', setShelfGuideCueActive);
+updateShelfHoverCueFromPointer = shelfWrapGeometry('updateShelfHoverCueFromPointer', updateShelfHoverCueFromPointer);
+tickShelfHoverCue = shelfWrapGeometry('tickShelfHoverCue', tickShelfHoverCue);
+setShelfPinnedOpen = shelfWrapGeometry('setShelfPinnedOpen', setShelfPinnedOpen);
+clearShelfPreviewOnPointerExit = shelfWrapGeometry('clearShelfPreviewOnPointerExit', clearShelfPreviewOnPointerExit);
+suppressShelfPreviewForPlaybackSwitch = shelfWrapGeometry('suppressShelfPreviewForPlaybackSwitch', suppressShelfPreviewForPlaybackSwitch);
 function safeShelfRebuild(reason, asyncCards) {
   if (!shelfManager || typeof shelfManager.rebuild !== 'function') return false;
   try {
@@ -15406,7 +15774,10 @@ document.addEventListener('mouseout', function(e) {
 //  二级内容框 (歌单内的歌曲列表) — 同样 PSP 风格滚动
 // ============================================================
 function makeContentListManager() {
+  // 保留无参接缝，只有 classic 工厂传入创建时选项；side 不读取舞台动效参数。
+  var classic = !!(arguments[0] && arguments[0].classic);
   var group = null;
+  var closingDetails = [];
   var rows = [];           // 每行一张卡 (歌曲)
   // 行步进同样是滚动热路径，按索引直接扫描，避免每步分配 find 回调。
   function rowAtIndex(idx) {
@@ -15449,6 +15820,34 @@ function makeContentListManager() {
     return shelfLayoutProfile(shelfCtl).detail || DETAIL_BASE;
   }
 
+  var detailCameraDir = new THREE.Vector3();
+  var detailCameraRight = new THREE.Vector3();
+  var detailCameraUp = new THREE.Vector3();
+  var detailCameraPos = new THREE.Vector3();
+  function placeDynamicDetailFromCamera(layout, intro, parX, parY) {
+    if (!group || !camera) return false;
+    var portrait = isPortraitShelfViewport();
+    var narrow = !portrait && innerWidth < 980;
+    var introMix = intro * (layout.intro == null ? 1 : layout.intro);
+    var parallax = layout.parallax == null ? 1 : layout.parallax;
+    var distance = portrait ? 5.04 : (narrow ? 4.96 : 4.86);
+    var rightOffset = portrait ? 0.02 : (narrow ? 0.06 : 0.10);
+    var upOffset = portrait ? -0.06 : -0.04;
+    distance += clampRange((layout.z - DETAIL_BASE.z) * 0.12, -0.20, 0.24);
+    rightOffset += clampRange((layout.x - DETAIL_BASE.x) * 0.08, -0.24, 0.24);
+    upOffset += clampRange((layout.y - DETAIL_BASE.y) * 0.08, -0.16, 0.16);
+    rightOffset += introMix * (portrait ? 0.34 : 0.46) + parX * (portrait ? 0.045 : 0.055) * parallax;
+    upOffset -= introMix * (portrait ? 0.050 : 0.040);
+    upOffset += parY * (portrait ? 0.042 : 0.045) * parallax;
+    distance += introMix * 0.12 + parY * 0.018 * parallax - parX * 0.012 * parallax;
+    camera.getWorldDirection(detailCameraDir);
+    detailCameraRight.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    detailCameraUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+    detailCameraPos.copy(camera.position).addScaledVector(detailCameraDir, distance)
+      .addScaledVector(detailCameraRight, rightOffset).addScaledVector(detailCameraUp, upOffset);
+    setContentGroupPosition(detailCameraPos.x, detailCameraPos.y, detailCameraPos.z);
+    return true;
+  }
   function measurePanelScreenBounds(width, height) {
     var hw = width / 2;
     var hh = height / 2;
@@ -15960,7 +16359,7 @@ function makeContentListManager() {
     setContentRowVisibility(row, true);
     setContentRowRenderOrder(row, 240 + Math.round((CONTENT_VISIBLE_RADIUS + 1 - Math.min(absD, CONTENT_VISIBLE_RADIUS + 1)) * 14));
     var nowT = uniforms.uTime.value;
-    var revealRaw = Math.max(0, Math.min(1, (nowT - rowAnimAt - absD * 0.040) / 0.72));
+    var revealRaw = Math.max(0, Math.min(1, (nowT - rowAnimAt - absD * 0.040) / (classic ? (layout.rowDuration || 0.72) : 0.72)));
     var reveal = revealRaw * revealRaw * (3 - 2 * revealRaw);
     var parX = pointerParallax.x || 0;
     var parY = pointerParallax.y || 0;
@@ -15968,30 +16367,32 @@ function makeContentListManager() {
     var pulse = row.fxPulse || 0;
     var settle = group && group.userData ? (group.userData.rowSettle || 0) : 0;
     // 歌单详情行使用与其他预设一致的基础位置。
-    var skullDetail = false;
+    var skullDetail = classic && shouldUseSkullSafeShelfCamera();
+    var introStrength = classic && layout.intro != null ? layout.intro : 1;
+    var parallax = classic && layout.parallax != null ? layout.parallax : 1;
     var rowBaseX = skullDetail ? 0.22 : -0.04;
     var rowSpreadX = skullDetail ? 0.030 : 0.014;
     var rowIntroX = skullDetail ? 0.58 : 0.38;
     var rowCenterZ = skullDetail ? 0.62 : 0.62;
     var rowBackZ = skullDetail ? 0.58 : 0.58;
     var rowDepthStep = skullDetail ? 0.046 : 0.048;
-    var px = rowBaseX + absD * rowSpreadX + (1 - reveal) * (rowIntroX + absD * rowSpreadX);
-    var py = -delta * layout.rowStep + (1 - reveal) * (0.20 + (delta < 0 ? -0.10 : 0.10));
-    var pz = (absD < 0.5 ? rowCenterZ : (rowBackZ - absD * rowDepthStep)) - (1 - reveal) * (skullDetail ? 0.10 : 0.16);
+    var px = rowBaseX + absD * rowSpreadX + (1 - reveal) * (rowIntroX + absD * rowSpreadX) * introStrength;
+    var py = -delta * layout.rowStep + (1 - reveal) * (0.20 + (delta < 0 ? -0.10 : 0.10)) * introStrength;
+    var pz = (absD < 0.5 ? rowCenterZ : (rowBackZ - absD * rowDepthStep)) - (1 - reveal) * (skullDetail ? 0.10 : 0.16) * introStrength;
     px += settle * ((skullDetail ? 0.11 : 0.12) + absD * (skullDetail ? 0.010 : 0.012));
     py += settle * (delta < 0 ? -0.08 : 0.08);
     pz -= settle * (skullDetail ? 0.045 : 0.08);
-    px += parX * (skullDetail ? 0.022 : 0.026) * parWeight;
-    py += parY * (skullDetail ? 0.024 : 0.036) * parWeight;
-    pz += (parY * (skullDetail ? 0.014 : 0.024) - parX * (skullDetail ? 0.010 : 0.020)) * parWeight;
+    px += parX * (skullDetail ? 0.022 : 0.026) * parWeight * parallax;
+    py += parY * (skullDetail ? 0.024 : 0.036) * parWeight * parallax;
+    pz += (parY * (skullDetail ? 0.014 : 0.024) - parX * (skullDetail ? 0.010 : 0.020)) * parWeight * parallax;
     var scale = (absD < 0.5 ? 1.00 : Math.max(0.66, 0.94 - absD * 0.070)) * (0.90 + reveal * 0.10) * (1 + pulse * 0.052) * (1 - settle * 0.025) * layout.rowScale;
     setContentRowPosition(row, px, py, pz);
     setContentRowScale(row, scale);
     var rowOpacityBase = Math.min(1, (absD < 0.5 ? 1.0 : Math.max(0.34, 1.0 - absD * 0.12)) * reveal + pulse * 0.14);
     var rowOpacityScale = absD < 0.5 ? Math.max(0.94, shelfLook.opacity) : shelfLook.opacity;
     setContentRowOpacity(row, Math.min(1, rowOpacityBase * rowOpacityScale));
-    var rotationY = (skullDetail ? -0.070 : 0.10) + (1 - reveal) * (skullDetail ? 0.018 : 0.052) + parX * (skullDetail ? 0.010 : 0.018) * parWeight;
-    var rotationX = (skullDetail ? 0.010 : 0) - delta * (skullDetail ? 0.010 : 0.022) - parY * (skullDetail ? 0.006 : 0.014) * parWeight;
+    var rotationY = (skullDetail ? -0.070 : 0.10) + (1 - reveal) * (skullDetail ? 0.018 : 0.052) * introStrength + parX * (skullDetail ? 0.010 : 0.018) * parWeight * parallax;
+    var rotationX = (skullDetail ? 0.010 : 0) - delta * (skullDetail ? 0.010 : 0.022) - parY * (skullDetail ? 0.006 : 0.014) * parWeight * parallax;
     setContentRowRotation(row, rotationX, rotationY);
   }
 
@@ -16081,6 +16482,24 @@ function makeContentListManager() {
 
   return {
     isOpen: function() { return open; },
+    dispose: function() {
+      open = false;
+      requestToken++;
+      if (group && window.gsap) window.gsap.killTweensOf(group.userData);
+      disposeCapturedDetail(group, rows, panel);
+      group = null; rows = []; panel = null; allTracks = []; sourceCard = null;
+      renderedStart = -1;
+      while (closingDetails.length) {
+        var closing = closingDetails.pop();
+        if (window.gsap) {
+          window.gsap.killTweensOf(closing.group.position);
+          window.gsap.killTweensOf(closing.group.scale);
+          window.gsap.killTweensOf(closing.group.userData);
+          window.gsap.killTweensOf(closing.materials);
+        }
+        disposeCapturedDetail(closing.group, closing.rows, closing.panel);
+      }
+    },
     refreshTheme: function() {
       panelDirty = true;
       rowsDirty = true;
@@ -16103,6 +16522,7 @@ function makeContentListManager() {
       rowDrawAt = -10;
       if (!group) {
         group = new THREE.Group();
+        if (classic) group.renderOrder = 320;
         scene.add(group);
       }
       group.userData.detailPositionX = null;
@@ -16117,11 +16537,12 @@ function makeContentListManager() {
       var openCoverRy = particles && particles.rotation ? particles.rotation.y : 0;
       var openCoverRz = particles && particles.rotation ? particles.rotation.z : 0;
       group.userData.detailIntro = 1;
-      group.position.set(openLayout.x + 0.16, openLayout.y - 0.024, openLayout.z - 0.070);
+      if (classic && openDynamicDetail) placeDynamicDetailFromCamera(openLayout, 1, 0, 0);
+      else group.position.set(openLayout.x + (classic && openSkullDetail ? 0.10 : 0.16), openLayout.y - (classic && openSkullDetail ? 0.02 : 0.024), openLayout.z - (classic && openSkullDetail ? 0.05 : 0.070));
       if ((openSkullDetail || openDynamicDetail) && camera) {
         group.quaternion.copy(camera.quaternion);
         group.rotateX(openLayout.rx);
-        group.rotateY(openLayout.ry + 0.018);
+        group.rotateY(openLayout.ry + (classic && openSkullDetail ? 0.014 : 0.018));
       } else {
         group.rotation.y = openCoverRy * 0.82 + openLayout.ry + 0.018;
         group.rotation.x = openCoverRx * 0.72 + openLayout.rx;
@@ -16130,7 +16551,7 @@ function makeContentListManager() {
       group.scale.setScalar(openLayout.scale * 0.965);
       if (window.gsap) {
         window.gsap.killTweensOf(group.userData);
-        window.gsap.to(group.userData, { detailIntro: 0, duration: 0.48, ease: 'power3.out' });
+        window.gsap.to(group.userData, { detailIntro: 0, duration: classic ? (openLayout.openDuration || 0.48) : 0.48, ease: 'power3.out' });
       } else {
         group.userData.detailIntro = 0;
       }
@@ -16190,29 +16611,39 @@ function makeContentListManager() {
       panelDrawAt = -10;
       rowDrawAt = -10;
       if (!targetGroup) return;
+      var closeLayout = classic ? detailLayout() : null;
+      var closeDuration = closeLayout ? (closeLayout.closeDuration || 0.18) : 0.18;
+      var closeIntro = closeLayout && closeLayout.intro != null ? closeLayout.intro : 1;
       var materials = targetRows.map(function(row){ return row.mesh && row.mesh.material; }).filter(Boolean);
       if (targetPanel && targetPanel.mesh && targetPanel.mesh.material) materials.push(targetPanel.mesh.material);
       if (window.gsap) {
         window.gsap.killTweensOf(targetGroup.position);
         window.gsap.killTweensOf(targetGroup.scale);
-        window.gsap.to(targetGroup.scale, { x: 0.965, y: 0.965, z: 0.965, duration: 0.18, ease: 'power2.in' });
+        window.gsap.to(targetGroup.scale, { x: 0.965, y: 0.965, z: 0.965, duration: closeDuration, ease: 'power2.in' });
         window.gsap.to(targetGroup.position, {
-          x: targetGroup.position.x + 0.18,
-          y: targetGroup.position.y - 0.02,
-          z: targetGroup.position.z - 0.10,
-          duration: 0.18,
+          x: targetGroup.position.x + 0.18 * closeIntro,
+          y: targetGroup.position.y - 0.02 * closeIntro,
+          z: targetGroup.position.z - 0.10 * closeIntro,
+          duration: closeDuration,
           ease: 'power2.in'
         });
-        var finishClose = function(){ disposeCapturedDetail(targetGroup, targetRows, targetPanel); };
+        var closing = { group: targetGroup, rows: targetRows, panel: targetPanel, materials: materials };
+        closingDetails.push(closing);
+        var finishClose = function(){
+          var index = closingDetails.indexOf(closing);
+          if (index < 0) return;
+          closingDetails.splice(index, 1);
+          disposeCapturedDetail(targetGroup, targetRows, targetPanel);
+        };
         if (materials.length) {
           window.gsap.to(materials, {
             opacity: 0,
-            duration: 0.16,
+            duration: classic ? Math.max(0.06, closeDuration * 0.88) : 0.16,
             ease: 'power2.in',
             onComplete: finishClose
           });
         } else {
-          window.gsap.delayedCall(0.18, finishClose);
+          window.gsap.delayedCall(closeDuration, finishClose);
         }
       } else {
         disposeCapturedDetail(targetGroup, targetRows, targetPanel);
@@ -16227,41 +16658,44 @@ function makeContentListManager() {
       var shelfLook = frameShelfLook || shelfSettings();
       var layout = frameLayout || detailLayout(shelfLook);
       var skullDetail = shouldUseSkullSafeShelfCamera();
+      var introMix = intro * (classic && layout.intro != null ? layout.intro : 1);
+      var parallax = classic && layout.parallax != null ? layout.parallax : 1;
       var dynamicDetail = !skullDetail && shouldUseShelfDynamicCamera('shelf-detail') && camera;
       var coverBoundDetail = !skullDetail && !dynamicDetail && particles && particles.rotation;
       var coverBindX = coverBoundDetail ? particles.rotation.y * 0.18 : 0;
       var coverBindY = coverBoundDetail ? particles.rotation.x * -0.16 : 0;
       var coverBindZ = coverBoundDetail ? Math.abs(particles.rotation.y) * 0.030 : 0;
-      setContentGroupPosition(
-        layout.x + coverBindX + intro * 0.16 + parX * 0.030,
-        layout.y + coverBindY - intro * 0.024 + parY * 0.026,
-        layout.z + coverBindZ - intro * 0.070 + parY * 0.016 - parX * 0.010
+      if (classic && dynamicDetail) placeDynamicDetailFromCamera(layout, intro, parX, parY);
+      else setContentGroupPosition(
+        layout.x + coverBindX + introMix * (classic && skullDetail ? 0.10 : 0.16) + parX * (classic && skullDetail ? 0.024 : 0.030) * parallax,
+        layout.y + coverBindY - introMix * (classic && skullDetail ? 0.02 : 0.024) + parY * 0.026 * parallax,
+        layout.z + coverBindZ - introMix * (classic && skullDetail ? 0.05 : 0.070) + parY * (classic && skullDetail ? 0.014 : 0.016) * parallax - parX * 0.010 * parallax
       );
       if (skullDetail && camera) {
         group.quaternion.copy(camera.quaternion);
-        group.rotateX(layout.rx - parY * 0.004);
-        group.rotateY(layout.ry + intro * 0.004 + parX * 0.004);
+        group.rotateX(layout.rx - parY * 0.004 * parallax);
+        group.rotateY(layout.ry + introMix * 0.004 + parX * 0.004 * parallax);
         invalidateContentGroupRotationCache();
       } else if (dynamicDetail) {
         group.quaternion.copy(camera.quaternion);
-        group.rotateX(layout.rx - parY * 0.006);
-        group.rotateY(layout.ry + intro * 0.012 + parX * 0.008);
+        group.rotateX(layout.rx - parY * 0.006 * parallax);
+        group.rotateY(layout.ry + introMix * 0.012 + parX * 0.008 * parallax);
         invalidateContentGroupRotationCache();
       } else {
         var coverRx = particles && particles.rotation ? particles.rotation.x : 0;
         var coverRy = particles && particles.rotation ? particles.rotation.y : 0;
         var coverRz = particles && particles.rotation ? particles.rotation.z : 0;
-        var nextRotationX = group.rotation.x + ((coverRx * 0.72 + layout.rx - parY * 0.010) - group.rotation.x) * 0.16;
-        var nextRotationY = group.rotation.y + ((coverRy * 0.82 + layout.ry + intro * 0.018 + parX * 0.014) - group.rotation.y) * 0.16;
+        var nextRotationX = group.rotation.x + ((coverRx * 0.72 + layout.rx - parY * 0.010 * parallax) - group.rotation.x) * 0.16;
+        var nextRotationY = group.rotation.y + ((coverRy * 0.82 + layout.ry + introMix * 0.018 + parX * 0.014 * parallax) - group.rotation.y) * 0.16;
         var nextRotationZ = group.rotation.z + ((coverRz * 0.70) - group.rotation.z) * 0.14;
         setContentGroupRotation(nextRotationX, nextRotationY, nextRotationZ);
       }
-      setContentGroupScale(layout.scale * (1 - intro * 0.035));
+      setContentGroupScale(layout.scale * (1 - introMix * (classic && skullDetail ? 0.020 : 0.035)));
       centerSmooth += (centerTarget - centerSmooth) * 0.18;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       syncRenderedRows(false, shelfLook);
       if (panel && panel.mesh) {
-        var pr = Math.max(0, Math.min(1, (uniforms.uTime.value - openAnimAt) / 0.72));
+        var pr = Math.max(0, Math.min(1, (uniforms.uTime.value - openAnimAt) / (classic ? (layout.openDuration || 0.72) : 0.72)));
         pr = pr * pr * (3 - 2 * pr);
         setContentPanelOpacity(panel, 0.86 * pr * shelfLook.opacity);
       }
@@ -35335,7 +35769,7 @@ function archiveMode(raw, key, pattern, fallback) {
 function normalizeFxArchiveSnapshot(raw) {
   if (!raw || typeof raw !== 'object') return null;
   var savedPreset = normalizeSavedVisualPreset(raw);
-  return {
+  var snapshot = {
     visualPresetSchema: VISUAL_PRESET_SCHEMA,
     preset: savedPreset,
     intensity: archiveNumber(raw, 'intensity', fxDefaults.intensity, 0.2, 1.6),
@@ -35418,6 +35852,13 @@ function normalizeFxArchiveSnapshot(raw) {
     shelfAccentColor: normalizeHexColor(raw.shelfAccentColor || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor),
     cam: archiveMode(raw, 'cam', /^(off|gesture)$/, fxDefaults.cam)
   };
+  classicShelfFxRanges();
+  for (var archiveClassicKey in CLASSIC_SHELF_FX_RANGES) {
+    if (!Object.prototype.hasOwnProperty.call(CLASSIC_SHELF_FX_RANGES, archiveClassicKey)) continue;
+    var archiveRange = CLASSIC_SHELF_FX_RANGES[archiveClassicKey];
+    snapshot[archiveClassicKey] = archiveNumber(raw, archiveClassicKey, fxDefaults[archiveClassicKey], archiveRange[0], archiveRange[1]);
+  }
+  return normalizeShelfProfiles(snapshot, raw);
 }
 function normalizeUserFxArchives(value) {
   var raw = value;
@@ -35487,6 +35928,7 @@ function applyFxArchiveSnapshot(snapshot) {
   var data = normalizeFxArchiveSnapshot(snapshot);
   if (!data) return false;
   var targetPreset = data.preset;
+  if (shelfModeValue() !== data.shelf) deactivateShelfEngine();
   Object.keys(data).forEach(function(key){
     if (key === 'visualPresetSchema' || key === 'preset') return;
     fx[key] = data[key];
@@ -35502,6 +35944,7 @@ function applyFxArchiveSnapshot(snapshot) {
     queueAIDepthForCurrentCover(true);
   }
   setShelfMode(fx.shelf);
+  applyShelfEngineSelection();
   if (shelfManager && shelfManager.rebuild) shelfManager.rebuild(true);
   if (shelfManager && shelfManager.refreshTheme) shelfManager.refreshTheme();
   setCamMode(fx.cam);
@@ -36762,6 +37205,8 @@ function updateFxInputs() {
   // 三态
   document.querySelectorAll('#shelf-seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.shelf === fx.shelf); });
   updateShelfControlUi();
+  updateShelfClassicParamsVisibility();
+  syncClassicShelfSliders();
   document.querySelectorAll('#cam-seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.cam === fx.cam); });
   refreshPresetGrid();
   updateLyricColorControls();
@@ -36783,7 +37228,11 @@ function animateFxResetButton(btn) {
 }
 function resetFxSliderValue(id, key, btn) {
   if (!Object.prototype.hasOwnProperty.call(fxDefaults, key)) return;
-  if (key === 'shelfAngleY') {
+  var stageDefaults = fx.shelf === 'stage' ? classicShelfBaseDefaults() : null;
+  if (stageDefaults && Object.prototype.hasOwnProperty.call(stageDefaults, key)) {
+    fx[key] = stageDefaults[key];
+    if (key === 'shelfAngleY') fx.shelfAngleYManual = true;
+  } else if (key === 'shelfAngleY') {
     fx.shelfAngleYManual = false;
     fx.shelfAngleY = shelfDefaultAngleForCameraMode(fx.shelfCameraMode);
   } else {
@@ -37996,6 +38445,7 @@ function resetFx() {
     shelfAngleY: shelfDefaultAngleForCameraMode(savedShelfCameraMode),
     shelfAngleYManual: false
   });
+  normalizeShelfProfiles(fx, fx);
   applyCoverParticleResolution(fx.coverResolution, { reload: true });
   updateFxInputs();
   applyDesktopLyricsState(true);
@@ -38013,17 +38463,30 @@ function resetFx() {
 
 function setShelfMode(m) {
   m = /^(off|side|stage)$/.test(String(m || '')) ? m : fxDefaults.shelf;
-  fx.shelf = m;
   document.querySelectorAll('#shelf-seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.shelf === m); });
-  if (shelfManager) shelfManager.setMode(m);
+  // 侧栏用本仓库现有歌单架，舞台用上游原版歌单架；切换时按目标模式换引擎。
+  applyShelfEngineForMode(m);
+  syncShelfBaseControls();
   // 舞台模式: 顶部搜索、底部控件让位
   var searchArea = document.getElementById('search-area');
   var bottomBar = document.getElementById('bottom-bar');
   if (searchArea) searchArea.classList.toggle('stage-mode', m === 'stage');
   if (bottomBar) bottomBar.classList.toggle('stage-mode', m === 'stage');
+  if (typeof updateBottomShelfToggle === 'function') updateBottomShelfToggle();
   saveLyricLayout();
 }
 
+function syncShelfBaseControls() {
+  setRange('fx-shelfsize', fx.shelfSize);
+  setRange('fx-shelfx', fx.shelfOffsetX);
+  setRange('fx-shelfy', fx.shelfOffsetY);
+  setRange('fx-shelfz', fx.shelfOffsetZ);
+  setRange('fx-shelfangle', fx.shelfAngleY);
+  setRange('fx-shelfopacity', fx.shelfOpacity);
+  setRange('fx-shelfbgalpha', fx.shelfBgOpacity);
+  updateShelfControlUi();
+  syncClassicShelfSliders();
+}
 function updateShelfControlUi() {
   fx.shelfCameraMode = normalizeShelfCameraMode(fx.shelfCameraMode || fxDefaults.shelfCameraMode);
   fx.shelfPresence = normalizeShelfPresence(fx.shelfPresence || fxDefaults.shelfPresence);
@@ -38038,6 +38501,7 @@ function updateShelfControlUi() {
   var value = document.getElementById('shelf-accent-value');
   if (picker) picker.value = color;
   if (value) value.textContent = color.toUpperCase();
+  updateShelfClassicParamsVisibility();
 }
 function refreshShelfVisuals(reason) {
   updateShelfControlUi();
@@ -38072,7 +38536,7 @@ function setShelfAccentColor(color, silent) {
   if (!silent) showToast('歌单架颜色: ' + fx.shelfAccentColor.toUpperCase());
 }
 function resetShelfAccentColor() {
-  setShelfAccentColor(fxDefaults.shelfAccentColor || '#f4d28a');
+  setShelfAccentColor(fx.shelf === 'stage' ? classicShelfBaseDefaults().shelfAccentColor : (fxDefaults.shelfAccentColor || '#f4d28a'));
 }
 
 function syncControlsAutoHideButton() {
@@ -44364,6 +44828,8 @@ if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 initPlaybackRateControls();
 initSleepTimerControls();
 initOutputDeviceControls();
+initShelfEngineControls();
+applyShelfEngineSelection();
 bindMainQuickControls();
 initPluginRuntime();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);

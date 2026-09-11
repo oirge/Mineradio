@@ -92,6 +92,49 @@ test('更新介绍去除 Markdown 链接、重复项和校验摘要', () => {
   ]);
 });
 
+test('更新介绍不再因为条目过长而整条丢弃', () => {
+  const { extractReleaseNotes } = loadReleaseNoteHelpers();
+  const longBullet = '- ' + '长条目内容'.repeat(30) + '结尾';
+  const notes = extractReleaseNotes(['## 更新内容', longBullet, '- 短条目'].join('\n'));
+
+  assert.equal(notes.length, 2);
+  assert.ok(notes[0].length > 96, '长条目应保留而不是被静默丢弃');
+  assert.ok(notes[0].endsWith('结尾'));
+  assert.equal(notes[1], '短条目');
+});
+
+test('更新介绍把任何 Markdown 标题当结构跳过（含「说明」这类不认识的标题）', () => {
+  const { extractReleaseNotes } = loadReleaseNoteHelpers();
+  const notes = extractReleaseNotes([
+    '# 主标题',
+    '## 更新内容',
+    '- 主界面音量弹层升级为快捷面板，内嵌播放速度、睡眠定时、无缝播放与音量均衡。',
+    '## 说明',
+    '- 安装身份、数据目录与自动更新线路不变。',
+  ].join('\n'));
+
+  assert.deepEqual(Array.from(notes), [
+    '主界面音量弹层升级为快捷面板，内嵌播放速度、睡眠定时、无缝播放与音量均衡。',
+    '安装身份、数据目录与自动更新线路不变。',
+  ]);
+});
+
+test('过长的非列表散段落仍不进更新介绍', () => {
+  const { extractReleaseNotes } = loadReleaseNoteHelpers();
+  const longProse = '随便写很长的一段正文'.repeat(20);
+  const notes = extractReleaseNotes(['## 更新内容', longProse, '- 短条目'].join('\n'));
+
+  assert.deepEqual(Array.from(notes), ['短条目']);
+});
+
+test('超过绝对上限的列表行丢弃以防异常长内容', () => {
+  const { extractReleaseNotes } = loadReleaseNoteHelpers();
+  const hugeBullet = '- ' + 'x'.repeat(700);
+  const notes = extractReleaseNotes(['## 更新内容', hugeBullet, '- 短条目'].join('\n'));
+
+  assert.deepEqual(Array.from(notes), ['短条目']);
+});
+
 test('manifest 显式 notes 和 summary 复用同一归一化链路', () => {
   const normalizeManifestUpdateInfo = loadManifestNormalizer();
   const expected = '修复更新介绍乱码';

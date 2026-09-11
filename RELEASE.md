@@ -1,5 +1,20 @@
 # 发布流程
 
+## v2.0.7 3D 歌单架新增「舞台」原版风格
+
+- 发布版本从 `2.0.6` 提升为 `2.0.7`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
+- 用户需求原话：「我要的是保留我这个原本的侧栏歌架单增加一个切换为舞台歌架单」、「和原项目舞台歌架单一模一样的效果」。**唯一模式仍是 `fx.shelf = off / side / stage`**，引擎由模式决定：`side` 走本仓库现有 `makeShelfManager()`（`shelfManagerDefault`），`stage` 走上游 XxHuberrr/Mineradio 原版实现（`public/shelf-classic.js` 的 `createClassicShelfEngine`，`shelfManagerClassic`）。
+- 切换入口两处：DIY 视觉控制台「3D / 手势」里原有的 `#shelf-seg` 三态 + 主界面底部控制条新增的 `#shelf-view-btn`（`toggleShelfStageMode()`）。**音量弹层不放歌单架入口**（用户明确否过），**也不再有「现有 / 原版」独立引擎开关**（首版那套已整体作废）。
+- **这一版的核心是补齐舞台动态接线**（首版只搬了外层卡片）：① 详情动画吃上游 `shelfDetailSettings` 的 `openDuration/closeDuration/rowDuration/intro/parallax`，由 `makeContentListManager({classic:true})` 启用，side 常数逐字不动；② 补上游 `placeDynamicDetailFromCamera`（按相机前/右/上三轴构造详情位置，`open()` 与逐帧 `update()` 都调用）——**只朝向相机不算跟拍**；③ 详情每帧只更新一次（删掉引擎包装器里那次重复 `contentList.update`，真机 `详情:引擎 = 50:50`）；④ `updateCamera` 在 `shelfClassic===true` 的 shelf focus 生命周期内按 `shelfCameraEnterSpeed/ExitSpeed` 缩放缓动，退出收敛后清 `orbit.focus.shelfClassic`，只碰 classic focus；⑤ 舞台与侧栏基础设置各存一份（`fx.shelfSideSettings` / `fx.shelfStageSettings` / `fx.shelfSettingsMode`），舞台默认取上游 `dynamic + auto`、`size 0.92 / offset -0.34,-0.2,0.12 / angle -11 / bgOpacity 0.79`，侧栏默认仍是 `static + always`。
+- **`CLASSIC_SHELF_FX_RANGES` 改成惰性 `classicShelfFxRanges()`**：范围表若在启动首次 `readSavedLyricLayout()` 时还是 `undefined`，20 条舞台参数重启就读不回来。
+- 上游 `stage` 分支本就不消费 `shelfSummonSlide/Stagger/Scale/Parallax`，这四个滑条已从 `#shelf-classic-params` 移除（存档与 `fxDefaults` 保留，不为了迁就无效控件去改上游舞台公式）。取材基线 `89c0d23`（上游远端 HEAD `328a087` 只晚 2 个提交且歌单架动态公式无变化）。
+- 测试：`tests/shelf-classic-engine.test.js` 25 例（真 THREE 建卡、0.8s 签名重建、每帧一次详情、停用释放与迟到回调、重入停旧实例、多帧位姿、上游常量等价）；旧锚点两处配合改动：`tests/frame-hot-path.test.js` 切片终点 → `\nvar shelfManagerDefault = makeShelfManager();`，`tests/playback-rate-sleep-timer.test.js` 启动链断言放宽。真机验证：详情 group 相机空间偏移 `(0.543,-0.089,-4.986)` 在两组不同相机位姿下保持不变（位置真跟拍）、详情每帧一次、切档零 `window` error、舞台正常出大卡 + 详情面板。全量 Node 回归 **1136/1136**。
+- ⚠️ **Release 正文必须用短句**：应用内公告走 `server.js` 的 `normalizeReleaseNotes`，无列表前缀的正文行超过 96 字会被丢弃（列表项放宽到 600 字）。发版时把「更新内容」写成每条不超过约 90 字的短句，避免功能说明被静默吞掉。
+
+## 已并入 v2.0.7 的修复：更新公告解析漏显
+
+- `server.js` 的 `normalizeReleaseNotes` 曾丢弃超过 96 字的整行，导致较长功能说明被静默吞掉；已放宽列表条目上限到 600 字并让任意 Markdown 标题都按结构跳过。`tests/update-release-notes.test.js` 4→8 例。**未单独开版本，已随 `v2.0.7` 一起发布。**
+
 ## v2.0.6 常用控制提到主界面 + 输出设备选择
 
 - 发布版本从 `2.0.5` 提升为 `2.0.6`；五处版本钉一起动。安装身份、数据目录与自动更新线路不变。**这一版把"主界面快捷面板"与"输出设备选择"两批改动合成一次发布**（前者曾单独准备但未发布，没有单独的 2.0.6 tag）。
