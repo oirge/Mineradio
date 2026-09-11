@@ -1,5 +1,18 @@
 # 发布流程
 
+## v2.0.6 常用控制提到主界面 + 输出设备选择
+
+- 发布版本从 `2.0.5` 提升为 `2.0.6`；五处版本钉一起动。安装身份、数据目录与自动更新线路不变。**这一版把"主界面快捷面板"与"输出设备选择"两批改动合成一次发布**（前者曾单独准备但未发布，没有单独的 2.0.6 tag）。
+- **主界面音量弹层扩成快捷面板：** 以前 `#volume-control` 的 `.volume-popover` 只有音量滑杆与数值（154×42 的小药丸），现在是一个多行面板，直接内嵌两组常用设置与两个开关——
+  - **速度**（`#main-rate-seg`，六档 0.5×–2.0×）、**睡眠**（`#main-sleep-seg`，关/15/30/60/本曲）、以及 **无缝**（`#main-gapless-btn`，`toggleGaplessSetting()`）与 **均衡**（`#main-replaygain-btn`，`toggleReplayGainSetting('enabled')`）。
+  - **画质档位不进主界面弹层**：它只在 DIY 高级面板的 `#performance-quality-seg`。弹层里三组一行会挤到 274px 宽之外，且画质是"调一次就不动"的设置，日常用的是速度与睡眠。（首次实现曾把画质也放进来，按反馈移除；测试用 `doesNotMatch(/main-quality-seg/)` 与 `doesNotMatch(/data-main-quality/)` 钉住它不会再回来。）
+  - 这些快捷项改的仍是各功能**唯一的设置状态**（`playbackRateSetting` / `sleepTimerState.mode` / `gaplessSettings.enabled` / `replayGainSettings.enabled`），不是副本；`updateMainQuickControls()` 回填选中态，并由 `updatePlaybackRateControls()` / `updateSleepTimerControls()` / `updateReplayGainControls()` / `updateGaplessControls()` 各自在末尾回填一次，所以主界面与设置面板**双向同步**。
+  - 事件绑定 `bindMainQuickControls()` 挂在弹层容器上，用 `[data-main-rate]` / `[data-main-sleep]` 两组 `data-*` 做事件委托（**不是内联 `onclick`**），启动时在 `initSleepTimerControls()` 之后调用一次。
+  - **放置约束：** `updateMainQuickControls` / `bindMainQuickControls` 定义在 `bindVolumeControls` **之后**（`function toggleVolumePanel(e) {` 是 `tests/playback-rate-sleep-timer.test.js` 的切片终点，新代码放它前面会被切进切片）；`bindMainQuickControls()` 的启动调用加在 `initSleepTimerControls();` 与 `initPluginRuntime();` 之间。
+  - CSS：`.volume-popover` 从定高药丸改成 `flex-direction:column` 的 `width:274px` 面板；`.volume-control::before` 悬停桥高度提到 210px（否则从按钮滑到多行面板顶上会中途关闭）；新增 `.volume-row` / `.vq-row` / `.vq-label` / `.vq-seg` / `.vq-toggle` 规则；`#volume-slider` 从定宽 92px 改成 `flex:1`。
+- **输出设备选择：** 设置面板新增折叠区「输出设备」（`fx-outputdevice-fold`），下拉列出所有 `audiooutput` 设备，首项恒为「系统默认」（deviceId 空串）。**关键约束：必须用 `AudioContext.setSinkId()`，不是元素级 `audio.setSinkId()`**——本播放器的声音被 `MediaElementSource` 拉进 WebAudio 图（`deck.source → deck.gain → analyser → … → gainNode → audioCtx.destination`），输出从 `audioCtx.destination` 出来，元素级改不动它；测试用 `doesNotMatch(/\.el\.setSinkId\(|audio\.setSinkId\(/)` 钉住。设备设置在 `initAudio()` 建好图之后（`gainNode.connect(audioCtx.destination)` 之后）与用户改选择时各应用一次；设备列表用 `navigator.mediaDevices.enumerateDevices()`，无 label 时按出现顺序兜底成「输出设备 N」；`devicechange` 事件（插拔耳机/切蓝牙）会重新枚举。设置存独立键 `mineradio-output-device-v1`（JSON `{deviceId, label}`），重启后设备不在列表时补一条「（当前不可用）」提示项而不是静默落错。
+- 验证：`tests/playback-rate-sleep-timer.test.js` 扩到 19 例（主界面内嵌快捷项、画质不在弹层、唯一设置状态互相回填、输出设备走 `AudioContext.setSinkId`、设备列表首项与筛选、选择落盘与 `setSinkId` 调用、持久化键登记）；全量 Node 回归 `1107/1107` 通过。**浏览器里真实验证过**：主界面点「1.5×」→ `playbackRateSetting` 变 1.5 且设置面板同档同步；点「15」→ `sleepTimerState.mode` 变 `15`；输出设备下拉在真实机器上列出了 Realtek 扬声器 / NVIDIA HDMI / 通信设备等，`AudioContext.setSinkId` 支持检测为 `true`。
+
 ## v2.0.5 播放速度与睡眠定时
 
 - 发布版本从 `2.0.4` 提升为 `2.0.5`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
