@@ -675,6 +675,10 @@ function releaseSectionAction(text) {
   if (/^(?:verification|validation|tests?|downloads?|installation|assets?|checksums?|验证|测试|下载|安装|发布资产|校验|哈希)$/i.test(heading)) return 'stop';
   return '';
 }
+// 非列表行沿用 96 字上限过滤（散段落不进更新介绍）；列表行放宽到 600 字，
+// 只作超长防护，绝不因为字数把用户写的功能说明整条丢掉。
+const RELEASE_NOTE_LINE_LIMIT = 96;
+const RELEASE_NOTE_BULLET_LIMIT = 600;
 function normalizeReleaseNotes(lines) {
   const notes = [];
   const seen = new Set();
@@ -682,15 +686,18 @@ function normalizeReleaseNotes(lines) {
   for (const line of source) {
     const raw = String(line || '').trim();
     if (!raw || /^(?:```|~~~)/.test(raw) || /^!\[/.test(raw)) continue;
+    const isHeading = /^#{1,6}\s/.test(raw);
+    const isBullet = /^[-*+]\s/.test(raw) || /^\d+[.)]\s/.test(raw);
     const text = cleanReleaseLine(raw);
     if (!text) continue;
     const sectionAction = releaseSectionAction(text);
     if (sectionAction === 'stop' && notes.length) break;
-    if (sectionAction) continue;
+    // 任何 Markdown 标题都是结构（含「说明」这类不认识的标题），不当作更新内容。
+    if (isHeading || sectionAction) continue;
     if (/^https?:\/\//i.test(text) || /^[-=_]{3,}$/.test(text)) continue;
     if (/[\uFFFD\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(text)) continue;
     if (/\bsha(?:256|512)\b/i.test(text) || /^[a-f0-9]{32,}\s+/i.test(text)) continue;
-    if (text.length > 96) continue;
+    if (text.length > (isBullet ? RELEASE_NOTE_BULLET_LIMIT : RELEASE_NOTE_LINE_LIMIT)) continue;
     const key = text.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);

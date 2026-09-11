@@ -377,7 +377,7 @@ test('主界面快捷控件改的是唯一设置状态，并与设置面板互�
   // 各设置的回填函数都要顺带刷新主界面快捷项，否则两边会不同步。
   assert.match(APP_SOURCE, /hint\.textContent = gaplessHintText\(\);\s*if \(typeof updateMainQuickControls === 'function'\) updateMainQuickControls\(\);/);
   assert.match(APP_SOURCE, /if \(typeof updateMainQuickControls === 'function'\) updateMainQuickControls\(\);\s*\}\s*\/\*\*\s*\n \* 落盘音量均衡设置/);
-  // 启动时绑定一次。
-  assert.match(APP_SOURCE, /initPlaybackRateControls\(\);\s*initSleepTimerControls\(\);\s*initOutputDeviceControls\(\);\s*bindMainQuickControls\(\);/);
+  // 启动时绑定一次（中间可插入其他初始化，如歌单架实现切换）。
+  assert.match(APP_SOURCE, /initPlaybackRateControls\(\);\s*initSleepTimerControls\(\);\s*initOutputDeviceControls\(\);[\s\S]{0,220}?bindMainQuickControls\(\);/);
 });
 
