@@ -234,6 +234,7 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-controls-auto-hide-v1',
   'mineradio-free-camera-v1',
   'mineradio-local-library-folder-v1',
+  'mineradio-local-library-folders-v1',
   'mineradio-playback-session-v1',
   'mineradio-song-resume-v1',
   'mineradio-special-liked-playlist-v1',

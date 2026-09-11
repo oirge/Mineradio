@@ -151,13 +151,21 @@ npm test
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
 
+### v2.0.4 (2026-09-11)
+
+- 本地曲库支持同时监控多个音乐文件夹，曲库是它们的并集；设置面板「音乐文件夹」可查看已监控目录并逐个移除
+- 导入文件夹改为追加：选第二个目录不再覆盖第一个，旧安装保存的单个目录会自动迁移，曲库与设置不丢
+- 改动任一被监控目录只会重扫该目录并就地合并，其他目录的歌曲、播放次数与收藏不受影响；整机备份按多目录导出 / 导入
+
+全量 Node 回归 `1088/1088` 通过。
+
 ### v2.0.3 (2026-09-10)
 
 - 本地同名歌词新增 `.ssa` 支持，与 `.ass` 共用解析和字幕优先级，并兼容 SSA v4 的 `Marked` 字段
 - 发布工作流禁用 electron-builder 隐式发布，改为显式创建或复用单个同 tag 草稿 Release，重复执行会覆盖同名资产
 - GitHub Actions 升级到 `actions/checkout@v5` / `actions/setup-node@v5`，SHA256 清单改为 LF 行尾、无 BOM 的 UTF-8
 
-全量 Node 回归 `1071/1071` 通过，Windows x64 安装包由 GitHub Actions 远程构建；[Release](https://github.com/oirge/Mineradio/releases/tag/v2.0.3) 已发布四项资产并设为 Latest。
+全量 Node 回归 `1076/1076` 通过，Windows x64 安装包由 GitHub Actions 远程构建；[Release](https://github.com/oirge/Mineradio/releases/tag/v2.0.3) 已发布四项资产并设为 Latest。
 
 ### v2.0.0 (2026-09-07)
 

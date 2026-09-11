@@ -27,7 +27,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Check document encoding
         run: node --test tests/doc-encoding-integrity.test.js
-      - run: node --test --test-concurrency=1
+      - run: node --test --test-concurrency=1 tests/*.test.js
       - run: |
           node --check desktop/main.js
           node --check desktop/overlay-preload.js

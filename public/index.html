@@ -640,6 +640,22 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold" id="fx-library-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-library-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>音乐文件夹</strong><small>多目录</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-section-label">已监控目录</div>
+      <div id="library-folder-list" class="library-folder-list"></div>
+      <div class="lyric-color-row">
+        <span>添加目录</span>
+        <strong id="library-folder-count">0 个</strong>
+        <button type="button" class="fx-mini-btn ghost" onclick="openLocalFolderImport()" title="选择要加入曲库的音乐文件夹，可以同时监控多个">添加</button>
+      </div>
+      <div class="mini-player-collapse-hint">可以同时监控多个音乐文件夹，曲库是它们的并集；改动任一目录都会自动同步。</div>
+    </div>
+  </div>
+
   <div class="fx-advanced" id="fx-advanced">
     <div class="fx-advanced-head" onclick="document.getElementById('fx-advanced').classList.toggle('open')">
       <span>高级参数</span><span class="arrow">▶</span>

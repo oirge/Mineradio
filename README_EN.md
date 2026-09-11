@@ -92,13 +92,21 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.0.4 (2026-09-11)
+
+- The local library can now watch multiple music folders at once; the library is their union, and the "Music Folders" section in settings lists watched folders with per-folder removal
+- Importing a folder is now additive: choosing a second folder no longer replaces the first, and a single folder saved by an older install migrates automatically without losing the library or settings
+- Changing any watched folder rescans only that folder and merges in place; songs, play counts, and favorites from other folders are untouched, and full backups export/import all folders
+
+Full Node regression suite: `1088/1088` passing.
+
 ### v2.0.3 (2026-09-10)
 
 - Added matching `.ssa` lyrics, sharing the ASS parser and subtitle priority while supporting the SSA v4 `Marked` field
 - Disabled electron-builder's implicit publishing; the release workflow now explicitly creates or reuses one draft Release for the tag and replaces same-name assets on reruns
 - Upgraded GitHub Actions to `actions/checkout@v5` and `actions/setup-node@v5`; SHA256 manifests now use LF line endings and UTF-8 without a BOM
 
-Full Node regression suite: `1071/1071` passing; the Windows x64 installer is built remotely by GitHub Actions, and the [Release](https://github.com/oirge/Mineradio/releases/tag/v2.0.3) is published with four assets and marked Latest.
+Full Node regression suite: `1076/1076` passing; the Windows x64 installer is built remotely by GitHub Actions, and the [Release](https://github.com/oirge/Mineradio/releases/tag/v2.0.3) is published with four assets and marked Latest.
 
 ### v2.0.0 (2026-09-07)
 

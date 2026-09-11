@@ -1,5 +1,16 @@
 # 发布流程
 
+## v2.0.4 同时监控多个音乐目录
+
+- 发布版本从 `2.0.3` 提升为 `2.0.4`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
+- **曲库从单根升级为多根：** 可以同时监控多个音乐文件夹，曲库是它们的并集。新增设置面板折叠区「音乐文件夹」（`public/index.html` 的 `fx-library-fold`），列出已监控目录并支持逐个「移除」；「添加」复用既有的文件夹选择流程。
+- **导入变成追加语义：** 以前选第二个文件夹会覆盖第一个（单根标量键 `mineradio-local-library-folder-v1`），现在并入已监控列表。新增数组键 `mineradio-local-library-folders-v1` 作为唯一权威，旧安装的标量根自动迁移成单元素列表；旧标量键保留为"主根镜像"，保证任何未改多根的旧读取路径仍拿到合理主根。
+- **恢复逐根取回再合并：** `restoreSavedLocalMusicFolder` 改为对每个根分别取回文件（SQLite 交接件 → 旧快照刷新 → 全量扫描），再一次性合并成一个曲库；某个根取不到就从设置里摘掉，其余根照常恢复，全都取不到才算失败。后台增量校验也逐根跑。
+- **监控与自动同步按根隔离：** watcher 的根列表 IPC 本来就是数组，渲染层现在把整个列表交出去（`localLibraryWatchRoots`）；一个目录变化只重扫那一根，`applyLocalLibraryAutoSync` 只对属于该根的歌做差异，别的根原地保留。索引仍按根保存，绝不把合并后的整库写进某一个根。
+- **备份接多根：** 导出写全部根，导入逐根判在本机在不在（在的用探回路径、不在的当场让用户重选，取消则整体放弃），歌单 / 收藏按各自根重挂。
+- **播放会话记住歌曲所属的根**，多根恢复时只要会话根属于当前任一监控根即放行，不再因歌曲落在非主根而丢续播。
+- 验证：新增 `tests/local-library-multi-root.test.js` 12 例（列表追加去重移除、旧标量迁移、标量镜像、根归属不越界、监控按列表、就地合并只动本根、导入追加语义、恢复逐根合并、备份多根、播放会话、设置面板、持久化键登记），并同步修 `tests/gapless-crossfade.test.js` 与 `tests/local-library-categories.test.js` 被折叠区 / 分组盖章改动的断言；全量 Node 回归 `1088/1088` 通过。
+
 ## v2.0.3 SSA 歌词与发布链路加固
 
 - 发布版本从 `2.0.2` 提升为 `2.0.3`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
@@ -7,7 +18,7 @@
 - **发布目标改为单一显式入口：** 构建步骤使用 `npm run build:win -- --publish never`，不再让 electron-builder 隐式创建 Release；上传步骤枚举同 tag Release，无记录时创建一个草稿、恰有一个时复用、超过一个时停止并要求人工处理，不自动删除任何 Release。
 - **重复执行保持幂等：** 同 tag 的工作流由 concurrency 串行化，`gh release upload --clobber` 替换同名资产。`GH_TOKEN` 只交给显式 Release 管理步骤，不进入构建步骤。
 - **工作流与清单格式更新：** `actions/checkout` / `actions/setup-node` 升到 v5；SHA256 清单通过 `WriteAllText` 写成 LF 行尾、无 BOM 的 UTF-8，不再使用 `Out-File`，`tr -d '\r'` 的时代结束。
-- 验证：SSA 定向回归、发布工作流回归、版本一致性、语法检查与全量 Node 回归均通过；全量结果为 `1071/1071`。
+- 验证：SSA 定向回归、发布工作流回归、版本一致性、语法检查与全量 Node 回归均通过；全量结果为 `1076/1076`。
 
 ### 发布记录（v2.0.3）
 
