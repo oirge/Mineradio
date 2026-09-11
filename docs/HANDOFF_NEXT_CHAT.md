@@ -27,16 +27,16 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前版本：`v2.0.4`（文档编码修复与发布记录回填，纯维护版、无运行时改动）。上一版 `v2.0.3`（SSA 歌词与发布链路加固）。
+- 当前版本：`v2.0.3`（SSA 歌词与发布链路加固），已发布并设为 GitHub Latest。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`。`package.json` 发布配置 owner/repo 为 `oirge/Mineradio`。
-- 发布基线：`v2.0.3` 已发布并设为 Latest（annotated tag object `ac634a30…` 指向 `30b3ba5f…`，Release `386043356`）。`v2.0.4` 为纯文档维护版。
+- 正式发布基线：远端 annotated tag `v2.0.3` = tag object `ac634a30…`，指向 release commit `30b3ba5f…`（是 `origin/main` 的祖先）；Release `386043356`，`published_at` `2026-09-10T06:22:41Z`，非 draft / 非 prerelease。
 - `main` 是发布线，发版走 `codex/release-vX.Y.Z` 分支 + PR（**用 merge commit 合，绝不 squash**，否则 tag 会离开 `main` 可达历史），tag 打在 release commit 上。
 - `package.json` 发布配置 owner/repo 已是 `oirge/Mineradio`。
 
 ## 最近完成
 
-- 2026-09-10：发布 `v2.0.4`（纯文档维护版）：修复 `RELEASE.md` 自 v1.2.61 起被 GBK 误解码损坏的约 165 行发布说明；新增文档编码门禁 `tests/doc-encoding-integrity.test.js` 并接入 `Verify`；回填 v2.0.3 资产记录、修正项目记忆与交接文档里过期的路径与基线。无运行时改动，回归 `1076/1076`。
 - 2026-09-10：发布 `v2.0.3`。SSA 歌词补齐（`.ssa` 与 `.ass` 共用解析）；发布链路改为显式管理单个同 tag Release（`--publish never` + `gh release upload --clobber`），不再由 electron-builder 隐式建双草稿；Actions 升 v5；SHA256 清单改为 LF、无 BOM UTF-8。分支 `codex/release-v2.0.3`，提交 `30b3ba5` / `5bae4cf`，PR #73（merge `d576231`）+ #74（merge `44b39d5`）；首次构建 run `34442721960` 因清单落盘路径失败，`5bae4cf` 修复后 run `34444159148` 成功。四资产回下载三路校验通过。
+- 2026-09-10：修复 `RELEASE.md` 自 v1.2.61 起被损坏的编码（GBK 乱码 + 换行丢失），以 `95a36fb` 为干净底本恢复；给 `Verify` 加文档编码门禁。
 - 2026-09-08：发布 `v2.0.2`，全屏进入 / 退出过渡与视觉预设构图修复。
 - 2026-09-07：发布 `v2.0.1`（视觉预设 6/8 切换不再漏透明）与 `v2.0.0`（视觉预设 7/8 读档不再截回 6）。
 - 2026-09-06：发布 `v1.10.0`，安装身份换到 `com.mineradio.desktop.oirge`，与原项目可同时安装、同时运行。

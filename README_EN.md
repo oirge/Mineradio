@@ -92,22 +92,13 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
-### v2.0.4 (2026-09-10)
-
-- Repaired a large block of release notes in `RELEASE.md` that had been corrupted by a GBK mis-decode since v1.2.61 (roughly 165 lines), restoring the earlier sections from a clean source
-- Added a document-encoding gate to CI: core docs must be valid UTF-8, free of replacement characters and GBK mojibake, and BOM-free
-- Backfilled the v2.0.3 release record and fixed stale paths, versions and baselines in the project memory and handoff docs
-- No runtime behaviour changes; this release only covers documentation and release-process maintenance
-
-Full Node regression suite: `1076/1076` passing; the Windows x64 installer is built remotely by GitHub Actions.
-
 ### v2.0.3 (2026-09-10)
 
 - Added matching `.ssa` lyrics, sharing the ASS parser and subtitle priority while supporting the SSA v4 `Marked` field
 - Disabled electron-builder's implicit publishing; the release workflow now explicitly creates or reuses one draft Release for the tag and replaces same-name assets on reruns
 - Upgraded GitHub Actions to `actions/checkout@v5` and `actions/setup-node@v5`; SHA256 manifests now use LF line endings and UTF-8 without a BOM
 
-Full Node regression suite: `1071/1071` passing; the [Release](https://github.com/oirge/Mineradio/releases/tag/v2.0.3) is published with four assets.
+Full Node regression suite: `1071/1071` passing; the Windows x64 installer is built remotely by GitHub Actions, and the [Release](https://github.com/oirge/Mineradio/releases/tag/v2.0.3) is published with four assets and marked Latest.
 
 ### v2.0.0 (2026-09-07)
 
