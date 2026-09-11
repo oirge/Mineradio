@@ -2,6 +2,10 @@
 
 ## v2.0.7 3D 歌单架新增「舞台」原版风格
 
+- **发布结果（2026-09-11）**：tag `v2.0.7` → release commit `15804c9`（PR #81，merge `9103baa` 合入 `main`）；Release `386939633`，`published_at` `2026-09-11T10:05:24Z`，已设 Latest；构建 run `34587084479` 成功，四资产齐全。
+  - `Mineradio-oirge-2.0.7-Setup.exe` sha256 `58e3a12ef64cf119dac7508279d39ec9877b1a1236802e97b235d42f72b60f2f`（size 102649838）
+  - `Mineradio-oirge-2.0.7-Setup.exe.blockmap` sha256 `6293eee964d048d5c297093abb1cb1e7c34dfd96819c7c6f6af78e73e3e7288a`
+  - `latest.yml` sha256 `b70a182efc6116a1621d60704e360d59611461fb0c17b0ee3936453bafca4c25`（`version: 2.0.7`）
 - 发布版本从 `2.0.6` 提升为 `2.0.7`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
 - 用户需求原话：「我要的是保留我这个原本的侧栏歌架单增加一个切换为舞台歌架单」、「和原项目舞台歌架单一模一样的效果」。**唯一模式仍是 `fx.shelf = off / side / stage`**，引擎由模式决定：`side` 走本仓库现有 `makeShelfManager()`（`shelfManagerDefault`），`stage` 走上游 XxHuberrr/Mineradio 原版实现（`public/shelf-classic.js` 的 `createClassicShelfEngine`，`shelfManagerClassic`）。
 - 切换入口两处：DIY 视觉控制台「3D / 手势」里原有的 `#shelf-seg` 三态 + 主界面底部控制条新增的 `#shelf-view-btn`（`toggleShelfStageMode()`）。**音量弹层不放歌单架入口**（用户明确否过），**也不再有「现有 / 原版」独立引擎开关**（首版那套已整体作废）。
