@@ -216,7 +216,7 @@ test('设置面板有两个折叠区、分段档位与提示位', () => {
 
 test('两个功能都归到高级页并在强制展开清单里', () => {
   assert.match(APP_SOURCE, /id === 'fx-playbackrate-fold' \|\| id === 'fx-sleep-fold'/);
-  assert.match(APP_SOURCE, /'fx-gapless-fold','fx-playbackrate-fold','fx-sleep-fold','fx-volume-fold'/);
+  assert.match(APP_SOURCE, /'fx-gapless-fold','fx-playbackrate-fold','fx-sleep-fold','fx-outputdevice-fold','fx-volume-fold'/);
 });
 
 test('两个功能的初始化接在曲库恢复之后，不打断既有启动链', () => {
@@ -240,6 +240,119 @@ test('倍速在切歌装载后补写，且记忆在独立键里', () => {
 test('"播完本曲"睡眠定时挂在 onended，优先于续播', () => {
   assert.match(APP_SOURCE, /if \(typeof settleSleepTimerOnTrackEnded === 'function' && settleSleepTimerOnTrackEnded\(\)\) \{\s*stopPlaybackAfterCurrentTrack\(\);/);
 });
+
+// 输出设备选择：从输出设备区块头切到 toggleVolumePanel（那个函数是另一个测试的切片终点）。
+const OUTPUT_DEVICE_SOURCE = sliceSource(
+  '//  输出设备选择',
+  'function toggleVolumePanel(e) {'
+);
+
+/**
+ * 跑真实的输出设备实现，注入可观察的 AudioContext 与设备枚举。
+ * @returns {object} 沙箱与观测。
+ */
+function createOutputDeviceSandbox() {
+  const toasts = [];
+  const calls = { setSinkId: [], applied: 0 };
+  const store = Object.create(null);
+  const localStorageStub = {
+    getItem(key) { return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null; },
+    setItem(key, value) { store[key] = String(value); },
+    removeItem(key) { delete store[key]; },
+  };
+  function AudioContextStub() {}
+  AudioContextStub.prototype.setSinkId = function (id) { calls.setSinkId.push(id); this.sinkId = id; return Promise.resolve(); };
+  const createdOptions = [];
+  const documentStub = {
+    getElementById() { return null; },
+    createElement() { return { value: '', textContent: '', selected: false, style: {} }; },
+  };
+  const context = {
+    console,
+    JSON, Object, Array, String, Number, Math, Boolean, Promise, isFinite,
+    AudioContext: AudioContextStub,
+    audioCtx: new AudioContextStub(),
+    localStorage: localStorageStub,
+    setPersistentLocalStorageItem(key, value) { localStorageStub.setItem(key, value); },
+    navigator: {
+      mediaDevices: {
+        enumerateDevices() {
+          return Promise.resolve([
+            { kind: 'audiooutput', deviceId: 'default', label: 'Default' },
+            { kind: 'audioinput', deviceId: 'mic1', label: 'Mic' },
+            { kind: 'audiooutput', deviceId: 'spk1', label: '扬声器' },
+            { kind: 'audiooutput', deviceId: 'spk2', label: '' },
+          ]);
+        },
+        addEventListener() {},
+      },
+    },
+    document: documentStub,
+    showToast(msg) { toasts.push(String(msg)); },
+    OUTPUT_DEVICE_STORE_KEY: 'mineradio-output-device-v1',
+    createMediaElementSource: null,
+  };
+  context.outputDeviceSetting = { deviceId: '', label: '' };
+  context.outputDeviceList = [];
+  vm.runInNewContext(`${OUTPUT_DEVICE_SOURCE}
+this.normalizeOutputDeviceSetting = normalizeOutputDeviceSetting;
+this.readSavedOutputDeviceSetting = readSavedOutputDeviceSetting;
+this.outputDeviceSelectionSupported = outputDeviceSelectionSupported;
+this.applyOutputDeviceToAudioContext = applyOutputDeviceToAudioContext;
+this.listAudioOutputDevices = listAudioOutputDevices;
+this.setOutputDevice = setOutputDevice;
+this.getSetting = function(){ return outputDeviceSetting; };
+this.getList = function(){ return outputDeviceList; };`, context);
+  return { context, calls, store, toasts, createdOptions };
+}
+
+test('输出设备走 AudioContext.setSinkId，而不是元素级', () => {
+  // 本播放器的声音被 MediaElementSource 拉进 WebAudio 图，元素级 setSinkId 无效，
+  // 必须作用在 AudioContext 上——这条是本次实现的核心约束，钉住防止被"优化"回元素级。
+  assert.match(OUTPUT_DEVICE_SOURCE, /audioCtx\.setSinkId\(deviceId\)/);
+  // 去掉注释行再查负例，否则说明文字里提到的 "audio.setSinkId()" 会误判。
+  const codeOnly = OUTPUT_DEVICE_SOURCE.split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join('\n');
+  assert.doesNotMatch(codeOnly, /\.el\.setSinkId\(|audio\.setSinkId\(/);
+  // 图建好之后要立刻套用上次选的设备。
+  assert.match(APP_SOURCE, /gainNode\.connect\(audioCtx\.destination\);[\s\S]{0,220}?applyOutputDeviceToAudioContext\(\)/);
+});
+
+test('设备列表首项恒为系统默认，audiooutput 之外的设备不列出', async () => {
+  const h = createOutputDeviceSandbox();
+  await h.context.outputDeviceSetting; // no-op
+  const list = await h.context.listAudioOutputDevices();
+  const ids = list.map((d) => d.deviceId);
+  assert.equal(ids[0], '', '首项必须是空串（系统默认）');
+  assert.ok(ids.includes('spk1'), '扬声器应被列出');
+  assert.ok(ids.includes('spk2'), '没有 label 的输出设备也要列出');
+  assert.ok(!ids.includes('mic1'), '麦克风（audioinput）不能混进输出列表');
+  const spk2 = list.find((d) => d.deviceId === 'spk2');
+  assert.match(spk2.label, /输出设备/, '没有 label 时用出现顺序兜底命名');
+});
+
+test('选择设备写进存档并调用 setSinkId，空串代表系统默认', async () => {
+  const h = createOutputDeviceSandbox();
+  await h.context.listAudioOutputDevices().then((l) => { /* 先不写 state */ });
+  // setOutputDevice 会自己从 outputDeviceList 里找 label；直接调也应在无列表时容错。
+  h.context.setOutputDevice('spk1', { toast: false });
+  assert.equal(h.calls.setSinkId[h.calls.setSinkId.length - 1], 'spk1');
+  assert.equal(JSON.parse(h.store['mineradio-output-device-v1']).deviceId, 'spk1');
+  h.context.setOutputDevice('', { toast: false });
+  assert.equal(h.calls.setSinkId[h.calls.setSinkId.length - 1], '', '系统默认传空串');
+  assert.equal(JSON.parse(h.store['mineradio-output-device-v1']).deviceId, '');
+});
+
+test('输出设备已存档、键在渲染层与桌面壳登记为持久化键', () => {
+  assert.match(APP_SOURCE, /var OUTPUT_DEVICE_STORE_KEY = 'mineradio-output-device-v1';/);
+  assert.match(APP_SOURCE, /PERSISTENT_UI_STATE_KEYS[\s\S]*?OUTPUT_DEVICE_STORE_KEY,/);
+  assert.ok(PRELOAD_SOURCE.includes("'mineradio-output-device-v1'"), 'preload 要镜像输出设备键');
+  assert.ok(MAIN_SOURCE.includes("'mineradio-output-device-v1'"), '主进程要镜像输出设备键');
+  // 设置面板有独立折叠区与下拉，归属高级页且在强制展开清单里。
+  assert.match(INDEX_SOURCE, /id="fx-outputdevice-fold"[\s\S]*?id="output-device-select"/);
+  assert.match(APP_SOURCE, /id === 'fx-outputdevice-fold'/);
+  assert.match(APP_SOURCE, /'fx-sleep-fold','fx-outputdevice-fold','fx-volume-fold'/);
+});
+
 
 test('主界面音量弹层内嵌倍速、睡眠快捷项与无缝/均衡开关', () => {
   // 音量弹层里直接有速度 / 睡眠两组分段与两个开关。
@@ -265,6 +378,6 @@ test('主界面快捷控件改的是唯一设置状态，并与设置面板互�
   assert.match(APP_SOURCE, /hint\.textContent = gaplessHintText\(\);\s*if \(typeof updateMainQuickControls === 'function'\) updateMainQuickControls\(\);/);
   assert.match(APP_SOURCE, /if \(typeof updateMainQuickControls === 'function'\) updateMainQuickControls\(\);\s*\}\s*\/\*\*\s*\n \* 落盘音量均衡设置/);
   // 启动时绑定一次。
-  assert.match(APP_SOURCE, /initPlaybackRateControls\(\);\s*initSleepTimerControls\(\);\s*bindMainQuickControls\(\);/);
+  assert.match(APP_SOURCE, /initPlaybackRateControls\(\);\s*initSleepTimerControls\(\);\s*initOutputDeviceControls\(\);\s*bindMainQuickControls\(\);/);
 });
 

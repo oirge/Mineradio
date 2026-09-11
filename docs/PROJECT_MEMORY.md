@@ -50,15 +50,16 @@
 
 ## Release Memory
 
-## v2.0.6 常用播放控制提到主界面
+## v2.0.6 常用控制提到主界面 + 输出设备选择
 
-- 日期：2026-09-11。发布版本从 `2.0.5` 提升为 `2.0.6`，五处版本钉一起动；安装身份、数据目录与自动更新线路不变。
+- 日期：2026-09-11。发布版本从 `2.0.5` 提升为 `2.0.6`，五处版本钉一起动；安装身份、数据目录与自动更新线路不变。**这一版把"主界面快捷面板"与"输出设备选择"合成一次发布**（前者曾单独准备但未发布，没有单独的 2.0.6 tag）。
 - 主界面 `#volume-control` 的 `.volume-popover` 从单一音量药丸扩成多行快捷面板：速度 `#main-rate-seg`（六档）、睡眠 `#main-sleep-seg`（关/15/30/60/本曲）、无缝 `#main-gapless-btn`、均衡 `#main-replaygain-btn`。**画质档位不放弹层**（只在 DIY 高级面板的 `#performance-quality-seg`），测试用 `doesNotMatch(/main-quality-seg/)` 钉住。
 - **这些快捷项改的是各功能唯一的设置状态**（`playbackRateSetting` / `sleepTimerState.mode` / `gaplessSettings.enabled` / `replayGainSettings.enabled`），不是副本。`updateMainQuickControls()` 只回填选中态，由四个设置回填函数各自末尾调用一次，所以主界面与设置面板双向同步。
+- 输出设备选择：设置面板 `fx-outputdevice-fold`（`#output-device-select`）。**必须用 `AudioContext.setSinkId()`**——声音被 `MediaElementSource` 拉进 WebAudio 图、从 `audioCtx.destination` 出来，元素级 `audio.setSinkId()` 无效；`applyOutputDeviceToAudioContext()` 在 `initAudio()` 建好图后与改选择时各调一次。设备列表只收 `audiooutput`、首项恒为空串（系统默认）、无 label 兜底成「输出设备 N」、`devicechange` 重新枚举。设置存 `mineradio-output-device-v1`，存档设备不在列表时补「（当前不可用）」项。
 - 事件用 `bindMainQuickControls()` 挂在弹层容器上做 `data-*` 委托，启动时在 `initSleepTimerControls();` 之后调用。
 - 放置约束：两个新函数定义在 `bindVolumeControls` 之后（避开 `tests/playback-rate-sleep-timer.test.js` 的 `toggleVolumePanel` 切片终点）。
 - CSS：`.volume-popover` 改 `flex-direction:column` / `width:274px`；`.volume-control::before` 悬停桥高 210px；新增 `.volume-row` / `.vq-row` / `.vq-label` / `.vq-seg` / `.vq-toggle`；`#volume-slider` 改 `flex:1`。
-- 验证：`tests/playback-rate-sleep-timer.test.js` 15 例；全量 Node 回归 `1103/1103` 通过。**已在浏览器真实渲染并点击验证双向同步**（点 1.5× → 设置面板同档按下；点 15 → 睡眠 15）。
+- 验证：`tests/playback-rate-sleep-timer.test.js` 19 例；全量 Node 回归 `1107/1107` 通过。**已在浏览器真实验证**：点 1.5× → 设置面板同档按下；点 15 → 睡眠 15；输出设备下拉在真机列出 Realtek 扬声器 / NVIDIA HDMI / 通信设备，`AudioContext.setSinkId` 支持检测 `true`。
 
 ## v2.0.5 播放速度与睡眠定时
 

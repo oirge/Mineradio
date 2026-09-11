@@ -148,6 +148,7 @@ var AUDIO_CHAIN_STORE_KEY = 'mineradio-audio-chain-v1';
 var GAPLESS_STORE_KEY = 'mineradio-gapless-v1';
 var PLAYBACK_RATE_STORE_KEY = 'mineradio-playback-rate-v1';
 var SLEEP_TIMER_STORE_KEY = 'mineradio-sleep-timer-v1';
+var OUTPUT_DEVICE_STORE_KEY = 'mineradio-output-device-v1';
 var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
 // genre 是向前生效字段：新解析的曲目会写入曲库与缓存，旧记录不带该键，
 // 因此 applyLocalAssetCacheToSong 的 hasOwnProperty 判定会跳过它，升级后不会整库回落文件名重解析。
@@ -178,6 +179,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   GAPLESS_STORE_KEY,
   PLAYBACK_RATE_STORE_KEY,
   SLEEP_TIMER_STORE_KEY,
+  OUTPUT_DEVICE_STORE_KEY,
   UPDATE_ROUTE_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
@@ -21633,6 +21635,8 @@ function initAudio() {
   replayGainNode.connect(audioChain.input);
   audioChain.output.connect(gainNode);
   gainNode.connect(audioCtx.destination);
+  // 输出设备现在才生效：图刚建好，把上次选的设备套上去（未选则跟随系统默认）。
+  if (typeof applyOutputDeviceToAudioContext === 'function') applyOutputDeviceToAudioContext();
   setReplayGainNodeGain(replayGainActive.linear, true);
   applyAudioChainToNodes(true);
   applyVolumeToAudio();
@@ -23604,8 +23608,186 @@ function settleSleepTimerOnTrackEnded() {
   sleepTimerState.mode = 'off';
   try { setPersistentLocalStorageItem(SLEEP_TIMER_STORE_KEY, JSON.stringify({ mode: 'off' })); } catch (e) {}
   updateSleepTimerControls();
-  // 由调用方的 stopPlaybackAfterCurrentTrack 负责暂停与提示，这里不再重复弹。
+  // 由调用方的 stopAfterCurrentTrack 负责暂停与提示，这里不再重复弹。
   return true;
+}
+
+// ============================================================
+//  输出设备选择
+// ============================================================
+// 本播放器的声音不走 <audio> 元素的默认输出，而是被 MediaElementSource 拉进 WebAudio 图
+// （deck.source → deck.gain → analyser → … → gainNode → audioCtx.destination）。
+// 因此元素级 audio.setSinkId() 在这里无效 —— 声音从 AudioContext 的 destination 出来，
+// 必须用 AudioContext.setSinkId() 才能真的把输出切到别的设备。
+// 设备主键是 deviceId；重启后设备可能不在（拔了耳机），所以同时存一份 label 用于回退显示。
+var outputDeviceSetting = { deviceId: '', label: '' };
+var outputDeviceList = [];
+var outputDeviceBound = false;
+
+/**
+ * 归一化输出设备设置。
+ * @param {*} raw 原始设置。
+ * @returns {{deviceId:string, label:string}} 归一化后的设置。
+ */
+function normalizeOutputDeviceSetting(raw) {
+  var src = raw && typeof raw === 'object' ? raw : {};
+  return {
+    deviceId: String(src.deviceId == null ? '' : src.deviceId),
+    label: String(src.label == null ? '' : src.label)
+  };
+}
+
+/**
+ * 读取本地保存的输出设备设置。
+ * @returns {{deviceId:string, label:string}} 输出设备设置。
+ */
+function readSavedOutputDeviceSetting() {
+  try {
+    var raw = localStorage.getItem(OUTPUT_DEVICE_STORE_KEY);
+    if (!raw) return normalizeOutputDeviceSetting(null);
+    return normalizeOutputDeviceSetting(JSON.parse(raw));
+  } catch (e) { return normalizeOutputDeviceSetting(null); }
+}
+
+/**
+ * 当前环境是否支持切换 AudioContext 的输出设备。
+ * @returns {boolean} 是否支持。
+ */
+function outputDeviceSelectionSupported() {
+  return !!(typeof AudioContext !== 'undefined' && AudioContext.prototype && typeof AudioContext.prototype.setSinkId === 'function')
+    || !!(audioCtx && typeof audioCtx.setSinkId === 'function');
+}
+
+/**
+ * 把保存的输出设备应用到当前 AudioContext。audioCtx 懒建在 initAudio 里，
+ * 所以这个函数要在两个时点调用：initAudio() 建好图之后，以及用户改选择时。
+ * @returns {Promise<boolean>} 是否成功应用（不支持或无 audioCtx 时返回 false）。
+ */
+function applyOutputDeviceToAudioContext() {
+  if (!audioCtx || typeof audioCtx.setSinkId !== 'function') return Promise.resolve(false);
+  var deviceId = outputDeviceSetting.deviceId || '';
+  // 空字符串 = 跟随系统默认设备；setSinkId('') 在 Chromium 是合法取值。
+  var current = '';
+  try { current = audioCtx.sinkId || ''; } catch (e) { current = ''; }
+  if (current === deviceId) return Promise.resolve(true);
+  try {
+    return Promise.resolve(audioCtx.setSinkId(deviceId)).then(function(){ return true; })
+      .catch(function(err){ console.warn('[OutputDevice]', err); return false; });
+  } catch (err2) {
+    console.warn('[OutputDevice]', err2);
+    return Promise.resolve(false);
+  }
+}
+
+/**
+ * 列出可用的音频输出设备。labels 在未授权时可能为空，用出现顺序兜底成"输出设备 N"。
+ * @returns {Promise<Array<{deviceId:string, label:string}>>} 设备列表，首项恒为"系统默认"。
+ */
+async function listAudioOutputDevices() {
+  var devices = [];
+  // 默认设备永远排在第一位，deviceId 用空串表示"跟随系统"。
+  devices.push({ deviceId: '', label: '系统默认' });
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') return devices;
+  try {
+    var list = await navigator.mediaDevices.enumerateDevices();
+    var idx = 0;
+    for (var i = 0; i < list.length; i++) {
+      var d = list[i];
+      if (!d || d.kind !== 'audiooutput') continue;
+      idx++;
+      devices.push({
+        deviceId: String(d.deviceId || ''),
+        label: String(d.label || '') || ('输出设备 ' + idx)
+      });
+    }
+  } catch (e) {
+    console.warn('[OutputDevice]', e);
+  }
+  return devices;
+}
+
+/**
+ * 回填输出设备下拉与说明。
+ * @returns {void}
+ */
+function updateOutputDeviceControls() {
+  var select = document.getElementById('output-device-select');
+  var hint = document.getElementById('output-device-hint');
+  var supported = outputDeviceSelectionSupported();
+  if (select) {
+    select.disabled = !supported;
+    var want = outputDeviceSetting.deviceId || '';
+    var found = false;
+    for (var i = 0; i < outputDeviceList.length; i++) {
+      if (outputDeviceList[i].deviceId === want) { found = true; break; }
+    }
+    // 保存的设备当前不在列表里（耳机拔了/驱动变了）时，补一条提示项，避免静默落到错误的项上。
+    if (!found && want) {
+      outputDeviceList = outputDeviceList.concat([{ deviceId: want, label: (outputDeviceSetting.label || '上次的设备') + '（当前不可用）' }]);
+    }
+    select.textContent = '';
+    for (var j = 0; j < outputDeviceList.length; j++) {
+      var opt = document.createElement('option');
+      opt.value = outputDeviceList[j].deviceId;
+      opt.textContent = outputDeviceList[j].label;
+      if (outputDeviceList[j].deviceId === want) opt.selected = true;
+      select.appendChild(opt);
+    }
+  }
+  if (hint) {
+    hint.textContent = supported
+      ? '切换后立即生效；"系统默认"跟随 Windows 当前输出设备。'
+      : '当前环境不支持选择输出设备（需要 Electron / Chromium 的 AudioContext.setSinkId）。';
+  }
+}
+
+/**
+ * 选择输出设备并落盘；audioCtx 已建则立即生效，否则下次开播时应用。
+ * @param {string} deviceId 目标设备 ID，空串表示系统默认。
+ * @param {{toast?: boolean}=} opts 提示选项。
+ * @returns {void}
+ */
+function setOutputDevice(deviceId, opts) {
+  opts = opts || {};
+  var id = String(deviceId == null ? '' : deviceId);
+  var label = '';
+  for (var i = 0; i < outputDeviceList.length; i++) {
+    if (outputDeviceList[i].deviceId === id) { label = outputDeviceList[i].label; break; }
+  }
+  outputDeviceSetting = { deviceId: id, label: label === '系统默认' ? '' : label };
+  try { setPersistentLocalStorageItem(OUTPUT_DEVICE_STORE_KEY, JSON.stringify(outputDeviceSetting)); } catch (e) {}
+  applyOutputDeviceToAudioContext();
+  updateOutputDeviceControls();
+  if (opts.toast !== false) showToast(id ? ('输出设备：' + (label || '已选择')) : '输出设备：系统默认');
+}
+
+/**
+ * 刷新设备列表（首次进入、以及插入/拔出设备时）。
+ * @returns {Promise<void>}
+ */
+async function refreshOutputDevices() {
+  outputDeviceList = await listAudioOutputDevices();
+  updateOutputDeviceControls();
+}
+
+/**
+ * 初始化输出设备控件：读存档、拉设备、绑下拉、监听设备变化。
+ * @returns {void}
+ */
+function initOutputDeviceControls() {
+  outputDeviceSetting = readSavedOutputDeviceSetting();
+  applyOutputDeviceToAudioContext();
+  var select = document.getElementById('output-device-select');
+  if (select && !outputDeviceBound) {
+    outputDeviceBound = true;
+    select.addEventListener('change', function(){ setOutputDevice(select.value); });
+  }
+  if (navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function' && !initOutputDeviceControls._deviceChangeBound) {
+    initOutputDeviceControls._deviceChangeBound = true;
+    // 插拔耳机/切换蓝牙后 deviceId 会变，重新枚举一次即可刷新列表。
+    navigator.mediaDevices.addEventListener('devicechange', function(){ refreshOutputDevices().catch(function(){}); });
+  }
+  refreshOutputDevices().catch(function(){});
 }
 
 function toggleVolumePanel(e) {
@@ -36658,7 +36840,7 @@ function fxPanelTargetForNode(node, current) {
   if (id === 'fx-lyric-fold') return 'lyrics';
   if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
-  if (id === 'fx-playbackrate-fold' || id === 'fx-sleep-fold' || id === 'fx-library-fold' || id === 'fx-backup-fold' || id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
+  if (id === 'fx-playbackrate-fold' || id === 'fx-sleep-fold' || id === 'fx-outputdevice-fold' || id === 'fx-library-fold' || id === 'fx-backup-fold' || id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
   if (inputId === 'fx-bgopacity' || inputId === 'fx-glassaberration') return 'appearance';
   if (inputId === 'fx-lyricglow') return 'lyrics';
@@ -36718,7 +36900,7 @@ function organizeFxPanel() {
     }
     (pages[target] || pages.presets).appendChild(node);
   });
-  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-playbackrate-fold','fx-sleep-fold','fx-volume-fold','fx-library-fold','fx-advanced'].forEach(function(id){
+  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-playbackrate-fold','fx-sleep-fold','fx-outputdevice-fold','fx-volume-fold','fx-library-fold','fx-advanced'].forEach(function(id){
     var fold = document.getElementById(id);
     if (fold) fold.classList.add('open');
   });
@@ -44181,6 +44363,7 @@ initGaplessControls();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 initPlaybackRateControls();
 initSleepTimerControls();
+initOutputDeviceControls();
 bindMainQuickControls();
 initPluginRuntime();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);

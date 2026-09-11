@@ -1322,6 +1322,8 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .fx-slider label{font-size:11.5px;color:rgba(255,255,255,.72);letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fx-slider input[type=range]{width:100%;min-width:0;accent-color:var(--fc-accent)}
 .fx-slider output{font-size:10.5px;color:rgba(255,255,255,.40);text-align:right;font-variant-numeric:tabular-nums}
+.fx-slider select{grid-column:2 / -1;width:100%;min-width:0;height:28px;padding:0 8px;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05);color:rgba(255,255,255,.82);font-family:inherit;font-size:11.5px;cursor:pointer}
+.fx-slider select:disabled{opacity:.5;cursor:not-allowed}
 .fx-reset-one{width:24px;height:24px;border:1px solid rgba(255,255,255,.09);border-radius:50%;background:rgba(255,255,255,.035);color:rgba(255,255,255,.46);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:color .2s,background .2s,border-color .2s,transform .2s}
 .fx-reset-one:hover{color:#eafffb;background:rgba(0,245,212,.085);border-color:rgba(0,245,212,.26);transform:rotate(-18deg) scale(1.04)}
 .fx-reset-one svg{width:13px;height:13px;display:block}

@@ -960,7 +960,7 @@ function testSourceWiring() {
   // 启动顺序：接在音效链之后初始化，且不能插进音量均衡那两行之间。
   assert.match(appSource, /initAudioChainControls\(\);\s*initGaplessControls\(\);/);
   assert.match(appSource, /'fx-gapless-fold'[\s\S]{0,140}return 'advanced';/);
-  assert.match(appSource, /\['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-playbackrate-fold','fx-sleep-fold','fx-volume-fold','fx-library-fold','fx-advanced'\]/);
+  assert.match(appSource, /\['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-playbackrate-fold','fx-sleep-fold','fx-outputdevice-fold','fx-volume-fold','fx-library-fold','fx-advanced'\]/);
 
   // 面板入口：折叠块夹在音量与 EQ 之间，只加一个开关和一根滑杆。
   assert.match(indexSource, /id="fx-volume-fold"[\s\S]*?id="fx-gapless-fold"[\s\S]*?id="fx-eq-fold"/);

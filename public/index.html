@@ -591,6 +591,17 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold" id="fx-outputdevice-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-outputdevice-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>输出设备</strong><small>选择声音从哪个设备播放</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-section-label">音频输出</div>
+      <div class="fx-slider"><label>输出设备</label><select id="output-device-select" aria-label="输出设备"><option value="">系统默认</option></select></div>
+      <div class="mini-player-collapse-hint" id="output-device-hint">切换后立即生效；"系统默认"跟随 Windows 当前输出设备。</div>
+    </div>
+  </div>
+
   <div class="fx-fold" id="fx-eq-fold">
     <div class="fx-fold-head" onclick="document.getElementById('fx-eq-fold').classList.toggle('open')">
       <span class="fx-fold-title"><strong>音效链</strong><small>预设 → EQ → Preamp → Limiter → Spatial</small></span><span class="arrow">▶</span>

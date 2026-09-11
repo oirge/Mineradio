@@ -96,6 +96,7 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 
 - The main-bar volume popover is now a quick panel embedding playback speed and sleep timer, plus gapless and ReplayGain toggles
 - These quick controls edit the same settings as the DIY panel and stay in sync both ways, so common tweaks no longer require opening the panel
+- Added output device selection: choose which audio device plays the sound; the list refreshes on headphone/Bluetooth changes, and the choice is remembered
 
 Full Node regression suite: `1103/1103` passing.
 
