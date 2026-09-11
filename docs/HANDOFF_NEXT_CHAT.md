@@ -27,15 +27,15 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前版本：`v2.0.5`（播放速度与睡眠定时），版本钉已升，尚未发布。
+- 当前版本：`v2.0.6`（常用播放控制提到主界面），版本钉已升，尚未发布。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`。`package.json` 发布配置 owner/repo 为 `oirge/Mineradio`。
-- 正式发布基线：远端 annotated tag `v2.0.3` = tag object `ac634a30…`，指向 release commit `30b3ba5f…`（是 `origin/main` 的祖先）；Release `386043356`，`published_at` `2026-09-10T06:22:41Z`，非 draft / 非 prerelease。**注：曾有一次 v2.0.4 文档维护提交与 tag 被反向提交移除（`1fa9680` / `7850c81`，tag `v2.0.4` 已删）；当前 `v2.0.4` 是本次多根功能重新启用的版本号。**
+- 正式发布基线：线上 Latest 是 `v2.0.5`（播放速度与睡眠定时），Release `386795754`，`published_at` `2026-09-11T05:03:59Z`，四项资产齐全；tag `v2.0.5` 指向 release commit `23e9e81`。上一版 `v2.0.4`（多根曲库，Release `386780937`，tag 指向 `2966d52`）、更早 `v2.0.3`（Release `386043356`）。
 - `main` 是发布线，发版走 `codex/release-vX.Y.Z` 分支 + PR（**用 merge commit 合，绝不 squash**，否则 tag 会离开 `main` 可达历史），tag 打在 release commit 上。
 - `package.json` 发布配置 owner/repo 已是 `oirge/Mineradio`。
 
 ## 最近完成
 
-- 2026-09-11：实现并发布 `v2.0.4` 多根曲库；随后实现 `v2.0.5` 播放速度（0.5×–2.0× 六档，双 deck 都写 `playbackRate`）与睡眠定时（15/30/60 分或播完本曲，到点淡出暂停）。新增 `tests/playback-rate-sleep-timer.test.js` 13 例，全量回归 `1101/1101`。`v2.0.5` 尚未发布。
+- 2026-09-11：实现 `v2.0.6`，把常用播放控制提到主界面音量弹层：速度 / 睡眠两组设置与无缝 / 均衡两个开关直接内嵌，改的是唯一设置状态、与 DIY 面板双向同步（画质按反馈不进弹层，仍在 DIY 高级面板）。浏览器真实渲染并点击验证过。全量回归 `1103/1103`。`v2.0.6` 尚未发布（线上 Latest 是 `v2.0.5`）。
 - 2026-09-11：实现 `v2.0.4` 多根曲库（同时监控多个音乐目录）。新增数组键 `mineradio-local-library-folders-v1`（旧单根标量自动迁移 + 保留主根镜像），导入改为追加语义、恢复逐根取回再合并、监控按根列表注册、单目录变化只同步那一根、索引按根保存、备份导出/导入接多根、设置面板新增 `fx-library-fold`。新增 `tests/local-library-multi-root.test.js` 12 例，全量回归 `1088/1088`。
 - 2026-09-10：把一次误建的 v2.0.4 文档维护提交与远端 tag 反向提交移除（`1fa9680` / `7850c81`，删 tag `v2.0.4` 与分支 `codex/release-v2.0.4`），`releases/latest` 回到 `v2.0.3`。
 - 2026-09-10：发布 `v2.0.3`。SSA 歌词补齐（`.ssa` 与 `.ass` 共用解析）；发布链路改为显式管理单个同 tag Release（`--publish never` + `gh release upload --clobber`），不再由 electron-builder 隐式建双草稿；Actions 升 v5；SHA256 清单改为 LF、无 BOM UTF-8。分支 `codex/release-v2.0.3`，提交 `30b3ba5` / `5bae4cf`，PR #73（merge `d576231`）+ #74（merge `44b39d5`）；首次构建 run `34442721960` 因清单落盘路径失败，`5bae4cf` 修复后 run `34444159148` 成功。四资产回下载三路校验通过。
@@ -47,7 +47,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 已知验证
 
-- 全量 Node 回归 `1088/1088` 通过（`npm test`，即 `node --test --test-concurrency=1`）；`v2.0.3` 发布时基线为 `1076`，`v2.0.4` 多根新增 `tests/local-library-multi-root.test.js` 12 例。
+- 全量 Node 回归 `1103/1103` 通过（`npm test`，即 `node --test --test-concurrency=1`）；基线 `v2.0.3` `1076` → `v2.0.4` `1088`（多根 12 例）→ `v2.0.5` `1101`（倍速/睡眠 13 例）→ `v2.0.6` `1103`（主界面快捷 2 例）。
 - 文档编码门禁：`tests/doc-encoding-integrity.test.js` 检查 `RELEASE.md` / `CHANGELOG.md` / `README*.md` / `AGENTS.md` / `NOTICE.md` / `AI_HANDOFF.md` / `docs/PROJECT_MEMORY.md` / `docs/HANDOFF_NEXT_CHAT.md` 必须是合法 UTF-8、无 U+FFFD、无 GBK 乱码、无 BOM，已接入 `Verify`。
 - `desktop/main.js`、`public/app.js`、`server.js` 等入口 `node --check` 通过。
 - 发布工作流 `Generate SHA256 checksums` 的清单必须用绝对路径（`Join-Path (Get-Location)`）落盘再上传，相对名会因 .NET 工作目录与 PowerShell 位置不一致而失败（v2.0.3 首次构建已踩过）。

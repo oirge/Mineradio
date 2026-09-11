@@ -240,3 +240,31 @@ test('倍速在切歌装载后补写，且记忆在独立键里', () => {
 test('"播完本曲"睡眠定时挂在 onended，优先于续播', () => {
   assert.match(APP_SOURCE, /if \(typeof settleSleepTimerOnTrackEnded === 'function' && settleSleepTimerOnTrackEnded\(\)\) \{\s*stopPlaybackAfterCurrentTrack\(\);/);
 });
+
+test('主界面音量弹层内嵌倍速、睡眠快捷项与无缝/均衡开关', () => {
+  // 音量弹层里直接有速度 / 睡眠两组分段与两个开关。
+  assert.match(INDEX_SOURCE, /id="volume-control"[\s\S]*?id="volume-slider"[\s\S]*?id="main-rate-seg"[\s\S]*?data-main-rate="2"/);
+  assert.match(INDEX_SOURCE, /id="main-sleep-seg"[\s\S]*?data-main-sleep="track"/);
+  assert.match(INDEX_SOURCE, /id="main-gapless-btn"[\s\S]*?onclick="toggleGaplessSetting\(\)"/);
+  assert.match(INDEX_SOURCE, /id="main-replaygain-btn"[\s\S]*?toggleReplayGainSetting\('enabled'\)/);
+  // 画质不放在主界面弹层里，仍只在 DIY 高级面板的 #performance-quality-seg。
+  assert.ok(!/main-quality-seg/.test(INDEX_SOURCE), '画质不应出现在音量弹层');
+  assert.ok(!/data-main-quality/.test(INDEX_SOURCE), '画质快捷按钮应已移除');
+  assert.match(INDEX_SOURCE, /id="performance-quality-seg"/);
+});
+
+test('主界面快捷控件改的是唯一设置状态，并与设置面板互相回填', () => {
+  assert.match(APP_SOURCE, /function updateMainQuickControls\(\) \{/);
+  assert.match(APP_SOURCE, /function bindMainQuickControls\(\) \{/);
+  // 点击委托：速度走 setPlaybackRate、睡眠走 setSleepTimerMode。
+  assert.match(APP_SOURCE, /if \(rateBtn\) \{ setPlaybackRate\(rateBtn\.getAttribute\('data-main-rate'\)\); return; \}/);
+  assert.match(APP_SOURCE, /if \(sleepBtn\) \{ setSleepTimerMode\(sleepBtn\.getAttribute\('data-main-sleep'\)\); return; \}/);
+  // 画质已从主界面移除，不应再有对应的委托分支。
+  assert.ok(!/data-main-quality/.test(APP_SOURCE), '主界面不应残留画质快速项逻辑');
+  // 各设置的回填函数都要顺带刷新主界面快捷项，否则两边会不同步。
+  assert.match(APP_SOURCE, /hint\.textContent = gaplessHintText\(\);\s*if \(typeof updateMainQuickControls === 'function'\) updateMainQuickControls\(\);/);
+  assert.match(APP_SOURCE, /if \(typeof updateMainQuickControls === 'function'\) updateMainQuickControls\(\);\s*\}\s*\/\*\*\s*\n \* 落盘音量均衡设置/);
+  // 启动时绑定一次。
+  assert.match(APP_SOURCE, /initPlaybackRateControls\(\);\s*initSleepTimerControls\(\);\s*bindMainQuickControls\(\);/);
+});
+

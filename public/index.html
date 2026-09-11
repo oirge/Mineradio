@@ -928,8 +928,35 @@ if (document.fonts && document.fonts.load) {
     <div id="volume-control" class="volume-control">
       <button id="volume-btn" class="ctrl-btn" onclick="toggleVolumePanel(event)" title="音量 / 静音"><svg id="volume-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15 9.5a4 4 0 0 1 0 5"/></svg></button>
       <div class="volume-popover" onclick="event.stopPropagation()">
-        <input id="volume-slider" type="range" min="0" max="1" step="0.01" value="1" aria-label="音量">
-        <span id="volume-value">100%</span>
+        <div class="volume-row">
+          <input id="volume-slider" type="range" min="0" max="1" step="0.01" value="1" aria-label="音量">
+          <span id="volume-value">100%</span>
+        </div>
+        <div class="vq-row">
+          <span class="vq-label">速度</span>
+          <div class="vq-seg" id="main-rate-seg" role="group" aria-label="播放速度">
+            <button type="button" data-main-rate="0.5" title="0.5×">0.5</button>
+            <button type="button" data-main-rate="0.75" title="0.75×">0.75</button>
+            <button type="button" data-main-rate="1" title="正常速度">1</button>
+            <button type="button" data-main-rate="1.25" title="1.25×">1.25</button>
+            <button type="button" data-main-rate="1.5" title="1.5×">1.5</button>
+            <button type="button" data-main-rate="2" title="2.0×">2</button>
+          </div>
+        </div>
+        <div class="vq-row">
+          <span class="vq-label">睡眠</span>
+          <div class="vq-seg" id="main-sleep-seg" role="group" aria-label="睡眠定时">
+            <button type="button" data-main-sleep="off" title="关闭睡眠定时">关</button>
+            <button type="button" data-main-sleep="15" title="15 分钟后暂停">15</button>
+            <button type="button" data-main-sleep="30" title="30 分钟后暂停">30</button>
+            <button type="button" data-main-sleep="60" title="60 分钟后暂停">60</button>
+            <button type="button" data-main-sleep="track" title="播完本曲后暂停">本曲</button>
+          </div>
+        </div>
+        <div class="vq-toggles">
+          <button type="button" class="vq-toggle" id="main-gapless-btn" onclick="toggleGaplessSetting()" title="无缝播放：提前解码下一首">无缝</button>
+          <button type="button" class="vq-toggle" id="main-replaygain-btn" onclick="toggleReplayGainSetting('enabled')" title="音量均衡：拉平不同歌曲的响度">均衡</button>
+        </div>
       </div>
     </div>
     <button id="controls-hide-btn" class="ctrl-btn active" onclick="toggleControlsAutoHide()" title="控制条自动隐藏"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 8h14"/><path d="M8 12h8"/><path d="M10 16h4"/></svg></button>

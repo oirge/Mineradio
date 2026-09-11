@@ -683,9 +683,22 @@ body.home-controls-locked #bottom-bar{opacity:0!important;pointer-events:none!im
 .song-action-btn .heart-svg,.qi-act button .heart-svg{width:15px;height:15px}
 .volume-control,.quality-control{position:relative;display:flex;align-items:center;justify-content:center}
 .volume-control::before,.quality-control::before{content:'';position:absolute;left:-34px;right:-34px;bottom:18px;height:70px;display:none;z-index:0}
+/* 音量弹层现在是多行快捷面板，悬停桥要够高，否则从按钮滑到面板顶上会中途关闭。 */
+.volume-control::before{left:-44px;right:-44px;height:210px}
 .volume-control.open::before,.volume-control:hover::before,.volume-control:focus-within::before,.quality-control.open::before,.quality-control:hover::before,.quality-control:focus-within::before{display:block}
 .volume-control.muted .ctrl-btn{color:rgba(255,255,255,.38)}
-.volume-popover{position:absolute;left:50%;bottom:46px;transform:translateX(-50%) translateY(8px);width:154px;height:42px;padding:0 12px;border-radius:14px;border:1px solid rgba(255,255,255,.09);background:rgba(12,12,16,.78);backdrop-filter:blur(24px) saturate(1.12);-webkit-backdrop-filter:blur(24px) saturate(1.12);box-shadow:0 18px 48px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.07);display:flex;align-items:center;gap:9px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:1}
+.volume-popover{position:absolute;left:50%;bottom:46px;transform:translateX(-50%) translateY(8px);width:274px;padding:10px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.09);background:rgba(12,12,16,.82);backdrop-filter:blur(24px) saturate(1.12);-webkit-backdrop-filter:blur(24px) saturate(1.12);box-shadow:0 18px 48px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:1}
+.volume-row{display:flex;align-items:center;gap:9px}
+.vq-row{display:flex;align-items:center;gap:8px}
+.vq-label{flex:none;width:28px;font-size:10px;color:rgba(255,255,255,.5)}
+.vq-seg{display:flex;flex:1;min-width:0;gap:4px}
+.vq-seg button{flex:1;min-width:0;height:22px;padding:0;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05);color:rgba(255,255,255,.72);font-family:inherit;font-size:10.5px;cursor:pointer;transition:background .18s,border-color .18s,color .18s}
+.vq-seg button:hover{background:rgba(255,255,255,.10);color:#fff}
+.vq-seg button.active{background:rgba(var(--fc-accent-rgb),.22);border-color:rgba(var(--fc-accent-rgb),.5);color:#fff}
+.vq-toggles{display:flex;gap:6px}
+.vq-toggle{flex:1;height:24px;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05);color:rgba(255,255,255,.72);font-family:inherit;font-size:11px;cursor:pointer;transition:background .18s,border-color .18s,color .18s}
+.vq-toggle:hover{background:rgba(255,255,255,.10);color:#fff}
+.vq-toggle.active{background:rgba(var(--fc-accent-rgb),.22);border-color:rgba(var(--fc-accent-rgb),.5);color:#fff}
 .volume-control .ctrl-btn,.quality-control .ctrl-btn{position:relative;z-index:2}
 .volume-control.open .volume-popover,.volume-control:hover .volume-popover,.volume-control:focus-within .volume-popover,.quality-control.open .quality-popover,.quality-control:hover .quality-popover,.quality-control:focus-within .quality-popover{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
 #quality-btn.quality-pill{width:auto;min-width:56px;padding:0 11px;border-radius:13px;font-size:11px;font-weight:800;letter-spacing:.2px;color:rgba(237,245,255,.82);background:rgba(255,255,255,.038);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
@@ -698,7 +711,7 @@ body.home-controls-locked #bottom-bar{opacity:0!important;pointer-events:none!im
 .quality-option.active{color:#eaf2ff;border-color:rgba(157,184,207,.46);background:rgba(157,184,207,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
 .quality-option.locked{opacity:.42;cursor:not-allowed;transform:none!important}
 .quality-option.locked small::after{content:' · 本地原始音质';color:rgba(244,210,138,.88)}
-#volume-slider{width:92px;accent-color:var(--fc-accent);cursor:pointer}
+#volume-slider{flex:1;min-width:0;width:auto;accent-color:var(--fc-accent);cursor:pointer}
 #volume-value{width:34px;text-align:right;font-size:10px;color:rgba(255,255,255,.52);font-variant-numeric:tabular-nums}
 .mini-queue-popover{position:absolute;left:50%;bottom:calc(100% + 14px);width:min(420px,calc(100vw - 32px));max-height:min(420px,calc(100vh - 170px));padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.075);background:linear-gradient(145deg,rgba(18,18,23,.82),rgba(8,8,12,.88));backdrop-filter:blur(30px) saturate(1.08);-webkit-backdrop-filter:blur(30px) saturate(1.08);box-shadow:0 22px 70px rgba(0,0,0,.46),inset 0 1px 0 rgba(255,255,255,.065);opacity:0;pointer-events:none;transform:translateX(-50%) translateY(12px) scale(.98);transition:opacity .22s,transform .22s;z-index:7;overflow:hidden}
 .mini-queue-popover.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0) scale(1)}

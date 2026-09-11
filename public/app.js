@@ -630,7 +630,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.0.5';
+var APP_VERSION = '2.0.6';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -23028,6 +23028,7 @@ function updateGaplessControls() {
   }
   var hint = document.getElementById('gapless-hint');
   if (hint) hint.textContent = gaplessHintText();
+  if (typeof updateMainQuickControls === 'function') updateMainQuickControls();
 }
 
 /**
@@ -23422,6 +23423,7 @@ function updatePlaybackRateControls() {
   if (hint) hint.textContent = playbackRateSetting === 1
     ? '正常速度；可切换 0.5× 到 2.0×，音高不变。'
     : '当前 ' + formatPlaybackRateLabel(playbackRateSetting) + '；音高不变，歌词与节拍会跟着走。';
+  if (typeof updateMainQuickControls === 'function') updateMainQuickControls();
 }
 
 /**
@@ -23563,13 +23565,14 @@ function updateSleepTimerControls() {
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
   var hint = document.getElementById('sleep-timer-hint');
-  if (!hint) return;
+  if (!hint) { if (typeof updateMainQuickControls === 'function') updateMainQuickControls(); return; }
   if (mode === 'off') hint.textContent = '关闭时不受影响；到点会淡出并暂停，不改变播放模式。';
   else if (mode === 'track') hint.textContent = '本曲自然播完后淡出暂停。';
   else {
     var leftMin = sleepTimerState.dueAt ? Math.max(0, Math.ceil((sleepTimerState.dueAt - Date.now()) / 60000)) : Number(mode);
     hint.textContent = '约 ' + leftMin + ' 分钟后淡出暂停。';
   }
+  if (typeof updateMainQuickControls === 'function') updateMainQuickControls();
 }
 
 /**
@@ -23653,6 +23656,66 @@ function bindVolumeControls() {
   });
   updateVolumeUi();
   applyVolumeToAudio();
+}
+
+// 主界面音量弹层里的常用快捷项：速度 / 睡眠 / 画质 / 无缝 / 均衡。
+// 它们直接改的是各功能唯一的设置状态，设置面板里的同一项会跟着同步。
+// 该函数定义在 bindVolumeControls 之后，因为 toggleVolumePanel 是 playback-rate 测试的切片终点。
+/**
+ * 回填主界面音量弹层里各快捷项的选中态。
+ * @returns {void}
+ */
+function updateMainQuickControls() {
+  var rateSeg = document.getElementById('main-rate-seg');
+  if (rateSeg) {
+    var rate = normalizePlaybackRateValue(playbackRateSetting);
+    var rateButtons = rateSeg.querySelectorAll('[data-main-rate]');
+    for (var i = 0; i < rateButtons.length; i++) {
+      var active = Math.abs(normalizePlaybackRateValue(rateButtons[i].getAttribute('data-main-rate')) - rate) < 0.001;
+      rateButtons[i].classList.toggle('active', active);
+      rateButtons[i].setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  }
+  var sleepSeg = document.getElementById('main-sleep-seg');
+  if (sleepSeg) {
+    var mode = normalizeSleepTimerMode(sleepTimerState.mode);
+    var sleepButtons = sleepSeg.querySelectorAll('[data-main-sleep]');
+    for (var j = 0; j < sleepButtons.length; j++) {
+      var sleepActive = normalizeSleepTimerMode(sleepButtons[j].getAttribute('data-main-sleep')) === mode;
+      sleepButtons[j].classList.toggle('active', sleepActive);
+      sleepButtons[j].setAttribute('aria-pressed', sleepActive ? 'true' : 'false');
+    }
+  }
+  var gaplessBtn = document.getElementById('main-gapless-btn');
+  if (gaplessBtn) {
+    var gaplessOn = !!(gaplessSettings && gaplessSettings.enabled);
+    gaplessBtn.classList.toggle('active', gaplessOn);
+    gaplessBtn.setAttribute('aria-pressed', gaplessOn ? 'true' : 'false');
+  }
+  var replayBtn = document.getElementById('main-replaygain-btn');
+  if (replayBtn) {
+    var replayOn = !!(replayGainSettings && replayGainSettings.enabled);
+    replayBtn.classList.toggle('active', replayOn);
+    replayBtn.setAttribute('aria-pressed', replayOn ? 'true' : 'false');
+  }
+}
+
+/**
+ * 绑定主界面音量弹层的快捷项事件。事件委托挂在弹层容器上。
+ * @returns {void}
+ */
+function bindMainQuickControls() {
+  var popover = document.querySelector('#volume-control .volume-popover');
+  if (!popover || popover._mineradioQuickBound) return;
+  popover._mineradioQuickBound = true;
+  popover.addEventListener('click', function(ev){
+    var target = ev.target;
+    if (!target || !target.closest) return;
+    var rateBtn = target.closest('[data-main-rate]');
+    if (rateBtn) { setPlaybackRate(rateBtn.getAttribute('data-main-rate')); return; }
+    var sleepBtn = target.closest('[data-main-sleep]');
+    if (sleepBtn) { setSleepTimerMode(sleepBtn.getAttribute('data-main-sleep')); return; }
+  });
 }
 
 // ============================================================
@@ -24117,6 +24180,7 @@ function updateReplayGainControls() {
   }
   var hint = document.getElementById('replaygain-hint');
   if (hint) hint.textContent = replayGainHintText();
+  if (typeof updateMainQuickControls === 'function') updateMainQuickControls();
 }
 
 /**
@@ -44117,6 +44181,7 @@ initGaplessControls();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 initPlaybackRateControls();
 initSleepTimerControls();
+bindMainQuickControls();
 initPluginRuntime();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
 

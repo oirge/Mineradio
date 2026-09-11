@@ -92,6 +92,13 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.0.6 (2026-09-11)
+
+- The main-bar volume popover is now a quick panel embedding playback speed and sleep timer, plus gapless and ReplayGain toggles
+- These quick controls edit the same settings as the DIY panel and stay in sync both ways, so common tweaks no longer require opening the panel
+
+Full Node regression suite: `1103/1103` passing.
+
 ### v2.0.5 (2026-09-11)
 
 - Added playback speed: a "Playback Speed" section in settings offers six steps from 0.5× to 2.0× with pitch preserved, applied live without interrupting the current track
