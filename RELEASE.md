@@ -1,5 +1,14 @@
 # 发布流程
 
+## v2.0.5 播放速度与睡眠定时
+
+- 发布版本从 `2.0.4` 提升为 `2.0.5`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
+- **播放速度（倍速）：** 新增设置折叠区「播放速度」（`public/index.html` 的 `fx-playbackrate-fold`），六个档位 `0.5× / 0.75× / 1.0× / 1.25× / 1.5× / 2.0×`。`playbackRate` 是元素级属性，**必须写进两个 deck 的音频元素**（`applyPlaybackRateToDecks`）——交叉 / 无缝接管的下一首可能落在另一个 deck 上，只写全局 `audio` 会让下一首突然回到 1×；`playLocalQueueItem` 的原生装载路径在 `applyVolumeToAudio()` 之后补一次。音高保持交给浏览器默认的 `preservesPitch`。**时间轴不需要换算**：渲染层读 `audio.currentTime` 的消费方（歌词高亮、舞台歌词、节拍分析、进度、媒体会话）拿到的都是已按 rate 缩放过的曲目时间轴，与歌词 / beatmap 时间戳同轴；唯一按墙钟外推的 `public/desktop-lyrics.html` 早已按 payload 里的 `rate` 换算。设置存独立键 `mineradio-playback-rate-v1`（JSON `{rate}`），**绝不写进视觉预设 `fx`**。
+- **睡眠定时：** 新增设置折叠区「睡眠定时」（`fx-sleep-fold`），五档 `关闭 / 15 分 / 30 分 / 60 分 / 播完本曲`。分钟档排一个 `setTimeout`，到点走既有 `fadeOutAndPauseAudio()`（淡出后暂停），不改变播放模式、不动队列；`播完本曲` 不排墙钟定时器，在曲目 `audio.onended` 里结算（`settleSleepTimerOnTrackEnded`），**排在 `stopAfterCurrentTrack` 之前**——到点直接 `stopPlaybackAfterCurrentTrack()`，不接下一首。设置存独立键 `mineradio-sleep-timer-v1`；重启只恢复模式，分钟档从整段重新计时（倒计时本身不持久化）。
+- **持久化键登记：** 两个新键同时登记进 `PERSISTENT_UI_STATE_KEYS`（app.js）、`desktop/preload.js` 的 `PERSISTENT_UI_STATE_KEYS`、`desktop/main.js` 的 `DESKTOP_UI_STATE_KEYS`。
+- **放置约束（别挪错）：** 两个功能都归 `fxPanelTargetForNode` 的 `'advanced'` 链；`organizeFxPanel` 的强制展开清单在 `fx-gapless-fold` 与 `fx-volume-fold` 之间插入两个新 id；两个折叠区在 `public/index.html` 里排在 `fx-gapless-fold` 与 `fx-eq-fold` 之间（保住 `fx-volume-fold < fx-gapless-fold < fx-eq-fold` 这条既有断言）；初始化 `initPlaybackRateControls(); initSleepTimerControls();` **必须排在 `if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);` 之后**，否则会打红 `tests/auto-playback-startup.test.js` 的启动链正则。
+- 验证：新增 `tests/playback-rate-sleep-timer.test.js` 13 例（倍速归一化、双 deck 写入、独立键落盘、展示文本、睡眠模式归一化、分钟档到点淡出暂停、播完本曲不排定时器且曲终结算、关闭清定时器、面板结构、归类与展开清单、初始化顺序、onended 优先级），并同步修 `tests/gapless-crossfade.test.js`（强制展开清单字面量）与 `tests/playback-queue-power.test.js`（onended 里 200→420 字窗口）被改动的断言；全量 Node 回归 `1101/1101` 通过。
+
 ## v2.0.4 同时监控多个音乐目录
 
 - 发布版本从 `2.0.3` 提升为 `2.0.4`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。

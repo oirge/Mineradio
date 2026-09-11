@@ -552,6 +552,45 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold" id="fx-playbackrate-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-playbackrate-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>播放速度</strong><small>0.5× 到 2.0×，音高不变</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-section-label">倍速</div>
+      <div class="fx-seg" id="playback-rate-seg-a" title="改变播放速度，音高保持不变">
+        <button type="button" data-playback-rate="0.5">0.5×</button>
+        <button type="button" data-playback-rate="0.75">0.75×</button>
+        <button type="button" data-playback-rate="1" aria-pressed="true">1.0×</button>
+      </div>
+      <div class="fx-seg" id="playback-rate-seg-b" title="改变播放速度，音高保持不变">
+        <button type="button" data-playback-rate="1.25">1.25×</button>
+        <button type="button" data-playback-rate="1.5">1.5×</button>
+        <button type="button" data-playback-rate="2">2.0×</button>
+      </div>
+      <div class="mini-player-collapse-hint" id="playback-rate-hint">正常速度；可切换 0.5× 到 2.0×，音高不变。</div>
+    </div>
+  </div>
+
+  <div class="fx-fold" id="fx-sleep-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-sleep-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>睡眠定时</strong><small>到点淡出并暂停</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-section-label">定时关闭</div>
+      <div class="fx-seg" id="sleep-timer-seg-a" title="到点后淡出并暂停播放">
+        <button type="button" data-sleep-mode="off" aria-pressed="true">关闭</button>
+        <button type="button" data-sleep-mode="15">15 分</button>
+        <button type="button" data-sleep-mode="30">30 分</button>
+      </div>
+      <div class="fx-seg" id="sleep-timer-seg-b" title="到点后淡出并暂停播放">
+        <button type="button" data-sleep-mode="60">60 分</button>
+        <button type="button" data-sleep-mode="track">播完本曲</button>
+      </div>
+      <div class="mini-player-collapse-hint" id="sleep-timer-hint">关闭时不受影响；到点会淡出并暂停，不改变播放模式。</div>
+    </div>
+  </div>
+
   <div class="fx-fold" id="fx-eq-fold">
     <div class="fx-fold-head" onclick="document.getElementById('fx-eq-fold').classList.toggle('open')">
       <span class="fx-fold-title"><strong>音效链</strong><small>预设 → EQ → Preamp → Limiter → Spatial</small></span><span class="arrow">▶</span>

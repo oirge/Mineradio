@@ -50,6 +50,16 @@
 
 ## Release Memory
 
+## v2.0.5 播放速度与睡眠定时
+
+- 日期：2026-09-11。发布版本从 `2.0.4` 提升为 `2.0.5`，五处版本钉一起动；只加两个播放功能，安装身份、数据目录与自动更新线路不变。
+- 倍速：`fx-playbackrate-fold`，六档 `PLAYBACK_RATE_PRESETS = [0.5,0.75,1,1.25,1.5,2]`；`normalizePlaybackRateValue` 只认档位、脏值（`null`/`0`/负/非数字）回落 `1`、越界夹到 `[0.5,2.0]`。`playbackRate` 是元素级属性，`applyPlaybackRateToDecks` **遍历 `audioDeckList` 两个 deck 都写**（交叉/无缝接管的下一首落在另一个 deck 上，不写就会回到 1×），`playLocalQueueItem` 原生装载路径在 `applyVolumeToAudio()` 之后补一次。
+- 倍速的时间轴：**不需要按 rate 换算**。渲染层读 `audio.currentTime` 的消费方（进度、舞台歌词、桌面歌词高亮、节拍分析、媒体会话）拿到的都已被媒体元素按 rate 缩放，与歌词/beatmap 时间戳同轴；唯一按墙钟外推的是 `public/desktop-lyrics.html` 的 `currentDesktopPlaybackTime`，它早已用 payload 里的 `rate` 换算。
+- 睡眠定时：`fx-sleep-fold`，五档 `关闭 / 15 分 / 30 分 / 60 分 / 播完本曲`；`normalizeSleepTimerMode` 只认 `off`/`track`/`15`/`30`/`60`。分钟档排 `setTimeout` 到点走既有 `fadeOutAndPauseAudio()`；`track` 档不排墙钟定时器，在 `audio.onended` 里 `settleSleepTimerOnTrackEnded()` 结算，**排在 `if (stopAfterCurrentTrack)` 之前**。
+- 两个设置各存独立键 `mineradio-playback-rate-v1` / `mineradio-sleep-timer-v1`（JSON），**都不进视觉预设 `fx`**；两个新键在 `PERSISTENT_UI_STATE_KEYS`(app.js) / preload / main.js 三处登记。
+- 放置约束：两个折叠区夹在 `fx-gapless-fold` 与 `fx-eq-fold` 之间；`fxPanelTargetForNode` 归 advanced 且新 id 靠前；`organizeFxPanel` 强制展开清单登记；两个 init 排在 `if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);` 之后。
+- 验证：新增 `tests/playback-rate-sleep-timer.test.js` 13 例；同步修 `tests/gapless-crossfade.test.js`（展开清单）与 `tests/playback-queue-power.test.js`（onended 窗口 200→420）；全量 Node 回归 `1101/1101` 通过；相关 JavaScript 语法检查通过。**真实窗口里没有肉眼验证过倍速与睡眠定时**，结论来自 `node:vm` 跑真实源码 + 源码断言。
+
 ## v2.0.4 同时监控多个音乐目录
 
 - 日期：2026-09-11。发布版本从 `2.0.3` 提升为 `2.0.4`，五处版本钉一起动；只做曲库多根功能，安装身份、数据目录与自动更新线路不变。

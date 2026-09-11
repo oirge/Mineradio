@@ -5,8 +5,8 @@
 ## 当前权威入口（2026-09-10）
 
 - **仓库以 GitHub `https://github.com/oirge/Mineradio` 为准，本地路径随机器变化**。旧规则里的 `C:\Users\oirg\Desktop\mok\Mineradio-sync`、`C:\Users\Administrator\Desktop\Mineradio-main`、`E:\桌面\播放器软件\Mineradio\resources\app` 在当前环境都不存在，别盲目切过去；先 `git remote -v` + `git log --oneline -1` 确认。
-- 当前源码版本是 `v2.0.4`（同时监控多个音乐目录），尚未发布；最新提交以 `git log --oneline -5 --decorate` 为准。
-- `v2.0.3` 已发布到 GitHub Release 并设为 Latest：`https://github.com/oirge/Mineradio/releases/tag/v2.0.3`（annotated tag object `ac634a30…` 指向 release commit `30b3ba5`，Release `386043356`，`published_at` `2026-09-10T06:22:41Z`）；四项资产已回下载核对一致。**注：曾有一次误建的 v2.0.4 文档维护提交与 tag 被反向提交移除，当前 `v2.0.4` 是本次多根功能重新启用的版本号，尚未打 tag。**
+- 当前源码版本是 `v2.0.5`（播放速度与睡眠定时），尚未发布；最新提交以 `git log --oneline -5 --decorate` 为准。
+- `v2.0.4` 已发布到 GitHub Release 并设为 Latest：`https://github.com/oirge/Mineradio/releases/tag/v2.0.4`（tag `v2.0.4` 指向 release commit `2966d52`，Release `386780937`，`published_at` `2026-09-11T04:18:08Z`，四项资产齐全）。`v2.0.3` 是上一版：Release `386043356`。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
 - 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录（只到 `v1.2.44`），不能覆盖上述文件的当前结论。

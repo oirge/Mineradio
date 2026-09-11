@@ -23,6 +23,8 @@ const PERSISTENT_UI_STATE_KEYS = [
   'mineradio-hotkey-settings-v1',
   'mineradio-visual-guide-seen-v2',
   'mineradio-upload-tip-seen',
+  'mineradio-playback-rate-v1',
+  'mineradio-sleep-timer-v1',
 ];
 
 function restorePersistentUiState() {
