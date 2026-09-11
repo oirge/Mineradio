@@ -133,6 +133,9 @@ var VOLUME_STORE_KEY = 'apex-player-volume';
 var LOCAL_BEATMAP_STORE_KEY = 'mineradio-local-beatmaps-v1';
 var LOCAL_BEAT_PREF_STORE_KEY = 'mineradio-local-beatmap-prefs-v1';
 var LOCAL_LIBRARY_FOLDER_STORE_KEY = 'mineradio-local-library-folder-v1';
+// 多根：曲库可以同时监控多个音乐目录。旧安装只存一个标量根（上面那个键）作为兼容镜像，
+// 新形态写在这个数组键里，读不到数组时按标量迁移，首个根恒等于标量键。
+var LOCAL_LIBRARY_FOLDERS_STORE_KEY = 'mineradio-local-library-folders-v1';
 var LOCAL_LIBRARY_SNAPSHOT_STORE_KEY = 'mineradio-local-library-snapshot-v1';
 var LOCAL_LIBRARY_INDEX_STORE_KEY = 'mineradio-local-library-index-v1';
 var PLAYBACK_SESSION_STORE_KEY = 'mineradio-playback-session-v1';
@@ -162,6 +165,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   CONTROLS_AUTO_HIDE_STORE_KEY,
   FREE_CAMERA_STORE_KEY,
   LOCAL_LIBRARY_FOLDER_STORE_KEY,
+  LOCAL_LIBRARY_FOLDERS_STORE_KEY,
   PLAYBACK_SESSION_STORE_KEY,
   SONG_RESUME_STORE_KEY,
   QUEUE_SNAPSHOT_STORE_KEY,
@@ -622,7 +626,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.0.3';
+var APP_VERSION = '2.0.4';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -23417,7 +23421,11 @@ function writePlaybackSession() {
   try { recordSongResumeTick(); } catch (e) {}
   try {
     var song = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
-    var folderPath = savedLocalLibraryFolderPath();
+    // 多根：记住这首歌实际属于哪个根，恢复时才能在所有根里对准曲库。
+    var roots = typeof savedLocalLibraryFolderPaths === 'function' ? savedLocalLibraryFolderPaths() : [];
+    var folderPath = typeof localLibraryRootForSong === 'function' && roots.length
+      ? (localLibraryRootForSong(song, roots) || savedLocalLibraryFolderPath())
+      : savedLocalLibraryFolderPath();
     var songKey = localPlaybackSessionSongKey(song);
     if (!folderPath || !songKey) return;
     setPersistentLocalStorageItem(PLAYBACK_SESSION_STORE_KEY, JSON.stringify({
@@ -23493,7 +23501,17 @@ function findPlaybackSessionIndex(songs, session) {
  */
 function restorePlaybackSessionForLocalLibrary(songs, folderPath) {
   var session = readPlaybackSession();
-  if (!session || !folderPath || session.folderPath !== folderPath) return false;
+  if (!session || !folderPath) return false;
+  // 单根：会话根必须与当前根一致。多根：会话根只要是当前曲库的任一根即可，
+  // 曲库是并集，上次那首歌可能落在另一个目录里。
+  var rootMatches = session.folderPath === folderPath;
+  if (!rootMatches && typeof savedLocalLibraryFolderPaths === 'function') {
+    var roots = savedLocalLibraryFolderPaths();
+    for (var r = 0; r < roots.length; r++) {
+      if (localLibraryWatchRootMatches(roots[r], session.folderPath)) { rootMatches = true; break; }
+    }
+  }
+  if (!rootMatches) return false;
   var idx = findPlaybackSessionIndex(songs, session);
   if (idx < 0) return false;
   currentIdx = idx;
@@ -32715,20 +32733,143 @@ async function preloadLocalSongAssets(song, opts) {
   }
   return true;
 }
+/**
+ * 规范化音乐文件夹列表：去空、按路径键去重（大小写与分隔符归一后比较）、保留首次出现顺序。
+ * 数组键是唯一权威，重复项一律在这里收口，后面所有读写都拿到干净列表。
+ * @param {Array<string>} list 原始文件夹列表。
+ * @returns {Array<string>} 规范化后的文件夹列表。
+ */
+function normalizeLocalLibraryFolderList(list) {
+  list = Array.isArray(list) ? list : [];
+  var out = [];
+  var seen = Object.create(null);
+  for (var i = 0; i < list.length; i++) {
+    var text = String(list[i] == null ? '' : list[i]).trim();
+    if (!text) continue;
+    var key = normalizeLocalLibraryPathKey(text);
+    if (!key || seen[key]) continue;
+    seen[key] = true;
+    out.push(text);
+  }
+  return out;
+}
+/**
+ * 读曲库的音乐文件夹列表。多根优先读数组键；旧安装只有一个标量根，就地迁移成单元素数组。
+ * @returns {Array<string>} 规范化后的文件夹列表。
+ */
+function savedLocalLibraryFolderPaths() {
+  var list = [];
+  try {
+    var raw = localStorage.getItem(LOCAL_LIBRARY_FOLDERS_STORE_KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed;
+    }
+  } catch (e) {}
+  if (!list.length) {
+    var single = '';
+    try { single = localStorage.getItem(LOCAL_LIBRARY_FOLDER_STORE_KEY) || ''; } catch (e2) {}
+    if (single) list = [single];
+  }
+  return normalizeLocalLibraryFolderList(list);
+}
+/**
+ * 保留旧签名：返回主根（列表首项）。播放会话、维护探测、空库检测这些单值消费方一律走它，
+ * 多根改造不动这些调用点的语义。
+ * @returns {string} 主根路径，没有文件夹时返回空串。
+ */
 function savedLocalLibraryFolderPath() {
-  try { return localStorage.getItem(LOCAL_LIBRARY_FOLDER_STORE_KEY) || ''; } catch (e) { return ''; }
+  var paths = savedLocalLibraryFolderPaths();
+  return paths.length ? paths[0] : '';
+}
+/**
+ * 写整份文件夹列表。数组键与标量键一起写，标量键恒指首个根，
+ * 这样任何还没来得及改多根的旧读取路径仍能拿到一个合理的主根。
+ * @param {Array<string>} list 文件夹列表。
+ * @returns {boolean} 是否写入成功。
+ */
+function saveLocalLibraryFolderPaths(list) {
+  var paths = normalizeLocalLibraryFolderList(list);
+  if (!paths.length) return false;
+  try {
+    setPersistentLocalStorageItem(LOCAL_LIBRARY_FOLDERS_STORE_KEY, JSON.stringify(paths));
+    setPersistentLocalStorageItem(LOCAL_LIBRARY_FOLDER_STORE_KEY, paths[0]);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 function saveLocalLibraryFolderPath(folderPath) {
-  if (folderPath) setPersistentLocalStorageItem(LOCAL_LIBRARY_FOLDER_STORE_KEY, folderPath);
+  if (folderPath) saveLocalLibraryFolderPaths([folderPath]);
 }
-function clearSavedLocalLibraryFolderPath() {
-  var folderPath = savedLocalLibraryFolderPath();
+/**
+ * 追加一个音乐目录（已存在则原样保留）。导入第二个及以后的文件夹走这条，
+ * 曲库是"合并"语义而不是"替换"。
+ * @param {string} folderPath 要加入的目录。
+ * @returns {boolean} 是否写入成功。
+ */
+function addLocalLibraryFolderPath(folderPath) {
+  if (!folderPath) return false;
+  var paths = savedLocalLibraryFolderPaths();
+  var key = normalizeLocalLibraryPathKey(folderPath);
+  var exists = false;
+  for (var i = 0; i < paths.length; i++) {
+    if (normalizeLocalLibraryPathKey(paths[i]) === key) { exists = true; break; }
+  }
+  if (!exists) paths.push(folderPath);
+  return saveLocalLibraryFolderPaths(paths);
+}
+/**
+ * 移除一个音乐目录。移除后曲库里不再有它的歌，对应快照/索引记录一并清掉。
+ * @param {string} folderPath 要移除的目录。
+ * @returns {boolean} 是否仍剩至少一个目录。
+ */
+function removeLocalLibraryFolderPath(folderPath) {
+  var key = normalizeLocalLibraryPathKey(folderPath);
+  if (!key) return false;
+  var paths = savedLocalLibraryFolderPaths().filter(function(p){
+    return normalizeLocalLibraryPathKey(p) !== key;
+  });
+  if (!paths.length) {
+    clearSavedLocalLibraryFolderPaths();
+    return false;
+  }
+  deleteLocalLibraryPersistentRecords(folderPath);
+  return saveLocalLibraryFolderPaths(paths);
+}
+/**
+ * 清空全部音乐目录设置，并逐个释放快照/索引记录。
+ * @returns {void}
+ */
+function clearSavedLocalLibraryFolderPaths() {
+  var paths = savedLocalLibraryFolderPaths();
   try {
+    removePersistentLocalStorageItem(LOCAL_LIBRARY_FOLDERS_STORE_KEY);
     removePersistentLocalStorageItem(LOCAL_LIBRARY_FOLDER_STORE_KEY);
     localStorage.removeItem(LOCAL_LIBRARY_SNAPSHOT_STORE_KEY);
     localStorage.removeItem(LOCAL_LIBRARY_INDEX_STORE_KEY);
   } catch (e) {}
-  deleteLocalLibraryPersistentRecords(folderPath);
+  for (var i = 0; i < paths.length; i++) deleteLocalLibraryPersistentRecords(paths[i]);
+}
+function clearSavedLocalLibraryFolderPath() {
+  clearSavedLocalLibraryFolderPaths();
+}
+/**
+ * 判断一首歌落在哪个曲库根下。按绝对路径前缀匹配（走与备份同一套相对路径切分），
+ * 认不出（歌曲没有绝对路径）返回空串。
+ * @param {object} song 本地歌曲。
+ * @param {Array<string>} roots 曲库根列表。
+ * @returns {string} 所属根路径，认不出返回空串。
+ */
+function localLibraryRootForSong(song, roots) {
+  if (!song) return '';
+  var abs = String(song.localFilePathAbsolute || song.localPath || '');
+  if (!abs) return '';
+  roots = Array.isArray(roots) ? roots : savedLocalLibraryFolderPaths();
+  for (var i = 0; i < roots.length; i++) {
+    if (mineradioBackupRelPath(roots[i], abs)) return roots[i];
+  }
+  return '';
 }
 function compactLocalLibrarySnapshotFile(file) {
   if (!file) return null;
@@ -33312,14 +33453,18 @@ async function openLocalFolderImport() {
       var result = await api.chooseLocalMusicFolder();
       if (!result || result.canceled) return;
       if (!result.ok) throw new Error(result.error || 'LOCAL_LIBRARY_CHOOSE_FAILED');
-      handleLocalFolderFiles(result.files || [], {
-        folderOnly: true,
-        folderPath: result.folderPath || '',
-        persist: true,
+      var newRoot = String(result.folderPath || '');
+      // 追加语义：先把这个目录并入已监控列表，再用全部根重建曲库，
+      // 于是"导入第二个文件夹"是并集而不是把第一个文件夹替换掉。
+      if (newRoot) addLocalLibraryFolderPath(newRoot);
+      await reloadLocalLibraryFromAllRoots({
         autoPlay: true,
-        desktopScanned: true,
-        directories: result.directories || [],
-        truncated: !!result.truncated
+        preloaded: newRoot ? {
+          root: newRoot,
+          files: result.files || [],
+          directories: result.directories || [],
+          truncated: !!result.truncated
+        } : null
       });
       return;
     } catch (e) {
@@ -33330,48 +33475,89 @@ async function openLocalFolderImport() {
   var input = document.getElementById('local-folder-input');
   if (input) input.click();
 }
-async function restoreSavedLocalMusicFolder() {
-  var folderPath = savedLocalLibraryFolderPath();
+/**
+ * 用当前保存的全部曲库根重建曲库：逐根取回文件（预取结果优先）再合并进一次 handleLocalFolderFiles。
+ * 导入新目录、删除目录后都走它，保证列表与曲库始终一致。
+ * @param {{autoPlay?: boolean, preloaded?: object}} opts 重建选项。
+ * @returns {Promise<boolean>} 是否完成重建。
+ */
+async function reloadLocalLibraryFromAllRoots(opts) {
+  opts = opts || {};
   var api = desktopLocalMusicApi();
-  if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return false;
+  if (!api || typeof api.scanLocalMusicFolder !== 'function') return false;
+  var roots = savedLocalLibraryFolderPaths();
+  if (!roots.length) return false;
+  var preloaded = opts.preloaded || null;
+  var groups = [];
+  var survivors = [];
+  for (var i = 0; i < roots.length; i++) {
+    var root = roots[i];
+    if (preloaded && localLibraryWatchRootMatches(preloaded.root, root)) {
+      survivors.push(preloaded.root || root);
+      groups.push({
+        root: preloaded.root || root,
+        files: preloaded.files || [],
+        directories: preloaded.directories || [],
+        truncated: !!preloaded.truncated
+      });
+      preloaded = null;
+      continue;
+    }
+    var loaded = await loadSingleLocalLibraryRoot(root, api);
+    if (!loaded) continue;
+    survivors.push(loaded.root || root);
+    groups.push({
+      root: loaded.root || root,
+      files: loaded.files,
+      directories: loaded.directories,
+      truncated: loaded.truncated
+    });
+  }
+  if (!groups.length) return false;
+  if (survivors.length !== roots.length) saveLocalLibraryFolderPaths(survivors);
+  await handleLocalFolderFiles(null, {
+    folderOnly: true,
+    rootGroups: groups,
+    persist: true,
+    autoPlay: opts.autoPlay !== false,
+    restored: false
+  });
+  return true;
+}
+/**
+ * 逐根取回一个已保存曲库根的文件列表：优先 SQLite 交接件、再旧快照刷新、最后全量扫描。
+ * 返回该根的一组文件与该根实际的路径（主进程可能把路径 resolve 过）。
+ * @param {string} folderPath 该根路径。
+ * @param {object} api 桌面壳本地音乐接口。
+ * @returns {Promise<{root:string, files:Array<object>, directories:Array<object>, truncated:boolean, snapshot:object|string}|null>} 该根结果，取不到返回 null。
+ */
+async function loadSingleLocalLibraryRoot(folderPath, api) {
   await hydrateLocalLibraryPersistentState(folderPath);
   var snapshot = await readLocalLibrarySnapshot(folderPath);
-  // SQLite 交接件里的 files 已经是主进程重建好的绝对路径 + 代理 URL 记录，
-  // 不必再把整个数组送进 refreshLocalMusicFiles 转一圈；删除的文件仍由后台增量扫描剔除。
   if (snapshot && snapshot.fromDb) {
     try {
-      await handleLocalFolderFiles(snapshot.files, {
-        folderOnly: true,
-        folderPath: folderPath,
-        persist: false,
-        autoPlay: false,
-        restored: true,
-        fromSnapshot: true,
+      return {
+        root: folderPath,
+        files: snapshot.files,
         directories: snapshot.directories || [],
-        truncated: !!snapshot.truncated
-      });
-      refreshSavedLocalMusicFolderInBackground(folderPath, snapshot);
-      return true;
+        truncated: !!snapshot.truncated,
+        snapshot: snapshot
+      };
     } catch (e) {
       console.warn('[LocalLibraryDbRestore]', e);
     }
   }
   if (snapshot && typeof api.refreshLocalMusicFiles === 'function') {
     try {
-      var restored = await api.refreshLocalMusicFiles(folderPath, snapshot);
-      if (restored && restored.ok && Array.isArray(restored.files)) {
-        await handleLocalFolderFiles(restored.files, {
-          folderOnly: true,
-          folderPath: restored.folderPath || folderPath,
-          persist: false,
-          autoPlay: false,
-          restored: true,
-          fromSnapshot: true,
-          directories: restored.directories || snapshot.directories || [],
-          truncated: !!snapshot.truncated
-        });
-        refreshSavedLocalMusicFolderInBackground(restored.folderPath || folderPath, snapshot);
-        return true;
+      var refreshed = await api.refreshLocalMusicFiles(folderPath, snapshot);
+      if (refreshed && refreshed.ok && Array.isArray(refreshed.files)) {
+        return {
+          root: refreshed.folderPath || folderPath,
+          files: refreshed.files,
+          directories: refreshed.directories || snapshot.directories || [],
+          truncated: !!snapshot.truncated,
+          snapshot: snapshot
+        };
       }
     } catch (e) {
       console.warn('[LocalLibrarySnapshotRestore]', e);
@@ -33380,22 +33566,58 @@ async function restoreSavedLocalMusicFolder() {
   try {
     var result = await api.scanLocalMusicFolder(folderPath);
     if (!result || !result.ok) throw new Error(result && result.error || 'LOCAL_LIBRARY_SCAN_FAILED');
-    await handleLocalFolderFiles(result.files || [], {
-      folderOnly: true,
-      folderPath: result.folderPath || folderPath,
-      persist: false,
-      autoPlay: false,
-      restored: true,
+    return {
+      root: result.folderPath || folderPath,
+      files: result.files || [],
       directories: result.directories || [],
-      truncated: !!result.truncated
-    });
-    return true;
+      truncated: !!result.truncated,
+      snapshot: null
+    };
   } catch (e) {
     console.warn('[LocalLibraryRestore]', e);
-    clearSavedLocalLibraryFolderPath();
+    return null;
+  }
+}
+async function restoreSavedLocalMusicFolder() {
+  var folderPaths = savedLocalLibraryFolderPaths();
+  var api = desktopLocalMusicApi();
+  if (!folderPaths.length || !api || typeof api.scanLocalMusicFolder !== 'function') return false;
+  // 逐根取回文件，再一次性合并进曲库。任何一个根取不到就把它从设置里摘掉，
+  // 剩下的根照常恢复；全都取不到才算这次恢复失败。
+  var groups = [];
+  var survivors = [];
+  for (var i = 0; i < folderPaths.length; i++) {
+    var loaded = await loadSingleLocalLibraryRoot(folderPaths[i], api);
+    var restoredRoot = loaded ? (loaded.root || folderPaths[i]) : folderPaths[i];
+    if (!loaded) continue;
+    survivors.push(restoredRoot);
+    groups.push({
+      root: restoredRoot,
+      files: loaded.files,
+      directories: loaded.directories,
+      truncated: loaded.truncated
+    });
+  }
+  if (!groups.length) {
+    clearSavedLocalLibraryFolderPaths();
     showToast('上次的本地音乐文件夹不可用，请重新导入');
     return false;
   }
+  if (survivors.length !== folderPaths.length) saveLocalLibraryFolderPaths(survivors);
+  await handleLocalFolderFiles(null, {
+    folderOnly: true,
+    rootGroups: groups,
+    persist: false,
+    autoPlay: false,
+    restored: true,
+    fromSnapshot: true
+  });
+  // 后台增量校验逐根跑（多根时每一根各扫一次），不再只盯主根。
+  for (var g = 0; g < groups.length; g++) {
+    var group = groups[g];
+    refreshSavedLocalMusicFolderInBackground(group.root, { signature: localLibrarySnapshotSignature(group.files) });
+  }
+  return true;
 }
 function scheduleSavedLocalMusicFolderRestore(delay) {
   if (!LOCAL_ONLY_MODE || localLibraryRestoreStarted || localLibraryRestoreScheduled) return;
@@ -33436,22 +33658,30 @@ function refreshSavedLocalMusicFolderInBackground(folderPath, snapshot) {
     if (localLibrarySongs !== ownedSongs) return;
     if (!result || !result.ok || !Array.isArray(result.files)) return;
     var nextSig = localLibrarySnapshotSignature(result.files || []);
-    saveLocalLibrarySnapshot(result.folderPath || folderPath, result, false, true);
+    var refreshRoot = result.folderPath || folderPath;
+    saveLocalLibrarySnapshot(refreshRoot, result, false, true);
+    // 多根：这一轮只扫了其中一个根，绝不能拿它的文件替换整库；无论是否在播都走按根就地合并。
+    var multiRoot = savedLocalLibraryFolderPaths().length > 1;
+    if (multiRoot) {
+      if (applyLocalLibraryAutoSync(refreshRoot, result)) return;
+      reportLocalLibrarySyncedCount((ownedSongs || []).length);
+      return;
+    }
     if (snapshotSignature && nextSig === snapshotSignature) {
-      scheduleLocalLibraryIndexSave(result.folderPath || folderPath, ownedSongs || [], 900);
+      scheduleLocalLibraryIndexSave(refreshRoot, ownedSongs || [], 900);
       reportLocalLibrarySyncedCount((ownedSongs || []).length);
       return;
     }
     var passiveRestoredQueue = localLibraryPassiveQueue && !playing && !(audio && audio.src && !audio.paused);
     if (playQueue.length && !passiveRestoredQueue) {
       // 有队列正在播时不再整库重建，改成就地增删改：播放不断，改过的标签与封面照样跟着刷新。
-      if (applyLocalLibraryAutoSync(result.folderPath || folderPath, result)) return;
-      scheduleLocalLibraryIndexSave(result.folderPath || folderPath, ownedSongs || [], 900);
+      if (applyLocalLibraryAutoSync(refreshRoot, result)) return;
+      scheduleLocalLibraryIndexSave(refreshRoot, ownedSongs || [], 900);
       return;
     }
     return handleLocalFolderFiles(result.files || [], {
       folderOnly: true,
-      folderPath: result.folderPath || folderPath,
+      folderPath: refreshRoot,
       persist: false,
       autoPlay: false,
       restored: true,
@@ -33486,40 +33716,121 @@ function refreshSavedLocalMusicFolderInBackground(folderPath, snapshot) {
   setTimeout(startOwnedLocalLibraryRefresh, 1200);
 }
 /**
+ * 把调用方传来的 rootGroups 归一化成 `{root, files, directories, truncated}` 数组。
+ * 没有分组时返回空数组，调用方退回单根旧路径。
+ * @param {object} opts handleLocalFolderFiles 的选项。
+ * @returns {Array<object>} 归一化后的分组列表。
+ */
+function localLibraryRootGroups(opts) {
+  var groups = opts && Array.isArray(opts.rootGroups) ? opts.rootGroups : null;
+  if (!groups || !groups.length) return [];
+  var out = [];
+  for (var i = 0; i < groups.length; i++) {
+    var group = groups[i];
+    if (!group) continue;
+    out.push({
+      root: String(group.root || group.folderPath || ''),
+      files: group.files || [],
+      directories: group.directories || [],
+      truncated: !!group.truncated
+    });
+  }
+  return out;
+}
+/**
  * 将导入或恢复的本地文件转换为播放队列，并安排缓存读取、后台资产处理和播放会话恢复。
- * @param {Array<File|object>} files 本地文件列表或主进程扫描结果。
- * @param {{folderOnly?: boolean, folderPath?: string, persist?: boolean, autoPlay?: boolean, restored?: boolean, refreshed?: boolean, truncated?: boolean, fromSnapshot?: boolean}} opts 导入、恢复和持久化参数。
+ * @param {Array<File|object>} files 本地文件列表或主进程扫描结果（不带 rootGroups 时的单根文件）。
+ * @param {{folderOnly?: boolean, folderPath?: string, persist?: boolean, autoPlay?: boolean, restored?: boolean, refreshed?: boolean, truncated?: boolean, fromSnapshot?: boolean, rootGroups?: Array<object>}} opts 导入、恢复和持久化参数。
  * @returns {Promise<void>}
  */
 async function handleLocalFolderFiles(files, opts) {
   opts = opts || {};
-  var songs = createLocalSongsFromFiles(files, { folderOnly: !!opts.folderOnly });
+  // 多根：调用方带 rootGroups（每个根一组文件）时逐根 hydrate、建歌、索引同步，再合并成一个曲库；
+  // 不带时退回单根旧路径（opts.folderPath 或已保存主根），单根行为与改造前逐字节一致。
+  var groups = localLibraryRootGroups(opts);
+  if (!groups.length) {
+    groups = [{
+      root: String(opts.folderPath || savedLocalLibraryFolderPath() || ''),
+      files: files,
+      directories: opts.directories || [],
+      truncated: !!opts.truncated
+    }];
+  }
+  var songs = [];
+  var songsByRoot = [];
+  var syncStats = { total:0, added:0, modified:0, unchanged:0, removed:0, reused:0, hasIndex:false };
+  var anyHasIndex = false;
+  for (var groupIdx = 0; groupIdx < groups.length; groupIdx++) {
+    var group = groups[groupIdx];
+    if (group.root) await hydrateLocalLibraryPersistentState(group.root);
+    var groupSongs = createLocalSongsFromFiles(group.files || [], { folderOnly: !!opts.folderOnly });
+    var groupSync = syncLocalLibraryIndexWithSongs(group.root, groupSongs);
+    noteLocalLibraryAddedAt(groupSongs, groupSync);
+    var groupStats = groupSync && groupSync.stats ? groupSync.stats : null;
+    if (groupStats) {
+      syncStats.total += groupStats.total;
+      syncStats.added += groupStats.added;
+      syncStats.modified += groupStats.modified;
+      syncStats.unchanged += groupStats.unchanged;
+      syncStats.removed += groupStats.removed;
+      syncStats.reused += groupStats.reused;
+      if (groupStats.hasIndex) anyHasIndex = true;
+    }
+    songsByRoot.push({ root: group.root, songs: groupSongs });
+    songs = songs.concat(groupSongs);
+  }
+  syncStats.hasIndex = anyHasIndex;
+  var librarySync = { stats: syncStats };
   if (!songs.length) {
     var confirmedEmptyFolder = !!opts.folderOnly && (opts.folderPath || opts.restored || opts.refreshed || files != null);
-    if (confirmedEmptyFolder) {
-      clearEmptyLocalLibrary(opts.folderPath || savedLocalLibraryFolderPath(), opts);
+    // 多根时一个空根不该清掉别的根的曲库；只有单根确认扫空才沿用清空旧曲库的老行为。
+    if (confirmedEmptyFolder && groups.length === 1) {
+      clearEmptyLocalLibrary(groups[0].root || savedLocalLibraryFolderPath(), opts);
       showToast('文件夹里没有找到支持的音乐，已清空旧曲库');
+      return;
+    }
+    if (confirmedEmptyFolder) {
+      showToast('这些文件夹里没有找到支持的音乐');
       return;
     }
     showToast(opts.folderOnly ? '文件夹里没有找到支持的音乐' : '没有找到可播放的本地音乐');
     return;
   }
-  var libraryFolderPath = opts.folderPath || savedLocalLibraryFolderPath();
-  await hydrateLocalLibraryPersistentState(libraryFolderPath);
-  var librarySync = syncLocalLibraryIndexWithSongs(libraryFolderPath, songs);
-  noteLocalLibraryAddedAt(songs, librarySync);
+  var libraryFolderPath = groups[0].root || opts.folderPath || savedLocalLibraryFolderPath();
   var deferAssetHydration = !!opts.restored
     || songs.length > 700
-    || !!(librarySync && librarySync.stats && librarySync.stats.hasIndex && librarySync.stats.unchanged > 64);
+    || !!(syncStats.hasIndex && syncStats.unchanged > 64);
   var shouldChunkAssetHydration = deferAssetHydration && songs.length > 220;
   var assetHydrationPromise = deferAssetHydration ? null : hydrateLocalAssetCacheForSongs(songs, { includeLyrics:false });
   if (!deferAssetHydration) await assetHydrationPromise;
-  if (opts.folderPath && opts.persist !== false) saveLocalLibraryFolderPath(opts.folderPath);
-  if (opts.folderPath && !opts.fromSnapshot) saveLocalLibrarySnapshot(opts.folderPath, {
-    files: files,
-    directories: opts.directories || [],
-    truncated: !!opts.truncated
-  }, false, !!opts.desktopScanned);
+  // 导入（persist）是"追加根"语义：选第二个文件夹是并入曲库，不是覆盖。恢复（persist:false）不动设置。
+  if (opts.persist !== false) {
+    for (var addIdx = 0; addIdx < groups.length; addIdx++) {
+      if (groups[addIdx].root) addLocalLibraryFolderPath(groups[addIdx].root);
+    }
+  }
+  if (!opts.fromSnapshot) {
+    for (var snapIdx = 0; snapIdx < groups.length; snapIdx++) {
+      var snapGroup = groups[snapIdx];
+      if (!snapGroup.root) continue;
+      saveLocalLibrarySnapshot(snapGroup.root, {
+        files: snapGroup.files,
+        directories: snapGroup.directories || [],
+        truncated: !!snapGroup.truncated
+      }, false, !!opts.desktopScanned);
+    }
+  }
+  /**
+   * 逐个根保存索引。索引按根键存（syncLocalLibraryIndexWithSongs 也是按根读），
+   * 合并后的整库只属于展示层，不能整份写到某一个根的索引上。
+   * @param {number} delay 延迟毫秒数。
+   * @returns {void}
+   */
+  function scheduleIndexForAllRoots(delay) {
+    for (var i = 0; i < songsByRoot.length; i++) {
+      if (songsByRoot[i].root) scheduleLocalLibraryIndexSave(songsByRoot[i].root, songsByRoot[i].songs, delay);
+    }
+  }
   finalizeListenSession(false);
   revokeDiscardedLocalSongObjectUrls(localLibrarySongs, [songs, playlist]);
   localLibrarySongs = songs;
@@ -33551,8 +33862,9 @@ async function handleLocalFolderFiles(files, opts) {
   renderHomeDiscover();
   if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
   if (!opts.restored) setPeek(document.getElementById('playlist-panel'), true, 'pl');
-  scheduleLocalLibraryIndexSave(opts.folderPath || libraryFolderPath, songs, 120);
-  registerLocalLibraryWatchRoots(libraryFolderPath);
+  scheduleIndexForAllRoots(120);
+  registerLocalLibraryWatchRoots(groups.map(function(group){ return group.root; }).filter(Boolean));
+  renderLocalLibraryFolderSettings();
   if (opts.restored) reportLocalLibrarySyncedCount(songs.length);
   function refreshAfterAssetHydration(count) {
     if (localLibrarySongs !== songs) return;
@@ -33562,7 +33874,7 @@ async function handleLocalFolderFiles(files, opts) {
     if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
     scheduleShelfRebuild('local-asset-cache-ready', true);
     if (currentIdx >= 0 && playQueue[currentIdx]) updateControlTrackInfo(playQueue[currentIdx]);
-    scheduleLocalLibraryIndexSave(opts.folderPath || libraryFolderPath, songs, 160);
+    scheduleIndexForAllRoots(160);
   }
   var assetProcessingCandidates = null;
   function pendingAssetProcessingSongs() {
@@ -33695,10 +34007,74 @@ function clearEmptyLocalLibrary(folderPath, opts) {
   pushMiniPlayerState(false);
 }
 
+/**
+ * 渲染设置面板里的"已监控目录"列表。多根时逐行显示路径与移除按钮；
+ * 只有一个根时也给移除按钮（移除后曲库清空），但文案改成提示可以再加。
+ * @returns {void}
+ */
+function renderLocalLibraryFolderSettings() {
+  var box = document.getElementById('library-folder-list');
+  if (!box) return;
+  var countEl = document.getElementById('library-folder-count');
+  var roots = savedLocalLibraryFolderPaths();
+  if (countEl) countEl.textContent = roots.length + ' 个';
+  box.textContent = '';
+  if (!roots.length) {
+    var empty = document.createElement('div');
+    empty.className = 'mini-player-collapse-hint';
+    empty.textContent = '还没有添加音乐文件夹，点下方「添加」选择。';
+    box.appendChild(empty);
+    return;
+  }
+  for (var i = 0; i < roots.length; i++) {
+    var row = document.createElement('div');
+    row.className = 'library-folder-row';
+    var label = document.createElement('span');
+    label.className = 'library-folder-path';
+    label.textContent = roots[i];
+    label.title = roots[i];
+    var remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'fx-mini-btn ghost';
+    remove.textContent = '移除';
+    remove.setAttribute('data-library-folder-remove', roots[i]);
+    remove.setAttribute('title', '把这个目录从曲库移除');
+    row.appendChild(label);
+    row.appendChild(remove);
+    box.appendChild(row);
+  }
+}
+/**
+ * 从曲库移除一个音乐目录，然后用剩下的目录重建曲库。
+ * @param {string} folderPath 要移除的目录。
+ * @returns {Promise<void>}
+ */
+async function removeLocalLibraryFolder(folderPath) {
+  if (!folderPath) return;
+  var remaining = removeLocalLibraryFolderPath(folderPath);
+  renderLocalLibraryFolderSettings();
+  if (!remaining) {
+    clearEmptyLocalLibrary('');
+    registerLocalLibraryWatchRoots([]);
+    return;
+  }
+  await reloadLocalLibraryFromAllRoots({ autoPlay: false });
+}
+// 设置面板里"已监控目录"的移除按钮走事件委托，列表是运行时生成的。
+document.addEventListener('click', function(e){
+  var btn = e.target && e.target.closest ? e.target.closest('[data-library-folder-remove]') : null;
+  if (!btn) return;
+  var folderPath = btn.getAttribute('data-library-folder-remove');
+  if (folderPath) removeLocalLibraryFolder(folderPath).catch(function(err){ console.warn('[LocalLibraryFolderRemove]', err); });
+});
 var LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS = 700;
 var LOCAL_LIBRARY_SYNC_BADGE_HOLD_MS = 4200;
+// 多根：主进程监控的是整个根列表，渲染层也按列表维护；localLibraryWatchRoot 保留主根镜像，
+// 只给"单根即可"的少数判断用，真正的注册与重扫都走列表。
+var localLibraryWatchRoots = [];
 var localLibraryWatchRoot = '';
 var localLibraryWatchUnsubscribe = null;
+var localLibraryWatchPendingRoots = [];
 var localLibraryWatchPendingRoot = '';
 var localLibraryWatchSyncTimer = null;
 var localLibraryWatchSyncRunning = false;
@@ -34017,10 +34393,24 @@ function applyLocalLibraryAutoSync(folderPath, result) {
   var songs = localLibrarySongs;
   if (!Array.isArray(songs) || !songs.length) return false;
   if (!result || !Array.isArray(result.files)) return false;
+  var root = String((result && result.folderPath) || folderPath || '');
   var nextSongs = createLocalSongsFromFiles(result.files, { folderOnly: true });
   // 扫到空多半是磁盘掉线或权限变化，宁可这轮不动也不能顺手清空整库；清空仍走原来的空文件夹路径。
   if (!nextSongs.length) return false;
-  var diff = localLibraryAutoSyncDiff(songs, nextSongs);
+  var roots = typeof savedLocalLibraryFolderPaths === 'function' ? savedLocalLibraryFolderPaths() : [];
+  if (!roots.length) roots = root ? [root] : [];
+  // 多根时只对"这一根的歌"做差异，别的根的歌必须原地保留；单根（或认不出根）时整库就是这一根，行为与改造前一致。
+  var multiRoot = roots.length > 1 && !!root;
+  var owned = songs;
+  if (multiRoot) {
+    owned = [];
+    for (var ownIdx = 0; ownIdx < songs.length; ownIdx++) {
+      var ownSong = songs[ownIdx];
+      var ownRoot = typeof localLibraryRootForSong === 'function' ? localLibraryRootForSong(ownSong, roots) : '';
+      if (ownRoot && localLibraryWatchRootMatches(ownRoot, root)) owned.push(ownSong);
+    }
+  }
+  var diff = localLibraryAutoSyncDiff(owned, nextSongs);
   if (!diff.added && !diff.changed && !diff.removed.length) {
     reportLocalLibrarySyncedCount(songs.length);
     return false;
@@ -34028,8 +34418,36 @@ function applyLocalLibraryAutoSync(folderPath, result) {
   var queueOwnsLibrary = playQueue === songs;
   var playingSong = (playQueue && currentIdx >= 0) ? playQueue[currentIdx] : null;
   var previousIdx = currentIdx;
-  var applied = applyLocalLibraryAutoSyncDiff(songs, diff, [currentLocalSong, playingSong], [playQueue || [], playlist || []]);
+  var applied = applyLocalLibraryAutoSyncDiff(owned, diff, [currentLocalSong, playingSong], [playQueue || [], playlist || []]);
   if (!applied.ok) return false;
+  if (multiRoot) {
+    // 把更新过的那一根拼回整库：其余根按原顺序保留，改过的那根用 owned 的新顺序替换。
+    var grouped = Object.create(null);
+    var order = [];
+    for (var otherIdx = 0; otherIdx < songs.length; otherIdx++) {
+      var otherSong = songs[otherIdx];
+      var otherRoot = typeof localLibraryRootForSong === 'function' ? localLibraryRootForSong(otherSong, roots) : '';
+      if (otherRoot && localLibraryWatchRootMatches(otherRoot, root)) continue;
+      var groupKey = normalizeLocalLibraryPathKey(otherRoot);
+      if (!grouped[groupKey]) { grouped[groupKey] = []; order.push(groupKey); }
+      grouped[groupKey].push(otherSong);
+    }
+    var rebuilt = [];
+    for (var rootIdx = 0; rootIdx < roots.length; rootIdx++) {
+      var rootKey = normalizeLocalLibraryPathKey(roots[rootIdx]);
+      if (localLibraryWatchRootMatches(roots[rootIdx], root)) {
+        for (var ownOut = 0; ownOut < owned.length; ownOut++) rebuilt.push(owned[ownOut]);
+      } else if (grouped[rootKey]) {
+        for (var keepOut = 0; keepOut < grouped[rootKey].length; keepOut++) rebuilt.push(grouped[rootKey][keepOut]);
+      }
+    }
+    // 认不出根的歌（没有绝对路径）不能丢，原样缀在末尾。
+    if (grouped['']) {
+      for (var unknownOut = 0; unknownOut < grouped[''].length; unknownOut++) rebuilt.push(grouped[''][unknownOut]);
+    }
+    songs.length = 0;
+    for (var rebuiltIdx = 0; rebuiltIdx < rebuilt.length; rebuiltIdx++) songs.push(rebuilt[rebuiltIdx]);
+  }
   if (queueOwnsLibrary && playingSong) {
     var movedIdx = songs.indexOf(playingSong);
     currentIdx = movedIdx >= 0 ? movedIdx : Math.max(0, Math.min(previousIdx, songs.length - 1));
@@ -34038,18 +34456,19 @@ function applyLocalLibraryAutoSync(folderPath, result) {
   }
   invalidateLocalPlaylistSongLookup();
   resetSearchRenderCache();
-  finishLocalLibraryAutoSync(folderPath, songs, applied);
+  finishLocalLibraryAutoSync(root, songs, applied, owned);
   return true;
 }
 
 /**
  * 同步落地后的收尾：补水新歌资产缓存、重排后台解析队列、刷新可见界面并保存索引。
- * @param {string} folderPath 曲库根路径。
- * @param {Array<object>} songs 已就地同步好的曲库数组。
+ * @param {string} folderPath 曲库根路径（只保存这一根的索引）。
+ * @param {Array<object>} songs 已就地同步好的整库数组。
  * @param {{added: number, changed: number, removed: number, deferred: number}} applied 应用结果。
+ * @param {Array<object>} [ownedSongs] 属于 folderPath 的那部分歌曲；缺省视为整库（单根）。
  * @returns {void}
  */
-function finishLocalLibraryAutoSync(folderPath, songs, applied) {
+function finishLocalLibraryAutoSync(folderPath, songs, applied, ownedSongs) {
   var reason = 'local-library-auto-sync';
   if (typeof flushLocalLibraryAddedAtMap === 'function') flushLocalLibraryAddedAtMap();
   safeRenderQueuePanel(reason, { scrollCurrent: false });
@@ -34058,7 +34477,8 @@ function finishLocalLibraryAutoSync(folderPath, songs, applied) {
   if ($input && !$input.value.trim()) refreshVisibleLocalLibraryResults('');
   refreshLocalPlaylistSurfaces(reason);
   if (currentIdx >= 0 && playQueue && playQueue[currentIdx]) updateControlTrackInfo(playQueue[currentIdx]);
-  scheduleLocalLibraryIndexSave(folderPath || savedLocalLibraryFolderPath(), songs, 240);
+  // 索引按根存：多根时只把这一根的歌写回它的索引，绝不能把合并后的整库写进某一个根。
+  scheduleLocalLibraryIndexSave(folderPath || savedLocalLibraryFolderPath(), Array.isArray(ownedSongs) ? ownedSongs : songs, 240);
   /**
    * 资产缓存补水结束后重排后台解析队列。startLocalLibraryBackgroundProcessing 是替换语义，
    * 只塞增量会把原本还没解析完的老歌挤出队列，所以要按整库重新挑一次待办。
@@ -34093,17 +34513,25 @@ function localLibraryWatchRootMatches(a, b) {
 }
 
 /**
- * 把当前曲库根注册给主进程的文件夹监控。渲染层只维护一个曲库根，
- * 但 IPC 与主进程都按列表设计，以后要接多个根不用再改协议。
- * @param {string} folderPath 曲库根路径。
+ * 把一个或多个曲库根注册给主进程的文件夹监控。IPC 与主进程都按列表设计，
+ * 这里把列表原样交出去；传入空值时退回已保存的全部根。
+ * @param {string|Array<string>} folderPath 单个根或根列表。
  * @returns {boolean} 是否已交给主进程。
  */
 function registerLocalLibraryWatchRoots(folderPath) {
   var api = desktopLocalMusicApi();
   if (!api || typeof api.setLocalLibraryWatchRoots !== 'function') return false;
-  var text = String(folderPath || savedLocalLibraryFolderPath() || '');
-  if (localLibraryWatchUnsubscribe && localLibraryWatchRootMatches(localLibraryWatchRoot, text)) return true;
-  localLibraryWatchRoot = text;
+  var list;
+  if (Array.isArray(folderPath)) list = normalizeLocalLibraryFolderList(folderPath);
+  else if (folderPath) list = normalizeLocalLibraryFolderList([folderPath]);
+  else list = savedLocalLibraryFolderPaths();
+  var sameSet = list.length === localLibraryWatchRoots.length;
+  for (var i = 0; sameSet && i < list.length; i++) {
+    if (!localLibraryWatchRootMatches(list[i], localLibraryWatchRoots[i])) sameSet = false;
+  }
+  if (localLibraryWatchUnsubscribe && sameSet) return true;
+  localLibraryWatchRoots = list;
+  localLibraryWatchRoot = list.length ? list[0] : '';
   if (!localLibraryWatchUnsubscribe && typeof api.onLocalLibraryWatchChanged === 'function') {
     try {
       localLibraryWatchUnsubscribe = api.onLocalLibraryWatchChanged(handleLocalLibraryWatchChanged) || null;
@@ -34112,13 +34540,25 @@ function registerLocalLibraryWatchRoots(folderPath) {
     }
   }
   try {
-    var call = api.setLocalLibraryWatchRoots(text ? [text] : []);
+    var call = api.setLocalLibraryWatchRoots(list.slice());
     if (call && typeof call.catch === 'function') call.catch(function(e){ console.warn('[LocalLibraryWatch]', e); });
   } catch (e2) {
     console.warn('[LocalLibraryWatch]', e2);
     return false;
   }
   return true;
+}
+
+/**
+ * 判断一个根是否在当前监控列表里。
+ * @param {string} folderPath 待判定的根。
+ * @returns {boolean} 是否已监控。
+ */
+function isLocalLibraryWatchRoot(folderPath) {
+  for (var i = 0; i < localLibraryWatchRoots.length; i++) {
+    if (localLibraryWatchRootMatches(localLibraryWatchRoots[i], folderPath)) return true;
+  }
+  return localLibraryWatchRoots.length === 0 && localLibraryWatchRootMatches(localLibraryWatchRoot, folderPath);
 }
 
 /**
@@ -34131,21 +34571,25 @@ function handleLocalLibraryWatchChanged(payload) {
   if (!LOCAL_ONLY_MODE) return false;
   var folderPath = String((payload && payload.folderPath) || localLibraryWatchRoot || '');
   if (!folderPath) return false;
-  if (localLibraryWatchRoot && !localLibraryWatchRootMatches(folderPath, localLibraryWatchRoot)) return false;
+  if (!isLocalLibraryWatchRoot(folderPath)) return false;
   if (!localLibraryReady) return false;
   return scheduleLocalLibraryWatchSync(folderPath, LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS);
 }
 
 /**
  * 安排一次监控触发的曲库重扫。密集通知只保留最后一次；正在扫的时候只排一轮补扫，
- * 避免边扫边被新事件推着无限重入。
+ * 避免边扫边被新事件推着无限重入。多根时把待扫的根攒进列表，一次运行逐根扫。
  * @param {string} folderPath 曲库根路径。
  * @param {number} delay 延迟毫秒数。
  * @returns {boolean} 是否已排上。
  */
 function scheduleLocalLibraryWatchSync(folderPath, delay) {
-  localLibraryWatchPendingRoot = String(folderPath || localLibraryWatchPendingRoot || localLibraryWatchRoot || '');
-  if (!localLibraryWatchPendingRoot) return false;
+  var root = String(folderPath || localLibraryWatchPendingRoot || localLibraryWatchRoot || '');
+  if (!root) return false;
+  if (!localLibraryWatchPendingRoots.some(function(r){ return localLibraryWatchRootMatches(r, root); })) {
+    localLibraryWatchPendingRoots.push(root);
+  }
+  localLibraryWatchPendingRoot = localLibraryWatchPendingRoots[0];
   if (localLibraryWatchSyncRunning) {
     localLibraryWatchSyncQueued = true;
     return true;
@@ -34160,7 +34604,7 @@ function scheduleLocalLibraryWatchSync(folderPath, delay) {
 
 /**
  * 执行一次监控触发的重扫并就地同步曲库。不带快照调用主进程扫描即可命中 SQLite 增量路径，
- * 只 stat 变过的目录；扫完中途换过库就整轮作废，不写任何东西。
+ * 只 stat 变过的目录；扫完中途换过库就整轮作废，不写任何东西。多根时逐个待扫根各扫一次。
  * 曲库当前为空（上次扫到空文件夹）时改走原来的整库导入路径，这样"空文件夹里放进第一首歌"也能自动入库。
  * @returns {Promise<boolean>} 是否完成了一轮同步。
  */
@@ -34169,41 +34613,54 @@ async function runLocalLibraryWatchSync() {
     localLibraryWatchSyncQueued = true;
     return false;
   }
-  var folderPath = localLibraryWatchPendingRoot || localLibraryWatchRoot || savedLocalLibraryFolderPath();
+  var pending = localLibraryWatchPendingRoots.slice();
+  if (!pending.length && (localLibraryWatchPendingRoot || localLibraryWatchRoot || savedLocalLibraryFolderPath())) {
+    pending = [localLibraryWatchPendingRoot || localLibraryWatchRoot || savedLocalLibraryFolderPath()];
+  }
   var api = desktopLocalMusicApi();
-  if (!folderPath || !api || typeof api.scanLocalMusicFolder !== 'function') return false;
+  if (!pending.length || !api || typeof api.scanLocalMusicFolder !== 'function') return false;
   var ownedSongs = localLibrarySongs;
   var rebuildFromEmpty = !Array.isArray(ownedSongs) || !ownedSongs.length;
   localLibraryWatchSyncRunning = true;
+  localLibraryWatchPendingRoots = [];
   localLibraryWatchPendingRoot = '';
+  var didWork = false;
   try {
-    var result = await api.scanLocalMusicFolder(folderPath);
-    if (localLibrarySongs !== ownedSongs) return false;
-    if (!result || !result.ok || !Array.isArray(result.files)) return false;
-    saveLocalLibrarySnapshot(result.folderPath || folderPath, result, false, true);
-    if (!rebuildFromEmpty) return applyLocalLibraryAutoSync(result.folderPath || folderPath, result);
-    if (!result.files.length) return false;
-    await handleLocalFolderFiles(result.files, {
-      folderOnly: true,
-      folderPath: result.folderPath || folderPath,
-      persist: false,
-      autoPlay: false,
-      restored: true,
-      refreshed: true,
-      desktopScanned: true,
-      directories: result.directories || [],
-      truncated: !!result.truncated
-    });
-    reportLocalLibrarySyncedCount((localLibrarySongs || []).length);
-    return true;
+    for (var p = 0; p < pending.length; p++) {
+      var folderPath = pending[p];
+      var result = await api.scanLocalMusicFolder(folderPath);
+      if (localLibrarySongs !== ownedSongs) return didWork;
+      if (!result || !result.ok || !Array.isArray(result.files)) continue;
+      var root = result.folderPath || folderPath;
+      saveLocalLibrarySnapshot(root, result, false, true);
+      if (!rebuildFromEmpty) {
+        if (applyLocalLibraryAutoSync(root, result)) didWork = true;
+        continue;
+      }
+      if (!result.files.length) continue;
+      await handleLocalFolderFiles(result.files, {
+        folderOnly: true,
+        folderPath: root,
+        persist: false,
+        autoPlay: false,
+        restored: true,
+        refreshed: true,
+        desktopScanned: true,
+        directories: result.directories || [],
+        truncated: !!result.truncated
+      });
+      reportLocalLibrarySyncedCount((localLibrarySongs || []).length);
+      didWork = true;
+    }
+    return didWork;
   } catch (e) {
     console.warn('[LocalLibraryWatchSync]', e);
-    return false;
+    return didWork;
   } finally {
     localLibraryWatchSyncRunning = false;
     if (localLibraryWatchSyncQueued) {
       localLibraryWatchSyncQueued = false;
-      scheduleLocalLibraryWatchSync(folderPath, LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS);
+      scheduleLocalLibraryWatchSync(pending[pending.length - 1] || localLibraryWatchRoot, LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS);
     }
   }
 }
@@ -35845,7 +36302,7 @@ function fxPanelTargetForNode(node, current) {
   if (id === 'fx-lyric-fold') return 'lyrics';
   if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
-  if (id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
+  if (id === 'fx-library-fold' || id === 'fx-backup-fold' || id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
   if (inputId === 'fx-bgopacity' || inputId === 'fx-glassaberration') return 'appearance';
   if (inputId === 'fx-lyricglow') return 'lyrics';
@@ -35905,7 +36362,7 @@ function organizeFxPanel() {
     }
     (pages[target] || pages.presets).appendChild(node);
   });
-  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-volume-fold','fx-advanced'].forEach(function(id){
+  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-volume-fold','fx-library-fold','fx-advanced'].forEach(function(id){
     var fold = document.getElementById(id);
     if (fold) fold.classList.add('open');
   });
@@ -42414,14 +42871,14 @@ function mineradioBackupReadJson(key, fallback) {
   try { return JSON.parse(raw); } catch (e) { return fallback; }
 }
 /**
- * 收集备份里的音乐文件夹列表。当前实现只维护一个曲库根，数组形式为将来多根留位。
+ * 收集备份里的音乐文件夹列表。多根：导出当前保存的全部曲库根。
  * @returns {Array<string>} 音乐文件夹绝对路径列表。
  */
 function mineradioBackupMusicFolders() {
-  var folders = [];
-  var saved = savedLocalLibraryFolderPath();
-  if (saved) folders.push(String(saved));
-  return folders;
+  // 多根列表在整机备份切片（vm）里可能没注入；退回单根路径，保持切片可跑。
+  if (typeof savedLocalLibraryFolderPaths === 'function') return savedLocalLibraryFolderPaths();
+  var single = typeof savedLocalLibraryFolderPath === 'function' ? savedLocalLibraryFolderPath() : '';
+  return single ? [String(single)] : [];
 }
 /**
  * 用当前内存曲库建一张 `pathKey -> 便携定位` 索引。歌单 / 特别喜欢 / 听歌历史里的
@@ -42808,19 +43265,24 @@ async function mineradioBackupResolveFolders(list, api) {
   var folders = Array.isArray(list) ? list.slice() : [];
   if (!folders.length) return folders;
   if (!api || typeof api.refreshLocalMusicFiles !== 'function') return folders;
-  var probe = null;
-  try { probe = await api.refreshLocalMusicFiles(folders[0], []); } catch (e) { probe = null; }
-  if (probe && probe.ok && probe.folderPath) {
-    folders[0] = String(probe.folderPath);
-    return folders;
+  // 逐根判在本机在不在：在的用探回的真实路径，不在的当场让用户重选一个补上；
+  // 用户取消就整体放弃导入（返回 null），不静默丢掉那一根引用。
+  var resolved = [];
+  for (var i = 0; i < folders.length; i++) {
+    var probe = null;
+    try { probe = await api.refreshLocalMusicFiles(folders[i], []); } catch (e) { probe = null; }
+    if (probe && probe.ok && probe.folderPath) {
+      resolved.push(String(probe.folderPath));
+      continue;
+    }
+    if (typeof api.chooseLocalMusicFolder !== 'function') { resolved.push(String(folders[i])); continue; }
+    showToast('备份里的音乐文件夹不在这台电脑上，请重新选择');
+    var picked = null;
+    try { picked = await api.chooseLocalMusicFolder(); } catch (e) { picked = null; }
+    if (!picked || !picked.ok || !picked.folderPath) return null;
+    resolved.push(String(picked.folderPath));
   }
-  if (typeof api.chooseLocalMusicFolder !== 'function') return folders;
-  showToast('备份里的音乐文件夹不在这台电脑上，请重新选择');
-  var picked = null;
-  try { picked = await api.chooseLocalMusicFolder(); } catch (e) { picked = null; }
-  if (!picked || !picked.ok || !picked.folderPath) return null;
-  folders[0] = String(picked.folderPath);
-  return folders;
+  return resolved.length ? resolved : folders;
 }
 /**
  * 把备份负载写回本机各层存储，然后重启。不做热重放：曲库扫描、引用解析、
@@ -42864,7 +43326,10 @@ async function applyMineradioBackup(payload) {
   removePersistentLocalStorageItem(QUEUE_SNAPSHOT_STORE_KEY);
   removePersistentLocalStorageItem(PLAYBACK_SESSION_STORE_KEY);
   removePersistentLocalStorageItem(SONG_RESUME_STORE_KEY);
-  if (folders[0]) saveLocalLibraryFolderPath(folders[0]);
+  if (folders.length) {
+    if (typeof saveLocalLibraryFolderPaths === 'function') saveLocalLibraryFolderPaths(folders);
+    else if (typeof saveLocalLibraryFolderPath === 'function') saveLocalLibraryFolderPath(folders[0]);
+  }
   var playlists = payload.database.playlists.map(function(playlist){
     var refs = Array.isArray(playlist && playlist.songRefs) ? playlist.songRefs : [];
     var restored = [];

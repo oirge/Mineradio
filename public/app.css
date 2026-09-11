@@ -2167,6 +2167,14 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 #hand-canvas.show{opacity:1}
 
 /* ============================================================ */
+/*  音乐文件夹（多目录）                                          */
+/* ============================================================ */
+.library-folder-list{display:flex;flex-direction:column;gap:6px;margin:4px 0 8px}
+.library-folder-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.library-folder-path{flex:1;min-width:0;font-size:11px;color:rgba(255,255,255,.72);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+.library-folder-row .fx-mini-btn{flex:none}
+
+/* ============================================================ */
 /*  响应式                                                        */
 /* ============================================================ */
 @media (max-width:720px){

@@ -549,7 +549,8 @@ test('入库时间在导入与监控两条路径上都会盖章，且不动 SQLi
   const source = readAppSource();
   const store = fs.readFileSync(path.join(__dirname, '..', 'desktop', 'local-library-store.js'), 'utf8');
 
-  assert.match(source, /var librarySync = syncLocalLibraryIndexWithSongs\(libraryFolderPath, songs\);\n  noteLocalLibraryAddedAt\(songs, librarySync\);/);
+  // 多根：导入与恢复都逐根建歌、逐根建索引，每一根的歌都要盖章入库时间。
+  assert.match(source, /var groupSync = syncLocalLibraryIndexWithSongs\(group\.root, groupSongs\);\n    noteLocalLibraryAddedAt\(groupSongs, groupSync\);/);
   assert.match(source, /typeof stampLocalLibraryAddedAtSong === 'function'\) stampLocalLibraryAddedAtSong\(step\.song\)/);
   assert.match(source, /typeof flushLocalLibraryAddedAtMap === 'function'\) flushLocalLibraryAddedAtMap\(\)/);
   assert.doesNotMatch(store, /added_at/, '曲库表没有迁移通道，入库时间不能塞进 SQLite');
