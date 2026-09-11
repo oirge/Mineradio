@@ -58,7 +58,6 @@
 - 编码门禁：新增 `tests/doc-encoding-integrity.test.js`，用反向变换（按 GBK 编码再按 UTF-8 解码）识别乱码，要求核心文档合法 UTF-8、无 U+FFFD、无乱码、无 BOM；接入 `Verify` 的 `Check document encoding` 步骤。对损坏文件命中 121 行、修复后 0 行。
 - 记录回填：补 `RELEASE.md` 的 v2.0.3 发布记录；统一 v2.0.3「准备中/尚未发布」措辞；修正本文件 Stable Project Facts 里过期的本机路径、最近发布基线（`v1.6.1` → `v2.0.3`）与自称当前版本的历史快照；交接文档 `AI_HANDOFF.md` / `docs/HANDOFF_NEXT_CHAT.md` 更新到 v2 线；修掉 `CHANGELOG.md` 中内容已发布却仍标 `## Unreleased` 的错标小节。
 - 验证：全量 Node 回归 `1076/1076`（发布基线 `1071` + 新增 5 例编码门禁）；`node --check` 与 `git diff --check` 全清。
-- 发布：分支 `codex/release-v2.0.4`，单提交 `4982e8c`，PR #76 → merge commit `76dd6d4`；annotated tag object `dd3d39eb…` 指向 `4982e8c`；`Build and Release` run `34482743650` 成功（`13:27:21Z`–`13:29:40Z`）。**没有双草稿**（唯一草稿 `386309149` 上传四资产后发布）。Release `386309149` 标题 `Mineradio v2.0.4：文档修复与发布链路维护`，`published_at` `2026-09-10T13:30:49Z`，Latest=`v2.0.4`。四资产回下载三路校验通过：安装器 `102618034` / `919f415d…`、blockmap `106723` / `e67841aa…`、清单 `282` / `0bac8ba0…`、`latest.yml` `359` / `fb258fb8…`；`latest.yml` size `102618034`、sha512 `aomwZODF…` 与安装器一致，`releaseDate` `2026-09-10T13:29:24.481Z`。
 
 ## v2.0.3 SSA 歌词与发布链路加固
 
