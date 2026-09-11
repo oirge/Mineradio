@@ -146,6 +146,8 @@ var AUTO_PLAYBACK_STORE_KEY = 'mineradio-auto-playback-v1';
 var REPLAY_GAIN_STORE_KEY = 'mineradio-replay-gain-v1';
 var AUDIO_CHAIN_STORE_KEY = 'mineradio-audio-chain-v1';
 var GAPLESS_STORE_KEY = 'mineradio-gapless-v1';
+var PLAYBACK_RATE_STORE_KEY = 'mineradio-playback-rate-v1';
+var SLEEP_TIMER_STORE_KEY = 'mineradio-sleep-timer-v1';
 var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
 // genre 是向前生效字段：新解析的曲目会写入曲库与缓存，旧记录不带该键，
 // 因此 applyLocalAssetCacheToSong 的 hasOwnProperty 判定会跳过它，升级后不会整库回落文件名重解析。
@@ -174,6 +176,8 @@ var PERSISTENT_UI_STATE_KEYS = [
   REPLAY_GAIN_STORE_KEY,
   AUDIO_CHAIN_STORE_KEY,
   GAPLESS_STORE_KEY,
+  PLAYBACK_RATE_STORE_KEY,
+  SLEEP_TIMER_STORE_KEY,
   UPDATE_ROUTE_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
@@ -626,7 +630,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.0.4';
+var APP_VERSION = '2.0.5';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -23320,6 +23324,287 @@ function adjustVolumeByKeyboard(delta) {
   setVolume(clampRange(targetVolume + step, 0, 1), false);
 }
 
+// ============================================================
+//  播放速度（倍速）
+// ============================================================
+// playbackRate 是元素级属性，两个 deck 各自独立；MediaElementSource 不会绕过它，
+// 音高保持交给浏览器默认的 preservesPitch。渲染层读 audio.currentTime 的消费方
+//（歌词、节拍、进度、媒体会话）拿到的都已经是按 rate 缩放过的曲目时间轴，无需换算。
+var PLAYBACK_RATE_MIN = 0.5;
+var PLAYBACK_RATE_MAX = 2.0;
+var PLAYBACK_RATE_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+var playbackRateSetting = 1;
+
+/**
+ * 归一化倍速值：只认已知档位，其余回落 1.0，避免脏存档把播放拉飞。
+ * @param {*} value 原始值。
+ * @returns {number} 归一化后的倍速。
+ */
+function normalizePlaybackRateValue(value) {
+  var rate = Number(value);
+  if (!isFinite(rate) || rate <= 0) return 1;
+  for (var i = 0; i < PLAYBACK_RATE_PRESETS.length; i++) {
+    if (Math.abs(PLAYBACK_RATE_PRESETS[i] - rate) < 0.001) return PLAYBACK_RATE_PRESETS[i];
+  }
+  return clampRange(rate, PLAYBACK_RATE_MIN, PLAYBACK_RATE_MAX);
+}
+
+/**
+ * 读取本地保存的倍速设置。
+ * @returns {number} 倍速值。
+ */
+function readSavedPlaybackRate() {
+  try {
+    var raw = localStorage.getItem(PLAYBACK_RATE_STORE_KEY);
+    if (!raw) return 1;
+    // 兼容两种形态：新写入的 JSON {rate}，以及可能的旧裸数值。
+    var parsed = raw.charAt(0) === '{' ? JSON.parse(raw) : raw;
+    return normalizePlaybackRateValue(parsed && typeof parsed === 'object' ? parsed.rate : parsed);
+  } catch (e) { return 1; }
+}
+
+/**
+ * 把当前倍速写进所有 deck 的音频元素。双 deck 都要写：交叉/无缝接管的下一首
+ * 可能落在另一个 deck 上，只写全局 audio 会让下一首突然回到 1×。
+ * @returns {void}
+ */
+function applyPlaybackRateToDecks() {
+  var rate = normalizePlaybackRateValue(playbackRateSetting);
+  for (var i = 0; i < audioDeckList.length; i++) {
+    var deck = audioDeckList[i];
+    if (!deck || !deck.el) continue;
+    try { deck.el.playbackRate = rate; } catch (e) {}
+  }
+  if (audio) {
+    try { audio.playbackRate = rate; } catch (e2) {}
+  }
+}
+
+/**
+ * 应用并落盘倍速设置；播放中当场生效，不打断当前音频。
+ * @param {number|string} value 目标倍速。
+ * @param {{toast?: boolean}=} opts 提示选项。
+ * @returns {void}
+ */
+function setPlaybackRate(value, opts) {
+  opts = opts || {};
+  var next = normalizePlaybackRateValue(value);
+  playbackRateSetting = next;
+  try { setPersistentLocalStorageItem(PLAYBACK_RATE_STORE_KEY, JSON.stringify({ rate: next })); } catch (e) {}
+  applyPlaybackRateToDecks();
+  updatePlaybackRateControls();
+  if (opts.toast !== false) showToast(next === 1 ? '恢复正常播放速度' : '播放速度 ' + formatPlaybackRateLabel(next));
+  if (typeof updateSystemMediaSessionPosition === 'function') updateSystemMediaSessionPosition(true);
+}
+
+/**
+ * 倍速档位的展示文本：整数不带小数点，半档保留一位。
+ * @param {number} rate 倍速值。
+ * @returns {string} 展示文本。
+ */
+function formatPlaybackRateLabel(rate) {
+  var n = Number(rate) || 1;
+  return (Math.abs(n - Math.round(n)) < 0.01 ? String(Math.round(n)) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')) + '×';
+}
+
+/**
+ * 回填倍速面板的分段选中态与说明。
+ * @returns {void}
+ */
+function updatePlaybackRateControls() {
+  var segButtons = document.querySelectorAll('#playback-rate-seg-a [data-playback-rate], #playback-rate-seg-b [data-playback-rate]');
+  for (var i = 0; i < segButtons.length; i++) {
+    var btn = segButtons[i];
+    var active = Math.abs(normalizePlaybackRateValue(btn.getAttribute('data-playback-rate')) - playbackRateSetting) < 0.001;
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  var hint = document.getElementById('playback-rate-hint');
+  if (hint) hint.textContent = playbackRateSetting === 1
+    ? '正常速度；可切换 0.5× 到 2.0×，音高不变。'
+    : '当前 ' + formatPlaybackRateLabel(playbackRateSetting) + '；音高不变，歌词与节拍会跟着走。';
+}
+
+/**
+ * 读取保存的倍速并挂上面板事件委托。
+ * @returns {void}
+ */
+function initPlaybackRateControls() {
+  playbackRateSetting = readSavedPlaybackRate();
+  applyPlaybackRateToDecks();
+  var fold = document.getElementById('fx-playbackrate-fold');
+  if (fold && !fold._mineradioPlaybackRateBound) {
+    fold._mineradioPlaybackRateBound = true;
+    fold.addEventListener('click', function(ev){
+      var btn = ev.target && ev.target.closest ? ev.target.closest('[data-playback-rate]') : null;
+      if (!btn) return;
+      setPlaybackRate(btn.getAttribute('data-playback-rate'), { toast: true });
+    });
+  }
+  updatePlaybackRateControls();
+}
+
+// ============================================================
+//  睡眠定时
+// ============================================================
+// 到点走 fadeOutAndPauseAudio（淡出后暂停），不改变播放模式、不动队列；
+// 定时器只在播放中推进，"播完本曲"在曲目 onended 时触发。
+var SLEEP_TIMER_MINUTE_OPTIONS = [15, 30, 60];
+var sleepTimerState = { mode: 'off', dueAt: 0, timer: null, fading: false };
+
+/**
+ * 归一化睡眠定时模式：只认 off / track / 15 / 30 / 60 分钟。
+ * @param {*} value 原始模式。
+ * @returns {string} 归一化后的模式。
+ */
+function normalizeSleepTimerMode(value) {
+  var text = String(value == null ? '' : value).trim();
+  if (text === 'off' || text === 'track') return text;
+  var minutes = Number(text);
+  return SLEEP_TIMER_MINUTE_OPTIONS.indexOf(minutes) >= 0 ? String(minutes) : 'off';
+}
+
+/**
+ * 读回持久化的睡眠定时模式；倒计时本身不持久化（重启即从整段重新计）。
+ * @returns {string} 模式。
+ */
+function readSavedSleepTimerMode() {
+  try {
+    var raw = localStorage.getItem(SLEEP_TIMER_STORE_KEY);
+    if (!raw) return 'off';
+    var parsed = raw.charAt(0) === '{' ? JSON.parse(raw) : raw;
+    return normalizeSleepTimerMode(parsed && typeof parsed === 'object' ? parsed.mode : parsed);
+  } catch (e) { return 'off'; }
+}
+
+/**
+ * 清掉正在跑的睡眠定时器。
+ * @returns {void}
+ */
+function clearSleepTimerCountdown() {
+  if (sleepTimerState.timer) { clearTimeout(sleepTimerState.timer); sleepTimerState.timer = null; }
+  sleepTimerState.dueAt = 0;
+}
+
+/**
+ * 睡眠定时到点：淡出并暂停，然后清回关闭态。
+ * @returns {void}
+ */
+function fireSleepTimer() {
+  clearSleepTimerCountdown();
+  sleepTimerState.fading = true;
+  var done = typeof fadeOutAndPauseAudio === 'function' ? fadeOutAndPauseAudio() : Promise.resolve(false);
+  Promise.resolve(done).catch(function(e){ console.warn('[SleepTimer]', e); }).then(function(paused){
+    sleepTimerState.fading = false;
+    sleepTimerState.mode = 'off';
+    try { setPersistentLocalStorageItem(SLEEP_TIMER_STORE_KEY, JSON.stringify({ mode: 'off' })); } catch (e2) {}
+    updateSleepTimerControls();
+    if (paused) showToast('睡眠定时到点，已暂停');
+  });
+}
+
+/**
+ * 按当前模式重排倒计时。off 清掉；track 不排计时器（等 onended）；分钟档按剩余毫秒排。
+ * @returns {void}
+ */
+function armSleepTimer() {
+  clearSleepTimerCountdown();
+  var mode = normalizeSleepTimerMode(sleepTimerState.mode);
+  sleepTimerState.mode = mode;
+  if (mode === 'off' || mode === 'track') return;
+  var minutes = Number(mode);
+  sleepTimerState.dueAt = Date.now() + minutes * 60000;
+  sleepTimerState.timer = setTimeout(function(){
+    sleepTimerState.timer = null;
+    fireSleepTimer();
+  }, minutes * 60000);
+}
+
+/**
+ * 设置睡眠定时模式并落盘。
+ * @param {string|number} mode 目标模式。
+ * @param {{toast?: boolean}=} opts 提示选项。
+ * @returns {void}
+ */
+function setSleepTimerMode(mode, opts) {
+  opts = opts || {};
+  var next = normalizeSleepTimerMode(mode);
+  sleepTimerState.mode = next;
+  try { setPersistentLocalStorageItem(SLEEP_TIMER_STORE_KEY, JSON.stringify({ mode: next })); } catch (e) {}
+  armSleepTimer();
+  updateSleepTimerControls();
+  if (opts.toast === false) return;
+  if (next === 'off') showToast('睡眠定时已关闭');
+  else if (next === 'track') showToast('播完本曲后暂停');
+  else showToast('睡眠定时 ' + next + ' 分钟');
+}
+
+/**
+ * 关闭睡眠定时（不弹提示），供到点或用户关闭时用。
+ * @returns {void}
+ */
+function cancelSleepTimer() {
+  clearSleepTimerCountdown();
+  if (sleepTimerState.mode === 'off') return;
+  sleepTimerState.mode = 'off';
+  try { setPersistentLocalStorageItem(SLEEP_TIMER_STORE_KEY, JSON.stringify({ mode: 'off' })); } catch (e) {}
+  updateSleepTimerControls();
+}
+
+/**
+ * 回填睡眠定时面板的选中态与说明。
+ * @returns {void}
+ */
+function updateSleepTimerControls() {
+  var mode = normalizeSleepTimerMode(sleepTimerState.mode);
+  var buttons = document.querySelectorAll('#sleep-timer-seg-a [data-sleep-mode], #sleep-timer-seg-b [data-sleep-mode]');
+  for (var i = 0; i < buttons.length; i++) {
+    var btn = buttons[i];
+    var active = normalizeSleepTimerMode(btn.getAttribute('data-sleep-mode')) === mode;
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  var hint = document.getElementById('sleep-timer-hint');
+  if (!hint) return;
+  if (mode === 'off') hint.textContent = '关闭时不受影响；到点会淡出并暂停，不改变播放模式。';
+  else if (mode === 'track') hint.textContent = '本曲自然播完后淡出暂停。';
+  else {
+    var leftMin = sleepTimerState.dueAt ? Math.max(0, Math.ceil((sleepTimerState.dueAt - Date.now()) / 60000)) : Number(mode);
+    hint.textContent = '约 ' + leftMin + ' 分钟后淡出暂停。';
+  }
+}
+
+/**
+ * 读回持久化的睡眠定时模式并挂上面板事件委托。
+ * @returns {void}
+ */
+function initSleepTimerControls() {
+  sleepTimerState.mode = readSavedSleepTimerMode();
+  if (sleepTimerState.mode !== 'off' && sleepTimerState.mode !== 'track') armSleepTimer();
+  var fold = document.getElementById('fx-sleep-fold');
+  if (fold && !fold._mineradioSleepTimerBound) {
+    fold._mineradioSleepTimerBound = true;
+    fold.addEventListener('click', function(ev){
+      var btn = ev.target && ev.target.closest ? ev.target.closest('[data-sleep-mode]') : null;
+      if (!btn) return;
+      setSleepTimerMode(btn.getAttribute('data-sleep-mode'), { toast: true });
+    });
+  }
+  updateSleepTimerControls();
+}
+
+/**
+ * 曲目自然播完时结算"播完本曲"睡眠定时。返回是否已触发（触发后调用方应停止续播）。
+ * @returns {boolean} 是否触发了睡眠定时。
+ */
+function settleSleepTimerOnTrackEnded() {
+  if (normalizeSleepTimerMode(sleepTimerState.mode) !== 'track') return false;
+  clearSleepTimerCountdown();
+  sleepTimerState.mode = 'off';
+  try { setPersistentLocalStorageItem(SLEEP_TIMER_STORE_KEY, JSON.stringify({ mode: 'off' })); } catch (e) {}
+  updateSleepTimerControls();
+  // 由调用方的 stopPlaybackAfterCurrentTrack 负责暂停与提示，这里不再重复弹。
+  return true;
+}
+
 function toggleVolumePanel(e) {
   if (e) e.stopPropagation();
   var wrap = document.getElementById('volume-control');
@@ -24767,12 +25052,19 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   }
   bindPlaybackProgressEvents(audio);
   applyVolumeToAudio();
+  // 倍速是元素级属性：接管来的 deck 或新建的元素都要在这里补一次，否则切歌会回到 1×。
+  if (typeof applyPlaybackRateToDecks === 'function') applyPlaybackRateToDecks();
   if (!adoptedDeck) audio.src = localUrl;
   schedulePlaybackProgressUi('audio-source', true);
   audio.onended = function(){
     if (token !== trackSwitchToken) return;
     finalizeListenSession(true);
     clearSongResumePosition(song); // 整首听完就别留断点，否则重播会跳到中间
+    // "播完本曲"睡眠定时优先于续播：到点就停，不接下一首。
+    if (typeof settleSleepTimerOnTrackEnded === 'function' && settleSleepTimerOnTrackEnded()) {
+      stopPlaybackAfterCurrentTrack();
+      return;
+    }
     if (stopAfterCurrentTrack) {
       stopPlaybackAfterCurrentTrack();
       return;
@@ -36302,7 +36594,7 @@ function fxPanelTargetForNode(node, current) {
   if (id === 'fx-lyric-fold') return 'lyrics';
   if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
-  if (id === 'fx-library-fold' || id === 'fx-backup-fold' || id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
+  if (id === 'fx-playbackrate-fold' || id === 'fx-sleep-fold' || id === 'fx-library-fold' || id === 'fx-backup-fold' || id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
   if (inputId === 'fx-bgopacity' || inputId === 'fx-glassaberration') return 'appearance';
   if (inputId === 'fx-lyricglow') return 'lyrics';
@@ -36362,7 +36654,7 @@ function organizeFxPanel() {
     }
     (pages[target] || pages.presets).appendChild(node);
   });
-  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-volume-fold','fx-library-fold','fx-advanced'].forEach(function(id){
+  ['fx-lyric-fold','fx-overlay-fold','fx-stage-fold','fx-playback-fold','fx-gapless-fold','fx-playbackrate-fold','fx-sleep-fold','fx-volume-fold','fx-library-fold','fx-advanced'].forEach(function(id){
     var fold = document.getElementById(id);
     if (fold) fold.classList.add('open');
   });
@@ -43823,6 +44115,8 @@ initReplayGainControls();
 initAudioChainControls();
 initGaplessControls();
 if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
+initPlaybackRateControls();
+initSleepTimerControls();
 initPluginRuntime();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
 

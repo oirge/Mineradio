@@ -244,6 +244,8 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-hotkey-settings-v1',
   'mineradio-visual-guide-seen-v2',
   'mineradio-upload-tip-seen',
+  'mineradio-playback-rate-v1',
+  'mineradio-sleep-timer-v1',
 ]);
 
 // GPU 守卫。历史上这里无条件拍上全部性能开关，其中 `ignore-gpu-blocklist` 会强行越过

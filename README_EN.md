@@ -92,6 +92,13 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.0.5 (2026-09-11)
+
+- Added playback speed: a "Playback Speed" section in settings offers six steps from 0.5× to 2.0× with pitch preserved, applied live without interrupting the current track
+- Added a sleep timer: a "Sleep Timer" section in settings offers 15 / 30 / 60 minutes or "after this track", fading out and pausing without changing the play mode or queue
+
+Full Node regression suite: `1101/1101` passing.
+
 ### v2.0.4 (2026-09-11)
 
 - The local library can now watch multiple music folders at once; the library is their union, and the "Music Folders" section in settings lists watched folders with per-folder removal

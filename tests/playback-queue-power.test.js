@@ -617,7 +617,8 @@ test('队列样式跟着主题令牌和强调色走，不写死青色', () => {
 });
 
 test('播完即停挂在 onended 上，队列内拖动不再亮文件遮罩', () => {
-  assert.match(appSource, /audio\.onended = function\(\)\{[\s\S]{0,200}?if \(stopAfterCurrentTrack\) \{\s*stopPlaybackAfterCurrentTrack\(\);\s*return;/);
+  // onended 里先结算"播完本曲"睡眠定时，再走播完即停；两条都落到 stopPlaybackAfterCurrentTrack。
+  assert.match(appSource, /audio\.onended = function\(\)\{[\s\S]{0,420}?if \(stopAfterCurrentTrack\) \{\s*stopPlaybackAfterCurrentTrack\(\);\s*return;/);
   assert.match(appSource, /dragenter[\s\S]{0,80}?if \(queueDragState \|\| !dragEventHasFiles\(e\)\) return;/);
   assert.match(appSource, /dragleave[\s\S]{0,80}?if \(queueDragState \|\| !dragEventHasFiles\(e\)\) return;/);
   assert.match(appSource, /'drop', function\(e\)\{[\s\S]{0,120}?if \(queueDragState\) return;/);
