@@ -92,6 +92,14 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.0.9 (2026-09-12)
+
+- New "Glass & Side Rail" controls: window background transparency, frosted glass, rail blur / density, open & close durations
+- The side rail gains a glass look: the sticky header and toolbar keep a frosted effect while scrolling, matching the original project
+- Removed the "Home" house button in the top-right corner; the Home key still works
+
+Full Node regression suite: `1168/1168` passing.
+
 ### v2.0.8 (2026-09-11)
 
 - Fixed the Wallpaper Engine import dialog losing all its styles: previews rendered at full size and the list could not scroll

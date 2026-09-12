@@ -51,6 +51,21 @@
 
 ## Release Memory
 
+## v2.0.9：玻璃与左栏参数组移植 + 隐藏右上角房子按钮（已发布，2026-09-12）
+
+- 用户需求原话：「把原项目的这个功能移植到我这个项目一模一样就行」，附上游 DIY 控制台「玻璃与左栏」组截图：窗口背景透明 1.00 / 毛玻璃透明 0.00 / 玻璃色差 50 / 左栏雾面 14 / 左栏遮挡 0.55 / 左栏唤出秒数 0.72 / 左栏掀起秒数 0.48。
+- 七条滑条里 `fx-glassaberration`（玻璃色差）本仓库早已有（`controlGlassChromaticOffset`，范围 0–140 与上游 30–140 不同，保持现状不动），其余六条全新移植，默认值/min/max/step 逐字照上游 `04-fx-defaults.js`：`windowBackgroundOpacity 1` / `backgroundGlassOpacity 0` / `playlistPanelGlassBlur 14` / `playlistPanelGlassDensity 0.55` / `playlistPanelOpenDuration 0.72` / `playlistPanelCloseDuration 0.48`。
+- **持久化五处**：`fxDefaults`、`PACKAGED_DEFAULT_FX_SNAPSHOT`、`readSavedLyricLayout`（saved 计算 + result 两处都要，result 缺键吃不到存档）、`saveLyricLayout`、存档 `archiveNumber`。fx 整包一个键，preload/main 不用动。
+- **左栏效果层**（`applyPlaylistPanelFxSettings` 全套逐字移植自上游 `06-fx-runtime-layout.js`，插在 `var PEEK_HIDE_DELAY = 170;` 前并模块加载即调）：density→alpha 六条公式 + toolbar blur `clamp(blur*0.74,12,46)` + open/close 毫秒写 CSS 变量（documentElement 与 `#playlist-panel` 两处）。调用点：`updateFxInputs` 末尾、`bindFxPanel` input `/^playlistPanel/`、`resetFxSliderValue`。
+- **CSS 移植的关键差异**：本仓库面板收起是 `left:-410px` 位移（上游是 translate3d），保留本仓库机制只把三段 transition 时长接 `--playlist-panel-motion-ms`；玻璃头 `.playlist-panel-sticky` 是新 DOM（index.html 把 `.queue-head`+`.panel-tabs` 包进该容器）；**本仓库主题补偿规则 `#playlist-panel *{backdrop-filter:none!important}` 必须豁免 `.playlist-panel-sticky` 与 `.queue-toolbar`，否则玻璃头被主题规则干掉**——这是移植时最容易踩的坑。
+- **开合接线**：`setPeek` off 分支挂 `playlist-panel-closing` 类 + `playlistPeekHideDelay`（pl=72ms，上游同款）+ `closeMs+80` 摘类；on 分支先摘 closing；`togglePlaylistPanel` 关 show 也挂 closing。
+- **窗口背景透明走独立通道**：`applyCustomBackground` 补 windowOpacity/glassOpacity（上游公式 glass blur=`op*32`、saturate=`1+op*0.55`、brightness=`1+op*0.08`、veil=`op*0.075`、overlay=`max(media?0.18:0, glassActive?op*0.42:0)`），`body.custom-window-transparent` + `--custom-bg-base-opacity`；**override 公式故意不加这两项**（override=用户显式接管背景，牵连壁纸板互斥等既有行为），CSS 用叠加规则 `body.custom-window-transparent #custom-bg{background:rgba(var(--custom-bg-color-rgb,0,0,0),var(--custom-bg-base-opacity,1))}`，默认观感零变化。毛玻璃的 `body.custom-bg-glass-active #custom-bg::after` CSS v1.4.3 起就在 wallpaper-engine.css（v2.0.8 修好），本轮只补 override+glass 与 flat 让位规则。
+- **output 显示两路一致**：`bindFxPanel` input 分支与 `setRange` 整数清单都要带 `fx-playlistblur`，只改一处会出现「拉动显示 33、重置显示 14.00」（真机撞见过，已修）。
+- 测试 `tests/glass-playlist-panel-fx.test.js` 27 例；**vm 切片只声明函数不执行，`applyCustomBackground` 的切片测试必须显式调用**（首版漏调用 4 例假红）。浏览器真机验证全过：默认值、拉动即时生效、落盘、复位、动画时长（0.08s 打开 / closing 下 0.48s 收起）、sticky 玻璃头 backdrop-filter、毛玻璃 ::after 视觉、DIY 面板呈现与重置。全量回归 `1166/1166`（v2.0.8 基线 `1139`，新增 27）。
+- **已知边界**：真 Electron 透明窗口「透出桌面」没在本机窗口肉眼验证（浏览器 html/body 黑底只能验类与变量）；上游 motion 标记系统（`markPlaylistPanelMotion`/`isPlaylistPanelInMotion`）故意没移植——本仓库没有对应消费者。
+- **追加：隐藏右上角房子按钮**：用户「隐藏我项目的这个房子的功能」。`local-only-mode` 里 `#user-btn`/`#user-capsule-hide-btn` 本被 CSS 隐藏，`#home-btn` 是右上角唯一可见项；删除按钮（`goHome` 函数、键盘 Home 键、空库引导保留，DIY 锚点有 `|| top-right` 兜底），`tests/home-btn-hidden.test.js` 2 例。回归 `1168/1168`。
+- 发布门禁：**用户明确说「发布新版」后发布为 `v2.0.9`**；版本钉五处 2.0.8→2.0.9，CHANGELOG/双语 README 同步。
+
 ## v2.0.8：Wallpaper Engine 壁纸导入弹窗样式全失效修复（已发布，2026-09-12）
 
 - 用户报告：WE「识别 / 导入」弹窗里壁纸特别大、几乎只能看见一张、不能上下滚动选择。

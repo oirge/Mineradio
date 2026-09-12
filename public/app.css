@@ -84,11 +84,13 @@ body.desktop-shell.desktop-fullscreen #top-right{top:24px}
 
 /* ---------- 背景 ---------- */
 #custom-bg{position:fixed;inset:0;z-index:0;background:var(--custom-bg-color,var(--th-bg-color,#000));overflow:hidden;transition:background .35s ease}
+body.custom-window-transparent #custom-bg{background:rgba(var(--custom-bg-color-rgb,0,0,0),var(--custom-bg-base-opacity,1))}
 #custom-bg-video{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);object-fit:cover;opacity:var(--custom-bg-video-opacity,0);filter:none;transform:scale(1.002);transition:opacity .35s ease;pointer-events:none;background:#000}
 #custom-bg::before{content:'';position:absolute;inset:-1px;background-image:var(--custom-bg-image,none);background-size:cover;background-position:center;opacity:var(--custom-bg-image-opacity,0);filter:none;transform:scale(1.002);transition:opacity .35s ease,background-image .35s ease;pointer-events:none}
 #custom-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.06),rgba(0,0,0,.16));opacity:var(--custom-bg-overlay-opacity,0);pointer-events:none}
 body.custom-background-override #custom-bg::after{background:linear-gradient(180deg,rgba(0,0,0,.018),rgba(0,0,0,.045))}
-body.custom-background-override.custom-background-flat #custom-bg::after{opacity:0!important}
+body.custom-background-override.custom-bg-glass-active #custom-bg::after{background:radial-gradient(circle at 22% 8%,rgba(255,255,255,var(--custom-bg-glass-veil,0)),transparent 34%),linear-gradient(180deg,rgba(255,255,255,var(--custom-bg-glass-veil,0)),rgba(0,0,0,.035))}
+body.custom-background-override.custom-background-flat:not(.custom-bg-glass-active) #custom-bg::after{opacity:0!important}
 body.custom-background-video #custom-bg::before{opacity:0!important}
 #album-bg{position:fixed;inset:0;z-index:0;background-size:cover;background-position:center;filter:blur(120px) brightness(0.18) saturate(1.5);transform:scale(1.4);transition:background-image 1.5s ease,opacity 1.5s ease;opacity:0}
 #album-bg.visible{opacity:1}
@@ -1503,7 +1505,14 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 /* ============================================================ */
 /*  歌单/队列面板                                                 */
 /* ============================================================ */
-#playlist-panel{position:fixed;z-index:17;top:78px;left:-410px;width:340px;max-height:calc(100vh - 120px);overflow:auto;background:rgba(12,12,18,0.42);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:18px;backdrop-filter:blur(40px) saturate(1.4);-webkit-backdrop-filter:blur(40px) saturate(1.4);box-shadow:0 24px 80px rgba(0,0,0,0.45);opacity:0;transition:left .55s cubic-bezier(.16,1,.3,1),opacity .45s cubic-bezier(.16,1,.3,1),transform .55s cubic-bezier(.16,1,.3,1);pointer-events:none;transform:translateX(-16px);overscroll-behavior:contain}
+#playlist-panel{--playlist-panel-open-ms:var(--mineradio-playlist-panel-open-ms,280ms);--playlist-panel-close-ms:var(--mineradio-playlist-panel-close-ms,180ms);--playlist-panel-motion-ms:var(--playlist-panel-open-ms);--playlist-sticky-blur:38px;--playlist-toolbar-blur:28px;--playlist-sticky-a1:.94;--playlist-sticky-a2:.90;--playlist-sticky-a3:.78;--playlist-toolbar-a1:.88;--playlist-toolbar-a2:.82;--playlist-toolbar-a3:.68;position:fixed;z-index:17;top:78px;left:-410px;width:340px;max-height:calc(100vh - 120px);overflow:auto;background:rgba(12,12,18,0.42);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:18px;backdrop-filter:blur(40px) saturate(1.4);-webkit-backdrop-filter:blur(40px) saturate(1.4);box-shadow:0 24px 80px rgba(0,0,0,0.45);opacity:0;transition:left var(--playlist-panel-motion-ms) cubic-bezier(.16,1,.3,1),opacity var(--playlist-panel-motion-ms) cubic-bezier(.16,1,.3,1),transform var(--playlist-panel-motion-ms) cubic-bezier(.16,1,.3,1);pointer-events:none;transform:translateX(-16px);overscroll-behavior:contain;will-change:left,opacity,transform;contain:layout paint}
+#playlist-panel.playlist-panel-closing{--playlist-panel-motion-ms:var(--playlist-panel-close-ms)}
+.playlist-panel-sticky{position:sticky;top:-18px;z-index:9;margin:-18px -18px 12px;padding:18px 18px 10px;border-radius:20px 20px 15px 15px;background:linear-gradient(180deg,rgba(12,14,18,var(--playlist-sticky-a1,.94)),rgba(9,11,15,var(--playlist-sticky-a2,.90)) 70%,rgba(9,11,15,var(--playlist-sticky-a3,.78))),linear-gradient(135deg,rgba(255,255,255,.085),rgba(255,255,255,.028) 42%,rgba(var(--fc-accent-rgb),.048));border:1px solid rgba(255,255,255,.090);border-top-color:rgba(255,255,255,.17);backdrop-filter:blur(var(--playlist-sticky-blur,38px)) saturate(1.34) brightness(1.06);-webkit-backdrop-filter:blur(var(--playlist-sticky-blur,38px)) saturate(1.34) brightness(1.06);box-shadow:0 18px 46px rgba(0,0,0,.44),inset 0 1px 0 rgba(255,255,255,.11),inset 0 -1px 0 rgba(255,255,255,.045);isolation:isolate}
+.playlist-panel-sticky::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.24),rgba(var(--fc-accent-rgb),.22),transparent);pointer-events:none}
+.playlist-panel-sticky .queue-head{margin-bottom:10px}
+.playlist-panel-sticky .panel-tabs{margin-bottom:0}
+.playlist-panel-sticky .fx-title{color:rgba(255,255,255,.96);font-weight:680;text-shadow:0 1px 10px rgba(0,0,0,.72),0 0 18px rgba(255,255,255,.08)}
+.playlist-panel-sticky .fx-sub{color:rgba(255,255,255,.48);text-shadow:0 1px 8px rgba(0,0,0,.62)}
 #playlist-panel.show, #playlist-panel.peek{left:32px;opacity:1;pointer-events:auto;transform:translateX(0)}
 #playlist-panel.pinned{border-color:rgba(var(--fc-accent-rgb),.28);box-shadow:0 24px 80px rgba(0,0,0,0.45),0 0 34px rgba(var(--fc-accent-rgb),.08)}
 #playlist-panel::-webkit-scrollbar{width:3px}
@@ -1535,7 +1544,7 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .song-action-btn{width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.045);color:rgba(255,255,255,.58);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .18s;font-size:14px;line-height:1}
 .song-action-btn:hover{background:rgba(0,245,212,.10);border-color:rgba(0,245,212,.32);color:#eafffb;transform:translateY(-1px)}
 .queue-chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--th-chip-border,rgba(255,255,255,.10));background:var(--th-chip-bg,rgba(255,255,255,.03));font-size:10.5px;color:var(--th-text-dim,rgba(255,255,255,.65))}
-.queue-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 4px}
+.queue-toolbar{position:sticky;top:82px;z-index:7;display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 -4px 8px;padding:7px 4px 6px;border-radius:12px;background:linear-gradient(180deg,rgba(11,13,18,var(--playlist-toolbar-a1,.88)),rgba(8,10,14,var(--playlist-toolbar-a2,.82)) 74%,rgba(8,10,14,var(--playlist-toolbar-a3,.68))),linear-gradient(135deg,rgba(255,255,255,.058),rgba(var(--fc-accent-rgb),.042));border:1px solid rgba(255,255,255,.075);backdrop-filter:blur(var(--playlist-toolbar-blur,28px)) saturate(1.25) brightness(1.05);-webkit-backdrop-filter:blur(var(--playlist-toolbar-blur,28px)) saturate(1.25) brightness(1.05);box-shadow:0 13px 30px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.085)}
 .queue-toolbar .fx-mini-btn{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;line-height:1}
 /* 播放模式与「播完即停」——一排小胶囊，选中态用主色描边，和面板其他控件同一套语言。
    底色一律走 --th-chip-*，强调色走 var(--fc-accent-rgb)：写死青色的话换主题和换强调色都不跟。 */
@@ -1689,7 +1698,7 @@ html.control-glass-svg-ok .icon-btn,html.control-glass-svg-ok #fx-fab,html.contr
    装了主题只要设几个变量就能把整片 UI 重新上色。选中态的 rgba(var(--fc-accent-rgb),…) 不套变量，
    那是设置里的取色器说了算。 */
 #playlist-panel{background:var(--th-side-panel-bg,var(--th-panel-bg,rgba(12,12,18,0.42)))!important;border:1px solid var(--th-side-panel-border,var(--th-panel-border,rgba(255,255,255,0.08)))!important;box-shadow:var(--th-side-panel-shadow,0 24px 80px rgba(0,0,0,0.45))!important;backdrop-filter:blur(40px) saturate(1.4)!important;-webkit-backdrop-filter:blur(40px) saturate(1.4)!important}
-#playlist-panel *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+#playlist-panel *:not(.playlist-panel-sticky):not(.queue-toolbar){backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 #playlist-panel.pinned{border-color:rgba(var(--fc-accent-rgb),.28)!important;box-shadow:var(--th-side-panel-shadow,0 24px 80px rgba(0,0,0,0.45)),0 0 34px rgba(var(--fc-accent-rgb),.08)!important}
 #playlist-panel::-webkit-scrollbar-thumb{background:rgba(var(--fc-accent-rgb),.20)!important}
 #playlist-panel .panel-tab{background:var(--th-chip-bg,rgba(255,255,255,.03))!important;border:1px solid var(--th-chip-border,rgba(255,255,255,.1))!important;box-shadow:none!important;color:rgba(255,255,255,.55)!important}

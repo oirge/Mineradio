@@ -27,7 +27,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前版本：`v2.0.8`（Wallpaper Engine 壁纸导入弹窗样式修复），已发布。
+- 当前版本：`v2.0.9`（玻璃与左栏参数组移植 + 隐藏右上角房子按钮），发布中（Release 详情发布完成后回填 RELEASE.md）。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`。`package.json` 发布配置 owner/repo 为 `oirge/Mineradio`。
 - 正式发布基线：线上 Latest 是 `v2.0.8`（Wallpaper Engine 壁纸导入修复），Release `387419553`，`published_at` `2026-09-12T01:45:15Z`，四项资产齐全；tag `v2.0.8` 指向 release commit `739d0cf`（PR #84 merge `8474d13`）。上一版 `v2.0.7`（Release `386939633`，tag 指向 `15804c9`）、更早 `v2.0.6`（Release `386831543`，tag 指向 `ee69d5b`）。
 - `main` 是发布线，发版走 `codex/release-vX.Y.Z` 分支 + PR（**用 merge commit 合，绝不 squash**，否则 tag 会离开 `main` 可达历史），tag 打在 release commit 上。
@@ -35,6 +35,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 最近完成
 
+- 2026-09-12：移植上游「玻璃与左栏」参数组（用户原话「把原项目的这个功能移植到我这个项目一模一样就行」）。新增 6 个 fx 键（`windowBackgroundOpacity`/`backgroundGlassOpacity`/`playlistPanelGlassBlur`/`playlistPanelGlassDensity`/`playlistPanelOpenDuration`/`playlistPanelCloseDuration`，默认 1/0/14/0.55/0.72/0.48 逐字照上游）+ 6 条 DIY 外观区滑条；左栏玻璃头 `.playlist-panel-sticky` + `.queue-toolbar` 玻璃款（CSS 变量族 `--playlist-sticky-*`/`--playlist-toolbar-*`，主题补偿规则豁免这两个类）；面板开合 transition 接 `--playlist-panel-motion-ms`（closing 类切收起时长、pl 隐藏延迟 72ms）；`applyCustomBackground` 补窗口透明（`body.custom-window-transparent` + `--custom-bg-base-opacity`，override 公式故意不加这两项）与毛玻璃（`custom-bg-glass-active` + `--custom-bg-glass-*`，公式照上游）。新增 `tests/glass-playlist-panel-fx.test.js` 27 例，全量回归 `1166/1166`（基线 1139）。**未发版**，等用户授权。
 - 2026-09-11：实现 `v2.0.8`，修复 Wallpaper Engine「识别 / 导入」弹窗样式全失效（`wallpaper-engine.css` 的 `#custom-bg::after` 规则缺一个收尾 `}`，Chrome CSS 嵌套把文件剩余全部规则吞进永不匹配的规则；v1.4.3 引入）。新增 `tests/wallpaper-engine-css-syntax.test.js` 3 例。全量回归 `1139/1139`。
 - 2026-09-11：实现 `v2.0.7`，3D 歌单架新增「舞台」档（`public/shelf-classic.js` 移植上游 XxHuberrr/Mineradio 原版实现，`fx.shelf = off/side/stage` 唯一模式入口：DIY `#shelf-seg` + 主界面 `#shelf-view-btn`）。核心是补齐舞台动态接线：详情动画吃上游参数、`placeDynamicDetailFromCamera` 让详情跟随镜头位置、详情每帧只更新一次、镜头进入/离开速度接入 classic focus、舞台与侧栏基础设置各存一份（`fx.shelfStageSettings`/`fx.shelfSideSettings`）；惰性范围表修复 20 条参数重启读回。真机验证详情相机空间偏移在不同相机位姿下不变（位置真跟拍）。全量回归 `1136/1136`。
 - 2026-09-11：发布 `v2.0.6`，常用播放控制提到主界面音量弹层（速度 / 睡眠两组设置 + 无缝 / 均衡两个开关，改的是唯一设置状态、与 DIY 面板双向同步；画质按反馈不进弹层），并新增输出设备选择（`AudioContext.setSinkId`，插拔设备自动刷新）。全量回归 `1107/1107`。
@@ -49,7 +50,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 已知验证
 
-- 全量 Node 回归 `1136/1136` 通过（`npm test`，即 `node --test --test-concurrency=1`）；基线 `v2.0.3` `1076` → `v2.0.4` `1088`（多根 12 例）→ `v2.0.5` `1101`（倍速/睡眠 13 例）→ `v2.0.6` `1107`（主界面快捷 + 输出设备）→ `v2.0.7` `1136`（舞台歌单架 25 例）。
+- 全量 Node 回归 `1166/1166` 通过（`npm test`，即 `node --test --test-concurrency=1`）；基线 `v2.0.3` `1076` → `v2.0.4` `1088`（多根 12 例）→ `v2.0.5` `1101`（倍速/睡眠 13 例）→ `v2.0.6` `1107`（主界面快捷 + 输出设备）→ `v2.0.7` `1136`（舞台歌单架 25 例）→ `v2.0.8` `1139`（WE 弹窗 CSS 3 例）→ 未发版 `1166`（玻璃与左栏 27 例）。
 - 文档编码门禁：`tests/doc-encoding-integrity.test.js` 检查 `RELEASE.md` / `CHANGELOG.md` / `README*.md` / `AGENTS.md` / `NOTICE.md` / `AI_HANDOFF.md` / `docs/PROJECT_MEMORY.md` / `docs/HANDOFF_NEXT_CHAT.md` 必须是合法 UTF-8、无 U+FFFD、无 GBK 乱码、无 BOM，已接入 `Verify`。
 - `desktop/main.js`、`public/app.js`、`server.js` 等入口 `node --check` 通过。
 - 发布工作流 `Generate SHA256 checksums` 的清单必须用绝对路径（`Join-Path (Get-Location)`）落盘再上传，相对名会因 .NET 工作目录与 PowerShell 位置不一致而失败（v2.0.3 首次构建已踩过）。
