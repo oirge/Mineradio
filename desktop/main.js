@@ -230,6 +230,8 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-diy-player-mode-v1',
   'mineradio-playlist-panel-pinned-v1',
   'mineradio-user-capsule-auto-hide-v1',
+  'mineradio-home-btn-auto-hide-v1',
+  'mineradio-lyric-llm-translation-v1',
   'mineradio-fx-fab-auto-hide-v1',
   'mineradio-controls-auto-hide-v1',
   'mineradio-free-camera-v1',

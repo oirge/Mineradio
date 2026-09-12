@@ -673,3 +673,14 @@ body.custom-bg-glass-active #custom-bg::after {
   line-height: 1.5;
   flex: 0 0 auto
 }
+
+/* v2.0.10 修复：v2.0.8 恢复本表样式后，actions 的 clamp 宽度在
+   .lyric-color-row.image-pick-row 的 68px 第三列里溢出，把「识别 / 导入」
+   挤出面板。WE 行用自己的三列布局，actions 占满第三列并收窄到面板可容纳的宽度。 */
+.lyric-color-row.wallpaper-engine-row {
+  grid-template-columns: 42px minmax(0, 1fr) clamp(176px, 40vw, 224px)
+}
+
+.wallpaper-engine-row .wallpaper-engine-actions {
+  width: 100%
+}

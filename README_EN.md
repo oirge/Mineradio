@@ -92,6 +92,15 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.0.10 (2026-09-12)
+
+- New "Display & Translation" controls: lyric line modes (single / dual / triple / cinema / custom), bilingual translation modes (off / current / dual / multi), plus translation gap / size / opacity
+- Multi-line stage lyrics: smooth track scrolling, fading context rows and translation sub-lines, matching the original project
+- Built-in translation source: lyrics without translations are auto-translated and cached locally, each line translated only once
+- Fixed the Wallpaper Engine "Import" button being pushed out of the panel
+
+Full Node regression suite: `1183/1183` passing.
+
 ### v2.0.9 (2026-09-12)
 
 - New "Glass & Side Rail" controls: window background transparency, frosted glass, rail blur / density, open & close durations

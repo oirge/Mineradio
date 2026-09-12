@@ -27,7 +27,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前版本：`v2.0.9`（玻璃与左栏参数组移植 + 隐藏右上角房子按钮），已发布。
+- 当前版本：`v2.0.10`（歌词显示与翻译 + LLM 翻译源 + WE 选择入口修复），发布中（详情发布后回填 RELEASE.md）。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`。`package.json` 发布配置 owner/repo 为 `oirge/Mineradio`。
 - 正式发布基线：线上 Latest 是 `v2.0.9`（玻璃与左栏参数组 + 隐藏房子按钮），Release `387445460`，`published_at` `2026-09-12T03:50:55Z`，四项资产齐全（Setup.exe sha256 `cf358317…` 实物校验一致）；tag `v2.0.9` 指向 release commit `ba7c46e`（PR #86 merge `02681cf`）。上一版 `v2.0.8`（Release `387419553`，tag 指向 `739d0cf`）、更早 `v2.0.7`（Release `386939633`，tag 指向 `15804c9`）。
 - `main` 是发布线，发版走 `codex/release-vX.Y.Z` 分支 + PR（**用 merge commit 合，绝不 squash**，否则 tag 会离开 `main` 可达历史），tag 打在 release commit 上。
@@ -35,6 +35,8 @@ Get-Content package.json -Encoding UTF8
 
 ## 最近完成
 
+- 2026-09-12：移植上游「显示与翻译」（歌词行数模式/双语翻译模式/译文三滑条，默认 cinema/multi/10/0.92/0.65/0.86），多行语义用轻量行池在本仓库单 mesh 引擎上复刻；新增 LLM 翻译服务（用户端点走 `/api/lyric-translate` 本地代理，英文 system prompt，行级内容寻址缓存永不重翻）；修复 v2.0.8 引入的 WE「识别 / 导入」按钮溢出回归。测试 14 例，回归 `1183/1183`。**用户已授权发布 v2.0.10**。
+- 2026-09-12：按用户纠正把房子按钮从「直接删除」改为「原版同款把手控制」：恢复 `#home-btn`，新增 `#home-btn-hide-btn` 把手（`toggleHomeBtnAutoHide`，持久化 `mineradio-home-btn-auto-hide-v1`，四处同步键清单），`tests/home-btn-auto-hide.test.js` 3 例。回归 `1169/1169`。工作区改动未发版。
 - 2026-09-12：发布 `v2.0.9`（玻璃与左栏参数组移植 + 隐藏右上角房子按钮）。tag `v2.0.9` → `ba7c46e`（PR #86 merge `02681cf`），Release `387445460` 已设 Latest，run `34671295714`，四资产齐全、SHA256 三路校验一致，`latest.yml` `version: 2.0.9`。应用内公告四条过真实解析器 4/4 保留（解析器上限 4 条，正文不带标题行）。
 - 2026-09-12：移植上游「玻璃与左栏」参数组（用户原话「把原项目的这个功能移植到我这个项目一模一样就行」）。新增 6 个 fx 键（`windowBackgroundOpacity`/`backgroundGlassOpacity`/`playlistPanelGlassBlur`/`playlistPanelGlassDensity`/`playlistPanelOpenDuration`/`playlistPanelCloseDuration`，默认 1/0/14/0.55/0.72/0.48 逐字照上游）+ 6 条 DIY 外观区滑条；左栏玻璃头 `.playlist-panel-sticky` + `.queue-toolbar` 玻璃款（CSS 变量族 `--playlist-sticky-*`/`--playlist-toolbar-*`，主题补偿规则豁免这两个类）；面板开合 transition 接 `--playlist-panel-motion-ms`（closing 类切收起时长、pl 隐藏延迟 72ms）；`applyCustomBackground` 补窗口透明（`body.custom-window-transparent` + `--custom-bg-base-opacity`，override 公式故意不加这两项）与毛玻璃（`custom-bg-glass-active` + `--custom-bg-glass-*`，公式照上游）。新增 `tests/glass-playlist-panel-fx.test.js` 27 例，全量回归 `1166/1166`（基线 1139）。**未发版**，等用户授权。
 - 2026-09-11：实现 `v2.0.8`，修复 Wallpaper Engine「识别 / 导入」弹窗样式全失效（`wallpaper-engine.css` 的 `#custom-bg::after` 规则缺一个收尾 `}`，Chrome CSS 嵌套把文件剩余全部规则吞进永不匹配的规则；v1.4.3 引入）。新增 `tests/wallpaper-engine-css-syntax.test.js` 3 例。全量回归 `1139/1139`。
@@ -51,7 +53,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 已知验证
 
-- 全量 Node 回归 `1168/1168` 通过（`npm test`，即 `node --test --test-concurrency=1`）；基线 `v2.0.3` `1076` → `v2.0.4` `1088`（多根 12 例）→ `v2.0.5` `1101`（倍速/睡眠 13 例）→ `v2.0.6` `1107`（主界面快捷 + 输出设备）→ `v2.0.7` `1136`（舞台歌单架 25 例）→ `v2.0.8` `1139`（WE 弹窗 CSS 3 例）→ `v2.0.9` `1168`（玻璃与左栏 27 例 + 房子按钮 2 例）。
+- 全量 Node 回归 `1168/1168` 通过（`npm test`，即 `node --test --test-concurrency=1`）；基线 `v2.0.3` `1076` → `v2.0.4` `1088`（多根 12 例）→ `v2.0.5` `1101`（倍速/睡眠 13 例）→ `v2.0.6` `1107`（主界面快捷 + 输出设备）→ `v2.0.7` `1136`（舞台歌单架 25 例）→ `v2.0.8` `1139`（WE 弹窗 CSS 3 例）→ `v2.0.9` `1168`（玻璃与左栏 27 例 + 房子按钮 2 例）→ `v2.0.10` `1183`（显示与翻译 11 + WE 行 3，含把手键三处同步调整）。
 - 文档编码门禁：`tests/doc-encoding-integrity.test.js` 检查 `RELEASE.md` / `CHANGELOG.md` / `README*.md` / `AGENTS.md` / `NOTICE.md` / `AI_HANDOFF.md` / `docs/PROJECT_MEMORY.md` / `docs/HANDOFF_NEXT_CHAT.md` 必须是合法 UTF-8、无 U+FFFD、无 GBK 乱码、无 BOM，已接入 `Verify`。
 - `desktop/main.js`、`public/app.js`、`server.js` 等入口 `node --check` 通过。
 - 发布工作流 `Generate SHA256 checksums` 的清单必须用绝对路径（`Join-Path (Get-Location)`）落盘再上传，相对名会因 .NET 工作目录与 PowerShell 位置不一致而失败（v2.0.3 首次构建已踩过）。
