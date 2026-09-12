@@ -9730,9 +9730,11 @@ function stageLyricPrimaryText(line) {
   // lyric compatibility and exposes the second fragment as `translation`.
   // The stage track has a separate translation child, so never paint that
   // fragment into the primary row as a horizontal "source translation" run.
-  var displayMode = typeof fx !== 'undefined' ? normalizeLyricDisplayMode(fx.lyricDisplayMode) : 'single';
-  var translationMode = typeof fx !== 'undefined' ? normalizeLyricTranslationMode(fx.lyricTranslationMode) : 'off';
-  if (line.translation && /\r?\n/.test(raw) && (displayMode !== 'single' || translationMode !== 'off')) raw = raw.split(/\r?\n/)[0];
+  // A parsed bilingual bucket keeps the original text joined for desktop
+  // lyrics, but the stage renderer always owns the translation as a child
+  // row.  Do not let the translation leak back into the primary mesh when
+  // translation display is turned off.
+  if (line.translation && /\r?\n/.test(raw)) raw = raw.split(/\r?\n/)[0];
   return stageLyricRenderText(raw);
 }
 function stageLyricCurrentDisplayText(line) {
@@ -9942,6 +9944,7 @@ function runLyricLlmTranslation(pending, token) {
 }
 // ---- 多行舞台行池：context 行 + 译文子行（布局语义照上游） ----
 var STAGE_LYRIC_ROW_POOL_MAX = 30;
+var lyricRowTranslationRevision = 0;
 // 主行虚拟间距：有译文 1.78–2.88（visualGap+0.82+scale*0.14）；无译文保持上游的 1 个主行槽位，
 // 上下文 spread 只作用于世界行高，不改变虚拟索引。
 function lyricRowSlotStep() {
@@ -9978,6 +9981,7 @@ function lyricRowVirtualPrefixKey() {
   var first = lyricsLines && lyricsLines[0];
   var last = lyricsLines && lyricsLines.length ? lyricsLines[lyricsLines.length - 1] : null;
   return [
+    lyricRowTranslationRevision,
     stageLyrics && stageLyrics.styleVersion || 0,
     lyricTranslationModeActive() ? 1 : 0,
     Math.round(lyricTranslationVisualGapValue() * 1000),
@@ -10098,6 +10102,7 @@ function stageLyricRowsClear() {
 }
 function bumpStageLyricRows() {
   stageLyrics.rowsSignature = '';
+  lyricRowTranslationRevision += 1;
   if (typeof lyricRowVirtualPrefixCache !== 'undefined') lyricRowVirtualPrefixCache.key = '';
 }
 function updateStageLyricRows(activeIdx) {
@@ -10293,6 +10298,10 @@ function tickStageLyricRows(dt) {
           : (row.lineIdx === activeIdx + 1 ? translationOpacity * 0.66 : 0);
       } else {
         // 上游 multi：译文行透明度按父行距离衰减混合（12:1418-1423）。
+        // `row.targetAlpha` is not present on the lightweight row-pool
+        // entries (the upstream resident track stores it on each payload
+        // entry).  Derive the same base alpha from the parent line here so
+        // context translations do not collapse to the 0.08 clamp.
         var contextTranslationAlpha = clampRange(
           lyricContextLineAlphaForDelta(parentDistance, mode) * 1.05 * (translationOpacity / 0.86),
           0.08,
