@@ -61,6 +61,7 @@
 - **缓存坑三连**：① `cacheDirty` 忘置 true → persist 永远 return、localStorage 恒空；② 仓库只有 `setPersistentLocalStorageItem`，读取端靠启动镜像灌回，没有 `getPersistentLocalStorageItem`（写了必 ReferenceError）；③ 缓存键登记三处（PERSISTENT_UI_STATE_KEYS/preload/main）。空译文写空串缓存防失败行无限重试。
 - **WE 按钮回归**：v2.0.8 恢复 wallpaper-engine.css 后 `.wallpaper-engine-actions` 宽度在 image-pick-row 第三列（68px）溢出，把「识别 / 导入」挤出面板——v2.0.8 引入的回归，WE 行专用三列布局修复。
 - 测试：`tests/lyric-display-translation.test.js` 11 例 + `tests/wallpaper-engine-row-layout.test.js` 3 例。浏览器真机：真实 API 翻 5 行中文、缓存命中零请求、cinema+multi 渲染截图全过。回归 `1183/1183`（v2.0.9 基线 `1168`）。
+- **发布后三轮修正（工作区未发版）**：用户三次强调「多行效果要和原项目一样」+ 要求默认单行、翻译方向可自定义。关键方法：**把上游原项目跑起来对比**（静态服务+注入双语歌词+手动驱动渲染帧 90 帧截图），肉眼对照修正——译文偏移回原值、context 译文提亮与原文同级、dual 0.66、context 行 uProgress=0 基色（设 1 全行高亮白是真坑）、屏幕 fit 压缩（上游相机布局与本仓库不同，5 行+5 译文必须 fit 进屏）。新需求：默认 `single`；`lyricTranslateTarget` 键（空=自动双向，填语言=全翻该语言；缓存键带目标语；换目标语只清 LLM 译文）；「显示与翻译」挪到歌词页最前+目标语言输入框。回归 `1183/1183`。
 - 发布门禁：**用户明确授权发布**（「然后再发布新版本」），已发布为 `v2.0.10`（Release `387480927`，tag → `3559edf`，PR #88 merge `3029b3b`，已设 Latest，run `34678695171`；Setup.exe sha256 `40edc83b…` 实物校验一致）。RELEASE.md 已回填。
 
 ## v2.0.9：玻璃与左栏参数组移植 + 隐藏右上角房子按钮（已发布，2026-09-12）

@@ -35,6 +35,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 最近完成
 
+- 2026-09-12（发布后修正，**工作区未发版**）：跑上游原项目对比多行歌词，修正译文偏移/亮度（context 译文与原文同级）、context 行 uProgress=0、屏幕自适应 fit；默认显示模式改 `single`；新增 `lyricTranslateTarget` 目标语言自定义（空=自动双向：非中→中、中→英；填「日本語」等=全翻该语言；缓存键带目标语；歌词页「显示与翻译」组新增目标语言输入框）。回归 `1183/1183`。
 - 2026-09-12：发布 `v2.0.10`（歌词显示与翻译 + LLM 翻译源 + WE 选择入口修复）。tag `v2.0.10` → `3559edf`（PR #88 merge `3029b3b`），Release `387480927` 已设 Latest，run `34678695171`，四资产齐全、SHA256 实物校验一致，`latest.yml` `version: 2.0.10`。公告四条过真实解析器 4/4。
 - 2026-09-12：移植上游「显示与翻译」（歌词行数模式/双语翻译模式/译文三滑条，默认 cinema/multi/10/0.92/0.65/0.86），多行语义用轻量行池在本仓库单 mesh 引擎上复刻；新增 LLM 翻译服务（用户端点走 `/api/lyric-translate` 本地代理，英文 system prompt，行级内容寻址缓存永不重翻）；修复 v2.0.8 引入的 WE「识别 / 导入」按钮溢出回归。测试 14 例，回归 `1183/1183`。**用户已授权发布 v2.0.10**。
 - 2026-09-12：按用户纠正把房子按钮从「直接删除」改为「原版同款把手控制」：恢复 `#home-btn`，新增 `#home-btn-hide-btn` 把手（`toggleHomeBtnAutoHide`，持久化 `mineradio-home-btn-auto-hide-v1`，四处同步键清单），`tests/home-btn-auto-hide.test.js` 3 例。回归 `1169/1169`。工作区改动未发版。

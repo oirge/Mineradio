@@ -2211,3 +2211,10 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
   .fx-slider{grid-template-columns:74px minmax(0,1fr) 40px 28px;gap:8px;padding:8px}
   .lyric-color-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+
+/* 歌词翻译目标语言输入（留空=自动：非中文→中文，中文→英文） */
+.lyric-translate-target-row{display:flex;align-items:center;gap:10px;margin:7px 0}
+.lyric-translate-target-row label{flex:0 0 auto;min-width:76px;color:rgba(232,236,239,.62);font-size:12px;letter-spacing:.4px}
+.lyric-translate-target-row input[type=text]{flex:1;min-width:0;height:30px;padding:0 10px;border-radius:9px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#e8ecef;font-size:12px;font-family:inherit;letter-spacing:.4px;outline:none}
+.lyric-translate-target-row input[type=text]:focus{border-color:rgba(var(--fc-accent-rgb),.42);background:rgba(255,255,255,.06)}
+.lyric-translate-target-row output{flex:0 0 auto;min-width:34px;text-align:right;color:rgba(255,255,255,.42);font-size:10.5px}

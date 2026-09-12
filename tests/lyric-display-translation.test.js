@@ -23,15 +23,16 @@ function slice(src, startMarker, endMarker) {
 // ---------- 1. 默认值与快照 ----------
 test('fxDefaults 六键默认值与上游一致', () => {
   const defaults = slice(appJs, 'var fxDefaults = {', '\n};');
-  assert.match(defaults, /lyricDisplayMode: 'cinema',/);
-  assert.match(defaults, /lyricTranslationMode: 'multi',/);
+  assert.match(defaults, /lyricDisplayMode: 'single',/);
+  assert.match(defaults, /lyricTranslateTarget: '',/);
+  assert.match(defaults, /lyricTranslationMode: 'off',/);
   assert.match(defaults, /lyricCustomLineCount: 10,/);
   assert.match(defaults, /lyricTranslationGap: 0\.92,/);
   assert.match(defaults, /lyricTranslationScale: 0\.65,/);
   assert.match(defaults, /lyricTranslationOpacity: 0\.86,/);
   const snapshot = slice(appJs, 'var PACKAGED_DEFAULT_FX_SNAPSHOT = Object.freeze({', '\n});');
-  assert.match(snapshot, /lyricDisplayMode: 'cinema',/);
-  assert.match(snapshot, /lyricTranslationMode: 'multi',/);
+  assert.match(snapshot, /lyricDisplayMode: 'single',/);
+  assert.match(snapshot, /lyricTranslationMode: 'off',/);
   assert.match(snapshot, /lyricTranslationGap: 0\.92,/);
 });
 
@@ -127,11 +128,18 @@ test('渲染层：行池管理/轨道滚动/译文门控/接线齐全', () => {
   assert.match(appJs, /while \(stageLyrics\.outgoing\.length\) disposeLyricMesh\(stageLyrics\.outgoing\.pop\(\)\);\s*\n\s*stageLyricRowsClear\(\);/);
   // refreshCurrentLyricStyle 失效签名
   assert.match(appJs, /function refreshCurrentLyricStyle\(\) \{\s*\n\s*stageLyrics\.styleVersion \+= 1;\s*\n\s*stageLyrics\.rowsSignature = '';/);
-  // 译文行 650 字重与 dual 半亮门控
+  // 译文行 650 字重与 dual 下一行亮度门控
   assert.match(appJs, /weight: isTranslation \? 650 : null,/);
-  assert.match(appJs, /translationOpacity \* 0\.56/);
+  assert.match(appJs, /translationOpacity \* 0\.66/);
   // 池更新签名短路（含 custom 行数）
   assert.match(appJs, /lyricCustomLineCountValue\(\), lines\.length, stageLyrics\.styleVersion/);
+  // 目标语言自定义：值函数、缓存键带目标语、双向自动 prompt、变更 setter
+  assert.match(appJs, /function lyricTranslateTargetValue\(\) \{/);
+  assert.match(appJs, /lyricLlmTranslateCacheKey\(lyricTranslateTargetValue\(\) \+/);
+  assert.match(appJs, /Chinese lines into English, and non-Chinese lines into Simplified Chinese/);
+  assert.match(appJs, /'Translate numbered song lyric lines into ' \+ target \+/);
+  assert.match(appJs, /function setLyricTranslateTarget\(value\) \{/);
+  assert.match(indexHtml, /id="lyric-translate-target"/);
 });
 
 // ---------- 6. 持久化 ----------
