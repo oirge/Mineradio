@@ -64,7 +64,7 @@
 - 测试 `tests/glass-playlist-panel-fx.test.js` 27 例；**vm 切片只声明函数不执行，`applyCustomBackground` 的切片测试必须显式调用**（首版漏调用 4 例假红）。浏览器真机验证全过：默认值、拉动即时生效、落盘、复位、动画时长（0.08s 打开 / closing 下 0.48s 收起）、sticky 玻璃头 backdrop-filter、毛玻璃 ::after 视觉、DIY 面板呈现与重置。全量回归 `1166/1166`（v2.0.8 基线 `1139`，新增 27）。
 - **已知边界**：真 Electron 透明窗口「透出桌面」没在本机窗口肉眼验证（浏览器 html/body 黑底只能验类与变量）；上游 motion 标记系统（`markPlaylistPanelMotion`/`isPlaylistPanelInMotion`）故意没移植——本仓库没有对应消费者。
 - **追加：隐藏右上角房子按钮**：用户「隐藏我项目的这个房子的功能」。`local-only-mode` 里 `#user-btn`/`#user-capsule-hide-btn` 本被 CSS 隐藏，`#home-btn` 是右上角唯一可见项；删除按钮（`goHome` 函数、键盘 Home 键、空库引导保留，DIY 锚点有 `|| top-right` 兜底），`tests/home-btn-hidden.test.js` 2 例。回归 `1168/1168`。
-- 发布门禁：**用户明确说「发布新版」后发布为 `v2.0.9`**；版本钉五处 2.0.8→2.0.9，CHANGELOG/双语 README 同步。
+- 发布门禁：**用户明确说「发布新版 更新介绍把更新内容都加上 简洁明了一些」后发布为 `v2.0.9`**（Release `387445460`，tag → `ba7c46e`，PR #86 merge `02681cf`，已设 Latest，`published_at` `2026-09-12T03:50:55Z`，run `34671295714`；Setup.exe sha256 `cf358317fdb6586b8446a9c3655ddeb36d567dc86a3c81383472341af16a1d67` 实物回下载校验一致）。版本钉五处 2.0.8→2.0.9，CHANGELOG/双语 README 同步。**解析器坑：`normalizeReleaseNotes` 上限 4 条（`notes.length >= 4` break），公告正文不能带标题行，否则少一条 bullet**；验证脚本必须按真实入口 `extractReleaseNotes`（body 先按行 split）传参，把整个 body 当字符串传会整段折叠成一行。
 
 ## v2.0.8：Wallpaper Engine 壁纸导入弹窗样式全失效修复（已发布，2026-09-12）
 
