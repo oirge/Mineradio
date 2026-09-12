@@ -1,5 +1,17 @@
 # 发布流程
 
+## v2.0.9 玻璃与左栏参数组移植 + 隐藏右上角房子按钮
+
+- 发布版本从 `2.0.8` 提升为 `2.0.9`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
+- 内容（用户原话「发布新版 更新介绍把更新内容都加上 简洁明了一些」）：① 移植上游「玻璃与左栏」参数组——窗口背景透明 / 毛玻璃透明 / 左栏雾面 / 左栏遮挡 / 左栏唤出秒数 / 左栏掀起秒数六条新滑条（`fx-glassaberration` 玻璃色差本仓库已有、范围 0–140 与上游不同保持现状），默认值 1 / 0 / 14 / 0.55 / 0.72 / 0.48 逐字照上游；② 左栏玻璃质感——`.playlist-panel-sticky` 玻璃头 + `.queue-toolbar` 玻璃工具条（CSS 变量族 `--playlist-sticky-*` / `--playlist-toolbar-*`，主题补偿规则豁免这两个类），开合 transition 接 `--playlist-panel-motion-ms`（closing 类切收起时长、pl 隐藏延迟 72ms）；③ 窗口背景透明走 `body.custom-window-transparent` + `--custom-bg-base-opacity` 独立通道（override 公式不动），毛玻璃走 `custom-bg-glass-active` + `--custom-bg-glass-*`（公式照上游）；④ 隐藏右上角「回到 Home」房子按钮（键盘 Home 键与空库引导保留，DIY 锚点 `top-right` 兜底）。
+- 测试：新增 `tests/glass-playlist-panel-fx.test.js` 27 例（vm 跑 `applyPlaylistPanelFxSettings` / `applyCustomBackground` 真切片 + 静态断言）与 `tests/home-btn-hidden.test.js` 2 例。全量 Node 回归 **1168/1168**（v2.0.8 基线 `1139`）。浏览器真机验证：默认值、拉动即时生效、落盘、复位、动画时长（0.08s 打开 / closing 下 0.48s 收起）、玻璃头 backdrop-filter、毛玻璃视觉、DIY 呈现与重置。
+- 发布结果（2026-09-12）：tag `v2.0.9` → release commit `ba7c46e`（PR #86，merge `02681cf` 合入 `main`）；Release `387445460`，`published_at` `2026-09-12T03:50:55Z`，已设 Latest；构建 run `34671295714` 成功，四资产齐全。
+  - `Mineradio-oirge-2.0.9-Setup.exe` sha256 `cf358317fdb6586b8446a9c3655ddeb36d567dc86a3c81383472341af16a1d67`（size 102652262）
+  - `Mineradio-oirge-2.0.9-Setup.exe.blockmap` sha256 `d20b67d3f9f89e2d98472de59b6aa26ba5aed9eb4a61f50ab7bcabcb16bbaee5`（size 106696）
+  - `latest.yml` sha256 `182e23a467735bd655efee6bc38246900888693d833ead5745447112cba295b6`（size 282），`version: 2.0.9` 已核对
+  - `Mineradio-oirge-2.0.9-SHA256SUMS.txt` 清单与实物回下载校验一致（Setup.exe 本体独立 sha256 比对通过）
+- 应用内更新公告四条，已经 `server.js` 真实 `extractReleaseNotes` 解析器预验证 4/4 保留（解析器上限 4 条，正文不带标题行）。
+
 ## v2.0.8 Wallpaper Engine 壁纸导入弹窗样式修复
 
 - **发布结果（2026-09-12）**：tag `v2.0.8` → release commit `739d0cf`（PR #84，merge `8474d13` 合入 `main`）；Release `387419553`，`published_at` `2026-09-12T01:45:15Z`，已设 Latest；构建 run `34665588375` 成功，四资产齐全。
