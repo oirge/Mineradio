@@ -308,6 +308,27 @@ if (document.fonts && document.fonts.load) {
       <span class="fx-fold-title"><strong>歌词外观</strong><small>颜色 / 来源 / 位置</small></span><span class="arrow">▶</span>
     </div>
     <div class="fx-fold-body">
+      <div class="fx-section-label">显示与翻译</div>
+      <div class="fx-seg" id="lyric-display-mode-seg">
+        <button type="button" data-mode="single" onclick="setLyricDisplayMode('single')">单行</button>
+        <button type="button" data-mode="dual" onclick="setLyricDisplayMode('dual')">双行</button>
+        <button type="button" data-mode="triple" onclick="setLyricDisplayMode('triple')">三行</button>
+        <button type="button" data-mode="cinema" onclick="setLyricDisplayMode('cinema')">沉浸</button>
+        <button type="button" data-mode="custom" onclick="setLyricDisplayMode('custom')">自定</button>
+      </div>
+      <div class="fx-slider"><label>显示行数</label><input id="fx-lyriccustomlines" type="range" min="1" max="10" step="1"><output></output></div>
+      <div class="fx-seg" id="lyric-translation-mode-seg">
+        <button type="button" data-translation="off" onclick="setLyricTranslationMode('off')">关闭</button>
+        <button type="button" data-translation="current" onclick="setLyricTranslationMode('current')">当前</button>
+        <button type="button" data-translation="dual" onclick="setLyricTranslationMode('dual')">双行</button>
+        <button type="button" data-translation="multi" onclick="setLyricTranslationMode('multi')">多行</button>
+      </div>
+      <div class="fx-slider lyric-translate-target-row"><label>目标语言</label><input id="lyric-translate-target" type="text" placeholder="留空=自动（非中→中，中→英）" maxlength="24"><output></output></div>
+      <div class="fx-slider"><label>译文间距</label><input id="fx-lyrictranslationgap" type="range" min="0.28" max="2.20" step="0.01"><output></output></div>
+      <div class="fx-slider"><label>译文字号</label><input id="fx-lyrictranslationscale" type="range" min="0.46" max="1.12" step="0.01"><output></output></div>
+      <div class="fx-slider"><label>译文透明</label><input id="fx-lyrictranslationopacity" type="range" min="0.20" max="1" step="0.01"><output></output></div>
+
+
       <div class="fx-section-label">歌词颜色</div>
       <div class="lyric-color-grid" id="lyric-color-grid"></div>
       <div class="lyric-color-row">
@@ -352,24 +373,6 @@ if (document.fonts && document.fonts.load) {
       <div class="fx-slider"><label>字间距</label><input id="fx-lyricspacing" type="range" min="-0.04" max="0.18" step="0.005"><output></output></div>
       <div class="fx-slider"><label>行距</label><input id="fx-lyriclineheight" type="range" min="0.86" max="1.35" step="0.01"><output></output></div>
       <div class="fx-slider"><label>字重</label><input id="fx-lyricweight" type="range" min="500" max="900" step="50"><output></output></div>
-      <div class="fx-section-label">显示与翻译</div>
-      <div class="fx-seg" id="lyric-display-mode-seg">
-        <button type="button" data-mode="single" onclick="setLyricDisplayMode('single')">单行</button>
-        <button type="button" data-mode="dual" onclick="setLyricDisplayMode('dual')">双行</button>
-        <button type="button" data-mode="triple" onclick="setLyricDisplayMode('triple')">三行</button>
-        <button type="button" data-mode="cinema" onclick="setLyricDisplayMode('cinema')">沉浸</button>
-        <button type="button" data-mode="custom" onclick="setLyricDisplayMode('custom')">自定</button>
-      </div>
-      <div class="fx-slider"><label>显示行数</label><input id="fx-lyriccustomlines" type="range" min="1" max="10" step="1"><output></output></div>
-      <div class="fx-seg" id="lyric-translation-mode-seg">
-        <button type="button" data-translation="off" onclick="setLyricTranslationMode('off')">关闭</button>
-        <button type="button" data-translation="current" onclick="setLyricTranslationMode('current')">当前</button>
-        <button type="button" data-translation="dual" onclick="setLyricTranslationMode('dual')">双行</button>
-        <button type="button" data-translation="multi" onclick="setLyricTranslationMode('multi')">多行</button>
-      </div>
-      <div class="fx-slider"><label>译文间距</label><input id="fx-lyrictranslationgap" type="range" min="0.28" max="2.20" step="0.01"><output></output></div>
-      <div class="fx-slider"><label>译文字号</label><input id="fx-lyrictranslationscale" type="range" min="0.46" max="1.12" step="0.01"><output></output></div>
-      <div class="fx-slider"><label>译文透明</label><input id="fx-lyrictranslationopacity" type="range" min="0.20" max="1" step="0.01"><output></output></div>
 
       <div class="fx-section-label">歌词布局</div>
       <div class="fx-slider"><label>歌词大小</label><input id="fx-lyricscale" type="range" min="0.35" max="1.65" step="0.01"><output></output></div>
