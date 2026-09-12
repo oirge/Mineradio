@@ -9944,6 +9944,7 @@ function runLyricLlmTranslation(pending, token) {
 }
 // ---- 多行舞台行池：context 行 + 译文子行（布局语义照上游） ----
 var STAGE_LYRIC_ROW_POOL_MAX = 30;
+var lyricRowTranslationRevision = 0;
 // 主行虚拟间距：有译文 1.78–2.88（visualGap+0.82+scale*0.14）；无译文保持上游的 1 个主行槽位，
 // 上下文 spread 只作用于世界行高，不改变虚拟索引。
 function lyricRowSlotStep() {
@@ -9980,6 +9981,7 @@ function lyricRowVirtualPrefixKey() {
   var first = lyricsLines && lyricsLines[0];
   var last = lyricsLines && lyricsLines.length ? lyricsLines[lyricsLines.length - 1] : null;
   return [
+    lyricRowTranslationRevision,
     stageLyrics && stageLyrics.styleVersion || 0,
     lyricTranslationModeActive() ? 1 : 0,
     Math.round(lyricTranslationVisualGapValue() * 1000),
@@ -10100,6 +10102,7 @@ function stageLyricRowsClear() {
 }
 function bumpStageLyricRows() {
   stageLyrics.rowsSignature = '';
+  lyricRowTranslationRevision += 1;
   if (typeof lyricRowVirtualPrefixCache !== 'undefined') lyricRowVirtualPrefixCache.key = '';
 }
 function updateStageLyricRows(activeIdx) {
