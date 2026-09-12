@@ -5,6 +5,11 @@
 - 发布版本从 `2.0.10` 提升为 `2.1.0`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流 description+默认 tag）一起动。
 - 内容：① 多行歌词按上游虚拟行槽位、独立译文步长、译文锚定位置和屏幕 fit 计算，修复播放换行错位；② 双语同时间歌词的主行统一空白并只绘制原文，译文子行按目标语言和字号缩放；③ 默认歌词显示为单行，默认翻译关闭，用户仍可在「显示与翻译」中开启双行 / 多行与翻译；④ 译文长句按缩放后的实际字号测宽，避免长句画布过宽导致显示比例异常。
 - 测试：歌词专项 `11/11`，全量 Node 回归 `1183/1183`，`node --check public/app.js` 与 `git diff --check` 通过。
+- 发布结果（2026-09-12）：tag `v2.1.0` → merge commit `3c6ec49`（PR #90/#91/#92 合入 `main`）；Release `387532338`，`published_at` `2026-09-12T10:22:15Z`，已设 Latest；构建 run `34688075442` 成功，四资产齐全。
+  - `Mineradio-oirge-2.1.0-Setup.exe` sha256 `2181c67afddc64415191698da58002951d7dd4e07fd69719280c823363bd6ce1`（size 102664665）
+  - `Mineradio-oirge-2.1.0-Setup.exe.blockmap` sha256 `ff62d215bad30ce7a06b276cbdfa720f068c0c00488c21a66d4873b7e23e0802`（size 106790）
+  - `latest.yml` sha256 `dcdb912a4058d4403f78ecb02ec7703ded73f1ab067165301b1e32967cbf0b07`，`version: 2.1.0` 已核对
+  - `Mineradio-oirge-2.1.0-SHA256SUMS.txt` sha256 `378c07a1aa2fcdeff1d98ef52f9448044eea8f7be954c5f25f93f0c34283b67f`
 
 ## v2.0.10 歌词显示与翻译 + Wallpaper Engine 选择入口修复
 
