@@ -10003,12 +10003,21 @@ function lyricRowVirtualIndex(row) {
   return row.kind === 'translation' ? primary + lyricTranslationVisualGapValue() : primary;
 }
 function lyricRowLineStepWorld(worldH) {
-  return clampRange(worldH * 0.34 * lyricContextSpreadFactor(), 0.22, 0.94);
+  var step = Number(worldH) || 0;
+  var lockFont = typeof LYRIC_ROW_LOCK_FONT === 'number' ? LYRIC_ROW_LOCK_FONT : 128;
+  step *= lockFont * lyricLineHeightFactor() / 384;
+  step *= lyricContextSpreadFactor();
+  if (lyricTranslationModeActive()) step *= 1.06;
+  return clampRange(step, 0.22, 0.94);
 }
 // Upstream uses a dedicated line-height for translation children. Reusing the
 // primary step makes the child drift from its parent during track scrolling.
 function lyricRowTranslationStepWorld(worldH) {
-  return clampRange(worldH * 0.34 * 1.04, 0.20, 0.78);
+  var step = Number(worldH) || 0;
+  var lockFont = typeof LYRIC_ROW_LOCK_FONT === 'number' ? LYRIC_ROW_LOCK_FONT : 128;
+  step *= lockFont * lyricLineHeightFactor() / 384;
+  if (lyricTranslationModeActive()) step *= 1.04;
+  return clampRange(step, 0.20, 0.78);
 }
 function lyricRowTranslationAnchoredY(row, scrollOffset, lineStepWorld, translationLineStepWorld, rowDrift, currentTranslation) {
   if (!row) return 0;
