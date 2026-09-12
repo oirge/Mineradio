@@ -13,6 +13,11 @@ const { Readable } = require('stream');
 const { fileURLToPath } = require('url');
 
 const PORT = process.env.PORT || 3000;
+// 歌词 LLM 翻译源（OpenAI 兼容端点，用户指定）。浏览器直连会被端点的 CORS 预检拦截，
+// 因此渲染层走 /api/lyric-translate 本地代理，密钥只存在于本进程。
+const LYRIC_TRANSLATE_ENDPOINT = 'http://129.204.9.16:8000/v1/chat/completions';
+const LYRIC_TRANSLATE_API_KEY = 'g2a_752333ba7025_t_S90cSbpFq_9qMEOuXoUl12bctaXvaP';
+const LYRIC_TRANSLATE_MODEL = 'grok-chat-fast';
 const HOST = process.env.HOST || '0.0.0.0';
 const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
 /**
@@ -2808,6 +2813,47 @@ const server = http.createServer(async (req, res) => {
       ? updateDownloadJobs.get(id)
       : latestUpdateDownloadJob(item => item.mode === 'patch');
     sendJSON(res, publicUpdateJob(job), job ? 200 : 404);
+    return;
+  }
+
+  if (pn === '/api/lyric-translate') {
+    if (req.method !== 'POST') {
+      sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const messages = Array.isArray(body.messages) ? body.messages : null;
+      if (!messages || !messages.length) {
+        sendJSON(res, { ok: false, error: 'MESSAGES_REQUIRED' }, 400);
+        return;
+      }
+      const temperature = Number.isFinite(Number(body.temperature)) ? Number(body.temperature) : 0.1;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
+      try {
+        const upstream = await fetch(LYRIC_TRANSLATE_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + LYRIC_TRANSLATE_API_KEY,
+          },
+          body: JSON.stringify({
+            model: LYRIC_TRANSLATE_MODEL,
+            temperature,
+            messages,
+          }),
+          signal: controller.signal,
+        });
+        const text = await upstream.text();
+        sendJSON(res, { ok: upstream.ok, status: upstream.status, body: text.slice(0, 400000) }, upstream.ok ? 200 : 502);
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (err) {
+      const code = err && err.name === 'AbortError' ? 'UPSTREAM_TIMEOUT' : (err && err.message || 'PROXY_FAILED');
+      sendJSON(res, { ok: false, error: code }, 502);
+    }
     return;
   }
 

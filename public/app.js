@@ -124,6 +124,7 @@ var DIY_MODE_STORE_KEY = 'mineradio-diy-player-mode-v1';
 var PLAYLIST_PANEL_PIN_STORE_KEY = 'mineradio-playlist-panel-pinned-v1';
 var SPECIAL_LIKED_PLAYLIST_STORE_KEY = 'mineradio-special-liked-playlist-v1';
 var USER_CAPSULE_AUTO_HIDE_STORE_KEY = 'mineradio-user-capsule-auto-hide-v1';
+var HOME_BTN_AUTO_HIDE_STORE_KEY = 'mineradio-home-btn-auto-hide-v1';
 var FX_FAB_AUTO_HIDE_STORE_KEY = 'mineradio-fx-fab-auto-hide-v1';
 var CONTROLS_AUTO_HIDE_STORE_KEY = 'mineradio-controls-auto-hide-v1';
 var FREE_CAMERA_STORE_KEY = 'mineradio-free-camera-v1';
@@ -164,7 +165,9 @@ var PERSISTENT_UI_STATE_KEYS = [
   SPECIAL_LIKED_PLAYLIST_STORE_KEY,
   LOCAL_PLAYLISTS_STORE_KEY,
   USER_CAPSULE_AUTO_HIDE_STORE_KEY,
+  HOME_BTN_AUTO_HIDE_STORE_KEY,
   FX_FAB_AUTO_HIDE_STORE_KEY,
+  LYRIC_LLM_TRANSLATE_STORE_KEY,
   CONTROLS_AUTO_HIDE_STORE_KEY,
   FREE_CAMERA_STORE_KEY,
   LOCAL_LIBRARY_FOLDER_STORE_KEY,
@@ -632,7 +635,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.0.9';
+var APP_VERSION = '2.0.10';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -724,6 +727,22 @@ function applyUserCapsuleAutoHideState() {
     btn.textContent = userCapsuleAutoHide ? '›' : '‹';
     btn.title = userCapsuleAutoHide ? '取消自动隐藏账号胶囊' : '自动隐藏账号胶囊';
   }
+}
+function applyHomeBtnAutoHideState() {
+  document.body.classList.toggle('home-btn-auto-hide', !!homeBtnAutoHide);
+  var btn = document.getElementById('home-btn-hide-btn');
+  if (btn) {
+    btn.classList.toggle('on', !!homeBtnAutoHide);
+    btn.textContent = homeBtnAutoHide ? '›' : '‹';
+    btn.title = homeBtnAutoHide ? '取消自动隐藏 Home 按钮' : '自动隐藏 Home 按钮';
+  }
+}
+function toggleHomeBtnAutoHide(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  homeBtnAutoHide = !homeBtnAutoHide;
+  saveBooleanPreference(HOME_BTN_AUTO_HIDE_STORE_KEY, homeBtnAutoHide);
+  applyHomeBtnAutoHideState();
+  showToast(homeBtnAutoHide ? 'Home 按钮已自动隐藏' : 'Home 按钮已固定显示');
 }
 function toggleUserCapsuleAutoHide(e) {
   if (e && e.stopPropagation) e.stopPropagation();
@@ -1192,6 +1211,12 @@ var fxDefaults = {
   lyricLetterSpacing: 0,
   lyricLineHeight: 1.0,
   lyricWeight: 900,
+  lyricDisplayMode: 'cinema',
+  lyricTranslationMode: 'multi',
+  lyricCustomLineCount: 10,
+  lyricTranslationGap: 0.92,
+  lyricTranslationScale: 0.65,
+  lyricTranslationOpacity: 0.86,
   visualTintMode: 'auto',
   visualTintColor: '#9db8cf',
   uiAccentColor: '#ffffff',
@@ -1312,6 +1337,12 @@ var PACKAGED_DEFAULT_FX_SNAPSHOT = Object.freeze({
   lyricLetterSpacing: 0,
   lyricLineHeight: 1,
   lyricWeight: 900,
+  lyricDisplayMode: 'cinema',
+  lyricTranslationMode: 'multi',
+  lyricCustomLineCount: 10,
+  lyricTranslationGap: 0.92,
+  lyricTranslationScale: 0.65,
+  lyricTranslationOpacity: 0.86,
   visualTintMode: 'auto',
   visualTintColor: '#9db8cf',
   uiAccentColor: '#ffffff',
@@ -1422,6 +1453,7 @@ var CURSOR_HIDE_DELAY = 2500;
 var fxPanelPinned = false;
 var playlistPanelPinned = readBooleanPreference(PLAYLIST_PANEL_PIN_STORE_KEY, false);
 var userCapsuleAutoHide = readBooleanPreference(USER_CAPSULE_AUTO_HIDE_STORE_KEY, false);
+var homeBtnAutoHide = readBooleanPreference(HOME_BTN_AUTO_HIDE_STORE_KEY, false);
 var fxFabAutoHide = readBooleanPreference(FX_FAB_AUTO_HIDE_STORE_KEY, false);
 var fxFabAutoHideRevealArmed = true;
 var hotkeySettings = readHotkeySettings();
@@ -5834,6 +5866,10 @@ var stageLyrics = {
   starRiverHeight: 0.58,
   lockFitScale: 1,
   snapCameraLockFrames: 0,
+  rows: [],
+  rowsScroll: 0,
+  rowsSignature: '',
+  styleVersion: 0,
 };
 var stageLyricIntroLine = {
   t: 0,
@@ -6233,6 +6269,12 @@ function readSavedLyricLayout() {
       lyricLetterSpacing: clampRange(Number(raw.lyricLetterSpacing) || 0, -0.04, 0.18),
       lyricLineHeight: clampRange(Number(raw.lyricLineHeight) || 1, 0.86, 1.35),
       lyricWeight: clampRange(Number(raw.lyricWeight) || 900, 500, 900),
+      lyricDisplayMode: normalizeLyricDisplayMode(raw.lyricDisplayMode || fxDefaults.lyricDisplayMode),
+      lyricTranslationMode: normalizeLyricTranslationMode(raw.lyricTranslationMode || fxDefaults.lyricTranslationMode),
+      lyricCustomLineCount: clampRange(Math.round(isFinite(Number(raw.lyricCustomLineCount)) ? Number(raw.lyricCustomLineCount) : fxDefaults.lyricCustomLineCount), 1, 10),
+      lyricTranslationGap: clampRange(isFinite(Number(raw.lyricTranslationGap)) ? Number(raw.lyricTranslationGap) : fxDefaults.lyricTranslationGap, 0.28, 2.20),
+      lyricTranslationScale: clampRange(isFinite(Number(raw.lyricTranslationScale)) ? Number(raw.lyricTranslationScale) : fxDefaults.lyricTranslationScale, 0.46, 1.12),
+      lyricTranslationOpacity: clampRange(isFinite(Number(raw.lyricTranslationOpacity)) ? Number(raw.lyricTranslationOpacity) : fxDefaults.lyricTranslationOpacity, 0.20, 1),
       lyricGlow: raw.lyricGlow !== false,
       lyricGlowBeat: raw.lyricGlowBeat !== false,
       lyricGlowParticles: !!raw.lyricGlowParticles,
@@ -6343,6 +6385,12 @@ function saveLyricLayout() {
       lyricLetterSpacing: clampRange(Number(fx.lyricLetterSpacing) || 0, -0.04, 0.18),
       lyricLineHeight: clampRange(Number(fx.lyricLineHeight) || 1, 0.86, 1.35),
       lyricWeight: clampRange(Number(fx.lyricWeight) || 900, 500, 900),
+      lyricDisplayMode: normalizeLyricDisplayMode(fx.lyricDisplayMode),
+      lyricTranslationMode: normalizeLyricTranslationMode(fx.lyricTranslationMode),
+      lyricCustomLineCount: clampRange(Math.round(isFinite(Number(fx.lyricCustomLineCount)) ? Number(fx.lyricCustomLineCount) : fxDefaults.lyricCustomLineCount), 1, 10),
+      lyricTranslationGap: clampRange(isFinite(Number(fx.lyricTranslationGap)) ? Number(fx.lyricTranslationGap) : fxDefaults.lyricTranslationGap, 0.28, 2.20),
+      lyricTranslationScale: clampRange(isFinite(Number(fx.lyricTranslationScale)) ? Number(fx.lyricTranslationScale) : fxDefaults.lyricTranslationScale, 0.46, 1.12),
+      lyricTranslationOpacity: clampRange(isFinite(Number(fx.lyricTranslationOpacity)) ? Number(fx.lyricTranslationOpacity) : fxDefaults.lyricTranslationOpacity, 0.20, 1),
       lyricGlow: !!fx.lyricGlow,
       lyricGlowBeat: !!fx.lyricGlowBeat,
       lyricGlowParticles: !!fx.lyricGlowParticles,
@@ -6625,14 +6673,83 @@ function lyricFontWeightValue() {
   if (normalizeLyricFontKey(fx && fx.lyricFont) === 'stone-song') return 900;
   return Math.round(clampRange(Number(fx && fx.lyricWeight) || 900, 500, 900) / 50) * 50;
 }
-function lyricFontCss(fontSize) {
-  return lyricFontWeightValue() + ' ' + fontSize + 'px ' + lyricFontStackForKey(fx && fx.lyricFont);
+function lyricFontCss(fontSize, weightOverride) {
+  var weight = weightOverride != null ? Math.round(clampRange(Number(weightOverride) || 900, 500, 900)) : lyricFontWeightValue();
+  return weight + ' ' + fontSize + 'px ' + lyricFontStackForKey(fx && fx.lyricFont);
 }
 function lyricLetterSpacingPx(fontSize) {
   return clampRange(Number(fx && fx.lyricLetterSpacing) || 0, -0.04, 0.18) * Math.max(1, fontSize || 1);
 }
 function lyricLineHeightFactor() {
   return clampRange(Number(fx && fx.lyricLineHeight) || 1, 0.86, 1.35);
+}
+// 歌词显示与翻译（移植上游 08-lyrics-display-modes.js 的取值语义）。
+var LYRIC_STAGE_CONTEXT_OPACITY = 0.54;
+var LYRIC_STAGE_CONTEXT_SPREAD = 1.96;
+function normalizeLyricDisplayMode(mode) {
+  mode = String(mode || '');
+  return /^(single|dual|triple|cinema|custom)$/.test(mode) ? mode : 'single';
+}
+function normalizeLyricTranslationMode(mode) {
+  mode = String(mode || '');
+  return /^(off|current|dual|multi)$/.test(mode) ? mode : 'off';
+}
+function lyricCustomLineCountValue() {
+  var raw = fx && fx.lyricCustomLineCount != null ? Number(fx.lyricCustomLineCount) : fxDefaults.lyricCustomLineCount;
+  if (!isFinite(raw)) raw = fxDefaults.lyricCustomLineCount;
+  return clampRange(Math.round(raw), 1, 10);
+}
+function lyricDisplayLineCountForMode(mode) {
+  if (mode === 'single') return 1;
+  if (mode === 'dual') return 2;
+  if (mode === 'triple') return 3;
+  if (mode === 'cinema') return 5;
+  return lyricCustomLineCountValue();
+}
+function lyricDisplayOffsetsForMode(mode) {
+  if (mode === 'single') return [0];
+  if (mode === 'dual') return [0, 1];
+  var count = lyricDisplayLineCountForMode(mode);
+  var activeSlot = Math.floor(count / 2);
+  var offsets = [];
+  for (var i = 0; i < count; i++) offsets.push(i - activeSlot);
+  return offsets;
+}
+function lyricTranslationModeActive() {
+  return normalizeLyricTranslationMode(fx && fx.lyricTranslationMode) !== 'off';
+}
+function lyricTranslationGapValue() {
+  var raw = fx && fx.lyricTranslationGap != null ? Number(fx.lyricTranslationGap) : fxDefaults.lyricTranslationGap;
+  return clampRange(isFinite(raw) ? raw : fxDefaults.lyricTranslationGap, 0.28, 2.20);
+}
+function lyricTranslationScaleValue() {
+  var raw = fx && fx.lyricTranslationScale != null ? Number(fx.lyricTranslationScale) : fxDefaults.lyricTranslationScale;
+  return clampRange(isFinite(raw) ? raw : fxDefaults.lyricTranslationScale, 0.46, 1.12);
+}
+function lyricTranslationOpacityValue() {
+  var raw = fx && fx.lyricTranslationOpacity != null ? Number(fx.lyricTranslationOpacity) : fxDefaults.lyricTranslationOpacity;
+  return clampRange(isFinite(raw) ? raw : fxDefaults.lyricTranslationOpacity, 0.20, 1);
+}
+function lyricTranslationVisualGapValue() {
+  var gap = lyricTranslationGapValue();
+  var scale = lyricTranslationScaleValue();
+  return clampRange(0.98 + (gap - 0.28) * 0.36 + Math.max(0, scale - 0.66) * 0.12, 0.92, 2.20);
+}
+function lyricContextSpreadFactor() {
+  return clampRange(1 + (LYRIC_STAGE_CONTEXT_SPREAD - 1) * 0.32, 0.86, 1.45);
+}
+function lyricContextLineAlphaForDelta(delta, mode) {
+  var abs = Math.abs(Number(delta) || 0);
+  var cinema = mode === 'cinema' || mode === 'custom';
+  if (abs <= 1) return LYRIC_STAGE_CONTEXT_OPACITY * (cinema ? 1 : 0.92);
+  if (abs === 2) return LYRIC_STAGE_CONTEXT_OPACITY * (cinema ? 0.64 : 0.52);
+  return LYRIC_STAGE_CONTEXT_OPACITY * (cinema ? 0.64 : 0.52) * Math.max(0.35, 1 - (abs - 2) * 0.24);
+}
+function lyricContextLineScaleForDelta(delta, mode) {
+  var abs = Math.abs(Number(delta) || 0);
+  var cinema = mode === 'cinema' || mode === 'custom';
+  if (abs <= 1) return cinema ? 0.90 : 0.88;
+  return cinema ? 0.82 : 0.78;
 }
 function measureTextWithLetterSpacing(ctx, text, spacing) {
   text = String(text || '');
@@ -9061,7 +9178,9 @@ function lyricDisplayLines(text, maxLines) {
   return lines.length ? lines : [''];
 }
 
-function makeLyricMask(text) {
+function makeLyricMask(text, opts) {
+  opts = opts || {};
+  var maskWeight = opts.weight != null ? Math.round(clampRange(Number(opts.weight) || 900, 500, 900)) : null;
   var canvas = document.createElement('canvas');
   var W = 2048, H = 384;
   canvas.width = W; canvas.height = H;
@@ -9075,7 +9194,7 @@ function makeLyricMask(text) {
   var lines = explicitLines;
   var widest = 1;
   for (; fontSize >= 42; fontSize -= 4) {
-    ctx.font = lyricFontCss(fontSize);
+    ctx.font = lyricFontCss(fontSize, maskWeight);
     lines = hasExplicitBreak
       ? explicitLines
       : (maxLines > 1 && lyricMeasureText(ctx, explicitLines[0], fontSize) > maxWidth ? wrapLyricText(ctx, explicitLines[0], maxWidth, maxLines, fontSize) : explicitLines);
@@ -9083,7 +9202,7 @@ function makeLyricMask(text) {
     for (var li = 0; li < lines.length; li++) widest = Math.max(widest, lyricMeasureText(ctx, lines[li], fontSize));
     if (widest <= maxWidth) break;
   }
-  ctx.font = lyricFontCss(fontSize);
+  ctx.font = lyricFontCss(fontSize, maskWeight);
   if (!lines.length) lines = [''];
   widest = 1;
   for (var mi = 0; mi < lines.length; mi++) widest = Math.max(widest, lyricMeasureText(ctx, lines[mi], fontSize));
@@ -9114,7 +9233,7 @@ function makeLyricMask(text) {
   tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
   tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1);
-  return { texture:tex, width:W, height:H, textWidth:width, textHeight:blockH, fontSize:fontSize, lineHeight:lineHeight, lineCount:lines.length, lines:lines, fitScaleX:fitScaleX, textMin:(W / 2 - width / 2) / W, textMax:(W / 2 + width / 2) / W };
+  return { texture:tex, width:W, height:H, textWidth:width, textHeight:blockH, fontSize:fontSize, lineHeight:lineHeight, lineCount:lines.length, lines:lines, fitScaleX:fitScaleX, weight:maskWeight, textMin:(W / 2 - width / 2) / W, textMax:(W / 2 + width / 2) / W };
 }
 
 function makeLyricReadabilityTexture(mask) {
@@ -9128,7 +9247,7 @@ function makeLyricReadabilityTexture(mask) {
   canvas.width = W; canvas.height = H;
   var ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
-  ctx.font = lyricFontCss(fontSize);
+  ctx.font = lyricFontCss(fontSize, mask && mask.weight);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
@@ -9561,6 +9680,9 @@ function showStageLine(text, redrawOnly) {
 }
 
 function refreshCurrentLyricStyle() {
+  stageLyrics.styleVersion += 1;
+  stageLyrics.rowsSignature = '';
+  scheduleLyricLlmTranslation();
   if (!stageLyrics || !stageLyrics.currentText || !stageLyrics.current) return;
   var progress = stageLyrics.current.userData ? (stageLyrics.current.userData.lastLyricProgress || 0) : 0;
   showStageLine(stageLyrics.currentText, true);
@@ -9576,6 +9698,336 @@ function clearStageLyrics() {
   stageLyrics.cursorLines = null;
   stageLyrics.cursorIdx = -1;
   while (stageLyrics.outgoing.length) disposeLyricMesh(stageLyrics.outgoing.pop());
+  stageLyricRowsClear();
+}
+// ============================================================
+// 歌词显示与翻译（移植上游「显示与翻译」语义；翻译源走用户提供的
+// OpenAI 兼容端点，为本地无译文歌词按行补齐 translation）。
+// ============================================================
+// 翻译源端点与密钥由本地 server.js 持有（/api/lyric-translate 代理），渲染层只发对话内容。
+var LYRIC_LLM_TRANSLATE_STORE_KEY = 'mineradio-lyric-llm-translation-v1';
+var LYRIC_LLM_TRANSLATE_MISS_MS = 10 * 60 * 1000;
+var LYRIC_LLM_TRANSLATE_BATCH = 24;
+var LYRIC_LLM_TRANSLATE_LIMIT = 1200;
+var lyricLlmTranslateState = { token: 0, running: false, scheduled: false, missUntil: 0, cache: null, cacheDirty: false };
+function readLyricLlmTranslateCache() {
+  if (lyricLlmTranslateState.cache) return lyricLlmTranslateState.cache;
+  var cache = {};
+  try {
+    var raw = localStorage.getItem(LYRIC_LLM_TRANSLATE_STORE_KEY);
+    if (raw) cache = JSON.parse(raw) || {};
+  } catch (e) { cache = {}; }
+  lyricLlmTranslateState.cache = cache && typeof cache === 'object' && !(cache instanceof Array) ? cache : {};
+  return lyricLlmTranslateState.cache;
+}
+function persistLyricLlmTranslateCache() {
+  if (!lyricLlmTranslateState.cacheDirty) return;
+  lyricLlmTranslateState.cacheDirty = false;
+  try {
+    var cache = lyricLlmTranslateState.cache || {};
+    var keys = Object.keys(cache);
+    while (keys.length > LYRIC_LLM_TRANSLATE_LIMIT) {
+      delete cache[keys[0]];
+      keys.shift();
+    }
+    setPersistentLocalStorageItem(LYRIC_LLM_TRANSLATE_STORE_KEY, JSON.stringify(cache));
+  } catch (e) {}
+}
+function lyricLlmTranslateCacheKey(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+}
+function scheduleLyricLlmTranslation() {
+  if (!lyricTranslationModeActive()) return;
+  if (lyricLlmTranslateState.running || lyricLlmTranslateState.scheduled) return;
+  if (!lyricsLines.length) return;
+  if (Date.now() < lyricLlmTranslateState.missUntil) return;
+  var pending = [];
+  var cachedHits = 0;
+  var cache = readLyricLlmTranslateCache();
+  for (var i = 0; i < lyricsLines.length; i++) {
+    var line = lyricsLines[i];
+    if (!line || !line.text || line.fallback) continue;
+    if (line.translation) continue;
+    var sourceText = String(line.text).split('\n')[0].trim();
+    if (!sourceText || isNoLyricText(sourceText)) continue;
+    var key = lyricLlmTranslateCacheKey(sourceText);
+    if (Object.prototype.hasOwnProperty.call(cache, key)) {
+      if (cache[key]) {
+        line.translation = cache[key];
+        cachedHits += 1;
+      }
+      continue;
+    }
+    if (pending.length < 80) pending.push({ line: line, text: sourceText, key: key });
+  }
+  if (cachedHits > 0) bumpStageLyricRows();
+  if (!pending.length) return;
+  lyricLlmTranslateState.scheduled = true;
+  var token = ++lyricLlmTranslateState.token;
+  setTimeout(function () {
+    lyricLlmTranslateState.scheduled = false;
+    if (token !== lyricLlmTranslateState.token) return;
+    runLyricLlmTranslation(pending, token);
+  }, 900);
+}
+function runLyricLlmTranslation(pending, token) {
+  lyricLlmTranslateState.running = true;
+  var cache = readLyricLlmTranslateCache();
+  var index = 0;
+  var changed = false;
+  function finish() {
+    lyricLlmTranslateState.running = false;
+    persistLyricLlmTranslateCache();
+    if (changed && token === lyricLlmTranslateState.token) {
+      stageLyrics.rowsSignature = '';
+      refreshCurrentLyricStyle();
+    }
+  }
+  function next() {
+    if (token !== lyricLlmTranslateState.token || index >= pending.length) { finish(); return; }
+    var batch = pending.slice(index, index + LYRIC_LLM_TRANSLATE_BATCH);
+    index += batch.length;
+    var promptLines = batch.map(function (item, i) { return (i + 1) + '. ' + item.text; }).join('\n');
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, 26000) : null;
+    fetch('/api/lyric-translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [
+        { role: 'system', content: 'Translate numbered song lyric lines into Simplified Chinese. Output ONLY the translation lines in the exact same numbered format and order. Never repeat the English text. Never answer the lyrics, continue them, or add explanations.' },
+        { role: 'user', content: 'Translate into Chinese:\n' + promptLines }
+      ] }),
+      signal: controller ? controller.signal : undefined
+    }).then(function (res) {
+      return res.json();
+    }).then(function (data) {
+      if (timer) clearTimeout(timer);
+      if (!data || !data.ok) throw new Error((data && data.error) || 'PROXY_FAILED');
+      var parsed = JSON.parse(data.body || '{}');
+      var content = parsed && parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content || '';
+      var outLines = String(content).split(/\r?\n/);
+      var byNo = {};
+      var ordered = [];
+      outLines.forEach(function (raw) {
+        var text = String(raw || '').trim();
+        if (!text) return;
+        var m = text.match(/^(\d{1,3})\s*[.、)）]\s*(.+)$/);
+        if (m) { byNo[parseInt(m[1], 10)] = m[2].trim(); ordered.push(m[2].trim()); }
+        else ordered.push(text);
+      });
+      batch.forEach(function (item, i) {
+        var translated = byNo[i + 1] != null ? byNo[i + 1] : ordered[i];
+        translated = String(translated || '').trim();
+        if (!translated || translated === item.text) {
+          cache[item.key] = '';
+          changed = true;
+          return;
+        }
+        cache[item.key] = translated;
+        item.line.translation = translated;
+        changed = true;
+        lyricLlmTranslateState.cacheDirty = true;
+      });
+      setTimeout(next, 60);
+    }).catch(function (err) {
+      if (timer) clearTimeout(timer);
+      console.warn('[LyricLlmTranslate]', err && err.message || err);
+      lyricLlmTranslateState.missUntil = Date.now() + LYRIC_LLM_TRANSLATE_MISS_MS;
+      lyricLlmTranslateState.token += 1; // 作废剩余批次，本轮结束
+      finish();
+    });
+  }
+  next();
+}
+// ---- 多行舞台行池：context 行 + 译文子行（布局语义照上游） ----
+var STAGE_LYRIC_ROW_POOL_MAX = 30;
+function lyricRowLineStepWorld(worldH) {
+  var active = lyricTranslationModeActive();
+  return clampRange(worldH * 1.30 * (active ? 1.18 : 1.0) * lyricContextSpreadFactor() * 0.86, 0.42, 2.4);
+}
+function lyricRowTranslationStepWorld(worldH) {
+  return clampRange(worldH * 0.66, 0.22, 1.6);
+}
+function buildLyricRowMesh(text, opts) {
+  opts = opts || {};
+  var mask = makeLyricMask(text, { weight: opts.weight != null ? opts.weight : null });
+  var worldW = 6.10;
+  var worldH = worldW * (mask.height / mask.width);
+  var pal = stageLyrics.palette;
+  var group = new THREE.Group();
+  var renderBase = opts.kind === 'translation' ? 31 : 29;
+  var readabilityTex = makeLyricReadabilityTexture(mask);
+  var readabilityMat = new THREE.MeshBasicMaterial({ map: readabilityTex, transparent: true, opacity: 0, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
+  var readability = new THREE.Mesh(new THREE.PlaneGeometry(worldW, worldH, 1, 1), readabilityMat);
+  readability.position.set(0, 0, -0.012);
+  readability.renderOrder = renderBase;
+  group.add(readability);
+  var textMat = new THREE.MeshBasicMaterial({
+    map: mask.texture, transparent: true, opacity: 0, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
+    color: lyricThreeColor(opts.color || pal.secondary || pal.primary, '#cfe9ff', 0.30)
+  });
+  var textMesh = new THREE.Mesh(new THREE.PlaneGeometry(worldW, worldH, 1, 1), textMat);
+  textMesh.renderOrder = renderBase + 1;
+  group.add(textMesh);
+  group.userData.row = {
+    mask: mask, textMesh: textMesh, readability: readability,
+    textMat: textMat, readabilityMat: readabilityMat,
+    worldW: worldW, worldH: worldH,
+    kind: opts.kind || 'context'
+  };
+  return group;
+}
+function stageLyricRowsClear() {
+  while (stageLyrics.rows.length) disposeLyricMesh(stageLyrics.rows.pop().mesh);
+  stageLyrics.rowsSignature = '';
+}
+function bumpStageLyricRows() {
+  stageLyrics.rowsSignature = '';
+}
+function updateStageLyricRows(activeIdx) {
+  if (!stageLyrics.group) return;
+  var mode = normalizeLyricDisplayMode(fx.lyricDisplayMode);
+  var translationMode = normalizeLyricTranslationMode(fx.lyricTranslationMode);
+  var lines = lyricsLines;
+  if (mode === 'single' || !lines.length || activeIdx == null || activeIdx < 0) {
+    if (stageLyrics.rows.length) stageLyricRowsClear();
+    return;
+  }
+  var styleKey = [activeIdx, mode, translationMode, lyricCustomLineCountValue(), lines.length, stageLyrics.styleVersion, (lines[activeIdx] ? (lines[activeIdx].text || '').length : 0)].join('|');
+  if (styleKey === stageLyrics.rowsSignature && !stageLyrics.rows.some(function (row) { return row.state === 'out'; })) return;
+  var want = [];
+  var offsets = lyricDisplayOffsetsForMode(mode);
+  offsets.forEach(function (delta) {
+    var idx = activeIdx + delta;
+    if (delta === 0 || idx < 0 || idx >= lines.length) return;
+    want.push({ kind: 'context', lineIdx: idx, delta: delta });
+  });
+  if (translationMode !== 'off') {
+    var translationTargets = [];
+    if (translationMode === 'current') translationTargets = [activeIdx];
+    else if (translationMode === 'dual') translationTargets = [activeIdx, activeIdx + 1];
+    else {
+      offsets.forEach(function (delta) {
+        var idx = activeIdx + delta;
+        if (idx >= 0 && idx < lines.length) translationTargets.push(idx);
+      });
+    }
+    translationTargets.forEach(function (idx) {
+      if (idx < 0 || idx >= lines.length) return;
+      if (!lines[idx] || !lines[idx].translation) return;
+      want.push({ kind: 'translation', lineIdx: idx, delta: idx - activeIdx });
+    });
+  }
+  var wantKey = {};
+  want.forEach(function (w) { wantKey[w.kind + ':' + w.lineIdx] = w; });
+  stageLyrics.rows.forEach(function (row) {
+    if (!wantKey[row.kind + ':' + row.lineIdx] && row.state !== 'out') {
+      row.state = 'out';
+      row.age = 0;
+    }
+  });
+  want.forEach(function (w) {
+    var key = w.kind + ':' + w.lineIdx;
+    for (var i = 0; i < stageLyrics.rows.length; i++) {
+      var row = stageLyrics.rows[i];
+      if (row.kind + ':' + row.lineIdx === key && row.state !== 'out') return;
+    }
+    var line = lines[w.lineIdx];
+    if (!line) return;
+    var isTranslation = w.kind === 'translation';
+    var text = isTranslation ? String(line.translation || '') : String(line.text || '').split('\n')[0];
+    if (!text) return;
+    var liveCount = 0;
+    stageLyrics.rows.forEach(function (row) { if (row.state !== 'out') liveCount += 1; });
+    if (liveCount >= STAGE_LYRIC_ROW_POOL_MAX) {
+      var oldest = -1;
+      for (var j = 0; j < stageLyrics.rows.length; j++) {
+        if (stageLyrics.rows[j].state === 'out') { oldest = j; break; }
+        if (oldest < 0 || stageLyrics.rows[j].age > stageLyrics.rows[oldest].age) oldest = j;
+      }
+      if (oldest >= 0) { disposeLyricMesh(stageLyrics.rows[oldest].mesh); stageLyrics.rows.splice(oldest, 1); }
+    }
+    var mesh = buildLyricRowMesh(text, {
+      kind: w.kind,
+      weight: isTranslation ? 650 : null,
+      color: isTranslation ? (stageLyrics.palette.secondary || stageLyrics.palette.primary) : (stageLyrics.palette.primary)
+    });
+    stageLyrics.group.add(mesh);
+    stageLyrics.rows.push({ mesh: mesh, kind: w.kind, lineIdx: w.lineIdx, state: 'in', age: 0, alpha: 0 });
+  });
+  stageLyrics.rowsSignature = styleKey;
+}
+function tickStageLyricRows(dt) {
+  if (!stageLyrics.group) return;
+  var activeIdx = stageLyrics.currentIdx;
+  updateStageLyricRows(activeIdx);
+  var rows = stageLyrics.rows;
+  if (!rows.length) return;
+  var ctx = stageLyricTickCtx;
+  var profile = ctx.shelfDetailLyricProfile || STAGE_LYRIC_PROFILE_DEFAULT;
+  var mode = normalizeLyricDisplayMode(fx.lyricDisplayMode);
+  var translationMode = normalizeLyricTranslationMode(fx.lyricTranslationMode);
+  var targetScroll = Math.max(0, activeIdx);
+  if (activeIdx == null || activeIdx < 0) targetScroll = stageLyrics.rowsScroll;
+  var diff = targetScroll - stageLyrics.rowsScroll;
+  if (!isFinite(stageLyrics.rowsScroll) || Math.abs(diff) > Math.max(3.2, lyricDisplayLineCountForMode(mode) * 0.9)) stageLyrics.rowsScroll = targetScroll;
+  else stageLyrics.rowsScroll += diff * Math.min(1, dt * 3.4);
+  var currentData = stageLyrics.current && stageLyrics.current.userData.lyric ? stageLyrics.current.userData.lyric : null;
+  var baseH = currentData ? currentData.worldH : 1.14;
+  var step = lyricRowLineStepWorld(baseH);
+  var transStep = lyricRowTranslationStepWorld(baseH);
+  var visualGap = lyricTranslationVisualGapValue();
+  var count = lyricDisplayLineCountForMode(mode);
+  var visibleRadius = Math.max(0.85, count * 0.5 + 0.7);
+  var translationOpacity = lyricTranslationOpacityValue();
+  var translationScale = lyricTranslationScaleValue();
+  var currentTranslationAlpha = clampRange(translationOpacity + 0.08, 0.48, 1);
+  for (var i = rows.length - 1; i >= 0; i--) {
+    var row = rows[i];
+    row.age += dt;
+    var mesh = row.mesh;
+    var data = mesh.userData.row;
+    var isCurrentRow = row.lineIdx === activeIdx;
+    var delta = row.lineIdx - stageLyrics.rowsScroll;
+    var y = -delta * step;
+    var target = 0;
+    var scale = 0.88;
+    var zBase = 0.96;
+    if (row.kind === 'translation') {
+      y -= visualGap * transStep * 0.58;
+      zBase = 1.0;
+      var parentDelta = Math.abs(row.lineIdx - activeIdx);
+      if (translationMode === 'current') {
+        target = isCurrentRow ? currentTranslationAlpha : 0;
+      } else if (translationMode === 'dual') {
+        target = isCurrentRow ? currentTranslationAlpha : (row.lineIdx === activeIdx + 1 ? translationOpacity * 0.56 : 0);
+      } else {
+        if (isCurrentRow) target = currentTranslationAlpha;
+        else {
+          var contextAlpha = lyricContextLineAlphaForDelta(parentDelta, mode);
+          target = clampRange(contextAlpha * 1.35 * (translationOpacity / 0.86), 0.08, Math.max(0.58, translationOpacity));
+        }
+      }
+      scale = translationScale * (isCurrentRow ? 1.08 : 0.92);
+    } else {
+      var absDelta = Math.abs(row.lineIdx - activeIdx);
+      var visibleFade = clampRange((visibleRadius + 0.9 - Math.abs(delta)) / 1.1, 0, 1);
+      visibleFade = visibleFade * visibleFade * (3 - 2 * visibleFade);
+      target = lyricContextLineAlphaForDelta(absDelta, mode) * profile.opacity * visibleFade;
+      scale = lyricContextLineScaleForDelta(absDelta, mode);
+    }
+    row.alpha += (target - row.alpha) * (target > row.alpha ? 0.16 : 0.11);
+    if (row.state === 'out') row.alpha += (0 - row.alpha) * 0.22;
+    data.textMat.opacity = row.alpha;
+    data.readabilityMat.opacity = row.alpha * 0.5 * profile.readability;
+    var breathe = Math.sin(ctx.t * 0.62 + row.lineIdx * 1.7) * 0.012;
+    mesh.scale.setScalar(scale + breathe);
+    mesh.position.set(0, y + (isCurrentRow ? 0.18 : 0), zBase - Math.min(0.6, Math.abs(delta) * 0.05));
+    if (row.state === 'out' && row.alpha < 0.015) {
+      disposeLyricMesh(mesh);
+      rows.splice(i, 1);
+    }
+  }
 }
 
 var stageLyricTickCtx = {
@@ -9892,6 +10344,7 @@ function updateStageLyrics3D(dt, frameShelfState) {
   stageLyricTickCtx.lyricGlowStrength = lyricGlowStrength;
   stageLyricTickCtx.glowDrive = glowDrive;
   stageLyricTickCtx.skullMouthLyrics = skullMouthLyrics;
+  tickStageLyricRows(dt);
   tickStageLyricMesh(stageLyrics.current, true);
   for (var i = stageLyrics.outgoing.length - 1; i >= 0; i--) {
     if (!tickStageLyricMesh(stageLyrics.outgoing[i], false)) {
@@ -20716,6 +21169,11 @@ function applyLyricsState(lines, hasNativeKaraoke, timingSource) {
   lyricsLines = Array.isArray(lines) ? lines : [];
   if (!lyricsLines.length) lyricsLines = withLyricFallback([]);
   if (lyricsLines.length && lyricsLines[0].fallback) lyricsTimingSource = 'fallback';
+  if (typeof stageLyricRowsClear === 'function' && typeof stageLyrics !== 'undefined') {
+    stageLyrics.rowsScroll = 0;
+    stageLyricRowsClear();
+    scheduleLyricLlmTranslation();
+  }
   renderLyrics();
   updateCustomLyricControls();
 }
@@ -20791,6 +21249,11 @@ function applyCustomLyricState(song, silent) {
     : (lines[0] && lines[0].source || 'custom-text');
   lyricsLines = withLyricFallback(lines);
   if (lyricsLines.length && lyricsLines[0].fallback) lyricsTimingSource = 'fallback';
+  if (typeof stageLyricRowsClear === 'function' && typeof stageLyrics !== 'undefined') {
+    stageLyrics.rowsScroll = 0;
+    stageLyricRowsClear();
+    scheduleLyricLlmTranslation();
+  }
   renderLyrics();
   updateCustomLyricControls();
   return true;
@@ -20833,6 +21296,44 @@ function setLyricSourceMode(mode, silent) {
   if (!silent) showToast(mode === 'custom' ? '已切换到自定义歌词' : '已切换到原歌词');
   updateCustomLyricControls();
   return true;
+}
+function updateLyricDisplayModeControls() {
+  var seg = document.getElementById('lyric-display-mode-seg');
+  if (seg) {
+    var mode = normalizeLyricDisplayMode(fx.lyricDisplayMode);
+    Array.prototype.forEach.call(seg.querySelectorAll('button'), function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+    });
+  }
+  var linesInput = document.getElementById('fx-lyriccustomlines');
+  if (linesInput) {
+    linesInput.value = lyricCustomLineCountValue();
+    var out = linesInput.parentElement.querySelector('output');
+    if (out) out.textContent = String(lyricCustomLineCountValue());
+  }
+}
+function updateLyricTranslationModeControls() {
+  var seg = document.getElementById('lyric-translation-mode-seg');
+  if (!seg) return;
+  var mode = normalizeLyricTranslationMode(fx.lyricTranslationMode);
+  Array.prototype.forEach.call(seg.querySelectorAll('button'), function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-translation') === mode);
+  });
+}
+function setLyricDisplayMode(mode) {
+  fx.lyricDisplayMode = normalizeLyricDisplayMode(mode);
+  updateLyricDisplayModeControls();
+  refreshCurrentLyricStyle();
+  saveLyricLayout();
+  showToast('歌词行数已切换');
+}
+function setLyricTranslationMode(mode) {
+  fx.lyricTranslationMode = normalizeLyricTranslationMode(mode);
+  updateLyricTranslationModeControls();
+  scheduleLyricLlmTranslation();
+  refreshCurrentLyricStyle();
+  saveLyricLayout();
+  showToast('双语翻译已切换');
 }
 function updateCustomLyricControls() {
   var song = currentLyricSong();
@@ -27351,6 +27852,7 @@ function parseLyricText(text) {
   for (var bucketIdx = 0; bucketIdx < ordered.length; bucketIdx++) {
     var bucket = ordered[bucketIdx];
     var text = bucket.texts.join('\n');
+    var bucketTranslation = bucket.texts.length > 1 ? String(bucket.texts[1] || '').trim() : '';
     var words = [];
     // 双语同时间行保持原有整行高亮；单行 Enhanced LRC 才启用逐字时间轴。
     if (bucket.texts.length === 1 && bucket.wordLines && bucket.wordLines.length) {
@@ -27373,6 +27875,7 @@ function parseLyricText(text) {
       charCount: Math.max(1, text.replace(/\n/g, '').length)
     };
     if (words.length) line.words = words;
+    if (bucketTranslation && bucketTranslation !== String(bucket.texts[0] || '').trim()) line.translation = bucketTranslation;
     if (line.text && !isNoLyricText(line.text)) lines.push(line);
   }
   return finalizeLyricLineDurations(lines);
@@ -35836,6 +36339,12 @@ function normalizeFxArchiveSnapshot(raw) {
     lyricLetterSpacing: archiveNumber(raw, 'lyricLetterSpacing', fxDefaults.lyricLetterSpacing, -0.04, 0.18),
     lyricLineHeight: archiveNumber(raw, 'lyricLineHeight', fxDefaults.lyricLineHeight, 0.86, 1.35),
     lyricWeight: archiveNumber(raw, 'lyricWeight', fxDefaults.lyricWeight, 500, 900),
+    lyricDisplayMode: normalizeLyricDisplayMode(raw.lyricDisplayMode),
+    lyricTranslationMode: normalizeLyricTranslationMode(raw.lyricTranslationMode),
+    lyricCustomLineCount: archiveNumber(raw, 'lyricCustomLineCount', fxDefaults.lyricCustomLineCount, 1, 10),
+    lyricTranslationGap: archiveNumber(raw, 'lyricTranslationGap', fxDefaults.lyricTranslationGap, 0.28, 2.20),
+    lyricTranslationScale: archiveNumber(raw, 'lyricTranslationScale', fxDefaults.lyricTranslationScale, 0.46, 1.12),
+    lyricTranslationOpacity: archiveNumber(raw, 'lyricTranslationOpacity', fxDefaults.lyricTranslationOpacity, 0.20, 1),
     visualTintMode: raw.visualTintMode === 'custom' ? 'custom' : 'auto',
     visualTintColor: normalizeHexColor(raw.visualTintColor || fxDefaults.visualTintColor),
     uiAccentColor: normalizeHexColor(raw.uiAccentColor || fxDefaults.uiAccentColor, fxDefaults.uiAccentColor),
@@ -37206,6 +37715,12 @@ function updateFxInputs() {
   setRange('fx-lyricspacing', fx.lyricLetterSpacing);
   setRange('fx-lyriclineheight', fx.lyricLineHeight);
   setRange('fx-lyricweight', fx.lyricWeight);
+  setRange('fx-lyriccustomlines', lyricCustomLineCountValue());
+  setRange('fx-lyrictranslationgap', fx.lyricTranslationGap == null ? fxDefaults.lyricTranslationGap : fx.lyricTranslationGap);
+  setRange('fx-lyrictranslationscale', fx.lyricTranslationScale == null ? fxDefaults.lyricTranslationScale : fx.lyricTranslationScale);
+  setRange('fx-lyrictranslationopacity', fx.lyricTranslationOpacity == null ? fxDefaults.lyricTranslationOpacity : fx.lyricTranslationOpacity);
+  updateLyricDisplayModeControls();
+  updateLyricTranslationModeControls();
   setRange('fx-lyricscale', fx.lyricScale);
   setRange('fx-lyricx', fx.lyricOffsetX);
   setRange('fx-lyricy', fx.lyricOffsetY);
@@ -37310,7 +37825,11 @@ function resetFxSliderValue(id, key, btn) {
   if (/^playlistPanel/.test(key)) applyPlaylistPanelFxSettings();
   if (key === 'controlGlassChromaticOffset') applyControlGlassChromaticOffset();
   syncFxUniforms();
-  if (key === 'lyricLetterSpacing' || key === 'lyricLineHeight' || key === 'lyricWeight') refreshCurrentLyricStyle();
+  if (key === 'lyricLetterSpacing' || key === 'lyricLineHeight' || key === 'lyricWeight' || key === 'lyricTranslationGap' || key === 'lyricTranslationScale' || key === 'lyricTranslationOpacity' || key === 'lyricCustomLineCount' || key === 'lyricDisplayMode' || key === 'lyricTranslationMode') {
+    refreshCurrentLyricStyle();
+    if (key === 'lyricCustomLineCount' || key === 'lyricDisplayMode') updateLyricDisplayModeControls();
+    if (key === 'lyricTranslationMode') updateLyricTranslationModeControls();
+  }
   saveLyricLayout();
   animateFxResetButton(btn);
   showToast('已恢复默认数值');
@@ -38177,7 +38696,7 @@ function bindFxPanel() {
     ['fx-desktoplyricssize','desktopLyricsSize'],['fx-desktoplyricsopacity','desktopLyricsOpacity'],['fx-desktoplyricsy','desktopLyricsY'],['fx-wallpaperopacity','wallpaperOpacity'],
     ['fx-miniplayerpulse','miniPlayerPulseStrength'],['fx-miniplayerglow','miniPlayerGlowStrength'],['fx-miniplayerradius','miniPlayerRadius'],
     ['fx-shelfsize','shelfSize'],['fx-shelfx','shelfOffsetX'],['fx-shelfy','shelfOffsetY'],['fx-shelfz','shelfOffsetZ'],['fx-shelfangle','shelfAngleY'],['fx-shelfopacity','shelfOpacity'],['fx-shelfbgalpha','shelfBgOpacity'],
-    ['fx-lyricspacing','lyricLetterSpacing'],['fx-lyriclineheight','lyricLineHeight'],['fx-lyricweight','lyricWeight'],
+    ['fx-lyricspacing','lyricLetterSpacing'],['fx-lyriclineheight','lyricLineHeight'],['fx-lyricweight','lyricWeight'],['fx-lyriccustomlines','lyricCustomLineCount'],['fx-lyrictranslationgap','lyricTranslationGap'],['fx-lyrictranslationscale','lyricTranslationScale'],['fx-lyrictranslationopacity','lyricTranslationOpacity'],
     ['fx-lyricscale','lyricScale'],['fx-lyricx','lyricOffsetX'],['fx-lyricy','lyricOffsetY'],['fx-lyricz','lyricOffsetZ'],['fx-lyrictiltx','lyricTiltX'],['fx-lyrictilty','lyricTiltY'],
     ['fx-point','point'],['fx-speed','speed'],['fx-twist','twist'],
     ['fx-color','color'],['fx-bloom','bloomStrength'],['fx-scatter','scatter'],['fx-bgfade','bgFade'],
@@ -38194,6 +38713,12 @@ function bindFxPanel() {
         applyCoverParticleResolution(fx.coverResolution, { reload: true });
       }
       if (pair[1] === 'lyricWeight') fx.lyricWeight = Math.round(clampRange(fx.lyricWeight, 500, 900) / 50) * 50;
+      if (pair[1] === 'lyricCustomLineCount') {
+        fx.lyricCustomLineCount = lyricCustomLineCountValue();
+        fx.lyricDisplayMode = 'custom';
+        updateLyricDisplayModeControls();
+      }
+      if (pair[1] === 'lyricTranslationGap' || pair[1] === 'lyricTranslationScale' || pair[1] === 'lyricTranslationOpacity') bumpStageLyricRows();
       if (pair[1] === 'backgroundOpacity') {
         fx.backgroundOpacity = clampRange(fx.backgroundOpacity, 0, 1);
         fx.backgroundColorMode = 'custom';
@@ -38240,7 +38765,7 @@ function bindFxPanel() {
         ? coverParticleCountLabel(fx.coverResolution)
         : (pair[1] === 'miniPlayerRadius'
           ? String(Math.round(fx.miniPlayerRadius)) + 'px'
-          : (pair[1] === 'lyricWeight' || pair[1] === 'controlGlassChromaticOffset' || pair[1] === 'lyricTiltX' || pair[1] === 'lyricTiltY' || pair[1] === 'shelfAngleY' || pair[1] === 'playlistPanelGlassBlur' ? String(Math.round(fx[pair[1]])) : Number(el.value).toFixed(pair[1] === 'lyricLetterSpacing' ? 3 : 2)));
+          : (pair[1] === 'lyricWeight' || pair[1] === 'controlGlassChromaticOffset' || pair[1] === 'lyricTiltX' || pair[1] === 'lyricTiltY' || pair[1] === 'shelfAngleY' || pair[1] === 'playlistPanelGlassBlur' || pair[1] === 'lyricCustomLineCount' ? String(Math.round(fx[pair[1]])) : Number(el.value).toFixed(pair[1] === 'lyricLetterSpacing' ? 3 : 2)));
       syncFxUniforms();
       if (/^shelf(Size|OffsetX|OffsetY|OffsetZ|AngleY|Opacity|BgOpacity)$/.test(pair[1]) && shelfManager && shelfManager.refreshTheme) shelfManager.refreshTheme();
       if (pair[1] === 'lyricLetterSpacing' || pair[1] === 'lyricLineHeight' || pair[1] === 'lyricWeight') refreshCurrentLyricStyle();
@@ -43899,6 +44424,7 @@ var MINERADIO_BACKUP_PLAYER_KEYS = [
   DIY_MODE_STORE_KEY,
   PLAYLIST_PANEL_PIN_STORE_KEY,
   USER_CAPSULE_AUTO_HIDE_STORE_KEY,
+  HOME_BTN_AUTO_HIDE_STORE_KEY,
   FX_FAB_AUTO_HIDE_STORE_KEY,
   CONTROLS_AUTO_HIDE_STORE_KEY,
   FREE_CAMERA_STORE_KEY,
@@ -44916,6 +45442,7 @@ scheduleUiWarmTask(function(){
   } catch (e) {}
 }, 900);
 applyUserCapsuleAutoHideState();
+applyHomeBtnAutoHideState();
 applyFxFabAutoHideState();
 applyControlsAutoHidePreference();
 applyDesktopLyricsState(false);

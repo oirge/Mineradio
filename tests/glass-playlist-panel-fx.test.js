@@ -339,7 +339,7 @@ test('bindFxPanel：六键登记 + input 夹紧 + 即时应用', () => {
   assert.match(appJs, /if \(pair\[1\] === 'windowBackgroundOpacity'\) \{\s*fx\.windowBackgroundOpacity = clampRange\(fx\.windowBackgroundOpacity, 0, 1\);\s*updateCustomBackgroundControls\(\);\s*\}/);
   assert.match(appJs, /if \(pair\[1\] === 'playlistPanelGlassBlur'\) fx\.playlistPanelGlassBlur = Math\.round\(clampRange\(fx\.playlistPanelGlassBlur, 14, 60\)\);/);
   assert.match(appJs, /if \(\/\^playlistPanel\/\.test\(pair\[1\]\)\) applyPlaylistPanelFxSettings\(\);/);
-  assert.match(appJs, /pair\[1\] === 'playlistPanelGlassBlur' \? String\(Math\.round\(fx\[pair\[1\]\]\)\)/);
+  assert.match(appJs, /pair\[1\] === 'playlistPanelGlassBlur'(?: \|\| pair\[1\] === 'lyricCustomLineCount')? \? String\(Math\.round\(fx\[pair\[1\]\]\)\)/);
 });
 
 test('updateFxInputs：六条 setRange 回填 + 末尾应用一次', () => {

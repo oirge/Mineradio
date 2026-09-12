@@ -57,6 +57,7 @@ const PLAYER_KEYS = {
   DIY_MODE_STORE_KEY: 'mineradio-diy-player-mode-v1',
   PLAYLIST_PANEL_PIN_STORE_KEY: 'mineradio-playlist-panel-pinned-v1',
   USER_CAPSULE_AUTO_HIDE_STORE_KEY: 'mineradio-user-capsule-auto-hide-v1',
+  HOME_BTN_AUTO_HIDE_STORE_KEY: 'mineradio-home-btn-auto-hide-v1',
   FX_FAB_AUTO_HIDE_STORE_KEY: 'mineradio-fx-fab-auto-hide-v1',
   CONTROLS_AUTO_HIDE_STORE_KEY: 'mineradio-controls-auto-hide-v1',
   FREE_CAMERA_STORE_KEY: 'mineradio-free-camera-v1',
@@ -611,7 +612,7 @@ test('config.player 只认白名单键，备份文件塞不进任意 localStorag
 test('白名单与 app.js 里的持久化键常量一一对应', () => {
   const mod = loadBackupModule({});
   const list = plain(mod.context.MINERADIO_BACKUP_PLAYER_KEYS);
-  assert.equal(list.length, 16);
+  assert.equal(list.length, 17);
   assert.deepEqual(list.slice().sort(), Object.values(PLAYER_KEYS).sort());
   Object.keys(PLAYER_KEYS).forEach((name) => {
     assert.match(appSource, new RegExp('var ' + name + " = '" + PLAYER_KEYS[name] + "';"), name + ' 常量值漂了');
