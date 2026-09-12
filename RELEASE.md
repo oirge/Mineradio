@@ -2,6 +2,10 @@
 
 ## v2.0.8 Wallpaper Engine 壁纸导入弹窗样式修复
 
+- **发布结果（2026-09-12）**：tag `v2.0.8` → release commit `739d0cf`（PR #84，merge `8474d13` 合入 `main`）；Release `387419553`，`published_at` `2026-09-12T01:45:15Z`，已设 Latest；构建 run `34665588375` 成功，四资产齐全。
+  - `Mineradio-oirge-2.0.8-Setup.exe` sha256 `36bab4aa8aba9204d179bd1329c59a5cc745a8e8abaf71a5194fef0668fe677f`
+  - `Mineradio-oirge-2.0.8-Setup.exe.blockmap` sha256 `9c42adb3bd5b94abe80db7670147d546f0fbe7e3f3252645746b64f71405d68d`
+  - `latest.yml` sha256 `8d8b9e5df8e94def7d0d6394e5e3c328850c897ed656518ed006e52425861dee`（`version: 2.0.8`）
 - 发布版本从 `2.0.7` 提升为 `2.0.8`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
 - 用户报告：WE 选择壁纸识别导入后，壁纸显示特别大、几乎只能看见一张、不能上下滚动选择。
 - 根因：`public/wallpaper-engine.css` 的 `body.custom-bg-glass-active #custom-bg::after` 规则**少一个收尾 `}`**，后面的 `.wallpaper-engine-row {` 被当嵌套规则，Chrome 的 CSS 嵌套把文件剩余全部规则（整个 `wallpaper-engine-library-modal` / `wallpaper-engine-grid` / `wallpaper-engine-card` 样式族）吞进这条永不匹配的规则。弹窗退回通用 `.modal`（380px 窄、高度随内容撑开）、卡片失去 16/9 四列布局、预览图按原始尺寸渲染——正好产出用户看到的现象。缺括号由 `7626bfb`（v1.4.3 首次添加该文件）引入，即该弹窗自 v1.4.3 起从未有过样式。

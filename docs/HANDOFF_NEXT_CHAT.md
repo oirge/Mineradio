@@ -27,9 +27,9 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前版本：`v2.0.8`（Wallpaper Engine 壁纸导入弹窗样式修复），版本钉已升，准备发布。
+- 当前版本：`v2.0.8`（Wallpaper Engine 壁纸导入弹窗样式修复），已发布。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`。`package.json` 发布配置 owner/repo 为 `oirge/Mineradio`。
-- 正式发布基线：线上 Latest 是 `v2.0.7`（3D 歌单架舞台原版风格），Release `386939633`，`published_at` `2026-09-11T10:05:24Z`，四项资产齐全；tag `v2.0.7` 指向 release commit `15804c9`（PR #81 merge `9103baa`）。上一版 `v2.0.6`（Release `386831543`，tag 指向 `ee69d5b`）、更早 `v2.0.5`（Release `386795754`，tag 指向 `23e9e81`）。
+- 正式发布基线：线上 Latest 是 `v2.0.8`（Wallpaper Engine 壁纸导入修复），Release `387419553`，`published_at` `2026-09-12T01:45:15Z`，四项资产齐全；tag `v2.0.8` 指向 release commit `739d0cf`（PR #84 merge `8474d13`）。上一版 `v2.0.7`（Release `386939633`，tag 指向 `15804c9`）、更早 `v2.0.6`（Release `386831543`，tag 指向 `ee69d5b`）。
 - `main` 是发布线，发版走 `codex/release-vX.Y.Z` 分支 + PR（**用 merge commit 合，绝不 squash**，否则 tag 会离开 `main` 可达历史），tag 打在 release commit 上。
 - `package.json` 发布配置 owner/repo 已是 `oirge/Mineradio`。
 
@@ -57,7 +57,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 后续优先级
 
-- 无未完成的发布动作；`v2.0.7` 资产与文档都已回填。下一版起沿用 `codex/release-vX.Y.Z` 分支 + PR 的流程。
+- 无未完成的发布动作；`v2.0.8` 资产与文档都已回填。下一版起沿用 `codex/release-vX.Y.Z` 分支 + PR 的流程。
 - 长期方向（未排期）：IndexedDB `assets` 拆分 `lyrics` store 并做流式迁移；外置封面改走 `/api/local-file` 流式 URL，避免主进程完整 Buffer/base64 和 renderer data URL。
 - 观察项：`docs/HANDOFF_NEXT_CHAT.md` / `AI_HANDOFF.md` 的本地路径描述随机器变化，接手时先 `git remote -v` 核对，不要照抄旧路径。
 
