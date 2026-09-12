@@ -27,7 +27,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 当前状态
 
-- 当前版本：`v2.0.7`（3D 歌单架新增「舞台」原版风格），已发布。
+- 当前版本：`v2.0.8`（Wallpaper Engine 壁纸导入弹窗样式修复），版本钉已升，准备发布。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`。`package.json` 发布配置 owner/repo 为 `oirge/Mineradio`。
 - 正式发布基线：线上 Latest 是 `v2.0.7`（3D 歌单架舞台原版风格），Release `386939633`，`published_at` `2026-09-11T10:05:24Z`，四项资产齐全；tag `v2.0.7` 指向 release commit `15804c9`（PR #81 merge `9103baa`）。上一版 `v2.0.6`（Release `386831543`，tag 指向 `ee69d5b`）、更早 `v2.0.5`（Release `386795754`，tag 指向 `23e9e81`）。
 - `main` 是发布线，发版走 `codex/release-vX.Y.Z` 分支 + PR（**用 merge commit 合，绝不 squash**，否则 tag 会离开 `main` 可达历史），tag 打在 release commit 上。
@@ -35,6 +35,7 @@ Get-Content package.json -Encoding UTF8
 
 ## 最近完成
 
+- 2026-09-11：实现 `v2.0.8`，修复 Wallpaper Engine「识别 / 导入」弹窗样式全失效（`wallpaper-engine.css` 的 `#custom-bg::after` 规则缺一个收尾 `}`，Chrome CSS 嵌套把文件剩余全部规则吞进永不匹配的规则；v1.4.3 引入）。新增 `tests/wallpaper-engine-css-syntax.test.js` 3 例。全量回归 `1139/1139`。
 - 2026-09-11：实现 `v2.0.7`，3D 歌单架新增「舞台」档（`public/shelf-classic.js` 移植上游 XxHuberrr/Mineradio 原版实现，`fx.shelf = off/side/stage` 唯一模式入口：DIY `#shelf-seg` + 主界面 `#shelf-view-btn`）。核心是补齐舞台动态接线：详情动画吃上游参数、`placeDynamicDetailFromCamera` 让详情跟随镜头位置、详情每帧只更新一次、镜头进入/离开速度接入 classic focus、舞台与侧栏基础设置各存一份（`fx.shelfStageSettings`/`fx.shelfSideSettings`）；惰性范围表修复 20 条参数重启读回。真机验证详情相机空间偏移在不同相机位姿下不变（位置真跟拍）。全量回归 `1136/1136`。
 - 2026-09-11：发布 `v2.0.6`，常用播放控制提到主界面音量弹层（速度 / 睡眠两组设置 + 无缝 / 均衡两个开关，改的是唯一设置状态、与 DIY 面板双向同步；画质按反馈不进弹层），并新增输出设备选择（`AudioContext.setSinkId`，插拔设备自动刷新）。全量回归 `1107/1107`。
 - 2026-09-11：实现 `v2.0.4` 多根曲库（同时监控多个音乐目录）。新增数组键 `mineradio-local-library-folders-v1`（旧单根标量自动迁移 + 保留主根镜像），导入改为追加语义、恢复逐根取回再合并、监控按根列表注册、单目录变化只同步那一根、索引按根保存、备份导出/导入接多根、设置面板新增 `fx-library-fold`。新增 `tests/local-library-multi-root.test.js` 12 例，全量回归 `1088/1088`。

@@ -149,7 +149,9 @@ body.custom-bg-glass-active #custom-bg::after {
   background:
     radial-gradient(circle at 22% 8%, rgba(255, 255, 255, var(--custom-bg-glass-veil, 0)), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, var(--custom-bg-glass-veil, 0)), rgba(0, 0, 0, .06));
-  backdrop-filter: blur(var(--custom-bg-glass-blur, 0px)) saturate(var(--custom-bg-glass-saturate, 1)) brightness(var(--custom-bg-glass-brightness, 1));
+  backdrop-filter: blur(var(--custom-bg-glass-blur, 0px)) saturate(var(--custom-bg-glass-saturate, 1)) brightness(var(--custom-bg-glass-brightness, 1))
+}
+
 .wallpaper-engine-row {
   border-color: rgba(97, 185, 255, .13);
   background: linear-gradient(135deg, rgba(65, 142, 255, .075), rgba(255, 255, 255, .022))

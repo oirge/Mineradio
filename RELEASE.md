@@ -1,5 +1,14 @@
 # 发布流程
 
+## v2.0.8 Wallpaper Engine 壁纸导入弹窗样式修复
+
+- 发布版本从 `2.0.7` 提升为 `2.0.8`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
+- 用户报告：WE 选择壁纸识别导入后，壁纸显示特别大、几乎只能看见一张、不能上下滚动选择。
+- 根因：`public/wallpaper-engine.css` 的 `body.custom-bg-glass-active #custom-bg::after` 规则**少一个收尾 `}`**，后面的 `.wallpaper-engine-row {` 被当嵌套规则，Chrome 的 CSS 嵌套把文件剩余全部规则（整个 `wallpaper-engine-library-modal` / `wallpaper-engine-grid` / `wallpaper-engine-card` 样式族）吞进这条永不匹配的规则。弹窗退回通用 `.modal`（380px 窄、高度随内容撑开）、卡片失去 16/9 四列布局、预览图按原始尺寸渲染——正好产出用户看到的现象。缺括号由 `7626bfb`（v1.4.3 首次添加该文件）引入，即该弹窗自 v1.4.3 起从未有过样式。
+- 修复：补上缺的 `}`。**排查定式：页面「有样式」不代表每个样式表都活着**——查 CSS 整段失效先数 `document.styleSheets` 里该表的 `cssRules.length`（坏文件只剩 16 条 vs 实际 83 条，Chrome 按嵌套静默吞掉、零报错），再做括号配平。
+- 测试：新增 `tests/wallpaper-engine-css-syntax.test.js` 3 例（花括号配平、弹窗关键选择器必须是顶层规则、网格可滚动/四列 16/9/弹窗定高约束），对修前源码对跑 3 例全红、修后全绿。浏览器注入 30 个模拟项目实测：弹窗恢复 `min(1120px,94vw) × min(820px,88vh)`、网格 `flex + overflow:auto` 可滚动、每行 4 张 16/9 卡，截图确认。
+- 全量 Node 回归 **1139/1139**。
+
 ## v2.0.7 3D 歌单架新增「舞台」原版风格
 
 - **发布结果（2026-09-11）**：tag `v2.0.7` → release commit `15804c9`（PR #81，merge `9103baa` 合入 `main`）；Release `386939633`，`published_at` `2026-09-11T10:05:24Z`，已设 Latest；构建 run `34587084479` 成功，四资产齐全。

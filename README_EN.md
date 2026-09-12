@@ -92,6 +92,13 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.0.8 (2026-09-11)
+
+- Fixed the Wallpaper Engine import dialog losing all its styles: previews rendered at full size and the list could not scroll
+- The dialog is back to its normal layout: four 16/9 wallpaper cards per row with a scrollable list
+
+Full Node regression suite: `1139/1139` passing.
+
 ### v2.0.7 (2026-09-11)
 
 - The 3D playlist shelf gains a "Stage" mode: switch between "Side" and "Stage" from the visual console or the new button in the bottom bar, and the choice is remembered
