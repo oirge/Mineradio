@@ -51,14 +51,14 @@
 
 ## Release Memory
 
-## 未发布修复：Wallpaper Engine 壁纸导入弹窗样式全失效（2026-09-11，工作区已改，未提交、未发版）
+## v2.0.8：Wallpaper Engine 壁纸导入弹窗样式全失效修复（已发布，2026-09-12）
 
 - 用户报告：WE「识别 / 导入」弹窗里壁纸特别大、几乎只能看见一张、不能上下滚动选择。
 - **根因是一处 CSS 缺右括号**：`public/wallpaper-engine.css` 里 `body.custom-bg-glass-active #custom-bg::after { ... backdrop-filter: ...;` 后**少了 `}`**，紧跟的 `.wallpaper-engine-row {` 被解析成嵌套规则；Chrome 的 CSS 嵌套把文件剩余全部顶层规则（`wallpaper-engine-library-modal` / `wallpaper-engine-grid` / `wallpaper-engine-card` 整族）吞进这条 `::after` 规则、永不匹配。于是弹窗退回通用 `.modal`（380px 窄、高度被内容撑到两屏多、遮罩不滚动）、卡片失去 16/9 四列、预览 `<img>` 按原始尺寸渲染成巨图——三件事拼出用户看到的现象。
 - **排查定式值得记**：页面"看起来有样式"不代表每个样式表都活着——`document.styleSheets` 里该表 `cssRules.length` 只有 16（实际 83 条），一条规则内语法错误会让 Chrome 按嵌套规则静默吞掉文件剩余部分，**不报任何错**。查 CSS「整段失效」先数 `cssRules.length`，再做括号配平。
 - 缺括号由 `7626bfb`（v1.4.3 首次添加该文件）引入——该弹窗自 v1.4.3 起从未有过样式。
 - 修复：补上 `}`。新增 `tests/wallpaper-engine-css-syntax.test.js` 3 例：花括号配平、弹窗关键选择器必须是**顶层**规则、布局约束（网格 `overflow:auto`、卡片 `calc((100% - 39px)/4)` 四列 + `16/9`、预览 `object-fit:cover`、弹窗 `height:min(820px,88vh)`）；对修前源码对跑 3 例全红、修后全绿。浏览器注入 30 个模拟项目实测布局恢复并截图确认。全量回归 `1139/1139`。
-- 版本保持 2.0.7，等用户授权发布后随下一版带上。
+- 版本 2.0.8 已在用户明确要求下发布（Release `387419553`，tag `v2.0.8` → `739d0cf`，已设 Latest，PR #84 merge `8474d13`）。
 
 ## v2.0.7 3D 歌单架「舞台档用原版」可切换（已发布）
 
