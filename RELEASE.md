@@ -1,5 +1,17 @@
 # 发布流程
 
+## v2.0.10 歌词显示与翻译 + Wallpaper Engine 选择入口修复
+
+- 发布版本从 `2.0.9` 提升为 `2.0.10`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流 description+默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
+- 内容：① 移植上游「显示与翻译」——歌词行数模式（单行/双行/三行/沉浸/自定）、显示行数、双语翻译模式（关闭/当前/双行/多行）、译文间距/字号/透明，默认 `cinema/multi/10/0.92/0.65/0.86` 逐字照上游；② 舞台歌词多行渲染——轻量行池（context/translation 两类 mesh）+ 轨道滚动缓动 + 译文子行四种门控（公式照上游）；③ 内置 LLM 翻译源——`/api/lyric-translate` 本地同源代理（端点不支持 CORS 预检，浏览器直连必挂；端点/key/模型由 server.js 持有）+ 行级内容寻址缓存（`mineradio-lyric-llm-translation-v1`，三处清单登记，同一句永不重翻）+ 英文 system prompt（中文 prompt 会被 grok-chat-fast 自由发挥或回显）+ 空译文空串缓存防无限重试；④ 修复 v2.0.8 引入的 WE「识别 / 导入」按钮溢出回归（actions clamp 宽度在 image-pick-row 第三列 68px 里装不下，WE 行专用三列布局）。
+- 测试：新增 `tests/lyric-display-translation.test.js` 11 例 + `tests/wallpaper-engine-row-layout.test.js` 3 例。全量 Node 回归 **1183/1183**（v2.0.9 基线 `1168`）。浏览器真机：真实 API 翻出 5 行中文并落盘、缓存命中零请求、cinema+multi 渲染截图（当前行高亮+译文子行+上下文渐隐）全过。
+- 发布结果（2026-09-12）：tag `v2.0.10` → release commit `3559edf`（PR #88，merge `3029b3b` 合入 `main`）；Release `387480927`，`published_at` `2026-09-12T06:44:57Z`，已设 Latest；构建 run `34678695171` 成功，四资产齐全。
+  - `Mineradio-oirge-2.0.10-Setup.exe` sha256 `40edc83b3774039a7d4185e6e41405cbf4350c8cd1a80a955679c53a178d5804`（size 102652262 以实际为准，实物回下载校验一致）
+  - `Mineradio-oirge-2.0.10-Setup.exe.blockmap` sha256 `0fd0cdeba7dfe8081a97913c9c2d6514b7c6da70976fc45cdee0d165db03adbb`
+  - `latest.yml` sha256 `080a0c5822dcc476fc76d47c35c40b310e81067bda56363e839f7dd13f933088`，`version: 2.0.10` 已核对
+  - `Mineradio-oirge-2.0.10-SHA256SUMS.txt` 清单与实物一致
+- 应用内更新公告四条，已经 `server.js` 真实 `extractReleaseNotes` 解析器预验证 4/4 保留。
+
 ## v2.0.9 玻璃与左栏参数组移植 + 隐藏右上角房子按钮
 
 - 发布版本从 `2.0.8` 提升为 `2.0.9`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。

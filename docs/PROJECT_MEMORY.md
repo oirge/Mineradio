@@ -51,7 +51,7 @@
 
 ## Release Memory
 
-## v2.0.10：歌词「显示与翻译」移植 + LLM 翻译源 + WE 选择入口修复（发布中，2026-09-12）
+## v2.0.10：歌词「显示与翻译」移植 + LLM 翻译源 + WE 选择入口修复（已发布，2026-09-12）
 
 - 用户需求：「把原项目的这个功能移植过来，一模一样就行」，附上游「显示与翻译」组截图，并指定翻译源 `http://129.204.9.16:8000/v1` / 模型 `grok-chat-fast`；随后补「翻译过的歌词自动保存到本地防止多次翻译」与「修复选择壁纸的按钮不在了」。
 - **上游语义侦察结论**：上游「双语翻译」只是平台译文（tlyric/网易跨源回退）的显示模式系统，无 LLM 翻译；行数模式=轨道布局（single 1 / dual [0,1] 当前行在上 / triple 3 / cinema 5 且 context 行更实 / custom 1–10）。译文永远挂在父行正下方，四种模式差别只在注入策略与透明度门控（current 仅当前行、dual 下一行 0.56 半亮、multi 全显示随 parentFade）。
@@ -61,7 +61,7 @@
 - **缓存坑三连**：① `cacheDirty` 忘置 true → persist 永远 return、localStorage 恒空；② 仓库只有 `setPersistentLocalStorageItem`，读取端靠启动镜像灌回，没有 `getPersistentLocalStorageItem`（写了必 ReferenceError）；③ 缓存键登记三处（PERSISTENT_UI_STATE_KEYS/preload/main）。空译文写空串缓存防失败行无限重试。
 - **WE 按钮回归**：v2.0.8 恢复 wallpaper-engine.css 后 `.wallpaper-engine-actions` 宽度在 image-pick-row 第三列（68px）溢出，把「识别 / 导入」挤出面板——v2.0.8 引入的回归，WE 行专用三列布局修复。
 - 测试：`tests/lyric-display-translation.test.js` 11 例 + `tests/wallpaper-engine-row-layout.test.js` 3 例。浏览器真机：真实 API 翻 5 行中文、缓存命中零请求、cinema+multi 渲染截图全过。回归 `1183/1183`（v2.0.9 基线 `1168`）。
-- 发布门禁：**用户明确授权发布**（「然后再发布新版本」）；发版后补 RELEASE.md。
+- 发布门禁：**用户明确授权发布**（「然后再发布新版本」），已发布为 `v2.0.10`（Release `387480927`，tag → `3559edf`，PR #88 merge `3029b3b`，已设 Latest，run `34678695171`；Setup.exe sha256 `40edc83b…` 实物校验一致）。RELEASE.md 已回填。
 
 ## v2.0.9：玻璃与左栏参数组移植 + 隐藏右上角房子按钮（已发布，2026-09-12）
 
