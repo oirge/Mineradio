@@ -705,16 +705,16 @@ test('分组目录页「加载更多」：songs 为空时渲染不得把懒加�
 
   api.renderLocalLibraryPlaylistPanel({ animate: false });
   assert.equal(api.playlistPanelRenderLimit, 60);
-  assert.ok(api.__captured.html.indexOf('加载更多 60/700') > 0);
+  assert.ok(api.__captured.html.indexOf('加载全部 60/700') > 0);
 
-  // 点击/滚动都会走 grow：上限 +60 后重渲染，卡片必须真的多出一批。
+  // 滚动走批增长：上限 +60 后重渲染，卡片必须真的多出一批。
   api.growPlaylistPanelRenderLimit();
   assert.equal(api.playlistPanelRenderLimit, 120);
-  assert.ok(api.__captured.html.indexOf('加载更多 120/700') > 0,
+  assert.ok(api.__captured.html.indexOf('加载全部 120/700') > 0,
     '分组页渲染把上限钳回 songs.length（0）会吃掉增长，按钮永远停在 60/700');
 
-  // 一直加到超出总数，按钮消失且不再超发。
-  for (let index = 0; index < 12; index++) api.growPlaylistPanelRenderLimit();
+  // 点按钮是「加载全部」：一次铺完当前视图，按钮消失且不再超发。
+  api.growPlaylistPanelRenderLimit(true);
   assert.equal(api.playlistPanelRenderLimit, 700);
   assert.equal(api.__captured.html.indexOf('data-pl-load-more'), -1);
 });

@@ -385,7 +385,7 @@ test('曲库面板把音乐库交给外层 tab，根视图不再重复入口，�
   // 目录层不铺歌，也不该弹"还没有本地音乐"
   assert.match(renderer, /if \(!songs\.length && !categoryDirectory\)/);
   // 分组卡片走面板懒加载额度
-  assert.match(renderer, /data-pl-load-more="1">加载更多 ' \+ visible \+ '\/' \+ entries\.length/);
+  assert.match(renderer, /data-pl-load-more="1">加载全部 ' \+ visible \+ '\/' \+ entries\.length/);
   assert.match(renderer, /localLibraryCategoryDomSignature\(selectedCategory\)/);
 });
 
