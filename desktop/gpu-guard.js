@@ -15,18 +15,30 @@ const DEFAULT_GPU_FAILURE_THRESHOLD = 2;
 // 属于功能开关而不是性能开关，降级时绝对不能跟着被摘掉。
 const BASE_SWITCHES = [['autoplay-policy', 'no-user-gesture-required']];
 
-// 只有 `default` 档才加的激进开关。`ignore-gpu-blocklist` 会强行越过 Chromium 对已知有问题的
-// 驱动组合的屏蔽，`use-angle=d3d11` 把后端钉死不让它自己挑，`force_high_performance_gpu`
-// 在双显卡机器上强选独显 —— 独显渲染、核显输出的跨适配器呈现正是黑帧的常见来源。
+// 只有 `default` 档才加的性能开关。这里刻意**不含**任何会越过 Chromium 屏蔽名单的项：
+// 上游 XxHuberrr/Mineradio 的无条件下发清单就是这一份（`autoplay-policy` 之外的 5 项），
+// 二创版此前把 `ignore-gpu-blocklist` 与 `force_high_performance_gpu` 也塞进默认档，
+// 在双显卡机器上强选独显 —— 独显渲染、核显或虚拟显示器（远控 / 投屏驱动）输出时的
+// 跨适配器呈现会造成透明窗口渲染成透明或黑帧，并表现为持续卡顿。
 const PERFORMANCE_GPU_SWITCHES = [
-  ['ignore-gpu-blocklist'],
   ['enable-gpu-rasterization'],
   ['enable-oop-rasterization'],
   ['enable-zero-copy'],
   ['enable-accelerated-2d-canvas'],
-  ['force_high_performance_gpu'],
   ['use-angle', 'd3d11'],
 ];
+
+// 高风险开关，只在用户显式设置对应环境变量为 `1` 时才下发，默认一个都不加。
+// `ignore-gpu-blocklist` 会强行越过 Chromium 对已知有问题的驱动组合的屏蔽；
+// `force_high_performance_gpu` 在双显卡 / 带虚拟显示器的机器上会造成跨适配器呈现，
+// 正是透明窗口黑屏与卡顿最常见的来源。对齐上游的环境变量 opt-in 行为。
+const OPT_IN_GPU_SWITCHES = [
+  ['ignore-gpu-blocklist', null, 'MINERADIO_IGNORE_GPU_BLOCKLIST'],
+  ['force_high_performance_gpu', null, 'MINERADIO_FORCE_HIGH_PERFORMANCE_GPU'],
+];
+
+// 任何档位都必须保留的非 GPU 开关。`autoplay-policy` 决定的是能不能自动起播，
+// 属于功能开关而不是性能开关，降级时绝对不能跟着被摘掉。
 
 // `software` 档要显式关掉 GPU 合成。只调 `app.disableHardwareAcceleration()` 有可能仍留在
 // 半 GPU 的合成路径上，而透明无边框窗口正是在那条路径上变黑的。
@@ -162,6 +174,7 @@ module.exports = {
   DEFAULT_GPU_FAILURE_THRESHOLD,
   BASE_SWITCHES,
   PERFORMANCE_GPU_SWITCHES,
+  OPT_IN_GPU_SWITCHES,
   SOFTWARE_SWITCHES,
   normalizeGpuMode,
   escalateGpuMode,

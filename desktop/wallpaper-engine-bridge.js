@@ -3,7 +3,7 @@
 const path = require('path');
 const { ipcMain, dialog, shell, screen, session } = require('electron');
 const { WallpaperEngineLibrary, registerWallpaperEngineScheme } = require('./wallpaper-engine-library');
-const { WallpaperEngineRuntime } = require('./wallpaper-engine-runtime');
+const { WallpaperEngineRuntime, noteWeDiagEvent } = require('./wallpaper-engine-runtime');
 
 const GRANT_MS = 12000;
 const PREPARE_TIMEOUT_MS = 9000;
@@ -35,6 +35,7 @@ function createWallpaperEngineBridge(options = {}) {
   let hostBoundsOperation = 0;
   let hostBoundsFollowupReason = '';
   let hostVisibilitySuspended = false;
+  let hostVisibilityResidentMinimized = false;
   let hostVisibilityResumePending = false;
   let hostVisibilityResumeTimer = null;
   let hostVisibilityOperation = 0;
@@ -301,6 +302,27 @@ function createWallpaperEngineBridge(options = {}) {
 
   function suspendForHiddenHost(win, reason = 'hidden') {
     if (!win || win.isDestroyed()) return Promise.resolve({ ok: true, stopped: false });
+    const normalizedReason = String(reason || 'hidden').toLowerCase();
+    const runtimeStatus = runtime.getStatus();
+    if (/^minimi[sz]e(?:d)?$/.test(normalizedReason)
+      && runtimeStatus
+      && runtimeStatus.active === true
+      && runtimeStatus.captureMode === 'dwm-thumbnail'
+      && runtimeStatus.dwmSurfaceReady === true) {
+      // The DWM helper is an independent native surface that can stay resident
+      // while Chromium is minimized. Stopping it here would discard the Scene
+      // state and force a visible reload (transparent -> black gap) on restore.
+      hostVisibilityResidentMinimized = true;
+      finishVisibleHostResume(win);
+      cancelHostBoundsRestart();
+      return Promise.resolve({
+        ok: true,
+        stopped: false,
+        preserved: true,
+        sessionId: String(runtimeStatus.sessionId || ''),
+      });
+    }
+    hostVisibilityResidentMinimized = false;
     if (hostVisibilitySuspended) {
       return hostVisibilityStopPromise || Promise.resolve({ ok: true, stopped: true });
     }
@@ -320,7 +342,30 @@ function createWallpaperEngineBridge(options = {}) {
 
   function resumeForVisibleHost(win, reason = 'visible') {
     if (isAppQuitting()) return;
-    if (!hostVisibilitySuspended) return;
+    if (!hostVisibilitySuspended) {
+      if (!hostVisibilityResidentMinimized) return;
+      hostVisibilityResidentMinimized = false;
+      const residentStatus = runtime.getStatus();
+      if (!residentStatus || residentStatus.active !== true || residentStatus.captureMode !== 'dwm-thumbnail') return;
+      if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+        try { win.webContents.setBackgroundThrottling(false); } catch (_) {}
+      }
+      const notifyResident = () => {
+        if (!win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) return;
+        try {
+          win.webContents.send('mineradio-wallpaper-engine-host-bounds-changed', {
+            phase: 'resident',
+            reason: String(reason || 'visible'),
+            sessionId: String(residentStatus.sessionId || ''),
+            forceVisibleHost: true,
+          });
+        } catch (_) {}
+      };
+      setTimeout(notifyResident, 80);
+      setTimeout(notifyResident, 420);
+      setTimeout(() => finishVisibleHostResume(win), 900);
+      return;
+    }
     hostVisibilitySuspended = false;
     hostVisibilityResumePending = true;
     const visibilityOperation = ++hostVisibilityOperation;
@@ -353,7 +398,22 @@ function createWallpaperEngineBridge(options = {}) {
   function scheduleHostBoundsRestart(win, reason = 'bounds-changed') {
     if (!win || win.isDestroyed()) return;
     const status = runtime.getStatus();
+    // The DWM surface helper is an independent native window that follows the
+    // authoritative host HWND and resizes the source in place. Restarting the
+    // Scene on move/resize/fullscreen would tear that helper down, throwing the
+    // transparent host to the desktop and then to black until a slow reload
+    // completes — the reported transparent/black stutter on complex wallpapers.
+    if (status && status.active === true && status.captureMode === 'dwm-thumbnail') {
+      // Instead of a rebuild, push one immediate follow so the mirrored surface
+      // tracks the window on the same frame as the drag. The helper's internal
+      // timer is only the idle fallback; this is what removes the lag.
+      if (typeof runtime.nudgeDwmSurfaceFollow === 'function') {
+        try { runtime.nudgeDwmSurfaceFollow(String(status.sessionId || '')); } catch (_) {}
+      }
+      return;
+    }
     if (!hostBoundsRestartPending && (!status || status.active !== true)) return;
+
     let job = hostBoundsStopPromise;
     if (!job) {
       hostBoundsFollowupReason = String(reason || 'bounds-changed').slice(0, 80);
@@ -526,6 +586,21 @@ function createWallpaperEngineBridge(options = {}) {
     ipcMain.handle('mineradio-wallpaper-engine-start-scene', async (event, payload = {}) => {
       let operation = 0;
       let startedSessionId = '';
+      let restoreHostTopTimer = null;
+      let hostTopRaised = false;
+      // Declared at handler scope so the finally block can always reach it, even
+      // on an early return before the raise happened.
+      const restoreHostTop = () => {
+        if (restoreHostTopTimer) {
+          clearTimeout(restoreHostTopTimer);
+          restoreHostTopTimer = null;
+        }
+        if (!hostTopRaised) return;
+        hostTopRaised = false;
+        const current = mainWindow();
+        if (!current || current.isDestroyed()) return;
+        try { current.setAlwaysOnTop(false); } catch (_) {}
+      };
       try {
         if (!isTrustedIpc(event)) return { ok: false, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
         const pendingRendererCleanup = rendererCleanupPromise;
@@ -534,10 +609,29 @@ function createWallpaperEngineBridge(options = {}) {
         operation = ++captureOperation;
         if (hostVisibilitySuspended) return { ok: false, error: 'WALLPAPER_ENGINE_HOST_SUSPENDED' };
         const win = mainWindow();
-        const physicalBounds = physicalContentBounds(win, payload);
+        // Wallpaper Engine opens its pop-out as a normal top-level window at the
+        // host rect. It is created black and sits above the host until the embed
+        // step can push it behind, which reads as the whole player flashing
+        // black for a moment. Raise the host above that level for the duration
+        // of the start/embed sequence so the pop-out can never cover it, then
+        // restore the previous topmost state. A watchdog restores even if the
+        // runtime wedges.
+        const hostWasTop = !!(win && typeof win.isAlwaysOnTop === 'function' && win.isAlwaysOnTop());
+        if (win && !hostWasTop) {
+          try {
+            win.setAlwaysOnTop(true, 'screen-saver');
+            hostTopRaised = true;
+          } catch (_) {}
+        }
+        if (hostTopRaised) {
+          restoreHostTopTimer = setTimeout(restoreHostTop, 10000);
+          if (restoreHostTopTimer && typeof restoreHostTopTimer.unref === 'function') restoreHostTopTimer.unref();
+        }
+        const win0 = win;
+        const physicalBounds = physicalContentBounds(win0, payload);
         const display = physicalBounds.display;
         const fps = targetFps(display, payload && payload.fps);
-        const cornerRadius = hostCornerRadius(win);
+        const cornerRadius = hostCornerRadius(win0);
         const result = await runtime.start(String(payload && payload.id || ''), {
           width: Math.max(640, Math.min(7680, physicalBounds.width)),
           height: Math.max(360, Math.min(4320, physicalBounds.height)),
@@ -588,7 +682,8 @@ function createWallpaperEngineBridge(options = {}) {
           await runtime.stop(grant.sessionId).catch(() => {});
           return { ok: false, error: 'WALLPAPER_ENGINE_START_SUPERSEDED', sessionId: grant.sessionId };
         }
-        return { ...result, ...embedded, capturePrepared: true, captureMode: 'dwm-thumbnail' };
+        const started = { ...result, ...embedded, capturePrepared: true, captureMode: 'dwm-thumbnail' };
+        return started;
       } catch (error) {
         if (startedSessionId) {
           clearCaptureGrant(startedSessionId);
@@ -597,6 +692,10 @@ function createWallpaperEngineBridge(options = {}) {
           clearCaptureGrant();
         }
         return { ok: false, error: error.code || error.message || 'WALLPAPER_ENGINE_SCENE_START_FAILED', sessionId: startedSessionId };
+      } finally {
+        // The native helper owns the layering from here on; drop the temporary
+        // host raise as soon as the embed sequence is done (success or not).
+        restoreHostTop();
       }
     });
 
@@ -703,6 +802,12 @@ function createWallpaperEngineBridge(options = {}) {
       const win = mainWindow();
       if (payload.active === true && (!win || !win.isVisible() || win.isMinimized() || hostVisibilitySuspended)) return;
       try { runtime.updateGlassSurface(sessionId, payload); } catch (_) {}
+    });
+
+    ipcMain.on('mineradio-wallpaper-engine-diag', (_event, payload = {}) => {
+      // 离线诊断通道（MINERADIO_WE_DIAG=1 才有输出）：渲染层只转发事件名与少量字段，
+      // 任何来源都允许 —— 它不改变状态、只写日志，泄露面与 console 相当。
+      try { noteWeDiagEvent(String(payload && payload.event || 'renderer'), payload); } catch (_) {}
     });
 
     ipcMain.on('mineradio-wallpaper-engine-pointer-activity', (event, payload = {}) => {
@@ -827,9 +932,13 @@ function createWallpaperEngineBridge(options = {}) {
     win.on('hide', () => suspendForHiddenHost(win, 'hide'));
     win.on('move', () => scheduleHostBoundsRestart(win, 'move'));
     win.on('resize', () => scheduleHostBoundsRestart(win, 'resize'));
-    win.on('enter-full-screen', () => setTimeout(() => scheduleHostBoundsRestart(win, 'enter-full-screen'), 40));
+    // A dwm-thumbnail session is skipped inside scheduleHostBoundsRestart: the
+    // native helper follows the host and resizes in place, so fullscreen
+    // transitions no longer need a delayed Scene rebuild. The debounce still
+    // collapses the burst of bounds events Windows emits around the switch.
+    win.on('enter-full-screen', () => scheduleHostBoundsRestart(win, 'enter-full-screen'));
     win.on('leave-full-screen', () => scheduleHostBoundsRestart(win, 'leave-full-screen'));
-    win.on('enter-html-full-screen', () => setTimeout(() => scheduleHostBoundsRestart(win, 'enter-html-full-screen'), 40));
+    win.on('enter-html-full-screen', () => scheduleHostBoundsRestart(win, 'enter-html-full-screen'));
     win.on('leave-html-full-screen', () => scheduleHostBoundsRestart(win, 'leave-html-full-screen'));
     win.on('closed', () => {
       if (attachedWindow !== win) return;

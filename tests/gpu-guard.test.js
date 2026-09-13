@@ -1,8 +1,9 @@
 'use strict';
 // GPU 守卫档位阶梯。黑屏与持续卡顿的根因是主进程无条件拍上 `ignore-gpu-blocklist` 等开关，
 // 强行越过 Chromium 对已知有问题的驱动组合的屏蔽，而且没有任何回退 —— 崩一次崩一辈子。
-// 这条测试钉住三件事：`default` 档的开关列表与历史行为逐字节相同；连续失败会逐级降档；
-// 换版本会退回 `default` 重试一次，不把用户永久钉在软件渲染上。
+// 这条测试钉住四件事：`default` 档只下发上游那份安全性能开关（高风险项改为 env opt-in）；
+// 高风险项默认不进任何档位；连续失败会逐级降档；换版本会退回 `default` 重试一次，
+// 不把用户永久钉在软件渲染上。
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -16,28 +17,43 @@ const {
   isLowestGpuMode,
   noteGpuFailure,
   normalizeGpuMode,
+  OPT_IN_GPU_SWITCHES,
   resolveGpuMode,
   shouldDisableHardwareAcceleration,
 } = require('../desktop/gpu-guard');
 
-// v1.8.2 及以前主进程里那份 CHROMIUM_PERFORMANCE_SWITCHES 的原样抄录。
-// `default` 档必须与它逐项相同，否则这次改动就不是「加了回退」而是「顺手改了默认行为」。
-const LEGACY_SWITCHES = [
+// 与上游 XxHuberrr/Mineradio 的 CHROMIUM_SAFE_PERFORMANCE_SWITCHES 逐项相同：
+// 不含 `ignore-gpu-blocklist`，也不含 `force_high_performance_gpu`。
+const SAFE_DEFAULT_SWITCHES = [
   ['autoplay-policy', 'no-user-gesture-required'],
-  ['ignore-gpu-blocklist'],
   ['enable-gpu-rasterization'],
   ['enable-oop-rasterization'],
   ['enable-zero-copy'],
   ['enable-accelerated-2d-canvas'],
-  ['force_high_performance_gpu'],
   ['use-angle', 'd3d11'],
 ];
 
-test('default 档的开关与历史行为逐项相同', () => {
-  assert.deepEqual(gpuSwitchesForMode('default'), LEGACY_SWITCHES);
-  assert.deepEqual(gpuSwitchesForMode(''), LEGACY_SWITCHES, '取值非法时也要回退到 default');
-  assert.deepEqual(gpuSwitchesForMode(undefined), LEGACY_SWITCHES);
+test('default 档只下发安全性能开关，不再越过屏蔽名单或强选独显', () => {
+  assert.deepEqual(gpuSwitchesForMode('default'), SAFE_DEFAULT_SWITCHES);
+  assert.deepEqual(gpuSwitchesForMode(''), SAFE_DEFAULT_SWITCHES, '取值非法时也要回退到 default');
+  assert.deepEqual(gpuSwitchesForMode(undefined), SAFE_DEFAULT_SWITCHES);
   assert.equal(shouldDisableHardwareAcceleration('default'), false);
+});
+
+test('高风险开关只作为 env opt-in 存在，任何档位都不会自动带上', () => {
+  const names = OPT_IN_GPU_SWITCHES.map(([name]) => name);
+  assert.deepEqual(names, ['ignore-gpu-blocklist', 'force_high_performance_gpu']);
+  for (const mode of GPU_MODES) {
+    const active = gpuSwitchesForMode(mode).map(([name]) => name);
+    for (const risky of names) {
+      assert.equal(active.includes(risky), false, `${mode} 档不应自动下发 ${risky}`);
+    }
+  }
+  // 每个高风险开关都必须绑定一个环境变量名，否则永远无法被用户点开。
+  for (const [, , envName] of OPT_IN_GPU_SWITCHES) {
+    assert.equal(typeof envName, 'string');
+    assert.match(envName, /^MINERADIO_/);
+  }
 });
 
 test('compatible 档只留功能开关，把 GPU 决定权交回 Chromium', () => {
