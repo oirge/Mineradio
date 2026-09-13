@@ -6,6 +6,35 @@ const path = require('path');
 const childProcess = require('child_process');
 const { discoverSteamLibraries: defaultDiscoverSteamLibraries } = require('./wallpaper-engine-library');
 
+// 诊断开关：设置 MINERADIO_WE_DIAG=1 时，把壁纸启动各阶段耗时与窗口层级
+// 事件逐行追加到用户目录下的 wallpaper-engine-diag.log，只写文件，
+// 不弹窗、不改窗口、不影响任何交互。用于用户正常使用时离线定位加载闪烁。
+const WE_DIAG_ENABLED = process.env.MINERADIO_WE_DIAG === '1';
+const weDiagState = { file: '', t0: 0 };
+function weDiag(event, fields = {}) {
+  if (!WE_DIAG_ENABLED) return;
+  try {
+    if (!weDiagState.file) {
+      const base = process.env.APPDATA || process.env.LOCALAPPDATA || process.cwd();
+      weDiagState.file = path.join(base, 'Mineradio-oirge', 'wallpaper-engine-diag.log');
+      fs.mkdirSync(path.dirname(weDiagState.file), { recursive: true });
+      if (!weDiagState.t0) weDiagState.t0 = Date.now();
+    }
+    const t = Date.now() - (weDiagState.t0 || Date.now());
+    const extra = Object.entries(fields)
+      .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+      .join(' ');
+    fs.appendFileSync(weDiagState.file, `${new Date().toISOString()} +${t}ms ${event}${extra ? ' ' + extra : ''}\n`);
+  } catch (_) { }
+}
+// 暴露给 bridge 的渲染层事件入口：同一份日志、同一个开关。
+function noteWeDiagEvent(event, payload = {}) {
+  const fields = { ...payload };
+  delete fields.event;
+  weDiag(`renderer:${event || 'unknown'}`, fields);
+}
+
+
 const SIGNER_PATTERN = /\bSkutta Software\b/i;
 const MIN_WIDTH = 64;
 const MAX_WIDTH = 7680;
@@ -29,7 +58,11 @@ const ENGINE_PROCESS_POLL_MS = 120;
 const ENGINE_PROCESS_STABLE_MS = 720;
 const ENGINE_READY_POLL_MS = 180;
 const ENGINE_READY_SUCCESS_COUNT = 2;
-const ENGINE_READY_CACHE_MS = 2500;
+// How long a proven-ready engine stays trusted without re-probing. The cache is
+// keyed by executable + live PID set, so a widened window cannot skip the probe
+// for a restarted engine; it only avoids re-waiting on the control IPC when the
+// user switches wallpapers while the same engine process is still up.
+const ENGINE_READY_CACHE_MS = 60000;
 const INITIAL_MUTE_RETRY_DELAYS_MS = Object.freeze([0, 120, 320, 700, 1300, 2200]);
 const INITIAL_MUTE_RETRY_DEADLINE_MS = 8000;
 const MUTE_REASSERT_DELAYS_MS = Object.freeze([80, 220, 650, 1500, 3200, 6500, 10000]);
@@ -44,9 +77,18 @@ const POINTER_RELAY_MAX_FPS = 120;
 const POINTER_RELAY_START_TIMEOUT_MS = 5000;
 const POINTER_RELAY_STOP_TIMEOUT_MS = 400;
 const POINTER_RELAY_RETRY_DELAYS_MS = Object.freeze([360, 1200, 3000]);
+// DWM helper timeouts kept at upstream values: the helper is created once per
+// session and outlives fullscreen/bounds changes, so it does not need the
+// inflated startup window that a per-transition rebuild would require.
 const DWM_SURFACE_START_TIMEOUT_MS = 6000;
 const DWM_SURFACE_STOP_TIMEOUT_MS = 600;
 const DWM_SURFACE_RETRY_DELAY_MS = 650;
+// Every live session gets a `Mineradio Wallpaper <24-hex session id>` window.
+// A close that WE never confirms (busy engine, app killed mid-switch) leaves
+// that window rendering behind, and nothing reaps it because it is no longer
+// this.active. Detecting them by this exact shape lets a new start close the
+// orphans instead of stacking another full Scene render on the desktop.
+const STALE_WALLPAPER_WINDOW_TITLE = /^Mineradio Wallpaper [a-f0-9]{24}$/i;
 
 function clampInteger(value, minimum, maximum, fallback) {
   const number = Number(value);
@@ -725,6 +767,19 @@ public static class MineradioWeWindowControl {
     RECT sourceRect;
     if (!GetWindowRect(hWnd, out sourceRect)) throw new Win32Exception(Marshal.GetLastWin32Error());
     bool rounded = ApplyCornerRegion(hWnd, sourceRect, hostCornerRadius);
+    // Keep the native Scene directly behind the authoritative host from the
+    // moment it is adopted. WE opens its pop-out as a normal top-level window,
+    // so without this it sits above Mineradio and its whole load (black frame,
+    // then the scene) is visible during startup. The DWM helper re-asserts this
+    // same ordering once it takes over, so this only extends the steady-state
+    // relationship to the load phase. WE disables Chromium window occlusion, so
+    // the mirrored surface keeps receiving live frames while hidden back there.
+    const uint SWP_NOSIZE = 0x0001;
+    const uint SWP_NOMOVE = 0x0002;
+    const uint SWP_NOACTIVATE_EMBED = 0x0010;
+    const uint SWP_NOOWNERZORDER_EMBED = 0x0200;
+    SetWindowPos(hWnd, hostHWnd, 0, 0, 0, 0,
+      SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE_EMBED | SWP_NOOWNERZORDER_EMBED);
     const int tolerance = 2;
     bool aligned = !(Math.Abs(sourceRect.Left - hostRect.Left) > tolerance
       || Math.Abs(sourceRect.Top - hostRect.Top) > tolerance
@@ -1042,6 +1097,9 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
   const uint DWM_TNP_SOURCECLIENTAREAONLY = 0x00000010;
   const uint SWP_NOACTIVATE = 0x0010;
   const uint SWP_SHOWWINDOW = 0x0040;
+  // 对另一个进程拥有的窗口，普通 SetWindowPos 会同步跨线程等待对方处理 ——
+  // WE 的渲染线程繁忙时会把我们的跟随节拍卡成 10-30Hz 且抖动。异步投递绕开它。
+  const uint SWP_ASYNCWINDOWPOS = 0x4000;
   const int WM_NCHITTEST = 0x0084;
   const int HTTRANSPARENT = -1;
   const uint GA_ROOT = 2;
@@ -1117,12 +1175,24 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
   readonly int windowCornerRadius;
   bool desktopIconLayeringEnabled;
   readonly System.Windows.Forms.Timer followTimer;
+  // 拖动期间的快速跟随定时器。顶层窗口不会随宿主原子移动，镜像表面只能靠
+  // SetWindowPos 去追：16ms 节拍与 DWM 合成节拍相位漂移，会留下 1-2 帧的可见
+  // 「慢一步 + 忽快忽慢」。4ms 节拍让绝大多数帧在合成前就位；闲置时回调只做
+  // 一次时间戳比较，开销可忽略。
+  System.Threading.Timer dragFollowTimer;
   IntPtr thumbnail = IntPtr.Zero;
   int lastWidth = -1;
   int lastHeight = -1;
   int lastRadius = -1;
   int consecutiveFollowFailures = 0;
   IntPtr desktopIconHost = IntPtr.Zero;
+  int lastHostLeft = Int32.MinValue;
+  int lastHostTop = Int32.MinValue;
+  int lastMoveTickAt = 0;
+  int dragFollowQueued = 0;
+  // 宿主最近一次移动/缩放之后，快速跟随保持生效的时长。
+  const int IDLE_FOLLOW_INTERVAL_MS = 60;
+  const int DRAG_FOLLOW_RECENT_MS = 200;
 
   MineradioWeDwmSurfaceHost(IntPtr host, IntPtr source, string expectedTitle, int cornerRadius,
       bool enableDesktopIconLayering) {
@@ -1136,25 +1206,39 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
     // the SVG sampler. DeleteTab below keeps this implementation surface out
     // of the user's taskbar without adding a second visible glass layer.
     ShowInTaskbar = true;
+    // The form is created at the default location and Application.Run shows it
+    // before the first FollowHost() call. For a moment it is an unpositioned
+    // black window at the top of the z-order (and on screen), which is the
+    // load-time flash. Start it 1x1 and fully offscreen so nothing is visible
+    // until FollowHost() places it behind the host.
     StartPosition = FormStartPosition.Manual;
+    Location = new Point(-32000, -32000);
+    Size = new Size(1, 1);
     BackColor = Color.Black;
     Text = "Mineradio WE DWM Surface";
     followTimer = new System.Windows.Forms.Timer();
-    followTimer.Interval = 60;
-    followTimer.Tick += delegate {
-      try { FollowHost(); }
-      catch (Exception error) {
-        Console.Error.WriteLine(error.Message);
-        Console.Error.Flush();
-        bool identityValid = IsWindow(hostWindow) && IsWindow(sourceWindow)
-          && String.Equals(WindowTitle(sourceWindow), sourceTitle, StringComparison.Ordinal);
-        consecutiveFollowFailures += 1;
-        // Explorer reparenting and DPI changes can make one FollowHost tick
-        // fail transiently. Keep the one DWM helper alive for a short bounded
-        // window; invalid HWND/title identity still closes immediately.
-        if (!identityValid || consecutiveFollowFailures >= 8) Close();
-      }
-    };
+    followTimer.Interval = IDLE_FOLLOW_INTERVAL_MS;
+    followTimer.Tick += delegate { SafeFollow(); };
+  }
+
+  /**
+   * 统一的跟随入口：异常走既有的失败计数与身份校验，防止一次瞬时失败
+   * 直接带崩 helper。
+   * @returns {void}
+   */
+  void SafeFollow() {
+    try { FollowHost(); }
+    catch (Exception error) {
+      Console.Error.WriteLine(error.Message);
+      Console.Error.Flush();
+      bool identityValid = IsWindow(hostWindow) && IsWindow(sourceWindow)
+        && String.Equals(WindowTitle(sourceWindow), sourceTitle, StringComparison.Ordinal);
+      consecutiveFollowFailures += 1;
+      // Explorer reparenting and DPI changes can make one FollowHost tick
+      // fail transiently. Keep the one DWM helper alive for a short bounded
+      // window; invalid HWND/title identity still closes immediately.
+      if (!identityValid || consecutiveFollowFailures >= 8) Close();
+    }
   }
 
   protected override bool ShowWithoutActivation { get { return true; } }
@@ -1171,6 +1255,16 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
     base.OnShown(eventArgs);
     FollowHost();
     followTimer.Start();
+    // 快速跟随只在宿主刚动过（DRAG_FOLLOW_RECENT_MS 内）时才真正入队，
+    // 平时每次触发只是一次时间戳比较。队列闸防止拖动高频触发堆积。
+    dragFollowTimer = new System.Threading.Timer(delegate {
+      try {
+        if (unchecked(Environment.TickCount - lastMoveTickAt) > DRAG_FOLLOW_RECENT_MS) return;
+        if (Interlocked.Exchange(ref dragFollowQueued, 1) == 1) return;
+        try { BeginInvoke(new Action(SafeFollow)); }
+        catch { Interlocked.Exchange(ref dragFollowQueued, 0); }
+      } catch { }
+    }, null, 8, 4);
     Thread inputThread = new Thread(delegate() {
       try {
         string line;
@@ -1184,6 +1278,18 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
                 Console.WriteLine("{\"ok\":true,\"dwm\":true,\"active\":true,\"surfaceWindowHandle\":"
                   + Handle.ToInt64() + "}");
                 Console.Out.Flush();
+              }));
+            } catch { }
+            continue;
+          }
+          if (String.Equals(command, "F", StringComparison.Ordinal)) {
+            // Event-driven follow: the Electron host pushes one of these on each
+            // move/resize so the mirrored surface tracks the window immediately
+            // instead of waiting for the next follow tick. Without it a drag
+            // reads as the wallpaper lagging a beat behind the window.
+            try {
+              if (!IsDisposed && IsHandleCreated) BeginInvoke(new Action(delegate() {
+                try { FollowHost(); } catch { }
               }));
             } catch { }
             continue;
@@ -1222,6 +1328,7 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
 
   protected override void OnFormClosed(FormClosedEventArgs eventArgs) {
     followTimer.Stop();
+    try { if (dragFollowTimer != null) dragFollowTimer.Dispose(); } catch { }
     if (thumbnail != IntPtr.Zero) {
       DwmUnregisterThumbnail(thumbnail);
       thumbnail = IntPtr.Zero;
@@ -1330,10 +1437,14 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
     FollowHost();
     // Keep the priming HWND a normal Shell capture target until WGC is already
     // live. Removing the taskbar tab earlier makes CreateForWindow reject it.
+    // The real WE Scene window is a plain top-level window and would otherwise
+    // leave a stray "Wallpaper Engine" taskbar button next to Mineradio's own;
+    // it is now fully mirrored by this helper, so drop its tab too.
     try {
       ITaskbarList taskbar = (ITaskbarList)new TaskbarList();
       taskbar.HrInit();
       taskbar.DeleteTab(Handle);
+      if (sourceWindow != IntPtr.Zero) taskbar.DeleteTab(sourceWindow);
       Marshal.FinalReleaseComObject(taskbar);
     } catch { }
   }
@@ -1370,19 +1481,10 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
     if (iconHost != IntPtr.Zero && hostRoot != hostWindow && hostRoot != iconHost) iconHost = IntPtr.Zero;
     IntPtr hostLayer = hostRoot != IntPtr.Zero && hostRoot != hostWindow ? hostRoot : hostWindow;
     IntPtr surfaceInsertAfter = iconHost != IntPtr.Zero ? iconHost : hostLayer;
-    if (thumbnail != IntPtr.Zero) {
-      if (!SetWindowPos(Handle, surfaceInsertAfter, hostRect.Left, hostRect.Top, width, height,
-          SWP_NOACTIVATE | SWP_SHOWWINDOW)) throw new Win32Exception(Marshal.GetLastWin32Error());
-      if (!SetWindowPos(sourceWindow, Handle, hostRect.Left, hostRect.Top, width, height,
-          SWP_NOACTIVATE | SWP_SHOWWINDOW)) throw new Win32Exception(Marshal.GetLastWin32Error());
-    } else {
-      // Until WGC has primed the SVG sampler, show the real source above the
-      // empty DWM destination so startup never flashes a black base frame.
-      if (!SetWindowPos(sourceWindow, surfaceInsertAfter, hostRect.Left, hostRect.Top, width, height,
-          SWP_NOACTIVATE | SWP_SHOWWINDOW)) throw new Win32Exception(Marshal.GetLastWin32Error());
-      if (!SetWindowPos(Handle, sourceWindow, hostRect.Left, hostRect.Top, width, height,
-          SWP_NOACTIVATE | SWP_SHOWWINDOW)) throw new Win32Exception(Marshal.GetLastWin32Error());
-    }
+    // 先于圆角区域更新记录变化：位置或尺寸任一变化都算「宿主在动」，
+    // 让 4ms 快速跟随保持工作（拖拽角缩放同样受益）。
+    bool hostPositionChanged = hostRect.Left != lastHostLeft || hostRect.Top != lastHostTop;
+    bool hostSizeChanged = width != lastWidth || height != lastHeight;
 
     if (width != lastWidth || height != lastHeight || radius != lastRadius) {
       ApplyCornerRegion(Handle, width, height, radius);
@@ -1390,6 +1492,30 @@ public sealed class MineradioWeDwmSurfaceHost : Form {
       lastWidth = width;
       lastHeight = height;
       lastRadius = radius;
+    }
+
+    if (hostPositionChanged || hostSizeChanged) {
+      lastHostLeft = hostRect.Left;
+      lastHostTop = hostRect.Top;
+      lastMoveTickAt = Environment.TickCount;
+    }
+
+    if (thumbnail != IntPtr.Zero) {
+      // 两个窗口每拍都移动。关键是 SWP_ASYNCWINDOWPOS：源窗口属于 WE 进程，
+      // 普通跨进程调用会同步阻塞到它的线程有空（WE 的消息泵和渲染循环同线程，
+      // 一忙就把我们的整个跟随循环卡成 10-30Hz）；异步投递让镜像表面保持
+      // 4ms 节拍，源窗口由 WE 在帧间自行应用，最多晚一帧且平滑。
+      if (!SetWindowPos(Handle, surfaceInsertAfter, hostRect.Left, hostRect.Top, width, height,
+          SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS)) throw new Win32Exception(Marshal.GetLastWin32Error());
+      if (!SetWindowPos(sourceWindow, Handle, hostRect.Left, hostRect.Top, width, height,
+          SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS)) throw new Win32Exception(Marshal.GetLastWin32Error());
+    } else {
+      // Until WGC has primed the SVG sampler, show the real source above the
+      // empty DWM destination so startup never flashes a black base frame.
+      if (!SetWindowPos(sourceWindow, surfaceInsertAfter, hostRect.Left, hostRect.Top, width, height,
+          SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS)) throw new Win32Exception(Marshal.GetLastWin32Error());
+      if (!SetWindowPos(Handle, sourceWindow, hostRect.Left, hostRect.Top, width, height,
+          SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS)) throw new Win32Exception(Marshal.GetLastWin32Error());
     }
 
     if (thumbnail != IntPtr.Zero) {
@@ -1735,6 +1861,34 @@ class WallpaperEngineRuntime {
     };
   }
 
+  /**
+   * 把一段 base64(UTF-16LE) PowerShell 脚本变成可执行的 powershell.exe 参数。
+   * Windows 命令行上限 32767 字符，而 `-EncodedCommand` 会把整段 base64 塞进命令行；
+   * 窗口控制 / 控制代理脚本已接近或超过该上限，超了 CreateProcess 直接 ENAMETOOLONG，
+   * 表现为 embed/close 静默失败。超限时改写临时文件、用 `-File` 执行（DWM helper 同款做法）。
+   * @param {string} encoded base64 编码的脚本。
+   * @param {string} tag 文件名标签，用于区分不同脚本。
+   * @returns {string[]} 直接可传给 powershell.exe 的参数数组。
+   */
+  _powerShellScriptArgs(encoded, tag) {
+    const text = String(encoded || '');
+    const base = ['-NoLogo', '-NoProfile', '-NonInteractive'];
+    const limit = 32767;
+    if (text.length + 96 <= limit) return base.concat(['-EncodedCommand', text]);
+    const digest = crypto.createHash('sha256').update(text).digest('hex').slice(0, 20);
+    const scriptFile = path.join(this.nativeTempPath, `wallpaper-engine-${tag}-${digest}.ps1`);
+    try {
+      if (!fs.existsSync(scriptFile)) {
+        fs.mkdirSync(this.nativeTempPath, { recursive: true });
+        fs.writeFileSync(scriptFile, `\uFEFF${Buffer.from(text, 'base64').toString('utf16le')}`, 'utf8');
+      }
+      return base.concat(['-ExecutionPolicy', 'Bypass', '-File', scriptFile]);
+    } catch (_) {
+      // 落盘失败只能退回原路径；调用方仍会看到实际错误，不会静默成功。
+      return base.concat(['-EncodedCommand', text]);
+    }
+  }
+
   _stopSessionDwmSurface(session) {
     if (!session) return false;
     if (session.dwmSurfaceRetryTimer) clearTimeout(session.dwmSurfaceRetryTimer);
@@ -1939,6 +2093,7 @@ class WallpaperEngineRuntime {
         || session.dwmSurfaceProcess !== child) {
         if (!ready && stderr.trim()) {
           console.warn(`[Wallpaper Engine] DWM surface unavailable: ${stderr.trim().replace(/\s+/g, ' ').slice(0, 400)}`);
+          weDiag('dwm-helper-unavailable', { stderr: stderr.trim().replace(/\s+/g, ' ').slice(0, 200) });
         }
         if (session.dwmSurfaceProcess === child) this._stopSessionDwmSurface(session);
         return false;
@@ -1953,6 +2108,7 @@ class WallpaperEngineRuntime {
       if (typeof child.once === 'function') {
         child.once('exit', () => {
           if (session.dwmSurfaceProcess !== child) return;
+          weDiag('dwm-helper-exited', { sessionId: session.sessionId, pid: child.pid });
           session.dwmSurfaceProcess = null;
           session.dwmSurfaceReady = false;
           session.dwmSurfaceActive = false;
@@ -2052,16 +2208,45 @@ class WallpaperEngineRuntime {
     }
     try { stdin.write('D\n', 'ascii'); }
     catch (_) { throw runtimeError('WALLPAPER_ENGINE_DWM_SURFACE_FAILED'); }
+    const activateStartedAt = this.now();
+    weDiag('dwm-activate-begin', { sessionId: session.sessionId });
     const deadline = this.now() + 2200;
     while (this.now() <= deadline) {
       if (this.disposed || this.active !== session || session.stopping === true
         || session.dwmSurfaceProcess !== child) {
         throw runtimeError('WALLPAPER_ENGINE_START_SUPERSEDED');
       }
-      if (session.dwmSurfaceActive === true) return this._publicSession(session);
+      if (session.dwmSurfaceActive === true) {
+        weDiag('dwm-activate-ok', { sessionId: session.sessionId, ms: Math.round(this.now() - activateStartedAt) });
+        return this._publicSession(session);
+      }
       await this.sleep(20);
     }
+    weDiag('dwm-activate-failed', { sessionId: session.sessionId, ms: Math.round(this.now() - activateStartedAt) });
     throw runtimeError('WALLPAPER_ENGINE_DWM_SURFACE_FAILED');
+  }
+
+  /**
+   * 让原生 DWM helper 立刻跟随一次宿主窗口位置。
+   * 拖动窗口时 Electron 每帧都会调这里，把「壁纸跟手」从固定 60ms 轮询降到
+   * 事件驱动；helper 内部同时会在移动期间把轮询提到约 60Hz 兜底。
+   * 只写一个字符，不等待回执，因此不会给 move/resize 热路径增加卡顿。
+   * @param {string} expectedSessionId 期望的会话 id，不匹配就静默忽略。
+   * @returns {boolean} 是否已把信号写入 helper。
+   */
+  nudgeDwmSurfaceFollow(expectedSessionId = '') {
+    const session = this.active;
+    expectedSessionId = String(expectedSessionId || '');
+    if (!session || (expectedSessionId && session.sessionId !== expectedSessionId)) return false;
+    if (session.dwmSurfaceReady !== true || !session.dwmSurfaceProcess) return false;
+    const stdin = session.dwmSurfaceProcess.stdin;
+    if (!stdin || stdin.destroyed === true || stdin.writableEnded === true) return false;
+    try {
+      stdin.write('F\n', 'ascii');
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   async updateDwmDesktopIconLayering(expectedSessionId = '', enabled = false) {
@@ -2545,13 +2730,7 @@ class WallpaperEngineRuntime {
         }
       };
       try {
-        this.nativeExecFile(this.powerShellExecutable, [
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-EncodedCommand',
-          nativeWindowControlScript(),
-        ], {
+        this.nativeExecFile(this.powerShellExecutable, this._powerShellScriptArgs(nativeWindowControlScript(), 'window-control'), {
           encoding: 'utf8',
           windowsHide: true,
           timeout: 15000,
@@ -2709,9 +2888,17 @@ class WallpaperEngineRuntime {
     const temporaryFile = stagedProjectFile + '.tmp';
     try {
       try {
+        // Hardlink reuses the cached/patched package in place: no second on-disk
+        // copy of a multi-MB scene, so loading skips a full file copy. If the
+        // staging root is on another volume, restore the previous hardlink, then
+        // fall back to an exclusive reflink, and finally copy.
         await fs.promises.link(stagedScenePackage, stagedPackageFile);
       } catch (_) {
-        await fs.promises.copyFile(stagedScenePackage, stagedPackageFile);
+        try {
+          await fs.promises.copyFile(stagedScenePackage, stagedPackageFile, fs.constants.COPYFILE_FICLONE);
+        } catch (_) {
+          await fs.promises.copyFile(stagedScenePackage, stagedPackageFile);
+        }
       }
       await fs.promises.writeFile(temporaryFile, JSON.stringify(project), 'utf8');
       await fs.promises.rename(temporaryFile, stagedProjectFile);
@@ -3256,13 +3443,7 @@ class WallpaperEngineRuntime {
         else resolve();
       };
       try {
-        this.controlExecFile(this.powerShellExecutable, [
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-EncodedCommand',
-          controlBrokerScript(),
-        ], {
+        this.controlExecFile(this.powerShellExecutable, this._powerShellScriptArgs(controlBrokerScript(), 'control-broker'), {
           encoding: 'utf8',
           windowsHide: true,
           timeout: 20000,
@@ -3604,8 +3785,11 @@ class WallpaperEngineRuntime {
     }
     if (session.embedPromise) return session.embedPromise;
     const generation = this.generation;
+    const embedStartedAt = Date.now();
+    weDiag('embed-begin', { sessionId: session.sessionId });
     const operation = (async () => {
       let embedding = await this._controlSessionWindow('embed', session, String(session.sourceId || ''), host);
+      weDiag('embed-attempt', { ms: Date.now() - embedStartedAt, aligned: embedding.aligned === true });
       for (let attempt = 0; attempt < 3 && embedding.aligned !== true; attempt += 1) {
         const hostWidth = Math.max(1, Number(embedding.hostRight) - Number(embedding.hostLeft));
         const hostHeight = Math.max(1, Number(embedding.hostBottom) - Number(embedding.hostTop));
@@ -3635,6 +3819,7 @@ class WallpaperEngineRuntime {
       session.dwmSurfaceHostCornerRadius = clampInteger(host.cornerRadius, 0, 512, 0);
       session.dwmSurfaceDesktopIconLayering = host.desktopIconLayering === true;
       session.captureAttached = true;
+      weDiag('embed-ok', { sessionId: session.sessionId, totalMs: Date.now() - embedStartedAt });
       return this._publicSession(session);
     })();
     session.embedPromise = operation;
@@ -3671,6 +3856,49 @@ class WallpaperEngineRuntime {
     } finally {
       if (session.parkPromise === operation) session.parkPromise = null;
     }
+  }
+
+  /**
+   * 关闭上个会话没能确认关闭、遗留在桌面上的 Wallpaper Engine 窗口。
+   * 每个遗留窗口都是一个完整的 WE 场景渲染进程，累积起来既是任务栏里
+   * 那些重复的 “Mineradio Wallpaper …” 窗口，也是持续的卡顿来源。
+   * @param {string} executable 已验证的 WE 可执行文件路径。
+   * @param {string} keepTitle 当前会话的窗口标题，必须保留。
+   * @returns {Promise<number>} 实际发出关闭命令的窗口数量。
+   */
+  async _closeStaleWallpaperWindows(executable, keepTitle = '') {
+    if (!executable || !this.desktopCapturer
+      || typeof this.desktopCapturer.getSources !== 'function') return 0;
+    let sources;
+    try {
+      sources = await this.desktopCapturer.getSources({
+        types: ['window'],
+        thumbnailSize: { width: 0, height: 0 },
+        fetchWindowIcons: false,
+      });
+    } catch (_) {
+      return 0;
+    }
+    const staleTitles = [];
+    for (const source of Array.isArray(sources) ? sources : []) {
+      const title = String(source && source.name || '');
+      if (!STALE_WALLPAPER_WINDOW_TITLE.test(title) || title === keepTitle) continue;
+      if (!staleTitles.includes(title)) staleTitles.push(title);
+    }
+    let closedCount = 0;
+    for (const title of staleTitles) {
+      if (this.disposed) break;
+      try {
+        await this._spawnControl(executable, [
+          '-control',
+          'closeWallpaper',
+          '-location',
+          title,
+        ]);
+        closedCount += 1;
+      } catch (_) { }
+    }
+    return closedCount;
   }
 
   async _closeSession(session) {
@@ -3845,6 +4073,8 @@ class WallpaperEngineRuntime {
     };
     this.pending = session;
     let startStage = 'discover-target';
+    const stageStartedAt = Date.now();
+    weDiag('start-begin', { sessionId: session.sessionId, id: session.id });
 
     try {
       const [installation, target] = await Promise.all([
@@ -3855,6 +4085,7 @@ class WallpaperEngineRuntime {
       if (!installation.available || !installation.executable) {
         throw runtimeError(installation.reason || 'WALLPAPER_ENGINE_NOT_INSTALLED');
       }
+      weDiag('stage-done', { stage: startStage, ms: Date.now() - stageStartedAt });
       const projectFile = target && target.projectFile;
       const scenePackage = target && target.scenePackage;
       const projectStat = projectFile && path.isAbsolute(projectFile) && path.extname(projectFile).toLowerCase() === '.json'
@@ -3874,11 +4105,13 @@ class WallpaperEngineRuntime {
       if (generation !== this.generation || this.disposed || this.pending !== session) {
         throw runtimeError('WALLPAPER_ENGINE_START_SUPERSEDED');
       }
+      weDiag('stage-done', { stage: startStage, ms: Date.now() - stageStartedAt });
       session.muteProperties = sanitizeMuteProperties(target && target.muteProperties);
       startStage = 'prepare-silent-project';
       session.launchFile = projectStat
         ? await this._prepareSilentLaunchFile(session, projectFile, scenePackage)
         : scenePackage;
+      weDiag('stage-done', { stage: startStage, ms: Date.now() - stageStartedAt });
       const previous = this.active;
       if (previous && previous.sessionId !== session.sessionId) {
         startStage = 'close-previous-window';
@@ -3889,10 +4122,21 @@ class WallpaperEngineRuntime {
         if (generation !== this.generation || this.disposed || this.pending !== session) {
           throw runtimeError('WALLPAPER_ENGINE_START_SUPERSEDED');
         }
+        weDiag('stage-done', { stage: startStage, ms: Date.now() - stageStartedAt });
       }
+      // Reap untracked leftovers from earlier sessions whose close was never
+      // confirmed. They are not this.active, so the stop above cannot see them,
+      // yet each one keeps a full WE Scene render alive on the desktop.
+      startStage = 'close-stale-windows';
+      await this._closeStaleWallpaperWindows(session.executable, session.locationTitle).catch(() => 0);
+      if (generation !== this.generation || this.disposed) {
+        throw runtimeError('WALLPAPER_ENGINE_START_SUPERSEDED');
+      }
+      weDiag('stage-done', { stage: startStage, ms: Date.now() - stageStartedAt });
       startStage = 'open-initial-window';
       await this._openInitialSessionWindow(session, generation);
       if (generation !== this.generation || this.disposed) throw runtimeError('WALLPAPER_ENGINE_START_SUPERSEDED');
+      weDiag('stage-done', { stage: startStage, ms: Date.now() - stageStartedAt });
       let earlyMuteError = null;
       const earlyMutePromise = this._muteSession(session, session.muteProperties)
         .then(() => true)
@@ -3914,6 +4158,7 @@ class WallpaperEngineRuntime {
       if (generation !== this.generation || this.disposed) throw runtimeError('WALLPAPER_ENGINE_START_SUPERSEDED');
       session.sourceId = String(captureSource && captureSource.id || '');
       session.windowSourceId = session.sourceId;
+      weDiag('stage-done', { stage: startStage, ms: Date.now() - stageStartedAt, sourceId: session.sourceId });
       startStage = 'apply-location-audio-properties';
       const mutedBeforeCapture = await earlyMutePromise;
       if (!mutedBeforeCapture) {
@@ -3928,9 +4173,11 @@ class WallpaperEngineRuntime {
 
       this.active = session;
       if (this.pending === session) this.pending = null;
+      weDiag('start-ok', { sessionId: session.sessionId, totalMs: Date.now() - stageStartedAt });
       return this._publicSession(session);
     } catch (error) {
       console.warn(`[Wallpaper Engine] native Scene start failed at ${startStage}:`, error && (error.code || error.message) || error);
+      weDiag('start-failed', { stage: startStage, ms: Date.now() - stageStartedAt, code: (error && error.code) || '', message: String((error && error.message) || error).slice(0, 200) });
       if (this.pending === session) this.pending = null;
       if (session.launched && (!this.active || this.active.sessionId !== session.sessionId)) {
         await this._closeSession(session);
@@ -4068,4 +4315,5 @@ module.exports = {
   readWallpaperPackageScene,
   forceSceneAudioSilent,
   nativeDwmThumbnailSurfaceScript,
+  noteWeDiagEvent,
 };

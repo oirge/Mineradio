@@ -48,6 +48,7 @@ const {
   gpuSwitchesForMode,
   noteGpuFailure,
   normalizeGpuMode,
+  OPT_IN_GPU_SWITCHES,
   resolveGpuMode,
   shouldDisableHardwareAcceleration,
 } = require('./gpu-guard');
@@ -267,6 +268,15 @@ console.log(`GPU 档位：${describeGpuMode(activeGpuMode, gpuGuardDecision.reas
 for (const [name, value] of gpuSwitchesForMode(activeGpuMode)) {
   if (value == null) app.commandLine.appendSwitch(name);
   else app.commandLine.appendSwitch(name, value);
+}
+// 高风险开关对齐上游：默认一个都不下发，只有用户显式用环境变量点开才加。
+// 透明无边框窗口配上被强开的独显 / 越过屏蔽名单的驱动组合，正是黑屏与卡顿的来源。
+if (activeGpuMode === 'default') {
+  for (const [name, value, envName] of OPT_IN_GPU_SWITCHES) {
+    if (process.env[envName] !== '1') continue;
+    if (value == null) app.commandLine.appendSwitch(name);
+    else app.commandLine.appendSwitch(name, value);
+  }
 }
 if (shouldDisableHardwareAcceleration(activeGpuMode)) app.disableHardwareAcceleration();
 if (gpuGuardDecision.resetOnVersionChange) {

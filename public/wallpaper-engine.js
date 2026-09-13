@@ -1,5 +1,16 @@
 /* Mineradio Wallpaper Engine renderer (ported from upstream). */
 (function () {
+  // 离线诊断：主进程开启 MINERADIO_WE_DIAG=1 时，preload 会暴露
+  // reportWallpaperEngineDiag；这里把渲染层关键节点写进同一个日志文件。
+  function weDiag(event, fields) {
+    try {
+      var api = wallpaperEngineDesktopApi();
+      if (api && typeof api.reportWallpaperEngineDiag === 'function') {
+        api.reportWallpaperEngineDiag(Object.assign({ event: event }, fields || {}));
+      }
+    } catch (e) { }
+  }
+  window.__mineradioWeDiag = weDiag;
   if (typeof normalizeForegroundFpsMode !== 'function') {
     window.normalizeForegroundFpsMode = function (value) {
       var mode = String(value || '').trim().toLowerCase();
@@ -1213,7 +1224,6 @@ async function ensureWallpaperEngineGlassSamplerCapture(sessionId, layerToken, a
       || video.srcObject !== stream) {
       throw new Error('WALLPAPER_GLASS_CAPTURE_FIRST_FRAME_TIMEOUT');
     }
-    var primingPixels = sampleWallpaperEngineGlassSamplerPixels(video);
     if (typeof api.activateWallpaperEngineDwmSurface !== 'function') {
       throw new Error('WALLPAPER_ENGINE_DWM_ACTIVATE_HANDLER_MISSING');
     }
@@ -1222,24 +1232,30 @@ async function ensureWallpaperEngineGlassSamplerCapture(sessionId, layerToken, a
       || !wallpaperEngineGlassSamplerIsCurrent(sessionId, layerToken, captureToken)) {
       throw new Error(activated && activated.error || 'WALLPAPER_ENGINE_DWM_SURFACE_FAILED');
     }
-    // The capture session was opened while the helper HWND was a plain black
-    // surface. Confirm its pixels changed after DWM activation before exposing
-    // the clipped sampler beneath the saved SVG glass. This remains reliable
-    // even when Chromium marks the transparent host as document.hidden.
-    var livePixels = await waitForWallpaperEngineGlassSamplerPixelChange(video, stream, primingPixels, 3600);
-    if (!livePixels || !wallpaperEngineGlassSamplerIsCurrent(sessionId, layerToken, captureToken)) {
-      throw new Error('WALLPAPER_GLASS_CAPTURE_LIVE_PIXELS_TIMEOUT');
-    }
+    // The DWM thumbnail is registered now, which is all this build needs: the
+    // native surface is what draws the wallpaper. The live-pixel comparison in
+    // upstream exists only to prove the SVG control-bar glass sampler receives
+    // fresh frames, and this build's app.js never consumes that sampler. Gating
+    // on it made complex/slow wallpapers fail with
+    // WALLPAPER_GLASS_CAPTURE_LIVE_PIXELS_TIMEOUT and then re-open a full
+    // 1080p60 capture on every retry — the visible "一卡一卡" churn and the
+    // transparent/black gap. Treat a successful activation as ready, and stop
+    // paying for a full-rate second capture of the wallpaper that nothing reads:
+    // drop the now-idle sampler stream to a near-static frame rate instead of
+    // tearing it down, so the activation/lifecycle semantics stay untouched.
     wallpaperEngineGlassCaptureRetryAttempt = 0;
+    if (typeof track.applyConstraints === 'function') {
+      Promise.resolve(track.applyConstraints({ frameRate: { ideal: 1, max: 1 } })).catch(function () { return null; });
+    }
     document.body.classList.add('wallpaper-engine-glass-sampler-ready');
     try {
       window.__mineradioWallpaperEngineGlassSamplerState = {
         ok: true,
         sessionId: sessionId,
-        captureMode: 'dwm-glass-svg-sampler',
+        captureMode: 'dwm-thumbnail-activate-only',
+        throttledFrameRate: 1,
         videoWidth: Number(video.videoWidth) || 0,
         videoHeight: Number(video.videoHeight) || 0,
-        meanAbsoluteRgbFromPriming: Number(livePixels.meanAbsoluteRgb) || 0,
         trackSettings: typeof track.getSettings === 'function' ? track.getSettings() : null
       };
     } catch (e2) { }
@@ -1316,11 +1332,29 @@ async function startWallpaperEngineNativeBackground(item, token) {
       wallpaperEngineLayerFailed(item, 'engine', token);
       return;
     }
-    wallpaperEngineLayerReady('dwm', token);
-    clearWallpaperEngineFreezeFrame(false);
+    // Keep the loading poster up for two paints plus a short settle so the
+    // native thumbnail has a real frame before the DOM goes transparent, then
+    // reveal in one step. A crossfade here is counterproductive: the poster is
+    // semi-transparent over the (black) base background, so fading it drags the
+    // whole player through a dark patch.
+    (function revealAfterNativeSettles() {
+      var settleToken = token;
+      var settleSessionId = sessionId;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          setTimeout(function () {
+            if (settleToken !== wallpaperEngineLayerToken
+              || !wallpaperEngineBackgroundActive()
+              || !wallpaperEngineNativeStartIsCurrent(item, settleToken)
+              || String(wallpaperEngineNativeSessionId || '') !== settleSessionId) return;
+            wallpaperEngineLayerReady('dwm', settleToken);
+            clearWallpaperEngineFreezeFrame(false);
+          }, 320);
+        });
+      });
+    })();
     return;
-  }
-  stopWallpaperEngineGlassCaptureStream(false);
+  }  stopWallpaperEngineGlassCaptureStream(false);
   var stream = takeWallpaperEnginePreparedCaptureStream(sessionId);
   if (!stream) {
     await reportWallpaperEngineCaptureResult(sessionId, false);
@@ -1473,7 +1507,7 @@ function clearWallpaperEngineLayerMedia(delay) {
 }
 
 function restoreOriginalBackgroundAfterWallpaperEngine() {
-  document.body.classList.remove('wallpaper-engine-active', 'wallpaper-engine-dwm-active');
+  document.body.classList.remove('wallpaper-engine-active', 'wallpaper-engine-dwm-active', 'wallpaper-engine-loading');
   stopWallpaperEngineGlassCaptureStream(false);
   if (typeof syncWallpaperEngineControlGlassSurface === 'function') {
     syncWallpaperEngineControlGlassSurface(true);
@@ -1493,6 +1527,8 @@ function suspendOriginalBackgroundForWallpaperEngine() {
 function wallpaperEngineLayerReady(kind, token) {
   if (token !== wallpaperEngineLayerToken || !wallpaperEngineBackgroundActive()) return;
   cancelWallpaperEngineHostRecovery(true);
+  document.body.classList.remove('wallpaper-engine-loading');
+  if (window.__mineradioWeDiag) window.__mineradioWeDiag('renderer-layer-ready', { kind: kind });
   var layer = document.getElementById('wallpaper-engine-layer');
   if (!layer) return;
   layer.classList.remove('ready', 'image-ready', 'video-ready', 'engine-ready', 'freeze-ready');
@@ -1508,6 +1544,11 @@ function wallpaperEngineLayerReady(kind, token) {
     animateWallpaperEngineControlGlassSurface(560);
   }
   if (kind === 'dwm') {
+    // This scheduling is not just the (currently unused) SVG glass sample: the
+    // helper's capture has to be opened while it is still a plain surface, and
+    // this call is what ultimately reaches activateWallpaperEngineDwmSurface to
+    // register the actual DWM thumbnail. Removing it leaves the native session
+    // active but dwmSurfaceActive false, so the wallpaper never comes up.
     scheduleWallpaperEngineGlassSamplerCapture(String(wallpaperEngineNativeSessionId || ''), token, 0);
   }
   suspendOriginalBackgroundForWallpaperEngine();
@@ -1518,6 +1559,8 @@ function wallpaperEngineLayerReady(kind, token) {
 
 function wallpaperEngineLayerFailed(item, attemptedKind, token) {
   if (token !== wallpaperEngineLayerToken) return;
+  document.body.classList.remove('wallpaper-engine-loading');
+  if (window.__mineradioWeDiag) window.__mineradioWeDiag('renderer-layer-failed', { attemptedKind: attemptedKind });
   var nativeStopPromise = Promise.resolve({ ok: true });
   if (attemptedKind === 'engine') {
     cancelWallpaperEngineFirstFrameWait();
@@ -1587,6 +1630,11 @@ function applyWallpaperEngineBackground(item, quiet) {
   var token = ++wallpaperEngineLayerToken;
   if (kind !== 'engine') stopWallpaperEngineNativeSession();
   restoreOriginalBackgroundAfterWallpaperEngine();
+  // Keep the base background opaque until the wallpaper layer can take over,
+  // so a translucent (window-opacity) background cannot expose the desktop or
+  // the WE window while it loads. Cleared by layer ready/failed/restore.
+  document.body.classList.add('wallpaper-engine-loading');
+  if (window.__mineradioWeDiag) window.__mineradioWeDiag('renderer-load-begin', { kind: kind, hasPreview: item.hasPreview === true });
   if (!layer || !image || !video) return false;
   updateWallpaperEngineEntryUi('正在加载 ' + (item.title || '壁纸') + '…');
 
@@ -1595,6 +1643,26 @@ function applyWallpaperEngineBackground(item, quiet) {
     if (kind === 'engine' && wallpaperEngineNativeHostUnavailable()) return;
     clearWallpaperEngineLayerMedia(0);
     if (kind === 'engine') {
+      // The native Scene takes several seconds to come up. Without something in
+      // the layer the module's own black backdrop shows for that whole window,
+      // which is the reported load-time flashing (the user's base background is
+      // #000000). Paint the project's preview poster first so loading reads as
+      // poster -> live wallpaper instead of bright -> black -> bright. It is
+      // replaced by the native DWM surface as soon as that is ready, and the
+      // layer is hidden entirely once dwm-active is set.
+      if (item.hasPreview) {
+        image.onload = function () {
+          if (token !== wallpaperEngineLayerToken || !wallpaperEngineBackgroundActive()) return;
+          if (wallpaperEngineSelection.id !== item.id) return;
+          // The native surface may already own the window by the time this
+          // poster decodes. Revealing the image layer then would push the live
+          // wallpaper off and put the still poster back, so skip it.
+          if (document.body.classList.contains('wallpaper-engine-dwm-active')) return;
+          wallpaperEngineLayerReady('image', token);
+        };
+        image.onerror = function () { };
+        image.src = wallpaperEngineMediaUrl(item, 'preview');
+      }
       startWallpaperEngineNativeBackground(item, token).catch(function (error) {
         if (token !== wallpaperEngineLayerToken) return;
         if (wallpaperEngineNativeHostUnavailable() || /WALLPAPER_ENGINE_START_SUPERSEDED/.test(String(error && (error.code || error.message) || error || ''))) return;
@@ -1763,6 +1831,22 @@ function restartWallpaperEngineAfterHostBoundsChange() {
 
 function handleWallpaperEngineHostBoundsChange(payload) {
   var phase = String(payload && payload.phase || 'restart');
+  if (phase === 'resident') {
+    var residentSessionId = String(payload && payload.sessionId || '');
+    if (!wallpaperEngineBackgroundActive()
+      || wallpaperEngineSelection.kind !== 'engine'
+      || wallpaperEngineCaptureMode !== 'dwm-thumbnail'
+      || residentSessionId !== String(wallpaperEngineNativeSessionId || '')) return;
+    // A minimized host no longer destroys the native DWM base. Restore only the
+    // renderer-side visual state; the Scene and its helper stayed resident, so
+    // nothing needs to be re-created or re-captured here.
+    wallpaperEngineHostBoundsPreparing = false;
+    wallpaperEngineDesktopPreviewActive = false;
+    wallpaperEngineDesktopPreviewUsesAsset = false;
+    clearWallpaperEngineFreezeFrame(false);
+    updateWallpaperEngineEntryUi();
+    return;
+  }
   if (phase === 'restart') {
     if (!wallpaperEngineHostBoundsPreparing && !wallpaperEngineDesktopPreviewActive) return;
     // BrowserWindow.show()/restore can fire before Chromium has published the

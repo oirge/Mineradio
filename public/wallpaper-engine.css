@@ -145,6 +145,17 @@ body.wallpaper-engine-active #album-bg-next {
   opacity: 0 !important
 }
 
+/* While a Wallpaper Engine scene is loading, the layer above is still
+   transparent, so whatever sits behind the window shows through. When the
+   user's window-opacity setting makes #custom-bg translucent, that means the
+   live desktop (and the WE pop-out being adopted behind the host) is visible
+   and animating — the load-time flashing. Force the base color opaque for the
+   duration of the load, then hand back to the normal background once the
+   wallpaper layer is ready. */
+body.wallpaper-engine-loading #custom-bg {
+  background: rgb(var(--custom-bg-color-rgb, 5, 6, 8)) !important
+}
+
 body.custom-bg-glass-active #custom-bg::after {
   background:
     radial-gradient(circle at 22% 8%, rgba(255, 255, 255, var(--custom-bg-glass-veil, 0)), transparent 34%),

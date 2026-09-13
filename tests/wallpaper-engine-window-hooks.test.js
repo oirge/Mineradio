@@ -130,5 +130,7 @@ test('旧主窗口关闭后新窗口重新挂载全部 Wallpaper Engine 窗口 h
     'enter-html-full-screen', 'leave-html-full-screen',
   ]);
   assert.deepEqual(calls.stopped, ['window-closed', 'window-closed']);
-  assert.deepEqual(calls.timers, [40, 40, 40, 40]);
+  // Fullscreen bounds changes now go straight into the debounced
+  // scheduleHostBoundsRestart instead of the old per-event setTimeout wrappers.
+  assert.deepEqual(calls.timers, []);
 });

@@ -173,6 +173,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   updateWallpaperEngineGlassSurface: (payload) => ipcRenderer.send('mineradio-wallpaper-engine-glass-surface', payload || {}),
   reportWallpaperEnginePointerActivity: (payload) => ipcRenderer.send('mineradio-wallpaper-engine-pointer-activity', payload || {}),
   stopWallpaperEngineScene: (payload) => ipcRenderer.invoke('mineradio-wallpaper-engine-stop-scene', payload || {}),
+  reportWallpaperEngineDiag: (payload) => ipcRenderer.send('mineradio-wallpaper-engine-diag', payload || {}),
   onWallpaperEngineHostBoundsChanged: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload || {});
