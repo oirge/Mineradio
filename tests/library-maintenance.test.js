@@ -633,3 +633,88 @@ test('探测 IPC 走可信主框架校验，preload 只暴露路径不暴露内�
   assert.ok(preload.indexOf("probeLocalMusicFiles: (paths) => ipcRenderer.invoke('mineradio-local-music-probe-entries'") > 0);
   assert.ok(preload.indexOf('Array.isArray(paths) ? paths : []') > 0);
 });
+
+/**
+ * 分组目录页的「加载更多」回归：把面板渲染整段搬进隔离 realm，
+ * 用 700 个艺术家分组 + 空 songs 复现目录页形态。
+ * @param {object} extra 额外注入的全局。
+ * @returns {object} vm 上下文（附带捕获的 innerHTML）。
+ */
+function createGroupPanelContext(extra = {}) {
+  const source = readSource(path.join('public', 'app.js'));
+  const block = readFunctionBlock(source, 'function localPlaylistsDomSignature(playlists)', 'function toggleLocalLibraryLike(index)');
+  const captured = { html: '' };
+  const entries = [];
+  for (let index = 0; index < 700; index++) {
+    entries.push({ value: `艺术家${index}`, count: 2, cover: '' });
+  }
+  const context = Object.assign({
+    LOCAL_ONLY_MODE: true,
+    LOCAL_LIBRARY_VALUE_KIND: 'library-value:',
+    userPlaylists: [],
+    playlistRenderSeq: 0,
+    playlistPanelLastDomSignature: '',
+    playlistPanelRenderLimit: 0,
+    playlistPanelBatchSize: () => 60,
+    normalizeLocalPlaylistKind: (kind) => String(kind || 'library'),
+    SPECIAL_LIKED_PLAYLIST_ID: 'special-liked',
+    animateVisiblePanelList: () => {},
+    renderUserPlaylistsList: () => {},
+    localLibraryPlaylistSelection: 'library-group:artist',
+    isLocalLibraryCategoryKind: () => true,
+    localLibraryCategoryView: () => ({
+      mode: 'group',
+      id: 'library-group:artist',
+      title: '艺术家',
+      parent: 'library',
+      def: { field: 'artist', title: '艺术家', icon: '◉', unit: '位', unknown: '未知艺术家' },
+    }),
+    localLibraryGroupEntries: () => entries,
+    localLibraryValueKind: (field, value) => `library-value:${field}:${value}`,
+    localPlaylistSongs: () => [],
+    localPlaylistById: () => null,
+    readLocalPlaylists: () => [],
+    getSpecialLikedSongs: () => [],
+    songCoverSignature: () => '',
+    songCoverSrc: () => '',
+    songDisplaySubtitle: () => '',
+    songListenStatBrief: () => '',
+    localLibraryCategoryStatMode: () => '',
+    localLibraryPlaylistDomSignature: () => '',
+    localLibraryCategoryDomSignature: () => 'group-sig',
+    localLibraryMaintenanceCardSub: () => '',
+    isSongLiked: () => false,
+    playlistPlusIconSvg: () => '+',
+    heartIconSvg: () => '♥',
+    document: {
+      getElementById: (id) => (id === 'pl-list' ? {
+        set innerHTML(value) { captured.html = String(value); },
+        get innerHTML() { return captured.html; },
+      } : null),
+    },
+    escHtml: (value) => String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+  }, extra);
+  context.__captured = captured;
+  vm.runInNewContext(`${block}\nthis.api = this;`, context);
+  return context;
+}
+
+test('分组目录页「加载更多」：songs 为空时渲染不得把懒加载额度钳回一批', () => {
+  const api = createGroupPanelContext();
+
+  api.renderLocalLibraryPlaylistPanel({ animate: false });
+  assert.equal(api.playlistPanelRenderLimit, 60);
+  assert.ok(api.__captured.html.indexOf('加载更多 60/700') > 0);
+
+  // 点击/滚动都会走 grow：上限 +60 后重渲染，卡片必须真的多出一批。
+  api.growPlaylistPanelRenderLimit();
+  assert.equal(api.playlistPanelRenderLimit, 120);
+  assert.ok(api.__captured.html.indexOf('加载更多 120/700') > 0,
+    '分组页渲染把上限钳回 songs.length（0）会吃掉增长，按钮永远停在 60/700');
+
+  // 一直加到超出总数，按钮消失且不再超发。
+  for (let index = 0; index < 12; index++) api.growPlaylistPanelRenderLimit();
+  assert.equal(api.playlistPanelRenderLimit, 700);
+  assert.equal(api.__captured.html.indexOf('data-pl-load-more'), -1);
+});
