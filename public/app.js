@@ -635,7 +635,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.1';
+var APP_VERSION = '2.1.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -29725,11 +29725,15 @@ function renderLocalLibraryPlaylistPanel(opts) {
   var seq = ++playlistRenderSeq;
   var selectionSignature = selectedKind;
   var panelBatch = playlistPanelBatchSize();
-  playlistPanelRenderLimit = Math.max(panelBatch, Math.min(songs.length, playlistPanelRenderLimit || panelBatch));
+  /* 分组目录页铺的是分组卡片，songs 是空的；上限的钳制口径必须是当前视图的
+     卡片数，否则每次渲染都把额度钳回一批，「加载更多」永远加不出下一批。 */
+  var directoryView = !!(selectedCategory && (selectedCategory.mode === 'home' || selectedCategory.mode === 'group'));
+  var renderLimitCap = directoryView ? localLibraryPlaylistPanelItemCount() : songs.length;
+  playlistPanelRenderLimit = Math.max(panelBatch, Math.min(renderLimitCap, playlistPanelRenderLimit || panelBatch));
   var visibleLength = Math.min(songs.length, playlistPanelRenderLimit);
   var specialCoverSignature = specialSongs.length ? songCoverSignature(specialSongs[0]) : '';
   var rowStatMode = localLibraryCategoryStatMode(selectedCategory);
-  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + localLibraryPlaylistDomSignature(songs, visibleLength, rowStatMode) + '|' + localLibraryCategoryDomSignature(selectedCategory);
+  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + localLibraryPlaylistDomSignature(songs, visibleLength, rowStatMode) + '|' + localLibraryCategoryDomSignature(selectedCategory) + (directoryView ? '|l' + playlistPanelRenderLimit : '');
   if (domSignature === playlistPanelLastDomSignature) return;
   playlistPanelLastDomSignature = domSignature;
   var html = '';
