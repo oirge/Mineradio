@@ -635,7 +635,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.2';
+var APP_VERSION = '2.1.3';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -29592,13 +29592,17 @@ function localPlaylistsDomSignature(playlists) {
   }
   return signature;
 }
-function growPlaylistPanelRenderLimit() {
+function growPlaylistPanelRenderLimit(loadAll) {
   var total = LOCAL_ONLY_MODE
     ? localLibraryPlaylistPanelItemCount()
     : userPlaylists.length;
   if (!total) return;
   var batch = playlistPanelBatchSize();
-  var next = Math.min(total, (playlistPanelRenderLimit || batch) + batch);
+  /* 点按钮一次铺完当前视图；滚动仍按批增长——初始渲染和普通滚动不能
+     一下子铺几千张卡片把面板卡死，「全部加载」只留给用户的显式点击。 */
+  var next = loadAll === true
+    ? total
+    : Math.min(total, (playlistPanelRenderLimit || batch) + batch);
   if (next <= playlistPanelRenderLimit) return;
   playlistPanelRenderLimit = next;
   if (LOCAL_ONLY_MODE) renderLocalLibraryPlaylistPanel({ animate: true });
@@ -29697,7 +29701,7 @@ function localLibraryGroupCardsHtml(def) {
       '播放' + entry.value);
   }
   if (entries.length > visible) {
-    html += '<button type="button" class="fx-mini-btn ghost pl-load-more" data-pl-load-more="1">加载更多 ' + visible + '/' + entries.length + '</button>';
+    html += '<button type="button" class="fx-mini-btn ghost pl-load-more" data-pl-load-more="1">加载全部 ' + visible + '/' + entries.length + '</button>';
   }
   return html;
 }
@@ -29822,7 +29826,7 @@ function renderLocalLibraryPlaylistPanel(opts) {
     '</div>';
   }
   if (songs.length > visibleLength) {
-    html += '<button type="button" class="fx-mini-btn ghost pl-load-more" data-pl-load-more="1">加载更多 ' + visibleLength + '/' + songs.length + '</button>';
+    html += '<button type="button" class="fx-mini-btn ghost pl-load-more" data-pl-load-more="1">加载全部 ' + visibleLength + '/' + songs.length + '</button>';
   }
   $pl.innerHTML = html;
   if (opts.animate && seq === playlistRenderSeq) animateVisiblePanelList($pl, '.pl-card', document.getElementById('playlist-panel'));
@@ -30027,7 +30031,7 @@ document.getElementById('pl-list').addEventListener('click', function(e){
   if (loadMore) {
     e.preventDefault();
     e.stopPropagation();
-    growPlaylistPanelRenderLimit();
+    growPlaylistPanelRenderLimit(true);
     return;
   }
   var detailLoadMore = e.target && e.target.closest ? e.target.closest('[data-pl-detail-load-more]') : null;
