@@ -1960,8 +1960,9 @@ function renderWallpaperEngineManualRoots() {
   var roots = wallpaperEngineLibrarySnapshot && Array.isArray(wallpaperEngineLibrarySnapshot.manualRoots)
     ? wallpaperEngineLibrarySnapshot.manualRoots : [];
   host.innerHTML = roots.map(function (root) {
-    return '<span class="wallpaper-engine-root-chip"><span title="手动导入目录">' + escHtml(root.name || '导入目录') + '</span>' +
-      '<button type="button" data-wallpaper-action="remove-root" data-root-id="' + escHtml(root.id || '') + '" title="移除此索引目录">×</button></span>';
+    var isMedia = root.kind === 'media';
+    return '<span class="wallpaper-engine-root-chip"><span title="' + (isMedia ? '手动导入文件' : '手动导入目录') + '">' + escHtml(root.name || (isMedia ? '导入视频' : '导入目录')) + '</span>' +
+      '<button type="button" data-wallpaper-action="remove-root" data-root-id="' + escHtml(root.id || '') + '" title="' + (isMedia ? '移除此索引文件' : '移除此索引目录') + '">×</button></span>';
   }).join('');
 }
 
@@ -2308,7 +2309,7 @@ async function chooseWallpaperEngineProjectFile() {
     if (snapshot && snapshot.canceled) return;
     if (!snapshot || snapshot.ok === false) throw new Error(snapshot && snapshot.error || '导入失败');
     consumeWallpaperEngineSnapshot(snapshot);
-    showToast('Wallpaper Engine 项目已加入索引；Scene 将由本机官方引擎实时运行');
+    showToast('已加入壁纸索引：视频/图片直接播放，Scene 由本机 Wallpaper Engine 原生引擎实时运行');
   } catch (e) {
     failure = e.message || '项目文件导入失败';
     showToast(failure);

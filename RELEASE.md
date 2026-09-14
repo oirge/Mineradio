@@ -1,5 +1,12 @@
 # 发布流程
 
+## v2.1.4 支持直接导入 mp4 视频壁纸（本地构建，未发布）
+
+- 发布版本从 `2.1.3` 提升为 `2.1.4`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流 description+默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
+- 内容：① 壁纸库单文件导入支持 mp4 / webm / mov / m4v 视频与 jpg / png / webp / gif 图片，直接作为可播放壁纸（渲染器内循环播放，与 WE Video 类型一致），不走 DWM 原生抓取，因此没有加载闪屏与拖动重影；② 库层新增独立媒体直索引（`indexDirectMedia`）与 `manualMediaFiles` 存档，无 `project.json` 的视频文件也能进索引并可单独移除；③ 项目媒体解析失败时由同目录手动导入的视频接管，且同一目录只产生一个条目、Scene 项目不改标；④ `project.json` 缺 `type` 但指向可解析媒体时按直接媒体索引，不再掉进仅预览。
+- 测试：新增 `tests/wallpaper-engine-library.test.js` 7 例（mp4 导入可播放 + 协议 Range 分段 / 无清单标题与类型 / 移除后存档清空且重启不复活 / 媒体失效时视频接管且去重 / 缺 `type` 直播放兜底 / Scene 目录内导入视频不改标 / 导入入口放开 mp4-webm）。全量 Node 回归 **1192/1192**（v2.1.3 基线 `1185`）。
+- 本次只做**本地构建并覆盖安装**（产物 `Mineradio-oirge-2.1.4-Setup.exe`），**未创建 tag、未发 GitHub Release**；要发布需另行走 `workflow_dispatch`。
+
 ## v2.1.0 多行歌词对齐上游 + 默认单行关闭翻译
 
 - 发布版本从 `2.0.10` 提升为 `2.1.0`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流 description+默认 tag）一起动。

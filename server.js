@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '电影镜头节奏更松',
-  '音源失败自动换源',
-  '右上角更新提示',
+  '壁纸库可直接导入 mp4 视频',
+  '视频壁纸没有闪屏与拖动重影',
+  'Scene 场景包仍由 WE 原生运行',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

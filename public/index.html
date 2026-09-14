@@ -1074,13 +1074,13 @@ if (document.fonts && document.fonts.load) {
       <div>
         <div class="wallpaper-engine-kicker">LOCAL WALLPAPER LIBRARY</div>
         <h2 id="wallpaper-engine-modal-title">Wallpaper Engine 壁纸导入</h2>
-        <p>只建立本地索引，不复制大型项目；Video 直接播放，Scene 项目与有效 PKGV 场景包由本机 Wallpaper Engine 原生引擎实时运行。</p>
+        <p>只建立本地索引，不复制大型项目；Video 与直接导入的 mp4/图片直接播放，Scene 项目与有效 PKGV 场景包由本机 Wallpaper Engine 原生引擎实时运行。</p>
       </div>
       <button class="wallpaper-engine-close" type="button" onclick="closeWallpaperEngineLibrary()" aria-label="关闭">×</button>
     </div>
     <div class="wallpaper-engine-toolbar">
       <input id="wallpaper-engine-search" type="search" placeholder="搜索壁纸名称" autocomplete="off" oninput="scheduleWallpaperEngineLibraryRender()">
-      <button class="fx-mini-btn ghost" type="button" onclick="chooseWallpaperEngineProjectFile()">导入项目 / 场景包</button>
+      <button class="fx-mini-btn ghost" type="button" onclick="chooseWallpaperEngineProjectFile()">导入项目 / 视频</button>
       <button class="fx-mini-btn ghost" type="button" onclick="chooseWallpaperEngineDirectory()">导入目录</button>
       <button class="fx-mini-btn ghost" type="button" onclick="refreshWallpaperEngineLibrary()">刷新识别</button>
       <button class="fx-mini-btn ghost" type="button" onclick="restoreHiddenWallpaperEngineItems()">恢复隐藏</button>

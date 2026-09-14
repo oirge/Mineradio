@@ -546,10 +546,18 @@ function createWallpaperEngineBridge(options = {}) {
         if (!isTrustedIpc(event)) return { ok: false, canceled: false, projects: [], count: 0, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
         const win = mainWindow();
         const options = {
-          title: '选择 project.json 或场景包 (.pkg/.pak)',
-          buttonLabel: '导入此项目',
+          title: '选择 project.json、场景包 (.pkg/.pak) 或视频/图片',
+          buttonLabel: '导入到壁纸索引',
           properties: ['openFile'],
-          filters: [{ name: 'Wallpaper Engine 项目', extensions: ['pkg', 'pak', 'json'] }],
+          filters: [
+            {
+              name: 'Wallpaper Engine 项目 / 视频 / 图片',
+              extensions: ['pkg', 'pak', 'json', 'mp4', 'webm', 'mov', 'm4v', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
+            },
+            { name: '视频', extensions: ['mp4', 'webm', 'mov', 'm4v'] },
+            { name: '图片', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] },
+            { name: '所有文件', extensions: ['*'] },
+          ],
         };
         const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
         if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: true, canceled: true };

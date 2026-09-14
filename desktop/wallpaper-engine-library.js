@@ -47,6 +47,14 @@ const VIDEO_MIME = new Map([
   ['.mov', 'video/quicktime'],
 ]);
 const SAFE_MIME = new Map([...IMAGE_MIME, ...VIDEO_MIME]);
+// Extensions accepted by the single-file importer. The same set backs
+// `SAFE_MIME`, so anything importable here is also servable over the custom
+// protocol without a second whitelist to keep in sync.
+const MEDIA_FILE_EXTENSIONS = new Set([...VIDEO_MIME.keys(), ...IMAGE_MIME.keys()]);
+const PROJECT_PREVIEW_CANDIDATES = [
+  'preview.jpg', 'preview.jpeg', 'preview.png', 'preview.webp', 'preview.gif',
+  'cover.jpg', 'cover.png', 'cover.webp', 'cover.gif',
+];
 
 function registerWallpaperEngineScheme(protocol) {
   protocol.registerSchemesAsPrivileged([{
@@ -436,7 +444,7 @@ async function readProjectManifest(projectRoot) {
   }
 }
 
-async function indexProject(projectRoot, source, scenePackageOverride = '') {
+async function indexProject(projectRoot, source, scenePackageOverride = '', mediaOverride = '') {
   const manifest = await readProjectManifest(projectRoot);
   if (!manifest) return null;
   const project = manifest.value;
@@ -444,9 +452,22 @@ async function indexProject(projectRoot, source, scenePackageOverride = '') {
   const directExt = path.extname(String(project.file || '')).toLowerCase();
   const inferredMedia = VIDEO_MIME.has(directExt) ? 'video' : (IMAGE_MIME.has(directExt) ? 'image' : '');
   const allowDirectMedia = projectType === 'video' || projectType === 'image' || (!projectType && !!inferredMedia);
-  const media = allowDirectMedia
-    ? await firstProjectFile(projectRoot, [project.file], SAFE_MIME)
+  // A user-picked media file wins over the manifest's own reference so an
+  // imported .mp4 can stand in when project.file points at a file we cannot
+  // serve (an unmounted drive, a renamed asset, or a Scene-internal name).
+  // Scene projects keep their native engine path: overriding their media would
+  // relabel a live Scene render as a plain video.
+  const mediaOverrideName = mediaOverride && projectType !== 'scene'
+    ? path.basename(String(mediaOverride))
     : '';
+  const declaredMedia = await firstProjectFile(projectRoot, [
+    mediaOverrideName,
+    allowDirectMedia ? project.file : '',
+  ].filter(Boolean), SAFE_MIME);
+  // A folder whose manifest names a resolvable media file but carries no usable
+  // `type` is still one playable asset; index it rather than dropping it into
+  // the preview-only bucket.
+  const media = declaredMedia || await firstProjectFile(projectRoot, [project.file], SAFE_MIME);
   const overrideRelative = scenePackageOverride
     ? path.relative(projectRoot, scenePackageOverride)
     : '';
@@ -463,16 +484,7 @@ async function indexProject(projectRoot, source, scenePackageOverride = '') {
     project.preview,
     project.cover,
     project.poster,
-    'preview.jpg',
-    'preview.jpeg',
-    'preview.png',
-    'preview.webp',
-    'preview.gif',
-    'cover.jpg',
-    'cover.png',
-    'cover.webp',
-    'cover.gif',
-  ], IMAGE_MIME);
+  ].concat(PROJECT_PREVIEW_CANDIDATES), IMAGE_MIME);
   if (!media && !preview && !scenePackage) return null;
 
   const id = opaqueId(projectRoot);
@@ -521,6 +533,68 @@ async function indexProject(projectRoot, source, scenePackageOverride = '') {
   };
 }
 
+// Index a media file the user picked by hand. Such a file has no Wallpaper
+// Engine project root of its own, so the containing folder stands in as the
+// root: every path stays inside it and the media URL keeps the same
+// "must resolve inside the project root" guarantee the protocol already
+// enforces. `directMedia` marks the record so manifest-dependent callers skip
+// the (absent) project.json instead of treating it as a broken project.
+async function indexDirectMedia(file, source) {
+  const ext = path.extname(file).toLowerCase();
+  const mediaType = VIDEO_MIME.has(ext) ? 'video' : (IMAGE_MIME.has(ext) ? 'image' : '');
+  if (!mediaType) return null;
+  const stat = await statSafe(file);
+  if (!stat || !stat.isFile()) return null;
+  let realRoot = '';
+  let realFile = '';
+  try {
+    realRoot = await fs.promises.realpath(path.dirname(file));
+    realFile = await fs.promises.realpath(file);
+  } catch (_) {
+    return null;
+  }
+  if (!isInside(realRoot, realFile)) return null;
+  const manifest = await readProjectManifest(realRoot);
+  const project = manifest ? manifest.value : {};
+  const title = sanitizeText(project.title, path.parse(realFile).name);
+  const preview = await firstProjectFile(realRoot, PROJECT_PREVIEW_CANDIDATES, IMAGE_MIME);
+  return {
+    item: {
+      id: opaqueId(realFile),
+      title,
+      projectType: mediaType,
+      mediaType,
+      mediaAnimated: ext === '.gif',
+      playable: true,
+      enginePlayable: false,
+      previewOnly: false,
+      hasPreview: !!preview,
+      previewAnimated: path.extname(preview).toLowerCase() === '.gif',
+      source: source.kind,
+      sourceLabel: source.label,
+      workshopId: '',
+      propertyCount: 0,
+      audioPropertyCount: 0,
+      mutedAudioPropertyCount: 0,
+      updatedAt: Math.round(Number(stat.mtimeMs) || 0),
+      safetyMode: 'direct-media',
+      direct: true,
+    },
+    record: {
+      id: opaqueId(realFile),
+      title,
+      mediaType,
+      projectRoot: realRoot,
+      projectFile: manifest ? manifest.file : '',
+      media: realFile,
+      preview,
+      scenePackage: '',
+      workshopId: '',
+      directMedia: true,
+    },
+  };
+}
+
 function mimeForPath(file) {
   return SAFE_MIME.get(path.extname(file).toLowerCase()) || 'application/octet-stream';
 }
@@ -551,6 +625,7 @@ class WallpaperEngineLibrary {
     const config = this.readConfig();
     this.manualRoots = config.manualRoots;
     this.manualProjectFiles = config.manualProjectFiles;
+    this.manualMediaFiles = config.manualMediaFiles;
     this.index = new Map();
     this.mediaToken = crypto.randomBytes(24).toString('hex');
     this.snapshot = null;
@@ -570,13 +645,17 @@ class WallpaperEngineLibrary {
       const manualProjectFiles = Array.isArray(raw && raw.manualProjectFiles)
         ? raw.manualProjectFiles.map(normalizeAbsolutePath).filter(Boolean).slice(0, 64)
         : [];
+      const manualMediaFiles = Array.isArray(raw && raw.manualMediaFiles)
+        ? raw.manualMediaFiles.map(normalizeAbsolutePath).filter(Boolean).slice(0, 64)
+        : [];
       return {
         version: 2,
         manualRoots: [...new Set(manualRoots)],
         manualProjectFiles: [...new Set(manualProjectFiles)],
+        manualMediaFiles: [...new Set(manualMediaFiles)],
       };
     } catch (_) {
-      return { version: 2, manualRoots: [], manualProjectFiles: [] };
+      return { version: 2, manualRoots: [], manualProjectFiles: [], manualMediaFiles: [] };
     }
   }
 
@@ -587,6 +666,7 @@ class WallpaperEngineLibrary {
       version: 2,
       manualRoots: this.manualRoots,
       manualProjectFiles: this.manualProjectFiles,
+      manualMediaFiles: this.manualMediaFiles,
     }, null, 2), 'utf8');
     await fs.promises.rename(temp, this.configPath).catch(async () => {
       await fs.promises.copyFile(temp, this.configPath);
@@ -595,10 +675,17 @@ class WallpaperEngineLibrary {
   }
 
   manualRootSummary() {
-    return this.manualRoots.map((root) => ({
+    const roots = this.manualRoots.map((root) => ({
+      kind: 'directory',
       id: opaqueId(root),
       name: path.basename(root) || path.parse(root).root || '导入目录',
     }));
+    const media = this.manualMediaFiles.map((file) => ({
+      kind: 'media',
+      id: opaqueId(file),
+      name: path.basename(file) || '导入视频',
+    }));
+    return roots.concat(media);
   }
 
   async addManualRoot(root) {
@@ -621,8 +708,11 @@ class WallpaperEngineLibrary {
     if (path.basename(file).toLowerCase() === 'project.json') {
       return this.addManualRoot(path.dirname(file));
     }
+    if (MEDIA_FILE_EXTENSIONS.has(path.extname(file).toLowerCase())) {
+      return this.addManualMediaFile(file);
+    }
     if (!SCENE_PACKAGE_EXTENSIONS.has(path.extname(file).toLowerCase())) {
-      throw new Error('请选择 project.json 或 Wallpaper Engine 场景包（.pkg/.pak）');
+      throw new Error('请选择 project.json、Wallpaper Engine 场景包（.pkg/.pak）或视频/图片（.mp4/.webm/.mov/.m4v/.jpg…）');
     }
     const scenePackage = await validateScenePackage(file);
     if (!scenePackage) {
@@ -645,15 +735,50 @@ class WallpaperEngineLibrary {
     return this.list({ force: true });
   }
 
+  // Import a standalone video/图片 as a playable wallpaper. The picked file is
+  // always recorded: when a project manifest sits beside it the file becomes
+  // that project's media reference (the folder is registered too, and the scan
+  // skips a second direct entry for it), otherwise it is indexed as a standalone
+  // asset. Either way one picked file yields exactly one entry.
+  async addManualMediaFile(file) {
+    file = normalizeAbsolutePath(file);
+    const stat = file ? await statSafe(file) : null;
+    if (!stat || !stat.isFile()) throw new Error('请选择存在的视频或图片文件');
+    if (!MEDIA_FILE_EXTENSIONS.has(path.extname(file).toLowerCase())) {
+      throw new Error('只支持导入视频（.mp4/.webm/.mov/.m4v）或图片（.jpg/.jpeg/.png/.webp/.gif）文件');
+    }
+    const directory = path.dirname(file);
+    if (await readProjectManifest(directory)
+      && !this.manualRoots.some((value) => pathKey(value) === pathKey(directory))) {
+      this.manualRoots.push(directory);
+      this.manualRoots = this.manualRoots.slice(-32);
+    }
+    if (!this.manualMediaFiles.some((value) => pathKey(value) === pathKey(file))) {
+      this.manualMediaFiles.push(file);
+      this.manualMediaFiles = this.manualMediaFiles.slice(-64);
+    }
+    await this.saveConfig();
+    return this.list({ force: true });
+  }
+
   async removeManualRoot(id) {
-    const removedRoots = this.manualRoots.filter((root) => opaqueId(root) === String(id || ''));
+    const target = String(id || '');
+    const removedRoots = this.manualRoots.filter((root) => opaqueId(root) === target);
+    const removedMedia = this.manualMediaFiles.filter((file) => opaqueId(file) === target);
     const beforeRoots = this.manualRoots.length;
-    const beforeFiles = this.manualProjectFiles.length;
+    const beforeProjectFiles = this.manualProjectFiles.length;
+    const beforeMediaFiles = this.manualMediaFiles.length;
     this.manualRoots = this.manualRoots.filter((root) => !removedRoots.includes(root));
     this.manualProjectFiles = this.manualProjectFiles.filter((file) => (
       !removedRoots.some((root) => isInside(path.resolve(root), path.resolve(file)))
     ));
-    if (this.manualRoots.length !== beforeRoots || this.manualProjectFiles.length !== beforeFiles) await this.saveConfig();
+    this.manualMediaFiles = this.manualMediaFiles.filter((file) => (
+      !removedMedia.includes(file)
+      && !removedRoots.some((root) => isInside(path.resolve(root), path.resolve(file)))
+    ));
+    if (this.manualRoots.length !== beforeRoots
+      || this.manualProjectFiles.length !== beforeProjectFiles
+      || this.manualMediaFiles.length !== beforeMediaFiles) await this.saveConfig();
     return this.list({ force: true });
   }
 
@@ -688,6 +813,11 @@ class WallpaperEngineLibrary {
     for (const file of this.manualProjectFiles) {
       manualPackageByRoot.set(pathKey(path.dirname(file)), file);
     }
+    const manualMediaByRoot = new Map();
+    for (const file of this.manualMediaFiles) {
+      const key = pathKey(path.dirname(file));
+      if (!manualMediaByRoot.has(key)) manualMediaByRoot.set(key, file);
+    }
     const projectSources = new Map();
     for (const source of sources) {
       const projects = source.direct ? await directProjectDirectories(source.root) : await manualProjectDirectories(source.root);
@@ -706,12 +836,31 @@ class WallpaperEngineLibrary {
         indexed = await indexProject(
           value.projectRoot,
           value.source,
-          manualPackageByRoot.get(pathKey(value.projectRoot)) || ''
+          manualPackageByRoot.get(pathKey(value.projectRoot)) || '',
+          manualMediaByRoot.get(pathKey(value.projectRoot)) || ''
         );
       } catch (_) { continue; }
       if (!indexed || nextIndex.has(indexed.item.id)) continue;
       projects.push(indexed.item);
       nextIndex.set(indexed.item.id, indexed.record);
+    }
+    // Hand-picked media files are indexed even when their folder holds no
+    // project.json. A file whose folder *is* an indexed project is already
+    // represented by that project entry (via the media override above), so
+    // skipping it here keeps one folder at one entry.
+    const indexedProjectRoots = new Set([...projectSources.keys()]);
+    for (const file of this.manualMediaFiles) {
+      if (this.disposed || generation !== this.generation) break;
+      if (indexedProjectRoots.has(pathKey(path.dirname(file)))) continue;
+      let indexed = null;
+      try {
+        indexed = await indexDirectMedia(file, { kind: 'imported', label: '手动导入' });
+      } catch (_) { continue; }
+      if (!indexed) continue;
+      nextIndex.set(indexed.item.id, indexed.record);
+      const existing = projects.findIndex((item) => item.id === indexed.item.id);
+      if (existing >= 0) projects[existing] = indexed.item;
+      else projects.push(indexed.item);
     }
     projects.sort((a, b) => Number(b.playable) - Number(a.playable) || Number(b.enginePlayable) - Number(a.enginePlayable) || a.title.localeCompare(b.title, 'zh-CN'));
     if (!this.disposed && generation === this.generation) this.index = nextIndex;
@@ -776,7 +925,7 @@ class WallpaperEngineLibrary {
     if (!/^[a-f0-9]{24}$/.test(id)) throw new Error('WALLPAPER_SCENE_ID_INVALID');
     if (!this.snapshot && !this.scanPromise) await this.list({ force: false });
     const record = this.index.get(id);
-    if (!record || !record.scenePackage) throw new Error('WALLPAPER_SCENE_NOT_FOUND');
+    if (!record || record.directMedia || !record.scenePackage) throw new Error('WALLPAPER_SCENE_NOT_FOUND');
     const target = await resolveProjectFile(record.projectRoot, path.relative(record.projectRoot, record.scenePackage), SCENE_PACKAGE_EXTENSIONS);
     const scenePackage = await validateScenePackage(target);
     if (!scenePackage) throw new Error('WALLPAPER_SCENE_PACKAGE_INVALID');
@@ -802,6 +951,19 @@ class WallpaperEngineLibrary {
     if (!this.snapshot && !this.scanPromise) await this.list({ force: false });
     const record = this.index.get(id);
     if (!record) throw new Error('WALLPAPER_PROJECT_NOT_FOUND');
+    if (record.directMedia) {
+      return {
+        ok: true,
+        id,
+        title: record.title || path.basename(record.media || ''),
+        projectType: record.mediaType || 'video',
+        workshopId: '',
+        propertyCount: 0,
+        audioPropertyCount: 0,
+        mutedAudioPropertyCount: 0,
+        properties: [],
+      };
+    }
     const manifest = await readProjectManifest(record.projectRoot);
     if (!manifest) throw new Error('WALLPAPER_PROJECT_MANIFEST_INVALID');
     const project = manifest.value;
