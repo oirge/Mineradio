@@ -1,11 +1,18 @@
 # 发布流程
 
-## v2.1.4 支持直接导入 mp4 视频壁纸（本地构建，未发布）
+## v2.1.4 支持直接导入 mp4 视频壁纸
 
 - 发布版本从 `2.1.3` 提升为 `2.1.4`；五处版本钉（`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流 description+默认 tag）一起动。安装身份、数据目录与自动更新线路保持不变。
 - 内容：① 壁纸库单文件导入支持 mp4 / webm / mov / m4v 视频与 jpg / png / webp / gif 图片，直接作为可播放壁纸（渲染器内循环播放，与 WE Video 类型一致），不走 DWM 原生抓取，因此没有加载闪屏与拖动重影；② 库层新增独立媒体直索引（`indexDirectMedia`）与 `manualMediaFiles` 存档，无 `project.json` 的视频文件也能进索引并可单独移除；③ 项目媒体解析失败时由同目录手动导入的视频接管，且同一目录只产生一个条目、Scene 项目不改标；④ `project.json` 缺 `type` 但指向可解析媒体时按直接媒体索引，不再掉进仅预览。
-- 测试：新增 `tests/wallpaper-engine-library.test.js` 7 例（mp4 导入可播放 + 协议 Range 分段 / 无清单标题与类型 / 移除后存档清空且重启不复活 / 媒体失效时视频接管且去重 / 缺 `type` 直播放兜底 / Scene 目录内导入视频不改标 / 导入入口放开 mp4-webm）。全量 Node 回归 **1192/1192**（v2.1.3 基线 `1185`）。
-- 本次只做**本地构建并覆盖安装**（产物 `Mineradio-oirge-2.1.4-Setup.exe`），**未创建 tag、未发 GitHub Release**；要发布需另行走 `workflow_dispatch`。
+- **更新介绍**：`server.js` 的 `UPDATE_FALLBACK_NOTES`（离线兜底三条）改成 2.1.4 内容；应用内在线公告来自 GitHub Release 正文，本次正文四条已用 `server.js` 真实 `extractReleaseNotes` 预验证 **4/4 保留**（正文顶部标题与末尾「验证」段被正确当作结构跳过）。
+- 测试：新增 `tests/wallpaper-engine-library.test.js` 7 例（mp4 导入可播放 + 协议 Range 分段 / 无清单标题与类型 / 移除后存档清空且重启不复活 / 媒体失效时视频接管且去重 / 缺 `type` 直播放兜底 / Scene 目录内导入视频不改标 / 导入入口放开 mp4-webm）。全量 Node 回归 **1192/1192**（v2.1.3 基线 `1185`）。`node --check` 过改动文件，`git diff --check` 通过。
+- 本地构建偏差：本机没有 Visual Studio，`npm run build:win` 会在 `@electron/rebuild` 重编 `uiohook-napi` 时失败（`Could not find any Visual Studio installation`）；本次改用 `--config.npmRebuild=false` 跳过重编（该包自带 `prebuilds\win32-x64\uiohook-napi.node` 预编译 N-API 二进制）。**未改任何仓库文件，CI（带 VS 工具链）走原命令不受影响。**
+- 发布结果（2026-09-14）：tag `v2.1.4` → commit `80e6aec`；Release `388161225`，`published_at` `2026-09-14T05:13:48Z`，已设 Latest（`draft=false` / `prerelease=false`）。四资产齐全：
+  - `Mineradio-oirge-2.1.4-Setup.exe` sha256 `042c1aaef5529992d921a3b2cdbd249e1319c37864408abf8eec13c3dbd05b7d`（size 102376319）
+  - `Mineradio-oirge-2.1.4-Setup.exe.blockmap` sha256 `6ebb17c760f14d97c40866e5ff4474d5367711192d59b2f55f252f3241a9ddd3`（size 106340）
+  - `latest.yml` sha256 `2f5523ef9c4e519899a551e1c6b15ef3a8937c3c0fd90964b16ff3485f0c0a80`（size 359），`version: 2.1.4` 已核对；`releases/latest/download/latest.yml` 返回 2.1.4 且其中 sha512 与本机 Setup.exe 逐字一致
+  - `Mineradio-oirge-2.1.4-SHA256SUMS.txt` sha256 `e2a958e82c7496a98f65b3a0449cea0c0fc7dd501fc7c6c75f0dee5aed6d36e9`（size 282，LF 无 BOM）
+- 发布过程为**手动** `gh release create --draft --verify-tag` → 上传四资产 → `--draft=false --latest`（未跑 `workflow_dispatch`，因本机缺 VS 工具链）。本地覆盖安装已验证：`D:\Mineradio-oirge` 报 2.1.4、`app.asar` 内含新代码、安装标记与 `owner: oirge` 完整、`%APPDATA%\Mineradio-oirge` 数据未动。
 
 ## v2.1.0 多行歌词对齐上游 + 默认单行关闭翻译
 
