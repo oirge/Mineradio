@@ -1,6 +1,6 @@
 # 发布流程
 
-## v2.1.5 搜索框布局修复与列表完整显示（准备中 / 未发布）
+## v2.1.5 搜索框布局修复与列表完整显示
 
 - 版本元数据统一为 `2.1.5`：`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流 description 与默认 tag；安装身份和数据目录不变。
 - 修复舞台样式搜索框变短和偏左，恢复普通样式宽度并居中。
@@ -9,7 +9,13 @@
 - 壁纸库显示全部筛选结果，保留图片懒加载。
 - 更新介绍：`server.js` 的 `UPDATE_FALLBACK_NOTES`、`public/app.js` 初始化公告与 `CHANGELOG.md` 顶部同步四条说明。
 - 验证：全量 Node 回归 **1213/1213**；浏览器 1280px 下 DIY 普通/舞台均为 520px、简约普通/舞台均为 620px，四组中心偏移均为 0。窄屏按钮改在搜索框下方，尚未完成窄屏实际布局复验；本轮未覆盖安装。
-- 发布状态：准备中，计划通过 GitHub Actions 从版本 tag 构建并上传，正式发布结果待回填。
+- 发布结果（2026-09-14）：PR #97 合并；tag `v2.1.5` → `486344bc74c3459132a6c7a4f1de18616e726bab`。GitHub Actions 构建 `34819394165` 成功，PR 和 main 的 Verify 均通过。Release `388220953` 于 `2026-09-14T08:12:08Z` 正式发布并设 Latest，非预发行。
+- 四资产下载后逐项核对 SHA256；`latest.yml` 版本为 `2.1.5`，安装包 SHA512 与清单一致，SHA256SUMS 为 LF 无 BOM：
+  - `Mineradio-oirge-2.1.5-Setup.exe`：102671988 B，SHA256 `144c04e269b8643c8fd32abc1c5dd49fe3c8931064dfcaa41460d2ec82348e25`。
+  - `Mineradio-oirge-2.1.5-Setup.exe.blockmap`：106804 B，SHA256 `c1de2f7612e14c4fcb0fd436313f70e7746944fa9d30fa9ccf5131f7161528f9`。
+  - `latest.yml`：359 B，SHA256 `7b934983d578bb18bae277e07a1da674da8d79b2a2d337d2971adcb1b677ee79`。
+  - `Mineradio-oirge-2.1.5-SHA256SUMS.txt`：282 B，SHA256 `a8beca5ef4783cb131b18aada5617cffcd7f11050649c0b7da2c2a5ffc4a8cbc`。
+- 发布后通过 GitHub Latest API 回读正式状态及四资产；真实 `extractReleaseNotes` 解析线上正文，四条中文公告全部保留。
 
 ## v2.1.4 支持直接导入 mp4 视频壁纸
 
