@@ -233,7 +233,7 @@ test('本地当前队列可像特别喜欢一样收藏到独立歌单', () => {
   const renderer = readFunctionBlock(
     source,
     'function queueItemHtml(row)',
-    'function growQueuePanelRenderLimit(amount)',
+    'function renderQueuePanel(opts)',
   );
   const context = {
     LOCAL_ONLY_MODE: true,
