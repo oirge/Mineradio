@@ -396,24 +396,6 @@ body.custom-bg-glass-active #custom-bg::after {
   font-size: 12px
 }
 
-.wallpaper-engine-load-more {
-  flex: 1 0 100%;
-  min-height: 42px;
-  border: 1px solid rgba(255, 255, 255, .12);
-  border-radius: 13px;
-  color: rgba(255, 255, 255, .72);
-  background: rgba(255, 255, 255, .055);
-  cursor: pointer;
-  transition: border-color .2s ease, background .2s ease, color .2s ease
-}
-
-.wallpaper-engine-load-more:hover,
-.wallpaper-engine-load-more:focus-visible {
-  color: #fff;
-  border-color: rgba(122, 204, 255, .38);
-  background: rgba(122, 204, 255, .10)
-}
-
 .wallpaper-engine-card {
   position: relative;
   flex: 0 0 calc((100% - 39px) / 4);

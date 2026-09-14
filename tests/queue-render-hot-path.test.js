@@ -21,7 +21,7 @@ function readRendererSource() {
  */
 function readQueueRendererSource(source) {
   const start = source.indexOf('function queueVisibleRows(');
-  const end = source.indexOf('function growQueuePanelRenderLimit(', start);
+  const end = source.indexOf('function renderQueuePanel(', start);
   assert.ok(start >= 0 && end > start, '未找到队列可见行渲染函数');
   return source.slice(start, end);
 }

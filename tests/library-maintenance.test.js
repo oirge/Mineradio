@@ -437,7 +437,7 @@ test('面板签名把现算数字和探测状态整份折进去，早退分支�
 function createHomeCardsContext(songs = [], extra = {}) {
   const source = readSource(path.join('public', 'app.js'));
   const model = readFunctionBlock(source, 'function normalizeLocalPlaylistKind(kind)', 'function localSongIndexByKey(songs, key)');
-  const render = readFunctionBlock(source, 'function localLibraryCategoryHeadHtml(view, count)', '/* 分组项也走面板的懒加载额度');
+  const render = readFunctionBlock(source, 'function localLibraryCategoryHeadHtml(view, count)', 'function localLibraryGroupCardsHtml(');
   const context = Object.assign({
     SPECIAL_LIKED_PLAYLIST_ID: 'special-liked',
     LOCAL_PLAYBACK_SOURCE_STORE_KEY: 'mineradio-local-playback-source-v1',
@@ -635,86 +635,112 @@ test('探测 IPC 走可信主框架校验，preload 只暴露路径不暴露内�
 });
 
 /**
- * 分组目录页的「加载更多」回归：把面板渲染整段搬进隔离 realm，
- * 用 700 个艺术家分组 + 空 songs 复现目录页形态。
- * @param {object} extra 额外注入的全局。
- * @returns {object} vm 上下文（附带捕获的 innerHTML）。
+ * 在真实分类模型上加载面板渲染器和签名函数，验证首次全量与后续刷新。
+ * @param {Array<object>} songs 可原地增长的曲库。
+ * @param {string} selection 当前分类或分组。
+ * @returns {object} vm 上下文（附带捕获的 HTML 和写入次数）。
  */
-function createGroupPanelContext(extra = {}) {
+function createFullPanelContext(songs, selection) {
   const source = readSource(path.join('public', 'app.js'));
-  const block = readFunctionBlock(source, 'function localPlaylistsDomSignature(playlists)', 'function toggleLocalLibraryLike(index)');
-  const captured = { html: '' };
-  const entries = [];
-  for (let index = 0; index < 700; index++) {
-    entries.push({ value: `艺术家${index}`, count: 2, cover: '' });
-  }
-  const context = Object.assign({
+  const block = readFunctionBlock(source, 'function localLibraryPlaylistDomSignature(songs, renderLimit, statMode)', 'function toggleLocalLibraryLike(index)');
+  const captured = { html: '', writes: 0 };
+  const list = {
+    set innerHTML(value) { captured.html = String(value); captured.writes++; },
+    get innerHTML() { return captured.html; },
+  };
+  const context = createMaintenanceContext(songs, {
     LOCAL_ONLY_MODE: true,
-    LOCAL_LIBRARY_VALUE_KIND: 'library-value:',
-    userPlaylists: [],
+    LOCAL_LIBRARY_NAME_COMPARE: new Intl.Collator('zh-Hans-CN', { numeric: true }).compare,
     playlistRenderSeq: 0,
     playlistPanelLastDomSignature: '',
-    playlistPanelRenderLimit: 0,
-    playlistPanelBatchSize: () => 60,
-    normalizeLocalPlaylistKind: (kind) => String(kind || 'library'),
-    SPECIAL_LIKED_PLAYLIST_ID: 'special-liked',
+    localLibraryPlaylistSelection: selection,
     animateVisiblePanelList: () => {},
-    renderUserPlaylistsList: () => {},
-    localLibraryPlaylistSelection: 'library-group:artist',
-    isLocalLibraryCategoryKind: () => true,
-    localLibraryCategoryView: () => ({
-      mode: 'group',
-      id: 'library-group:artist',
-      title: '艺术家',
-      parent: 'library',
-      def: { field: 'artist', title: '艺术家', icon: '◉', unit: '位', unknown: '未知艺术家' },
-    }),
-    localLibraryGroupEntries: () => entries,
-    localLibraryValueKind: (field, value) => `library-value:${field}:${value}`,
-    localPlaylistSongs: () => [],
-    localPlaylistById: () => null,
-    readLocalPlaylists: () => [],
-    getSpecialLikedSongs: () => [],
     songCoverSignature: () => '',
     songCoverSrc: () => '',
     songDisplaySubtitle: () => '',
     songListenStatBrief: () => '',
-    localLibraryCategoryStatMode: () => '',
-    localLibraryPlaylistDomSignature: () => '',
-    localLibraryCategoryDomSignature: () => 'group-sig',
-    localLibraryMaintenanceCardSub: () => '',
     isSongLiked: () => false,
     playlistPlusIconSvg: () => '+',
     heartIconSvg: () => '♥',
-    document: {
-      getElementById: (id) => (id === 'pl-list' ? {
-        set innerHTML(value) { captured.html = String(value); },
-        get innerHTML() { return captured.html; },
-      } : null),
-    },
+    document: { getElementById: (id) => id === 'pl-list' ? list : null },
     escHtml: (value) => String(value == null ? '' : value)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
-  }, extra);
+  });
+  context.readLocalPlaylists = () => [];
   context.__captured = captured;
-  vm.runInNewContext(`${block}\nthis.api = this;`, context);
+  vm.runInNewContext(block, context);
   return context;
 }
 
-test('分组目录页「加载更多」：songs 为空时渲染不得把懒加载额度钳回一批', () => {
-  const api = createGroupPanelContext();
+function assertNoLoadMore(html) {
+  assert.doesNotMatch(html, /data-pl-load-more|加载更多|加载全部/);
+}
 
-  api.renderLocalLibraryPlaylistPanel({ animate: false });
-  assert.equal(api.playlistPanelRenderLimit, 60);
-  assert.ok(api.__captured.html.indexOf('加载全部 60/700') > 0);
+for (const [field, label] of [['artist', '艺术家'], ['album', '专辑']]) {
+  test(`${label}目录首次完整显示700项，重复刷新不截断，增长后末项可进入和播放`, () => {
+    const makeSong = (index) => song(`group-${index}`, { [field]: `${label}${index}` });
+    const songs = Array.from({ length: 700 }, (_, index) => makeSong(index));
+    const api = createFullPanelContext(songs, `library-group:${field}`);
+    const assertCards = (count) => {
+      const html = api.__captured.html;
+      assert.equal((html.match(/data-library-kind="/g) || []).length, count);
+      assert.equal((html.match(/data-library-kind-play="/g) || []).length, count);
+      const lastKind = `library-value:${field}:${label}${count - 1}`;
+      assert.ok(html.includes(`data-library-kind="${lastKind}"`));
+      assert.ok(html.includes(`data-library-kind-play="${lastKind}"`));
+      assert.deepEqual(pick(api.localPlaylistSongs(lastKind)), [`group-${count - 1}`]);
+      assert.doesNotMatch(html, /data-local-library-index|还没有本地音乐/);
+      assertNoLoadMore(html);
+    };
 
-  // 滚动走批增长：上限 +60 后重渲染，卡片必须真的多出一批。
-  api.growPlaylistPanelRenderLimit();
-  assert.equal(api.playlistPanelRenderLimit, 120);
-  assert.ok(api.__captured.html.indexOf('加载全部 120/700') > 0,
-    '分组页渲染把上限钳回 songs.length（0）会吃掉增长，按钮永远停在 60/700');
+    api.renderLocalLibraryPlaylistPanel({ animate: false });
+    assertCards(700);
+    const firstHtml = api.__captured.html;
+    api.renderLocalLibraryPlaylistPanel({ animate: false });
+    assertCards(700);
+    assert.equal(api.__captured.html, firstHtml);
+    assert.equal(api.__captured.writes, 1, '相同签名不重复写入 DOM');
 
-  // 点按钮是「加载全部」：一次铺完当前视图，按钮消失且不再超发。
-  api.growPlaylistPanelRenderLimit(true);
-  assert.equal(api.playlistPanelRenderLimit, 700);
-  assert.equal(api.__captured.html.indexOf('data-pl-load-more'), -1);
-});
+    songs.push(makeSong(700));
+    api.renderLocalLibraryPlaylistPanel({ animate: false });
+    assertCards(701);
+    assert.equal(api.__captured.writes, 2, '曲库增长必须使真实签名失效');
+    api.renderLocalLibraryPlaylistPanel({ animate: false });
+    assertCards(701);
+    assert.equal(api.__captured.writes, 2);
+  });
+}
+
+for (const selection of ['library', 'library-cat:all', 'library-value:artist:同一艺术家', 'library-value:album:同一专辑', 'library-fix:no-cover']) {
+  test(`${selection}歌曲列表首次全量700首，刷新和增长保留末行操作`, () => {
+    const makeSong = (index) => song(`track-${index}`, {
+      artist: '同一艺术家', album: '同一专辑', localCoverLoaded: true,
+    });
+    const songs = Array.from({ length: 700 }, (_, index) => makeSong(index));
+    const api = createFullPanelContext(songs, selection);
+    const assertRows = (count) => {
+      const html = api.__captured.html;
+      assert.deepEqual(Array.from(html.matchAll(/data-local-library-index="(\d+)"/g), (match) => Number(match[1])),
+        Array.from({ length: count }, (_, index) => index), '所有歌曲索引完整且不重复');
+      assert.ok(html.includes(`data-local-collect-index="${count - 1}"`));
+      assert.ok(html.includes(`data-local-like-index="${count - 1}"`));
+      assert.ok(html.includes(`<div class="pl-name">track-${count - 1}</div>`));
+      assert.equal(api.localPlaylistSongs(selection)[count - 1].localKey, `track-${count - 1}`);
+      assertNoLoadMore(html);
+    };
+
+    api.renderLocalLibraryPlaylistPanel({ animate: false });
+    assertRows(700);
+    api.renderLocalLibraryPlaylistPanel({ animate: false });
+    assertRows(700);
+    assert.equal(api.__captured.writes, 1);
+
+    songs.push(makeSong(700));
+    api.renderLocalLibraryPlaylistPanel({ animate: false });
+    assertRows(701);
+    assert.equal(api.__captured.writes, 2);
+    api.renderLocalLibraryPlaylistPanel({ animate: false });
+    assertRows(701);
+    assert.equal(api.__captured.writes, 2);
+  });
+}

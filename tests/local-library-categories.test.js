@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function readAppSource() {
-  return fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  return fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
 }
 
 function readFunctionBlock(source, startMarker, endMarker) {
@@ -367,7 +367,7 @@ test('曲库面板把音乐库交给外层 tab，根视图不再重复入口，�
   const source = readAppSource();
   const renderer = readFunctionBlock(
     source,
-    'function localLibraryPlaylistPanelItemCount()',
+    'function localLibraryCategoryHeadHtml(view, count)',
     'function toggleLocalLibraryLike(index)',
   );
 
@@ -384,8 +384,8 @@ test('曲库面板把音乐库交给外层 tab，根视图不再重复入口，�
   assert.match(renderer, /data-selected-playlist-play="1">播放全部/);
   // 目录层不铺歌，也不该弹"还没有本地音乐"
   assert.match(renderer, /if \(!songs\.length && !categoryDirectory\)/);
-  // 分组卡片走面板懒加载额度
-  assert.match(renderer, /data-pl-load-more="1">加载全部 ' \+ visible \+ '\/' \+ entries\.length/);
+  // 分组与歌曲首次全量渲染，不再提供分页按钮。
+  assert.doesNotMatch(renderer, /data-pl-load-more|加载更多|加载全部/);
   assert.match(renderer, /localLibraryCategoryDomSignature\(selectedCategory\)/);
 });
 
@@ -455,7 +455,6 @@ function createTabContext(selection = 'library', tab = 'queue') {
     localLibraryPlaylistSelection: selection,
     LOCAL_LIBRARY_CATEGORY_HOME_KIND: 'library-cat:home',
     isLocalLibraryCategoryKind: (kind) => String(kind || '').indexOf('library-') === 0,
-    resetPlaylistPanelRenderLimit: () => { renders.push('reset'); },
     refreshUserPlaylists: () => { renders.push('render'); },
     animateVisiblePanelList: () => {},
     safeShelfRebuild: () => {},

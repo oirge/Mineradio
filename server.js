@@ -78,9 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '壁纸库可直接导入 mp4 视频',
-  '视频壁纸没有闪屏与拖动重影',
-  'Scene 场景包仍由 WE 原生运行',
+  '修复舞台样式搜索框变短和偏左，恢复普通样式宽度并居中',
+  '音乐库专辑、艺术家等分组打开即显示全部，无需加载更多',
+  '主队列、迷你队列和歌单详情直接显示全部',
+  '壁纸库显示全部筛选结果，保留图片懒加载',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

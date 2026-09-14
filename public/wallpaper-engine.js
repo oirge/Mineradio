@@ -63,11 +63,9 @@ var wallpaperEnginePointerActivityLastSentAt = 0;
 var wallpaperEnginePointerActivityLatestX = 32768;
 var wallpaperEnginePointerActivityLatestY = 32768;
 var wallpaperEnginePointerActivityHasPoint = false;
-var wallpaperEngineRenderLimit = 240;
 var wallpaperEngineRuntimeError = '';
 var wallpaperEngineProjectDetailsId = '';
 var WALLPAPER_ENGINE_SWITCH_FADE_MS = 440;
-var WALLPAPER_ENGINE_RENDER_BATCH = 240;
 var WALLPAPER_ENGINE_PREPARED_STREAM_TTL_MS = 12000;
 var WALLPAPER_ENGINE_FIRST_FRAME_TIMEOUT_MS = 8000;
 var WALLPAPER_ENGINE_FREEZE_FADE_MS = 180;
@@ -1902,25 +1900,12 @@ function loadWallpaperEnginePreviewsNearViewport() {
   });
 }
 
-function extendWallpaperEngineLibraryNearEnd() {
-  var grid = document.getElementById('wallpaper-engine-grid');
-  if (!grid || !grid.querySelector('[data-wallpaper-action="load-more"]')) return;
-  var remaining = grid.scrollHeight - grid.scrollTop - grid.clientHeight;
-  if (remaining > Math.max(280, grid.clientHeight * 0.7)) return;
-  wallpaperEngineRenderLimit += WALLPAPER_ENGINE_RENDER_BATCH;
-  renderWallpaperEngineLibrary(true);
-}
-
 function scheduleWallpaperEnginePreviewViewportUpdate() {
-  if (wallpaperEnginePreviewObserver) {
-    extendWallpaperEngineLibraryNearEnd();
-    return;
-  }
+  if (wallpaperEnginePreviewObserver) return;
   if (wallpaperEnginePreviewScrollTimer) return;
   wallpaperEnginePreviewScrollTimer = setTimeout(function () {
     wallpaperEnginePreviewScrollTimer = 0;
     loadWallpaperEnginePreviewsNearViewport();
-    extendWallpaperEngineLibraryNearEnd();
   }, 60);
 }
 
@@ -1966,7 +1951,7 @@ function renderWallpaperEngineManualRoots() {
   }).join('');
 }
 
-function renderWallpaperEngineLibrary(preserveRenderLimit) {
+function renderWallpaperEngineLibrary() {
   var grid = document.getElementById('wallpaper-engine-grid');
   if (!grid) return;
   var modal = document.getElementById('wallpaper-engine-modal');
@@ -1974,7 +1959,6 @@ function renderWallpaperEngineLibrary(preserveRenderLimit) {
     disconnectWallpaperEnginePreviewObserver();
     return;
   }
-  if (!preserveRenderLimit) wallpaperEngineRenderLimit = WALLPAPER_ENGINE_RENDER_BATCH;
   disconnectWallpaperEnginePreviewObserver();
   if (wallpaperEngineLibraryBusy) {
     grid.innerHTML = '<div class="wallpaper-engine-empty">正在读取 project.json 元数据，不扫描 94GB 素材文件…</div>';
@@ -1985,8 +1969,7 @@ function renderWallpaperEngineLibrary(preserveRenderLimit) {
     grid.innerHTML = '<div class="wallpaper-engine-empty">' + (wallpaperEngineProjects.length ? '没有符合筛选条件的壁纸' : '没有识别到 Wallpaper Engine 项目<br>可以点击“导入目录”手动选择项目或素材库') + '</div>';
     return;
   }
-  var visibleItems = items.slice(0, wallpaperEngineRenderLimit);
-  grid.innerHTML = visibleItems.map(function (item) {
+  grid.innerHTML = items.map(function (item) {
     var favorite = favoriteWallpaperEngineIds.has(item.id);
     var active = wallpaperEngineSelection.active && wallpaperEngineSelection.id === item.id;
     var preview = item.hasPreview ? wallpaperEngineMediaUrl(item, 'preview') : '';
@@ -1997,9 +1980,7 @@ function renderWallpaperEngineLibrary(preserveRenderLimit) {
       '<button class="wallpaper-engine-card-hide" type="button" data-wallpaper-action="hide" data-wallpaper-id="' + item.id + '" title="从列表隐藏">×</button>' +
       '<div class="wallpaper-engine-card-meta">' + escHtml(item.title) + '<small>' + escHtml(wallpaperEngineProjectLabel(item)) + '</small></div>' +
       '</article>';
-  }).join('') + (visibleItems.length < items.length
-    ? '<button type="button" class="wallpaper-engine-load-more" data-wallpaper-action="load-more">继续加载 ' + visibleItems.length + ' / ' + items.length + '</button>'
-    : '');
+  }).join('');
   observeWallpaperEnginePreviews();
 }
 
@@ -2390,10 +2371,6 @@ function bindWallpaperEngineLibraryEvents() {
         if (actionName === 'favorite') toggleFavoriteWallpaperEngineItem(id);
         else if (actionName === 'hide') hideWallpaperEngineItem(id);
         else if (actionName === 'details') showWallpaperEngineProjectDetails(id);
-        else if (actionName === 'load-more') {
-          wallpaperEngineRenderLimit += WALLPAPER_ENGINE_RENDER_BATCH;
-          renderWallpaperEngineLibrary(true);
-        }
         return;
       }
       var card = event.target && event.target.closest ? event.target.closest('[data-wallpaper-id]') : null;
