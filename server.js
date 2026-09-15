@@ -78,10 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复舞台样式搜索框变短和偏左，恢复普通样式宽度并居中',
-  '音乐库专辑、艺术家等分组打开即显示全部，无需加载更多',
-  '主队列、迷你队列和歌单详情直接显示全部',
-  '壁纸库显示全部筛选结果，保留图片懒加载',
+  '修复舞台歌单架滚动中scale、深度位移瞬间不连续，跨0.5边界平滑过渡',
+  '改为dt驱动缓动，帧率变化不影响滚动速度一致性',
+  '窗口滑动时复用卡片纹理对象，降低渲染开销',
+  '详情列表滚动优化，窗口移位仅重建离开的行',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

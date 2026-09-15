@@ -622,7 +622,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.5';
+var APP_VERSION = '2.1.6';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,6 +677,10 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
+    '修复舞台歌单架滚动中scale、深度位移瞬间不连续，跨0.5边界平滑过渡。',
+    '改为dt驱动缓动，帧率变化不影响滚动速度一致性（30/60/120FPS等价）。',
+    '窗口滑动时复用卡片纹理对象，相同窗口步进仅重新绑定2张而非11张。',
+    '详情列表滚动优化，窗口移位仅重建离开的行，保留相邻行资源。',
     '修复舞台样式搜索框变短和偏左，恢复普通样式宽度并保持居中。',
     '音乐库专辑、艺术家等分组打开即显示全部，无需加载更多。',
     '主队列、迷你队列和歌单详情直接显示全部歌曲。',

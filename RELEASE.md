@@ -1,5 +1,20 @@
 # 发布流程
 
+## v2.1.6 舞台歌单架动画优化
+
+- **版本元数据**：`2.1.6` 于 `package.json`、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一。
+- **内容**：
+  1. 修复舞台歌单架滚动中 scale、深度位移瞬间不连续（absD<0.5 边界跨越时从 1.20 骤变到 0.89，降幅 26%）。
+  2. 改为 dt 基于缓动，帧率变化不影响滚动速度一致性（30/60/120FPS 插值时间相同）。
+  3. 窗口滑动时复用卡片纹理对象，same-window 步进仅重新绑定 2 张而非 11 张。
+  4. 详情列表滚动优化，窗口移位仅重建离开的行，保留相邻行资源。
+- **技术细节**：
+  - `placeCard()` stage 分支：scale `Math.max(0.45, 1.2-absD*0.46)`、z `1.0-max(0,absD-0.5)*0.55`、透明度 `1-absD*0.18+0.12`。
+  - `update()` 采用 `centerSmooth += (centerTarget-centerSmooth)*clamp(1-exp(-dt/0.016),0.001,1)`。
+  - `syncRenderedRows()`：标记 `forceFresh` 控制重绘范围，窗口不变时仅更新 item 引用。
+- **本地构建**：使用 `npmRebuild: false` 跳过原生模块重编（`uiohook-napi` 自带 `prebuilds/win32-x64` 预编译二进制）。
+- **回归**：全量 Node 回归 **1213/1213** 均通过。
+
 ## v2.1.5 搜索框布局修复与列表完整显示
 
 - 版本元数据统一为 `2.1.5`：`package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、发布工作流 description 与默认 tag；安装身份和数据目录不变。
