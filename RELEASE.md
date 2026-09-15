@@ -13,7 +13,13 @@
   - `update()` 采用 `centerSmooth += (centerTarget-centerSmooth)*clamp(1-exp(-dt/0.016),0.001,1)`。
   - `syncRenderedRows()`：标记 `forceFresh` 控制重绘范围，窗口不变时仅更新 item 引用。
 - **本地构建**：使用 `npmRebuild: false` 跳过原生模块重编（`uiohook-napi` 自带 `prebuilds/win32-x64` 预编译二进制）。
-- **回归**：全量 Node 回归 **1213/1213** 均通过。
+- **GitHub 发布结果（2026-09-15）**：tag `v2.1.6` → commit `47471a8d54599d9fc085886b598562364a0beaeb`；Actions 构建 `34936149387` 成功，构建、SHA256 清单生成和资产上传全部通过。Release `388906508` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍已改为本版本四条舞台歌单架动画说明。
+- **线上资产核对**：`latest.yml` 版本为 `2.1.6`，安装包 SHA512 与清单一致；GitHub 下载资产 SHA256 如下：
+  - `Mineradio-oirge-2.1.6-Setup.exe`：102373966 B，SHA256 `a966cc09890bd632982fb83d3d5bc6ab08522d4d0cf68efc42de6a49ee5a747b`。
+  - `Mineradio-oirge-2.1.6-Setup.exe.blockmap`：106639 B，SHA256 `146082617c45c5226089176b1c5e9d1f1af2f4627564c9f3320bde87a98fcdc4`。
+  - `latest.yml`：359 B，SHA256 `8679e23c36b86ad37d24531c08adc545853b8f7a151d772d7d5cfa10be96472c`。
+  - `Mineradio-oirge-2.1.6-SHA256SUMS.txt`：282 B，SHA256 `566c3703540018f8a1d6195cc51db563ddf32674eaa736825f6de5b4b54ca408`。
+- **本地安装**：已用构建包覆盖安装至 `D:\Mineradio-oirge`，EXE `FileVersion/ProductVersion` 均为 `2.1.6`；`%APPDATA%\Mineradio-oirge` 数据目录保留。后续发布核对未关闭或重启用户正在运行的应用。
 
 ## v2.1.5 搜索框布局修复与列表完整显示
 
