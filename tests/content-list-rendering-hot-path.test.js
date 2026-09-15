@@ -37,6 +37,7 @@ function testVisibleRowReuseContract() {
   const drawCalls = [];
   const context = {
     Math,
+    classic: false,
     group: {},
     uniforms: { uTime: { value: 12 } },
     isLoadingContent: () => false,

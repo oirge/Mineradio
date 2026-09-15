@@ -523,17 +523,30 @@ function makeShelfManager() {
     var rec = item.cover ? playlistCoverCache[item.cover] : null;
     var coverState = item.cover ? (rec && rec.loaded ? 'ready' : (rec && rec.failed ? 'fail' : 'wait')) : 'none';
     var pulseBucket = card && card.isCenter ? Math.round((bass + beatPulse * 0.85) * 6) : 0;
-    return [
+    return JSON.stringify([
       item.type || '', item.title || '', item.sub || '', item.tag || '',
-      item.playlistId || '', item.podcastKey || '', item.queueIndex == null ? '' : item.queueIndex,
       item.cover || '', coverState, card && card.isCenter ? 1 : 0, card && card.selected ? 1 : 0,
       card && card.dofBucket == null ? -1 : card.dofBucket, pulseBucket, shelfAccentHex(), shelfSettings().bgOpacity
-    ].join('|');
+    ]);
   }
 
   function drawCard(card, item) {
     if (card.disposed || !group || mode === 'off') return;
     item = item || card.item || {};
+    var coverUrl = item.cover || '';
+    var coverRec = coverUrl ? playlistCoverCache[coverUrl] : null;
+    if (coverUrl && !(coverRec && (coverRec.loaded || coverRec.failed)) &&
+        (card.coverWaitUrl !== coverUrl || card.coverWaitBinding !== card.binding || card.coverWaitRecord !== coverRec)) {
+      var binding = card.binding;
+      var generation = engineGeneration;
+      card.coverWaitUrl = coverUrl;
+      card.coverWaitBinding = binding;
+      requestPlaylistCover(coverUrl, function () {
+        if (generation !== engineGeneration || card.disposed || card.binding !== binding || !card.item || card.item.cover !== coverUrl || !group || mode === 'off') return;
+        drawCard(card, card.item);
+      });
+      card.coverWaitRecord = playlistCoverCache[coverUrl];
+    }
     var nextDrawKey = cardDrawSignature(card, item);
     if (card.drawKey === nextDrawKey) return;
     card.drawKey = nextDrawKey;
@@ -582,13 +595,6 @@ function makeShelfManager() {
       if (rec && rec.loaded && rec.img) {
         ctx.save(); makeRoundRect(ctx, cx, cy, coverSize, coverSize, 26); ctx.clip();
         ctx.drawImage(rec.img, cx, cy, coverSize, coverSize); ctx.restore();
-      } else if (!rec || (!rec.loading && !rec.failed)) {
-        var binding = card.binding || 0;
-        var generation = engineGeneration;
-        requestPlaylistCover(item.cover, function () {
-          if (generation !== engineGeneration || card.disposed || card.item !== item || card.binding !== binding || !group || mode === 'off') return;
-          drawCard(card, item);
-        });
       }
     }
 
@@ -683,14 +689,15 @@ function makeShelfManager() {
   }
 
   function rebindShelfCard(card, item, index) {
-    card.binding++;
+    var changedBinding = card.index !== index || card.item.key !== item.key || card.item.type !== item.type ||
+      card.item.playlistId !== item.playlistId || card.item.podcastKey !== item.podcastKey ||
+      card.item.queueIndex !== item.queueIndex || card.item.cover !== item.cover;
+    if (changedBinding) card.binding++;
     card.item = item;
     card.index = index;
     card.selected = index === selectedIdx;
     card.isCenter = Math.abs(index - centerSmooth) < 0.5;
-    card.drawKey = '';
     card.mesh.userData.action = shelfCardAction(item);
-    card.mesh.renderOrder = 50 + index;
     drawCard(card, item);
     return card;
   }
@@ -763,11 +770,7 @@ function makeShelfManager() {
     if (!force && start === renderedStart && cards.length === (end - start + 1)) {
       cards.forEach(function (c) {
         var nextItem = shelfItemAt(allItems, c.index) || c.item;
-        if (c.item !== nextItem) {
-          c.item = nextItem;
-          c.drawKey = '';
-          drawCard(c, c.item);
-        }
+        rebindShelfCard(c, nextItem, c.index);
       });
       return;
     }
@@ -921,7 +924,7 @@ function makeShelfManager() {
       // 舞台 PSP: 水平展开 + center 突出, dock 在底部
       var pxStage = (layout.stageX || 0) + delta * layout.stageXStep;
       var pyStage = layout.stageY;
-      var pzStage = absD < 0.5 ? layout.stageZ : (layout.stageZ - Math.min(2.0, absD) * 0.55);
+      var pzStage = layout.stageZ - Math.min(2.0, absD) * 0.55;
       var paneRawS = Math.max(0, Math.min(1, (uniforms.uTime.value - paneSwitchAt - absD * 0.030) / 0.72));
       var paneEaseS = 1 - paneRawS * paneRawS * (3 - 2 * paneRawS);
       pxStage += paneEaseS * paneSwitchDir * 0.80;
@@ -929,13 +932,16 @@ function makeShelfManager() {
       pxStage += parX * 0.110 * parWeight;
       pyStage += parY * 0.060 * parWeight;
       pzStage += (parY * 0.040 - parX * 0.035) * parWeight;
-      var scaleS = (absD < 0.5 ? 1.20 : Math.max(0.45, 1.0 - absD * 0.22)) * (1 + pulse * 0.060) * layout.stageScale;
+      // 连续中心增量只作用于相邻停靠点之间；整数距离保留原版大小。
+      var centerWeightS = Math.max(0, 1 - absD);
+      centerWeightS = centerWeightS * centerWeightS * (3 - 2 * centerWeightS);
+      var scaleS = (Math.max(0.45, 1.0 - absD * 0.22) + 0.20 * centerWeightS) * (1 + pulse * 0.060) * layout.stageScale;
       card.mesh.position.set(pxStage, pyStage, pzStage);
       card.mesh.rotation.y = -delta * 0.22 + parX * 0.050 * parWeight;
       card.mesh.rotation.x = 0.10 - absD * 0.04 - parY * 0.028 * parWeight;
       card.mesh.scale.setScalar(scaleS);
       var disabledStage = contentList && contentList.isOpen();
-      var opS = absD < 0.5 ? 1.0 : Math.max(0.18, 1.0 - absD * 0.32);
+      var opS = Math.max(0.18, 1.0 - absD * 0.32);
       if (disabledStage) {
         opS *= card.index === openCardIdx ? 0.16 : 0.08;
         card.mesh.material.color.setScalar(card.index === openCardIdx ? 0.42 : 0.25);
@@ -1180,7 +1186,8 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     update: function (dt) {
       if (!group) return;
       // PSP 滚动平滑
-      centerSmooth += (centerTarget - centerSmooth) * 0.16;
+      var centerEase = mode === 'stage' ? 1 - Math.pow(1 - 0.16, (isFinite(dt) && dt >= 0 ? dt : 1 / 60) * 60) : 0.16;
+      centerSmooth += (centerTarget - centerSmooth) * centerEase;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       var px = pointerParallax.x, py = pointerParallax.y;
       var appRevealed = !document.body.classList.contains('splash-active');

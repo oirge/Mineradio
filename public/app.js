@@ -16764,7 +16764,12 @@ function makeContentListManager() {
         ctx.drawImage(coverRec.img, coverX, coverY, coverSize, coverSize);
         ctx.restore();
       } else if (!coverRec || (!coverRec.loading && !coverRec.failed)) {
-        requestPlaylistCover(coverUrl, function(){ drawPanel(); });
+        var coverPanel = panel;
+        var coverToken = requestToken;
+        requestPlaylistCover(coverUrl, function(){
+          if (classic && (!open || panel !== coverPanel || requestToken !== coverToken)) return;
+          drawPanel();
+        });
       }
     }
     var sweep = (Math.sin((uniforms.uTime.value || 0) * 1.7) + 1) * 0.5;
@@ -16860,10 +16865,18 @@ function makeContentListManager() {
           ctx.clip();
           ctx.drawImage(songCoverRec.img, coverX, coverY, coverSize, coverSize);
           ctx.restore();
-        } else if (!songCoverRec || (!songCoverRec.loading && !songCoverRec.failed)) {
+        } else if ((!classic && (!songCoverRec || (!songCoverRec.loading && !songCoverRec.failed))) ||
+                   (classic && !(songCoverRec && (songCoverRec.loaded || songCoverRec.failed)) &&
+                    (row.coverWaitUrl !== songCover || row.coverWaitBinding !== row.binding || row.coverWaitRecord !== songCoverRec))) {
+          var coverBinding = row.binding;
+          var coverToken = requestToken;
+          row.coverWaitUrl = songCover;
+          row.coverWaitBinding = coverBinding;
           requestPlaylistCover(songCover, function(){
+            if (classic && (!open || requestToken !== coverToken || row.disposed || row.binding !== coverBinding || songCoverSrc(row.song, 80) !== songCover)) return;
             if (row && row.mesh && row.mesh.parent) drawRow(row, row.song, !!row.lastCenter);
           });
+          row.coverWaitRecord = playlistCoverCache[songCover];
         }
       }
     }
@@ -17183,6 +17196,11 @@ function makeContentListManager() {
   function disposeRowList(rowList) {
     while (rowList.length) {
       var row = rowList.pop();
+      if (classic) {
+        row.disposed = true;
+        row.binding++;
+        if (window.gsap) window.gsap.killTweensOf(row);
+      }
       if (row.mesh && row.mesh.parent) row.mesh.parent.remove(row.mesh);
       if (row.mesh && row.mesh.material) {
         if (row.mesh.material.map) row.mesh.material.map.dispose();
@@ -17217,6 +17235,17 @@ function makeContentListManager() {
     }
   }
 
+  function rebindContentRow(row, song, index) {
+    if (row.index === index && row.song === song) return false;
+    row.binding++;
+    if (window.gsap) window.gsap.killTweensOf(row, 'fxPulse');
+    row.fxPulse = 0;
+    row.song = song;
+    row.index = index;
+    // 不直接重置 mesh：姿态缓存仍精确描述当前对象，下一帧 place 写入新目标。
+    return true;
+  }
+
   /**
    * 同步歌单详情页的可见歌曲行，复用窗口并合并数据更新与绘制循环。
    * @param {boolean} force 是否强制重建可见行。
@@ -17239,8 +17268,9 @@ function makeContentListManager() {
       var shouldRedraw = rowsDirty || refreshLoading;
       for (var rowIdx = 0; rowIdx < rows.length; rowIdx++) {
         var row = rows[rowIdx];
+        var rebound = classic ? rebindContentRow(row, allTracks[row.index] || row.song, row.index) : false;
         row.song = allTracks[row.index] || row.song;
-        if (shouldRedraw) {
+        if (shouldRedraw || rebound) {
           var isCenter = Math.abs(row.index - centerSmooth) < 0.5;
           drawRow(row, row.song, isCenter, shelfLook);
           row.lastCenter = isCenter;
@@ -17252,14 +17282,39 @@ function makeContentListManager() {
       }
       return;
     }
-    disposeRows();
-    renderedStart = start;
-    for (var idx = start; idx <= end; idx++) {
-      var row = makeRow(allTracks[idx], idx);
-      rows.push(row);
-      drawRow(row, row.song, idx === Math.round(centerSmooth), shelfLook);
-      row.lastCenter = idx === Math.round(centerSmooth);
+    if (classic) {
+      var existingByIndex = Object.create(null);
+      var reusable = [];
+      for (var oldIdx = 0; oldIdx < rows.length; oldIdx++) {
+        var oldRow = rows[oldIdx];
+        if (oldRow.index >= start && oldRow.index <= end) existingByIndex[oldRow.index] = oldRow;
+        else reusable.push(oldRow);
+      }
+      var nextRows = [];
+      for (var idx = start; idx <= end; idx++) {
+        var row = existingByIndex[idx] || reusable.shift();
+        var changed = !row;
+        if (!row) row = makeRow(allTracks[idx], idx);
+        else changed = rebindContentRow(row, allTracks[idx], idx);
+        var isCenter = Math.abs(idx - centerSmooth) < 0.5;
+        if (changed || force || rowsDirty || refreshLoading || row.lastCenter !== isCenter) {
+          drawRow(row, row.song, isCenter, shelfLook);
+          row.lastCenter = isCenter;
+        }
+        nextRows.push(row);
+      }
+      disposeRowList(reusable);
+      rows = nextRows;
+    } else {
+      disposeRows();
+      for (var idx = start; idx <= end; idx++) {
+        var row = makeRow(allTracks[idx], idx);
+        rows.push(row);
+        drawRow(row, row.song, idx === Math.round(centerSmooth), shelfLook);
+        row.lastCenter = idx === Math.round(centerSmooth);
+      }
     }
+    renderedStart = start;
     rowsDirty = false;
     rowDrawAt = nowT;
   }
@@ -17435,6 +17490,10 @@ function makeContentListManager() {
     },
     update: function(dt, frameLayout, frameShelfLook) {
       if (!group || !open) return;
+      var frameSteps = (isFinite(dt) && dt >= 0 ? dt : 1 / 60) * 60;
+      var rotationEase = classic ? 1 - Math.pow(1 - 0.16, frameSteps) : 0.16;
+      var rollEase = classic ? 1 - Math.pow(1 - 0.14, frameSteps) : 0.14;
+      var centerEase = classic ? 1 - Math.pow(1 - 0.18, frameSteps) : 0.18;
       var intro = group.userData.detailIntro || 0;
       var parX = pointerParallax.x || 0;
       var parY = pointerParallax.y || 0;
@@ -17469,13 +17528,13 @@ function makeContentListManager() {
         var coverRx = particles && particles.rotation ? particles.rotation.x : 0;
         var coverRy = particles && particles.rotation ? particles.rotation.y : 0;
         var coverRz = particles && particles.rotation ? particles.rotation.z : 0;
-        var nextRotationX = group.rotation.x + ((coverRx * 0.72 + layout.rx - parY * 0.010 * parallax) - group.rotation.x) * 0.16;
-        var nextRotationY = group.rotation.y + ((coverRy * 0.82 + layout.ry + introMix * 0.018 + parX * 0.014 * parallax) - group.rotation.y) * 0.16;
-        var nextRotationZ = group.rotation.z + ((coverRz * 0.70) - group.rotation.z) * 0.14;
+        var nextRotationX = group.rotation.x + ((coverRx * 0.72 + layout.rx - parY * 0.010 * parallax) - group.rotation.x) * rotationEase;
+        var nextRotationY = group.rotation.y + ((coverRy * 0.82 + layout.ry + introMix * 0.018 + parX * 0.014 * parallax) - group.rotation.y) * rotationEase;
+        var nextRotationZ = group.rotation.z + ((coverRz * 0.70) - group.rotation.z) * rollEase;
         setContentGroupRotation(nextRotationX, nextRotationY, nextRotationZ);
       }
       setContentGroupScale(layout.scale * (1 - introMix * (classic && skullDetail ? 0.020 : 0.035)));
-      centerSmooth += (centerTarget - centerSmooth) * 0.18;
+      centerSmooth += (centerTarget - centerSmooth) * centerEase;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       syncRenderedRows(false, shelfLook);
       if (panel && panel.mesh) {
@@ -17649,6 +17708,8 @@ function makeContentListManager() {
         mesh: mesh,
         song: song,
         index: i,
+        binding: 0,
+        disposed: false,
         fxPulse: 0,
         positionX: 0,
         positionY: 0,
