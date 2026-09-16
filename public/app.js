@@ -622,7 +622,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.6';
+var APP_VERSION = '2.1.7';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,14 +677,11 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '修复舞台歌单架滚动中scale、深度位移瞬间不连续，跨0.5边界平滑过渡。',
-    '改为dt驱动缓动，帧率变化不影响滚动速度一致性（30/60/120FPS等价）。',
-    '窗口滑动时复用卡片纹理对象，相同窗口步进仅重新绑定2张而非11张。',
-    '详情列表滚动优化，窗口移位仅重建离开的行，保留相邻行资源。',
-    '修复舞台样式搜索框变短和偏左，恢复普通样式宽度并保持居中。',
-    '音乐库专辑、艺术家等分组打开即显示全部，无需加载更多。',
-    '主队列、迷你队列和歌单详情直接显示全部歌曲。',
-    '壁纸库显示全部筛选结果，保留图片懒加载。'
+    '播放中的 3D 渲染不再跟随高刷屏跑满：默认 60FPS、节能 48FPS、极致档跟随显示器刷新率，高刷屏 CPU/GPU 占用大幅下降。',
+    '无音频、无交互的可见空闲降频区分画质档位，节能档空闲进一步降到 24FPS。',
+    '帧率节流预留 2ms 容差，修复限帧与屏幕刷新率一致时隔帧跳帧、帧率减半的卡顿。',
+    '主队列与迷你队列改为增量渲染：切歌只切换类名，单曲封面就绪只替换对应行，大队列不再整表重建。',
+    '全量 Node 回归 1218/1218 通过。'
   ]
 };
 function readSavedVolume() {
@@ -1835,9 +1832,12 @@ var camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100)
 var RENDER_DPR_CAP = 1.35;
 var RENDER_PIXEL_BUDGET = 5200000;
 var RENDER_MIN_DPR = 0.72;
-// 播放中和交互期间保留显示器刷新率；无音频、无交互的可见空闲场景降频，避免高刷屏持续空转。
+// 交互期间保留显示器刷新率；稳定播放按画质档位限帧（高刷屏不再整场跟随），无音频、无交互的可见空闲场景继续降频。
 var RENDER_VISIBLE_VSYNC = true;
 var RENDER_IDLE_FPS = 30;
+var RENDER_IDLE_FPS_ECO = 24;
+var RENDER_PLAYBACK_FPS_CAP = 60;
+var RENDER_PLAYBACK_FPS_CAP_ECO = 48;
 var RENDER_ACTIVE_FPS = 0;
 var RENDER_LARGE_FPS = 0;
 var RENDER_HUGE_FPS = 0;
@@ -29079,6 +29079,7 @@ function renderMiniQueuePanel(opts) {
   if (!miniQueueOpen && !opts.animate && !opts.scrollCurrent) return;
   if (!total) {
     miniQueueLastDomSignature = 'empty';
+    miniQueueIncrementalState = null;
     $list.innerHTML = '<div class="mini-queue-empty">队列为空，先搜索或打开歌单</div>';
     return;
   }
@@ -29087,7 +29088,11 @@ function renderMiniQueuePanel(opts) {
   var domSignature = queueVisibleDomSignature(renderLimit, true, visibleRows);
   if (domSignature === miniQueueLastDomSignature && !opts.animate && !opts.scrollCurrent) return;
   miniQueueLastDomSignature = domSignature;
-  $list.innerHTML = queueItemsHtml(renderLimit, true, visibleRows);
+  // 入场动画需要全新 DOM；其余变化优先增量修补，避免迷你队列整表重建导致封面重新解码。
+  if (opts.animate || !queueListApplyIncremental($list, renderLimit, visibleRows, true, miniQueueIncrementalState)) {
+    $list.innerHTML = queueItemsHtml(renderLimit, true, visibleRows);
+    miniQueueIncrementalState = queueListIncrementalState(renderLimit, visibleRows, true);
+  }
   if (opts.animate || opts.scrollCurrent) {
     requestAnimationFrame(function(){
       if (opts.animate) animateListItems($list, '.mini-queue-item', { x: 0, y: 6, stagger: 0.01, duration: 0.20, limit: 16 });
@@ -29208,14 +29213,7 @@ function queueItemsHtml(renderLimit, mini, visibleRows) {
     var row = visibleRows[i];
     var song = row.song;
     if (mini) {
-      var thumb = row.thumb;
-      var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="mini-queue-cover"></div>';
-      html += '<div class="mini-queue-item' + (row.current ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
-        imgTag +
-        '<div class="mini-queue-info"><div class="mini-queue-name">' + escHtml(row.name) + '</div><div class="mini-queue-sub">' + escHtml(row.subtitle) + '</div></div>' +
-        '<button class="mini-queue-remove mini-queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
-        '<button class="mini-queue-remove" onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
-      '</div>';
+      html += queueMiniItemHtml(row);
     } else {
       html += queueItemHtml(row);
     }
@@ -29257,6 +29255,127 @@ function queueItemHtml(row) {
   '</div>';
 }
 /**
+ * 使用单行快照生成迷你队列项，供整表重建与增量替换共用同一份 HTML 拼接。
+ * @param {object} row 队列可见行快照。
+ * @returns {string} 迷你队列项 HTML。
+ */
+function queueMiniItemHtml(row) {
+  var i = row.index;
+  var thumb = row.thumb;
+  var imgTag = thumb ? '<img src="' + thumb + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="mini-queue-cover"></div>';
+  return '<div class="mini-queue-item' + (row.current ? ' now' : '') + '" onclick="playQueueAt(' + i + ')">' +
+    imgTag +
+    '<div class="mini-queue-info"><div class="mini-queue-name">' + escHtml(row.name) + '</div><div class="mini-queue-sub">' + escHtml(row.subtitle) + '</div></div>' +
+    '<button class="mini-queue-remove mini-queue-next" onclick="event.stopPropagation();queueIndexNext(' + i + ')" title="下一首播放">下</button>' +
+    '<button class="mini-queue-remove" onclick="event.stopPropagation();removeFromQueue(' + i + ')" title="移除">×</button>' +
+  '</div>';
+}
+/**
+ * 主队列面板与迷你队列的增量修补状态：缓存上次 DOM 对应的行内容签名、游标与本地模式，
+ * 切歌、封面就绪等高频场景只补类名或替换个别行，不再整表 innerHTML 重建。
+ */
+var queuePanelIncrementalState = null;
+var miniQueueIncrementalState = null;
+/**
+ * 生成单行内容签名；与整表签名使用同一组字段，保证两者对「行 HTML 是否变化」的判断一致。
+ * @param {object} row 队列可见行快照。
+ * @returns {string} 行内容签名。
+ */
+function queueRowContentSignature(row) {
+  return row.index + '~' + row.itemKey + '~' + row.signatureName + '~' + row.subtitle + '~' +
+    row.albumSignature + '~' + row.coverSignature + '~' + (row.liked ? 1 : 0);
+}
+/**
+ * 批量生成行内容签名数组，作为增量修补的比对基线。
+ * @param {number} renderLimit 当前渲染行数。
+ * @param {Array<object>} visibleRows 可见行快照。
+ * @returns {Array<string>} 行内容签名数组。
+ */
+function queueRowSignaturesSnapshot(renderLimit, visibleRows) {
+  var signatures = new Array(renderLimit);
+  for (var i = 0; i < renderLimit; i++) signatures[i] = queueRowContentSignature(visibleRows[i]);
+  return signatures;
+}
+/**
+ * 找出 next-up 标记所在的行索引。
+ * @param {number} renderLimit 当前渲染行数。
+ * @param {Array<object>} visibleRows 可见行快照。
+ * @returns {number} next-up 行索引；不存在时返回 -1。
+ */
+function queueRowNextUpIndex(renderLimit, visibleRows) {
+  for (var i = 0; i < renderLimit; i++) {
+    if (visibleRows[i] && visibleRows[i].nextUp) return i;
+  }
+  return -1;
+}
+/**
+ * 为整表重建后的 DOM 建立增量修补基线。
+ * @param {number} renderLimit 当前渲染行数。
+ * @param {Array<object>} visibleRows 可见行快照。
+ * @param {boolean} mini 是否为迷你队列（迷你项没有 next-up 类）。
+ * @returns {object} 增量修补状态。
+ */
+function queueListIncrementalState(renderLimit, visibleRows, mini) {
+  return {
+    signatures: queueRowSignaturesSnapshot(renderLimit, visibleRows),
+    current: currentIdx,
+    next: mini ? -1 : queueRowNextUpIndex(renderLimit, visibleRows),
+    mode: LOCAL_ONLY_MODE ? 1 : 0
+  };
+}
+/**
+ * 尝试增量修补队列列表 DOM：内容未变的行原样保留，仅游标（正在播放/下一首）变化时切换类名，
+ * 少量行内容变化时只替换这些行的 outerHTML，避免大队列每次切歌整表重建造成主线程卡顿。
+ * @param {Element} $list 队列列表容器。
+ * @param {number} renderLimit 当前渲染行数。
+ * @param {Array<object>} visibleRows 可见行快照。
+ * @param {boolean} mini 是否为迷你队列。
+ * @param {object} state 上次重建建立的增量修补状态。
+ * @returns {boolean} 修补成功返回 true；结构不符或变更过多时返回 false，由调用方整表重建。
+ */
+function queueListApplyIncremental($list, renderLimit, visibleRows, mini, state) {
+  var children = $list && $list.children;
+  if (!children || !children.length || children.length !== renderLimit) return false;
+  var signatures = state && state.signatures;
+  if (!signatures || signatures.length !== renderLimit) return false;
+  if ((LOCAL_ONLY_MODE ? 1 : 0) !== state.mode) return false;
+  var changed = [];
+  for (var i = 0; i < renderLimit; i++) {
+    if (!children[i] || queueRowContentSignature(visibleRows[i]) !== signatures[i]) changed.push(i);
+  }
+  // 变更行超过总量八分之一（且至多 256 行）时整表重建更划算，也顺带覆盖整队洗牌、拖动重排。
+  if (changed.length > 256 || changed.length > (renderLimit >> 3)) return false;
+  var nextIdx = mini ? -1 : queueRowNextUpIndex(renderLimit, visibleRows);
+  if (state.current !== currentIdx || state.next !== nextIdx) {
+    var affected = {};
+    if (state.current >= 0 && state.current < renderLimit) affected[state.current] = 1;
+    if (currentIdx >= 0 && currentIdx < renderLimit) affected[currentIdx] = 1;
+    if (state.next >= 0 && state.next < renderLimit) affected[state.next] = 1;
+    if (nextIdx >= 0) affected[nextIdx] = 1;
+    for (var key in affected) {
+      var idx = key | 0;
+      var el = children[idx];
+      if (!el || !el.classList || typeof el.classList.toggle !== 'function') return false;
+      el.classList.toggle('now', !!(visibleRows[idx] && visibleRows[idx].current));
+      if (!mini) el.classList.toggle('next-up', !!(visibleRows[idx] && visibleRows[idx].nextUp));
+    }
+  }
+  for (var c = 0; c < changed.length; c++) {
+    var rowIdx = changed[c];
+    var rowEl = children[rowIdx];
+    if (!rowEl || typeof rowEl.outerHTML !== 'string' || !rowEl.getAttribute) return false;
+    // 逐行替换前校验身份标记，防御拖动占位等结构漂移；迷你项没有 data-queue-index，改用 onclick 校验。
+    var identity = rowEl.getAttribute(mini ? 'onclick' : 'data-queue-index');
+    if (identity !== (mini ? ('playQueueAt(' + rowIdx + ')') : String(rowIdx))) return false;
+    rowEl.outerHTML = mini ? queueMiniItemHtml(visibleRows[rowIdx]) : queueItemHtml(visibleRows[rowIdx]);
+  }
+  state.signatures = queueRowSignaturesSnapshot(renderLimit, visibleRows);
+  state.current = currentIdx;
+  state.next = nextIdx;
+  state.mode = LOCAL_ONLY_MODE ? 1 : 0;
+  return true;
+}
+/**
  * 渲染主播放队列，并把本轮已计算的可见行传给迷你队列。
  * @param {object=} opts 渲染选项。
  * @returns {void}
@@ -29275,6 +29394,7 @@ function renderQueuePanel(opts) {
   if (!playQueue.length) {
     queuePanelLastDomSignature = 'empty';
     miniQueueLastDomSignature = '';
+    queuePanelIncrementalState = null;
     $ql.innerHTML = '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">队列为空，搜索后点 + 设为下一首</div>';
     renderMiniQueuePanel();
     var panel = document.getElementById('playlist-panel');
@@ -29287,7 +29407,11 @@ function renderQueuePanel(opts) {
   var domSignature = queueVisibleDomSignature(renderLimit, false, visibleRows);
   if (domSignature !== queuePanelLastDomSignature || opts.animate || opts.scrollCurrent) {
     queuePanelLastDomSignature = domSignature;
-    $ql.innerHTML = queueItemsHtml(renderLimit, false, visibleRows);
+    // 入场动画需要全新 DOM；其余变化优先增量修补，避免大队列整表 innerHTML 重建造成卡顿。
+    if (opts.animate || !queueListApplyIncremental($ql, renderLimit, visibleRows, false, queuePanelIncrementalState)) {
+      $ql.innerHTML = queueItemsHtml(renderLimit, false, visibleRows);
+      queuePanelIncrementalState = queueListIncrementalState(renderLimit, visibleRows, false);
+    }
   }
   if (opts.animate && seq === queueRenderSeq) {
     animateVisiblePanelList($ql, '.queue-item', document.getElementById('playlist-panel'), '.queue-item.now', { scrollActive: opts.scrollCurrent !== false });
@@ -45689,7 +45813,7 @@ function cancelMainRenderFrame() {
  */
 function mainRenderScheduleKindForState(frameFps) {
   var fps = frameFps == null && typeof getAdaptiveRenderFps === 'function' ? getAdaptiveRenderFps() : frameFps;
-  return fps === RENDER_IDLE_FPS ? 'idle-timeout' : 'raf';
+  return fps && fps <= RENDER_IDLE_FPS ? 'idle-timeout' : 'raf';
 }
 /**
  * 调度下一次主场景更新。空闲态按目标帧率唤醒，播放或交互态恢复 RAF。
@@ -45698,7 +45822,8 @@ function mainRenderScheduleKindForState(frameFps) {
  */
 function scheduleMainRenderFrame(frameFps) {
   if (mainRenderLoopSuspended || isDeepBackgroundMode()) return false;
-  var scheduleKind = mainRenderScheduleKindForState(frameFps);
+  var targetFps = frameFps == null && typeof getAdaptiveRenderFps === 'function' ? getAdaptiveRenderFps() : frameFps;
+  var scheduleKind = mainRenderScheduleKindForState(targetFps);
   if (mainRenderFrameId && mainRenderScheduleKind === scheduleKind) return false;
   if (mainRenderFrameId) cancelMainRenderFrame();
   mainRenderScheduleKind = scheduleKind;
@@ -45707,7 +45832,7 @@ function scheduleMainRenderFrame(frameFps) {
       mainRenderFrameId = 0;
       mainRenderScheduleKind = '';
       animate();
-    }, Math.max(16, Math.round(1000 / RENDER_IDLE_FPS)));
+    }, Math.max(16, Math.round(1000 / (targetFps || RENDER_IDLE_FPS))));
   } else {
     mainRenderFrameId = requestAnimationFrame(function() {
       mainRenderFrameId = 0;
@@ -45753,6 +45878,26 @@ function isContinuousPlaybackRenderActive() {
   return !!(audio && audio.src && !audio.paused && !audio.ended);
 }
 /**
+ * 稳定播放阶段的画质档位限帧：默认档 60 FPS，节能档 48 FPS，极致档跟随显示器刷新率。
+ * @returns {number} 播放阶段目标帧率；零表示跟随显示器 RAF。
+ */
+function playbackRenderFpsCapForQuality() {
+  if (typeof normalizePerformanceQuality !== 'function') return RENDER_PLAYBACK_FPS_CAP;
+  var quality = normalizePerformanceQuality(typeof fx !== 'undefined' && fx ? fx.performanceQuality : '');
+  if (quality === 'eco') return RENDER_PLAYBACK_FPS_CAP_ECO;
+  if (quality === 'ultra') return 0;
+  return RENDER_PLAYBACK_FPS_CAP;
+}
+/**
+ * 可见空闲场景的画质档位降频：节能档进一步压到 24 FPS，其余档位维持 30 FPS。
+ * @returns {number} 空闲阶段目标帧率。
+ */
+function idleRenderFpsForQuality() {
+  if (typeof normalizePerformanceQuality !== 'function') return RENDER_IDLE_FPS;
+  var quality = normalizePerformanceQuality(typeof fx !== 'undefined' && fx ? fx.performanceQuality : '');
+  return quality === 'eco' ? RENDER_IDLE_FPS_ECO : RENDER_IDLE_FPS;
+}
+/**
  * 根据当前渲染压力、交互状态和后台状态选择主场景目标帧率。
  * @param {number} [frameNow] 当前帧时间戳；省略时由交互状态入口自行读取时钟。
  * @returns {number} 目标帧率；零表示跟随显示器 RAF。
@@ -45764,8 +45909,9 @@ function getAdaptiveRenderFps(frameNow) {
   if (RENDER_VISIBLE_VSYNC) {
     if (pressureLevel >= 2) return interactionActive ? 60 : 48;
     if (pressureLevel >= 1 && !interactionActive) return 60;
-    if (!interactionActive && !isContinuousPlaybackRenderActive()) return RENDER_IDLE_FPS;
-    return 0;
+    if (!interactionActive && !isContinuousPlaybackRenderActive()) return idleRenderFpsForQuality();
+    if (interactionActive) return 0;
+    return playbackRenderFpsCapForQuality();
   }
   var tier = (typeof getRenderLoadTier === 'function') ? getRenderLoadTier() : 0;
   if (interactionActive) {
@@ -45790,7 +45936,9 @@ function shouldSkipAdaptiveRenderFrame(now, frameFps) {
     renderPerfState.lastRenderAt = now;
     return false;
   }
-  var minGap = 1000 / fps;
+  // 预留 2ms 容差：目标帧率与显示器刷新率接近时（如 60 FPS 上限配 60Hz 屏），
+  // 避免 RAF 时间戳轻微抖动导致隔帧跳过、实际降到一半帧率的卡顿。
+  var minGap = Math.max(1, 1000 / fps - 2);
   if (now - renderPerfState.lastRenderAt < minGap) {
     renderPerfState.skipped += 1;
     return true;

@@ -78,10 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复舞台歌单架滚动中scale、深度位移瞬间不连续，跨0.5边界平滑过渡',
-  '改为dt驱动缓动，帧率变化不影响滚动速度一致性',
-  '窗口滑动时复用卡片纹理对象，降低渲染开销',
-  '详情列表滚动优化，窗口移位仅重建离开的行',
+  '播放中的 3D 渲染按画质档位限帧，高刷屏不再跑满 144/165/240FPS',
+  '可见空闲降频区分画质档位，节能档空闲降到 24FPS',
+  '帧率节流预留 2ms 容差，避免与屏幕刷新率一致时隔帧跳帧',
+  '主队列与迷你队列增量渲染，切歌和封面就绪不再整表重建',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

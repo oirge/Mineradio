@@ -7,6 +7,7 @@
 ## Fact / Pitfall
 
 - 队列、封面、歌词和本地元数据会在切歌或后台资产加载时连续触发刷新。如果每次都重建可见 DOM，会造成主线程抖动。
+- 队列签名变化不等于全部行变化：切歌只移动 now/next-up 游标，单曲封面就绪只改一行内容。签名一变就整表 `innerHTML` 重建，会在几百首的队列上制造主线程长任务、大字符串 GC，并让全部封面图重新解码。
 - 播放器性能优化默认不改变 UI 表层。布局、CSS、可见文案、视觉质感和交互入口变化都属于额外产品改动，除非用户明确要求，否则不应混入性能优化提交。
 - 队列、搜索结果和歌单详情的可见列表会在高频交互中反复生成 HTML；`slice/map/join` 在大列表上会额外制造中间数组和短命字符串。
 - 队列和搜索结果 DOM 签名也属于热路径；每行用临时数组再 `join` 会在封面/歌词/元数据连续刷新时放大 GC 压力。
@@ -166,6 +167,8 @@
 - 实时节拍引擎跟随音频分析帧持续执行；在 `processRealtimeBeatEngine()` 内声明 helper 或直接返回对象字面量会在播放期间反复创建闭包与短命对象。
 - MediaPipe 手势帧会同时计算粒子位置、张开度和 Canvas 骨架；不要重复计算掌心，也不要在帧内新建 tips 数组或掌心对象。
 - 主窗口可见但没有音频播放或用户交互时，主 3D RAF 如果继续跟随高刷新屏会持续占用 CPU；桌面歌词和壁纸必须保持独立调度，不能用主窗口降频替代覆盖层同步。
+- 主窗口正在播放但没有用户交互时，主 3D RAF 跟随 144/165/240Hz 显示器会把整场渲染跑满高刷频率；音乐可视化 60 FPS 已足够，高刷跟随只会放大 CPU/GPU 占用和功耗。
+- RAF 逐帧节流的目标帧率与显示器刷新率一致（如 60 FPS 上限配 60Hz 屏）时，RAF 时间戳的毫秒级抖动会让节流误判跳帧，实际帧率掉到一半并形成规律性卡顿。
 - 3D 歌单架完全隐藏或启动页遮挡时，卡片位置、旋转、透明度和详情行更新没有可见消费者；继续执行会放大高刷屏下的数学热循环。
 - 主分析器的 kick、人声、中频和高频桶是连续互斥范围；用四个循环扫描同一 TypedArray 会重复承担边界和索引开销。实时节拍分析的五个频段存在重叠，不能为了表面上的“单次扫描”引入更慢的多重边界判断。
 - `getStageLyricLockBounds()` 位于歌词镜头帧热路径，必须直接处理当前网格和 outgoing 网格，不能在每次调用中创建 `take()` 闭包。
@@ -177,6 +180,7 @@
 - 队列面板刷新必须通过 `safeRenderQueuePanel()`，由内部调度合并到命名 RAF 任务。
 - 性能优化优先改内部数据、缓存、调度和少分配实现；如果必须碰 DOM/HTML 生成，输出结构、class、文案和交互属性必须保持等价。
 - 队列 DOM 更新前先比较 `queueVisibleDomSignature()`；签名未变化时跳过 `innerHTML` 重建。
+- 队列签名变化后先尝试 `queueListApplyIncremental()` 增量修补：内容未变的行原样保留，仅 now/next-up 游标变化时切换类名，变更行不超过总量八分之一（且至多 256 行）时只替换这些行的 `outerHTML`。children 数量对不上、行身份标记（主队列 `data-queue-index` / 迷你队列 `onclick`）不符、`classList` 或 `outerHTML` 缺失，或变更过多时回退整表 `innerHTML` 重建。`opts.animate` 入场动画需要全新 DOM，必须整表重建。整表重建后用 `queueListIncrementalState()` 重建基线；空队列时清空 `queuePanelIncrementalState` / `miniQueueIncrementalState`。迷你队列项没有 next-up 类，游标修补只碰 `now`。回归测试：`tests/queue-incremental-render.test.js`。
 - 队列、搜索结果和歌单详情的可见 HTML 优先用单次循环拼接，避免在热路径里恢复 `slice(...).map(...).join('')`。
 - 队列和搜索结果 DOM 签名使用字符串累加，不要为每行恢复 `[...].join('~')` 临时数组。
 - 本地搜索文本热路径使用直接字段拼接，不要恢复字段数组、`filter(Boolean)` 和 `join(' ')`。
@@ -370,7 +374,7 @@
 - 3D 歌单详情页的 `syncRenderedRows()` 在可见窗口未变化时必须用单次索引循环同时更新歌曲引用和按需重绘，避免恢复为两个 `forEach` 遍历；`rowsDirty` / 加载动画刷新、中心行判定和绘制顺序必须保持原语义。
 
 - 实时节拍分析调用方必须把主频谱分析已经计算的时域 RMS 传给 `processRealtimeBeatEngine(analysisDt, rms)`，这样持续播放时不再重复扫描第二份 `2048` 点时域数组；保留省略该参数时的 `beatTimeDomainData` 回退路径，供直接调用和未来独立分析入口使用。
-- 主渲染器通过 `isContinuousPlaybackRenderActive()` 区分播放/交互与可见空闲：空闲目标为 30 FPS，播放或交互返回显示器刷新率，帧压力和深后台仍优先走原有 60/48/1 FPS 策略。
+- 主渲染器通过 `isContinuousPlaybackRenderActive()` 区分播放/交互与可见空闲：可见空闲按画质档位取 30/24 FPS（`idleRenderFpsForQuality()`，节能档 24），交互期间返回显示器刷新率，稳定播放按画质档位限帧（`playbackRenderFpsCapForQuality()`：默认 60、节能 48、极致 0 即跟随显示器），帧压力和深后台仍优先走原有 60/48/1 FPS 策略。回归测试：`tests/idle-render-hot-path.test.js`。
 - `shelfManager.update()` 先更新可见性状态；启动页或 `targetVis === 0` 且 `group.visible === false` 时直接结束，详情打开或可见过渡期间仍完整更新卡片和行。
 - 实时频谱在一次 `for (i < len)` 中按边界把样本分配到四个桶，再分别归一化；不要恢复四段独立扫描或改变原有桶边界。
 - `beatBandRms()` 接收 `start/end` 频谱桶边界，边界由 `ensureBeatBandRanges()` 按采样率、FFT 尺寸和数组长度缓存；不要在每个分析帧重新执行同一组 Hz 到桶的 `floor/ceil` 换算。`tests/audio-analysis-hot-path.test.js` 必须锁定采样桶和 RMS 数值等价。
@@ -379,7 +383,8 @@
 - `updateHomeAudioVisual()` 先命中已有时间节流，再查找 `home-wave-track` DOM 节点；空 Home 波形的显示和刷新间隔语义保持不变。
 - 主音频分析的四个频谱段应先累加 `Uint8Array` 原始采样值，再按段统一乘 `1 / 255` 和平均因子；时域 RMS 可复用 256 项 `Float64Array` 平方查找表，避免每个采样重复执行相同的减法、除法和乘法。必须用旧版逐采样算法锁定四个频段和 RMS 的数值等价，避免浮点累加顺序变化影响节拍阈值。
 - 实时节拍分析器独立于主视觉分析器；主分析仍按 60 FPS 提供视觉数据，节拍频谱只需按 30 FPS 刷新，间隔内复用上一份 `beatFrequencyData` 和五个频段标量，节拍状态机继续按主分析时间片推进。重置实时节拍引擎时必须重置采样时隙和频段缓存，保证切歌后的首个分析片立即刷新频谱。
-- 主渲染器可见空闲态的目标仍是 30 FPS，但 `scheduleMainRenderFrame()` 必须使用定时器直接按目标帧率唤醒，避免高刷屏每个 RAF 周期进入一次 JS 再被跳过；播放、帧压力或交互态必须自动切回 RAF。`markRenderInteraction()` 在已有空闲定时器时要立即升级调度，不能让指针操作等待下一次空闲唤醒。
+- 主渲染器可见空闲态的目标仍是 30 FPS（节能档 24），但 `scheduleMainRenderFrame()` 必须使用定时器直接按目标帧率唤醒，避免高刷屏每个 RAF 周期进入一次 JS 再被跳过；定时器调度的判定是 `fps && fps <= RENDER_IDLE_FPS`（不只等于 `RENDER_IDLE_FPS`），延迟按实际目标帧率计算。播放、帧压力或交互态必须自动切回 RAF。`markRenderInteraction()` 在已有空闲定时器时要立即升级调度，不能让指针操作等待下一次空闲唤醒。
+- `shouldSkipAdaptiveRenderFrame()` 的 `minGap` 必须预留 2ms 容差（`Math.max(1, 1000 / fps - 2)`）：目标帧率与显示器刷新率一致时，避免 RAF 时间戳轻微抖动导致隔帧跳过、实际帧率减半。
 - `public/wallpaper.html` 的覆盖层关闭或未播放时不得持续满速 RAF；启用播放态可用 RAF，启用但未播放限为 `WALLPAPER_IDLE_FPS`，关闭态使用更长定时器并清空封面图与粒子数组。状态切换和可见性恢复必须取消旧句柄后重新调度，避免同时留下 RAF 与 timeout。
 - 3D 歌单架 `placeCard()` 的卡片位置、缩放、旋转、相机姿态、可见性、渲染顺序、材质颜色和透明度必须通过卡片级稳定值缓存写入；动画目标仍按帧计算，但相同目标值不得重复触发 Three.js setter。普通欧拉姿态切换时若未显式传入 `z`，必须保留当前 `rotation.z`，避免从相机四元数姿态切回时改变滚转。回归测试：`tests/frame-hot-path.test.js`。
 - 3D 歌单详情的可见行位置、缩放、旋转、可见性、渲染顺序和材质透明度，以及详情组位置/缩放/普通欧拉姿态和面板透明度，都必须通过运行时稳定值缓存写入；动画目标仍按帧计算，相同目标值不得重复触发 Three.js setter。相机四元数分支必须使详情组欧拉缓存失效，切回普通姿态时重新写入当前目标。回归测试：`tests/frame-hot-path.test.js`。

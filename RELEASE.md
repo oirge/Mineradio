@@ -1,5 +1,20 @@
 # 发布流程
 
+## v2.1.7 运行时降载：播放限帧与队列增量渲染
+
+- **版本元数据**：`2.1.7` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 播放中的主 3D 渲染按画质档位限帧（`playbackRenderFpsCapForQuality()`：默认 60、节能 48、极致 0 即跟随显示器刷新率），交互期间保持显示器刷新率；高刷屏（144/165/240Hz）整机 CPU/GPU 占用大幅下降。
+  2. 可见空闲降频区分档位（`idleRenderFpsForQuality()`：默认 30、节能 24）。
+  3. `shouldSkipAdaptiveRenderFrame()` 的 `minGap` 预留 2ms 容差，修复目标帧率与显示器刷新率一致时（60FPS 上限配 60Hz 屏）隔帧跳帧、实际帧率减半的卡顿。
+  4. 主队列与迷你队列增量渲染（`queueListApplyIncremental()`）：切歌只切换 now/next-up 类名，单曲封面就绪等少量行变化（≤总量八分之一且 ≤256 行）只替换对应行 `outerHTML`；结构不符或变更过多回退整表重建，`opts.animate` 入场动画仍整表重建。
+- **技术细节**：
+  - 常量：`RENDER_IDLE_FPS_ECO=24`、`RENDER_PLAYBACK_FPS_CAP=60`、`RENDER_PLAYBACK_FPS_CAP_ECO=48`；新 helper 均带 `typeof` 防御，兼容测试 VM 切片。
+  - 定时器调度判定放宽为 `fps && fps <= RENDER_IDLE_FPS`（覆盖节能档空闲 24FPS），延迟按实际目标帧率计算。
+  - 增量基线 `queuePanelIncrementalState` / `miniQueueIncrementalState` 缓存行签名、游标与 `LOCAL_ONLY_MODE`；整表重建后重建基线，空队列清空。
+  - 迷你队列项没有 `data-queue-index`，行身份校验走 `onclick="playQueueAt(i)"`；主队列行校验 `data-queue-index`。
+- **回归**：新增 `tests/queue-incremental-render.test.js`（5 项），更新 `tests/idle-render-hot-path.test.js` 档位断言；全量 Node 回归 `1218/1218` 通过。
+
 ## v2.1.6 舞台歌单架动画优化
 
 - **版本元数据**：`2.1.6` 于 `package.json`、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一。
