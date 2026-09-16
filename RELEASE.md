@@ -14,6 +14,13 @@
   - 增量基线 `queuePanelIncrementalState` / `miniQueueIncrementalState` 缓存行签名、游标与 `LOCAL_ONLY_MODE`；整表重建后重建基线，空队列清空。
   - 迷你队列项没有 `data-queue-index`，行身份校验走 `onclick="playQueueAt(i)"`；主队列行校验 `data-queue-index`。
 - **回归**：新增 `tests/queue-incremental-render.test.js`（5 项），更新 `tests/idle-render-hot-path.test.js` 档位断言；全量 Node 回归 `1218/1218` 通过。
+- **GitHub 发布结果（2026-09-16）**：tag `v2.1.7` → commit `347f5c2ad6f8bbc7c1a7cc80211c5ec838a003d4`；Actions 构建 `35052628573` 成功（1m53s），构建、SHA256 清单生成和资产上传全部通过。Release `389622359` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍已改为本版本四条运行时降载说明。
+- **线上资产核对**：`latest.yml` 版本为 `2.1.7`，安装包 SHA512 与清单一致；GitHub 下载资产 SHA256 如下：
+  - `Mineradio-oirge-2.1.7-Setup.exe`：102376133 B，SHA256 `5eb8dc341edf6afb372b62d8539e00742f7a796ad3d21515f5ff05fe343ac14d`。
+  - `Mineradio-oirge-2.1.7-Setup.exe.blockmap`：106717 B，SHA256 `c45ee75bd32a92174a1595869bbc165835fde834e4f14a42c4df977eae1c9afc`。
+  - `latest.yml`：359 B，SHA256 `1e3918bc7410b3384fcfe4018ae68adbbfaeb160bd1493d9dd3afeb13dfe7225`。
+  - `Mineradio-oirge-2.1.7-SHA256SUMS.txt`：282 B，SHA256 `da47c95cdf7ee19e5df1d07e3329930d851de0f0697288c7d8c41c0d5b400fbd`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的 v2.1.6 正在运行，未强制关闭；已验证安装包 SHA256 与线上清单一致。应用内更新检测到 `latest.yml` 的 2.1.7 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.1.7-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
 
 ## v2.1.6 舞台歌单架动画优化
 
