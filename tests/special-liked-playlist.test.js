@@ -42,7 +42,7 @@ function createSpecialLikedContext(initialStorage = '[]') {
     syncLocalLibraryDbFavorite: () => {},
     showToast: () => {},
   };
-  vm.runInNewContext(`${functions}\nthis.api = { compactSpecialLikedSongRefs, readSpecialLikedSongRefs, toggleSpecialLikedSong, specialLikedSongRefIndex, getSpecialLikedSongs };`, context);
+  vm.runInNewContext(`${functions}\nthis.api = { compactSpecialLikedSongRefs, readSpecialLikedSongRefs, toggleSpecialLikedSong, specialLikedSongRefIndex, isSpecialLikedSong, getSpecialLikedSongs };`, context);
   return { context, storage };
 }
 
@@ -63,6 +63,35 @@ test('特别喜欢支持添加、移除和引用去重', () => {
   assert.equal(context.api.toggleSpecialLikedSong(song), false);
   assert.equal(context.api.specialLikedSongRefIndex(song), -1);
   assert.equal(JSON.parse(storage.get('mineradio-special-liked-playlist-v1')).length, 0);
+});
+
+test('喜欢 Set 查表与线性扫描等价，并在引用变更后失效重建', () => {
+  const refs = JSON.stringify([
+    { key: 'local-key:a', path: 'd:/music/a.mp3', name: 'A' },
+    { key: 'local-key:legacy', path: 'd:/music/b.mp3', name: 'B' },
+  ]);
+  const { context } = createSpecialLikedContext(refs);
+  // 命中 key
+  const byKey = { type: 'local', localKey: 'a', localPath: 'D:\\Music\\A.mp3', name: 'A' };
+  // key 不同但路径命中（例如重新定位后 localKey 变了）
+  const byPath = { type: 'local', localKey: 'renamed', localPath: 'D:\\Music\\B.mp3', name: 'B' };
+  // 都不命中
+  const miss = { type: 'local', localKey: 'z', localPath: 'D:\\Music\\Z.mp3', name: 'Z' };
+
+  [byKey, byPath, miss].forEach((song) => {
+    // 快表与逐行扫描必须给出一致结论，Set 查表命中即 index >= 0。
+    assert.equal(context.api.isSpecialLikedSong(song), context.api.specialLikedSongRefIndex(song) >= 0);
+  });
+  assert.equal(context.api.isSpecialLikedSong(byKey), true);
+  assert.equal(context.api.isSpecialLikedSong(byPath), true);
+  assert.equal(context.api.isSpecialLikedSong(miss), false);
+
+  // 取消喜欢后，refs 变为新数组，快表应随之失效——不再命中。
+  context.api.toggleSpecialLikedSong(byKey);
+  assert.equal(context.api.isSpecialLikedSong(byKey), false);
+  assert.equal(context.api.specialLikedSongRefIndex(byKey), -1);
+  // 未受影响的歌曲仍然命中。
+  assert.equal(context.api.isSpecialLikedSong(byPath), true);
 });
 
 test('特别喜欢可按本地路径回退恢复歌曲', () => {

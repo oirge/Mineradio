@@ -622,7 +622,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.7';
+var APP_VERSION = '2.1.8';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,11 +677,9 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '播放中的 3D 渲染不再跟随高刷屏跑满：默认 60FPS、节能 48FPS、极致档跟随显示器刷新率，高刷屏 CPU/GPU 占用大幅下降。',
-    '无音频、无交互的可见空闲降频区分画质档位，节能档空闲进一步降到 24FPS。',
-    '帧率节流预留 2ms 容差，修复限帧与屏幕刷新率一致时隔帧跳帧、帧率减半的卡顿。',
-    '主队列与迷你队列改为增量渲染：切歌只切换类名，单曲封面就绪只替换对应行，大队列不再整表重建。',
-    '全量 Node 回归 1218/1218 通过。'
+    '切换歌单播放不再明显卡顿：整表渲染时「特别喜欢」状态查询从逐行线性扫描改为 Set 查表，大歌单开销由 O(队列×喜欢数) 降到 O(队列)。',
+    '搜索结果、曲库列表等所有展示红心状态的位置同步受益，喜欢的歌越多、歌单越大提速越明显。',
+    '全量 Node 回归 1219/1219 通过。'
   ]
 };
 function readSavedVolume() {
@@ -21976,6 +21974,37 @@ function specialLikedSongRefIndex(song) {
   }
   return -1;
 }
+// 喜欢查询的 Set 索引。队列 / 曲库整表渲染时每行都要判断是否已喜欢，逐行线性扫描 refs
+// 会让整表渲染退化成 O(行数 × 喜欢数)，切大歌单时尤其明显。这里按 refs 数组引用缓存
+// key / path 两个集合：refs 每次变更都由 compactSpecialLikedSongRefs 产出新数组，
+// 引用一变缓存即失效并重建，无需手动清理。
+var specialLikedLookupCache = { refs: null, keys: null, paths: null };
+function specialLikedLookupSets() {
+  var refs = readSpecialLikedSongRefs();
+  if (specialLikedLookupCache.refs !== refs) {
+    var keys = new Set();
+    var paths = new Set();
+    for (var i = 0; i < refs.length; i++) {
+      var ref = refs[i];
+      if (!ref) continue;
+      if (ref.key) keys.add(String(ref.key));
+      if (ref.path) paths.add(ref.path);
+    }
+    specialLikedLookupCache.refs = refs;
+    specialLikedLookupCache.keys = keys;
+    specialLikedLookupCache.paths = paths;
+  }
+  return specialLikedLookupCache;
+}
+// 与 specialLikedRefMatchesSong 逐行判定等价：命中 key，或歌曲有路径且命中 path，即为已喜欢。
+// compactSpecialLikedSongRefs 保证每个 ref 的 key 非空、path 已归一化，故集合命中与线性扫描结果一致。
+function isSpecialLikedSong(song) {
+  if (!song) return false;
+  var sets = specialLikedLookupSets();
+  if (sets.keys.has(specialLikedSongKey(song))) return true;
+  var path = specialLikedSongPath(song);
+  return !!(path && sets.paths.has(path));
+}
 function getSpecialLikedSongs() {
   var refs = readSpecialLikedSongRefs();
   var source = localLibrarySongs && localLibrarySongs.length ? localLibrarySongs : (playQueue || []);
@@ -22026,7 +22055,7 @@ function toggleSpecialLikedSong(song) {
   return true;
 }
 function isSongLiked(song) {
-  if (song && song.type === 'local') return specialLikedSongRefIndex(song) >= 0;
+  if (song && song.type === 'local') return isSpecialLikedSong(song);
   return !!(song && song.id && likedSongMap[String(song.id)]);
 }
 function ensureLoggedInForAction() {

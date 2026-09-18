@@ -78,10 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '播放中的 3D 渲染按画质档位限帧，高刷屏不再跑满 144/165/240FPS',
-  '可见空闲降频区分画质档位，节能档空闲降到 24FPS',
-  '帧率节流预留 2ms 容差，避免与屏幕刷新率一致时隔帧跳帧',
-  '主队列与迷你队列增量渲染，切歌和封面就绪不再整表重建',
+  '切换歌单播放不再明显卡顿：喜欢状态查询改为 Set 查表，大歌单整表渲染开销由 O(队列×喜欢数) 降到 O(队列)',
+  '搜索结果与曲库列表的红心状态判断同步加速',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
