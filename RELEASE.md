@@ -1,5 +1,24 @@
 # 发布流程
 
+## v2.1.8 切歌单降载：喜欢状态 Set 查表
+
+- **版本元数据**：`2.1.8` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 切换歌单播放不再明显卡顿：队列 / 曲库整表渲染时每行都要判断歌曲是否已「特别喜欢」，原 `isSongLiked()` 对本地歌走 `specialLikedSongRefIndex()` 逐行线性扫描 `specialLikedSongRefs`，整表渲染退化成 O(队列长度 × 喜欢数)，切大歌单时开销尤其突出。
+  2. 新增 `isSpecialLikedSong()`：按 `refs` 数组引用缓存 `key` / `path` 两个 `Set`，查询降到 O(1)/行；`isSongLiked()` 本地分支改调它。搜索结果、曲库列表等所有走 `isSongLiked()` 的位置同步受益。
+- **技术细节**：
+  - 缓存 `specialLikedLookupCache = { refs, keys, paths }`：`specialLikedLookupSets()` 发现 `refs` 引用变化才重建集合；`refs` 每次变更都由 `compactSpecialLikedSongRefs()` 产出新数组，引用一变缓存即失效，无需手动清理。
+  - `isSpecialLikedSong()` 与逐行 `specialLikedRefMatchesSong()` 判定等价：命中 `key`，或歌曲有 `path` 且命中 `path`。`compactSpecialLikedSongRefs()` 保证每个 `ref` 的 `key` 非空、`path` 已归一化，故集合命中与线性扫描结果一致。
+  - `specialLikedSongRefIndex()` 保留：`toggleSpecialLikedSong()` 仍需真实索引做 `splice`，且它只在点红心时调用，不在整表渲染热路径上。
+- **回归**：`tests/special-liked-playlist.test.js` 新增「Set 查表与线性扫描等价、引用变更后失效重建」用例（并验证 VM 上下文内 `Set` 可用）；全量 Node 回归 `1219/1219` 通过。
+- **GitHub 发布结果（2026-09-18）**：tag `v2.1.8` → commit `70e01fd4c067137f38a9f68e6f131032defe6efa`；Actions 构建 `35326380824` 成功（2m2s），构建、SHA256 清单生成和资产上传全部通过。Release `391332342` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍已改为本版本两条切歌单降载说明。
+- **线上资产核对**：`latest.yml` 版本为 `2.1.8`，安装包 SHA512（`ekZOu1kiVwSM5tjr5DUVGldnt0aqg9iAbLOp1bgikixXrru9VMVPol2eyjYx8kieER9VFf2GwK6MKFOdE0Jm2Q==`）与清单一致；GitHub 下载资产 SHA256 如下：
+  - `Mineradio-oirge-2.1.8-Setup.exe`：102378595 B，SHA256 `e4065a3b8dd0f10973e5e3b30c60c04cfc5304c16ac5425a46d9e5ff276aa75b`。
+  - `Mineradio-oirge-2.1.8-Setup.exe.blockmap`：106630 B，SHA256 `60ba3060078b9df302f768931d33efd5e68f4b6653d0ca3652ef023240a5d6ac`。
+  - `latest.yml`：359 B，SHA256 `3642c6c55b9b93c734e32f26be96882f1a7169caac6e1d169724fef1b890dcd0`。
+  - `Mineradio-oirge-2.1.8-SHA256SUMS.txt`：282 B，SHA256 `6571c7c492368569ccfe6344b3ca4611756b9ecb32acb6dd2c82f7bd54153eda`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的已装应用正在运行，未强制关闭；已在临时目录验证安装包 SHA256、SHA512 与线上清单一致。应用内更新检测到 `latest.yml` 的 2.1.8 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.1.8-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.1.7 运行时降载：播放限帧与队列增量渲染
 
 - **版本元数据**：`2.1.7` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
