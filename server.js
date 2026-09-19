@@ -78,8 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '切换歌单播放不再明显卡顿：喜欢状态查询改为 Set 查表，大歌单整表渲染开销由 O(队列×喜欢数) 降到 O(队列)',
-  '搜索结果与曲库列表的红心状态判断同步加速',
+  '音量支持鼠标滚轮调节，步进可在音量弹层里 1%~50% 自定义',
+  '歌词翻译改为开启/关闭开关，不再与多行歌词叠字冲突',
+  '新增歌词翻译进度角标，实时显示翻译进度',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

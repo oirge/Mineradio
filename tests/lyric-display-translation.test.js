@@ -57,7 +57,12 @@ test('显示模式归一：非法值回落 single（上游语义）', () => {
   assert.equal(api.normalizeLyricDisplayMode('cinema'), 'cinema');
   assert.equal(api.normalizeLyricDisplayMode('xxx'), 'single');
   assert.equal(api.normalizeLyricDisplayMode(''), 'single');
-  assert.equal(api.normalizeLyricTranslationMode('multi'), 'multi');
+  assert.equal(api.normalizeLyricTranslationMode('on'), 'on');
+  assert.equal(api.normalizeLyricTranslationMode('off'), 'off');
+  // 旧档位迁移为开启，不再各自成一档，避免与多行歌词叠字冲突。
+  assert.equal(api.normalizeLyricTranslationMode('current'), 'on');
+  assert.equal(api.normalizeLyricTranslationMode('dual'), 'on');
+  assert.equal(api.normalizeLyricTranslationMode('multi'), 'on');
   assert.equal(api.normalizeLyricTranslationMode('xxx'), 'off');
 });
 
@@ -128,7 +133,9 @@ test('渲染层：行池管理/轨道滚动/译文门控/接线齐全', () => {
   assert.match(appJs, /while \(stageLyrics\.outgoing\.length\) disposeLyricMesh\(stageLyrics\.outgoing\.pop\(\)\);\s*\n\s*stageLyricRowsClear\(\);/);
   // refreshCurrentLyricStyle 失效签名
   assert.match(appJs, /function refreshCurrentLyricStyle\(\) \{\s*\n\s*stageLyrics\.styleVersion \+= 1;\s*\n\s*stageLyrics\.rowsSignature = '';/);
-  // 译文行 650 字重与 dual 下一行亮度门控
+  // 开启翻译时只给当前行配一条译文行，避免与多行歌词逐行叠字
+  assert.match(appJs, /want\.push\(\{ kind: 'translation', lineIdx: activeIdx, delta: 0 \}\);/);
+  // 译文行 650 字重
   assert.match(appJs, /weight: isTranslation \? 650 : null,/);
   assert.match(appJs, /translationOpacity \* 0\.66/);
   // 池更新签名短路（含 custom 行数）
@@ -140,6 +147,28 @@ test('渲染层：行池管理/轨道滚动/译文门控/接线齐全', () => {
   assert.match(appJs, /'Translate numbered song lyric lines into ' \+ target \+/);
   assert.match(appJs, /function setLyricTranslateTarget\(value\) \{/);
   assert.match(indexHtml, /id="lyric-translate-target"/);
+});
+
+// ---------- 5b. 翻译进度角标 ----------
+test('翻译进度角标：元素、状态字段、调度/批次/完成/失败接线齐全', () => {
+  // 角标元素与文字位
+  assert.match(indexHtml, /id="lyric-translate-chip"/);
+  assert.match(indexHtml, /id="lyric-translate-text"/);
+  // 进度状态字段
+  assert.match(appJs, /var lyricLlmTranslateState = \{[^}]*total: 0, done: 0[^}]*\};/);
+  // 角标读写函数
+  assert.match(appJs, /function setLyricTranslateChip\(text, opts\) \{/);
+  // 调度阶段：无待译清空角标，有待译显示 0/总数
+  assert.match(appJs, /if \(!pending\.length\) \{ setLyricTranslateChip\(null\); return; \}/);
+  assert.match(appJs, /setLyricTranslateChip\('翻译歌词 0\/' \+ pending\.length\);/);
+  // 每批完成推进进度
+  assert.match(appJs, /lyricLlmTranslateState\.done = Math\.min\(index, pending\.length\);/);
+  assert.match(appJs, /setLyricTranslateChip\('翻译歌词 ' \+ lyricLlmTranslateState\.done \+ '\/' \+ pending\.length\);/);
+  // 完成态与失败态
+  assert.match(appJs, /setLyricTranslateChip\('翻译完成 ' \+ pending\.length \+ '\/' \+ pending\.length, \{ done: true, hideAfter: 1500 \}\);/);
+  assert.match(appJs, /setLyricTranslateChip\('翻译失败，稍后重试', \{ hideAfter: 2800 \}\);/);
+  // 关闭翻译时收起角标
+  assert.match(appJs, /if \(fx\.lyricTranslationMode !== 'on'\) setLyricTranslateChip\(null\);/);
 });
 
 // ---------- 6. 持久化 ----------
@@ -163,9 +192,11 @@ test('index.html：行数分段/翻译分段/四滑条与上游一致', () => {
     assert.match(indexHtml, new RegExp(`data-mode="${mode}"[^>]*>${label}</button>`));
   }
   assert.match(indexHtml, /<div class="fx-seg" id="lyric-translation-mode-seg">/);
-  for (const [mode, label] of [['off', '关闭'], ['current', '当前'], ['dual', '双行'], ['multi', '多行']]) {
+  // 翻译只剩开启/关闭两态，不再有当前/双行/多行档位。
+  for (const [mode, label] of [['off', '关闭'], ['on', '开启']]) {
     assert.match(indexHtml, new RegExp(`data-translation="${mode}"[^>]*>${label}</button>`));
   }
+  assert.doesNotMatch(indexHtml, /data-translation="(current|dual|multi)"/, '旧翻译档位按钮应已移除');
   const rows = {
     'fx-lyriccustomlines': { min: '1', max: '10', step: '1' },
     'fx-lyrictranslationgap': { min: '0.28', max: '2.20', step: '0.01' },
@@ -183,7 +214,7 @@ test('绑定/回填/setter 接线齐全', () => {
   assert.match(appJs, /\['fx-lyriccustomlines','lyricCustomLineCount'\],\['fx-lyrictranslationgap','lyricTranslationGap'\],\['fx-lyrictranslationscale','lyricTranslationScale'\],\['fx-lyrictranslationopacity','lyricTranslationOpacity'\],/);
   assert.match(appJs, /if \(pair\[1\] === 'lyricCustomLineCount'\) \{\s*\n\s*fx\.lyricCustomLineCount = lyricCustomLineCountValue\(\);\s*\n\s*fx\.lyricDisplayMode = 'custom';\s*\n\s*updateLyricDisplayModeControls\(\);/);
   assert.match(appJs, /function setLyricDisplayMode\(mode\) \{[\s\S]*?showToast\('歌词行数已切换'\);/);
-  assert.match(appJs, /function setLyricTranslationMode\(mode\) \{[\s\S]*?showToast\('双语翻译已切换'\);/);
+  assert.match(appJs, /function setLyricTranslationMode\(mode\) \{[\s\S]*?fx\.lyricTranslationMode === 'on' \? '歌词翻译已开启' : '歌词翻译已关闭'/);
   assert.match(appJs, /setRange\('fx-lyrictranslationgap', fx\.lyricTranslationGap == null \? fxDefaults\.lyricTranslationGap : fx\.lyricTranslationGap\);/);
   assert.match(appJs, /updateLyricDisplayModeControls\(\);\s*\n\s*updateLyricTranslationModeControls\(\);/);
 });

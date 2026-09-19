@@ -53,6 +53,7 @@ const BACKUP_SOURCE = slice(
 const LIBRARY_ROOT = 'D:\\Music';
 const PLAYER_KEYS = {
   VOLUME_STORE_KEY: 'apex-player-volume',
+  VOLUME_WHEEL_STEP_STORE_KEY: 'mineradio-volume-wheel-step-v1',
   PLAYBACK_QUALITY_STORE_KEY: 'mineradio-playback-quality-v1',
   DIY_MODE_STORE_KEY: 'mineradio-diy-player-mode-v1',
   PLAYLIST_PANEL_PIN_STORE_KEY: 'mineradio-playlist-panel-pinned-v1',
@@ -612,7 +613,7 @@ test('config.player 只认白名单键，备份文件塞不进任意 localStorag
 test('白名单与 app.js 里的持久化键常量一一对应', () => {
   const mod = loadBackupModule({});
   const list = plain(mod.context.MINERADIO_BACKUP_PLAYER_KEYS);
-  assert.equal(list.length, 17);
+  assert.equal(list.length, 18);
   assert.deepEqual(list.slice().sort(), Object.values(PLAYER_KEYS).sort());
   Object.keys(PLAYER_KEYS).forEach((name) => {
     assert.match(appSource, new RegExp('var ' + name + " = '" + PLAYER_KEYS[name] + "';"), name + ' 常量值漂了');

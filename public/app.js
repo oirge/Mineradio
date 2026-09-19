@@ -131,6 +131,7 @@ var FREE_CAMERA_STORE_KEY = 'mineradio-free-camera-v1';
 var HOTKEY_SETTINGS_STORE_KEY = 'mineradio-hotkey-settings-v1';
 var VISUAL_GUIDE_SEEN_STORE_KEY = 'mineradio-visual-guide-seen-v2';
 var VOLUME_STORE_KEY = 'apex-player-volume';
+var VOLUME_WHEEL_STEP_STORE_KEY = 'mineradio-volume-wheel-step-v1';
 var LOCAL_BEATMAP_STORE_KEY = 'mineradio-local-beatmaps-v1';
 var LOCAL_BEAT_PREF_STORE_KEY = 'mineradio-local-beatmap-prefs-v1';
 var LOCAL_LIBRARY_FOLDER_STORE_KEY = 'mineradio-local-library-folder-v1';
@@ -158,6 +159,7 @@ var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', '
 var LOCAL_METADATA_TAG_SCHEMA = 4;
 var PERSISTENT_UI_STATE_KEYS = [
   VOLUME_STORE_KEY,
+  VOLUME_WHEEL_STEP_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
   PLAYBACK_QUALITY_STORE_KEY,
   DIY_MODE_STORE_KEY,
@@ -622,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.8';
+var APP_VERSION = '2.1.9';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,9 +679,10 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '切换歌单播放不再明显卡顿：整表渲染时「特别喜欢」状态查询从逐行线性扫描改为 Set 查表，大歌单开销由 O(队列×喜欢数) 降到 O(队列)。',
-    '搜索结果、曲库列表等所有展示红心状态的位置同步受益，喜欢的歌越多、歌单越大提速越明显。',
-    '全量 Node 回归 1219/1219 通过。'
+    '音量支持鼠标滚轮调节：滚轮悬停在音量键上滚动即可增减，步进可在音量弹层里 1%~50% 自定义。',
+    '歌词翻译改为开启/关闭开关，开启时只给当前行配译文，不再与多行歌词逐行叠字冲突。',
+    '新增歌词翻译进度角标：实时显示翻译进度、完成与失败状态。',
+    '全量 Node 回归 1228/1228 通过。'
   ]
 };
 function readSavedVolume() {
@@ -688,6 +691,32 @@ function readSavedVolume() {
     return isFinite(v) ? Math.max(0, Math.min(1, v)) : 1.0;
   } catch (e) {
     return 1.0;
+  }
+}
+// 鼠标滚轮每滚一格调整的音量幅度（0~1 的比例）。默认 5%，可在音量弹层里 1%~50% 自定义。
+var VOLUME_WHEEL_STEP_DEFAULT = 0.05;
+var VOLUME_WHEEL_STEP_MIN = 0.01;
+var VOLUME_WHEEL_STEP_MAX = 0.5;
+/**
+ * 归一化滚轮音量步进：脏值/越界回落到合法区间，量化到 1% 粒度。
+ * @param {*} value 原始步进比例（0~1）。
+ * @returns {number} 归一化后的步进比例。
+ */
+function normalizeVolumeWheelStep(value) {
+  var step = Number(value);
+  if (!isFinite(step) || step <= 0) return VOLUME_WHEEL_STEP_DEFAULT;
+  step = Math.round(step * 100) / 100;
+  return Math.max(VOLUME_WHEEL_STEP_MIN, Math.min(VOLUME_WHEEL_STEP_MAX, step));
+}
+/**
+ * 读取已保存的滚轮音量步进；读不到或脏值回落默认。
+ * @returns {number} 步进比例（0~1）。
+ */
+function readVolumeWheelStep() {
+  try {
+    return normalizeVolumeWheelStep(parseFloat(localStorage.getItem(VOLUME_WHEEL_STEP_STORE_KEY)));
+  } catch (e) {
+    return VOLUME_WHEEL_STEP_DEFAULT;
   }
 }
 function readDiyModePreference() {
@@ -886,6 +915,7 @@ function toggleDiyMode() {
 }
 var targetVolume = readSavedVolume();
 var lastNonZeroVolume = targetVolume > 0.01 ? targetVolume : 0.8;
+var volumeWheelStep = readVolumeWheelStep();
 var volumeCloseTimer = null;
 var volumePersistenceState = { timer: 0, pendingValue: '', lastValue: String(targetVolume) };
 var volumeUiState = {
@@ -4001,7 +4031,7 @@ var particlePointerLocalHit = new THREE.Vector3();
 var particlePointerQuat = new THREE.Quaternion();
 var particlePointerFrame = { dirty:false, ndcX:0, ndcY:0 };
 var CLICK_THRESHOLD = 6;  // 像素, 拖动 > 6px 视为 drag
-var UI_HIT_SELECTOR = '#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#drop-overlay';
+var UI_HIT_SELECTOR = '#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#lyric-translate-chip,#drop-overlay';
 var pointerUiHitCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
 function isPointerOverUi(e) {
@@ -6672,7 +6702,10 @@ function normalizeLyricDisplayMode(mode) {
 }
 function normalizeLyricTranslationMode(mode) {
   mode = String(mode || '');
-  return /^(off|current|dual|multi)$/.test(mode) ? mode : 'off';
+  // 只保留开启/关闭两态；旧档位 current/dual/multi 统一迁移为开启，
+  // 开启时只给当前行配译文，避免多行显示模式下每行都叠译文挤爆舞台。
+  if (mode === 'on' || /^(current|dual|multi)$/.test(mode)) return 'on';
+  return 'off';
 }
 function lyricCustomLineCountValue() {
   var raw = fx && fx.lyricCustomLineCount != null ? Number(fx.lyricCustomLineCount) : fxDefaults.lyricCustomLineCount;
@@ -9776,7 +9809,31 @@ var LYRIC_LLM_TRANSLATE_STORE_KEY = 'mineradio-lyric-llm-translation-v1';
 var LYRIC_LLM_TRANSLATE_MISS_MS = 10 * 60 * 1000;
 var LYRIC_LLM_TRANSLATE_BATCH = 24;
 var LYRIC_LLM_TRANSLATE_LIMIT = 1200;
-var lyricLlmTranslateState = { token: 0, running: false, scheduled: false, missUntil: 0, cache: null, cacheDirty: false };
+var lyricLlmTranslateState = { token: 0, running: false, scheduled: false, missUntil: 0, cache: null, cacheDirty: false, total: 0, done: 0 };
+var lyricTranslateChipHideTimer = 0;
+/**
+ * 更新/隐藏「翻译进度」角标。
+ * @param {?string} text 角标文字；传 null 立即隐藏。
+ * @param {{done?:boolean, hideAfter?:number}=} opts done 加完成态样式；hideAfter 毫秒后自动隐藏。
+ * @returns {void}
+ */
+function setLyricTranslateChip(text, opts) {
+  var chip = document.getElementById('lyric-translate-chip');
+  if (!chip) return;
+  var label = document.getElementById('lyric-translate-text');
+  opts = opts || {};
+  if (lyricTranslateChipHideTimer) { clearTimeout(lyricTranslateChipHideTimer); lyricTranslateChipHideTimer = 0; }
+  if (text == null) { chip.classList.remove('show', 'done'); return; }
+  if (label) label.textContent = text;
+  chip.classList.toggle('done', !!opts.done);
+  chip.classList.add('show');
+  if (opts.hideAfter) {
+    lyricTranslateChipHideTimer = setTimeout(function () {
+      lyricTranslateChipHideTimer = 0;
+      chip.classList.remove('show', 'done');
+    }, opts.hideAfter);
+  }
+}
 function readLyricLlmTranslateCache() {
   if (lyricLlmTranslateState.cache) return lyricLlmTranslateState.cache;
   var cache = {};
@@ -9832,8 +9889,11 @@ function scheduleLyricLlmTranslation() {
     if (pending.length < 80) pending.push({ line: line, text: sourceText, key: key });
   }
   if (cachedHits > 0) bumpStageLyricRows();
-  if (!pending.length) return;
+  if (!pending.length) { setLyricTranslateChip(null); return; }
   lyricLlmTranslateState.scheduled = true;
+  lyricLlmTranslateState.total = pending.length;
+  lyricLlmTranslateState.done = 0;
+  setLyricTranslateChip('翻译歌词 0/' + pending.length);
   var token = ++lyricLlmTranslateState.token;
   setTimeout(function () {
     lyricLlmTranslateState.scheduled = false;
@@ -9843,6 +9903,8 @@ function scheduleLyricLlmTranslation() {
 }
 function runLyricLlmTranslation(pending, token) {
   lyricLlmTranslateState.running = true;
+  lyricLlmTranslateState.total = pending.length;
+  lyricLlmTranslateState.done = 0;
   var cache = readLyricLlmTranslateCache();
   var index = 0;
   var changed = false;
@@ -9855,7 +9917,12 @@ function runLyricLlmTranslation(pending, token) {
     }
   }
   function next() {
-    if (token !== lyricLlmTranslateState.token || index >= pending.length) { finish(); return; }
+    if (token !== lyricLlmTranslateState.token) { setLyricTranslateChip(null); finish(); return; }
+    if (index >= pending.length) {
+      setLyricTranslateChip('翻译完成 ' + pending.length + '/' + pending.length, { done: true, hideAfter: 1500 });
+      finish();
+      return;
+    }
     var batch = pending.slice(index, index + LYRIC_LLM_TRANSLATE_BATCH);
     index += batch.length;
     var promptLines = batch.map(function (item, i) { return (i + 1) + '. ' + item.text; }).join('\n');
@@ -9905,12 +9972,15 @@ function runLyricLlmTranslation(pending, token) {
         changed = true;
         lyricLlmTranslateState.cacheDirty = true;
       });
+      lyricLlmTranslateState.done = Math.min(index, pending.length);
+      setLyricTranslateChip('翻译歌词 ' + lyricLlmTranslateState.done + '/' + pending.length);
       setTimeout(next, 60);
     }).catch(function (err) {
       if (timer) clearTimeout(timer);
       console.warn('[LyricLlmTranslate]', err && err.message || err);
       lyricLlmTranslateState.missUntil = Date.now() + LYRIC_LLM_TRANSLATE_MISS_MS;
       lyricLlmTranslateState.token += 1; // 作废剩余批次，本轮结束
+      setLyricTranslateChip('翻译失败，稍后重试', { hideAfter: 2800 });
       finish();
     });
   }
@@ -10098,20 +10168,11 @@ function updateStageLyricRows(activeIdx) {
     want.push({ kind: 'context', lineIdx: idx, delta: delta });
   });
   if (translationMode !== 'off') {
-    var translationTargets = [];
-    if (translationMode === 'current') translationTargets = [activeIdx];
-    else if (translationMode === 'dual') translationTargets = [activeIdx, activeIdx + 1];
-    else {
-      offsets.forEach(function (delta) {
-        var idx = activeIdx + delta;
-        if (idx >= 0 && idx < lines.length) translationTargets.push(idx);
-      });
+    // 开启翻译只给当前行加一条译文行：无论单/双/三/沉浸/自定行数，舞台最多多出一行译文，
+    // 不会与多行歌词逐行叠字冲突。
+    if (activeIdx >= 0 && activeIdx < lines.length && lines[activeIdx] && lines[activeIdx].translation) {
+      want.push({ kind: 'translation', lineIdx: activeIdx, delta: 0 });
     }
-    translationTargets.forEach(function (idx) {
-      if (idx < 0 || idx >= lines.length) return;
-      if (!lines[idx] || !lines[idx].translation) return;
-      want.push({ kind: 'translation', lineIdx: idx, delta: idx - activeIdx });
-    });
   }
   var wantKey = {};
   want.forEach(function (w) { wantKey[w.kind + ':' + w.lineIdx] = w; });
@@ -10211,11 +10272,8 @@ function tickStageLyricRows(dt) {
     var fitDelta = Number(fitOffsets[fitIndex]) || 0;
     var fitLine = activeIdx == null || activeIdx < 0 ? 0 : Math.max(0, Math.min(lyricsLines.length - 1, activeIdx + fitDelta));
     var fitVirtualDelta = Math.abs(lyricRowPrimaryVirtualIndex(fitLine) - targetScroll);
-    var fitHasTranslation = false;
-    if (translationMode === 'current') fitHasTranslation = fitLine === activeIdx;
-    else if (translationMode === 'dual') fitHasTranslation = fitLine === activeIdx || fitLine === activeIdx + 1;
-    else if (translationMode !== 'off') fitHasTranslation = true;
-    fitHasTranslation = fitHasTranslation && lyricRowHasTranslationAt(fitLine);
+    // 只有当前行会渲染译文，所以只给当前行预留译文行的排版空间。
+    var fitHasTranslation = translationMode !== 'off' && fitLine === activeIdx && lyricRowHasTranslationAt(fitLine);
     var fitTranslationExtra = fitHasTranslation ? visualGap * translationStep : 0;
     var fitSpan = fitVirtualDelta * step + fitTranslationExtra;
     if (fitDelta < 0) spanTop = Math.max(spanTop, fitSpan);
@@ -21713,7 +21771,8 @@ function setLyricTranslationMode(mode) {
   scheduleLyricLlmTranslation();
   refreshCurrentLyricStyle();
   saveLyricLayout();
-  showToast('双语翻译已切换');
+  if (fx.lyricTranslationMode !== 'on') setLyricTranslateChip(null);
+  showToast(fx.lyricTranslationMode === 'on' ? '歌词翻译已开启' : '歌词翻译已关闭');
 }
 function updateCustomLyricControls() {
   var song = currentLyricSong();
@@ -24704,6 +24763,44 @@ function adjustVolumeByKeyboard(delta) {
   if (!step) return;
   setVolume(clampRange(targetVolume + step, 0, 1), false);
 }
+// ---- 滚轮音量步进（可自定义）----
+/**
+ * 把音量弹层里的步进输入框回填成当前步进的百分比。用户正在输入时不覆盖。
+ * @returns {void}
+ */
+function updateVolumeWheelStepUi() {
+  var input = document.getElementById('volume-wheel-step');
+  if (!input) return;
+  var pct = Math.round(volumeWheelStep * 100);
+  if (document.activeElement !== input && String(input.value) !== String(pct)) input.value = pct;
+}
+/**
+ * 设置滚轮音量步进并落盘。
+ * @param {*} value 步进比例（0~1）。
+ * @param {{force?:boolean, toast?:boolean}=} opts force 强制落盘；toast 弹提示。
+ * @returns {number} 归一化后的步进比例。
+ */
+function setVolumeWheelStep(value, opts) {
+  opts = opts || {};
+  var next = normalizeVolumeWheelStep(value);
+  var changed = Math.abs(next - volumeWheelStep) > 0.0001;
+  volumeWheelStep = next;
+  if (changed || opts.force) setPersistentLocalStorageItem(VOLUME_WHEEL_STEP_STORE_KEY, String(next));
+  updateVolumeWheelStepUi();
+  if (opts.toast) showToast('滚轮步进 ' + Math.round(next * 100) + '%');
+  return next;
+}
+/**
+ * 按滚轮方向调整音量：向上滚增大，向下滚减小，幅度为当前步进。
+ * @param {number} deltaY 滚轮竖向增量（<0 为向上滚）。
+ * @returns {void}
+ */
+function adjustVolumeByWheel(deltaY) {
+  var dir = deltaY < 0 ? 1 : (deltaY > 0 ? -1 : 0);
+  if (!dir) return;
+  setVolume(clampRange(targetVolume + dir * volumeWheelStep, 0, 1), false);
+}
+// ---- 滚轮音量步进结束 ----
 
 // ============================================================
 //  播放速度（倍速）
@@ -25192,15 +25289,37 @@ function bindVolumeControls() {
       if (wrap) wrap.classList.remove('open');
     }, 520);
   }
+  var stepInput = document.getElementById('volume-wheel-step');
   if (wrap) {
     wrap.addEventListener('mouseenter', keepVolumePanelOpen);
     wrap.addEventListener('mouseleave', closeVolumePanelSoon);
+    // 滚轮悬停在音量控件上即可调整音量；滚在步进输入框上时让它自己处理，不改音量。
+    wrap.addEventListener('wheel', function(e){
+      if (e.target && e.target.closest && e.target.closest('.vol-wheel-step')) return;
+      e.preventDefault();
+      keepVolumePanelOpen();
+      adjustVolumeByWheel(e.deltaY);
+      closeVolumePanelSoon();
+    }, { passive: false });
   }
   if (slider) {
     slider.addEventListener('input', function(){ setVolume(slider.value, true); });
     slider.addEventListener('focus', keepVolumePanelOpen);
     slider.addEventListener('blur', function(){ flushVolumePreference(); closeVolumePanelSoon(); });
     slider.addEventListener('change', function(){ flushVolumePreference(); showToast('音量 ' + Math.round(targetVolume * 100) + '%'); });
+  }
+  if (stepInput) {
+    updateVolumeWheelStepUi();
+    stepInput.addEventListener('input', function(){
+      if (stepInput.value === '') return;
+      setVolumeWheelStep(parseFloat(stepInput.value) / 100, {});
+    });
+    stepInput.addEventListener('change', function(){
+      setVolumeWheelStep(parseFloat(stepInput.value) / 100, { force: true, toast: true });
+      updateVolumeWheelStepUi();
+    });
+    stepInput.addEventListener('focus', keepVolumePanelOpen);
+    stepInput.addEventListener('blur', closeVolumePanelSoon);
   }
   if (btn) {
     btn.addEventListener('dblclick', function(e){ e.stopPropagation(); toggleMute(); });
@@ -39477,7 +39596,7 @@ function closeImmersiveInterference() {
   closeCustomLyricModal();
   closeTrackDetailModal();
   if (!localBeatAnalysis.active) closeLocalBeatModal();
-  ['search-area', 'fx-panel', 'trial-banner', 'ai-depth-chip', 'beat-chip'].forEach(function(id){
+  ['search-area', 'fx-panel', 'trial-banner', 'ai-depth-chip', 'beat-chip', 'lyric-translate-chip'].forEach(function(id){
     var el = document.getElementById(id);
     if (el) el.classList.remove('peek', 'show', 'closing');
   });
@@ -44715,6 +44834,7 @@ var MINERADIO_BACKUP_IMPORT_ARM_MS = 12000;
  * 歌单与特别喜欢（进 database）、音效链与视觉预设（进 config.eq / config.theme）。 */
 var MINERADIO_BACKUP_PLAYER_KEYS = [
   VOLUME_STORE_KEY,
+  VOLUME_WHEEL_STEP_STORE_KEY,
   PLAYBACK_QUALITY_STORE_KEY,
   DIY_MODE_STORE_KEY,
   PLAYLIST_PANEL_PIN_STORE_KEY,

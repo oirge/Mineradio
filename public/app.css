@@ -66,6 +66,7 @@ body.desktop-shell #top-right{top:58px;right:24px}
 body.desktop-shell #trial-banner{top:112px}
 body.desktop-shell #ai-depth-chip{top:112px}
 body.desktop-shell #beat-chip{top:154px}
+body.desktop-shell #lyric-translate-chip{top:196px}
 body.desktop-shell #toast{top:60px}
 #fullscreen-diy-zone{display:none;position:fixed;z-index:520;top:var(--fullscreen-diy-top,24px);left:var(--fullscreen-diy-left,calc(100vw - 510px));width:var(--fullscreen-diy-width,224px);height:52px;align-items:center;justify-content:center;gap:8px;pointer-events:auto;-webkit-app-region:no-drag}
 #fullscreen-diy-btn,#fullscreen-exit-btn{height:34px;transition:opacity .2s cubic-bezier(.16,1,.3,1),transform .2s cubic-bezier(.16,1,.3,1),background .18s,color .18s,border-color .18s,box-shadow .18s}
@@ -699,6 +700,12 @@ body.home-controls-locked #bottom-bar{opacity:0!important;pointer-events:none!im
 .vq-seg button{flex:1;min-width:0;height:22px;padding:0;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05);color:rgba(255,255,255,.72);font-family:inherit;font-size:10.5px;cursor:pointer;transition:background .18s,border-color .18s,color .18s}
 .vq-seg button:hover{background:rgba(255,255,255,.10);color:#fff}
 .vq-seg button.active{background:rgba(var(--fc-accent-rgb),.22);border-color:rgba(var(--fc-accent-rgb),.5);color:#fff}
+.vol-wheel-step{display:flex;flex:1;min-width:0;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05);transition:background .18s,border-color .18s}
+.vol-wheel-step:hover,.vol-wheel-step:focus-within{background:rgba(255,255,255,.10);border-color:rgba(var(--fc-accent-rgb),.5)}
+.vol-wheel-step input{flex:1;min-width:0;width:100%;height:100%;padding:0;border:0;background:transparent;color:#fff;font-family:inherit;font-size:11px;text-align:right;-moz-appearance:textfield;appearance:textfield}
+.vol-wheel-step input:focus{outline:none}
+.vol-wheel-step input::-webkit-outer-spin-button,.vol-wheel-step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.vol-wheel-step-unit{flex:none;font-size:10px;color:rgba(255,255,255,.5)}
 .vq-toggles{display:flex;gap:6px}
 .vq-toggle{flex:1;height:24px;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05);color:rgba(255,255,255,.72);font-family:inherit;font-size:11px;cursor:pointer;transition:background .18s,border-color .18s,color .18s}
 .vq-toggle:hover{background:rgba(255,255,255,.10);color:#fff}
@@ -859,6 +866,7 @@ body.immersive-mode #fx-panel,
 body.immersive-mode #trial-banner,
 body.immersive-mode #ai-depth-chip,
 body.immersive-mode #beat-chip,
+body.immersive-mode #lyric-translate-chip,
 body.immersive-mode #gesture-hud,
 body.immersive-mode #hand-canvas,
 body.immersive-mode #hint,
@@ -1152,6 +1160,12 @@ body.login-guide-active #login-guide-canvas{opacity:1}
 #beat-chip{position:fixed;z-index:7;top:122px;right:24px;background:rgba(10,10,16,0.85);border:1px solid rgba(126,226,168,0.3);padding:8px 14px;border-radius:14px;font-size:11px;color:#7ee2a8;letter-spacing:.4px;display:none;align-items:center;gap:8px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
 #beat-chip.show{display:flex}
 #beat-chip .mini-spin{width:11px;height:11px;border:1.5px solid rgba(126,226,168,.25);border-top-color:#7ee2a8;border-radius:50%;animation:spin .7s linear infinite}
+#lyric-translate-chip{position:fixed;z-index:7;top:164px;right:24px;background:rgba(10,10,16,0.85);border:1px solid rgba(140,190,255,0.32);padding:8px 14px;border-radius:14px;font-size:11px;color:#9cc4ff;letter-spacing:.4px;display:none;align-items:center;gap:8px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+#lyric-translate-chip.show{display:flex}
+#lyric-translate-chip .mini-spin{width:11px;height:11px;border:1.5px solid rgba(140,190,255,.25);border-top-color:#9cc4ff;border-radius:50%;animation:spin .7s linear infinite}
+#lyric-translate-chip.done{border-color:rgba(126,226,168,0.42);color:#7ee2a8}
+#lyric-translate-chip.done .mini-spin{animation:none;border-color:transparent;border-top-color:transparent;position:relative}
+#lyric-translate-chip.done .mini-spin::after{content:"";position:absolute;left:1px;top:-1px;width:4px;height:8px;border:solid #7ee2a8;border-width:0 1.6px 1.6px 0;transform:rotate(45deg)}
 html.local-only-mode #visual-guide-btn,
 html.local-only-mode #upload-tip,
 html.local-only-mode #source-fallback-notice,

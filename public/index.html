@@ -319,9 +319,7 @@ if (document.fonts && document.fonts.load) {
       <div class="fx-slider"><label>显示行数</label><input id="fx-lyriccustomlines" type="range" min="1" max="10" step="1"><output></output></div>
       <div class="fx-seg" id="lyric-translation-mode-seg">
         <button type="button" data-translation="off" onclick="setLyricTranslationMode('off')">关闭</button>
-        <button type="button" data-translation="current" onclick="setLyricTranslationMode('current')">当前</button>
-        <button type="button" data-translation="dual" onclick="setLyricTranslationMode('dual')">双行</button>
-        <button type="button" data-translation="multi" onclick="setLyricTranslationMode('multi')">多行</button>
+        <button type="button" data-translation="on" onclick="setLyricTranslationMode('on')">开启</button>
       </div>
       <div class="fx-slider lyric-translate-target-row"><label>目标语言</label><input id="lyric-translate-target" type="text" placeholder="留空=自动（非中→中，中→英）" maxlength="24"><output></output></div>
       <div class="fx-slider"><label>译文间距</label><input id="fx-lyrictranslationgap" type="range" min="0.28" max="2.20" step="0.01"><output></output></div>
@@ -857,6 +855,9 @@ if (document.fonts && document.fonts.load) {
 <!-- 节拍分析角标 -->
 <div id="beat-chip"><div class="mini-spin"></div><span id="beat-text">分析节奏…</span></div>
 
+<!-- 歌词翻译进度角标 -->
+<div id="lyric-translate-chip"><div class="mini-spin"></div><span id="lyric-translate-text">翻译歌词…</span></div>
+
 <!-- 舞台歌词 (大字 3D, 由 JS 动态填充) -->
 <div id="stage-lyrics"></div>
 
@@ -1017,6 +1018,13 @@ if (document.fonts && document.fonts.load) {
             <button type="button" data-main-sleep="30" title="30 分钟后暂停">30</button>
             <button type="button" data-main-sleep="60" title="60 分钟后暂停">60</button>
             <button type="button" data-main-sleep="track" title="播完本曲后暂停">本曲</button>
+          </div>
+        </div>
+        <div class="vq-row">
+          <span class="vq-label">滚轮</span>
+          <div class="vol-wheel-step" title="鼠标滚轮悬停在音量键上滚动即可调整音量，这里设置每滚一格的幅度">
+            <input id="volume-wheel-step" type="number" min="1" max="50" step="1" value="5" inputmode="numeric" aria-label="滚轮音量步进（百分比）">
+            <span class="vol-wheel-step-unit">% / 格</span>
           </div>
         </div>
         <div class="vq-toggles">
