@@ -1,5 +1,27 @@
 # 发布流程
 
+## v2.1.10 单行歌词翻译 + 桌面歌词翻译显示与开关
+
+- **版本元数据**：`2.1.10` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 单行歌词模式开启翻译时，把当前行译文并进主 mesh 画成第二行显示；此前只有多行显示模式才出译文，单行模式开翻译什么都不显示。
+  2. 桌面歌词支持显示翻译：当前行原文下方跟随一行译文，复用现有 DOM/滚动/高亮管线，随播放一起滚动、高亮。
+  3. 桌面歌词悬浮控制栏（`#lockHint`）与主界面歌词设置面板都新增「翻译」开关，一键开关桌面翻译，两端状态经 IPC 同步。
+- **技术细节**：
+  - `buildLyricMesh` 新增 `maxLines` 选项；`showStageLine` 在单行 + 翻译开启且当前行有译文时拼 `原文\n译文` 并按两行建 mesh，译文异步到达后由 `refreshCurrentLyricStyle` 重绘补上。
+  - 新增 `fx.desktopLyricsTranslation`（默认关）贯穿 fxDefaults / 读写 / 快照归档；`desktopLyricsPayload` 增加 `showTranslation` / `translation`，并纳入前端与主进程两处 dedup 签名，否则改动不下发。
+  - `currentDesktopLyricSnapshot` 捕获当前行 `translation`；`desktop-lyrics.html` `applyState` 把译文并到显示文本。
+  - 拉取译文门控由 `lyricTranslationModeActive()` 放宽为 `lyricTranslationWanted()`（舞台或桌面任一开启翻译即拉取），进度角标沿用。
+  - 新 IPC 通道 `mineradio-desktop-lyrics-set-translation`（overlay → 主进程 → 主窗口回推），走 `isCurrentDesktopLyricsWindowSender` 校验，与 stable 开关同构。
+- **回归**：新增 `tests/desktop-lyrics-translation.test.js`（7 项，覆盖单行舞台拼行、门控放宽、fx 标志、payload/签名、桌面渲染、IPC 全链路、FX 面板开关）；扩充 `tests/lyric-display-translation.test.js`，并把新通道加入 `tests/main-window-navigation-ipc-trust.test.js` 的 overlay 允许清单；全量 Node 回归 `1235/1235` 通过。
+- **GitHub 发布结果（2026-09-19）**：tag `v2.1.10` → commit `2c060b3d28f3957795bddab0ee6a3262d40c367d`；Actions 构建 `35419425745` 成功（约 1m56s），构建、SHA256 清单生成和资产上传全部通过。Release `391903665` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍已改为本版本三条说明。
+- **线上资产核对**：`latest.yml` 版本为 `2.1.10`，安装包 SHA512（`7LhMYKjft25TLtRU5fW3E/FEwALcGFLRK5mIaKPhSNBQiPA5XB/3BlGFn4j9QuCJIobjmkUElKKHhrOv4EZLLg==`）与清单一致；GitHub 下载资产 SHA256（与 `SHA256SUMS.txt` 逐条一致）如下：
+  - `Mineradio-oirge-2.1.10-Setup.exe`：102378300 B，SHA256 `d8b37523baca61d6d5f6582857c78a0c841838b5da39664b911321b100b8071a`。
+  - `Mineradio-oirge-2.1.10-Setup.exe.blockmap`：106586 B，SHA256 `326ebe6c46e9c47aab7601b12ac41272c22fec591e4e802f18e530a2c9e48df3`。
+  - `latest.yml`：362 B，SHA256 `261c905cf2de82b081909e7f3b2d696a830e658133c100dcac4cba573db24182`。
+  - `Mineradio-oirge-2.1.10-SHA256SUMS.txt`：284 B，SHA256 `52941aee8212568b2a7abc0ae9110902df77e1a90b2a5aa81b7723f7011bce8e`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的已装应用正在运行，未强制关闭；已在临时目录核对 `latest.yml` 与 `SHA256SUMS.txt` 内容与线上资产摘要一致。应用内更新检测到 `latest.yml` 的 2.1.10 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.1.10-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.1.9 滚轮调音量 + 歌词翻译开关与进度角标
 
 - **版本元数据**：`2.1.9` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
