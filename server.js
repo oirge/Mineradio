@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复桌面歌词文字发虚：辉光按行绘制去掉重影',
-  '开启翻译不再影响原文逐字高亮，译文改为独立静态元素',
-  '舞台与桌面歌词译文均只做静态副色显示',
+  '单行歌词模式开启翻译也会在原文下方显示译文',
+  '桌面歌词支持显示翻译，随播放滚动高亮',
+  '桌面歌词控制栏与歌词面板新增「翻译」开关',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
