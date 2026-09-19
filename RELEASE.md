@@ -1,5 +1,24 @@
 # 发布流程
 
+## v2.2.0 桌面歌词发虚修复 + 翻译不影响原文逐字高亮
+
+- **版本元数据**：`2.2.0` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 修复桌面歌词文字发虚：辉光层此前把 `原文\n译文` 画在同一条基线上（`fillText` 忽略 `\n`），在清晰的 DOM 文字后留下一层错位重影；改为按行绘制辉光后重影消失。
+  2. 开启翻译不再影响原文逐字高亮：v2.1.10 把译文拼进了同一个高亮元素，导致原文的逐字扫光被译文带偏；现译文改为独立静态元素，原文扫光与关闭翻译时逐字节一致。
+- **技术细节**：
+  - `desktop-lyrics.html` `drawGlowText` 按 `\n` 拆行，逐行按 `lineStep` 垂直偏移绘制描边与填充，去掉单基线重影；`drawHighlightBloom` 光头按当前行数居中修正。
+  - 舞台歌词：`buildLyricMesh` 移除双行合进主纹理的路径（`maxLines = rowMode ? 1 : STAGE_LYRIC_MAX_LINES`），译文单独建静态子网格（`MeshBasicMaterial` 副色 + 可读性底衬，不走 karaoke shader），透明度由 `syncLyricTranslationOpacity` 跟随原文、随调色板换色。
+  - 桌面歌词：`.line` 拆成 `.ly-src`（原文，接扫光渐变，按原文自身宽度归一化）与 `.ly-tr`（译文，恒为 `--lyric-secondary`）两段；`setLineContent` 负责建段，`line.textContent` 仍为 `原文\n译文`，测量/辉光/滚动逻辑不变。
+- **回归**：更新 `tests/desktop-lyrics-translation.test.js`（舞台改断言独立静态子网格、桌面断言 `setLineContent` 与 `.ly-src`/`.ly-tr`）与 `tests/desktop-lyrics-stable.test.js`（扫光选择器改为 `.line .ly-src`）；全量 Node 回归 `1235/1235` 通过。
+- **GitHub 发布结果（2026-09-19）**：tag `v2.2.0` → commit `8724394528a4f2eea544ee40caf6c92e8497fd4a`；Actions 构建 `35428165597` 成功（约 2m23s），构建、SHA256 清单生成和资产上传全部通过。Release `391971786` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍已改为本版本说明。
+- **线上资产核对**：`latest.yml` 版本为 `2.2.0`，安装包 SHA512（`++HUyVlPDYr+tlJMGaFLkXBg10I3d9ntLxGqAydB2ks8iT/fYQ5s0e1bP1XflJrhjAm0M5pQeusQsF6ZMTto4g==`）与清单一致；GitHub 下载资产 SHA256（与 `SHA256SUMS.txt` 逐条一致）如下：
+  - `Mineradio-oirge-2.2.0-Setup.exe`：102381912 B，SHA256 `abb01424e7f14bfc971a8abe09a68c4940eaf35d350b401b378d3bb26e0ff721`。
+  - `Mineradio-oirge-2.2.0-Setup.exe.blockmap`：106653 B，SHA256 `3303fa981745585030e14f4e40f3d2798b3c3e845f4a93c72b44481be6469a6a`。
+  - `latest.yml`：359 B，SHA256 `f4233688b02e0e0185472c331c53e518a62d45e22759582e30646143ff78a986`。
+  - `Mineradio-oirge-2.2.0-SHA256SUMS.txt`：282 B，SHA256 `54b8a6dc19037a830d1b0366e71a62d45e466c22deafefde3fba7a78fde87ac4`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的已装应用正在运行，未强制关闭；已在临时目录核对 `latest.yml` 与 `SHA256SUMS.txt` 内容与线上资产摘要一致。应用内更新检测到 `latest.yml` 的 2.2.0 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.2.0-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.1.10 单行歌词翻译 + 桌面歌词翻译显示与开关
 
 - **版本元数据**：`2.1.10` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
