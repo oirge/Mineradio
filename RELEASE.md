@@ -1,5 +1,25 @@
 # 发布流程
 
+## v2.1.9 滚轮调音量 + 歌词翻译开关与进度角标
+
+- **版本元数据**：`2.1.9` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 音量支持鼠标滚轮调节：滚轮悬停在音量控件上滚动即可增减，向上加、向下减，到 0/1 自动夹紧；每滚一格的步进可在音量弹层新增的输入框里 1%~50% 自定义，默认 5%，独立键 `mineradio-volume-wheel-step-v1` 持久化并纳入备份白名单。
+  2. 歌词翻译从「关闭/当前/双行/多行」四档简化为「关闭/开启」两态：开启时只给当前行配一条译文行，任何多行显示模式（双行/三行/沉浸/自定）下舞台最多多出一行译文，不再逐行叠字冲突；旧档位 `current/dual/multi` 归一化时自动迁移为「开启」。
+  3. 新增歌词翻译进度角标：LLM 翻译按批推进时实时显示「翻译歌词 X/总数」，完成显示「翻译完成」并短暂停留，失败显示「翻译失败，稍后重试」；沉浸模式下隐藏。
+- **技术细节**：
+  - 滚轮监听挂在 `#volume-control` 上，滚在步进输入框（`.vol-wheel-step`）上时放行给它自身处理、不改音量；`adjustVolumeByWheel` 复用 `setVolume` + `clampRange`。
+  - `normalizeLyricTranslationMode` 只认 `on/off`；`updateStageLyricRows` 与排版占位（`fitHasTranslation`）改为只给当前行预留译文空间，运行路径与旧「当前」档等价。
+  - `setLyricTranslateChip` 统一驱动角标；进度状态存于 `lyricLlmTranslateState.total/done`，调度与每批完成时刷新。
+- **回归**：新增 `tests/volume-wheel-step.test.js`（8 项），扩充 `tests/lyric-display-translation.test.js`（归一化迁移、两态按钮、只译当前行、进度角标接线）；全量 Node 回归 `1228/1228` 通过。
+- **GitHub 发布结果（2026-09-19）**：tag `v2.1.9` → commit `9021d0e5e7842804456a6983d1bd68d7d17d0915`；Actions 构建 `35417376406` 成功（约 2m18s），构建、SHA256 清单生成和资产上传全部通过。Release `391894499` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍已改为本版本三条说明。
+- **线上资产核对**：`latest.yml` 版本为 `2.1.9`，安装包 SHA512（`e9em4YQrK4xfRBGGowzLA3qU6Y4C56N3ujG4fSRZgVIfVru8tenPKvYB2QBopUvRJ0bV5DZccNVn/2oiiugEkg==`）与清单一致；GitHub 下载资产 SHA256（与 `SHA256SUMS.txt` 逐条一致）如下：
+  - `Mineradio-oirge-2.1.9-Setup.exe`：102380262 B，SHA256 `df83569b252999ad02c756adac22d6a03e8f7f23d89bcb6ed8f9fad2201fff62`。
+  - `Mineradio-oirge-2.1.9-Setup.exe.blockmap`：106591 B，SHA256 `2ca2886a9befb93fdc03b90f13eb4dccb19e80debe3c628c5793355c8cb5e945`。
+  - `latest.yml`：359 B，SHA256 `b2ffc654e034755d88964fd6bb920f13af41ec2160962b9987407a34bd9a70d9`。
+  - `Mineradio-oirge-2.1.9-SHA256SUMS.txt`：282 B，SHA256 `9d84e68ec2797ba16ef2e30863067dc8ce887c2407f868d693b361e3df7ee34c`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的已装应用（v2.1.8）正在运行，未强制关闭；已在临时目录核对 `latest.yml` 与 `SHA256SUMS.txt` 内容与线上资产摘要一致。应用内更新检测到 `latest.yml` 的 2.1.9 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.1.9-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.1.8 切歌单降载：喜欢状态 Set 查表
 
 - **版本元数据**：`2.1.8` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
