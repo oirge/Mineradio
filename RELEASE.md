@@ -1,5 +1,25 @@
 # 发布流程
 
+## v2.2.0 歌词翻译方向修正 + 自带双语不重复 + 桌面歌词左键单击解锁
+
+- **版本元数据**：`2.2.0` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 歌词翻译方向修正：默认中文译英文、英文译中文，不再把中文又「翻译」成中文。
+  2. 歌词自带双语（原文已含译文）时不再重复显示译文，桌面端不再出现「原文 / 译文 / 译文」。
+  3. 桌面歌词锁定态下，左键单击命中歌词即可解锁并唤出悬浮控制栏，无需再等 1.5s 悬停或按中键。
+- **技术细节**：
+  - 翻译方向：新增 `lyricHasHan` / `lyricLineTranslateTarget`（客户端按是否含汉字逐行判向），`runLyricLlmTranslation` 每行下发 `[→目标语言]` 标注、系统提示改为「照标翻译」；新增 `lyricTranslationLooksValid` 方向校验，方向不符或空译文写空串缓存（不再永久缓存坏结果），缓存键并入逐行目标语以作废旧坏值。
+  - 自带双语去重：`currentDesktopLyricSnapshot` 用新增的 `desktopLyricTranslationEmbedded`（逐行精确比对）判断译文是否已内含在展示文本里，已内含则不再单独下发 `cache.translation`，避免桌面端重复；LLM 补充译文与单行模式不受影响。舞台 3D 侧 `stageLyricPrimaryText` 早已剥离内含译文，逐字高亮不动。
+  - 左键解锁：`desktop/main.js` PowerShell 轮询在中键（VK 4）外增加左键（VK 1）监听，各自 down 沿去重发 `LMB`；`handleDesktopLyricsGlobalLeftClick` 仅在「已锁定 + 命中热区」时解锁（`clickThrough=false` + 抓指针），260ms 去抖，热区外左键照常放行；`desktop-lyrics.html` `applyState` 检测锁定→解锁跳变后立即 `setHintVisible(true)` 弹控制栏。未新增 IPC 通道（复用既有 lock-state 广播）。
+- **回归**：新增 `tests/desktop-lyrics-left-click-unlock.test.js`（9 项：左键处理的锁定/解锁/热区/去抖/未启用分支、LMB/MMB 路由、PowerShell 双键监听、renderer 解锁弹栏），扩充 `tests/desktop-lyrics-translation.test.js`（去重 helper 真实切片行为）与 `tests/lyric-display-translation.test.js`（逐行判向 / 方向校验 / 每行标注 / 新系统提示）；全量 Node 回归 `1245/1245` 通过。
+- **GitHub 发布结果（2026-09-19）**：tag `v2.2.0` → commit `a56756071f4fbfd318296dd6f610823d735e27f0`；Actions 构建 `35434645354` 成功，构建、SHA256 清单生成和资产上传全部通过。Release `392012252` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍改为本版本三条说明。
+- **线上资产核对**：`latest.yml` 版本为 `2.2.0`，安装包 SHA512（`/2oiMa4UrrB/u8HosoHKI0L9GHfI5aO3DFw6rXjLnWXAXBAY34zoCxfMjS9EgRnQmAnzhGXD0rsxBNFPIoIlfQ==`）与清单一致；GitHub 下载资产 SHA256（与 `SHA256SUMS.txt` 逐条一致）如下：
+  - `Mineradio-oirge-2.2.0-Setup.exe`：102382049 B，SHA256 `9be01632f02743ace089933254b09b293922646c892a423e4a9ea52115d3a7f8`。
+  - `Mineradio-oirge-2.2.0-Setup.exe.blockmap`：106570 B，SHA256 `a7195d9f6bfd6497a69164efbb3e66cfa10bcf0ac407976451b96729f64f2cae`。
+  - `latest.yml`：359 B，SHA256 `739e1a357f611728303631e3fbf5a80bc25a777cc470c89566408bd3e97071d2`。
+  - `Mineradio-oirge-2.2.0-SHA256SUMS.txt`：282 B，SHA256 `011de696622c6043807cc9b0a330fb1c5e51c219647b36c226c4926ec2a8eb64`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的已装应用未强制关闭；已在临时目录核对 `latest.yml` 与 `SHA256SUMS.txt` 内容与线上资产摘要一致。应用内更新检测到 `latest.yml` 的 2.2.0 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.2.0-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.1.10 单行歌词翻译 + 桌面歌词翻译显示与开关
 
 - **版本元数据**：`2.1.10` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
