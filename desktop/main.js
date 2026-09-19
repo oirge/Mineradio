@@ -2895,6 +2895,8 @@ function desktopLyricsStateSignature(state) {
     payload.cinema === false ? 0 : 1,
     payload.stable ? 1 : 0,
     payload.highlightFollow ? 1 : 0,
+    payload.showTranslation ? 1 : 0,
+    payload.translation || '',
     payload.frameRate || 0,
     payload.fontFamily || '',
     payload.fontWeight || '',
@@ -5257,6 +5259,21 @@ async function handleDesktopLyricsStableState(event, stable) {
 }
 
 ipcMain.handle('mineradio-desktop-lyrics-set-stable-state', handleDesktopLyricsStableState);
+
+async function handleDesktopLyricsTranslationState(event, on) {
+  try {
+    if (!isCurrentDesktopLyricsWindowSender(event)) return { ok: true, ignored: true };
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
+      return { ok: false, error: 'MAIN_RENDERER_UNAVAILABLE' };
+    }
+    mainWindow.webContents.send('mineradio-desktop-lyrics-translation-request', { on: !!on });
+    return { ok: true, on: !!on };
+  } catch (e) {
+    return { ok: false, error: e.message || 'DESKTOP_LYRICS_TRANSLATION_FAILED' };
+  }
+}
+
+ipcMain.handle('mineradio-desktop-lyrics-set-translation', handleDesktopLyricsTranslationState);
 
 /**
  * 将桌面歌词工具栏的播放命令转发给主 renderer，避免覆盖层维护第二套播放逻辑。

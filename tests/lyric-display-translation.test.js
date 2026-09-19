@@ -111,7 +111,7 @@ test('翻译服务：端点/模型/调度门控/批处理/缓存齐全', () => {
   assert.match(serverJs, /Authorization: 'Bearer ' \+ LYRIC_TRANSLATE_API_KEY,/);
   assert.match(appJs, /fetch\('\/api\/lyric-translate', \{/);
   assert.match(appJs, /var LYRIC_LLM_TRANSLATE_STORE_KEY = 'mineradio-lyric-llm-translation-v1';/);
-  assert.match(appJs, /function scheduleLyricLlmTranslation\(\) \{[\s\S]*?if \(!lyricTranslationModeActive\(\)\) return;[\s\S]*?if \(lyricLlmTranslateState\.running \|\| lyricLlmTranslateState\.scheduled\) return;[\s\S]*?if \(Date\.now\(\) < lyricLlmTranslateState\.missUntil\) return;/);
+  assert.match(appJs, /function scheduleLyricLlmTranslation\(\) \{[\s\S]*?if \(!lyricTranslationWanted\(\)\) return;[\s\S]*?if \(lyricLlmTranslateState\.running \|\| lyricLlmTranslateState\.scheduled\) return;[\s\S]*?if \(Date\.now\(\) < lyricLlmTranslateState\.missUntil\) return;/);
   assert.match(appJs, /var LYRIC_LLM_TRANSLATE_BATCH = 24;/);
   // 空译文也写空串缓存，防止同批失败行无限重试
   assert.match(appJs, /if \(!translated \|\| translated === item\.text\) \{\s*cache\[item\.key\] = '';/);

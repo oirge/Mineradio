@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.9';
+var APP_VERSION = '2.1.10';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,10 +679,10 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '音量支持鼠标滚轮调节：滚轮悬停在音量键上滚动即可增减，步进可在音量弹层里 1%~50% 自定义。',
-    '歌词翻译改为开启/关闭开关，开启时只给当前行配译文，不再与多行歌词逐行叠字冲突。',
-    '新增歌词翻译进度角标：实时显示翻译进度、完成与失败状态。',
-    '全量 Node 回归 1228/1228 通过。'
+    '单行歌词模式开启翻译时也会在原文下方显示译文，不再只有多行模式才有翻译。',
+    '桌面歌词支持显示翻译：原文下方跟随译文，随播放一起滚动高亮。',
+    '桌面歌词悬浮控制栏与歌词设置面板都新增「翻译」开关，一键开关桌面翻译。',
+    '全量 Node 回归 1235/1235 通过。'
   ]
 };
 function readSavedVolume() {
@@ -1264,6 +1264,7 @@ var fxDefaults = {
   desktopLyricsCinema: true,
   desktopLyricsStable: false,
   desktopLyricsHighlight: true,
+  desktopLyricsTranslation: false,
   desktopLyricsFps: 60,
   desktopLyricsRows: 'double',
   desktopLyricsAlign: 'center',
@@ -1397,6 +1398,7 @@ var PACKAGED_DEFAULT_FX_SNAPSHOT = Object.freeze({
   desktopLyricsCinema: true,
   desktopLyricsStable: false,
   desktopLyricsHighlight: true,
+  desktopLyricsTranslation: false,
   desktopLyricsFps: 60,
   desktopLyricsRows: 'double',
   desktopLyricsAlign: 'center',
@@ -6317,6 +6319,7 @@ function readSavedLyricLayout() {
       desktopLyricsCinema: desktopLyricsSchemaReady ? raw.desktopLyricsCinema !== false : fxDefaults.desktopLyricsCinema,
       desktopLyricsStable: desktopLyricsSchemaReady ? raw.desktopLyricsStable === true : fxDefaults.desktopLyricsStable,
       desktopLyricsHighlight: desktopLyricsSchemaReady ? raw.desktopLyricsHighlight === true : fxDefaults.desktopLyricsHighlight,
+      desktopLyricsTranslation: desktopLyricsSchemaReady ? raw.desktopLyricsTranslation === true : fxDefaults.desktopLyricsTranslation,
       desktopLyricsFps: desktopLyricsSchemaReady ? normalizeDesktopLyricsFps(raw.desktopLyricsFps) : fxDefaults.desktopLyricsFps,
       desktopLyricsRows: desktopLyricsSchemaReady ? normalizeDesktopLyricsRows(raw.desktopLyricsRows) : fxDefaults.desktopLyricsRows,
       desktopLyricsAlign: desktopLyricsSchemaReady ? normalizeDesktopLyricsAlign(raw.desktopLyricsAlign) : fxDefaults.desktopLyricsAlign,
@@ -6434,6 +6437,7 @@ function saveLyricLayout() {
       desktopLyricsCinema: fx.desktopLyricsCinema !== false,
       desktopLyricsStable: fx.desktopLyricsStable === true,
       desktopLyricsHighlight: fx.desktopLyricsHighlight === true,
+      desktopLyricsTranslation: fx.desktopLyricsTranslation === true,
       desktopLyricsFps: normalizeDesktopLyricsFps(fx.desktopLyricsFps),
       desktopLyricsRows: normalizeDesktopLyricsRows(fx.desktopLyricsRows),
       desktopLyricsAlign: normalizeDesktopLyricsAlign(fx.desktopLyricsAlign),
@@ -6730,6 +6734,10 @@ function lyricDisplayOffsetsForMode(mode) {
 }
 function lyricTranslationModeActive() {
   return normalizeLyricTranslationMode(fx && fx.lyricTranslationMode) !== 'off';
+}
+// 是否需要为歌词拉取译文：舞台开启翻译，或桌面歌词开启了翻译显示，任一为真就该补齐 line.translation。
+function lyricTranslationWanted() {
+  return lyricTranslationModeActive() || !!(fx && fx.desktopLyricsTranslation === true);
 }
 function lyricTranslationGapValue() {
   var raw = fx && fx.lyricTranslationGap != null ? Number(fx.lyricTranslationGap) : fxDefaults.lyricTranslationGap;
@@ -9586,8 +9594,10 @@ function buildLyricMesh(text, opts) {
   opts = opts || {};
   // 多行模式（rowMode）下当前行与上下文行走同一套锁字号单行纹理：字号一致、平面宽度随文本变长。
   var rowMode = opts.rowMode === true;
-  text = lyricDisplayLines(text, rowMode ? 1 : STAGE_LYRIC_MAX_LINES).join('\n');
-  var mask = rowMode ? makeLyricMask(text, { maxLines: 1, lockFont: LYRIC_ROW_LOCK_FONT }) : makeLyricMask(text);
+  // 单行模式开启翻译时，当前行会带一条译文子行，允许把当前主 mesh 画成两行（原文 + 译文）。
+  var maxLines = opts.maxLines != null ? Math.max(1, Math.round(Number(opts.maxLines))) : (rowMode ? 1 : STAGE_LYRIC_MAX_LINES);
+  text = lyricDisplayLines(text, maxLines).join('\n');
+  var mask = rowMode ? makeLyricMask(text, { maxLines: 1, lockFont: LYRIC_ROW_LOCK_FONT }) : makeLyricMask(text, { maxLines: maxLines });
   var pal = stageLyrics.palette;
   var worldW = rowMode ? lyricRowPlaneSize(mask).worldW : 6.10;
   var worldH = rowMode ? lyricRowPlaneSize(mask).worldH : (worldW * (mask.height / mask.width));
@@ -9767,7 +9777,17 @@ function showStageLine(text, redrawOnly) {
     }
   }
   stageLyrics.currentText = text;
-  var mesh = buildLyricMesh(text, { rowMode: multilineStage });
+  // 单行模式开启翻译时，把当前行译文并到主 mesh 里画成第二行；译文异步到达后由
+  // refreshCurrentLyricStyle 重绘时补上（currentText 只存原文，重绘时按当前行重新取译文）。
+  var composite = text;
+  var twoLine = false;
+  if (!multilineStage && lyricTranslationModeActive()) {
+    var curIdx = stageLyrics.currentIdx;
+    var curLineForTr = (curIdx != null && curIdx >= 0 && curIdx < lyricsLines.length) ? lyricsLines[curIdx] : null;
+    var trText = curLineForTr && curLineForTr.translation ? stageLyricRenderText(curLineForTr.translation) : '';
+    if (trText && trText !== stageLyricRenderText(text)) { composite = text + '\n' + trText; twoLine = true; }
+  }
+  var mesh = buildLyricMesh(composite, { rowMode: multilineStage, maxLines: twoLine ? 2 : undefined });
   if (multilineStage) {
     // Multi-line mode is drawn by the shared rows track. Keep this mesh as a
     // state/progress carrier for the existing playback code, but never paint
@@ -9865,7 +9885,7 @@ function lyricTranslateTargetValue() {
   return raw.slice(0, 24);
 }
 function scheduleLyricLlmTranslation() {
-  if (!lyricTranslationModeActive()) return;
+  if (!lyricTranslationWanted()) return;
   if (lyricLlmTranslateState.running || lyricLlmTranslateState.scheduled) return;
   if (!lyricsLines.length) return;
   if (Date.now() < lyricLlmTranslateState.missUntil) return;
@@ -36784,6 +36804,7 @@ function normalizeFxArchiveSnapshot(raw) {
     desktopLyricsCinema: raw.desktopLyricsCinema !== false,
     desktopLyricsStable: raw.desktopLyricsStable === true,
     desktopLyricsHighlight: raw.desktopLyricsHighlight === true,
+    desktopLyricsTranslation: raw.desktopLyricsTranslation === true,
     desktopLyricsFps: normalizeDesktopLyricsFps(Object.prototype.hasOwnProperty.call(raw, 'desktopLyricsFps') ? raw.desktopLyricsFps : fxDefaults.desktopLyricsFps),
     desktopLyricsRows: normalizeDesktopLyricsRows(raw.desktopLyricsRows || fxDefaults.desktopLyricsRows),
     desktopLyricsAlign: normalizeDesktopLyricsAlign(raw.desktopLyricsAlign || fxDefaults.desktopLyricsAlign),
@@ -37978,6 +37999,7 @@ function updateDevelopmentFxControls() {
     ['desktopLyricsCinema', 't-desktopLyricsCinema', '桌面歌词绑定鼓点电影震动，基础漂浮始终保留'],
     ['desktopLyricsStable', 't-desktopLyricsStable', '关闭切行弹入与上下漂浮，歌词垂直位置保持固定'],
     ['desktopLyricsHighlight', 't-desktopLyricsHighlight', '桌面歌词按播放进度高亮，金色到青色的进度光带沿歌词流动'],
+    ['desktopLyricsTranslation', 't-desktopLyricsTranslation', '桌面歌词在原文下方显示翻译（需在歌词面板开启翻译）'],
     ['wallpaperMode', 't-wallpaperMode', '封面光晕粒子壁纸，可切换画到桌面壁纸层或播放器背景板']
   ].forEach(function(item){
     var locked = isDevelopmentLockedFx(item[0]);
@@ -38173,6 +38195,8 @@ function updateFxInputs() {
   if (desktopLyricsStableToggle) desktopLyricsStableToggle.classList.toggle('on', fx.desktopLyricsStable === true);
   var desktopLyricsHighlightToggle = document.getElementById('t-desktopLyricsHighlight');
   if (desktopLyricsHighlightToggle) desktopLyricsHighlightToggle.classList.toggle('on', fx.desktopLyricsHighlight === true);
+  var desktopLyricsTranslationToggle = document.getElementById('t-desktopLyricsTranslation');
+  if (desktopLyricsTranslationToggle) desktopLyricsTranslationToggle.classList.toggle('on', fx.desktopLyricsTranslation === true);
   updateDesktopLyricsFpsControls();
   updateDesktopLyricsLayoutControls();
   var wallpaperModeToggle = document.getElementById('t-wallpaperMode');
@@ -38412,6 +38436,7 @@ function ensureLyricPrimaryControls() {
     't-desktopLyricsCinema',
     't-desktopLyricsStable',
     't-desktopLyricsHighlight',
+    't-desktopLyricsTranslation',
     't-lyricCameraLock',
     't-lyricGlow',
     't-lyricGlowBeat',
@@ -39382,13 +39407,14 @@ function toggleFx(key) {
   var toggle = document.getElementById(toggleId);
   if (toggle) toggle.classList.toggle('on', fx[key]);
   syncFxUniforms();
-  if (key === 'lyricCameraLock' || key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles' || key === 'bloom' || key === 'edge' || key === 'cinema' || key === 'desktopLyrics' || key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsStable' || key === 'desktopLyricsHighlight' || key === 'wallpaperMode' || key === 'shelfShowPodcasts' || key === 'shelfMergeCollections' || key === 'liveBackgroundKeep') saveLyricLayout();
+  if (key === 'lyricCameraLock' || key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles' || key === 'bloom' || key === 'edge' || key === 'cinema' || key === 'desktopLyrics' || key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsStable' || key === 'desktopLyricsHighlight' || key === 'desktopLyricsTranslation' || key === 'wallpaperMode' || key === 'shelfShowPodcasts' || key === 'shelfMergeCollections' || key === 'liveBackgroundKeep') saveLyricLayout();
   if (key === 'floatLayer') { if (fx.floatLayer) createFloatLayer(); else destroyFloatLayer(); }
   if (key === 'desktopLyrics') {
     applyDesktopLyricsState(true);
     pushMiniPlayerState(true);
   }
-  if (key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsStable' || key === 'desktopLyricsHighlight') pushDesktopLyricsState(true);
+  if (key === 'desktopLyricsClickThrough' || key === 'desktopLyricsCinema' || key === 'desktopLyricsStable' || key === 'desktopLyricsHighlight' || key === 'desktopLyricsTranslation') pushDesktopLyricsState(true);
+  if (key === 'desktopLyricsTranslation' && fx.desktopLyricsTranslation === true) scheduleLyricLlmTranslation();
   if (key === 'lyricGlow' || key === 'lyricGlowBeat' || key === 'lyricGlowParticles') pushDesktopLyricsState(true);
   if (key === 'wallpaperMode') applyWallpaperModeState(true);
   if (key === 'shelfShowPodcasts' || key === 'shelfMergeCollections') {
@@ -39415,6 +39441,7 @@ function toggleFx(key) {
   if (key === 'desktopLyricsCinema') showToast(fx.desktopLyricsCinema !== false ? '桌面歌词电影震动已开启' : '桌面歌词电影震动已关闭，基础漂浮保留');
   if (key === 'desktopLyricsStable') showToast(fx.desktopLyricsStable === true ? '桌面歌词已固定，不再上下跳动' : '桌面歌词固定已关闭');
   if (key === 'desktopLyricsHighlight') showToast(fx.desktopLyricsHighlight === true ? '桌面歌词高亮光效流动已开启' : '桌面歌词高亮跟随已关闭');
+  if (key === 'desktopLyricsTranslation') showToast(fx.desktopLyricsTranslation === true ? '桌面歌词翻译已开启（需在歌词面板开启翻译）' : '桌面歌词翻译已关闭');
   if (key === 'wallpaperMode') showToast(fx.wallpaperMode ? '壁纸模式已开启' : '壁纸模式已关闭');
   if (key === 'shelfShowPodcasts') showToast('3D歌单架已保持纯本地内容');
   if (key === 'shelfMergeCollections') showToast(fx.shelfMergeCollections === true ? '我的歌单与收藏歌单已合并滚动' : '收藏歌单恢复滚到底切页');
@@ -43561,7 +43588,7 @@ function findDesktopLyricIndex(lines, time) {
   return found;
 }
 // These scratch payloads are reused; callers must consume or IPC-serialize them synchronously.
-var desktopLyricSnapshotCache = { text: '', progress: 0, progressSpan: 4.8 };
+var desktopLyricSnapshotCache = { text: '', translation: '', progress: 0, progressSpan: 4.8 };
 var desktopLyricFallbackLineScratch = { t: 0, text: '', duration: 4.8, charCount: 1, fallback: true };
 var desktopLyricIntroLineScratch = { t: 0, text: '', duration: 4.8, charCount: 1, fallback: true };
 var desktopOverlayColorsCache = { primary: '#d6f8ff', secondary: '#9cffdf', highlight: '#fff0b8', glow: '#9cffdf' };
@@ -43635,6 +43662,7 @@ function currentDesktopLyricSnapshot() {
       var nextT = nextLine && nextLine.t > curLine.t ? nextLine.t : Math.min((audio && audio.duration) || t + 4, curLine.t + (curLine.duration || 4.8));
       var span = Math.max(0.75, nextT - curLine.t);
       cache.text = normalizeDesktopLyricText(curLine.text || currentLyricFallbackText());
+      cache.translation = (!curLine.fallback && curLine.translation) ? normalizeDesktopLyricText(curLine.translation) : '';
       cache.progress = getLyricLineProgress(curLine, nextLine, t);
       cache.progressSpan = span;
       return cache;
@@ -43649,6 +43677,7 @@ function currentDesktopLyricSnapshot() {
       desktopLyricIntroLineScratch.charCount = Math.max(1, introText.length);
       desktopLyricIntroLineScratch.fallback = true;
       cache.text = introText;
+      cache.translation = '';
       cache.progress = getLyricLineProgress(desktopLyricIntroLineScratch, null, t);
       cache.progressSpan = Math.max(0.8, introEnd);
       return cache;
@@ -43656,11 +43685,13 @@ function currentDesktopLyricSnapshot() {
   }
   if (stageLyrics && stageLyrics.currentText) {
     cache.text = normalizeDesktopLyricText(stageLyrics.currentText);
+    cache.translation = '';
     cache.progress = stageLyrics.current && stageLyrics.current.userData ? clampRange(Number(stageLyrics.current.userData.lastLyricProgress) || 0, 0, 1) : 0;
     cache.progressSpan = 4.8;
     return cache;
   }
   cache.text = normalizeDesktopLyricText(currentDesktopSongMeta().title || 'Mineradio');
+  cache.translation = '';
   cache.progress = 0;
   cache.progressSpan = 4.8;
   return cache;
@@ -43768,6 +43799,8 @@ function desktopLyricsPayload(forceBeatMap) {
   payload.cinema = fx.desktopLyricsCinema !== false;
   payload.stable = fx.desktopLyricsStable === true;
   payload.highlightFollow = fx.desktopLyricsHighlight === true;
+  payload.showTranslation = fx.desktopLyricsTranslation === true;
+  payload.translation = payload.showTranslation ? (lyric.translation || '') : '';
   payload.frameRate = normalizeDesktopLyricsFps(fx.desktopLyricsFps);
   payload.fontFamily = lyricFontStackForKey(fx.lyricFont);
   payload.fontWeight = lyricFontWeightValue();
@@ -43810,6 +43843,8 @@ function desktopLyricsPayloadSignature(payload) {
   parts[i++] = payload.cinema === false ? 0 : 1;
   parts[i++] = payload.stable ? 1 : 0;
   parts[i++] = payload.highlightFollow ? 1 : 0;
+  parts[i++] = payload.showTranslation ? 1 : 0;
+  parts[i++] = payload.translation || '';
   parts[i++] = payload.frameRate || 0;
   parts[i++] = payload.fontFamily || '';
   parts[i++] = payload.fontWeight || '';
@@ -44688,6 +44723,18 @@ function handleDesktopMiniPlayerCommand(payload) {
       saveLyricLayout();
       pushDesktopLyricsState(true);
       showToast(nextStable ? '桌面歌词已固定' : '桌面歌词浮动已恢复');
+    });
+  }
+  if (typeof api.onDesktopLyricsTranslationRequest === 'function') {
+    api.onDesktopLyricsTranslationRequest(function(payload){
+      var nextOn = !!(payload && payload.on === true);
+      if (fx.desktopLyricsTranslation === nextOn) return;
+      fx.desktopLyricsTranslation = nextOn;
+      updateFxInputs();
+      saveLyricLayout();
+      if (nextOn) scheduleLyricLlmTranslation();
+      pushDesktopLyricsState(true);
+      showToast(nextOn ? '桌面歌词翻译已开启' : '桌面歌词翻译已关闭');
     });
   }
   if (typeof api.onDesktopLyricsGlowStrengthRequest === 'function') {

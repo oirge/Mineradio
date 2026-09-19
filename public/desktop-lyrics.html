@@ -229,6 +229,8 @@
     .lyrics-glow-setting .lyrics-adjust-btn:hover{background:rgba(156,255,223,.16);color:#fff}
     .lyrics-stable-toggle{display:flex;min-width:36px}
     .lyrics-stable-toggle.active{color:var(--lyric-highlight);text-shadow:0 0 14px var(--lyric-glow)}
+    .lyrics-translate-toggle{display:flex;min-width:36px}
+    .lyrics-translate-toggle.active{color:var(--lyric-highlight);text-shadow:0 0 14px var(--lyric-glow)}
     .lyrics-tool-label{display:none}
     .lyrics-playback-btn{display:none;width:22px;height:22px;margin-right:-4px;padding:0 0 1px;border-left:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.82);font:900 14px/1 Arial,sans-serif}
     .lyrics-playback-btn svg{width:14px;height:14px;pointer-events:none}
@@ -279,7 +281,7 @@
   <div class="wrap">
     <div id="stage" class="stage">
       <div id="lyricViewport" class="lyric-viewport"><div id="lyricScroller" class="lyric-scroll"><div id="line" class="line" data-text="Mineradio">Mineradio</div></div></div>
-      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><span class="lyrics-setting lyrics-size-setting" aria-label="桌面歌词字号"><span class="lyrics-setting-mark" aria-hidden="true">A</span><span class="lyrics-setting-label">字号</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="缩小桌面歌词">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-size-step plus" type="button" aria-label="Enlarge desktop lyrics" title="放大桌面歌词">+</button></span><span class="lyrics-setting lyrics-glow-setting" aria-label="歌词光效"><span class="lyrics-setting-mark" aria-hidden="true">&#10022;</span><span class="lyrics-setting-label">光效</span><button id="glowDownBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-glow-step" type="button" aria-label="Reduce lyric glow" title="减弱歌词光效">&#8722;</button><span id="glowValue" class="lyrics-glow-value" aria-live="polite">35%</span><button id="glowUpBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-glow-step plus" type="button" aria-label="Increase lyric glow" title="增强歌词光效">+</button></span><button id="previousTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button><button id="playPauseBtn" class="lyrics-tool-btn lyrics-playback-btn play-toggle" type="button" aria-label="播放" title="播放"><svg class="play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg></button><button id="nextTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.5 12 6 18V6zM16 6v12h2V6z"/></svg></button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="关闭桌面歌词" title="关闭桌面歌词">×</button></div>
+      <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><span class="lyrics-setting lyrics-size-setting" aria-label="桌面歌词字号"><span class="lyrics-setting-mark" aria-hidden="true">A</span><span class="lyrics-setting-label">字号</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="缩小桌面歌词">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-size-step plus" type="button" aria-label="Enlarge desktop lyrics" title="放大桌面歌词">+</button></span><span class="lyrics-setting lyrics-glow-setting" aria-label="歌词光效"><span class="lyrics-setting-mark" aria-hidden="true">&#10022;</span><span class="lyrics-setting-label">光效</span><button id="glowDownBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-glow-step" type="button" aria-label="Reduce lyric glow" title="减弱歌词光效">&#8722;</button><span id="glowValue" class="lyrics-glow-value" aria-live="polite">35%</span><button id="glowUpBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-glow-step plus" type="button" aria-label="Increase lyric glow" title="增强歌词光效">+</button></span><button id="previousTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button><button id="playPauseBtn" class="lyrics-tool-btn lyrics-playback-btn play-toggle" type="button" aria-label="播放" title="播放"><svg class="play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg></button><button id="nextTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.5 12 6 18V6zM16 6v12h2V6z"/></svg></button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="translateToggleBtn" class="lyrics-tool-btn lyrics-translate-toggle" type="button" aria-label="Toggle desktop lyric translation" aria-pressed="false" title="打开翻译">翻译</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="关闭桌面歌词" title="关闭桌面歌词">×</button></div>
     </div>
   </div>
   <script>
@@ -303,6 +305,7 @@
     var nextTrackBtn = document.getElementById('nextTrackBtn');
     var lockToggleBtn = document.getElementById('lockToggleBtn');
     var stableToggleBtn = document.getElementById('stableToggleBtn');
+    var translateToggleBtn = document.getElementById('translateToggleBtn');
     var closeLyricsBtn = document.getElementById('closeLyricsBtn');
     var dpr = 1;
     var lastText = '';
@@ -360,7 +363,7 @@
     var state = {
       enabled:false,text:'Mineradio',progress:0,progressSpan:4.8,progressReceivedAt:0,playing:false,
       playbackTime:0,playbackDuration:0,playbackRate:1,playbackReceivedAt:0,beatMapKey:'',
-      size:1,opacity:.92,clickThrough:true,lyricGlowParticles:false,cinema:true,stable:false,highlightFollow:false,frameRate:60,
+      size:1,opacity:.92,clickThrough:true,lyricGlowParticles:false,cinema:true,stable:false,highlightFollow:false,showTranslation:false,translation:'',frameRate:60,
       lyricGlow:true,lyricGlowBeat:true,lyricGlowStrength:.35,highBloom:0,beatGlow:0,beatPulse:0,bass:0,feather:.055,
       fontFamily:'Inter,"Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif',
       fontWeight:900,letterSpacing:0,lineHeight:1,lyricScale:1,rows:'double',align:'center',
@@ -880,6 +883,12 @@
         stableToggleBtn.setAttribute('aria-pressed', state.stable === true ? 'true' : 'false');
         stableToggleBtn.title = state.stable === true ? '\u6062\u590d\u6b4c\u8bcd\u4e0a\u4e0b\u6d6e\u52a8' : '\u56fa\u5b9a\u6b4c\u8bcd\u4f4d\u7f6e\uff0c\u4e0d\u4e0a\u4e0b\u6d6e\u52a8';
       }
+      if (translateToggleBtn) {
+        var trOn = state.showTranslation === true;
+        translateToggleBtn.classList.toggle('active', trOn);
+        translateToggleBtn.setAttribute('aria-pressed', trOn ? 'true' : 'false');
+        translateToggleBtn.title = trOn ? '\u5173\u95ed\u7ffb\u8bd1' : '\u6253\u5f00\u7ffb\u8bd1';
+      }
       syncSizeButtons();
       syncGlowButtons();
       syncPlaybackButton();
@@ -1053,6 +1062,21 @@
         syncLockClasses();
       });
     }
+    function requestLyricsTranslation(on) {
+      if (!window.desktopOverlay || !window.desktopOverlay.setLyricsTranslation) return;
+      var previous = state.showTranslation === true;
+      state.showTranslation = !!on;
+      syncLockClasses();
+      window.desktopOverlay.setLyricsTranslation(state.showTranslation).then(function(result){
+        if (!result || result.ok === false) {
+          state.showTranslation = previous;
+          syncLockClasses();
+        }
+      }).catch(function(){
+        state.showTranslation = previous;
+        syncLockClasses();
+      });
+    }
     function applyState(next){
       next = next || {};
       state = Object.assign({}, state, next);
@@ -1068,6 +1092,10 @@
       if (motion.beatPulse != null) state.beatPulse = motion.beatPulse;
       if (motion.bass != null) state.bass = motion.bass;
       var text = normalizeDesktopStateText(state.text, state.rows);
+      // 开启桌面翻译时把译文并到当前行下方一行显示（复用同一渲染/滚动/高亮管线）。
+      state.showTranslation = state.showTranslation === true;
+      var trText = state.showTranslation ? String(state.translation || '').replace(/\s+/g, ' ').trim() : '';
+      if (trText && trText !== text) text = text + '\n' + trText;
       baseFontSize = Math.round(58 * clamp(state.size, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, 1));
       state.progress = clamp(state.progress, 0, 1, 0);
       state.progressSpan = clamp(state.progressSpan, .75, 18, 4.8);
@@ -1664,6 +1692,14 @@
         evt.preventDefault();
         evt.stopPropagation();
         requestLyricsStable(state.stable !== true);
+        setHintVisible(true);
+      });
+    }
+    if (translateToggleBtn) {
+      translateToggleBtn.addEventListener('click', function(evt){
+        evt.preventDefault();
+        evt.stopPropagation();
+        requestLyricsTranslation(state.showTranslation !== true);
         setHintVisible(true);
       });
     }

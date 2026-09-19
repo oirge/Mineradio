@@ -148,6 +148,12 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     ipcRenderer.on('mineradio-desktop-lyrics-stable-request', listener);
     return () => ipcRenderer.removeListener('mineradio-desktop-lyrics-stable-request', listener);
   },
+  onDesktopLyricsTranslationRequest: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mineradio-desktop-lyrics-translation-request', listener);
+    return () => ipcRenderer.removeListener('mineradio-desktop-lyrics-translation-request', listener);
+  },
   onDesktopLyricsGlowStrengthRequest: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload || {});

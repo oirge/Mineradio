@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '音量支持鼠标滚轮调节，步进可在音量弹层里 1%~50% 自定义',
-  '歌词翻译改为开启/关闭开关，不再与多行歌词叠字冲突',
-  '新增歌词翻译进度角标，实时显示翻译进度',
+  '单行歌词模式开启翻译也会在原文下方显示译文',
+  '桌面歌词支持显示翻译，随播放滚动高亮',
+  '桌面歌词控制栏与歌词面板新增「翻译」开关',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

@@ -587,6 +587,7 @@ function testHighPrivilegeIpcWiring() {
     'mineradio-desktop-lyrics-set-pointer-capture',
     'mineradio-desktop-lyrics-set-size',
     'mineradio-desktop-lyrics-set-stable-state',
+    'mineradio-desktop-lyrics-set-translation',
     'mineradio-mini-player-command',
     'mineradio-mini-player-move-by',
     'mineradio-mini-player-window-move-by',
