@@ -39,14 +39,37 @@ test('桌面歌词翻译标志：fxDefaults 两处、读写、快照归档都带
 test('桌面歌词 payload 带 showTranslation / translation，且进 dedup 签名（前后端）', () => {
   assert.match(appJs, /payload\.showTranslation = fx\.desktopLyricsTranslation === true;/);
   assert.match(appJs, /payload\.translation = payload\.showTranslation \? \(lyric\.translation \|\| ''\) : '';/);
-  // 快照捕获当前行译文
-  assert.match(appJs, /cache\.translation = \(!curLine\.fallback && curLine\.translation\) \? normalizeDesktopLyricText\(curLine\.translation\) : '';/);
+  // 快照捕获当前行译文；自带双语（原文已含译文）不再单独下发，避免桌面端重复显示
+  assert.match(appJs, /var curTranslation = \(!curLine\.fallback && curLine\.translation\) \? normalizeDesktopLyricText\(curLine\.translation\) : '';/);
+  assert.match(appJs, /cache\.translation = \(curTranslation && !desktopLyricTranslationEmbedded\(cache\.text, curTranslation\)\) \? curTranslation : '';/);
+  assert.match(appJs, /function desktopLyricTranslationEmbedded\(displayText, translation\) \{/);
   // 前端签名
   assert.match(appJs, /parts\[i\+\+\] = payload\.showTranslation \? 1 : 0;/);
   assert.match(appJs, /parts\[i\+\+\] = payload\.translation \|\| '';/);
   // 主进程签名
   assert.match(mainJs, /payload\.showTranslation \? 1 : 0,/);
   assert.match(mainJs, /payload\.translation \|\| '',/);
+});
+
+test('desktopLyricTranslationEmbedded：整行内含才判重复（跑真实切片）', () => {
+  const vm = require('node:vm');
+  const start = appJs.indexOf('function desktopLyricTranslationEmbedded(');
+  assert.ok(start >= 0, 'helper not found');
+  const end = appJs.indexOf('\n}', start) + 2;
+  const chunk = appJs.slice(start, end);
+  const ctx = {};
+  vm.runInNewContext(chunk + '\nglobalThis.__fn = desktopLyricTranslationEmbedded;', ctx);
+  const fn = ctx.__fn;
+  // 自带双语：展示文本已是「原文\n译文」，译文视为已内含 → 不再单独下发
+  assert.equal(fn('原文\n译文', '译文'), true);
+  // LLM 译文：展示文本只有原文，译文未内含 → 仍需单独下发
+  assert.equal(fn('原文', '译文'), false);
+  // 单行模式：展示文本被截断只剩原文，译文未内含 → 仍单独下发（保持双语可见）
+  assert.equal(fn('Hello', 'Hola'), false);
+  // 子串不算：原文含译文子串但非整行 → 不判重复
+  assert.equal(fn('Hello world', 'world'), false);
+  // 空译文一律不算内含
+  assert.equal(fn('原文', ''), false);
 });
 
 test('desktop-lyrics.html 渲染译文并有「翻译」工具栏开关', () => {

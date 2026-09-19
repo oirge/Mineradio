@@ -113,8 +113,8 @@ test('翻译服务：端点/模型/调度门控/批处理/缓存齐全', () => {
   assert.match(appJs, /var LYRIC_LLM_TRANSLATE_STORE_KEY = 'mineradio-lyric-llm-translation-v1';/);
   assert.match(appJs, /function scheduleLyricLlmTranslation\(\) \{[\s\S]*?if \(!lyricTranslationWanted\(\)\) return;[\s\S]*?if \(lyricLlmTranslateState\.running \|\| lyricLlmTranslateState\.scheduled\) return;[\s\S]*?if \(Date\.now\(\) < lyricLlmTranslateState\.missUntil\) return;/);
   assert.match(appJs, /var LYRIC_LLM_TRANSLATE_BATCH = 24;/);
-  // 空译文也写空串缓存，防止同批失败行无限重试
-  assert.match(appJs, /if \(!translated \|\| translated === item\.text\) \{\s*cache\[item\.key\] = '';/);
+  // 空译文/方向不符也写空串缓存，防止同批失败行无限重试
+  assert.match(appJs, /if \(!translated \|\| translated === item\.text \|\| !lyricTranslationLooksValid\(translated, item\.target\)\) \{\s*cache\[item\.key\] = '';/);
   // 歌词应用后调度
   assert.match(appJs, /scheduleLyricLlmTranslation\(\);[\s\S]{0,60}renderLyrics\(\);/);
 });
@@ -140,11 +140,14 @@ test('渲染层：行池管理/轨道滚动/译文门控/接线齐全', () => {
   assert.match(appJs, /translationOpacity \* 0\.66/);
   // 池更新签名短路（含 custom 行数）
   assert.match(appJs, /lyricCustomLineCountValue\(\), lines\.length, stageLyrics\.styleVersion/);
-  // 目标语言自定义：值函数、缓存键带目标语、双向自动 prompt、变更 setter
+  // 目标语言：值函数、逐行客户端判向（含汉字→英文、其余→中文）、方向校验、缓存键带逐行目标语、每行 [→X] 标注、变更 setter
   assert.match(appJs, /function lyricTranslateTargetValue\(\) \{/);
-  assert.match(appJs, /lyricLlmTranslateCacheKey\(lyricTranslateTargetValue\(\) \+/);
-  assert.match(appJs, /Chinese lines into English, and non-Chinese lines into Simplified Chinese/);
-  assert.match(appJs, /'Translate numbered song lyric lines into ' \+ target \+/);
+  assert.match(appJs, /function lyricLineTranslateTarget\(sourceText\) \{/);
+  assert.match(appJs, /return lyricHasHan\(sourceText\) \? 'English' : 'Simplified Chinese';/);
+  assert.match(appJs, /function lyricTranslationLooksValid\(translated, target\) \{/);
+  assert.match(appJs, /lyricLlmTranslateCacheKey\(lineTarget \+/);
+  assert.match(appJs, /'\. \[→' \+ item\.target \+ '\] ' \+ item\.text/);
+  assert.match(appJs, /Translate each numbered song lyric line into the target language marked in its \[→LANGUAGE\] tag/);
   assert.match(appJs, /function setLyricTranslateTarget\(value\) \{/);
   assert.match(indexHtml, /id="lyric-translate-target"/);
 });

@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '单行歌词模式开启翻译也会在原文下方显示译文',
-  '桌面歌词支持显示翻译，随播放滚动高亮',
-  '桌面歌词控制栏与歌词面板新增「翻译」开关',
+  '歌词翻译方向修正：中文译英文、英文译中文，不再把中文译成中文',
+  '歌词自带双语时不再重复显示译文',
+  '桌面歌词左键单击命中歌词即可解锁并唤出控制栏',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

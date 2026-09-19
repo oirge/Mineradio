@@ -1079,6 +1079,8 @@
     }
     function applyState(next){
       next = next || {};
+      // 记录并入前锁定态，用于检测「主进程解锁」这一跳变（左键/中键命中热区解锁后自动唤出控制栏）。
+      var wasLockedBeforeApply = isLocked();
       state = Object.assign({}, state, next);
       state.colors = Object.assign({}, state.colors, next.colors || {});
       applyDesktopPlayback(next.playback);
@@ -1142,6 +1144,11 @@
       document.body.classList.toggle('flowing', state.lyricGlow === true && state.playing === true);
       document.body.style.opacity = state.enabled ? String(clamp(state.opacity, .28, 1, .92)) : '0';
       syncLockClasses();
+      // 从锁定跳到解锁（左键/中键命中热区解锁，或主界面切换）：立即唤出控制栏，
+      // 无需再等 1.5s 悬停提示。仅在启用时触发，避免关窗时误弹。
+      if (state.enabled && wasLockedBeforeApply && !isLocked()) {
+        setHintVisible(true);
+      }
       if (!state.enabled) {
         hideInteractionHint();
         setPointerCapture(false);

@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.10';
+var APP_VERSION = '2.2.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,10 +679,10 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '单行歌词模式开启翻译时也会在原文下方显示译文，不再只有多行模式才有翻译。',
-    '桌面歌词支持显示翻译：原文下方跟随译文，随播放一起滚动高亮。',
-    '桌面歌词悬浮控制栏与歌词设置面板都新增「翻译」开关，一键开关桌面翻译。',
-    '全量 Node 回归 1235/1235 通过。'
+    '歌词翻译方向修正：默认中文译英文、英文译中文，不再把中文又「翻译」成中文。',
+    '歌词自带双语（原文已含译文）时不再重复显示译文。',
+    '桌面歌词左键单击命中歌词即可解锁并唤出控制栏，无需再等悬停或中键。',
+    '全量 Node 回归 1245/1245 通过。'
   ]
 };
 function readSavedVolume() {
@@ -9884,6 +9884,26 @@ function lyricTranslateTargetValue() {
   var raw = fx && fx.lyricTranslateTarget != null ? String(fx.lyricTranslateTarget).trim() : '';
   return raw.slice(0, 24);
 }
+function lyricHasHan(text) {
+  return /[㐀-䶿一-鿿豈-﫿]/.test(String(text || ''));
+}
+// 逐行判定翻译目标语言：用户手动指定则一律用它；否则含汉字→英文、其余→简体中文。
+// 方向由客户端判定，避免让模型自己猜语言时把中文行「翻译」成中文。
+function lyricLineTranslateTarget(sourceText) {
+  var manual = lyricTranslateTargetValue();
+  if (manual) return manual;
+  return lyricHasHan(sourceText) ? 'English' : 'Simplified Chinese';
+}
+// 校验译文方向：目标英文却仍含汉字、或目标中文却完全没有汉字，都判为模型没照做，视为无效。
+function lyricTranslationLooksValid(translated, target) {
+  var t = String(translated || '');
+  if (!t) return false;
+  var tgt = String(target || '').toLowerCase();
+  var hasHan = lyricHasHan(t);
+  if ((tgt.indexOf('english') >= 0 || tgt === 'en') && hasHan) return false;
+  if ((tgt.indexOf('chinese') >= 0 || tgt.indexOf('中') >= 0) && !hasHan) return false;
+  return true;
+}
 function scheduleLyricLlmTranslation() {
   if (!lyricTranslationWanted()) return;
   if (lyricLlmTranslateState.running || lyricLlmTranslateState.scheduled) return;
@@ -9898,7 +9918,8 @@ function scheduleLyricLlmTranslation() {
     if (line.translation) continue;
     var sourceText = String(line.text).split('\n')[0].trim();
     if (!sourceText || isNoLyricText(sourceText)) continue;
-    var key = lyricLlmTranslateCacheKey(lyricTranslateTargetValue() + '\u0000' + sourceText);
+    var lineTarget = lyricLineTranslateTarget(sourceText);
+    var key = lyricLlmTranslateCacheKey(lineTarget + '\u0000' + sourceText);
     if (Object.prototype.hasOwnProperty.call(cache, key)) {
       if (cache[key]) {
         line.translation = cache[key];
@@ -9906,7 +9927,7 @@ function scheduleLyricLlmTranslation() {
       }
       continue;
     }
-    if (pending.length < 80) pending.push({ line: line, text: sourceText, key: key });
+    if (pending.length < 80) pending.push({ line: line, text: sourceText, key: key, target: lineTarget });
   }
   if (cachedHits > 0) bumpStageLyricRows();
   if (!pending.length) { setLyricTranslateChip(null); return; }
@@ -9945,18 +9966,15 @@ function runLyricLlmTranslation(pending, token) {
     }
     var batch = pending.slice(index, index + LYRIC_LLM_TRANSLATE_BATCH);
     index += batch.length;
-    var promptLines = batch.map(function (item, i) { return (i + 1) + '. ' + item.text; }).join('\n');
+    // 每行自带 [→目标语言] 标注（方向由客户端判定，模型只管照标翻译），避免模型自行猜语言把中文行「翻译」成中文。
+    var promptLines = batch.map(function (item, i) { return (i + 1) + '. [→' + item.target + '] ' + item.text; }).join('\n');
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = controller ? setTimeout(function () { controller.abort(); }, 26000) : null;
     fetch('/api/lyric-translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: [
-        { role: 'system', content: (function () {
-          var target = lyricTranslateTargetValue();
-          if (target) return 'Translate numbered song lyric lines into ' + target + '. Output ONLY the translation lines in the exact same numbered format and order. Never repeat the original text. Never answer the lyrics, continue them, or add explanations.';
-          return 'For each numbered song lyric line, translate it into the other language: Chinese lines into English, and non-Chinese lines into Simplified Chinese. Output ONLY the translation lines in the exact same numbered format and order. Never repeat the original text. Never answer the lyrics, continue them, or add explanations.';
-        })() },
+        { role: 'system', content: 'Translate each numbered song lyric line into the target language marked in its [→LANGUAGE] tag. Always output in that exact target language, even if the source is already similar. Output ONLY the translation lines in the exact same numbered format and order, without the tag. Never repeat the original text. Never answer the lyrics, continue them, or add explanations.' },
         { role: 'user', content: promptLines }
       ] }),
       signal: controller ? controller.signal : undefined
@@ -9980,7 +9998,9 @@ function runLyricLlmTranslation(pending, token) {
       batch.forEach(function (item, i) {
         var translated = byNo[i + 1] != null ? byNo[i + 1] : ordered[i];
         translated = String(translated || '').trim();
-        if (!translated || translated === item.text) {
+        // 去掉模型偶尔回带的 [→X] 标注
+        translated = translated.replace(/^\[[^\]]*\]\s*/, '').trim();
+        if (!translated || translated === item.text || !lyricTranslationLooksValid(translated, item.target)) {
           cache[item.key] = '';
           lyricLlmTranslateState.cacheDirty = true;
           changed = true;
@@ -43558,6 +43578,30 @@ function normalizeDesktopLyricText(text, maxLines) {
   return cache.value;
 }
 /**
+ * 判断译文是否已内含在展示文本里（自带双语的歌词，原文本身就是「原文\n译文」）。
+ * 逐行精确比对，只有译文每一非空行都能在展示文本里找到同样一行才算已内含，
+ * 避免把「原文碰巧包含译文子串」误判为重复。
+ * @param {string} displayText 已归一化的当前行展示文本（可能被行数截断）。
+ * @param {string} translation 已归一化的当前行译文。
+ * @returns {boolean} 译文是否已作为整行出现在展示文本中。
+ */
+function desktopLyricTranslationEmbedded(displayText, translation) {
+  var tr = String(translation || '').trim();
+  if (!tr) return false;
+  var textLines = String(displayText || '').split('\n');
+  var trLines = tr.split('\n');
+  for (var i = 0; i < trLines.length; i++) {
+    var trLine = trLines[i].trim();
+    if (!trLine) continue;
+    var found = false;
+    for (var j = 0; j < textLines.length; j++) {
+      if (textLines[j].trim() === trLine) { found = true; break; }
+    }
+    if (!found) return false;
+  }
+  return true;
+}
+/**
  * 查找桌面歌词当前行。播放顺序推进时沿用上次游标，拖动或切歌时退回二分查找。
  * @param {Array<object>} lines 当前歌词行数组。
  * @param {number} time 当前播放秒数。
@@ -43662,7 +43706,9 @@ function currentDesktopLyricSnapshot() {
       var nextT = nextLine && nextLine.t > curLine.t ? nextLine.t : Math.min((audio && audio.duration) || t + 4, curLine.t + (curLine.duration || 4.8));
       var span = Math.max(0.75, nextT - curLine.t);
       cache.text = normalizeDesktopLyricText(curLine.text || currentLyricFallbackText());
-      cache.translation = (!curLine.fallback && curLine.translation) ? normalizeDesktopLyricText(curLine.translation) : '';
+      var curTranslation = (!curLine.fallback && curLine.translation) ? normalizeDesktopLyricText(curLine.translation) : '';
+      // 自带双语的歌词，原文本身已是「原文\n译文」，此时不再单独下发译文，避免桌面端重复显示。
+      cache.translation = (curTranslation && !desktopLyricTranslationEmbedded(cache.text, curTranslation)) ? curTranslation : '';
       cache.progress = getLyricLineProgress(curLine, nextLine, t);
       cache.progressSpan = span;
       return cache;

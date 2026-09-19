@@ -147,6 +147,7 @@ let desktopLyricsMousePoller = null;
 let desktopLyricsMousePollerBuffer = '';
 let desktopLyricsHotBounds = null;
 let desktopLyricsLastMiddleAt = 0;
+let desktopLyricsLastLeftAt = 0;
 let desktopLyricsWindowGeometrySignature = '';
 const DESKTOP_LYRICS_SIZE_MIN = 0.20;
 const DESKTOP_LYRICS_SIZE_MAX = 1.55;
@@ -2730,6 +2731,28 @@ function handleDesktopLyricsGlobalMiddleClick() {
   broadcastDesktopLyricsLockState();
 }
 
+/**
+ * 处理左键轮询命中：仅在「已锁定 + 命中歌词热区」时解锁并唤出控制栏。
+ * 只做「解锁」不做「锁定」，避免解锁后拖动歌词的左键被误当成再次切换；
+ * 热区外的左键一律放行，不影响正常使用电脑。
+ * @returns {void}
+ */
+function handleDesktopLyricsGlobalLeftClick() {
+  if (!desktopLyricsWindow || desktopLyricsWindow.isDestroyed()) return;
+  if (!desktopLyricsStateCache.enabled) return;
+  // 已解锁时不介入：此时左键归窗口自身（拖动/按钮），由 renderer 处理。
+  if (desktopLyricsStateCache.value.clickThrough !== true) return;
+  const now = Date.now();
+  if (now - desktopLyricsLastLeftAt < 260) return;
+  const point = screen.getCursorScreenPoint();
+  if (!pointInBounds(point, desktopLyricsHotBoundsOnScreen())) return;
+  desktopLyricsLastLeftAt = now;
+  desktopLyricsStateCache.apply({ clickThrough: false });
+  desktopLyricsPointerCapture = true;
+  applyDesktopLyricsMouseBehavior();
+  broadcastDesktopLyricsLockState();
+}
+
 function consumeDesktopLyricsMousePollerOutput(chunk) {
   desktopLyricsMousePollerBuffer += chunk.toString('utf8');
   let lineStart = 0;
@@ -2737,8 +2760,11 @@ function consumeDesktopLyricsMousePollerOutput(chunk) {
     if (desktopLyricsMousePollerBuffer.charCodeAt(i) !== 10) continue;
     let lineEnd = i;
     if (lineEnd > lineStart && desktopLyricsMousePollerBuffer.charCodeAt(lineEnd - 1) === 13) lineEnd -= 1;
-    if (desktopLyricsMousePollerBuffer.slice(lineStart, lineEnd).trim() === 'MMB') {
+    const token = desktopLyricsMousePollerBuffer.slice(lineStart, lineEnd).trim();
+    if (token === 'MMB') {
       handleDesktopLyricsGlobalMiddleClick();
+    } else if (token === 'LMB') {
+      handleDesktopLyricsGlobalLeftClick();
     }
     lineStart = i + 1;
   }
@@ -2760,14 +2786,21 @@ public class MineradioMousePoll {
   [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
 }
 "@
-$prev = $false
+$prevMid = $false
+$prevLeft = $false
 while ($true) {
-  $down = (([MineradioMousePoll]::GetAsyncKeyState(4) -band 0x8000) -ne 0)
-  if ($down -and -not $prev) {
+  $mid = (([MineradioMousePoll]::GetAsyncKeyState(4) -band 0x8000) -ne 0)
+  if ($mid -and -not $prevMid) {
     [Console]::Out.WriteLine("MMB")
     [Console]::Out.Flush()
   }
-  $prev = $down
+  $prevMid = $mid
+  $left = (([MineradioMousePoll]::GetAsyncKeyState(1) -band 0x8000) -ne 0)
+  if ($left -and -not $prevLeft) {
+    [Console]::Out.WriteLine("LMB")
+    [Console]::Out.Flush()
+  }
+  $prevLeft = $left
   Start-Sleep -Milliseconds 24
 }
 `;
