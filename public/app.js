@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.1.10';
+var APP_VERSION = '2.2.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,9 +679,9 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '单行歌词模式开启翻译时也会在原文下方显示译文，不再只有多行模式才有翻译。',
-    '桌面歌词支持显示翻译：原文下方跟随译文，随播放一起滚动高亮。',
-    '桌面歌词悬浮控制栏与歌词设置面板都新增「翻译」开关，一键开关桌面翻译。',
+    '修复桌面歌词文字发虚：辉光层按行绘制，去掉原文与译文叠在同一条基线上的重影。',
+    '开启翻译不再影响原文逐字高亮：译文改为独立静态元素，原文扫光与关闭翻译时完全一致。',
+    '舞台歌词与桌面歌词都适用，译文只做静态副色显示，不再被高亮扫光波及。',
     '全量 Node 回归 1235/1235 通过。'
   ]
 };
@@ -8716,6 +8716,7 @@ function applyLyricPaletteToMesh(mesh) {
   if (data.glowMat) data.glowMat.color.copy(lyricThreeColor(pal.glowColor || pal.secondary || pal.primary, '#9cffdf', 0.36));
   if (data.sparkMat) setLyricSparkColor(data, lyricThreeColor(pal.highlight || pal.secondary || pal.primary, '#fff0b8', 0.46));
   if (data.sunMat) data.sunMat.color.copy(lyricThreeColor(pal.highlight || pal.secondary || pal.primary, '#fff0b8', 0.50));
+  if (data.translationMat) data.translationMat.color.copy(lyricThreeColor(pal.secondary || pal.primary, '#9cffdf', 0.34));
 }
 function effectiveLyricPalette(pal) {
   var src = pal || stageLyrics.coverPalette || stageLyrics.palette || {};
@@ -9594,8 +9595,9 @@ function buildLyricMesh(text, opts) {
   opts = opts || {};
   // 多行模式（rowMode）下当前行与上下文行走同一套锁字号单行纹理：字号一致、平面宽度随文本变长。
   var rowMode = opts.rowMode === true;
-  // 单行模式开启翻译时，当前行会带一条译文子行，允许把当前主 mesh 画成两行（原文 + 译文）。
-  var maxLines = opts.maxLines != null ? Math.max(1, Math.round(Number(opts.maxLines))) : (rowMode ? 1 : STAGE_LYRIC_MAX_LINES);
+  // 主 mesh 永远只放原文（单行）；单行模式开启翻译时译文由 opts.translationText 单独做静态子网格，
+  // 不合进主纹理，以免 karaoke shader 扫到译文或译文宽度撑大归一化包围盒挤压原文逐字进度。
+  var maxLines = rowMode ? 1 : STAGE_LYRIC_MAX_LINES;
   text = lyricDisplayLines(text, maxLines).join('\n');
   var mask = rowMode ? makeLyricMask(text, { maxLines: 1, lockFont: LYRIC_ROW_LOCK_FONT }) : makeLyricMask(text, { maxLines: maxLines });
   var pal = stageLyrics.palette;
@@ -9721,6 +9723,36 @@ function buildLyricMesh(text, opts) {
     textWorldW:textWorldW, textWorldH:textWorldH, worldW:worldW, worldH:worldH,
     rowMode: !!opts.rowMode
   };
+  // 单行模式的译文：独立静态子网格（不走 karaoke shader，恒为副色），挂在主 group 下随进出场/位移一起动。
+  // 只有原文的主纹理参与逐字扫描，译文只是原文下方跟随的一条静态文字，永不影响高亮。
+  var translationText = !rowMode && opts.translationText ? stageLyricRenderText(opts.translationText) : '';
+  if (translationText) {
+    var trScale = lyricTranslationScaleValue();
+    var trMask = makeLyricMask(translationText, { maxLines: 1, textScale: trScale });
+    var trWorldW = worldW;
+    var trWorldH = trWorldW * (trMask.height / trMask.width);
+    var trTextWorldH = trWorldH * ((trMask.textHeight || trMask.fontSize) / trMask.height);
+    var trGroup = new THREE.Group();
+    // 摆到原文下方：原文半高 + 间距 + 译文半高。间距随原文高度缩放，观感与多行译文一致。
+    var trGap = textWorldH * 0.34 + trTextWorldH * 0.16;
+    trGroup.position.set(0, -(textWorldH / 2 + trGap + trTextWorldH / 2), 0.004);
+    var trReadabilityTex = makeLyricReadabilityTexture(trMask);
+    var trReadabilityMat = new THREE.MeshBasicMaterial({ map:trReadabilityTex, transparent:true, opacity:0, depthWrite:false, depthTest:false, side:THREE.DoubleSide });
+    var trReadability = new THREE.Mesh(new THREE.PlaneGeometry(trWorldW, trWorldH, 1, 1), trReadabilityMat);
+    trReadability.position.set(0, 0, -0.010);
+    trReadability.renderOrder = 42;
+    trGroup.add(trReadability);
+    var trMat = new THREE.MeshBasicMaterial({
+      map:trMask.texture, transparent:true, opacity:0, depthWrite:false, depthTest:false, side:THREE.DoubleSide,
+      color:lyricThreeColor((stageLyrics.palette && stageLyrics.palette.secondary) || (stageLyrics.palette && stageLyrics.palette.primary), '#9cffdf', 0.34)
+    });
+    var trMesh = new THREE.Mesh(new THREE.PlaneGeometry(trWorldW, trWorldH, 1, 1), trMat);
+    trMesh.renderOrder = 43;
+    trGroup.add(trMesh);
+    group.add(trGroup);
+    group.userData.lyric.translationMat = trMat;
+    group.userData.lyric.translationReadabilityMat = trReadabilityMat;
+  }
   updateLyricMeshProgress(group, 0);
   return group;
 }
@@ -9731,6 +9763,13 @@ function updateLyricMeshProgress(mesh, progress) {
   var d = mesh.userData.lyric;
   d.textMat.uniforms.uProgress.value = progress;
   mesh.userData.lastLyricProgress = progress;
+}
+// 单行模式译文子网格的透明度跟随原文，再乘译文不透明度设置做整体压暗；描边可读层单独乘 readability。
+function syncLyricTranslationOpacity(data, textOpacity, readabilityFactor) {
+  if (!data || !data.translationMat) return;
+  var trAlpha = clampRange((textOpacity || 0) * lyricTranslationOpacityValue(), 0, 1);
+  data.translationMat.opacity = trAlpha;
+  if (data.translationReadabilityMat) data.translationReadabilityMat.opacity = trAlpha * (readabilityFactor != null ? readabilityFactor : 0.58);
 }
 
 // The upstream track treats each timestamp bucket as one visual row. Parser
@@ -9777,17 +9816,18 @@ function showStageLine(text, redrawOnly) {
     }
   }
   stageLyrics.currentText = text;
-  // 单行模式开启翻译时，把当前行译文并到主 mesh 里画成第二行；译文异步到达后由
-  // refreshCurrentLyricStyle 重绘时补上（currentText 只存原文，重绘时按当前行重新取译文）。
-  var composite = text;
-  var twoLine = false;
+  // 单行模式开启翻译时，译文单独做成静态子网格挂在主 mesh 下（照多行模式 useShader:false 的译文行），
+  // 主 mesh 只放原文——这样原文的逐字高亮（charCount / mask 宽度 / textMin~textMax / 横向扫描）
+  // 与没翻译时完全一致，译文永远不会被 karaoke shader 扫到、也不会撑大归一化包围盒挤压原文进度。
+  // 译文异步到达后由 refreshCurrentLyricStyle 重绘补上（currentText 只存原文，重绘时按当前行重新取译文）。
+  var translationText = '';
   if (!multilineStage && lyricTranslationModeActive()) {
     var curIdx = stageLyrics.currentIdx;
     var curLineForTr = (curIdx != null && curIdx >= 0 && curIdx < lyricsLines.length) ? lyricsLines[curIdx] : null;
     var trText = curLineForTr && curLineForTr.translation ? stageLyricRenderText(curLineForTr.translation) : '';
-    if (trText && trText !== stageLyricRenderText(text)) { composite = text + '\n' + trText; twoLine = true; }
+    if (trText && trText !== stageLyricRenderText(text)) translationText = trText;
   }
-  var mesh = buildLyricMesh(composite, { rowMode: multilineStage, maxLines: twoLine ? 2 : undefined });
+  var mesh = buildLyricMesh(text, { rowMode: multilineStage, translationText: translationText });
   if (multilineStage) {
     // Multi-line mode is drawn by the shared rows track. Keep this mesh as a
     // state/progress carrier for the existing playback code, but never paint
@@ -10453,6 +10493,7 @@ function tickStageLyricMesh(mesh, isCurrent) {
     var opacityEase = shelfDetailOpen && currentOpacity > lyricOpacityTarget ? shelfDetailLyricProfile.easeDown : 0.16;
     opacity = clampRange(currentOpacity + (lyricOpacityTarget - currentOpacity) * opacityEase, 0, 1);
     if (data.textMat) data.textMat.uniforms.uOpacity.value = opacity;
+    syncLyricTranslationOpacity(data, opacity, shelfDetailOpen ? shelfDetailLyricProfile.readability : 0.58);
     if (data.readabilityMat) {
       var readabilityTarget = opacity * shelfDetailLyricProfile.readability;
       var readabilityEase = shelfDetailOpen && data.readabilityMat.opacity > readabilityTarget ? 0.28 : 0.16;
@@ -10548,6 +10589,7 @@ function tickStageLyricMesh(mesh, isCurrent) {
   opacity = (1 - a) * 0.72 * shelfDetailLyricProfile.outgoing;
   if (data.textMat) data.textMat.uniforms.uOpacity.value = opacity;
   if (data.readabilityMat) data.readabilityMat.opacity = opacity * (shelfDetailOpen ? shelfDetailLyricProfile.readability : 0.58);
+  syncLyricTranslationOpacity(data, opacity, shelfDetailOpen ? shelfDetailLyricProfile.readability : 0.58);
   if (data.textMat && data.textMat.uniforms.uSolar) data.textMat.uniforms.uSolar.value *= shelfDetailOpen ? 0.72 : 0.86;
   if (data.glowMat) data.glowMat.opacity = lyricGlowStrength > 0 ? (shelfDetailOpen ? Math.min(shelfDetailLyricProfile.glowCap * 0.40, opacity * 0.05 * lyricGlowStrength) : opacity * 0.08 * lyricGlowStrength) : 0;
   if (data.sparkMat) {

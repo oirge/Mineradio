@@ -97,10 +97,6 @@
       text-overflow:clip;
       padding:.20em .12em .34em;
       margin:-.20em -.12em -.34em;
-      background:linear-gradient(90deg,var(--lyric-primary),var(--lyric-primary));
-      -webkit-background-clip:text;
-      background-clip:text;
-      -webkit-text-fill-color:transparent;
       -webkit-text-stroke:.18px rgba(255,255,255,.72);
       paint-order:stroke fill;
       text-shadow:0 0 1px rgba(255,255,255,.34),0 0 calc(6px + var(--lyric-css-beat-glow)) var(--lyric-shadow-soft),0 0 calc(14px + var(--lyric-css-beat-glow)) var(--lyric-shadow-glow);
@@ -109,9 +105,19 @@
       transform:translate3d(0,0,0);
       transform-origin:center;
       backface-visibility:hidden;
-      will-change:opacity,filter,transform,background;
+      will-change:opacity,filter,transform;
     }
-    body.highlight .line,body.flowing .line{
+    /* 逐字扫描高亮画在原文段 .ly-src 上，归一化按原文自身宽度，与译文长短无关，
+       所以译文不会被扫到、也不会撑大包围盒挤压原文进度。译文段 .ly-tr 恒为静态副色。 */
+    .line .ly-src{
+      display:inline;
+      background:linear-gradient(90deg,var(--lyric-primary),var(--lyric-primary));
+      -webkit-background-clip:text;
+      background-clip:text;
+      -webkit-text-fill-color:transparent;
+      will-change:background;
+    }
+    body.highlight .line .ly-src,body.flowing .line .ly-src{
       background:linear-gradient(90deg,
         var(--lyric-highlight) 0%,
         var(--lyric-highlight) max(0%,calc(var(--lyric-progress) - var(--lyric-feather))),
@@ -121,6 +127,12 @@
         var(--lyric-primary) 100%);
       -webkit-background-clip:text;
       background-clip:text;
+    }
+    .line .ly-tr{
+      display:inline;
+      color:var(--lyric-secondary);
+      -webkit-text-fill-color:var(--lyric-secondary);
+      opacity:.94;
     }
     .line.in{animation:lyr-in 820ms cubic-bezier(.16,.84,.32,1.02) forwards}
     body.stable .line.in{animation:lyr-in-stable 420ms cubic-bezier(.2,.8,.2,1) forwards}
@@ -280,7 +292,7 @@
   <canvas id="fx"></canvas>
   <div class="wrap">
     <div id="stage" class="stage">
-      <div id="lyricViewport" class="lyric-viewport"><div id="lyricScroller" class="lyric-scroll"><div id="line" class="line" data-text="Mineradio">Mineradio</div></div></div>
+      <div id="lyricViewport" class="lyric-viewport"><div id="lyricScroller" class="lyric-scroll"><div id="line" class="line" data-text="Mineradio"><span class="ly-src">Mineradio</span></div></div></div>
       <div id="lockHint" class="lock-hint"><span class="lock-icon"></span><span id="lockText">&#20013;&#38190;&#35299;&#38145;</span><span class="lyrics-setting lyrics-size-setting" aria-label="桌面歌词字号"><span class="lyrics-setting-mark" aria-hidden="true">A</span><span class="lyrics-setting-label">字号</span><button id="sizeDownBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-size-step" type="button" aria-label="Shrink desktop lyrics" title="缩小桌面歌词">&#8722;</button><span id="sizeValue" class="lyrics-size-value" aria-live="polite">100%</span><button id="sizeUpBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-size-step plus" type="button" aria-label="Enlarge desktop lyrics" title="放大桌面歌词">+</button></span><span class="lyrics-setting lyrics-glow-setting" aria-label="歌词光效"><span class="lyrics-setting-mark" aria-hidden="true">&#10022;</span><span class="lyrics-setting-label">光效</span><button id="glowDownBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-glow-step" type="button" aria-label="Reduce lyric glow" title="减弱歌词光效">&#8722;</button><span id="glowValue" class="lyrics-glow-value" aria-live="polite">35%</span><button id="glowUpBtn" class="lyrics-tool-btn lyrics-adjust-btn lyrics-glow-step plus" type="button" aria-label="Increase lyric glow" title="增强歌词光效">+</button></span><button id="previousTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button><button id="playPauseBtn" class="lyrics-tool-btn lyrics-playback-btn play-toggle" type="button" aria-label="播放" title="播放"><svg class="play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg></button><button id="nextTrackBtn" class="lyrics-tool-btn lyrics-playback-btn" type="button" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.5 12 6 18V6zM16 6v12h2V6z"/></svg></button><button id="lockToggleBtn" class="lyrics-tool-btn lyrics-lock-toggle" type="button" aria-label="Toggle desktop lyrics lock">&#35299;&#38145;</button><button id="stableToggleBtn" class="lyrics-tool-btn lyrics-stable-toggle" type="button" aria-label="Toggle fixed desktop lyric position" aria-pressed="false">固定</button><button id="translateToggleBtn" class="lyrics-tool-btn lyrics-translate-toggle" type="button" aria-label="Toggle desktop lyric translation" aria-pressed="false" title="打开翻译">翻译</button><button id="closeLyricsBtn" class="lyrics-tool-btn lyrics-close" type="button" aria-label="关闭桌面歌词" title="关闭桌面歌词">×</button></div>
     </div>
   </div>
@@ -734,6 +746,22 @@
       lastLineRectKey = '';
       fitLyricText(true);
     }
+    function setLineContent(srcText, trText) {
+      // 原文段与译文段分开：逐字扫描高亮只画在 .ly-src 上；译文段 .ly-tr 静态副色。
+      // 用真实换行文本节点分隔，line.textContent 仍是「原文\n译文」，测量/发光/滚动逻辑不变。
+      while (line.firstChild) line.removeChild(line.firstChild);
+      var src = document.createElement('span');
+      src.className = 'ly-src';
+      src.textContent = String(srcText == null ? '' : srcText);
+      line.appendChild(src);
+      if (trText) {
+        line.appendChild(document.createTextNode('\n'));
+        var tr = document.createElement('span');
+        tr.className = 'ly-tr';
+        tr.textContent = String(trText);
+        line.appendChild(tr);
+      }
+    }
     function measureLineWidth(fontSize) {
       ctx.save();
       ctx.font = state.fontWeight + ' ' + fontSize + 'px ' + state.fontFamily;
@@ -1091,11 +1119,14 @@
       if (motion.beatGlow != null) state.beatGlow = motion.beatGlow;
       if (motion.beatPulse != null) state.beatPulse = motion.beatPulse;
       if (motion.bass != null) state.bass = motion.bass;
-      var text = normalizeDesktopStateText(state.text, state.rows);
-      // 开启桌面翻译时把译文并到当前行下方一行显示（复用同一渲染/滚动/高亮管线）。
+      var srcText = normalizeDesktopStateText(state.text, state.rows);
+      // 开启桌面翻译时把译文放到当前行下方一行。译文单独一段（.ly-tr，静态副色），
+      // 逐字扫描只作用于原文段（.ly-src），所以译文既不会被高亮扫过、也不会挤压原文进度。
       state.showTranslation = state.showTranslation === true;
       var trText = state.showTranslation ? String(state.translation || '').replace(/\s+/g, ' ').trim() : '';
-      if (trText && trText !== text) text = text + '\n' + trText;
+      var hasTr = !!(trText && trText !== srcText);
+      // text 仍是合并文本：测量、发光层、滚动、layoutKey 都按两行算，行为与合并渲染时一致。
+      var text = hasTr ? srcText + '\n' + trText : srcText;
       baseFontSize = Math.round(58 * clamp(state.size, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX, 1));
       state.progress = clamp(state.progress, 0, 1, 0);
       state.progressSpan = clamp(state.progressSpan, .75, 18, 4.8);
@@ -1154,7 +1185,7 @@
         scrollState.dir = -1;
         scrollState.holdUntil = performance.now() + lyricScrollInitialHoldMs();
         scrollState.lastAt = 0;
-        line.textContent = text;
+        setLineContent(srcText, hasTr ? trText : '');
         line.setAttribute('data-text', text);
         lastLineRect = null;
         lastLineRectKey = '';
@@ -1318,7 +1349,9 @@
       if (!state.lyricGlow || state.playing !== true) return;
       var p = clamp(progress, 0, 1, 0);
       var x = rect.left + rect.width * p;
-      var y = rect.top + rect.height * .50 - live.lift * .10;
+      // 有译文时 rect 覆盖两行，取原文所在的首行中心，别让光斑落进两行之间的空隙。
+      var bloomRows = currentLyricLineCount();
+      var y = (bloomRows > 1 ? rect.top + rect.height * (0.5 / bloomRows) : rect.top + rect.height * .50) - live.lift * .10;
       var rx = Math.max(42, Math.min(150, renderedFontSize * (1.05 + live.beat * .32)));
       var ry = Math.max(24, Math.min(82, renderedFontSize * (.42 + live.beat * .18)));
       var alpha = clamp(.52 + live.solar * .28 + live.beat * .34, .34, .92) * clamp(state.opacity, .28, 1, .92);
@@ -1343,9 +1376,16 @@
       live.glow += (target - live.glow) * (target > live.glow ? .11 : .06);
       if (live.glow <= .004) return;
       var text = line.textContent || 'Mineradio';
+      // 画布发光层用 fillText 逐行绘制，本身不认 \n；开启翻译（或双语歌词）后文本是「原文\n译文」，
+      // 必须按行拆开、各自摆到对应行的垂直中心，否则两行会叠在同一基线糊成重影。
+      var glowRows = text.split(/\n/).filter(Boolean);
+      if (!glowRows.length) glowRows = ['Mineradio'];
       var cx = rect.left + rect.width / 2;
       var cy = rect.top + rect.height / 2;
       var spacing = renderedFontSize * state.letterSpacing;
+      // 每行行高（本地未缩放坐标系）：与 DOM 的 line-height 一致，缩放交给下面的 ctx.scale。
+      var lineStep = renderedFontSize * clamp(state.lineHeight, .86, 1.35, 1);
+      var firstRowY = -(glowRows.length - 1) * lineStep / 2;
       var hotMix = Math.max(0, Math.min(1, live.solar * 1.05 + live.beat * .18));
       var color = hotMix > .42 ? state.displayColors.highlight : state.displayColors.glow;
       ctx.save();
@@ -1364,8 +1404,11 @@
         ctx.strokeStyle = color;
         ctx.lineWidth = Math.max(layer.minStroke, renderedFontSize * layer.strokeFactor);
         ctx.lineJoin = 'round';
-        drawCanvasText(text, 0, 0, renderedFontSize, spacing, true);
-        drawCanvasText(text, 0, 0, renderedFontSize, spacing, false);
+        for (var r = 0; r < glowRows.length; r++) {
+          var rowY = firstRowY + r * lineStep;
+          drawCanvasText(glowRows[r], 0, rowY, renderedFontSize, spacing, true);
+          drawCanvasText(glowRows[r], 0, rowY, renderedFontSize, spacing, false);
+        }
         ctx.restore();
       }
       ctx.restore();
