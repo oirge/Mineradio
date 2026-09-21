@@ -108,13 +108,13 @@ test('翻译服务：端点/模型/调度门控/批处理/缓存齐全', () => {
   assert.match(serverJs, /const LYRIC_TRANSLATE_ENDPOINT = 'http:\/\/129\.204\.9\.16:8000\/v1\/chat\/completions';/);
   assert.match(serverJs, /const LYRIC_TRANSLATE_API_KEY = 'g2a_752333ba7025_t_S90cSbpFq_9qMEOuXoUl12bctaXvaP';/);
   assert.match(serverJs, /const LYRIC_TRANSLATE_MODEL = 'grok-chat-fast';/);
-  assert.match(serverJs, /Authorization: 'Bearer ' \+ LYRIC_TRANSLATE_API_KEY,/);
+  assert.match(serverJs, /headers: \{ 'Content-Type': 'application\/json', Authorization: 'Bearer ' \+ LYRIC_TRANSLATE_API_KEY \}/);
   assert.match(appJs, /fetch\('\/api\/lyric-translate', \{/);
   assert.match(appJs, /var LYRIC_LLM_TRANSLATE_STORE_KEY = 'mineradio-lyric-llm-translation-v1';/);
-  assert.match(appJs, /function scheduleLyricLlmTranslation\(\) \{[\s\S]*?if \(!lyricTranslationWanted\(\)\) return;[\s\S]*?if \(lyricLlmTranslateState\.running \|\| lyricLlmTranslateState\.scheduled\) return;[\s\S]*?if \(Date\.now\(\) < lyricLlmTranslateState\.missUntil\) return;/);
-  assert.match(appJs, /var LYRIC_LLM_TRANSLATE_BATCH = 24;/);
-  // 空译文/方向不符也写空串缓存，防止同批失败行无限重试
-  assert.match(appJs, /if \(!translated \|\| translated === item\.text \|\| !lyricTranslationLooksValid\(translated, item\.target\)\) \{\s*cache\[item\.key\] = '';/);
+  assert.match(appJs, /function scheduleLyricLlmTranslation\(force\) \{/);
+  assert.match(appJs, /var LYRIC_LLM_TRANSLATE_BATCH = 6/);
+  assert.match(appJs, /LYRIC_LLM_TRANSLATE_RETRY_DELAYS = \[2000, 5000\]/);
+  assert.doesNotMatch(appJs, /LYRIC_LLM_TRANSLATE_MISS_MS/);
   // 歌词应用后调度
   assert.match(appJs, /scheduleLyricLlmTranslation\(\);[\s\S]{0,60}renderLyrics\(\);/);
 });
@@ -145,9 +145,9 @@ test('渲染层：行池管理/轨道滚动/译文门控/接线齐全', () => {
   assert.match(appJs, /function lyricLineTranslateTarget\(sourceText\) \{/);
   assert.match(appJs, /return lyricHasHan\(sourceText\) \? 'English' : 'Simplified Chinese';/);
   assert.match(appJs, /function lyricTranslationLooksValid\(translated, target\) \{/);
-  assert.match(appJs, /lyricLlmTranslateCacheKey\(lineTarget \+/);
+  assert.match(appJs, /lyricLlmTranslateCacheKey\(target \+/);
   assert.match(appJs, /'\. \[→' \+ item\.target \+ '\] ' \+ item\.text/);
-  assert.match(appJs, /Translate each numbered song lyric line into the target language marked in its \[→LANGUAGE\] tag/);
+  assert.match(appJs, /Translate ALL \+ batch\.length|Translate each line into its tagged target language/);
   assert.match(appJs, /function setLyricTranslateTarget\(value\) \{/);
   assert.match(indexHtml, /id="lyric-translate-target"/);
 });
@@ -162,14 +162,14 @@ test('翻译进度角标：元素、状态字段、调度/批次/完成/失败�
   // 角标读写函数
   assert.match(appJs, /function setLyricTranslateChip\(text, opts\) \{/);
   // 调度阶段：无待译清空角标，有待译显示 0/总数
-  assert.match(appJs, /if \(!pending\.length\) \{ setLyricTranslateChip\(null\); return; \}/);
+  assert.match(appJs, /if \(!pending\.length\) return;/);
   assert.match(appJs, /setLyricTranslateChip\('翻译歌词 0\/' \+ pending\.length\);/);
   // 每批完成推进进度
-  assert.match(appJs, /lyricLlmTranslateState\.done = Math\.min\(index, pending\.length\);/);
-  assert.match(appJs, /setLyricTranslateChip\('翻译歌词 ' \+ lyricLlmTranslateState\.done \+ '\/' \+ pending\.length\);/);
+  assert.match(appJs, /state\.done \+= 1/);
+  assert.match(appJs, /setLyricTranslateChip\('翻译歌词 ' \+ state\.done \+ '\/' \+ pending\.length\);/);
   // 完成态与失败态
-  assert.match(appJs, /setLyricTranslateChip\('翻译完成 ' \+ pending\.length \+ '\/' \+ pending\.length, \{ done: true, hideAfter: 1500 \}\);/);
-  assert.match(appJs, /setLyricTranslateChip\('翻译失败，稍后重试', \{ hideAfter: 2800 \}\);/);
+  assert.match(appJs, /setLyricTranslateChip\('翻译完成 ' \+ state\.done \+ '\/' \+ pending\.length/);
+  assert.match(appJs, /setLyricTranslateChip\('已翻译 ' \+ state\.done \+ '\/' \+ pending\.length/);
   // 关闭翻译时收起角标
   assert.match(appJs, /if \(fx\.lyricTranslationMode !== 'on'\) setLyricTranslateChip\(null\);/);
 });

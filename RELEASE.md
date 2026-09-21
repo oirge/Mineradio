@@ -1,5 +1,20 @@
 # 发布流程
 
+## v2.2.1 歌词翻译重试与免费备用
+
+- **版本元数据**：`2.2.1` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 主翻译请求失败后自动按 `2 秒 / 5 秒` 退避重试两次；鉴权、参数等确定性错误不会盲目重试。
+  2. 失败、空响应、原文回显、缺行或目标语言不匹配的结果不再写入空失败缓存；启动时清理旧版本遗留的空缓存，之前失败的歌词可以重新翻译。
+  3. 换歌、切换目标语言或关闭翻译时取消旧请求；缺失行按编号单独重试，避免批量返回错位。
+  4. 翻译进度角标会显示上游错误、超时和重试状态，并增加「重试未译歌词」操作。
+  5. 新增默认关闭的 MyMemory 中英免费备用。只有用户明确开启并同意把待译歌词发送给第三方后，主接口重试耗尽才会使用；备用额度和隐私限制在设置中明确提示。
+- **技术细节**：
+  - 本地 `/api/lyric-translate` 代理保留上游状态、错误信息、可重试标志和 `Retry-After`，同时不向渲染层暴露主接口密钥。
+  - MyMemory 请求按单行 UTF-8 编码，检查 HTTP 状态、JSON、内嵌 `responseStatus`、配额和译文方向；匿名额度有限，失败时进入冷却，不循环请求。
+  - 自动重试只对当前歌词批次生效；旧请求由 `AbortController` 取消。
+- **验证**：翻译专项回归 26/26 通过；发布前运行全量 Node 回归、语法检查和 Windows 安装包构建。
+
 ## v2.2.0 歌词翻译方向修正 + 自带双语不重复 + 桌面歌词左键单击解锁
 
 - **版本元数据**：`2.2.0` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。

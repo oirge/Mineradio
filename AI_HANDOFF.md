@@ -2,14 +2,13 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
-## 当前权威入口（2026-09-10）
+## 当前权威入口（2026-09-21）
 
-- **仓库以 GitHub `https://github.com/oirge/Mineradio` 为准，本地路径随机器变化**。旧规则里的 `C:\Users\oirg\Desktop\mok\Mineradio-sync`、`C:\Users\Administrator\Desktop\Mineradio-main`、`E:\桌面\播放器软件\Mineradio\resources\app` 在当前环境都不存在，别盲目切过去；先 `git remote -v` + `git log --oneline -1` 确认。
-- 当前源码版本是 `v2.0.6`（常用播放控制提到主界面），尚未发布；最新提交以 `git log --oneline -5 --decorate` 为准。
-- 线上 Latest 是 `v2.0.5`（播放速度与睡眠定时，Release `386795754`，`published_at` `2026-09-11T05:03:59Z`）；`v2.0.4`（同时监控多个音乐目录，Release `386780937`）是上一版；`v2.0.3`（Release `386043356`）更早。
+- **仓库以 GitHub `https://github.com/oirge/Mineradio` 为准，本地源码路径为 `D:\Mineradio-src`；已安装程序路径为 `D:\Mineradio-oirge`。**
+- 当前源码续版为 `v2.2.1`，本轮加入歌词翻译有限重试、失败缓存清理、请求取消、错误透传，以及默认关闭并需同意的 MyMemory 中英备用；发布前以当前分支和 `git log --oneline -5 --decorate` 为准。
+- 线上 Latest 基线是 `v2.2.0`；本轮发布目标为 GitHub Release `v2.2.1`，安装身份、数据目录和自动更新线路不变。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
-- 新对话优先读 `AGENTS.md`、`docs/PROJECT_MEMORY.md`、`docs/HANDOFF_NEXT_CHAT.md`；涉及 3D 歌单架、玻璃 SVG、发布或安装包时再读对应专项文档。本文件下面包含较早历史记录（只到 `v1.2.44`），不能覆盖上述文件的当前结论。
 
 ## 用户偏好
 

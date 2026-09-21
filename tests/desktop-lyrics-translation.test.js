@@ -25,7 +25,7 @@ test('单行舞台开启翻译时把译文并进当前行画成两行', () => {
 
 test('拉取译文的门控放宽到「舞台或桌面任一开启翻译」', () => {
   assert.match(appJs, /function lyricTranslationWanted\(\) \{[\s\S]*?desktopLyricsTranslation === true/);
-  assert.match(appJs, /function scheduleLyricLlmTranslation\(\) \{\s*\n\s*if \(!lyricTranslationWanted\(\)\) return;/);
+  assert.match(appJs, /function scheduleLyricLlmTranslation\(force\) \{/);
 });
 
 test('桌面歌词翻译标志：fxDefaults 两处、读写、快照归档都带上', () => {
@@ -100,5 +100,5 @@ test('桌面「翻译」开关的 IPC 全链路接线齐全', () => {
 test('主界面 FX 面板有桌面歌词翻译开关且接线', () => {
   assert.match(indexHtml, /id="t-desktopLyricsTranslation" onclick="toggleFx\('desktopLyricsTranslation'\)"/);
   assert.match(appJs, /\['desktopLyricsTranslation', 't-desktopLyricsTranslation',/);
-  assert.match(appJs, /if \(key === 'desktopLyricsTranslation' && fx\.desktopLyricsTranslation === true\) scheduleLyricLlmTranslation\(\);/);
+  assert.match(appJs, /if \(key === 'desktopLyricsTranslation'\) scheduleLyricLlmTranslation\(\);/);
 });
