@@ -13,7 +13,8 @@
   - 本地 `/api/lyric-translate` 代理保留上游状态、错误信息、可重试标志和 `Retry-After`，同时不向渲染层暴露主接口密钥。
   - MyMemory 请求按单行 UTF-8 编码，检查 HTTP 状态、JSON、内嵌 `responseStatus`、配额和译文方向；匿名额度有限，失败时进入冷却，不循环请求。
   - 自动重试只对当前歌词批次生效；旧请求由 `AbortController` 取消。
-- **验证**：翻译专项回归 26/26 通过；发布前运行全量 Node 回归、语法检查和 Windows 安装包构建。
+- **GitHub 发布结果（2026-09-21）**：tag `v2.2.1` → commit `235e9bb`；Actions 构建 `35566368557` 成功，构建、SHA256 清单生成和资产上传全部通过。Release `392723659` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`）。
+- **线上资产核对**：`latest.yml` 版本为 `2.2.1`，安装器 SHA512 与 `latest.yml` 的大小/摘要字段一致；GitHub SHA256 清单与四项线上资产摘要一致。安装包 `Mineradio-oirge-2.2.1-Setup.exe`、blockmap、`latest.yml`、`SHA256SUMS.txt` 均已上传。
 
 ## v2.2.0 歌词翻译方向修正 + 自带双语不重复 + 桌面歌词左键单击解锁
 

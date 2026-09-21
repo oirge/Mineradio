@@ -6,7 +6,7 @@
 
 - **仓库以 GitHub `https://github.com/oirge/Mineradio` 为准，本地源码路径为 `D:\Mineradio-src`；已安装程序路径为 `D:\Mineradio-oirge`。**
 - 当前源码续版为 `v2.2.1`，本轮加入歌词翻译有限重试、失败缓存清理、请求取消、错误透传，以及默认关闭并需同意的 MyMemory 中英备用；发布前以当前分支和 `git log --oneline -5 --decorate` 为准。
-- 线上 Latest 基线是 `v2.2.0`；本轮发布目标为 GitHub Release `v2.2.1`，安装身份、数据目录和自动更新线路不变。
+- 线上 Latest 已是 `v2.2.1`（GitHub Release 于 2026-09-21 发布）；安装身份、数据目录和自动更新线路不变。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
 
