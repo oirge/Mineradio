@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.1';
+var APP_VERSION = '2.2.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,10 +679,9 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '歌词翻译方向修正：默认中文译英文、英文译中文，不再把中文又「翻译」成中文。',
-    '歌词自带双语（原文已含译文）时不再重复显示译文。',
-    '桌面歌词左键单击命中歌词即可解锁并唤出控制栏，无需再等悬停或中键。',
-    '全量 Node 回归 1245/1245 通过。'
+    '桌面歌词控制栏不再在软件开启后长期滞留：程序化唤出且未悬停时会定时自动收起。',
+    '解锁状态下左键单击歌词即可立即唤出控制栏，无需再等 1.5 秒悬停。',
+    '全量 Node 回归 1273/1273 通过。'
   ]
 };
 function readSavedVolume() {

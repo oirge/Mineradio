@@ -78,9 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '歌词翻译失败后自动有限重试，不再把失败结果永久缓存',
-  '主翻译服务不可用时可在设置中手动开启 MyMemory 中英免费备用',
-  '翻译请求会显示具体失败原因，切歌或切换目标语言时取消旧请求',
+  '桌面歌词控制栏未悬停时定时自动收起，不再长期滞留',
+  '解锁状态下左键单击歌词即可立即唤出控制栏',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

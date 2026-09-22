@@ -323,6 +323,8 @@
     var hoverInside = false;
     var hintVisible = false;
     var hintTimer = 0;
+    var autoHideHintTimer = 0;
+    var DESKTOP_LYRICS_HINT_AUTO_HIDE_MS = 2600;
     var lastHintPositionAt = 0;
     var desktopLyricsWindowTopInset = 0;
     var desktopLyricsWindowBottomInset = 0;
@@ -1489,13 +1491,32 @@
       if (!hintVisible || !lockHint) return false;
       return pointInRect(evt, lockHint.getBoundingClientRect(), 10, 10);
     }
+    function clearHintAutoHide() {
+      if (autoHideHintTimer) {
+        clearTimeout(autoHideHintTimer);
+        autoHideHintTimer = 0;
+      }
+    }
+    // 程序化唤出控制栏（启动跳变/命中热区解锁/单击/滚轮/按钮）时，若指针并未停在控制栏上，
+    // 定时自动收起，避免控制栏长期滞留在桌面上；悬停或拖动期间不收起，交由离开事件隐藏。
+    function scheduleHintAutoHide() {
+      clearHintAutoHide();
+      autoHideHintTimer = setTimeout(function(){
+        autoHideHintTimer = 0;
+        if (dragging || hoverInside) return;
+        hideInteractionHint();
+      }, DESKTOP_LYRICS_HINT_AUTO_HIDE_MS);
+    }
     function setHintVisible(visible) {
       hintVisible = !!visible;
       if (hintVisible) {
         positionInteractionHint();
         lastHintPositionAt = performance.now();
+        if (!hoverInside && !dragging) scheduleHintAutoHide();
+        else clearHintAutoHide();
       } else {
         lastHintPositionAt = 0;
+        clearHintAutoHide();
       }
       stage.classList.toggle('hint-visible', hintVisible);
       setPointerCapture(!isLocked() && (hintVisible || dragging) && hoverInside);
@@ -1609,6 +1630,8 @@
         return;
       }
       if (evt.button === 0 && !isLocked()) {
+        // 解锁状态下左键单击歌词立即唤出控制栏（无需等 1.5s 悬停），随后按需自动收起。
+        setHintVisible(true);
         dragging = true;
         dragPointerId = evt.pointerId;
         dragLast.x = evt.screenX;

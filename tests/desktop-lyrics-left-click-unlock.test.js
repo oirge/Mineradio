@@ -132,3 +132,25 @@ test('renderer：从锁定跳到解锁时立即唤出控制栏（无需等 1.5s 
   assert.match(applyState, /var wasLockedBeforeApply = isLocked\(\);/);
   assert.match(applyState, /if \(state\.enabled && wasLockedBeforeApply && !isLocked\(\)\) \{\s*setHintVisible\(true\);/);
 });
+
+test('renderer：程序化唤出控制栏后未悬停则定时自动收起（不再长期滞留）', () => {
+  const setHintVisible = readFunctionFrom(desktopLyricsHtml, 'setHintVisible');
+  const scheduleHintAutoHide = readFunctionFrom(desktopLyricsHtml, 'scheduleHintAutoHide');
+  // 显示且未悬停/未拖动时安排自动收起；悬停或拖动则清掉计时器交由离开事件隐藏。
+  assert.match(setHintVisible, /if \(!hoverInside && !dragging\) scheduleHintAutoHide\(\);/);
+  assert.match(setHintVisible, /else clearHintAutoHide\(\);/);
+  // 隐藏分支必须清掉计时器，避免残留 timer 误触发。
+  assert.match(setHintVisible, /lastHintPositionAt = 0;\s*clearHintAutoHide\(\);/);
+  // 到点若仍在悬停/拖动则不收起，否则收起控制栏。
+  assert.match(scheduleHintAutoHide, /if \(dragging \|\| hoverInside\) return;/);
+  assert.match(scheduleHintAutoHide, /hideInteractionHint\(\);/);
+});
+
+test('renderer：解锁状态下左键单击歌词立即唤出控制栏', () => {
+  const start = desktopLyricsHtml.indexOf("window.addEventListener('pointerdown'");
+  const end = desktopLyricsHtml.indexOf("window.addEventListener('pointerup'", start);
+  assert.ok(start >= 0 && end > start, 'missing pointerdown handler');
+  const pointerDown = desktopLyricsHtml.slice(start, end);
+  // 命中歌词热区、未锁定的左键按下：先唤出控制栏，再进入拖动。
+  assert.match(pointerDown, /if \(evt\.button === 0 && !isLocked\(\)\) \{\s*(?:\/\/[^\n]*\n\s*)?setHintVisible\(true\);/);
+});
