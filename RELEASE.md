@@ -1,5 +1,24 @@
 # 发布流程
 
+## v2.2.2 桌面歌词控制栏自动收起与单击唤出
+
+- **版本元数据**：`2.2.2` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 修复「打开软件后桌面歌词控制栏一直显示」：控制栏程序化唤出（启动锁定→解锁跳变、命中热区解锁、单击、滚轮、按钮）且指针未停留在控制栏上时，会在约 2.6 秒后自动收起；悬停或拖动期间不收起，仍交由离开事件隐藏。
+  2. 修复「单击桌面歌词不出现控制栏」：解锁状态下左键单击歌词即可立即唤出控制栏，无需再等 1.5 秒悬停。
+- **技术细节**：
+  - `public/desktop-lyrics.html` 新增 `scheduleHintAutoHide()` / `clearHintAutoHide()`，`setHintVisible(true)` 在非悬停、非拖动时安排自动收起；隐藏分支清理计时器，避免残留 timer 误触发。
+  - `pointerdown` 命中歌词热区、未锁定的左键分支先 `setHintVisible(true)` 再进入拖动。
+  - 未改动主进程左键/中键轮询与热区判定逻辑。
+- **测试**：全量 `node --test --test-concurrency=1 tests/*.test.js` 回归 1273/1273 通过（新增 3 条针对自动收起与单击唤出的断言）。
+- **GitHub 发布结果（2026-09-22）**：tag `v2.2.2` → commit `28591fa`；Actions 构建 `35676543218` 成功，构建、SHA256 清单生成和资产上传全部通过。Release `393400167` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍改为本版本三条说明。
+- **线上资产核对**：`latest.yml` 版本为 `2.2.2`，安装包 SHA512（`e/uafeJk5WupB+z3Puj99Tr8qXVyDbOr0RaGc3wOv6osjv1dFwdZbEfBcO2iagPAZR6d4Cb5iiqtWPdNbHBujQ==`）与清单一致；GitHub 下载资产 SHA256（与 `SHA256SUMS.txt` 逐条一致）如下：
+  - `Mineradio-oirge-2.2.2-Setup.exe`：102382604 B，SHA256 `be2c5006502758d56b6e5cb0627dddda5100a9c8726c3606d95e60bcb49361d9`。
+  - `Mineradio-oirge-2.2.2-Setup.exe.blockmap`：106623 B，SHA256 `eaaa3bda8f2f7501d4dda2a894ded606a8c879397b33ca647290ee4558a422ff`。
+  - `latest.yml`：359 B，SHA256 `51fb4112aba341cac3d23ca221c8055c6ba330a1100ae00d47837fd4d8b547e0`。
+  - `Mineradio-oirge-2.2.2-SHA256SUMS.txt`：282 B，SHA256 `8a5a2f5d459bdcd3c04fa65f09ff2324d7156c8ded22d9f138f885c96a835ac4`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的已装应用未强制关闭；已在临时目录核对 `latest.yml` 与 `SHA256SUMS.txt` 内容与线上资产摘要一致。应用内更新检测到 `latest.yml` 的 2.2.2 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.2.2-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.2.1 歌词翻译重试与免费备用
 
 - **版本元数据**：`2.2.1` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
