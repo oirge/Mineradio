@@ -5,8 +5,8 @@
 ## 当前权威入口（2026-09-21）
 
 - **仓库以 GitHub `https://github.com/oirge/Mineradio` 为准，本地源码路径为 `D:\Mineradio-src`；已安装程序路径为 `D:\Mineradio-oirge`。**
-- 当前源码续版为 `v2.2.1`，本轮加入歌词翻译有限重试、失败缓存清理、请求取消、错误透传，以及默认关闭并需同意的 MyMemory 中英备用；发布前以当前分支和 `git log --oneline -5 --decorate` 为准。
-- 线上 Latest 已是 `v2.2.1`（GitHub Release 于 2026-09-21 发布）；安装身份、数据目录和自动更新线路不变。
+- 当前源码续版为 `v2.2.2`，本轮修复桌面歌词控制栏两处交互问题：开启后长期滞留（程序化唤出且未悬停时约 2.6s 自动收起）、解锁态左键单击不出控制栏（单击即唤出，无需再等 1.5s 悬停）；发布前以当前分支和 `git log --oneline -5 --decorate` 为准。
+- 线上 Latest 已是 `v2.2.2`（GitHub Release 于 2026-09-22 发布）；`origin/main` 已同步到 `v2.2.2`；安装身份、数据目录和自动更新线路不变。
 - GitHub 仓库：`https://github.com/oirge/Mineradio`
 - `package.json` 的发布配置和软件内更新配置均指向 `oirge/Mineradio`。
 
