@@ -1,5 +1,24 @@
 # 发布流程
 
+## v2.2.4 本地歌译文落盘、单音轨出声不变量、3D 歌单架交互
+
+- **版本元数据**：`2.2.4` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION` 与更新预览 `notes`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 翻译过的本地歌重开软件后重播不再重新翻译：LLM 译文按歌存进本地 SQLite 曲库（借歌词记录的 `extra` JSON 字段透传，零 DDL / 零迁移），无全局条数上限、不占 localStorage 配额；在线/流媒体歌（无 localKey）仍走原有 localStorage 全局缓存，行为不变。
+  2. 修复切歌后偶发的旧歌残响 / 两首重合：起播前（非交叉淡入时）先用极短斜坡把仍在响的非活动音轨压 0 再停，保证同一时刻只有活动音轨出声。
+  3. 3D 歌单架交互：自动隐藏侧栏靠边悬停即可淡入唤出（不拽镜头，镜头只在真正命中卡片时跟随）；右键底部「3D 歌单架」按钮弹出歌单架专用控制浮层（借用原 `#fx-stage-fold` 节点，可还原，不复制）；移除旧的「点击打开歌单」就绪提示牌。
+- **技术细节**：
+  - `public/app.js` 新增按歌译文缓存（`songLyricTranslationState` 一族：`loadSongLyricTranslations` / `recordSongLyricTranslation` / `queueSongLyricTranslationWrite` / `flushSongLyricTranslations` / `writeSongLyricTranslationRecord`），逐行键复用 `lyricLlmTranslateCacheKey`，整段以 `window.desktopWindow.isDesktop` 为门槛；`desktop/local-library-store.js` `writeLyricRecord` 在缺省时从既有 `extra` 捞回 `localLyricTranslations`，避免频繁歌词快照写入整列重建 `extra` 抹掉译文。
+  - `public/app.js` 新增 `pauseInactiveAudioDecks()`，`attemptAudioPlay` 在真正 `play()` 前（非 crossfade 时）调用；新增 `openShelfQuickPanel` / `closeShelfQuickPanel` / `toggleShelfQuickPanel`、`shelfSideWantsCameraFollow`，改 `canShowShelfHoverCueAt`、`toggleFxPanel`。
+- **测试**：新增 `tests/lyric-translation-song-cache.test.js`、`tests/audio-single-deck-invariant.test.js`、`tests/shelf-hover-ready-tab.test.js` 及 `tests/local-library-sqlite-store.test.js` 的按歌译文往返/快照保留断言；全量 `node --test --test-concurrency=1 tests/*.test.js` 回归 1293/1293 通过。
+- **GitHub 发布结果（2026-09-27）**：tag `v2.2.4` → commit `d870501`；Actions 构建 `36309444263` 成功（约 2 分钟），构建、SHA256 清单生成和资产上传全部通过。Release `397585323` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），`releases/latest` API 返回 `v2.2.4`；更新介绍改为本版本说明。`origin/main` 已从 `1ba7fdd` 快进到 `d870501`。
+- **线上资产核对**：`latest.yml` 版本为 `2.2.4`，安装包 SHA512（`nDZ5MvYb3fYj/L3vSTyftX4N/gkJhgMjvYH7hhCCKrkz+6a7qWXiB1mxOc/lPTqlD7dgv0bQPXOu7rWD72kzow==`）与 size（102386207 B）与 `latest.yml` 一致；下载的 `SHA256SUMS.txt` 三条摘要与 GitHub 各资产的服务端 SHA256 摘要逐条一致。GitHub 资产 SHA256 如下：
+  - `Mineradio-oirge-2.2.4-Setup.exe`：102386207 B，SHA256 `854351f33efdc66609d8881ec69532061695b2e03229bd3587a6c593f82bd21f`。
+  - `Mineradio-oirge-2.2.4-Setup.exe.blockmap`：106717 B，SHA256 `7dc1570001ad512cdd250297fc78430b500aa55c486b4cc075eb4c9ab7f12518`。
+  - `latest.yml`：359 B，SHA256 `a0f8ae4bee8cf4e58ceebcccdcabcb6baf6ecfaff99d11cf7a5a35c5ca4f1fc0`。
+  - `Mineradio-oirge-2.2.4-SHA256SUMS.txt`：282 B，SHA256 `c1c2a2074fc9e8d1a2d6b9f7007c89367e56e0ef3360df2071c97ca69e95a2ab`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的已装应用未强制关闭；已在临时目录核对 `latest.yml` 与 `SHA256SUMS.txt` 内容与线上资产摘要一致。应用内更新检测到 `latest.yml` 的 2.2.4 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.2.4-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.2.3 本地封面修复：杂图不再顶替内嵌专辑封面
 
 - **版本元数据**：`2.2.3` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
