@@ -1,5 +1,23 @@
 # 发布流程
 
+## v2.2.3 本地封面修复：杂图不再顶替内嵌专辑封面
+
+- **版本元数据**：`2.2.3` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 修复「本地曲库封面在某些情况下全部变成同一张图」：移除封面匹配的 `byDirFirst` 兜底层——它取文件夹内任意第一张图片作为封面，且封面文件优先级高于内嵌专辑封面，导致目录里的杂图（艺人写真、内页扫描等）顶替每首歌的内嵌封面。
+  2. 现在文件夹图片仅在规范命名（cover/folder/front/album/artwork/封面）、与曲目同名或路径匹配时才作为封面；否则回落到各曲目自身的内嵌专辑封面。
+- **技术细节**：
+  - `public/app.js` `buildLocalCoverMaps` 不再构建 `byDirFirst` 索引，`findLocalCoverFile` 去掉 `byDirFirst` 兜底匹配层；其余 byPath / byBase / byLoose / byDirNamed 匹配不变。
+  - 未改动 `ensureLocalCoverForSong` 的封面/内嵌优先级与异步 residency 状态机。
+- **测试**：新增 `tests/local-media-format-support.test.js` 回归断言（杂图不匹配、规范命名与逐曲同名封面仍匹配、共存时选规范封面）；全量 `node --test --test-concurrency=1 tests/*.test.js` 回归 1286/1286 通过。
+- **GitHub 发布结果（2026-09-27）**：tag `v2.2.3` → commit `3ae1148`；Actions 构建 `36286854887` 成功，构建、SHA256 清单生成和资产上传全部通过。Release `397469489` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`），更新介绍改为本版本说明。`origin/main` 已快进到 `3ae1148`。
+- **线上资产核对**：`latest.yml` 版本为 `2.2.3`，安装包 SHA512（`EiB3kqAuoXRDGOK3s1V1oYPMthouWY8LpgXK0JByDAb5Y03McQ3jFfuRvnmN7WYPfahO3u8as5AxNyaeVk5gkg==`）与 `latest.yml` 一致；本地下载安装包并 `sha256sum -c` 逐条核对通过。GitHub 下载资产 SHA256（与 `SHA256SUMS.txt` 逐条一致）如下：
+  - `Mineradio-oirge-2.2.3-Setup.exe`：102384205 B，SHA256 `2c47301eceecec25983d63fae34b1bce3fd3edbab5f35566f8e02fce1fd1e94c`。
+  - `Mineradio-oirge-2.2.3-Setup.exe.blockmap`：106611 B，SHA256 `9af508c49cc9e81c61f7addadfedde8b40ccb2c58a5038ec33558b02d05c7782`。
+  - `latest.yml`：359 B，SHA256 `7c1414f1e41ef867b83bc5bb758a10897d6532144a1d83648c1c85f9d2af50cc`。
+  - `Mineradio-oirge-2.2.3-SHA256SUMS.txt`：282 B，SHA256 `3026a8b1b486eb1f5b3df55012ba1da16eec77a41637751941bb6bb3f8bd7908`。
+- **本地安装**：发布时 `D:\Mineradio-oirge` 的已装应用未强制关闭；已在临时目录核对 `latest.yml` 与 `SHA256SUMS.txt` 内容与线上资产摘要一致。应用内更新检测到 `latest.yml` 的 2.2.3 后可在更新面板直接升级，或关闭应用后用 `Mineradio-oirge-2.2.3-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.2.2 桌面歌词控制栏自动收起与单击唤出
 
 - **版本元数据**：`2.2.2` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
