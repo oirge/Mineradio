@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.3';
+var APP_VERSION = '2.2.4';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,9 +679,10 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '修复本地曲库封面在某些情况下全部变成同一张图：文件夹里的杂图不再顶替每首歌的内嵌专辑封面。',
-    '仅规范命名（cover/folder/front/album/artwork/封面）或与曲目同名的图片才会作为封面。',
-    '全量 Node 回归 1286/1286 通过。'
+    '翻译过的本地歌重开软件后重播不再重新翻译：译文按歌存进本地曲库，无全局条数上限。',
+    '修复切歌后偶发的旧歌残响 / 两首重合：起播前先收掉仍在响的非活动音轨。',
+    '3D 歌单架：自动隐藏侧栏靠边悬停即可淡入唤出，右键底部按钮弹出歌单架专用控制浮层。',
+    '全量 Node 回归 1293/1293 通过。'
   ]
 };
 function readSavedVolume() {
@@ -2434,6 +2435,7 @@ function flushPersistentVisualState() {
   try { flushPersistentUiStateBackup(); } catch (e) {}
   // 上面这些 save 走 120ms 防抖，页面卸载时定时器不会再跑，待写队列必须当场冲掉。
   if (typeof flushLocalUserStateWrites === 'function') { try { flushLocalUserStateWrites(); } catch (e) {} }
+  if (typeof flushSongLyricTranslations === 'function') { try { flushSongLyricTranslations(); } catch (e) {} }
 }
 window.addEventListener('beforeunload', flushPersistentVisualState);
 window.addEventListener('pagehide', flushPersistentVisualState);
@@ -8320,6 +8322,10 @@ function copyLocalLyricCachePayload(sourceRecord, targetRecord) {
   targetRecord.localLyricTagName = sourceRecord.localLyricTagName || '';
   targetRecord.localLyricFileSignature = sourceRecord.localLyricFileSignature || '';
   targetRecord.localLyricSource = sourceRecord.localLyricSource || '';
+  // 按歌译文（叠加在 extra 里）也要随歌词快照一起保留，别被轻量更新覆盖掉。
+  if (sourceRecord.localLyricTranslations !== undefined && targetRecord.localLyricTranslations === undefined) {
+    targetRecord.localLyricTranslations = sourceRecord.localLyricTranslations;
+  }
 }
 /**
  * 把歌词快照写入独立 lyrics store；释放原文后的轻量更新会先合并已落盘歌词。
@@ -9884,6 +9890,93 @@ function persistLyricLlmTranslateCache() {
 function lyricLlmTranslateCacheKey(text) {
   return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
 }
+// —— 按歌落盘的 LLM 译文：叠加在全局 localStorage 缓存之上，专治本地歌重开后又从头翻译。
+// 借 SQLite 歌词记录已有的 extra JSON 透传（desktop/local-library-store.js 的 collect/mergeExtraFields），
+// 按 song.localKey 存 { v:1, map:{ 逐行键: 译文 } }；逐行键与全局缓存键同构，无 1200 行上限、不吃 localStorage 配额。
+var songLyricTranslationState = { loaded: Object.create(null), loading: Object.create(null), maps: Object.create(null), pending: Object.create(null), writeTimer: 0 };
+function songLyricTranslationDbEnabled() {
+  // 仅桌面 SQLite 环境启用；浏览器/测试（无 window.desktopWindow）走原同步路径，行为不变。
+  return typeof window !== 'undefined' && !!(window.desktopWindow && window.desktopWindow.isDesktop);
+}
+function songLyricTranslationKeyOf(song) {
+  return (typeof localAssetCacheKey === 'function') ? localAssetCacheKey(song) : '';
+}
+async function loadSongLyricTranslations(song) {
+  var key = songLyricTranslationKeyOf(song);
+  if (!key || !songLyricTranslationDbEnabled()) return;
+  if (songLyricTranslationState.loaded[key]) return;
+  if (songLyricTranslationState.loading[key]) return songLyricTranslationState.loading[key];
+  var promise = (async function () {
+    var map = {};
+    try {
+      var records = await readLocalLyricCacheRecords([key]);
+      var record = records && records[key];
+      var payload = record && record.localLyricTranslations;
+      var stored = payload && payload.map;
+      if (stored && typeof stored === 'object') {
+        var cache = readLyricLlmTranslateCache();
+        Object.keys(stored).forEach(function (lineKey) {
+          var value = stored[lineKey];
+          if (typeof value !== 'string' || !value.trim()) return;
+          map[lineKey] = value;
+          // 只补缺失键，绝不覆盖本会话已翻译/已存在的译文。
+          if (typeof cache[lineKey] !== 'string' || !cache[lineKey].trim()) cache[lineKey] = value;
+        });
+      }
+    } catch (e) { if (typeof console !== 'undefined') console.warn('[SongLyricTranslationLoad]', key, e); }
+    songLyricTranslationState.maps[key] = map;
+    songLyricTranslationState.loaded[key] = true;
+    delete songLyricTranslationState.loading[key];
+  })();
+  songLyricTranslationState.loading[key] = promise;
+  return promise;
+}
+function recordSongLyricTranslation(song, lineKey, translated) {
+  if (!songLyricTranslationDbEnabled()) return;
+  if (!lineKey || typeof translated !== 'string' || !translated.trim()) return;
+  var key = songLyricTranslationKeyOf(song);
+  if (!key) return;
+  var map = songLyricTranslationState.maps[key] || (songLyricTranslationState.maps[key] = {});
+  if (map[lineKey] === translated) return;
+  map[lineKey] = translated;
+  songLyricTranslationState.pending[key] = true;
+  queueSongLyricTranslationWrite();
+}
+function queueSongLyricTranslationWrite() {
+  if (songLyricTranslationState.writeTimer) return;
+  songLyricTranslationState.writeTimer = setTimeout(function () {
+    songLyricTranslationState.writeTimer = 0;
+    flushSongLyricTranslations();
+  }, 1500);
+}
+function flushSongLyricTranslations() {
+  if (songLyricTranslationState.writeTimer) { clearTimeout(songLyricTranslationState.writeTimer); songLyricTranslationState.writeTimer = 0; }
+  var keys = Object.keys(songLyricTranslationState.pending);
+  if (!keys.length) return;
+  songLyricTranslationState.pending = Object.create(null);
+  keys.forEach(function (key) {
+    var map = songLyricTranslationState.maps[key];
+    if (map && Object.keys(map).length) writeSongLyricTranslationRecord(key, map);
+  });
+}
+async function writeSongLyricTranslationRecord(key, map) {
+  try {
+    // 先读回整条歌词记录（含歌词正文等所有字段），只叠加 localLyricTranslations 再写回，绝不覆盖正文。
+    var records = await readLocalLyricCacheRecords([key]);
+    var record = (records && records[key]) || { id: key };
+    var merged = {};
+    var existing = record.localLyricTranslations && record.localLyricTranslations.map;
+    if (existing && typeof existing === 'object') {
+      Object.keys(existing).forEach(function (k) { if (typeof existing[k] === 'string' && existing[k].trim()) merged[k] = existing[k]; });
+    }
+    Object.keys(map).forEach(function (k) { if (typeof map[k] === 'string' && map[k].trim()) merged[k] = map[k]; });
+    record.id = key;
+    record.localLyricTranslations = { v: 1, map: merged };
+    // 记住合并后的全量，避免下轮把已落盘键当增量重复写。
+    songLyricTranslationState.maps[key] = merged;
+    await putLocalLyricCacheRecord(record);
+  } catch (e) { if (typeof console !== 'undefined') console.warn('[SongLyricTranslationWrite]', key, e); }
+}
 function lyricTranslateTargetValue() {
   return String(fx && fx.lyricTranslateTarget || '').trim().slice(0, 24);
 }
@@ -9977,10 +10070,24 @@ function scheduleLyricLlmTranslation(force) {
     state.fallback = lyricTranslateFallbackEnabled();
   }
   if (state.running || state.scheduled || !lyricsLines.length) return;
+  // 本地歌：先把该曲落盘的按歌译文并入内存缓存，命中后老歌重播就不必再打网络。
+  if (songLyricTranslationDbEnabled()) {
+    var dbSong = (typeof currentLyricSong === 'function') ? currentLyricSong() : null;
+    var dbKey = songLyricTranslationKeyOf(dbSong);
+    if (dbKey && !songLyricTranslationState.loaded[dbKey]) {
+      var pendingLines = lyricsLines;
+      loadSongLyricTranslations(dbSong).then(function () {
+        // 载入期间没切歌才继续调度，避免把旧歌的调度强加到新歌。
+        if (lyricsLines === pendingLines) scheduleLyricLlmTranslation(force);
+      });
+      return;
+    }
+  }
   var pending = [];
   var byKey = Object.create(null);
   var cache = readLyricLlmTranslateCache();
   var cachedHits = 0;
+  var fillSong = (typeof currentLyricSong === 'function') ? currentLyricSong() : null;
   for (var i = 0; i < lyricsLines.length; i++) {
     var line = lyricsLines[i];
     if (!line || !line.text || line.fallback || line.translation) continue;
@@ -9992,6 +10099,7 @@ function scheduleLyricLlmTranslation(force) {
       if (cache[key] !== sourceText && lyricTranslationLooksValid(cache[key], target)) {
         line.translation = cache[key];
         line.translationSource = 'llm';
+        recordSongLyricTranslation(fillSong, key, cache[key]);
         cachedHits += 1;
         continue;
       }
@@ -10025,6 +10133,7 @@ function runLyricLlmTranslation(pending, token) {
   var state = lyricLlmTranslateState;
   state.running = true;
   var cache = readLyricLlmTranslateCache();
+  var translationSong = (typeof currentLyricSong === 'function') ? currentLyricSong() : null;
   var index = 0;
   var failed = 0;
   var usedFallback = false;
@@ -10045,6 +10154,7 @@ function runLyricLlmTranslation(pending, token) {
   function finish() {
     if (!current()) return;
     persistLyricLlmTranslateCache();
+    flushSongLyricTranslations();
     state.running = false;
     state.controller = null;
     stageLyrics.rowsSignature = '';
@@ -10098,6 +10208,7 @@ function runLyricLlmTranslation(pending, token) {
         return;
       }
       cache[item.key] = translated;
+      recordSongLyricTranslation(translationSong, item.key, translated);
       item.lines.forEach(function (line) {
         line.translation = translated;
         line.translationSource = 'llm';
@@ -15257,7 +15368,9 @@ function shelfAutoHiddenInputReady() {
 }
 function canShowShelfHoverCueAt(e) {
   if (!e) return false;
-  if (!shelfHoverCue.guide) return false;
+  // 自动隐藏侧栏：鼠标靠近右侧边缘即可淡入唤出（不再要求处于视觉引导态）。
+  // 只驱动歌单架「可见度/淡入」，镜头是否跟随另由 isSideShelfFocusHit 的实卡命中判定，
+  // 避免恢复「右侧隐形区把动态镜头拽走」的旧手感。
   if (document.body.classList.contains('splash-active')) return false;
   if (visualGuideActive || emptyHomeActive || homeForcedOpen) return false;
   if (!shelfManager || !shelfManager.getMode || shelfManager.getMode() !== 'side') return false;
@@ -15290,6 +15403,15 @@ function setShelfGuideCueActive(on) {
   } else {
     shelfHoverCue.target = 0;
   }
+}
+// 侧栏歌单架是否应让动态镜头跟随：固定展开/详情页打开时跟随；自动隐藏或常驻时只有
+// 真正命中实卡才跟随。这样「靠右边缘淡入唤出」只淡入不拽镜头，避免旧的隐形触发区手感。
+function shelfSideWantsCameraFollow(e) {
+  if (!e || !shelfManager || !shelfManager.getMode || shelfManager.getMode() !== 'side') return false;
+  if (shelfPinnedOpen) return true;
+  if (shelfManager.hasOpenContent && shelfManager.hasOpenContent()) return true;
+  if (typeof isPointerOverUi === 'function' && isPointerOverUi(e)) return false;
+  return !!(shelfPreviewIsVisible() && pointerCardHit(raycasterFromPointerEvent(e), e, shelfAlwaysVisible() ? 18 : 24));
 }
 function updateShelfHoverCueFromPointer(e) {
   if (!e) {
@@ -15357,6 +15479,99 @@ function setShelfPinnedOpen(open, immediate) {
   if (typeof updateEmptyHomeVisibility === 'function') updateEmptyHomeVisibility({ forceLoad: false });
   if (shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent()) return;
   if (typeof setFocusZone === 'function') setFocusZone(shelfPinnedOpen ? 'shelf-side' : null, immediate);
+}
+// 右键底部「3D 歌单架」按钮 → 只显示歌单架控制的浮层。借用视觉控制台里的同一组控件
+// （#fx-stage-fold 原节点本身，事件绑定与状态同步照旧），不进入 DIY 玩家模式也能开。
+var shelfQuickPanelOpen = false;
+var shelfFoldOrigParent = null;
+var shelfFoldOrigNext = null;
+function ensureShelfQuickPanel() {
+  var panel = document.getElementById('shelf-quick-panel');
+  if (panel) return panel;
+  panel = document.createElement('div');
+  panel.id = 'shelf-quick-panel';
+  panel.className = 'shelf-quick-panel';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-label', '3D 歌单架控制');
+  panel.setAttribute('aria-hidden', 'true');
+  var head = document.createElement('div');
+  head.className = 'shelf-quick-head';
+  var title = document.createElement('b');
+  title.textContent = '3D 歌单架';
+  var closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'shelf-quick-close';
+  closeBtn.title = '关闭';
+  closeBtn.textContent = '×';
+  closeBtn.addEventListener('click', function(ev){ ev.stopPropagation(); closeShelfQuickPanel(); });
+  head.appendChild(title);
+  head.appendChild(closeBtn);
+  var body = document.createElement('div');
+  body.className = 'shelf-quick-body';
+  panel.appendChild(head);
+  panel.appendChild(body);
+  panel.addEventListener('click', function(ev){ ev.stopPropagation(); });
+  panel.addEventListener('contextmenu', function(ev){ ev.stopPropagation(); ev.preventDefault(); });
+  panel.addEventListener('wheel', function(ev){ ev.stopPropagation(); }, { passive: true });
+  document.body.appendChild(panel);
+  return panel;
+}
+function positionShelfQuickPanel(anchor) {
+  var panel = document.getElementById('shelf-quick-panel');
+  if (!panel) return;
+  var rect = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+  var pw = panel.offsetWidth || 300;
+  var margin = 12;
+  var left, bottom;
+  if (rect) {
+    left = Math.min(innerWidth - pw - margin, Math.max(margin, rect.left + rect.width / 2 - pw / 2));
+    bottom = Math.max(margin, innerHeight - rect.top + 10);
+  } else {
+    left = innerWidth - pw - margin;
+    bottom = 92;
+  }
+  panel.style.left = Math.round(left) + 'px';
+  panel.style.bottom = Math.round(bottom) + 'px';
+}
+function openShelfQuickPanel(anchor) {
+  var fold = document.getElementById('fx-stage-fold');
+  var panel = ensureShelfQuickPanel();
+  if (!fold || !panel) return;
+  if (!shelfQuickPanelOpen) {
+    shelfFoldOrigParent = fold.parentNode;
+    shelfFoldOrigNext = fold.nextSibling;
+    var body = panel.querySelector('.shelf-quick-body');
+    if (body) body.appendChild(fold);
+  }
+  fold.classList.add('open');
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+  shelfQuickPanelOpen = true;
+  positionShelfQuickPanel(anchor);
+  requestAnimationFrame(function(){ positionShelfQuickPanel(anchor); });
+}
+function closeShelfQuickPanel() {
+  if (!shelfQuickPanelOpen) return;
+  shelfQuickPanelOpen = false;
+  var fold = document.getElementById('fx-stage-fold');
+  var panel = document.getElementById('shelf-quick-panel');
+  if (fold && shelfFoldOrigParent) {
+    if (shelfFoldOrigNext && shelfFoldOrigNext.parentNode === shelfFoldOrigParent) {
+      shelfFoldOrigParent.insertBefore(fold, shelfFoldOrigNext);
+    } else {
+      shelfFoldOrigParent.appendChild(fold);
+    }
+  }
+  shelfFoldOrigParent = null;
+  shelfFoldOrigNext = null;
+  if (panel) {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+}
+function toggleShelfQuickPanel(anchor) {
+  if (shelfQuickPanelOpen) closeShelfQuickPanel();
+  else openShelfQuickPanel(anchor);
 }
 function clearShelfPreviewOnPointerExit() {
   if (!shelfManager || !shelfManager.getMode || shelfManager.getMode() !== 'side') return;
@@ -24245,6 +24460,22 @@ function releaseGaplessPrefetch(opts) {
 }
 
 /**
+ * 兜底不变量：任一时刻只有活动 deck 能出声。把除活动 deck 外仍在播放的 deck 全部暂停。
+ * 无缝预取的闲置 deck 本来就是暂停态，这里对它是空操作；真正会被停下的只有交叉淡入残留、
+ * 或 settle 计时被丢弃后仍在响的旧 deck —— 正是「切歌后旧歌还在放 / 两首重合」的来源。
+ * @returns {void}
+ */
+function pauseInactiveAudioDecks() {
+  var active = activeAudioDeck();
+  for (var i = 0; i < audioDeckList.length; i++) {
+    var deck = audioDeckList[i];
+    if (!deck || !deck.el || deck === active) continue;
+    // 用极短斜坡压到 0 再停，避免在非零电平上硬切爆音；已暂停的闲置 deck 是空操作。
+    if (!deck.el.paused) duckAndRetireAudioDeck(deck, GAPLESS_HANDOFF_RAMP_SECONDS);
+  }
+}
+
+/**
  * 起播确认之后把接管 deck 的增益补齐到 1。放在 play() 已经 resolve 之后，
  * 斜坡正好落在第一个可闻样本上，既没有咔哒也没有可感知的延迟。
  * @returns {void}
@@ -27201,6 +27432,9 @@ async function attemptAudioPlay(opts) {
   try {
       if (!audio) return false;
       if (!audioReady) initAudio();
+      // 起播前收掉任何仍在响的非活动 deck（交叉进行中除外，那是有意的双 deck 对交叉）。
+      // 保证只有活动 deck 出声，杜绝「切歌后旧歌还在放 / 两首重合」。
+      if (!crossfadeState.active && !crossfadeState.starting) pauseInactiveAudioDecks();
       if (opts.fade !== false) preparePlaybackFadeIn();
       if (opts.manual) {
         var manualPlay = audio.play();
@@ -39552,6 +39786,17 @@ function bindFxPanel() {
   document.querySelectorAll('#shelf-presence-seg [data-shelf-presence]').forEach(function(b){
     b.addEventListener('click', function(){ setShelfPresence(b.getAttribute('data-shelf-presence')); });
   });
+  // 右键底部「3D 歌单架」按钮 → 只显示歌单架控制的浮层（左键仍是侧栏/舞台切换）。
+  var shelfViewBtn = document.getElementById('shelf-view-btn');
+  if (shelfViewBtn) {
+    shelfViewBtn.addEventListener('contextmenu', function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleShelfQuickPanel(shelfViewBtn);
+    });
+  }
+  document.addEventListener('click', function(){ if (shelfQuickPanelOpen) closeShelfQuickPanel(); });
+  document.addEventListener('keydown', function(ev){ if (ev.key === 'Escape' && shelfQuickPanelOpen) closeShelfQuickPanel(); });
   document.querySelectorAll('#cam-seg button').forEach(function(b){
     b.addEventListener('click', function(){ setCamMode(b.dataset.cam); });
   });
@@ -39669,6 +39914,8 @@ function toggleFx(key) {
 function toggleFxPanel(force) {
   var el = document.getElementById('fx-panel');
   if (!el) return;
+  // 视觉控制台开合前先把借走的歌单架分组还回去，避免控制台里缺这一组。
+  if (typeof closeShelfQuickPanel === 'function' && shelfQuickPanelOpen) closeShelfQuickPanel();
   if (!diyPlayerMode && force !== false) {
     showToast('开启 DIY 玩家模式后可打开视觉控制台');
     return;
@@ -42919,7 +43166,7 @@ window.addEventListener('mousemove', function(e){
     var shelfCanFocusImm = !!(shelfManager && shelfManager.canInteract && shelfManager.canInteract());
     var newFocusImm = null;
     var queueFocusImm = isPlaylistPanelFocusActive(inQueueTriggerImm, inQueuePanelImm, pp, ex, ppRectImm);
-    var shelfHoverFocusImm = !!(shelfCanFocusImm && isSideShelfFocusHit(e));
+    var shelfHoverFocusImm = !!(shelfCanFocusImm && shelfSideWantsCameraFollow(e));
     if (queueFocusImm) newFocusImm = 'queue';
     else if (shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent()) newFocusImm = 'shelf-detail';
     else if (shelfHoverFocusImm) newFocusImm = 'shelf-side';
@@ -42983,7 +43230,7 @@ window.addEventListener('mousemove', function(e){
 
   var newFocus = null;
   var queueFocusActive = isPlaylistPanelFocusActive(inQueueTrigger, inQueuePanel, pp, ex, ppRect);
-  var shelfHoverFocus = !!(shelfCanFocus && isSideShelfFocusHit(e));
+  var shelfHoverFocus = !!(shelfCanFocus && shelfSideWantsCameraFollow(e));
   if (queueFocusActive) {
     newFocus = 'queue';
   } else if (shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent()) {

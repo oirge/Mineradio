@@ -1463,6 +1463,17 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1240px,cal
 .fx-fold-body .fx-section-label{margin-top:12px}
 .fx-fold-body .fx-section-label:first-child{margin-top:4px}
 .fx-fold .fx-slider label{font-size:10.5px;color:rgba(255,255,255,.58)}
+/* 右键底部「3D 歌单架」按钮弹出的歌单架专用控制浮层（借用 #fx-stage-fold 原节点） */
+.shelf-quick-panel{position:fixed;z-index:60;display:none;left:auto;bottom:92px;width:min(320px,calc(100vw - 32px));max-height:min(64vh,540px);overflow:auto;overscroll-behavior:contain;padding:14px 14px 16px;border-radius:18px;background:var(--glass-bg);border:1px solid rgba(0,245,212,.18);box-shadow:var(--glass-shadow);backdrop-filter:blur(40px) saturate(1.3);-webkit-backdrop-filter:blur(40px) saturate(1.3);scrollbar-width:thin;scrollbar-color:rgba(var(--fc-accent-rgb),.30) transparent}
+.shelf-quick-panel.open{display:block;animation:shelfQuickPop .18s cubic-bezier(.16,1,.3,1)}
+@keyframes shelfQuickPop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+.shelf-quick-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.shelf-quick-head b{font-size:12.5px;letter-spacing:.5px;color:rgba(255,255,255,.86)}
+.shelf-quick-close{width:26px;height:26px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:rgba(255,255,255,.7);cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center}
+.shelf-quick-close:hover{background:rgba(255,255,255,.09);color:#fff}
+.shelf-quick-panel #fx-stage-fold{margin-top:0;border:none;background:none;border-radius:0}
+.shelf-quick-panel #fx-stage-fold>.fx-fold-head{display:none}
+.shelf-quick-panel #fx-stage-fold>.fx-fold-body{display:block;padding:0}
 .fx-actions{display:flex;gap:8px;margin-top:14px}
 .fx-mini-btn{flex:1;height:30px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:rgba(255,255,255,.78);font-size:11.5px;cursor:pointer;font-family:inherit;letter-spacing:.3px}
 .fx-mini-btn:hover{background:rgba(255,255,255,.1);color:#fff}

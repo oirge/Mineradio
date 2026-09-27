@@ -813,6 +813,27 @@ function createLocalLibraryStore(options) {
   }
 
   /**
+   * 读取歌词记录 extra JSON 中的单个字段（缺失/破损都返回 undefined）。
+   * 供 writeLyricRecord 在轻量写入时保留渲染层未随本次带上的叠加字段。
+   * @param {string} songKey 曲库缓存键。
+   * @param {string} field extra 字段名。
+   * @returns {*} 字段值或 undefined。
+   */
+  function readLyricExtraField(songKey, field) {
+    const statement = prepare('SELECT extra FROM lyrics WHERE song_key=?');
+    if (!statement) return undefined;
+    const row = statement.get(songKey);
+    if (!row || row.extra == null) return undefined;
+    try {
+      const parsed = JSON.parse(row.extra);
+      if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, field)) {
+        return parsed[field];
+      }
+    } catch (_e) { /* 破损 extra 按缺省处理 */ }
+    return undefined;
+  }
+
+  /**
    * 写入歌词缓存记录。
    * @param {object} record 渲染层歌词缓存记录。
    * @returns {object} 写入结果。
@@ -821,6 +842,12 @@ function createLocalLibraryStore(options) {
     const songKey = record ? toText(record.id) : '';
     if (!songKey) return { ok: false, error: 'LOCAL_LIBRARY_DB_KEY_REQUIRED' };
     if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
+    // extra 列每次写入都整体重建：频繁的歌词快照写入不带 localLyricTranslations，
+    // 若不先捞回已落盘的按歌译文，就会被这次轻量写入抹掉。缺省时补回，避免误删。
+    if (record.localLyricTranslations === undefined) {
+      const preserved = readLyricExtraField(songKey, 'localLyricTranslations');
+      if (preserved !== undefined) record.localLyricTranslations = preserved;
+    }
     const text = toText(record.localLyricText);
     const params = [songKey];
     for (const column of LYRIC_COLUMNS) params.push(columnValue(column.kind, record[column.field]));

@@ -373,6 +373,75 @@ async function testAssetAndLyricRoundTrip() {
 }
 
 /**
+ * 按歌 LLM 译文经 extra JSON 透传无损落盘、读回，且不占用 LYRIC_COLUMNS 里的列。
+ * @returns {Promise<void>}
+ */
+async function testLyricTranslationsRoundTrip() {
+  await withStore(async (handle) => {
+    const key = 'English\u0000微风轻轻吹过';
+    assert.equal(handle.writeLyricRecord({
+      id: 'song-t',
+      localLyricText: '[00:01.00]微风轻轻吹过',
+      localLyricLoaded: true,
+      localLibraryPathKey: 'D:\\Music\\T.mp3',
+      localLibraryFileSignature: 'd:/music/t.mp3|1024|1700000000000',
+      localLyricTranslations: { v: 1, map: { [key]: 'A gentle breeze passes by.' } },
+      schema: 1,
+      savedAt: Date.now(),
+    }).ok, true);
+
+    const lyric = handle.readLyricRecords(['song-t']).records['song-t'];
+    assert.equal(lyric.localLyricText, '[00:01.00]微风轻轻吹过');
+    assert.ok(lyric.localLyricTranslations, '按歌译文必须随记录回来');
+    assert.equal(lyric.localLyricTranslations.v, 1);
+    assert.equal(lyric.localLyricTranslations.map[key], 'A gentle breeze passes by.');
+
+    const sqlite = require('node:sqlite');
+    const probe = new sqlite.DatabaseSync(handle.filePath);
+    try {
+      // 译文只落在 extra JSON 里，LYRIC_RESERVED_FIELDS / LYRIC_COLUMNS 都不认它，零 DDL。
+      const extra = JSON.parse(probe.prepare('SELECT extra FROM lyrics WHERE song_key=?').get('song-t').extra);
+      assert.equal(extra.localLyricTranslations.map[key], 'A gentle breeze passes by.');
+    } finally {
+      probe.close();
+    }
+  });
+}
+
+/**
+ * 轻量歌词快照写入（不带 localLyricTranslations）不得把已落盘译文连同整列 extra 一起重建抹掉；
+ * 而显式带上新译文时仍以本次写入为准。
+ * @returns {Promise<void>}
+ */
+async function testLyricTranslationsSurviveSnapshotWrite() {
+  await withStore(async (handle) => {
+    const key = 'English\u0000微风轻轻吹过';
+    handle.writeLyricRecord({
+      id: 'song-s',
+      localLyricText: '旧正文',
+      localLyricTranslations: { v: 1, map: { [key]: 'A gentle breeze passes by.' } },
+      savedAt: Date.now(),
+    });
+
+    // 模拟渲染层 localLyricCacheSnapshot 的轻量写入：只更新正文，不带译文。
+    handle.writeLyricRecord({ id: 'song-s', localLyricText: '新正文', localLyricLoaded: true, savedAt: Date.now() });
+    const kept = handle.readLyricRecords(['song-s']).records['song-s'];
+    assert.equal(kept.localLyricText, '新正文', '歌词正文按本次写入更新');
+    assert.ok(kept.localLyricTranslations, '轻量快照写入不得抹掉已落盘的按歌译文');
+    assert.equal(kept.localLyricTranslations.map[key], 'A gentle breeze passes by.');
+
+    // 显式带上新译文时以本次写入为准，不再保留旧值。
+    handle.writeLyricRecord({
+      id: 'song-s',
+      localLyricText: '新正文',
+      localLyricTranslations: { v: 1, map: { [key]: '一阵微风拂过。' } },
+      savedAt: Date.now(),
+    });
+    assert.equal(handle.readLyricRecords(['song-s']).records['song-s'].localLyricTranslations.map[key], '一阵微风拂过。', '显式写入覆盖旧译文');
+  });
+}
+
+/**
  * 播放次数累加、最近播放取最大值、收藏状态可来回切，且都不被重扫清零。
  * @returns {Promise<void>}
  */
@@ -577,6 +646,8 @@ test('两万首曲库可原样落盘并有序读回', testLargeLibraryRoundTrip)
 test('完整扫描剔除删除文件而截断扫描不剔除', testPruneRespectsTruncatedScan);
 test('两次扫描落在同一时钟刻度时完整扫描仍然剔除删除文件', testPruneSurvivesFrozenClock);
 test('封面 BLOB 与歌词缓存 round-trip 形状不变', testAssetAndLyricRoundTrip);
+test('按歌 LLM 译文经 extra 透传无损 round-trip', testLyricTranslationsRoundTrip);
+test('轻量歌词快照写入不会抹掉已落盘的按歌译文', testLyricTranslationsSurviveSnapshotWrite);
 test('播放次数累加、最近播放取最大值、收藏可切换', testPlayStatsAndFavorite);
 test('两档清空只归零播放列，收藏和行本身都留着', testClearPlayStats);
 test('缓存回收保护正在使用的键并遵守字节上限', testTrimProtectsActiveKeys);

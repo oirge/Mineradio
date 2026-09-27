@@ -78,8 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复本地曲库封面在某些情况下全部变成同一张图',
-  '文件夹里的杂图不再顶替每首歌的内嵌专辑封面',
+  '本地歌译文按歌存进曲库，重开重播不再重新翻译',
+  '修复切歌后旧歌残响 / 两首重合',
+  '3D 歌单架靠边悬停唤出与右键控制浮层',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
