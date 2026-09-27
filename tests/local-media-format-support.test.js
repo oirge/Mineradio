@@ -262,3 +262,40 @@ test('桌面扫描和本地文件代理返回新增格式的正确 MIME', async 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('目录内任意杂图不再顶替曲目内嵌封面', () => {
+  const classifier = createLocalFileClassifier();
+  const audio = { name: 'track.flac', webkitRelativePath: 'album/track.flac' };
+
+  // 与曲目无关、非规范命名的杂图（艺人写真 / 内页扫描）不得被当作封面，
+  // 否则会用同一张图顶替整目录所有曲目的内嵌专辑封面（“所有封面都一样”）。
+  const strayPhoto = { name: '方大同.jpg', webkitRelativePath: 'album/方大同.jpg' };
+  assert.equal(
+    classifier.findLocalCoverFile(audio, classifier.buildLocalCoverMaps([strayPhoto])),
+    null,
+    '任意杂图不得匹配到曲目，应让内嵌封面生效',
+  );
+
+  // 规范命名（cover/folder/front/album/artwork/封面）的封面仍然匹配。
+  const namedCover = { name: 'cover.jpg', webkitRelativePath: 'album/cover.jpg' };
+  assert.equal(
+    classifier.findLocalCoverFile(audio, classifier.buildLocalCoverMaps([namedCover])),
+    namedCover,
+    '规范命名的封面应继续匹配',
+  );
+
+  // 与音频同名的逐曲封面仍然匹配。
+  const perTrack = { name: 'track.png', webkitRelativePath: 'album/track.png' };
+  assert.equal(
+    classifier.findLocalCoverFile(audio, classifier.buildLocalCoverMaps([perTrack])),
+    perTrack,
+    '与音频同名的逐曲封面应继续匹配',
+  );
+
+  // 杂图与规范封面共存时必须选规范封面，而不是目录里的第一张图。
+  assert.equal(
+    classifier.findLocalCoverFile(audio, classifier.buildLocalCoverMaps([strayPhoto, namedCover])),
+    namedCover,
+    '目录同时存在杂图与规范封面时必须选规范封面',
+  );
+});

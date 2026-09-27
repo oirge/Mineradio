@@ -78,8 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '桌面歌词控制栏未悬停时定时自动收起，不再长期滞留',
-  '解锁状态下左键单击歌词即可立即唤出控制栏',
+  '修复本地曲库封面在某些情况下全部变成同一张图',
+  '文件夹里的杂图不再顶替每首歌的内嵌专辑封面',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

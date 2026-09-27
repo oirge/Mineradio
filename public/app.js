@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.2';
+var APP_VERSION = '2.2.3';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,9 +679,9 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '桌面歌词控制栏不再在软件开启后长期滞留：程序化唤出且未悬停时会定时自动收起。',
-    '解锁状态下左键单击歌词即可立即唤出控制栏，无需再等 1.5 秒悬停。',
-    '全量 Node 回归 1273/1273 通过。'
+    '修复本地曲库封面在某些情况下全部变成同一张图：文件夹里的杂图不再顶替每首歌的内嵌专辑封面。',
+    '仅规范命名（cover/folder/front/album/artwork/封面）或与曲目同名的图片才会作为封面。',
+    '全量 Node 回归 1286/1286 通过。'
   ]
 };
 function readSavedVolume() {
@@ -31300,10 +31300,10 @@ function findLocalLyricFile(audioFile, maps) {
 /**
  * 构建本地封面文件索引。大文件夹导入时避免 filter/forEach 链式中间数组，降低导入前主线程分配。
  * @param {FileList|Array<object>} files 导入文件集合。
- * @returns {{byPath: object, byBase: object, byLoose: object, byDirNamed: object, byDirFirst: object}} 封面匹配索引。
+ * @returns {{byPath: object, byBase: object, byLoose: object, byDirNamed: object}} 封面匹配索引。
  */
 function buildLocalCoverMaps(files) {
-  var maps = { byPath: {}, byBase: {}, byLoose: {}, byDirNamed: {}, byDirFirst: {} };
+  var maps = { byPath: {}, byBase: {}, byLoose: {}, byDirNamed: {} };
   var length = Number(files && files.length) || 0;
   var coverFiles = [];
   for (var i = 0; i < length; i++) {
@@ -31320,7 +31320,6 @@ function buildLocalCoverMaps(files) {
     if (pathKey && !maps.byPath[pathKey]) maps.byPath[pathKey] = file;
     if (baseKey && !maps.byBase[baseKey]) maps.byBase[baseKey] = file;
     if (looseKey && !maps.byLoose[looseKey]) maps.byLoose[looseKey] = file;
-    if (!maps.byDirFirst[dirKey]) maps.byDirFirst[dirKey] = file;
     if (LOCAL_COVER_NAME_RE.test(localFileBaseName(file)) && !maps.byDirNamed[dirKey]) maps.byDirNamed[dirKey] = file;
   }
   return maps;
@@ -31335,7 +31334,6 @@ function findLocalCoverFile(audioFile, maps) {
     (maps.byBase && maps.byBase[baseKey]) ||
     (maps.byLoose && maps.byLoose[looseKey]) ||
     (maps.byDirNamed && maps.byDirNamed[dirKey]) ||
-    (maps.byDirFirst && maps.byDirFirst[dirKey]) ||
     null;
 }
 function localTrackInfoFromFile(file) {
