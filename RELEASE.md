@@ -1,5 +1,20 @@
 # 发布流程
 
+## v2.2.5 更新弹窗小窗口适配
+
+- **版本元数据**：`2.2.5` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION` 与更新预览 `notes`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
+- **内容**：
+  1. 修复非全屏和较小窗口下更新弹窗顶部版本号、底部「立即更新」按钮被裁切的问题。
+  2. 更新说明与长错误详情可在弹窗内容区独立滚动，底部操作区保持可见；长版本号和长文本不会造成横向溢出。
+- **测试**：新增 `scripts/check-update-modal-layout.js`，用真实 Electron/Chromium 检查六种窗口尺寸、长短更新说明及错误文案；四档系统缩放共 `116/116` 通过。全量 Node 回归 `1293/1293`、文档编码、JavaScript 语法和 `git diff --check` 通过；`npm run build:win -- --publish never` 成功。
+- **GitHub 发布结果（2026-10-05）**：PR #101 合并至 `main`（merge commit `44e5ec7`）；tag `v2.2.5` 指向该合并提交。Verify 两组检查通过。Actions 构建 `37317142299` 成功，Release `403744812` 已正式发布并设为 Latest（`draft=false` / `prerelease=false`，`published_at` `2026-10-05T13:34:52Z`）；`releases/latest` 返回 `v2.2.5`，更新说明已替换为本版本修复内容。
+- **线上资产核对**：`latest.yml` 版本为 `2.2.5`，安装包大小 `102386750` B，下载后 SHA512 与 `latest.yml` 一致；`SHA256SUMS.txt` 三项资产摘要与 GitHub 服务端摘要逐条相同。
+  - `Mineradio-oirge-2.2.5-Setup.exe`：102386750 B，SHA256 `24d868e430aa97c616e88ab2ef37488b2d8184dcac420d2843d5268c2c7b4d12`。
+  - `Mineradio-oirge-2.2.5-Setup.exe.blockmap`：106663 B，SHA256 `a07f9cda03ad68ca93fb6b202dbfc903b01bdfc61c6d09487bd1c621a2c3892e`。
+  - `latest.yml`：359 B，SHA256 `ea947a0e7957da35a881dd07d4e223f0397da4e5446e4667fb8df250f7d03ca8`。
+  - `Mineradio-oirge-2.2.5-SHA256SUMS.txt`：282 B，SHA256 `5926791fe4bde92a93c344bac1953c6a15165bdcd1b9630c606e16957003bb44`。
+- **更新通道**：`releases/latest/download/latest.yml` 已验证返回 `2.2.5`，版本、安装包大小与下载后 SHA512 均匹配；应用内更新面板可检测并安装新版，也可关闭应用后运行 `Mineradio-oirge-2.2.5-Setup.exe` 覆盖安装，`%APPDATA%\Mineradio-oirge` 数据目录保留。
+
 ## v2.2.4 本地歌译文落盘、单音轨出声不变量、3D 歌单架交互
 
 - **版本元数据**：`2.2.4` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION` 与更新预览 `notes`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。
