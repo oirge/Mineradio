@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.4';
+var APP_VERSION = '2.2.5';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,10 +679,8 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '翻译过的本地歌重开软件后重播不再重新翻译：译文按歌存进本地曲库，无全局条数上限。',
-    '修复切歌后偶发的旧歌残响 / 两首重合：起播前先收掉仍在响的非活动音轨。',
-    '3D 歌单架：自动隐藏侧栏靠边悬停即可淡入唤出，右键底部按钮弹出歌单架专用控制浮层。',
-    '全量 Node 回归 1293/1293 通过。'
+    '修复非全屏和较小窗口下更新弹窗的版本号、立即更新按钮被裁切。',
+    '更新说明可在弹窗内滚动查看，底部操作按钮保持可见。'
   ]
 };
 function readSavedVolume() {

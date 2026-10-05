@@ -1272,6 +1272,7 @@ if (document.fonts && document.fonts.load) {
           <span id="update-check-label">检测更新</span>
         </button>
       </div>
+      <div class="update-panel-body" tabindex="0" role="region" aria-label="更新说明与下载线路">
       <div class="update-hero">
         <div id="update-hero-main" class="update-hero-main">电影镜头更稳，音源兜底更顺。</div>
         <div id="update-hero-sub" class="update-hero-sub"></div>
@@ -1289,6 +1290,7 @@ if (document.fonts && document.fonts.load) {
           <button type="button" data-update-route="proxy" aria-pressed="false">本机代理</button>
         </div>
       </div>
+      </div>
       <div class="update-actions">
         <button id="update-primary-btn" class="update-primary-btn" type="button" onclick="startUpdatePreviewDownload()">
           <span id="update-btn-fill" class="update-btn-fill"></span>
@@ -1296,7 +1298,7 @@ if (document.fonts && document.fonts.load) {
         </button>
         <button id="update-secondary-btn" class="update-secondary-btn" type="button" onclick="handleUpdateSecondaryAction()">取消</button>
       </div>
-      <div id="update-footnote" class="update-footnote">预览版只演示更新手感，不会真的下载安装。</div>
+      <div id="update-footnote" class="update-footnote" tabindex="0">预览版只演示更新手感，不会真的下载安装。</div>
     </div>
   </div>
 </div>
