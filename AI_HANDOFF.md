@@ -4,7 +4,11 @@
 
 ## 当前权威入口（2026-10-07）
 
-- **当前版本 v2.2.7 已正式发布**：桌面歌词显示与自动恢复修复已合入 `main`；PR #105，merge/tag commit `5fe9321208772270fce64d62b8461c613500ff15`，Release `405504333` 于北京时间 `2026-10-07 15:47:30` 发布并设为 Latest。官方 Windows 构建 `37588692774` 成功；PR 双 Verify、主分支 Verify `37588639141` 均通过。四项线上资产已完整回下载并通过 GitHub digest / SHA256SUMS 校验，`latest.yml` 中的安装包 SHA-512 也与本地重算匹配。详见 `RELEASE.md`。
+- **当前版本 v2.2.8 已正式发布**：修复更新弹窗在短窗口被裁切，并确保长说明、版本号与操作区稳定可见。PR #107 已合并，tag/merge commit `c711c84453b24f5e972fb450daecd7672e47e768`；PR 两组 Verify 与合并后 Verify `37600666433` 通过，Windows Build and Release `37600847689` 成功。Release `405596536` 于北京时间 `2026-10-07 17:39:16` 正式设为 Latest。公开 latest.yml 返回 `2.2.8` 且安装包大小正确；blockmap、latest.yml 和 SHA256SUMS 已回下载并匹配 GitHub digest，四项服务端摘要与清单声明一致。约 102 MB 官方 EXE 下载在当前代理环境中停滞，因此没有本地重算官方安装包摘要。完整记录见 `RELEASE.md`。
+- **本轮验证与构建**：全量 Node `1325/1325`；真实 Electron/Chromium 4 档缩放布局检查 `128/128`，含 `480×270`；编码 `5/5`，元数据/公告/workflow `18/18`，语法检查和 `git diff --check` 通过。本机 Windows 安装包构建也成功并核对本机构建 latest.yml 的 SHA-512。
+- **上个正式版 v2.2.7**：PR #105 合入，PR #106 补发布记录；历史发布信息见 `RELEASE.md`。
+- 仓库：`https://github.com/oirge/Mineradio`。当前隔离检出 `D:\Mineradio-release-2.2.6`。代码分支 `codex/release-v2.2.8` 的提交 `c43f12a` 已合并并在 `c711c844` 上打 tag；当前工作分支 `docs/record-v2.2.8-release` 用于单独补录发布记录。
+
 - **歌词不可见热修已包含在 v2.2.7**：用户选择重启验证后修复了本机旧版；热修代码现已提交、合并、正式发布。装包 smoke 覆盖主窗口隐藏、renderer 崩溃、关闭后重开，真实本机歌曲验证确认播放不中断。初始安装目录缺失的 `resources` 与 `locales` 已补回，原 ASAR 与用户设置备份仍保留在 `D:\Mineradio-oirge\backups\desktop-lyrics-fix-20261007-152457`。
 - 仓库：`https://github.com/oirge/Mineradio`。本轮在隔离工作树 `D:\Mineradio-release-2.2.6` 完成 v2.2.6；代码分支 `codex/release-v2.2.6` 的提交 `3601ae7` 已经 [PR #103](https://github.com/oirge/Mineradio/pull/103) 合并至 `main`。tag `v2.2.6` 指向合并提交 `17025f0f20ad41065eae0685a20607ab4d0cc30b`。不要改动原安装目录 `D:\Mineradio-oirge` 或本轮以外的用户修改。
 - 用户已明确授权完成修复、推送分支、创建并合并 PR，以及发布新版。[v2.2.6](https://github.com/oirge/Mineradio/releases/tag/v2.2.6) 已于 `2026-10-07T06:53:49Z` 正式发布并设为 Latest（Release ID `405458964`），不是待发布状态。发布记录在 `docs/record-v2.2.6-release` 分支补录，不改动已发布 tag 或资产。
@@ -82,6 +86,12 @@
 这个目录是人工归档区，不参与软件更新流程。
 
 ## 已完成工作日志
+
+### 2026-10-07（v2.2.8 已正式发布）
+
+- 在最新 `origin/main` 上修复更新弹窗短窗口的裁切：内容说明区独立滚动，版本和底部操作区固定可见；版本号改紧凑琥珀标签，长号省略。
+- 扩展真实 Electron 布局复验，将应用最小尺寸 `480×270` 纳入 4 档系统缩放检查，`128/128` 通过；全量 Node `1325/1325`、编码 `5/5`、更新文案和 release workflow `18/18`、语法检查及空白检查通过。
+- 本机 Windows NSIS 构建成功并核对 `latest.yml` SHA-512。分支 `codex/release-v2.2.8`，代码提交 `c43f12a` 已由 PR #107 合并，tag 指向 merge commit `c711c844`。PR Verify 两组、合并后 Verify `37600666433`、官方构建 workflow `37600847689` 成功；Release `405596536` 正式 Latest。GitHub 四项资产与服务端 SHA256SUMS 对上，当前网络代理阻塞了本机完整回下载；记录已写入 `RELEASE.md`。
 
 ### 2026-10-07（v2.2.7 已正式发布）
 
