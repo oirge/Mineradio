@@ -78,10 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复桌面歌词已开启却不显示：页面加载完成主动显示，并增加首帧超时兜底',
-  '歌词窗口加载失败或渲染进程崩溃后自动有限重试，恢复当前歌词而不中断音乐',
-  '解锁、休眠唤醒或显示器变化后恢复歌词窗口显示与置顶，修正不可达的位置',
-  '主界面收进托盘时桌面歌词继续显示，保留原有字号、透明度与拖动位置',
+  '修复非全屏和短窗口下更新弹窗被裁切：按可用高度适配，并在极短窗口收紧留白',
+  '超长更新说明在内容区独立滚动，版本号、下载线路、状态和底部操作按钮保持可见',
+  '版本号改为紧凑的琥珀色标签，长版本号自动省略，避免横向撑破弹窗',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.7';
+var APP_VERSION = '2.2.8';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,12 +677,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '当前版本，更新检测已就绪。',
+  hero: '更新弹窗适配小窗口，更新说明再长也不挡住版本和操作按钮。',
   notes: [
-    '修复桌面歌词已开启却不显示：加载完成主动显示，首帧事件异常时增加超时兜底。',
-    '歌词窗口加载失败或崩溃后自动有限重试，恢复当前歌词而不中断音乐。',
-    '解锁、休眠唤醒和显示器变化后恢复歌词显示与置顶，并修正完全不可达的位置。',
-    '主界面收进托盘时桌面歌词继续显示，保留原有字号、透明度、样式和拖动位置。'
+    '修复非全屏和短窗口下更新弹窗被裁切：按可用高度适配，并在极短窗口收紧留白。',
+    '超长更新说明在内容区独立滚动，版本号、下载线路、状态和底部操作按钮保持可见。',
+    '版本号改为紧凑的琥珀色标签，长版本号自动省略，避免横向撑破弹窗。'
   ]
 };
 function readSavedVolume() {
