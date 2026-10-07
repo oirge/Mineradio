@@ -4,8 +4,8 @@
 
 ## 当前权威入口（2026-10-07）
 
-- **发布 v2.2.7 进行中**：用户在本机热修验证后明确要求“发布新版”；分支 codex/release-v2.2.7 包含桌面歌词恢复模块、11 项新增测试和新版元数据。完成 CI、构建、PR 合并、tag 与 Release 资产校验后补录结果；此前“未授权发布”仅表示热修任务结束时的历史状态。
-- **2026-10-07 后续本地热修：桌面歌词不可见。** 用户本轮要求修复并明确选择“现在重启并验证”，已更新安装目录 D:\Mineradio-oirge 并重启；下述上一轮“不改原安装目录”只适用于之前的发布任务。修复源码在本工作树，未提交/未推送/未发新版，安装版版本号仍为 2.2.6。详见下面的本地热修日志。
+- **当前版本 v2.2.7 已正式发布**：桌面歌词显示与自动恢复修复已合入 `main`；PR #105，merge/tag commit `5fe9321208772270fce64d62b8461c613500ff15`，Release `405504333` 于北京时间 `2026-10-07 15:47:30` 发布并设为 Latest。官方 Windows 构建 `37588692774` 成功；PR 双 Verify、主分支 Verify `37588639141` 均通过。四项线上资产已完整回下载并通过 GitHub digest / SHA256SUMS 校验，`latest.yml` 中的安装包 SHA-512 也与本地重算匹配。详见 `RELEASE.md`。
+- **歌词不可见热修已包含在 v2.2.7**：用户选择重启验证后修复了本机旧版；热修代码现已提交、合并、正式发布。装包 smoke 覆盖主窗口隐藏、renderer 崩溃、关闭后重开，真实本机歌曲验证确认播放不中断。初始安装目录缺失的 `resources` 与 `locales` 已补回，原 ASAR 与用户设置备份仍保留在 `D:\Mineradio-oirge\backups\desktop-lyrics-fix-20261007-152457`。
 - 仓库：`https://github.com/oirge/Mineradio`。本轮在隔离工作树 `D:\Mineradio-release-2.2.6` 完成 v2.2.6；代码分支 `codex/release-v2.2.6` 的提交 `3601ae7` 已经 [PR #103](https://github.com/oirge/Mineradio/pull/103) 合并至 `main`。tag `v2.2.6` 指向合并提交 `17025f0f20ad41065eae0685a20607ab4d0cc30b`。不要改动原安装目录 `D:\Mineradio-oirge` 或本轮以外的用户修改。
 - 用户已明确授权完成修复、推送分支、创建并合并 PR，以及发布新版。[v2.2.6](https://github.com/oirge/Mineradio/releases/tag/v2.2.6) 已于 `2026-10-07T06:53:49Z` 正式发布并设为 Latest（Release ID `405458964`），不是待发布状态。发布记录在 `docs/record-v2.2.6-release` 分支补录，不改动已发布 tag 或资产。
 - 本轮改动包含事务式恢复统计与本地歌曲译文、扩充整机备份内容、输出设备切换状态与断连恢复、损坏本地歌曲自动跳过、安装包断点续传。
@@ -83,8 +83,16 @@
 
 ## 已完成工作日志
 
-### 2026-10-07（桌面歌词不可见：本地热修，未发布）
+### 2026-10-07（v2.2.7 已正式发布）
 
+- 桌面歌词恢复修复从 PR #105 合入 `main`，tag `v2.2.7` 指向 merge commit `5fe9321208772270fce64d62b8461c613500ff15`。Release `405504333` 于北京时间 `15:47:30` 发布并设为 Latest；官方 Windows Build and Release `37588692774` 成功，PR 两组 Verify 与主分支 Verify `37588639141` 通过。
+- 全量 Node `1325/1325`、文档编码 `5/5`、JavaScript 语法与 `git diff --check` 通过。打包 EXE 隔离 profile 冒烟确认主/渲染版本 `2.2.7`、隐藏主窗口仍显歌词、强制崩溃自动恢复、关闭后可重新开启；真 Electron 故障注入也屏蔽了 `ready-to-show` 并验证 renderer 崩溃恢复。
+- 官方安装包 `102394759` B / SHA256 `6defff3a5de582e95edab43e09e168bf23771dcc5c27b9ffe1b24de68fca2410`；blockmap `106483` B / SHA256 `6bdda91f18a262dd1a66332b289c1801c635886f1c4d722adad60c0b08056e92`；`latest.yml` `359` B / SHA256 `51296e217d0234d8a9ffdbdcc1f6ee6fd648749b33af0234d701b9702cb4b234`；SHA256SUMS `282` B / SHA256 `c96c9ff2c9d93a70e66a2558ca81fd158754582e366c94442e34754aaf6ebb17`。四项均从 GitHub 回下载并逐项核对服务端 digest 与清单；EXE SHA-512 `GqPfVukUSfoD53vfmydZtptAiAyLVhGim6XX0gFkOhbXJ1Bl4Gb2yR9hwttQFP/Mw+OrRBmNATRE9cxHjE131g==` 和公开更新清单一致。
+- 公开 `releases/latest/download/latest.yml` 实测版本 `2.2.7`、安装器路径和大小正确；PR、workflow、Release 与资产结果均记录在 `RELEASE.md`。
+
+### 2026-10-07（桌面歌词不可见：先行本地热修，后随 v2.2.7 发布）
+
+- 本节记录代码在版本发布前先安装到本机验证的阶段；修复现已随 `v2.2.7` 正式发布。
 - 初始现场：D:\Mineradio-oirge 仅有 EXE/DLL，缺少 resources 和 locales，无二创进程；快捷方式目标正确。用本机 v2.2.6 dist/win-unpacked 补回缺失目录，未覆盖既有文件或曲库。EXE 与构建目录 SHA256 相同。不能据此断言资源缺失是用户此前每次歌词消失的唯一原因。
 - 代码缺口：歌词窗口 show:false 只靠一次 ready-to-show 显示；did-finish-load 只监听一次且不负责显示；加载失败只记日志，renderer 崩溃没有恢复。新增 desktop/desktop-lyrics-recovery.js：加载完成显示 + 2s 首帧看门狗、至多三次指数退避重载、每次加载补最新状态、实例所有权/关闭/退出门控与定时器释放。唤醒、解锁、显示器变化重新显示并 invalidate，显示器增删补位置纠偏；不重载主播放器、不抢焦点、不把主窗口 hide 传播给歌词。
 - 回归：新增恢复测试 11 项，npm test **1325/1325**；JS 语法与 git diff --check 通过。隔离真 Electron（software GPU）主动屏蔽 ready-to-show、强制 renderer crash，歌词可见并恢复正文；产物在 .tmp-lyrics-fix/。
