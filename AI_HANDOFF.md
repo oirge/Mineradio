@@ -4,10 +4,11 @@
 
 ## 当前权威入口（2026-10-07）
 
-- 仓库：`https://github.com/oirge/Mineradio`。本轮在隔离工作树 `D:\Mineradio-release-2.2.6` 的分支 `codex/release-v2.2.6` 上基于 `origin/main`（`46ca86b`）准备 v2.2.6，原目录 `D:\Mineradio-oirge` 的既有未提交 `desktop/main.js` 修改不属于本轮。
-- 用户已明确授权完成修复、推送分支、创建并合并 PR，以及发布新版。当前代码和文档尚未提交、推送或发布；版本目标为 `2.2.6`。
+- 仓库：`https://github.com/oirge/Mineradio`。本轮在隔离工作树 `D:\Mineradio-release-2.2.6` 完成 v2.2.6；代码分支 `codex/release-v2.2.6` 的提交 `3601ae7` 已经 [PR #103](https://github.com/oirge/Mineradio/pull/103) 合并至 `main`。tag `v2.2.6` 指向合并提交 `17025f0f20ad41065eae0685a20607ab4d0cc30b`。不要改动原安装目录 `D:\Mineradio-oirge` 或本轮以外的用户修改。
+- 用户已明确授权完成修复、推送分支、创建并合并 PR，以及发布新版。[v2.2.6](https://github.com/oirge/Mineradio/releases/tag/v2.2.6) 已于 `2026-10-07T06:53:49Z` 正式发布并设为 Latest（Release ID `405458964`），不是待发布状态。发布记录在 `docs/record-v2.2.6-release` 分支补录，不改动已发布 tag 或资产。
 - 本轮改动包含事务式恢复统计与本地歌曲译文、扩充整机备份内容、输出设备切换状态与断连恢复、损坏本地歌曲自动跳过、安装包断点续传。
-- 发布前全量 Node 回归 `1314/1314` 通过，文档编码检查 `5/5` 通过，JavaScript 语法检查和 `git diff --check` 通过；Windows 打包、界面冒烟及 GitHub PR / Release 仍待完成。
+- 全量 Node 回归 `1314/1314`、文档编码检查 `5/5`、JavaScript 语法检查和 `git diff --check` 通过；Playwright 本地冒烟通过（HTTP 200、版本正确、关键控件存在、无页面异常）。PR Verify 两组及合并后 Verify `37582592950` 通过，官方 Windows 构建与发布 workflow `37582936272` 成功。
+- `releases/latest` 和公开的 `releases/latest/download/latest.yml` 均已复核为 v2.2.6。四项线上资产大小与 SHA256 详见 `RELEASE.md`；清单与 GitHub 服务端摘要一致，小资产回下载 SHA256 匹配。官方 EXE 完整回下载未完成，未在本地重新计算其 SHA512；不要把清单里的 SHA512 声明写成本地实测通过。
 - 远端仓库和应用内更新配置指向 `oirge/Mineradio`；应用 ID、安装身份与用户数据目录沿用既有设置。
 
 ## 历史状态（2026-09-21；已由 2026-10-07 权威入口取代）
@@ -80,12 +81,14 @@
 
 ## 已完成工作日志
 
-### 2026-10-07（v2.2.6 发布准备）
+### 2026-10-07（v2.2.6 已正式发布）
 
 - 在独立工作树 `D:\Mineradio-release-2.2.6` 准备 v2.2.6，保护原目录 `D:\Mineradio-oirge` 的用户未提交修改。
 - SQLite 备份恢复改为事务式覆盖统计、收藏与按歌译文；译文导出按 `local:` 歌词键重连到便携路径，并新增覆盖、兼容、事务回滚测试。
 - 整机备份纳入倍速、自定义歌词、歌词来源偏好、手选歌词与 SQLite 本地歌曲译文；输出设备、损坏歌曲自动跳过、安装包 Range 断点续传均已实现。
-- 全量 Node 回归 `1314/1314`、文档编码检查 `5/5`、语法检查及 `git diff --check` 通过。Windows 构建、界面冒烟、推送、PR 合并及正式 Release 尚未完成。
+- 全量 Node 回归 `1314/1314`、文档编码检查 `5/5`、语法检查及 `git diff --check` 通过；Playwright 本地浏览器冒烟通过。PR #103 已合并（`17025f0`），tag `v2.2.6` 指向同一提交；PR 两组 Verify、主分支 Verify `37582592950` 和 Windows Release workflow `37582936272` 全部通过。
+- Release `405458964` 于 `2026-10-07T06:53:49Z` 正式发布并设为 Latest，安装包、blockmap、`latest.yml`、SHA256 清单四项资产齐全；安装包大小 `102393432` B，服务端 SHA256 `23720ba7e4151b682a86450c37f8f68ba1363f7ecfa4f4a96087f618883d9e59` 与发布清单一致。
+- 复核公开更新通道返回 `2.2.6`；小资产回下载 SHA256 匹配，官方 EXE 的完整回下载及本地 SHA512 重算未完成。补齐 `RELEASE.md` 发布、CI、资产与校验边界记录，并纠正本文件的旧“未提交/未发布”状态；此次收尾仅改文档，不重建或替换已发布资产，不覆盖安装用户程序。
 
 ### 2026-09-10（v2.0.3 已发布 + RELEASE.md 编码损坏修复）
 

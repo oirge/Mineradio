@@ -8,7 +8,14 @@
   2. 输出设备切换串行执行并提示实际状态；设备不可用时临时回到系统默认，保留原选择并在重连后自动恢复。
   3. 自动续播有限跳过损坏或不支持的本地歌曲，避免异常曲目循环重试；手动播放、系统拦截和主动中断保留原提示。
   4. 完整安装包支持校验 Range / Content-Range 和前缀摘要后续传；服务器忽略 Range 时截断并从头下载，完成后验证安装包大小和摘要。
-- **测试**：全量 Node 回归 `1314/1314` 通过；文档编码检查 `5/5` 通过；JavaScript 语法检查和 `git diff --check` 通过。Windows 打包、浏览器冒烟与远端发布结果待完成后补录。
+- **测试**：全量 Node 回归 `1314/1314` 通过；文档编码检查 `5/5` 通过；JavaScript 语法检查和 `git diff --check` 通过。Playwright 本地浏览器冒烟通过：HTTP 200、版本正确、关键控件存在、无页面异常。官方 Windows 构建与资产上传成功。
+- **GitHub 发布结果（2026-10-07）**：[PR #103](https://github.com/oirge/Mineradio/pull/103) 已合并至 `main`（merge commit `17025f0f20ad41065eae0685a20607ab4d0cc30b`）；tag `v2.2.6` 指向该提交。PR Verify 两组检查通过，合并后 Verify `37582592950` 通过；[Build and Release `37582936272`](https://github.com/oirge/Mineradio/actions/runs/37582936272) 成功。[Release `405458964`](https://github.com/oirge/Mineradio/releases/tag/v2.2.6) 已正式发布并设为 Latest（`draft=false` / `prerelease=false`，`published_at` `2026-10-07T06:53:49Z`）；`releases/latest` 返回 `v2.2.6`。
+- **线上资产核对**：`SHA256SUMS.txt` 三项资产摘要与 GitHub 服务端 SHA256 逐项一致；回下载的 blockmap、`latest.yml` 和 SHA256 清单实测 SHA256 均与服务端摘要匹配。官方安装包完整回下载因速度缓慢未完成，未在本地重新计算官方 EXE 的 SHA512，不将清单声明视为本地实测。
+  - `Mineradio-oirge-2.2.6-Setup.exe`：102393432 B，SHA256 `23720ba7e4151b682a86450c37f8f68ba1363f7ecfa4f4a96087f618883d9e59`。
+  - `Mineradio-oirge-2.2.6-Setup.exe.blockmap`：106442 B，SHA256 `b06189db79209c45272e059105730bc1481f3eccd5e4eb7dcd270bd697f72196`。
+  - `latest.yml`：359 B，SHA256 `8f51eb41ae031ffc7ac3399aa69c15d514a4011bc97a6f9448e6a26db8478989`。
+  - `Mineradio-oirge-2.2.6-SHA256SUMS.txt`：282 B，SHA256 `aec30935ae43479a964a56ad9cf457652a2b08b62ae6d0357884232b0a8351d1`。
+- **更新通道**：公开地址 `releases/latest/download/latest.yml` 已验证返回 `2.2.6`，安装包路径与大小 `102393432` B 正确；声明的 SHA512 为 `EpKReX0pHT12OdKIdAxm2PMLPlxUMMI1XOCN05gTTokH+05R2PKqTqjn0jfjeeQsPoKgI/q1NklNNFWUxJgj4g==`。应用内更新通道已指向新版；本轮没有覆盖安装或修改用户数据。
 
 ## v2.2.5 更新弹窗小窗口适配
 
