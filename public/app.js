@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.6';
+var APP_VERSION = '2.2.7';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,9 +679,10 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '整机备份恢复现在覆盖式还原播放统计，并一并迁移自定义歌词、手选歌词和本地歌曲译文。',
-    '耳机临时拔出时输出自动回到系统默认，重连后恢复所选设备；切换状态会显示实际结果。',
-    '自动续播遇到损坏或不支持的本地歌曲会有限跳过；安装包下载支持断点续传和完整摘要校验。'
+    '修复桌面歌词已开启却不显示：加载完成主动显示，首帧事件异常时增加超时兜底。',
+    '歌词窗口加载失败或崩溃后自动有限重试，恢复当前歌词而不中断音乐。',
+    '解锁、休眠唤醒和显示器变化后恢复歌词显示与置顶，并修正完全不可达的位置。',
+    '主界面收进托盘时桌面歌词继续显示，保留原有字号、透明度、样式和拖动位置。'
   ]
 };
 function readSavedVolume() {

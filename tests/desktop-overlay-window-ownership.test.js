@@ -7,6 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { DesktopOverlayStateCache } = require('../desktop/desktop-overlay-state-cache');
+const { createDesktopLyricsRecovery } = require('../desktop/desktop-lyrics-recovery');
 
 /**
  * 模拟覆盖层 BrowserWindow，允许测试精确控制迟到的 ready、load 和 closed 事件。
@@ -20,6 +21,8 @@ class FakeOverlayWindow extends EventEmitter {
     super();
     this.options = options;
     this.webContents = new EventEmitter();
+    this.webContents.isDestroyed = () => false;
+    this.webContents.invalidate = () => {};
     this.showCount = 0;
     this.closeCount = 0;
   }
@@ -29,6 +32,9 @@ class FakeOverlayWindow extends EventEmitter {
 
   /** @returns {void} 忽略置顶参数。 */
   setAlwaysOnTop() {}
+
+  isAlwaysOnTop() { return true; }
+  isVisible() { return this.showCount > 0; }
 
   /** @returns {void} 忽略工作区参数。 */
   setVisibleOnAllWorkspaces() {}
@@ -122,6 +128,10 @@ function testDesktopLyricsWindowOwnership() {
   const context = {
     BrowserWindow: createBrowserWindowConstructor(windows),
     desktopLyricsStateCache: new DesktopOverlayStateCache(),
+    createDesktopLyricsRecovery,
+    desktopLyricsRecovery: null,
+    appQuitting: false,
+    gpuGuardRelaunching: false,
     desktopLyricsWindow: null,
     desktopLyricsUserBounds: null,
     desktopLyricsMouseIgnored: null,
