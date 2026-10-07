@@ -441,6 +441,59 @@ async function testLyricTranslationsSurviveSnapshotWrite() {
   });
 }
 
+async function testRestoreLyricTranslationsIsReplaceOnlyAndPreservesLyricRows() {
+  await withStore(async (handle) => {
+    const oldLine = 'English\u0000old line';
+    const newLine = 'English\u0000new line';
+    handle.writeLyricRecord({
+      id: 'song-restore', localLyricText: '[00:01.00] original lyrics', localLyricLoaded: true,
+      localLyricTranslations: { v: 1, map: { [oldLine]: 'old translation' } }, customMarker: 'keep-this-extra',
+    });
+    handle.writeLyricRecord({
+      id: 'song-obsolete', localLyricText: '[00:02.00] obsolete song lyrics',
+      localLyricTranslations: { v: 1, map: { [oldLine]: 'obsolete translation' } },
+    });
+    const snapshot = [{ key: 'song-restore', translations: { [newLine]: 'new translation' } }];
+    assert.deepEqual(handle.restoreLyricRecords(snapshot), { ok: true, restored: 1 });
+    assert.deepEqual(handle.restoreLyricRecords(snapshot), { ok: true, restored: 1 }, '重试覆盖同一映射，不累加');
+    const restored = handle.readLyricRecords(['song-restore', 'song-obsolete']).records;
+    assert.equal(restored['song-restore'].localLyricText, '[00:01.00] original lyrics');
+    assert.equal(restored['song-restore'].localLyricTranslations.map[newLine], 'new translation');
+    assert.equal(restored['song-restore'].localLyricTranslations.map[oldLine], undefined);
+    assert.equal(restored['song-restore'].customMarker, 'keep-this-extra');
+    assert.equal(restored['song-obsolete'].localLyricTranslations, undefined, '备份未包含的旧按歌译文应清掉');
+    assert.equal(restored['song-obsolete'].localLyricText, '[00:02.00] obsolete song lyrics');
+    assert.equal(handle.restoreLyricRecords([]).ok, true);
+    assert.equal(handle.readLyricRecords(['song-restore']).records['song-restore'].localLyricTranslations, undefined);
+  });
+}
+
+async function testRestoreLyricTranslationsRollsBackAsOneTransaction() {
+  await withStore(async (handle) => {
+    const oldLine = 'English\u0000existing line';
+    handle.writeLyricRecord({
+      id: 'song-preserved', localLyricText: '[00:01.00] original lyrics',
+      localLyricTranslations: { v: 1, map: { [oldLine]: 'existing translation' } },
+    });
+    const { DatabaseSync } = require('node:sqlite');
+    const probe = new DatabaseSync(handle.filePath);
+    try {
+      probe.exec("CREATE TRIGGER reject_backup_translation BEFORE INSERT ON lyrics WHEN NEW.song_key='reject-lyrics' BEGIN SELECT RAISE(ABORT, 'simulated lyric restore rejection'); END");
+      const result = handle.restoreLyricRecords([
+        { key: 'song-new', translations: { ['English\u0000new line']: 'new translation' } },
+        { key: 'reject-lyrics', translations: { ['English\u0000blocked line']: 'blocked translation' } },
+      ]);
+      assert.equal(result.ok, false);
+      assert.match(result.error, /simulated lyric restore rejection/);
+      const records = handle.readLyricRecords(['song-preserved', 'song-new', 'reject-lyrics']).records;
+      assert.equal(records['song-preserved'].localLyricText, '[00:01.00] original lyrics');
+      assert.equal(records['song-preserved'].localLyricTranslations.map[oldLine], 'existing translation', '清除旧译文的更新也应回滚');
+      assert.equal(records['song-new'], undefined, '事务中先插入的新记录应回滚');
+      assert.equal(records['reject-lyrics'], undefined);
+    } finally { probe.close(); }
+  });
+}
+
 /**
  * 播放次数累加、最近播放取最大值、收藏状态可来回切，且都不被重扫清零。
  * @returns {Promise<void>}
@@ -648,6 +701,8 @@ test('两次扫描落在同一时钟刻度时完整扫描仍然剔除删除文�
 test('封面 BLOB 与歌词缓存 round-trip 形状不变', testAssetAndLyricRoundTrip);
 test('按歌 LLM 译文经 extra 透传无损 round-trip', testLyricTranslationsRoundTrip);
 test('轻量歌词快照写入不会抹掉已落盘的按歌译文', testLyricTranslationsSurviveSnapshotWrite);
+test('按歌译文恢复覆盖旧映射、保留歌词正文与其它 extra 字段', testRestoreLyricTranslationsIsReplaceOnlyAndPreservesLyricRows);
+test('按歌译文恢复中途失败时回滚清理和新增记录', testRestoreLyricTranslationsRollsBackAsOneTransaction);
 test('播放次数累加、最近播放取最大值、收藏可切换', testPlayStatsAndFavorite);
 test('两档清空只归零播放列，收藏和行本身都留着', testClearPlayStats);
 test('缓存回收保护正在使用的键并遵守字节上限', testTrimProtectsActiveKeys);

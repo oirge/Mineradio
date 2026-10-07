@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.5';
+var APP_VERSION = '2.2.6';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -679,8 +679,9 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '当前版本，更新检测已就绪。',
   notes: [
-    '修复非全屏和较小窗口下更新弹窗的版本号、立即更新按钮被裁切。',
-    '更新说明可在弹窗内滚动查看，底部操作按钮保持可见。'
+    '整机备份恢复现在覆盖式还原播放统计，并一并迁移自定义歌词、手选歌词和本地歌曲译文。',
+    '耳机临时拔出时输出自动回到系统默认，重连后恢复所选设备；切换状态会显示实际结果。',
+    '自动续播遇到损坏或不支持的本地歌曲会有限跳过；安装包下载支持断点续传和完整摘要校验。'
   ]
 };
 function readSavedVolume() {
@@ -25553,6 +25554,12 @@ function settleSleepTimerOnTrackEnded() {
 var outputDeviceSetting = { deviceId: '', label: '' };
 var outputDeviceList = [];
 var outputDeviceBound = false;
+var outputDeviceListReady = false;
+var outputDeviceEnumerationReliable = false;
+var outputDeviceRefreshSerial = 0;
+var outputDeviceApplySerial = 0;
+var outputDeviceApplyQueue = Promise.resolve();
+var outputDeviceRuntime = { status: 'idle', actualId: '', message: '' };
 
 /**
  * 归一化输出设备设置。
@@ -25588,25 +25595,77 @@ function outputDeviceSelectionSupported() {
     || !!(audioCtx && typeof audioCtx.setSinkId === 'function');
 }
 
+function outputDeviceLabel(deviceId) {
+  if (!deviceId) return '系统默认';
+  for (var i = 0; i < outputDeviceList.length; i++) {
+    if (outputDeviceList[i].deviceId === deviceId) return outputDeviceList[i].label;
+  }
+  return deviceId === outputDeviceSetting.deviceId ? (outputDeviceSetting.label || '已选设备') : '上一个设备';
+}
+function outputDeviceIsAvailable(deviceId) {
+  if (!deviceId || !outputDeviceListReady) return true;
+  for (var i = 0; i < outputDeviceList.length; i++) if (outputDeviceList[i].deviceId === deviceId) return true;
+  return false;
+}
+function outputDeviceErrorText(err) {
+  var name = err && err.name;
+  if (name === 'NotFoundError') return '设备当前不可用';
+  if (name === 'NotAllowedError' || name === 'SecurityError') return '系统未允许使用该设备';
+  if (name === 'AbortError') return '设备切换被中断';
+  return '无法切换输出设备';
+}
 /**
- * 把保存的输出设备应用到当前 AudioContext。audioCtx 懒建在 initAudio 里，
- * 所以这个函数要在两个时点调用：initAudio() 建好图之后，以及用户改选择时。
- * @returns {Promise<boolean>} 是否成功应用（不支持或无 audioCtx 时返回 false）。
+ * 串行应用所选设备；暂时缺失时回到默认输出，同时保留重连后的首选设备。
+ * @param {{toast?:boolean}=} opts 是否提示本次实际结果。
+ * @returns {Promise<boolean>} 是否成功应用首选设备。
  */
-function applyOutputDeviceToAudioContext() {
-  if (!audioCtx || typeof audioCtx.setSinkId !== 'function') return Promise.resolve(false);
-  var deviceId = outputDeviceSetting.deviceId || '';
-  // 空字符串 = 跟随系统默认设备；setSinkId('') 在 Chromium 是合法取值。
-  var current = '';
-  try { current = audioCtx.sinkId || ''; } catch (e) { current = ''; }
-  if (current === deviceId) return Promise.resolve(true);
-  try {
-    return Promise.resolve(audioCtx.setSinkId(deviceId)).then(function(){ return true; })
-      .catch(function(err){ console.warn('[OutputDevice]', err); return false; });
-  } catch (err2) {
-    console.warn('[OutputDevice]', err2);
+function applyOutputDeviceToAudioContext(opts) {
+  opts = opts || {};
+  var serial = ++outputDeviceApplySerial;
+  var context = audioCtx;
+  if (!context || typeof context.setSinkId !== 'function') {
+    outputDeviceRuntime.status = 'deferred';
+    outputDeviceRuntime.message = '选择已保存，将在开始播放时应用。';
+    updateOutputDeviceControls();
+    if (opts.toast) showToast(outputDeviceRuntime.message);
     return Promise.resolve(false);
   }
+  outputDeviceRuntime.status = 'pending';
+  outputDeviceRuntime.message = '正在切换输出设备…';
+  updateOutputDeviceControls();
+  // setSinkId 本身不可取消：串行执行，旧请求完成后才能提交新请求，避免迟到回包把声音切回旧设备。
+  var operation = outputDeviceApplyQueue.then(async function() {
+    if (serial !== outputDeviceApplySerial || context !== audioCtx) return false;
+    var wanted = outputDeviceSetting.deviceId || '';
+    var deviceId = outputDeviceIsAvailable(wanted) ? wanted : '';
+    var missing = deviceId !== wanted;
+    var failure = null;
+    try {
+      if ((context.sinkId || '') !== deviceId) await context.setSinkId(deviceId);
+    } catch (err) {
+      if (serial !== outputDeviceApplySerial || context !== audioCtx) return false;
+      if (wanted && err && err.name === 'NotFoundError') {
+        missing = true;
+        try { await context.setSinkId(''); } catch (fallbackError) { failure = fallbackError; }
+      } else failure = err;
+    }
+    if (serial !== outputDeviceApplySerial || context !== audioCtx) return false;
+    if (!failure && typeof context.resume === 'function' && (context.state === 'suspended' || context.state === 'interrupted')
+        && typeof audio !== 'undefined' && audio && !audio.paused && !audio.ended) {
+      try { await context.resume(); } catch (resumeError) { failure = resumeError; }
+      if (serial !== outputDeviceApplySerial || context !== audioCtx) return false;
+    }
+    outputDeviceRuntime.actualId = typeof context.sinkId === 'string' ? context.sinkId : '';
+    outputDeviceRuntime.status = failure ? 'error' : (missing ? 'fallback' : 'applied');
+    outputDeviceRuntime.message = failure
+      ? outputDeviceErrorText(failure) + '；当前输出：' + outputDeviceLabel(outputDeviceRuntime.actualId) + '。'
+      : (missing ? '所选设备当前不可用，已临时使用系统默认；设备重连后自动恢复。' : '当前输出：' + outputDeviceLabel(outputDeviceRuntime.actualId) + '。');
+    updateOutputDeviceControls();
+    if (opts.toast) showToast(outputDeviceRuntime.message);
+    return !failure && !missing;
+  });
+  outputDeviceApplyQueue = operation.catch(function(err) { console.warn('[OutputDevice]', err); });
+  return operation;
 }
 
 /**
@@ -25621,17 +25680,27 @@ async function listAudioOutputDevices() {
   try {
     var list = await navigator.mediaDevices.enumerateDevices();
     var idx = 0;
+    var permissionLabelsVisible = false;
+    var explicitOutputDevice = false;
     for (var i = 0; i < list.length; i++) {
       var d = list[i];
       if (!d || d.kind !== 'audiooutput') continue;
+      if (d.label) permissionLabelsVisible = true;
+      if (!d.deviceId || d.deviceId === 'default') continue;
       idx++;
+      explicitOutputDevice = true;
       devices.push({
         deviceId: String(d.deviceId || ''),
         label: String(d.label || '') || ('输出设备 ' + idx)
       });
     }
+    outputDeviceEnumerationReliable = explicitOutputDevice || permissionLabelsVisible;
+    if (!outputDeviceEnumerationReliable) {
+      outputDeviceRuntime.message = '设备名称需在系统授权麦克风访问后显示；系统默认输出仍可正常播放。';
+    } else if (outputDeviceRuntime.status === 'idle') outputDeviceRuntime.message = '';
   } catch (e) {
     console.warn('[OutputDevice]', e);
+    throw e;
   }
   return devices;
 }
@@ -25652,21 +25721,21 @@ function updateOutputDeviceControls() {
       if (outputDeviceList[i].deviceId === want) { found = true; break; }
     }
     // 保存的设备当前不在列表里（耳机拔了/驱动变了）时，补一条提示项，避免静默落到错误的项上。
-    if (!found && want) {
-      outputDeviceList = outputDeviceList.concat([{ deviceId: want, label: (outputDeviceSetting.label || '上次的设备') + '（当前不可用）' }]);
-    }
+    var displayList = !found && want
+      ? outputDeviceList.concat([{ deviceId: want, label: (outputDeviceSetting.label || '上次的设备') + '（当前不可用）' }])
+      : outputDeviceList;
     select.textContent = '';
-    for (var j = 0; j < outputDeviceList.length; j++) {
+    for (var j = 0; j < displayList.length; j++) {
       var opt = document.createElement('option');
-      opt.value = outputDeviceList[j].deviceId;
-      opt.textContent = outputDeviceList[j].label;
-      if (outputDeviceList[j].deviceId === want) opt.selected = true;
+      opt.value = displayList[j].deviceId;
+      opt.textContent = displayList[j].label;
+      if (displayList[j].deviceId === want) opt.selected = true;
       select.appendChild(opt);
     }
   }
   if (hint) {
     hint.textContent = supported
-      ? '切换后立即生效；"系统默认"跟随 Windows 当前输出设备。'
+      ? (outputDeviceRuntime.message || '"系统默认"跟随 Windows 当前输出设备。')
       : '当前环境不支持选择输出设备（需要 Electron / Chromium 的 AudioContext.setSinkId）。';
   }
 }
@@ -25675,7 +25744,7 @@ function updateOutputDeviceControls() {
  * 选择输出设备并落盘；audioCtx 已建则立即生效，否则下次开播时应用。
  * @param {string} deviceId 目标设备 ID，空串表示系统默认。
  * @param {{toast?: boolean}=} opts 提示选项。
- * @returns {void}
+ * @returns {Promise<boolean>} 是否已切到所选设备。
  */
 function setOutputDevice(deviceId, opts) {
   opts = opts || {};
@@ -25686,9 +25755,7 @@ function setOutputDevice(deviceId, opts) {
   }
   outputDeviceSetting = { deviceId: id, label: label === '系统默认' ? '' : label };
   try { setPersistentLocalStorageItem(OUTPUT_DEVICE_STORE_KEY, JSON.stringify(outputDeviceSetting)); } catch (e) {}
-  applyOutputDeviceToAudioContext();
-  updateOutputDeviceControls();
-  if (opts.toast !== false) showToast(id ? ('输出设备：' + (label || '已选择')) : '输出设备：系统默认');
+  return applyOutputDeviceToAudioContext({ toast: opts.toast !== false });
 }
 
 /**
@@ -25696,8 +25763,13 @@ function setOutputDevice(deviceId, opts) {
  * @returns {Promise<void>}
  */
 async function refreshOutputDevices() {
-  outputDeviceList = await listAudioOutputDevices();
+  var serial = ++outputDeviceRefreshSerial;
+  var devices = await listAudioOutputDevices();
+  if (serial !== outputDeviceRefreshSerial) return;
+  outputDeviceList = devices;
+  outputDeviceListReady = outputDeviceEnumerationReliable;
   updateOutputDeviceControls();
+  await applyOutputDeviceToAudioContext();
 }
 
 /**
@@ -26788,31 +26860,69 @@ function showSourceFallbackNotice(title, body) {
 function markQueueItemPlaybackFailed(idx) {
   if (playQueue[idx]) playQueue[idx]._lastPlaybackFailAt = Date.now();
 }
-function nextUnblockedQueueIndex(idx) {
-  var now = Date.now();
+function nextUnblockedQueueIndex(idx, chain) {
   for (var step = 1; step < playQueue.length; step++) {
     var nextIdx = (idx + step) % playQueue.length;
-    var failedAt = Number(playQueue[nextIdx] && playQueue[nextIdx]._lastPlaybackFailAt) || 0;
-    if (!failedAt || now - failedAt > 18000) return nextIdx;
+    var candidate = playQueue[nextIdx];
+    if (candidate && !chain.attempted.has(candidate)
+        && (candidate.type !== 'local' || !Number(candidate._lastPlaybackFailAt) || Date.now() - Number(candidate._lastPlaybackFailAt) > 18000)) return nextIdx;
   }
   return -1;
 }
-function skipFailedQueueItem(idx, token, message) {
-  hideLoading();
+function skipFailedQueueItem(idx, token, message, opts) {
   if (token !== trackSwitchToken) return;
+  hideLoading();
+  opts = opts || {};
+  var chain = opts.playbackFailureChain;
+  if (!chain) {
+    chain = { queue: playQueue, attempted: new Set(), remaining: playQueue.length };
+    for (var i = 0; i < playQueue.length; i++) {
+      var recentFailure = Number(playQueue[i] && playQueue[i]._lastPlaybackFailAt) || 0;
+      if (recentFailure && Date.now() - recentFailure <= 18000) chain.attempted.add(playQueue[i]);
+    }
+  }
+  if (chain.queue !== playQueue) return;
   markQueueItemPlaybackFailed(idx);
+  chain.attempted.add(playQueue[idx]);
+  chain.remaining--;
   if (playQueue.length <= 1) {
     showSourceFallbackNotice('没有可跳过的下一首', message || '当前歌曲不可播放，队列里没有其他歌曲。');
     return;
   }
-  var nextIdx = nextUnblockedQueueIndex(idx);
+  // 一轮最多尝试起始队列的首数；慢盘每首失败超过 18 秒也不能绕回开头无限循环。
+  var nextIdx = chain.remaining > 0 ? nextUnblockedQueueIndex(idx, chain) : -1;
   if (nextIdx < 0) {
     showSourceFallbackNotice('队列暂时没有可播歌曲', '已尝试跳过异常歌曲，当前队列没有新的可播放项。');
     return;
   }
   showSourceFallbackNotice('已跳过异常歌曲', message || '当前本地文件不可播放，正在播放下一首。');
   currentIdx = nextIdx;
-  playQueueAt(nextIdx, { fallbackDepth: 0 });
+  return playQueueAt(nextIdx, { playbackFailureChain: chain });
+}
+function localPlaybackErrorCanSkip(err, media) {
+  var name = err && err.name;
+  if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'AbortError') return false;
+  var code = Number(media && media.error && media.error.code) || Number(err && err.code) || 0;
+  return code === 2 || code === 3 || code === 4 || name === 'NotSupportedError' || name === 'NotFoundError' || name === 'NetworkError';
+}
+function localPlaybackErrorText(err, media) {
+  var name = err && err.name;
+  var code = Number(media && media.error && media.error.code) || Number(err && err.code) || 0;
+  if (name === 'NotAllowedError' || name === 'SecurityError') return '播放被系统拦截，请点击播放按钮';
+  if (name === 'AbortError' || code === 1) return '播放已中断，请重新播放';
+  if (code === 3) return '本地音频损坏或解码失败';
+  if (code === 4 || name === 'NotSupportedError') return '当前音频格式或编码不受支持';
+  if (code === 2 || name === 'NotFoundError' || name === 'NetworkError') return '无法读取本地音频，请检查文件或磁盘连接';
+  return '本地音乐启动失败，请重试';
+}
+function handleLocalPlaybackFailure(song, idx, opts, token, err, media) {
+  if (token !== trackSwitchToken || playQueue[idx] !== song) return;
+  var message = localPlaybackErrorText(err, media);
+  // 损坏本地文件在自动播放链上应跳过；手动点播、系统拦截和用户主动中断则保留提示。
+  if (!opts.manual && localPlaybackErrorCanSkip(err, media)) {
+    return skipFailedQueueItem(idx, token, message, opts);
+  }
+  showToast(message);
 }
 
 function pauseCurrentAudioForTrackSwitch() {
@@ -27223,6 +27333,9 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   markPlayPhase('local-source');
   var localUrl = ensureLocalSongUrl(song);
   if (!localUrl) throw new Error('本地音频文件不可用');
+  var localPlaybackStarted = false;
+  var localPlaybackErrorHandled = false;
+  var startError = null;
   currentLocalSong = song;
   schedulePlaybackMetadataRefresh(song);
   prepareReplayGainForSong(song, token);
@@ -27290,6 +27403,11 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
     const code = mediaError && Number(mediaError.code) || 0;
     song._lastPlaybackError = code;
     console.warn('[LocalPlaybackError]', song.name, song.localFormat || '', code, localUrl);
+    // 起播阶段由 play() 的拒绝统一结算；播到一半才读坏的文件由事件处理，避免一次失败跳两首。
+    if (localPlaybackStarted && !localPlaybackErrorHandled) {
+      localPlaybackErrorHandled = true;
+      handleLocalPlaybackFailure(song, idx, opts, token, mediaError, audio);
+    }
   };
   // 接管来的 deck 的起播位置已经在 adoptGaplessDeckForSong 里对好了，这里再 seek 一次会多一次可闻的跳动；
   // load() 更不能调，它会把预解码好的缓冲整个丢掉，无缝接续就白做了。
@@ -27320,13 +27438,16 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   // 接管 deck 时禁掉主增益淡入：preparePlaybackFadeIn 会把 gainNode 直接拉到 0，
   // 那是两个 deck 共用的主音量，交叉会被它一把掐死，纯无缝接续也会重新长出 460 ms 的空档。
   // 接管路径的电平交给 deckGain 处理（交叉走等功率曲线，无缝走 12 ms 斜坡）。
-  var playbackStarted = await playAudio({ manual: !!opts.manual, silent: false, fade: adoptedDeck ? false : undefined });
+  var playbackStarted = await playAudio({ manual: !!opts.manual, silent: true, fade: adoptedDeck ? false : undefined, onError: function(err) { startError = err; } });
   if (token !== trackSwitchToken) return;
   if (!playbackStarted) {
     forcePlaybackControlsInteractive();
-    showToast(opts.manual ? '本地音乐启动失败，请重新选择文件' : '歌曲已载入，点击播放按钮继续播放');
-    return;
+    localPlaybackErrorHandled = true;
+    return handleLocalPlaybackFailure(song, idx, opts, token, startError, audio);
   }
+  localPlaybackStarted = true;
+  delete song._lastPlaybackFailAt;
+  delete song._lastPlaybackError;
   forcePlaybackControlsInteractive();
   markPlayPhase('session-begin');
   safePlaybackStep('listen-session-begin', function(){ beginListenSession(song, opts.context || null); });
@@ -27419,14 +27540,16 @@ async function playQueueAt(idx, opts) {
     hideLoading();
     forcePlaybackControlsInteractive();
     if (!isPlaybackRecursionError(setupErr) && token === trackSwitchToken && !opts.manual && playQueue.length > 1) {
-      skipFailedQueueItem(idx, token, '当前歌曲切换失败，正在尝试队列里的下一首。');
-      return;
+      return skipFailedQueueItem(idx, token, '当前歌曲切换失败，正在尝试队列里的下一首。', opts);
     }
     showToast(playbackFailureToastText(setupErr));
   }
 }
 async function attemptAudioPlay(opts) {
   opts = opts || {};
+  var playToken = trackSwitchToken;
+  var playElement = audio;
+  function ownsAttempt() { return playToken === trackSwitchToken && playElement === audio; }
   try {
       if (!audio) return false;
       if (!audioReady) initAudio();
@@ -27436,13 +27559,15 @@ async function attemptAudioPlay(opts) {
       if (opts.fade !== false) preparePlaybackFadeIn();
       if (opts.manual) {
         var manualPlay = audio.play();
-        await resumeAudioAnalysis();
-        await manualPlay;
+        await Promise.all([manualPlay, resumeAudioAnalysis()]);
       } else {
         await resumeAudioAnalysis();
+        if (!ownsAttempt()) return false;
         await audio.play();
       }
+      if (!ownsAttempt()) return false;
       await resumeAudioAnalysis();
+      if (!ownsAttempt()) return false;
       switchPlaybackVisualToEmily();
       playing = true; setPlayIcon(true);
     // play() 已经 resolve，音频真的在走了，这时候补 deck 起播斜坡正好落在第一个可闻样本上。
@@ -27453,6 +27578,7 @@ async function attemptAudioPlay(opts) {
     hideLoading();
     return true;
   } catch (err) {
+    if (!ownsAttempt()) return false;
     console.warn('Audio play blocked:', err && (err.message || err));
     restorePlaybackGain();
     // 起播失败也要把 deck 增益补回中性 1，否则这个 deck 会一直被 0 增益压着，下次播它就是静音。
@@ -27460,13 +27586,14 @@ async function attemptAudioPlay(opts) {
     playing = false; setPlayIcon(false);
     hideLoading();
     forcePlaybackControlsInteractive();
-    if (!opts.silent) showToast(opts.manual ? '播放启动失败, 请重新选择歌曲' : '播放被系统拦截, 请点击播放按钮');
+    if (typeof opts.onError === 'function') opts.onError(err);
+    if (!opts.silent) showToast(localPlaybackErrorText(err, playElement));
     return false;
   }
 }
 async function playAudio(opts) {
   opts = opts || {};
-  return attemptAudioPlay({ manual: !!opts.manual, silent: !!opts.silent, fade: opts.fade });
+  return attemptAudioPlay({ manual: !!opts.manual, silent: !!opts.silent, fade: opts.fade, onError: opts.onError });
 }
 async function togglePlay() {
   if (playToggleBusy) return;
@@ -45359,6 +45486,8 @@ var MINERADIO_BACKUP_IMPORT_ARM_MS = 12000;
  * 歌单与特别喜欢（进 database）、音效链与视觉预设（进 config.eq / config.theme）。 */
 var MINERADIO_BACKUP_PLAYER_KEYS = [
   VOLUME_STORE_KEY,
+  PLAYBACK_RATE_STORE_KEY,
+  LYRIC_LLM_TRANSLATE_STORE_KEY,
   VOLUME_WHEEL_STEP_STORE_KEY,
   PLAYBACK_QUALITY_STORE_KEY,
   DIY_MODE_STORE_KEY,
@@ -45502,6 +45631,7 @@ function mineradioBackupMusicFolders() {
 function mineradioBackupBuildLocateIndex(folders) {
   var byPath = Object.create(null);
   var byKey = Object.create(null);
+  var byLyricKey = Object.create(null);
   var songs = localLibrarySongs || [];
   for (var i = 0; i < songs.length; i++) {
     var song = songs[i];
@@ -45518,8 +45648,82 @@ function mineradioBackupBuildLocateIndex(folders) {
     if (pathKey && !byPath[pathKey]) byPath[pathKey] = entry;
     var refKey = specialLikedSongKey(song);
     if (refKey && !byKey[refKey]) byKey[refKey] = entry;
+    var lyricKey = typeof songCustomLyricKey === 'function' ? songCustomLyricKey(song) : ('local:' + song.localKey);
+    if (lyricKey) byLyricKey[lyricKey] = entry;
   }
-  return { byPath: byPath, byKey: byKey };
+  return { byPath: byPath, byKey: byKey, byLyricKey: byLyricKey };
+}
+/**
+ * 读取用户歌词数据。已水合的内存值包含尚未到防抖时间的编辑，优先于磁盘快照。
+ * @param {string} id IndexedDB 记录名。
+ * @param {string} legacyKey 旧 localStorage 键。
+ * @param {object|null} current 已水合的内存值。
+ * @returns {Promise<object>} 映射表。
+ */
+async function mineradioBackupReadUserMap(id, legacyKey, current) {
+  if (current) return current;
+  var record = await readLocalUserStateRecord(id);
+  var value = record && record.value != null ? record.value : mineradioBackupReadJson(legacyKey, {});
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+/**
+ * 自定义歌词、来源偏好与手选歌词共用便携歌曲身份；不把可重新生成的音频/封面缓存打包。
+ * @param {object} index 曲库定位索引。
+ * @returns {Promise<Array<object>>} 用户歌词记录。
+ */
+async function mineradioBackupCollectLyrics(index) {
+  var maps = await Promise.all([
+    mineradioBackupReadUserMap('custom-lyrics', 'mineradio-custom-lyrics-v1', typeof customLyricMapHydrated !== 'undefined' && customLyricMapHydrated ? customLyricMap : null),
+    mineradioBackupReadUserMap('custom-lyric-prefs', 'mineradio-custom-lyric-prefs-v1', typeof customLyricPrefsHydrated !== 'undefined' && customLyricPrefsHydrated ? customLyricPrefs : null),
+    mineradioBackupReadUserMap('local-lyric-picks', 'mineradio-local-lyric-picks-v1', typeof localLyricPicksHydrated !== 'undefined' && localLyricPicksHydrated ? localLyricPicks : null)
+  ]);
+  var keys = Object.create(null);
+  maps.forEach(function(map){ Object.keys(map).forEach(function(key){ keys[key] = true; }); });
+  return Object.keys(keys).map(function(key){
+    var located = index.byLyricKey[key] || mineradioBackupPortableStatKey(key, index);
+    var entry = located ? Object.assign({}, located) : { key: key };
+    var lyric = maps[0][key];
+    if (typeof lyric === 'string') lyric = { text: lyric };
+    if (lyric && typeof lyric.text === 'string' && lyric.text) {
+      entry.text = lyric.text;
+      entry.updatedAt = Number(lyric.updatedAt) || 0;
+    }
+    if (maps[1][key] === 'custom' || maps[1][key] === 'original') entry.source = maps[1][key];
+    if (typeof maps[2][key] === 'string' && maps[2][key]) entry.pick = maps[2][key];
+    return entry;
+  });
+}
+/**
+ * 导出按歌保存的 SQLite 翻译缓存，身份只写音乐根序号与相对路径。
+ * @param {{byLyricKey:object}} index 曲库便携定位索引。
+ * @returns {Promise<Array<object>>} 按歌译文记录。
+ */
+async function mineradioBackupCollectLyricTranslations(index) {
+  var api = getDesktopWindowApi && getDesktopWindowApi();
+  if (!api || typeof api.readLocalLibraryDbLyrics !== 'function') return [];
+  var localSongs = (localLibrarySongs || []).filter(function(song){ return song && song.type === 'local'; });
+  var out = [];
+  // 128 首一批避免 IPC 参数与返回对象过大；只扫描本机曲库已知歌曲的缓存键。
+  for (var start = 0; start < localSongs.length; start += 128) {
+    var keys = [];
+    var songs = localSongs.slice(start, start + 128);
+    songs.forEach(function(song){
+      var key = typeof localAssetCacheKey === 'function' ? localAssetCacheKey(song) : '';
+      if (key) keys.push(key);
+    });
+    if (!keys.length) continue;
+    var result = await api.readLocalLibraryDbLyrics(keys);
+    if (!result || result.ok !== true || !result.records) throw new Error('本地歌词缓存读取失败，无法完整备份按歌译文');
+    keys.forEach(function(key){
+      var record = result.records[key];
+      var map = record && record.localLyricTranslations && record.localLyricTranslations.map;
+      if (!map || typeof map !== 'object' || Array.isArray(map) || !Object.keys(map).length) return;
+      var located = index.byLyricKey['local:' + key];
+      if (!located) return;
+      out.push({ folder: located.folder, rel: located.rel, size: located.size, mtime: located.mtime, translations: map });
+    });
+  }
+  return out;
 }
 /**
  * 把一条引用表记录换成便携形态。命中曲库就存 `{folder, rel}`，
@@ -45739,7 +45943,11 @@ async function collectMineradioBackupPayload() {
         history: history.records.length
       }
     },
-    database: { songs: songs, playlists: playlists, favorites: favorites, history: history },
+    database: {
+      songs: songs, playlists: playlists, favorites: favorites, history: history,
+      lyrics: await mineradioBackupCollectLyrics(index),
+      lyricTranslations: await mineradioBackupCollectLyricTranslations(index)
+    },
     config: {
       theme: {
         plugins: mineradioBackupReadJson(MINERADIO_BACKUP_PLUGIN_STORE_KEY, []),
@@ -45818,6 +46026,9 @@ function parseMineradioBackupText(text) {
       songs: Array.isArray(database.songs) ? database.songs : [],
       playlists: Array.isArray(database.playlists) ? database.playlists : [],
       favorites: Array.isArray(database.favorites) ? database.favorites : [],
+      // 老版没有 lyrics 段：保留本机歌词；新版显式空数组则表示清空。
+      lyrics: Array.isArray(database.lyrics) ? database.lyrics : null,
+      lyricTranslations: Array.isArray(database.lyricTranslations) ? database.lyricTranslations : null,
       history: {
         updatedAt: Number(history.updatedAt) || 0,
         records: Array.isArray(history.records) ? history.records : [],
@@ -45898,6 +46109,107 @@ async function mineradioBackupResolveFolders(list, api) {
   return resolved.length ? resolved : folders;
 }
 /**
+ * 在改动设置/歌单前完成统计快照的事务替换。收藏以备份的 favorites 为准，
+ * 未出现在快照里的旧统计/旧收藏由主进程一次性清除。
+ * @param {object} database 备份数据。
+ * @param {Array<string>} folders 本机根目录。
+ * @param {object|null} api 桌面接口；浏览器统计由 history 用户态恢复。
+ * @returns {Promise<number>} 已恢复统计行数。
+ */
+async function mineradioBackupRestoreStats(database, folders, api) {
+  if (!api) return 0;
+  if (typeof api.restoreLocalLibraryDbStats !== 'function') throw new Error('当前客户端不支持备份统计恢复');
+  var byKey = Object.create(null);
+  database.songs.forEach(function(entry){
+    var identity = mineradioBackupIdentity(entry, folders);
+    if (!identity) return;
+    var key = mineradioBackupSongKeyFromIdentity(identity);
+    byKey[key] = {
+      key: key, pathKey: identity.pathKey,
+      plays: Math.max(0, Number(entry.plays) || 0), listenMs: Math.max(0, Number(entry.listenMs) || 0),
+      completed: Math.max(0, Number(entry.completed) || 0), lastPlayedAt: Math.max(0, Number(entry.lastPlayedAt) || 0),
+      favorite: false, favoriteAt: Math.max(0, Number(entry.favoriteAt) || 0),
+      name: String(entry.name || ''), artist: String(entry.artist || '')
+    };
+  });
+  database.favorites.forEach(function(entry){
+    var ref = mineradioBackupRestoreRef(entry, folders);
+    if (!ref || !ref.key) return;
+    var key = mineradioBackupSongKeyFromIdentity(ref);
+    if (!byKey[key]) byKey[key] = { key: key, pathKey: ref.path, name: ref.name, artist: ref.artist };
+    byKey[key].favorite = true;
+  });
+  var result = await api.restoreLocalLibraryDbStats({ stats: Object.keys(byKey).map(function(key){ return byKey[key]; }) });
+  if (!result || result.ok !== true) throw new Error('播放统计恢复失败：' + ((result && result.error) || '数据库未确认写入'));
+  return Number(result.restored) || 0;
+}
+/**
+ * 写回用户态并让错误上抛；取消旧防抖任务，防止重启前旧歌词再覆盖新快照。
+ * @param {string} id 记录标识。
+ * @param {object|Array} value 新快照。
+ * @param {string} legacyKey 旧镜像键。
+ * @returns {Promise<void>} 完成持久化。
+ */
+async function mineradioBackupWriteUserState(id, value, legacyKey) {
+  if (typeof localUserStateWriteTimers !== 'undefined' && localUserStateWriteTimers[id]) clearTimeout(localUserStateWriteTimers[id]);
+  if (typeof localUserStatePendingWrites !== 'undefined') delete localUserStatePendingWrites[id];
+  if (typeof localUserStateWriteTokens !== 'undefined') localUserStateWriteTokens[id] = (Number(localUserStateWriteTokens[id]) || 0) + 1;
+  var result = await writeLocalUserStateRecord(id, value);
+  if (result === false || (result && result.ok === false)) throw new Error('备份用户数据写入失败：' + id);
+  if (legacyKey) localStorage.removeItem(legacyKey);
+}
+/**
+ * 恢复自定义歌词及必要偏好。旧备份缺段时完全不碰现有歌词。
+ * @param {Array<object>|null} entries 用户歌词记录。
+ * @param {Array<string>} folders 本机音乐根目录。
+ * @returns {Promise<void>} 写入完成。
+ */
+async function mineradioBackupRestoreLyrics(entries, folders) {
+  if (!Array.isArray(entries)) return;
+  var lyrics = Object.create(null), prefs = Object.create(null), picks = Object.create(null);
+  entries.forEach(function(entry){
+    if (!entry || typeof entry !== 'object') return;
+    var key = mineradioBackupRestoreStatKey(entry, folders);
+    if (!key) return;
+    if (typeof entry.text === 'string' && entry.text) lyrics[key] = { text: entry.text, updatedAt: Number(entry.updatedAt) || 0 };
+    if (entry.source === 'custom' || entry.source === 'original') prefs[key] = entry.source;
+    if (typeof entry.pick === 'string' && entry.pick) picks[key] = entry.pick;
+  });
+  await mineradioBackupWriteUserState('custom-lyrics', lyrics, 'mineradio-custom-lyrics-v1');
+  await mineradioBackupWriteUserState('custom-lyric-prefs', prefs, 'mineradio-custom-lyric-prefs-v1');
+  await mineradioBackupWriteUserState('local-lyric-picks', picks, 'mineradio-local-lyric-picks-v1');
+  if (typeof customLyricMap !== 'undefined') { customLyricMap = lyrics; customLyricMapHydrated = true; }
+  if (typeof customLyricPrefs !== 'undefined') { customLyricPrefs = prefs; customLyricPrefsHydrated = true; }
+  if (typeof localLyricPicks !== 'undefined') { localLyricPicks = picks; localLyricPicksHydrated = true; }
+}
+/**
+ * 把按歌译文换算到新机器 song_key 后通过 SQLite 事务整体恢复。
+ * @param {Array<object>|null} entries 便携译文记录。
+ * @param {Array<string>} folders 本机音乐根目录。
+ * @param {object|null} api 桌面数据库接口。
+ * @returns {Promise<number>} 写入的按歌译文记录数。
+ */
+async function mineradioBackupRestoreLyricTranslations(entries, folders, api) {
+  if (!Array.isArray(entries) || !api) return 0;
+  if (typeof api.restoreLocalLibraryDbLyrics !== 'function') throw new Error('当前客户端不支持按歌译文恢复');
+  var records = [];
+  entries.forEach(function(entry){
+    if (!entry || typeof entry !== 'object') return;
+    var identity = mineradioBackupIdentity(entry, folders);
+    var map = entry.translations;
+    if (!identity || !map || typeof map !== 'object' || Array.isArray(map)) return;
+    var clean = {};
+    Object.keys(map).forEach(function(key){
+      if (key.length > 1024 || typeof map[key] !== 'string' || !map[key].trim() || map[key].length > 12000) return;
+      clean[key] = map[key];
+    });
+    if (Object.keys(clean).length) records.push({ key: mineradioBackupSongKeyFromIdentity(identity), translations: clean });
+  });
+  var result = await api.restoreLocalLibraryDbLyrics(records);
+  if (!result || result.ok !== true) throw new Error('按歌译文恢复失败：' + ((result && result.error) || '数据库未确认写入'));
+  return Number(result.restored) || 0;
+}
+/**
  * 把备份负载写回本机各层存储，然后重启。不做热重放：曲库扫描、引用解析、
  * 音效链重建都在启动流程里，重启一次比逐个子系统热更新可靠得多。
  * @param {object} payload parseMineradioBackupText 结果。
@@ -45910,6 +46222,9 @@ async function applyMineradioBackup(payload) {
     showToast('已取消导入');
     return false;
   }
+  var restoredStats = await mineradioBackupRestoreStats(payload.database, folders, api);
+  await mineradioBackupRestoreLyrics(payload.database.lyrics, folders);
+  var restoredTranslations = await mineradioBackupRestoreLyricTranslations(payload.database.lyricTranslations, folders, api);
   var i = 0;
   // config.player：只认白名单键，备份文件塞不进任意 localStorage 键。
   var player = payload.config.player || {};
@@ -45926,10 +46241,7 @@ async function applyMineradioBackup(payload) {
   var eq = payload.config.eq || {};
   if (eq.audioChain != null) setPersistentLocalStorageItem(AUDIO_CHAIN_STORE_KEY, JSON.stringify(eq.audioChain));
   if (eq.archives != null) {
-    try {
-      await writeLocalUserStateRecord(LOCAL_USER_STATE_FX_ARCHIVES, normalizeUserFxArchives(eq.archives));
-      try { localStorage.removeItem(USER_FX_ARCHIVE_STORE_KEY); } catch (e) {}
-    } catch (e) {}
+    await mineradioBackupWriteUserState(LOCAL_USER_STATE_FX_ARCHIVES, normalizeUserFxArchives(eq.archives), USER_FX_ARCHIVE_STORE_KEY);
   }
   // 队列快照 / 续播位置 / 曲库快照都是没进备份的临时文件，换机后指向的是旧路径，直接抹掉。
   try {
@@ -45967,7 +46279,6 @@ async function applyMineradioBackup(payload) {
   writeSpecialLikedSongRefs(favorites);
   // database.songs：入库时间回填到 pathKey 映射，播放次数 / 收藏交给 SQLite。
   var addedAtMap = ensureLocalLibraryAddedAtMap();
-  var statTasks = [];
   var songs = payload.database.songs;
   for (i = 0; i < songs.length; i++) {
     var entry = songs[i];
@@ -45975,60 +46286,11 @@ async function applyMineradioBackup(payload) {
     if (!identity) continue;
     var addedAt = Number(entry.addedAt) || 0;
     if (addedAt && identity.pathKey) addedAtMap[identity.pathKey] = addedAt;
-    var plays = Math.max(0, Number(entry.plays) || 0);
-    var listenMs = Math.max(0, Number(entry.listenMs) || 0);
-    var completed = Math.max(0, Number(entry.completed) || 0);
-    var lastPlayedAt = Math.max(0, Number(entry.lastPlayedAt) || 0);
-    if (!plays && !listenMs && !completed && !lastPlayedAt && !entry.favorite) continue;
-    statTasks.push({
-      key: mineradioBackupSongKeyFromIdentity(identity),
-      pathKey: identity.pathKey,
-      plays: plays,
-      listenMs: listenMs,
-      completed: completed,
-      lastPlayedAt: lastPlayedAt,
-      favorite: !!entry.favorite,
-      name: String(entry.name || ''),
-      artist: String(entry.artist || '')
-    });
   }
   saveLocalLibraryAddedAtMap();
-  // song_stats 是累加语义，新机器上是空表，所以累加等于赋值；同机重复导入才会翻倍，
-  // 这也是导入前要求二次确认的原因。lastPlayedAt 传 0 会被主进程当成「现在」，
-  // 所以清过最近播放的行统一垫 1ms，保住播放次数又不冒充刚听过。
-  var restoredStats = 0;
-  if (api && typeof api.bumpLocalLibraryDbPlayStat === 'function') {
-    for (i = 0; i < statTasks.length; i++) {
-      var task = statTasks[i];
-      try {
-        if (task.plays || task.listenMs || task.completed || task.lastPlayedAt) {
-          await api.bumpLocalLibraryDbPlayStat({
-            key: task.key,
-            pathKey: task.pathKey,
-            plays: task.plays,
-            listenMs: task.listenMs,
-            completed: task.completed,
-            lastPlayedAt: task.lastPlayedAt || 1,
-            name: task.name,
-            artist: task.artist
-          });
-        }
-        if (task.favorite && typeof api.setLocalLibraryDbFavorite === 'function') {
-          await api.setLocalLibraryDbFavorite({
-            key: task.key,
-            pathKey: task.pathKey,
-            favorite: 1,
-            name: task.name,
-            artist: task.artist
-          });
-        }
-        restoredStats++;
-      } catch (e) {}
-    }
-  }
   await mineradioBackupRestoreHistory(payload.database.history, folders);
   flushPersistentUiStateBackup();
-  showToast('备份已导入：' + songs.length + ' 首 / ' + playlists.length + ' 歌单 / ' + favorites.length + ' 收藏 / ' + restoredStats + ' 条统计，正在重启…');
+  showToast('备份已导入：' + songs.length + ' 首 / ' + playlists.length + ' 歌单 / ' + favorites.length + ' 收藏 / ' + restoredStats + ' 条统计 / ' + restoredTranslations + ' 首译文，正在重启…');
   setTimeout(function(){
     try {
       if (api && typeof api.restartApp === 'function') api.restartApp();
@@ -46111,10 +46373,7 @@ async function mineradioBackupRestoreHistory(history, folders) {
       lastPlayedAt: Math.max(0, Number(artist.lastPlayedAt) || 0)
     };
   }
-  try {
-    await writeLocalUserStateRecord(LOCAL_USER_STATE_LISTEN_STATS, state);
-    try { localStorage.removeItem(HOME_LISTEN_STATS_KEY); } catch (e) {}
-  } catch (e) {}
+  await mineradioBackupWriteUserState(LOCAL_USER_STATE_LISTEN_STATS, state, HOME_LISTEN_STATS_KEY);
 }
 /**
  * 取备份文本。桌面端走 .backup 专用通道，浏览器端回落 `<input type=file>`。

@@ -53,6 +53,8 @@ const BACKUP_SOURCE = slice(
 const LIBRARY_ROOT = 'D:\\Music';
 const PLAYER_KEYS = {
   VOLUME_STORE_KEY: 'apex-player-volume',
+  PLAYBACK_RATE_STORE_KEY: 'mineradio-playback-rate-v1',
+  LYRIC_LLM_TRANSLATE_STORE_KEY: 'mineradio-lyric-llm-translation-v1',
   VOLUME_WHEEL_STEP_STORE_KEY: 'mineradio-volume-wheel-step-v1',
   PLAYBACK_QUALITY_STORE_KEY: 'mineradio-playback-quality-v1',
   DIY_MODE_STORE_KEY: 'mineradio-diy-player-mode-v1',
@@ -133,6 +135,15 @@ function loadBackupModule(options) {
       calls.push('read-stats');
       return Promise.resolve({ ok: true, stats: opts.dbStats || {} });
     },
+    readLocalLibraryDbLyrics(keys) {
+      const records = {};
+      for (const key of keys || []) if (opts.lyricCache && opts.lyricCache[key]) records[key] = plain(opts.lyricCache[key]);
+      return Promise.resolve({ ok: true, records });
+    },
+    restoreLocalLibraryDbLyrics(entries) {
+      dbCalls.push({ method: 'restore-lyrics', entries: plain(entries) });
+      return Promise.resolve(opts.restoreLyricResult || { ok: true, restored: entries.length });
+    },
     refreshLocalMusicFiles(folder) {
       calls.push('probe:' + folder);
       if (opts.folderMissing) return Promise.resolve({ ok: false, error: 'LOCAL_LIBRARY_NOT_DIRECTORY' });
@@ -146,6 +157,10 @@ function loadBackupModule(options) {
     bumpLocalLibraryDbPlayStat(payload) {
       dbCalls.push({ method: 'bump', payload: JSON.parse(JSON.stringify(payload)) });
       return Promise.resolve({ ok: true });
+    },
+    restoreLocalLibraryDbStats(payload) {
+      dbCalls.push({ method: 'restore', payload: plain(payload) });
+      return Promise.resolve(opts.restoreResult || { ok: true, restored: payload.stats.length });
     },
     setLocalLibraryDbFavorite(payload) {
       dbCalls.push({ method: 'favorite', payload: JSON.parse(JSON.stringify(payload)) });
@@ -188,6 +203,8 @@ function loadBackupModule(options) {
       if (raw) return 'local-path:' + raw;
       return 'local-meta:' + String(song.name || '') + '|' + String(song.artist || '');
     },
+    localAssetCacheKey(song) { return song && song.localKey ? String(song.localKey) : ''; },
+    songCustomLyricKey(song) { return song && song.localKey ? 'local:' + song.localKey : ''; },
     localStorage: {
       getItem(key) {
         return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
@@ -221,6 +238,7 @@ function loadBackupModule(options) {
     },
     writeLocalUserStateRecord(id, value) {
       calls.push('write-user-state:' + id);
+      if (opts.failUserState === id) return Promise.reject(new Error('simulated storage failure'));
       userState[id] = plain(value);
       return Promise.resolve({ ok: true });
     },
@@ -322,7 +340,7 @@ test('导出结构只有 version / meta / database / config / paths 五段', asy
   const payload = plain(await mod.context.collectMineradioBackupPayload());
   assert.equal(payload.version, 2);
   assert.deepEqual(Object.keys(payload), ['version', 'meta', 'database', 'config', 'paths']);
-  assert.deepEqual(Object.keys(payload.database), ['songs', 'playlists', 'favorites', 'history']);
+  assert.deepEqual(Object.keys(payload.database), ['songs', 'playlists', 'favorites', 'history', 'lyrics', 'lyricTranslations']);
   assert.deepEqual(Object.keys(payload.config), ['theme', 'eq', 'player']);
   assert.deepEqual(Object.keys(payload.paths), ['musicFolders']);
   assert.deepEqual(payload.paths.musicFolders, [LIBRARY_ROOT]);
@@ -386,7 +404,7 @@ test('默认不备份音频 / 大封面缓存 / 临时文件', async () => {
   assert.ok(!text.includes('base64'), 'base64 载荷不该进备份');
   assert.ok(!text.includes('.mp3:'), 'localKey 形态的绝对路径不该进备份');
   const keys = collectKeys(payload);
-  ['cover', 'coverUrl', 'artwork', 'picture', 'dataUrl', 'blob', 'bytes', 'buffer', 'beatMap', 'lyrics', 'localFile']
+  ['cover', 'coverUrl', 'artwork', 'picture', 'dataUrl', 'blob', 'bytes', 'buffer', 'beatMap', 'localLyricText', 'localFile']
     .forEach((key) => { assert.ok(!keys.has(key), '不该备份的字段: ' + key); });
   // 临时文件：曲库快照 / 曲库索引 / 队列快照 / 播放会话 / 续播位置一个都不进 config.player。
   assert.deepEqual(Object.keys(payload.config.player).sort(), ['apex-player-volume', 'mineradio-gapless-v1']);
@@ -453,7 +471,7 @@ test('新电脑导入：原文件夹不在就让用户重选，歌单与收藏�
   assert.equal(mod.addedAt[NEW_A_PATH_KEY], 4321);
   assert.equal(mod.written.addedAtSaved, 1);
   assert.equal(mod.written.flushed, 1);
-  assert.ok(mod.toasts.some((item) => item.includes('备份已导入：2 首 / 1 歌单 / 1 收藏 / 2 条统计')));
+  assert.ok(mod.toasts.some((item) => item.includes('备份已导入：2 首 / 1 歌单 / 1 收藏 / 2 条统计 / 0 首译文')));
   // 覆盖式导入以重启收尾。
   assert.equal(mod.timers.length, 1);
   mod.timers[0].fn();
@@ -488,28 +506,33 @@ test('用户在重选文件夹时取消：什么都不写，也不重启', async
   assert.ok(mod.toasts.includes('已取消导入'));
 });
 
-test('播放次数与收藏落回 SQLite：lastPlayedAt 为 0 的行垫 1ms，别冒充刚听过', async () => {
+test('播放次数与收藏落回 SQLite：lastPlayedAt 为 0 就保持为零，不冒充刚听过', async () => {
   const text = await makeBackupText();
   const mod = loadBackupModule({ folder: '', folderMissing: true, pickedFolder: NEW_ROOT });
   await mod.context.applyMineradioBackup(mod.context.parseMineradioBackupText(text));
-  assert.deepEqual(mod.dbCalls.map((item) => item.method), ['bump', 'bump', 'favorite']);
-  assert.deepEqual(mod.dbCalls[0].payload, {
+  assert.deepEqual(mod.dbCalls.map((item) => item.method), ['restore', 'restore-lyrics']);
+  const statsRestore = mod.dbCalls.find((item) => item.method === 'restore');
+  assert.deepEqual(statsRestore.payload.stats[0], {
     key: NEW_A_ABS + ':111:222',
     pathKey: NEW_A_PATH_KEY,
     plays: 7,
     listenMs: 120000,
     completed: 3,
     lastPlayedAt: 990,
+    favorite: false,
+    favoriteAt: 0,
     name: '甲歌',
     artist: '甲',
   });
-  assert.equal(mod.dbCalls[1].payload.key, NEW_B_ABS + ':333:444');
-  assert.equal(mod.dbCalls[1].payload.plays, 2);
-  assert.equal(mod.dbCalls[1].payload.lastPlayedAt, 1);
-  assert.deepEqual(mod.dbCalls[2].payload, {
+  assert.deepEqual(statsRestore.payload.stats[1], {
     key: NEW_B_ABS + ':333:444',
     pathKey: NEW_B_PATH_KEY,
-    favorite: 1,
+    plays: 2,
+    listenMs: 50000,
+    completed: 1,
+    lastPlayedAt: 0,
+    favorite: true,
+    favoriteAt: 880,
     name: '乙歌',
     artist: '乙',
   });
@@ -585,7 +608,7 @@ test('版本闸门：只认 version 2，杂物一律拒收', () => {
   const parsed = plain(mod.context.parseMineradioBackupText('{"version":2}'));
   assert.equal(parsed.version, 2);
   assert.deepEqual(parsed.database, {
-    songs: [], playlists: [], favorites: [], history: { updatedAt: 0, records: [], songs: [], artists: [] },
+    songs: [], playlists: [], favorites: [], lyrics: null, lyricTranslations: null, history: { updatedAt: 0, records: [], songs: [], artists: [] },
   });
   assert.deepEqual(parsed.config, { theme: {}, eq: {}, player: {} });
   assert.deepEqual(parsed.paths, { musicFolders: [] });
@@ -593,6 +616,93 @@ test('版本闸门：只认 version 2，杂物一律拒收', () => {
   const dirty = plain(mod.context.parseMineradioBackupText('{"version":2,"paths":{"musicFolders":["  ",""," D:\\\\Music "]},"config":{"player":[]}}'));
   assert.deepEqual(dirty.paths.musicFolders, ['D:\\Music']);
   assert.deepEqual(dirty.config.player, {});
+});
+
+test('重复导入提交相同统计快照；数据库失败不覆盖歌单设置或重启', async () => {
+  const text = await makeBackupText();
+  const mod = loadBackupModule({});
+  const payload = mod.context.parseMineradioBackupText(text);
+  await mod.context.applyMineradioBackup(payload);
+  await mod.context.applyMineradioBackup(payload);
+  assert.equal(mod.dbCalls.length, 4);
+  assert.deepEqual(mod.dbCalls[0], mod.dbCalls[2], '重复导入要提交相同统计快照');
+  assert.deepEqual(mod.dbCalls[1], mod.dbCalls[3], '重复导入要提交相同译文快照');
+  const failed = loadBackupModule({ restoreResult: { ok: false, error: 'SQLITE_FULL' }, localStorage: { keep: 'old' } });
+  await assert.rejects(failed.context.applyMineradioBackup(payload), /SQLITE_FULL/);
+  assert.deepEqual(failed.store, { keep: 'old' });
+  assert.equal(failed.written.playlists, null);
+  assert.equal(failed.written.favorites, null);
+  assert.deepEqual(failed.userState, {});
+  assert.deepEqual(failed.timers, []);
+  assert.equal(failed.toasts.some((text) => text.includes('备份已导入')), false);
+});
+
+test('播放速度和自定义歌词连同来源偏好、手选歌词在换盘恢复后仍能命中', async () => {
+  const key = 'local:' + SONG_A_ABS + ':111:222';
+  const translated = '{"ja:line":"译文"}';
+  const src = loadBackupModule(exportFixture({
+    localStorage: { 'mineradio-playback-rate-v1': '{"rate":1.5}', 'mineradio-lyric-llm-translation-v1': translated },
+    userState: {
+      'custom-lyrics': { [key]: { text: '[00:01.00] 自定义歌词', updatedAt: 123 }, 'meta:广播|主播': { text: '外部曲目', updatedAt: 456 } },
+      'custom-lyric-prefs': { [key]: 'custom' },
+      'local-lyric-picks': { [key]: 'rock/a.zh.lrc' }
+    }
+  }));
+  const exported = await src.context.collectMineradioBackupPayload();
+  assert.equal(exported.config.player['mineradio-playback-rate-v1'], '{"rate":1.5}');
+  assert.equal(exported.database.lyrics[0].rel, 'Rock/a.mp3');
+  assert.equal(exported.database.lyrics[0].key, undefined);
+  const dst = loadBackupModule({ folderMissing: true, pickedFolder: NEW_ROOT });
+  await dst.context.applyMineradioBackup(dst.context.parseMineradioBackupText(JSON.stringify(exported)));
+  const movedKey = 'local:' + NEW_A_ABS + ':111:222';
+  assert.deepEqual(dst.userState['custom-lyrics'][movedKey], { text: '[00:01.00] 自定义歌词', updatedAt: 123 });
+  assert.deepEqual(dst.userState['custom-lyrics']['meta:广播|主播'], { text: '外部曲目', updatedAt: 456 });
+  assert.equal(dst.userState['custom-lyric-prefs'][movedKey], 'custom');
+  assert.equal(dst.userState['local-lyric-picks'][movedKey], 'rock/a.zh.lrc');
+  assert.equal(dst.store['mineradio-playback-rate-v1'], '{"rate":1.5}');
+  assert.equal(dst.store['mineradio-lyric-llm-translation-v1'], translated);
+});
+
+test('按歌译文随整机备份换盘迁移，并在导入时事务式恢复到新 localKey', async () => {
+  const localKey = SONG_A_ABS + ':111:222';
+  const lineKey = 'English\u0000微风轻轻吹过';
+  const src = loadBackupModule(exportFixture({ lyricCache: {
+    [localKey]: { id: localKey, localLyricText: '歌词正文不备份', localLyricTranslations: { v: 1, map: { [lineKey]: 'A gentle breeze passes by.' } } }
+  } }));
+  const exported = plain(await src.context.collectMineradioBackupPayload());
+  assert.deepEqual(exported.database.lyricTranslations, [{
+    folder: 0, rel: 'Rock/a.mp3', size: 111, mtime: 222, translations: { [lineKey]: 'A gentle breeze passes by.' }
+  }]);
+  assert.equal(JSON.stringify(exported).includes('歌词正文不备份'), false);
+
+  const dst = loadBackupModule({ folderMissing: true, pickedFolder: NEW_ROOT });
+  await dst.context.applyMineradioBackup(dst.context.parseMineradioBackupText(JSON.stringify(exported)));
+  assert.deepEqual(dst.dbCalls.find((item) => item.method === 'restore-lyrics').entries, [{
+    key: NEW_A_ABS + ':111:222', translations: { [lineKey]: 'A gentle breeze passes by.' }
+  }]);
+});
+
+test('旧备份缺少按歌译文段时保留本机 SQLite 翻译缓存', async () => {
+  const raw = JSON.parse(await makeBackupText());
+  delete raw.database.lyricTranslations;
+  const mod = loadBackupModule({});
+  await mod.context.applyMineradioBackup(mod.context.parseMineradioBackupText(JSON.stringify(raw)));
+  assert.equal(mod.dbCalls.some((item) => item.method === 'restore-lyrics'), false);
+});
+
+test('旧备份不抹掉自定义歌词，新版空歌词快照明确清空；写失败不报成功', async () => {
+  const raw = JSON.parse(await makeBackupText());
+  delete raw.database.lyrics;
+  const old = loadBackupModule({ userState: { 'custom-lyrics': { keep: { text: '原歌词' } } } });
+  await old.context.applyMineradioBackup(old.context.parseMineradioBackupText(JSON.stringify(raw)));
+  assert.equal(old.userState['custom-lyrics'].keep.text, '原歌词');
+  raw.database.lyrics = [];
+  await old.context.applyMineradioBackup(old.context.parseMineradioBackupText(JSON.stringify(raw)));
+  assert.deepEqual(old.userState['custom-lyrics'], {});
+  const failed = loadBackupModule({ failUserState: 'custom-lyrics' });
+  await assert.rejects(failed.context.applyMineradioBackup(failed.context.parseMineradioBackupText(JSON.stringify(raw))), /simulated storage failure/);
+  assert.deepEqual(failed.timers, []);
+  assert.equal(failed.toasts.some((text) => text.includes('备份已导入')), false);
 });
 
 test('config.player 只认白名单键，备份文件塞不进任意 localStorage 键', async () => {
@@ -613,7 +723,7 @@ test('config.player 只认白名单键，备份文件塞不进任意 localStorag
 test('白名单与 app.js 里的持久化键常量一一对应', () => {
   const mod = loadBackupModule({});
   const list = plain(mod.context.MINERADIO_BACKUP_PLAYER_KEYS);
-  assert.equal(list.length, 18);
+  assert.equal(list.length, 20);
   assert.deepEqual(list.slice().sort(), Object.values(PLAYER_KEYS).sort());
   Object.keys(PLAYER_KEYS).forEach((name) => {
     assert.match(appSource, new RegExp('var ' + name + " = '" + PLAYER_KEYS[name] + "';"), name + ' 常量值漂了');
