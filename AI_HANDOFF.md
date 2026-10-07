@@ -4,7 +4,7 @@
 
 ## 当前权威入口（2026-10-07）
 
-- **当前版本 v2.2.8 已正式发布**：修复更新弹窗在短窗口被裁切，并确保长说明、版本号与操作区稳定可见。PR #107 已合并，tag/merge commit `c711c84453b24f5e972fb450daecd7672e47e768`；PR 两组 Verify 与合并后 Verify `37600666433` 通过，Windows Build and Release `37600847689` 成功。Release `405596536` 于北京时间 `2026-10-07 17:39:16` 正式设为 Latest。公开 latest.yml 返回 `2.2.8` 且安装包大小正确；GitHub Release 的四项服务端 digest 与 SHA256SUMS 相符。受当前网络代理影响，官方 EXE / 小资产完整回下载在本机没有成功，不要把服务端摘要写成本地重算结果。完整记录见 `RELEASE.md`。
+- **当前版本 v2.2.8 已正式发布**：修复更新弹窗在短窗口被裁切，并确保长说明、版本号与操作区稳定可见。PR #107 已合并，tag/merge commit `c711c84453b24f5e972fb450daecd7672e47e768`；PR 两组 Verify 与合并后 Verify `37600666433` 通过，Windows Build and Release `37600847689` 成功。Release `405596536` 于北京时间 `2026-10-07 17:39:16` 正式设为 Latest。公开 latest.yml 返回 `2.2.8` 且安装包大小正确；blockmap、latest.yml 和 SHA256SUMS 已回下载并匹配 GitHub digest，四项服务端摘要与清单声明一致。约 102 MB 官方 EXE 下载在当前代理环境中停滞，因此没有本地重算官方安装包摘要。完整记录见 `RELEASE.md`。
 - **本轮验证与构建**：全量 Node `1325/1325`；真实 Electron/Chromium 4 档缩放布局检查 `128/128`，含 `480×270`；编码 `5/5`，元数据/公告/workflow `18/18`，语法检查和 `git diff --check` 通过。本机 Windows 安装包构建也成功并核对本机构建 latest.yml 的 SHA-512。
 - **上个正式版 v2.2.7**：PR #105 合入，PR #106 补发布记录；历史发布信息见 `RELEASE.md`。
 - 仓库：`https://github.com/oirge/Mineradio`。当前隔离检出 `D:\Mineradio-release-2.2.6`，工作分支 `codex/release-v2.2.8`，主代码提交 `c43f12a`，发布记录收尾提交尚待合入。
