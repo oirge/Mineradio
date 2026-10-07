@@ -1,5 +1,15 @@
 # 发布流程
 
+## v2.2.6 整机备份、输出设备与更新下载修复
+
+- **版本元数据**：`2.2.6` 已统一到 `package.json`、`package-lock.json`、`public/app.js`、`server.js` 和 Release workflow 默认 tag；应用 ID、安装身份与用户数据目录保持原样。
+- **内容**：
+  1. 整机备份事务式覆盖恢复播放统计、收藏与本地歌曲译文，避免重复导入累加；补齐倍速、自定义歌词、来源偏好和手选歌词的迁移。
+  2. 输出设备切换串行执行并提示实际状态；设备不可用时临时回到系统默认，保留原选择并在重连后自动恢复。
+  3. 自动续播有限跳过损坏或不支持的本地歌曲，避免异常曲目循环重试；手动播放、系统拦截和主动中断保留原提示。
+  4. 完整安装包支持校验 Range / Content-Range 和前缀摘要后续传；服务器忽略 Range 时截断并从头下载，完成后验证安装包大小和摘要。
+- **测试**：全量 Node 回归 `1314/1314` 通过；文档编码检查 `5/5` 通过；JavaScript 语法检查和 `git diff --check` 通过。Windows 打包、浏览器冒烟与远端发布结果待完成后补录。
+
 ## v2.2.5 更新弹窗小窗口适配
 
 - **版本元数据**：`2.2.5` 于 `package.json`、`package-lock.json` 两处、`public/app.js` 的 `APP_VERSION` 与更新预览 `notes`、`server.js` 的 `UPDATE_FALLBACK_NOTES`、`.github/workflows/release.yml` description 与默认 tag 统一；安装身份、数据目录和自动更新线路不变。

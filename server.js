@@ -78,8 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复非全屏和较小窗口下更新弹窗的版本号、立即更新按钮被裁切',
-  '更新说明可在弹窗内滚动查看，底部操作按钮保持可见',
+  '整机备份恢复以事务覆盖播放统计，并迁移自定义歌词、手选歌词和本地歌曲译文',
+  '输出设备临时不可用时回退到系统默认，重连后恢复已保存选择并展示切换结果',
+  '自动续播遇到损坏或不支持的本地歌曲时有限跳过，避免坏歌反复循环',
+  '完整安装包支持按已校验区间断点续传，断网 / 取消 / 换线路后继续并执行完整摘要校验',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -2067,6 +2069,83 @@ async function rankUpdateDownloadCandidates(job, candidates) {
   for (let i = 0; i < failed.length; i++) ordered.push(failed[i].candidate);
   return ordered;
 }
+/**
+ * 解析下载线路的 Content-Range，拒绝有歧义或越界的区间。
+ * @param {string} value 响应头值。
+ * @returns {{start:number,end:number,total:number}|{unsatisfied:true,total:number}|null} 有效区间或 null。
+ */
+function parseUpdateContentRange(value) {
+  const text = String(value || '').trim();
+  const unsatisfied = /^bytes\s+\*\/(\d+)$/i.exec(text);
+  if (unsatisfied) {
+    const total = Number(unsatisfied[1]);
+    return Number.isSafeInteger(total) ? { unsatisfied: true, total } : null;
+  }
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(text);
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = Number(match[3]);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || !Number.isSafeInteger(total)
+      || start < 0 || end < start || total <= end) return null;
+  return { start, end, total };
+}
+/**
+ * 把已有临时文件前缀加入本次流式摘要，整个过程固定使用 1 MiB 缓冲区。
+ * @param {string} filePath 临时安装包路径。
+ * @param {number} expectedBytes 预期前缀大小。
+ * @param {object|null} sha256 SHA-256 累加器。
+ * @param {object|null} sha512 SHA-512 累加器。
+ * @returns {Promise<void>}
+ */
+async function seedUpdateHashesFromFile(filePath, expectedBytes, sha256, sha512) {
+  if (!sha256 && !sha512) return;
+  let handle = null;
+  let error = null;
+  try {
+    handle = await fs.promises.open(filePath, 'r');
+    const buffer = Buffer.allocUnsafe(UPDATE_VERIFY_CHUNK_BYTES);
+    let position = 0;
+    while (position < expectedBytes) {
+      const length = Math.min(buffer.length, expectedBytes - position);
+      const result = await handle.read(buffer, 0, length, position);
+      if (!result.bytesRead) throw updateError('UPDATE_SIZE_MISMATCH', 'Partial installer changed while resuming');
+      const chunk = buffer.subarray(0, result.bytesRead);
+      if (sha256) sha256.update(chunk);
+      if (sha512) sha512.update(chunk);
+      position += result.bytesRead;
+    }
+  } catch (err) {
+    error = err;
+  } finally {
+    error = await closeUpdateFileHandle(handle, error);
+  }
+  if (error) throw error;
+}
+/**
+ * 释放未消费的下载响应体，避免错误区间或 HTTP 错误继续占用连接。
+ * @param {object|null} response fetch 风格响应。
+ * @returns {Promise<void>}
+ */
+async function cancelUnconsumedUpdateResponse(response) {
+  const body = response && response.body;
+  if (!body) return;
+  try {
+    if (typeof body.cancel === 'function') await body.cancel();
+  } catch (_) {}
+}
+function finishUpdateInstallerFile(job, tmpPath) {
+  if (fs.existsSync(job.filePath)) fs.unlinkSync(job.filePath);
+  fs.renameSync(tmpPath, job.filePath);
+  job.status = 'ready';
+  job.received = job.total || job.expectedSize || job.received || 0;
+  job.total = job.total || job.expectedSize || job.received;
+  job.progress = 100;
+  job.etaSeconds = 0;
+  job.speedBps = 0;
+  job.message = '安装包已下载';
+  job.updatedAt = Date.now();
+}
 async function downloadUpdateAssetWithMirrors(job) {
   const tmpPath = job.filePath + '.download';
   const allCandidates = Array.isArray(job.downloadCandidates) && job.downloadCandidates.length
@@ -2076,55 +2155,164 @@ async function downloadUpdateAssetWithMirrors(job) {
   const rawCandidates = filterUpdateRouteCandidates(allCandidates, job.route);
   if (!rawCandidates.length) throw updateError('UPDATE_ROUTE_UNAVAILABLE', 'No download candidate for route ' + (job.route || 'auto'));
   throwIfUpdateJobCanceled(job);
+  fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
+  // 先复用上次被取消 / 断网留下的字节。完整临时文件必须先过大小和摘要校验，
+  // 否则清掉后从零开始，不能把损坏缓存直接当成安装器。
+  let partialSize = 0;
+  try {
+    const partialStat = fs.statSync(tmpPath);
+    if (!partialStat.isFile()) throw updateError('EISDIR', 'Partial installer path is not a file');
+    partialSize = partialStat.size || 0;
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') throw err;
+  }
+  const maxPartialSize = Number(job.expectedSize) > 0 ? Number(job.expectedSize) : UPDATE_INSTALLER_MAX_BYTES;
+  if (partialSize <= 0 || partialSize > maxPartialSize) {
+    if (partialSize > 0 && fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    partialSize = 0;
+  } else if ((Number(job.expectedSize) > 0 && partialSize === Number(job.expectedSize))
+      || (!(Number(job.expectedSize) > 0) && !!(job.sha256 || job.sha512))) {
+    try {
+      await verifyUpdateFile(tmpPath, job);
+      throwIfUpdateJobCanceled(job);
+      job.total = Number(job.expectedSize) > 0 ? Number(job.expectedSize) : partialSize;
+      job.received = partialSize;
+      finishUpdateInstallerFile(job, tmpPath);
+      return;
+    } catch (verifyErr) {
+      if (job.canceled) throw updateError('UPDATE_CANCELED', 'Update canceled');
+      fs.unlinkSync(tmpPath);
+      partialSize = 0;
+    }
+  }
   const candidates = await rankUpdateDownloadCandidates(job, rawCandidates);
   const failures = [];
-  fs.mkdirSync(UPDATE_DOWNLOAD_DIR, { recursive: true });
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
+    let resp = null;
+    let reader = null;
     try {
       throwIfUpdateJobCanceled(job);
-      try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
       ensureMirrorCanBeVerified(job, candidate);
       prepareUpdateJobAttempt(job, candidate, i, candidates.length);
-      job.message = job.total ? '正在下载完整安装包' : '正在下载完整安装包，等待服务器返回大小';
+      let offset = 0;
+      try {
+        const stat = fs.statSync(tmpPath);
+        if (stat.isFile() && stat.size > 0 && stat.size <= maxPartialSize) offset = stat.size;
+        else if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch (err) {
+        if (!err || err.code !== 'ENOENT') throw err;
+      }
+      job.received = offset;
+      job.total = Number(job.expectedSize) > 0 ? Number(job.expectedSize) : 0;
+      job.progress = job.total > 0 && offset > 0 ? Math.min(99, Math.floor(offset / job.total * 100)) : 0;
+      job.message = offset > 0
+        ? '正在续传安装包（已保留 ' + offset + ' 字节）'
+        : (job.total ? '正在下载完整安装包' : '正在下载完整安装包，等待服务器返回大小');
 
       const idleGuard = createUpdateDownloadIdleGuard(UPDATE_DOWNLOAD_IDLE_TIMEOUT_MS, job.cancelSignal);
       idleGuard.touch(12000);
       const expectedSha256 = normalizeDigest(job.sha256 || '', 'sha256').toLowerCase();
       const expectedSha512 = normalizeDigest(job.sha512 || '', 'sha512');
-      const sha256 = expectedSha256 ? crypto.createHash('sha256') : null;
-      const sha512 = expectedSha512 ? crypto.createHash('sha512') : null;
+      let sha256 = expectedSha256 ? crypto.createHash('sha256') : null;
+      let sha512 = expectedSha512 ? crypto.createHash('sha512') : null;
       try {
-        const resp = await openUpdateRouteResponse(job, candidate.url, {
+        const headers = { 'User-Agent': `Mineradio/${APP_VERSION}`, 'Accept-Encoding': 'identity' };
+        if (offset > 0) headers.Range = `bytes=${offset}-`;
+        resp = await openUpdateRouteResponse(job, candidate.url, {
           signal: idleGuard.signal,
-          headers: { 'User-Agent': `Mineradio/${APP_VERSION}` },
+          headers,
         });
+        if (!resp.ok && resp.status !== 416) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
+
+        const contentRangeHeader = resp.headers && resp.headers.get('content-range');
+        const parsedContentRange = contentRangeHeader ? parseUpdateContentRange(contentRangeHeader) : null;
+        if (resp.status === 416 && offset > 0 && (Number(job.expectedSize) > 0 || job.sha256 || job.sha512)
+            && parsedContentRange && parsedContentRange.unsatisfied
+            && parsedContentRange.total === offset) {
+          await cancelUnconsumedUpdateResponse(resp);
+          resp = null;
+          try {
+            await verifyUpdateFile(tmpPath, job);
+            throwIfUpdateJobCanceled(job);
+            job.total = Number(job.expectedSize) > 0 ? Number(job.expectedSize) : offset;
+            job.received = offset;
+            finishUpdateInstallerFile(job, tmpPath);
+            return;
+          } catch (verifyErr) {
+            if (/^UPDATE_SHA(?:256|512)_MISMATCH$/.test(String(verifyErr && verifyErr.code || ''))) {
+              try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+              offset = 0;
+              throw verifyErr;
+            }
+            throw verifyErr;
+          }
+        }
+        if (resp.status === 416) throw updateError('UPDATE_RANGE_INVALID', 'Server rejected the saved download offset');
         if (!resp.ok) throw updateError('HTTP_' + resp.status, 'HTTP ' + resp.status);
 
         idleGuard.touch();
-        const totalHeader = parseInt(resp.headers.get('content-length') || '0', 10) || 0;
-        const expectedSize = job.total;
-        if (expectedSize > 0 && totalHeader > 0 && totalHeader !== expectedSize) {
-          throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${expectedSize} bytes, response declared ${totalHeader}`);
+        const contentLengthText = resp.headers && resp.headers.get('content-length');
+        const hasContentLength = contentLengthText != null && String(contentLengthText).trim() !== '';
+        const totalHeader = hasContentLength ? Number(String(contentLengthText).trim()) : 0;
+        if (hasContentLength && (!Number.isSafeInteger(totalHeader) || totalHeader < 0)) {
+          throw updateError('UPDATE_RANGE_INVALID', 'Invalid Content-Length response header');
         }
-        if (!expectedSize && totalHeader > UPDATE_INSTALLER_MAX_BYTES) {
+        const expectedSize = job.total;
+        let responseStart = 0;
+        let responseTotal = 0;
+        let expectedResponseBytes = 0;
+        let appendToPartial = offset > 0;
+        if (resp.status === 206) {
+          if (!parsedContentRange || parsedContentRange.unsatisfied || parsedContentRange.start !== offset) {
+            throw updateError('UPDATE_RANGE_INVALID', `Expected bytes starting at ${offset}, got ${contentRangeHeader || 'no Content-Range'}`);
+          }
+          responseStart = parsedContentRange.start;
+          responseTotal = parsedContentRange.total;
+          expectedResponseBytes = parsedContentRange.end - parsedContentRange.start + 1;
+          if (Number(job.expectedSize) > 0 && responseTotal !== Number(job.expectedSize)) {
+            throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${job.expectedSize} bytes, range declared ${responseTotal}`);
+          }
+          if (totalHeader > 0 && totalHeader !== expectedResponseBytes) {
+            throw updateError('UPDATE_RANGE_INVALID', `Content-Length ${totalHeader} does not match range length ${expectedResponseBytes}`);
+          }
+        } else {
+          // 有些线路不支持 Range，会忽略请求并回 200；这种情况必须截断重下，不能把整包接到旧前缀后面。
+          appendToPartial = false;
+          responseStart = 0;
+          responseTotal = totalHeader || Number(job.expectedSize) || 0;
+          expectedResponseBytes = totalHeader || Number(job.expectedSize) || 0;
+          if (Number(job.expectedSize) > 0 && totalHeader > 0 && totalHeader !== Number(job.expectedSize)) {
+            throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${job.expectedSize} bytes, response declared ${totalHeader}`);
+          }
+        }
+        if (!Number(job.expectedSize) && responseTotal > UPDATE_INSTALLER_MAX_BYTES) {
           throw updateError('UPDATE_SIZE_MISMATCH', `Installer exceeds ${UPDATE_INSTALLER_MAX_BYTES} byte safety limit`);
         }
-        job.total = expectedSize || totalHeader;
+        if (appendToPartial && offset > 0) {
+          await seedUpdateHashesFromFile(tmpPath, offset, sha256, sha512);
+        } else {
+          offset = 0;
+          job.received = 0;
+          sha256 = expectedSha256 ? crypto.createHash('sha256') : null;
+          sha512 = expectedSha512 ? crypto.createHash('sha512') : null;
+        }
+        job.total = Number(job.expectedSize) || responseTotal || totalHeader || 0;
         job.updatedAt = Date.now();
         let speedWindowAt = Date.now();
         let speedWindowBytes = 0;
-        const maxBytes = expectedSize || totalHeader || UPDATE_INSTALLER_MAX_BYTES;
+        let responseReceived = 0;
+        const maxBytes = Number(job.expectedSize) || responseTotal || job.total || UPDATE_INSTALLER_MAX_BYTES;
 
         if (!resp.body || typeof resp.body.getReader !== 'function') {
           throw updateError('UPDATE_EMPTY_RESPONSE', 'Installer response has no readable body');
         }
-        const reader = resp.body.getReader();
+        reader = resp.body.getReader();
         let fileHandle = null;
         let readComplete = false;
         let streamErr = null;
         try {
-          fileHandle = await fs.promises.open(tmpPath, 'w');
+          fileHandle = await fs.promises.open(tmpPath, appendToPartial ? 'a' : 'w');
           while (true) {
             idleGuard.touch();
             // 逐块检查取消，取消必须与传输实现无关：代理线路的响应体来自 Readable.toWeb，
@@ -2138,12 +2326,22 @@ async function downloadUpdateAssetWithMirrors(job) {
             idleGuard.touch();
             throwIfUpdateJobCanceled(job);
             const buf = Buffer.from(chunk.value);
-            job.received += buf.length;
-            if (job.received > maxBytes) {
+            if (job.received + buf.length > maxBytes) {
               throw updateError('UPDATE_SIZE_MISMATCH', `Installer exceeded ${maxBytes} byte limit`);
+            }
+            if (expectedResponseBytes > 0 && responseReceived + buf.length > expectedResponseBytes) {
+              throw updateError('UPDATE_RANGE_INVALID', `Response exceeded its declared ${expectedResponseBytes} byte range`);
+            }
+            let offset = 0;
+            while (offset < buf.length) {
+              const result = await fileHandle.write(buf, offset, buf.length - offset, null);
+              if (!result.bytesWritten) throw updateError('UPDATE_WRITE_FAILED', 'Installer write returned zero bytes');
+              offset += result.bytesWritten;
             }
             if (sha256) sha256.update(buf);
             if (sha512) sha512.update(buf);
+            job.received += buf.length;
+            responseReceived += buf.length;
             speedWindowBytes += buf.length;
             const now = Date.now();
             if (now - speedWindowAt >= 900) {
@@ -2158,14 +2356,13 @@ async function downloadUpdateAssetWithMirrors(job) {
               const kb = Math.max(1, job.received / 1024);
               job.progress = Math.max(1, Math.min(88, Math.round(Math.log10(kb + 1) * 24)));
             }
-            job.message = job.total > 0 ? '正在下载完整安装包' : '正在下载完整安装包，服务器未提供总大小';
+            job.message = job.total > 0
+              ? (responseStart > 0 ? '正在续传安装包' : '正在下载完整安装包')
+              : '正在下载完整安装包，服务器未提供总大小';
             job.updatedAt = Date.now();
-            let offset = 0;
-            while (offset < buf.length) {
-              const result = await fileHandle.write(buf, offset, buf.length - offset, null);
-              if (!result.bytesWritten) throw updateError('UPDATE_WRITE_FAILED', 'Installer write returned zero bytes');
-              offset += result.bytesWritten;
-            }
+          }
+          if (expectedResponseBytes > 0 && responseReceived !== expectedResponseBytes) {
+            throw updateError('UPDATE_SIZE_MISMATCH', `Expected ${expectedResponseBytes} response bytes, got ${responseReceived}`);
           }
         } catch (err) {
           streamErr = err;
@@ -2179,18 +2376,17 @@ async function downloadUpdateAssetWithMirrors(job) {
         idleGuard.clear();
       }
 
+      throwIfUpdateJobCanceled(job);
       // 下载过程中已流式累计摘要，避免完整安装包二次整文件读盘校验。
       verifyStreamedUpdatePayload(job, job.received, sha256, sha512);
-      if (fs.existsSync(job.filePath)) fs.unlinkSync(job.filePath);
-      fs.renameSync(tmpPath, job.filePath);
-      job.status = 'ready';
-      job.progress = 100;
-      job.etaSeconds = 0;
-      job.message = '安装包已下载';
-      job.updatedAt = Date.now();
+      finishUpdateInstallerFile(job, tmpPath);
       return;
     } catch (err) {
-      try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+      if (resp && !reader) await cancelUnconsumedUpdateResponse(resp);
+      // 完整字节数却摘要不符，前缀已不可复用；丢弃后让下一条线路从头取干净副本。
+      if (/^UPDATE_SHA(?:256|512)_MISMATCH$/.test(String(err && err.code || ''))) {
+        try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+      }
       // 用户取消要立刻收尾，不再换线、不写失败线路列表。
       if (job.canceled) {
         markUpdateJobCanceled(job);

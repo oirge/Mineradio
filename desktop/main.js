@@ -4920,6 +4920,8 @@ ipcMain.handle('mineradio-local-library-db-write-assets', trustedMainFrameHandle
 
 ipcMain.handle('mineradio-local-library-db-read-lyrics', trustedMainFrameHandler((_event, keys) => withLocalLibraryStore((store) => store.readLyricRecords(Array.isArray(keys) ? keys : []))));
 
+ipcMain.handle('mineradio-local-library-db-restore-lyrics', trustedMainFrameHandler((_event, entries) => withLocalLibraryStore((store) => store.restoreLyricRecords(Array.isArray(entries) ? entries : []))));
+
 ipcMain.handle('mineradio-local-library-db-write-lyrics', trustedMainFrameHandler((_event, records) => withLocalLibraryStore((store) => {
   const list = Array.isArray(records) ? records : [records];
   let saved = 0;
@@ -4931,6 +4933,8 @@ ipcMain.handle('mineradio-local-library-db-write-lyrics', trustedMainFrameHandle
 })));
 
 ipcMain.handle('mineradio-local-library-db-bump-play', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.bumpPlayStat(payload || {}))));
+
+ipcMain.handle('mineradio-local-library-db-restore-stats', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.restoreStats(payload || {}))));
 
 ipcMain.handle('mineradio-local-library-db-clear-play', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.clearPlayStats(payload || {}))));
 

@@ -813,6 +813,72 @@ function createLocalLibraryStore(options) {
   }
 
   /**
+   * 按歌曲恢复完整翻译映射，并事务式替换旧按歌翻译缓存，保留歌词正文及其它 extra 字段。
+   * @param {Array<object>} entries 已按本机根目录重建 song_key 的翻译快照。
+   * @returns {{ok:boolean,restored?:number,error?:string}} 恢复结果。
+   */
+  function restoreLyricRecords(entries) {
+    if (!Array.isArray(entries) || entries.length > 200000) return { ok: false, error: 'LOCAL_LIBRARY_DB_RESTORE_INVALID' };
+    const records = new Map();
+    for (const entry of entries) {
+      const key = toText(entry && entry.key);
+      if (!key || records.has(key)) return { ok: false, error: 'LOCAL_LIBRARY_DB_RESTORE_INVALID' };
+      const rawMap = entry.translations;
+      if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) return { ok: false, error: 'LOCAL_LIBRARY_DB_RESTORE_INVALID' };
+      const map = {};
+      for (const lineKey of Object.keys(rawMap)) {
+        const value = rawMap[lineKey];
+        if (!lineKey || lineKey.length > 1024 || typeof value !== 'string' || !value.trim() || value.length > 12000) {
+          return { ok: false, error: 'LOCAL_LIBRARY_DB_RESTORE_INVALID' };
+        }
+        map[lineKey] = value;
+      }
+      records.set(key, { v: 1, map });
+    }
+    if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
+    try {
+      const restored = inTransaction((handle) => {
+        const insert = prepare(LYRIC_UPSERT_SQL);
+        if (!insert) throw new Error(openError || 'LOCAL_LIBRARY_DB_RESTORE_FAILED');
+        const existing = handle.prepare('SELECT song_key, extra FROM lyrics WHERE instr(extra, ?) > 0');
+        const rows = existing.all('localLyricTranslations');
+        for (const row of rows) {
+          let extra = {};
+          try { extra = row.extra ? JSON.parse(row.extra) : {}; } catch (_) {}
+          if (!extra || typeof extra !== 'object' || Array.isArray(extra)) extra = {};
+          delete extra.localLyricTranslations;
+          const update = handle.prepare('UPDATE lyrics SET extra=? WHERE song_key=?');
+          update.run(Object.keys(extra).length ? JSON.stringify(extra) : '', row.song_key);
+        }
+        const find = handle.prepare('SELECT extra FROM lyrics WHERE song_key=?');
+        const update = handle.prepare('UPDATE lyrics SET extra=? WHERE song_key=?');
+        for (const [key, translation] of records) {
+          const row = find.get(key);
+          let extra = {};
+          try { extra = row && row.extra ? JSON.parse(row.extra) : {}; } catch (_) {}
+          if (!extra || typeof extra !== 'object' || Array.isArray(extra)) extra = {};
+          extra.localLyricTranslations = translation;
+          if (row) {
+            update.run(JSON.stringify(extra), key);
+            continue;
+          }
+          const record = { id: key, localLyricTranslations: translation };
+          const text = '';
+          const params = [record.id];
+          for (const column of LYRIC_COLUMNS) params.push(columnValue(column.kind, record[column.field]));
+          params.push('', '', Buffer.byteLength(text, 'utf8'), collectExtraFields(record, LYRIC_COLUMNS, LYRIC_RESERVED_FIELDS));
+          insert.run(...params);
+        }
+        return records.size;
+      });
+      if (restored === null) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_RESTORE_FAILED' };
+      return { ok: true, restored };
+    } catch (error) {
+      return { ok: false, error: (error && error.message) || 'LOCAL_LIBRARY_DB_RESTORE_FAILED' };
+    }
+  }
+
+  /**
    * 读取歌词记录 extra JSON 中的单个字段（缺失/破损都返回 undefined）。
    * 供 writeLyricRecord 在轻量写入时保留渲染层未随本次带上的叠加字段。
    * @param {string} songKey 曲库缓存键。
@@ -895,6 +961,43 @@ function createLocalLibraryStore(options) {
     });
     if (!done) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_STAT_FAILED' };
     return { ok: true, stat: readSongStat(songKey) };
+  }
+
+  /**
+   * 用备份快照替换全部播放统计与收藏。删除和插入同属一个事务，重试不会累加，
+   * 任意一条写入失败都会恢复原表；零时间必须保持为零，不能变成“刚刚播放”。
+   * @param {{stats:Array<object>}} payload 已按本机路径重建身份的完整快照。
+   * @returns {{ok:boolean, restored?:number, error?:string}} 恢复结果。
+   */
+  function restoreStats(payload) {
+    const rows = payload && payload.stats;
+    if (!Array.isArray(rows) || rows.length > 200000) return { ok: false, error: 'LOCAL_LIBRARY_DB_RESTORE_INVALID' };
+    const keys = new Set();
+    for (const row of rows) {
+      const key = toText(row && row.key);
+      if (!key || keys.has(key)) return { ok: false, error: 'LOCAL_LIBRARY_DB_RESTORE_INVALID' };
+      keys.add(key);
+    }
+    if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
+    try {
+      const restored = inTransaction((handle) => {
+        const insert = prepare('INSERT INTO song_stats (song_key, path_key, play_count, listen_ms, completed, last_played_at, favorite, favorite_at, name, artist, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        handle.exec('DELETE FROM song_stats');
+        const now = Date.now();
+        for (const row of rows) {
+          const favorite = toFlag(row.favorite);
+          insert.run(toText(row.key), normalizeStorePathKey(row.pathKey),
+            Math.max(0, toInt(row.plays)), Math.max(0, toInt(row.listenMs)), Math.max(0, toInt(row.completed)),
+            Math.max(0, toInt(row.lastPlayedAt)), favorite, favorite ? Math.max(0, toInt(row.favoriteAt)) : 0,
+            toText(row.name), toText(row.artist), now);
+        }
+        return rows.length;
+      });
+      if (restored === null) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_RESTORE_FAILED' };
+      return { ok: true, restored: restored };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || 'LOCAL_LIBRARY_DB_RESTORE_FAILED' };
+    }
   }
 
   /**
@@ -1104,8 +1207,10 @@ function createLocalLibraryStore(options) {
     readAssetRecords: readAssetRecords,
     writeAssetRecord: writeAssetRecord,
     readLyricRecords: readLyricRecords,
+    restoreLyricRecords: restoreLyricRecords,
     writeLyricRecord: writeLyricRecord,
     bumpPlayStat: bumpPlayStat,
+    restoreStats: restoreStats,
     clearPlayStats: clearPlayStats,
     setFavorite: setFavorite,
     readStats: readStats,

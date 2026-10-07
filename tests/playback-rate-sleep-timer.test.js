@@ -261,7 +261,12 @@ function createOutputDeviceSandbox() {
     removeItem(key) { delete store[key]; },
   };
   function AudioContextStub() {}
-  AudioContextStub.prototype.setSinkId = function (id) { calls.setSinkId.push(id); this.sinkId = id; return Promise.resolve(); };
+  AudioContextStub.prototype.setSinkId = function (id) {
+    calls.setSinkId.push(id);
+    if (id && this.failIds && this.failIds.has(id)) return Promise.reject(Object.assign(new Error('device missing'), { name: 'NotFoundError' }));
+    this.sinkId = id;
+    return Promise.resolve();
+  };
   const createdOptions = [];
   const documentStub = {
     getElementById() { return null; },
@@ -294,6 +299,8 @@ function createOutputDeviceSandbox() {
   };
   context.outputDeviceSetting = { deviceId: '', label: '' };
   context.outputDeviceList = [];
+  context.outputDeviceListReady = false;
+  context.outputDeviceEnumerationReliable = false;
   vm.runInNewContext(`${OUTPUT_DEVICE_SOURCE}
 this.normalizeOutputDeviceSetting = normalizeOutputDeviceSetting;
 this.readSavedOutputDeviceSetting = readSavedOutputDeviceSetting;
@@ -309,7 +316,8 @@ this.getList = function(){ return outputDeviceList; };`, context);
 test('输出设备走 AudioContext.setSinkId，而不是元素级', () => {
   // 本播放器的声音被 MediaElementSource 拉进 WebAudio 图，元素级 setSinkId 无效，
   // 必须作用在 AudioContext 上——这条是本次实现的核心约束，钉住防止被"优化"回元素级。
-  assert.match(OUTPUT_DEVICE_SOURCE, /audioCtx\.setSinkId\(deviceId\)/);
+  assert.match(OUTPUT_DEVICE_SOURCE, /var context = audioCtx;/);
+  assert.match(OUTPUT_DEVICE_SOURCE, /context\.setSinkId\(deviceId\)/);
   // 去掉注释行再查负例，否则说明文字里提到的 "audio.setSinkId()" 会误判。
   const codeOnly = OUTPUT_DEVICE_SOURCE.split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join('\n');
   assert.doesNotMatch(codeOnly, /\.el\.setSinkId\(|audio\.setSinkId\(/);
@@ -319,7 +327,6 @@ test('输出设备走 AudioContext.setSinkId，而不是元素级', () => {
 
 test('设备列表首项恒为系统默认，audiooutput 之外的设备不列出', async () => {
   const h = createOutputDeviceSandbox();
-  await h.context.outputDeviceSetting; // no-op
   const list = await h.context.listAudioOutputDevices();
   const ids = list.map((d) => d.deviceId);
   assert.equal(ids[0], '', '首项必须是空串（系统默认）');
@@ -328,18 +335,68 @@ test('设备列表首项恒为系统默认，audiooutput 之外的设备不列�
   assert.ok(!ids.includes('mic1'), '麦克风（audioinput）不能混进输出列表');
   const spk2 = list.find((d) => d.deviceId === 'spk2');
   assert.match(spk2.label, /输出设备/, '没有 label 时用出现顺序兜底命名');
+  assert.equal(h.context.outputDeviceEnumerationReliable, true);
 });
 
 test('选择设备写进存档并调用 setSinkId，空串代表系统默认', async () => {
   const h = createOutputDeviceSandbox();
   await h.context.listAudioOutputDevices().then((l) => { /* 先不写 state */ });
   // setOutputDevice 会自己从 outputDeviceList 里找 label；直接调也应在无列表时容错。
-  h.context.setOutputDevice('spk1', { toast: false });
+  await h.context.setOutputDevice('spk1', { toast: false });
   assert.equal(h.calls.setSinkId[h.calls.setSinkId.length - 1], 'spk1');
   assert.equal(JSON.parse(h.store['mineradio-output-device-v1']).deviceId, 'spk1');
-  h.context.setOutputDevice('', { toast: false });
+  await h.context.setOutputDevice('', { toast: false });
   assert.equal(h.calls.setSinkId[h.calls.setSinkId.length - 1], '', '系统默认传空串');
   assert.equal(JSON.parse(h.store['mineradio-output-device-v1']).deviceId, '');
+});
+
+test('输出设备异步切换串行提交：旧请求迟到不得覆盖用户最后选择', async () => {
+  const h = createOutputDeviceSandbox();
+  let resolveFirst;
+  const calls = [];
+  h.context.audioCtx.setSinkId = function(id) {
+    calls.push(id);
+    if (id === 'spk1') return new Promise((resolve) => { resolveFirst = () => { this.sinkId = id; resolve(); }; });
+    this.sinkId = id;
+    return Promise.resolve();
+  };
+  const first = h.context.setOutputDevice('spk1', { toast: false });
+  await Promise.resolve();
+  const second = h.context.setOutputDevice('spk2', { toast: false });
+  resolveFirst();
+  await Promise.all([first, second]);
+  assert.deepEqual(calls, ['spk1', 'spk2']);
+  assert.equal(h.context.audioCtx.sinkId, 'spk2');
+  assert.equal(h.context.outputDeviceRuntime.status, 'applied');
+});
+
+test('拔出所选输出设备时回退到系统默认，重连后自动恢复原选择', async () => {
+  const h = createOutputDeviceSandbox();
+  const list = await h.context.listAudioOutputDevices();
+  h.context.outputDeviceList = list;
+  h.context.outputDeviceListReady = true;
+  await h.context.setOutputDevice('spk1', { toast: false });
+  h.context.outputDeviceEnumerationReliable = true;
+  h.context.outputDeviceListReady = true;
+  h.context.outputDeviceList = [{ deviceId: '', label: '系统默认' }, { deviceId: 'spk2', label: '另一扬声器' }];
+  await h.context.applyOutputDeviceToAudioContext();
+  assert.equal(h.context.audioCtx.sinkId, '');
+  assert.equal(h.context.outputDeviceSetting.deviceId, 'spk1', '持久化首选需保留，避免拔出后丢失设置');
+  assert.equal(h.context.outputDeviceRuntime.status, 'fallback');
+  h.context.outputDeviceList = list;
+  await h.context.applyOutputDeviceToAudioContext();
+  assert.equal(h.context.audioCtx.sinkId, 'spk1');
+  assert.equal(h.context.outputDeviceRuntime.status, 'applied');
+});
+
+test('枚举 API 尚未获得标签权限时明确说明当前只能使用系统默认', async () => {
+  const h = createOutputDeviceSandbox();
+  h.context.navigator.mediaDevices.enumerateDevices = async () => [{ kind: 'audiooutput', deviceId: 'default', label: '' }];
+  const list = await h.context.listAudioOutputDevices();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].deviceId, '');
+  assert.match(h.context.outputDeviceRuntime.message, /系统授权麦克风访问/);
+  assert.equal(h.context.outputDeviceEnumerationReliable, false);
 });
 
 test('输出设备已存档、键在渲染层与桌面壳登记为持久化键', () => {
@@ -380,4 +437,3 @@ test('主界面快捷控件改的是唯一设置状态，并与设置面板互�
   // 启动时绑定一次（中间可插入其他初始化，如歌单架实现切换）。
   assert.match(APP_SOURCE, /initPlaybackRateControls\(\);\s*initSleepTimerControls\(\);\s*initOutputDeviceControls\(\);[\s\S]{0,220}?bindMainQuickControls\(\);/);
 });
-
