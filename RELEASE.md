@@ -1,5 +1,13 @@
 # 发布流程
 
+## v2.2.8 更新弹窗短窗口适配完善（发布准备中）
+
+- **版本元数据**：`package.json`、`package-lock.json`、前端 `APP_VERSION`、前后端更新说明和 Release workflow 默认 tag 已统一为 `2.2.8`；应用 ID、安装身份、用户数据目录与自动更新线路保持不变。
+- **内容**：弹窗高度按视口可用空间计算；短窗口缩小留白；长更新说明仍在内容区滚动，版本标签和操作按钮保持可见；长版本号使用紧凑琥珀色标签并自动省略。
+- **验证**：全量 Node 回归 `1325/1325`；4 档缩放的真实 Electron/Chromium 布局检查 `128/128`，包含应用可用最小内容尺寸 `480×270`；文档编码检查 `5/5`、元数据/更新说明测试 `18/18`、JavaScript 语法和 `git diff --check` 均通过。
+- **Windows 本地构建**：`npm run build:win -- --publish never` 成功，生成 `Mineradio-oirge-2.2.8-Setup.exe`（102393340 B）、blockmap（106472 B）和 `latest.yml`（359 B）。`latest.yml` 的 `2.2.8`、安装包大小及 SHA-512 已与本地安装包实测一致；本地安装包 SHA256 为 `1701bf1b169e27950ae270faf63a934ec8e61e8c8d434145582c342ce7523e27`。
+- **发布状态**：代码尚未合入 `main`，GitHub Release 尚未生成；合并后由官方 Windows workflow 从 `v2.2.8` tag 重建并上传资产，再核对公开 Latest 与自动更新清单。
+
 ## v2.2.7 桌面歌词显示与自动恢复修复
 
 - **版本元数据**：package.json、package-lock.json、前端 APP_VERSION 和 Release workflow 默认 tag 升为 2.2.7；前后端更新说明同步。应用 ID、安装身份和用户数据目录不变。

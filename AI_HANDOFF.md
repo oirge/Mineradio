@@ -4,6 +4,12 @@
 
 ## 当前权威入口（2026-10-07）
 
+- **v2.2.8 正在准备发布**：当前分支 `codex/release-v2.2.8` 从最新 `origin/main`（`e67888e`，含 v2.2.7 发布记录 PR #106）创建。修复更新弹窗在短窗口被裁切、长说明挤占操作区，并收紧版本标签视觉；发版说明见 `RELEASE.md`。版本元数据、前后端更新文案和 workflow 已统一到 2.2.8。
+- **本轮验证**：全量 Node `1325/1325`；真实 Electron/Chromium 4 档缩放布局检查 `128/128`，含 `480×270`；编码 `5/5`，元数据/公告/workflow `18/18`，JavaScript 语法、`git diff --check` 通过。`npm run build:win -- --publish never` 本地构建成功；EXE `102393340` B / SHA256 `1701bf1b169e27950ae270faf63a934ec8e61e8c8d434145582c342ce7523e27`，blockmap `106472` B / SHA256 `bc3fac6e377a718e0b3f74b7bf9653e55dfb4e4af0a242ac945673b6e7dccbd8`，`latest.yml` `359` B / SHA256 `f64c2f0fc58bfce66f72dfe91f037794c91e7154e03f86be3bf7b83c21df43ee`；更新清单 SHA512 与本机安装包一致。
+- **当前发版进度**：代码提交 `c43f12a` 已推送；[PR #107](https://github.com/oirge/Mineradio/pull/107) 已创建，等待 GitHub 两组 Verify。检查通过后继续合并、在合并提交打 `v2.2.8` tag 并触发官方 Windows Release workflow；核对四项资产后正式设为 Latest。不要改已安装目录 `D:\Mineradio-oirge` 或旧分支 `D:\Mineradio-src`。
+- **上个正式版仍是 v2.2.7**：PR #105 合入，PR #106 补发布记录；Latest Release `405504333`。完整构建与远端摘要记录见 `RELEASE.md`。
+- 仓库：`https://github.com/oirge/Mineradio`。当前工作树是隔离检出 `D:\Mineradio-release-2.2.6`，工作分支为本轮 `codex/release-v2.2.8`。
+
 - **当前版本 v2.2.7 已正式发布**：桌面歌词显示与自动恢复修复已合入 `main`；PR #105，merge/tag commit `5fe9321208772270fce64d62b8461c613500ff15`，Release `405504333` 于北京时间 `2026-10-07 15:47:30` 发布并设为 Latest。官方 Windows 构建 `37588692774` 成功；PR 双 Verify、主分支 Verify `37588639141` 均通过。四项线上资产已完整回下载并通过 GitHub digest / SHA256SUMS 校验，`latest.yml` 中的安装包 SHA-512 也与本地重算匹配。详见 `RELEASE.md`。
 - **歌词不可见热修已包含在 v2.2.7**：用户选择重启验证后修复了本机旧版；热修代码现已提交、合并、正式发布。装包 smoke 覆盖主窗口隐藏、renderer 崩溃、关闭后重开，真实本机歌曲验证确认播放不中断。初始安装目录缺失的 `resources` 与 `locales` 已补回，原 ASAR 与用户设置备份仍保留在 `D:\Mineradio-oirge\backups\desktop-lyrics-fix-20261007-152457`。
 - 仓库：`https://github.com/oirge/Mineradio`。本轮在隔离工作树 `D:\Mineradio-release-2.2.6` 完成 v2.2.6；代码分支 `codex/release-v2.2.6` 的提交 `3601ae7` 已经 [PR #103](https://github.com/oirge/Mineradio/pull/103) 合并至 `main`。tag `v2.2.6` 指向合并提交 `17025f0f20ad41065eae0685a20607ab4d0cc30b`。不要改动原安装目录 `D:\Mineradio-oirge` 或本轮以外的用户修改。
@@ -82,6 +88,12 @@
 这个目录是人工归档区，不参与软件更新流程。
 
 ## 已完成工作日志
+
+### 2026-10-07（v2.2.8 弹窗适配，发布准备中）
+
+- 在最新 `origin/main` 上修复更新弹窗短窗口的裁切：内容说明区独立滚动，版本和底部操作区固定可见；版本号改紧凑琥珀标签，长号省略。
+- 扩展真实 Electron 布局复验，将应用最小尺寸 `480×270` 纳入 4 档系统缩放检查，`128/128` 通过；全量 Node `1325/1325`、编码 `5/5`、更新文案和 release workflow `18/18`、语法检查及空白检查通过。
+- 本机 Windows NSIS 构建成功并核对 `latest.yml` SHA-512。分支 `codex/release-v2.2.8`，提交 `c43f12a` 已推送并创建 PR #107；Verify 运行中，tag 和 Release 待后续完成。最终线上资产记录待官方 workflow 完成后更新 `RELEASE.md` 与本节。
 
 ### 2026-10-07（v2.2.7 已正式发布）
 
