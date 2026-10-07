@@ -13,7 +13,7 @@ const root = path.resolve(__dirname, '..');
 const args = process.argv.slice(2);
 const option = name => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 const baseline = args.includes('--baseline');
-const sizes = [[980, 550], [960, 540], [640, 360], [360, 300], [1280, 720], [1920, 1080]];
+const sizes = [[980, 550], [960, 540], [640, 360], [480, 270], [360, 300], [1280, 720], [1920, 1080]];
 
 /** Launch isolated Electron workers without showing native windows or consoles. */
 async function launchWorkers() {
@@ -178,7 +178,10 @@ async function inspectLayout(testCase) {
     ['#update-check-btn', 'check button'], ['#update-primary-btn', 'update button'], ['#update-secondary-btn', 'cancel button'],
   ]) bounded(get(selector), label, true);
   expect(panel.scrollWidth <= panel.clientWidth + 1, 'dialog has horizontal overflow');
-  expect(version.scrollWidth <= version.clientWidth + 1, 'version has horizontal overflow');
+  const versionStyle = getComputedStyle(version);
+  expect(versionStyle.whiteSpace === 'nowrap', 'version can wrap into the dialog header');
+  expect(versionStyle.textOverflow === 'ellipsis', 'long version is not visibly truncated');
+  expect(versionStyle.overflowX === 'hidden' || versionStyle.overflowX === 'clip', 'long version can escape its label');
 
   const body = get('.update-panel-body');
   const actionBefore = rect(actions);
