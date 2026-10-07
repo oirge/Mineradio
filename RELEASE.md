@@ -6,7 +6,13 @@
 - **内容**：桌面歌词增加加载完成显示和 2 秒首帧兜底；加载失败/renderer 崩溃最多三次退避恢复并补最新状态；唤醒、解锁、显示器变化恢复显示/置顶并纠正不可达位置；主窗口收进托盘不连带隐藏歌词。
 - **验证基线**：修复阶段全量 Node 1325/1325；真 Electron 屏蔽 ready-to-show、强制歌词 renderer 崩溃均恢复。安装版实测隐藏主窗口、歌词关闭重开、崩溃恢复成功且音乐连续播放。真实休眠/显示器热插拔未主动触发，不把模拟验证当硬件实测。
 - **2.2.7 发布前复验**：全量 Node 1325/1325、文档编码 5/5、JS 语法和空白检查通过。真正的打包 EXE 使用独立数据目录进行冒烟，主进程与 renderer 版本均为 2.2.7，主窗口隐藏、歌词崩溃恢复、关闭重开全部通过，截图非透明像素 118930；未干扰用户正在使用的 2.2.6 热修实例。
-- **发布状态**：用户已授权发布；构建、CI、PR、tag 和线上资产核对结果完成后补录。不要把发布准备视为已上线。
+- **GitHub 发布结果（2026-10-07）**：[PR #105](https://github.com/oirge/Mineradio/pull/105) 已合并；tag `v2.2.7` 指向 merge commit `5fe9321208772270fce64d62b8461c613500ff15`。PR Verify 两组通过，合并后 Verify `37588639141` 通过；[Build and Release `37588692774`](https://github.com/oirge/Mineradio/actions/runs/37588692774) 成功。Release `405504333` 于北京时间 `2026-10-07 15:47:30` 正式发布并设为 Latest（`draft=false` / `prerelease=false`）；公开 `releases/latest` 与 `latest.yml` 均为 `v2.2.7`。
+- **线上资产核对**：安装器、blockmap、`latest.yml` 和 SHA256 清单四项均从 GitHub 回下载；文件大小和 SHA256 与 GitHub 服务端 digest 及 `SHA256SUMS.txt` 一致。安装器 SHA-512 与公开 `latest.yml` 声明一致。
+  - `Mineradio-oirge-2.2.7-Setup.exe`：102394759 B，SHA256 `6defff3a5de582e95edab43e09e168bf23771dcc5c27b9ffe1b24de68fca2410`。
+  - `Mineradio-oirge-2.2.7-Setup.exe.blockmap`：106483 B，SHA256 `6bdda91f18a262dd1a66332b289c1801c635886f1c4d722adad60c0b08056e92`。
+  - `latest.yml`：359 B，SHA256 `51296e217d0234d8a9ffdbdcc1f6ee6fd648749b33af0234d701b9702cb4b234`。
+  - `Mineradio-oirge-2.2.7-SHA256SUMS.txt`：282 B，SHA256 `c96c9ff2c9d93a70e66a2558ca81fd158754582e366c94442e34754aaf6ebb17`。
+- **更新通道**：公开 `releases/latest/download/latest.yml` 返回 `2.2.7`，安装包大小 `102394759` B，SHA-512 `GqPfVukUSfoD53vfmydZtptAiAyLVhGim6XX0gFkOhbXJ1Bl4Gb2yR9hwttQFP/Mw+OrRBmNATRE9cxHjE131g==` 已和回下载的安装包实测一致。
 
 ## v2.2.6 整机备份、输出设备与更新下载修复
 
