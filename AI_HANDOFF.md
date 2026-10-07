@@ -4,6 +4,8 @@
 
 ## 当前权威入口（2026-10-07）
 
+- **发布 v2.2.7 进行中**：用户在本机热修验证后明确要求“发布新版”；分支 codex/release-v2.2.7 包含桌面歌词恢复模块、11 项新增测试和新版元数据。完成 CI、构建、PR 合并、tag 与 Release 资产校验后补录结果；此前“未授权发布”仅表示热修任务结束时的历史状态。
+- **2026-10-07 后续本地热修：桌面歌词不可见。** 用户本轮要求修复并明确选择“现在重启并验证”，已更新安装目录 D:\Mineradio-oirge 并重启；下述上一轮“不改原安装目录”只适用于之前的发布任务。修复源码在本工作树，未提交/未推送/未发新版，安装版版本号仍为 2.2.6。详见下面的本地热修日志。
 - 仓库：`https://github.com/oirge/Mineradio`。本轮在隔离工作树 `D:\Mineradio-release-2.2.6` 完成 v2.2.6；代码分支 `codex/release-v2.2.6` 的提交 `3601ae7` 已经 [PR #103](https://github.com/oirge/Mineradio/pull/103) 合并至 `main`。tag `v2.2.6` 指向合并提交 `17025f0f20ad41065eae0685a20607ab4d0cc30b`。不要改动原安装目录 `D:\Mineradio-oirge` 或本轮以外的用户修改。
 - 用户已明确授权完成修复、推送分支、创建并合并 PR，以及发布新版。[v2.2.6](https://github.com/oirge/Mineradio/releases/tag/v2.2.6) 已于 `2026-10-07T06:53:49Z` 正式发布并设为 Latest（Release ID `405458964`），不是待发布状态。发布记录在 `docs/record-v2.2.6-release` 分支补录，不改动已发布 tag 或资产。
 - 本轮改动包含事务式恢复统计与本地歌曲译文、扩充整机备份内容、输出设备切换状态与断连恢复、损坏本地歌曲自动跳过、安装包断点续传。
@@ -80,6 +82,15 @@
 这个目录是人工归档区，不参与软件更新流程。
 
 ## 已完成工作日志
+
+### 2026-10-07（桌面歌词不可见：本地热修，未发布）
+
+- 初始现场：D:\Mineradio-oirge 仅有 EXE/DLL，缺少 resources 和 locales，无二创进程；快捷方式目标正确。用本机 v2.2.6 dist/win-unpacked 补回缺失目录，未覆盖既有文件或曲库。EXE 与构建目录 SHA256 相同。不能据此断言资源缺失是用户此前每次歌词消失的唯一原因。
+- 代码缺口：歌词窗口 show:false 只靠一次 ready-to-show 显示；did-finish-load 只监听一次且不负责显示；加载失败只记日志，renderer 崩溃没有恢复。新增 desktop/desktop-lyrics-recovery.js：加载完成显示 + 2s 首帧看门狗、至多三次指数退避重载、每次加载补最新状态、实例所有权/关闭/退出门控与定时器释放。唤醒、解锁、显示器变化重新显示并 invalidate，显示器增删补位置纠偏；不重载主播放器、不抢焦点、不把主窗口 hide 传播给歌词。
+- 回归：新增恢复测试 11 项，npm test **1325/1325**；JS 语法与 git diff --check 通过。隔离真 Electron（software GPU）主动屏蔽 ready-to-show、强制 renderer crash，歌词可见并恢复正文；产物在 .tmp-lyrics-fix/。
+- ASAR 热修仅修改 desktop/main.js，新增恢复模块，其余文件字节与 unpack 标记逐项核对不变；原包 SHA256 为 49fc434b81ce4fe441d5de03441775a628afc37e4566b796bf3c1b9058fdbeaa，热修包为 6d78ee389f55a9c239a0e937eb87295c2b429103f2c6adb6ad7eaf2f09d17369。原包及两份设置备份在 D:\Mineradio-oirge\backups\desktop-lyrics-fix-20261007-152457。未修改发布区 Setup、latest.yml、blockmap 或线上资产。
+- 安装版实测：真实歌曲播放时主窗口隐藏，歌词 visible:true、置顶、正文 opacity=1、body opacity=.92；强制歌词 renderer 崩溃恢复成功，关闭后窗口释放、重开显示；截图非透明像素 55617，播放时间从 104.399819 连续推进至 111.058141 秒，无暂停。诊断 inspector 端口已关闭，播放器保持运行。字号仍是用户原来的 .20，未改动视觉偏好或手动位置。
+- D:\Mineradio-src 是旧 2.2.4 分支，任务开始前已有未提交的 suspendDesktopLyricsForMainHide 修改，本轮未覆盖它；不要从旧分支打包，否则会重新引入“主界面收进托盘，歌词也消失”的行为。
 
 ### 2026-10-07（v2.2.6 已正式发布）
 
@@ -254,6 +265,7 @@
 
 ## 未完成/待确认事项
 
+- 桌面歌词热修已在本机安装并验证，源码尚未提交、推送或发布；下次用户授权发版时应包含恢复模块与测试，避免重装原版 2.2.6 覆盖热修。真实系统休眠/显示器热拔插未主动执行，仅验证接线和恢复入口；不把模拟验证写成真实电源/硬件测试。
 - `includeLyrics:false` 目前只阻止把歌词应用到歌曲对象，IndexedDB `store.get()` 仍会 structured-clone 完整合并记录；真正降低大批量补水峰值需要把轻量资产摘要与歌词重载荷拆成独立记录/存储，不能只增加无效 selection 参数。
 - 外置本地封面仍可能走完整 data URL；后续可利用已有同源 `localFileProxyUrl` 或 Blob/URL 缩略图接缝，避免主进程 Buffer、base64 字符串和 renderer 解码对象同时驻留。
 - 迷你播放器持续 `did-fail-load` 或“加载完成后很快再次崩溃”仍可能跨窗口反复重建。下一轮应先建立纯 Node fake clock / BrowserWindow 回归接缝，再由用户确认重试上限与退避策略，不能直接加入猜测性容错。

@@ -6,6 +6,7 @@ const { pathToFileURL } = require('url');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
+const { createDesktopLyricsRecovery } = require('./desktop-lyrics-recovery');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache, miniPlayerThemeSignature } = require('./mini-player-state-cache');
 const {
@@ -149,6 +150,7 @@ let desktopLyricsHotBounds = null;
 let desktopLyricsLastMiddleAt = 0;
 let desktopLyricsLastLeftAt = 0;
 let desktopLyricsWindowGeometrySignature = '';
+let desktopLyricsRecovery = null;
 const DESKTOP_LYRICS_SIZE_MIN = 0.20;
 const DESKTOP_LYRICS_SIZE_MAX = 1.55;
 const DESKTOP_LYRICS_GLOW_MIN = 0;
@@ -3045,17 +3047,6 @@ function createDesktopLyricsWindow(payload = {}) {
   positionDesktopLyricsWindow(state, { force: !!resetManualBounds || !desktopLyricsUserBounds });
 
   /**
-   * 仅显示仍持有全局槽位的歌词窗口，隔离旧实例迟到的 ready 事件。
-   * @returns {void}
-   */
-  function showOwnedDesktopLyricsWindow() {
-    if (desktopLyricsWindow !== win || win.isDestroyed()) return;
-    win.showInactive();
-    sendDesktopLyricsWindowGeometry(true);
-    sendDesktopLyricsState(true);
-  }
-
-  /**
    * 页面加载完成后只为当前歌词窗口发送状态。
    * @returns {void}
    */
@@ -3072,6 +3063,8 @@ function createDesktopLyricsWindow(payload = {}) {
    */
   function releaseOwnedDesktopLyricsWindow() {
     if (desktopLyricsWindow !== win) return;
+    if (desktopLyricsRecovery) desktopLyricsRecovery.dispose();
+    desktopLyricsRecovery = null;
     desktopLyricsWindow = null;
     stopDesktopLyricsMousePoller();
     desktopLyricsMouseIgnored = null;
@@ -3096,25 +3089,20 @@ function createDesktopLyricsWindow(payload = {}) {
     rememberDesktopLyricsBounds();
   }
 
-  /**
-   * 记录桌面歌词页面加载失败原因。
-   * @param {Error} error 加载错误。
-   * @returns {void}
-   */
-  function reportDesktopLyricsLoadFailure(error) {
-    console.warn('Desktop lyrics load failed:', error.message);
-  }
-
-  win.once('ready-to-show', showOwnedDesktopLyricsWindow);
+  desktopLyricsRecovery = createDesktopLyricsRecovery(win, {
+    isCurrent: () => desktopLyricsWindow === win && desktopLyricsStateCache.enabled
+      && !appQuitting && !gpuGuardRelaunching,
+    syncState: sendOwnedDesktopLyricsState,
+    url: overlayUrl('desktop-lyrics.html'),
+  });
   win.webContents.on('did-start-loading', resetOwnedDesktopLyricsHotBounds);
-  win.webContents.once('did-finish-load', sendOwnedDesktopLyricsState);
   win.on('close', rememberOwnedDesktopLyricsBounds);
   win.on('closed', releaseOwnedDesktopLyricsWindow);
   win.on('moved', () => {
     sendDesktopLyricsWindowGeometry();
     rememberOwnedDesktopLyricsBounds();
   });
-  win.loadURL(overlayUrl('desktop-lyrics.html')).catch(reportDesktopLyricsLoadFailure);
+  desktopLyricsRecovery.load();
   return win;
 }
 
@@ -3125,6 +3113,8 @@ function createDesktopLyricsWindow(payload = {}) {
  */
 function closeDesktopLyricsWindow(options = {}) {
   const broadcast = options.broadcast !== false;
+  if (desktopLyricsRecovery) desktopLyricsRecovery.dispose();
+  desktopLyricsRecovery = null;
   desktopLyricsStateCache.setEnabled(false);
   desktopLyricsPointerCapture = false;
   desktopLyricsMouseIgnored = null;
@@ -3141,6 +3131,11 @@ function closeDesktopLyricsWindow(options = {}) {
   }
   desktopLyricsWindow = null;
   if (broadcast) broadcastDesktopLyricsEnabledState(false);
+}
+
+/** @returns {void} 解锁、唤醒或显示器变化后恢复歌词合成表面，不重载播放器。 */
+function refreshDesktopLyricsWindow() {
+  if (desktopLyricsRecovery) desktopLyricsRecovery.show();
 }
 
 function nativeWindowHandleDecimal(win) {
@@ -5862,17 +5857,22 @@ if (!gotSingleInstanceLock) {
       scheduleWindowStateSend(mainWindow);
       // 改分辨率或改缩放会让透明窗口的合成表面失效，和睡眠回来是同一类黑屏。
       nudgeMainWindowRepaint('display-metrics-changed');
+      refreshDesktopLyricsWindow();
     });
     screen.on('display-added', () => {
       keepMainWindowInsideDisplay(mainWindow);
+      positionDesktopLyricsWindow();
       sendDesktopLyricsWindowGeometry(true);
+      refreshDesktopLyricsWindow();
       handleMiniPlayerDisplayTopologyChanged();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
     });
     screen.on('display-removed', () => {
       keepMainWindowInsideDisplay(mainWindow);
+      positionDesktopLyricsWindow();
       sendDesktopLyricsWindowGeometry(true);
+      refreshDesktopLyricsWindow();
       handleMiniPlayerDisplayTopologyChanged();
       scheduleMiniPlayerRecovery(80);
       scheduleWindowStateSend(mainWindow);
@@ -5885,6 +5885,8 @@ if (!gotSingleInstanceLock) {
     // 主窗口是透明无边框的，合成表面丢了之后 Chromium 不一定自己重新出图 —— 那就是一片全黑。
     powerMonitor.on('resume', () => nudgeMainWindowRepaint('system-resume'));
     powerMonitor.on('unlock-screen', () => nudgeMainWindowRepaint('screen-unlock'));
+    powerMonitor.on('resume', refreshDesktopLyricsWindow);
+    powerMonitor.on('unlock-screen', refreshDesktopLyricsWindow);
     powerMonitor.on('resume', () => restoreUnexpectedFullscreenVisibility(mainWindow, 'system-resume'));
     powerMonitor.on('unlock-screen', () => restoreUnexpectedFullscreenVisibility(mainWindow, 'screen-unlock'));
     createTray();

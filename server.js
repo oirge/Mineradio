@@ -78,10 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '整机备份恢复以事务覆盖播放统计，并迁移自定义歌词、手选歌词和本地歌曲译文',
-  '输出设备临时不可用时回退到系统默认，重连后恢复已保存选择并展示切换结果',
-  '自动续播遇到损坏或不支持的本地歌曲时有限跳过，避免坏歌反复循环',
-  '完整安装包支持按已校验区间断点续传，断网 / 取消 / 换线路后继续并执行完整摘要校验',
+  '修复桌面歌词已开启却不显示：页面加载完成主动显示，并增加首帧超时兜底',
+  '歌词窗口加载失败或渲染进程崩溃后自动有限重试，恢复当前歌词而不中断音乐',
+  '解锁、休眠唤醒或显示器变化后恢复歌词窗口显示与置顶，修正不可达的位置',
+  '主界面收进托盘时桌面歌词继续显示，保留原有字号、透明度与拖动位置',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
