@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复非全屏和短窗口下更新弹窗被裁切：按可用高度适配，并在极短窗口收紧留白',
-  '超长更新说明在内容区独立滚动，版本号、下载线路、状态和底部操作按钮保持可见',
-  '版本号改为紧凑的琥珀色标签，长版本号自动省略，避免横向撑破弹窗',
+  '修复已翻译歌曲仍显示“翻译歌词 0/1”：切歌或取消任务后及时收起旧进度',
+  '已有译文、命中本地缓存或没有待译歌词时清理残留提示，保留已保存译文',
+  '翻译完成和失败提示仍按原定时间自动收起，重试与请求取消行为保持正常',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

@@ -102,7 +102,7 @@ test('network failure retries after 2 and 5 seconds, then succeeds', async () =>
   await c.start(); await c.fire(2000); await c.fire(5000); await c.finish();
   assert.equal(c.requests.length, 3); assert.equal(c.scope.lyricsLines[0].translation, 'A gentle breeze passes by.');
   assert.equal(c.scope.lyricLlmTranslateState.running, false);
-  assert.ok(c.chips.some(v => v.startsWith('翻译完成 1/1')));
+  assert.ok(c.chips.some(v => v != null && v.startsWith('翻译完成 1/1')));
 });
 
 test('raw fetch rejection is retryable', async () => {
@@ -117,7 +117,7 @@ test('retry exhaustion stops without persisted failure or a render-triggered loo
   for (let i = 0; i < 10; i++) c.scope.scheduleLyricLlmTranslation();
   assert.equal(c.requests.length, 3); assert.equal(c.timers.size, 0);
   assert.equal(Object.keys(c.scope.readLyricLlmTranslateCache()).length, 0);
-  assert.ok(c.chips.some(v => v.includes('1 行失败')));
+  assert.ok(c.chips.some(v => v != null && v.includes('1 行失败')));
   c.scope.retryLyricLlmTranslation(); await c.fire(0); assert.equal(c.requests.length, 4);
 });
 
@@ -125,7 +125,7 @@ test('invalid response language is retried, never cached as empty or reported co
   const c = client({ reply: reply('1. 微风轻轻吹过') });
   await c.start(); await c.fire(2000); await c.fire(5000); await c.finish();
   assert.equal(c.requests.length, 3); assert.equal(Object.keys(c.scope.readLyricLlmTranslateCache()).length, 0);
-  assert.equal(c.chips.some(v => v.startsWith('翻译完成')), false);
+  assert.equal(c.chips.some(v => v != null && v.startsWith('翻译完成')), false);
 });
 
 test('partial result retries only missing numbered lines without shifting translations', async () => {

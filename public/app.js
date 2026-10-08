@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.8';
+var APP_VERSION = '2.2.9';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,11 +677,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '更新弹窗适配小窗口，更新说明再长也不挡住版本和操作按钮。',
+  hero: '已翻译歌曲及时收起旧进度，本地译文继续复用。',
   notes: [
-    '修复非全屏和短窗口下更新弹窗被裁切：按可用高度适配，并在极短窗口收紧留白。',
-    '超长更新说明在内容区独立滚动，版本号、下载线路、状态和底部操作按钮保持可见。',
-    '版本号改为紧凑的琥珀色标签，长版本号自动省略，避免横向撑破弹窗。'
+    '修复已翻译歌曲仍显示“翻译歌词 0/1”：切歌或取消任务后及时收起旧进度。',
+    '已有译文、命中本地缓存或没有待译歌词时清理残留提示，保留已保存译文。',
+    '翻译完成和失败提示仍按原定时间自动收起，重试与请求取消行为保持正常。'
   ]
 };
 function readSavedVolume() {
@@ -10014,6 +10014,7 @@ function cancelLyricLlmTranslation() {
   state.failures = Object.create(null);
   state.total = 0;
   state.done = 0;
+  setLyricTranslateChip(null);
 }
 function lyricTranslationRequestError(data, status) {
   var detail = data || {};
@@ -10068,7 +10069,11 @@ function scheduleLyricLlmTranslation(force) {
     state.target = lyricTranslateTargetValue();
     state.fallback = lyricTranslateFallbackEnabled();
   }
-  if (state.running || state.scheduled || !lyricsLines.length) return;
+  if (state.running || state.scheduled) return;
+  if (!lyricsLines.length) {
+    if (!lyricTranslateChipHideTimer) setLyricTranslateChip(null);
+    return;
+  }
   // 本地歌：先把该曲落盘的按歌译文并入内存缓存，命中后老歌重播就不必再打网络。
   if (songLyricTranslationDbEnabled()) {
     var dbSong = (typeof currentLyricSong === 'function') ? currentLyricSong() : null;
@@ -10115,7 +10120,11 @@ function scheduleLyricLlmTranslation(force) {
   }
   persistLyricLlmTranslateCache();
   if (cachedHits) bumpStageLyricRows();
-  if (!pending.length) return;
+  if (!pending.length) {
+    // 空队列不应保留旧进度；完成/失败提示仍按各自的定时器收起。
+    if (!lyricTranslateChipHideTimer) setLyricTranslateChip(null);
+    return;
+  }
   state.scheduled = true;
   state.total = pending.length;
   state.done = 0;
