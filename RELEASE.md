@@ -7,6 +7,13 @@
 - **修复验证**：新增 13 个真实客户端状态行为回归，旧版 11 失败、2 通过，修复后全部通过；6 份相关测试共 `66/66`。独立隐藏 Electron 对照覆盖切到自带译文、缓存命中、空歌词及直接取消，修复前后 8 项均符合预期。安装版已验证 46/46 行有译文、无活动翻译任务、角标隐藏、音乐正常播放。
 - **发布前验证**：全量 Node 回归 `1338/1338`、JavaScript 语法和 `git diff --check` 通过；实际 Release 三条更新说明经解析器验证全部保留。本地打包 EXE 使用独立数据目录与隐藏窗口，主进程和 renderer 均为 `2.2.9`，上述四种清理场景全部通过，无加载失败或 renderer 崩溃事件。
 - **Windows 本地构建**：`npm run build:win -- --publish never` 成功；生成安装器（102395592 B）、blockmap 和 `latest.yml`。安装器 SHA256 为 `b21dee226e50d6ca9f68db7caa1b1832d4a8600ccc02435207885baf2884a7ac`；`latest.yml` 中的版本、大小和 SHA-512 已与本地安装器实测一致。
+- **GitHub 发布结果（2026-10-08）**：[PR #109](https://github.com/oirge/Mineradio/pull/109) 已合并，tag `v2.2.9` 指向 merge commit `06fb9f8b6aa84bb3ed09478edaed722a35553b64`。两组 PR Verify、合并后 Verify `37724152998` 及 [Windows Release workflow `37724237798`](https://github.com/oirge/Mineradio/actions/runs/37724237798) 全部成功。[Release `406391506`](https://github.com/oirge/Mineradio/releases/tag/v2.2.9) 于北京时间 `2026-10-08 11:53:26` 正式公开，`draft=false` / `prerelease=false`，已核对 Latest 为 `v2.2.9`。
+- **线上资产核验**：安装器、blockmap、`latest.yml` 和 SHA256 清单四项均已完整回下载，文件大小和 SHA256 与 GitHub 服务端 digest 及清单一致；安装器 SHA-512 与 `latest.yml` 声明一致。首次 `gh release download` 下载安装器停滞，随后通过 GitHub 资产 API 获取临时下载地址并使用本机代理完整下载校验。
+  - `Mineradio-oirge-2.2.9-Setup.exe`：102395596 B，SHA256 `749ba9361adf7de7459a935db2d78d5771df3d89827e773bfb0b022f237b2fcd`。
+  - `Mineradio-oirge-2.2.9-Setup.exe.blockmap`：106664 B，SHA256 `54f583a96c1f7c637317786a0ddc511a3be5516e80be1ada6d81aa67734a1aac`。
+  - `latest.yml`：359 B，SHA256 `9ca9bede4f7599eb22817b363b605077af6aa3ef2a2b48459b2704c0b56d7a85`。
+  - `Mineradio-oirge-2.2.9-SHA256SUMS.txt`：282 B，SHA256 `c703e3e7e2155cc05e98ab940a1862512ea7a110535f6b6b1a12043e849ba106`。
+- **自动更新入口**：公开 `releases/latest/download/latest.yml` 返回 HTTP 200、版本 `2.2.9`，下载内容与已校验的 Release 资产逐字节一致。
 
 ## v2.2.8 更新弹窗短窗口适配完善
 
