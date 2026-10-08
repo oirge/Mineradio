@@ -161,8 +161,9 @@ test('翻译进度角标：元素、状态字段、调度/批次/完成/失败�
   assert.match(appJs, /var lyricLlmTranslateState = \{[^}]*total: 0, done: 0[^}]*\};/);
   // 角标读写函数
   assert.match(appJs, /function setLyricTranslateChip\(text, opts\) \{/);
-  // 调度阶段：无待译清空角标，有待译显示 0/总数
-  assert.match(appJs, /if \(!pending\.length\) return;/);
+  // 调度阶段：无待译清空旧进度，完成/失败提示保留自身隐藏窗口。
+  const scheduleChunk = slice(appJs, 'function scheduleLyricLlmTranslation(force) {', 'function runLyricLlmTranslation(pending, token) {');
+  assert.match(scheduleChunk, /if \(!pending\.length\) \{[^}]*if \(!lyricTranslateChipHideTimer\) setLyricTranslateChip\(null\);\s*return;\s*\}/);
   assert.match(appJs, /setLyricTranslateChip\('翻译歌词 0\/' \+ pending\.length\);/);
   // 每批完成推进进度
   assert.match(appJs, /state\.done \+= 1/);
