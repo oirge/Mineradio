@@ -147,6 +147,9 @@ var shelfManager = null;
 var shelfOpenAnimAt = -10;
 var shelfHoverCue = { target: 0, value: 0, x: 0, y: 0, lastAt: 0, enteredAt: 0, zoneActive: false, guide: false };
 var shelfVisibility = 0;  // 0..1, 侧栏自动隐藏的整体透明度系数
+// 悬停呼吸/浮动的强度系数（0..1）。钉开或打开详情时不再瞬间归零，而是缓动淡出，
+// 让「悬停预览 → 点击可用」的过渡更连续（见渲染循环与 hoverBreath）。
+var shelfBreathLevel = 1;
 var shelfPlaybackSwitchGuardUntil = 0;
 function shelfPlaybackSwitchGuardActive(now) {
   return (now || performance.now()) < shelfPlaybackSwitchGuardUntil;
@@ -855,7 +858,7 @@ function makeShelfManager() {
       // 右侧 3D 架: 恢复更靠近、更斜切的打开姿态，让卡片有真正的前后层次。
       var detailOpenSide = contentList && contentList.isOpen();
       var nowT = uniforms.uTime.value;
-      var hoverBreath = (!shelfPinnedOpen && !detailOpenSide) ? shelfVisibility : 0;
+      var hoverBreath = shelfVisibility * shelfBreathLevel;
       var passiveAlways = shelfAlwaysVisible() && !shelfPinnedOpen && !detailOpenSide;
       var liftTarget = card.selected && shelfPointerSelectionForegroundActive() && !detailOpenSide ? 1 : 0;
       var liftRate = liftTarget > (card.floatMix || 0) ? 0.20 : 0.13;
@@ -1210,6 +1213,9 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         ? Math.max(0.05, summonVis.openDuration * 0.45)
         : Math.max(0.05, summonVis.closeDuration * 0.65);
       shelfVisibility += (targetVis - shelfVisibility) * durationEaseFactor(visDuration, dt);
+      // 悬停呼吸强度缓动：钉开/详情打开时平滑淡出而非瞬停，消除「悬停态→可用态」的手感跳变。
+      var shelfBreathTarget = (shelfPinnedOpen || (contentList && contentList.isOpen())) ? 0 : 1;
+      shelfBreathLevel += (shelfBreathTarget - shelfBreathLevel) * durationEaseFactor(0.32, dt);
       if (shelfVisibility < 0.01 && targetVis === 0) shelfVisibility = 0;
       group.visible = appRevealed && (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || (contentList && contentList.isOpen()));
       if (connectorParticles) connectorParticles.visible = group.visible && mode === 'stage';
