@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.2.9';
+var APP_VERSION = '2.3.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,11 +677,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '已翻译歌曲及时收起旧进度，本地译文继续复用。',
+  hero: '本地歌译文更稳：重播不再重复翻译、落盘失败自动补存；Electron 内核安全升级。',
   notes: [
-    '修复已翻译歌曲仍显示“翻译歌词 0/1”：切歌或取消任务后及时收起旧进度。',
-    '已有译文、命中本地缓存或没有待译歌词时清理残留提示，保留已保存译文。',
-    '翻译完成和失败提示仍按原定时间自动收起，重试与请求取消行为保持正常。'
+    '本地歌译文：重播老歌不再重复翻译——长列表把译文挤出全局缓存后，自动复用已保存的按歌译文并回灌缓存。',
+    '本地歌译文：按歌译文落盘失败后自动重新排队补存（有限次重试），不再静默丢失已翻译内容。',
+    'Electron 内核升级到 43.7.9，修补已公开的安全漏洞影响范围（同系列补丁升级）。'
   ]
 };
 function readSavedVolume() {
@@ -9892,7 +9892,9 @@ function lyricLlmTranslateCacheKey(text) {
 // —— 按歌落盘的 LLM 译文：叠加在全局 localStorage 缓存之上，专治本地歌重开后又从头翻译。
 // 借 SQLite 歌词记录已有的 extra JSON 透传（desktop/local-library-store.js 的 collect/mergeExtraFields），
 // 按 song.localKey 存 { v:1, map:{ 逐行键: 译文 } }；逐行键与全局缓存键同构，无 1200 行上限、不吃 localStorage 配额。
-var songLyricTranslationState = { loaded: Object.create(null), loading: Object.create(null), maps: Object.create(null), pending: Object.create(null), writeTimer: 0 };
+// 写盘失败后有限次重排，避免永久失败（磁盘满/库损坏）时每 1.5s 热循环重试。
+var SONG_LYRIC_TRANSLATION_WRITE_MAX_RETRIES = 5;
+var songLyricTranslationState = { loaded: Object.create(null), loading: Object.create(null), maps: Object.create(null), pending: Object.create(null), writeRetries: Object.create(null), writeTimer: 0 };
 function songLyricTranslationDbEnabled() {
   // 仅桌面 SQLite 环境启用；浏览器/测试（无 window.desktopWindow）走原同步路径，行为不变。
   return typeof window !== 'undefined' && !!(window.desktopWindow && window.desktopWindow.isDesktop);
@@ -9939,6 +9941,8 @@ function recordSongLyricTranslation(song, lineKey, translated) {
   if (map[lineKey] === translated) return;
   map[lineKey] = translated;
   songLyricTranslationState.pending[key] = true;
+  // 有新内容要写，重置该曲的写盘重试预算，让后续失败能重新争取有限次重试。
+  delete songLyricTranslationState.writeRetries[key];
   queueSongLyricTranslationWrite();
 }
 function queueSongLyricTranslationWrite() {
@@ -9974,7 +9978,17 @@ async function writeSongLyricTranslationRecord(key, map) {
     // 记住合并后的全量，避免下轮把已落盘键当增量重复写。
     songLyricTranslationState.maps[key] = merged;
     await putLocalLyricCacheRecord(record);
-  } catch (e) { if (typeof console !== 'undefined') console.warn('[SongLyricTranslationWrite]', key, e); }
+    delete songLyricTranslationState.writeRetries[key];
+  } catch (e) {
+    if (typeof console !== 'undefined') console.warn('[SongLyricTranslationWrite]', key, e);
+    // 落盘失败不能把这批译文丢掉：重新排队，由防抖定时器择机重试（有限次）。
+    var retries = songLyricTranslationState.writeRetries[key] || 0;
+    if (retries < SONG_LYRIC_TRANSLATION_WRITE_MAX_RETRIES) {
+      songLyricTranslationState.writeRetries[key] = retries + 1;
+      songLyricTranslationState.pending[key] = true;
+      queueSongLyricTranslationWrite();
+    }
+  }
 }
 function lyricTranslateTargetValue() {
   return String(fx && fx.lyricTranslateTarget || '').trim().slice(0, 24);
@@ -10092,6 +10106,8 @@ function scheduleLyricLlmTranslation(force) {
   var cache = readLyricLlmTranslateCache();
   var cachedHits = 0;
   var fillSong = (typeof currentLyricSong === 'function') ? currentLyricSong() : null;
+  var fillSongKey = (typeof songLyricTranslationKeyOf === 'function') ? songLyricTranslationKeyOf(fillSong) : '';
+  var fillSongMap = (fillSongKey && songLyricTranslationState.maps) ? songLyricTranslationState.maps[fillSongKey] : null;
   for (var i = 0; i < lyricsLines.length; i++) {
     var line = lyricsLines[i];
     if (!line || !line.text || line.fallback || line.translation) continue;
@@ -10109,6 +10125,16 @@ function scheduleLyricLlmTranslation(force) {
       }
       delete cache[key];
       state.cacheDirty = true;
+    }
+    // 全局缓存可能被 1200 条上限淘汰；此时复用该曲内存中的按歌译文并回灌全局缓存，老歌重播不再重译。
+    if (fillSongMap && typeof fillSongMap[key] === 'string' && fillSongMap[key].trim()
+        && fillSongMap[key] !== sourceText && lyricTranslationLooksValid(fillSongMap[key], target)) {
+      line.translation = fillSongMap[key];
+      line.translationSource = 'llm';
+      cache[key] = fillSongMap[key];
+      state.cacheDirty = true;
+      cachedHits += 1;
+      continue;
     }
     if (state.failures[key]) continue;
     if (byKey[key]) { byKey[key].lines.push(line); continue; }
