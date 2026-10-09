@@ -141,13 +141,17 @@ test('干净档案启动走 default，存档的降档结论会被沿用', () => 
   assert.equal(saved.resetOnVersionChange, false);
 });
 
-test('换过版本就退回 default 重试一次，不把用户永久钉在软件渲染上', () => {
+test('换过版本保留已降到的档位、只重置失败计数，不再退回硬件造成更新后反复重启', () => {
   const upgraded = resolveGpuMode({ gpuMode: 'software', appVersion: '1.8.2' }, { appVersion: '1.8.3' });
-  assert.equal(upgraded.mode, 'default');
+  assert.equal(upgraded.mode, 'software', '保留已稳定的软件渲染档，不强退回 default');
   assert.equal(upgraded.reason, 'version-changed');
-  assert.equal(upgraded.resetOnVersionChange, true, '要求调用方把旧结论清掉写盘');
+  assert.equal(upgraded.resetOnVersionChange, true, '仍要求调用方把失败计数清掉写盘');
 
-  // 记录里没有版本号（v1.8.2 之前写下的档案）时不触发重试，避免每次启动都白白重试一遍。
+  const upgradedCompat = resolveGpuMode({ gpuMode: 'compatible', appVersion: '1.8.2' }, { appVersion: '1.8.3' });
+  assert.equal(upgradedCompat.mode, 'compatible', 'compatible 档同样保留');
+  assert.equal(upgradedCompat.resetOnVersionChange, true);
+
+  // 记录里没有版本号（v1.8.2 之前写下的档案）时不触发重置，避免每次启动都白白重写一遍。
   const noVersion = resolveGpuMode({ gpuMode: 'software' }, { appVersion: '1.8.3' });
   assert.equal(noVersion.mode, 'software');
   assert.equal(noVersion.resetOnVersionChange, false);

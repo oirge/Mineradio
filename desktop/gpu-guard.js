@@ -4,7 +4,7 @@
 // 指定、把决定权交回 Chromium 自己的屏蔽名单，`software` 彻底关掉硬件加速。
 // 黑屏与持续卡顿几乎都出在 `default` 档强行越过屏蔽名单之后：屏蔽名单里躺着的正是那些
 // 会把画面渲染成全黑的驱动组合，而 GPU 进程反复崩溃再退回软件合成，就是肉眼看到的卡顿。
-// 所以这三档必须能自动逐级降级，并且换过 Electron 或驱动之后要能自动退回 `default` 重试一次。
+// 所以这三档必须能自动逐级降级；换过版本时保留已降到的档位、只重置失败计数（不再自动退回 default，避免更新后反复崩溃重启）。
 const GPU_MODES = ['default', 'compatible', 'software'];
 
 // 连续多少次 GPU 进程异常退出就降一档。设成 2 是因为单次崩溃可能只是驱动瞬时抽风，
@@ -77,9 +77,9 @@ function isLowestGpuMode(mode) {
 /**
  * 决定本次启动实际使用的 GPU 档位。
  * 环境变量优先级最高且不写盘，方便用户在黑屏时用一次性环境变量把界面救出来；
- * 记录里的档位属于上一次自动降级的结论；而只要 `appVersion` 与记录不同，就退回 `default`
- * 重试一次 —— 换了 Electron 或换了显卡驱动之后原来的黑屏可能已经不复存在，
- * 不重试会让用户被永久钉在软件渲染上，那本身就是卡顿。
+ * 记录里的档位属于上一次自动降级的结论；换版本时保留该档位，只重置失败计数重新评估，
+ * 避免每次更新都退回硬件 GPU 再崩溃重启（更新后一串「一直重启」的根因）。
+ * 想在新版本重新试硬件的用户，用一次性 `MINERADIO_GPU_MODE=default` 覆盖即可。
  * @param {{gpuMode?: string, appVersion?: string}} saved 已持久化的 GPU 守卫记录。
  * @param {{envMode?: string, appVersion?: string}} options 本次启动的环境覆盖与当前版本号。
  * @returns {{mode: string, reason: string, forced: boolean, resetOnVersionChange: boolean}} 档位决议。
@@ -98,7 +98,10 @@ function resolveGpuMode(saved, options) {
   const currentVersion = String(opts.appVersion == null ? '' : opts.appVersion);
   const savedVersion = String(record.appVersion == null ? '' : record.appVersion);
   if (currentVersion && savedVersion && currentVersion !== savedVersion) {
-    return { mode: GPU_MODES[0], reason: 'version-changed', forced: false, resetOnVersionChange: true };
+    // 换版本不再强退回 default（硬件）：之前已稳定在 compatible/software 的机器，更新后保留该档，
+    // 只重置失败计数重新评估，避免每次更新都退回硬件 GPU → 崩溃 → 兜底重启的一串「更新后一直重启」。
+    // 想在新版本重新试硬件，用一次性 MINERADIO_GPU_MODE=default 覆盖即可。
+    return { mode: savedMode, reason: 'version-changed', forced: false, resetOnVersionChange: true };
   }
   return { mode: savedMode, reason: 'saved', forced: false, resetOnVersionChange: false };
 }

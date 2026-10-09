@@ -624,7 +624,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.3.1';
+var APP_VERSION = '2.3.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,11 +677,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '迷你播放器崩溃不再卡死，3D 歌单架交互更稳更顺滑。',
+  hero: 'GPU 兼容性修复：部分机器更新后不再反复重启。',
   notes: [
-    '迷你播放器崩溃/加载失败后不再无限重建：按次退避重试，达上限回退主窗口。',
-    'Home 页开启时后方 3D 歌单架不再被误触，杜绝点击穿透。',
-    '3D 歌单架从悬停预览到点击可用的过渡更顺滑。'
+    '修复弱显卡 / 虚拟显示器 / 远程桌面等环境更新后 GPU 反复崩溃、软件一直重启的问题。',
+    'GPU 兜底换版本时保留已降到的渲染档位，不再每次更新退回硬件加速。',
+    '延续 2.3.x：本地歌译文稳健性、迷你播放器崩溃退避、3D 歌单架交互修复。'
   ]
 };
 function readSavedVolume() {

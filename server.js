@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '迷你播放器崩溃/加载失败后不再无限重建：按次退避重试，达上限回退主窗口',
-  'Home 页开启时后方 3D 歌单架不再被误触，杜绝点击穿透',
-  '3D 歌单架从悬停预览到点击可用的过渡更顺滑',
+  '修复弱显卡 / 虚拟显示器 / 远程桌面等环境更新后 GPU 反复崩溃、软件一直重启',
+  'GPU 兜底换版本时保留已降到的渲染档位，不再每次更新退回硬件加速',
+  '延续 2.3.x：本地歌译文稳健性、迷你播放器崩溃退避、3D 歌单架交互修复',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
