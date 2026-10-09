@@ -1,5 +1,18 @@
 # 发布流程
 
+## v2.3.0 本地歌译文稳健性修复、Electron 内核安全升级
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明（`public/app.js` hero/notes、`server.js` UPDATE_FALLBACK_NOTES）与 Release workflow 默认 tag 统一为 `2.3.0`。
+- **内容**：本地歌译文全局缓存（1200 条上限）淘汰后，调度器改为先复用内存中按歌译文并回灌缓存，长会话重播老歌不再重复翻译；按歌译文落盘失败后自动重新排队补存（上限 5 次），写入成功清空该曲重试预算。Electron 内核 43.4.0 → 43.7.9（同系列安全补丁），package-lock 同步解析。
+- **发布前验证**：全量 Node 回归 `1340/1340` 通过（新增「全局缓存淘汰后复用按歌 map」「落盘失败重排补存」两项断言）；`version-consistency`、`doc-encoding` 门禁通过；`public/app.js`、`server.js` `node --check` 通过。
+- **验证边界（本会话未做）**：Electron 升级的桌面端窗口/歌词/音频/GPU 行为未做 GUI 自测（Node 层不覆盖 GUI），建议发布版实机冒烟；安装器 EXE 未在本会话完整回下载重算 SHA-256/SHA-512。
+- **GitHub 发布结果（2026-10-09）**：[PR #111](https://github.com/oirge/Mineradio/pull/111) 以 merge commit 合入 `main`，tag `v2.3.0` 指向 merge commit `17e4faea2498ff64579d85e9af6a8f579c984018`。[Windows Release workflow `37879192105`](https://github.com/oirge/Mineradio/actions/runs/37879192105) 成功（1m40s）。[Release v2.3.0](https://github.com/oirge/Mineradio/releases/tag/v2.3.0) 已 `draft=false`，`releases/latest` API 核对 Latest 为 `v2.3.0`；`latest.yml` releaseDate `2026-10-09T03:26:44Z`（北京时间 `2026-10-09 11:26:44`）。
+- **线上资产核验**：CI 生成的 `SHA256SUMS.txt` 清单与 GitHub 服务端 digest 对账，EXE/blockmap/latest.yml 三项 SHA256 全部一致；`latest.yml`、`SHA256SUMS.txt` 两项小资产已完整回下载并本机重算 SHA256，与 GitHub digest 逐字一致。
+  - `Mineradio-oirge-2.3.0-Setup.exe`：106858209 B，SHA256 `a7d6c118586deb8ba91f13b9cc05f378477b86c819abec73377a3d5bc8c6d5b2`，SHA512（`latest.yml` 声明，未本机重算）`fgPN9sOkMfVEqJxUq3GnEETpTffbRSnEFPOEZknWenEQUZy2XOlxdFkqjc+UyV//8OUrSdjBAr+y45FO0sVDsw==`。
+  - `Mineradio-oirge-2.3.0-Setup.exe.blockmap`：112491 B，SHA256 `04fb9a93aba1fd7baf40f692c2bcc629558aa2390007172000b8add664e57c88`。
+  - `latest.yml`：359 B，SHA256 `2352e740f59f60beea74e591ba0745e259665d611cc4c57a8d7e913fd1cfcc4f`，版本 `2.3.0`、大小 `106858209` 与 EXE 一致。
+  - `Mineradio-oirge-2.3.0-SHA256SUMS.txt`：282 B，SHA256 `8a37d9193ddfad5d28961757beded6347609593465330ab257a21b09cca3bdda`。
+
 ## v2.2.9 歌词翻译进度残留修复
 
 - **版本元数据**：`package.json`、`package-lock.json`、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.2.9`。
