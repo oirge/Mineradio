@@ -172,6 +172,10 @@ let miniPlayerPointerPassthrough = false;
 let miniPlayerLastSentState = null;
 let miniPlayerRecoveryTimer = null;
 let miniPlayerRecreateTimer = null;
+// 迷你播放器崩溃/加载失败恢复的退避与上限：反复失败按 200·n²ms 退避，达到上限就停手并回退主窗口，
+// 避免把「加载不起来的页面」无限重建成「黑窗 + 满负载」。成功加载后计数清零（见 did-finish-load）。
+const MINI_PLAYER_CRASH_RECOVERY_LIMIT = 3;
+let miniPlayerCrashFailureCount = 0;
 // 主窗口开始收缩动画时预热的迷你窗口。最小化真正落地前它只是隐藏的已加载窗口，
 // 主窗口最终没有最小化时必须由 discardMiniPlayerPrewarm() 丢弃，不为不可见窗口常驻内存。
 let miniPlayerPrewarmWindow = null;
@@ -3855,7 +3859,16 @@ function destroyMiniPlayerWindowInstance(win) {
 function scheduleMiniPlayerWindowRecovery(win, reason) {
   if (appQuitting || miniPlayerRecoverySession.paused || !win || miniPlayerWindow !== win || miniPlayerProgrammaticCloseWindows.has(win)) return;
   if (miniPlayerRecreateTimer) return;
-  console.warn(`Mini player recovery scheduled: ${reason || 'unknown'}`);
+  if (miniPlayerCrashFailureCount >= MINI_PLAYER_CRASH_RECOVERY_LIMIT) {
+    console.warn(`Mini player recovery hit limit (${MINI_PLAYER_CRASH_RECOVERY_LIMIT}); restoring main window: ${reason || 'unknown'}`);
+    destroyMiniPlayerWindowInstance(win);
+    focusMainWindow();
+    return;
+  }
+  miniPlayerCrashFailureCount += 1;
+  const attempt = miniPlayerCrashFailureCount;
+  const delay = Math.min(2400, 200 * attempt * attempt);
+  console.warn(`Mini player recovery scheduled (attempt ${attempt}, ${delay}ms): ${reason || 'unknown'}`);
   miniPlayerRecreateTimer = setTimeout(() => {
     miniPlayerRecreateTimer = null;
     if (miniPlayerWindow !== win || win.isDestroyed()) {
@@ -3877,7 +3890,7 @@ function scheduleMiniPlayerWindowRecovery(win, reason) {
     }
     destroyMiniPlayerWindowInstance(win);
     if (shouldShowMiniPlayer()) showMiniPlayerWindow();
-  }, 120);
+  }, delay);
   if (typeof miniPlayerRecreateTimer.unref === 'function') miniPlayerRecreateTimer.unref();
 }
 
@@ -4150,6 +4163,7 @@ function createMiniPlayerWindow() {
       return;
     }
     miniPlayerRendererReloadWindows.delete(win);
+    miniPlayerCrashFailureCount = 0;
     miniPlayerLastSentState = null;
     if (shouldShowMiniPlayer()) showMiniPlayerWindow();
     else sendMiniPlayerState(true);
