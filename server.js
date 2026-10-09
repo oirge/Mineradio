@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '本地歌译文：重播老歌不再重复翻译——长列表把译文挤出全局缓存后自动复用已保存的按歌译文',
-  '本地歌译文：按歌译文落盘失败后自动重新排队补存（有限次重试），不再静默丢失已翻译内容',
-  'Electron 内核升级到 43.7.9，修补已公开的安全漏洞影响范围（同系列补丁升级）',
+  '迷你播放器崩溃/加载失败后不再无限重建：按次退避重试，达上限回退主窗口',
+  'Home 页开启时后方 3D 歌单架不再被误触，杜绝点击穿透',
+  '3D 歌单架从悬停预览到点击可用的过渡更顺滑',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
