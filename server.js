@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复已翻译歌曲仍显示“翻译歌词 0/1”：切歌或取消任务后及时收起旧进度',
-  '已有译文、命中本地缓存或没有待译歌词时清理残留提示，保留已保存译文',
-  '翻译完成和失败提示仍按原定时间自动收起，重试与请求取消行为保持正常',
+  '本地歌译文：重播老歌不再重复翻译——长列表把译文挤出全局缓存后自动复用已保存的按歌译文',
+  '本地歌译文：按歌译文落盘失败后自动重新排队补存（有限次重试），不再静默丢失已翻译内容',
+  'Electron 内核升级到 43.7.9，修补已公开的安全漏洞影响范围（同系列补丁升级）',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

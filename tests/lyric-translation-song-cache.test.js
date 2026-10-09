@@ -19,6 +19,7 @@ async function settle() { for (let i = 0; i < 80; i++) await Promise.resolve(); 
 // window.desktopWindow / currentLyricSong / localAssetCacheKey / read+putLocalLyricCacheRecords。
 function client(options = {}) {
   let sequence = 0;
+  let failPutsRemaining = options.failPuts || 0;
   const timers = new Map();
   const requests = [];
   const chips = [];
@@ -45,6 +46,7 @@ function client(options = {}) {
       return out;
     },
     putLocalLyricCacheRecord: async record => {
+      if (failPutsRemaining > 0) { failPutsRemaining -= 1; throw new Error('synthetic write failure'); }
       puts.push(JSON.parse(JSON.stringify(record)));
       store[record.id] = JSON.parse(JSON.stringify(record));
       return true;
@@ -137,4 +139,46 @@ test('source wires the per-song translation cache into schedule / run / persist 
   assert.ok(appSource.includes('flushSongLyricTranslations();'));
   // 门槛必须以桌面 DB 为条件，浏览器/测试（无 window）走原路径。
   assert.ok(appSource.includes("typeof window !== 'undefined'"));
+  // 全局缓存淘汰后复用按歌 map、写盘失败后有限次重排的接线必须在位。
+  assert.ok(/fillSongMap\[key\]/.test(appSource), '调度应在全局缓存缺失时查按歌 map');
+  assert.ok(appSource.includes('SONG_LYRIC_TRANSLATION_WRITE_MAX_RETRIES'), '写盘失败应有有限次重排预算');
+});
+
+test('a globally-evicted line is refilled from the per-song store on replay without any network', async () => {
+  const key = 'English\u0000微风轻轻吹过';
+  const c = client({
+    song: { localKey: 'song-evict' },
+    lines: ['微风轻轻吹过'],
+    store: { 'song-evict': { id: 'song-evict', localLyricText: 'lrc', localLyricTranslations: { v: 1, map: { [key]: 'A gentle breeze passes by.' } } } }
+  });
+  await c.schedule();
+  assert.equal(c.requests.length, 0, '首次重播命中按歌 map，不打网络');
+  assert.equal(c.scope.readLyricLlmTranslateCache()[key], 'A gentle breeze passes by.');
+  // 模拟长会话把该行挤出 1200 条全局缓存上限：按歌 map 仍在内存。
+  delete c.scope.readLyricLlmTranslateCache()[key];
+  // 重新进入该歌：全新行对象（无 translation），loaded 门槛已为 true 不再预加载回填。
+  c.scope.lyricsLines = [{ text: '微风轻轻吹过' }];
+  await c.schedule();
+  assert.equal(c.requests.length, 0, '全局缓存淘汰后应复用按歌 map，不得重新请求翻译');
+  assert.equal(c.timers.size, 0, '复用按歌 map 后不应排下网络防抖定时器');
+  assert.equal(c.scope.lyricsLines[0].translation, 'A gentle breeze passes by.');
+  assert.equal(c.scope.lyricsLines[0].translationSource, 'llm');
+  assert.equal(c.scope.readLyricLlmTranslateCache()[key], 'A gentle breeze passes by.', '命中按歌 map 后应回灌全局缓存');
+});
+
+test('a failed per-song translation write is requeued and persisted on a later flush', async () => {
+  const key = 'English\u0000微风轻轻吹过';
+  const c = client({ song: { localKey: 'song-fail' }, store: {}, failPuts: 1 });
+  await c.schedule();   // 空库未命中 → 自调度建 pending，排下 900ms 网络防抖
+  await c.fire(900);    // 发起翻译 → accept 记入按歌载荷
+  await c.finish();     // finish 冲写 → 首次 putLocalLyricCacheRecord 抛错
+  assert.equal(c.puts.length, 0, '首次写盘失败不应落盘');
+  assert.ok(c.scope.songLyricTranslationState.pending['song-fail'], '写盘失败后应把该曲重新排队');
+  assert.equal(c.scope.songLyricTranslationState.writeRetries['song-fail'], 1, '失败一次应记一次重试预算');
+  // 防抖定时器重排，下一次 flush 写盘成功。
+  await c.fire(1500);
+  const rec = c.store['song-fail'];
+  assert.ok(rec && rec.localLyricTranslations, '重试后译文必须落盘');
+  assert.equal(rec.localLyricTranslations.map[key], 'A gentle breeze passes by.');
+  assert.ok(!c.scope.songLyricTranslationState.writeRetries['song-fail'], '落盘成功后应清空该曲重试预算');
 });
