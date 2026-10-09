@@ -1,5 +1,18 @@
 # 发布流程
 
+## v2.3.1 迷你播放器崩溃恢复、3D 歌单架交互修复
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.3.1`。
+- **内容**：迷你播放器崩溃/加载失败按 200·n²ms 退避、达上限 3 次回退主窗口（`desktop/main.js`）；Home 覆盖层开启时 3D 歌单架 `canInteract` 返回 false，杜绝镜头跟随/卡片悬停/滚轮/点击穿透（`public/shelf-classic.js`）；歌单架悬停呼吸/浮动改为缓动淡出使「悬停→点击可用」更连续；构建链依赖安全清理（PR #113，npm audit 15→8）已先并入 main。
+- **发布前验证**：全量 Node 回归 `1348/1348` 通过（新增崩溃退避 4 例、歌单架 Home 门槛 2 例、呼吸缓动 2 例）；`version-consistency`、`doc-encoding` 门禁通过；`public/app.js`、`server.js`、`public/shelf-classic.js`、`desktop/main.js` `node --check` 通过。
+- **验证边界（本会话未做）**：迷你播放器崩溃退避与歌单架 Home 门槛为逻辑/源码级验证（纯 Node 假定时器，未跑真实 Electron 崩溃）；3D 歌单架悬停「顺滑度」为视觉手感，需在桌面版实机确认；安装器 EXE 未完整回下载重算 SHA-256/SHA-512。
+- **GitHub 发布结果（2026-10-09）**：[PR #114](https://github.com/oirge/Mineradio/pull/114) 以 merge commit 合入 `main`，tag `v2.3.1` 指向 merge commit `0381f753312bfe193b74a3b822afe1cd68b4dfac`。[Windows Release workflow `37897875130`](https://github.com/oirge/Mineradio/actions/runs/37897875130) 成功（1m45s）。[Release v2.3.1](https://github.com/oirge/Mineradio/releases/tag/v2.3.1) 已 `draft=false`，`releases/latest` API 核对 Latest 为 `v2.3.1`。
+- **线上资产核验**：CI 生成的 `SHA256SUMS.txt` 清单与 GitHub 服务端 digest 对账，EXE/blockmap/latest.yml 三项 SHA256 全部一致；`latest.yml` 已完整回下载并本机重算 SHA256，与 digest 逐字一致；`latest.yml` 版本 `2.3.1`、大小 `115685973` 与 EXE 一致。
+  - `Mineradio-oirge-2.3.1-Setup.exe`：115685973 B，SHA256 `c827498a1560fa511feb492a76e307bc75555da8adc06f7c9178ff75272f3574`，SHA512（`latest.yml` 声明，未本机重算）`6GPJQOl9EQyFXW7XHBhZz2X5V6aPuVzYEoXz2vJbwwVvJ9JP2FM5J0mcdJ9cOMS0AlwosWWKqswpK7vApW/FRQ==`。
+  - `Mineradio-oirge-2.3.1-Setup.exe.blockmap`：121806 B，SHA256 `ebfe03c400808a049b085c0661e7940eae4e3c51db9990a7a26432339f7b05ba`。
+  - `latest.yml`：359 B，SHA256 `248b0f2aafd332406e018530f6ba37bc4ee7ac6b4ba9744ac102627b24ee284d`。
+  - `Mineradio-oirge-2.3.1-SHA256SUMS.txt`：282 B，SHA256 `3d918504827bce6670538c840ab2a75995778760ce3084ef138ac04613c4cbab`。
+
 ## v2.3.0 本地歌译文稳健性修复、Electron 内核安全升级
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明（`public/app.js` hero/notes、`server.js` UPDATE_FALLBACK_NOTES）与 Release workflow 默认 tag 统一为 `2.3.0`。
