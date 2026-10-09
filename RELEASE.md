@@ -1,5 +1,18 @@
 # 发布流程
 
+## v2.3.2 GPU 兼容性修复：更新后不再反复重启
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.3.2`。
+- **内容**：`desktop/gpu-guard.js` 的 `resolveGpuMode` 换版本时不再强退回 `default`（硬件），改为保留上一次已稳定降到的档位（compatible/software）、只重置失败计数重新评估。根因：旧逻辑每次更新把 GPU 档位重置回硬件，弱显卡/虚拟显示器/远程桌面等机器硬件 GPU 进程随即崩溃 → `handleGpuProcessGone` 触发 `app.relaunch()` 兜底重启 → 逐级降档，表现为「更新后一直重启」。想重新试硬件用一次性 `MINERADIO_GPU_MODE=default` 覆盖。
+- **发布前验证**：全量 Node 回归 `1348/1348` 通过（`gpu-guard.test.js` 版本变更保留档位断言、`gpu-guard-main-wiring.test.js` 注释已同步）；`version-consistency`、`doc-encoding` 门禁通过；`desktop/gpu-guard.js`、`desktop/main.js`、`public/app.js`、`server.js` `node --check` 通过。
+- **验证边界（本会话未做）**：该问题经用户机实机日志确认（`desktop-shell-settings.json` 记 `gpuFailureReason: crashed:34`，GPU 兜底 relaunch）；修复为逻辑级验证（纯 Node），桌面端「更新后不再重启」需发布版实机确认；安装器 EXE 未完整回下载重算 SHA-256/SHA-512。
+- **GitHub 发布结果（2026-10-09）**：[PR #116](https://github.com/oirge/Mineradio/pull/116) 以 merge commit 合入 `main`，tag `v2.3.2` 指向 merge commit `abb0fe832d3388608de9f7540efc16438e235170`。[Windows Release workflow `37907038836`](https://github.com/oirge/Mineradio/actions/runs/37907038836) 成功（1m53s）。[Release v2.3.2](https://github.com/oirge/Mineradio/releases/tag/v2.3.2) 已 `draft=false`，`releases/latest` API 核对 Latest 为 `v2.3.2`。
+- **线上资产核验**：CI 生成的 `SHA256SUMS.txt` 清单与 GitHub 服务端 digest 对账，EXE/blockmap/latest.yml 三项 SHA256 全部一致；`latest.yml` 已完整回下载并本机重算 SHA256，与 digest 逐字一致；`latest.yml` 版本 `2.3.2`、大小 `115685785` 与 EXE 一致。
+  - `Mineradio-oirge-2.3.2-Setup.exe`：115685785 B，SHA256 `2bd28185868ff21cc4d94fcdaf327c662a489a5e50bf997ae85853f7f1865ff2`，SHA512（`latest.yml` 声明，未本机重算）`b1x47TutrKatXXJSzxpYtvzrySG5aJuGJL2VHQtaELHT/UGMQ59zDmJAol7fkIE+lZMyJpw4RDLnC7tGo0fj4g==`。
+  - `Mineradio-oirge-2.3.2-Setup.exe.blockmap`：121876 B，SHA256 `961911b10342a3acb226146e9332f475aae1dcff0959a87ba29b0aaa7f3ba246`。
+  - `latest.yml`：359 B，SHA256 `e0754c37c5c279ac26331581b8145deee6b6aee16760dc32da214e80a92bb506`。
+  - `Mineradio-oirge-2.3.2-SHA256SUMS.txt`：282 B，SHA256 `d73380add3d63ba9114f9c151850053d858e9f1c92184fd2e3c4c682565d68f0`。
+
 ## v2.3.1 迷你播放器崩溃恢复、3D 歌单架交互修复
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.3.1`。
