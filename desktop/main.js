@@ -287,8 +287,8 @@ if (activeGpuMode === 'default') {
 }
 if (shouldDisableHardwareAcceleration(activeGpuMode)) app.disableHardwareAcceleration();
 if (gpuGuardDecision.resetOnVersionChange) {
-  // 换过版本就把上一次的降级结论清掉重试一次：Electron 或驱动升级后原来的黑屏可能已经没了，
-  // 不重试会把用户永久钉在软件渲染上，那本身就是卡顿。
+  // 换过版本只重置失败计数、保留已降到的档位：避免每次更新都退回硬件 GPU → 崩溃 → 兜底重启的
+  // 「更新后一直重启」。gpuMode 写 activeGpuMode（= 保留的档位），不再强制回 default。
   try {
     writeDesktopShellSettings({
       gpuMode: activeGpuMode,

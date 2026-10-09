@@ -87,7 +87,7 @@ test('达到阈值就降档写盘并立刻重启', () => {
   assert.equal(h.calls.writes.length, 1);
   assert.equal(h.calls.writes[0].gpuMode, 'compatible');
   assert.equal(h.calls.writes[0].gpuFailureCount, 0, '降档后计数归零，别把下一档连带判死');
-  assert.equal(h.calls.writes[0].appVersion, '1.8.3', '要记下版本号，换版本时才能退回 default 重试');
+  assert.equal(h.calls.writes[0].appVersion, '1.8.3', '要记下版本号，换版本时才能只重置失败计数、保留档位');
   assert.equal(h.calls.writes[0].gpuFailureReason.includes('crashed'), true);
   // GPU 开关只能在 app ready 之前生效，所以降档必须配一次真重启。
   assert.equal(h.calls.relaunch, 1);
