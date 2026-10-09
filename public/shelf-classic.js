@@ -1364,7 +1364,12 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     hasOpenContent: function () { return contentList && contentList.isOpen(); },
     getContentList: function () { return contentList; },
     getOpenContentIndex: function () { return openCardIdx; },
-    canInteract: function () { return mode !== 'off' && allItems.length > 0; }
+    canInteract: function () {
+      // Home 覆盖层 / 视觉引导 / 强制 Home 打开时，3D 歌单架不接受交互（镜头跟随、卡片悬停、滚轮、点击），
+      // 避免这些操作穿透到后方歌单架——与 canShowShelfHoverCueAt 的 Home 门槛保持一致。
+      if (visualGuideActive || emptyHomeActive || homeForcedOpen) return false;
+      return mode !== 'off' && allItems.length > 0;
+    }
   };
 }
 
