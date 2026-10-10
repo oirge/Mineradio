@@ -24,12 +24,18 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Support for cover images in the same directory and embedded audio covers.
 - Removed local rhythm analysis.
 - Mini player optimization with improved animations.
-- Folia local playback interface with lyric, floating record wall and cover mosaic views, 14 built-in lyric effects and 5 backgrounds, sharing Mineradio's library and audio engine.
+- Folia local playback with lyric, floating Polaroid record wall and Lattice cover mosaic views, 14 lyric effects and 5 backgrounds, sharing Mineradio's library and audio engine.
 
 ## Usage
 
+Source builds require Node.js 24 or newer.
+
 ```bash
-npm install
+git clone https://github.com/oirge/Mineradio.git
+cd Mineradio
+npm ci
+npm ci --prefix vendor-src/folia --ignore-scripts
+npm run build:folia
 npm start
 ```
 
@@ -42,6 +48,14 @@ npm run build:win
 Build artifacts are located in `dist/`.
 
 ## Features
+
+### Folia Local Playback (v2.4.0)
+
+- Switch between **Mineradio / Folia** in the title bar. Folia offers lyric playback, a floating Polaroid record wall, and a Lattice cover mosaic; music keeps playing as you change views.
+- 14 built-in lyric effects: Classic, Partita, Tempera, Lumiere, Cadenza, Fume, Claddagh, Cappella, Tilt, Diorama, Monet, Pendolo, Sonnet, and Still. Twelve have their original dedicated settings panels.
+- Five local backgrounds: Common, Latent, Sora, Monet, and Nomand. Themes, typography, translations, image assets, and visual preferences can be saved.
+- Folia shares Mineradio's local library, favorites, playlists, queue, and audio engine.
+- This integration includes Folia's local player and visuals, without its online music, accounts, or sync services. See the [integration and source notes](./docs/FOLIA_INTEGRATION.md).
 
 ### Audio Format Support
 - ✅ MP3 (MPEG Audio Layer 3)
@@ -92,6 +106,13 @@ Build artifacts are located in `dist/`.
 ## Changelog
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
+
+### v2.4.0 (2026-10-10)
+
+- Added Folia local playback with lyric, floating Polaroid record wall, and Lattice cover mosaic views
+- Added 14 lyric effects, 12 dedicated settings panels, and five local backgrounds with saved visual preferences
+- Shared Mineradio's local library, favorites, playlists, queue, and audio engine across both interfaces without interrupting playback
+- Fixed stale interface caching after an upgrade and the order of listening-stat and resume-position updates when changing tracks
 
 ### v2.0.10 (2026-09-12)
 
@@ -419,3 +440,5 @@ Please ensure that the music files you import and play are from legal sources.
 ## License
 
 This project follows the original project license, see [LICENSE](./LICENSE) for details.
+
+Folia's source, AGPL license, and packaged dependency notices are documented in [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) and the [integration guide](./docs/FOLIA_INTEGRATION.md).
