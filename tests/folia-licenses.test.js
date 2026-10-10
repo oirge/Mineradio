@@ -109,3 +109,23 @@ test('reports every missing bundled dependency in one failure', t => {
   const b = add('node_modules/missing-b', 'missing-b', '2.0.0', {});
   assert.throws(() => collectBundledLicenses(root, [a, b]), error => error.message.includes('missing-a@1.0.0') && error.message.includes('missing-b@2.0.0'));
 });
+
+test('fiber 9.8.1 retains its published-commit notice and rejects other versions or license declarations', t => {
+  const { root, add } = fixture(t);
+  const exact = add('node_modules/@react-three/fiber', '@react-three/fiber', '9.8.1', {});
+  const result = collectBundledLicenses(root, [exact]);
+  assert.ok(result.text.includes('Copyright (c) 2019-2025 Poimandres'));
+  assert.ok(result.text.includes('Permission is hereby granted'));
+  assert.ok(result.text.includes('THE SOFTWARE IS PROVIDED "AS IS"'));
+  const notice = result.manifest.packages[0].files[0];
+  assert.equal(notice.sha256, '9c35b5de7b7493a707fffe4eb23bd2f7f449153c1911f7c6eefb4e591fd5349a');
+  assert.equal(notice.sourceCommit, '53ec672ac4a7189711766b87ece18889abbb32d4');
+  assert.equal(notice.sourceUrl, 'https://raw.githubusercontent.com/pmndrs/react-three-fiber/53ec672ac4a7189711766b87ece18889abbb32d4/LICENSE');
+  assert.equal(fs.existsSync(path.join(path.dirname(exact), 'LICENSE')), false);
+  assert.doesNotThrow(() => verifyBundledLicenses(result.manifest, result.text));
+  const packageFile = path.join(path.dirname(exact), 'package.json');
+  fs.writeFileSync(packageFile, JSON.stringify({ name: '@react-three/fiber', version: '9.8.2', license: 'MIT' }));
+  assert.throws(() => collectBundledLicenses(root, [exact]), /lacks non-empty LICENSE\/NOTICE/);
+  fs.writeFileSync(packageFile, JSON.stringify({ name: '@react-three/fiber', version: '9.8.1', license: 'Apache-2.0' }));
+  assert.throws(() => collectBundledLicenses(root, [exact]), /Invalid pinned license fallback/);
+});

@@ -20,6 +20,7 @@ Folia 的 GNU Affero General Public License v3 全文随源码和界面产物分
 `local-player-build.json` 保存该清单及 SHA-256，`npm run check:folia` 会检查文本与清单一致，缺失或变更时阻止打包。
 若某个 npm 归档遗漏许可文件，仅对已核验的精确包版本使用 `third-party/folia-license-fallbacks/` 中的原始文本；
 该目录记录不可变上游提交、来源及内容校验值，构建时不联网下载或为其他版本猜测许可。
+当前精确版本补件包括 `@pixi/colord@2.9.6` 与 `@react-three/fiber@9.8.1`，均保留各自上游原始 MIT 版权与完整许可文本。
 
 ## desktop/audio/ape-decoder.js —— FFmpeg（LGPL-2.1-or-later）
 
