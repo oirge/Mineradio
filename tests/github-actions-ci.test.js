@@ -48,7 +48,10 @@ test('发布工作流清单覆盖全部自动更新资产', () => {
 test('发布工作流禁用构建器发布并只创建或复用一个 Release', () => {
   assert.match(releaseWorkflow, /uses: actions\/checkout@v5/);
   assert.match(releaseWorkflow, /uses: actions\/setup-node@v5/);
-  assert.match(releaseWorkflow, /npm run build:win -- --publish never/);
+  assert.match(releaseWorkflow, /^\s+run: npm run build:win\s*$/m);
+  assert.equal((releaseWorkflow.match(/^\s+run: npm run build:win\s*$/gm) || []).length, 1);
+  assert.equal(packageJson.scripts['build:win'], 'electron-builder --win --publish never');
+  assert.doesNotMatch(releaseWorkflow, /npm run build:win --/);
   assert.match(releaseWorkflow, /concurrency:/);
   assert.match(releaseWorkflow, /function Get-TagReleases/);
   assert.match(releaseWorkflow, /\$releases\.Count -gt 1/);
