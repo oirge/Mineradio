@@ -33,6 +33,37 @@ export function localActiveLineIndex(lines: Line[], time: number): number {
     return -1;
 }
 
+/** Skip future lyric rows during playback while preserving the original resolver for unordered timing. */
+export function createLocalActiveLineLookup(lines: Line[]): (time: number) => number {
+    let previousStart = Number.NEGATIVE_INFINITY;
+    for (const line of lines) {
+        if (!Number.isFinite(line.startTime) || line.startTime < previousStart) {
+            return time => localActiveLineIndex(lines, time);
+        }
+        previousStart = line.startTime;
+    }
+
+    let highestStartIndex = -1;
+    let previousTime = Number.NEGATIVE_INFINITY;
+
+    return time => {
+        if (!Number.isFinite(time)) return localActiveLineIndex(lines, time);
+        if (time < previousTime) highestStartIndex = -1;
+        previousTime = time;
+
+        while (highestStartIndex + 1 < lines.length && lines[highestStartIndex + 1].startTime <= time) {
+            highestStartIndex++;
+        }
+
+        for (let index = highestStartIndex; index >= 0; index--) {
+            const line = lines[index];
+            if (time <= (line.renderHints?.renderEndTime ?? line.endTime)) return index;
+        }
+
+        return -1;
+    };
+}
+
 /** Snapshots are authoritative; extrapolation only fills their short delivery gap. */
 export function interpolatedLocalTime(state: HostState, elapsedSeconds: number): number {
     const elapsed = state.playing ? Math.min(0.5, Math.max(0, finite(elapsedSeconds))) : 0;

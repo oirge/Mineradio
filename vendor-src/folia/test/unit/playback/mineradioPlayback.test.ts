@@ -197,10 +197,10 @@ describe('Mineradio playback conversions and commands', () => {
         expect(result?.lines[0].endTime).toBe(5);
         expect(result?.lines[1].words).toEqual([{ text: 'Two', startTime: 5, endTime: 10 }]);
         expect(result?.isWordByWord).toBe(false);
-        applyHostAudio({ frequency: Array(1024).fill(255), timeDomain: [], sampleRate: 48000, fftSize: 2048 });
+        applyHostAudio({ frequency: Array(1024).fill(255), sampleRate: 48000, fftSize: 2048 });
         expect(audioBands.bass.get()).toBe(255);
         expect(audioBands.treble.get()).toBe(255);
-        applyHostAudio({ frequency: [], timeDomain: [], sampleRate: 0, fftSize: 0 });
+        applyHostAudio({ frequency: [], sampleRate: 0, fftSize: 0 });
         expect(audioBands.vocal.get()).toBe(0);
     });
 

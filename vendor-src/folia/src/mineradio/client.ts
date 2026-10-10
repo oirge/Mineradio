@@ -57,7 +57,6 @@ export interface HostLyrics {
 
 export interface HostAudio {
     frequency: number[];
-    timeDomain: number[];
     sampleRate: number;
     fftSize: number;
 }

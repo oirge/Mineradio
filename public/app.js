@@ -17034,13 +17034,16 @@ function isShelfContentPlayableSong(song) {
   return !!(song && song.type !== 'podcast-radio' && (song.localKey || (song.id != null && song.id !== '')));
 }
 function isPlaylistPanelVisibleForRender() {
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) return false;
   var panel = document.getElementById('playlist-panel');
   var panelOpen = panel && (panel.classList.contains('show') || panel.classList.contains('peek') || panel.classList.contains('pinned'));
   return !!(panelOpen || miniQueueOpen);
 }
 function safeRenderQueuePanel(reason, opts) {
   opts = opts || {};
-  if (!isPlaylistPanelVisibleForRender() && opts.deferWhenHidden !== false) {
+  // Folia 保留原面板的展开状态，但没有原队列的可见消费者；强制补刷也应等切回后执行。
+  var foliaActive = typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive();
+  if (foliaActive || (!isPlaylistPanelVisibleForRender() && opts.deferWhenHidden !== false)) {
     queuePanelDirty = true;
     return true;
   }
@@ -46840,6 +46843,10 @@ function resumeMainRenderLoop(reason) {
     renderPerfState.lastRenderAt = 0;
   }
   var scheduled = scheduleMainRenderFrame();
+  // 切回原界面或恢复前台时，合并补刷已展开队列；关闭的面板继续等用户打开。
+  if (typeof flushDeferredQueuePanel === 'function' && typeof isPlaylistPanelVisibleForRender === 'function' && isPlaylistPanelVisibleForRender()) {
+    flushDeferredQueuePanel(reason || 'render-resume');
+  }
   if (scheduled && reason && window.__mineradioDebugRenderPower) console.log('[RenderResumed]', reason);
   return scheduled;
 }
