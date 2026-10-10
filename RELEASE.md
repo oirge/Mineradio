@@ -1,5 +1,13 @@
 # 发布流程
 
+## v2.4.1 Folia 性能优化与卡顿减少
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.1`。
+- **内容**：Folia 大曲库分页建立可复用的匹配索引，歌单成员列表按曲库/队列修订号缓存；Folia 活跃时暂停隐藏的 Mineradio 队列渲染，切回原界面后再合并补刷；音频桥接停止传输未使用的时域采样；有序歌词定位复用增量游标，乱序歌词保留原有定位回退。
+- **发布前验证**：根目录 Node 回归 `1414` 项通过，另有 1 项可选基准按环境跳过；Folia 类型检查、构建和产物检查通过；浏览器验收 10 个检查点通过，覆盖 14 种歌词效果、5 种背景、界面切换与数据操作；本地 50,000 首曲库分页基准约为全部音乐 328 ms、喜欢列表 170 ms，10 秒音频桥接基准约 23 ms。
+- **验证边界**：Folia 上游全量单测仍有环境或既有测试失败（缺失 issue 模板、Windows symlink 权限、既有分层边界、播放队列断言和 stage API bad-port 错误）；本轮相关歌词测试、Folia 类型检查和根目录 CI 均通过。Windows 安装器资产待 Release workflow 完成后核验。
+- **发布资产**：工作流应上传 `Mineradio-oirge-2.4.1-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-oirge-2.4.1-SHA256SUMS.txt`，并将该 Release 正式设为 Latest。
+
 ## v2.4.0 Folia 本地播放界面与完整歌词效果
 
 - **版本元数据**：package、lock、前端版本、前后端更新说明和 Release workflow 默认 tag 统一为 `2.4.0`。
