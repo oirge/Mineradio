@@ -54,11 +54,11 @@ describe('isolated Mineradio local display projection', () => {
     it('uses source FFT resolution and the original Folia energy response curves', () => {
         const bands = { bass: motionValue(0), lowMid: motionValue(0), mid: motionValue(0), vocal: motionValue(0), treble: motionValue(0), spectrum: motionValue(new Uint8Array(0)) };
         const power = motionValue(0);
-        applyLocalAudio({ frequency: Array(1024).fill(128), timeDomain: [], sampleRate: 48000, fftSize: 2048 }, bands, power);
+        applyLocalAudio({ frequency: Array(1024).fill(128), sampleRate: 48000, fftSize: 2048 }, bands, power);
         expect(bands.bass.get()).toBeCloseTo(Math.pow(128 / 255, 1.8) * 255);
         expect(power.get()).toBeCloseTo(Math.pow(128 / 255, 3) * 255);
         expect(bands.spectrum.get()).toHaveLength(1024);
-        applyLocalAudio({ frequency: [], timeDomain: [], sampleRate: 0, fftSize: 0 }, bands, power);
+        applyLocalAudio({ frequency: [], sampleRate: 0, fftSize: 0 }, bands, power);
         expect(power.get()).toBe(0);
     });
 });

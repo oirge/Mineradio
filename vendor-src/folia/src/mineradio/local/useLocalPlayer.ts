@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import type { AudioBands, Line } from '../../types';
 import { requestHost, subscribeHost, type HostAudio, type HostLyrics, type HostState } from '../client';
-import { applyLocalAudio, clearLocalAudio, interpolatedLocalTime, localActiveLineIndex, localLyricLines, localStateSignature } from './localPlayerData';
+import { applyLocalAudio, clearLocalAudio, createLocalActiveLineLookup, interpolatedLocalTime, localLyricLines, localStateSignature } from './localPlayerData';
 import type { LocalPlayer } from './playerTypes';
 
 // src/mineradio/local/useLocalPlayer.ts
@@ -37,6 +37,7 @@ export function useLocalPlayer(): LocalPlayer {
         let disposed = false, hostActive = false, visible = false;
         let latest: HostState | null = null, stateSignature = '';
         let lyricLines: Line[] = [], lineIndex = -1;
+        let activeLineAt = createLocalActiveLineLookup(lyricLines);
         let lyricRequest = 0, snapshotRequest = 0, anchoredAt = 0;
         let animationFrame: number | null = null;
         const report = (failure: unknown) => {
@@ -44,7 +45,7 @@ export function useLocalPlayer(): LocalPlayer {
         };
         const syncClock = (position: number) => {
             currentTime.set(position);
-            const nextIndex = localActiveLineIndex(lyricLines, position);
+            const nextIndex = activeLineAt(position);
             if (nextIndex !== lineIndex) { lineIndex = nextIndex; setCurrentLineIndex(nextIndex); }
         };
         const stopClock = () => {
@@ -66,6 +67,7 @@ export function useLocalPlayer(): LocalPlayer {
         const applyLyrics = (value: HostLyrics) => {
             if (disposed || value.trackId !== (latest?.currentTrack?.id ?? null)) return;
             lyricLines = localLyricLines(value, latest?.duration ?? 0);
+            activeLineAt = createLocalActiveLineLookup(lyricLines);
             setLines(lyricLines);
             syncClock(currentTime.get());
         };
@@ -88,7 +90,11 @@ export function useLocalPlayer(): LocalPlayer {
             hostActive = next.interface === 'folia';
             const signature = localStateSignature(next);
             if (signature !== stateSignature) { stateSignature = signature; setState(next); }
-            if (changedTrack) { lyricRequest++; lyricLines = []; setLines(lyricLines); }
+            if (changedTrack) {
+                lyricRequest++; lyricLines = [];
+                activeLineAt = createLocalActiveLineLookup(lyricLines);
+                setLines(lyricLines);
+            }
             syncClock(interpolatedLocalTime(next, 0));
             refreshVisibility();
             if (changedLyrics) void refreshLyrics();

@@ -5,13 +5,15 @@
   var MODE_KEY = 'mineradio-player-interface-v1';
   var active = false, frame = null, ready = false, loadFailed = false;
   var tickTimer = 0, audioTimer = 0, loadTimer = 0;
-  var libraryRevision = 1, queueRevision = 1, lyricsRevision = 1;
+  var libraryRevision = 1, queueRevision = 1, lyricsRevision = 1, favoritesRevision = 1;
   var sentLibraryRevision = 0, sentQueueRevision = 0, lastLibraryAt = 0, lastLyricsAt = 0;
   var lastLyricsSignature = '', lastLibrarySource = null, lastLibraryLength = -1;
   var lastQueueSource = null, lastQueueLength = -1;
   var pausedVideos = new Set(), oldInert = new Map(), inFlight = new Set();
-  var audioFrequency = null, audioTimeDomain = null;
+  var audioFrequency = null;
   var coverTransfers = new Map(), coverTransferBytes = 0;
+  var playlistMembership = new Map();
+  var trackPageIndexes = new WeakMap();
 
   function number(value, fallback) { var result = Number(value); return Number.isFinite(result) ? result : fallback; }
   function clamp(value, low, high) { return Math.max(low, Math.min(high, value)); }
@@ -72,6 +74,7 @@
     var source = global.localLibrarySongs || [];
     if (lastLibrarySource !== source || lastLibraryLength !== source.length) {
       lastLibrarySource = source; lastLibraryLength = source.length; libraryRevision++;
+      playlistMembership.clear();
     }
     var queue = global.playQueue || [];
     if (lastQueueSource !== queue || lastQueueLength !== queue.length) {
@@ -106,21 +109,44 @@
     id = String(id || 'library');
     if (id === 'library') return librarySongs();
     if (id !== 'special-liked' && !call('localPlaylistById', id)) fail('PLAYLIST_NOT_FOUND', '歌单不存在');
-    return call('localPlaylistSongs', id);
+    syncRevisions();
+    var cached = playlistMembership.get(id);
+    var revision = id === 'special-liked' ? favoritesRevision : libraryRevision;
+    if (cached && cached.revision === revision && cached.queueRevision === queueRevision) return cached.songs;
+    var songs = call('localPlaylistSongs', id);
+    playlistMembership.set(id, { songs: songs, revision: revision, queueRevision: queueRevision });
+    return songs;
   }
   function pageTracks(songs, params) {
+    syncRevisions();
     var offset = Math.max(0, Math.floor(number(params.offset, 0)));
     var limit = clamp(Math.floor(number(params.limit, 100)), 1, 1000);
     var query = String(params.query || '').trim().toLocaleLowerCase().slice(0, 240);
-    var items = [], total = 0;
-    for (var i = 0; i < songs.length; i++) {
-      var song = songs[i];
-      if (!song || song.type !== 'local') continue;
-      if (query && (String(song.name || song.title || '') + '\n' + String(song.artist || '') + '\n' + String(song.album || '')).toLocaleLowerCase().indexOf(query) < 0) continue;
-      if (total >= offset && items.length < limit) items.push(projectTrack(song, false));
-      total++;
+    var index = trackPageIndexes.get(songs);
+    if (!index || index.query !== query || index.length !== songs.length
+      || index.libraryRevision !== libraryRevision || index.queueRevision !== queueRevision) {
+      // Reuse membership across pages, but never retain projected metadata or covers.
+      // The usual all-local catalog needs only a count, with no full-library copy.
+      var positions = null, total = 0;
+      for (var i = 0; i < songs.length; i++) {
+        var song = songs[i];
+        var matches = song && song.type === 'local'
+          && (!query || (String(song.name || song.title || '') + '\n' + String(song.artist || '') + '\n' + String(song.album || '')).toLocaleLowerCase().indexOf(query) >= 0);
+        if (matches) {
+          if (positions) positions.push(i);
+          total++;
+        } else if (!positions) {
+          positions = [];
+          for (var previous = 0; previous < i; previous++) positions.push(previous);
+        }
+      }
+      index = { query: query, length: songs.length, positions: positions, total: total,
+        libraryRevision: libraryRevision, queueRevision: queueRevision };
+      trackPageIndexes.set(songs, index);
     }
-    return { items: items, total: total, offset: offset, limit: limit };
+    var items = [], end = Math.min(index.total, offset + limit);
+    for (var item = offset; item < end; item++) items.push(projectTrack(songs[index.positions ? index.positions[item] : item], false));
+    return { items: items, total: index.total, offset: offset, limit: limit };
   }
   function projectPlaylist(playlist) {
     return { id: playlist.id, name: playlist.name, count: (playlist.songRefs || []).length, cover: '', readOnly: false };
@@ -237,6 +263,7 @@
       else global.localStorage.setItem(MODE_KEY, active ? 'folia' : 'mineradio');
     } catch (_error) {}
     event('visibility', { active: active }); stopTimers();
+    if (!active) trackPageIndexes = new WeakMap();
     if (active) { tick(); audioTick(); if (frame) frame.focus(); }
     return getState();
   }
@@ -270,10 +297,10 @@
     if (ready && analyser && !document.hidden) {
       try {
         if (!audioFrequency || audioFrequency.length !== analyser.frequencyBinCount) {
-          audioFrequency = new Uint8Array(analyser.frequencyBinCount); audioTimeDomain = new Uint8Array(analyser.fftSize);
+          audioFrequency = new Uint8Array(analyser.frequencyBinCount);
         }
-        analyser.getByteFrequencyData(audioFrequency); analyser.getByteTimeDomainData(audioTimeDomain);
-        event('audio', { frequency: Array.from(audioFrequency), timeDomain: Array.from(audioTimeDomain),
+        analyser.getByteFrequencyData(audioFrequency);
+        event('audio', { frequency: Array.from(audioFrequency),
           sampleRate: global.audioCtx ? global.audioCtx.sampleRate : 44100, fftSize: analyser.fftSize });
       } catch (_error) {}
     }
@@ -454,7 +481,8 @@
       var result = original.apply(this, arguments);
       if (kind === 'queue') queueRevision++;
       else if (kind === 'lyrics') { lastLyricsAt = 0; lastLyricsSignature = ''; }
-      else libraryRevision++;
+      else if (kind === 'favorites') { favoritesRevision++; libraryRevision++; playlistMembership.clear(); }
+      else { libraryRevision++; playlistMembership.clear(); }
       return result;
     };
   }
@@ -477,7 +505,8 @@
       handle('importFiles', {}).catch(function (error) { if (typeof global.showToast === 'function') global.showToast(error.message); });
     });
   });
-  ['writeLocalPlaylists', 'writeSpecialLikedSongRefs', 'invalidateLocalPlaylistSongLookup', 'schedulePlaybackMetadataRefresh', 'scheduleLocalAssetUiRefresh'].forEach(function (name) { observeMutation(name, 'library'); });
+  ['writeLocalPlaylists', 'invalidateLocalPlaylistSongLookup', 'schedulePlaybackMetadataRefresh', 'scheduleLocalAssetUiRefresh'].forEach(function (name) { observeMutation(name, 'library'); });
+  observeMutation('writeSpecialLikedSongRefs', 'favorites');
   observeMutation('markQueueContentChanged', 'queue'); observeMutation('applyLyricsState', 'lyrics'); updateButtons();
   if (global.MineradioSonicWorkshop) {
     var workshopPresetChanged = global.MineradioSonicWorkshop.onPresetChange;
