@@ -627,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.0';
+var APP_VERSION = '2.4.1';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -680,12 +680,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 本地播放界面：三种视图与完整歌词效果。',
+  hero: 'Folia 性能优化：大曲库分页、歌词定位与后台渲染更顺畅。',
   notes: [
-    '新增 Folia 本地界面，支持歌词播放、悬浮唱片墙和封面拼贴墙，切换界面时音乐继续播放。',
-    '提供全部 14 种内置歌词效果、12 套专属参数面板和 5 种背景，支持图片素材与偏好保存。',
-    '音乐库、收藏、歌单和队列共享 Mineradio 本地数据，收藏刷新保留墙面镜头与选择状态。',
-    '修复覆盖安装后界面缓存未更新，以及切歌时听歌统计递归结算和播放断点保存顺序的问题。'
+    'Folia 大曲库分页和歌单成员复用缓存，减少翻页、切换歌单时的重复扫描。',
+    '切换到 Folia 后暂停隐藏的 Mineradio 队列渲染，回到原界面时再合并补刷，降低后台卡顿。',
+    '音频桥接移除未使用的时域采样传输，减少播放中的跨窗口数据开销。',
+    '有序歌词改用增量游标定位，逐帧更新更轻；乱序歌词继续使用原有定位逻辑。'
   ]
 };
 function readSavedVolume() {
