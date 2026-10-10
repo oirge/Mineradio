@@ -18,7 +18,7 @@
 - 支持同目录封面图片和音频内嵌封面。
 - 移除本地节奏分析环节。
 - 支持多格式音频播放、歌词显示、迷你播放器和桌面歌词。
-- 支持 Folia 本地播放界面：歌词播放、悬浮唱片墙、封面拼贴墙，以及 14 种内置歌词效果和 5 种背景。
+- 支持 Folia 本地播放：歌词、悬浮 Polaroid 唱片墙、Lattice 封面拼贴墙三种视图，14 种歌词效果和 5 种背景；沿用 Mineradio 曲库与音频引擎。
 
 [下载最新版本](https://github.com/oirge/Mineradio/releases/latest) · [报告问题](https://github.com/oirge/Mineradio/issues) · [功能建议](https://github.com/oirge/Mineradio/issues/new?template=feature_request.yml)
 
@@ -27,6 +27,14 @@
 ---
 
 ## ✨ 功能特性
+
+### 🌿 Folia 本地播放（v2.4.0）
+
+- 在标题栏切换 **Mineradio / Folia**；Folia 内可选歌词播放、悬浮 Polaroid 唱片墙和 Lattice 封面拼贴墙，切换视图时音乐继续播放。
+- 14 种内置歌词效果：Classic、Partita、Tempera、Lumiere、Cadenza、Fume、Claddagh、Cappella、Tilt、Diorama、Monet、Pendolo、Sonnet、Still。其中 12 种提供原版专属参数面板。
+- 5 种本地背景：Common、Latent、Sora、Monet、Nomand；支持主题、字号、译文、图片素材及视觉偏好保存。
+- 音乐库、收藏、歌单和队列共用 Mineradio 的本地数据，播放仍由 Mineradio 的音频引擎负责。
+- 只集成 Folia 的本地播放功能和视觉组件，不接入它的在线音乐、账号或同步服务。实现与源码说明见 [Folia 本地集成文档](./docs/FOLIA_INTEGRATION.md)。
 
 ### 🎵 音频格式支持
 - **MP3** - MPEG Audio Layer 3
@@ -83,13 +91,19 @@
 
 ### 从源码运行
 
+源码构建需要 Node.js 24 或更新版本。
+
 ```bash
 # 克隆仓库
 git clone https://github.com/oirge/Mineradio.git
 cd Mineradio
 
-# 安装依赖
-npm install
+# 分别安装 Mineradio 与 Folia 的锁定依赖
+npm ci
+npm ci --prefix vendor-src/folia --ignore-scripts
+
+# 构建 Folia 本地界面
+npm run build:folia
 
 # 启动应用
 npm start
@@ -121,6 +135,10 @@ npm run build:win
    - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF 文件可使用内嵌歌词标签
    - 开启桌面歌词窗口显示
 
+4. **使用 Folia 本地界面**
+   - 在标题栏点击「Folia」，切换歌词、悬浮唱片墙或封面拼贴墙
+   - 通过「音乐库」和「效果」打开本地曲库与视觉设置；点击「Mineradio」切回原界面，播放不会中断
+
 ---
 
 ## 🔧 开发
@@ -128,7 +146,7 @@ npm run build:win
 ### 技术栈
 
 - **Electron** v43.4.0 - 桌面应用框架
-- **Node.js** 22.x - 运行环境
+- **Node.js** 24+ - 源码构建与测试环境
 - **electron-builder** - Windows 打包工具
 - **uiohook-napi** v1.5.5 - 唯一的运行时依赖，只为全局鼠标键热键提供系统级低层输入钩子；没有绑定鼠标键时不会被加载
 
@@ -151,6 +169,13 @@ npm test
 ## 📋 变更日志
 
 查看 [Releases](https://github.com/oirge/Mineradio/releases) 页面获取完整变更历史。
+
+### v2.4.0 (2026-10-10)
+
+- 新增 Folia 本地播放的歌词、悬浮 Polaroid 唱片墙和 Lattice 封面拼贴墙三种视图
+- 提供 14 种歌词效果、12 套专属参数面板和 5 种本地背景，保存主题与视觉偏好
+- Folia 与 Mineradio 共用本地音乐库、收藏、歌单、队列和音频引擎，切换界面时继续播放
+- 修复覆盖安装后的界面缓存，以及切歌时听歌统计和播放断点的处理顺序
 
 ### v2.0.10 (2026-09-12)
 
@@ -498,6 +523,8 @@ npm test
 本项目沿用原项目授权，详见 [LICENSE](./LICENSE)。
 
 原项目地址：[XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
+
+Folia 的来源、AGPL 许可证与打包依赖声明见 [第三方声明](./THIRD-PARTY-NOTICES.md) 和 [集成文档](./docs/FOLIA_INTEGRATION.md)。
 
 ---
 
