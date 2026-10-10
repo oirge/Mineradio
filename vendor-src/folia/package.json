@@ -1,0 +1,291 @@
+{
+  "name": "folia-major",
+  "productName": "Folia",
+  "desktopName": "folia-major.desktop",
+  "description": "Lyrics Reimagine",
+  "author": {
+    "name": "chthollyphile",
+    "email": "chthollyphile@users.noreply.github.com"
+  },
+  "private": true,
+  "version": "0.7.16",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:probe": "vite --open /dev-probe.html",
+    "build": "npm run build:vercel-api && vite build",
+    "build:vercel-api": "tsc -p api-ts/tsconfig.json",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "codemap": "node dev/mcp/ts-code-map/codemap.mjs",
+    "folium:api": "node dev/folium/api-docs.mjs",
+    "codemap:check": "node dev/mcp/ts-code-map/codemap.mjs --check",
+    "test": "vitest run -c vitest.config.ts",
+    "test:unit": "vitest run -c vitest.config.ts",
+    "test:unit:watch": "vitest -c vitest.config.ts",
+    "test:ui": "playwright test",
+    "test:component": "playwright test --project=components",
+    "test:ui:update": "playwright test --update-snapshots",
+    "test:render": "playwright test -c playwright.probe.config.ts",
+    "benchmark:lyrics": "npx tsx test/manual/lyrics_benchmark.ts",
+    "manual:lyrics": "npx tsx test/manual/netease_lyrics_cli.ts",
+    "audit:lyrics-sources": "npx tsx test/manual/lyric-audit/index.ts",
+    "probe:netease-xeapi": "node test/manual/netease_xeapi_probe.cjs",
+    "manual:wallpaper-watchdog": "npx tsx test/manual/wallpaper-watchdog-sim.ts",
+    "manual:analysis-idle": "node test/manual/analysis_idle_release.mts",
+    "manual:visualizer-memory": "node test/manual/visualizer-memory-probe.mjs",
+    "manual:lattice-cover-memory": "node test/manual/lattice-cover-memory.mjs",
+    "stage:client": "vite --open /stage-client.html",
+    "dev:electron": "cross-env ELECTRON_DEV=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer FOLIA_WALLPAPER_HELPER_PATH=build/folia-wallpaper-helper.exe concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
+    "dev:electron:update-preview": "cross-env ELECTRON_DEV=true FOLIA_DEV_UPDATE_PREVIEW=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer FOLIA_WALLPAPER_HELPER_PATH=build/folia-wallpaper-helper.exe concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
+    "dev:electron:wallpaper": "npm run build:windowtolayer && npm run build:wallpaper-helper && npm run dev:electron",
+    "dev:electron:dist": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
+    "dev:electron:dist:sourcemap": "cross-env-shell ELECTRON_DEV=false ELECTRON=true NODE_OPTIONS=--enable-source-maps FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer \"vite build --sourcemap && electron .\"",
+    "dev:electron:dist:swiftshader": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=swiftshader FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
+    "dev:electron:dist:software": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=software FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
+    "build:electron:dir": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && npm run build:wallpaper-helper && electron-builder --linux dir",
+    "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && npm run build:wallpaper-helper && electron-builder",
+    "build:windowtolayer": "node packaging/linux/build-windowtolayer.mjs",
+    "build:wallpaper-helper": "node packaging/windows/build-wallpaper-helper.mjs",
+    "build:ffmpeg": "node packaging/ffmpeg/fetch-ffmpeg.mjs",
+    "contributors:add": "npx all-contributors-cli add",
+    "contributors:generate": "npx all-contributors-cli generate",
+    "models:fetch": "node build/fetchModels.mjs",
+    "manual:ai-probe": "node test/manual/ai_probe.mjs"
+  },
+  "build": {
+    "appId": "top.izuna.foliamajor",
+    "productName": "Folia",
+    "beforePack": "build/beforePack.cjs",
+    "afterPack": "build/afterPack.cjs",
+    "electronLanguages": [
+      "en-US",
+      "zh-CN",
+      "id"
+    ],
+    "generateUpdatesFilesForAllChannels": true,
+    "directories": {
+      "output": "release"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "chthollyphile",
+        "repo": "folia-major"
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "shared/**/*",
+      "package.json",
+      "build/miao.png",
+      "build/thumbar/*.png"
+    ],
+    "asarUnpack": [
+      "electron/analysis/htdemucs_runner.py",
+      "node_modules/@koromix/koffi-*/**/*.node"
+    ],
+    "extraResources": [
+      {
+        "from": "build/ffmpeg/${os}-${arch}",
+        "to": "ffmpeg-audio"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "linux/icon.png"
+      },
+      {
+        "from": "build/trayTemplate.png",
+        "to": "trayTemplate.png"
+      },
+      {
+        "from": "build/trayTemplate@2x.png",
+        "to": "trayTemplate@2x.png"
+      },
+      {
+        "from": "packaging/linux/folia-major.desktop",
+        "to": "linux/folia-major.desktop"
+      },
+      {
+        "from": "packaging/linux/README-LINUX.txt",
+        "to": "linux/README-LINUX.txt"
+      },
+      {
+        "from": "build",
+        "to": ".",
+        "filter": [
+          "windowtolayer",
+          "windowtolayer-COPYING"
+        ]
+      }
+    ],
+    "mac": {
+      "extraResources": [
+        {
+          "from": "build/koffi/darwin_${arch}",
+          "to": "koffi/darwin_${arch}"
+        }
+      ],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png",
+      "extraResources": [
+        {
+          "from": "build",
+          "to": ".",
+          "filter": [
+            "folia-wallpaper-helper.exe"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": [
+        "en_US",
+        "zh_CN",
+        "id"
+      ],
+      "include": "build/installer.nsh"
+    },
+    "linux": {
+      "artifactName": "${name}-${version}-linux-${arch}.${ext}",
+      "target": [
+        "tar.gz",
+        "deb",
+        "rpm"
+      ],
+      "publish": {
+        "provider": "github",
+        "publishAutoUpdate": false
+      },
+      "icon": "build/icon.png",
+      "category": "AudioVideo",
+      "executableName": "folia-major",
+      "syncDesktopName": true,
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "folia-major"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@google/genai": "^2.24.0",
+    "@neteasecloudmusicapienhanced/api": "^4.41.1",
+    "@xhayper/discord-rpc": "^1.5.1",
+    "@yakult-green-tea/qq-music-api": "3.1.4",
+    "axios": "^1.20.0",
+    "bodian-music-api": "0.1.2",
+    "busboy": "^1.6.0",
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.9",
+    "fflate": "^0.8.3",
+    "file-type": "^21.3.4",
+    "koffi": "^3.3.1",
+    "kugoumusicapi": "https://github.com/MakcRe/KuGouMusicApi/archive/refs/tags/v1.6.0.tar.gz",
+    "music-metadata": "^11.16.1",
+    "onnxruntime-node": "^1.30.0",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@applemusic-like-lyrics/ttml": "^1.0.1",
+    "@chenglou/pretext": "^0.0.9",
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3",
+    "@paper-design/shaders-react": "^0.0.80",
+    "@playwright/test": "^1.63.0",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.8.1",
+    "@react-three/postprocessing": "^3.1.2",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/blueimp-md5": "^2.18.2",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.185.4",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@xmldom/xmldom": "^0.9.12",
+    "animejs": "^4.5.0",
+    "autoprefixer": "^10.6.1",
+    "baseline-browser-mapping": "^2.11.26",
+    "blueimp-md5": "^2.19.0",
+    "buffer": "^6.0.3",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "dexie": "^4.4.6",
+    "electron": "^43.7.5",
+    "electron-builder": "^26.15.3",
+    "fake-indexeddb": "^6.2.5",
+    "framer-motion": "^13.4.3",
+    "i18next": "^26.4.2",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "lucide-react": "^1.48.0",
+    "opencc-js": "^1.4.2",
+    "pinyin-pro": "3.29.3",
+    "pixi.js": "^8.21.0",
+    "postcss": "^8.5.28",
+    "react": "^19.3.0",
+    "react-colorful": "^5.8.1",
+    "react-dom": "^19.3.0",
+    "react-i18next": "^17.0.15",
+    "react-window": "^2.3.3",
+    "tailwindcss": "^4.3.3",
+    "three": "^0.185.1",
+    "twgl.js": "^7.0.0",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.1",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.11",
+    "wait-on": "^9.1.0",
+    "wanakana": "^5.3.1",
+    "zustand": "^5.0.15"
+  },
+  "overrides": {
+    "@babel/plugin-transform-runtime": "7.29.7",
+    "concurrently": {
+      "shell-quote": "1.12.0"
+    },
+    "@discordjs/rest": {
+      "undici": "^6.27.0"
+    },
+    "qs": "6.16.0",
+    "three-stdlib": {
+      "fflate": "$fflate"
+    }
+  }
+}

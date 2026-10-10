@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Folia Stage API Docs</title>
+    <script type="module" src="/test/manual/stage-client/main.ts"></script>
+</head>
+<body>
+    <main class="stage-client-shell">
+        <div class="stage-docs-layout">
+            <aside class="docs-sidebar">
+                <p class="eyebrow">Folia Stage API</p>
+                <h1>Local API Docs</h1>
+                <p class="sidebar-copy">
+                    面向本地桌面 Stage Mode 的 API 调用文档与调试控制台
+                </p>
+                <nav class="sidebar-nav">
+                    <a href="#quickstart">Quickstart</a>
+                    <a href="#overview">Overview</a>
+                    <a href="#health">GET /stage/health</a>
+                    <a href="#status">GET /stage/status</a>
+                    <a href="#lyrics">POST /stage/lyrics</a>
+                    <a href="#session">POST /stage/session</a>
+                    <a href="#search">POST /stage/player/search</a>
+                    <a href="#play">POST /stage/player/play</a>
+                    <a href="#player-status">GET /stage/player/status</a>
+                    <a href="#player-time">GET /stage/player/time</a>
+                    <a href="#player-control">POST /stage/player/control</a>
+                    <a href="#player-queue">GET/POST /stage/player/queue</a>
+                    <a href="#player-ws">WS /stage/player/ws</a>
+                    <a href="#clear">DELETE /stage/state</a>
+                </nav>
+            </aside>
+
+            <div class="docs-content">
+                <section class="hero">
+                    <div>
+                        <p class="eyebrow">Reference + Console</p>
+                        <h2>Stage API</h2>
+                    </div>
+                </section>
+
+                <section id="quickstart" class="doc-section connection-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Quickstart</p>
+                            <h3>Connection</h3>
+                        </div>
+                    </div>
+                    <div class="doc-card">
+                        <div class="grid two">
+                            <label>
+                                <span>Stage address</span>
+                                <input id="base-url" type="url" value="http://127.0.0.1:32107" />
+                            </label>
+                            <label>
+                                <span>Bearer token</span>
+                                <input id="token" type="password" placeholder="Paste the token from Folia settings" />
+                            </label>
+                        </div>
+                        <div class="quickstart-grid">
+                            <article class="mini-doc-card">
+                                <strong>1. Enable Stage Mode</strong>
+                                <p class="hint">在 Folia 设置中开启 Stage Mode，并复制 Bearer token。</p>
+                            </article>
+                            <article class="mini-doc-card">
+                                <strong>2. Pick an endpoint</strong>
+                                <p class="hint">左侧目录按接口分组，适合先看文档再发请求。</p>
+                            </article>
+                            <article class="mini-doc-card">
+                                <strong>3. Validate with live preview</strong>
+                                <p class="hint">所有请求都能先看到最终 method、headers 和 body，再真正发送。</p>
+                            </article>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="overview" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Overview</p>
+                            <h3>Endpoint Surface</h3>
+                        </div>
+                    </div>
+                    <div class="overview-grid">
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-get">GET</span>
+                            <code>/stage/health</code>
+                            <p class="hint">Public health check.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-get">GET</span>
+                            <code>/stage/status</code>
+                            <p class="hint">Read active stage state.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-post">POST</span>
+                            <code>/stage/lyrics</code>
+                            <p class="hint">Push parser-compatible lyric source.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-post">POST</span>
+                            <code>/stage/session</code>
+                            <p class="hint">Push media session by URL or file.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-post">POST</span>
+                            <code>/stage/player/search</code>
+                            <p class="hint">Search Netease songs.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-post">POST</span>
+                            <code>/stage/player/play</code>
+                            <p class="hint">Trigger Folia playback.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-get">GET</span>
+                            <code>/stage/player/status</code>
+                            <p class="hint">Read player playback state.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-get">GET</span>
+                            <code>/stage/player/time</code>
+                            <p class="hint">Read precise playback clock.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-post">POST</span>
+                            <code>/stage/player/control</code>
+                            <p class="hint">Send transport controls.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-get">GET</span>
+                            <code>/stage/player/queue</code>
+                            <p class="hint">Read player queue.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-post">POST</span>
+                            <code>/stage/player/queue</code>
+                            <p class="hint">Edit player queue.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-ws">WS</span>
+                            <code>/stage/player/ws</code>
+                            <p class="hint">Subscribe to player events.</p>
+                        </article>
+                        <article class="endpoint-chip-card">
+                            <span class="method-chip method-delete">DELETE</span>
+                            <code>/stage/state</code>
+                            <p class="hint">Clear current stage input.</p>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="health" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-get">GET</span><code>/stage/health</code></h3>
+                        </div>
+                        <button id="run-health" type="button" class="secondary">Run Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">无需鉴权。用于探活，并确认本地 Stage 入口是否可达。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>None</span></div>
+                                <div><span class="meta-label">Response</span><span>JSON</span></div>
+                            </div>
+                            <h4>cURL example</h4>
+                            <pre id="health-example" class="code-example"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Request preview</h4>
+                            <pre id="health-preview" class="request-preview"></pre>
+                            <div id="health-status" class="status-line">No request sent yet.</div>
+                            <pre id="health-response" class="response-output compact"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="status" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-get">GET</span><code>/stage/status</code></h3>
+                        </div>
+                        <button id="run-status" type="button" class="secondary">Run Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">读取当前 active entry、lyrics session 和 media session，需要 Bearer token。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Response</span><span>JSON</span></div>
+                            </div>
+                            <h4>cURL example</h4>
+                            <pre id="status-example" class="code-example"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Request preview</h4>
+                            <pre id="status-preview" class="request-preview"></pre>
+                            <div id="status-status" class="status-line">No request sent yet.</div>
+                            <pre id="status-response" class="response-output compact"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="lyrics" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-post">POST</span><code>/stage/lyrics</code></h3>
+                        </div>
+                        <button id="push-lyrics" type="button">Send Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">推送 parser-compatible 完整歌词对象，相当于进行一次仅有歌词的无音频播放。适合外部歌词工具、爬虫或自定义同步器对接。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Content-Type</span><span>application/json</span></div>
+                            </div>
+                            <h4>Body fields</h4>
+                            <dl class="field-list">
+                                <div><dt>title</dt><dd>可选，歌曲标题。</dd></div>
+                                <div><dt>artist</dt><dd>可选，歌手名。</dd></div>
+                                <div><dt>album</dt><dd>可选，专辑名。</dd></div>
+                                <div><dt>lyricSource</dt><dd>必填，完整歌词来源对象，`type` 需为 `embedded`、`local`、`navidrome` 或 `netease`。</dd></div>
+                            </dl>
+                            <h4>cURL example</h4>
+                            <pre id="lyrics-example" class="code-example"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Interactive request</h4>
+                            <div class="grid two">
+                                <label>
+                                    <span>Title</span>
+                                    <input id="lyrics-title" type="text" value="Stage Lyrics" placeholder="Stage Lyrics" />
+                                </label>
+                                <label>
+                                    <span>Artist</span>
+                                    <input id="lyrics-artist" type="text" value="Folia" placeholder="Folia" />
+                                </label>
+                            </div>
+                            <label>
+                                <span>Album (optional)</span>
+                                <input id="lyrics-album" type="text" placeholder="Optional album name" />
+                            </label>
+                            <label>
+                                <span>Lyric source JSON</span>
+                                <textarea id="lyrics-source-json" rows="10">{&quot;type&quot;:&quot;local&quot;,&quot;lrcContent&quot;:&quot;[00:00.00]Hello world&quot;,&quot;tLrcContent&quot;:&quot;[00:00.00]你好，世界&quot;,&quot;formatHint&quot;:&quot;lrc&quot;}</textarea>
+                            </label>
+                            <pre id="lyrics-preview" class="request-preview"></pre>
+                            <div id="lyrics-status" class="status-line">No request sent yet.</div>
+                            <pre id="lyrics-response" class="response-output"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="session" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-post">POST</span><code>/stage/session</code></h3>
+                        </div>
+                        <button id="push-session" type="button">Send Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">推送媒体会话。支持 `JSON` 和 `multipart/form-data` 两种形式，适合 URL 拉流或本地文件注入。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Transport</span><span>JSON or multipart</span></div>
+                            </div>
+                            <h4>Body fields</h4>
+                            <dl class="field-list">
+                                <div><dt>audioUrl / audioFile</dt><dd>二选一，必须提供其一。</dd></div>
+                                <div><dt>lyricsText / lyricsFile</dt><dd>可选，二选一。</dd></div>
+                                <div><dt>lyricsFormat</dt><dd>可选，`lrc`、`enhanced-lrc`、`vtt`、`yrc` 或自动识别。</dd></div>
+                                <div><dt>coverUrl / coverFile</dt><dd>可选，封面来源。</dd></div>
+                                <div><dt>title / artist / album</dt><dd>可选，补充 metadata。</dd></div>
+                            </dl>
+                            <h4>JSON example</h4>
+                            <pre id="session-example-json" class="code-example"></pre>
+                            <h4>Multipart example</h4>
+                            <pre id="session-example-multipart" class="code-example"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Interactive request</h4>
+                            <div class="grid two">
+                                <label>
+                                    <span>Title</span>
+                                    <input id="title" type="text" value="Folia Demo Tone" placeholder="Song title" />
+                                </label>
+                                <label>
+                                    <span>Artist</span>
+                                    <input id="artist" type="text" value="Folia" placeholder="Artist" />
+                                </label>
+                            </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>Album</span>
+                                    <input id="album" type="text" placeholder="Album" />
+                                </label>
+                                <label>
+                                    <span>Cover URL</span>
+                                    <input id="cover-url" type="url" placeholder="https://example.com/cover.jpg" />
+                                </label>
+                            </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>Audio URL</span>
+                                    <input id="audio-url" type="url" value="https://example.com/demo.mp3" placeholder="https://example.com/song.mp3" />
+                                </label>
+                                <label>
+                                    <span>Audio file</span>
+                                    <input id="audio-file" type="file" accept="audio/*" />
+                                </label>
+                            </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>Cover file</span>
+                                    <input id="cover-file" type="file" accept="image/*" />
+                                </label>
+                                <label>
+                                    <span>Lyrics file</span>
+                                    <input id="lyrics-file" type="file" accept=".lrc,.vtt,.txt,text/plain" />
+                                </label>
+                            </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>Lyrics format</span>
+                                    <select id="lyrics-format">
+                                        <option value="">auto-detect</option>
+                                        <option value="lrc">lrc</option>
+                                        <option value="enhanced-lrc">enhanced-lrc</option>
+                                        <option value="vtt">vtt</option>
+                                        <option value="yrc">yrc</option>
+                                    </select>
+                                </label>
+                                <div class="hint callout-inline">
+                                    上传音频文件时，Folia 会尝试读取内嵌歌词、封面和 metadata。
+                                </div>
+                            </div>
+                            <label>
+                                <span>Lyrics text</span>
+                                <textarea id="lyrics-text" rows="10">[00:00.00]Folia demo line one
+[00:05.00]Folia demo line two</textarea>
+                            </label>
+                            <pre id="session-preview" class="request-preview"></pre>
+                            <div id="session-status" class="status-line">No request sent yet.</div>
+                            <pre id="session-response" class="response-output"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="search" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-post">POST</span><code>/stage/player/search</code></h3>
+                        </div>
+                        <button id="run-search" type="button">Send Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">搜索网易云结果，返回歌曲列表。结果可直接触发 `/stage/player/play` 或追加到主播放器队列。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Content-Type</span><span>application/json</span></div>
+                            </div>
+                            <h4>Body fields</h4>
+                            <dl class="field-list">
+                                <div><dt>query</dt><dd>必填，歌曲 / 歌手 / 专辑关键词。</dd></div>
+                                <div><dt>limit</dt><dd>可选，结果数量上限。</dd></div>
+                            </dl>
+                            <h4>cURL example</h4>
+                            <pre id="search-example" class="code-example"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Interactive request</h4>
+                            <div class="grid two">
+                                <label>
+                                    <span>Query</span>
+                                    <input id="search-query" type="text" value="Mili world.execute (me)" placeholder="Song / artist / album" />
+                                </label>
+                                <label>
+                                    <span>Limit</span>
+                                    <input id="search-limit" type="number" min="1" max="50" value="5" />
+                                </label>
+                            </div>
+                            <pre id="search-preview" class="request-preview"></pre>
+                            <div id="search-status" class="status-line">No request sent yet.</div>
+                            <pre id="search-response" class="response-output compact"></pre>
+                            <div id="search-results" class="playlist-list"></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="play" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-post">POST</span><code>/stage/player/play</code></h3>
+                        </div>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">从外部触发 Folia 主播放器点歌。在 /stage/player/search 返回的搜索结果中进行调试</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Trigger</span><span>Search result action</span></div>
+                            </div>
+                            <h4>Body fields</h4>
+                            <dl class="field-list">
+                                <div><dt>songId</dt><dd>必填，正整数歌曲 ID。</dd></div>
+                                <div><dt>appendToQueue</dt><dd>可选，`true` 时只追加到主播放队列，不打断当前播放。（注：Folia 存在自动去重机制，同一歌曲不会在队列中出现两次，若已在队列中则会被移动到目标位置，并通过返回值的 `deduplicated` 字段体现。）</dd></div>
+                            </dl>
+                            <h4>cURL example</h4>
+                            <pre id="play-example" class="code-example"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Live request preview</h4>
+                            <p class="hint">点击搜索结果中的 `Play In Folia` 或 `Add To Queue` 后，这里会显示实际发送的 `/stage/player/play` 请求。</p>
+                            <pre id="play-preview" class="request-preview">Search results can be played directly back into Folia.</pre>
+                            <div id="play-status" class="status-line">No request sent yet.</div>
+                            <pre id="play-response" class="response-output compact"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="player-status" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-get">GET</span><code>/stage/player/status</code></h3>
+                        </div>
+                        <button id="run-player-status" type="button" class="secondary">Run Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">读取 Folia 播放器域状态，包含当前曲目、播放上下文、控制能力和队列摘要。不会返回完整队列 items。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Response</span><span>JSON</span></div>
+                            </div>
+                            <h4>cURL example</h4>
+                            <pre id="player-status-example" class="code-example scroll-box"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Request preview</h4>
+                            <pre id="player-status-preview" class="request-preview scroll-box"></pre>
+                            <div id="player-status-status" class="status-line">No request sent yet.</div>
+                            <pre id="player-status-response" class="response-output compact scroll-box"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="player-time" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-get">GET</span><code>/stage/player/time</code></h3>
+                        </div>
+                        <button id="run-player-time" type="button" class="secondary">Run Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">主动校准播放时间。播放中会按主进程收到的快照采样时间推算当前 `positionMs`。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Response</span><span>Clock JSON</span></div>
+                            </div>
+                            <h4>cURL example</h4>
+                            <pre id="player-time-example" class="code-example scroll-box"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Request preview</h4>
+                            <pre id="player-time-preview" class="request-preview scroll-box"></pre>
+                            <div id="player-time-status" class="status-line">No request sent yet.</div>
+                            <pre id="player-time-response" class="response-output compact scroll-box"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="player-control" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-post">POST</span><code>/stage/player/control</code></h3>
+                        </div>
+                        <button id="run-player-control" type="button">Send Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">发送播放器控制指令。当前上下文不支持时返回 `409 STAGE_PLAYER_CONTROL_UNSUPPORTED`。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Content-Type</span><span>application/json</span></div>
+                            </div>
+                            <h4>Body fields</h4>
+                            <dl class="field-list">
+                                <div><dt>action</dt><dd>`next`、`prev`、`pause`、`resume` 或 `seek`。</dd></div>
+                                <div><dt>positionMs</dt><dd>`seek` 时必填，非负整数，无效值会返回 `400`。</dd></div>
+                            </dl>
+                            <h4>cURL example</h4>
+                            <pre id="player-control-example" class="code-example scroll-box"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Interactive request</h4>
+                            <div class="grid two">
+                                <label>
+                                    <span>Action</span>
+                                    <select id="player-control-action">
+                                        <option value="pause">pause</option>
+                                        <option value="resume">resume</option>
+                                        <option value="next">next</option>
+                                        <option value="prev">prev</option>
+                                        <option value="seek">seek</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Position ms</span>
+                                    <input id="player-control-position" type="number" min="0" value="30000" />
+                                </label>
+                            </div>
+                            <div class="button-row">
+                                <button type="button" class="secondary" data-control-action="pause">Pause</button>
+                                <button type="button" class="secondary" data-control-action="resume">Resume</button>
+                                <button type="button" class="secondary" data-control-action="prev">Prev</button>
+                                <button type="button" class="secondary" data-control-action="next">Next</button>
+                            </div>
+                            <pre id="player-control-preview" class="request-preview scroll-box"></pre>
+                            <div id="player-control-status" class="status-line">No request sent yet.</div>
+                            <pre id="player-control-response" class="response-output compact scroll-box"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="player-queue" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-get">GET</span><span class="method-chip method-post">POST</span><code>/stage/player/queue</code></h3>
+                        </div>
+                        <div class="button-row">
+                            <button id="run-player-queue-get" type="button" class="secondary">Read Queue</button>
+                            <button id="run-player-queue-post" type="button">Send Edit</button>
+                        </div>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">读取或编辑正常播放器队列。GET 默认返回 100 条队列窗口，支持 offset、limit 和 around=current。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Content-Type</span><span>application/json for POST</span></div>
+                            </div>
+                            <h4>POST action</h4>
+                            <dl class="field-list">
+                                <div><dt>append / insert-next</dt><dd>需要 `songId` 或 `songIds`。（注：Folia 会对歌曲自动去重，若歌曲已在队列中则会被直接移动到目标位置，不会重复添加；请求本身如果有重复歌曲也会被合并。响应的 `deduplicated` 字段会体现去重状态。）</dd></div>
+                                <div><dt>remove / select</dt><dd>需要 `queueItemId` 或 `index`，`select` 会切到该队列项播放。使用 `queueItemId` 时会严格校验项匹配度。</dd></div>
+                                <div><dt>move</dt><dd>需要 `fromQueueItemId` 或 `fromIndex`，并提供 `toIndex`。使用 `queueItemId` 时会严格校验项匹配度。</dd></div>
+                                <div><dt>clear</dt><dd>清空队列中非当前播放项。</dd></div>
+                            </dl>
+                            <h4>cURL example</h4>
+                            <pre id="player-queue-example" class="code-example scroll-box"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Interactive request</h4>
+                            <div class="grid two">
+                                <label>
+                                    <span>Action</span>
+                                    <select id="player-queue-action">
+                                        <option value="append">append</option>
+                                        <option value="insert-next">insert-next</option>
+                                        <option value="remove">remove</option>
+                                        <option value="move">move</option>
+                                        <option value="select">select</option>
+                                        <option value="clear">clear</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Song ID</span>
+                                    <input id="player-queue-song-id" type="number" min="1" value="123456" />
+                                </label>
+                            </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>Queue item ID</span>
+                                    <input id="player-queue-item-id" type="text" placeholder="netease:123456:0" />
+                                </label>
+                                <label>
+                                    <span>From queue item ID</span>
+                                    <input id="player-queue-from-item-id" type="text" placeholder="netease:123456:0" />
+                                </label>
+                            </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>Index</span>
+                                    <input id="player-queue-index" type="number" min="0" placeholder="0" />
+                                </label>
+                                <label>
+                                    <span>To index</span>
+                                    <input id="player-queue-to-index" type="number" min="0" placeholder="1" />
+                                </label>
+                            </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>GET offset</span>
+                                    <input id="player-queue-offset" type="number" min="0" value="0" />
+                                </label>
+                                <label>
+                                    <span>GET limit</span>
+                                    <input id="player-queue-limit" type="number" min="1" max="500" value="100" />
+                                </label>
+                            </div>
+                            <label class="inline-toggle">
+                                <input id="player-queue-around-current" type="checkbox" />
+                                <span>Center GET window around current track</span>
+                            </label>
+                            <pre id="player-queue-preview" class="request-preview scroll-box"></pre>
+                            <div id="player-queue-status" class="status-line">No request sent yet.</div>
+                            <pre id="player-queue-response" class="response-output compact scroll-box"></pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="player-ws" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-ws">WS</span><code>/stage/player/ws</code></h3>
+                        </div>
+                        <div class="button-row">
+                            <button id="connect-player-ws" type="button">Connect</button>
+                            <button id="disconnect-player-ws" type="button" class="secondary">Disconnect</button>
+                            <button id="clear-player-ws-log" type="button" class="secondary">Clear Log</button>
+                        </div>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">订阅播放器事件。TRACK_CHANGED 不携带 positionMs / durationMs；PLAYBACK_UPDATED 只推送播放时间和状态。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token or ?token=</span></div>
+                                <div><span class="meta-label">Transport</span><span>WebSocket</span></div>
+                            </div>
+                            <h4>URL preview</h4>
+                            <pre id="player-ws-preview" class="request-preview compact scroll-box"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Event log</h4>
+                            <div id="player-ws-status" class="status-line">Disconnected.</div>
+                            <pre id="player-ws-log" class="response-output ws-log scroll-box">No events yet.</pre>
+                        </article>
+                    </div>
+                </section>
+
+                <section id="clear" class="doc-section">
+                    <div class="section-header">
+                        <div>
+                            <p class="section-kicker">Endpoint</p>
+                            <h3><span class="method-chip method-delete">DELETE</span><code>/stage/state</code></h3>
+                        </div>
+                        <button id="run-clear" type="button" class="secondary">Run Request</button>
+                    </div>
+                    <div class="endpoint-layout">
+                        <article class="doc-card">
+                            <p class="hint">清空当前 Stage 输入，不区分 lyrics 或 media，会把当前注入态整体移除。</p>
+                            <div class="meta-grid">
+                                <div><span class="meta-label">Auth</span><span>Bearer token</span></div>
+                                <div><span class="meta-label">Effect</span><span>Clear stage state</span></div>
+                            </div>
+                            <h4>cURL example</h4>
+                            <pre id="clear-example" class="code-example"></pre>
+                        </article>
+                        <article class="doc-card">
+                            <h4>Request preview</h4>
+                            <pre id="clear-preview" class="request-preview"></pre>
+                            <div id="clear-status" class="status-line">No request sent yet.</div>
+                            <pre id="clear-response" class="response-output compact"></pre>
+                        </article>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

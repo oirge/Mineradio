@@ -1,0 +1,30 @@
+name: folia-sync
+
+services:
+  sync-server:
+    container_name: folia-sync
+    build:
+      context: ../..
+      dockerfile: deploy/docker/images/sync-server.Dockerfile
+    image: folia-sync-server:local
+    restart: unless-stopped
+    read_only: true
+    env_file:
+      - ../../sync-server/.env
+    environment:
+      PORT: "3000"
+      DB_PATH: /app/data/folia-sync.db
+    ports:
+      - "${FOLIA_SYNC_BIND:-0.0.0.0}:${FOLIA_SYNC_PORT:-13000}:3000"
+    volumes:
+      - "../../sync-server/data:/app/data"
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true

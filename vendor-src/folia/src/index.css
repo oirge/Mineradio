@@ -1,0 +1,293 @@
+@import "tailwindcss";
+
+/* Folium mod stylesheets (registries.styles) live in this layer. Declaring it
+   after Tailwind's layers makes mod rules win over host utilities without
+   !important, independent of when a mod's <style> is injected. */
+@layer folium-mods;
+
+@font-face {
+  font-family: 'Folia Noto Serif SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://cdn.jsdmirror.cn/npm/@fontsource/noto-serif-sc@5.2.9/files/noto-serif-sc-chinese-simplified-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Folia Noto Serif SC';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('https://cdn.jsdmirror.cn/npm/@fontsource/noto-serif-sc@5.2.9/files/noto-serif-sc-chinese-simplified-500-normal.woff2') format('woff2');
+}
+
+/* Custom Global Styles */
+body {
+  background-color: #09090b;
+  color: #e4e4e7;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+/* 播放页空闲时隐藏鼠标指针。挂点在播放页的视觉层容器上，弹窗和浮动控件都在它外面，
+   不会被波及，所以不需要 !important。
+   后代选择器压得住 Tailwind 的 cursor-* 靠的不是特异性，而是这条规则**不在任何
+   @layer 里**：Tailwind v4 的工具类全在 @layer utilities 中，无层规则整体优先于有层
+   规则，与特异性无关（作用域内有 18 处 disabled:cursor-not-allowed，特异性比这条高）。
+   别把它挪进 @layer 或改写成 @utility，那会让这些元素在指针隐藏时露出光标。 */
+.cursor-auto-hidden,
+.cursor-auto-hidden * {
+  cursor: none;
+}
+
+:root {
+  --scrollbar-track: #18181b;
+  --scrollbar-thumb: #3f3f46;
+  --scrollbar-thumb-hover: #52525b;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 768px) {
+  .mobile-hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .mobile-hide-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+.visualizer-overlay-scrollbar {
+  /* Remove standard scrollbar-width/color to prevent Chromium from ignoring -webkit-scrollbar styles */
+}
+
+.visualizer-overlay-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.visualizer-overlay-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.visualizer-overlay-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-color, rgba(255, 255, 255, 0.18));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.visualizer-overlay-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover-color, rgba(255, 255, 255, 0.3));
+}
+
+.visualizer-overlay-scrollbar::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Polaroid Card theme-adaptive styles */
+.theme-polaroid-card {
+  background-color: color-mix(in srgb, var(--bg-color) 95%, transparent) !important;
+  border-color: color-mix(in srgb, var(--text-primary) 5%, transparent) !important;
+  color: var(--text-primary) !important;
+  transition: all 0.3s ease;
+}
+
+.theme-polaroid-card:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 32%, transparent) !important;
+}
+
+/* Glass panel (search box, sidebar) theme-adaptive styles */
+.theme-glass-panel {
+  background-color: color-mix(in srgb, var(--bg-color) 85%, transparent) !important;
+  border-color: color-mix(in srgb, var(--text-primary) 12%, transparent) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Click-through: the window ignores real clicks but still receives forwarded mouse-move, so hover
+   styles would keep lighting up components nobody can reach. Only the unlock control stays live. */
+html[data-click-through='active'] body * {
+  pointer-events: none !important;
+}
+
+html[data-click-through='active'] body .click-through-interactive,
+html[data-click-through='active'] body .click-through-interactive * {
+  pointer-events: auto !important;
+}
+
+/* Remote control: during an audio transition the progress bar breathes a
+   soft glow, so the handoff reads at a glance without watching the timestamps.
+   The glow rides on an overlay sibling because the track itself clips overflow
+   to keep the fill's rounded ends, which would cut any shadow off the fill. */
+@keyframes remote-progress-transition-glow {
+
+  0%,
+  100% {
+    opacity: 0.5;
+    box-shadow: 0 0 4px 0 var(--transition-glow-color), 0 0 9px 0 var(--transition-glow-color);
+  }
+
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 7px 1px var(--transition-glow-color), 0 0 16px 3px var(--transition-glow-color);
+  }
+}
+
+.remote-progress-transition-glow {
+  animation: remote-progress-transition-glow 2.4s ease-in-out infinite;
+}
+
+/* 降级状态由 useMotionSettingsStore 同步到 <html data-reduce-motion>，不再直接跟随系统偏好。
+   见 stores/useMotionSettingsStore.ts。 */
+:root[data-reduce-motion~='uiMicroMotion'] .remote-progress-transition-glow {
+  animation: none;
+  opacity: 0.85;
+  box-shadow: 0 0 6px 0 var(--transition-glow-color);
+}
+
+/* Grid 顶部标题的面板开关：用户第一次进入 grid 视图时，让开关自己呼吸几下并把
+   "展开"文案短暂推出来，把"标题可以点开左侧面板"这件事主动说一次。
+   两段动画都有固定的结束时间，跑完自动还原成 hover 控制的静止态，不需要计时器。 */
+@keyframes grid-panel-toggle-hint {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+
+.grid-panel-toggle-hint {
+  animation: grid-panel-toggle-hint 1.4s ease-in-out 3;
+}
+
+@keyframes grid-panel-toggle-hint-label {
+
+  0%,
+  100% {
+    max-width: 0;
+    opacity: 0;
+  }
+
+  12%,
+  76% {
+    max-width: 5rem;
+    opacity: 1;
+  }
+}
+
+.grid-panel-toggle-hint-label {
+  animation: grid-panel-toggle-hint-label 4.2s ease-in-out 1;
+}
+
+/* 关掉动画的用户改为静态展示文案，仍然拿得到这条提示。 */
+:root[data-reduce-motion~='uiMicroMotion'] .grid-panel-toggle-hint {
+  animation: none;
+}
+
+:root[data-reduce-motion~='uiMicroMotion'] .grid-panel-toggle-hint-label {
+  animation: none;
+  max-width: 5rem;
+  opacity: 1;
+}
+
+/* 思索：一章播完后右边缘那个「下一章」提示里，箭头的横向呼吸。
+   方向就是它要去的方向，幅度压得很小 —— 它是提示，不是要抢走刚演完那幅画面的注意力。
+
+   动的是箭头图标而不是整个按钮：会动的点击目标本来就难点中，
+   而且按钮自身不停移动时 Playwright 会判定元素不稳定、永远点不下去。 */
+@keyframes ponder-next-cue-breathe {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(4px); }
+}
+
+.ponder-next-cue-arrow {
+    animation: ponder-next-cue-breathe 1.8s ease-in-out infinite;
+}
+
+:root[data-reduce-motion~='uiMicroMotion'] .ponder-next-cue-arrow {
+    animation: none;
+}
+
+/* 自动进入下一章的读条。走 CSS 而不是 React state：它每帧都在变，
+   进 state 等于让整个教程层按帧重渲染，正是 frontend-runtime-guardrails 要挡的形状。
+   时长由内联的 animation-duration 给，因为它是 DSL 里的一个常量。 */
+@keyframes ponder-next-cue-countdown {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+
+.ponder-next-cue-countdown {
+    animation-name: ponder-next-cue-countdown;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+    transform-origin: left center;
+}
+
+/* 思索：骨架框逐个落位。
+
+   一进场整幅骨架整齐地出现在那里，读起来像一张静态插图；让它们按声明顺序错开几十毫秒
+   落位，眼睛才会跟着「先是这一页，再是页里的这几块」走一遍，和字幕的讲述顺序对上。
+
+   幅度压得很小：它是入场，不是表演，落位之后紧接着就是真正要看的那段演示。 */
+@keyframes ponder-skeleton-in {
+    from { opacity: 0; transform: scale(0.97); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.ponder-skeleton-in {
+    animation: ponder-skeleton-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 标签跟着自己那个框来，不自带缩放 —— 它贴在框外沿，缩放会让它先歪一下。 */
+@keyframes ponder-skeleton-label-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.ponder-skeleton-label-in {
+    animation: ponder-skeleton-label-in 280ms ease-out both;
+}
+
+:root[data-reduce-motion~='uiMicroMotion'] .ponder-skeleton-in,
+:root[data-reduce-motion~='uiMicroMotion'] .ponder-skeleton-label-in {
+    animation: none;
+}

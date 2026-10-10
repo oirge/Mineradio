@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Folia QQ 歌单诊断</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: #17181c;
+        color: #e8e8ea;
+        font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+      }
+      h1 { font-size: 17px; margin: 0 0 4px; }
+      .sub { color: #8b8d95; font-size: 12px; margin: 0 0 16px; }
+      .sub code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+      .card {
+        border: 1px solid #2c2e35;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 12px;
+        background: #1d1e23;
+      }
+      .card h2 { font-size: 13px; margin: 0 0 8px; color: #a9abb4; font-weight: 600; }
+      button {
+        appearance: none;
+        border: 1px solid #3a3d46;
+        background: #262830;
+        color: #e8e8ea;
+        border-radius: 9px;
+        padding: 9px 13px;
+        font-size: 13px;
+        cursor: pointer;
+        margin: 0 6px 6px 0;
+      }
+      button:active { background: #31343e; }
+      button:disabled { opacity: .45; cursor: default; }
+      button.primary { background: #2f5bd0; border-color: #3f6ae0; }
+      pre {
+        margin: 8px 0 0;
+        padding: 10px;
+        background: #121317;
+        border-radius: 8px;
+        font-size: 11.5px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 340px;
+        overflow: auto;
+      }
+      .row {
+        border-top: 1px solid #2c2e35;
+        padding: 10px 0 4px;
+      }
+      .row:first-of-type { border-top: 0; }
+      .name { font-weight: 600; }
+      .meta { color: #8b8d95; font-size: 11.5px; word-break: break-all; }
+      .ok { color: #5fd68b; }
+      .bad { color: #ff7a7a; }
+      .warn { color: #f0c05a; }
+      .note { color: #8b8d95; font-size: 11.5px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>QQ 歌单诊断</h1>
+    <p class="sub">
+      只读探针，不会修改任何账号数据。请先在 Folia 主站登录 QQ 音乐，再打开本页。
+      与 <code>dev-probe.html</code> 一样，本页不在 <code>vite.config.ts</code> 的
+      <code>build.rollupOptions.input</code> 里，因此只在开发服务器上可用，不会进生产产物。
+    </p>
+    <div id="root"></div>
+    <script type="module" src="/test/manual/qq-diag/main.ts"></script>
+  </body>
+</html>

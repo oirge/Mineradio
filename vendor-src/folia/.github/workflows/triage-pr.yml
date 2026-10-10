@@ -1,0 +1,58 @@
+name: Triage Pull Requests
+
+# PR 元数据管理：按标题前缀打类型标签、提示暂停接受的区域、标记改动过大。纯确定性逻辑，不调用 LLM，也不审查代码。
+on:
+  # 用 pull_request_target 是因为 fork PR 在 pull_request 下拿到的 token 只读，打不了标签。
+  # 代价是这里有写权限，所以：只 checkout 默认分支、不 checkout 也不执行 PR 的任何文件、不注入 DeepSeek 密钥。
+  # workflow 定义和脚本都来自 base 分支，PR 改了它们也不影响这次运行。
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR 编号'
+        required: true
+        type: string
+      dry_run:
+        description: '只输出到 job summary，不写入'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  # 给 PR 打标签和创建标签走的是 issues API。
+  issues: write
+
+# 只关心 PR 的最新状态，连续 push 时旧的运行直接丢掉。
+concurrency:
+  group: triage-pr-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Triage pull request
+    if: github.event_name == 'workflow_dispatch' || github.event.sender.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out triage scripts from the default branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Run triage
+        run: node .github/scripts/triage/bin/triage-pr.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRIAGE_MODE: ${{ vars.TRIAGE_MODE }}
+          TRIAGE_DISPATCH_NUMBER: ${{ inputs.pr_number }}
+          TRIAGE_DISPATCH_DRY_RUN: ${{ inputs.dry_run }}

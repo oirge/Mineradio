@@ -7,3 +7,5 @@
 *.ico binary
 *.png binary
 *.min.js text eol=lf
+public/vendor/folia/LICENSE text eol=lf
+public/vendor/folia/THIRD-PARTY-LICENSES.txt text eol=lf whitespace=-blank-at-eof

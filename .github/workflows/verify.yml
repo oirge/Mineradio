@@ -22,15 +22,30 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor-src/folia/package-lock.json
       - run: npm ci --ignore-scripts
+      - name: Install Folia build dependencies
+        run: npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
+      - name: Build embedded Folia
+        run: npm run build:folia
+      - name: Save embedded Folia build
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-static
+          path: public/vendor/folia/
+          if-no-files-found: error
+          retention-days: 7
       - name: Check document encoding
         run: node --test tests/doc-encoding-integrity.test.js
-      - run: node --test --test-concurrency=1 tests/*.test.js
+      - run: node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
       - run: |
           node --check desktop/main.js
           node --check desktop/overlay-preload.js
           node --check server.js
           node --check public/app.js
+          node --check scripts/build-folia.js
           git diff --check

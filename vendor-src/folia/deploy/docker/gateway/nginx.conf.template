@@ -1,0 +1,100 @@
+pid /tmp/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    log_format combined_no_query '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" '
+                                 '$status $body_bytes_sent "$http_referer" "$http_user_agent"';
+    access_log /dev/stdout combined_no_query;
+    error_log /dev/stderr warn;
+
+    map $http_x_forwarded_proto $folia_forwarded_proto {
+        default $http_x_forwarded_proto;
+        "" $scheme;
+    }
+
+    sendfile on;
+    keepalive_timeout 65;
+    client_max_body_size 4m;
+
+    server {
+        listen 8080;
+        server_name _;
+        root /usr/share/nginx/html;
+
+        # FOLIA_TRUSTED_PROXIES 非空时由 entrypoint 生成 set_real_ip_from 等指令，否则为空。
+        ${FOLIA_REAL_IP_CONFIG}
+
+        location = /healthz {
+            access_log off;
+            default_type application/json;
+            return 200 '{"ok":true,"service":"folia-gateway"}';
+        }
+
+        location = /runtime-config.js {
+            access_log off;
+            default_type application/javascript;
+            add_header Cache-Control "no-store";
+            return 200 'window.__FOLIA_RUNTIME_CONFIG__={aiProvider:"${FOLIA_AI_PROVIDER}",deployment:"docker"};';
+        }
+
+        location /netease/ {
+            proxy_pass http://netease-api:3000/;
+            # Netease QR login returns several large Set-Cookie headers before they are hidden.
+            proxy_buffer_size 32k;
+            proxy_buffers 8 32k;
+            proxy_busy_buffers_size 64k;
+            proxy_hide_header Set-Cookie;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $folia_forwarded_proto;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location /kugou/ {
+            proxy_pass http://kugou-api:3000/;
+            proxy_hide_header Set-Cookie;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $folia_forwarded_proto;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location /qq/ {
+            proxy_pass http://qq-api:3000/;
+            proxy_hide_header Set-Cookie;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $folia_forwarded_proto;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # 下发明文 Navidrome 凭据，按 NAVIDROME_PRESET_ALLOW 限制来源（默认只放行局域网）。
+        # 用不区分大小写的前缀正则而不是精确匹配：Express 默认忽略大小写和结尾斜杠，
+        # /api/Navidrome-Preset、/api/navidrome-preset/ 这类写法若落到下面的 /api/ 就绕过了限制。
+        location ~* ^/api/navidrome-preset {
+            ${FOLIA_NAVIDROME_PRESET_ACL}
+            proxy_pass http://backend:3000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $folia_forwarded_proto;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location /api/ {
+            proxy_pass http://backend:3000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $folia_forwarded_proto;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}

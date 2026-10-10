@@ -1,0 +1,24 @@
+{
+  "@pixi/colord@2.9.6": {
+    "license": "MIT",
+    "file": "pixi-colord-2.9.6-LICENSE.txt",
+    "sha256": "7613d4594ee8b6163926af3435dae61c9e3d5a27cd137bd76a543ba40002d8fc",
+    "sourceUrl": "https://raw.githubusercontent.com/omgovich/colord/5344fbf77b736f81cd33c21050021bc09bc9dd1d/LICENSE.md",
+    "sourceCommit": "5344fbf77b736f81cd33c21050021bc09bc9dd1d",
+    "packageMetadataUrl": "https://registry.npmjs.org/@pixi%2fcolord/2.9.6",
+    "packageIntegrity": "sha512-nezytU2pw587fQstUu1AsJZDVEynjskwOL+kibwcdxsMBFqPsFFNA7xl0ii/gXuDi6M0xj3mfRJj8pBSc2jCfA==",
+    "retrievedAt": "2026-10-10",
+    "reason": "The npm archive omits LICENSE.md. Its published gitHead identifies this exact upstream commit; the commit's package.json also reports version 2.9.6."
+  },
+  "@react-three/fiber@9.8.1": {
+    "license": "MIT",
+    "file": "react-three-fiber-9.8.1-LICENSE.txt",
+    "sha256": "9c35b5de7b7493a707fffe4eb23bd2f7f449153c1911f7c6eefb4e591fd5349a",
+    "sourceUrl": "https://raw.githubusercontent.com/pmndrs/react-three-fiber/53ec672ac4a7189711766b87ece18889abbb32d4/LICENSE",
+    "sourceCommit": "53ec672ac4a7189711766b87ece18889abbb32d4",
+    "packageMetadataUrl": "https://registry.npmjs.org/@react-three%2ffiber/9.8.1",
+    "packageIntegrity": "sha512-GbNP4r6F/gpclFKkLGHzXcuwFWAzLyKsmrQGcDuwK3wQnwLH6F1TfGtEYjHy8OQoGsajwT19B9jtVLLjjfH09w==",
+    "retrievedAt": "2026-10-10",
+    "reason": "The npm archive omits LICENSE. Its published gitHead identifies this exact upstream commit; packages/fiber/package.json at that commit also reports @react-three/fiber version 9.8.1 and MIT. The archive SHA-512 was verified against npm metadata."
+  }
+}

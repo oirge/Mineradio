@@ -1,0 +1,95 @@
+name: PR Unit Tests
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  # main 上也跑一次，唯一目的是把 node_modules 缓存写进 base 分支的 scope。Actions 的缓存
+  # 作用域规则是「PR 能读 base 分支的缓存，分支之间互相不可见」，而这个 workflow 原本只在
+  # pull_request 触发，于是缓存只会写进各个 PR 自己的 scope 并随 PR 合并作废——每个新分支、
+  # 每个 fork PR 的首跑都必然冷启动装 1.4GB 依赖。
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-unit-tests-${{ github.event.pull_request.number || github.ref }}
+  # main 上不抢占：那一跑是为了落缓存，被后一次推送掐掉就白跑了。
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test-unit:
+    name: Run unit tests
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # 缓存 node_modules 本身而不是 ~/.npm：这棵树有 1.4GB（onnxruntime-node 的原生库 285MB、
+      # electron 43 自带的 dist 313MB，两者都在 tarball 里，没有可跳过的 install script），
+      # 而 npm ci 在 ~/.npm 命中的情况下仍然量到过 5 分钟，瓶颈是 1169 个包的解包落盘而不是下载。
+      # setup-node 的 cache: npm 与这里用同一个 lockfile hash 做 key，命中/落空完全同步，留着纯属
+      # 多下一份，所以上面没有开。
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-ubuntu-latest-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+  typecheck-sync-server:
+    name: Typecheck sync-server
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    # 与 test-unit 并行。sync-server 只有 46 个包，却量到过一次 5 分钟的 npm ci，串在根依赖
+    # 后面等于把这份抖动直接加进关键路径。它和根依赖没有任何关系，分开跑就只取两者的较大值。
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Restore sync-server node_modules
+        id: sync-server-node-modules
+        uses: actions/cache@v4
+        with:
+          path: sync-server/node_modules
+          key: sync-server-node-modules-ubuntu-latest-node24-${{ hashFiles('sync-server/package-lock.json') }}
+
+      - name: Install sync-server dependencies
+        if: steps.sync-server-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+        working-directory: ./sync-server
+
+      - name: Run sync-server typecheck
+        run: npm run build:node
+        working-directory: ./sync-server

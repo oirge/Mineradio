@@ -1,0 +1,14 @@
+.git
+.github
+.vercel
+node_modules
+dist
+release
+test-results
+sync-server
+deploy/docker/data
+*.local
+.env
+.env.*
+**/.env
+**/.env.*

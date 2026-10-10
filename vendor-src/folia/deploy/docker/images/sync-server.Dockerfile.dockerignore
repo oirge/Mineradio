@@ -1,0 +1,11 @@
+*
+!sync-server/
+!sync-server/package.json
+!sync-server/package-lock.json
+!sync-server/tsconfig.json
+!sync-server/src/
+!sync-server/src/**
+!deploy/
+!deploy/docker/
+!deploy/docker/sync-server/
+!deploy/docker/sync-server/entrypoint.sh

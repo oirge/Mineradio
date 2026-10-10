@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Runtime Guardrails"
+  short_description: "Guard frontend animation performance"
+  default_prompt: "Use $frontend-runtime-guardrails to review or implement a visualizer change without introducing high-frequency React state updates."

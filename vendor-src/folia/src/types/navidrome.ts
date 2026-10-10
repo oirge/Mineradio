@@ -1,0 +1,354 @@
+import { AmllDbPlatform, LyricData, LyricProviderSource, ReplayGainInfo, SongResult } from '../types';
+
+// Navidrome/Subsonic API Configuration
+export interface NavidromeConfig {
+    serverUrl: string;
+    username: string;
+    // Stored as MD5 hash for token-based auth
+    passwordHash: string;
+    // Salt used for the last successful auth
+    salt?: string;
+}
+
+// Subsonic API Response Wrapper
+export interface SubsonicResponse<T> {
+    'subsonic-response': {
+        status: 'ok' | 'failed';
+        version: string;
+        type: string;
+        serverVersion: string;
+        openSubsonic: boolean;
+        error?: {
+            code: number;
+            message: string;
+        };
+    } & T;
+}
+
+// Artist
+export interface SubsonicArtist {
+    id: string;
+    name: string;
+    coverArt?: string;
+    albumCount?: number;
+    artistImageUrl?: string;
+}
+
+// Album
+export interface SubsonicAlbum {
+    id: string;
+    name: string;
+    artist: string;
+    artistId: string;
+    coverArt?: string;
+    songCount: number;
+    duration: number;
+    playCount?: number;
+    created: string;
+    starred?: string;
+    year?: number;
+    genre?: string;
+    song?: SubsonicSong[];
+}
+
+// Song/Child
+export interface SubsonicSong {
+    id: string;
+    parent?: string;
+    isDir: boolean;
+    title: string;
+    album: string;
+    artist: string;
+    track?: number;
+    year?: number;
+    genre?: string;
+    coverArt?: string;
+    size: number;
+    contentType: string;
+    suffix: string;
+    duration: number; // seconds
+    bitRate?: number;
+    path: string;
+    playCount?: number;
+    discNumber?: number;
+    created: string;
+    albumId: string;
+    artistId: string;
+    type: 'music' | 'podcast' | 'audiobook';
+    isVideo: boolean;
+    starred?: string;
+    replayGain?: ReplayGainInfo;
+}
+
+// Album List Response
+export interface AlbumList2Response {
+    albumList2: {
+        album: SubsonicAlbum[];
+    };
+}
+
+// Album Response
+export interface AlbumResponse {
+    album: SubsonicAlbum;
+}
+
+export interface SongResponse {
+    song: SubsonicSong;
+}
+
+export interface SubsonicPlaylist {
+    id: string;
+    name: string;
+    comment?: string;
+    owner?: string;
+    public?: boolean;
+    songCount: number;
+    duration: number;
+    created?: string;
+    changed?: string;
+    coverArt?: string;
+    entry?: SubsonicSong[];
+}
+
+export interface PlaylistsResponse {
+    playlists?: {
+        playlist?: SubsonicPlaylist[];
+    };
+}
+
+export interface PlaylistResponse {
+    playlist: SubsonicPlaylist;
+}
+
+export interface CreatePlaylistResponse {
+    playlist?: SubsonicPlaylist;
+}
+
+export interface NavidromePlaylistDialogItem {
+    id: string;
+    name: string;
+    description?: string;
+}
+
+export type NavidromeCollectionDescriptor =
+    | {
+        kind: 'playlist';
+        playlist: SubsonicPlaylist;
+        editable: true;
+    }
+    | {
+        kind: 'favorites' | 'random' | 'artist';
+        editable?: false;
+    };
+
+export interface ArtistsIndexResponse {
+    artists?: {
+        ignoredArticles?: string;
+        index?: Array<{
+            name: string;
+            artist: SubsonicArtist[];
+        }>;
+    };
+}
+
+export interface ArtistResponse {
+    artist: SubsonicArtist & {
+        album?: SubsonicAlbum[];
+    };
+}
+
+export interface RandomSongsResponse {
+    randomSongs?: {
+        song?: SubsonicSong[];
+    };
+}
+
+export interface Starred2Response {
+    starred2?: {
+        song?: SubsonicSong[];
+        album?: SubsonicAlbum[];
+        artist?: SubsonicArtist[];
+    };
+}
+
+export interface OpenSubsonicExtension {
+    name: string;
+    versions: number[];
+}
+
+export interface OpenSubsonicExtensionsResponse {
+    openSubsonicExtensions?: OpenSubsonicExtension[];
+}
+
+export interface NavidromeUserProfile {
+    username: string;
+    email?: string;
+    scrobblingEnabled?: boolean;
+    adminRole?: boolean;
+    settingsRole?: boolean;
+    downloadRole?: boolean;
+    uploadRole?: boolean;
+    playlistRole?: boolean;
+    coverArtRole?: boolean;
+    commentRole?: boolean;
+    podcastRole?: boolean;
+    streamRole?: boolean;
+    jukeboxRole?: boolean;
+    shareRole?: boolean;
+    videoConversionRole?: boolean;
+    avatarLastChanged?: string;
+    folder?: Array<string | number>;
+}
+
+export interface UserResponse {
+    user?: NavidromeUserProfile;
+}
+
+export interface MusicFolder {
+    id: string | number;
+    name: string;
+}
+
+export interface MusicFoldersResponse {
+    musicFolders?: {
+        musicFolder?: MusicFolder[];
+    };
+}
+
+export interface NavidromeLicense {
+    valid: boolean;
+    email?: string;
+    licenseExpires?: string;
+    trialExpires?: string;
+}
+
+export interface LicenseResponse {
+    license?: NavidromeLicense;
+}
+
+export interface NavidromeCapabilities {
+    openSubsonic: boolean;
+    extensionVersions: Record<string, number[]>;
+    supportsApiKeyAuthentication: boolean;
+    supportsFormPost: boolean;
+    supportsPlaybackReport: boolean;
+    supportsSongLyrics: boolean;
+    supportsTranscoding: boolean;
+}
+
+export interface NavidromeServerProfile {
+    fetchedAt: number;
+    apiVersion?: string;
+    serverType?: string;
+    serverVersion?: string;
+    openSubsonic: boolean;
+    openSubsonicExtensions: OpenSubsonicExtension[];
+    capabilities: NavidromeCapabilities;
+    user: NavidromeUserProfile | null;
+    musicFolders: MusicFolder[];
+    license: NavidromeLicense | null;
+}
+
+// Ping Response
+export interface PingResponse {
+    // Empty, just checks status
+}
+
+// Lyrics Response
+export interface LyricsResponse {
+    lyrics?: {
+        artist?: string;
+        title?: string;
+        value?: string; // Plain text lyrics (not LRC format usually)
+    };
+}
+
+// Search3 Response
+export interface Search3Response {
+    searchResult3: {
+        artist?: SubsonicArtist[];
+        album?: SubsonicAlbum[];
+        song?: SubsonicSong[];
+    };
+}
+
+export interface StructuredLyricLine {
+    start: number;
+    value: string;
+}
+
+export interface StructuredLyricCue {
+    start?: number;
+    end?: number;
+    value: string;
+    byteStart?: number;
+    byteEnd?: number;
+}
+
+export interface StructuredLyricCueLine {
+    index: number;
+    start?: number;
+    end?: number;
+    value: string;
+    agentId?: string;
+    cue?: StructuredLyricCue[];
+}
+
+export interface StructuredLyricAgent {
+    id: string;
+    role?: string;
+    name?: string;
+}
+
+export interface StructuredLyric {
+    displayArtist?: string;
+    displayTitle?: string;
+    lang?: string;
+    kind?: 'main' | 'translation' | 'pronunciation' | string;
+    line: StructuredLyricLine[];
+    cueLine?: StructuredLyricCueLine[];
+    agents?: StructuredLyricAgent[];
+    offset?: number;
+    synced?: boolean;
+}
+
+export interface LyricsBySongIdResponse {
+    lyricsList?: {
+        structuredLyrics?: StructuredLyric[];
+    };
+}
+
+// Extended SongResult for Navidrome songs
+export interface NavidromeSong extends SongResult {
+    isNavidrome: true;
+    navidromeData: {
+        id: string;
+        streamUrl: string;
+        coverArtUrl?: string;
+        albumId: string;
+        artistId: string;
+        path: string;
+        bitRate?: number;
+        suffix: string;
+        starred?: string;
+        replayGain?: SubsonicSong['replayGain'];
+    };
+    // For lyrics matching (similar to local songs)
+    matchedSongId?: number;
+    matchedLyrics?: LyricData;
+    matchedIsPureMusic?: boolean;
+    hasManualLyricSelection?: boolean;
+    lyricsSource?: 'navi' | 'online';
+    useOnlineCover?: boolean;
+    useOnlineMetadata?: boolean;
+    noAutoMatch?: boolean;
+    matchedLyricsSource?: LyricProviderSource;
+    matchedLyricsProviderPlatform?: AmllDbPlatform;
+    cachedStructuredLyrics?: StructuredLyric | StructuredLyric[] | StructuredLyricLine[];
+    cachedPlainLyrics?: string;
+}
+
+// Type guard for NavidromeSong
+export function isNavidromeSong(song: SongResult): song is NavidromeSong {
+    return 'isNavidrome' in song && (song as NavidromeSong).isNavidrome === true;
+}

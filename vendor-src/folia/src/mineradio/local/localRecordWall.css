@@ -1,0 +1,24 @@
+/* src/mineradio/local/localRecordWall.css */
+/* Composition only: card surfaces and capsule/slide controls keep their original Folia utilities. */
+.local-record-wall{position:absolute;inset:0;overflow:hidden;isolation:isolate;user-select:none}
+.local-record-backdrop{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.local-record-backdrop img{width:100%;height:100%;object-fit:cover;transform:scale(1.1);filter:blur(30px)}
+.local-record-viewport{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none;outline:none;cursor:grab}
+.local-record-viewport:active{cursor:grabbing}
+.local-record-back{position:absolute;left:24px;top:20px;width:40px;height:40px;border:0;border-radius:50%;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--text-primary) 8%,transparent);color:inherit;backdrop-filter:blur(8px);z-index:5;cursor:pointer;transition:transform .18s;box-shadow:0 5px 20px #0002}
+.local-record-back:hover{transform:scale(1.05)}
+.local-record-title{position:absolute;left:50%;top:76px;transform:translateX(-50%);z-index:5;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 20px;border:0;border-radius:16px;background:color-mix(in srgb,var(--bg-color) 20%,transparent);color:inherit;backdrop-filter:blur(12px);cursor:pointer;max-width:60vw}
+.local-record-title strong{font-size:18px;font-weight:700;letter-spacing:-.45px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.local-record-title small{font-size:11px;opacity:.5}
+.local-record-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-size:13px;color:var(--text-secondary)}
+.local-record-empty strong{font-weight:500}
+.local-record-empty button{padding:9px 16px;background:color-mix(in srgb,var(--text-primary) 8%,transparent);border:0;border-radius:12px;color:inherit;cursor:pointer}
+.local-record-catalog{position:absolute;left:24px;top:80px;width:min(320px,calc(100vw - 48px));z-index:8;border:1px solid;border-radius:24px;padding:18px;box-shadow:0 20px 60px #0003;backdrop-filter:blur(24px);display:flex;flex-direction:column;gap:15px}
+.local-record-catalog-heading{display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.local-record-catalog-heading button{width:30px;height:30px;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer}
+.local-record-catalog select,.local-record-catalog label{border:1px solid color-mix(in srgb,var(--text-primary) 12%,transparent);border-radius:12px;background:color-mix(in srgb,var(--bg-color) 85%,transparent);padding:10px 12px;color:inherit;font-size:12px;width:100%;min-width:0}
+.local-record-catalog label{display:flex;align-items:center;gap:10px}
+.local-record-catalog input{border:0;background:transparent;color:inherit;font-size:12px;outline:0;min-width:0;width:100%}
+.local-record-catalog input::placeholder{color:var(--text-secondary)}
+.local-record-list-button{position:absolute;right:0;bottom:24px;padding-right:32px;width:80px;display:flex;justify-content:flex-end;z-index:6}
+@media(max-width:767px){.local-record-title{top:126px}.local-record-list-button{padding-right:16px}.local-record-catalog{top:124px}}

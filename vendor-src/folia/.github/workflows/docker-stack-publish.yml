@@ -1,0 +1,199 @@
+name: docker-stack-publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/docker/VERSION'
+  workflow_dispatch:
+    inputs:
+      force_republish:
+        description: 'Allow rebuilding an existing version tag after a partial or broken publish'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-stack-publish
+  cancel-in-progress: false
+
+env:
+  REGISTRY: docker.io
+
+jobs:
+  prepare:
+    name: Validate Docker stack release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      major: ${{ steps.meta.outputs.major }}
+      minor: ${{ steps.meta.outputs.minor }}
+      created: ${{ steps.meta.outputs.created }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Validate branch and version
+        id: meta
+        env:
+          FORCE_REPUBLISH: ${{ inputs.force_republish || false }}
+          IMAGE_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Docker stable releases must run from main." >&2
+            exit 1
+          fi
+          VERSION="$(./deploy/docker/scripts/validate-version.sh)"
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            PREVIOUS_VERSION="$(git show HEAD^:deploy/docker/VERSION 2>/dev/null || true)"
+            if [[ -n "${PREVIOUS_VERSION}" ]]; then
+              ./deploy/docker/scripts/validate-version.sh deploy/docker/VERSION "${PREVIOUS_VERSION}" >/dev/null
+            fi
+          fi
+          if [[ -z "${IMAGE_NAMESPACE}" ]]; then
+            echo "DOCKERHUB_USERNAME is not configured." >&2
+            exit 1
+          fi
+          if [[ "${FORCE_REPUBLISH}" != "true" ]]; then
+            for image in folia-web folia-web-api folia-netease-api folia-kugou-api folia-qq-api; do
+              if docker manifest inspect "docker.io/${IMAGE_NAMESPACE}/${image}:${VERSION}" >/dev/null 2>&1; then
+                echo "${image}:${VERSION} already exists. Use force_republish only for recovery." >&2
+                exit 1
+              fi
+            done
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major=${VERSION%%.*}" >> "$GITHUB_OUTPUT"
+          echo "minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: folia-web
+            dockerfile: deploy/docker/images/gateway.Dockerfile
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - image: folia-web
+            dockerfile: deploy/docker/images/gateway.Dockerfile
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - image: folia-web-api
+            dockerfile: deploy/docker/images/backend.Dockerfile
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - image: folia-web-api
+            dockerfile: deploy/docker/images/backend.Dockerfile
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - image: folia-netease-api
+            dockerfile: deploy/docker/images/netease-api.Dockerfile
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - image: folia-netease-api
+            dockerfile: deploy/docker/images/netease-api.Dockerfile
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - image: folia-kugou-api
+            dockerfile: deploy/docker/images/kugou-api.Dockerfile
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - image: folia-kugou-api
+            dockerfile: deploy/docker/images/kugou-api.Dockerfile
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - image: folia-qq-api
+            dockerfile: deploy/docker/images/qq-api.Dockerfile
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - image: folia-qq-api
+            dockerfile: deploy/docker/images/qq-api.Dockerfile
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log into Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push architecture image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          push: true
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            STACK_VERSION=${{ needs.prepare.outputs.version }}
+            REQUIRE_COMMIT_NAME=true
+          tags: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}:${{ needs.prepare.outputs.version }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.created=${{ needs.prepare.outputs.created }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+  promote:
+    name: Promote Docker stack tags
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log into Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Promote all image aliases
+        env:
+          IMAGE_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          MAJOR: ${{ needs.prepare.outputs.major }}
+          MINOR: ${{ needs.prepare.outputs.minor }}
+        run: |
+          for image in folia-web folia-web-api folia-netease-api folia-kugou-api folia-qq-api; do
+            source="docker.io/${IMAGE_NAMESPACE}/${image}:${VERSION}"
+            docker buildx imagetools create \
+              --tag "${source}" \
+              --tag "docker.io/${IMAGE_NAMESPACE}/${image}:${MINOR}" \
+              --tag "docker.io/${IMAGE_NAMESPACE}/${image}:${MAJOR}" \
+              --tag "docker.io/${IMAGE_NAMESPACE}/${image}:latest" \
+              "${source}-amd64" \
+              "${source}-arm64"
+          done

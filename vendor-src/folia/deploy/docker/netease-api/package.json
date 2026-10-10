@@ -1,0 +1,8 @@
+{
+  "name": "folia-docker-netease-api",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@neteasecloudmusicapienhanced/api": "4.40.1"
+  }
+}

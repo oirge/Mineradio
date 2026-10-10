@@ -1,0 +1,10 @@
+{
+  "format": "folium-signature",
+  "version": 1,
+  "modId": "sample-progress-bar",
+  "modVersion": "1.0.1",
+  "digest": "sha256:600b929b04dd5e9a9dde124e26de86e8988f397b66c77a080d4247a9851bc77f",
+  "keyId": "folium-2026-1",
+  "signedAt": "2026-09-24T19:10:07.803Z",
+  "signature": "Jg9BTgUeRMcMW80BuBIn2tLidEmke3dQGvHmC/pJq0o8WxsmzIX+XatGRALo2hLhfQtwGw8klnMw9mL6rUssAA=="
+}

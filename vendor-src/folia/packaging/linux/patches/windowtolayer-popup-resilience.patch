@@ -1,0 +1,48 @@
+diff --git a/src/main.rs b/src/main.rs
+index d3a016f..30c2c62 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -362,7 +362,7 @@ fn process_messages(
+             fds: &mut reverse.fds_out,
+         };
+         let rev_dst_len = reverse_dstq.data.len();
+-        match state
++        let processed_message = state
+             .process_message(
+                 from_upstream,
+                 msg,
+@@ -374,8 +374,9 @@ fn process_messages(
+                 WaylandError::Parse => "Failed to parse messsage".into(),
+                 // TODO: protocol or logic error, send to client via wl_display::error
+                 WaylandError::Other(x) => x,
+-            })? {
+-            ProcResult::NeedsSpace(fwd_space, rev_space) => {
++            });
++        match processed_message {
++            Ok(ProcResult::NeedsSpace(fwd_space, rev_space)) => {
+                 if fwd_space.0 > bufs.buf_dst.len()
+                     || fwd_space.1 > bufs.fds_out.capacity()
+                     || rev_space.0 > reverse.buf_dst.len()
+@@ -396,13 +397,20 @@ fn process_messages(
+                 debug!("Waiting for output space");
+                 break;
+             }
+-            ProcResult::WaitForOtherDirection => {
++            Ok(ProcResult::WaitForOtherDirection) => {
+                 // TODO: handle this in the main loop to avoid busy-waiting if the
+                 // compositor takes a long time to send output name events
+                 debug!("Waiting for progress on the other direction");
+                 break;
+             }
+-            ProcResult::Done => (),
++            Ok(ProcResult::Done) => (),
++            Err(process_err) => {
++                // Drop a single unprocessable message and keep going. Unsupported
++                // requests such as xdg_wm_base::create_positioner / xdg_surface::get_popup
++                // (used by popups and menus) must not tear down the whole layer: that
++                // breaks the wrapped client's Wayland connection and crashes it.
++                eprintln!("Ignoring unprocessable message: {}", process_err);
++            }
+         }
+         let new_dst_len = dstq.data.len();
+         let new_rev_dst_len = reverse_dstq.data.len();

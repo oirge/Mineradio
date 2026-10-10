@@ -1,0 +1,210 @@
+// src/utils/coverUrl.ts
+
+const NON_RESIZABLE_COVER_PROTOCOLS = new Set(['blob:', 'data:', 'file:', 'filesystem:']);
+const KUGOU_COVER_HOST_PATTERN = /(?:^|\.)(?:kugou\.com|kgimg\.com)$/i;
+const KUGOU_COVER_PATH_PATTERN = /(\/stdmusic\/)(\d+)(\/)/;
+const KUWO_COVER_HOST_PATTERN = /^img\d*\.kuwo\.cn$/i;
+const KUWO_COVER_PATH_PATTERN = /^(\/star\/(?:albumcover|starheads)\/)(\d+)(\/)/;
+const KUWO_COVER_SMALL_SIZE = 240;
+const KUWO_COVER_LARGE_SIZE = 800;
+const QQ_COVER_HOSTNAMES = new Set(['y.gtimg.cn', 'y.qq.com']);
+const QQ_COVER_PATH_PATTERN = /(T00[12])(?:R(\d+)x\d+)?(M000)/;
+const QQ_COVER_SMALL_SIZE = 300;
+const QQ_COVER_LARGE_SIZE = 800;
+export const LOCAL_COVER_THUMBNAIL_SIZES = [512, 1024] as const;
+
+export const resolveLocalCoverThumbnailSize = (size: number): number => {
+    const normalizedSize = Math.max(1, Math.round(size));
+    return LOCAL_COVER_THUMBNAIL_SIZES.find(candidate => candidate >= normalizedSize)
+        ?? LOCAL_COVER_THUMBNAIL_SIZES[LOCAL_COVER_THUMBNAIL_SIZES.length - 1];
+};
+
+const withLocalCoverThumbnailSize = (url: URL, size: number): string => {
+    url.searchParams.set('size', String(resolveLocalCoverThumbnailSize(size)));
+    return url.toString();
+};
+
+const isKugouCoverUrl = (url: URL): boolean => (
+    KUGOU_COVER_HOST_PATTERN.test(url.hostname) && KUGOU_COVER_PATH_PATTERN.test(url.pathname)
+);
+
+const withKugouCoverSize = (url: URL, size: number): string => {
+    url.pathname = url.pathname.replace(KUGOU_COVER_PATH_PATTERN, `$1${size}$3`);
+    return url.toString();
+};
+
+const isKuwoCoverUrl = (url: URL): boolean => (
+    KUWO_COVER_HOST_PATTERN.test(url.hostname) && KUWO_COVER_PATH_PATTERN.test(url.pathname)
+);
+
+// Bodian metadata supplies 240px thumbnails and 800px artwork, including its albumPic120 field.
+const withKuwoCoverSize = (url: URL, size: number): string => {
+    url.pathname = url.pathname.replace(KUWO_COVER_PATH_PATTERN, `$1${size}$3`);
+    return url.toString();
+};
+
+const isQqCoverUrl = (url: URL): boolean => (
+    QQ_COVER_HOSTNAMES.has(url.hostname) && QQ_COVER_PATH_PATTERN.test(url.pathname)
+);
+
+const withQqCoverSize = (url: URL, size: number | null): string => {
+    url.pathname = url.pathname.replace(
+        QQ_COVER_PATH_PATTERN,
+        size ? `$1R${size}x${size}$3` : '$1$3',
+    );
+    return url.toString();
+};
+
+/**
+ * Restores the original CDN asset when the source URL exposes a known resize suffix.
+ */
+export const getOriginalCoverUrl = (url: string | null | undefined): string => {
+    const trimmedUrl = url?.trim() ?? '';
+    if (!trimmedUrl) return '';
+
+    try {
+        const urlObj = new URL(trimmedUrl);
+        if (isKuwoCoverUrl(urlObj)) {
+            const originalSize = Number(KUWO_COVER_PATH_PATTERN.exec(urlObj.pathname)?.[2]);
+            return withKuwoCoverSize(urlObj, Math.max(KUWO_COVER_LARGE_SIZE, originalSize));
+        }
+        return isQqCoverUrl(urlObj) ? withQqCoverSize(urlObj, null) : trimmedUrl;
+    } catch {
+        return trimmedUrl;
+    }
+};
+
+/**
+ * Resolves a cover image URL to a smaller CDN variant when the source supports it.
+ */
+export const getSizedCoverUrl = (url: string | null | undefined, size: number): string => {
+    const trimmedUrl = url?.trim() ?? '';
+    if (!trimmedUrl) return '';
+
+    const normalizedSize = Math.max(1, Math.round(size));
+
+    try {
+        const urlObj = new URL(trimmedUrl);
+        if (NON_RESIZABLE_COVER_PROTOCOLS.has(urlObj.protocol)) {
+            return trimmedUrl;
+        }
+
+        if (urlObj.protocol === 'folia-cover:') {
+            return withLocalCoverThumbnailSize(urlObj, normalizedSize);
+        }
+
+        if (isKugouCoverUrl(urlObj)) {
+            return withKugouCoverSize(urlObj, normalizedSize);
+        }
+
+        if (isKuwoCoverUrl(urlObj)) {
+            // The shared smallest poster step is 256px; use the CDN's available 240px thumbnail.
+            if (normalizedSize <= 256) return withKuwoCoverSize(urlObj, KUWO_COVER_SMALL_SIZE);
+            if (normalizedSize <= KUWO_COVER_LARGE_SIZE) return withKuwoCoverSize(urlObj, KUWO_COVER_LARGE_SIZE);
+            return getOriginalCoverUrl(trimmedUrl);
+        }
+
+        if (isQqCoverUrl(urlObj)) {
+            const qqCoverSize = normalizedSize <= QQ_COVER_SMALL_SIZE
+                ? QQ_COVER_SMALL_SIZE
+                : normalizedSize <= QQ_COVER_LARGE_SIZE ? QQ_COVER_LARGE_SIZE : null;
+            return withQqCoverSize(urlObj, qqCoverSize);
+        }
+
+        if (urlObj.hostname.includes('126.net')) {
+            return `${urlObj.origin}${urlObj.pathname}?param=${normalizedSize}y${normalizedSize}`;
+        }
+
+        if (urlObj.pathname.includes('getCoverArt')) {
+            urlObj.searchParams.set('size', String(normalizedSize));
+            return urlObj.toString();
+        }
+
+        return trimmedUrl;
+    } catch {
+        if (trimmedUrl.startsWith('/__folia_cover/')) {
+            const localUrl = new URL(trimmedUrl, 'https://folia.local');
+            localUrl.searchParams.set('size', String(resolveLocalCoverThumbnailSize(normalizedSize)));
+            return `${localUrl.pathname}${localUrl.search}`;
+        }
+
+        if (trimmedUrl.includes('126.net')) {
+            return `${trimmedUrl.split('?')[0]}?param=${normalizedSize}y${normalizedSize}`;
+        }
+
+        return trimmedUrl;
+    }
+};
+
+/**
+ * Widths a card is allowed to ask for. The steps double, so a box has to change gear by a factor
+ * of two before its artwork is refetched, and every one of them lands on something the providers
+ * actually serve: QQ rounds 256 up to its own 300 bucket and 512 up to 800; Kuwo uses 240 and 800. Local thumbnails are
+ * stored at exactly 512 and 1024, and Netease, KuGou and Navidrome resize to the number given.
+ * Quantising also keeps the URL shared between cards showing the same song at similar sizes, which
+ * is what lets the browser hand them all one decoded bitmap.
+ */
+export const COVER_SIZE_STEPS = [256, 512, 1024] as const;
+
+/**
+ * Smallest step that still covers `size` device pixels. Past the top step there is no bucket left
+ * to ask for, so the answer is `Infinity`: the caller should keep the provider's own asset, which
+ * is the sharpest thing on offer.
+ */
+export const resolveCoverSizeStep = (size: number): number => (
+    COVER_SIZE_STEPS.find(step => step >= size) ?? Number.POSITIVE_INFINITY
+);
+
+export type CoverProvider = 'netease' | 'kugou' | 'kuwo' | 'qq' | 'navidrome' | 'local' | 'other';
+
+export interface CoverUrlDescription {
+    provider: CoverProvider;
+    /** Size this URL asks for, or null when it carries none and the provider answers with its original. */
+    requestedSize: number | null;
+}
+
+const parseSize = (value: string | null | undefined): number | null => {
+    const size = Number(String(value ?? '').split(/[xy]/i)[0]);
+    return Number.isFinite(size) && size > 0 ? size : null;
+};
+
+/**
+ * Reads back what a cover URL is asking its provider for - the inverse of `getSizedCoverUrl`, kept
+ * beside it so the host rules are written once. The debug overlay uses it to line up what was
+ * requested against the dimensions the CDN actually returned, which is the only way to find out
+ * that a provider quietly ignores or clamps a size.
+ */
+export const describeCoverUrl = (url: string | null | undefined): CoverUrlDescription | null => {
+    const trimmedUrl = url?.trim() ?? '';
+    if (!trimmedUrl) return null;
+
+    try {
+        const urlObj = new URL(trimmedUrl);
+        if (NON_RESIZABLE_COVER_PROTOCOLS.has(urlObj.protocol)) return null;
+        if (urlObj.protocol === 'folia-cover:') {
+            return { provider: 'local', requestedSize: parseSize(urlObj.searchParams.get('size')) };
+        }
+        if (isKugouCoverUrl(urlObj)) {
+            return { provider: 'kugou', requestedSize: parseSize(KUGOU_COVER_PATH_PATTERN.exec(urlObj.pathname)?.[2]) };
+        }
+        if (isKuwoCoverUrl(urlObj)) {
+            return { provider: 'kuwo', requestedSize: parseSize(KUWO_COVER_PATH_PATTERN.exec(urlObj.pathname)?.[2]) };
+        }
+        if (isQqCoverUrl(urlObj)) {
+            return { provider: 'qq', requestedSize: parseSize(QQ_COVER_PATH_PATTERN.exec(urlObj.pathname)?.[2]) };
+        }
+        if (urlObj.hostname.includes('126.net')) {
+            return { provider: 'netease', requestedSize: parseSize(urlObj.searchParams.get('param')) };
+        }
+        if (urlObj.pathname.includes('getCoverArt')) {
+            return { provider: 'navidrome', requestedSize: parseSize(urlObj.searchParams.get('size')) };
+        }
+        return { provider: 'other', requestedSize: null };
+    } catch {
+        if (trimmedUrl.startsWith('/__folia_cover/')) {
+            const localUrl = new URL(trimmedUrl, 'https://folia.local');
+            return { provider: 'local', requestedSize: parseSize(localUrl.searchParams.get('size')) };
+        }
+        return null;
+    }
+};

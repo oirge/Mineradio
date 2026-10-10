@@ -1,0 +1,6 @@
+/* test/ui/helpers/hideDevOverlays.css
+ * 截图基线只拍应用本身：开发版专用的浮层（Library 的 suite 切换）不进基线。
+ * 生产构建里它根本不存在；P3.4 起它在首页上也出现，不藏的话三张首页基线都会多出它。 */
+[data-testid="dev-library-renderer-switch"] {
+    visibility: hidden !important;
+}

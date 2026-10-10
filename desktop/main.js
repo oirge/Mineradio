@@ -253,6 +253,9 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-user-fx-archives-v1',
   'mineradio-hotkey-settings-v1',
   'mineradio-visual-guide-seen-v2',
+  'mineradio-player-interface-v1',
+  'mineradio-folia-local-visuals-v1',
+  'mineradio-folia-local-lattice-v1',
   'mineradio-upload-tip-seen',
   'mineradio-playback-rate-v1',
   'mineradio-sleep-timer-v1',
@@ -5031,6 +5034,17 @@ function isTrustedMainDocumentUrl(value) {
  * @type {string}
  */
 const TRUSTED_WALLPAPER_FRAME_PATH = '/vendor/sonic-workshop/mineradio-bridge.html';
+const TRUSTED_FOLIA_FRAME_PATH = '/vendor/folia/index.html';
+
+/** Folia may load from this server; its child frame has no main-frame IPC privileges. */
+function isTrustedFoliaFrameUrl(value) {
+  try {
+    const parsed = new URL(String(value || ''));
+    return parsed.protocol === 'http:' && parsed.hostname === '127.0.0.1' &&
+      Number(parsed.port || 0) === Number(mainServerPort || 3000) &&
+      parsed.pathname === TRUSTED_FOLIA_FRAME_PATH;
+  } catch (_e) { return false; }
+}
 
 /**
  * 可信壁纸子 frame URL：仅放行当前 127.0.0.1 本地服务下音域回响原作的桥接页。
@@ -5129,8 +5143,8 @@ function isAllowedFrameNavigation(info) {
   const parent = frame && frame.parent && typeof frame.parent === 'object' ? frame.parent : null;
   if (parent && parent.parent) return false;
   if (info && info.isMainFrame === true) return isTrustedMainDocumentUrl(url);
-  if (info && info.isMainFrame === false) return isTrustedWallpaperFrameUrl(url);
-  return isTrustedMainDocumentUrl(url) || isTrustedWallpaperFrameUrl(url);
+  if (info && info.isMainFrame === false) return isTrustedWallpaperFrameUrl(url) || isTrustedFoliaFrameUrl(url);
+  return isTrustedMainDocumentUrl(url) || isTrustedWallpaperFrameUrl(url) || isTrustedFoliaFrameUrl(url);
 }
 
 /**

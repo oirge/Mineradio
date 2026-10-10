@@ -1,0 +1,51 @@
+name: Sync Code Map
+
+# 代码地图是生成物，维护责任不摊派给贡献者：PR 不再校验它，改由 main 落地后自动重生成并提交。
+# 约 62% 的提交会新增或删除源文件，放在 PR 上校验会让绝大多数 PR 因为一个与改动无关的产物变红。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/CODEMAP.md'
+
+permissions:
+  contents: write
+
+# 串行执行：并发的两次 push 各自 checkout 后推同一个分支会撞车。
+concurrency:
+  group: codemap-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Regenerate code map
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # 生成器只用 Node 内置模块和仓库内文件，跑它不需要装依赖。
+      - name: Regenerate code map
+        run: npm run codemap
+
+      - name: Commit when the map moved
+        run: |
+          if git diff --quiet -- docs/CODEMAP.md; then
+            echo "代码地图已经是最新的，无需提交。"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/CODEMAP.md
+          # GITHUB_TOKEN 推的 commit 本来就不会触发 workflow；[skip ci] 是换成 PAT 时的兜底，
+          # 否则 canary-pre-release 的 `push: branches: ['**']` 会被每次结构变动带起来。
+          git commit -m 'chore(dev): 同步代码地图 [skip ci]'
+          git push

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codebase Navigation"
+  short_description: "Find current code locations quickly"
+  default_prompt: "Use $codebase-navigation to locate the current entry point, state owner, service boundary, and adjacent files before editing."

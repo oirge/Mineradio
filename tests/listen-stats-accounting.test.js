@@ -104,6 +104,38 @@ function playFor(context, totalMs, stepMs) {
   }
 }
 
+test('切歌结算旧会话不会递归，且新歌时间不计入旧歌', () => {
+  const context = createListenContext({ duration: 300 });
+  startSession(context, 'local:old');
+  playFor(context, 46000, 1000);
+  context.playing = { key: 'local:new', name: 'NEW', localKey: 'new' };
+  context.now += 6000;
+  context.audio.currentTime = 150;
+  assert.doesNotThrow(() => context.api.updateListenStatsTick(false));
+  assert.equal(context.listenStatsState.songs['local:old'].listenMs, 46000);
+  assert.equal(context.listenStatsState.songs['local:old'].plays, 1);
+  assert.equal(context.session().key, 'local:new');
+  assert.equal(context.session().listenMs, 0);
+  assert.equal(context.dbPlayStats.length, 1);
+  playFor(context, 1000, 1000);
+  assert.equal(context.session().listenMs, 1000);
+});
+
+test('直接切换会话与结算时不会借用下一首进度', () => {
+  const context = createListenContext({ duration: 300 });
+  startSession(context, 'local:short');
+  playFor(context, 1000, 1000);
+  context.playing = { key: 'local:next', name: 'NEXT', localKey: 'next' };
+  context.audio.currentTime = 200;
+  assert.doesNotThrow(() => context.api.beginListenSession(context.playing, null));
+  assert.equal(context.listenStatsState.songs['local:short'], undefined);
+  assert.equal(context.session().key, 'local:next');
+  context.playing = { key: 'local:last' };
+  assert.doesNotThrow(() => context.api.finalizeListenSession(false));
+  assert.equal(context.session(), null);
+  assert.equal(context.dbPlayStats.length, 0);
+});
+
 /**
  * 时长未知的文件（APE/DSF 虚拟 WAV、元数据未解析）也必须累计收听时长，
  * 否则结算门里「无时长看 30 秒」那条兜底永远走不到。

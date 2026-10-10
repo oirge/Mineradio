@@ -1,0 +1,38 @@
+/* Keep the original player mounted: audio and desktop lyrics retain ownership. */
+#folia-interface{position:fixed;inset:0;z-index:450;background:#171719;overflow:hidden;color:#dedee3}
+#folia-interface[hidden]{display:none!important}
+#folia-frame{display:block;width:100%;height:100%;border:0;background:#171719;opacity:0;transition:opacity .18s ease}
+#folia-interface.folia-ready #folia-frame{opacity:1}
+#folia-load-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:40px;text-align:center;color:#a8a8b5;font:500 14px/1.6 var(--font-sans);pointer-events:none}
+#folia-load-status.failed{color:#f0b5bb}
+#folia-interface.folia-ready #folia-load-status{display:none}
+body.desktop-shell #folia-interface{top:44px}
+body.desktop-shell.folia-interface-active #desktop-titlebar{background:#171719}
+#folia-titlebar-controls{display:none;position:absolute;left:50%;top:0;transform:translateX(-50%);width:max-content;min-width:0;height:100%;align-items:center;justify-content:center;pointer-events:none;-webkit-app-region:drag;text-transform:none;letter-spacing:normal}
+body.desktop-shell.folia-interface-active #folia-titlebar-controls{display:flex}
+#folia-titlebar-controls nav{display:flex;align-items:center;gap:4px;max-width:100%;min-width:0;height:34px;padding:2px 4px;box-sizing:border-box;border:1px solid rgba(255,255,255,.11);border-radius:12px;background:rgba(35,35,40,.84);color:#e6e5ed;pointer-events:auto;-webkit-app-region:no-drag}
+#folia-titlebar-controls button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;gap:6px;height:28px;min-height:0;padding:0 10px;border:0;border-radius:8px;background:transparent;color:inherit;font:500 12px var(--font-sans);letter-spacing:normal;white-space:nowrap;cursor:pointer;-webkit-app-region:no-drag;transition:background .18s,color .18s}
+#folia-titlebar-controls button:hover,#folia-titlebar-controls button[aria-pressed=true]{background:rgba(255,255,255,.09);color:#fff}
+#folia-titlebar-controls button:focus-visible{outline:2px solid #ff5367;outline-offset:1px}
+#folia-titlebar-controls button svg{width:16px;height:16px;flex:0 0 auto}
+#folia-titlebar-controls .local-view-switch{display:flex;align-items:center;gap:2px;padding-right:5px;margin-right:1px;border-right:1px solid rgba(255,255,255,.12)}
+@media(max-width:1100px){#folia-titlebar-controls nav{gap:2px}#folia-titlebar-controls button{padding:0 8px}body.desktop-shell.folia-interface-active .desktop-window-controls{gap:4px}body.desktop-shell.folia-interface-active .desktop-mode-btn{min-width:0;padding:0 8px;letter-spacing:0;gap:4px}}
+body.desktop-shell.desktop-fullscreen #folia-interface,html:fullscreen body.desktop-shell #folia-interface{top:0}
+body.folia-interface-active #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone){visibility:hidden!important;pointer-events:none!important}
+body.folia-interface-active #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone) *{visibility:hidden!important;animation-play-state:paused!important}
+body.folia-interface-active #diy-mode-btn,body.folia-interface-active #visual-guide-btn,body.folia-interface-active #update-entry{display:none!important}
+#folia-floating-switch{position:fixed;top:14px;right:16px;z-index:650;min-width:76px;height:30px;padding:0 12px;border:1px solid rgba(180,180,205,.25);border-radius:9px;background:#292930;color:#e4e3ef;font:600 11px var(--font-sans);cursor:pointer;-webkit-app-region:no-drag}
+#folia-floating-switch.on{color:#fff;border-color:rgba(255,83,103,.50);background:rgba(255,83,103,.13);box-shadow:0 12px 34px rgba(255,83,103,.09),inset 0 1px 0 rgba(255,255,255,.08)}
+body.desktop-shell:not(.desktop-fullscreen) #folia-floating-switch{display:none}
+html:fullscreen body.desktop-shell #folia-floating-switch{display:block}
+body.folia-interface-active #folia-floating-switch{top:10px;right:16px}
+body.folia-interface-active:has(#folia-interface.folia-ready) #folia-floating-import{display:none!important}
+body.folia-interface-active #fullscreen-diy-zone{display:none!important}
+body.folia-interface-active,body.folia-interface-active.cursor-hidden,body.folia-interface-active.cursor-hidden *{cursor:auto!important}
+body.folia-interface-active [data-folia-switch]{cursor:pointer!important}
+#folia-import-files,#folia-floating-import{display:none}
+body.folia-interface-active #folia-import-files{display:flex}
+body.folia-interface-active #folia-floating-import{position:fixed;display:block;top:10px;right:148px;z-index:650;height:30px;padding:0 12px;border:1px solid rgba(180,180,205,.25);border-radius:9px;background:#292930;color:#e4e3ef;font:600 11px var(--font-sans);cursor:pointer!important;-webkit-app-region:no-drag}
+body.desktop-shell:not(.desktop-fullscreen).folia-interface-active #folia-floating-import{display:none}
+html:fullscreen body.desktop-shell.folia-interface-active #folia-floating-import{display:block}
+@media(prefers-reduced-motion:reduce){#folia-frame{transition:none}}

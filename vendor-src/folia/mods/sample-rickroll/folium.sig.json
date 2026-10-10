@@ -1,0 +1,10 @@
+{
+  "format": "folium-signature",
+  "version": 1,
+  "modId": "sample-rickroll",
+  "modVersion": "1.0.1",
+  "digest": "sha256:31285c45822ff937bc4f1e326a7d6b589d106f5e1167dcc595a1ecbfc4b5873e",
+  "keyId": "folium-2026-1",
+  "signedAt": "2026-09-24T19:10:07.804Z",
+  "signature": "Q18JsYoM6hShQcNXM1VcsPyLytyc6NdmbWZjwqD/0Vulth3btn/P4MnUfbGmIJaX1RBBGKIKYMngK7psMI0oDw=="
+}

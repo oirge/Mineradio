@@ -1,0 +1,93 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.vercel
+.env*.local
+
+dev-dist/
+example/
+release/
+packaging/aur/folia-major-bin/FIRST_RELEASE.md
+packaging/aur/folia-major-bin/README.md
+.codex
+.codex-tmp
+.wrangler/tmp
+wrangler.local.toml
+
+test/test-song/*
+test/test-ReplayGain
+impl.md
+test-results/
+.dev-credentials/
+.codex-remote-attachments
+test/manual/lyric-output/*
+test/manual/lyric-audit-output/*    
+deploy/docker/.env
+deploy/docker/data/
+.agents/
+skills-lock.json
+TODO.MD
+commit.md
+.codebuff-ai/reasson/conf.jsonc
+scripts/*
+docs/TODO.md
+design/
+plan/
+
+# Model weights: fetched and hash-verified by build/fetchModels.mjs, shipped in the installer,
+# never committed - 83MB that never changes does not belong in every clone's history.
+models/
+build/windowtolayer
+build/windowtolayer-COPYING
+build/ffmpeg/
+build/koffi/
+# The transcode fallback's dev slot: same binary as build/ffmpeg/<os>-<arch>, staged here so
+# `npm run dev:electron` runs the audio-only runtime the release ships instead of system PATH.
+# `ffmpeg-8.1.2/` is the mod exporters' slot and is a full build the developer supplies.
+ffmpeg-audio/
+ffmpeg-8.1.2/
+.windowtolayer-src/
+# Local reference clone of upstream main used for pollution review; never ship.
+original/
+# Local upstream implementation references used during investigation; never ship.
+reference/
+# Optional developer override for FFmpeg; packaged builds fetch their pinned runtime.
+# Local hand-made zip bundles of mods (drag-drop install test files); never ship.
+mods/*.zip
+
+
+# Built by packaging/windows/build-wallpaper-helper.mjs (Windows wallpaper mode helper).
+build/folia-wallpaper-helper.exe
+packaging/windows/wallpaper-helper/target/
+
+# Local Rust Spout sender build artifacts.
+build/folia-spout-sender.exe
+packaging/windows/spout-sender/target/
+
+# Python bytecode from the htdemucs runner, written beside it by the downloaded runtime.
+__pycache__/
+
+# Built by build/buildPythonRuntime.mjs - binary artifacts that live on the mirrors, not in git.
+dist-runtime/

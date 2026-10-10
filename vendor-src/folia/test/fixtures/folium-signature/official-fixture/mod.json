@@ -1,0 +1,7 @@
+{
+  "folium": 1,
+  "id": "signature-fixture",
+  "name": "Signature fixture",
+  "version": "1.0.0",
+  "client": "client.mjs"
+}

@@ -24,6 +24,7 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Support for cover images in the same directory and embedded audio covers.
 - Removed local rhythm analysis.
 - Mini player optimization with improved animations.
+- Folia local playback interface with lyric, floating record wall and cover mosaic views, 14 built-in lyric effects and 5 backgrounds, sharing Mineradio's library and audio engine.
 
 ## Usage
 

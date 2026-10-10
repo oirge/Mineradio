@@ -1,0 +1,6 @@
+*
+!deploy/
+!deploy/docker/
+!deploy/docker/kugou-api/
+!deploy/docker/kugou-api/package.json
+!deploy/docker/kugou-api/package-lock.json

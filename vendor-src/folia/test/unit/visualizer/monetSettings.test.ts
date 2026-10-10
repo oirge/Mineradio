@@ -1,0 +1,745 @@
+import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_LATENT_BACKGROUND_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_NOMAND_BACKGROUND_TUNING, type Line, type Theme } from '@/types';
+import { getMonetBackgroundCacheKey, resolveWashColor, checkCanvasFilterSupport } from '@/components/visualizer/monet/monetBackgroundPipeline';
+import {
+    resolveLatentAudioSpeedTarget,
+    resolveLatentBeatSpeedTarget,
+    resolveLatentBroadbandEnergy,
+    resolveLatentOnsetPulse,
+    resolveLatentShaderColors,
+    resolveLatentShaderSpeed,
+} from '@/components/visualizer/backgrounds/latent/LatentBackground';
+import { resolveMonetWordColor } from '@/components/visualizer/monet/MonetLyricsRail';
+import { buildMonetDisplayTokens, resolveMonetLyricContext } from '@/components/visualizer/monet/VisualizerMonet';
+import { buildMonetVisibleLineEntries, measureMonetLineLayout, resolveMonetSweepEdgeSoftness, resolveMonetSweepEnd } from '@/components/visualizer/monet/monetLyricsModel';
+import { colorWithAlpha, mixColors, parseColorChannels } from '@/components/visualizer/colorMix';
+import { buildWordColorRanges, prepareWordColorMatchers, resolveTokenColorMap } from '@/components/visualizer/wordColoring';
+import { resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveVisualizerBackgroundMode } from '@/stores/visualizerSettingsPersistence';
+
+// test/unit/visualizer/monetSettings.test.ts
+// Locks Monet tuning normalization, background cache keys, and lyric helper contracts.
+
+vi.mock('@chenglou/pretext', () => ({
+    prepareWithSegments: (text: string) => ({ text }),
+    layoutWithLines: (prepared: { text?: string; }, maxWidth: number) => {
+        const text = prepared.text || ' ';
+        const charsPerLine = Math.max(1, Math.floor(maxWidth / 10));
+        const lineCount = Math.max(1, Math.ceil(text.length / charsPerLine));
+        return {
+            lines: Array.from({ length: lineCount }, () => ({
+                width: Math.min(text.length, charsPerLine) * 10,
+            })),
+        };
+    },
+}));
+
+// Monet measures lyric text through the rich-inline helper so timed words stay atomic like the
+// `inline-block` spans the rail renders. Mirror the plain mock's per-character heuristic here.
+vi.mock('@chenglou/pretext/rich-inline', () => ({
+    prepareRichInline: (items: { text: string; }[]) => ({ text: items.map(item => item.text).join('') }),
+    measureRichInlineStats: (prepared: { text?: string; }, maxWidth: number) => {
+        const text = prepared.text || ' ';
+        const charsPerLine = Math.max(1, Math.floor(maxWidth / 10));
+        return {
+            lineCount: Math.max(1, Math.ceil(text.length / charsPerLine)),
+            maxLineWidth: Math.min(text.length, charsPerLine) * 10,
+        };
+    },
+}));
+
+describe('Monet tuning and lyric helpers', () => {
+    it('keeps bright wash targets bright in daylight themes instead of pulling them toward dark text color', () => {
+        const washColor = resolveWashColor(
+            0.95,
+            { r: 245, g: 245, b: 244 },
+            { r: 234, g: 88, b: 12 },
+            { r: 28, g: 25, b: 23 },
+        );
+
+        expect(washColor.r).toBeGreaterThan(220);
+        expect(washColor.g).toBeGreaterThan(190);
+        expect(washColor.b).toBeGreaterThan(170);
+    });
+
+    it('normalizes persisted Monet background tuning values from legacy storage', () => {
+        expect(resolveStoredMonetBackgroundTuning({
+            backgroundSource: 'uploaded-global',
+            backgroundBlurPx: 999,
+            backgroundOverlayOpacity: -2,
+            backgroundCropMode: 'full-artwork',
+            backgroundLayout: 'full-overlay',
+            backgroundGrayscale: -1,
+            backgroundSaturation: 9,
+            backgroundWash: 2,
+            backgroundHalfPaneOffsetX: 99,
+            backgroundWashColorMode: 'custom',
+            backgroundWashCustomColor: 'AABBCC',
+            coverPaneRatio: 0.9,
+            lyricsFocusScale: 4,
+        })).toEqual({
+            backgroundSource: 'uploaded-global',
+            backgroundLayout: 'full-overlay',
+            backgroundBlurPx: 60,
+            backgroundOverlayOpacity: 0,
+            backgroundGrayscale: 0,
+            backgroundSaturation: 2,
+            backgroundWash: 1,
+            backgroundHalfPaneOffsetX: 40,
+            backgroundWashColorMode: 'custom',
+            backgroundWashCustomColor: '#aabbcc',
+            backgroundDriftEnabled: DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftEnabled,
+            backgroundDriftStrength: DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
+            backgroundStreaksEnabled: DEFAULT_MONET_BACKGROUND_TUNING.backgroundStreaksEnabled,
+        });
+
+        expect(resolveStoredMonetBackgroundTuning({
+            backgroundCropMode: 'full-artwork',
+            coverPaneRatio: 0.9,
+            lyricsFocusScale: 4,
+            backgroundHalfPaneOffsetX: -99,
+            backgroundWashColorMode: 'bad' as never,
+            backgroundWashCustomColor: 'nope',
+        })).toEqual({
+            ...DEFAULT_MONET_BACKGROUND_TUNING,
+            backgroundHalfPaneOffsetX: -40,
+        });
+
+        expect(resolveStoredMonetBackgroundTuning({})).toEqual(DEFAULT_MONET_BACKGROUND_TUNING);
+    });
+
+    it('clamps Monet background drift strength and keeps the drift and streak switches', () => {
+        expect(resolveStoredMonetBackgroundTuning({
+            backgroundDriftEnabled: false,
+            backgroundDriftStrength: 9,
+            backgroundStreaksEnabled: false,
+        })).toEqual({
+            ...DEFAULT_MONET_BACKGROUND_TUNING,
+            backgroundDriftEnabled: false,
+            backgroundDriftStrength: 1,
+            backgroundStreaksEnabled: false,
+        });
+
+        expect(resolveStoredMonetBackgroundTuning({
+            backgroundDriftStrength: Number.NaN,
+        }).backgroundDriftStrength).toBe(DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength);
+    });
+
+    it('keeps drift out of the Monet background cache key but rebakes when streaks toggle', () => {
+        const theme = { backgroundColor: '#101014', primaryColor: '#ffffff', accentColor: '#8fb7ff' } as Theme;
+        const base = { coverUrl: 'https://example.com/cover.jpg', theme, tuning: DEFAULT_MONET_BACKGROUND_TUNING };
+
+        expect(getMonetBackgroundCacheKey({
+            ...base,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundDriftEnabled: false, backgroundDriftStrength: 1 },
+        })).toBe(getMonetBackgroundCacheKey(base));
+
+        expect(getMonetBackgroundCacheKey({
+            ...base,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundStreaksEnabled: false },
+        })).not.toBe(getMonetBackgroundCacheKey(base));
+    });
+
+    it('normalizes persisted Monet lyric and portrait tuning values', () => {
+        expect(resolveStoredMonetTuning({
+            keywordColoringEnabled: false,
+            showAudioVisualization: false,
+            audioStyle: 'line',
+            fontScale: 3,
+            portraitSource: 'custom',
+        })).toEqual({
+            keywordColoringEnabled: false,
+            showAudioVisualization: false,
+            audioStyle: 'line',
+            fontScale: 1.5,
+            portraitSource: 'custom',
+            showDescription: true,
+            portraitOffsetX: 0,
+            portraitStyle: 'square',
+            showPortraitDragHanger: true,
+        });
+
+        expect(resolveStoredMonetTuning({
+            backgroundCropMode: 'full-artwork',
+            coverPaneRatio: 0.9,
+            lyricsFocusScale: 4,
+            portraitSource: 'bad' as never,
+        })).toEqual(DEFAULT_MONET_TUNING);
+
+        expect(resolveStoredMonetTuning({})).toEqual(DEFAULT_MONET_TUNING);
+    });
+
+    it('resolves automatic visualizer background mode', () => {
+        expect(resolveVisualizerBackgroundMode(null, 'monet')).toBe('latent');
+        expect(resolveVisualizerBackgroundMode(null, 'classic')).toBe('latent');
+        expect(resolveVisualizerBackgroundMode('common', 'monet')).toBe('common');
+        expect(resolveVisualizerBackgroundMode('monet', 'classic')).toBe('monet');
+        expect(resolveVisualizerBackgroundMode('nomand', 'classic')).toBe('nomand');
+    });
+
+    it('normalizes persisted Nomand background tuning', () => {
+        expect(resolveStoredNomandBackgroundTuning({
+            imageSource: 'uploaded-global',
+            ditheringType: 'random',
+            size: 99,
+            colorSteps: -4,
+            originalColors: true,
+            inverted: true,
+            overlayEnabled: false,
+            overlayOpacity: 4,
+        })).toEqual({
+            ...DEFAULT_NOMAND_BACKGROUND_TUNING,
+            imageSource: 'uploaded-global',
+            ditheringType: '8x8',
+            size: 20,
+            colorSteps: 1,
+            originalColors: true,
+            inverted: true,
+            overlayEnabled: false,
+            overlayOpacity: 1,
+        });
+
+        expect(resolveStoredNomandBackgroundTuning({
+            ditheringType: 'invalid' as never,
+            size: Number.NaN,
+        })).toEqual(DEFAULT_NOMAND_BACKGROUND_TUNING);
+    });
+
+    it('normalizes and clamps Paper effect variant tuning', () => {
+        expect(resolveStoredNomandBackgroundTuning({
+            effect: 'lens-distortion',
+            flutedGlassSize: 0,
+            flutedGlassDistortion: 2,
+            paperTextureContrast: -1,
+            halftoneDotsRadius: 4,
+            lensDistortionSpread: 2,
+            lensDistortionBulge: -2,
+            lensDistortionDispersion: Number.NaN,
+        })).toMatchObject({
+            effect: 'lens-distortion',
+            flutedGlassSize: 0.1,
+            flutedGlassDistortion: 1,
+            paperTextureContrast: 0,
+            halftoneDotsRadius: 2,
+            lensDistortionSpread: 1,
+            lensDistortionBulge: -1,
+            lensDistortionDispersion: DEFAULT_NOMAND_BACKGROUND_TUNING.lensDistortionDispersion,
+        });
+    });
+
+    it('normalizes Latent background tuning and clamps shader speed settings to 0-2', () => {
+        expect(DEFAULT_LATENT_BACKGROUND_TUNING.ditheringSpeed).toBe(0.1);
+        expect(DEFAULT_LATENT_BACKGROUND_TUNING.ditheringAudioSpeed).toBe(1.2);
+        expect(DEFAULT_LATENT_BACKGROUND_TUNING.enhancedBeatResponse).toBe(true);
+        expect(DEFAULT_LATENT_BACKGROUND_TUNING.colorSource).toBe('cover-theme');
+
+        expect(resolveStoredLatentBackgroundTuning({
+            displayMode: 'mesh',
+            colorSource: 'cover-only',
+            dynamicOnlyInPlayer: false,
+            enhancedBeatResponse: false,
+            ditheringSpeed: -1,
+            ditheringAudioSpeed: 9,
+            ditheringSize: 20,
+            ditheringOpacity: -2,
+            meshSpeed: 4,
+            meshAudioSpeed: -3,
+            meshDistortion: 8,
+            meshSwirl: 4,
+            overlayEnabled: false,
+            overlayOpacity: 4,
+        })).toEqual({
+            displayMode: 'mesh',
+            colorSource: 'cover-only',
+            dynamicOnlyInPlayer: false,
+            enhancedBeatResponse: false,
+            ditheringSpeed: 0,
+            ditheringAudioSpeed: 2,
+            ditheringSize: 8,
+            ditheringOpacity: 0,
+            meshSpeed: 2,
+            meshAudioSpeed: 0,
+            meshDistortion: 2,
+            meshSwirl: 1,
+            overlayEnabled: false,
+            overlayOpacity: 1,
+        });
+
+        expect(resolveStoredLatentBackgroundTuning({
+            displayMode: 'invalid' as never,
+            meshSpeed: Number.NaN,
+        })).toEqual(DEFAULT_LATENT_BACKGROUND_TUNING);
+    });
+
+    it('keeps Latent moving slowly during playback pause without overriding explicit zero speed', () => {
+        expect(resolveLatentShaderSpeed(0.35, 1.2, 0.8, true)).toBeCloseTo(0.042);
+        expect(resolveLatentShaderSpeed(0.3, 1.4, 0.9, true)).toBeCloseTo(0.036);
+        expect(resolveLatentShaderSpeed(0, 1.4, 0.9, true)).toBe(0);
+        expect(resolveLatentShaderSpeed(0.3, 1.3, 0.5, false)).toBeCloseTo(0.8);
+    });
+
+    it('drives Latent shader speed from broadband energy instead of bass alone', () => {
+        const bassOnly = resolveLatentBroadbandEnergy(255, 0, 0, 0, 0);
+        const midOnly = resolveLatentBroadbandEnergy(0, 0, 255, 0, 0);
+        const vocalOnly = resolveLatentBroadbandEnergy(0, 0, 0, 255, 0);
+
+        expect(midOnly).toBeCloseTo(bassOnly);
+        expect(vocalOnly).toBeGreaterThan(bassOnly);
+        expect(resolveLatentBroadbandEnergy(0, 0, 0, 0, 0)).toBe(0);
+        expect(resolveLatentBroadbandEnergy(255, 255, 255, 255, 255)).toBeCloseTo(1);
+    });
+
+    it('accentuates broadband onsets in both Latent shader speeds', () => {
+        const onsetPulse = resolveLatentOnsetPulse(0.42, 0.22, 0);
+        const steadySpeed = resolveLatentBeatSpeedTarget(0.42, 0);
+        const onsetSpeed = resolveLatentBeatSpeedTarget(0.42, onsetPulse);
+
+        expect(onsetPulse).toBe(1);
+        expect(onsetSpeed).toBeGreaterThan(steadySpeed * 2);
+        expect(resolveLatentAudioSpeedTarget(0.42, onsetPulse, true)).toBe(onsetSpeed);
+        expect(resolveLatentAudioSpeedTarget(0.42, onsetPulse, false)).toBeCloseTo(0.42);
+        expect(resolveLatentOnsetPulse(0.2, 0.4, 0)).toBe(0);
+        expect(resolveLatentOnsetPulse(0.2, 0.2, 1)).toBeCloseTo(0.84);
+    });
+
+    it('keeps the readability overlay separate from Latent shader color presets', () => {
+        const theme: Theme = {
+            name: 'Latent Theme',
+            backgroundColor: '#101010',
+            primaryColor: '#f0f0f0',
+            accentColor: '#00ffff',
+            secondaryColor: '#cccccc',
+            fontStyle: 'sans',
+            animationIntensity: 'normal',
+        };
+        const coverColors = ['#110000', '#220000', '#330000', '#440000', '#550000', '#660000'];
+
+        expect(resolveLatentShaderColors(coverColors, theme, 'cover-theme')).toEqual({
+            ditheringBack: theme.backgroundColor,
+            ditheringFront: coverColors[0],
+            mesh: [
+                coverColors[0],
+                coverColors[1],
+                coverColors[2],
+                coverColors[3],
+                theme.backgroundColor,
+                theme.accentColor,
+            ],
+        });
+        expect(resolveLatentShaderColors(coverColors, theme, 'cover-only')).toEqual({
+            ditheringBack: coverColors[2],
+            ditheringFront: coverColors[0],
+            mesh: coverColors,
+        });
+    });
+
+    it('builds stable display tokens without dropping spaces or punctuation', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 2,
+            fullText: 'Hello, world!',
+            translation: '你好，世界！',
+            words: [
+                { text: 'Hello', startTime: 0, endTime: 0.7 },
+                { text: 'world', startTime: 0.8, endTime: 1.4 },
+            ],
+        };
+
+        expect(buildMonetDisplayTokens(line).map(token => token.text).join('')).toBe(line.fullText);
+        expect(buildMonetDisplayTokens(line).map(token => [token.text, token.startOffset, token.endOffset])).toEqual([
+            ['Hello', 0, 5],
+            [', ', 5, 7],
+            ['world', 7, 12],
+            ['!', 12, 13],
+        ]);
+    });
+
+    it('keeps TTML syllable timing on Monet timed tokens', () => {
+        const line: Line = {
+            startTime: 1,
+            endTime: 2,
+            fullText: 'hurricane',
+            words: [{
+                text: 'hurricane',
+                startTime: 1,
+                endTime: 2,
+                syllables: [
+                    { text: 'hurri', startTime: 1, endTime: 1.4 },
+                    { text: 'cane', startTime: 1.4, endTime: 2, endsWithSpace: true },
+                ],
+            }],
+        };
+
+        const [token] = buildMonetDisplayTokens(line);
+
+        expect(token.text).toBe('hurricane');
+        expect(token.graphemeTimings.map(timing => timing.char).join('')).toBe('hurricane');
+        expect(token.graphemeTimings[5]).toMatchObject({ char: 'c', startTime: 1.4 });
+        expect(token.graphemeTimings[8].startTime).toBeCloseTo(1.85);
+    });
+
+    it('keeps lyric context aligned around the active line', () => {
+        const lines: Line[] = [
+            { startTime: 0, endTime: 1, fullText: 'A', words: [] },
+            { startTime: 1, endTime: 2, fullText: 'B', translation: 'Bee', words: [] },
+            { startTime: 2, endTime: 3, fullText: 'C', words: [] },
+        ];
+
+        expect(resolveMonetLyricContext(lines, 1, lines[1], lines[0], lines[2])).toEqual({
+            previousLine: lines[0],
+            activeLine: lines[1],
+            nextLine: lines[2],
+        });
+
+        expect(resolveMonetLyricContext(lines, -1, null, lines[0], lines[1])).toEqual({
+            previousLine: lines[0],
+            activeLine: null,
+            nextLine: lines[1],
+        });
+    });
+
+    it('assigns explicit waiting active passed states for the lyric rail', () => {
+        const lines: Line[] = [
+            { startTime: 0, endTime: 1, fullText: 'A', words: [] },
+            { startTime: 2, endTime: 3, fullText: 'B', words: [] },
+            { startTime: 4, endTime: 5, fullText: 'C', words: [] },
+        ];
+
+        expect(buildMonetVisibleLineEntries({
+            lines,
+            currentLineIndex: 1,
+            activeLine: lines[1],
+            recentCompletedLine: lines[0],
+            upcomingLine: lines[2],
+            currentTime: 2.5,
+            before: 1,
+            after: 1,
+        }).map(entry => entry.status)).toEqual(['passed', 'active', 'waiting']);
+
+        expect(buildMonetVisibleLineEntries({
+            lines,
+            currentLineIndex: -1,
+            activeLine: null,
+            recentCompletedLine: lines[0],
+            upcomingLine: lines[1],
+            currentTime: 1.5,
+            before: 1,
+            after: 1,
+        }).map(entry => entry.status)).toEqual(['passed', 'waiting', 'waiting']);
+    });
+
+    it('does not reserve Monet translation height when subtitle translation is hidden', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 3,
+            fullText: 'A bright river',
+            translation: '一条明亮的河流',
+            words: [],
+        };
+
+        const visibleLayout = measureMonetLineLayout({
+            line,
+            status: 'active',
+            fontPx: 32,
+            translationFontPx: 18,
+            fontStack: 'Arial, sans-serif',
+            maxWidthPx: 520,
+            showSubtitleTranslation: true,
+        });
+        const hiddenLayout = measureMonetLineLayout({
+            line,
+            status: 'active',
+            fontPx: 32,
+            translationFontPx: 18,
+            fontStack: 'Arial, sans-serif',
+            maxWidthPx: 520,
+            showSubtitleTranslation: false,
+        });
+
+        expect(visibleLayout.translationHeightPx).toBeGreaterThan(0);
+        expect(hiddenLayout.translationLineCount).toBe(0);
+        expect(hiddenLayout.translationHeightPx).toBe(0);
+        expect(hiddenLayout.visualHeightPx).toBe(hiddenLayout.textHeightPx);
+    });
+
+    it('clears the full Monet mask softness before a word becomes passed', () => {
+        const fullWidthPx = 120;
+        const edgeSoftnessPx = 36;
+        const sweepEndPx = resolveMonetSweepEnd(fullWidthPx, fullWidthPx, edgeSoftnessPx);
+
+        expect(sweepEndPx - edgeSoftnessPx).toBe(fullWidthPx);
+    });
+
+    it('keeps the Monet sweep feather narrow enough for short lyric tokens', () => {
+        expect(resolveMonetSweepEdgeSoftness(12)).toBe(6);
+        expect(resolveMonetSweepEdgeSoftness(32)).toBe(14.4);
+        expect(resolveMonetSweepEdgeSoftness(64)).toBe(16);
+    });
+
+    it('gates Monet keyword coloring through tuning', () => {
+        const theme: Theme = {
+            name: 'Keyword Theme',
+            backgroundColor: '#000000',
+            primaryColor: '#ffffff',
+            accentColor: '#ff99aa',
+            secondaryColor: '#dddddd',
+            fontStyle: 'sans',
+            animationIntensity: 'normal',
+            wordColors: [
+                { word: 'night glow', color: '#ffee88' },
+                { word: '雨', color: '#66ccff' },
+            ],
+        };
+
+        expect(resolveMonetWordColor('night', theme, '#ffffff', true)).toBe('#ffee88');
+        expect(resolveMonetWordColor('雨', theme, '#ffffff', true)).toBe('#66ccff');
+        expect(resolveMonetWordColor('night', theme, '#ffffff', false)).toBe('#ffffff');
+    });
+
+    it('ignores malformed persisted keyword color entries', () => {
+        const theme: Theme = {
+            name: 'Keyword Theme',
+            backgroundColor: '#000000',
+            primaryColor: '#ffffff',
+            accentColor: '#ff99aa',
+            secondaryColor: '#dddddd',
+            fontStyle: 'sans',
+            animationIntensity: 'normal',
+            wordColors: [
+                undefined,
+                { color: '#ff0000' },
+                { word: undefined, color: '#00ff00' },
+                { word: 'night', color: '#ffee88' },
+            ] as unknown as Theme['wordColors'],
+        };
+
+        expect(prepareWordColorMatchers(theme.wordColors)).toEqual([
+            { color: '#ffee88', cjkPhrases: [], englishWords: ['night'], priority: 5 },
+        ]);
+        expect(resolveMonetWordColor('night', theme, '#ffffff', true)).toBe('#ffee88');
+        expect(resolveMonetWordColor('day', theme, '#ffffff', true)).toBe('#ffffff');
+    });
+
+    it('keeps visualizer canvas colors valid when a persisted theme has invalid hex colors', () => {
+        expect(parseColorChannels('#e9b11')).toBeNull();
+        expect(colorWithAlpha('#e9b11', 0.42)).toBe('rgba(255, 255, 255, 0.42)');
+        expect(colorWithAlpha(undefined as unknown as string, 0.35)).toBe('rgba(255, 255, 255, 0.35)');
+        expect(colorWithAlpha('rgb(nope, 20, 30)', 0.5)).toBe('rgba(255, 255, 255, 0.5)');
+        expect(mixColors('#e9b11', '#000000', 0.2, 0.7)).toBe('rgba(255, 255, 255, 0.7)');
+    });
+
+    it('maps CJK phrase coloring by full-line ranges instead of coloring every matching particle token', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 8,
+            fullText: 'の 時の欠片 の',
+            words: [
+                { text: 'の', startTime: 0, endTime: 1 },
+                { text: '時', startTime: 1, endTime: 2 },
+                { text: 'の', startTime: 2, endTime: 3 },
+                { text: '欠', startTime: 3, endTime: 4 },
+                { text: '片', startTime: 4, endTime: 5 },
+                { text: 'の', startTime: 5, endTime: 6 },
+            ],
+        };
+        const tokens = buildMonetDisplayTokens(line);
+        const ranges = buildWordColorRanges(line.fullText, [{ word: '時の欠片', color: '#66ccff' }]);
+        const colorMap = resolveTokenColorMap(tokens, ranges);
+
+        expect(ranges).toEqual([{ startOffset: 2, endOffset: 6, color: '#66ccff', priority: 4 }]);
+        expect(tokens.map(token => [token.text, colorMap.get(token.key) ?? null])).toEqual([
+            ['の', null],
+            [' ', null],
+            ['時', '#66ccff'],
+            ['の', '#66ccff'],
+            ['欠', '#66ccff'],
+            ['片', '#66ccff'],
+            [' ', null],
+            ['の', null],
+        ]);
+    });
+
+    it('colors repeated CJK phrase ranges without falling back to single-character includes', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 10,
+            fullText: '時の欠片と時の欠片',
+            words: [
+                { text: '時', startTime: 0, endTime: 1 },
+                { text: 'の', startTime: 1, endTime: 2 },
+                { text: '欠', startTime: 2, endTime: 3 },
+                { text: '片', startTime: 3, endTime: 4 },
+                { text: 'と', startTime: 4, endTime: 5 },
+                { text: '時', startTime: 5, endTime: 6 },
+                { text: 'の', startTime: 6, endTime: 7 },
+                { text: '欠', startTime: 7, endTime: 8 },
+                { text: '片', startTime: 8, endTime: 9 },
+            ],
+        };
+        const tokens = buildMonetDisplayTokens(line);
+        const ranges = buildWordColorRanges(line.fullText, [{ word: '時の欠片', color: '#66ccff' }]);
+        const colorMap = resolveTokenColorMap(tokens, ranges);
+
+        expect(ranges.map(range => [range.startOffset, range.endOffset])).toEqual([[0, 4], [5, 9]]);
+        expect(tokens.map(token => [token.text, colorMap.get(token.key) ?? null])).toEqual([
+            ['時', '#66ccff'],
+            ['の', '#66ccff'],
+            ['欠', '#66ccff'],
+            ['片', '#66ccff'],
+            ['と', null],
+            ['時', '#66ccff'],
+            ['の', '#66ccff'],
+            ['欠', '#66ccff'],
+            ['片', '#66ccff'],
+        ]);
+    });
+
+    it('keeps English keyword coloring as normalized word range matches', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 4,
+            fullText: 'Night, glow! daylight',
+            words: [
+                { text: 'Night', startTime: 0, endTime: 1 },
+                { text: 'glow', startTime: 1, endTime: 2 },
+                { text: 'daylight', startTime: 2, endTime: 3 },
+            ],
+        };
+        const tokens = buildMonetDisplayTokens(line);
+        const ranges = buildWordColorRanges(line.fullText, [{ word: 'night glow', color: '#ffee88' }]);
+        const colorMap = resolveTokenColorMap(tokens, ranges);
+
+        expect(tokens.map(token => [token.text, colorMap.get(token.key) ?? null])).toEqual([
+            ['Night', '#ffee88'],
+            [', ', null],
+            ['glow', '#ffee88'],
+            ['! ', null],
+            ['daylight', null],
+        ]);
+    });
+
+    it('prepares keyword matchers once while letting English ranges scan the line once', () => {
+        const line: Line = {
+            startTime: 0,
+            endTime: 4,
+            fullText: 'Night, rain and glow',
+            words: [
+                { text: 'Night', startTime: 0, endTime: 1 },
+                { text: 'rain', startTime: 1, endTime: 2 },
+                { text: 'glow', startTime: 2, endTime: 3 },
+            ],
+        };
+        const tokens = buildMonetDisplayTokens(line);
+        const matchers = prepareWordColorMatchers([
+            { word: 'night glow', color: '#ffee88' },
+            { word: 'rain', color: '#66ccff' },
+        ]);
+        const ranges = buildWordColorRanges(line.fullText, [
+            { word: 'night glow', color: '#ffee88' },
+            { word: 'rain', color: '#66ccff' },
+        ]);
+        const colorMap = resolveTokenColorMap(tokens, ranges);
+
+        expect(matchers).toEqual([
+            { color: '#ffee88', cjkPhrases: [], englishWords: ['night', 'glow'], priority: 5 },
+            { color: '#66ccff', cjkPhrases: [], englishWords: ['rain'], priority: 4 },
+        ]);
+        expect(colorMap.get(tokens[0].key)).toBe('#ffee88');
+        expect(colorMap.get(tokens[2].key)).toBe('#66ccff');
+        expect(colorMap.get(tokens[4].key)).toBe('#ffee88');
+    });
+
+    it('changes the background cache key only when source or background treatment changes', () => {
+        const theme = {
+            name: 'Test Theme',
+            backgroundColor: '#000000',
+            primaryColor: '#ffffff',
+            accentColor: '#ff99aa',
+            secondaryColor: '#dddddd',
+            fontStyle: 'sans' as const,
+            animationIntensity: 'normal' as const,
+        };
+
+        const first = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            theme,
+            tuning: DEFAULT_MONET_BACKGROUND_TUNING,
+        });
+        const second = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            theme,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundBlurPx: DEFAULT_MONET_BACKGROUND_TUNING.backgroundBlurPx + 1 },
+        });
+        const third = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            monetBackgroundImage: { id: 'uploaded-1', name: 'bg', url: 'blob:test' },
+            theme,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundSource: 'uploaded-global' },
+        });
+        const overlayChanged = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            theme,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundOverlayOpacity: DEFAULT_MONET_BACKGROUND_TUNING.backgroundOverlayOpacity + 0.02 },
+        });
+        const grayscaleChanged = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            theme,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundGrayscale: 0.2 },
+        });
+        const saturationChanged = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            theme,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundSaturation: 1.4 },
+        });
+        const washChanged = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            theme,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundWash: 0.6 },
+        });
+        const washColorChanged = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            theme,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundWashColorMode: 'custom', backgroundWashCustomColor: '#aabbcc' },
+        });
+        const nonBackgroundChanged = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-a',
+            theme,
+            tuning: {
+                ...DEFAULT_MONET_BACKGROUND_TUNING,
+                backgroundLayout: 'full-overlay',
+                backgroundHalfPaneOffsetX: 20,
+            },
+        });
+
+        expect(first).not.toBe(second);
+        expect(second).not.toBe(third);
+        expect(first).not.toBe(overlayChanged);
+        expect(first).not.toBe(grayscaleChanged);
+        expect(first).not.toBe(saturationChanged);
+        expect(first).not.toBe(washChanged);
+        expect(first).not.toBe(washColorChanged);
+        expect(first).toBe(nonBackgroundChanged);
+
+        const layoutBase = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-b',
+            theme,
+            tuning: DEFAULT_MONET_BACKGROUND_TUNING,
+        });
+        const layoutChanged = getMonetBackgroundCacheKey({
+            coverUrl: 'cover-b',
+            theme,
+            tuning: {
+                ...DEFAULT_MONET_BACKGROUND_TUNING,
+                backgroundLayout: 'full-overlay',
+                backgroundHalfPaneOffsetX: 24,
+                backgroundCropMode: 'full-artwork',
+            } as typeof DEFAULT_MONET_BACKGROUND_TUNING & { backgroundCropMode: string; },
+        });
+        expect(layoutBase).toBe(layoutChanged);
+    });
+
+    it('handles canvas filter feature detection without throwing', () => {
+        // Feature detection returns boolean and doesn't crash
+        const supported = checkCanvasFilterSupport();
+        expect(typeof supported).toBe('boolean');
+    });
+});

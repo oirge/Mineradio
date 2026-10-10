@@ -1,0 +1,14 @@
+# 所有文本文件在任何平台检出都是 LF，与 .editorconfig 一致。Git for Windows 的系统配置默认
+# core.autocrlf=true，会把工作区转成 CRLF，编辑器按 .editorconfig 写回 LF 后每次 add / commit
+# 都报 "LF will be replaced by CRLF"；这里的属性优先于 autocrlf，Windows 与 Linux 行为一致。
+# 二进制文件由 text=auto 自动识别，不做转换。
+* text=auto eol=lf
+
+# 保证容器内执行的脚本在 Windows 检出后仍是 LF（上面的规则已覆盖，保留以免被误删）。
+# core.autocrlf=true 会把 *.sh 换成 CRLF，容器启动时 `#!/bin/sh\r` 会失败于
+# "exec /usr/local/bin/...: no such file or directory"。
+*.sh text eol=lf
+
+# Signed mods and fixtures: the signature covers exact bytes, so no line-ending conversion.
+mods/** -text
+test/fixtures/folium-signature/** -text

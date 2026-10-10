@@ -30,6 +30,7 @@ backups/
 .env.*
 
 # Local development noise
+__pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini

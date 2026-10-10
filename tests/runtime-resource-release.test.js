@@ -95,12 +95,13 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
   assert.match(appSource, /function scheduleMainRenderFrame\([^)]*\)[\s\S]*mainRenderFrameId = requestAnimationFrame\(function\(\)\s*\{/);
   assert.match(appSource, /function scheduleMainRenderFrame\([^)]*\)[\s\S]*mainRenderFrameId = setTimeout\(function\(\)/);
   assert.match(appSource, /function suspendMainRenderLoop\(reason\)[\s\S]*cancelMainRenderFrame\(\);/);
-  assert.match(appSource, /function animate\(\) \{\s*mainRenderFrameId = 0;\s*mainRenderScheduleKind = '';\s*if \(isDeepBackgroundMode\(\)\) \{\s*suspendMainRenderLoop\('deep-background-frame'\);\s*return;/);
+  assert.match(extractFunction('animate'), /if \(isDeepBackgroundMode\(\)\) \{\s*suspendMainRenderLoop\('deep-background-frame'\);\s*return;/);
   assert.match(appSource, /function recoverVisualsAfterBackground\(reason\) \{\s*resumeMainRenderLoop\(reason \|\| 'restore'\);/);
   assert.match(appSource, /resumeMainRenderLoop\('startup'\);/);
   assert.match(appSource, /function scheduleDesktopOverlaySync\(/, '桌面覆盖层继续保留独立调度器');
 
   let deep = false;
+  let folia = false;
   const requested = [];
   const cancelled = [];
   const context = {
@@ -118,6 +119,7 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
     },
     cancelAnimationFrame(id) { cancelled.push(id); },
     isDeepBackgroundMode() { return deep; },
+    isFoliaInterfaceActive() { return folia; },
     performance: { now() { return 1234; } },
     window: {},
     clearTimeout() {}
@@ -146,4 +148,15 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
   assert.equal(requested.length, 2);
   assert.equal(context.mainRenderLoopSuspended, false);
   assert.equal(context.prevTime, 1234);
+  folia = true;
+  context.syncMainRenderLoopPowerState('folia-interface');
+  assert.equal(context.mainRenderLoopSuspended, true);
+  assert.deepEqual(cancelled, [1, 2]);
+  assert.equal(context.resumeMainRenderLoop('background-recovery'), false);
+  assert.equal(context.scheduleMainRenderFrame(), false);
+  assert.equal(requested.length, 2, 'Folia 显示期间宿主可视化不得被恢复入口唤醒');
+  folia = false;
+  context.syncMainRenderLoopPowerState('mineradio-interface');
+  assert.equal(requested.length, 3);
+  assert.equal(context.mainRenderLoopSuspended, false);
 });

@@ -1,0 +1,199 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// test/unit/library/core/useLibraryAccount.test.ts
+// 账户绑定（A3）：订阅 controller 快照、把登录与切换确认的 i18n key 翻译好；细粒度 selector 只在自己那一块变化时重渲染。
+// controller 用一个只有 getSnapshot / subscribe 的假实现驱动（动作由 controller 自己的单测覆盖）。
+
+// 翻译函数身份稳定（真实 i18n 在语言不变时也是），带插值时把参数拼进结果，便于断言。
+const translate = vi.hoisted(() => (key: string, values?: Record<string, unknown>) => (
+    values ? `${key}${JSON.stringify(values)}` : key
+));
+vi.mock('react-i18next', () => ({
+    useTranslation: () => ({ t: translate }),
+}));
+
+import React, { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import {
+    useLibraryAccount,
+    useLibraryAccountLogin,
+    useLibraryAccountPendingSwitch,
+    useLibraryAccountProviders,
+    type LibraryAccountView,
+} from '@/library/core/bindings/useLibraryAccount';
+import type {
+    LibraryAccountController,
+    LibraryAccountSnapshot,
+    LibraryLoginSessionSnapshot,
+} from '@/library/core/contracts/account';
+import type { ProviderAccountSummary } from '@/types/onlineMusic';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const provider = (providerId: string, shortName: string): ProviderAccountSummary => ({
+    providerId,
+    displayName: `${shortName} display`,
+    shortName,
+    availability: { configured: true },
+    status: 'authenticated',
+    user: null,
+    collections: [],
+});
+
+const PROVIDERS = [provider('netease', 'NetEase'), provider('quill', 'Quill')];
+
+const quillLogin: LibraryLoginSessionSnapshot = {
+    id: 3,
+    providerId: 'quill',
+    phase: 'expired',
+    methods: [
+        { id: 'qq', labelKey: 'home.qqLoginMethodQq', iconKey: 'qq' },
+        { id: 'wechat', labelKey: 'home.qqLoginMethodWechat', iconKey: 'wechat' },
+    ],
+    selectedMethodId: 'wechat',
+    qrImageUrl: 'qr.png',
+    failure: 'expired-after-scan',
+    retryCooldownSeconds: null,
+    selfCheck: null,
+    backend: { failed: false, detail: null, restarting: false, canRestart: false },
+    copy: { title: { key: 'home.loginTitle' }, note: { key: 'home.loginNote' }, status: { key: 'home.qrExpired' } },
+};
+
+const createFakeController = (initial: LibraryAccountSnapshot) => {
+    let snapshot = initial;
+    const listeners = new Set<() => void>();
+    const controller = {
+        getSnapshot: () => snapshot,
+        subscribe: (listener: () => void) => {
+            listeners.add(listener);
+            return () => { listeners.delete(listener); };
+        },
+    } as unknown as LibraryAccountController;
+    return {
+        controller,
+        set: (patch: Partial<LibraryAccountSnapshot>) => {
+            snapshot = { ...snapshot, ...patch };
+            act(() => { for (const listener of [...listeners]) listener(); });
+        },
+        listenerCount: () => listeners.size,
+    };
+};
+
+const baseSnapshot = (): LibraryAccountSnapshot => ({
+    providers: PROVIDERS,
+    activeProviderId: 'netease',
+    login: null,
+    pendingSwitch: null,
+    logout: { providerId: null, status: 'idle' },
+    lastLoginCompletion: null,
+});
+
+let root: Root | null = null;
+
+const mount = (element: React.ReactElement) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    act(() => root!.render(element));
+};
+
+afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+});
+
+describe('useLibraryAccount', () => {
+    it('translates the login session and the pending switch, and follows controller updates', () => {
+        const fake = createFakeController(baseSnapshot());
+        let view: LibraryAccountView | null = null;
+        const Probe = () => {
+            view = useLibraryAccount(fake.controller);
+            return null;
+        };
+        mount(React.createElement(Probe));
+
+        expect(view!.login).toBeNull();
+        expect(view!.pendingSwitch).toBeNull();
+
+        fake.set({ login: quillLogin, pendingSwitch: { id: 7, from: 'netease', to: 'quill', reason: 'activate-after-login' } });
+
+        expect(view!.snapshot.login).toBe(quillLogin);
+        expect(view!.login).toMatchObject({
+            session: quillLogin,
+            visible: true,
+            canRetry: true,
+            canShowDiagnostics: true,
+            title: 'home.loginTitle',
+            note: 'home.loginNote',
+            status: 'home.qrExpired',
+            diagnosticsPrompt: 'home.qrDiagnosticsPromptScanned',
+            backendFailure: null,
+            retryLabel: 'home.retryQr',
+            closeLabel: 'home.closeLogin',
+        });
+        expect(view!.login!.methodStep).toEqual({
+            title: 'home.qqLoginMethodTitle',
+            hint: 'home.qqLoginMethodHint',
+            pending: 'home.qqLoginMethodPending',
+            current: 'home.qqLoginMethodCurrent{"method":"home.qqLoginMethodWechat"}',
+            options: [
+                { id: 'qq', label: 'home.qqLoginMethodQq', iconKey: 'qq' },
+                { id: 'wechat', label: 'home.qqLoginMethodWechat', iconKey: 'wechat' },
+            ],
+        });
+        // 确认框里的平台名与 omni.getProviderLabel 同一取法（shortName 优先）。
+        expect(view!.pendingSwitch).toEqual({
+            request: { id: 7, from: 'netease', to: 'quill', reason: 'activate-after-login' },
+            title: 'home.switchOnlineProvider',
+            description: 'home.confirmOnlineProviderSwitch{"provider":"Quill"}',
+        });
+
+        // 后端故障时重试不可用，但诊断照样给：报告里有拉起的每一步与错误原文。
+        fake.set({ login: { ...quillLogin, backend: { failed: true, detail: 'down', restarting: false, canRestart: true } } });
+        expect(view!.login).toMatchObject({
+            canRetry: false,
+            canShowDiagnostics: true,
+            diagnosticsPrompt: 'home.qrDiagnosticsPromptScanned',
+            backendFailure: { title: 'home.loginBackendDown', restartLabel: 'home.restartBackend', restartingLabel: 'home.restartingBackend' },
+        });
+    });
+
+    it('re-renders a fine-grained subscriber only when its own slice changes', () => {
+        const fake = createFakeController({ ...baseSnapshot(), login: quillLogin });
+        const renders = { login: 0, switch: 0, providers: 0 };
+        const LoginProbe = () => { useLibraryAccountLogin(fake.controller); renders.login += 1; return null; };
+        const SwitchProbe = () => { useLibraryAccountPendingSwitch(fake.controller); renders.switch += 1; return null; };
+        const ProvidersProbe = () => { useLibraryAccountProviders(fake.controller); renders.providers += 1; return null; };
+        mount(React.createElement(React.Fragment, null,
+            React.createElement(LoginProbe),
+            React.createElement(SwitchProbe),
+            React.createElement(ProvidersProbe)));
+        const initial = { ...renders };
+
+        // 只换了登出状态：三块都没变，谁都不重渲染。
+        fake.set({ logout: { providerId: 'netease', status: 'pending' } });
+        expect(renders).toEqual(initial);
+
+        // 只换了 provider 列表：登录不动；切换确认与账户列表读它，会重渲染。
+        fake.set({ providers: [...PROVIDERS] });
+        expect(renders.login).toBe(initial.login);
+        expect(renders.providers).toBe(initial.providers + 1);
+
+        fake.set({ login: null });
+        expect(renders.login).toBe(initial.login + 1);
+        expect(renders.providers).toBe(initial.providers + 1);
+    });
+
+    it('unsubscribes on unmount', () => {
+        const fake = createFakeController(baseSnapshot());
+        const Probe = () => { useLibraryAccount(fake.controller); return null; };
+        mount(React.createElement(Probe));
+        expect(fake.listenerCount()).toBeGreaterThan(0);
+
+        act(() => root?.unmount());
+        root = null;
+
+        expect(fake.listenerCount()).toBe(0);
+    });
+});
