@@ -1,0 +1,8 @@
+{
+  "name": "folia-docker-kugou-api",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "kugoumusicapi": "https://github.com/MakcRe/KuGouMusicApi/archive/refs/tags/v1.6.0.tar.gz"
+  }
+}

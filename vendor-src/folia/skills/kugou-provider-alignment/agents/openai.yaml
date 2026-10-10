@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kugou Provider Alignment"
+  short_description: "Probe real KuGou responses before coding"
+  default_prompt: "Use $kugou-provider-alignment to verify a KuGou endpoint against the project docs and live response before implementing it."

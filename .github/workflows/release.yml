@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v2.3.2)'
+        description: 'Release tag (e.g. v2.4.0)'
         required: true
-        default: 'v2.3.2'
+        default: 'v2.4.0'
 
 jobs:
   build-windows:
@@ -46,11 +46,28 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            vendor-src/folia/package-lock.json
       
       - name: Install dependencies
         run: npm ci
+
+      - name: Ensure Electron runtime
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe' -PathType Leaf)) {
+            node node_modules/electron/install.js
+            if ($LASTEXITCODE -ne 0) { throw 'Electron runtime installation failed' }
+          }
+          if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe' -PathType Leaf)) {
+            throw 'Electron runtime is missing; check ELECTRON_SKIP_BINARY_DOWNLOAD and download logs'
+          }
+
+      - name: Install Folia build dependencies
+        run: npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
       
       - name: Build Windows installer
         run: npm run build:win -- --publish never

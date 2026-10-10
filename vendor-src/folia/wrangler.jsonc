@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "folia-major",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-04-02",
+  "define": {
+    "process.env.NODE_ENV": "\"production\"",
+    "process.env.JEST_WORKER_ID": "undefined",
+    "process.env.LOG_LEVEL": "undefined"
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  }
+}

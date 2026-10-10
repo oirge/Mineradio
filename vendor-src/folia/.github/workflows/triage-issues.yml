@@ -1,0 +1,76 @@
+name: Triage Issues
+
+# issue 的自动分类、打标签、重复归并、信息追问与申诉提醒；LLM 用 DeepSeek，详见 .github/triage/config.json。
+# 运行模式由仓库变量 TRIAGE_MODE 控制（off / dry-run / live），没设时取 config.json 的 mode。
+on:
+  issues:
+    types: [opened, reopened, edited]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'issue 编号'
+        required: true
+        type: string
+      dry_run:
+        description: '只输出到 job summary，不写入'
+        type: boolean
+        default: true
+      force:
+        description: '忽略 bot: skip 标签'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+# 同一 issue 的运行排队执行，避免两次运行交错 upsert 同一条评论。
+concurrency:
+  group: triage-issue-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    name: Triage issue
+    # 先在表达式层挡掉明显无关的事件，省一个 runner。脚本里会再完整判断一次。
+    # GITHUB_TOKEN 触发的事件本来就不会启动 workflow；排除 Bot 是换成 PAT / App token 时的兜底。
+    if: >-
+      github.event_name == 'workflow_dispatch' || (
+        github.event.sender.type != 'Bot' && (
+          github.event_name == 'issues' ||
+          startsWith(github.event.comment.body, '/triage') ||
+          contains(github.event.issue.labels.*.name, 'stale') ||
+          contains(github.event.issue.labels.*.name, 'needs-info') ||
+          contains(github.event.issue.labels.*.name, 'bot: auto-closed')
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # 只需要 .github 下的脚本、配置和模板；不保留凭据，后续步骤用不到 git 写权限。
+      - name: Check out triage scripts
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # 事件文本（标题、正文、评论）一律由脚本从 GITHUB_EVENT_PATH 读取，不在这里做表达式插值，
+      # 否则 issue 标题就能注入 shell 命令。
+      - name: Run triage
+        run: node .github/scripts/triage/bin/triage-issue.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          TRIAGE_MODE: ${{ vars.TRIAGE_MODE }}
+          TRIAGE_DISPATCH_NUMBER: ${{ inputs.issue_number }}
+          TRIAGE_DISPATCH_DRY_RUN: ${{ inputs.dry_run }}
+          TRIAGE_DISPATCH_FORCE: ${{ inputs.force }}

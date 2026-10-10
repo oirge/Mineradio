@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const PERSISTENT_UI_STATE_KEYS = [
+  'mineradio-player-interface-v1',
+  'mineradio-folia-local-visuals-v1',
+  'mineradio-folia-local-lattice-v1',
   'apex-player-volume',
   'mineradio-lyric-layout-v1',
   'mineradio-playback-quality-v1',

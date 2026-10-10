@@ -78,9 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复弱显卡 / 虚拟显示器 / 远程桌面等环境更新后 GPU 反复崩溃、软件一直重启',
-  'GPU 兜底换版本时保留已降到的渲染档位，不再每次更新退回硬件加速',
-  '延续 2.3.x：本地歌译文稳健性、迷你播放器崩溃退避、3D 歌单架交互修复',
+  '新增 Folia 本地界面，支持歌词播放、悬浮唱片墙和封面拼贴墙，切换界面时音乐继续播放',
+  '提供全部 14 种内置歌词效果、12 套专属参数面板和 5 种背景，支持图片素材与偏好保存',
+  '音乐库、收藏、歌单和队列共享 Mineradio 本地数据，收藏刷新保留墙面镜头与选择状态',
+  '修复覆盖安装后界面缓存未更新，以及切歌时听歌统计递归结算和播放断点保存顺序的问题',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -3318,8 +3319,10 @@ const server = http.createServer(async (req, res) => {
     const override = path.join(APP_ROOT, 'public', 'app.js');
     if (fs.existsSync(override)) filePath = override;
   }
-  // vendor 库随安装包版本一起走、不单独热替换，7 天新鲜期内免 304 重验证，加快下次启动。
-  const vendorCacheControl = pn.startsWith('/vendor/')
+  // Hashed vendor assets can stay fresh for a week. Entry documents and the build inventory
+  // must revalidate after a local installation, including updates that keep the same version.
+  const vendorCacheControl = pn.startsWith('/vendor/') && !pn.endsWith('.html')
+    && pn !== '/vendor/folia/local-player-build.json'
     ? 'public, max-age=604800'
     : undefined;
   serveStatic(req, res, filePath, vendorCacheControl);

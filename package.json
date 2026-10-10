@@ -1,16 +1,20 @@
 {
   "name": "mineradio",
   "productName": "Mineradio",
-  "version": "2.3.2",
+  "version": "2.4.0",
   "description": "Mineradio 二改本地音乐播放器，支持 MP3/MP2/FLAC/M4A/M4B/WAV/OGG/OGA/AAC/Opus/WebM/WebA/AIFF/APE/DSD(.dsf)、本地封面和歌词",
   "author": "Mineradio",
   "main": "desktop/main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test --test-concurrency=1 tests/*.test.js",
-    "build:win": "electron-builder --win",
-    "build:win:dir": "electron-builder --win dir"
+    "build:folia": "node scripts/build-folia.js",
+    "check:folia": "node scripts/build-folia.js --check",
+    "test": "node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs",
+    "prebuild:win": "npm run build:folia",
+    "build:win": "electron-builder --win --publish never",
+    "prebuild:win:dir": "npm run build:folia",
+    "build:win:dir": "electron-builder --win dir --publish never"
   },
   "build": {
     "appId": "com.mineradio.desktop.oirge",

@@ -158,6 +158,9 @@ var LOCAL_METADATA_TEXT_FIELDS = ['name', 'artist', 'album', 'albumArtist', 'gen
 var LOCAL_METADATA_VALUE_FIELDS = ['duration', 'localFormat', 'localFileSize', 'localBitrateKbps'];
 var LOCAL_METADATA_TAG_SCHEMA = 4;
 var PERSISTENT_UI_STATE_KEYS = [
+  'mineradio-player-interface-v1',
+  'mineradio-folia-local-visuals-v1',
+  'mineradio-folia-local-lattice-v1',
   VOLUME_STORE_KEY,
   VOLUME_WHEEL_STEP_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
@@ -624,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.3.2';
+var APP_VERSION = '2.4.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -677,11 +680,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'GPU 兼容性修复：部分机器更新后不再反复重启。',
+  hero: 'Folia 本地播放界面：三种视图与完整歌词效果。',
   notes: [
-    '修复弱显卡 / 虚拟显示器 / 远程桌面等环境更新后 GPU 反复崩溃、软件一直重启的问题。',
-    'GPU 兜底换版本时保留已降到的渲染档位，不再每次更新退回硬件加速。',
-    '延续 2.3.x：本地歌译文稳健性、迷你播放器崩溃退避、3D 歌单架交互修复。'
+    '新增 Folia 本地界面，支持歌词播放、悬浮唱片墙和封面拼贴墙，切换界面时音乐继续播放。',
+    '提供全部 14 种内置歌词效果、12 套专属参数面板和 5 种背景，支持图片素材与偏好保存。',
+    '音乐库、收藏、歌单和队列共享 Mineradio 本地数据，收藏刷新保留墙面镜头与选择状态。',
+    '修复覆盖安装后界面缓存未更新，以及切歌时听歌统计递归结算和播放断点保存顺序的问题。'
   ]
 };
 function readSavedVolume() {
@@ -19238,7 +19242,10 @@ function updateListenStatsTick(force) {
  */
 function finalizeListenSession(completed) {
   if (!listenSession) return;
-  updateListenStatsTick(true);
+  // 切歌可能已更新当前曲目；此时不能让 tick 再次开始会话并递归结算，
+  // 也不能把新曲目的时间计入旧曲目。只有仍在播放同一首时补最后一段。
+  var currentSong = currentCoverSong();
+  if (currentSong && queueItemKey(currentSong) === listenSession.key) updateListenStatsTick(true);
   var session = listenSession;
   listenSession = null;
   var effective = completed || session.listenMs >= 45000 || session.maxProgress >= 0.5 || (!audio || !audio.duration ? session.listenMs >= 30000 : false);
@@ -41843,6 +41850,7 @@ function releaseIdleGuideCanvasResources() {
 }
 
 function ensureIdleGuideCanvasActive() {
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) return false;
   if (!idleGuideCanvas) idleGuideCanvas = document.getElementById('idle-guide-canvas');
   if (!idleGuideCanvas) return false;
   if (!idleGuideCtx) idleGuideCtx = idleGuideCanvas.getContext('2d');
@@ -41934,6 +41942,10 @@ function scheduleIdleGuideFrame(delay) {
 }
 function drawIdleGuideFrame() {
   idleGuideFrameId = 0;
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) {
+    releaseIdleGuideCanvasResources();
+    return;
+  }
   if (!idleGuideCanvas || !idleGuideCtx || !idleGuideCanvasActive) return;
   var ctx = idleGuideCtx;
   var nowFrame = performance.now();
@@ -46789,6 +46801,7 @@ function mainRenderScheduleKindForState(frameFps) {
  * @returns {boolean} 是否创建了新的调度句柄。
  */
 function scheduleMainRenderFrame(frameFps) {
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) return false;
   if (mainRenderLoopSuspended || isDeepBackgroundMode()) return false;
   var targetFps = frameFps == null && typeof getAdaptiveRenderFps === 'function' ? getAdaptiveRenderFps() : frameFps;
   var scheduleKind = mainRenderScheduleKindForState(targetFps);
@@ -46818,6 +46831,7 @@ function suspendMainRenderLoop(reason) {
   if (reason && window.__mineradioDebugRenderPower) console.log('[RenderSuspended]', reason);
 }
 function resumeMainRenderLoop(reason) {
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) return false;
   if (isDeepBackgroundMode()) return false;
   var wasSuspended = mainRenderLoopSuspended;
   mainRenderLoopSuspended = false;
@@ -46831,6 +46845,10 @@ function resumeMainRenderLoop(reason) {
 }
 function syncMainRenderLoopPowerState(reason) {
   if (typeof renderPerfState === 'undefined' || !renderPerfState) return;
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) {
+    suspendMainRenderLoop('folia-interface');
+    return;
+  }
   if (isDeepBackgroundMode()) suspendMainRenderLoop(reason || 'deep-background');
   else resumeMainRenderLoop(reason || 'foreground');
 }
@@ -46972,6 +46990,10 @@ function consumeAudioAnalysisDelta(now, fallbackDt) {
 function animate() {
   mainRenderFrameId = 0;
   mainRenderScheduleKind = '';
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) {
+    suspendMainRenderLoop('folia-interface-frame');
+    return;
+  }
   if (isDeepBackgroundMode()) {
     suspendMainRenderLoop('deep-background-frame');
     return;

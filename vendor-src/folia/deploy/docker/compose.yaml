@@ -1,0 +1,185 @@
+name: folia
+
+services:
+  gateway:
+    image: ${FOLIA_IMAGE_NAMESPACE:?Set FOLIA_IMAGE_NAMESPACE}/folia-web:${FOLIA_STACK_VERSION:-latest}
+    restart: unless-stopped
+    read_only: true
+    environment:
+      FOLIA_AI_PROVIDER: ${FOLIA_AI_PROVIDER:-google}
+      NAVIDROME_PRESET_ALLOW: ${NAVIDROME_PRESET_ALLOW:-private}
+      FOLIA_TRUSTED_PROXIES: ${FOLIA_TRUSTED_PROXIES:-}
+    ports:
+      - "${FOLIA_HTTP_BIND:-0.0.0.0}:${FOLIA_HTTP_PORT:-18080}:8080"
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx:uid=101,gid=101,mode=0750
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    depends_on:
+      backend:
+        condition: service_healthy
+      netease-api:
+        condition: service_healthy
+      kugou-api:
+        condition: service_healthy
+      qq-api:
+        condition: service_healthy
+    networks:
+      - folia-edge
+      - folia-internal
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    image: ${FOLIA_IMAGE_NAMESPACE:?Set FOLIA_IMAGE_NAMESPACE}/folia-web-api:${FOLIA_STACK_VERSION:-latest}
+    restart: unless-stopped
+    read_only: true
+    environment:
+      PORT: "3000"
+      # 歌词分词端点在服务端自己选 provider（前端不参与），所以 backend 也要拿到这个选择。
+      AI_PROVIDER: ${FOLIA_AI_PROVIDER:-google}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_URL: ${OPENAI_API_URL:-https://api.openai.com/v1}
+      OPENAI_API_MODEL: ${OPENAI_API_MODEL:-gpt-5.6-luna}
+      OPENAI_API_TEMPERATURE: ${OPENAI_API_TEMPERATURE:-0.7}
+      NAVIDROME_URL: ${NAVIDROME_URL:-}
+      NAVIDROME_USERNAME: ${NAVIDROME_USERNAME:-}
+      NAVIDROME_PASSWORD: ${NAVIDROME_PASSWORD:-}
+    expose:
+      - "3000"
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - folia-internal
+      - folia-egress
+    security_opt:
+      - no-new-privileges:true
+
+  netease-api:
+    image: ${FOLIA_IMAGE_NAMESPACE:?Set FOLIA_IMAGE_NAMESPACE}/folia-netease-api:${FOLIA_STACK_VERSION:-latest}
+    restart: unless-stopped
+    read_only: true
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      FOLIA_FORWARD_CLIENT_IP: ${FOLIA_FORWARD_CLIENT_IP:-false}
+      ENABLE_GENERAL_UNBLOCK: ${ENABLE_GENERAL_UNBLOCK:-false}
+    expose:
+      - "3000"
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    networks:
+      - folia-internal
+      - folia-egress
+    security_opt:
+      - no-new-privileges:true
+
+  kugou-api:
+    image: ${FOLIA_IMAGE_NAMESPACE:?Set FOLIA_IMAGE_NAMESPACE}/folia-kugou-api:${FOLIA_STACK_VERSION:-latest}
+    restart: unless-stopped
+    read_only: true
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      FOLIA_FORWARD_CLIENT_IP: ${FOLIA_FORWARD_CLIENT_IP:-false}
+    expose:
+      - "3000"
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    networks:
+      - folia-internal
+      - folia-egress
+    security_opt:
+      - no-new-privileges:true
+
+  qq-api:
+    image: ${FOLIA_IMAGE_NAMESPACE:?Set FOLIA_IMAGE_NAMESPACE}/folia-qq-api:${FOLIA_STACK_VERSION:-latest}
+    restart: unless-stopped
+    read_only: true
+    environment:
+      PORT: "3000"
+      QQ_AUTH_STATE_PATH: /app/.auth-state/qq-device.json
+      QQ_AUTH_SESSION_PATH: ${QQ_AUTH_SESSION_PATH:-}
+      QQ_SESSION_SECRET: ${QQ_SESSION_SECRET:-}
+    expose:
+      - "3000"
+    volumes:
+      - qq-api-state:/app/.auth-state
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    networks:
+      - folia-internal
+      - folia-egress
+    security_opt:
+      - no-new-privileges:true
+
+  sync-server:
+    image: ${FOLIA_IMAGE_NAMESPACE:?Set FOLIA_IMAGE_NAMESPACE}/folia-sync-server:${FOLIA_SYNC_VERSION:-latest}
+    restart: unless-stopped
+    read_only: true
+    environment:
+      PORT: "3000"
+      DB_PATH: /app/data/folia-sync.db
+      SYNC_TOKEN: ${SYNC_TOKEN:?Set SYNC_TOKEN to at least 8 characters}
+      DASHBOARD_TOKEN: ${DASHBOARD_TOKEN:-}
+    ports:
+      - "${FOLIA_SYNC_BIND:-0.0.0.0}:${FOLIA_SYNC_PORT:-13000}:3000"
+    volumes:
+      - "${FOLIA_SYNC_DATA_DIR:-./data/sync}:/app/data"
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - folia-sync
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  # QQ 扫码登录的 Android device context；只存装置识别值，不存用户凭证。
+  qq-api-state:
+
+networks:
+  folia-edge:
+    driver: bridge
+  folia-internal:
+    driver: bridge
+    internal: true
+  folia-egress:
+    driver: bridge
+  folia-sync:
+    driver: bridge

@@ -1,0 +1,57 @@
+name: docker-stack-check
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/docker/**'
+      - 'api-ts/**'
+      - 'shared/**'
+      - 'src/services/runtimeConfig.ts'
+      - 'src/services/gemini.ts'
+      - 'src/utils/obsWebAppearance.ts'
+      - 'index.html'
+      - 'public/runtime-config.js'
+      - 'vite.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'sync-server/package.json'
+      - 'sync-server/package-lock.json'
+      - 'sync-server/src/**'
+      - '.github/workflows/docker-stack-check.yml'
+      - '.github/workflows/docker-stack-publish.yml'
+      - '.github/workflows/sync-server-docker-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-stack-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Docker stack
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Validate stack version
+        run: ./deploy/docker/scripts/validate-version.sh
+
+      - name: Validate Compose configuration
+        env:
+          FOLIA_IMAGE_NAMESPACE: folia-local
+          SYNC_TOKEN: docker-check-token
+        run: docker compose -f deploy/docker/compose.yaml -f deploy/docker/compose.build.yaml config --quiet
+
+      - name: Build native architecture images
+        env:
+          FOLIA_IMAGE_NAMESPACE: folia-local
+          SYNC_TOKEN: docker-check-token
+        run: docker compose -f deploy/docker/compose.yaml -f deploy/docker/compose.build.yaml build
+
+      - name: Run stack smoke test
+        run: ./deploy/docker/scripts/smoke-test.sh

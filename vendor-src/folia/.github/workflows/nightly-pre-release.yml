@@ -1,0 +1,157 @@
+name: Publish Limo Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: limo-nightly
+  cancel-in-progress: true
+
+jobs:
+  check-updates:
+    name: Check for new commits since Limo
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.meta.outputs.should_build }}
+      version: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine Limo version
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]] && git rev-parse --verify refs/tags/limo >/dev/null 2>&1 && git rev-list --count refs/tags/limo..HEAD | grep -qx '0'; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE_VERSION="$(jq -r .version package.json | sed 's/-.*//')"
+          if [[ ! "${BASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "package.json must contain a semver base version" >&2
+            exit 1
+          fi
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "version=${BASE_VERSION}-beta.$(date -u +%s)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Limo on ${{ matrix.os }}
+    needs: check-updates
+    if: needs.check-updates.outputs.should_build == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Rust toolchain
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo build
+        if: runner.os == 'Linux'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .windowtolayer-src
+
+      - name: Cache wallpaper-helper Cargo build
+        if: runner.os == 'Windows'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packaging/windows/wallpaper-helper
+
+      - name: Build wallpaper helper (Windows only)
+        if: runner.os == 'Windows'
+        run: npm run build:wallpaper-helper
+
+      - name: Build windowtolayer (Linux only)
+        if: runner.os == 'Linux'
+        run: npm run build:windowtolayer
+
+      - name: Stamp Limo package metadata
+        shell: bash
+        env:
+          TARGET_VERSION: ${{ needs.check-updates.outputs.version }}
+        run: |
+          node -e "const fs=require('fs'); const pkg=require('./package.json'); pkg.version=process.env.TARGET_VERSION; pkg.foliaReleaseChannel='limo'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
+      - name: Build web app for Electron
+        env:
+          ELECTRON: 'true'
+          APP_VERSION_LABEL: Limo
+          APP_RELEASE_CHANNEL: limo
+        run: npm run build
+
+      - name: Package Electron app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --publish never --config.publish.channel=beta
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: limo-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.blockmap
+            release/*.yml
+            !release/builder-debug.yml
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish rolling Limo prerelease
+    runs-on: ubuntu-latest
+    needs: [check-updates, build]
+    if: needs.check-updates.outputs.should_build == 'true'
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: limo-artifacts
+
+      - name: Replace rolling Limo release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.check-updates.outputs.version }}
+        shell: bash
+        run: |
+          gh release delete limo --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes >/dev/null 2>&1 || true
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/limo" >/dev/null 2>&1 || true
+          mapfile -d '' files < <(find limo-artifacts -type f -print0)
+          cat > release-notes.md <<EOF
+          Automated Limo nightly build for commit ${GITHUB_SHA}.
+
+          Version: ${RELEASE_VERSION}
+          Source commit: https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}
+          EOF
+          gh release create limo "${files[@]}" --repo "${GITHUB_REPOSITORY}" --title "Limo Nightly (${RELEASE_VERSION})" --notes-file release-notes.md --target "${GITHUB_SHA}" --prerelease

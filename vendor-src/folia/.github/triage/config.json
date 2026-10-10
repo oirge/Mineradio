@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "mode": "dry-run",
+  "botLogin": "github-actions[bot]",
+  "maintainerAssociations": ["OWNER", "MEMBER", "COLLABORATOR"],
+  "labels": {
+    "managed": {
+      "needs-info": { "color": "fbca04", "description": "等待提交者补充信息" },
+      "stale": { "color": "eeeeee", "description": "长期无活动" },
+      "provider-request": { "color": "5319e7", "description": "请求支持新的音乐平台或音源" },
+      "bot: skip": { "color": "ededed", "description": "triage bot 跳过此条目" },
+      "bot: auto-closed": { "color": "c5def5", "description": "由 triage bot 自动关闭，便于维护者审计" },
+      "bot: rate-limited": { "color": "f9d0c4", "description": "触发熔断，LLM 分类延后补跑" },
+      "module: lattice": { "color": "1d76db", "description": "Lattice 队列拼贴视图" },
+      "module: command": { "color": "1d76db", "description": "命令面板与快捷键" },
+      "module: playback": { "color": "1d76db", "description": "播放、队列、音频输出与播放器界面" },
+      "module: library-ui": { "color": "1d76db", "description": "音乐库界面：首页、网格与各浏览视图" },
+      "module: omni": { "color": "1d76db", "description": "在线音源统一层：登录、搜索、歌单、歌词与音频获取" },
+      "module: folium": { "color": "1d76db", "description": "Folium 模组 API" },
+      "module: general": { "color": "1d76db", "description": "未归入具体模块" },
+      "type: refactor": { "color": "d4c5f9", "description": "重构" },
+      "type: perf": { "color": "d4c5f9", "description": "性能" },
+      "type: test": { "color": "d4c5f9", "description": "测试" },
+      "type: chore": { "color": "d4c5f9", "description": "杂项、构建、CI、发布" }
+    },
+    "botMayAdd": [
+      "bug", "enhancement", "question", "documentation", "duplicate", "invalid", "out of scope",
+      "breaking-change", "scope too large", "需要他人协助",
+      "needs-info", "stale", "provider-request",
+      "bot: auto-closed", "bot: rate-limited", "module: *", "type: *"
+    ],
+    "botMayRemove": ["needs-info", "stale", "bot: rate-limited"]
+  },
+  "modules": {
+    "lattice": "Lattice 队列拼贴视图：以拼贴形式展示播放队列、聚焦当前歌曲、拼贴的滚动与布局",
+    "command": "命令面板（command palette）、全局快捷键、键盘导航与命令检索",
+    "playback": "播放控制、播放队列、音频输出与解码、本地文件播放、歌词显示与播放器界面",
+    "library-ui": "音乐库界面：首页、网格、歌单/专辑/歌手页、本地库与 Navidrome 的浏览界面",
+    "omni": "在线音源统一层：网易云/QQ/酷狗等 provider 的扫码登录、搜索、歌单、在线歌词与音频获取",
+    "folium": "Folium 模组 API、模组设置与模组管理",
+    "general": "以上都不明显匹配：安装、设置、部署、文档、其他"
+  },
+  "aggregates": [
+    { "id": "qr-qq", "provider": "qq", "issue": 484, "maxAppVersion": "0.7.14" }
+  ],
+  "outOfScope": [
+    { "id": "mobile-tv-native", "description": "Android / iOS / TV 原生客户端" }
+  ],
+  "providerRequest": {
+    "platformNames": [
+      "喜马拉雅", "酷我", "kuwo", "Apple Music", "苹果音乐", "YouTube Music", "YouTube", "油管",
+      "Spotify", "Tidal", "Deezer", "SoundCloud", "Bilibili", "B站", "哔哩哔哩", "咪咕", "migu",
+      "汽水音乐", "千千音乐", "5sing", "荔枝", "Qobuz", "Amazon Music", "Jellyfin", "Emby", "Plex"
+    ],
+    "appleMusicPattern": "apple\\s*music|苹果音乐",
+    "inProgress": [
+      { "pattern": "spotify|youtube\\s*music", "issue": 507 }
+    ]
+  },
+  "pausedAreas": [
+    { "announcement": 506, "pathPrefixes": ["src/library/suites/", "src/components/"], "note": "library v2 重构" }
+  ],
+  "thresholds": {
+    "closeConfidence": 0.9,
+    "duplicateConfirmConfidence": 0.9,
+    "invalidConfidence": 0.95,
+    "relatedConfidence": 0.6,
+    "maxClosesPerRun": 2
+  },
+  "llm": {
+    "baseUrl": "https://api.deepseek.com",
+    "model": "deepseek-chat",
+    "timeoutMs": 30000,
+    "maxTokens": 900,
+    "maxCallsPerRun": 3,
+    "bodyHeadChars": 3000,
+    "bodyTailChars": 1000,
+    "longBodyChars": 8000,
+    "tldrMinChars": 1500,
+    "codeBlockMaxLines": 30,
+    "candidateLimit": 80,
+    "candidateWindowDays": 120,
+    "duplicateBodyChars": 1500
+  },
+  "breaker": {
+    "globalPerHour": 10,
+    "globalPerDay": 40,
+    "perAuthorPerDay": 3,
+    "newAccountDays": 7,
+    "newAccountPerDay": 1,
+    "manualRerunsPerDay": 3,
+    "notifyIssueTitle": "[triage] 熔断通知"
+  },
+  "pr": {
+    "typeLabels": {
+      "feat": "enhancement",
+      "fix": "bug",
+      "docs": "documentation",
+      "refactor": "type: refactor",
+      "perf": "type: perf",
+      "test": "type: test",
+      "chore": "type: chore",
+      "ci": "type: chore",
+      "build": "type: chore",
+      "dev": "type: chore",
+      "release": "type: chore"
+    },
+    "scopeTooLarge": { "changedLines": 3000, "changedFiles": 40 },
+    "ignoreFilesForSize": ["**/package-lock.json", "package-lock.json", "docs/CODEMAP.md", "**/*.snap", "**/__screenshots__/**"],
+    "exemptAuthors": ["app/allcontributors", "allcontributors[bot]", "dependabot[bot]"]
+  },
+  "stale": {
+    "needsInfoDays": 14,
+    "inactiveDays": 60,
+    "closeAfterStaleDays": 30,
+    "closeLabels": ["bug", "question"],
+    "exemptLabels": [
+      "announcement", "priority: high", "priority: low", "needs follow-up", "needs major refactoring",
+      "需要他人协助", "bot: skip", "provider-request"
+    ],
+    "rateLimitedRerunsPerRun": 10
+  }
+}

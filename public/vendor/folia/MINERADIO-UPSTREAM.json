@@ -1,0 +1,9 @@
+{
+  "project": "Folia",
+  "repository": "https://github.com/chthollyphile/folia-major",
+  "version": "0.7.16",
+  "observedMainCommit": "d824c0b854e54d5411cb072092999823e9bd7071",
+  "retrievedAt": "2026-10-10",
+  "license": "AGPL-3.0",
+  "integration": "Complete web interface; playback, library and playlists are owned by Mineradio through the local frame bridge."
+}

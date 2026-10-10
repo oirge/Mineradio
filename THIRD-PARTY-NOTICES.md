@@ -2,6 +2,25 @@
 
 Mineradio 本体以 `GPL-3.0` 发布（见 `LICENSE`）。下列组件来自第三方，保留各自的版权与授权条款。
 
+## public/vendor/folia 与 vendor-src/folia —— Folia（AGPL-3.0）
+
+Folia Web 界面来自 chthollyphile/folia-major，取材版本 0.7.16（2026-10-10）。
+项目地址：https://github.com/chthollyphile/folia-major 。
+记录的上游 main commit 为 `d824c0b854e54d5411cb072092999823e9bd7071`。
+本地嵌入适配只挂载独立本地播放器，复用原版歌词、背景和视觉参数组件，将播放和曲库操作交给 Mineradio；不加载上游完整应用入口、在线功能、独立 Electron 程序及在线服务部署。
+修改后的 Folia 源码位于本项目源码检出的 `vendor-src/folia`，构建命令为 `npm run build:folia`。
+源码与桌面运行产物的边界、重建步骤见 `docs/FOLIA_INTEGRATION.md`；当前桌面打包配置只包含编译后的界面文件。
+上游版本记录见源码内及运行产物内的 `MINERADIO-UPSTREAM.json`。
+Folia 的 GNU Affero General Public License v3 全文随源码和界面产物分别保留于
+`vendor-src/folia/LICENSE` 和 `public/vendor/folia/LICENSE`。相关作者声明及依赖清单保留在原始源码中。
+
+嵌入界面实际打包的 npm 依赖（包括 React、React DOM、PixiJS、Zustand 等）的原始版权、许可和 NOTICE 文本，
+随安装包保留于 `public/vendor/folia/THIRD-PARTY-LICENSES.txt`。该文件由主界面与 worker 的实际入包模块生成，
+不会将仅安装、未打包的开发或在线服务依赖列为分发组件；每个条目记录对应包名、版本和许可来源文件。
+`local-player-build.json` 保存该清单及 SHA-256，`npm run check:folia` 会检查文本与清单一致，缺失或变更时阻止打包。
+若某个 npm 归档遗漏许可文件，仅对已核验的精确包版本使用 `third-party/folia-license-fallbacks/` 中的原始文本；
+该目录记录不可变上游提交、来源及内容校验值，构建时不联网下载或为其他版本猜测许可。
+
 ## desktop/audio/ape-decoder.js —— FFmpeg（LGPL-2.1-or-later）
 
 Monkey's Audio (APE) 解复用与解码实现是 FFmpeg 以下文件的逐行 JavaScript 移植：

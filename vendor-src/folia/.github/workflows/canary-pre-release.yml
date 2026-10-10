@@ -1,0 +1,202 @@
+name: Publish Cielo Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_mode:
+        description: 'Choose whether this build updates Cielo, is retained as a branch release, or is available only as workflow artifacts'
+        required: true
+        default: rolling
+        type: choice
+        options:
+          - rolling
+          - branch-release
+          - artifacts
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cielo-canary-${{ github.event_name != 'workflow_dispatch' && 'rolling' || inputs.publish_mode == 'rolling' && 'rolling' || format('{0}-{1}', inputs.publish_mode, github.ref_name) }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare Cielo build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[canary]')
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      branch_name: ${{ steps.meta.outputs.branch_name }}
+      publish_mode: ${{ steps.meta.outputs.publish_mode }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      release_title: ${{ steps.meta.outputs.release_title }}
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Determine Cielo metadata
+        id: meta
+        shell: bash
+        env:
+          PUBLISH_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_mode || 'rolling' }}
+        run: |
+          set -euo pipefail
+          BASE_VERSION="$(jq -r .version package.json | sed 's/-.*//')"
+          if [[ ! "${BASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "package.json must contain a semver base version" >&2
+            exit 1
+          fi
+          case "${PUBLISH_MODE}" in
+            rolling|branch-release|artifacts) ;;
+            *)
+              echo "Unsupported Cielo publish mode: ${PUBLISH_MODE}" >&2
+              exit 1
+              ;;
+          esac
+
+          VERSION="${BASE_VERSION}-alpha.$(date -u +%s)"
+          BRANCH_SLUG="$(printf '%s' "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+|-+$//g' | cut -c 1-40)"
+          BRANCH_SLUG="${BRANCH_SLUG:-branch}"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          if [[ "${PUBLISH_MODE}" == "rolling" ]]; then
+            RELEASE_TAG="cielo"
+            RELEASE_TITLE="Cielo Canary (${VERSION})"
+          else
+            RELEASE_TAG="cielo-${BRANCH_SLUG}-${SHORT_SHA}"
+            RELEASE_TITLE="Cielo Branch Canary (${GITHUB_REF_NAME}, ${VERSION})"
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "branch_name=${GITHUB_REF_NAME}"
+            echo "publish_mode=${PUBLISH_MODE}"
+            echo "release_tag=${RELEASE_TAG}"
+            echo "release_title=${RELEASE_TITLE}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Cielo on ${{ matrix.os }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Rust toolchain
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo build
+        if: runner.os == 'Linux'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .windowtolayer-src
+
+      - name: Cache wallpaper-helper Cargo build
+        if: runner.os == 'Windows'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packaging/windows/wallpaper-helper
+
+      - name: Build wallpaper helper (Windows only)
+        if: runner.os == 'Windows'
+        run: npm run build:wallpaper-helper
+
+      - name: Build windowtolayer (Linux only)
+        if: runner.os == 'Linux'
+        run: npm run build:windowtolayer
+
+      - name: Stamp Cielo package metadata
+        shell: bash
+        env:
+          TARGET_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          node -e "const fs=require('fs'); const pkg=require('./package.json'); pkg.version=process.env.TARGET_VERSION; pkg.foliaReleaseChannel='cielo'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
+      - name: Build web app for Electron
+        env:
+          ELECTRON: 'true'
+          APP_VERSION_LABEL: Cielo
+          APP_RELEASE_CHANNEL: cielo
+        run: npm run build
+
+      - name: Package Electron app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --publish never --config.publish.channel=alpha
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ needs.prepare.outputs.release_tag }}-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.blockmap
+            release/*.yml
+            !release/builder-debug.yml
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish Cielo prerelease
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    if: needs.prepare.outputs.publish_mode != 'artifacts'
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: cielo-artifacts
+
+      - name: Publish Cielo release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          PUBLISH_MODE: ${{ needs.prepare.outputs.publish_mode }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          RELEASE_TITLE: ${{ needs.prepare.outputs.release_title }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes >/dev/null 2>&1 || true
+          mapfile -d '' files < <(find cielo-artifacts -type f -print0)
+          COMMIT_URL="https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          PUBLISHED_AT="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          cat > release-notes.md <<EOF
+          Canary build for branch ${BRANCH_NAME} at commit ${GITHUB_SHA}.
+
+          警告：Canary 版本包含未经充分验证的实验性功能，极有可能存在严重问题或破坏性变更，请勿作为日常使用版本下载。
+
+          Version: ${RELEASE_VERSION}
+          Source commit: ${COMMIT_URL}
+          Published at: ${PUBLISHED_AT}
+          EOF
+          gh release create "${RELEASE_TAG}" "${files[@]}" --repo "${GITHUB_REPOSITORY}" --title "${RELEASE_TITLE}" --notes-file release-notes.md --target "${GITHUB_SHA}" --prerelease

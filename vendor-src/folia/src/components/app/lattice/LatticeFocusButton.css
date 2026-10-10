@@ -1,0 +1,236 @@
+.lattice-tools {
+    position: absolute;
+    right: 24px;
+    bottom: 24px;
+    z-index: 30;
+    color: var(--text-primary, #f7f4ee);
+}
+
+.lattice-tools-panel {
+    position: absolute;
+    right: 0;
+    bottom: 64px;
+    display: flex;
+    width: min(320px, calc(100vw - 48px));
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    overflow: hidden;
+    border: 1px solid rgb(255 255 255 / 8%);
+    border-radius: 24px;
+    background: rgb(0 0 0 / 40%);
+    box-shadow: 0 24px 64px rgb(0 0 0 / 42%);
+    backdrop-filter: blur(24px);
+}
+
+.lattice-tools.is-daylight .lattice-tools-panel {
+    border-color: rgb(0 0 0 / 7%);
+    background: rgb(255 255 255 / 62%);
+    box-shadow: 0 24px 64px rgb(42 35 27 / 18%);
+}
+
+.lattice-tools-action {
+    display: flex;
+    width: 100%;
+    min-height: 48px;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.lattice-tools-action:hover,
+.lattice-tools-action:focus-visible {
+    background: rgb(255 255 255 / 10%);
+}
+
+.lattice-tools.is-daylight .lattice-tools-action:hover,
+.lattice-tools.is-daylight .lattice-tools-action:focus-visible {
+    background: rgb(0 0 0 / 7%);
+}
+
+.lattice-tools-action:focus-visible,
+.lattice-tools button:focus-visible {
+    outline: 2px solid var(--text-accent, currentColor);
+    outline-offset: 2px;
+}
+
+.lattice-tools-action:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.lattice-tools-action:disabled:hover { background: transparent; }
+.lattice-tools-action svg { width: 19px; height: 19px; flex: 0 0 auto; }
+
+.lattice-tools-action kbd {
+    margin-left: auto;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.42;
+}
+
+.lattice-tools-toggle {
+    width: 34px;
+    height: 20px;
+    margin-left: auto;
+    padding: 2px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    opacity: 0.42;
+    transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.lattice-tools-toggle > span {
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: currentColor;
+    transition: transform 160ms ease;
+}
+
+.lattice-tools-toggle.is-on {
+    background: var(--text-accent, currentColor);
+    opacity: 1;
+}
+
+.lattice-tools-toggle.is-on > span {
+    color: var(--text-primary, #f7f4ee);
+    transform: translateX(14px);
+}
+
+.lattice-tools-help-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid rgb(255 255 255 / 10%);
+}
+
+.lattice-tools-lights-toggle {
+    display: inline-grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+    border-radius: 999px;
+    color: inherit;
+    background: rgb(255 255 255 / 6%);
+    cursor: pointer;
+}
+
+.lattice-tools-lights-toggle span {
+    min-width: 48px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    color: color-mix(in srgb, currentColor 58%, transparent);
+    font-size: 11px;
+    font-weight: 650;
+    text-align: center;
+    transition: color 160ms ease, background-color 160ms ease;
+}
+
+.lattice-tools-lights-toggle span.is-active {
+    color: var(--text-primary, #f7f4ee);
+    background: var(--text-accent, currentColor);
+}
+
+.lattice-tools.is-daylight .lattice-tools-lights-toggle {
+    background: rgb(0 0 0 / 5%);
+}
+
+.lattice-tools.is-daylight .lattice-tools-help-section {
+    border-top-color: rgb(0 0 0 / 9%);
+}
+
+.lattice-tools-help-trigger {
+    width: 38px;
+    min-height: 38px;
+    justify-content: center;
+    align-self: flex-end;
+    padding: 0;
+}
+
+.lattice-tools-help {
+    flex-basis: 100%;
+    margin-top: 6px;
+    overflow: hidden;
+}
+
+.lattice-tools-help ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0;
+    padding: 7px 12px;
+    border-radius: 14px;
+    background: rgb(255 255 255 / 6%);
+    list-style: none;
+}
+
+.lattice-tools.is-daylight .lattice-tools-help ul {
+    background: rgb(0 0 0 / 5%);
+}
+
+.lattice-tools-help li {
+    display: flex;
+    min-height: 34px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: color-mix(in srgb, currentColor 76%, transparent);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.lattice-tools-help li + li {
+    border-top: 1px solid rgb(255 255 255 / 7%);
+}
+
+.lattice-tools.is-daylight .lattice-tools-help li + li {
+    border-top-color: rgb(0 0 0 / 6%);
+}
+
+.lattice-tools-help li > span:first-child {
+    min-width: 0;
+}
+
+.lattice-tools-help li > kbd,
+.lattice-tools-help-key kbd {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    border: 1px solid color-mix(in srgb, currentColor 36%, transparent);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.lattice-tools-help-key {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+}
+
+@media (max-width: 640px) {
+    .lattice-tools { right: 16px; bottom: 16px; }
+    .lattice-tools-panel { width: min(320px, calc(100vw - 32px)); }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prepare Folia Release"
+  short_description: "Prepare Folia stable release metadata"
+  default_prompt: "Use $prepare-folia-release to prepare the next stable Folia release and return paste-ready Markdown release notes."

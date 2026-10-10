@@ -101,6 +101,7 @@ function loadTrustCore() {
   return {
     isTrustedMainDocumentUrl: context.isTrustedMainDocumentUrl,
     isTrustedWallpaperFrameUrl: context.isTrustedWallpaperFrameUrl,
+    isTrustedFoliaFrameUrl: context.isTrustedFoliaFrameUrl,
     isTrustedMainFrameSender: context.isTrustedMainFrameSender,
     trustedMainFrameHandler: context.trustedMainFrameHandler,
     installMainWindowNavigationGuard: context.installMainWindowNavigationGuard,
@@ -187,6 +188,71 @@ function navigate(webContents, eventName, url, options = {}) {
 }
 
 const BRIDGE_URL = 'http://127.0.0.1:3000/vendor/sonic-workshop/mineradio-bridge.html';
+const FOLIA_URL = 'http://127.0.0.1:3000/vendor/folia/index.html';
+
+function testTrustedFoliaFrameUrl() {
+  const { isTrustedFoliaFrameUrl, isTrustedMainDocumentUrl } = loadTrustCore();
+  for (const url of [FOLIA_URL, FOLIA_URL + '?host=mineradio', FOLIA_URL + '?host=mineradio#/local']) {
+    assert.equal(isTrustedFoliaFrameUrl(url), true, '应放行同源 Folia 文档：' + url);
+    assert.equal(isTrustedMainDocumentUrl(url), false, 'Folia 不能成为可信主文档：' + url);
+  }
+  for (const url of [
+    'https://127.0.0.1:3000/vendor/folia/index.html',
+    'http://localhost:3000/vendor/folia/index.html',
+    'http://127.0.0.1:3001/vendor/folia/index.html',
+    'http://127.0.0.1/vendor/folia/index.html',
+    'https://evil.example/vendor/folia/index.html',
+    'file:///D:/Mineradio/public/vendor/folia/index.html',
+    'http://127.0.0.1:3000/vendor/folia/',
+    FOLIA_URL + '/',
+    FOLIA_URL + '.evil',
+    FOLIA_URL + '/../../../index.html',
+    'http://127.0.0.1:3000/index.html',
+    'about:blank', 'javascript:alert(1)', '', null,
+  ]) {
+    assert.equal(isTrustedFoliaFrameUrl(url), false, '应拒绝非准确 Folia 文档：' + url);
+  }
+}
+
+function testFoliaFramePathStaysInSync() {
+  const whitelist = /const TRUSTED_FOLIA_FRAME_PATH = '([^']+)';/.exec(readMainSource());
+  const bridge = fs.readFileSync(path.join(__dirname, '..', 'public', 'folia-host.js'), 'utf8');
+  const frameSrc = /frame\.src = '([^']+)'/.exec(bridge);
+  assert.ok(whitelist && frameSrc, '必须同时找到 Folia 导航白名单与 iframe 地址');
+  const parsed = new URL(frameSrc[1], TRUSTED_MAIN_URL);
+  assert.equal(parsed.pathname, whitelist[1]);
+  assert.equal(parsed.searchParams.get('host'), 'mineradio');
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', ...whitelist[1].split('/'))));
+}
+
+function testFoliaNavigationGuard() {
+  const { installMainWindowNavigationGuard } = loadTrustCore();
+  const win = { webContents: makeFakeWebContents() };
+  installMainWindowNavigationGuard(win);
+  for (const shape of ['electron', 'positional', 'detail']) {
+    const child = { isMainFrame: false, shape };
+    assert.equal(navigate(win.webContents, 'will-frame-navigate', FOLIA_URL + '?host=mineradio', child), false, '直属子 frame 加载 Folia：' + shape);
+    assert.equal(navigate(win.webContents, 'will-frame-navigate', FOLIA_URL + '#/settings', child), false, 'Folia 路由允许：' + shape);
+    for (const url of [
+      FOLIA_URL + '/', FOLIA_URL + '.evil',
+      'http://127.0.0.1:3001/vendor/folia/index.html',
+      'https://evil.example/vendor/folia/index.html',
+    ]) {
+      assert.equal(navigate(win.webContents, 'will-frame-navigate', url, child), true, '子 frame 错误地址拦截：' + shape + ' ' + url);
+    }
+    for (const event of ['will-navigate', 'will-frame-navigate']) {
+      assert.equal(navigate(win.webContents, event, FOLIA_URL, { shape }), true, '主文档不能被 Folia 页面替换：' + event + ' ' + shape);
+    }
+  }
+  for (const shape of ['electron', 'detail']) {
+    assert.equal(navigate(win.webContents, 'will-frame-navigate', FOLIA_URL, {
+      shape, isMainFrame: false, frame: { parent: { parent: { parent: null } } },
+    }), true, 'Folia 深层嵌套 frame 必须拒绝：' + shape);
+    assert.equal(navigate(win.webContents, 'will-frame-navigate', FOLIA_URL, {
+      shape, isMainFrame: false, frame: { parent: null },
+    }), true, '真实 frame 归属优先于不一致的 isMainFrame 标记：' + shape);
+  }
+}
 
 /**
  * 验证可信壁纸子 frame URL 白名单：只放行当前本地服务下音域回响的桥接页。
@@ -450,6 +516,28 @@ async function testUntrustedSenderCannotExpandAuthorization() {
   assert.equal(ipc.calls.dataUrls, 0);
 }
 
+async function testFoliaChildCannotUsePrivilegedIpc() {
+  const ipc = loadLocalFileIpc();
+  const childEvent = {
+    sender: ipc.trustedEvent.sender,
+    senderFrame: { parent: ipc.trustedEvent.senderFrame, url: FOLIA_URL + '?host=mineradio' },
+  };
+  const core = loadTrustCore();
+  assert.equal(core.isTrustedMainFrameSender({ sender: core.trustedSender, senderFrame: childEvent.senderFrame }), false);
+  assert.equal(core.isTrustedMainFrameSender({ sender: core.trustedSender, senderFrame: { parent: null, url: FOLIA_URL } }), false);
+  for (const result of [
+    await ipc.handlers.scan(childEvent, 'C:\\anywhere', {}),
+    await ipc.handlers.refresh(childEvent, 'C:\\anywhere', []),
+    await ipc.handlers.readRange(childEvent, 'C:\\anywhere\\song.flac', 0, 100),
+    await ipc.handlers.readDataUrl(childEvent, 'C:\\anywhere\\cover.jpg'),
+  ]) {
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'IPC_FORBIDDEN');
+  }
+  assert.equal(ipc.auth.roots.size, 0, '同源 Folia iframe 也不能扩张文件授权');
+  assert.deepEqual(ipc.calls, { scans: 0, refreshes: 0, ranges: 0, dataUrls: 0 });
+}
+
 /**
  * 验证可信主 frame 扫描才可授权根目录，读取仍受授权边界约束。
  * @returns {Promise<void>}
@@ -645,10 +733,14 @@ function testHighPrivilegeIpcWiring() {
 
 test('可信主文档 URL 只放行本地服务 / 与 /index.html', testTrustedMainDocumentUrl);
 test('可信壁纸子 frame URL 只放行音域回响桥接页', testTrustedWallpaperFrameUrl);
+test('可信 Folia 子 frame URL 只放行同源准确文档路径', testTrustedFoliaFrameUrl);
+test('Folia iframe 地址与主进程导航白名单保持一致', testFoliaFramePathStaysInSync);
+test('Folia 导航只允许第一层子 frame，拒绝异源错误端口与深层嵌套', testFoliaNavigationGuard);
 test('壁纸桥接页路径在主进程白名单与预设 8 之间保持一致', testWallpaperBridgePathStaysInSync);
 test('主窗口导航守卫拦截外部页面与非法 frame', testNavigationGuard);
 test('统一可信主 frame 校验拒绝非法 sender', testTrustedMainFrameSender);
 test('非法 sender 不能扩大本地文件授权范围', testUntrustedSenderCannotExpandAuthorization);
+test('允许加载 Folia 不授予子 frame 文件扫描与读取 IPC 权限', testFoliaChildCannotUsePrivilegedIpc);
 test('可信主 frame 扫描授权后读取仍受根目录边界约束', testTrustedScanAuthorizesAndReadStaysBounded);
 test('重启后可信主 frame 恢复已导入曲库授权', testRestartRestoreReauthorizesSavedLibrary);
 test('高权限 IPC 全部经可信主 frame 包装且新增未包装通道被拦截', testHighPrivilegeIpcWiring);

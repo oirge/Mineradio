@@ -21,6 +21,7 @@ if (document.fonts && document.fonts.load) {
 </script>
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="wallpaper-engine.css">
+<link rel="stylesheet" href="folia-host.css">
 </head>
 <body>
 <div id="desktop-window-shell">
@@ -28,8 +29,11 @@ if (document.fonts && document.fonts.load) {
   <div class="desktop-drag-region">
     <div class="desktop-app-mark" aria-hidden="true"></div>
     <div class="desktop-app-title" aria-hidden="true"></div>
+    <div id="folia-titlebar-controls"></div>
   </div>
   <div class="desktop-window-controls">
+    <button id="folia-switch-btn" class="desktop-mode-btn on" type="button" data-folia-switch aria-label="Folia" aria-pressed="false">Folia</button>
+    <button id="folia-import-files" class="desktop-mode-btn" type="button" data-folia-import title="导入音乐文件">导入文件</button>
     <button id="visual-guide-btn" class="icon-btn" type="button" onclick="startVisualGuide({ manual: true })" title="查看使用引导" aria-label="查看使用引导">?</button>
     <button id="update-entry" class="update-entry available" type="button" onclick="openUpdatePanel()" title="检测更新" aria-label="检测更新" aria-busy="false">
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -57,6 +61,7 @@ if (document.fonts && document.fonts.load) {
   <button id="fullscreen-exit-btn" class="desktop-mode-btn" type="button" onclick="toggleFullscreen()" title="退出全屏" aria-label="退出全屏">退出全屏</button>
 </div>
 <canvas id="wallpaper-board" aria-hidden="true"></canvas>
+<div id="folia-interface" hidden aria-hidden="true"><div id="folia-load-status" role="status">正在加载 Folia…</div></div>
 <div id="custom-bg"><video id="custom-bg-video" muted loop playsinline preload="metadata"></video></div>
 <div id="wallpaper-engine-layer" aria-hidden="true">
   <img id="wallpaper-engine-image" alt="">
@@ -1331,6 +1336,8 @@ if (document.fonts && document.fonts.load) {
 </div>
 
 <div id="fullscreen-transition-layer" aria-hidden="true"></div>
+<button id="folia-floating-switch" class="on" type="button" data-folia-switch aria-label="Folia" aria-pressed="false">Folia</button>
+<button id="folia-floating-import" type="button" data-folia-import title="导入音乐文件">导入文件</button>
 
 <!-- three/gsap 必须先于 app.js 求值（app.js 顶层就实例化 THREE 场景），放在 body 末尾只为不阻塞 head 解析和首帧。 -->
 <script src="vendor/three.r128.min.js"></script>
@@ -1346,5 +1353,6 @@ if (document.fonts && document.fonts.load) {
 <script src="shelf-classic.js"></script>
 <script src="app.js"></script>
 <script src="wallpaper-engine.js"></script>
+<script src="folia-host.js"></script>
 </body>
 </html>

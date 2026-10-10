@@ -1,0 +1,39 @@
+services:
+  gateway:
+    image: folia-local/web:check
+    build:
+      context: ../..
+      dockerfile: deploy/docker/images/gateway.Dockerfile
+      args:
+        VCS_REF: ${FOLIA_BUILD_VCS_REF:-local}
+        STACK_VERSION: ${FOLIA_STACK_VERSION:-local}
+
+  backend:
+    image: folia-local/web-api:check
+    build:
+      context: ../..
+      dockerfile: deploy/docker/images/backend.Dockerfile
+
+  netease-api:
+    image: folia-local/netease-api:check
+    build:
+      context: ../..
+      dockerfile: deploy/docker/images/netease-api.Dockerfile
+
+  kugou-api:
+    image: folia-local/kugou-api:check
+    build:
+      context: ../..
+      dockerfile: deploy/docker/images/kugou-api.Dockerfile
+
+  qq-api:
+    image: folia-local/qq-api:check
+    build:
+      context: ../..
+      dockerfile: deploy/docker/images/qq-api.Dockerfile
+
+  sync-server:
+    image: folia-local/sync-server:check
+    build:
+      context: ../..
+      dockerfile: deploy/docker/images/sync-server.Dockerfile

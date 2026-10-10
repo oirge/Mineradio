@@ -1,0 +1,101 @@
+// electron/windowPlaybackHandoff.cjs
+// Holds a short-lived renderer playback handoff while the main window is rebuilt or the whole
+// process is relaunched (wallpaper mode). When backed by electron-store (`storage`), the handoff
+// also survives a full process restart so song + position + play state can be restored; the TTL
+// semantics are identical to the in-memory variant, just checked against real wall-clock time.
+
+function isObject(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function createWindowPlaybackHandoffStore(options = {}) {
+  const ttlMs = Number.isFinite(options.ttlMs) ? Math.max(0, options.ttlMs) : 15_000;
+  const now = typeof options.now === 'function' ? options.now : () => Date.now();
+  // Optional electron-store-like backing (get/set/delete) so the handoff survives relaunch.
+  const storage = options.storage || null;
+  const storageKey = options.storageKey || 'window_playback_handoff';
+
+  let currentHandoff = null;
+  let expiresAt = 0;
+
+  const readPersisted = () => {
+    if (!storage) {
+      return;
+    }
+    const saved = storage.get(storageKey);
+    if (!isObject(saved)) {
+      currentHandoff = null;
+      expiresAt = 0;
+      return;
+    }
+    currentHandoff = isObject(saved.handoff) ? saved.handoff : null;
+    expiresAt = typeof saved.expiresAt === 'number' ? saved.expiresAt : 0;
+  };
+  readPersisted();
+
+  const writePersisted = () => {
+    if (!storage) {
+      return;
+    }
+    try {
+      if (!currentHandoff || now() > expiresAt) {
+        storage.delete(storageKey);
+        return;
+      }
+      storage.set(storageKey, { handoff: currentHandoff, expiresAt });
+    } catch (error) {
+      // Persisting is best-effort: the in-memory handoff still works within this process,
+      // and an expired/stale disk entry simply won't be restored.
+      console.warn('[WindowPlaybackHandoff] Failed to persist handoff', error);
+    }
+  };
+
+  const clear = () => {
+    currentHandoff = null;
+    expiresAt = 0;
+    writePersisted();
+  };
+
+  const save = (handoff) => {
+    if (!isObject(handoff)) {
+      clear();
+      return false;
+    }
+
+    currentHandoff = handoff;
+    expiresAt = now() + ttlMs;
+    writePersisted();
+    return true;
+  };
+
+  const consume = () => {
+    if (!currentHandoff || now() > expiresAt) {
+      clear();
+      return null;
+    }
+
+    const handoff = currentHandoff;
+    clear();
+    return handoff;
+  };
+
+  const peek = () => {
+    if (!currentHandoff || now() > expiresAt) {
+      clear();
+      return null;
+    }
+
+    return currentHandoff;
+  };
+
+  return {
+    clear,
+    consume,
+    peek,
+    save,
+  };
+}
+
+module.exports = {
+  createWindowPlaybackHandoffStore,
+};

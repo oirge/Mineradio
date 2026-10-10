@@ -1,0 +1,13 @@
+{
+  "@pixi/colord@2.9.6": {
+    "license": "MIT",
+    "file": "pixi-colord-2.9.6-LICENSE.txt",
+    "sha256": "7613d4594ee8b6163926af3435dae61c9e3d5a27cd137bd76a543ba40002d8fc",
+    "sourceUrl": "https://raw.githubusercontent.com/omgovich/colord/5344fbf77b736f81cd33c21050021bc09bc9dd1d/LICENSE.md",
+    "sourceCommit": "5344fbf77b736f81cd33c21050021bc09bc9dd1d",
+    "packageMetadataUrl": "https://registry.npmjs.org/@pixi%2fcolord/2.9.6",
+    "packageIntegrity": "sha512-nezytU2pw587fQstUu1AsJZDVEynjskwOL+kibwcdxsMBFqPsFFNA7xl0ii/gXuDi6M0xj3mfRJj8pBSc2jCfA==",
+    "retrievedAt": "2026-10-10",
+    "reason": "The npm archive omits LICENSE.md. Its published gitHead identifies this exact upstream commit; the commit's package.json also reports version 2.9.6."
+  }
+}

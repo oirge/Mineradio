@@ -1,0 +1,484 @@
+diff --git i/src/state.rs w/src/state.rs
+index 045331b..3e6fac6 100644
+--- i/src/state.rs
++++ w/src/state.rs
+@@ -55,6 +55,16 @@ pub struct WindowToLayer<'a> {
+     empty_region: Option<UpstreamID>,
+     /** The first zwlr_layer_shell_v1 object created */
+     zwlr_layer_shell_v1: Option<UpstreamID>,
++    /** The xdg_wm_base bound by this program itself (the client never sees this object; its
++     * own xdg_wm_base is translated from zwlr_layer_shell_v1). Used to forward every toplevel
++     * beyond the one holding the layer surface to xdg-shell unchanged, so that a client's
++     * secondary windows (remote controls, detached devtools, dialogs) stay normal windows
++     * instead of piling up as full-size layer surfaces. None if the compositor never
++     * advertised xdg_wm_base. */
++    upstream_xdg_wm_base: Option<UpstreamID>,
++    /** The downstream xdg_toplevel currently backed by a layer surface, if any. The slot is
++     * claimed by the first toplevel created and released when that toplevel is destroyed. */
++    layer_toplevel: Option<DownstreamID>,
+     layer: ZwlrLayerShellV1Layer,
+     zone: i32,
+     maximized: bool,
+@@ -90,6 +100,8 @@ impl<'a> WindowToLayer<'a> {
+             outputs: BTreeMap::new(),
+             first_registry: None,
+             zwlr_layer_shell_v1: None,
++            upstream_xdg_wm_base: None,
++            layer_toplevel: None,
+             layer,
+             zone,
+             kbd_interactive: kbd_int,
+@@ -164,8 +176,40 @@ fn process_event_w2l(
+                 let map = state.registry_global_maps.get_mut(&object_id).unwrap();
+ 
+                 if string.eq(XDG_WM_BASE.name.as_bytes()) {
+-                    // do nothing, thereby filtering out the global
++                    // Filter the global out downstream: the client is given an xdg_wm_base
++                    // advertisement translated from zwlr_layer_shell_v1 instead.
+                     map.add_filtered(name)?;
++
++                    if state.upstream_xdg_wm_base.is_some() {
++                        return Ok(Done);
++                    }
++                    /* Bind the real xdg_wm_base for this program's own use, so toplevels beyond
++                     * the one holding the layer surface can be forwarded to xdg-shell unchanged. */
++                    let bind_version = std::cmp::min(version, XDG_WM_BASE.version);
++                    check_space!(
++                        (0, 0),
++                        (length_wl_registry_req_bind(string), 0),
++                        dst,
++                        reverse_dst
++                    );
++
++                    let wm_base_id = get_new_upstream_client_id(&mut state.objs)?;
++                    insert_object(
++                        &mut state.objs,
++                        Some((wm_base_id, &XDG_WM_BASE, bind_version)),
++                        None,
++                    )?;
++                    // TODO: this requires that the registry is not a zombie object /
++                    // was already not destroyed via wl_fixes
++                    write_wl_registry_req_bind(
++                        reverse_dst,
++                        object_id,
++                        name,
++                        string,
++                        bind_version,
++                        wm_base_id,
++                    );
++                    state.upstream_xdg_wm_base = Some(wm_base_id);
+                     Ok(Done)
+                 } else if string.eq(ZWLR_LAYER_SHELL_V1.name.as_bytes()) {
+                     /* Translate the upstream layer-shell advertisement to xdg_wm_base, to ensure
+@@ -474,6 +518,17 @@ fn process_event_w2l(
+                 Ok(Done)
+             }
+         }
++    } else if intf.uid == XDG_WM_BASE.uid && alt_id.is_none() {
++        /* Events for the xdg_wm_base bound by this program: the client never sees this object,
++         * so answer the compositor's liveness pings here instead of translating them. */
++        match parse_xdg_wm_base_evt_ids(opcode).unwrap() {
++            XdgWmBaseEvtIDs::Ping => {
++                check_space!((0, 0), (length_xdg_wm_base_req_pong(), 0), dst, reverse_dst);
++                let serial = parse_xdg_wm_base_evt_ping(msg)?;
++                write_xdg_wm_base_req_pong(reverse_dst, object_id, serial);
++                Ok(Done)
++            }
++        }
+     } else if intf.uid == WL_CALLBACK.uid {
+         assert!(matches!(
+             parse_wl_callback_evt_ids(opcode).unwrap(),
+@@ -580,6 +635,137 @@ fn process_event_w2l(
+         Ok(Done)
+     }
+ }
++/** Give an existing downstream-only object an upstream counterpart, as done when an
++ * xdg_surface turns out to belong to a window that is forwarded to xdg-shell instead of
++ * being translated into a layer surface. */
++fn attach_upstream_object(
++    objs: &mut ObjectTracker,
++    downstream_id: DownstreamID,
++    upstream_id: UpstreamID,
++    intf: &'static WaylandInterface,
++    version: u32,
++) -> Result<(), WaylandError> {
++    let Some(obj) = objs.down_to_up.get_mut(&downstream_id) else {
++        return Err(WaylandError::Other(format!(
++            "Tried to attach an upstream object to unknown downstream object {}",
++            downstream_id
++        )));
++    };
++    obj.alt = Some(upstream_id);
++    if objs
++        .up_to_down
++        .insert(
++            upstream_id,
++            UpstreamObject {
++                alt: Some(downstream_id),
++                intf,
++                version,
++                zombie: false,
++            },
++        )
++        .is_some()
++    {
++        return Err(WaylandError::Other(format!(
++            "ID collision when inserting upstream object {}#{}",
++            intf.name, upstream_id
++        )));
++    }
++    Ok(())
++}
++
++/** Create the upstream xdg_surface for a downstream xdg_surface that was kept downstream only
++ * until its role was known, and link the two. Callers must have reserved
++ * [length_xdg_wm_base_req_get_xdg_surface] bytes in `dst` beforehand. */
++fn create_upstream_xdg_surface(
++    state: &mut WindowToLayer,
++    object_id: DownstreamID,
++    wm_base_id: UpstreamID,
++    version: u32,
++    dst: &mut OutputQueue,
++) -> Result<UpstreamID, WaylandError> {
++    let Some(wl_surface_id) = state.xdg_to_wl_surface_map.get(&object_id) else {
++        return Err(WaylandError::Other(
++            "Unexpected xdg_surface: created without associated wl_surface".to_string(),
++        ));
++    };
++    let upstream_wl_surface_id = state.objs.down_to_up[wl_surface_id].alt.unwrap();
++    let upstream_surface_id = get_new_upstream_client_id(&mut state.objs)?;
++    write_xdg_wm_base_req_get_xdg_surface(
++        dst,
++        wm_base_id,
++        upstream_surface_id,
++        upstream_wl_surface_id,
++    );
++    attach_upstream_object(
++        &mut state.objs,
++        object_id,
++        upstream_surface_id,
++        &XDG_SURFACE,
++        version,
++    )?;
++    Ok(upstream_surface_id)
++}
++
++/** Translate and forward a request unchanged; the generic handling of the last branch of
++ * [process_request_w2l], used for the xdg-shell objects that this program passes through. */
++#[allow(clippy::too_many_arguments)]
++fn forward_request(
++    state: &mut WindowToLayer,
++    msg: &[u8],
++    meth: &WaylandMethod,
++    object_id: DownstreamID,
++    alt_id: UpstreamID,
++    version: u32,
++    fds: &mut ArrayVec<OwnedFd, FD_IN_QUEUE_SIZE>,
++    dst: &mut OutputQueue,
++    reverse_dst: &mut OutputQueue,
++) -> Result<ProcResult, WaylandError> {
++    check_space!((msg.len(), meth.fd_count.into()), (0, 0), dst, reverse_dst);
++    create_objects(msg, version, meth, false, &mut state.objs)?;
++    write_translate(msg, meth, false, &state.objs, fds, dst)?;
++    if meth.destructor {
++        generic_destroy_object(&mut state.objs, alt_id, object_id)?;
++    }
++    Ok(ProcResult::Done)
++}
++
++/** The xdg_wm_base to forward passed-through xdg-shell objects to, if it can serve a
++ * downstream object bound at `version`. The client's own xdg_wm_base is advertised at the
++ * maximum supported version, so a compositor providing an older xdg-shell must not receive
++ * requests the client made at a version it does not implement. */
++fn passthrough_wm_base(state: &WindowToLayer, version: u32) -> Option<UpstreamID> {
++    let upstream_id = state.upstream_xdg_wm_base?;
++    if state.objs.up_to_down.get(&upstream_id)?.version < version {
++        return None;
++    }
++    Some(upstream_id)
++}
++
++/** True iff this downstream xdg_toplevel is the one backed by a layer surface; every other
++ * toplevel has a real xdg_toplevel upstream and is forwarded unchanged. */
++fn is_layer_toplevel(state: &WindowToLayer, alt_id: Option<UpstreamID>) -> bool {
++    let Some(upstream_id) = alt_id else {
++        return false;
++    };
++    let Some(obj) = state.objs.up_to_down.get(&upstream_id) else {
++        return false;
++    };
++    obj.intf.uid == ZWLR_LAYER_SURFACE_V1.uid
++}
++
++/** True iff this downstream object is an xdg_toplevel forwarded to the compositor's own
++ * xdg-shell, and thus has an upstream object of the same interface. */
++fn is_passthrough_toplevel(state: &WindowToLayer, downstream_id: DownstreamID) -> bool {
++    let Some(upstream_id) = state.objs.down_to_up.get(&downstream_id).and_then(|obj| obj.alt) else {
++        return false;
++    };
++    state
++        .objs
++        .up_to_down
++        .get(&upstream_id)
++        .is_some_and(|obj| obj.intf.uid == XDG_TOPLEVEL.uid)
++}
++
+ fn process_request_w2l(
+     state: &mut WindowToLayer,
+     msg: &[u8],
+@@ -778,9 +964,25 @@ fn process_request_w2l(
+             ZxdgDecorationManagerV1ReqIDs::Destroy => { /* todo */ }
+             ZxdgDecorationManagerV1ReqIDs::GetToplevelDecoration => {
+                 /* create a downstream only toplevel object, and link it to the xdg-surface */
+-                let (new_decoration_id, _xdg_toplevel_id) =
++                let (new_decoration_id, xdg_toplevel_id) =
+                     parse_zxdg_decoration_manager_v1_req_get_toplevel_decoration(msg)?;
+ 
++                /* A passed-through window has a real xdg_toplevel, so let it negotiate
++                 * decorations with the compositor as it normally would. */
++                if is_passthrough_toplevel(state, xdg_toplevel_id) {
++                    return forward_request(
++                        state,
++                        msg,
++                        meth,
++                        object_id,
++                        alt_id.unwrap(),
++                        version,
++                        fds,
++                        dst,
++                        reverse_dst,
++                    );
++                }
++
+                 // TODO: associate the decoration with the surface
+ 
+                 /* this object has _no_ corresponding object on the other side */
+@@ -792,8 +994,8 @@ fn process_request_w2l(
+             }
+         }
+         Ok(Done)
+-    } else if intf.uid == ZXDG_TOPLEVEL_DECORATION_V1.uid {
+-        /* Ignore all */
++    } else if intf.uid == ZXDG_TOPLEVEL_DECORATION_V1.uid && alt_id.is_none() {
++        /* Ignore all (decorations of the layer surface, which has none) */
+         Ok(Done)
+     } else if intf.uid == WL_SEAT.uid && state.dummy_seat {
+         match parse_wl_seat_req_ids(opcode).unwrap() {
+@@ -875,9 +1077,31 @@ fn process_request_w2l(
+                     .insert(new_xdg_surface_id, wl_surface_id);
+                 Ok(Done)
+             }
+-            XdgWmBaseReqIDs::CreatePositioner => Err(WaylandError::Other(
+-                "unimplemented: xdg_wm_base::create_positioner".to_string(),
+-            )),
++            XdgWmBaseReqIDs::CreatePositioner => {
++                /* Positioners are only useful for popups, which can only be forwarded for the
++                 * windows that this program passes through to xdg-shell. */
++                let Some(wm_base_id) = passthrough_wm_base(state, version) else {
++                    return Err(WaylandError::Other(
++                        "unimplemented: xdg_wm_base::create_positioner".to_string(),
++                    ));
++                };
++                check_space!(
++                    (length_xdg_wm_base_req_create_positioner(), 0),
++                    (0, 0),
++                    dst,
++                    reverse_dst
++                );
++
++                let new_positioner_id = parse_xdg_wm_base_req_create_positioner(msg)?;
++                let upstream_positioner_id = get_new_upstream_client_id(&mut state.objs)?;
++                insert_object(
++                    &mut state.objs,
++                    Some((upstream_positioner_id, &XDG_POSITIONER, version)),
++                    Some((new_positioner_id, &XDG_POSITIONER, version)),
++                )?;
++                write_xdg_wm_base_req_create_positioner(dst, wm_base_id, upstream_positioner_id);
++                Ok(Done)
++            }
+             XdgWmBaseReqIDs::Pong => Err(WaylandError::Other(
+                 "Did not expect to receive xdg_wm_base::pong; ping was never sent".to_string(),
+             )),
+@@ -891,6 +1115,29 @@ fn process_request_w2l(
+                 Ok(Done)
+             }
+         }
++    } else if intf.uid == XDG_SURFACE.uid && alt_id.is_some() {
++        /* An xdg_surface with an upstream equivalent belongs to a passed-through window:
++         * forward its requests (::ack_configure, ::set_window_geometry, ::get_popup,
++         * ::destroy) unchanged instead of translating them onto a layer surface. */
++        if matches!(
++            parse_xdg_surface_req_ids(opcode).unwrap(),
++            XdgSurfaceReqIDs::Destroy
++        ) {
++            if let Some(wl_surface_id) = state.xdg_to_wl_surface_map.remove(&object_id) {
++                state.wl_to_xdg_surface_map.remove(&wl_surface_id);
++            }
++        }
++        forward_request(
++            state,
++            msg,
++            meth,
++            object_id,
++            alt_id.unwrap(),
++            version,
++            fds,
++            dst,
++            reverse_dst,
++        )
+     } else if intf.uid == XDG_SURFACE.uid {
+         match parse_xdg_surface_req_ids(opcode).unwrap() {
+             XdgSurfaceReqIDs::Destroy => {
+@@ -917,6 +1164,39 @@ fn process_request_w2l(
+                 Ok(Done)
+             }
+             XdgSurfaceReqIDs::GetToplevel => {
++                /* Only one window can be the layer surface. Every later window (a remote
++                 * control, detached devtools, a dialog) is created as an ordinary xdg-shell
++                 * toplevel on the compositor's real xdg_wm_base, so it behaves like a normal
++                 * window instead of covering the layer surface. */
++                if state.layer_toplevel.is_some() {
++                    let Some(wm_base_id) = passthrough_wm_base(state, version) else {
++                        return Err(WaylandError::Other(
++                            "cannot forward a second xdg_toplevel: the compositor has no \
++                            xdg_wm_base of a matching version"
++                                .to_string(),
++                        ));
++                    };
++                    let length = length_xdg_wm_base_req_get_xdg_surface()
++                        + length_xdg_surface_req_get_toplevel();
++                    check_space!((length, 0), (0, 0), dst, reverse_dst);
++
++                    let new_toplevel_id = parse_xdg_surface_req_get_toplevel(msg)?;
++                    let upstream_surface_id =
++                        create_upstream_xdg_surface(state, object_id, wm_base_id, version, dst)?;
++                    let upstream_toplevel_id = get_new_upstream_client_id(&mut state.objs)?;
++                    write_xdg_surface_req_get_toplevel(
++                        dst,
++                        upstream_surface_id,
++                        upstream_toplevel_id,
++                    );
++                    insert_object(
++                        &mut state.objs,
++                        Some((upstream_toplevel_id, &XDG_TOPLEVEL, version)),
++                        Some((new_toplevel_id, &XDG_TOPLEVEL, version)),
++                    )?;
++                    return Ok(Done);
++                }
++
+                 let target_output_id = if let Some(ref name) = state.target_output {
+                     let mut id = UpstreamID(0);
+                     let mut complete = true;
+@@ -1025,13 +1305,54 @@ fn process_request_w2l(
+                     )),
+                     Some((new_toplevel_id, &XDG_TOPLEVEL, version)),
+                 )?;
++                state.layer_toplevel = Some(new_toplevel_id);
+                 Ok(Done)
+             }
+             XdgSurfaceReqIDs::GetPopup => {
+-                // technically, these can be forwarded
+-                Err(WaylandError::Other(
+-                    "unimplemented: xdg_surface::get_popup".to_string(),
+-                ))
++                /* Popups can be forwarded when their parent is one of the windows passed
++                 * through to xdg-shell; the layer surface has no xdg_surface upstream that a
++                 * popup could be parented to. */
++                let (new_popup_id, parent_surface_id, positioner_id) =
++                    parse_xdg_surface_req_get_popup(msg)?;
++                let upstream_parent = state
++                    .objs
++                    .down_to_up
++                    .get(&parent_surface_id)
++                    .and_then(|obj| obj.alt);
++                let upstream_positioner = state
++                    .objs
++                    .down_to_up
++                    .get(&positioner_id)
++                    .and_then(|obj| obj.alt);
++                let (Some(wm_base_id), Some(parent), Some(positioner)) = (
++                    passthrough_wm_base(state, version),
++                    upstream_parent,
++                    upstream_positioner,
++                ) else {
++                    return Err(WaylandError::Other(
++                        "unimplemented: xdg_surface::get_popup".to_string(),
++                    ));
++                };
++                let length =
++                    length_xdg_wm_base_req_get_xdg_surface() + length_xdg_surface_req_get_popup();
++                check_space!((length, 0), (0, 0), dst, reverse_dst);
++
++                let upstream_surface_id =
++                    create_upstream_xdg_surface(state, object_id, wm_base_id, version, dst)?;
++                let upstream_popup_id = get_new_upstream_client_id(&mut state.objs)?;
++                write_xdg_surface_req_get_popup(
++                    dst,
++                    upstream_surface_id,
++                    upstream_popup_id,
++                    parent,
++                    positioner,
++                );
++                insert_object(
++                    &mut state.objs,
++                    Some((upstream_popup_id, &XDG_POPUP, version)),
++                    Some((new_popup_id, &XDG_POPUP, version)),
++                )?;
++                Ok(Done)
+             }
+             XdgSurfaceReqIDs::SetWindowGeometry => {
+                 /* ignore, for now */
+@@ -1053,6 +1374,41 @@ fn process_request_w2l(
+                 Ok(Done)
+             }
+         }
++    } else if intf.uid == XDG_TOPLEVEL.uid && alt_id.is_some() && !is_layer_toplevel(state, alt_id)
++    {
++        /* A passed-through window: its toplevel exists upstream, so ::set_title,
++         * ::set_min_size, ::move, ::resize and the rest work as they would without this
++         * program in between. */
++        if opcode == XdgToplevelReqIDs::SetParent as u32 {
++            /* The layer surface has no xdg_toplevel upstream, so a window parented to it (a
++             * modal dialog, say) is forwarded without a parent rather than with an object id
++             * of the wrong interface, which would be a fatal protocol error. */
++            let parent = parse_xdg_toplevel_req_set_parent(msg)?;
++            let upstream_parent = if is_passthrough_toplevel(state, parent) {
++                state.objs.down_to_up[&parent].alt.unwrap()
++            } else {
++                UpstreamID(0)
++            };
++            check_space!(
++                (length_xdg_toplevel_req_set_parent(), 0),
++                (0, 0),
++                dst,
++                reverse_dst
++            );
++            write_xdg_toplevel_req_set_parent(dst, alt_id.unwrap(), upstream_parent);
++            return Ok(Done);
++        }
++        forward_request(
++            state,
++            msg,
++            meth,
++            object_id,
++            alt_id.unwrap(),
++            version,
++            fds,
++            dst,
++            reverse_dst,
++        )
+     } else if intf.uid == XDG_TOPLEVEL.uid {
+         match parse_xdg_toplevel_req_ids(opcode).unwrap() {
+             XdgToplevelReqIDs::SetMaxSize => {
+@@ -1111,6 +1467,11 @@ fn process_request_w2l(
+                 if let Some(xdg_surface_id) = state.toplevel_to_surface_map.remove(&object_id) {
+                     state.surface_to_toplevel_map.remove(&xdg_surface_id);
+                 }
++                /* Release the layer surface slot: the next toplevel created takes it, which is
++                 * how a client that rebuilds its main window keeps the layer surface. */
++                if state.layer_toplevel == Some(object_id) {
++                    state.layer_toplevel = None;
++                }
+                 Ok(Done)
+             }
+             _ => {

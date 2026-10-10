@@ -1,0 +1,253 @@
+name: Pre-Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Base version (e.g. 0.5.13). Leave empty to use package.json version.'
+        required: false
+        type: string
+      channel:
+        description: 'Pre-release channel'
+        required: true
+        default: beta
+        type: choice
+        options:
+          - beta
+          - rc
+      prerelease_number:
+        description: 'Pre-release number (e.g. 1 -> vX.Y.Z-beta.1 or vX.Y.Z-rc.1)'
+        required: false
+        default: '1'
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pre-release-${{ github.ref }}-${{ github.event.inputs.channel }}-${{ github.event.inputs.prerelease_number }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    name: Prepare pre-release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      base_version: ${{ steps.meta.outputs.base_version }}
+      prerelease_label: ${{ steps.meta.outputs.prerelease_label }}
+      release_version: ${{ steps.meta.outputs.release_version }}
+      tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Determine pre-release version
+        id: meta
+        shell: bash
+        env:
+          BASE_VERSION_INPUT: ${{ github.event.inputs.version }}
+          CHANNEL: ${{ github.event.inputs.channel }}
+          PRERELEASE_NUMBER: ${{ github.event.inputs.prerelease_number }}
+        run: |
+          if [ -n "${BASE_VERSION_INPUT}" ]; then
+            BASE_VERSION="${BASE_VERSION_INPUT}"
+          else
+            BASE_VERSION=$(jq -r .version package.json)
+          fi
+
+          if [[ ! "${BASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Base version must be a plain semver version like 0.5.13, got: ${BASE_VERSION}" >&2
+            exit 1
+          fi
+
+          if [[ ! "${PRERELEASE_NUMBER}" =~ ^[0-9]+$ ]]; then
+            echo "Pre-release number must be numeric, got: ${PRERELEASE_NUMBER}" >&2
+            exit 1
+          fi
+
+          PRERELEASE_LABEL="${CHANNEL}.${PRERELEASE_NUMBER}"
+          RELEASE_VERSION="${BASE_VERSION}-${PRERELEASE_LABEL}"
+          TAG="v${RELEASE_VERSION}"
+
+          echo "base_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "prerelease_label=${PRERELEASE_LABEL}" >> "$GITHUB_OUTPUT"
+          echo "release_version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Clean up orphaned pre-release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists, deleting it so the draft can be recreated."
+            gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes
+          fi
+
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Found orphaned tag ${RELEASE_TAG}, deleting it."
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}"
+          else
+            echo "No orphaned tag found for ${RELEASE_TAG}."
+          fi
+
+  build:
+    name: Build pre-release on ${{ matrix.os }}
+    needs: prepare-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Update package.json version for pre-release build
+        shell: bash
+        env:
+          TARGET_VERSION: ${{ needs.prepare-release.outputs.release_version }}
+        run: |
+          CURRENT_VERSION=$(jq -r .version package.json)
+          if [ "${CURRENT_VERSION}" != "${TARGET_VERSION}" ]; then
+            npm version "${TARGET_VERSION}" --no-git-tag-version
+          fi
+          node -e "const fs=require('fs'); const pkg=require('./package.json'); pkg.foliaReleaseChannel='internal'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
+      - name: Generate pre-release notes from template
+        shell: bash
+        env:
+          BASE_VERSION: ${{ needs.prepare-release.outputs.base_version }}
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.release_version }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          PRERELEASE_LABEL: ${{ needs.prepare-release.outputs.prerelease_label }}
+          TARGET_REF: ${{ github.sha }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const templatePath = path.join('.github', 'release-candidate-template.md');
+          const outputPath = path.join('build', 'pre-release-notes.md');
+          let template = fs.readFileSync(templatePath, 'utf8');
+
+          const replacements = {
+            BASE_VERSION: process.env.BASE_VERSION || '',
+            VERSION: process.env.RELEASE_VERSION || '',
+            TAG: process.env.RELEASE_TAG || '',
+            PRERELEASE_LABEL: process.env.PRERELEASE_LABEL || '',
+            TARGET_REF: process.env.TARGET_REF || '',
+          };
+
+          for (const [key, value] of Object.entries(replacements)) {
+            template = template.split(`{{${key}}}`).join(value);
+          }
+
+          fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+          fs.writeFileSync(outputPath, `${template.trim()}\n`);
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Rust toolchain
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo build
+        if: runner.os == 'Linux'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .windowtolayer-src
+
+      - name: Cache wallpaper-helper Cargo build
+        if: runner.os == 'Windows'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packaging/windows/wallpaper-helper
+
+      - name: Build wallpaper helper (Windows only)
+        if: runner.os == 'Windows'
+        run: npm run build:wallpaper-helper
+
+      - name: Build windowtolayer (Linux only)
+        if: runner.os == 'Linux'
+        run: npm run build:windowtolayer
+
+      - name: Build Web App for Electron
+        env:
+          ELECTRON: "true"
+          APP_VERSION_LABEL: Internal
+          APP_RELEASE_CHANNEL: internal
+        run: npm run build
+
+      - name: Package Electron App
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --publish never
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: pre-release-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+            build/pre-release-notes.md
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish pre-release draft release
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build]
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: pre-release-artifacts
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          NOTES_FILE=$(find pre-release-artifacts -type f -name 'pre-release-notes.md' | head -n 1)
+          if [ -z "${NOTES_FILE}" ]; then
+            echo "Unable to locate pre-release notes artifact"
+            exit 1
+          fi
+          cp "${NOTES_FILE}" pre-release-notes.md
+
+      - name: Publish pre-release draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          PRERELEASE_LABEL: ${{ needs.prepare-release.outputs.prerelease_label }}
+        shell: bash
+        run: |
+          mapfile -d '' files < <(find pre-release-artifacts -type f ! -name 'pre-release-notes.md' -print0)
+          gh release create "${RELEASE_TAG}" \
+            "${files[@]}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Pre-Release ${RELEASE_TAG} (${PRERELEASE_LABEL})" \
+            --notes-file pre-release-notes.md \
+            --target "${GITHUB_SHA}" \
+            --draft \
+            --prerelease

@@ -18,6 +18,7 @@
 - 支持同目录封面图片和音频内嵌封面。
 - 移除本地节奏分析环节。
 - 支持多格式音频播放、歌词显示、迷你播放器和桌面歌词。
+- 支持 Folia 本地播放界面：歌词播放、悬浮唱片墙、封面拼贴墙，以及 14 种内置歌词效果和 5 种背景。
 
 [下载最新版本](https://github.com/oirge/Mineradio/releases/latest) · [报告问题](https://github.com/oirge/Mineradio/issues) · [功能建议](https://github.com/oirge/Mineradio/issues/new?template=feature_request.yml)
 

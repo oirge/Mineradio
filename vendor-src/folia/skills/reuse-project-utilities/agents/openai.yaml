@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reuse Project Utilities"
+  short_description: "Find and reuse existing project helpers"
+  default_prompt: "Use $reuse-project-utilities to implement this change with existing helpers and libraries instead of duplicating utility code."

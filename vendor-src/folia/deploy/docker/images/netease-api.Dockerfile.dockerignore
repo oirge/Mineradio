@@ -1,0 +1,6 @@
+*
+!deploy/
+!deploy/docker/
+!deploy/docker/netease-api/
+!deploy/docker/netease-api/package.json
+!deploy/docker/netease-api/package-lock.json

@@ -1,0 +1,49 @@
+name: Triage Stale Items
+
+# 每天一次：needs-info 超期关闭、长期无活动标记 stale、stale 超期关闭（功能建议和 PR 只标记不关），
+# 以及熔断解除后补跑带 `bot: rate-limited` 的 issue。
+on:
+  schedule:
+    # UTC 19:00，即北京时间 03:00。
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只输出到 job summary，不写入'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: triage-stale
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    name: Sweep stale items
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out triage scripts
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Run stale sweep
+        run: node .github/scripts/triage/bin/triage-stale.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          TRIAGE_MODE: ${{ vars.TRIAGE_MODE }}
+          TRIAGE_DISPATCH_DRY_RUN: ${{ inputs.dry_run }}

@@ -1,0 +1,13 @@
+{
+  "name": "folia-docker-web-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "@google/genai": "2.16.0",
+    "express": "5.2.1"
+  }
+}

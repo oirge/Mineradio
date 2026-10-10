@@ -1836,3 +1836,19 @@
 - **本机打包产物和 CI 产物字节数不同是正常的**（本轮本地 `102318993`、CI `102616378`）。electron-builder 的输出不可复现（Electron 缓存版本、依赖树、压缩时序都参与），**不要拿本地那份的哈希去核对 Release 资产**，本地那份只用来跑静默 E2E。
 - **`SHA256SUMS.txt` 的 CRLF 遗留自 v1.7.26 记到现在仍未修**：本轮 287 字节、3 个 `\r`、去掉正好 284、**没有 BOM**（首字节就是哈希的 `7`）。`sha256sum -c` 前必须 `tr -d '\r'`。资产名带上 `-oirge` 后清单比上一版长 14 字节。
 - **发布记录必须在发布当轮写完，补写拿不回全部事实。** 复核时发现两处历史欠账：v1.9.3 的资产记录提交 `cc3bb1b` 是**直接推到 `main`** 的（`gh api …/commits/cc3bb1b/pulls` 返回空数组），违反本仓库「资产记录走 `docs/release-assets-vXXX` 分支 + PR」和「不直接 push `main`」两条规矩；v1.9.2 更是**整节发布记录都没写**。v1.9.2 那节已按 API 补齐（PR #60 → 合并提交 `2cbf6cd`、tag object `9e00b243…`、run `33959417757`、Release `383206778`、四项资产字节与 API `digest`），但**「双草稿有没有出现」「有没有回下本机复算」这类只存在于当时终端里的事实永久丢失**，那节里已如实标注等级。
+
+
+### 2026-10-10 - Folia 本地范围包含两种墙与全部内置歌词效果
+
+- 用户明确要 Folia 本地播放功能、界面与效果，不能把完整 App/在线账户/同步搬进来；“本地”也不能缩窄成只有歌词页。截图确认需保留原 Polaroid 悬浮卡片墙、Lattice 封面拼贴墙与全部14内置歌词模式。
+- 三视图入口和原版 visualizer/卡片/拼贴组件位于 `vendor-src/folia/src/mineradio/local/`；全部使用 Mineradio 唯一音频，通过frame bridge操作本地曲库。歌词原版12个专属设置面板及图片素材已接入；Cadenza/Still上游没有专属panel，不凭空补。
+- 同集合曲库revision刷新必须保留墙和镜头；收藏不能清空再加载cards。由wallCatalogData按ID复用数据，测试 `tests/folia-wall-catalog.test.mjs`。
+- 同版本覆盖安装时/vendor HTML七天缓存会继续显示旧页面。server.js对HTML/构建清单用no-cache，hashed assets继续长缓存；这次入口surface=v3绕过旧缓存。桌面必须在旧缓存档验证，不能只用空档。
+
+
+### 2026-10-10 - Folia 顶栏文案与位置
+
+- 顶栏导航必须按整个窗口中心定位；用户已明确指出左侧剩余区域flex居中会偏左。960px窄窗口通过收紧右侧控件处理碰撞，不能移动导航中心避让；验收必须检查导航中心与窗口中心的像素误差。
+
+- 用户要求将三视图切换等整排控件放入最上方桌面标题栏，删掉子页面重复的“← Mineradio”。用同源 React portal 接入宿主 `#folia-titlebar-controls`，全屏/浏览器保留子页顶部导航与外层切换入口。
+- 品牌切换按钮只显示“Folia”或“Mineradio”，不加“本地”或“返回”，两态统一现有Mineradio红色。音乐库、效果入口使用文字，不恢复成纯图标。
