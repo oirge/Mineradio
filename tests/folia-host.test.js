@@ -81,6 +81,9 @@ function harness() {
         savePlaybackSession: () => calls.push('save-session'), clearLocalLibraryPassiveQueue: () => calls.push('clear-passive'),
         safeRenderQueuePanel: () => calls.push('render-queue'), safeShelfRebuild: () => calls.push('rebuild-shelf'),
         markQueueContentChanged() {}, updateLikeButtons() {}, showToast() {}, updateVolumeUi() {}, scheduleVolumePreference() {},
+        schedulePlaybackMetadataRefresh: () => calls.push('schedule-metadata'),
+        refreshLocalMetadataUi: () => calls.push('refresh-metadata'),
+        scheduleLocalAssetUiRefresh: () => calls.push('refresh-assets'),
         suspendMainRenderLoop: () => calls.push('suspend-render'), resumeMainRenderLoop: () => calls.push('resume-render'),
         scheduleMainRendererViewportRefresh: () => calls.push('refresh-viewport'),
         syncBeatMapPlaybackCursor() {}, schedulePlaybackProgressUi() {},
@@ -155,6 +158,54 @@ test('Folia host projects paginated tracks without live audio or file objects', 
     const search = await h.request('listTracks', { query: 'TRACK C', limit: 5000 });
     assert.equal(search.result.limit, 1000);
     assert.deepEqual(search.result.items.map(song => song.id), ['local-key:c']);
+});
+
+test('Folia library revision follows completed metadata and covers, not scheduled UI work', async () => {
+    const h = harness();
+    const initial = (await h.request('getState')).result.libraryRevision;
+    h.context.schedulePlaybackMetadataRefresh(h.tracks[0]);
+    h.context.scheduleLocalAssetUiRefresh(h.tracks[0], 'local-library-assets');
+    h.context.scheduleLocalAssetUiRefresh(h.tracks[0], 'local-lyric-prefetch');
+    assert.equal((await h.request('getState')).result.libraryRevision, initial);
+    h.context.refreshLocalMetadataUi(h.tracks[0], 'local-metadata-ready');
+    assert.ok((await h.request('getState')).result.libraryRevision > initial);
+    const metadataRevision = (await h.request('getState')).result.libraryRevision;
+    h.context.scheduleLocalAssetUiRefresh(h.tracks[1], 'local-cover-prefetch');
+    assert.ok((await h.request('getState')).result.libraryRevision > metadataRevision);
+});
+
+test('Folia audio bridge sends typed frequency data only during visible playback', async () => {
+    const h = harness();
+    let frequencyReads = 0;
+    h.context.analyser = {
+        frequencyBinCount: 4, fftSize: 8,
+        getByteFrequencyData(buffer) {
+            frequencyReads++;
+            buffer.set([10, 20, 30, 40]);
+        },
+        getByteTimeDomainData() { assert.fail('unused waveform data should never be sampled'); },
+    };
+    h.context.audioCtx = { sampleRate: 48000 };
+    await h.request('getState');
+    h.runTimer(33);
+    let audioMessages = h.messages.filter(message => message.type === 'event' && message.event === 'audio');
+    assert.equal(audioMessages.length, 1);
+    assert.ok(audioMessages[0].data.frequency instanceof Uint8Array);
+    assert.deepEqual([...audioMessages[0].data.frequency], [10, 20, 30, 40]);
+    assert.equal('timeDomain' in audioMessages[0].data, false);
+    assert.equal(audioMessages[0].data.sampleRate, 48000);
+    h.context.audio.paused = true;
+    h.runTimer(33);
+    assert.equal(frequencyReads, 1);
+    h.document.hidden = true;
+    h.context.audio.paused = false;
+    h.runTimer(250);
+    assert.equal(frequencyReads, 1);
+    h.document.hidden = false;
+    h.runTimer(250);
+    audioMessages = h.messages.filter(message => message.type === 'event' && message.event === 'audio');
+    assert.equal(audioMessages.length, 2);
+    assert.equal(frequencyReads, 2);
 });
 
 test('switching interfaces retains the iframe, audio graph, queue and playback position', async () => {

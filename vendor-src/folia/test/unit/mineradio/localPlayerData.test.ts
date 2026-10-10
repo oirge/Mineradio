@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { motionValue } from 'framer-motion';
 import type { HostState } from '../../../src/mineradio/client';
-import { applyLocalAudio, interpolatedLocalTime, localActiveLineIndex, localLyricLines, localStateSignature } from '../../../src/mineradio/local/localPlayerData';
+import { applyLocalAudio, interpolatedLocalTime, localActiveLineIndex, localLyricLines, localStateChanged, localStateSignature } from '../../../src/mineradio/local/localPlayerData';
 
 // test/unit/mineradio/localPlayerData.test.ts
 const state = { position: 10, duration: 100, playing: true, playbackRate: 1 } as HostState;
@@ -49,6 +49,21 @@ describe('isolated Mineradio local display projection', () => {
         expect(localStateSignature({ ...state, position: 90 })).toBe(localStateSignature(state));
         expect(localStateSignature({ ...state, playing: false })).not.toBe(localStateSignature(state));
         expect(localStateSignature({ ...state, lyricsRevision: 2 })).not.toBe(localStateSignature(state));
+    });
+
+    it('compares discrete snapshots without serializing the current track', () => {
+        const first = {
+            ...state, currentTrack: {
+                id: 'local:1', title: 'Song', artist: 'Artist', album: 'Album', duration: 100,
+                cover: 'blob:cover', liked: false, filePath: 'D:/song.flac', format: 'flac',
+            },
+            currentIndex: 0, playbackRate: 1, volume: 0.8, muted: false, playMode: 'loop',
+            queueRevision: 1, libraryRevision: 1, lyricsRevision: 1, interface: 'folia',
+        } as HostState;
+        const same = { ...first, currentTrack: { ...first.currentTrack! } };
+        expect(localStateChanged(first, same)).toBe(false);
+        expect(localStateChanged(first, { ...same, position: 42 })).toBe(false);
+        expect(localStateChanged(first, { ...same, currentTrack: { ...same.currentTrack!, liked: true } })).toBe(true);
     });
 
     it('uses source FFT resolution and the original Folia energy response curves', () => {

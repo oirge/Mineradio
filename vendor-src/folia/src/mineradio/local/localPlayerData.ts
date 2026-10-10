@@ -25,12 +25,116 @@ export function localLyricLines(value: HostLyrics, duration: number): Line[] {
 }
 
 /** Last active line wins for overlapping voices; lyric gaps have no current line. */
-export function localActiveLineIndex(lines: Line[], time: number): number {
-    for (let index = lines.length - 1; index >= 0; index--) {
+interface ActiveLineLookup {
+    boundaries: number[];
+    exact: number[];
+    after: number[];
+}
+
+const activeLineLookupCache = new WeakMap<Line[], ActiveLineLookup>();
+
+const buildActiveLineLookup = (lines: Line[]): ActiveLineLookup => {
+    const starts = new Map<number, number[]>();
+    const ends = new Map<number, number[]>();
+    const boundarySet = new Set<number>();
+
+    for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index];
-        if (time >= line.startTime && time <= (line.renderHints?.renderEndTime ?? line.endTime)) return index;
+        const start = line.startTime;
+        const end = line.renderHints?.renderEndTime ?? line.endTime;
+        // Comparisons against NaN are always false in the original scan, so such a
+        // malformed line must not become searchable just because it was indexed.
+        if (Number.isNaN(start) || Number.isNaN(end) || start > end) continue;
+        const startEntries = starts.get(start);
+        if (startEntries) startEntries.push(index);
+        else starts.set(start, [index]);
+        const endEntries = ends.get(end);
+        if (endEntries) endEntries.push(index);
+        else ends.set(end, [index]);
+        boundarySet.add(start);
+        boundarySet.add(end);
     }
-    return -1;
+
+    const boundaries = [...boundarySet].sort((a, b) => a - b);
+    const exact: number[] = [];
+    const after: number[] = [];
+    const active = new Uint8Array(lines.length);
+    const heap: number[] = [];
+
+    const push = (value: number) => {
+        heap.push(value);
+        let child = heap.length - 1;
+        while (child > 0) {
+            const parent = (child - 1) >>> 1;
+            if (heap[parent] >= value) break;
+            heap[child] = heap[parent];
+            child = parent;
+        }
+        heap[child] = value;
+    };
+    const discardInactive = () => {
+        while (heap.length > 0 && active[heap[0]] === 0) {
+            const last = heap.pop()!;
+            if (heap.length === 0) break;
+            let parent = 0;
+            while (true) {
+                const left = parent * 2 + 1;
+                if (left >= heap.length) break;
+                const right = left + 1;
+                const child = right < heap.length && heap[right] > heap[left] ? right : left;
+                if (heap[child] <= last) break;
+                heap[parent] = heap[child];
+                parent = child;
+            }
+            heap[parent] = last;
+        }
+    };
+    const peek = () => {
+        discardInactive();
+        return heap.length > 0 ? heap[0] : -1;
+    };
+
+    for (const boundary of boundaries) {
+        // Endpoints are inclusive. Add starts before reading the exact-boundary
+        // result, then remove endings for the open interval after this boundary.
+        for (const index of starts.get(boundary) ?? []) {
+            active[index] = 1;
+            push(index);
+        }
+        exact.push(peek());
+        for (const index of ends.get(boundary) ?? []) active[index] = 0;
+        after.push(peek());
+    }
+
+    return { boundaries, exact, after };
+};
+
+const lookupFor = (lines: Line[]): ActiveLineLookup => {
+    const cached = activeLineLookupCache.get(lines);
+    if (cached) return cached;
+    const lookup = buildActiveLineLookup(lines);
+    activeLineLookupCache.set(lines, lookup);
+    return lookup;
+};
+
+const lowerBound = (values: number[], target: number): number => {
+    let low = 0;
+    let high = values.length;
+    while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (values[middle] < target) low = middle + 1;
+        else high = middle;
+    }
+    return low;
+};
+
+export function localActiveLineIndex(lines: Line[], time: number): number {
+    if (!lines.length || Number.isNaN(time)) return -1;
+    const lookup = lookupFor(lines);
+    if (!lookup.boundaries.length) return -1;
+    const index = lowerBound(lookup.boundaries, time);
+    if (index < lookup.boundaries.length && lookup.boundaries[index] === time) return lookup.exact[index];
+    return index > 0 ? lookup.after[index - 1] : -1;
 }
 
 /** Snapshots are authoritative; extrapolation only fills their short delivery gap. */
@@ -49,9 +153,42 @@ export function localStateSignature(state: HostState): string {
     ]);
 }
 
+const sameHostTrack = (left: HostState['currentTrack'], right: HostState['currentTrack']): boolean => {
+    if (left === right) return true;
+    if (!left || !right) return false;
+    return left.id === right.id
+        && left.title === right.title
+        && left.artist === right.artist
+        && left.album === right.album
+        && left.duration === right.duration
+        && left.cover === right.cover
+        && left.liked === right.liked
+        && left.filePath === right.filePath
+        && left.format === right.format;
+};
+
+/** Compare the discrete host snapshot fields without serializing the track payload. */
+export function localStateChanged(previous: HostState | null, next: HostState): boolean {
+    if (!previous) return true;
+    return !sameHostTrack(previous.currentTrack, next.currentTrack)
+        || previous.currentIndex !== next.currentIndex
+        || previous.duration !== next.duration
+        || previous.playing !== next.playing
+        || previous.playbackRate !== next.playbackRate
+        || previous.volume !== next.volume
+        || previous.muted !== next.muted
+        || previous.playMode !== next.playMode
+        || previous.queueRevision !== next.queueRevision
+        || previous.libraryRevision !== next.libraryRevision
+        || previous.lyricsRevision !== next.lyricsRevision
+        || previous.interface !== next.interface;
+}
+
 /** Folia's response curves, applied to Mineradio's existing analyser without creating audio nodes. */
 export function applyLocalAudio(frame: HostAudio, bands: AudioBands, power: MotionValue<number>): void {
-    const data = Uint8Array.from(frame.frequency);
+    const data: Uint8Array<ArrayBuffer> = frame.frequency instanceof Uint8Array
+        ? (frame.frequency as Uint8Array<ArrayBuffer>)
+        : Uint8Array.from(frame.frequency);
     const binHz = frame.sampleRate / frame.fftSize;
     const energy = (min: number, max: number) => {
         if (!data.length || !Number.isFinite(binHz) || binHz <= 0) return 0;

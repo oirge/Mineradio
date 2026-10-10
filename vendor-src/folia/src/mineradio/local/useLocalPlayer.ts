@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import type { AudioBands, Line } from '../../types';
 import { requestHost, subscribeHost, type HostAudio, type HostLyrics, type HostState } from '../client';
-import { applyLocalAudio, clearLocalAudio, interpolatedLocalTime, localActiveLineIndex, localLyricLines, localStateSignature } from './localPlayerData';
+import { applyLocalAudio, clearLocalAudio, interpolatedLocalTime, localActiveLineIndex, localLyricLines, localStateChanged } from './localPlayerData';
 import type { LocalPlayer } from './playerTypes';
 
 // src/mineradio/local/useLocalPlayer.ts
@@ -35,7 +35,7 @@ export function useLocalPlayer(): LocalPlayer {
     useEffect(() => {
         mounted.current = true;
         let disposed = false, hostActive = false, visible = false;
-        let latest: HostState | null = null, stateSignature = '';
+        let latest: HostState | null = null;
         let lyricLines: Line[] = [], lineIndex = -1;
         let lyricRequest = 0, snapshotRequest = 0, anchoredAt = 0;
         let animationFrame: number | null = null;
@@ -83,11 +83,11 @@ export function useLocalPlayer(): LocalPlayer {
             if (disposed) return;
             const changedTrack = (next.currentTrack?.id ?? null) !== (latest?.currentTrack?.id ?? null);
             const changedLyrics = changedTrack || next.lyricsRevision !== latest?.lyricsRevision;
+            const changedState = localStateChanged(latest, next);
             latest = next;
             anchoredAt = performance.now();
             hostActive = next.interface === 'folia';
-            const signature = localStateSignature(next);
-            if (signature !== stateSignature) { stateSignature = signature; setState(next); }
+            if (changedState) setState(next);
             if (changedTrack) { lyricRequest++; lyricLines = []; setLines(lyricLines); }
             syncClock(interpolatedLocalTime(next, 0));
             refreshVisibility();

@@ -40,7 +40,11 @@ export function hostLyricsToFolia(value: HostLyrics, duration: number): LyricDat
 
 /** Same response curve as Folia's analyser, using the host's actual FFT bin width. */
 export function applyHostAudio(frame: HostAudio): void {
-    const data = Uint8Array.from(frame.frequency);
+    // postMessage already gives the iframe an owned typed-array clone. Copying it
+    // again at 30 FPS only adds GC pressure to the visualizer hot path.
+    const data: Uint8Array<ArrayBuffer> = frame.frequency instanceof Uint8Array
+        ? (frame.frequency as Uint8Array<ArrayBuffer>)
+        : Uint8Array.from(frame.frequency);
     const binHz = frame.sampleRate / frame.fftSize;
     const energy = (min: number, max: number) => {
         if (!data.length || !Number.isFinite(binHz) || binHz <= 0) return 0;

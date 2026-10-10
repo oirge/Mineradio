@@ -4,12 +4,18 @@ import { Disc } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../types';
 import { PolaroidCard, type GridItem } from '../../library/suites/grid/shared/PolaroidCard';
-import { computeHexCardFrame } from '../../library/suites/grid/shared/hexCardTransform';
 import { recordWallLayout } from './recordWallLayout';
 import { useRecordWallMotion } from './useRecordWallMotion';
 
 // src/mineradio/local/RecordWallViewport.tsx
 // The original Polaroid material and entrance animation, virtualized by Folia's hex-grid runtime.
+const CARD_FRAME_BASE_STYLE: CSSProperties = {
+    transformOrigin: 'center center',
+    contain: 'layout style',
+    backfaceVisibility: 'hidden',
+    perspective: '1200px',
+};
+
 function RecordWallViewport({ items, theme, isDaylight, onPlay, onAddQueue }: {
     items: GridItem[]; theme: Theme; isDaylight: boolean;
     onPlay: (id: string) => void; onAddQueue: (id: string) => void;
@@ -66,18 +72,13 @@ function RecordWallViewport({ items, theme, isDaylight, onPlay, onAddQueue }: {
             style={{ x: wall.x, y: wall.y, touchAction: 'none', background: 'rgba(0,0,0,0)' }}
             className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing">
             {wall.renderedIndexes.map(index => {
-                const item = items[index], coord = wall.coords[index];
-                if (!item || !coord) return null;
-                const frame = computeHexCardFrame(coord, wall.x.get(), wall.y.get(), layout);
+                const item = items[index];
+                if (!item || !wall.coords[index]) return null;
                 const animateEntrance = !entered.current.has(item.id);
                 return <div key={item.id} ref={node => { wall.bindCard(index, node); }}
                     data-record-id={item.id} data-focused={index === wall.focusedIndex}
                     className="absolute select-none pointer-events-auto folia-grid-card-frame"
-                    style={{ transformOrigin: 'center center', contain: 'layout style', backfaceVisibility: 'hidden', perspective: '1200px',
-                        display: frame.display || undefined, transform: frame.transform, opacity: frame.opacity, zIndex: frame.zIndex,
-                        '--queue-opacity': frame.queueOpacity, '--queue-pe': frame.queuePointerEvents,
-                        '--play-opacity': frame.playOpacity, '--play-scale': frame.playScale, '--play-pe': frame.playPointerEvents,
-                    } as CSSProperties}>
+                    style={CARD_FRAME_BASE_STYLE}>
                     <motion.div initial={animateEntrance ? { opacity: 0, scale: 0.98, rotateY: -90 } : false}
                         animate={{ opacity: 1, scale: 1, rotateY: 0, x: 0, y: 0 }}
                         transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}

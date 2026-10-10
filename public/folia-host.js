@@ -10,8 +10,9 @@
   var lastLyricsSignature = '', lastLibrarySource = null, lastLibraryLength = -1;
   var lastQueueSource = null, lastQueueLength = -1;
   var pausedVideos = new Set(), oldInert = new Map(), inFlight = new Set();
-  var audioFrequency = null, audioTimeDomain = null;
+  var audioFrequency = null;
   var coverTransfers = new Map(), coverTransferBytes = 0;
+  var currentTrackProjectionCache = null;
 
   function number(value, fallback) { var result = Number(value); return Number.isFinite(result) ? result : fallback; }
   function clamp(value, low, high) { return Math.max(low, Math.min(high, value)); }
@@ -60,13 +61,37 @@
     // A current cover travels with 5 state messages per second. Catalog covers are sent
     // only with their requested page; keep their original thumbnail URL leases intact.
     if (current) cover = coverTransferUrl(cover, 'current:' + trackId(song));
-    return {
-      id: trackId(song), title: String(song.name || song.title || ''),
-      artist: String(song.artist || song.albumArtist || ''), album: String(song.album || ''),
-      duration: Math.max(0, number(call('playbackDurationFromSong', song), 0)), cover: cover,
-      liked: !!call('isSpecialLikedSong', song), filePath: path,
-      format: String(song.format || song.localFormat || (path.match(/\.([^./\\]+)$/) || [])[1] || '').toLowerCase()
+    var id = trackId(song);
+    var title = String(song.name || song.title || '');
+    var artist = String(song.artist || song.albumArtist || '');
+    var album = String(song.album || '');
+    var duration = Math.max(0, number(call('playbackDurationFromSong', song), 0));
+    var liked = !!call('isSpecialLikedSong', song);
+    var format = String(song.format || song.localFormat || (path.match(/\.([^./\\]+)$/) || [])[1] || '').toLowerCase();
+    if (current && currentTrackProjectionCache
+      && currentTrackProjectionCache.song === song
+      && currentTrackProjectionCache.id === id
+      && currentTrackProjectionCache.title === title
+      && currentTrackProjectionCache.artist === artist
+      && currentTrackProjectionCache.album === album
+      && currentTrackProjectionCache.duration === duration
+      && currentTrackProjectionCache.cover === cover
+      && currentTrackProjectionCache.liked === liked
+      && currentTrackProjectionCache.filePath === path
+      && currentTrackProjectionCache.format === format) {
+      return currentTrackProjectionCache.value;
+    }
+    var value = {
+      id: id, title: title, artist: artist, album: album, duration: duration, cover: cover,
+      liked: liked, filePath: path, format: format
     };
+    if (current) {
+      currentTrackProjectionCache = {
+        song: song, id: id, title: title, artist: artist, album: album, duration: duration,
+        cover: cover, liked: liked, filePath: path, format: format, value: value
+      };
+    }
+    return value;
   }
   function syncRevisions() {
     var source = global.localLibrarySongs || [];
@@ -266,14 +291,14 @@
   }
   function audioTick() {
     audioTimer = 0; if (!active) return;
-    var media = global.audio, playing = !!(media && !media.paused && !media.ended), analyser = global.analyser;
-    if (ready && analyser && !document.hidden) {
+    var media = global.audio, playing = !!(media && media.src && !media.paused && !media.ended), analyser = global.analyser;
+    if (ready && playing && analyser && !document.hidden) {
       try {
         if (!audioFrequency || audioFrequency.length !== analyser.frequencyBinCount) {
-          audioFrequency = new Uint8Array(analyser.frequencyBinCount); audioTimeDomain = new Uint8Array(analyser.fftSize);
+          audioFrequency = new Uint8Array(analyser.frequencyBinCount);
         }
-        analyser.getByteFrequencyData(audioFrequency); analyser.getByteTimeDomainData(audioTimeDomain);
-        event('audio', { frequency: Array.from(audioFrequency), timeDomain: Array.from(audioTimeDomain),
+        analyser.getByteFrequencyData(audioFrequency);
+        event('audio', { frequency: audioFrequency,
           sampleRate: global.audioCtx ? global.audioCtx.sampleRate : 44100, fftSize: analyser.fftSize });
       } catch (_error) {}
     }
@@ -454,7 +479,11 @@
       var result = original.apply(this, arguments);
       if (kind === 'queue') queueRevision++;
       else if (kind === 'lyrics') { lastLyricsAt = 0; lastLyricsSignature = ''; }
-      else libraryRevision++;
+      else if (kind === 'cover') {
+        // Asset UI batches and lyric prefetch do not change the catalog. A newly
+        // prepared cover does, and must still reach the Folia wall.
+        if (arguments[1] === 'local-cover-prefetch') libraryRevision++;
+      } else libraryRevision++;
       return result;
     };
   }
@@ -477,7 +506,8 @@
       handle('importFiles', {}).catch(function (error) { if (typeof global.showToast === 'function') global.showToast(error.message); });
     });
   });
-  ['writeLocalPlaylists', 'writeSpecialLikedSongRefs', 'invalidateLocalPlaylistSongLookup', 'schedulePlaybackMetadataRefresh', 'scheduleLocalAssetUiRefresh'].forEach(function (name) { observeMutation(name, 'library'); });
+  ['writeLocalPlaylists', 'writeSpecialLikedSongRefs', 'invalidateLocalPlaylistSongLookup', 'refreshLocalMetadataUi'].forEach(function (name) { observeMutation(name, 'library'); });
+  observeMutation('scheduleLocalAssetUiRefresh', 'cover');
   observeMutation('markQueueContentChanged', 'queue'); observeMutation('applyLyricsState', 'lyrics'); updateButtons();
   if (global.MineradioSonicWorkshop) {
     var workshopPresetChanged = global.MineradioSonicWorkshop.onPresetChange;
