@@ -2,7 +2,7 @@
 
 [中文](./README.md) · English
 
-This is a locally modified version of Mineradio music player, converted to pure local playback use.
+This local music player is adapted from Mineradio and Folia. Mineradio manages the library and audio playback; Folia provides the local playback views and visual effects.
 
 Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 
