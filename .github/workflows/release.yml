@@ -70,7 +70,7 @@ jobs:
         run: npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
       
       - name: Build Windows installer
-        run: npm run build:win -- --publish never
+        run: npm run build:win
       
       - name: Generate SHA256 checksums
         run: |
