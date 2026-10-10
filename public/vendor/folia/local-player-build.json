@@ -473,5 +473,443 @@
     "src/utils/lyrics/wordSegmentation.ts",
     "src/utils/playerBottomBarLayout.ts",
     "src/utils/settledTitleCache.ts"
-  ]
+  ],
+  "thirdPartyLicenses": {
+    "fileName": "THIRD-PARTY-LICENSES.txt",
+    "sha256": "368d3e2a0505b52f6601b9616331e729b0bb5d2befcc112dc8d336552ac41d34",
+    "packages": [
+      {
+        "name": "@chenglou/pretext",
+        "version": "0.0.9",
+        "directory": "node_modules/@chenglou/pretext",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "e9355cb16457e81acd97dac2e50f2f8bbf2a9a464025f9c46db3680cf9598846"
+          }
+        ]
+      },
+      {
+        "name": "@paper-design/shaders",
+        "version": "0.0.80",
+        "directory": "node_modules/@paper-design/shaders",
+        "license": "Apache-2.0",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+          },
+          {
+            "path": "NOTICE",
+            "sha256": "06cf1515dc4628ae4a10f04f394ce746c6edba1ad0ed5d3f7df7ab1781dfe868"
+          }
+        ]
+      },
+      {
+        "name": "@paper-design/shaders-react",
+        "version": "0.0.80",
+        "directory": "node_modules/@paper-design/shaders-react",
+        "license": "Apache-2.0",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+          },
+          {
+            "path": "NOTICE",
+            "sha256": "06cf1515dc4628ae4a10f04f394ce746c6edba1ad0ed5d3f7df7ab1781dfe868"
+          }
+        ]
+      },
+      {
+        "name": "@pixi/colord",
+        "version": "2.9.6",
+        "directory": "node_modules/@pixi/colord",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "license-fallbacks/pixi-colord-2.9.6-LICENSE.txt",
+            "sha256": "7613d4594ee8b6163926af3435dae61c9e3d5a27cd137bd76a543ba40002d8fc",
+            "sourceUrl": "https://raw.githubusercontent.com/omgovich/colord/5344fbf77b736f81cd33c21050021bc09bc9dd1d/LICENSE.md",
+            "sourceCommit": "5344fbf77b736f81cd33c21050021bc09bc9dd1d"
+          }
+        ]
+      },
+      {
+        "name": "@react-three/fiber",
+        "version": "9.8.1",
+        "directory": "node_modules/@react-three/fiber",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "license-fallbacks/react-three-fiber-9.8.1-LICENSE.txt",
+            "sha256": "9c35b5de7b7493a707fffe4eb23bd2f7f449153c1911f7c6eefb4e591fd5349a",
+            "sourceUrl": "https://raw.githubusercontent.com/pmndrs/react-three-fiber/53ec672ac4a7189711766b87ece18889abbb32d4/LICENSE",
+            "sourceCommit": "53ec672ac4a7189711766b87ece18889abbb32d4"
+          }
+        ]
+      },
+      {
+        "name": "@xmldom/xmldom",
+        "version": "0.9.12",
+        "directory": "node_modules/@xmldom/xmldom",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "4da724fc305d81606b245b324d4d2586916b9d248b23d82183df753ace0fdf71"
+          }
+        ]
+      },
+      {
+        "name": "base64-js",
+        "version": "1.5.1",
+        "directory": "node_modules/base64-js",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1"
+          }
+        ]
+      },
+      {
+        "name": "buffer",
+        "version": "6.0.3",
+        "directory": "node_modules/buffer",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6"
+          }
+        ]
+      },
+      {
+        "name": "earcut",
+        "version": "3.2.3",
+        "directory": "node_modules/earcut",
+        "license": "ISC",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "0b348fff56384b43dbb37593906904e56d0f9deb51eae590d4dc6d427fbf1808"
+          }
+        ]
+      },
+      {
+        "name": "eventemitter3",
+        "version": "5.0.4",
+        "directory": "node_modules/eventemitter3",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "3aecc12b1cb28832b5f65ab64291de96568c3f236a74d646281b4491f7bcadbf"
+          }
+        ]
+      },
+      {
+        "name": "fflate",
+        "version": "0.8.3",
+        "directory": "node_modules/fflate",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "0a1df3a083d0c010560aa342e87959c8c1070e6fd54545741f083f22d0c8b551"
+          }
+        ]
+      },
+      {
+        "name": "framer-motion",
+        "version": "13.4.3",
+        "directory": "node_modules/framer-motion",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE.md",
+            "sha256": "5ff46083b88563822b0560dd6221ab89d2f74bc97a52d4c97a75020fd62c6f32"
+          }
+        ]
+      },
+      {
+        "name": "i18next",
+        "version": "26.4.2",
+        "directory": "node_modules/i18next",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "1cd0a2b02a6cc40ef8ee16310d13eeffdd7b5de4a562fd3ee7c921d8eb54f60a"
+          }
+        ]
+      },
+      {
+        "name": "i18next-browser-languagedetector",
+        "version": "8.2.1",
+        "directory": "node_modules/i18next-browser-languagedetector",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "95bdba2cfae72e5337ecc7ccc33154492e33a533549628e385d32d98d1642859"
+          }
+        ]
+      },
+      {
+        "name": "ieee754",
+        "version": "1.2.1",
+        "directory": "node_modules/ieee754",
+        "license": "BSD-3-Clause",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "18d45466ba3253deae04667e267a91ea8de8548f18c1125264d1c9db28194cc1"
+          }
+        ]
+      },
+      {
+        "name": "ismobilejs",
+        "version": "1.1.1",
+        "directory": "node_modules/ismobilejs",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "57c43c929cbc20653cb0e62620a413a8bc456888c1874ebc25d08e0122cd953e"
+          }
+        ]
+      },
+      {
+        "name": "its-fine",
+        "version": "2.1.1",
+        "directory": "node_modules/its-fine",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "643123eeb38f154d93cb8323e1289a648d3f343b411a9340453c010e325d0c82"
+          }
+        ]
+      },
+      {
+        "name": "lucide-react",
+        "version": "1.48.0",
+        "directory": "node_modules/lucide-react",
+        "license": "ISC",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
+          }
+        ]
+      },
+      {
+        "name": "motion-dom",
+        "version": "13.4.2",
+        "directory": "node_modules/motion-dom",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE.md",
+            "sha256": "1bf0dc3f7727723e5a032ed12164a47cf92c05204cb1a3485f123c24e2833ed1"
+          }
+        ]
+      },
+      {
+        "name": "motion-utils",
+        "version": "13.3.0",
+        "directory": "node_modules/motion-utils",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE.md",
+            "sha256": "1bf0dc3f7727723e5a032ed12164a47cf92c05204cb1a3485f123c24e2833ed1"
+          }
+        ]
+      },
+      {
+        "name": "parse-svg-path",
+        "version": "0.2.0",
+        "directory": "node_modules/parse-svg-path",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "2d5ffdfe09268750ba687a149db8392038772e7f156db3a98b615a7de0cab76e"
+          }
+        ]
+      },
+      {
+        "name": "pixi.js",
+        "version": "8.21.0",
+        "directory": "node_modules/pixi.js",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "5ce7447bc57f7349ffc48338782fbcabe613696e00712b20d66bc58e780f9473"
+          }
+        ]
+      },
+      {
+        "name": "@xmldom/xmldom",
+        "version": "0.8.15",
+        "directory": "node_modules/pixi.js/node_modules/@xmldom/xmldom",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "4da724fc305d81606b245b324d4d2586916b9d248b23d82183df753ace0fdf71"
+          }
+        ]
+      },
+      {
+        "name": "react",
+        "version": "19.3.0",
+        "directory": "node_modules/react",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+          }
+        ]
+      },
+      {
+        "name": "react-colorful",
+        "version": "5.8.1",
+        "directory": "node_modules/react-colorful",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "c779efe5dfb04b7b7cac35c4898725e4d22e98b86bc81c9556311d067bf97af5"
+          }
+        ]
+      },
+      {
+        "name": "react-dom",
+        "version": "19.3.0",
+        "directory": "node_modules/react-dom",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+          }
+        ]
+      },
+      {
+        "name": "react-i18next",
+        "version": "17.0.15",
+        "directory": "node_modules/react-i18next",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "29b8ae456ef442e53a98df183ad088cf98c2ece73aa84c462330c43e665b8ab2"
+          }
+        ]
+      },
+      {
+        "name": "react-use-measure",
+        "version": "2.1.7",
+        "directory": "node_modules/react-use-measure",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "9c35b5de7b7493a707fffe4eb23bd2f7f449153c1911f7c6eefb4e591fd5349a"
+          }
+        ]
+      },
+      {
+        "name": "scheduler",
+        "version": "0.28.0",
+        "directory": "node_modules/scheduler",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+          }
+        ]
+      },
+      {
+        "name": "suspend-react",
+        "version": "0.1.3",
+        "directory": "node_modules/suspend-react",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "997e79b828d8b85d6f18730c8dbf58074811360a199506bd84e1263e17c227a2"
+          }
+        ]
+      },
+      {
+        "name": "three",
+        "version": "0.185.1",
+        "directory": "node_modules/three",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc"
+          }
+        ]
+      },
+      {
+        "name": "tiny-lru",
+        "version": "11.4.7",
+        "directory": "node_modules/tiny-lru",
+        "license": "BSD-3-Clause",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "8106f20bacca3558946439afb5e4854333f0a9944eee1c60488aa7ac7fc8f52b"
+          }
+        ]
+      },
+      {
+        "name": "twgl.js",
+        "version": "7.0.0",
+        "directory": "node_modules/twgl.js",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE.md",
+            "sha256": "87a5a44b12faff1205d5325b67b26216404fec66f08db2df4d448bff42f4d668"
+          }
+        ]
+      },
+      {
+        "name": "use-sync-external-store",
+        "version": "1.7.0",
+        "directory": "node_modules/use-sync-external-store",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+          }
+        ]
+      },
+      {
+        "name": "zustand",
+        "version": "5.0.15",
+        "directory": "node_modules/zustand",
+        "license": "MIT",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "c1e6e266563517467b1bf874817d23e426f3149252bd7d42758cd697514b8417"
+          }
+        ]
+      }
+    ]
+  }
 }
