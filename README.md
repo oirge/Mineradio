@@ -4,7 +4,7 @@
 
 <div align="center">
 
-**基于 Mineradio 二次修改的本地音乐播放器**
+**基于 Mineradio和Folia 二次修改的本地音乐播放器**
 
 - 支持导入本地音乐文件夹。
 - 支持单独导入本地音乐文件。
