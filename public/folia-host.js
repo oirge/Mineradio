@@ -309,6 +309,7 @@
     frame.addEventListener('load', function () {
       event('visibility', { active: active });
       if (!ready) updateStatus('正在连接播放器…', false);
+      if (active) attachFrameActivity();
     });
     mount.appendChild(frame);
     loadTimer = global.setTimeout(function () {
@@ -351,6 +352,174 @@
       button.classList.toggle('on', true);
     });
   }
+  // ---- Immersive chrome: top host titlebar + bottom Folia player bar auto-hide on idle ----
+  // Both float over the visualization and slide away after a short idle; the pointer reaching the
+  // top edge or the bottom band (or touching a control) brings the relevant one back. Dragging or
+  // hovering a control holds it open. Torn down when Folia is left. Same-origin iframe is driven
+  // via a body class + an injected stylesheet, so React re-renders never fight it.
+  var CHROME_HIDE_DELAY = 2500, BAR_HIDE_DELAY = 2500, TOP_BAND = 96, BOTTOM_BAND = 170;
+  var chromeHideTimer = 0, barHideTimer = 0, topHideTimer = 0;
+  var chromeHoverLock = false, barLock = false, barDragging = false, barZone = false, topLock = false, topZone = false, chromeZone = false;
+  var chromeListening = false, revealZone = null, frameActivityDoc = null;
+  function setChromeHidden(h) { document.body.classList.toggle('folia-chrome-hidden', !!h); }
+  function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h); }
+  function scheduleChromeHide() {
+    if (chromeHideTimer) { global.clearTimeout(chromeHideTimer); chromeHideTimer = 0; }
+    if (!isImmersive() || chromeHoverLock) return;
+    chromeHideTimer = global.setTimeout(function () { chromeHideTimer = 0; if (isImmersive() && !chromeHoverLock) setChromeHidden(true); }, CHROME_HIDE_DELAY);
+  }
+  function revealChrome(persist) {
+    setChromeHidden(false);
+    if (persist) { if (chromeHideTimer) { global.clearTimeout(chromeHideTimer); chromeHideTimer = 0; } }
+    else scheduleChromeHide();
+  }
+  function scheduleBarHide() {
+    if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
+    if (!active || barLock || barDragging) return;
+    barHideTimer = global.setTimeout(function () { barHideTimer = 0; if (active && !barLock && !barDragging) setBarHidden(true); }, BAR_HIDE_DELAY);
+  }
+  function revealBar(persist) {
+    setBarHidden(false);
+    if (persist) { if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; } }
+    else scheduleBarHide();
+  }
+  // Fullscreen Folia renders its top nav (.local-header) inside the iframe; auto-hide it too.
+  function setTopHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-topnav-hidden', !!h); }
+  function scheduleTopHide() {
+    if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
+    if (!active || topLock) return;
+    topHideTimer = global.setTimeout(function () { topHideTimer = 0; if (active && !topLock) setTopHidden(true); }, CHROME_HIDE_DELAY);
+  }
+  function revealTop(persist) {
+    setTopHidden(false);
+    if (persist) { if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; } }
+    else scheduleTopHide();
+  }
+  function onHostPointerMove(e) {
+    if (!isImmersive()) return;
+    var y = (e && typeof e.clientY === 'number') ? e.clientY : 0;
+    if (y <= TOP_BAND) { chromeZone = true; revealChrome(false); }
+    else if (chromeZone) { chromeZone = false; scheduleChromeHide(); }
+  }
+  function onChromeHoverEnter() { chromeHoverLock = true; revealChrome(true); }
+  function onChromeHoverLeave() { chromeHoverLock = false; scheduleChromeHide(); }
+  function onFramePointerMove(e) {
+    if (!active) return;
+    var doc = frameActivityDoc && frameActivityDoc.documentElement;
+    var h = doc ? doc.clientHeight : 0, y = e.clientY;
+    var closest = (e.target && e.target.closest) ? e.target.closest.bind(e.target) : function () { return null; };
+    // top: host titlebar (windowed) + Folia header (fullscreen)
+    var overTop = !!closest('.local-header');
+    topLock = overTop;
+    if (overTop || y <= TOP_BAND) { topZone = true; revealChrome(false); revealTop(false); }
+    else if (topZone) { topZone = false; scheduleChromeHide(); scheduleTopHide(); }
+    // bottom: Folia player bar
+    var overBar = !!closest('.local-controls');
+    barLock = overBar;
+    if (overBar || (h && y >= h - BOTTOM_BAND)) { barZone = true; revealBar(false); }
+    else if (barZone) { barZone = false; scheduleBarHide(); }
+  }
+  function onFramePointerDown(e) {
+    if (e.pointerType === 'touch') { revealChrome(false); revealTop(false); revealBar(false); }
+    if (e.target && e.target.closest && e.target.closest('.local-controls')) { barDragging = true; revealBar(true); }
+  }
+  function onFramePointerUp() { if (barDragging) { barDragging = false; scheduleBarHide(); } }
+  function injectBarStyle(doc) {
+    if (!doc || !doc.head || doc.getElementById('mineradio-immersive-bar-style')) return;
+    var style = doc.createElement('style');
+    style.id = 'mineradio-immersive-bar-style';
+    style.textContent = '.local-controls{transition:background .3s ease,border-color .3s ease,box-shadow .3s ease,backdrop-filter .3s ease,-webkit-backdrop-filter .3s ease,padding .3s ease!important}'
+      + '.local-transport{overflow:hidden;max-height:80px;transition:opacity .3s cubic-bezier(.22,1,.36,1),max-height .34s cubic-bezier(.22,1,.36,1),margin-top .3s cubic-bezier(.22,1,.36,1)!important}'
+      + 'body.mineradio-bar-hidden .local-controls{background:transparent!important;border-color:transparent!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;padding-top:4px!important;padding-bottom:4px!important}'
+      + 'body.mineradio-bar-hidden .local-transport{opacity:0!important;max-height:0!important;margin-top:0!important;pointer-events:none!important}'
+      + '.local-header{transition:opacity .3s cubic-bezier(.22,1,.36,1),transform .3s cubic-bezier(.22,1,.36,1)!important}'
+      + 'body.mineradio-topnav-hidden .local-header{opacity:0!important;transform:translateY(-16px)!important;pointer-events:none!important}'
+      + 'button[aria-label="沉浸播放"]{display:none!important}'
+      + '@media(prefers-reduced-motion:reduce){.local-controls,.local-transport{transition-duration:.15s!important}}';
+    doc.head.appendChild(style);
+  }
+  function attachFrameActivity() {
+    if (!frame) return;
+    var doc;
+    try { doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document); } catch (_e) { return; }
+    if (!doc || doc === frameActivityDoc) return;
+    detachFrameActivity();
+    frameActivityDoc = doc;
+    injectBarStyle(doc);
+    doc.addEventListener('pointermove', onFramePointerMove, true);
+    doc.addEventListener('pointerdown', onFramePointerDown, true);
+    doc.addEventListener('pointerup', onFramePointerUp, true);
+    if (active) { scheduleBarHide(); scheduleTopHide(); }
+  }
+  function detachFrameActivity() {
+    if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
+    if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
+    barLock = barDragging = barZone = topLock = topZone = false;
+    if (!frameActivityDoc) return;
+    try {
+      setBarHidden(false); setTopHidden(false);
+      frameActivityDoc.removeEventListener('pointermove', onFramePointerMove, true);
+      frameActivityDoc.removeEventListener('pointerdown', onFramePointerDown, true);
+      frameActivityDoc.removeEventListener('pointerup', onFramePointerUp, true);
+    } catch (_e) {}
+    frameActivityDoc = null;
+  }
+  function ensureRevealZone() {
+    if (revealZone && revealZone.isConnected) return revealZone;
+    revealZone = document.getElementById('folia-reveal-zone');
+    if (!revealZone) {
+      revealZone = document.createElement('div');
+      revealZone.id = 'folia-reveal-zone'; revealZone.setAttribute('aria-hidden', 'true');
+      (document.getElementById('desktop-window-shell') || document.body).appendChild(revealZone);
+    }
+    return revealZone;
+  }
+  function chromeHoverTargets() {
+    return Array.prototype.slice.call(document.querySelectorAll(
+      '.desktop-drag-region,.desktop-window-controls,#top-right,#folia-floating-switch,#folia-floating-import,#fullscreen-diy-zone'));
+  }
+  function startChromeAutoHide() {
+    var fresh = !chromeListening;
+    if (fresh) {
+      chromeListening = true;
+      ensureRevealZone();
+      revealZone.addEventListener('mouseenter', onHostPointerMove);
+      revealZone.addEventListener('mousemove', onHostPointerMove);
+      document.addEventListener('mousemove', onHostPointerMove, true);
+      document.addEventListener('pointerdown', onHostPointerMove, true);
+      chromeHoverTargets().forEach(function (el) {
+        el.addEventListener('mouseenter', onChromeHoverEnter);
+        el.addEventListener('mouseleave', onChromeHoverLeave);
+        el.addEventListener('focusin', onChromeHoverEnter);
+        el.addEventListener('focusout', onChromeHoverLeave);
+      });
+    }
+    attachFrameActivity();
+    if (fresh) { chromeHoverLock = false; revealChrome(false); }
+    if (active) scheduleBarHide();
+  }
+  function stopChromeAutoHide() {
+    if (chromeHideTimer) { global.clearTimeout(chromeHideTimer); chromeHideTimer = 0; }
+    chromeHoverLock = false; chromeZone = false; setChromeHidden(false);
+    detachFrameActivity();
+    if (!chromeListening) return;
+    chromeListening = false;
+    document.removeEventListener('mousemove', onHostPointerMove, true);
+    document.removeEventListener('pointerdown', onHostPointerMove, true);
+    if (revealZone) {
+      revealZone.removeEventListener('mouseenter', onHostPointerMove);
+      revealZone.removeEventListener('mousemove', onHostPointerMove);
+    }
+    chromeHoverTargets().forEach(function (el) {
+      el.removeEventListener('mouseenter', onChromeHoverEnter);
+      el.removeEventListener('mouseleave', onChromeHoverLeave);
+      el.removeEventListener('focusin', onChromeHoverEnter);
+      el.removeEventListener('focusout', onChromeHoverLeave);
+    });
+  }
+  function isDesktopFullscreen() { return document.body.classList.contains('desktop-fullscreen') || !!document.fullscreenElement; }
+  function isImmersive() { return active || isDesktopFullscreen(); }
+  function syncImmersiveController() { if (isImmersive()) startChromeAutoHide(); else stopChromeAutoHide(); }
   function setInterface(mode) {
     var next = mode === 'folia';
     if (next) ensureFrame();
@@ -361,6 +530,7 @@
     var mount = document.getElementById('folia-interface');
     if (mount) { mount.hidden = !active; mount.setAttribute('aria-hidden', String(!active)); }
     setOriginalVisualsVisible(!active); updateButtons();
+    if (active) startChromeAutoHide(); else syncImmersiveController();
     try {
       if (typeof global.setPersistentLocalStorageItem === 'function') global.setPersistentLocalStorageItem(MODE_KEY, active ? 'folia' : 'mineradio');
       else global.localStorage.setItem(MODE_KEY, active ? 'folia' : 'mineradio');
@@ -632,6 +802,33 @@
       handle('importFiles', {}).catch(function (error) { if (typeof global.showToast === 'function') global.showToast(error.message); });
     });
   });
+  // Collapse/expand the centred Folia nav from a toggle placed left of the Mineradio switch.
+  var NAV_COLLAPSE_KEY = 'mineradio-folia-nav-collapsed';
+  function setFoliaNavCollapsed(collapsed, persist) {
+    document.body.classList.toggle('folia-nav-collapsed', !!collapsed);
+    var btn = document.getElementById('folia-expand-proxy');
+    if (btn) { btn.title = collapsed ? '展开导航' : '收起导航'; btn.setAttribute('aria-label', btn.title); btn.setAttribute('aria-pressed', String(!!collapsed)); }
+    if (persist) { try { global.localStorage.setItem(NAV_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (_e) {} }
+  }
+  var foliaNavToggle = document.getElementById('folia-expand-proxy');
+  if (foliaNavToggle) {
+    foliaNavToggle.addEventListener('click', function () {
+      setFoliaNavCollapsed(!document.body.classList.contains('folia-nav-collapsed'), true);
+    });
+    try { if (global.localStorage.getItem(NAV_COLLAPSE_KEY) === '1') setFoliaNavCollapsed(true, false); } catch (_e) {}
+  }
+  // Keep the idle auto-hide running in fullscreen for the Mineradio view too (not only Folia).
+  (function () {
+    var wasFullscreen = isDesktopFullscreen();
+    try {
+      new MutationObserver(function () {
+        var now = isDesktopFullscreen();
+        if (now !== wasFullscreen) { wasFullscreen = now; syncImmersiveController(); }
+      }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    } catch (_e) {}
+    document.addEventListener('fullscreenchange', syncImmersiveController);
+    syncImmersiveController();
+  })();
   ['writeLocalPlaylists', 'invalidateLocalPlaylistSongLookup'].forEach(function (name) { observeMutation(name, 'library'); });
   observeMutation('refreshLocalMetadataUi', 'track-metadata');
   observeMutation('scheduleLocalAssetUiRefresh', 'track-cover');
@@ -649,7 +846,7 @@
   }
   try { if (global.localStorage.getItem(MODE_KEY) === 'folia') setInterface('folia'); } catch (error) { console.warn('[FoliaHostRestore]', error); }
   global.addEventListener('beforeunload', function () {
-    stopTimers(); if (loadTimer) global.clearTimeout(loadTimer);
+    stopTimers(); stopChromeAutoHide(); if (loadTimer) global.clearTimeout(loadTimer);
     if (trackChangeTimer) global.clearTimeout(trackChangeTimer);
     pendingTrackChanges.clear();
     coverTransfers.forEach(function (entry) { global.URL.revokeObjectURL(entry.url); }); coverTransfers.clear();

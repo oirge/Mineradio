@@ -7,7 +7,24 @@
 #folia-load-status.failed{color:#f0b5bb}
 #folia-interface.folia-ready #folia-load-status{display:none}
 body.desktop-shell #folia-interface{top:44px}
-body.desktop-shell.folia-interface-active #desktop-titlebar{background:#171719}
+/* Let the Folia background reach the very top: no separate black titlebar strip. */
+body.desktop-shell.folia-interface-active #folia-interface{top:0}
+body.desktop-shell.folia-interface-active #desktop-titlebar{background:transparent;transition:opacity .32s cubic-bezier(.22,1,.36,1),transform .32s cubic-bezier(.22,1,.36,1)}
+/* Idle auto-hide: the top chrome floats over the background and slides away when unused. */
+body.desktop-shell.folia-interface-active.folia-chrome-hidden #desktop-titlebar{opacity:0;transform:translateY(-100%);pointer-events:none!important}
+body.desktop-shell.folia-interface-active.folia-chrome-hidden #desktop-titlebar *{pointer-events:none!important}
+#folia-reveal-zone{display:none}
+body.folia-interface-active #folia-reveal-zone{display:block;position:fixed;top:0;left:0;right:0;height:12px;z-index:600;pointer-events:none;-webkit-app-region:no-drag}
+body.folia-interface-active.folia-chrome-hidden #folia-reveal-zone{pointer-events:auto}
+html:fullscreen body.desktop-shell.folia-interface-active.folia-chrome-hidden #folia-reveal-zone,body.desktop-shell.desktop-fullscreen.folia-interface-active.folia-chrome-hidden #folia-reveal-zone{height:16px}
+#folia-floating-switch,#folia-floating-import{transition:opacity .3s cubic-bezier(.22,1,.36,1),transform .3s cubic-bezier(.22,1,.36,1),background .18s,color .18s,border-color .18s,box-shadow .18s}
+body.folia-interface-active.folia-chrome-hidden #folia-floating-switch,body.folia-interface-active.folia-chrome-hidden #folia-floating-import{opacity:0;transform:translateY(-12px);pointer-events:none!important}
+body.folia-interface-active.folia-chrome-hidden #fullscreen-diy-zone{opacity:0;pointer-events:none!important;transition:opacity .3s cubic-bezier(.22,1,.36,1)}
+/* Mineradio-view fullscreen: idle auto-hide the top-right controls (Folia switch / DIY / 退出全屏 / home) too. */
+body.desktop-shell.desktop-fullscreen #top-right,html:fullscreen body.desktop-shell #top-right{transition:opacity .3s cubic-bezier(.22,1,.36,1),transform .3s cubic-bezier(.22,1,.36,1)}
+body.desktop-shell.desktop-fullscreen.folia-chrome-hidden #top-right,html:fullscreen body.desktop-shell.folia-chrome-hidden #top-right,
+body.desktop-shell.desktop-fullscreen.folia-chrome-hidden #fullscreen-diy-zone,html:fullscreen body.desktop-shell.folia-chrome-hidden #fullscreen-diy-zone,
+body.desktop-shell.desktop-fullscreen.folia-chrome-hidden #folia-floating-switch,html:fullscreen body.desktop-shell.folia-chrome-hidden #folia-floating-switch{opacity:0!important;pointer-events:none!important;transform:translateY(-10px)}
 #folia-titlebar-controls{display:none;position:absolute;left:50%;top:0;transform:translateX(-50%);width:max-content;min-width:0;height:100%;align-items:center;justify-content:center;pointer-events:none;-webkit-app-region:drag;text-transform:none;letter-spacing:normal}
 body.desktop-shell.folia-interface-active #folia-titlebar-controls{display:flex}
 #folia-titlebar-controls nav{display:flex;align-items:center;gap:4px;max-width:100%;min-width:0;height:34px;padding:2px 4px;box-sizing:border-box;border:1px solid rgba(255,255,255,.11);border-radius:12px;background:rgba(35,35,40,.84);color:#e6e5ed;pointer-events:auto;-webkit-app-region:no-drag}
@@ -22,15 +39,27 @@ body.folia-interface-active #desktop-window-shell>:not(#folia-interface):not(#de
 body.folia-interface-active #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone) *{visibility:hidden!important;animation-play-state:paused!important}
 body.folia-interface-active #diy-mode-btn,body.folia-interface-active #visual-guide-btn,body.folia-interface-active #update-entry{display:none!important}
 #folia-floating-switch{position:fixed;top:14px;right:16px;z-index:650;min-width:76px;height:30px;padding:0 12px;border:1px solid rgba(180,180,205,.25);border-radius:9px;background:#292930;color:#e4e3ef;font:600 11px var(--font-sans);cursor:pointer;-webkit-app-region:no-drag}
-#folia-floating-switch.on{color:#fff;border-color:rgba(255,83,103,.50);background:rgba(255,83,103,.13);box-shadow:0 12px 34px rgba(255,83,103,.09),inset 0 1px 0 rgba(255,255,255,.08)}
+#folia-floating-switch.on{color:#f3f5f9;border-color:rgba(255,255,255,.20);background:rgba(32,32,38,.88);box-shadow:0 10px 30px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.06)}
 body.desktop-shell:not(.desktop-fullscreen) #folia-floating-switch{display:none}
 html:fullscreen body.desktop-shell #folia-floating-switch{display:block}
 body.folia-interface-active #folia-floating-switch{top:10px;right:16px}
+/* In Mineradio-view fullscreen, sit the switch left of the DIY zone (JS-measured) so it never overlaps the top-right cluster. */
+html:fullscreen body.desktop-shell:not(.folia-interface-active) #folia-floating-switch,body.desktop-shell.desktop-fullscreen:not(.folia-interface-active) #folia-floating-switch{top:var(--folia-fs-top,14px);right:var(--folia-fs-switch-right,16px)}
 body.folia-interface-active:has(#folia-interface.folia-ready) #folia-floating-import{display:none!important}
 body.folia-interface-active #fullscreen-diy-zone{display:none!important}
 body.folia-interface-active,body.folia-interface-active.cursor-hidden,body.folia-interface-active.cursor-hidden *{cursor:auto!important}
 body.folia-interface-active [data-folia-switch]{cursor:pointer!important}
 #folia-import-files,#folia-floating-import{display:none}
+/* A collapse/expand toggle (left of the Mineradio switch) that folds the centred Folia nav away. */
+#folia-expand-proxy{display:none;width:34px;height:30px;padding:0;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.09);border-radius:9px;background:rgba(4,8,10,.42);color:rgba(224,250,255,.74);cursor:pointer;-webkit-app-region:no-drag;transition:background .18s,color .18s,border-color .18s,transform .18s}
+#folia-expand-proxy svg{width:16px;height:16px;transition:transform .22s cubic-bezier(.22,1,.36,1)}
+#folia-expand-proxy:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff;transform:translateY(-1px)}
+body.folia-interface-active #folia-expand-proxy{display:inline-flex}
+body.folia-nav-collapsed #folia-expand-proxy svg{transform:rotate(180deg)}
+body.folia-interface-active #folia-titlebar-controls{transition:opacity .22s cubic-bezier(.22,1,.36,1),transform .22s cubic-bezier(.22,1,.36,1)}
+body.folia-interface-active.folia-nav-collapsed #folia-titlebar-controls{opacity:0;transform:translateX(-50%) translateY(-10px);pointer-events:none}
+/* Remove the "沉浸播放" (⤢) button from the Folia nav entirely. */
+body.folia-interface-active #folia-titlebar-controls button[aria-label="沉浸播放"]{display:none!important}
 body.folia-interface-active #folia-import-files{display:flex}
 body.folia-interface-active #folia-floating-import{position:fixed;display:block;top:10px;right:148px;z-index:650;height:30px;padding:0 12px;border:1px solid rgba(180,180,205,.25);border-radius:9px;background:#292930;color:#e4e3ef;font:600 11px var(--font-sans);cursor:pointer!important;-webkit-app-region:no-drag}
 body.desktop-shell:not(.desktop-fullscreen).folia-interface-active #folia-floating-import{display:none}
