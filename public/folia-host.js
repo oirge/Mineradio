@@ -360,7 +360,7 @@
   var CHROME_HIDE_DELAY = 2500, BAR_HIDE_DELAY = 2500, TOP_BAND = 96, BOTTOM_BAND = 170;
   var chromeHideTimer = 0, barHideTimer = 0, topHideTimer = 0;
   var chromeHoverLock = false, barLock = false, barDragging = false, barZone = false, topLock = false, topZone = false, chromeZone = false;
-  var chromeListening = false, revealZone = null, frameActivityDoc = null;
+  var chromeListening = false, frameActivityDoc = null;
   function setChromeHidden(h) { document.body.classList.toggle('folia-chrome-hidden', !!h); }
   function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h); }
   function scheduleChromeHide() {
@@ -464,16 +464,6 @@
     } catch (_e) {}
     frameActivityDoc = null;
   }
-  function ensureRevealZone() {
-    if (revealZone && revealZone.isConnected) return revealZone;
-    revealZone = document.getElementById('folia-reveal-zone');
-    if (!revealZone) {
-      revealZone = document.createElement('div');
-      revealZone.id = 'folia-reveal-zone'; revealZone.setAttribute('aria-hidden', 'true');
-      (document.getElementById('desktop-window-shell') || document.body).appendChild(revealZone);
-    }
-    return revealZone;
-  }
   function chromeHoverTargets() {
     return Array.prototype.slice.call(document.querySelectorAll(
       '.desktop-drag-region,.desktop-window-controls,#top-right,#folia-floating-switch,#folia-floating-import,#fullscreen-diy-zone'));
@@ -482,11 +472,7 @@
     var fresh = !chromeListening;
     if (fresh) {
       chromeListening = true;
-      ensureRevealZone();
-      revealZone.addEventListener('mouseenter', onHostPointerMove);
-      revealZone.addEventListener('mousemove', onHostPointerMove);
-      document.addEventListener('mousemove', onHostPointerMove, true);
-      document.addEventListener('pointerdown', onHostPointerMove, true);
+      if (document.addEventListener) { document.addEventListener('mousemove', onHostPointerMove, true); document.addEventListener('pointerdown', onHostPointerMove, true); }
       chromeHoverTargets().forEach(function (el) {
         el.addEventListener('mouseenter', onChromeHoverEnter);
         el.addEventListener('mouseleave', onChromeHoverLeave);
@@ -504,12 +490,7 @@
     detachFrameActivity();
     if (!chromeListening) return;
     chromeListening = false;
-    document.removeEventListener('mousemove', onHostPointerMove, true);
-    document.removeEventListener('pointerdown', onHostPointerMove, true);
-    if (revealZone) {
-      revealZone.removeEventListener('mouseenter', onHostPointerMove);
-      revealZone.removeEventListener('mousemove', onHostPointerMove);
-    }
+    if (document.removeEventListener) { document.removeEventListener('mousemove', onHostPointerMove, true); document.removeEventListener('pointerdown', onHostPointerMove, true); }
     chromeHoverTargets().forEach(function (el) {
       el.removeEventListener('mouseenter', onChromeHoverEnter);
       el.removeEventListener('mouseleave', onChromeHoverLeave);
@@ -517,7 +498,7 @@
       el.removeEventListener('focusout', onChromeHoverLeave);
     });
   }
-  function isDesktopFullscreen() { return document.body.classList.contains('desktop-fullscreen') || !!document.fullscreenElement; }
+  function isDesktopFullscreen() { var b = document.body; return !!(b && b.classList && b.classList.contains && b.classList.contains('desktop-fullscreen')) || !!document.fullscreenElement; }
   function isImmersive() { return active || isDesktopFullscreen(); }
   function syncImmersiveController() { if (isImmersive()) startChromeAutoHide(); else stopChromeAutoHide(); }
   function setInterface(mode) {
@@ -826,7 +807,7 @@
         if (now !== wasFullscreen) { wasFullscreen = now; syncImmersiveController(); }
       }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     } catch (_e) {}
-    document.addEventListener('fullscreenchange', syncImmersiveController);
+    if (document.addEventListener) document.addEventListener('fullscreenchange', syncImmersiveController);
     syncImmersiveController();
   })();
   ['writeLocalPlaylists', 'invalidateLocalPlaylistSongLookup'].forEach(function (name) { observeMutation(name, 'library'); });

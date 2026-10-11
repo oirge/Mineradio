@@ -13,10 +13,6 @@ body.desktop-shell.folia-interface-active #desktop-titlebar{background:transpare
 /* Idle auto-hide: the top chrome floats over the background and slides away when unused. */
 body.desktop-shell.folia-interface-active.folia-chrome-hidden #desktop-titlebar{opacity:0;transform:translateY(-100%);pointer-events:none!important}
 body.desktop-shell.folia-interface-active.folia-chrome-hidden #desktop-titlebar *{pointer-events:none!important}
-#folia-reveal-zone{display:none}
-body.folia-interface-active #folia-reveal-zone{display:block;position:fixed;top:0;left:0;right:0;height:12px;z-index:600;pointer-events:none;-webkit-app-region:no-drag}
-body.folia-interface-active.folia-chrome-hidden #folia-reveal-zone{pointer-events:auto}
-html:fullscreen body.desktop-shell.folia-interface-active.folia-chrome-hidden #folia-reveal-zone,body.desktop-shell.desktop-fullscreen.folia-interface-active.folia-chrome-hidden #folia-reveal-zone{height:16px}
 #folia-floating-switch,#folia-floating-import{transition:opacity .3s cubic-bezier(.22,1,.36,1),transform .3s cubic-bezier(.22,1,.36,1),background .18s,color .18s,border-color .18s,box-shadow .18s}
 body.folia-interface-active.folia-chrome-hidden #folia-floating-switch,body.folia-interface-active.folia-chrome-hidden #folia-floating-import{opacity:0;transform:translateY(-12px);pointer-events:none!important}
 body.folia-interface-active.folia-chrome-hidden #fullscreen-diy-zone{opacity:0;pointer-events:none!important;transition:opacity .3s cubic-bezier(.22,1,.36,1)}
