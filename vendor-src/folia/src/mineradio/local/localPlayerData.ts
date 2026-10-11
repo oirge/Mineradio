@@ -33,7 +33,7 @@ export function localActiveLineIndex(lines: Line[], time: number): number {
     return -1;
 }
 
-/** Skip future lyric rows during playback while preserving the original resolver for unordered timing. */
+/** Index an immutable lyric snapshot; rebuild on replacement, and fall back for unordered timing. */
 export function createLocalActiveLineLookup(lines: Line[]): (time: number) => number {
     let previousStart = Number.NEGATIVE_INFINITY;
     for (const line of lines) {
@@ -45,21 +45,27 @@ export function createLocalActiveLineLookup(lines: Line[]): (time: number) => nu
 
     let highestStartIndex = -1;
     let previousTime = Number.NEGATIVE_INFINITY;
+    let firstPotentialIndex = 0;
 
     return time => {
         if (!Number.isFinite(time)) return localActiveLineIndex(lines, time);
-        if (time < previousTime) highestStartIndex = -1;
+        if (time < previousTime) {
+            highestStartIndex = -1;
+            firstPotentialIndex = 0;
+        }
         previousTime = time;
 
         while (highestStartIndex + 1 < lines.length && lines[highestStartIndex + 1].startTime <= time) {
             highestStartIndex++;
         }
 
-        for (let index = highestStartIndex; index >= 0; index--) {
+        for (let index = highestStartIndex; index >= firstPotentialIndex; index--) {
             const line = lines[index];
             if (time <= (line.renderHints?.renderEndTime ?? line.endTime)) return index;
         }
 
+        // Once the playhead is past every earlier line, those rows cannot reactivate until a backward seek.
+        firstPotentialIndex = highestStartIndex + 1;
         return -1;
     };
 }
@@ -82,7 +88,11 @@ export function localStateSignature(state: HostState): string {
 
 /** Folia's response curves, applied to Mineradio's existing analyser without creating audio nodes. */
 export function applyLocalAudio(frame: HostAudio, bands: AudioBands, power: MotionValue<number>): void {
-    const data = Uint8Array.from(frame.frequency);
+    // Host postMessage delivers an ordinary ArrayBuffer-backed view; keep it by
+    // identity so each 33ms audio tick does not allocate another full FFT copy.
+    const data = frame.frequency instanceof Uint8Array
+        ? frame.frequency as Uint8Array<ArrayBuffer>
+        : Uint8Array.from(frame.frequency);
     const binHz = frame.sampleRate / frame.fftSize;
     const energy = (min: number, max: number) => {
         if (!data.length || !Number.isFinite(binHz) || binHz <= 0) return 0;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ChevronLeft, ChevronRight, FileAudio, FolderPlus, Heart, Info, Music2, Plus, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { HostState, HostTrack } from '../client';
@@ -11,8 +11,11 @@ import TrackDetails from './TrackDetails';
 interface Props { state: HostState | null; command: LocalCommand; queue: boolean; onTab: (queue: boolean) => void; onClose: () => void; }
 export default function LibraryPanel({ state, command, queue, onTab, onClose }: Props) {
     const { t } = useTranslation('localPlayer');
-    const catalog = useLibraryPage(state, command, queue);
     const [details, setDetails] = useState<HostTrack | null>(null);
+    const onTracksChanged = useCallback((tracks: ReadonlyMap<string, HostTrack>) => {
+        setDetails(previous => previous ? tracks.get(previous.id) ?? previous : null);
+    }, []);
+    const catalog = useLibraryPage(state, command, queue, onTracksChanged);
     const [creating, setCreating] = useState(false);
     const [name, setName] = useState('');
     const run = (method: string, params?: Record<string, unknown>) => { void command(method, params).then(catalog.refresh).catch(() => {}); };

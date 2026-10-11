@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { beginWallCatalogRefresh, completeWallCatalogRefresh, emptyWallCatalog } from '../vendor-src/folia/src/mineradio/local/wallCatalogData.ts';
+import { beginWallCatalogRefresh, completeWallCatalogRefresh, emptyWallCatalog, patchWallCatalogTracks } from '../vendor-src/folia/src/mineradio/local/wallCatalogData.ts';
 
 // tests/folia-wall-catalog.test.mjs
 // Catalog refreshes must preserve mounted wall content and unaffected visual object identities.
@@ -37,6 +37,35 @@ test('unchanged replies retain snapshot and changed artwork replaces only its so
     assert.equal(next.tracks[1], previous.tracks[1]);
 });
 
+test('artwork completion patches only its wall tile without refetching the collection', () => {
+    const previous = loaded();
+    const changed = song('b', { cover: '/new-b.jpg' });
+    const next = patchWallCatalogTracks(previous, scope, [changed]);
+    assert.equal(next.songs[1].album.coverUrl, '/new-b.jpg');
+    assert.notEqual(next.songs[1], previous.songs[1]);
+    assert.equal(next.songs[0], previous.songs[0]);
+    assert.equal(next.tracks[0], previous.tracks[0]);
+    assert.equal(patchWallCatalogTracks(next, scope, [changed]), next);
+});
+
+test('one asset batch updates every affected wall tile', () => {
+    const previous = loaded();
+    const next = patchWallCatalogTracks(previous, scope, [
+        song('a', { cover: '/new-a.jpg' }), song('b', { cover: '/new-b.jpg' }),
+    ]);
+    assert.deepEqual(next.songs.map(item => item.album.coverUrl), ['/new-a.jpg', '/new-b.jpg']);
+});
+
+test('an in-flight stale page cannot overwrite artwork that completed after the request began', () => {
+    const previous = loaded();
+    const changed = song('b', { cover: '/new-b.jpg' });
+    const patched = patchWallCatalogTracks(beginWallCatalogRefresh(previous, scope), scope, [changed]);
+    const completed = completeWallCatalogRefresh(patched, scope, [song('a'), song('b')], new Map([['b', changed]]));
+    assert.equal(completed.songs[1].album.coverUrl, '/new-b.jpg');
+    assert.equal(completed.songs[1], patched.songs[1]);
+    assert.equal(completed.songs[0], previous.songs[0]);
+});
+
 test('reordering and deleting retain identities by ID while reflecting the new collection', () => {
     const previous = loaded();
     const reordered = completeWallCatalogRefresh(previous, scope, [song('b'), song('a')]);
@@ -58,4 +87,25 @@ test('switching collection clears old tiles and rejects a stale prior collection
     assert.equal(completed.loading, false);
     assert.equal(completed.songs[0].sourceRef.mediaId, 'a');
     assert.equal(completed.songs[0].durationMs, 120000);
+});
+
+test('large catalog refresh keeps the full collection and stable identities across late edits and reordering', () => {
+    const tracks = Array.from({ length: 50_000 }, (_, index) => song(String(index)));
+    const previous = completeWallCatalogRefresh(emptyWallCatalog(scope), scope, tracks);
+    assert.equal(previous.tracks.length, 50_000);
+    assert.equal(previous.songs[49_999].localRef.songId, '49999');
+    assert.equal(completeWallCatalogRefresh(previous, scope, tracks), previous);
+
+    const edited = tracks.slice();
+    edited[49_999] = { ...edited[49_999], liked: true };
+    const favorite = completeWallCatalogRefresh(previous, scope, edited);
+    assert.equal(favorite.tracks[49_999].liked, true);
+    assert.equal(favorite.songs, previous.songs);
+    assert.equal(favorite.tracks[0], previous.tracks[0]);
+
+    const reordered = completeWallCatalogRefresh(favorite, scope, edited.toReversed());
+    assert.equal(reordered.tracks.length, 50_000);
+    assert.equal(reordered.tracks[0], favorite.tracks[49_999]);
+    assert.equal(reordered.songs[0], favorite.songs[49_999]);
+    assert.equal(reordered.songs[49_999], favorite.songs[0]);
 });

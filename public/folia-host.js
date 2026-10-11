@@ -14,6 +14,17 @@
   var coverTransfers = new Map(), coverTransferBytes = 0;
   var playlistMembership = new Map();
   var trackPageIndexes = new WeakMap();
+  var currentTrackCache = null;
+  var pendingTrackChanges = new Map(), trackChangeTimer = 0;
+  // Native metadata and cover hydration mutate these projection inputs in place.
+  var CURRENT_TRACK_FIELDS = [
+    'type', 'localKey', 'id', 'localFilePathAbsolute', 'localPath', 'localFile',
+    'name', 'title', 'artist', 'albumArtist', 'album', 'duration', 'durationMs', 'dt',
+    'cover', 'customCoverKey', 'customCover', 'localCoverThumbDataUrl', 'localCoverDataUrl',
+    'localCoverObjectUrl', 'localCoverFile', '_mineradioCoverCacheVersion', 'format', 'localFormat'
+  ];
+  var TRACK_QUERY_CACHE_LIMIT = 8;
+  var TRACK_CHANGE_DELAY_MS = 180, TRACK_CHANGE_DRAIN_DELAY_MS = 32, TRACK_CHANGE_BATCH_LIMIT = 180;
 
   function number(value, fallback) { var result = Number(value); return Number.isFinite(result) ? result : fallback; }
   function clamp(value, low, high) { return Math.max(low, Math.min(high, value)); }
@@ -58,7 +69,6 @@
     if (!song) return null;
     var path = String(song.localFilePathAbsolute || song.localPath || '');
     var cover = String(call('songCoverSrc', song, current ? 400 : 96) || '');
-    if (!current && song.localCoverThumbDataUrl && !song.customCover) cover = song.localCoverThumbDataUrl;
     // A current cover travels with 5 state messages per second. Catalog covers are sent
     // only with their requested page; keep their original thumbnail URL leases intact.
     if (current) cover = coverTransferUrl(cover, 'current:' + trackId(song));
@@ -69,6 +79,27 @@
       liked: !!call('isSpecialLikedSong', song), filePath: path,
       format: String(song.format || song.localFormat || (path.match(/\.([^./\\]+)$/) || [])[1] || '').toLowerCase()
     };
+  }
+  function projectCurrentTrack(song) {
+    if (!song) { currentTrackCache = null; return null; }
+    var cached = currentTrackCache, covers = global.customCoverMap;
+    var unchanged = !!(cached && cached.song === song && cached.favoritesRevision === favoritesRevision
+      && cached.mappedCover === (covers && cached.coverKey ? covers[cached.coverKey] : undefined));
+    if (unchanged) {
+      for (var i = 0; i < CURRENT_TRACK_FIELDS.length; i++) {
+        if (cached.fields[i] !== song[CURRENT_TRACK_FIELDS[i]]) { unchanged = false; break; }
+      }
+    }
+    if (!unchanged) {
+      var projected = projectTrack(song, true), fields = new Array(CURRENT_TRACK_FIELDS.length);
+      for (var field = 0; field < fields.length; field++) fields[field] = song[CURRENT_TRACK_FIELDS[field]];
+      var coverKey = typeof global.songCustomCoverKey === 'function' ? global.songCustomCoverKey(song) : '';
+      covers = global.customCoverMap;
+      currentTrackCache = { song: song, favoritesRevision: favoritesRevision,
+        coverKey: coverKey, mappedCover: covers && coverKey ? covers[coverKey] : undefined,
+        fields: fields, projected: projected };
+    }
+    return Object.assign({}, currentTrackCache.projected);
   }
   function syncRevisions() {
     var source = global.localLibrarySongs || [];
@@ -86,7 +117,7 @@
     var media = global.audio;
     var volume = clamp(number(global.targetVolume, media ? media.volume : 1), 0, 1);
     return {
-      currentTrack: projectTrack(currentSong(), true), currentIndex: number(global.currentIdx, -1),
+      currentTrack: projectCurrentTrack(currentSong()), currentIndex: number(global.currentIdx, -1),
       position: number(call('getPlaybackCurrentSeconds'), 0), duration: number(call('getPlaybackDurationSeconds'), 0),
       playing: !!(media && media.src && !media.paused && !media.ended), playbackRate: media ? number(media.playbackRate, 1) : 1, volume: volume,
       muted: volume <= 0.0001 || !!(media && media.muted), playMode: global.playMode || 'loop',
@@ -117,36 +148,108 @@
     playlistMembership.set(id, { songs: songs, revision: revision, queueRevision: queueRevision });
     return songs;
   }
+  function createTrackPageIndex(songs) {
+    return {
+      length: songs.length,
+      queries: new Map(), queryOrder: [], libraryRevision: libraryRevision, queueRevision: queueRevision
+    };
+  }
+  function rememberTrackQuery(index, query, result) {
+    var existing = index.queryOrder.indexOf(query);
+    if (existing >= 0) index.queryOrder.splice(existing, 1);
+    index.queries.set(query, result);
+    index.queryOrder.push(query);
+    while (index.queryOrder.length > TRACK_QUERY_CACHE_LIMIT) index.queries.delete(index.queryOrder.shift());
+    return result;
+  }
+  function trackQueryIndex(index, songs, query) {
+    var cached = index.queries.get(query);
+    if (cached) return rememberTrackQuery(index, query, cached);
+    if (!query) {
+      var allPositions = null, localCount = 0;
+      for (var i = 0; i < index.length; i++) {
+        if (songs[i] && songs[i].type === 'local') {
+          if (allPositions) allPositions.push(i);
+          localCount++;
+        } else if (!allPositions) {
+          allPositions = [];
+          for (var previous = 0; previous < i; previous++) allPositions.push(previous);
+        }
+      }
+      return rememberTrackQuery(index, query, { positions: allPositions, total: localCount });
+    }
+    var positions = [], total = 0;
+    // New searches read live metadata; tags can change in place without replacing the library array.
+    for (var candidate = 0; candidate < index.length; candidate++) {
+      var song = songs[candidate];
+      if (song && song.type === 'local'
+        && (String(song.name || song.title || '') + '\n' + String(song.artist || '') + '\n' + String(song.album || '')).toLocaleLowerCase().indexOf(query) >= 0) {
+        positions.push(candidate); total++;
+      }
+    }
+    return rememberTrackQuery(index, query, {
+      positions: total === index.length ? null : positions, total: total
+    });
+  }
   function pageTracks(songs, params) {
     syncRevisions();
     var offset = Math.max(0, Math.floor(number(params.offset, 0)));
     var limit = clamp(Math.floor(number(params.limit, 100)), 1, 1000);
     var query = String(params.query || '').trim().toLocaleLowerCase().slice(0, 240);
     var index = trackPageIndexes.get(songs);
-    if (!index || index.query !== query || index.length !== songs.length
+    if (!index || index.length !== songs.length
       || index.libraryRevision !== libraryRevision || index.queueRevision !== queueRevision) {
-      // Reuse membership across pages, but never retain projected metadata or covers.
-      // The usual all-local catalog needs only a count, with no full-library copy.
-      var positions = null, total = 0;
-      for (var i = 0; i < songs.length; i++) {
-        var song = songs[i];
-        var matches = song && song.type === 'local'
-          && (!query || (String(song.name || song.title || '') + '\n' + String(song.artist || '') + '\n' + String(song.album || '')).toLocaleLowerCase().indexOf(query) >= 0);
-        if (matches) {
-          if (positions) positions.push(i);
-          total++;
-        } else if (!positions) {
-          positions = [];
-          for (var previous = 0; previous < i; previous++) positions.push(previous);
-        }
-      }
-      index = { query: query, length: songs.length, positions: positions, total: total,
-        libraryRevision: libraryRevision, queueRevision: queueRevision };
+      index = createTrackPageIndex(songs);
       trackPageIndexes.set(songs, index);
     }
-    var items = [], end = Math.min(index.total, offset + limit);
-    for (var item = offset; item < end; item++) items.push(projectTrack(songs[index.positions ? index.positions[item] : item], false));
-    return { items: items, total: index.total, offset: offset, limit: limit };
+    var queryIndex = trackQueryIndex(index, songs, query);
+    var items = [], end = Math.min(queryIndex.total, offset + limit);
+    for (var item = offset; item < end; item++) {
+      var songIndex = queryIndex.positions ? queryIndex.positions[item] : item;
+      items.push(projectTrack(songs[songIndex], false));
+    }
+    return { items: items, total: queryIndex.total, offset: offset, limit: limit };
+  }
+  function queueTrackChange(song, searchableChanged) {
+    if (!song || song.type !== 'local' || !frame || !ready) return;
+    syncRevisions();
+    var id = trackId(song);
+    var lookup = call('getLocalPlaylistSongLookup');
+    var canonical = lookup && lookup.byKey && lookup.byKey[id];
+    var queueClone = canonical !== song && (global.playQueue || []).indexOf(song) >= 0;
+    if (!canonical || (canonical !== song && !queueClone)) return;
+    if (searchableChanged) trackPageIndexes = new WeakMap();
+    var pending = pendingTrackChanges.get(id);
+    pendingTrackChanges.set(id, {
+      song: song, queueClone: queueClone, librarySource: global.localLibrarySongs,
+      libraryRevision: libraryRevision, searchableChanged: !!searchableChanged || !!(pending && pending.searchableChanged)
+    });
+    if (!trackChangeTimer) trackChangeTimer = global.setTimeout(flushTrackChanges, TRACK_CHANGE_DELAY_MS);
+  }
+  function flushTrackChanges() {
+    trackChangeTimer = 0;
+    if (!frame || !ready) { pendingTrackChanges.clear(); return; }
+    try {
+      syncRevisions();
+      var lookup = call('getLocalPlaylistSongLookup'), updates = [];
+      var entries = pendingTrackChanges.entries();
+      for (var i = 0; i < TRACK_CHANGE_BATCH_LIMIT; i++) {
+        var entry = entries.next();
+        if (entry.done) break;
+        var id = entry.value[0], pending = entry.value[1];
+        pendingTrackChanges.delete(id);
+        var song = lookup && lookup.byKey && lookup.byKey[id];
+        if (!song || pending.librarySource !== global.localLibrarySongs
+          || pending.libraryRevision !== libraryRevision
+          || (song !== pending.song && !pending.queueClone)) continue;
+        updates.push({ track: projectTrack(song, false), searchableChanged: pending.searchableChanged });
+      }
+      if (updates.length) event('tracksChanged', { updates: updates });
+      if (pendingTrackChanges.size) trackChangeTimer = global.setTimeout(flushTrackChanges, TRACK_CHANGE_DRAIN_DELAY_MS);
+    } catch (error) {
+      pendingTrackChanges.clear();
+      console.warn('[FoliaHostTracks]', error);
+    }
   }
   function projectPlaylist(playlist) {
     return { id: playlist.id, name: playlist.name, count: (playlist.songRefs || []).length, cover: '', readOnly: false };
@@ -300,7 +403,7 @@
           audioFrequency = new Uint8Array(analyser.frequencyBinCount);
         }
         analyser.getByteFrequencyData(audioFrequency);
-        event('audio', { frequency: Array.from(audioFrequency),
+        event('audio', { frequency: audioFrequency,
           sampleRate: global.audioCtx ? global.audioCtx.sampleRate : 44100, fftSize: analyser.fftSize });
       } catch (_error) {}
     }
@@ -478,16 +581,40 @@
   function observeMutation(name, kind) {
     var original = global[name]; if (typeof original !== 'function') return;
     global[name] = function () {
+      if (kind === 'asset-cache') {
+        var song = arguments[0];
+        if (!song || song.type !== 'local' || !frame || !ready) return original.apply(this, arguments);
+        var nameBefore = song.name, artistBefore = song.artist, albumBefore = song.album;
+        var albumArtistBefore = song.albumArtist, durationBefore = song.duration, formatBefore = song.localFormat;
+        var thumbBefore = song.localCoverThumbDataUrl, coverBefore = song.localCoverDataUrl;
+        var coverFileBefore = song.localCoverFile, coverUrlBefore = song.localCoverObjectUrl;
+        var changed = original.apply(this, arguments);
+        if (changed) {
+          var searchableChanged = nameBefore !== song.name || artistBefore !== song.artist || albumBefore !== song.album;
+          if (searchableChanged || albumArtistBefore !== song.albumArtist || durationBefore !== song.duration
+            || formatBefore !== song.localFormat || thumbBefore !== song.localCoverThumbDataUrl
+            || coverBefore !== song.localCoverDataUrl || coverFileBefore !== song.localCoverFile
+            || coverUrlBefore !== song.localCoverObjectUrl) queueTrackChange(song, searchableChanged);
+        }
+        return changed;
+      }
       var result = original.apply(this, arguments);
       if (kind === 'queue') queueRevision++;
       else if (kind === 'lyrics') { lastLyricsAt = 0; lastLyricsSignature = ''; }
+      else if (kind === 'track-metadata') queueTrackChange(arguments[0], arguments[2] !== false);
+      else if (kind === 'track-cover') {
+        if (arguments[1] === 'local-cover-prefetch') queueTrackChange(arguments[0], false);
+      }
+      else if (kind === 'custom-cover') queueTrackChange(currentSong(), false);
       else if (kind === 'favorites') { favoritesRevision++; libraryRevision++; playlistMembership.clear(); }
       else { libraryRevision++; playlistMembership.clear(); }
       return result;
     };
   }
   global.isFoliaInterfaceActive = function () { return active; };
-  global.MineradioFoliaHost = Object.freeze({ setInterface: setInterface, getState: getState, version: VERSION });
+  global.MineradioFoliaHost = Object.freeze({
+    setInterface: setInterface, getState: getState, noteTrackChanged: queueTrackChange, version: VERSION
+  });
   global.addEventListener('message', onMessage);
   // Same-origin child preferences use the host's desktop backup, including across port changes.
   global.addEventListener('storage', function (change) {
@@ -505,7 +632,12 @@
       handle('importFiles', {}).catch(function (error) { if (typeof global.showToast === 'function') global.showToast(error.message); });
     });
   });
-  ['writeLocalPlaylists', 'invalidateLocalPlaylistSongLookup', 'schedulePlaybackMetadataRefresh', 'scheduleLocalAssetUiRefresh'].forEach(function (name) { observeMutation(name, 'library'); });
+  ['writeLocalPlaylists', 'invalidateLocalPlaylistSongLookup'].forEach(function (name) { observeMutation(name, 'library'); });
+  observeMutation('refreshLocalMetadataUi', 'track-metadata');
+  observeMutation('scheduleLocalAssetUiRefresh', 'track-cover');
+  observeMutation('applyLocalAssetCacheToSong', 'asset-cache');
+  observeMutation('setCustomCoverForCurrent', 'custom-cover');
+  observeMutation('clearCustomCoverForCurrent', 'custom-cover');
   observeMutation('writeSpecialLikedSongRefs', 'favorites');
   observeMutation('markQueueContentChanged', 'queue'); observeMutation('applyLyricsState', 'lyrics'); updateButtons();
   if (global.MineradioSonicWorkshop) {
@@ -518,6 +650,8 @@
   try { if (global.localStorage.getItem(MODE_KEY) === 'folia') setInterface('folia'); } catch (error) { console.warn('[FoliaHostRestore]', error); }
   global.addEventListener('beforeunload', function () {
     stopTimers(); if (loadTimer) global.clearTimeout(loadTimer);
+    if (trackChangeTimer) global.clearTimeout(trackChangeTimer);
+    pendingTrackChanges.clear();
     coverTransfers.forEach(function (entry) { global.URL.revokeObjectURL(entry.url); }); coverTransfers.clear();
   });
 })(window);

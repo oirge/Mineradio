@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo, useRef, type CSSProperties } from 'react';
 import { ChevronLeft, Music2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PlayerState, type Theme } from '../../types';
@@ -11,6 +11,7 @@ import { useLatticeControlsStore } from '../../stores/useLatticeControlsStore';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
 import { useStableCallbacks } from '../../hooks/useStableCallbacks';
 import { hostTrackToWallSong, useLocalWallCatalog } from './wallCatalog';
+import { buildPosterWallTiles, type PosterWallTiles } from './wallViewData';
 import { LocalLatticeActionsContext } from './LocalLatticeExtraControls';
 import LocalLatticeTools from './LocalLatticeTools';
 import type { LocalPlayer } from './playerTypes';
@@ -38,14 +39,11 @@ export default function LocalPosterWall({ player, theme, isDaylight, onBack, onO
     const track = player.state?.currentTrack;
     const currentSong = useMemo(() => track ? hostTrackToWallSong(track) : null, [track]);
     const songKey = currentSong ? getPlaybackSongKey(currentSong) : '';
-    const tiles = useMemo<LatticeTile[]>(() => {
-        const currentIndex = catalog.songs.findIndex(song => getPlaybackSongKey(song) === songKey);
-        return catalog.songs.map((song, index) => ({
-            id: getPlaybackSongKey(song), queueIndex: index, song, title: song.name,
-            artist: song.artists.map(artist => artist.name).filter(Boolean).join(' / ') || song.album.name,
-            coverUrl: song.album.coverUrl,
-            section: index === currentIndex ? 'now' : currentIndex >= 0 && index < currentIndex ? 'played' : 'upcoming',
-        }));
+    const tilesCache = useRef<PosterWallTiles | undefined>(undefined);
+    const tiles = useMemo(() => {
+        const next = buildPosterWallTiles(catalog.songs, songKey, tilesCache.current);
+        tilesCache.current = next;
+        return next.tiles;
     }, [catalog.songs, songKey]);
     const wall = useStableCallbacks({
         onPlay: (tile: LatticeTile) => { void player.command('play', { id: String(tile.song.id), playlistId: catalog.playlistId }).catch(() => {}); },
