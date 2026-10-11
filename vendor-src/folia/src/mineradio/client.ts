@@ -56,7 +56,7 @@ export interface HostLyrics {
 }
 
 export interface HostAudio {
-    frequency: number[];
+    frequency: number[] | Uint8Array;
     sampleRate: number;
     fftSize: number;
 }

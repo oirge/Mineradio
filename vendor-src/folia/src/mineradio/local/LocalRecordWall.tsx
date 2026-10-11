@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ChevronDown, ChevronLeft, List, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../types';
-import type { GridItem } from '../../library/suites/grid/shared/PolaroidCard';
 import { SlideActionButton } from '../../components/shared/SlideActionButton';
 import { useLocalWallCatalog } from './wallCatalog';
+import { buildRecordWallItems, type RecordWallItems } from './wallViewData';
 import type { LocalPlayer } from './playerTypes';
 import RecordWallViewport from './RecordWallViewport';
 import LocalRecordTransport from './LocalRecordTransport';
@@ -24,11 +24,13 @@ export default function LocalRecordWall({ player, theme, isDaylight, onBack, onO
     const { t } = useTranslation('localPlayer');
     const catalog = useLocalWallCatalog(player);
     const [showCatalog, setShowCatalog] = useState(false);
-    const items = useMemo<GridItem[]>(() => catalog.songs.map((song, index) => ({
-        id: song.id, name: song.name, coverUrl: song.album.coverUrl,
-        description: song.artists.map(artist => artist.name).filter(Boolean).join(' / ') || t('unknownArtist'),
-        rawTrack: song, rawTrackIndex: index,
-    })), [catalog.songs, t]);
+    const itemsCache = useRef<RecordWallItems | undefined>(undefined);
+    const unknownArtist = t('unknownArtist');
+    const items = useMemo(() => {
+        const next = buildRecordWallItems(catalog.songs, unknownArtist, itemsCache.current);
+        itemsCache.current = next;
+        return next.items;
+    }, [catalog.songs, unknownArtist]);
     const command = player.command;
     const play = useCallback((id: string) => {
         void command('play', { id, playlistId: catalog.playlistId }).catch(() => {});

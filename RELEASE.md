@@ -1,5 +1,14 @@
 # 发布流程
 
+## v2.4.2 Folia 大曲库搜索与播放刷新优化
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.2`。
+- **内容**：Folia 曲库分页按数组身份保存最多 8 个查询的成员位置，完整或部分元数据变化时更新搜索和同曲副本，不触发整墙重拉；播放状态复用未改变的当前歌曲投影，音频桥改传频谱 `Uint8Array`；封面补水合并首批后小批排空，墙面局部重算变动卡片，长歌词静音段跳过已结束前缀。
+- **发布前验证**：重新构建 Folia 和 Windows 安装器后，根目录 Node 回归 `1438` 项通过，另有 1 项可选基准跳过；Folia 定向单测 `24/24`、类型检查、产物检查、JavaScript 语法及 `git diff --check` 均通过。轻量标签的旧界面合批路径先红测复现逐首刷新，再验证批量通知、Folia 搜索和当前曲目即时更新。
+- **浏览器验证与边界**：Edge 中注入 50,000 首合成曲目，两面墙正常渲染；单封面更新约 186 ms 可见且不重载曲库，400 条更新按 `180/180/40` 三批排空，无控制台错误。未将合成数据和空音频冒烟等同于真实文件库、封面解码或安装版 Electron 压测。
+- **Windows 本地构建**：安装器 `120700361` 字节，SHA256 `26a2eb6b1a37c16c73c5ddfd37eb9261dcf2e7a8a7356d74a78389ace2c04738`；本地 `latest.yml` 的版本、大小和 SHA-512 与该安装器一致。GitHub CI 产物以线上构建和回下载校验为准。
+- **发布资产**：GitHub workflow 将生成 `Mineradio-oirge-2.4.2-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-oirge-2.4.2-SHA256SUMS.txt`，核验后正式设为 Latest。
+
 ## v2.4.1 Folia 性能优化与卡顿减少
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.1`。

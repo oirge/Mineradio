@@ -434,6 +434,7 @@
     "src/mineradio/local/visualAssetCache.ts",
     "src/mineradio/local/wallCatalog.ts",
     "src/mineradio/local/wallCatalogData.ts",
+    "src/mineradio/local/wallViewData.ts",
     "src/services/baseThemes.ts",
     "src/services/temperaImageArchive.ts",
     "src/services/temperaImageArchiveFormat.ts",

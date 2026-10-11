@@ -54,9 +54,10 @@ All times are **seconds**. Track IDs are opaque stable Mineradio IDs. Read resul
 
 - `state`: light State every 200 ms while Folia is active; no entire library or queue.
 - `libraryChanged`: `{revision}` after library, favorites or playlists change. Refetch relevant catalog pages and playlists.
+- `tracksChanged`: `{updates:[{track,searchableChanged}]}` for batched local metadata or cover changes. Patch matching visible tracks without refetching the whole catalog; a nonempty search must recheck membership when `searchableChanged` is true. This event does not increment `libraryRevision`.
 - `queueChanged`: `{revision}` after queue structure changes. Refetch queue pages.
 - `lyrics`: full current Lyrics after lyric source or translation changes; never all library lyrics.
-- `audio`: `{frequency:number[],timeDomain:number[],sampleRate,fftSize}`. Raw Web Audio byte values (0–255), approximately 30 Hz while playing and Folia active, slower while paused. Frequency length is `fftSize / 2`, timeDomain length is `fftSize`. Use the existing analyser; no new output graph.
+- `audio`: `{frequency:Uint8Array,sampleRate,fftSize}`. Raw Web Audio frequency bytes (0–255), approximately 30 Hz while playing and Folia active, slower while paused. Frequency length is `fftSize / 2`; the unused time-domain data is not sent. Folia also accepts a legacy `number[]` frequency payload. Use the existing analyser; no new output graph.
 - `visibility`: `{active:boolean}`. Suspend Folia rendering while inactive.
 
 Initial synchronization: install the listener, call `getState`, `listPlaylists`, first `listTracks` page, `getQueue`, and `getLyrics`. Keep the iframe mounted when switching back so settings and navigation survive. Neither interface switch rebuilds the audio engine or changes playback. Host suspend/resume applies to visual loops only; desktop lyrics and audio remain live.

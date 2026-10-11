@@ -61,4 +61,12 @@ describe('isolated Mineradio local display projection', () => {
         applyLocalAudio({ frequency: [], sampleRate: 0, fftSize: 0 }, bands, power);
         expect(power.get()).toBe(0);
     });
+
+    it('reuses typed-array audio frames received from the host bridge', () => {
+        const bands = { bass: motionValue(0), lowMid: motionValue(0), mid: motionValue(0), vocal: motionValue(0), treble: motionValue(0), spectrum: motionValue(new Uint8Array(0)) };
+        const power = motionValue(0);
+        const frequency = new Uint8Array(1024).fill(128);
+        applyLocalAudio({ frequency, sampleRate: 48000, fftSize: 2048 }, bands, power);
+        expect(bands.spectrum.get()).toBe(frequency);
+    });
 });

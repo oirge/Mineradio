@@ -93,3 +93,21 @@ test('600 playback frames do not revisit the future 1,000-line lyric tail', t =>
     t.diagnostic(`1,000 lines / 600 frames: ${reads} value reads and ${descriptorReads} property reads`);
     assert.ok(reads + descriptorReads < 5000, `future lyrics should be indexed once, observed ${reads + descriptorReads} reads`);
 });
+
+test('silent gaps after long lyrics do not revisit every past line on each frame', t => {
+    const values = project(Array.from({ length: 1000 }, (_, index) => sourceLine(index * 2, index * 2 + 1)));
+    let reads = 0;
+    const lines = new Proxy(values, {
+        get(target, property, receiver) {
+            if (/^\d+$/.test(String(property))) reads++;
+            return Reflect.get(target, property, receiver);
+        },
+    });
+    const at = createLocalActiveLineLookup(lines);
+    for (let frame = 0; frame < 600; frame++) {
+        const time = 1501 + frame / 120;
+        assert.equal(at(time), localActiveLineIndex(values, time));
+    }
+    t.diagnostic(`1,000 lines / 600 gap frames: ${reads} indexed reads`);
+    assert.ok(reads < 5000, `silent gaps should not scan past lyrics on every frame, observed ${reads} reads`);
+});

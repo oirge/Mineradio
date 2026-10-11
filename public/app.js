@@ -627,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.1';
+var APP_VERSION = '2.4.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -680,12 +680,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 性能优化：大曲库分页、歌词定位与后台渲染更顺畅。',
+  hero: 'Folia 性能优化：大曲库搜索切换与播放刷新更顺畅。',
   notes: [
-    'Folia 大曲库分页和歌单成员复用缓存，减少翻页、切换歌单时的重复扫描。',
-    '切换到 Folia 后暂停隐藏的 Mineradio 队列渲染，回到原界面时再合并补刷，降低后台卡顿。',
-    '音频桥接移除未使用的时域采样传输，减少播放中的跨窗口数据开销。',
-    '有序歌词改用增量游标定位，逐帧更新更轻；乱序歌词继续使用原有定位逻辑。'
+    'Folia 大曲库反复切换搜索词和翻页时复用有限查询索引，轻量标签变化也及时刷新。',
+    '播放进度刷新复用未变化的歌曲信息与封面，减少重复解析和收藏状态计算。',
+    '音频桥接减少频谱复制，后台封面更新时墙面只重算变动卡片。',
+    '长歌词静音段跳过已经结束的歌词行，降低逐帧定位开销。'
   ]
 };
 function readSavedVolume() {
@@ -14289,15 +14289,21 @@ function handoffLocalLyricText(previousSong, nextSong) {
 }
 /**
  * 将本地歌曲的轻量资产和元数据同步给同一曲目的其他视图对象，不传播完整封面大字符串。
- * @param {object} sourceSong 已完成资产补齐的源歌曲对象。
+ * @param {object} sourceSong 已更新资产字段的源歌曲对象。
+ * @param {object=} partialMetadataTags 未完成扫描中已确认的标签，不传播未扫描字段。
  * @returns {void}
  */
-function syncLocalSongAssetFields(sourceSong) {
+function syncLocalSongAssetFields(sourceSong, partialMetadataTags) {
   if (!sourceSong || !sourceSong.localKey) return;
   // 资产结论刚变过一次，音乐库维护那几个现算名单要重新算。
   if (typeof noteLocalLibraryMaintenanceAssetChange === 'function') noteLocalLibraryMaintenanceAssetChange();
   var lists = [localLibrarySongs, playQueue, playlist];
   var retainedLyricSong = shouldRetainLocalLyricText(sourceSong) ? sourceSong : null;
+  var partialTags = sourceSong.localMetadataLoaded ? null : partialMetadataTags;
+  var partialTitle = !!(partialTags && partialTags.title && !isLocalSourcePlaceholderMetadata(partialTags.title));
+  var partialArtist = !!(partialTags && partialTags.artist && !isLocalSourcePlaceholderMetadata(partialTags.artist));
+  var partialAlbum = !!(partialTags && partialTags.album && !isLocalSourcePlaceholderMetadata(partialTags.album));
+  var partialAlbumArtist = !!(partialTags && partialTags.albumArtist && !isLocalSourcePlaceholderMetadata(partialTags.albumArtist));
   // 资产字段仍可跨视图同步，但歌词原文只能写入精确当前对象，避免任一副本阻止大字符串回收。
   for (var listIndex = 0; listIndex < lists.length; listIndex++) {
     var list = lists[listIndex] || [];
@@ -14330,15 +14336,17 @@ function syncLocalSongAssetFields(sourceSong) {
       if (sourceSong.localLyricFile && !target.localLyricFile) target.localLyricFile = sourceSong.localLyricFile;
       if (sourceSong.localLyricFileName && !target.localLyricFileName) target.localLyricFileName = sourceSong.localLyricFileName;
       if (sourceSong.localLyricTagName && !target.localLyricTagName) target.localLyricTagName = sourceSong.localLyricTagName;
-      if (sourceSong.localMetadataLoaded) {
-        if (sourceSong.name) target.name = sourceSong.name;
-        if (sourceSong.artist) target.artist = sourceSong.artist;
-        if (sourceSong.album) target.album = sourceSong.album;
-        if (sourceSong.albumArtist) target.albumArtist = sourceSong.albumArtist;
-        if (sourceSong.trackNumber) target.trackNumber = sourceSong.trackNumber;
-        if (sourceSong.year) target.year = sourceSong.year;
-        target.localMetadataLoaded = true;
-        target.localMetadataTagSchema = sourceSong.localMetadataTagSchema || 0;
+      if (sourceSong.localMetadataLoaded || partialTags) {
+        if (sourceSong.name && (sourceSong.localMetadataLoaded || partialTitle)) target.name = sourceSong.name;
+        if (sourceSong.artist && (sourceSong.localMetadataLoaded || partialArtist)) target.artist = sourceSong.artist;
+        if (sourceSong.album && (sourceSong.localMetadataLoaded || partialAlbum)) target.album = sourceSong.album;
+        if (sourceSong.albumArtist && (sourceSong.localMetadataLoaded || partialAlbumArtist)) target.albumArtist = sourceSong.albumArtist;
+        if (sourceSong.trackNumber && (sourceSong.localMetadataLoaded || partialTags.track)) target.trackNumber = sourceSong.trackNumber;
+        if (sourceSong.year && (sourceSong.localMetadataLoaded || partialTags.year)) target.year = sourceSong.year;
+        if (sourceSong.localMetadataLoaded) {
+          target.localMetadataLoaded = true;
+          target.localMetadataTagSchema = sourceSong.localMetadataTagSchema || 0;
+        }
       }
       if (sourceSong.duration && !target.duration) target.duration = sourceSong.duration;
       if (sourceSong.localFormat && !target.localFormat) target.localFormat = sourceSong.localFormat;
@@ -35042,7 +35050,8 @@ function applyLocalMetadataTags(song, tags) {
   updateLocalAudioQualityInfo(song);
   return changed;
 }
-function refreshLocalMetadataUi(song, reason) {
+/** 第三个参数由 Folia host 观察器读取，用于保留未变化的搜索索引。 */
+function refreshLocalMetadataUi(song, reason, searchableChanged) {
   if (song && isCurrentLocalQueueSong(song)) {
     updateControlTrackInfo(song);
     var title = document.getElementById('thumb-title');
@@ -35090,17 +35099,27 @@ function ensureLocalMetadataForSong(song, opts) {
     return song.localMetadataPromise.then(continuePendingLocalMetadataLoad);
   }
   song.localMetadataPromise = extractLocalMetadataTags(song.localFile, { light: !!(opts.background && !opts.applyCurrent) }).then(function(tags){
+    var nameBefore = song.name, artistBefore = song.artist, albumBefore = song.album;
     var changed = applyLocalMetadataTags(song, tags || {});
+    var searchableChanged = nameBefore !== song.name || artistBefore !== song.artist || albumBefore !== song.album;
     // 非当前歌曲的轻量范围可能停在大 PADDING/PICTURE block 内，不能把空结果写成已完成 schema。
     if (tags && tags._mineradioScanComplete === false) {
-      if (changed) syncLocalSongAssetFields(song);
+      if (changed) {
+        syncLocalSongAssetFields(song, tags);
+        if (isCurrentLocalQueueSong(song)) {
+          refreshLocalMetadataUi(song, 'local-metadata-ready', searchableChanged);
+        } else {
+          scheduleLocalAssetUiRefresh(song, 'local-metadata-ready');
+          if (window.MineradioFoliaHost) window.MineradioFoliaHost.noteTrackChanged(song, searchableChanged);
+        }
+      }
       return changed;
     }
     song.localMetadataLoaded = true;
     song.localMetadataTagSchema = LOCAL_METADATA_TAG_SCHEMA;
     syncLocalSongAssetFields(song);
     scheduleLocalAssetCacheWrite(song);
-    if (changed || opts.applyCurrent) refreshLocalMetadataUi(song, 'local-metadata-ready');
+    if (changed || opts.applyCurrent) refreshLocalMetadataUi(song, 'local-metadata-ready', searchableChanged);
     return changed;
   }).catch(function(e){
     console.warn('[LocalMetadata]', song && song.name, e);
@@ -35163,6 +35182,7 @@ function ensureLocalCoverForSong(song, opts) {
         invalidateSongCoverCache(song);
         syncLocalSongAssetFields(song);
         scheduleLocalAssetCacheWrite(song);
+        if (window.MineradioFoliaHost) window.MineradioFoliaHost.noteTrackChanged(song, false);
       });
     }
     maybeApplyLocalCoverForSong(song, opts);
