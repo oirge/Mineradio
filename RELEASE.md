@@ -1,5 +1,14 @@
 # 发布流程
 
+## v2.4.3 Folia 海报墙切歌刷新优化
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.3`；两条公告与 `CHANGELOG.md` 顶部保持一致。
+- **内容**：`wallViewData.ts` 在海报墙切歌时复用未受影响的卡片，仅重算播放分区或歌曲信息变化的卡片；封面变化继续同步，曲库顺序改变时保留重建路径。
+- **发布前验证**：根目录 Node `1438` 项通过、`1` 项可选基准跳过；Folia 定向 `27/27`、类型检查、产物检查、JavaScript 语法与空白检查通过。Windows 安装器构建成功，`latest.yml` 的版本、大小和 SHA-512 与安装器一致。
+- **性能与界面验证**：50,000 首相邻切歌的 200 次合成基准，中位耗时 `6.629 → 0.898 ms`、P95 `13.330 → 1.389 ms`，替换的海报数据对象从 `50,000` 个降至 `2` 个；3,388 组增量与完整重建结果一致。真实 Chromium 四项墙面验收通过，覆盖前后连续切歌、当前曲高亮、播放/暂停、跳播、收藏和墙面设置恢复，页面及控制台零错误。基准衡量数据处理，不代表 DOM 重建数量或真实曲库 FPS；仍保留线性扫描。
+- **本地最终安装器**：`120700971` 字节，SHA256 `20a6cc4be3c7f41856e680a1fb1c448e776a26f9b839c963a90c3257ae3bff26`。独立安装锁定依赖后重新打包，已确认 ASAR 包含 `node-gyp-build 4.8.4`、`uiohook-napi 1.5.5`，Windows x64 原生模块存在且非空；清单 SHA-512 匹配。官方构建资产须单独校验。
+- **发布状态**：尚未发布。计划生成 `Mineradio-oirge-2.4.3-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-oirge-2.4.3-SHA256SUMS.txt`；正式 Release、tag/commit 与线上资产校验结果在发布完成后补录。
+
 ## v2.4.2 Folia 大曲库搜索与播放刷新优化
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.2`。
@@ -7,7 +16,8 @@
 - **发布前验证**：重新构建 Folia 和 Windows 安装器后，根目录 Node 回归 `1438` 项通过，另有 1 项可选基准跳过；Folia 定向单测 `24/24`、类型检查、产物检查、JavaScript 语法及 `git diff --check` 均通过。轻量标签的旧界面合批路径先红测复现逐首刷新，再验证批量通知、Folia 搜索和当前曲目即时更新。
 - **浏览器验证与边界**：Edge 中注入 50,000 首合成曲目，两面墙正常渲染；单封面更新约 186 ms 可见且不重载曲库，400 条更新按 `180/180/40` 三批排空，无控制台错误。未将合成数据和空音频冒烟等同于真实文件库、封面解码或安装版 Electron 压测。
 - **Windows 本地构建**：安装器 `120700361` 字节，SHA256 `26a2eb6b1a37c16c73c5ddfd37eb9261dcf2e7a8a7356d74a78389ace2c04738`；本地 `latest.yml` 的版本、大小和 SHA-512 与该安装器一致。GitHub CI 产物以线上构建和回下载校验为准。
-- **发布资产**：GitHub workflow 将生成 `Mineradio-oirge-2.4.2-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-oirge-2.4.2-SHA256SUMS.txt`，核验后正式设为 Latest。
+- **正式发布**：[PR #125](https://github.com/oirge/Mineradio/pull/125) 已合并，tag `v2.4.2` 指向 `492cc434577be0a6713862767dcbd7f1e4b19808`；Windows Build and Release `38104911581` 成功。[v2.4.2](https://github.com/oirge/Mineradio/releases/tag/v2.4.2)（Release ID `409344608`）于北京时间 `2026-10-11 10:25:46` 正式发布并设为 Latest，非草稿、非预发布。
+- **线上资产验证**：安装器、`.blockmap`、`latest.yml`、SHA256SUMS 四项资产均已完整回下载，SHA256 与 GitHub digest 及清单一致；官方 EXE 的 SHA-512 与 `latest.yml` 一致，公开 `releases/latest/download/latest.yml` 也已复核为 `2.4.2`。官方安装器为 `120700318` 字节，SHA256 `7bb930b0142c1e83edfea20ea08137730a436c20d144da8ab60e69ed2dbed100`；与上方本地构建分别记录。
 
 ## v2.4.1 Folia 性能优化与卡顿减少
 

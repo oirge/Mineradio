@@ -208,6 +208,21 @@ with sync_playwright() as p:
         command("toggleLike", {"id": tracks[0]["id"]})
         page.wait_for_timeout(700)
         expect(child.locator(".lattice-poster.is-expanded")).to_have_attribute("data-instance-id", expanded_id)
+        poster_catalog = command("listTracks", {"playlistId": "library"})["items"]
+        for track in [tracks[1], tracks[0], tracks[1], tracks[0]]:
+            command("play", {"id": track["id"], "playlistId": "library"})
+            expect(child.get_by_test_id("local-poster-now-playing")).to_contain_text(track["title"])
+            child.get_by_test_id("local-poster-now-playing").click()
+            current = child.locator(".lattice-poster.is-expanded.is-current")
+            expect(current).to_have_count(1)
+            expected_index = next(index for index, item in enumerate(poster_catalog) if item["id"] == track["id"])
+            child.wait_for_function("""([index, count]) => {
+              const current = document.querySelector('.lattice-poster.is-expanded.is-current');
+              return current && Number(current.dataset.instanceId.split(':')[0]) % count === index;
+            }""", arg=[expected_index, len(poster_catalog)])
+            assert_single_audio()
+        command("pause")
+        checkpoint("poster-forward-and-backward-track-changes")
         page.screenshot(path=str(OUTPUT / "folia-poster-wall.png"))
         child.locator('.lattice-tools button').last.click()
         lights = child.locator('.lattice-tools-lights-toggle')

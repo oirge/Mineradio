@@ -23,11 +23,14 @@ const recordItem = (song: LocalWallSong, index: number, unknownArtist: string): 
     rawTrack: song, rawTrackIndex: index,
 });
 
+const posterSection = (index: number, currentIndex: number): LatticeTile['section'] =>
+    index === currentIndex ? 'now' : currentIndex >= 0 && index < currentIndex ? 'played' : 'upcoming';
+
 const posterTile = (song: LocalWallSong, index: number, currentIndex: number): LatticeTile => ({
     id: getPlaybackSongKey(song), queueIndex: index, song, title: song.name,
     artist: song.artists.map(artist => artist.name).filter(Boolean).join(' / ') || song.album.name,
     coverUrl: song.album.coverUrl,
-    section: index === currentIndex ? 'now' : currentIndex >= 0 && index < currentIndex ? 'played' : 'upcoming',
+    section: posterSection(index, currentIndex),
 });
 
 // Rebuild only changed slots while the collection order and display language stay fixed.
@@ -48,7 +51,7 @@ export function buildRecordWallItems(songs: readonly LocalWallSong[], unknownArt
     return { songs, unknownArtist, items: items ?? previous.items };
 }
 
-// A stable playhead keeps every unaffected poster's section and identity unchanged.
+// Reuse posters unless their song data or playback section changes.
 export function buildPosterWallTiles(songs: readonly LocalWallSong[], songKey: string,
     previous?: PosterWallTiles): PosterWallTiles {
     const rebuild = (): PosterWallTiles => {
@@ -56,14 +59,17 @@ export function buildPosterWallTiles(songs: readonly LocalWallSong[], songKey: s
         return { songs, songKey, currentIndex,
             tiles: songs.map((song, index) => posterTile(song, index, currentIndex)) };
     };
-    if (!previous || previous.songKey !== songKey || previous.songs.length !== songs.length) return rebuild();
-    if (previous.songs === songs) return previous;
+    if (!previous || previous.songs.length !== songs.length) return rebuild();
+    if (previous.songs === songs && previous.songKey === songKey) return previous;
+    const currentIndex = previous.songKey === songKey ? previous.currentIndex
+        : songKey ? songs.findIndex(song => getPlaybackSongKey(song) === songKey) : -1;
     let tiles: LatticeTile[] | undefined;
     for (let index = 0; index < songs.length; index++) {
         if (previous.songs[index].id !== songs[index].id) return rebuild();
-        if (previous.songs[index] === songs[index]) continue;
+        if (previous.songs[index] === songs[index]
+            && previous.tiles[index].section === posterSection(index, currentIndex)) continue;
         tiles ??= previous.tiles.slice();
-        tiles[index] = posterTile(songs[index], index, previous.currentIndex);
+        tiles[index] = posterTile(songs[index], index, currentIndex);
     }
-    return { songs, songKey, currentIndex: previous.currentIndex, tiles: tiles ?? previous.tiles };
+    return { songs, songKey, currentIndex, tiles: tiles ?? previous.tiles };
 }
