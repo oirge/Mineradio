@@ -627,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.2';
+var APP_VERSION = '2.4.3';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -680,12 +680,10 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 性能优化：大曲库搜索切换与播放刷新更顺畅。',
+  hero: 'Folia 海报墙切歌优化，减少大曲库中的重复计算。',
   notes: [
-    'Folia 大曲库反复切换搜索词和翻页时复用有限查询索引，轻量标签变化也及时刷新。',
-    '播放进度刷新复用未变化的歌曲信息与封面，减少重复解析和收藏状态计算。',
-    '音频桥接减少频谱复制，后台封面更新时墙面只重算变动卡片。',
-    '长歌词静音段跳过已经结束的歌词行，降低逐帧定位开销。'
+    'Folia 海报墙切歌时复用未变化的卡片，减少大曲库中的重复计算。',
+    '播放分区随当前歌曲及时更新，封面变化与曲库重排继续正确同步。'
   ]
 };
 function readSavedVolume() {

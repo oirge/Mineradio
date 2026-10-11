@@ -43,6 +43,49 @@ it('reuses all unaffected record and poster items after one cover finishes in a 
     expect(nextPosters.tiles[49_999].section).toBe('now');
 });
 
+it('advancing to the next song changes only the two affected posters in a 50k-song library', () => {
+    const songs = Array.from({ length: 50_000 }, (_, index) => song(String(index)));
+    const previous = buildPosterWallTiles(songs, 'local:25000');
+    const next = buildPosterWallTiles(songs, 'local:25001', previous);
+
+    expect(next.currentIndex).toBe(25_001);
+    expect(next.tiles[25_000].section).toBe('played');
+    expect(next.tiles[25_001].section).toBe('now');
+    expect(next.tiles[24_999]).toBe(previous.tiles[24_999]);
+    expect(next.tiles[25_002]).toBe(previous.tiles[25_002]);
+    expect(next.tiles.filter((tile, index) => tile !== previous.tiles[index])).toHaveLength(2);
+});
+
+it('updates artwork and playback sections together without replacing unrelated posters', () => {
+    const songs = [song('a'), song('b'), song('c'), song('d')];
+    const previous = buildPosterWallTiles(songs, 'local:b');
+    const changed = songs.slice();
+    changed[3] = { ...songs[3], album: { ...songs[3].album, coverUrl: '/new-cover.jpg' } };
+    const next = buildPosterWallTiles(changed, 'local:c', previous);
+
+    expect(next.tiles.map(tile => tile.section)).toEqual(['played', 'played', 'now', 'upcoming']);
+    expect(next.tiles[3].coverUrl).toBe('/new-cover.jpg');
+    expect(next.tiles[0]).toBe(previous.tiles[0]);
+    expect(next.tiles[1]).not.toBe(previous.tiles[1]);
+    expect(next.tiles[2]).not.toBe(previous.tiles[2]);
+    expect(next.tiles[3]).not.toBe(previous.tiles[3]);
+});
+
+it('restores poster sections when the playing song leaves and re-enters the collection', () => {
+    const songs = [song('a'), song('b'), song('c'), song('d')];
+    const current = buildPosterWallTiles(songs, 'local:c');
+    const missing = buildPosterWallTiles(songs, 'local:outside', current);
+    expect(missing.currentIndex).toBe(-1);
+    expect(missing.tiles.map(tile => tile.section)).toEqual(['upcoming', 'upcoming', 'upcoming', 'upcoming']);
+    expect(missing.tiles[3]).toBe(current.tiles[3]);
+    const stillMissing = buildPosterWallTiles(songs, 'online:outside', missing);
+    expect(stillMissing.tiles).toBe(missing.tiles);
+
+    const returned = buildPosterWallTiles(songs, 'local:b', stillMissing);
+    expect(returned.tiles.map(tile => tile.section)).toEqual(['played', 'now', 'upcoming', 'upcoming']);
+    expect(returned.tiles[3]).toBe(missing.tiles[3]);
+});
+
 it('rebuilds entries for reorder, playback changes and translated artist fallback', () => {
     const songs = [song('a', ''), song('b'), song('c')];
     const records = buildRecordWallItems(songs, 'Unknown artist');
