@@ -627,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.3';
+var APP_VERSION = '2.4.4';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -843,6 +843,11 @@ function layoutFullscreenDiyZone() {
   document.documentElement.style.setProperty('--fullscreen-diy-left', left.toFixed(1) + 'px');
   document.documentElement.style.setProperty('--fullscreen-diy-top', top.toFixed(1) + 'px');
   document.documentElement.style.setProperty('--fullscreen-diy-width', width + 'px');
+  // Seat the fullscreen Folia switch in the same row, just left of the DIY zone, so it never
+  // overlaps the top-right home/account cluster.
+  var switchRight = Math.max(rightInset, innerWidth - left + gap);
+  document.documentElement.style.setProperty('--folia-fs-switch-right', switchRight.toFixed(1) + 'px');
+  document.documentElement.style.setProperty('--folia-fs-top', (top + Math.max(0, (height - 30) / 2)).toFixed(1) + 'px');
   return { left: left, top: top, width: width, height: height };
 }
 function shouldSuppressFullscreenDiyPeek() {
