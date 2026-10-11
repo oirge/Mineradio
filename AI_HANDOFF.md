@@ -2,14 +2,15 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
-## 当前权威入口（2026-10-11；v2.4.3 进行中）
+## 当前权威入口（2026-10-11；v2.4.3 已正式发布）
 
-- **当前正式版是 v2.4.2**：PR #125 已合并，tag 指向 `492cc434577be0a6713862767dcbd7f1e4b19808`，Windows Build and Release `38104911581` 成功。Release `409344608` 于北京时间 `2026-10-11 10:25:46` 正式发布并设为 Latest。四项官方资产完整回下载的 SHA256 与 GitHub digest/清单一致，EXE SHA-512 与 `latest.yml` 一致，公开更新清单复核通过。
-- **本轮 v2.4.3 尚在进行中**：在 `D:/Mineradio-src/poster-songkey-perf`、分支 `codex/poster-songkey-perf` 优化 Folia 海报墙切歌。`wallViewData.ts` 复用不受影响的卡片，减少整墙重建，保持播放分区、封面变化与曲库重排同步；发布元数据和两条中文公告已准备。
-- **本轮验证**：根目录 Node `1438` 通过、`1` 可选基准跳过；Folia 定向 `27/27`、类型检查与产物检查通过，Windows 安装包构建及清单 SHA-512 校验通过。Chromium 墙面四项验收通过，含前后连续切歌与当前曲高亮；50,000 首相邻切歌数据处理的中位耗时 `6.629 → 0.898 ms`，不是 FPS 测量。PR/CI 与线上发布尚待完成；完成后更新 `RELEASE.md` 和本入口。
+- **当前正式版是 v2.4.3**：PR #126 已合并，merge commit / tag 目标为 `53b1fcdb2b2b70edb8c89a02cb91718e28dc8385`；两组 PR Verify、合并后 Verify `38108580279` 与 Windows Build and Release `38109334223` 成功。Release `409391054` 于北京时间 `2026-10-11 11:50:28` 正式发布并设为 Latest；公开 `latest.yml` 也返回 `2.4.3`。
+- **本轮改动**：在 `D:/Mineradio-src/poster-songkey-perf` 的 `codex/poster-songkey-perf` 优化 Folia 海报墙切歌。`wallViewData.ts` 复用未受影响的卡片，减少整墙重建，同时保持播放分区、封面变化、曲库重排及当前曲离开/重新进入集合的语义。
+- **本轮验证**：根目录 Node `1438` 通过、`1` 可选基准跳过；Folia 定向 `27/27`、类型检查与产物检查通过；Windows 安装器构建成功。Chromium 墙面四项验收通过，含前后连续切歌与当前曲高亮；50,000 首相邻切歌数据处理的中位耗时 `6.629 → 0.898 ms`，不是 FPS 测量。
+- **线上资产核对**：四项资产齐全。`latest.yml`、`.blockmap` 与 SHA256SUMS 已回下载，SHA256 分别匹配 GitHub digest；官方 EXE 为 `120701035` 字节，GitHub digest / 清单 SHA256 为 `30f84034621d98cc84471527b17be9ac814f95f7cc27796546b43ecc034e5b5a`，公开 `latest.yml` 声明的 SHA-512 为 `5Yn8p63v90R3uNRVGyTrG4665cxjTljeBAeTjzsLjPDMCZC0Cdb8HB6zJf7XG4NvhqxjQsl3irLbuo/O1RZ8wA==`；本轮未完整回下载 EXE 做本地重算。发布记录见 `RELEASE.md`。
 - 仓库以 `https://github.com/oirge/Mineradio` 为准；本轮仅在上述隔离检出工作，不访问或改动 `D:/Mineradio-oirge` 安装目录。以下入口及日志为历史记录。
 
-## 当前权威入口（2026-10-07）
+## 历史权威入口（2026-10-07；已由本节取代）
 
 - **当前版本 v2.2.8 已正式发布**：修复更新弹窗在短窗口被裁切，并确保长说明、版本号与操作区稳定可见。PR #107 已合并，tag/merge commit `c711c84453b24f5e972fb450daecd7672e47e768`；PR 两组 Verify 与合并后 Verify `37600666433` 通过，Windows Build and Release `37600847689` 成功。Release `405596536` 于北京时间 `2026-10-07 17:39:16` 正式设为 Latest。公开 latest.yml 返回 `2.2.8` 且安装包大小正确；blockmap、latest.yml 和 SHA256SUMS 已回下载并匹配 GitHub digest，四项服务端摘要与清单声明一致。约 102 MB 官方 EXE 下载在当前代理环境中停滞，因此没有本地重算官方安装包摘要。完整记录见 `RELEASE.md`。
 - **本轮验证与构建**：全量 Node `1325/1325`；真实 Electron/Chromium 4 档缩放布局检查 `128/128`，含 `480×270`；编码 `5/5`，元数据/公告/workflow `18/18`，语法检查和 `git diff --check` 通过。本机 Windows 安装包构建也成功并核对本机构建 latest.yml 的 SHA-512。
@@ -94,11 +95,13 @@
 
 ## 已完成工作日志
 
-### 2026-10-11（v2.4.3 海报墙切歌优化，待 GitHub 发布）
+### 2026-10-11（v2.4.3 海报墙切歌优化，已正式发布）
 
 - 接续 v2.4.2 后留下的海报墙改动，切歌时复用播放分区和歌曲数据未变化的卡片对象；保留封面补齐、倒退跳播、重排及集合外歌曲语义。
 - 定向测试 `27/27`、根目录 `1438` 通过、`1` 可选基准跳过；Chromium 四项墙面验收通过。50,000 首相邻切歌合成基准中位 `6.629 → 0.898 ms`，对象替换 `50,000 → 2`，不等同于真实 FPS。
 - 本机工作树使用独立安装的锁定依赖：`node_modules` junction 会让构建器漏收 `node-gyp-build`，Folia junction 还会把另一个工作树路径写进许可证。发布包必须核对运行依赖和清单，不仅检查构建退出码。
+- PR #126 已合并（merge commit `53b1fcdb2b2b70edb8c89a02cb91718e28dc8385`），tag `v2.4.3` 指向该提交；合并后 Verify `38108580279` 与 Windows Build and Release `38109334223` 成功。Release `409391054` 于北京时间 `11:50:28` 发布并设为 Latest。第一次手动触发发生在 tag 推送前，checkout 失败；推送 tag 后重跑成功。
+- GitHub Release 四项资产大小 / SHA256：Setup.exe `120701035` 字节 / `30f84034621d98cc84471527b17be9ac814f95f7cc27796546b43ecc034e5b5a`；blockmap `127765` 字节 / `7e9e0be65fff8327952ce8cbc2e55839dbd89ab1e0ae25455c4a744153705671`；`latest.yml` `359` 字节 / `ca7f55aca2c116eb2b60970fbaf1e0db79346a6e622c0d33f23d4e38cfefcf1c`；SHA256SUMS `282` 字节 / `76b9e82468450c07c37210c41d05bbc75c50a432ba41a5568ea3852a40810500`。后三项已回下载并匹配 GitHub digest；EXE 摘要来自 GitHub Release digest/清单，没有完整回下载重算。`latest.yml` 声明 EXE SHA-512 `5Yn8p63v90R3uNRVGyTrG4665cxjTljeBAeTjzsLjPDMCZC0Cdb8HB6zJf7XG4NvhqxjQsl3irLbuo/O1RZ8wA==`，大小匹配官方资产。
 
 ### 2026-10-07（v2.2.8 已正式发布）
 
@@ -296,7 +299,6 @@
 
 ## 未完成/待确认事项
 
-- 本轮 v2.4.3 的代码、界面与本地安装包验证已完成；待完成 PR/CI、GitHub 正式发布及线上资产校验，完成后以顶部权威入口和 `RELEASE.md` 为准。
 - 桌面歌词热修已在本机安装并验证，源码尚未提交、推送或发布；下次用户授权发版时应包含恢复模块与测试，避免重装原版 2.2.6 覆盖热修。真实系统休眠/显示器热拔插未主动执行，仅验证接线和恢复入口；不把模拟验证写成真实电源/硬件测试。
 - `includeLyrics:false` 目前只阻止把歌词应用到歌曲对象，IndexedDB `store.get()` 仍会 structured-clone 完整合并记录；真正降低大批量补水峰值需要把轻量资产摘要与歌词重载荷拆成独立记录/存储，不能只增加无效 selection 参数。
 - 外置本地封面仍可能走完整 data URL；后续可利用已有同源 `localFileProxyUrl` 或 Blob/URL 缩略图接缝，避免主进程 Buffer、base64 字符串和 renderer 解码对象同时驻留。

@@ -7,7 +7,8 @@
 - **发布前验证**：根目录 Node `1438` 项通过、`1` 项可选基准跳过；Folia 定向 `27/27`、类型检查、产物检查、JavaScript 语法与空白检查通过。Windows 安装器构建成功，`latest.yml` 的版本、大小和 SHA-512 与安装器一致。
 - **性能与界面验证**：50,000 首相邻切歌的 200 次合成基准，中位耗时 `6.629 → 0.898 ms`、P95 `13.330 → 1.389 ms`，替换的海报数据对象从 `50,000` 个降至 `2` 个；3,388 组增量与完整重建结果一致。真实 Chromium 四项墙面验收通过，覆盖前后连续切歌、当前曲高亮、播放/暂停、跳播、收藏和墙面设置恢复，页面及控制台零错误。基准衡量数据处理，不代表 DOM 重建数量或真实曲库 FPS；仍保留线性扫描。
 - **本地最终安装器**：`120700971` 字节，SHA256 `20a6cc4be3c7f41856e680a1fb1c448e776a26f9b839c963a90c3257ae3bff26`。独立安装锁定依赖后重新打包，已确认 ASAR 包含 `node-gyp-build 4.8.4`、`uiohook-napi 1.5.5`，Windows x64 原生模块存在且非空；清单 SHA-512 匹配。官方构建资产须单独校验。
-- **发布状态**：尚未发布。计划生成 `Mineradio-oirge-2.4.3-Setup.exe`、对应 `.blockmap`、`latest.yml` 和 `Mineradio-oirge-2.4.3-SHA256SUMS.txt`；正式 Release、tag/commit 与线上资产校验结果在发布完成后补录。
+- **正式发布**：[PR #126](https://github.com/oirge/Mineradio/pull/126) 已合并，merge commit `53b1fcdb2b2b70edb8c89a02cb91718e28dc8385`；tag `v2.4.3` 指向该提交。PR Verify 两组、合并后 Verify `38108580279` 均通过；Windows Build and Release `38109334223` 成功。[v2.4.3](https://github.com/oirge/Mineradio/releases/tag/v2.4.3)（Release ID `409391054`）于北京时间 `2026-10-11 11:50:28` 正式发布并设为 Latest，非草稿、非预发布。
+- **线上资产验证**：四项资产均已上传。GitHub API 记录的大小 / SHA256 为：Setup.exe `120701035` 字节 / `30f84034621d98cc84471527b17be9ac814f95f7cc27796546b43ecc034e5b5a`；blockmap `127765` 字节 / `7e9e0be65fff8327952ce8cbc2e55839dbd89ab1e0ae25455c4a744153705671`；`latest.yml` `359` 字节 / `ca7f55aca2c116eb2b60970fbaf1e0db79346a6e622c0d33f23d4e38cfefcf1c`；SHA256SUMS `282` 字节 / `76b9e82468450c07c37210c41d05bbc75c50a432ba41a5568ea3852a40810500`。后三项已回下载并匹配 GitHub digest，公开 `releases/latest/download/latest.yml` 也为 `2.4.3`；EXE 未完整回下载，本地未重算 SHA256。公开 `latest.yml` 中 EXE SHA-512 `5Yn8p63v90R3uNRVGyTrG4665cxjTljeBAeTjzsLjPDMCZC0Cdb8HB6zJf7XG4NvhqxjQsl3irLbuo/O1RZ8wA==`、大小 `120701035` 与 Release 元数据一致。
 
 ## v2.4.2 Folia 大曲库搜索与播放刷新优化
 
