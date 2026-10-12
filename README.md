@@ -183,22 +183,7 @@ npm test
 - 自动读取音频文件内嵌封面
 - 或读取同目录下的 `cover.jpg`/`cover.png` 等图片文件
 
-### 是否支持在线音乐？
-本版本为**纯本地播放器**，不提供在线音乐搜索、登录、会员音源等功能。
-
 ---
-
-## 📄 授权
-
-本项目沿用原项目授权，详见 [LICENSE](./LICENSE)。
-
-原项目地址：[XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
-
-Folia 的来源、AGPL 许可证与打包依赖声明见 [第三方声明](./THIRD-PARTY-NOTICES.md) 和 [集成文档](./docs/FOLIA_INTEGRATION.md)。
-
----
-
-## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
