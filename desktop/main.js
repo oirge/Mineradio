@@ -73,6 +73,18 @@ const INSTANCE_PROFILE = resolveInstanceProfile({
   isPackaged: app.isPackaged,
 });
 const INSTANCE_ID = INSTANCE_PROFILE.instanceId;
+const QA_HIDDEN = process.env.MINERADIO_QA_HIDDEN === '1'
+  && !INSTANCE_PROFILE.primary
+  && /^lyric-sync-qa-[A-Za-z0-9._-]+$/.test(process.env.MINERADIO_INSTANCE_ID || '');
+if (QA_HIDDEN) {
+  const audit = { instanceId: INSTANCE_ID, events: [] };
+  app.__mineradioQaHidden = audit;
+  app.on('browser-window-created', (_event, win) => {
+    const record = (event) => audit.events.push({ event, id: win.id, visible: win.isVisible() });
+    record('created');
+    for (const event of ['show', 'focus', 'restore']) win.on(event, () => record(event));
+  });
+}
 const INSTANCE_APP_NAME = INSTANCE_PROFILE.appName;
 const APP_USER_MODEL_ID = INSTANCE_PROFILE.appUserModelId;
 const LEGACY_SHARED_PROFILE = INSTANCE_PROFILE.primary
@@ -116,7 +128,7 @@ const { writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT } = resolveRuntimeAp
 const wallpaperEngineNativeTempPath = path.join(app.getPath('userData'), 'native');
 fs.mkdirSync(wallpaperEngineNativeTempPath, { recursive: true });
 const wallpaperEngineBridge = createWallpaperEngineBridge({
-  getMainWindow: () => mainWindow,
+  getMainWindow: () => QA_HIDDEN ? null : mainWindow,
   getMainServerPort: () => mainServerPort,
   isAppQuitting: () => appQuitting,
   isWindowFullscreen: () => windowFullscreenActive,
@@ -1620,6 +1632,7 @@ function getSenderWindow(event) {
 
 function focusMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (QA_HIDDEN) return true;
   miniPlayerActive = false;
   hideMiniPlayerWindow();
   mainWindowIntentionalHide = false;
@@ -2390,7 +2403,7 @@ function exitFullscreenToWindow(win) {
  * @returns {void}
  */
 function toggleFullscreen(win) {
-  if (!win || win.isDestroyed()) return;
+  if (QA_HIDDEN || !win || win.isDestroyed()) return;
   if (win.isFullScreen() || windowFullscreenActive) {
     exitFullscreenToWindow(win);
     return;
@@ -2995,6 +3008,7 @@ function sendDesktopLyricsState(force = false) {
  * @returns {Electron.BrowserWindow} 桌面歌词窗口。
  */
 function createDesktopLyricsWindow(payload = {}) {
+  if (QA_HIDDEN) return null;
   const previousState = desktopLyricsStateCache.value;
   const previousY = previousState.y;
   const previousOpacity = previousState.opacity;
@@ -3142,6 +3156,7 @@ function closeDesktopLyricsWindow(options = {}) {
 
 /** @returns {void} 解锁、唤醒或显示器变化后恢复歌词合成表面，不重载播放器。 */
 function refreshDesktopLyricsWindow() {
+  if (QA_HIDDEN) return;
   if (desktopLyricsRecovery) desktopLyricsRecovery.show();
 }
 
@@ -3218,6 +3233,7 @@ function sendWallpaperState() {
  * @returns {Electron.BrowserWindow} 壁纸窗口。
  */
 function createWallpaperWindow(payload = {}) {
+  if (QA_HIDDEN) return null;
   wallpaperStateCache.setEnabled(true, payload);
   if (wallpaperWindow && !wallpaperWindow.isDestroyed()) {
     positionWallpaperWindow();
@@ -3778,7 +3794,8 @@ function sendMiniPlayerState(force = false) {
  */
 function shouldShowMiniPlayer() {
   return !!(
-    !miniPlayerRecoverySession.paused
+    !QA_HIDDEN
+    && !miniPlayerRecoverySession.paused
     && miniPlayerEnabled
     && miniPlayerActive
     && mainWindow
@@ -4087,6 +4104,7 @@ function handleMiniPlayerScreenUnlock() {
  * @returns {Electron.BrowserWindow} 当前可复用或新创建的迷你播放器窗口。
  */
 function createMiniPlayerWindow() {
+  if (QA_HIDDEN) return null;
   if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) return miniPlayerWindow;
   miniPlayerWindow = null;
   miniPlayerUserMovePending = false;
@@ -5485,7 +5503,7 @@ function clearMainWindowFullscreenVisibilityGuard() {
  * @returns {boolean} 需要强制恢复可见性时返回 true。
  */
 function shouldRestoreUnexpectedFullscreenVisibility(win) {
-  if (!win || win.isDestroyed() || appQuitting || mainWindowIntentionalHide) return false;
+  if (QA_HIDDEN || !win || win.isDestroyed() || appQuitting || mainWindowIntentionalHide) return false;
   if (!win.isFullScreen() || win.isMinimized() || win.isVisible()) return false;
   return true;
 }
@@ -5544,6 +5562,7 @@ function clearMainWindowShowWatchdog() {
  */
 function armMainWindowShowWatchdog(win) {
   clearMainWindowShowWatchdog();
+  if (QA_HIDDEN) return;
   mainWindowShowWatchdogTimer = setTimeout(() => {
     mainWindowShowWatchdogTimer = null;
     if (appQuitting || !win || win.isDestroyed() || win !== mainWindow || win.isVisible()) return;
@@ -5646,7 +5665,9 @@ async function createWindow() {
   } catch (e) {
     const detail = (e && e.stack) || String(e);
     console.error('[Mineradio] 本地服务加载失败:', detail);
-    try { dialog.showErrorBox('Mineradio 启动失败', '本地服务加载失败，安装包可能不完整。\n\n' + detail); } catch (_) {}
+    if (!QA_HIDDEN) {
+      try { dialog.showErrorBox('Mineradio 启动失败', '本地服务加载失败，安装包可能不完整。\n\n' + detail); } catch (_) {}
+    }
     app.quit();
     return;
   }
@@ -5732,7 +5753,7 @@ async function createWindow() {
   armMainWindowShowWatchdog(mainWindow);
   mainWindow.once('ready-to-show', () => {
     clearMainWindowShowWatchdog();
-    mainWindow.show();
+    if (!QA_HIDDEN) mainWindow.show();
     sendWindowState(mainWindow);
   });
 
@@ -5846,7 +5867,7 @@ async function createWindow() {
     setTimeout(() => applyWindowedBounds(mainWindow), 50);
   });
 
-  wallpaperEngineBridge.attachWindow(mainWindow);
+  if (!QA_HIDDEN) wallpaperEngineBridge.attachWindow(mainWindow);
   try {
     await mainWindow.loadURL(`http://127.0.0.1:${port}`);
   } catch (e) {
@@ -5872,7 +5893,7 @@ if (!gotSingleInstanceLock) {
     cleanupProfileSessionStaging(PROFILE_STATE_MIGRATION_STAGING_ROOT);
     migratePrimaryDesktopShellSettings();
     applySavedDesktopShellSettings();
-    reconcileStartupEntryPath();
+    if (!QA_HIDDEN) reconcileStartupEntryPath();
     wallpaperEngineBridge.configureSessionPermissions();
     await wallpaperEngineBridge.installProtocol(protocol);
     screen.on('display-metrics-changed', () => {
@@ -5917,7 +5938,7 @@ if (!gotSingleInstanceLock) {
     powerMonitor.on('unlock-screen', refreshDesktopLyricsWindow);
     powerMonitor.on('resume', () => restoreUnexpectedFullscreenVisibility(mainWindow, 'system-resume'));
     powerMonitor.on('unlock-screen', () => restoreUnexpectedFullscreenVisibility(mainWindow, 'screen-unlock'));
-    createTray();
+    if (!QA_HIDDEN) createTray();
     await createWindow();
   });
 

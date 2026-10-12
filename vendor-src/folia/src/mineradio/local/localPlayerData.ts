@@ -6,7 +6,7 @@ import type { HostAudio, HostLyrics, HostState } from '../client';
 // Pure host projection shared by the isolated local player and its tests.
 const finite = (value: number | undefined, fallback = 0): number => Number.isFinite(value) ? value! : fallback;
 
-/** Keep source words and absolute second timing; line-only lyrics remain one display unit. */
+/** Keep only source word timing; line-only lyrics have display text but no fabricated words. */
 export function localLyricLines(value: HostLyrics, duration: number): Line[] {
     return value.lines.map((line, index) => {
         const startTime = Math.max(0, finite(line.time));
@@ -19,7 +19,7 @@ export function localLyricLines(value: HostLyrics, duration: number): Line[] {
         return {
             id: `${value.trackId}:${index}`, startTime, endTime,
             fullText: line.text, translation: line.translation,
-            words: words.length ? words : [{ text: line.text, startTime, endTime }],
+            words,
         };
     });
 }

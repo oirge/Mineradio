@@ -125,6 +125,13 @@
       interface: active ? 'folia' : 'mineradio'
     };
   }
+  function pushPlaybackState() {
+    if (active && ready) event('state', getState());
+  }
+  function getPlaybackTime() {
+    var media = global.audio;
+    return media && Number.isFinite(media.currentTime) ? media.currentTime : 0;
+  }
   function findSong(id) {
     if (typeof id !== 'string' || !id || id.length > 8192) fail('INVALID_TRACK', '歌曲标识无效');
     var lookup = call('getLocalPlaylistSongLookup');
@@ -265,13 +272,19 @@
     for (var i = 0; i < source.length; i++) {
       var line = source[i];
       if (!line || line.fallback || !line.text) continue;
-      var start = Math.max(0, number(line.t, 0)), next = source[i + 1];
-      var end = next && number(next.t, 0) > start ? number(next.t, 0) : start + Math.max(0.1, number(line.duration, 4.8));
+      var lineStart = Math.max(0, number(line.t, 0));
+      var start = Math.max(lineStart, number(line.words && line.words[0] && line.words[0].t, lineStart)), next = source[i + 1];
+      var nextStart = next && number(next.words && next.words[0] && next.words[0].t, number(next.t, 0));
+      var end = number(line.duration, 0) > 0 ? lineStart + line.duration
+        : (next && nextStart > start ? nextStart : start + 4.8);
       var words = (Array.isArray(line.words) ? line.words : []).map(function (word) {
         return { time: Math.max(0, number(word.t, start)), duration: Math.max(0, number(word.d, 0.24)),
           text: String(word.text || word.word || String(line.text).slice(number(word.c0, 0), number(word.c1, 0))) };
       });
-      lines.push({ time: start, endTime: end, text: String(line.text), translation: String(line.translation || ''), words: words });
+      for (var wordIndex = 0; wordIndex < words.length; wordIndex++) {
+        end = Math.max(end, words[wordIndex].time + words[wordIndex].duration);
+      }
+      lines.push({ time: start, endTime: Math.max(start, end), text: String(line.text), translation: String(line.translation || ''), words: words, timingSource: line.source || 'line', untimed: !!line.untimed });
     }
     return { trackId: trackId(currentSong()), lines: lines };
   }
@@ -284,7 +297,11 @@
     mix(trackId(currentSong()));
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i]; if (!line) continue;
-      mix(line.t); mix(line.duration); mix(line.text); mix(line.translation); mix(line.fallback); mix((line.words || []).length);
+      mix(line.t); mix(line.duration); mix(line.text); mix(line.translation); mix(line.fallback); mix(line.untimed); mix(line.source); mix((line.words || []).length);
+      for (var wordIndex = 0; wordIndex < (line.words || []).length; wordIndex++) {
+        var word = line.words[wordIndex];
+        mix(word.t); mix(word.d); mix(word.c0); mix(word.c1); mix(word.text);
+      }
     }
     return lines.length + ':' + (hash >>> 0);
   }
@@ -764,7 +781,8 @@
   }
   global.isFoliaInterfaceActive = function () { return active; };
   global.MineradioFoliaHost = Object.freeze({
-    setInterface: setInterface, getState: getState, noteTrackChanged: queueTrackChange, version: VERSION
+    setInterface: setInterface, getState: getState, pushPlaybackState: pushPlaybackState,
+    getPlaybackTime: getPlaybackTime, noteTrackChanged: queueTrackChange, version: VERSION
   });
   global.addEventListener('message', onMessage);
   // Same-origin child preferences use the host's desktop backup, including across port changes.

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { motionValue } from 'framer-motion';
 import type { HostState } from '../../../src/mineradio/client';
+import { readHostPlaybackTime } from '../../../src/mineradio/client';
 import { applyLocalAudio, interpolatedLocalTime, localActiveLineIndex, localLyricLines, localStateSignature } from '../../../src/mineradio/local/localPlayerData';
 
 // test/unit/mineradio/localPlayerData.test.ts
@@ -21,9 +22,10 @@ describe('isolated Mineradio local display projection', () => {
         ]);
     });
 
-    it('keeps line-only timing as one unit and does not invent word timings', () => {
+    it('keeps line-only display text without inventing word timings', () => {
         const lines = localLyricLines({ trackId: 'local:2', lines: [{ time: 1, text: 'one line' }, { time: 4, text: 'next' }] }, 8);
-        expect(lines[0].words).toEqual([{ text: 'one line', startTime: 1, endTime: 4 }]);
+        expect(lines[0].fullText).toBe('one line');
+        expect(lines[0].words).toEqual([]);
         expect(lines[1].endTime).toBe(8);
         expect(localActiveLineIndex(lines, 0)).toBe(-1);
         expect(localActiveLineIndex(lines, 4)).toBe(1);
@@ -68,5 +70,24 @@ describe('isolated Mineradio local display projection', () => {
         const frequency = new Uint8Array(1024).fill(128);
         applyLocalAudio({ frequency, sampleRate: 48000, fftSize: 2048 }, bands, power);
         expect(bands.spectrum.get()).toBe(frequency);
+    });
+});
+
+describe('Mineradio host playback clock', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('uses the media element position, including exact zero after seeking back', () => {
+        vi.stubGlobal('window', { parent: { MineradioFoliaHost: { getPlaybackTime: () => 12.25 } } });
+        expect(readHostPlaybackTime()).toBe(12.25);
+        vi.stubGlobal('window', { parent: { MineradioFoliaHost: { getPlaybackTime: () => 0 } } });
+        expect(readHostPlaybackTime()).toBe(0);
+    });
+
+    it('lets the snapshot interpolation take over when direct timing is unavailable', () => {
+        expect(readHostPlaybackTime()).toBeNull();
+        vi.stubGlobal('window', { parent: { MineradioFoliaHost: { getPlaybackTime: () => Number.NaN } } });
+        expect(readHostPlaybackTime()).toBeNull();
+        vi.stubGlobal('window', { parent: { MineradioFoliaHost: { getPlaybackTime: () => { throw new Error('cross-origin'); } } } });
+        expect(readHostPlaybackTime()).toBeNull();
     });
 });

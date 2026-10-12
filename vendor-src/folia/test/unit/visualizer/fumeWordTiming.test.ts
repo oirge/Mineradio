@@ -156,7 +156,8 @@ describe('VisualizerFume word timing helpers', () => {
         ]);
         const ranges = buildWordRangesFromWords(line, Array.from(line.fullText));
 
-        expect(resolvePrintedGraphemeCount(line, ranges, 9, 1.45)).toBe(6);
+        expect(resolvePrintedGraphemeCount(line, ranges, 9, 1.39)).toBe(5);
+        expect(resolvePrintedGraphemeCount(line, ranges, 9, 1.45)).toBe(9);
     });
 
     it('keeps reveal completion aligned with line endTime even when renderEndTime is later', () => {

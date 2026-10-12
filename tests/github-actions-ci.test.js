@@ -16,7 +16,9 @@ test('GitHub Actions verifies the release branch and default branch', () => {
   assert.match(workflow, /- main/);
   assert.match(workflow, /- 'codex\/\*\*'/);
   assert.match(workflow, /npm ci --ignore-scripts/);
-  assert.match(workflow, /node --test --test-concurrency=1/);
+  assert.match(workflow, /- run: npm test/);
+  assert.match(packageJson.scripts.test, /--test-concurrency=1 tests\/\*\.test\.js tests\/\*\.test\.mjs tests\/\*\.test\.cjs/);
+  assert.match(workflow, /npm run check:folia/);
   assert.match(workflow, /node --check desktop\/main\.js/);
   assert.match(workflow, /git diff --check/);
 });
@@ -49,6 +51,10 @@ test('发布工作流禁用构建器发布并只创建或复用一个 Release', 
   assert.match(releaseWorkflow, /uses: actions\/checkout@v5/);
   assert.match(releaseWorkflow, /uses: actions\/setup-node@v5/);
   assert.match(releaseWorkflow, /^\s+run: npm run build:win\s*$/m);
+  assert.match(releaseWorkflow, /^\s+run: npm test\s*$/m);
+  assert.ok(releaseWorkflow.indexOf('run: npm test') < releaseWorkflow.indexOf('run: npm run build:win'));
+  assert.match(releaseWorkflow, /npm run check:folia/);
+  assert.match(releaseWorkflow, /dist\/win-unpacked\/resources\/app\.asar\.unpacked\/lyric-aligner\/align\.py/);
   assert.equal((releaseWorkflow.match(/^\s+run: npm run build:win\s*$/gm) || []).length, 1);
   assert.equal(packageJson.scripts['build:win'], 'electron-builder --win --publish never');
   assert.doesNotMatch(releaseWorkflow, /npm run build:win --/);

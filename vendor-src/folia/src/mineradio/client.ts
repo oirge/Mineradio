@@ -80,6 +80,20 @@ export function isMineradioEmbedded(): boolean {
             || window.location.pathname.startsWith('/vendor/folia/'));
 }
 
+/** Read the owning audio element's current time without waiting for the next host snapshot. */
+export function readHostPlaybackTime(): number | null {
+    try {
+        if (typeof window === 'undefined' || window.parent === window) return null;
+        const host = (window.parent as Window & {
+            MineradioFoliaHost?: { getPlaybackTime?: () => unknown };
+        }).MineradioFoliaHost;
+        const time = host?.getPlaybackTime?.();
+        return typeof time === 'number' && Number.isFinite(time) ? time : null;
+    } catch {
+        return null;
+    }
+}
+
 function listen(): void {
     if (listening || !isMineradioEmbedded()) return;
     listening = true;

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v2.4.4)'
+        description: 'Release tag (e.g. v2.4.5)'
         required: true
-        default: 'v2.4.4'
+        default: 'v2.4.5'
 
 jobs:
   build-windows:
@@ -68,9 +68,35 @@ jobs:
 
       - name: Install Folia build dependencies
         run: npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
+
+      - name: Build and check embedded Folia
+        run: |
+          npm run build:folia
+          npm run check:folia
+
+      - name: Run complete regression suite
+        run: npm test
+
+      - name: Check release source syntax
+        shell: pwsh
+        run: |
+          node --check desktop/main.js
+          node --check desktop/lyric-alignment-service.js
+          node --check server.js
+          node --check public/app.js
+          node --check public/lyric-alignment.js
+          git diff --check
       
       - name: Build Windows installer
         run: npm run build:win
+
+      - name: Verify unpacked alignment worker
+        shell: pwsh
+        run: |
+          $worker = 'dist/win-unpacked/resources/app.asar.unpacked/lyric-aligner/align.py'
+          if (-not (Test-Path -LiteralPath $worker -PathType Leaf) -or (Get-Item -LiteralPath $worker).Length -le 0) {
+            throw "安装器缺少可执行路径上的校正 worker：$worker"
+          }
       
       - name: Generate SHA256 checksums
         run: |
