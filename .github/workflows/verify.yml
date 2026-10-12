@@ -32,6 +32,8 @@ jobs:
         run: npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
       - name: Build embedded Folia
         run: npm run build:folia
+      - name: Check embedded Folia build
+        run: npm run check:folia
       - name: Save embedded Folia build
         uses: actions/upload-artifact@v4
         with:
@@ -41,11 +43,13 @@ jobs:
           retention-days: 7
       - name: Check document encoding
         run: node --test tests/doc-encoding-integrity.test.js
-      - run: node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
+      - run: npm test
       - run: |
           node --check desktop/main.js
+          node --check desktop/lyric-alignment-service.js
           node --check desktop/overlay-preload.js
           node --check server.js
           node --check public/app.js
+          node --check public/lyric-alignment.js
           node --check scripts/build-folia.js
           git diff --check

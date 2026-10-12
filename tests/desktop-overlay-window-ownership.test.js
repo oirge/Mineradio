@@ -139,6 +139,7 @@ function testDesktopLyricsWindowOwnership() {
     desktopLyricsLastOpacity: null,
     desktopLyricsHotBounds: null,
     desktopLyricsPointerCapture: false,
+    QA_HIDDEN: false,
     path,
     __dirname: path.join(__dirname, '..', 'desktop'),
     clampNumber,
@@ -175,6 +176,10 @@ function testDesktopLyricsWindowOwnership() {
   assert.equal(second.showCount, 0);
   assert.equal(calls.sends, sendBaseline);
   assert.equal(context.currentWindow(), second);
+
+  context.QA_HIDDEN = true;
+  assert.equal(context.createWindow({ enabled: true }), null);
+  assert.equal(windows.length, 2, '隐藏 QA 不得创建桌面歌词覆盖层');
 }
 
 /**
@@ -198,6 +203,7 @@ function testWallpaperWindowOwnership() {
     BrowserWindow: createBrowserWindowConstructor(windows),
     wallpaperStateCache: new DesktopOverlayStateCache(),
     wallpaperWindow: null,
+    QA_HIDDEN: false,
     screen: { getPrimaryDisplay },
     path,
     __dirname: path.join(__dirname, '..', 'desktop'),
@@ -230,6 +236,10 @@ function testWallpaperWindowOwnership() {
   assert.equal(calls.sends, sendBaseline);
   assert.equal(calls.attaches, attachBaseline);
   assert.equal(context.currentWindow(), second);
+
+  context.QA_HIDDEN = true;
+  assert.equal(context.createWindow({ enabled: true }), null);
+  assert.equal(windows.length, 2, '隐藏 QA 不得创建壁纸覆盖层');
 }
 
 test('旧桌面歌词窗口事件不覆盖替代窗口所有权', testDesktopLyricsWindowOwnership);

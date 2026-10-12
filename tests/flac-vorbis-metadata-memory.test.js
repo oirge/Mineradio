@@ -370,7 +370,7 @@ async function testFlacLyricsContinueAfterEmptyComment() {
 }
 
 /**
- * 验证最高优先级歌词命中后不再解码后续大型重复字段。
+ * 验证已选歌词字段 first-wins，不再解码后续大型同名字段。
  * @returns {Promise<void>} 测试完成 Promise。
  */
 async function testFlacLyricsStopAfterMaximumPriorityMatch() {
@@ -408,11 +408,11 @@ async function testFlacLyricsStopAfterMaximumPriorityMatch() {
     if (length > maxDecodedBytes) maxDecodedBytes = length;
   }
   assert.equal(lyricText, '[00:04.00]最高优先级歌词');
-  assert.ok(maxDecodedBytes < 128, '最高优先级歌词命中后不得解码后续大型字段');
+  assert.ok(maxDecodedBytes < 128, '已选歌词字段不得解码后续大型同名字段');
 }
 
 /**
- * 验证当前结果已高于字段理论上限时跳过大型低优先级 value。
+ * 验证没有原生逐字标记的大型低优先级 value 不会被解码。
  * @returns {Promise<void>} 测试完成 Promise。
  */
 async function testFlacLyricsSkipFieldThatCannotBeatCurrentBest() {
@@ -450,7 +450,7 @@ async function testFlacLyricsSkipFieldThatCannotBeatCurrentBest() {
     if (length > maxDecodedBytes) maxDecodedBytes = length;
   }
   assert.equal(lyricText, '无时间主歌词');
-  assert.ok(maxDecodedBytes < 128, '理论上无法超过当前结果的字段不得解码大型 value');
+  assert.ok(maxDecodedBytes < 128, '无逐字标记且无法超过当前结果的字段不得解码大型 value');
 }
 
 /**
@@ -651,15 +651,63 @@ async function testFlacLyricsPrioritizeAcrossVorbisBlocks() {
   assert.equal(lyricText, '[00:01.00]timed lyric');
 }
 
+/**
+ * 验证同名 first-wins 跨 block 生效，同时不挡住另一字段的原生逐字歌词。
+ * @returns {Promise<void>} 测试完成 Promise。
+ */
+async function testFlacLyricsSkipDuplicateAcrossBlocksButKeepNativeWords() {
+  const native = '[00:01.00]<00:01.10>原<00:01.50>生<00:02.00>';
+  const bytes = buildFlacVorbisBlocks([
+    ['LYRICS=[00:01.00]普通歌词'],
+    ['LYRICS=' + 'D'.repeat(512 * 1024), 'SYNCEDLYRICS=' + native],
+  ]);
+
+  /** @returns {number} 返回测试 FLAC 夹具大小。 */
+  function localFileSize() { return bytes.byteLength; }
+
+  /** @returns {Promise<Uint8Array>} 直接返回内存 FLAC 夹具。 */
+  function readLocalFileBytes() { return Promise.resolve(bytes); }
+
+  TrackingTextDecoder.lengths = [];
+  const context = {
+    LOCAL_ASSET_LIGHT_SCAN_BYTES: 4 * 1024 * 1024,
+    Math,
+    Number,
+    Object,
+    Promise,
+    String,
+    TextDecoder: TrackingTextDecoder,
+    Uint8Array,
+    localFileSize,
+    readLocalFileBytes,
+  };
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const parserStart = source.indexOf('function lyricTagTimeToSeconds(');
+  const parserEnd = source.indexOf('function renderLyrics(', parserStart);
+  assert.ok(parserStart >= 0 && parserEnd > parserStart, '未找到生产歌词解析段');
+  vm.runInNewContext(
+    'function isNoLyricText(text) { return !String(text || "").trim(); }\n'
+      + source.slice(parserStart, parserEnd)
+      + readFlacMetadataParserSource()
+      + '\nthis.extractLyrics = extractFlacEmbeddedLyricsText;',
+    context,
+  );
+
+  const lyricText = await context.extractLyrics({ name: 'duplicate-lyrics.flac' }, {});
+  assert.equal(lyricText, native);
+  assert.ok(Math.max(...TrackingTextDecoder.lengths) < 128, '跨 block 重复大字段不得进入 UTF-8 解码器');
+}
+
 test('FLAC 元数据跳过未知和重复大字段 value 解码', testFlacMetadataSkipsUnusedLargeCommentValues);
 test('FLAC 歌词跳过无时间标签可能性的未知大字段 value 解码', testFlacLyricsSkipUnrelatedLargeCommentValues);
 test('FLAC 歌词保留未知时间标签字段回退', testFlacLyricsPreserveTimedUnknownFieldFallback);
 test('FLAC 元数据跳过空 comment 后继续解析', testFlacMetadataContinuesAfterEmptyComment);
 test('FLAC 歌词跳过空 comment 后继续解析', testFlacLyricsContinueAfterEmptyComment);
-test('FLAC 歌词命中最高优先级后停止解码', testFlacLyricsStopAfterMaximumPriorityMatch);
-test('FLAC 歌词跳过无法超过当前结果的字段', testFlacLyricsSkipFieldThatCannotBeatCurrentBest);
+test('FLAC 歌词已选同名字段保持 first-wins', testFlacLyricsStopAfterMaximumPriorityMatch);
+test('FLAC 歌词跳过无逐字标记的低优先级大字段', testFlacLyricsSkipFieldThatCannotBeatCurrentBest);
 test('FLAC 歌词未知字段需真实时间标签才解码', testFlacLyricsRequireActualTimeTagBeforeUnknownDecode);
 test('FLAC 专辑艺术家排序字段不覆盖展示字段', testFlacAlbumArtistSortDoesNotReplaceAlbumArtist);
 test('FLAC 轻量元数据截断保持完整扫描可重试', testFlacLightMetadataScanReportsTruncation);
 test('FLAC 元数据跨多个 Vorbis block 保持 first-wins', testFlacMetadataMergesMultipleVorbisBlocks);
 test('FLAC 歌词优先级跨多个 Vorbis block 提升', testFlacLyricsPrioritizeAcrossVorbisBlocks);
+test('FLAC 歌词跨 block 跳过重复大字段仍保留原生逐字晋级', testFlacLyricsSkipDuplicateAcrossBlocksButKeepNativeWords);

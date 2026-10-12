@@ -484,6 +484,7 @@ test('进入全屏前先铺满目标显示器，再锁住尺寸并进原生全�
     order.push('bounds');
   };
   const scope = {
+    QA_HIDDEN: false,
     windowFullscreenActive: false,
     htmlFullscreenActive: false,
     getWindowDisplay: () => context.display,
@@ -505,6 +506,13 @@ test('进入全屏前先铺满目标显示器，再锁住尺寸并进原生全�
   assert.equal(scope.windowFullscreenActive, true);
   assert.equal(context.calls.setBounds, 1);
   assert.deepEqual(context.calls.setFullScreen, [true]);
+
+  scope.QA_HIDDEN = true;
+  scope.windowFullscreenActive = false;
+  scope.toggle(context.win);
+  assert.equal(scope.windowFullscreenActive, false);
+  assert.deepEqual(order, ['bounds', 'lock', 'state']);
+  assert.deepEqual(context.calls.setFullScreen, [true], '隐藏 QA 不得切换原生全屏');
 });
 
 test('Esc 会退出透明窗口的逻辑全屏状态', () => {

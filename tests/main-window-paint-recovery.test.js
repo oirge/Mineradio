@@ -115,6 +115,7 @@ function createRecoveryHarness(options) {
     setTimeout: timers.setTimeout,
     clearTimeout: timers.clearTimeout,
     appQuitting: false,
+    QA_HIDDEN: !!opts.hidden,
     gpuGuardRelaunching: false,
     mainWindow: win,
     mainServerPort: opts.port || 26001,
@@ -147,6 +148,14 @@ test('ready-to-show 正常触发时撤掉看门狗，不会二次 show', () => {
   assert.equal(h.api.watchdogTimer, null);
   assert.equal(h.timers.cleared.length, 1);
   assert.equal(h.timers.runAll(), 0);
+  assert.equal(h.calls.show, 0);
+});
+
+test('隐藏 QA 不布置主窗口可见性看门狗', () => {
+  const h = createRecoveryHarness({ hidden: true });
+  h.api.armMainWindowShowWatchdog(h.win);
+  assert.equal(h.timers.jobs.length, 0);
+  assert.equal(h.api.watchdogTimer, null);
   assert.equal(h.calls.show, 0);
 });
 

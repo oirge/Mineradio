@@ -45,6 +45,17 @@ function resolveRuntimeAppRoots() {
   return { writableRoot, resourceRoot };
 }
 const { writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT } = resolveRuntimeAppRoots();
+const { createLyricAlignmentService, normalizeLyrics, defaultAlignmentRuntimeRoot } =
+  require(path.join(RESOURCE_ROOT, 'desktop', 'lyric-alignment-service.js'));
+const alignmentRuntimeRoot = process.env.MINERADIO_ALIGN_RUNTIME || defaultAlignmentRuntimeRoot();
+const lyricAlignment = createLyricAlignmentService({
+  runtimeRoot: alignmentRuntimeRoot,
+  cacheRoot: process.env.MINERADIO_ALIGN_CACHE || path.join(alignmentRuntimeRoot, 'alignments'),
+  resourceRoot: RESOURCE_ROOT,
+  resourcesPath: process.resourcesPath,
+  workerPath: process.env.MINERADIO_ALIGN_WORKER,
+  pythonPath: process.env.MINERADIO_ALIGN_PYTHON,
+});
 
 /**
  * 注入本地文件代理的授权校验函数（跨进程契约：与主进程 resolveAuthorizedLocalFile 对齐）。
@@ -78,8 +89,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 海报墙切歌时复用未变化的卡片，减少大曲库中的重复计算。',
-  '播放分区随当前歌曲及时更新，封面变化与曲库重排继续正确同步。',
+  '本地歌自动查找校正缓存；已配置本地模型时后台对齐，不弹出校正界面。',
+  '原生逐字时间轴优先；模型区间不足时保留整句歌词，不把整句时长均分到每个字。',
+  '暂停、拖动和 Folia 歌词沿实际播放时钟更新，切歌后的旧结果不覆盖当前歌曲。',
+  '实验性歌声对齐需另装 Python 3.13、FFmpeg 和模型；安装包不自带运行时，也不保证逐字精度。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -3165,6 +3178,62 @@ const server = http.createServer(async (req, res) => {
 
   if (pn === '/api/lyric-translate') {
     await handleLyricTranslateRequest(req, res);
+    return;
+  }
+
+  if (pn === '/api/lyrics-alignment') {
+    try {
+      if (req.method !== 'POST') {
+        sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED' }, 405);
+        return;
+      }
+      const body = await readRequestBody(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        sendJSON(res, { ok: false, error: 'INVALID_ALIGNMENT_REQUEST' }, 400);
+        return;
+      }
+      if (!LOCAL_FILE_TOKEN || body.token !== LOCAL_FILE_TOKEN || !localFileAuthorizer) {
+        sendJSON(res, { ok: false, error: 'FORBIDDEN' }, 403);
+        return;
+      }
+      // Reuse the exact playback authorization boundary; alignment never reads arbitrary paths.
+      let file;
+      try {
+        if (typeof body.path !== 'string' || !path.isAbsolute(body.path)) throw new Error('FORBIDDEN');
+        const authorized = localFileAuthorizer(path.resolve(body.path));
+        // Resolve links before rechecking, so a junction inside a music folder cannot
+        // route this external Python process to a file outside the granted roots.
+        file = localFileAuthorizer(await fs.promises.realpath(authorized));
+        if (!/\.(?:mp3|mp2|flac|wav|ogg|oga|m4a|m4b|aac|opus|webm|weba|aif|aiff|aifc|ape|dsf)$/i.test(file)) {
+          sendJSON(res, { ok: false, error: 'ALIGNMENT_AUDIO_REQUIRED', message: '请选择本地音频文件' }, 400);
+          return;
+        }
+      } catch (error) {
+        sendJSON(res, { ok: false, error: error.code === 'ENOENT' ? 'AUDIO_NOT_FOUND' : 'FORBIDDEN' }, error.code === 'ENOENT' ? 404 : 403);
+        return;
+      }
+      let result;
+      switch (body.action) {
+        case 'runtime': result = lyricAlignment.runtimeStatus(); break;
+        case 'lookup': {
+          const rows = body.lyrics === undefined || Array.isArray(body.lyrics) && !body.lyrics.length
+            ? null : normalizeLyrics(body.lyrics);
+          result = await lyricAlignment.readCache(file, rows);
+          break;
+        }
+        case 'status': result = lyricAlignment.status(body.id, file); break;
+        case 'correct':
+          result = await lyricAlignment.correct(file, body.alignment, body.audioSha256, body.lyricsHash, body.revision);
+          break;
+        case 'clear': result = await lyricAlignment.clear(file); break;
+        case 'start': result = await lyricAlignment.start(file, body.lyrics, body.language); break;
+        case 'ensure': result = await lyricAlignment.ensure(file, body.lyrics, body.language); break;
+        default: sendJSON(res, { ok: false, error: 'INVALID_ALIGNMENT_ACTION' }, 400); return;
+      }
+      sendJSON(res, result);
+    } catch (error) {
+      sendJSON(res, { ok: false, error: error.code || 'ALIGNMENT_FAILED', message: error.message }, error.status || 500);
+    }
     return;
   }
 
