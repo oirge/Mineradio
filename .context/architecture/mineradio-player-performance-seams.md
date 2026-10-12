@@ -104,7 +104,7 @@
 - 迷你播放器 5 秒可见性恢复和 120ms 崩溃重建只在用户可见会话中有意义；仅清除已有定时器不够，锁屏后的 renderer/display 事件仍会重新安排任务。`lock-screen` 与 `suspend` 还可能重叠，不能用单一布尔值在第一个恢复事件到达时提前放行。
 - 迷你播放器渲染进程连续崩溃不能无限调用 `webContents.reload()`；同一窗口在一次成功 `did-finish-load` 之前只允许一次重载，后续失败必须升级为窗口重建。
 - 主窗口恢复后如果只对迷你 BrowserWindow 调用 `hide()`，独立渲染进程和已解码封面仍会常驻；独立临时用户目录实测会多保留 1 个 Electron 进程和约 100 MiB 工作集。
-- 启动页隐藏后必须释放独立全屏 Canvas/WebGL backing store、shader/buffer、粒子数组和 resize 监听；启动音效的独立 `AudioContext` 在最后一个节点结束后关闭。否则隐藏启动页会长期保留 GPU/音频资源，后续窗口缩放还会反复重建不可见粒子数组。
+- 启动直接进入主页，不再分配启动页 Canvas/WebGL、粒子数组、resize 监听或启动音效 `AudioContext`；不要恢复品牌开场和等待动画。
 - 主窗口进入 `document.hidden`、最小化或不可见状态时，主 3D `requestAnimationFrame` 循环必须取消且不再以 1 FPS 空唤醒；播放 tick、桌面歌词和壁纸使用各自调度器继续工作。恢复可见或切到后台保持模式时重置渲染时间并单次重启 RAF，避免积累巨型 `dt`。
 - 空场待机背景已关闭时，`idle-guide-canvas` 不得在启动阶段取得全屏 2D backing store、绑定 resize 或启动 140ms 轮询；只有视觉引导进入歌单架提示步骤时才按需激活，提示完全淡出后缩回 `1 × 1`、清空粒子/轨迹并取消 RAF/定时器/监听。
 - 歌单架选择提示音使用独立 `uiSfxCtx`；最后一次提示音后空闲 5 秒必须按 context 所有权关闭，并同时释放该 context 对应的 6 个噪声 AudioBuffer。新交互按需重建，旧定时器不得关闭替代 context。
@@ -302,7 +302,7 @@
 - 主进程电源事件通过 `MiniPlayerRecoverySession` 按 `screen` / `suspend` 原因暂停：进入任一原因时同时取消周期恢复和崩溃重建，`shouldShowMiniPlayer()` 与崩溃恢复入口在暂停期间拒绝新任务；只有最后一个原因解除后才调用 `scheduleMiniPlayerRecovery(180)`。
 - 迷你窗口重载额度使用 `miniPlayerRendererReloadWindows` 按窗口跟踪；首次崩溃加入集合并重载，`did-finish-load` 或窗口销毁时删除，集合已命中时直接走 `destroyMiniPlayerWindowInstance()` 和现有重建路径。
 - 主窗口恢复或重新显示时必须销毁不再需要的迷你 BrowserWindow，而不是仅隐藏；下次最小化/关闭到托盘时由现有状态重新创建。使用 `scripts/test-mini-player-memory.ps1` 验证创建、释放、再次创建和再次释放四段生命周期。
-- `releaseMineradioSplashResources()` 必须移除启动页 resize 监听、删除 WebGL buffer/program、主动丢失独立 context、把 Canvas 缩到 `1 × 1` 并清空启动粒子数组；`splashAudioCtx` 由 5.6 秒收尾定时器关闭。`scheduleMainRenderFrame()` 是主 3D RAF 的唯一入口，深后台由 `suspendMainRenderLoop()` 取消，`recoverVisualsAfterBackground()` 负责恢复。
+- `initializePlayerHome()` 在 `DOMContentLoaded` 直接初始化壁纸、曲库恢复和 Home；即时壁纸必须取消旧 `alphaTween`，防止次帧回暗。`scheduleMainRenderFrame()` 是主 3D RAF 的唯一入口，深后台由 `suspendMainRenderLoop()` 取消，`recoverVisualsAfterBackground()` 负责恢复。
 - `initIdleGuideCanvas()` 在 `IDLE_GUIDE_BACKGROUND_ENABLED=false` 时只保留 DOM 引用并把 backing store 设为 `1 × 1`；`ensureIdleGuideCanvasActive()` / `releaseIdleGuideCanvasResources()` 管理完整租约。`scheduleIdleGuideFrame()` 用 `idleGuideFrameId` 保证单飞，非活动态不得留下 140ms 空轮询。
 - `releaseUiSfxContext(ctx)` 只释放仍由 `uiSfxCtx` 持有的实例，并清空对应 noise pool；`scheduleUiSfxContextRelease()` 在连续选择声之间重置 5 秒计时。
 - 音量偏好通过 `scheduleVolumePreference()` 合并写入，`flushVolumePreference()` 在 change/blur/退出时落盘；音量百分比、静音 class 和 SVG 图标按状态签名更新。

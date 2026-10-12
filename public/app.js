@@ -627,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.4';
+var APP_VERSION = '2.4.6';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -680,10 +680,10 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 海报墙切歌优化，减少大曲库中的重复计算。',
+  hero: '移除启动动画，修复 Folia 切换按钮重叠。',
   notes: [
-    'Folia 海报墙切歌时复用未变化的卡片，减少大曲库中的重复计算。',
-    '播放分区随当前歌曲及时更新，封面变化与曲库重排继续正确同步。'
+    '启动后直接进入播放器主页，移除启动动画、启动音效及相关 Canvas/WebGL 工作。',
+    '调整 Folia 按钮在普通窗口、全屏和窄屏下的位置，避免与右上角控件和搜索区重叠。'
   ]
 };
 function readSavedVolume() {
@@ -1958,7 +1958,7 @@ function listAnimationLimit(defaultLimit, now) {
   return defaultLimit || 0;
 }
 function updateRuntimeFramePressure(now, sample) {
-  if (!runtimeFramePressureState || isDeepBackgroundMode() || (typeof isMainSceneCoveredBySplash === 'function' && isMainSceneCoveredBySplash())) {
+  if (!runtimeFramePressureState || isDeepBackgroundMode()) {
     runtimeFramePressureState.level = 0;
     runtimeFramePressureState.score = 0;
     runtimeFramePressureState.pressureUntil = 0;
@@ -15420,7 +15420,6 @@ function canShowShelfHoverCueAt(e) {
   // 自动隐藏侧栏：鼠标靠近右侧边缘即可淡入唤出（不再要求处于视觉引导态）。
   // 只驱动歌单架「可见度/淡入」，镜头是否跟随另由 isSideShelfFocusHit 的实卡命中判定，
   // 避免恢复「右侧隐形区把动态镜头拽走」的旧手感。
-  if (document.body.classList.contains('splash-active')) return false;
   if (visualGuideActive || emptyHomeActive || homeForcedOpen) return false;
   if (!shelfManager || !shelfManager.getMode || shelfManager.getMode() !== 'side') return false;
   if (shelfPinnedOpen) return false;
@@ -16543,8 +16542,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         group.renderOrder = 50;
         scene.add(group);
       }
-      var asyncCards = mode === 'side' && document.body.classList.contains('splash-active');
-      rebuild(asyncCards);
+      rebuild(false);
     },
     getMode: function(){ return mode; },
     /**
@@ -16560,15 +16558,11 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       centerSmooth += (centerTarget - centerSmooth) * 0.16;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       var px = pointerParallax.x, py = pointerParallax.y;
-      var appRevealed = !document.body.classList.contains('splash-active');
       var contentOpen = frameShelfState ? frameShelfState.contentOpen : !!(contentList && contentList.isOpen());
       var alwaysVisible = frameShelfState ? frameShelfState.alwaysVisible : shelfAlwaysVisible();
-      var cueVis = appRevealed ? tickShelfHoverCue(dt, frameNow) : 0;
-      // v8: shelf 自动可见度 — 启动页期间不显示；侧栏只在右侧停留时淡入。
+      var cueVis = tickShelfHoverCue(dt, frameNow);
       var targetVis;
-      if (!appRevealed) {
-        targetVis = 0;
-      } else if (mode === 'side') {
+      if (mode === 'side') {
         if (!allItems.length && !contentOpen) targetVis = 0;
         else targetVis = (contentOpen || shelfPinnedOpen || alwaysVisible) ? 1.0 : (cueVis > 0.01 ? Math.max(0.16, cueVis * 0.88) : 0);
       } else {
@@ -16576,10 +16570,10 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       }
       shelfVisibility += (targetVis - shelfVisibility) * (targetVis > shelfVisibility ? 0.22 : 0.18);
       if (shelfVisibility < 0.01 && targetVis === 0) shelfVisibility = 0;
-      group.visible = appRevealed && (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || contentOpen);
+      group.visible = (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || contentOpen);
       if (connectorParticles) connectorParticles.visible = group.visible && mode === 'stage';
       if (floorMirror) floorMirror.visible = group.visible && mode === 'stage';
-      if (!appRevealed || (!group.visible && targetVis === 0)) return;
+      if (!group.visible && targetVis === 0) return;
       if (mode === 'side') {
         var passiveAlwaysGroup = alwaysVisible && !shelfPinnedOpen && !contentOpen;
         var liftedCardActive = false;
@@ -18480,7 +18474,7 @@ function isSideShelfFocusHit(e) {
 }
 function updateShelfCardHoverSelection(e) {
   if (!shelfManager || !shelfManager.clearSelected || !shelfManager.setSelected) return;
-  if (!e || document.body.classList.contains('splash-active')) {
+  if (!e) {
     shelfManager.clearSelected();
     return;
   }
@@ -18528,7 +18522,6 @@ function isShelfPlaylistPlayHit(hit) {
 }
 renderer.domElement.addEventListener('click', function(e){
   if (!shelfManager || shelfManager.getMode() === 'off') return;
-  if (document.body.classList.contains('splash-active')) return;
   if (isPointerOverUi(e)) return;
   if (mouseDownAt.hadDrag) { mouseDownAt.hadDrag = false; return; }
 
@@ -18599,7 +18592,6 @@ renderer.domElement.addEventListener('click', function(e){
 });
 
 renderer.domElement.addEventListener('contextmenu', function(e){
-  if (document.body.classList.contains('splash-active')) return;
   if (isPointerOverUi(e)) return;
   e.preventDefault();
   e.stopPropagation();
@@ -19883,8 +19875,7 @@ async function loadHomeDiscover(force) {
   homeDiscoverState.podcasts = [];
   renderHomeDiscover();
 }
-function shouldShowEmptyHomeCore(ignoreSplash) {
-  if (!ignoreSplash && document.body.classList.contains('splash-active')) return false;
+function shouldShowEmptyHome() {
   if (immersiveMode) return false;
   if (homeForcedOpen) return true;
   if (homeSuppressed) return false;
@@ -19896,13 +19887,7 @@ function shouldShowEmptyHomeCore(ignoreSplash) {
   if (playing) return false;
   return true;
 }
-function shouldShowEmptyHome() {
-  return shouldShowEmptyHomeCore(false);
-}
-function shouldShowEmptyHomeAfterSplash() {
-  return shouldShowEmptyHomeCore(true);
-}
-function shouldForceEmptyHomeAfterSplash() {
+function shouldForceEmptyHome() {
   if (immersiveMode) return false;
   if (shelfPinnedOpen) return false;
   if (shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent()) return false;
@@ -19912,8 +19897,7 @@ function shouldForceEmptyHomeAfterSplash() {
   if (playing) return false;
   return true;
 }
-function shouldUseIdleWallpaperPreview(ignoreSplash) {
-  if (!ignoreSplash && document.body.classList.contains('splash-active')) return false;
+function shouldUseIdleWallpaperPreview() {
   if (immersiveMode || playing || (audio && !audio.paused)) return false;
   if (shelfPinnedOpen) return false;
   if (shelfManager && shelfManager.hasOpenContent && shelfManager.hasOpenContent()) return false;
@@ -19947,6 +19931,8 @@ function openHomePlayerConsole() {
 function ensureHomeWallpaperParticles(opts) {
   opts = opts || {};
   if (uniforms && uniforms.uAlpha && opts.instant) {
+    if (alphaTween) cancelAnimationFrame(alphaTween.raf);
+    alphaTween = null;
     uniforms.uAlpha.value = 0.96;
   } else if (uniforms && uniforms.uAlpha && uniforms.uAlpha.value < 0.88) {
     tweenParticleAlpha(uniforms.uAlpha.value || 0, 0.96, 920);
@@ -19958,25 +19944,6 @@ function activateHomeWallpaperPreview(opts) {
   opts = opts || {};
   document.body.classList.add('home-wallpaper-preview');
   ensureHomeWallpaperParticles(opts);
-}
-var homeWallpaperPrewarmStarted = false;
-var homeWallpaperPrewarmPending = false;
-function prewarmHomeWallpaperPreview() {
-  if (homeWallpaperPrewarmStarted) return;
-  if (document.body.classList.contains('splash-active')) {
-    homeWallpaperPrewarmPending = true;
-    return;
-  }
-  homeWallpaperPrewarmPending = false;
-  homeWallpaperPrewarmStarted = true;
-  if (!shouldUseIdleWallpaperPreview(true)) return;
-  scheduleVisualApply(function(){
-    if (!shouldUseIdleWallpaperPreview(true)) return;
-    activateHomeWallpaperPreview({ skipTransition: true, instant: true });
-  }, 900, 2600);
-}
-function flushHomeWallpaperPrewarmAfterSplash() {
-  if (homeWallpaperPrewarmPending || !homeWallpaperPrewarmStarted) prewarmHomeWallpaperPreview();
 }
 function deactivateHomeWallpaperPreview(playback) {
   document.body.classList.remove('home-wallpaper-preview');
@@ -36195,10 +36162,6 @@ function scheduleSavedLocalMusicFolderRestore(delay) {
   setTimeout(function(){
     localLibraryRestoreScheduled = false;
     if (localLibraryRestoreStarted) return;
-    if (document.body.classList.contains('splash-active')) {
-      scheduleSavedLocalMusicFolderRestore(650);
-      return;
-    }
     localLibraryRestoreStarted = true;
     restoreSavedLocalMusicFolder().catch(function(e){
       console.warn('[LocalLibraryRestoreScheduled]', e);
@@ -41553,7 +41516,8 @@ var loginGuideAnimating = false;
 var loginGuideRaf = null;
 function runLoginGuideParticles(done) {
   var canvas = document.getElementById('login-guide-canvas');
-  if (!canvas || reduceSplashMotion) {
+  var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  if (!canvas || reduceMotion) {
     if (done) setTimeout(done, 120);
     return;
   }
@@ -41657,7 +41621,6 @@ function maybeRunStartupLoginGuide(source) {
   if (LOCAL_ONLY_MODE) return;
   if (startupLoginGuideShown || loginGuideAnimating) return;
   if (visualGuideActive) return;
-  if (document.body.classList.contains('splash-active')) return;
   if (immersiveMode) return;
   if (!loginStatusChecked || loginStatusCheckFailed || loginStatus.loggedIn || playing) return;
   var loginModal = document.getElementById('login-modal');
@@ -41665,9 +41628,9 @@ function maybeRunStartupLoginGuide(source) {
   if ((loginModal && loginModal.classList.contains('show')) || (userModal && userModal.classList.contains('show'))) return;
   startupLoginGuideShown = true;
   setTimeout(function(){
-    if (loginStatus.loggedIn || playing || immersiveMode || document.body.classList.contains('splash-active')) return;
+    if (loginStatus.loggedIn || playing || immersiveMode) return;
     runLoginGuideParticles(function(){ showLoginModal({ guided: true, source: source || 'startup' }); });
-  }, source === 'splash' ? 6200 : 2600);
+  }, 2600);
 }
 
 // ============================================================
@@ -41718,7 +41681,6 @@ function setIdleGuideVisible(show, interactive) {
 }
 function shouldShowIdleGuide() {
   if (!IDLE_GUIDE_BACKGROUND_ENABLED) return false;
-  if (document.body.classList.contains('splash-active')) return false;
   if (immersiveMode) return false;
   if (playing) return false;
   if (loginGuideAnimating) return false;
@@ -41727,7 +41689,6 @@ function shouldShowIdleGuide() {
   return true;
 }
 function shouldShowShelfHoverCue(value) {
-  if (document.body.classList.contains('splash-active')) return false;
   if (!shelfHoverCue.guide && document.querySelector('.modal-mask.show')) return false;
   if (!shelfHoverCue.guide) {
     if (shelfPinnedOpen) return false;
@@ -42320,16 +42281,12 @@ function maybeRunStartupVisualGuide(source) {
   if (source !== 'manual' && !hasAnyPlatformLogin()) return false;
   setTimeout(function(){
     if (!visualGuideWasSeen() || source === 'manual') startVisualGuide({ source: source || 'startup' });
-  }, source === 'splash' ? 3600 : 1400);
+  }, 1400);
   return true;
 }
 function startVisualGuide(opts) {
   if (LOCAL_ONLY_MODE) return;
   opts = opts || {};
-  if (document.body.classList.contains('splash-active')) {
-    setTimeout(function(){ startVisualGuide(opts); }, 700);
-    return;
-  }
   if (immersiveMode) setImmersiveMode(false);
   closeMiniQueue();
   closeUploadTip(false);
@@ -43226,7 +43183,7 @@ function maybeShowUploadTipOnce() {
     setTimeout(maybeShowUploadTipOnce, 1800);
     return;
   }
-  if (document.body.classList.contains('splash-active') || loginGuideAnimating) {
+  if (loginGuideAnimating) {
     setTimeout(maybeShowUploadTipOnce, 900);
     return;
   }
@@ -43341,12 +43298,6 @@ window.addEventListener('mousemove', function(e){
   updateUserCapsuleAutoHideFromPointer(ex, ey);
   updateFxFabAutoHideFromPointer(ex, ey);
   updateFullscreenDiyPeekFromPointer(ex, ey);
-  if (document.body.classList.contains('splash-active')) {
-    updateShelfHoverCueFromPointer(null);
-    updateShelfCardHoverSelection(null);
-    setFocusZone(null);
-    return;
-  }
   if (immersiveMode) {
     updateShelfHoverCueFromPointer(e);
     updateShelfCardHoverSelection(e);
@@ -43442,683 +43393,34 @@ window.addEventListener('mousemove', function(e){
 });
 
 // ============================================================
-//  启动页 (splash) 控制
+//  首屏初始化
 // ============================================================
 
-document.body.classList.add('splash-active');
-var splashAnimating = true;
-var splashCanvas = null, splashCtx = null;
-var splashGl = null, splashGlProgram = null, splashGlBuffer = null, splashGlUniforms = null;
-var splashResizeHandler = null;
-var splashW = 0, splashH = 0;
-var splashDust = [];
-var splashStreaks = [];
-var splashShards = [];
-var splashPixelRatio = 1;
-var splashStartedAt = performance.now();
-var splashSoundPlayed = false;
-var splashAudioCtx = null;
-var splashAudioCloseTimer = 0;
-var splashSoundFallbackArmed = false;
-var splashTimer = null;
-var splashAutoEnterTimer = null;
-var reduceSplashMotion = false;
-var splashReadyToEnter = false;
-
-function splashClamp01(v) { return Math.max(0, Math.min(1, v)); }
-function splashSmoothstep(edge0, edge1, x) {
-  var t = splashClamp01((x - edge0) / Math.max(0.0001, edge1 - edge0));
-  return t * t * (3 - 2 * t);
-}
-function splashEaseOutCubic(t) {
-  t = splashClamp01(t);
-  return 1 - Math.pow(1 - t, 3);
-}
-
-function initMineradioSplashWebgl(canvas) {
-  var gl = null;
-  try {
-    gl = canvas.getContext('webgl', {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      stencil: false,
-      premultipliedAlpha: false,
-      preserveDrawingBuffer: false,
-      powerPreference: 'high-performance'
-    }) || canvas.getContext('experimental-webgl');
-  } catch (e) {
-    gl = null;
-  }
-  if (!gl) return false;
-
-  var vertexSource = [
-    'attribute vec2 aPosition;',
-    'varying vec2 vUv;',
-    'void main(){',
-    '  vUv = aPosition * 0.5 + 0.5;',
-    '  gl_Position = vec4(aPosition, 0.0, 1.0);',
-    '}'
-  ].join('\n');
-
-  var fragmentSource = [
-    'precision highp float;',
-    'varying vec2 vUv;',
-    'uniform vec2 uResolution;',
-    'uniform float uTime;',
-    '',
-    'float saturate(float v){ return clamp(v, 0.0, 1.0); }',
-    'float ease(float v){ v = saturate(v); return v * v * (3.0 - 2.0 * v); }',
-    'mat2 rot(float a){ float c = cos(a); float s = sin(a); return mat2(c, -s, s, c); }',
-    'float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }',
-    'float noise(vec2 p){',
-    '  vec2 i = floor(p);',
-    '  vec2 f = fract(p);',
-    '  vec2 u = f * f * (3.0 - 2.0 * f);',
-    '  return mix(mix(hash(i), hash(i + vec2(1.0,0.0)), u.x), mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), u.x), u.y);',
-    '}',
-    '',
-    'float animatedLoop(vec2 uv, float t, float channel){',
-    '  vec2 q = uv;',
-    '  q *= rot(0.28 + sin(t * 0.18) * 0.12);',
-    '  q.x += 0.055 * sin(t * 0.30 + channel);',
-    '  q.y += 0.040 * cos(t * 0.24 + channel * 1.7);',
-    '  float ang = atan(q.y, q.x);',
-    '  float angularShift = sin(ang * 3.0 + t * 0.72 + channel * 1.9) * 0.078;',
-    '  angularShift += sin(ang * 7.0 - t * 0.54 + channel) * 0.020;',
-    '  float neonD = length(q) + angularShift;',
-    '  float warpD = length(q * vec2(1.34 + 0.06 * sin(t * 0.25), 0.82 + 0.04 * cos(t * 0.31)));',
-    '  warpD += 0.026 * sin(q.x * 4.4 + t * 0.62) + 0.018 * sin(q.y * 5.2 - t * 0.45);',
-    '  float diamondD = abs(q.x) * 1.20 + abs(q.y) * 0.84;',
-    '  float d = mix(warpD, diamondD, 0.32);',
-    '  d = mix(d, neonD, 0.20 + 0.04 * sin(t * 0.18 + channel));',
-    '  float pattern = mod((q.x + q.y) * 0.62 + sin(q.x * 5.5 + t) * 0.015 + sin(q.y * 7.0 - t * 0.75) * 0.012, 0.20);',
-    '  float acc = 0.0;',
-    '  for (int i = 1; i <= 6; i++) {',
-    '    float fi = float(i);',
-    '    float f = fract(t * 0.152 - channel * 0.018 + 0.011 * fi) * 4.70 - d + pattern;',
-    '    acc += 0.00110 * fi * fi / max(abs(f), 0.0065);',
-    '  }',
-    '  float threadCoord = q.x * 0.92 - q.y * 0.58 + 0.030 * sin(q.x * 5.2 + t * 0.72);',
-    '  float threadLines = 0.0065 / max(abs(sin((threadCoord + t * 0.10 + channel * 0.035) * 27.0)), 0.070);',
-    '  acc += threadLines * (0.50 + 0.30 * sin(ang * 1.2 + t + channel));',
-    '  return min(acc, 1.95);',
-    '}',
-    '',
-    'void main(){',
-    '  vec2 p = vUv * 2.0 - 1.0;',
-    '  p.x *= uResolution.x / max(uResolution.y, 1.0);',
-    '  float t = uTime;',
-    '  float intro = ease(t / 0.72);',
-    '  float bloomIn = ease((t - 0.10) / 1.10);',
-    '  float climax = exp(-pow((t - 3.62) / 0.58, 2.0));',
-    '  float preClimax = ease((t - 2.15) / 1.25) * (1.0 - ease((t - 3.86) / 0.72));',
-    '  float afterglow = exp(-pow((t - 4.14) / 0.62, 2.0));',
-    '  float calm = 1.0 - 0.22 * ease((t - 4.75) / 0.70);',
-    '  float settle = 1.0 - 0.34 * ease((t - 5.05) / 0.52);',
-    '  vec2 uv = p * (0.98 + 0.05 * sin(t * 0.25));',
-    '  uv += vec2(0.0, -0.025);',
-    '  vec2 flowAxis = normalize(vec2(0.86, -0.50));',
-    '  vec2 crossAxis = vec2(-flowAxis.y, flowAxis.x);',
-    '  float lane = dot(p, flowAxis);',
-    '  float crossLane = dot(p, crossAxis);',
-    '  float syncWave = sin(crossLane * 5.4 + lane * 1.1 - t * 1.85);',
-    '  uv += flowAxis * syncWave * 0.055 * climax;',
-    '  uv += crossAxis * sin(lane * 7.2 + t * 1.25) * 0.034 * climax;',
-    '  uv *= 1.0 + 0.045 * preClimax - 0.020 * climax;',
-    '  vec3 ch1 = vec3(1.00, 0.13, 0.31);',
-    '  vec3 ch2 = vec3(0.16, 1.00, 0.86);',
-    '  vec3 ch3 = vec3(1.00, 0.76, 0.28);',
-    '  float a = animatedLoop(uv, t, 0.0);',
-    '  float b = animatedLoop(uv * 1.018 + vec2(0.012, -0.008), t + 0.18, 1.0);',
-    '  float c = animatedLoop(uv * 0.986 + vec2(-0.010, 0.010), t + 0.35, 2.0);',
-    '  vec3 loopCol = ch1 * a + ch2 * b + ch3 * c;',
-    '  float tunnel = animatedLoop(uv * 1.42 + vec2(sin(t * 0.2) * 0.08, cos(t * 0.17) * 0.05), t * 1.12 + 1.7, 2.7);',
-    '  loopCol += mix(ch2, ch3, 0.35 + 0.25 * sin(t)) * tunnel * (0.30 + 0.24 * preClimax);',
-    '  float syncBand = exp(-pow((lane + 0.08 * sin(t * 0.72)) / 0.62, 2.0));',
-    '  float phaseThread = pow(0.5 + 0.5 * sin(crossLane * 13.5 + lane * 2.2 - t * 3.1), 8.0);',
-    '  float phaseThread2 = pow(0.5 + 0.5 * sin(crossLane * 9.0 - lane * 5.4 + t * 2.4), 10.0);',
-    '  vec3 climaxCol = (mix(ch2, ch3, 0.36) * phaseThread + ch1 * phaseThread2 * 0.52) * syncBand * climax;',
-    '  float afterBand = exp(-pow((lane - 0.34) / 0.72, 2.0));',
-    '  climaxCol += mix(ch1, ch2, vUv.x) * afterBand * afterglow * 0.13;',
-    '  float centerBeam = exp(-abs(p.y + 0.005 * sin(t * 3.0)) * 24.0) * (0.14 + 0.52 * exp(-pow((t - 0.74) / 0.34, 2.0)));',
-    '  float bladeMask = smoothstep(-1.55, -0.08, p.x) * (1.0 - smoothstep(0.08, 1.55, p.x));',
-    '  vec3 blade = mix(ch1, ch2, vUv.x) * centerBeam * bladeMask * (0.40 + 0.28 * climax);',
-    '  float flare = exp(-dot(p, p) * 3.6) * exp(-pow((t - 0.88) / 0.40, 2.0));',
-    '  vec3 col = vec3(0.002, 0.004, 0.005);',
-    '  col += loopCol * (0.56 + 0.46 * bloomIn) * calm * settle;',
-    '  col += climaxCol * 0.22;',
-    '  float diagonalGlint = exp(-pow(lane * 1.2 + crossLane * 0.10, 2.0) / 0.030) * climax;',
-    '  col += blade + vec3(1.0, 0.78, 0.42) * flare * 0.18 + vec3(1.0, 0.86, 0.58) * diagonalGlint * 0.07;',
-    '  float scan = 0.92 + 0.08 * sin((vUv.y * uResolution.y + t * 52.0) * 0.72);',
-    '  float grain = noise(vUv * uResolution.xy * 0.52 + t * 17.0) - 0.5;',
-    '  col *= scan;',
-    '  col += grain * 0.018;',
-    '  col *= intro;',
-    '  col = max(col - vec3(0.010, 0.012, 0.012), 0.0);',
-    '  col = vec3(1.0) - exp(-max(col, 0.0) * (0.62 + 0.18 * climax));',
-    '  float vignette = smoothstep(1.52, 0.20, length(p * vec2(0.78, 1.04)));',
-    '  col *= 0.38 + 0.86 * vignette;',
-    '  col += vec3(0.020, 0.010, 0.014) * (1.0 - vignette);',
-    '  gl_FragColor = vec4(col, 1.0);',
-    '}'
-  ].join('\n');
-
-  function compile(type, source) {
-    var shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.warn('Splash shader compile failed:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
-    }
-    return shader;
-  }
-
-  var vertexShader = compile(gl.VERTEX_SHADER, vertexSource);
-  var fragmentShader = compile(gl.FRAGMENT_SHADER, fragmentSource);
-  if (!vertexShader || !fragmentShader) return false;
-
-  var program = gl.createProgram();
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.warn('Splash shader link failed:', gl.getProgramInfoLog(program));
-    gl.deleteProgram(program);
-    return false;
-  }
-
-  splashGl = gl;
-  splashGlProgram = program;
-  splashGlBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, splashGlBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-  splashGlUniforms = {
-    position: gl.getAttribLocation(program, 'aPosition'),
-    resolution: gl.getUniformLocation(program, 'uResolution'),
-    time: gl.getUniformLocation(program, 'uTime')
-  };
-  gl.disable(gl.DEPTH_TEST);
-  gl.disable(gl.CULL_FACE);
-  return true;
-}
-
-function drawMineradioSplashWebgl(elapsed) {
-  var gl = splashGl;
-  if (!gl || !splashGlProgram || !splashGlUniforms) return;
-  gl.viewport(0, 0, splashCanvas.width, splashCanvas.height);
-  gl.useProgram(splashGlProgram);
-  gl.bindBuffer(gl.ARRAY_BUFFER, splashGlBuffer);
-  gl.enableVertexAttribArray(splashGlUniforms.position);
-  gl.vertexAttribPointer(splashGlUniforms.position, 2, gl.FLOAT, false, 0, 0);
-  gl.uniform2f(splashGlUniforms.resolution, splashCanvas.width, splashCanvas.height);
-  gl.uniform1f(splashGlUniforms.time, elapsed);
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
-}
-
-function releaseMineradioSplashResources() {
-  if (splashResizeHandler) {
-    window.removeEventListener('resize', splashResizeHandler);
-    splashResizeHandler = null;
-  }
-  if (splashGl) {
-    try { if (splashGlBuffer) splashGl.deleteBuffer(splashGlBuffer); } catch (e) {}
-    try { if (splashGlProgram) splashGl.deleteProgram(splashGlProgram); } catch (e) {}
-    try {
-      var loseContext = splashGl.getExtension && splashGl.getExtension('WEBGL_lose_context');
-      if (loseContext && loseContext.loseContext) loseContext.loseContext();
-    } catch (e) {}
-  }
-  splashGlBuffer = null;
-  splashGlProgram = null;
-  splashGlUniforms = null;
-  splashGl = null;
-  splashCtx = null;
-  splashDust.length = 0;
-  splashStreaks.length = 0;
-  splashShards.length = 0;
-  splashW = 0;
-  splashH = 0;
-  splashPixelRatio = 1;
-  if (splashCanvas) {
-    splashCanvas.width = 1;
-    splashCanvas.height = 1;
-  }
-  splashCanvas = null;
-}
-
-(function initMineradioSplashCanvas() {
-  splashCanvas = document.getElementById('splash-canvas');
-  if (!splashCanvas) return;
-  if (!reduceSplashMotion && initMineradioSplashWebgl(splashCanvas)) {
-    splashCtx = null;
-  } else {
-    splashCtx = splashCanvas.getContext('2d');
-  }
-  function resize() {
-    splashW = window.innerWidth;
-    splashH = window.innerHeight;
-    var splashPixels = splashW * splashH;
-    var splashMaxRatio = splashPixels > 2600000 ? 1.16 : (splashPixels > 1600000 ? 1.25 : 1.36);
-    splashPixelRatio = Math.min(splashMaxRatio, Math.max(1, window.devicePixelRatio || 1));
-    splashCanvas.width = Math.max(1, Math.floor(splashW * splashPixelRatio));
-    splashCanvas.height = Math.max(1, Math.floor(splashH * splashPixelRatio));
-    if (splashCtx) splashCtx.setTransform(splashPixelRatio, 0, 0, splashPixelRatio, 0, 0);
-    if (splashGl) splashGl.viewport(0, 0, splashCanvas.width, splashCanvas.height);
-    splashDust = [];
-    splashStreaks = [];
-    splashShards = [];
-    var count = reduceSplashMotion ? 28 : 84;
-    for (var i = 0; i < count; i++) {
-      splashDust.push({
-        x: Math.random() * splashW,
-        y: Math.random() * splashH,
-        vx: (Math.random() - 0.5) * 0.18,
-        vy: (Math.random() - 0.5) * 0.11,
-        r: Math.random() * 1.35 + 0.28,
-        a: Math.random() * 0.105 + 0.025,
-        p: Math.random() * Math.PI * 2
-      });
-    }
-    var streakColors = [
-      'rgba(244,210,138,',
-      'rgba(122,215,194,',
-      'rgba(255,83,103,',
-      'rgba(157,184,207,'
-    ];
-    var streakCount = reduceSplashMotion ? 6 : 22;
-    for (var s = 0; s < streakCount; s++) {
-      splashStreaks.push({
-        x: Math.random() * splashW,
-        y: splashH * (0.20 + Math.random() * 0.62),
-        len: splashW * (0.12 + Math.random() * 0.24),
-        width: 0.75 + Math.random() * 2.1,
-        speed: splashW * (0.00028 + Math.random() * 0.00042),
-        angle: (-10 + Math.random() * 20) * Math.PI / 180,
-        phase: Math.random() * Math.PI * 2,
-        color: streakColors[s % streakColors.length],
-        delay: Math.random() * 1.1,
-        alpha: 0.18 + Math.random() * 0.36
-      });
-    }
-    var shardCount = reduceSplashMotion ? 10 : 34;
-    for (var h = 0; h < shardCount; h++) {
-      splashShards.push({
-        ox: (Math.random() - 0.5) * splashW * 0.92,
-        oy: (Math.random() - 0.5) * splashH * 0.22,
-        w: 18 + Math.random() * 86,
-        h: 1 + Math.random() * 5,
-        skew: (Math.random() - 0.5) * 20,
-        phase: Math.random() * Math.PI * 2,
-        color: streakColors[h % streakColors.length],
-        alpha: 0.10 + Math.random() * 0.24
-      });
-    }
-  }
-  resize();
-  splashResizeHandler = resize;
-  window.addEventListener('resize', splashResizeHandler);
-  drawMineradioSplash();
-})();
-
-function drawMineradioSplash() {
-  if (!splashAnimating || (!splashCtx && !splashGl)) return;
-  requestAnimationFrame(drawMineradioSplash);
-  var elapsed = (performance.now() - splashStartedAt) / 1000;
-  if (splashGl && splashGlProgram) {
-    drawMineradioSplashWebgl(elapsed);
-    return;
-  }
-  splashCtx.clearRect(0, 0, splashW, splashH);
-
-  var base = splashCtx.createLinearGradient(0, 0, splashW, splashH);
-  base.addColorStop(0, 'rgba(1,6,7,0.68)');
-  base.addColorStop(0.45, 'rgba(10,9,12,0.74)');
-  base.addColorStop(1, 'rgba(0,0,0,0.84)');
-  splashCtx.fillStyle = base;
-  splashCtx.fillRect(0, 0, splashW, splashH);
-
-  splashCtx.save();
-  splashCtx.globalAlpha = 0.22;
-  splashCtx.fillStyle = 'rgba(255,255,255,0.035)';
-  var scanOffset = (elapsed * 28) % 36;
-  for (var sy = -scanOffset; sy < splashH; sy += 36) splashCtx.fillRect(0, sy, splashW, 1);
-  splashCtx.restore();
-
-  for (var i = 0; i < splashDust.length; i++) {
-    var d = splashDust[i];
-    d.x += d.vx;
-    d.y += d.vy;
-    d.p += 0.018;
-    if (d.x < -10) d.x = splashW + 10;
-    if (d.x > splashW + 10) d.x = -10;
-    if (d.y < -10) d.y = splashH + 10;
-    if (d.y > splashH + 10) d.y = -10;
-    var alpha = d.a * (0.58 + Math.sin(d.p + elapsed * 0.8) * 0.34);
-    splashCtx.beginPath();
-    splashCtx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-    splashCtx.fillStyle = 'rgba(255,255,255,' + Math.max(0, alpha) + ')';
-    splashCtx.fill();
-  }
-
-  splashCtx.save();
-  splashCtx.globalCompositeOperation = 'lighter';
-  for (var k = 0; k < splashStreaks.length; k++) {
-    var st = splashStreaks[k];
-    var travel = (elapsed * st.speed * 240 + st.x + Math.sin(elapsed * 0.8 + st.phase) * 28) % (splashW + st.len + 180);
-    var px = travel - st.len - 90;
-    var py = st.y + Math.sin(elapsed * 0.75 + st.phase) * 18;
-    var fade = splashSmoothstep(st.delay * 0.55, st.delay * 0.55 + 0.52, elapsed) * (1 - splashSmoothstep(3.52, 4.12, elapsed));
-    if (fade <= 0) continue;
-    splashCtx.save();
-    splashCtx.translate(px, py);
-    splashCtx.rotate(st.angle);
-    var sg = splashCtx.createLinearGradient(-st.len * 0.5, 0, st.len * 0.5, 0);
-    sg.addColorStop(0, st.color + '0)');
-    sg.addColorStop(0.52, st.color + (st.alpha * fade).toFixed(3) + ')');
-    sg.addColorStop(1, 'rgba(255,255,255,0)');
-    splashCtx.strokeStyle = sg;
-    splashCtx.lineWidth = st.width;
-    splashCtx.shadowColor = st.color + (0.34 * fade).toFixed(3) + ')';
-    splashCtx.shadowBlur = 18;
-    splashCtx.beginPath();
-    splashCtx.moveTo(-st.len * 0.5, 0);
-    splashCtx.lineTo(st.len * 0.5, 0);
-    splashCtx.stroke();
-    splashCtx.restore();
-  }
-
-  var lineT = splashEaseOutCubic((elapsed - 0.12) / 1.18);
-  var exitFade = 1 - splashSmoothstep(3.58, 4.12, elapsed);
-  if (lineT > 0 && exitFade > 0) {
-    var centerY = splashH * 0.5 + Math.sin(elapsed * 1.4) * 1.6;
-    var slitW = splashW * (0.16 + lineT * 0.72);
-    var left = splashW * 0.5 - slitW * 0.5;
-    var right = splashW * 0.5 + slitW * 0.5;
-    var coreAlpha = (0.34 + lineT * 0.58) * exitFade;
-    var slitGrad = splashCtx.createLinearGradient(left, centerY, right, centerY);
-    slitGrad.addColorStop(0, 'rgba(255,83,103,0)');
-    slitGrad.addColorStop(0.18, 'rgba(255,83,103,' + (0.18 * exitFade).toFixed(3) + ')');
-    slitGrad.addColorStop(0.50, 'rgba(255,255,255,' + coreAlpha.toFixed(3) + ')');
-    slitGrad.addColorStop(0.68, 'rgba(244,210,138,' + (0.38 * exitFade).toFixed(3) + ')');
-    slitGrad.addColorStop(0.84, 'rgba(122,215,194,' + (0.20 * exitFade).toFixed(3) + ')');
-    slitGrad.addColorStop(1, 'rgba(122,215,194,0)');
-    splashCtx.shadowColor = 'rgba(244,210,138,' + (0.48 * exitFade).toFixed(3) + ')';
-    splashCtx.shadowBlur = 42 + lineT * 42;
-    splashCtx.lineCap = 'round';
-    splashCtx.strokeStyle = slitGrad;
-    splashCtx.lineWidth = 1.4 + lineT * 2.2;
-    splashCtx.beginPath();
-    splashCtx.moveTo(left, centerY);
-    splashCtx.lineTo(right, centerY);
-    splashCtx.stroke();
-
-    var ignition = Math.exp(-Math.pow((elapsed - 0.72) / 0.26, 2));
-    if (ignition > 0.018) {
-      var ig = splashCtx.createLinearGradient(0, centerY, splashW, centerY);
-      ig.addColorStop(0, 'rgba(122,215,194,0)');
-      ig.addColorStop(0.46, 'rgba(122,215,194,' + (0.07 * ignition).toFixed(3) + ')');
-      ig.addColorStop(0.50, 'rgba(255,255,255,' + (0.16 * ignition).toFixed(3) + ')');
-      ig.addColorStop(0.54, 'rgba(255,83,103,' + (0.08 * ignition).toFixed(3) + ')');
-      ig.addColorStop(1, 'rgba(244,210,138,0)');
-      splashCtx.fillStyle = ig;
-      splashCtx.fillRect(0, centerY - 48 * ignition, splashW, 96 * ignition);
-    }
-
-    var waveAlpha = splashSmoothstep(0.72, 1.95, elapsed) * exitFade;
-    if (waveAlpha > 0) {
-      splashCtx.shadowBlur = 20;
-      splashCtx.strokeStyle = 'rgba(244,210,138,' + (0.22 * waveAlpha).toFixed(3) + ')';
-      splashCtx.lineWidth = 1;
-      splashCtx.beginPath();
-      var steps = 82;
-      for (var wi = 0; wi <= steps; wi++) {
-        var u = wi / steps;
-        var x = left + slitW * u;
-        var edge = 1 - Math.abs(u - 0.5) * 2;
-        var amp = (4 + 18 * lineT) * Math.pow(Math.max(0, edge), 1.4) * waveAlpha;
-        var y = centerY + Math.sin(u * 34 + elapsed * 8.2) * amp + Math.sin(u * 87 - elapsed * 5.1) * amp * 0.18;
-        if (wi === 0) splashCtx.moveTo(x, y);
-        else splashCtx.lineTo(x, y);
-      }
-      splashCtx.stroke();
-    }
-
-    var shardT = splashSmoothstep(0.72, 2.45, elapsed) * exitFade;
-    for (var si = 0; si < splashShards.length; si++) {
-      var sh = splashShards[si];
-      var drift = Math.sin(elapsed * 1.7 + sh.phase) * 22;
-      var sx = splashW * 0.5 + sh.ox * (0.18 + shardT * 0.82) + drift;
-      var sy2 = centerY + sh.oy * (0.20 + shardT * 0.92);
-      var localAlpha = sh.alpha * shardT * (0.62 + Math.sin(elapsed * 5 + sh.phase) * 0.38);
-      if (localAlpha <= 0) continue;
-      splashCtx.save();
-      splashCtx.translate(sx, sy2);
-      splashCtx.rotate((-6 + sh.skew * 0.10) * Math.PI / 180);
-      splashCtx.fillStyle = sh.color + Math.max(0, localAlpha).toFixed(3) + ')';
-      splashCtx.shadowColor = sh.color + Math.min(0.38, localAlpha * 1.2).toFixed(3) + ')';
-      splashCtx.shadowBlur = 14;
-      splashCtx.beginPath();
-      splashCtx.moveTo(-sh.w * 0.5, -sh.h * 0.5);
-      splashCtx.lineTo(sh.w * 0.5, -sh.h * 0.5);
-      splashCtx.lineTo(sh.w * 0.5 + sh.skew, sh.h * 0.5);
-      splashCtx.lineTo(-sh.w * 0.5 + sh.skew, sh.h * 0.5);
-      splashCtx.closePath();
-      splashCtx.fill();
-      splashCtx.restore();
-    }
-
-    var flash = Math.exp(-Math.pow((elapsed - 2.52) / 0.38, 2));
-    if (flash > 0.015) {
-      var fg = splashCtx.createLinearGradient(0, centerY, splashW, centerY);
-      fg.addColorStop(0, 'rgba(255,83,103,0)');
-      fg.addColorStop(0.48, 'rgba(255,255,255,' + (0.20 * flash).toFixed(3) + ')');
-      fg.addColorStop(0.52, 'rgba(244,210,138,' + (0.24 * flash).toFixed(3) + ')');
-      fg.addColorStop(1, 'rgba(122,215,194,0)');
-      splashCtx.fillStyle = fg;
-      splashCtx.fillRect(0, centerY - 46 * flash, splashW, 92 * flash);
-    }
-  }
-  splashCtx.restore();
-}
-
-function playMineradioIntroSound() {
-  if (splashSoundPlayed) return;
-  try {
-    var AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextCtor) return;
-    var ctx = splashAudioCtx || new AudioContextCtor();
-    splashAudioCtx = ctx;
-    if (ctx.state === 'suspended' && ctx.resume) {
-      ctx.resume().then(function(){
-        if (!splashSoundPlayed) playMineradioIntroSound();
-      }).catch(function(){});
-      if (ctx.state === 'suspended') return;
-    }
-    splashSoundPlayed = true;
-
-    var now = ctx.currentTime + 0.02;
-    var master = ctx.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.exponentialRampToValueAtTime(0.062, now + 0.16);
-    master.gain.exponentialRampToValueAtTime(0.040, now + 3.35);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + 5.28);
-    master.connect(ctx.destination);
-
-    var noiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2.45), ctx.sampleRate);
-    var data = noiseBuffer.getChannelData(0);
-    for (var i = 0; i < data.length; i++) {
-      var tail = 1 - i / data.length;
-      data[i] = (Math.random() * 2 - 1) * Math.pow(tail, 1.35);
-    }
-    var noise = ctx.createBufferSource();
-    var noiseGain = ctx.createGain();
-    var noiseFilter = ctx.createBiquadFilter();
-    noise.buffer = noiseBuffer;
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.setValueAtTime(720, now);
-    noiseFilter.frequency.exponentialRampToValueAtTime(2400, now + 2.2);
-    noiseFilter.Q.setValueAtTime(0.72, now);
-    noiseGain.gain.setValueAtTime(0.0001, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.020, now + 0.12);
-    noiseGain.gain.exponentialRampToValueAtTime(0.010, now + 1.60);
-    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.42);
-    noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(master);
-    noise.start(now); noise.stop(now + 2.46);
-
-    var low = ctx.createOscillator();
-    var lowGain = ctx.createGain();
-    low.type = 'sine';
-    low.frequency.setValueAtTime(86, now + 0.18);
-    low.frequency.exponentialRampToValueAtTime(43, now + 1.18);
-    lowGain.gain.setValueAtTime(0.0001, now + 0.12);
-    lowGain.gain.exponentialRampToValueAtTime(0.032, now + 0.30);
-    lowGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.34);
-    low.connect(lowGain); lowGain.connect(master);
-    low.start(now + 0.12); low.stop(now + 1.40);
-
-    function softTone(type, f0, f1, startAt, dur, peak) {
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      var filter = ctx.createBiquadFilter();
-      osc.type = type;
-      osc.frequency.setValueAtTime(f0, now + startAt);
-      osc.frequency.exponentialRampToValueAtTime(f1, now + startAt + dur * 0.72);
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(3400, now + startAt);
-      gain.gain.setValueAtTime(0.0001, now + startAt);
-      gain.gain.exponentialRampToValueAtTime(peak, now + startAt + 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + startAt + dur);
-      osc.connect(filter); filter.connect(gain); gain.connect(master);
-      osc.start(now + startAt);
-      osc.stop(now + startAt + dur + 0.04);
-    }
-    softTone('triangle', 440, 660, 1.05, 0.72, 0.018);
-    softTone('sine', 880, 1320, 2.10, 0.86, 0.013);
-    softTone('triangle', 1180, 1760, 2.72, 0.52, 0.010);
-    softTone('triangle', 660, 1180, 3.32, 0.82, 0.014);
-    softTone('sine', 1760, 1040, 3.64, 0.46, 0.010);
-    if (splashAudioCloseTimer) clearTimeout(splashAudioCloseTimer);
-    splashAudioCloseTimer = setTimeout(function(){
-      splashAudioCloseTimer = 0;
-      if (splashAudioCtx !== ctx) return;
-      splashAudioCtx = null;
-      try {
-        var closed = ctx.close && ctx.close();
-        if (closed && closed.catch) closed.catch(function(){});
-      } catch (e) {}
-    }, 5600);
-  } catch (e) {}
-}
-function armSplashSoundFallback() {
-  if (splashSoundFallbackArmed) return;
-  splashSoundFallbackArmed = true;
-  function unlock() {
-    if (!splashSoundPlayed) playMineradioIntroSound();
-    document.removeEventListener('pointerdown', unlock, true);
-    document.removeEventListener('keydown', unlock, true);
-  }
-  document.addEventListener('pointerdown', unlock, true);
-  document.addEventListener('keydown', unlock, true);
-}
-
-function dismissSplash() {
-  var s = document.getElementById('splash');
-  if (!s || s.classList.contains('hide') || s.classList.contains('exiting')) return;
-  markAppPerf('splash-dismiss');
-  if (splashTimer) { clearTimeout(splashTimer); splashTimer = null; }
-  if (splashAutoEnterTimer) { clearTimeout(splashAutoEnterTimer); splashAutoEnterTimer = null; }
-  splashReadyToEnter = false;
-  s.classList.remove('ready');
-  var shouldPrimeHomeWallpaper = typeof shouldUseIdleWallpaperPreview === 'function'
-    ? shouldUseIdleWallpaperPreview(true)
-    : (typeof shouldShowEmptyHomeAfterSplash === 'function' && shouldShowEmptyHomeAfterSplash());
-  revealIdleParticles(0, reduceSplashMotion ? 700 : 2400);
-  document.body.classList.add('splash-revealing');
-  s.classList.add('exiting');
-
-  var content = s.querySelector('.splash-content');
-  if (content) {
-    content.style.transition = 'opacity 680ms cubic-bezier(.22,1,.36,1), transform 980ms cubic-bezier(.22,1,.36,1)';
-    content.style.opacity = '0';
-    content.style.transform = 'translateY(-14px) scale(.986)';
-  }
-
-  setTimeout(function() {
-    s.classList.add('hide');
-    splashAnimating = false;
-    releaseMineradioSplashResources();
-    document.body.classList.remove('splash-active');
-    document.body.classList.remove('splash-revealing');
-    if (shouldPrimeHomeWallpaper && typeof activateHomeWallpaperPreview === 'function') activateHomeWallpaperPreview({ instant: true });
-    if (typeof flushHomeWallpaperPrewarmAfterSplash === 'function') flushHomeWallpaperPrewarmAfterSplash();
-    if (typeof scheduleSavedLocalMusicFolderRestore === 'function') scheduleSavedLocalMusicFolderRestore(420);
-    markAppPerf('home-revealed');
-    if (s && s.parentNode) s.style.display = 'none';
-    requestAnimationFrame(function(){
-      var homeShown = updateEmptyHomeVisibility({ forceLoad: true });
-      if (!homeShown && shouldForceEmptyHomeAfterSplash()) {
-        homeSuppressed = false;
-        homeForcedOpen = true;
-        homeShown = updateEmptyHomeVisibility({ forceLoad: true });
-      }
-      requestAnimationFrame(function(){
-        var guideStarted = maybeRunStartupVisualGuide('splash');
-        if (!guideStarted && !hasAnyPlatformLogin()) maybeRunStartupLoginGuide('splash');
-        else if (!guideStarted && !homeShown) maybeRunStartupLoginGuide('splash');
-        setTimeout(maybeShowUploadTipOnce, 5200);
-      });
-    });
-  }, 1180);
-}
-
-function markSplashReadyToEnter() {
-  var s = document.getElementById('splash');
-  if (!s || s.classList.contains('hide') || s.classList.contains('exiting')) return;
-  markAppPerf('splash-ready');
-  splashReadyToEnter = true;
-  splashTimer = null;
-  s.classList.add('ready');
-  s.setAttribute('role', 'button');
-  s.setAttribute('tabindex', '0');
-  s.setAttribute('aria-label', '自动进入 Mineradio');
-  if (splashAutoEnterTimer) clearTimeout(splashAutoEnterTimer);
-  splashAutoEnterTimer = setTimeout(function(){
-    splashAutoEnterTimer = null;
-    dismissSplash();
-  }, reduceSplashMotion ? 120 : 420);
-}
-
-document.addEventListener('DOMContentLoaded', function(){
-  var s = document.getElementById('splash');
-  if (!s) return;
+function initializePlayerHome() {
   markAppPerf('dom-content-loaded');
-  armSplashSoundFallback();
-  prewarmHomeWallpaperPreview();
-  function requestSplashEnter() {
-    playMineradioIntroSound();
-    if (splashReadyToEnter) dismissSplash();
+  var shouldPrimeHomeWallpaper = shouldUseIdleWallpaperPreview();
+  if (shouldPrimeHomeWallpaper && typeof activateHomeWallpaperPreview === 'function') {
+    activateHomeWallpaperPreview({ instant: true });
   }
-  s.addEventListener('click', requestSplashEnter);
-  document.addEventListener('keydown', function(e){
-    if (!document.body.classList.contains('splash-active')) return;
-    if (e.key === 'Enter' || e.code === 'Space') {
-      e.preventDefault();
-      requestSplashEnter();
+  if (typeof scheduleSavedLocalMusicFolderRestore === 'function') scheduleSavedLocalMusicFolderRestore(420);
+  markAppPerf('home-revealed');
+  requestAnimationFrame(function(){
+    var homeShown = updateEmptyHomeVisibility({ forceLoad: true });
+    if (!homeShown && shouldForceEmptyHome()) {
+      homeSuppressed = false;
+      homeForcedOpen = true;
+      homeShown = updateEmptyHomeVisibility({ forceLoad: true });
     }
+    requestAnimationFrame(function(){
+      var guideStarted = maybeRunStartupVisualGuide('startup');
+      if (!guideStarted && !hasAnyPlatformLogin()) maybeRunStartupLoginGuide('startup');
+      else if (!guideStarted && !homeShown) maybeRunStartupLoginGuide('startup');
+      setTimeout(maybeShowUploadTipOnce, 5200);
+    });
   });
-  if (reduceSplashMotion) {
-    s.classList.add('reduce-motion');
-    splashTimer = setTimeout(markSplashReadyToEnter, 900);
-    return;
-  }
-  playMineradioIntroSound();
-  splashTimer = setTimeout(markSplashReadyToEnter, 5000);
-});
+}
+
+document.addEventListener('DOMContentLoaded', initializePlayerHome);
 
 var desktopOverlayPushState = {
   lyricsAt: 0,
@@ -46738,7 +46040,7 @@ if (LOCAL_ONLY_MODE) {
   homeDiscoverState.playlists = [];
   homeDiscoverState.podcasts = [];
   renderUserBtn();
-  if (!document.body.classList.contains('splash-active')) updateEmptyHomeVisibility({ forceLoad: false });
+  updateEmptyHomeVisibility({ forceLoad: false });
 }
 var collectNameInput = document.getElementById('collect-new-name');
 if (collectNameInput) {
@@ -46881,10 +46183,6 @@ function syncMainRenderLoopPowerState(reason) {
   }
   if (isDeepBackgroundMode()) suspendMainRenderLoop(reason || 'deep-background');
   else resumeMainRenderLoop(reason || 'foreground');
-}
-var splashWarmRenderLast = 0;
-function isMainSceneCoveredBySplash() {
-  return document.body.classList.contains('splash-active') && !document.body.classList.contains('splash-revealing');
 }
 /**
  * 判断当前是否存在需要高刷新率跟随的连续播放会话。
@@ -47036,13 +46334,6 @@ function animate() {
   prevTime = now;
   sampleRenderPerf(now, dt);
   uniforms.uTime.value += dt;
-  if (isMainSceneCoveredBySplash()) {
-    if (now - splashWarmRenderLast > 520) {
-      splashWarmRenderLast = now;
-      renderer.render(scene, camera);
-    }
-    return;
-  }
   pointerParallax.x += (pointerTarget.x - pointerParallax.x) * 0.040;
   pointerParallax.y += (pointerTarget.y - pointerParallax.y) * 0.040;
 

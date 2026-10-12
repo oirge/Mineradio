@@ -25,67 +25,18 @@ function extractFunction(name) {
   throw new Error(`函数 ${name} 未闭合`);
 }
 
-test('启动页退出后释放 Canvas WebGL 和不可见 resize 工作', () => {
-  assert.match(appSource, /function releaseMineradioSplashResources\(\)/);
-  assert.match(appSource, /window\.removeEventListener\('resize', splashResizeHandler\)/);
-  assert.match(appSource, /splashGl\.deleteBuffer\(splashGlBuffer\)/);
-  assert.match(appSource, /splashGl\.deleteProgram\(splashGlProgram\)/);
-  assert.match(appSource, /getExtension\('WEBGL_lose_context'\)/);
-  assert.match(appSource, /splashDust\.length = 0;/);
-  assert.match(appSource, /splashStreaks\.length = 0;/);
-  assert.match(appSource, /splashShards\.length = 0;/);
-  assert.match(appSource, /splashCanvas\.width = 1;[\s\S]*splashCanvas\.height = 1;/);
-  assert.match(appSource, /splashAnimating = false;\s*releaseMineradioSplashResources\(\);/);
-
-  const removed = [];
-  const deleted = [];
-  const canvas = { width: 1920, height: 1080 };
-  let lost = false;
-  const context = {
-    window: {
-      removeEventListener(type, handler) { removed.push([type, handler]); }
-    },
-    splashResizeHandler() {},
-    splashGlBuffer: { id: 'buffer' },
-    splashGlProgram: { id: 'program' },
-    splashGlUniforms: { id: 'uniforms' },
-    splashGl: {
-      deleteBuffer(value) { deleted.push(['buffer', value]); },
-      deleteProgram(value) { deleted.push(['program', value]); },
-      getExtension(name) {
-        assert.equal(name, 'WEBGL_lose_context');
-        return { loseContext() { lost = true; } };
-      }
-    },
-    splashCtx: { id: '2d' },
-    splashDust: [1, 2],
-    splashStreaks: [1],
-    splashShards: [1, 2, 3],
-    splashW: 1920,
-    splashH: 1080,
-    splashPixelRatio: 1.36,
-    splashCanvas: canvas
-  };
-  vm.runInNewContext(`${extractFunction('releaseMineradioSplashResources')}\nreleaseMineradioSplashResources();`, context);
-
-  assert.equal(removed.length, 1);
-  assert.equal(removed[0][0], 'resize');
-  assert.deepEqual(deleted.map((entry) => entry[0]), ['buffer', 'program']);
-  assert.equal(lost, true);
-  assert.equal(canvas.width, 1);
-  assert.equal(canvas.height, 1);
-  assert.equal(context.splashDust.length, 0);
-  assert.equal(context.splashStreaks.length, 0);
-  assert.equal(context.splashShards.length, 0);
-  assert.equal(context.splashCanvas, null);
-  assert.equal(context.splashGl, null);
+test('直接启动不再分配启动页 Canvas WebGL 和 resize 工作', () => {
+  assert.doesNotMatch(appSource, /\b(?:splashCanvas|splashCtx|splashGl|splashGlProgram|splashGlBuffer|splashGlUniforms|splashResizeHandler)\b/);
+  assert.doesNotMatch(appSource, /\b(?:splashDust|splashStreaks|splashShards|splashPixelRatio|splashAnimating)\b/);
+  assert.doesNotMatch(appSource, /\b(?:initMineradioSplashWebgl|initMineradioSplashCanvas|releaseMineradioSplashResources|drawMineradioSplash)\b/);
+  assert.doesNotMatch(extractFunction('initializePlayerHome'), /getContext|createElement|addEventListener\('resize'/);
 });
 
-test('启动音效结束后关闭独立 AudioContext', () => {
-  assert.match(appSource, /splashAudioCloseTimer = setTimeout\(function\(\)\{/);
-  assert.match(appSource, /if \(splashAudioCtx !== ctx\) return;\s*splashAudioCtx = null;/);
-  assert.match(appSource, /var closed = ctx\.close && ctx\.close\(\);/);
-  assert.match(appSource, /\}, 5600\);/);
+test('直接启动不再创建独立音效 AudioContext 或解锁监听', () => {
+  assert.doesNotMatch(appSource, /\b(?:splashAudioCtx|splashAudioCloseTimer|splashSoundPlayed|splashSoundFallbackArmed)\b/);
+  assert.doesNotMatch(appSource, /\b(?:playMineradioIntroSound|armSplashSoundFallback)\b/);
+  assert.doesNotMatch(appSource, /\b(?:splashTimer|splashAutoEnterTimer|splashReadyToEnter|markSplashReadyToEnter|dismissSplash)\b/);
+  assert.doesNotMatch(extractFunction('initializePlayerHome'), /AudioContext|pointerdown|keydown/);
 });
 
 test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {

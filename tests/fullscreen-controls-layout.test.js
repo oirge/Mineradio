@@ -59,6 +59,8 @@ test('全屏 DIY 与退出按钮固定在 Home 左侧', () => {
   assert.equal(result.top + result.height / 2, homeRect.top + homeRect.height / 2);
   assert.equal(properties.get('--fullscreen-diy-left'), '1618.0px');
   assert.equal(properties.get('--fullscreen-diy-top'), '20.0px');
+  assert.equal(1920 - parseFloat(properties.get('--folia-fs-switch-right')), result.left - 10);
+  assert.equal(parseFloat(properties.get('--folia-fs-top')) + 15, homeRect.top + homeRect.height / 2);
   assert.match(functionSource, /getElementById\('home-btn'\)/);
   assert.doesNotMatch(functionSource, /top-account-pill|user-btn/);
 });

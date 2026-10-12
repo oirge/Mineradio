@@ -1,5 +1,13 @@
 # 发布流程
 
+## v2.4.6 移除启动动画与修复 Folia 按钮布局
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.6`。
+- **内容**：移除启动页 DOM、动画、音效、Canvas/WebGL 绘制与相关生命周期；启动时直接进入 Home，并保留原有启动恢复和 reduced-motion 登录引导。调整 Folia 切换按钮在普通窗口、全屏和窄屏下的位置，避开右上角控件与搜索区。
+- **发布前验证**：全量 Node 回归 `1452` 项通过、`1` 项可选基准跳过；Folia 产物检查、`server.js` / `public/app.js` / `public/shelf-classic.js` 语法检查和 `git diff --check` 通过。
+- **本地 Windows x64 安装器**：`120695959` 字节，SHA256 `bb009277a144d6afe9d8f81bf9ece1614ca0c7492095fd1ecd25894d164cdd98`；`latest.yml` 声明版本、文件名、大小与 SHA-512 均和安装器匹配。正式发布资产将由 GitHub Actions 在发布标签上重建并单独核验。
+- **发布状态**：GitHub Latest 仍为 `v2.4.4`；`v2.4.6` tag 与 Release 尚不存在。提交、推送、CI 构建及正式发布结果待补录。
+
 ## v2.4.3 Folia 海报墙切歌刷新优化
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.3`；两条公告与 `CHANGELOG.md` 顶部保持一致。

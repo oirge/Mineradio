@@ -253,7 +253,6 @@ function canShowShelfHoverCueAt(e) {
   if (!e) return false;
   if (shelfPlaybackSwitchGuardActive()) return false;
   if (!shelfHoverCue.guide) return false;
-  if (document.body.classList.contains('splash-active')) return false;
   if (visualGuideActive || emptyHomeActive || homeForcedOpen) return false;
   if (!shelfManager || !shelfManager.getMode || shelfManager.getMode() !== 'side') return false;
   if (shelfPinnedOpen) return false;
@@ -1182,8 +1181,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         group.renderOrder = 50;
         scene.add(group);
       }
-      var asyncCards = mode === 'side' && document.body.classList.contains('splash-active');
-      rebuild(asyncCards);
+      rebuild(false);
     },
     getMode: function () { return mode; },
     update: function (dt) {
@@ -1193,13 +1191,9 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       centerSmooth += (centerTarget - centerSmooth) * centerEase;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       var px = pointerParallax.x, py = pointerParallax.y;
-      var appRevealed = !document.body.classList.contains('splash-active');
       var cueVis = tickShelfHoverCue(dt);
-      // v8: shelf 自动可见度 — 启动页期间不显示；侧栏只在右侧停留时淡入。
       var targetVis;
-      if (!appRevealed) {
-        targetVis = 0;
-      } else if (mode === 'side') {
+      if (mode === 'side') {
         var contentOpen = contentList && contentList.isOpen();
         var switchGuard = typeof shelfPlaybackSwitchGuardActive === 'function' && shelfPlaybackSwitchGuardActive();
         if (!allItems.length && !contentOpen) targetVis = 0;
@@ -1217,7 +1211,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       var shelfBreathTarget = (shelfPinnedOpen || (contentList && contentList.isOpen())) ? 0 : 1;
       shelfBreathLevel += (shelfBreathTarget - shelfBreathLevel) * durationEaseFactor(0.32, dt);
       if (shelfVisibility < 0.01 && targetVis === 0) shelfVisibility = 0;
-      group.visible = appRevealed && (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || (contentList && contentList.isOpen()));
+      group.visible = (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || (contentList && contentList.isOpen()));
       if (connectorParticles) connectorParticles.visible = group.visible && mode === 'stage';
       if (mode === 'side') {
         var contentOpenForLayer = !!(contentList && contentList.isOpen());

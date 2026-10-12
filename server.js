@@ -78,8 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 海报墙切歌时复用未变化的卡片，减少大曲库中的重复计算。',
-  '播放分区随当前歌曲及时更新，封面变化与曲库重排继续正确同步。',
+  '启动后直接进入播放器主页，移除启动动画、启动音效及相关 Canvas/WebGL 工作。',
+  '调整 Folia 按钮在普通窗口、全屏和窄屏下的位置，避免与右上角控件和搜索区重叠。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

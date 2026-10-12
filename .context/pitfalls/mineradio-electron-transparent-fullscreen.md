@@ -43,6 +43,7 @@ Mineradio v1.4.5 的 `keepMainWindowInsideDisplay()` 只依据 `isFullScreen()` 
 - 全屏 `DIY` 与“退出全屏”必须作为同一 `#fullscreen-diy-zone` 内的常驻控件，与 Home 按钮共享垂直中心线。
 - 不得给全屏 `DIY` 保留 `translateY(-18px)` 的自动收起初始位；淡出过程中截帧会让按钮看起来永久偏上，并且 GSAP 缩放可能固化该位移。
 - 全屏控制区仍通过 `layoutFullscreenDiyZone()` 锚定 Home 左侧，视觉引导打开时可以整体隐藏，但普通全屏状态不能依赖鼠标悬停才完成对齐。
+- Folia 悬浮切换入口不能覆盖 Home、搜索框或导入按钮：浏览器原界面和不超过 1600px 的桌面全屏放在下一排，宽屏保留 DIY 区左侧的测量定位；不超过 720px 的简约全屏须避开搜索框的 116px 下边界。Folia 激活态的位置与闲置自动隐藏独立保留。
 
 ## Window drag correction
 

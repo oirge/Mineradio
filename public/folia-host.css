@@ -39,8 +39,12 @@ body.folia-interface-active #diy-mode-btn,body.folia-interface-active #visual-gu
 body.desktop-shell:not(.desktop-fullscreen) #folia-floating-switch{display:none}
 html:fullscreen body.desktop-shell #folia-floating-switch{display:block}
 body.folia-interface-active #folia-floating-switch{top:10px;right:16px}
-/* In Mineradio-view fullscreen, sit the switch left of the DIY zone (JS-measured) so it never overlaps the top-right cluster. */
-html:fullscreen body.desktop-shell:not(.folia-interface-active) #folia-floating-switch,body.desktop-shell.desktop-fullscreen:not(.folia-interface-active) #folia-floating-switch{top:var(--folia-fs-top,14px);right:var(--folia-fs-switch-right,16px)}
+body:not(.desktop-shell):not(.folia-interface-active) #folia-floating-switch{top:90px;right:24px}
+/* Wide fullscreen shares the control row; compact windows leave room for search and imports. */
+html:fullscreen body.desktop-shell:not(.folia-interface-active) #folia-floating-switch,body.desktop-shell.desktop-fullscreen:not(.folia-interface-active) #folia-floating-switch{top:var(--folia-fs-top,31px);right:var(--folia-fs-switch-right,312px)}
+@media(max-width:1600px){html:fullscreen body.desktop-shell:not(.folia-interface-active) #folia-floating-switch,body.desktop-shell.desktop-fullscreen:not(.folia-interface-active) #folia-floating-switch{top:108px;right:24px}}
+@media(max-width:720px){body:not(.desktop-shell):not(.folia-interface-active) #folia-floating-switch,html:fullscreen body.desktop-shell:not(.folia-interface-active) #folia-floating-switch,body.desktop-shell.desktop-fullscreen:not(.folia-interface-active) #folia-floating-switch{right:12px}}
+@media(max-width:720px){html:fullscreen body.desktop-shell.simple-mode:not(.folia-interface-active) #folia-floating-switch,body.desktop-shell.desktop-fullscreen.simple-mode:not(.folia-interface-active) #folia-floating-switch{top:124px}}
 body.folia-interface-active:has(#folia-interface.folia-ready) #folia-floating-import{display:none!important}
 body.folia-interface-active #fullscreen-diy-zone{display:none!important}
 body.folia-interface-active,body.folia-interface-active.cursor-hidden,body.folia-interface-active.cursor-hidden *{cursor:auto!important}

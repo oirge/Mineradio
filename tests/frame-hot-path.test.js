@@ -59,8 +59,9 @@ function testShelfFrameStateCache() {
   const placeCardSource = readSourceBetween(managerSource, 'function placeCard(', '\n\n  function setCardCenter');
   assert.match(updateSource, /var contentOpen = frameShelfState \? frameShelfState\.contentOpen : !!\(contentList && contentList\.isOpen\(\)\);/);
   assert.match(updateSource, /var alwaysVisible = frameShelfState \? frameShelfState\.alwaysVisible : shelfAlwaysVisible\(\);/);
-  assert.match(updateSource, /var cueVis = appRevealed \? tickShelfHoverCue\(dt, frameNow\) : 0;/);
-  assert.match(updateSource, /if \(!appRevealed \|\| \(!group\.visible && targetVis === 0\)\) return;/);
+  assert.match(updateSource, /var cueVis = tickShelfHoverCue\(dt, frameNow\);/);
+  assert.match(updateSource, /if \(!group\.visible && targetVis === 0\) return;/);
+  assert.doesNotMatch(updateSource, /\bappRevealed\b|splash-active/);
   assert.equal((updateSource.match(/contentList\.isOpen\(\)/g) || []).length, 1);
   assert.equal((updateSource.match(/shelfAlwaysVisible\(\)/g) || []).length, 1);
   assert.match(placeCardSource, /frameContentOpen, frameAlwaysVisible/);
