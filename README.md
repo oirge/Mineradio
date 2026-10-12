@@ -1,4 +1,4 @@
-# Mineradio Local Player
+# Mineradio和Folia Local Player
 
 中文 · [English](./README_EN.md)
 
