@@ -176,8 +176,7 @@ test('开机启动项按 AppUserModelId 独立写入，并纠正指向旧安装�
   assert.match(MAIN, /openAtLogin: !!enabled,\s*\n\s*\/\/[^\n]*\n\s*name: APP_USER_MODEL_ID,/);
   assert.match(MAIN, /function reconcileStartupEntryPath\(\)/);
   assert.match(MAIN, /settings\.executableWillLaunchAtLogin !== false/);
-  // 普通启动仍纠偏旧登录项；隐藏 QA 不能动用户的开机启动设置。
-  assert.match(MAIN, /applySavedDesktopShellSettings\(\);\s*\n\s*if \(!QA_HIDDEN\) reconcileStartupEntryPath\(\);/);
+  assert.match(MAIN, /applySavedDesktopShellSettings\(\);\s*\n\s*reconcileStartupEntryPath\(\);/);
 });
 
 test('共享谱面缓存的临时文件带进程号，两个播放器不会互相打断', () => {

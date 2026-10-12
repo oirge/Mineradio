@@ -546,13 +546,6 @@ describe('Tempera program compiler', () => {
         expect(shots.at(-1)!.endTime).toBeCloseTo(program.paragraphs[1].startTime, 6);
     });
 
-    it('keeps a single unsyllabled word in one shot when all its graphemes share a start', () => {
-        const program = compileTemperaProgram([line('你好世界', 0, 4)], 'single-word');
-        const shots = program.paragraphs.flatMap(paragraph => paragraph.shots.filter(shot => !shot.isBridge));
-        expect(shots).toHaveLength(1);
-        expect(shots[0].slices).toHaveLength(1);
-    });
-
     it('leaves short gaps to the transition instead of bridging them', () => {
         const program = compileTemperaProgram([
             line('第一段唱完这里就断开了', 0, 3),

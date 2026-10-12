@@ -374,16 +374,7 @@ describe('Monet tuning and lyric helpers', () => {
         expect(token.text).toBe('hurricane');
         expect(token.graphemeTimings.map(timing => timing.char).join('')).toBe('hurricane');
         expect(token.graphemeTimings[5]).toMatchObject({ char: 'c', startTime: 1.4 });
-        expect(token.graphemeTimings[8].startTime).toBe(1.4);
-    });
-
-    it('renders a line-only lyric statically instead of inventing a timed sweep', () => {
-        const [token] = buildMonetDisplayTokens({
-            fullText: '整句歌词', startTime: 3, endTime: 6, words: [],
-        });
-        expect(token).toMatchObject({
-            text: '整句歌词', timed: false, startTime: null, endTime: null, graphemeTimings: [],
-        });
+        expect(token.graphemeTimings[8].startTime).toBeCloseTo(1.85);
     });
 
     it('keeps lyric context aligned around the active line', () => {

@@ -214,9 +214,6 @@ const buildShotChunks = (
             const target = 2 + Math.floor(temperaHash01(chunkSeed, 1, 179) * 3);
             const spent = entry.segment.endTime - startTime;
             const isLast = order === usable.length - 1;
-            const next = usable[order + 1];
-            // Graphemes sharing a source word's start cannot open separate simultaneous shots.
-            if (next && next.segment.startTime <= entry.segment.startTime) return;
             if (!isLast && words < target && spent < 2.2) return;
 
             chunks.push({
@@ -227,6 +224,7 @@ const buildShotChunks = (
                 endTime: Math.max(entry.segment.endTime, startTime + 0.2),
                 lyricEndTime: Math.max(entry.segment.endTime, startTime + 0.2),
             });
+            const next = usable[order + 1];
             if (next) {
                 segmentStart = next.index;
                 startTime = next.segment.startTime;

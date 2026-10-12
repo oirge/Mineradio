@@ -103,22 +103,3 @@ test('插件系统的所有源码文件都会进安装包', () => {
     assert.equal(isPackaged(rel), true, `${rel} 必须在 build.files 里`);
   }
 });
-
-test('歌词校正只打包最小运行文件，并在 ASAR 外提供真实 worker 与安装脚本', () => {
-  const required = [
-    'lyric-aligner/align.py',
-    'lyric-aligner/install.ps1',
-    'lyric-aligner/requirements.txt',
-    'lyric-aligner/README.md',
-  ];
-  assert.deepEqual(files.filter(pattern => pattern.startsWith('lyric-aligner/')), required);
-  for (const rel of required) {
-    assert.equal(fs.existsSync(path.join(root, rel)), true, `${rel} 必须存在`);
-    assert.equal(isPackaged(rel), true, `${rel} 必须进入安装包`);
-  }
-  assert.ok(packageJson.build.asarUnpack.includes('lyric-aligner/**'));
-  for (const rel of ['lyric-aligner/verify_suite.py', 'lyric-aligner/models/model.safetensors',
-    'lyric-runtime/venv/Scripts/python.exe', 'verification/lyric-alignment/example.flac']) {
-    assert.equal(isPackaged(rel), false, `${rel} 是本机实验或模型数据，不能进入安装包`);
-  }
-});

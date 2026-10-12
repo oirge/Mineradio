@@ -6,13 +6,13 @@ import type { Line, Word } from '@/types';
 // Covers pure lyric grapheme timing helpers used by visualizer runtimes.
 
 describe('graphemeTiming', () => {
-    it('does not invent per-character timings inside a timed word', () => {
+    it('spreads untimed word graphemes evenly across the word duration', () => {
         const word: Word = { text: 'abc', startTime: 0, endTime: 3 };
 
         expect(buildWordGraphemeTimings(word)).toEqual([
-            { char: 'a', startTime: 0, endTime: 3 },
-            { char: 'b', startTime: 0, endTime: 3 },
-            { char: 'c', startTime: 0, endTime: 3 },
+            { char: 'a', startTime: 0, endTime: 1 },
+            { char: 'b', startTime: 1, endTime: 2 },
+            { char: 'c', startTime: 2, endTime: 3 },
         ]);
     });
 
@@ -30,12 +30,12 @@ describe('graphemeTiming', () => {
         const timings = buildWordGraphemeTimings(word);
 
         expect(timings).toHaveLength(9);
-        expect(timings[0]).toEqual({ char: 'h', startTime: 1, endTime: 1.4 });
+        expect(timings[0]).toEqual({ char: 'h', startTime: 1, endTime: 1.08 });
         expect(timings[5].char).toBe('c');
         expect(timings[5].startTime).toBeCloseTo(1.4);
-        expect(timings[5].endTime).toBe(2);
+        expect(timings[5].endTime).toBeCloseTo(1.55);
         expect(timings[8].char).toBe('e');
-        expect(timings[8].startTime).toBe(1.4);
+        expect(timings[8].startTime).toBeCloseTo(1.85);
         expect(timings[8].endTime).toBe(2);
     });
 
@@ -74,17 +74,12 @@ describe('graphemeTiming', () => {
         expect(timeline[10]).toEqual({ char: '風', startTime: 2, endTime: 2.5, wordIndex: 1 });
     });
 
-    it('keeps emoji and CJK graphemes intact with their word timing', () => {
+    it('keeps emoji and CJK graphemes intact in fallback timing', () => {
         const word: Word = { text: '你😊好', startTime: 4, endTime: 7 };
         const timings = buildWordGraphemeTimings(word);
 
         expect(timings.map(item => item.char)).toEqual(['你', '😊', '好']);
-        expect(timings.map(item => item.startTime)).toEqual([4, 4, 4]);
-        expect(timings.map(item => item.endTime)).toEqual([7, 7, 7]);
-    });
-
-    it('does not infer a grapheme timeline from a line timestamp alone', () => {
-        const line: Line = { fullText: '整句，没有逐字', startTime: 4, endTime: 7, words: [] };
-        expect(buildLineGraphemeTimeline(line)).toEqual([]);
+        expect(timings.map(item => item.startTime)).toEqual([4, 5, 6]);
+        expect(timings[2].endTime).toBe(7);
     });
 });

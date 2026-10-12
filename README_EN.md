@@ -84,7 +84,6 @@ Build artifacts are located in `dist/`.
 - Timeline quirks handled: `[offset:±N]` global shift, `[mm:ss:cc]`, `[hh:mm:ss.fff]`, and fractions scaled by their actual digit count
 - Matching JPG/JPEG/JPE/JFIF/PNG/WebP/AVIF/GIF/BMP/SVG cover files
 - MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags
-- Experimental background timing alignment for local songs: requires separately installed Python 3.13, FFmpeg, and a local model. Missing or uncertain results fall back to the original lyrics without a correction UI; see [runtime setup](./lyric-aligner/README.md).
 - Automatic lyrics translation recognition
 - Desktop lyrics display
 - Dual-line lyrics support

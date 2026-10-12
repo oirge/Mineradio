@@ -6,7 +6,6 @@ import { buildMonetDisplayTokens } from '../../../src/components/visualizer/mone
 import { resolveMonetFillWidth, resolveMonetGlow, MONET_SCROLL_SPRING } from '../../../src/components/visualizer/monet/monetLyricMotion';
 import { layoutLatticeLine, resolveLatticeLongLineOffset, resolveLatticeTypography, wrapLatticeTokens,
     type MeasureText } from '../../../src/components/app/lattice/lyrics/latticeLyricLayout';
-import { resolveLatticeSweepProgress } from '../../../src/components/app/lattice/lyrics/latticeLyricScene';
 import { createLatticeTimeline, stepLatticeSpring } from '../../../src/components/app/lattice/lyrics/latticeLyricTimeline';
 import type { LatticeLyricInput } from '../../../src/components/app/lattice/lyrics/types';
 
@@ -66,21 +65,16 @@ describe('Lattice wrapping and long-line following', () => {
         expect(pieces.filter(p => p.text === 'go').map(p => p.token.startTime)).toEqual([1, 2]);
     });
     it('wraps an oversized timed token without restarting its sweep on each row', () => {
-        const lyric = { ...line('abcdefghijklmnopqrstuvwx', 0, 24), words: [
-            { text: 'abcdefghijkl', startTime: 0, endTime: 12 },
-            { text: 'mnopqrstuvwx', startTime: 12, endTime: 24 },
-        ] };
+        const lyric = line('abcdefghijklmnopqrstuvwx', 0, 24);
         const type = resolveLatticeTypography(input(), 90, 140, measure);
         const layout = layoutLatticeLine(lyric, type, 90, measure, false);
         expect(layout.rows).toBeGreaterThan(2);
         expect(layout.pieces[1].tokenOffset).toBeGreaterThan(0);
-        expect(resolveLatticeLongLineOffset(layout, -1, 60, type.lineHeight)).toBe(0);
-        const firstWord = resolveLatticeLongLineOffset(layout, 1, 60, type.lineHeight);
-        expect(firstWord).toBeGreaterThan(0);
+        expect(resolveLatticeLongLineOffset(layout, 1, 60, type.lineHeight)).toBe(0);
         const tail = resolveLatticeLongLineOffset(layout, 23.9, 60, type.lineHeight);
-        expect(tail).toBeGreaterThan(firstWord);
+        expect(tail).toBeGreaterThan(0);
         expect(tail).toBeLessThanOrEqual(layout.height - 60);
-        expect(resolveLatticeLongLineOffset(layout, -1, 60, type.lineHeight)).toBe(0);
+        expect(resolveLatticeLongLineOffset(layout, 1, 60, type.lineHeight)).toBe(0);
     });
     it('does not truncate the active source and selects romanization when requested', () => {
         const lyric = { ...line('唱'.repeat(200)), translation: 'translated line', romanization: 'romanized line' };
@@ -97,28 +91,18 @@ describe('Lattice wrapping and long-line following', () => {
 });
 
 describe('shared Monet absolute-time envelopes', () => {
-    it('reveals whole graphemes at their source start times and rewinds correctly', () => {
+    it('sweeps measured grapheme widths and rewinds correctly', () => {
         const timings = [{ char: 'a', startTime: 1, endTime: 2 }, { char: 'b', startTime: 3, endTime: 5 }];
-        expect(resolveMonetFillWidth(1, 1, 5, [0, 10, 40], timings)).toBe(10);
-        expect(resolveMonetFillWidth(1.5, 1, 5, [0, 10, 40], timings)).toBe(10);
+        expect(resolveMonetFillWidth(1.5, 1, 5, [0, 10, 40], timings)).toBe(5);
         expect(resolveMonetFillWidth(2.5, 1, 5, [0, 10, 40], timings)).toBe(10);
-        expect(resolveMonetFillWidth(3, 1, 5, [0, 10, 40], timings)).toBe(40);
-        expect(resolveMonetFillWidth(4, 1, 5, [0, 10, 40], timings)).toBe(40);
+        expect(resolveMonetFillWidth(4, 1, 5, [0, 10, 40], timings)).toBe(25);
         expect(resolveMonetFillWidth(0, 1, 5, [0, 10, 40], timings)).toBe(0);
         expect(resolveMonetFillWidth(9, 1, 5, [0, 10, 40], timings)).toBe(40);
     });
-    it('does not sweep without timing, even after the line ends', () => {
-        expect(resolveMonetFillWidth(0.5, 0, 1, [0, 10, 40], [])).toBe(0);
+    it('handles missing timing, zero duration and exact original timing boundaries', () => {
+        expect(resolveMonetFillWidth(0.5, 0, 1, [0, 10, 40], [])).toBe(10);
         expect(resolveMonetFillWidth(1, 1, 1, [0, 10], [])).toBe(0);
-        expect(resolveMonetFillWidth(2, 1, 1, [0, 10], [])).toBe(0);
-        expect(resolveMonetFillWidth(1, 1, 1, [0, 10], [{ char: 'x', startTime: 1, endTime: 1 }])).toBe(10);
-    });
-    it('changes Lattice shader color only at the timed token boundary', () => {
-        expect(resolveLatticeSweepProgress(0.9, 1, 'active', true)).toBe(0);
-        expect(resolveLatticeSweepProgress(1, 1, 'active', true)).toBe(1);
-        expect(resolveLatticeSweepProgress(1.5, 1, 'active', true)).toBe(1);
-        expect(resolveLatticeSweepProgress(1.5, 1, 'waiting', true)).toBe(0);
-        expect(resolveLatticeSweepProgress(1.5, 1, 'active', false)).toBe(0);
+        expect(resolveMonetFillWidth(2, 1, 1, [0, 10], [])).toBe(10);
     });
     it('matches Monet smoothstep rise, linger and decay without audio input', () => {
         expect(resolveMonetGlow(0, 0, 1, 4)).toBe(0);

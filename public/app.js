@@ -627,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.5';
+var APP_VERSION = '2.4.4';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -680,12 +680,10 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '歌词时间轴后台静默校正与逐字同步修复。',
+  hero: 'Folia 海报墙切歌优化，减少大曲库中的重复计算。',
   notes: [
-    '本地歌自动查找校正缓存；已配置本地模型时后台对齐，不弹出校正界面。',
-    '原生逐字时间轴优先；模型区间不足时保留整句歌词，不把整句时长均分到每个字。',
-    '暂停、拖动和 Folia 歌词沿实际播放时钟更新，切歌后的旧结果不覆盖当前歌曲。',
-    '实验性歌声对齐需另装 Python 3.13、FFmpeg 和模型；安装包不自带运行时，也不保证逐字精度。'
+    'Folia 海报墙切歌时复用未变化的卡片，减少大曲库中的重复计算。',
+    '播放分区随当前歌曲及时更新，封面变化与曲库重排继续正确同步。'
   ]
 };
 function readSavedVolume() {
@@ -9568,11 +9566,6 @@ function makeLyricShaderMaterial(mask, pal) {
     uniforms: {
       uMap: { value: mask.texture },
       uProgress: { value: 0 },
-      uTimed: { value: 0 },
-      uActive: { value: 0 },
-      uActiveLeft: { value: 0 },
-      uActiveRight: { value: 0 },
-      uTimedMinY: { value: mask.lines && mask.lines.length > 1 ? 0.5 : 0 },
       uTextMin: { value: mask.textMin },
       uTextMax: { value: mask.textMax },
       uOpacity: { value: 0 },
@@ -9587,7 +9580,7 @@ function makeLyricShaderMaterial(mask, pal) {
     fragmentShader: [
       'precision highp float;',
       'uniform sampler2D uMap;',
-      'uniform float uProgress,uTimed,uActive,uActiveLeft,uActiveRight,uTimedMinY,uTextMin,uTextMax,uOpacity,uFeather,uSolar;',
+      'uniform float uProgress,uTextMin,uTextMax,uOpacity,uFeather,uSolar;',
       'uniform vec3 uBaseColor,uHiColor,uGlowColor,uSolarColor;',
       'varying vec2 vUv;',
       'void main(){',
@@ -9596,12 +9589,9 @@ function makeLyricShaderMaterial(mask, pal) {
       '  if(mask < 0.01) discard;',
       '  float denom = max(0.001, uTextMax - uTextMin);',
       '  float p = clamp((uv.x - uTextMin) / denom, 0.0, 1.0);',
-      '  float primary = step(uTimedMinY, uv.y);',
-      '  float filled = uTimed > 0.5 ? step(p, uProgress) * primary : 1.0 - smoothstep(uProgress, uProgress + uFeather, p);',
-      '  float edge = uTimed > 0.5 ? 0.0 : 1.0 - smoothstep(0.0, uFeather * 2.8, abs(p - uProgress));',
-      '  float activeGlyph = uActive * primary * step(uActiveLeft, p) * step(p, uActiveRight);',
+      '  float filled = 1.0 - smoothstep(uProgress, uProgress + uFeather, p);',
+      '  float edge = 1.0 - smoothstep(0.0, uFeather * 2.8, abs(p - uProgress));',
       '  vec3 color = mix(uBaseColor, uHiColor, filled * 0.88);',
-      '  color = mix(color, uHiColor, activeGlyph * 0.28);',
       '  color += uGlowColor * edge * 0.14;',
       '  vec3 solar = uSolarColor;',
       '  color = mix(color, color + solar * 0.34, uSolar * (0.25 + filled * 0.45));',
@@ -9758,52 +9748,6 @@ function updateLyricMeshProgress(mesh, progress) {
   mesh.userData.lastLyricProgress = progress;
 }
 
-function lyricGlyphBoundary(mask, charEnd) {
-  if (!mask || !mask.lines || !mask.lines[0]) return 0;
-  var text = mask.lines[0];
-  var end = Math.max(0, Math.min(text.length, Number(charEnd) || 0));
-  if (!end) return 0;
-  if (end === text.length) return 1;
-  if (!mask.glyphBoundaries) {
-    var ctx = mask.texture.image.getContext('2d');
-    ctx.font = lyricFontCss(mask.fontSize, mask.weight);
-    var total = lyricMeasureText(ctx, text, mask.fontSize);
-    mask.glyphBoundaries = new Array(text.length + 1);
-    mask.glyphBoundaries[0] = 0;
-    for (var i = 1; i < text.length; i++) {
-      mask.glyphBoundaries[i] = Math.max(0, Math.min(1, lyricMeasureText(ctx, text.slice(0, i), mask.fontSize) / Math.max(1, total)));
-    }
-    mask.glyphBoundaries[text.length] = 1;
-  }
-  return mask.glyphBoundaries[end];
-}
-
-function setLyricMeshAtTime(mesh, line, now) {
-  if (!mesh || !mesh.userData || !mesh.userData.lyric) return 0;
-  var timed = !!(line && line.words && line.words.length);
-  var progress = timed ? getLyricLineProgress(line, null, now) : 0;
-  var data = mesh.userData.lyric;
-  data.textMat.uniforms.uTimed.value = timed ? 1 : 0;
-  var activeWord = null;
-  if (timed) {
-    for (var i = 0; i < line.words.length; i++) {
-      var word = line.words[i];
-      if (now < word.t) break;
-      if (now < word.t + Math.max(0, Number(word.d) || 0)) activeWord = word;
-    }
-  }
-  data.textMat.uniforms.uActive.value = activeWord ? 1 : 0;
-  data.textMat.uniforms.uActiveLeft.value = activeWord ? lyricGlyphBoundary(data.mask, activeWord.c0) : 0;
-  data.textMat.uniforms.uActiveRight.value = activeWord ? lyricGlyphBoundary(data.mask, activeWord.c1) : 0;
-  if (timed) {
-    var charEnd = Math.round(progress * Math.max(1, line.charCount || String(line.text || '').length));
-    progress = lyricGlyphBoundary(data.mask, charEnd);
-  }
-  updateLyricMeshProgress(mesh, progress);
-  mesh.userData.activeLyricWord = activeWord;
-  return progress;
-}
-
 // The upstream track treats each timestamp bucket as one visual row. Parser
 // compatibility keeps duplicate texts joined with "\n", so normalize all
 // whitespace here instead of letting the active carrier wrap while context
@@ -9888,8 +9832,6 @@ function clearStageLyrics() {
   stageLyrics.currentText = '';
   stageLyrics.cursorLines = null;
   stageLyrics.cursorIdx = -1;
-  stageLyrics.lastPlaybackTime = null;
-  stageLyrics.forceSnapRows = true;
   while (stageLyrics.outgoing.length) disposeLyricMesh(stageLyrics.outgoing.pop());
   stageLyricRowsClear();
 }
@@ -10674,12 +10616,11 @@ function tickStageLyricRows(dt) {
   var scrollEase = clampRange(0.18 * 1.16, 0.08, 0.34);
   var frameScale = clampRange(dt * 60, 0.5, 3);
   var trackEase = 1 - Math.pow(1 - scrollEase, frameScale);
-  if (stageLyrics.forceSnapRows || !isFinite(stageLyrics.rowsScroll) || Math.abs(diff) > Math.max(3.2, lyricDisplayLineCountForMode(mode) * 1.85)) stageLyrics.rowsScroll = targetScroll;
+  if (!isFinite(stageLyrics.rowsScroll) || Math.abs(diff) > Math.max(3.2, lyricDisplayLineCountForMode(mode) * 1.85)) stageLyrics.rowsScroll = targetScroll;
   else {
     var trackStep = clampRange(diff * trackEase, -0.68 * slotStepForLimit, 0.68 * slotStepForLimit);
     stageLyrics.rowsScroll += trackStep;
   }
-  stageLyrics.forceSnapRows = false;
   var visualGap = lyricTranslationVisualGapValue();
   var count = lyricDisplayLineCountForMode(mode);
   // 行高照上游 lyricTrackLineStepWorld：世界高 × (画布行高/画布高)，锁字号下画布高 384、
@@ -10796,22 +10737,13 @@ function tickStageLyricRows(dt) {
     if (isCurrentRow) {
       ctx.currentRowY = y;
       if (data.useShader && data.textMat && data.textMat.uniforms && data.textMat.uniforms.uProgress) {
-        var currentLine = lyricsLines[activeIdx];
-        var currentWords = currentLine && currentLine.words;
-        var currentTime = audio && isFinite(audio.currentTime) ? audio.currentTime : 0;
-        var currentProgress = currentWords && currentWords.length ? getLyricLineProgress(currentLine, null, currentTime) : 0;
-        var currentCharEnd = Math.round(currentProgress * Math.max(1, currentLine && currentLine.charCount || 1));
-        var activeWord = stageLyrics.current && stageLyrics.current.userData && stageLyrics.current.userData.activeLyricWord;
-        data.textMat.uniforms.uTimed.value = currentWords && currentWords.length ? 1 : 0;
-        data.textMat.uniforms.uProgress.value = lyricGlyphBoundary(data.mask, currentCharEnd);
-        data.textMat.uniforms.uActive.value = activeWord ? 1 : 0;
-        data.textMat.uniforms.uActiveLeft.value = activeWord ? lyricGlyphBoundary(data.mask, activeWord.c0) : 0;
-        data.textMat.uniforms.uActiveRight.value = activeWord ? lyricGlyphBoundary(data.mask, activeWord.c1) : 0;
+        var activeProgress = stageLyrics.current && stageLyrics.current.userData
+          ? Number(stageLyrics.current.userData.lastLyricProgress) || 0
+          : 0;
+        data.textMat.uniforms.uProgress.value = activeProgress;
       }
     } else if (data.useShader && data.textMat && data.textMat.uniforms && data.textMat.uniforms.uProgress) {
       data.textMat.uniforms.uProgress.value = 0;
-      data.textMat.uniforms.uTimed.value = 0;
-      data.textMat.uniforms.uActive.value = 0;
     }
     if (data.useShader) data.textMat.uniforms.uOpacity.value = row.alpha;
     else data.textMat.opacity = row.alpha;
@@ -11169,6 +11101,7 @@ var lyricWordProgressCursor = {
 };
 function getLyricLineProgress(line, nextLine, now) {
   if (!line) return 0;
+  now += line.words && line.words.length ? 0.030 : 0.020;
   if (line.words && line.words.length && line.charCount > 0) {
     var words = line.words;
     var cursor = lyricWordProgressCursor;
@@ -11179,31 +11112,37 @@ function getLyricLineProgress(line, nextLine, now) {
       cursor.lastP = 0;
     }
     var lastP = cursor.lastP;
-    for (var i = cursor.index; i < words.length; i++) {
+    var startIndex = cursor.index;
+    for (var i = startIndex; i < words.length; i++) {
       var w = words[i];
-      if (now < w.t) {
+      var ws = w.t;
+      var we = w.t + Math.max(0.08, w.d || 0.24);
+      if (now < ws) {
         cursor.index = i;
         cursor.lastP = lastP;
         cursor.now = now;
         return lastP;
       }
-      // A timed token begins as one unit. Multi-character tokens do not
-      // contain enough evidence to place each character within the token.
-      lastP = Math.max(lastP, Math.min(line.charCount, Number(w.c1) || 0) / line.charCount);
+      var local = now >= we ? 1 : (now - ws) / Math.max(0.08, we - ws);
+      local = Math.max(0, Math.min(1, local));
+      var p = (w.c0 + (w.c1 - w.c0) * local) / line.charCount;
+      lastP = Math.max(lastP, p);
+      if (now < we) {
+        cursor.index = i;
+        cursor.lastP = lastP;
+        cursor.now = now;
+        return lastP;
+      }
     }
     cursor.index = words.length;
     cursor.lastP = lastP;
     cursor.now = now;
-    return lastP;
+    return 1;
   }
-  return 0;
-}
-
-function lyricLineVocalStart(line) {
-  if (line && line.words && line.words.length && isFinite(line.words[0].t)) {
-    return Math.max(Number(line.t) || 0, Number(line.words[0].t));
-  }
-  return Number(line && line.t) || 0;
+  var nextT = nextLine && nextLine.t > line.t ? nextLine.t : Math.min((audio && audio.duration) || now + 4, line.t + (line.duration || 4.8));
+  var span = Math.max(0.75, nextT - line.t);
+  var prog = Math.max(0, Math.min(1, (now - line.t) / span));
+  return prog * prog * (3 - 2 * prog);
 }
 
 function findStageLyricIndex(lines, time) {
@@ -11213,19 +11152,19 @@ function findStageLyricIndex(lines, time) {
     stageLyrics.cursorIdx = -1;
     return -1;
   }
-  var target = time;
+  var target = time + 0.05;
   var index = stageLyrics.cursorLines === lines ? stageLyrics.cursorIdx : -1;
-  if (stageLyrics.cursorLines === lines && index >= 0 && index < lines.length && lyricLineVocalStart(lines[index]) <= target) {
-    while (index + 1 < lines.length && lyricLineVocalStart(lines[index + 1]) <= target) index++;
+  if (stageLyrics.cursorLines === lines && index >= 0 && index < lines.length && lines[index].t <= target) {
+    while (index + 1 < lines.length && lines[index + 1].t <= target) index++;
     stageLyrics.cursorIdx = index;
     return index;
   }
-  if (stageLyrics.cursorLines === lines && index === -1 && lyricLineVocalStart(lines[0]) > target) return -1;
+  if (stageLyrics.cursorLines === lines && index === -1 && lines[0].t > target) return -1;
   var low = 0;
   var high = lines.length;
   while (low < high) {
     var mid = (low + high) >> 1;
-    if (lyricLineVocalStart(lines[mid]) <= target) {
+    if (lines[mid].t <= target) {
       low = mid + 1;
     } else {
       high = mid;
@@ -11242,7 +11181,7 @@ function tickLyricsParticles() {
     clearStageLyrics();
     return;
   }
-  if (!audio || !audio.src || !lyricsLines.length) {
+  if (!playing || !audio || !lyricsLines.length) {
     if (stageLyrics.current) {
       stageLyrics.current.userData.state = 'out';
       stageLyrics.current.userData.age = 0;
@@ -11254,9 +11193,6 @@ function tickLyricsParticles() {
     return;
   }
   var t = audio.currentTime;
-  var elapsed = stageLyrics.lastPlaybackTime == null ? 0 : t - stageLyrics.lastPlaybackTime;
-  if (elapsed < -0.02 || elapsed > 0.30) stageLyrics.forceSnapRows = true;
-  stageLyrics.lastPlaybackTime = t;
   var newIdx = findStageLyricIndex(lyricsLines, t);
   if (newIdx < 0) {
     var introText = currentLyricFallbackText();
@@ -11276,7 +11212,7 @@ function tickLyricsParticles() {
       stageLyricIntroLine.duration = Math.max(0.8, introEnd);
       stageLyricIntroLine.charCount = Math.max(1, introText.length);
       stageLyricIntroLine.fallback = true;
-      setLyricMeshAtTime(stageLyrics.current, stageLyricIntroLine, t);
+      updateLyricMeshProgress(stageLyrics.current, getLyricLineProgress(stageLyricIntroLine, null, t));
     }
     return;
   }
@@ -11290,7 +11226,9 @@ function tickLyricsParticles() {
       stageLyricFallbackLine.t = t;
       curLine = stageLyricFallbackLine;
     }
-    setLyricMeshAtTime(stageLyrics.current, curLine, t);
+    var nextLine = lyricsLines[newIdx + 1];
+    var progress = getLyricLineProgress(curLine, nextLine, t);
+    updateLyricMeshProgress(stageLyrics.current, progress);
   }
 }
 
@@ -22154,10 +22092,6 @@ function applyLyricsState(lines, hasNativeKaraoke, timingSource) {
   }
   renderLyrics();
   updateCustomLyricControls();
-  if (typeof window !== 'undefined' && window.MineradioLyricAlignment &&
-      typeof window.MineradioLyricAlignment.onLyricsChanged === 'function') {
-    window.MineradioLyricAlignment.onLyricsChanged();
-  }
 }
 /**
  * 切回原歌词并复用其只读对象图，避免每次来源切换再次深克隆长歌词。
@@ -22168,7 +22102,7 @@ function applyOriginalLyricsState() {
   applyLyricsState(originalLyricsState.lines, originalLyricsState.hasNativeKaraoke, originalLyricsState.timingSource);
 }
 /**
- * 解析用户或本地歌词。纯文本只估算展示行位置，不把它作为声学时间或逐字时间。
+ * 解析用户或本地纯文本歌词。优先识别带时间轴格式，普通文本按歌曲时长均分，避免链式 map/filter 放大长歌词加载成本。
  * @param {string} text 歌词原文。
  * @returns {Array<object>} 标准化歌词行。
  */
@@ -22206,10 +22140,9 @@ function parseCustomLyricText(text) {
   var generated = new Array(rows.length);
   for (var genIdx = 0; genIdx < rows.length; genIdx++) {
     var line = rows[genIdx];
-    generated[genIdx] = { t: genIdx * gap, duration: gap, text: line, source: 'custom-text',
-      untimed: true, charCount: Math.max(1, line.length) };
+    generated[genIdx] = { t: genIdx * gap, duration: gap, text: line, source: 'custom-text', charCount: Math.max(1, line.length) };
   }
-  return generated;
+  return finalizeLyricLineDurations(generated);
 }
 function applyCustomLyricState(song, silent) {
   song = song || currentLyricSong();
@@ -22239,9 +22172,6 @@ function applyCustomLyricState(song, silent) {
   }
   renderLyrics();
   updateCustomLyricControls();
-  if (window.MineradioLyricAlignment && typeof window.MineradioLyricAlignment.onLyricsChanged === 'function') {
-    window.MineradioLyricAlignment.onLyricsChanged();
-  }
   return true;
 }
 function preferredLyricSourceForSong(song) {
@@ -22472,7 +22402,7 @@ function openCustomLyricModal() {
   if (sub) sub.textContent = (songDisplaySubtitle(song) || '') + (entry ? ' · 已保存自定义歌词' : ' · 可粘贴 LRC 或逐行输入');
   if (input) input.value = entry ? (entry.text || '') : '';
   renderLocalLyricPickRow(song);
-  setCustomLyricStatus(entry ? '已读取本地自定义歌词' : '', entry ? 'good' : '');
+  setCustomLyricStatus(entry ? '已读取本地自定义歌词' : '提示：带 [00:12.00] 时间轴会更精准；纯文本会自动铺开', entry ? 'good' : '');
   openGsapModal(document.getElementById('custom-lyric-modal'));
   setTimeout(function(){ if (input) input.focus(); }, 120);
 }
@@ -28943,26 +28873,13 @@ function lyricLinesHaveWordTiming(lines) {
   }
   return false;
 }
-function lyricWordTimingsCoverText(text, words) {
-  if (!Array.isArray(words) || !words.length) return false;
-  var covered = 0, previousStart = -Infinity;
-  for (var i = 0; i < words.length; i++) {
-    var word = words[i];
-    if (!word || !isFinite(word.t) || !isFinite(word.d) || word.d < 0 || word.t < previousStart ||
-        word.c0 < covered || word.c1 <= word.c0 || word.c1 > text.length ||
-        /[\p{L}\p{N}]/u.test(text.slice(covered, word.c0))) return false;
-    covered = word.c1;
-    previousStart = word.t;
-  }
-  return !/[\p{L}\p{N}]/u.test(text.slice(covered));
-}
 var ENHANCED_LRC_WORD_TAG_REG = /<(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?>/g;
 /**
  * 向 Enhanced LRC 正文追加一个带时间的片段，并让字符范围与折叠空白后的正文保持一致。
  * @param {{text:string,words:Array<object>}} state 当前行解析状态。
  * @param {string} rawText 当前时间标签后的原始片段。
  * @param {number} startTime 片段开始秒数。
- * @param {number} endTime 下一标签秒数；缺失时保留未知时长。
+ * @param {number} endTime 下一标签秒数；缺失时使用保守时长。
  * @returns {void}
  */
 function appendEnhancedLrcSegment(state, rawText, startTime, endTime) {
@@ -28979,19 +28896,18 @@ function appendEnhancedLrcSegment(state, rawText, startTime, endTime) {
   }
   var c1 = state.text.length;
   if (c1 <= c0 || !state.text.slice(c0, c1).trim()) return;
-  var duration = isFinite(endTime) ? endTime - startTime : NaN;
+  var duration = isFinite(endTime) ? Math.max(0, endTime - startTime) : 0.24;
   var previous = state.words.length ? state.words[state.words.length - 1] : null;
   if (previous && previous.c1 === c0 && Math.abs(previous.t - startTime) < 0.0005) {
     previous.c1 = c1;
     previous.text = state.text.slice(previous.c0, c1);
-    previous.d = isFinite(previous.d) && isFinite(duration) && previous.d >= 0 && duration >= 0
-      ? Math.max(previous.d, duration) : NaN;
+    previous.d = Math.max(previous.d || 0, duration, 0.06);
     return;
   }
   state.words.push({
     text: state.text.slice(c0, c1),
     t: Math.max(0, Number(startTime) || 0),
-    d: duration,
+    d: Math.max(0.06, duration),
     c0: c0,
     c1: c1
   });
@@ -29111,11 +29027,9 @@ function parseLyricText(text) {
     var text = bucket.texts.join('\n');
     var bucketTranslation = bucket.texts.length > 1 ? String(bucket.texts[1] || '').trim() : '';
     var words = [];
-    // The primary lyric retains its native timestamps when a translation
-    // shares the same line timestamp. Translation text stays untimed.
-    var primaryWordLine = bucket.wordLines && bucket.wordLines.filter(function(wordLine) { return wordLine.textIndex === 0; })[0];
-    if (primaryWordLine) {
-      var sourceWords = primaryWordLine.words || [];
+    // 双语同时间行保持原有整行高亮；单行 Enhanced LRC 才启用逐字时间轴。
+    if (bucket.texts.length === 1 && bucket.wordLines && bucket.wordLines.length) {
+      var sourceWords = bucket.wordLines[0].words || [];
       for (var wordIdx = 0; wordIdx < sourceWords.length; wordIdx++) {
         var sourceWord = sourceWords[wordIdx];
         words.push({
@@ -29127,12 +29041,11 @@ function parseLyricText(text) {
         });
       }
     }
-    if (!lyricWordTimingsCoverText(bucket.texts[0] || '', words)) words = [];
     var line = {
       t: bucket.t,
       text: text,
       source: words.length ? 'lrc-word' : (bucket.texts.length > 1 ? 'lrc-bilingual' : 'lrc'),
-      charCount: Math.max(1, words.length ? bucket.texts[0].length : text.replace(/\n/g, '').length)
+      charCount: Math.max(1, text.replace(/\n/g, '').length)
     };
     if (words.length) line.words = words;
     if (bucketTranslation && bucketTranslation !== String(bucket.texts[0] || '').trim()) line.translation = bucketTranslation;
@@ -29395,19 +29308,35 @@ function parseYrcText(text) {
     var lineStartMs = parseInt(m[1], 10) || 0;
     var lineDurMs = parseInt(m[2], 10) || 0;
     var body = m[3] || '';
-    var rawWords = [];
+    var words = [], fullText = '';
     var reg = /\((\d+),(\d+),\d+\)([^()]*)/g, wm;
     while ((wm = reg.exec(body))) {
+      var txt = (wm[3] || '').replace(/\s+/g, ' ');
+      if (!txt) continue;
       var rawStart = parseInt(wm[1], 10) || 0;
       var rawDur = parseInt(wm[2], 10) || 0;
       var absStartMs = rawStart >= lineStartMs - 500 ? rawStart : lineStartMs + rawStart;
-      rawWords.push({ text: wm[3] || '', startMs: absStartMs, durMs: rawDur });
+      var c0 = fullText.length;
+      fullText += txt;
+      words.push({ text:txt, t:absStartMs / 1000, d:Math.max(0.06, rawDur / 1000), c0:c0, c1:fullText.length });
     }
-    var built = buildWordTimedLyricLine(
-      lineStartMs, lineDurMs, rawWords, body.replace(/\(\d+,\d+,\d+\)/g, ''), 'yrc-word', 'yrc-line');
-    if (built) lines.push(built);
+    if (!fullText) fullText = body.replace(/\(\d+,\d+,\d+\)/g, '').replace(/\s+/g, ' ');
+    var leading = leadingWhitespaceLength(fullText);
+    fullText = fullText.replace(/\s+/g, ' ').trim();
+    if (!fullText) return;
+    if (words.length) {
+      var compactWords = [];
+      for (var wordIdx = 0; wordIdx < words.length; wordIdx++) {
+        var w = words[wordIdx];
+        w.c0 = Math.max(0, Math.min(fullText.length, w.c0 - leading));
+        w.c1 = Math.max(w.c0, Math.min(fullText.length, w.c1 - leading));
+        if (w.c1 > w.c0) compactWords.push(w);
+      }
+      words = compactWords;
+    }
+    lines.push({ t:lineStartMs / 1000, duration:lineDurMs / 1000, text:fullText, words:words, charCount:Math.max(1, fullText.length), source: words.length ? 'yrc-word' : 'yrc-line' });
   });
-  return finalizeLyricLineDurations(lines, true);
+  return finalizeLyricLineDurations(lines);
 }
 // KRC / QRC / TTML 的分流特征。KRC 与 QRC 的行头和 YRC 一样是 `[起点,时长]`，
 // 只能靠词项分隔符区分：KRC 用 `<偏移,时长,0>正文`，QRC 用 `正文(起点,时长)`，
@@ -29429,30 +29358,35 @@ var QRC_WORD_SNIFF_RE = /^\s*\[\d+,\d+\][^\n]*\(\d+,\d+\)/m;
  * @returns {object|null} 标准化歌词行；正文为空时返回 null。
  */
 function buildWordTimedLyricLine(lineStartMs, lineDurMs, rawWords, plainFallback, wordSource, lineSource) {
-  var words = [], fullText = String(plainFallback || '').replace(/\s+/g, ' ').trim();
-  if (!fullText) {
-    fullText = rawWords.map(function(raw) { return String(raw && raw.text || ''); }).join('').replace(/\s+/g, ' ').trim();
-  }
-  if (!fullText) return null;
-  var textCursor = 0, mapped = true;
+  var words = [], fullText = '';
   for (var i = 0; i < rawWords.length; i++) {
     var raw = rawWords[i] || {};
-    var txt = String(raw.text || '').replace(/\s+/g, ' ').trim();
+    var txt = String(raw.text || '').replace(/\s+/g, ' ');
     if (!txt) continue;
-    var c0 = fullText.indexOf(txt, textCursor);
-    if (c0 < 0) { mapped = false; continue; }
-    var c1 = c0 + txt.length;
-    textCursor = c1;
+    var c0 = fullText.length;
+    fullText += txt;
     words.push({
-      text: fullText.slice(c0, c1),
-      t: raw.startMs == null ? NaN : Number(raw.startMs) / 1000,
-      d: raw.durMs == null ? NaN : Number(raw.durMs) / 1000,
+      text: txt,
+      t: (Number(raw.startMs) || 0) / 1000,
+      d: Math.max(0.06, (Number(raw.durMs) || 0) / 1000),
       c0: c0,
-      c1: c1
+      c1: fullText.length
     });
   }
-  // A cumulative mask cannot skip untimed text or consume backward onsets.
-  if (!mapped || !lyricWordTimingsCoverText(fullText, words)) words = [];
+  if (!fullText) fullText = String(plainFallback || '');
+  var leading = leadingWhitespaceLength(fullText);
+  fullText = fullText.replace(/\s+/g, ' ').trim();
+  if (!fullText) return null;
+  if (words.length) {
+    var compactWords = [];
+    for (var wordIdx = 0; wordIdx < words.length; wordIdx++) {
+      var word = words[wordIdx];
+      word.c0 = Math.max(0, Math.min(fullText.length, word.c0 - leading));
+      word.c1 = Math.max(word.c0, Math.min(fullText.length, word.c1 - leading));
+      if (word.c1 > word.c0) compactWords.push(word);
+    }
+    words = compactWords;
+  }
   return {
     t: lineStartMs / 1000,
     duration: lineDurMs > 0 ? lineDurMs / 1000 : 0,
@@ -29485,12 +29419,24 @@ function parseQrcText(text) {
     var rest = m[3] || '';
     var rawWords = [];
     var reg = /([^()]*)\((\d+),(\d+)\)/g, wm;
+    var consumed = 0, lastEndMs = lineStartMs;
     while ((wm = reg.exec(rest))) {
       var rawStart = parseInt(wm[2], 10) || 0;
       // 少数导出工具把词项起点写成相对行首的偏移，拿行首当基准把两种写法都收下。
       var wordStartMs = rawStart >= lineStartMs - 500 ? rawStart : lineStartMs + rawStart;
       var wordDurMs = parseInt(wm[3], 10) || 0;
       rawWords.push({ text: wm[1] || '', startMs: wordStartMs, durMs: wordDurMs });
+      consumed = reg.lastIndex;
+      lastEndMs = wordStartMs + wordDurMs;
+    }
+    // 最后一个词项漏写时间标记时，把剩下的正文按行尾补上，宁可时间粗一点也不丢字。
+    var tail = rawWords.length ? rest.slice(consumed) : '';
+    if (tail && /\S/.test(tail)) {
+      rawWords.push({
+        text: tail,
+        startMs: lastEndMs,
+        durMs: Math.max(0, lineStartMs + lineDurMs - lastEndMs)
+      });
     }
     var built = buildWordTimedLyricLine(
       lineStartMs, lineDurMs, rawWords, rest.replace(/\(\d+,\d+\)/g, ''), 'qrc-word', 'qrc-line');
@@ -29621,15 +29567,15 @@ function parseTtmlText(text) {
       rawWords.push({
         text: spanText,
         startMs: spanStart,
-        durMs: isFinite(spanEnd) ? spanEnd - spanStart : null
+        durMs: isFinite(spanEnd) && spanEnd > spanStart ? spanEnd - spanStart : 0
       });
     }
     // 只写了 begin 的词项按「下一个词项开始」收尾，最后一个退到整行的 end。
     for (var wi = 0; wi < rawWords.length; wi++) {
-      if (rawWords[wi].durMs !== null) continue;
+      if (rawWords[wi].durMs > 0) continue;
       var nextWord = rawWords[wi + 1];
       var until = nextWord ? nextWord.startMs : lineEndMs;
-      rawWords[wi].durMs = isFinite(until) ? until - rawWords[wi].startMs : NaN;
+      rawWords[wi].durMs = isFinite(until) && until > rawWords[wi].startMs ? until - rawWords[wi].startMs : 0;
     }
     if (!isFinite(lineStartMs) && rawWords.length) lineStartMs = rawWords[0].startMs;
     if (!isFinite(lineStartMs)) continue;
@@ -30953,20 +30899,10 @@ function schedulePlaybackProgressUi(reason, force) {
   }
   scheduleNamedAnimationFrame('playback-progress-ui', updatePlaybackProgressUi);
 }
-var PLAYBACK_PROGRESS_EVENT_NAMES = ['loadedmetadata', 'durationchange', 'timeupdate', 'seeking', 'seeked', 'ratechange', 'play', 'pause', 'ended', 'emptied'];
+var PLAYBACK_PROGRESS_EVENT_NAMES = ['loadedmetadata', 'durationchange', 'timeupdate', 'seeked', 'play', 'pause', 'emptied'];
 var PLAYBACK_STATE_EVENT_NAMES = ['play', 'playing', 'pause', 'ended', 'emptied', 'abort', 'error'];
 function handlePlaybackProgressEvent(event) {
   schedulePlaybackProgressUi(event && event.type || 'audio-event');
-  if (event && event.target === audio && /^(seeking|seeked|ratechange|play|pause|ended|emptied)$/.test(event.type)) {
-    if (stageLyrics) stageLyrics.forceSnapRows = true;
-    if (fx && fx.desktopLyrics) {
-      desktopOverlayPushState.lyricsAt = 0;
-      pushDesktopLyricsState(false);
-    }
-    if (window.MineradioFoliaHost && window.MineradioFoliaHost.pushPlaybackState) {
-      window.MineradioFoliaHost.pushPlaybackState();
-    }
-  }
   // 无缝预取与交叉的触发点挂在 timeupdate 上：它由媒体时钟驱动，
   // 后台标签页被节流时不会漏掉交叉窗口，暂停时也不会像自建定时器那样空转。
   if (event && event.type === 'timeupdate' && typeof runGaplessPlaybackWatch === 'function') runGaplessPlaybackWatch(event.target);
@@ -30975,11 +30911,7 @@ function handlePlaybackStateEvent(event) {
   syncPlaybackStateFromAudioEvent(event && event.type || 'audio-event');
 }
 function bindPlaybackProgressEvents(audioEl) {
-  if (!audioEl) return;
-  if (window.MineradioLyricAlignment && typeof window.MineradioLyricAlignment.bindAudio === 'function') {
-    window.MineradioLyricAlignment.bindAudio(audioEl);
-  }
-  if (audioEl._mineradioProgressBound) return;
+  if (!audioEl || audioEl._mineradioProgressBound) return;
   audioEl._mineradioProgressBound = true;
   for (var progressIdx = 0; progressIdx < PLAYBACK_PROGRESS_EVENT_NAMES.length; progressIdx++) {
     audioEl.addEventListener(PLAYBACK_PROGRESS_EVENT_NAMES[progressIdx], handlePlaybackProgressEvent);
@@ -31488,7 +31420,6 @@ function seekFromProgressPointer(e, emitParticles) {
   setProgressVisual(ratio * 100);
   syncBeatMapPlaybackCursor(audio.currentTime);
   schedulePlaybackProgressUi('progress-seek');
-  if (stageLyrics) stageLyrics.forceSnapRows = true;
   if (emitParticles) emitProgressDragParticles(e.clientX, rect.top + rect.height / 2);
 }
 var progressBar = document.getElementById('progress-bar');
@@ -34854,14 +34785,11 @@ function normalizeEmbeddedLyricText(text) {
 }
 function embeddedLyricFieldPriority(key, value) {
   var normalized = String(key || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  var raw = String(value || '');
-  var hasTimeTags = /\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]|\[\d+,\d+\]|<tt[\s>]/i.test(raw);
-  var mayHaveWords = /<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>|\[\d+,\d+\]|<tt[\s>]/i.test(raw);
-  var hasWords = mayHaveWords && lyricLinesHaveWordTiming(parseTimedLyricText(raw));
-  if (normalized === 'LYRICS') return hasWords ? 100 : (hasTimeTags ? 95 : 90);
-  if (normalized === 'SYNCEDLYRICS' || normalized === 'SYNCLYRICS') return hasWords ? 99 : (hasTimeTags ? 94 : 70);
-  if (normalized === 'LYRIC') return hasWords ? 98 : (hasTimeTags ? 92 : 65);
-  if (normalized === 'UNSYNCEDLYRICS' || normalized === 'UNSYNCEDLYRIC') return hasWords ? 97 : (hasTimeTags ? 80 : 45);
+  var hasTimeTags = /\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/.test(String(value || ''));
+  if (normalized === 'LYRICS') return hasTimeTags ? 100 : 90;
+  if (normalized === 'SYNCEDLYRICS' || normalized === 'SYNCLYRICS') return hasTimeTags ? 95 : 70;
+  if (normalized === 'LYRIC') return hasTimeTags ? 92 : 65;
+  if (normalized === 'UNSYNCEDLYRICS' || normalized === 'UNSYNCEDLYRIC') return hasTimeTags ? 80 : 45;
   return hasTimeTags ? 25 : 0;
 }
 /**
@@ -34872,36 +34800,10 @@ function embeddedLyricFieldPriority(key, value) {
 function embeddedLyricFieldMaxPriority(key) {
   var normalized = String(key || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (normalized === 'LYRICS') return 100;
-  if (normalized === 'SYNCEDLYRICS' || normalized === 'SYNCLYRICS') return 99;
-  if (normalized === 'LYRIC') return 98;
-  if (normalized === 'UNSYNCEDLYRICS' || normalized === 'UNSYNCEDLYRIC') return 97;
-  return 25;
-}
-/**
- * 没有原生逐字标记时歌词字段最多达到的优先级。
- * @param {string} key Vorbis comment 字段名。
- * @returns {number} 句级/普通文本的理论最高优先级。
- */
-function embeddedLyricFieldLinePriority(key) {
-  var normalized = String(key || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (normalized === 'LYRICS') return 95;
-  if (normalized === 'SYNCEDLYRICS' || normalized === 'SYNCLYRICS') return 94;
+  if (normalized === 'SYNCEDLYRICS' || normalized === 'SYNCLYRICS') return 95;
   if (normalized === 'LYRIC') return 92;
   if (normalized === 'UNSYNCEDLYRICS' || normalized === 'UNSYNCEDLYRIC') return 80;
   return 25;
-}
-/**
- * 在解码大型 value 前保守判断其是否可能含原生逐字时间轴。
- * @param {Uint8Array} bytes Vorbis comment 字节。
- * @param {number} start value 起始偏移。
- * @param {number} end value 结束偏移，不含该位置。
- * @returns {boolean} 是否出现逐字格式必需的分隔符。
- */
-function mayHaveEmbeddedWordTimingBytes(bytes, start, end) {
-  for (var i = start; i < end; i++) {
-    if (bytes[i] === 60 || bytes[i] === 40) return true; // `<` 或 `(`
-  }
-  return false;
 }
 /**
  * 判断字节是否为现有 LRC 时间标签规则使用的 ASCII 数字。
@@ -34941,7 +34843,7 @@ function hasEmbeddedLyricTimeTagBytes(bytes, start, end) {
 /**
  * 把单个 VORBIS_COMMENT payload 合并到跨 block 的歌词候选结果。
  * @param {Uint8Array} bytes 完整 Vorbis payload。
- * @param {{priority:number,text:string,selectedKeys?:object}} best 当前最高优先级结果。
+ * @param {{priority:number,text:string}} best 当前最高优先级结果。
  * @returns {boolean} 是否命中最高优先级并可结束后续 block 读取。
  */
 function parseFlacLyricsVorbisPayload(bytes, best) {
@@ -34962,13 +34864,9 @@ function parseFlacLyricsVorbisPayload(bytes, best) {
     var eq = findByteInRange(bytes, commentStart, commentEnd, 61);
     if (eq <= commentStart) continue;
     var key = utf8FromBytes(bytes, commentStart, eq - commentStart).trim();
-    var normalizedKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (best.selectedKeys && best.selectedKeys[normalizedKey]) continue;
     var valueStart = eq + 1;
     var maxPriority = embeddedLyricFieldMaxPriority(key);
     if (best.priority >= maxPriority) continue;
-    if (best.priority >= embeddedLyricFieldLinePriority(key)
-        && !mayHaveEmbeddedWordTimingBytes(bytes, valueStart, commentEnd)) continue;
     // 未知字段只有存在完整 LRC 时间标签才可能命中 priority 25 回退。
     if (maxPriority === 25 && !hasEmbeddedLyricTimeTagBytes(bytes, valueStart, commentEnd)) continue;
     var value = normalizeEmbeddedLyricText(utf8FromBytes(bytes, valueStart, commentEnd - valueStart));
@@ -34976,9 +34874,7 @@ function parseFlacLyricsVorbisPayload(bytes, best) {
     if (value && priority > best.priority) {
       best.priority = priority;
       best.text = value;
-      if (!best.selectedKeys) best.selectedKeys = Object.create(null);
-      best.selectedKeys[normalizedKey] = true;
-      // 只有解析出 LYRICS 原生逐字时间才能到 100，后续字段无法改进。
+      // 100 是现有优先级上限，后续字段和 block 都不可能替换当前 first-wins 结果。
       if (priority === 100) return true;
     }
   }
@@ -44344,10 +44240,10 @@ function desktopLyricTranslationEmbedded(displayText, translation) {
  * @returns {number} 当前歌词行索引，尚未到首行时返回 -1。
  */
 function findDesktopLyricIndex(lines, time) {
-  var target = time;
+  var target = time + 0.05;
   var idx = desktopLyricSnapshotState.lines === lines ? desktopLyricSnapshotState.idx : -1;
-  if (idx >= 0 && idx < lines.length && lines[idx] && lyricLineVocalStart(lines[idx]) <= target) {
-    while (idx + 1 < lines.length && lyricLineVocalStart(lines[idx + 1]) <= target) idx++;
+  if (idx >= 0 && idx < lines.length && lines[idx] && lines[idx].t <= target) {
+    while (idx + 1 < lines.length && lines[idx + 1].t <= target) idx++;
     desktopLyricSnapshotState.lines = lines;
     desktopLyricSnapshotState.idx = idx;
     return idx;
@@ -44355,7 +44251,7 @@ function findDesktopLyricIndex(lines, time) {
   var lo = 0, hi = lines.length - 1, found = -1;
   while (lo <= hi) {
     var mid = (lo + hi) >> 1;
-    var lineTime = lyricLineVocalStart(lines[mid]);
+    var lineTime = Number(lines[mid] && lines[mid].t) || 0;
     if (lineTime <= target) {
       found = mid;
       lo = mid + 1;
@@ -44368,7 +44264,7 @@ function findDesktopLyricIndex(lines, time) {
   return found;
 }
 // These scratch payloads are reused; callers must consume or IPC-serialize them synchronously.
-var desktopLyricSnapshotCache = { text: '', translation: '', progress: 0, progressSpan: 4.8, line: null, lineKey: '', wordTimings: [] };
+var desktopLyricSnapshotCache = { text: '', translation: '', progress: 0, progressSpan: 4.8 };
 var desktopLyricFallbackLineScratch = { t: 0, text: '', duration: 4.8, charCount: 1, fallback: true };
 var desktopLyricIntroLineScratch = { t: 0, text: '', duration: 4.8, charCount: 1, fallback: true };
 var desktopOverlayColorsCache = { primary: '#d6f8ff', secondary: '#9cffdf', highlight: '#fff0b8', glow: '#9cffdf' };
@@ -44387,8 +44283,6 @@ var desktopLyricsPayloadCache = {
   text: '',
   progress: 0,
   progressSpan: 4.8,
-  lineKey: '',
-  wordTimings: [],
   title: '',
   artist: '',
   playing: false,
@@ -44428,7 +44322,7 @@ function currentDesktopLyricSnapshot() {
   var cache = desktopLyricSnapshotCache;
   var t = audio && isFinite(audio.currentTime) ? Number(audio.currentTime) : 0;
   var lines = Array.isArray(lyricsLines) ? lyricsLines : [];
-  if (audio && audio.src && lines.length) {
+  if (playing && audio && lines.length) {
     var idx = findDesktopLyricIndex(lines, t);
     if (idx >= 0) {
       var curLine = lines[idx];
@@ -44444,15 +44338,6 @@ function currentDesktopLyricSnapshot() {
       var nextT = nextLine && nextLine.t > curLine.t ? nextLine.t : Math.min((audio && audio.duration) || t + 4, curLine.t + (curLine.duration || 4.8));
       var span = Math.max(0.75, nextT - curLine.t);
       cache.text = normalizeDesktopLyricText(curLine.text || currentLyricFallbackText());
-      if (cache.line !== curLine) {
-        cache.line = curLine;
-        cache.lineKey = String(idx) + ':' + String(curLine.t);
-        cache.wordTimings = (curLine.words || []).map(function(word) {
-          return [Number(word.t), Number(word.d), Number(word.c0), Number(word.c1)];
-        }).filter(function(word) {
-          return isFinite(word[0]) && isFinite(word[1]) && isFinite(word[2]) && isFinite(word[3]) && word[3] > word[2];
-        });
-      }
       var curTranslation = (!curLine.fallback && curLine.translation) ? normalizeDesktopLyricText(curLine.translation) : '';
       // 自带双语的歌词，原文本身已是「原文\n译文」，此时不再单独下发译文，避免桌面端重复显示。
       cache.translation = (curTranslation && !desktopLyricTranslationEmbedded(cache.text, curTranslation)) ? curTranslation : '';
@@ -44473,9 +44358,6 @@ function currentDesktopLyricSnapshot() {
       cache.translation = '';
       cache.progress = getLyricLineProgress(desktopLyricIntroLineScratch, null, t);
       cache.progressSpan = Math.max(0.8, introEnd);
-      cache.line = null;
-      cache.lineKey = 'intro';
-      cache.wordTimings = [];
       return cache;
     }
   }
@@ -44484,18 +44366,12 @@ function currentDesktopLyricSnapshot() {
     cache.translation = '';
     cache.progress = stageLyrics.current && stageLyrics.current.userData ? clampRange(Number(stageLyrics.current.userData.lastLyricProgress) || 0, 0, 1) : 0;
     cache.progressSpan = 4.8;
-    cache.line = null;
-    cache.lineKey = 'stage';
-    cache.wordTimings = [];
     return cache;
   }
   cache.text = normalizeDesktopLyricText(currentDesktopSongMeta().title || 'Mineradio');
   cache.translation = '';
   cache.progress = 0;
   cache.progressSpan = 4.8;
-  cache.line = null;
-  cache.lineKey = 'fallback';
-  cache.wordTimings = [];
   return cache;
 }
 function desktopOverlayColorValue(value, fallback) {
@@ -44590,11 +44466,9 @@ function desktopLyricsPayload(forceBeatMap) {
   payload.text = lyric.text;
   payload.progress = lyric.progress;
   payload.progressSpan = lyric.progressSpan;
-  payload.lineKey = lyric.lineKey;
-  payload.wordTimings = lyric.wordTimings;
   payload.title = meta.title;
   payload.artist = meta.artist;
-  payload.playing = !!(audio && audio.src && !audio.paused && !audio.ended);
+  payload.playing = !!playing;
   payload.size = clampRange(Number(fx.desktopLyricsSize) || fxDefaults.desktopLyricsSize, DESKTOP_LYRICS_SIZE_MIN, DESKTOP_LYRICS_SIZE_MAX);
   payload.opacity = clampRange(fx.desktopLyricsOpacity == null ? fxDefaults.desktopLyricsOpacity : Number(fx.desktopLyricsOpacity), 0.28, 1);
   payload.y = clampRange(fx.desktopLyricsY == null ? fxDefaults.desktopLyricsY : Number(fx.desktopLyricsY), 0.08, 0.92);
@@ -44634,7 +44508,6 @@ function desktopLyricsPayloadSignature(payload) {
   var i = 0;
   parts[i++] = payload.enabled ? 1 : 0;
   parts[i++] = payload.text || '';
-  parts[i++] = payload.lineKey || '';
   parts[i++] = roundOverlayNumber(payload.progress, 1000);
   parts[i++] = roundOverlayNumber(payload.progressSpan, 100);
   parts[i++] = payload.title || '';
@@ -47162,7 +47035,6 @@ function animate() {
   var dt = Math.min((now - prevTime) / 1000, 0.05);
   prevTime = now;
   sampleRenderPerf(now, dt);
-  if (audio && audio.src && !audio.paused && !audio.ended) updatePlaybackProgressUi();
   uniforms.uTime.value += dt;
   if (isMainSceneCoveredBySplash()) {
     if (now - splashWarmRenderLast > 520) {

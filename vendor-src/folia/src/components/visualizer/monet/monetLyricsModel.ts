@@ -381,13 +381,13 @@ export const buildMonetDisplayTokens = (line: Line): MonetDisplayToken[] => {
     if (line.words.length === 0) {
         return [{
             text: line.fullText,
-            startTime: null,
-            endTime: null,
+            startTime: line.startTime,
+            endTime: getLineRenderEndTime(line),
             key: `${line.startTime}-full`,
-            timed: false,
+            timed: true,
             startOffset: 0,
             endOffset: line.fullText.length,
-            graphemeTimings: [],
+            graphemeTimings: buildLineGraphemeTimeline(line),
         }];
     }
 

@@ -26,7 +26,7 @@ export const splitLyricGraphemes = (text: string): string[] => {
     return Array.from(text);
 };
 
-const buildSpanGraphemeTimings = (
+const buildEvenGraphemeTimings = (
     text: string,
     startTime: number,
     endTime: number,
@@ -37,21 +37,24 @@ const buildSpanGraphemeTimings = (
         return [];
     }
 
-    return graphemes.map(char => ({
+    const duration = Math.max(endTime - startTime, 0);
+    const unitDuration = duration / graphemes.length;
+
+    return graphemes.map((char, index) => ({
         char,
-        startTime,
-        endTime,
+        startTime: startTime + unitDuration * index,
+        endTime: index === graphemes.length - 1 ? endTime : startTime + unitDuration * (index + 1),
         ...(typeof wordIndex === 'number' ? { wordIndex } : {}),
     }));
 };
 
 export const buildWordGraphemeTimings = (word: Word, wordIndex?: number): GraphemeTiming[] => {
     if (!word.syllables?.length) {
-        return buildSpanGraphemeTimings(word.text, word.startTime, word.endTime, wordIndex);
+        return buildEvenGraphemeTimings(word.text, word.startTime, word.endTime, wordIndex);
     }
 
     return word.syllables.flatMap(syllable =>
-        buildSpanGraphemeTimings(syllable.text, syllable.startTime, syllable.endTime, wordIndex)
+        buildEvenGraphemeTimings(syllable.text, syllable.startTime, syllable.endTime, wordIndex)
     );
 };
 
@@ -86,7 +89,7 @@ export const buildLineGraphemeTimeline = (line: Line): GraphemeTiming[] => {
     }
 
     if (line.words.length === 0) {
-        return [];
+        return buildEvenGraphemeTimings(line.fullText, line.startTime, line.endTime);
     }
 
     const timeline: GraphemeTiming[] = [];
@@ -114,7 +117,7 @@ export const buildLineGraphemeTimeline = (line: Line): GraphemeTiming[] => {
         const wordTimings = buildWordGraphemeTimings(word, wordIndex);
         for (let localIndex = 0; localIndex < end - start; localIndex += 1) {
             const timing = wordTimings[localIndex]
-                ?? buildSpanGraphemeTimings(
+                ?? buildEvenGraphemeTimings(
                     wordGraphemes[localIndex] ?? '',
                     word.startTime,
                     word.endTime,

@@ -1,7 +1,7 @@
 import type { Container, Mesh, MeshGeometry, Shader, Sprite, Texture } from 'pixi.js';
 import type { MonetVisibleLineEntry } from '../../../visualizer/monet/monetLyricsModel';
 import { resolveMonetSweepEdgeSoftness, resolveMonetSweepEnd } from '../../../visualizer/monet/monetLyricsModel';
-import { resolveMonetFillWidth, resolveMonetGlow } from '../../../visualizer/monet/monetLyricMotion';
+import { resolveMonetFillWidth, resolveMonetGlow, clampMonetProgress } from '../../../visualizer/monet/monetLyricMotion';
 import { buildWordColorRangesFromMatchers, prepareWordColorMatchers, resolveTokenColorMap } from '../../../visualizer/wordColoring';
 import { colorWithAlpha, mixColors } from '../../../visualizer/colorMix';
 import { getLineRenderEndTime } from '../../../../utils/lyrics/renderHints';
@@ -14,9 +14,6 @@ import { createLatticeQuadGeometry, createLatticeSweepShader, type LatticeSweep 
 type Pixi = typeof import('pixi.js');
 interface PieceView { sprite: Mesh<MeshGeometry, Shader>; glow: Sprite[]; texture: Texture; sweep: LatticeSweep;
     pad: number; width: number; height: number; piece: LyricPiece; color: string; base: number[]; }
-
-export const resolveLatticeSweepProgress = (time: number, start: number, status: MonetVisibleLineEntry['status'], timed: boolean) =>
-    status === 'active' && timed ? Number(time >= start) : 0;
 
 /** Builds only the rows near the card viewport; a long lyric never allocates a song-sized texture. */
 export function createLatticeLineView(pixi: Pixi, raster: LatticeRaster, parent: Container,
@@ -67,7 +64,7 @@ export function createLatticeLineView(pixi: Pixi, raster: LatticeRaster, parent:
             view.sprite.y = y - view.pad; view.glow.forEach(sprite => { sprite.y = view.sprite.y; });
             const token = piece.token, start = token.startTime ?? Infinity, end = token.endTime ?? Infinity;
             const passed = token.timed && (status === 'passed' || (status === 'active' && time > end));
-            const progress = resolveLatticeSweepProgress(time, start, status, token.timed);
+            const progress = status === 'active' && token.timed ? clampMonetProgress((time - start) / Math.max(0.001, end - start)) : 0;
             const width = status === 'active' ? resolveMonetFillWidth(time, start, end, piece.offsets, token.graphemeTimings) : 0;
             const softness = resolveMonetSweepEdgeSoftness(type.fontPx);
             const front = resolveMonetSweepEnd(width, piece.offsets.at(-1) ?? 0, softness);

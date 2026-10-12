@@ -21,17 +21,29 @@ export function resolveMonetGlow(time: number, start: number, end: number, lineE
     return remaining * remaining * (3 - 2 * remaining);
 }
 
-/** Reveals complete graphemes at source timing boundaries, never inventing a timed sweep. */
-export function resolveMonetFillWidth(time: number, start: number, _end: number,
+/** Interpolates measured glyph positions, including a proportional fallback for untimed graphemes. */
+export function resolveMonetFillWidth(time: number, start: number, end: number,
     offsets: number[], timings: GraphemeTiming[]): number {
-    if (timings.length === 0 || time < start) return 0;
+    const width = offsets.at(-1) ?? 0;
+    if (time <= start) return 0;
+    if (time >= end) return width;
     const count = Math.min(timings.length, offsets.length - 1);
-    let revealed = 0;
-    for (let i = 0; i < count; i++) {
-        if (time < timings[i].startTime) break;
-        revealed = i + 1;
+    if (count > 0) {
+        for (let i = 0; i < count; i++) {
+            const timing = timings[i];
+            const timingStart = Math.max(start, timing.startTime);
+            const timingEnd = Math.max(timingStart, timing.endTime);
+            if (time < timingStart) return offsets[i];
+            if (time <= timingEnd) {
+                const progress = (time - timingStart) / Math.max(0.001, timingEnd - timingStart);
+                return offsets[i] + (offsets[i + 1] - offsets[i]) * progress;
+            }
+        }
+        return offsets[count] ?? width;
     }
-    return offsets[revealed] ?? 0;
+    const index = clampMonetProgress((time - start) / Math.max(0.001, end - start)) * (offsets.length - 1);
+    const whole = Math.floor(index);
+    return (offsets[whole] ?? width) + ((offsets[whole + 1] ?? width) - (offsets[whole] ?? width)) * (index - whole);
 }
 
 export function resolveMonetTone(status: 'active' | 'waiting' | 'passed', offset: number) {

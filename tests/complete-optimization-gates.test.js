@@ -22,11 +22,10 @@ test('asar 打包使用可写 app.asar.unpacked 运行根', () => {
   assert.equal(packageJson.build.asar, true);
   // server.js 在 app.asar.unpacked 里运行，它的相对 require 都按真实路径解析，
   // 所以它自己和 package.json 必须解包，不能只躺在 asar 里。
-  // uiohook-napi 是原生模块；Python worker 和安装脚本也必须作为真实文件可访问。
+  // uiohook-napi 是原生模块：`.node` 二进制在 asar 里没法 dlopen，也必须解包。
   assert.deepEqual(packageJson.build.asarUnpack, [
     'server.js',
     'package.json',
-    'lyric-aligner/**',
     'node_modules/uiohook-napi/**'
   ]);
   assert.match(serverSource, /function resolveRuntimeAppRoots\(\)/);

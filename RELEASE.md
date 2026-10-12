@@ -1,14 +1,5 @@
 # 发布流程
 
-## v2.4.5 歌词时间轴后台静默校正与逐字同步修复
-
-- **版本元数据**：`package.json`、`package-lock.json`、前端 `APP_VERSION`、前后端更新说明及 Release workflow 默认 tag 同步为 `2.4.5`。
-- **内容**：本地歌的时间轴缓存静默查找、后台任务及结果隔离；原生逐字轴优先，缺乏可靠逐字区间时退回整句；播放暂停、seek 和 Folia 视图共享实际媒体时钟。用户界面不提供校正按钮、弹窗或进度提示。
-- **发布边界**：安装包只提供后台服务与 worker 源码，不含 Python/FFmpeg/模型。默认运行时与缓存位于 `%LOCALAPPDATA%\Mineradio-oirge\lyric-runtime`，升级安装不删除；未安装模型时不在播放过程中下载，仅复用缓存并静默回退。完整歌声样本目前只有《本草纲目》7/63、《晴天》0/50 行具备完整逐字区间，且尚无人工标注真值，不宣传“精准逐字校正”。
-- **发布前验证**：根目录 `npm test` 共 1514 项，1513 通过、0 失败，1 项可选性能基准按默认配置跳过；相关歌词测试 53/53、Windows 包定向测试 44/44、Folia 产物检查、JavaScript/Python 语法及 `git diff --check` 通过。隔离数据目录的打包 EXE 启动后服务与静态资源正常、未出现可见窗口；缺模型无隐式下载，缓存仍命中，原安装版进程未动。此烟测使用解包应用，未覆盖安装正式目录。
-- **本地构建**：`Mineradio-oirge-2.4.5-Setup.exe` 为 120726505 字节，SHA256 `62334ce886b7e7a27303ba976abeb17c9e7ce4b58745d095290dcb3f9fdc157f`；本地 `latest.yml` 的大小和 SHA-512 与安装器实测一致，ASAR 外 worker 与源码一致。GitHub 官方构建产物须另行核验。
-- **发布状态**：GitHub tag、Release、正式资产及更新通道待发布完成后补录。
-
 ## v2.4.3 Folia 海报墙切歌刷新优化
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.3`；两条公告与 `CHANGELOG.md` 顶部保持一致。

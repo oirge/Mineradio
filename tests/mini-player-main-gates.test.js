@@ -59,7 +59,6 @@ function isWindowVisible() { return false; }
  */
 function testPausedRecoverySessionBlocksMiniPlayerVisibility() {
   const context = {
-    QA_HIDDEN: false,
     miniPlayerRecoverySession: { paused: true },
     miniPlayerEnabled: true,
     miniPlayerActive: true,
@@ -81,10 +80,6 @@ function testPausedRecoverySessionBlocksMiniPlayerVisibility() {
 
   context.miniPlayerEnabled = false;
   assert.equal(context.shouldShow(), false);
-
-  context.miniPlayerEnabled = true;
-  context.QA_HIDDEN = true;
-  assert.equal(context.shouldShow(), false, '隐藏 QA 不显示迷你播放器');
 }
 
 /**
@@ -249,7 +244,6 @@ function testCreatingMiniPlayerWindowStartsFreshResidency() {
   function overlayUrl() { return 'file://mini-player.html'; }
 
   const context = {
-    QA_HIDDEN: false,
     miniPlayerWindow: null,
     miniPlayerUserMovePending: false,
     miniPlayerCoverDragSession: null,
@@ -312,10 +306,6 @@ function testCreatingMiniPlayerWindowStartsFreshResidency() {
   assert.equal(context.miniPlayerWindow, null);
   assert.equal(stateCache.value.cover, '');
   assert.equal(stateCache.apply({ cover: 'late-cover', hasTrack: true }), false);
-
-  context.QA_HIDDEN = true;
-  assert.equal(context.createMiniPlayer(), null);
-  assert.equal(calls.syncRequests, 1, '隐藏 QA 不得创建新的迷你窗口');
 }
 
 /**

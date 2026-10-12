@@ -840,13 +840,9 @@ test('歌词时间轴异常修复：全局偏移、时分秒与时长收敛', ()
   assert.equal(parser.parseLyricText('[offset:-500]\n[00:10.00]甲')[0].t, 10.5);
   assert.equal(parser.parseLyricText('[offset:+2000]\n[00:01.00]甲')[0].t, 0);
   // Enhanced LRC 的逐字时间轴跟着整行一起偏移。
-  const shifted = parser.parseLyricText('[offset:+500]\n[00:10.00]<00:10.00>甲<00:11.00>乙<00:12.00>');
+  const shifted = parser.parseLyricText('[offset:+500]\n[00:10.00]<00:10.00>甲<00:11.00>乙');
   assert.equal(shifted[0].t, 9.5);
   assert.deepEqual(Array.from(shifted[0].words, word => word.t), [9.5, 10.5]);
-  // 没有收尾标签的最后一个字缺结束时间，不得用下一句时长伪造逐字区间。
-  const openEnded = parser.parseLyricText('[00:10.00]<00:10.00>甲<00:11.00>乙');
-  assert.equal(openEnded[0].text, '甲乙');
-  assert.equal(openEnded[0].words, undefined);
 
   // 时间标签的四种写法：mm:ss、mm:ss.xx、mm:ss:xx（冒号分隔的百分秒）、hh:mm:ss.xxx。
   assert.equal(parser.lyricLineTagToSeconds('01', '02'), 62);

@@ -144,8 +144,7 @@ test('QRC 的 XML 容器与裸正文都解析成逐字歌词行', () => {
 
   const tailed = parsers.parseQrcText('[1000,2000]今(1000,400)天(1400,600)漏了标记');
   assert.equal(tailed[0].text, '今天漏了标记', '最后一个词项漏写时间标记也不能把正文丢掉');
-  assert.equal(tailed[0].source, 'qrc-line');
-  assert.equal(tailed[0].words.length, 0, '尾部未计时文字不能启用不完整的逐字遮罩');
+  assert.equal(tailed[0].words.length, 3);
 });
 
 test('KRC 词项偏移以行首为基准换算成绝对时间', () => {
@@ -190,17 +189,17 @@ test('TTML 逐字与整行都能解析，译文与罗马音不进正文', () => 
   assert.deepEqual(briefLines(lines), [
     { t: 1, duration: 2.5, text: 'Hello world', source: 'ttml-word' },
     { t: 4, duration: 2.5, text: '整行没有 span & 带实体', source: 'ttml-line' },
-    { t: 8, duration: 4.8, text: '只有开始', source: 'ttml-line' },
+    { t: 8, duration: 4.8, text: '只有开始', source: 'ttml-word' },
   ]);
   assert.deepEqual(
     Array.from(lines[0].words, w => ({ text: w.text, t: w.t, d: w.d, c0: w.c0, c1: w.c1 })),
     [
-      { text: 'Hello', t: 1, d: 0.8, c0: 0, c1: 5 },
+      { text: 'Hello ', t: 1, d: 0.8, c0: 0, c1: 6 },
       { text: 'world', t: 1.8, d: 1.7, c0: 6, c1: 11 },
     ],
   );
   assert.ok(!lines[0].text.includes('你好世界'), '标成 x-translation 的 span 是译文，不能混进正文');
-  assert.equal(lines[2].words.length, 0, '没有行级结束时间时不启用缺尾项的逐字遮罩');
+  assert.equal(lines[2].words[0].d, 0.5, '只写 begin 的词项按下一个词项的开始收尾');
   assert.deepEqual(briefLines(parsers.parseTimedLyricText(ttml)), briefLines(lines), 'TTML 要能被分流认出来');
 
   const nested = parsers.parseTtmlText(

@@ -75,7 +75,6 @@ function createVisibilityHarness(overrides) {
     setInterval: bench.setInterval,
     clearInterval: bench.clearInterval,
     appQuitting: false,
-    QA_HIDDEN: false,
     mainWindowIntentionalHide: false,
     mainWindowFullscreenVisibilityTimer: null,
     sendWindowState() { calls.windowState += 1; },
@@ -196,11 +195,6 @@ test('退出中或用户主动收进托盘时看门狗不动手', () => {
   assert.equal(trayed.api.should(trayed.win), false);
   assert.equal(trayed.api.restore(trayed.win, 'x'), false);
   assert.equal(trayed.calls.showInactive, 0);
-
-  const hidden = createVisibilityHarness({ QA_HIDDEN: true });
-  assert.equal(hidden.api.should(hidden.win), false);
-  assert.equal(hidden.api.restore(hidden.win, 'x'), false);
-  assert.equal(hidden.calls.showInactive, 0);
 });
 
 test('恢复用 showInactive，不抢焦点；抛异常时回落到 show', () => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import type { AudioBands, Line } from '../../types';
-import { readHostPlaybackTime, requestHost, subscribeHost, type HostAudio, type HostLyrics, type HostState } from '../client';
+import { requestHost, subscribeHost, type HostAudio, type HostLyrics, type HostState } from '../client';
 import { applyLocalAudio, clearLocalAudio, createLocalActiveLineLookup, interpolatedLocalTime, localLyricLines, localStateSignature } from './localPlayerData';
 import type { LocalPlayer } from './playerTypes';
 
@@ -55,7 +55,7 @@ export function useLocalPlayer(): LocalPlayer {
         const tickClock = () => {
             animationFrame = null;
             if (disposed || !visible || !latest?.playing) return;
-            syncClock(readHostPlaybackTime() ?? interpolatedLocalTime(latest, (performance.now() - anchoredAt) / 1000));
+            syncClock(interpolatedLocalTime(latest, (performance.now() - anchoredAt) / 1000));
             animationFrame = requestAnimationFrame(tickClock);
         };
         const refreshVisibility = () => {
