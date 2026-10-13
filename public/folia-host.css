@@ -41,6 +41,9 @@ body.folia-interface-active #diy-mode-btn,body.folia-interface-active #visual-gu
 #folia-floating-switch.on{color:#f3f5f9;border-color:rgba(255,255,255,.20);background:rgba(32,32,38,.88);box-shadow:0 10px 30px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.06)}
 body.desktop-shell:not(.desktop-fullscreen) #folia-floating-switch{display:none}
 html:fullscreen body.desktop-shell #folia-floating-switch{display:block}
+/* Empty Mineradio Home keeps only imports; saved Folia retains its return entry. */
+html:not(.folia-mode-preload) body.empty-home-active:not(.folia-interface-active) #folia-switch-btn,
+html:not(.folia-mode-preload) body.empty-home-active:not(.folia-interface-active) #folia-floating-switch{display:none!important}
 body.folia-interface-active #folia-floating-switch{top:10px;right:16px}
 body:not(.desktop-shell):not(.folia-interface-active) #folia-floating-switch{top:90px;right:24px}
 /* Wide fullscreen shares the control row; compact windows leave room for search and imports. */

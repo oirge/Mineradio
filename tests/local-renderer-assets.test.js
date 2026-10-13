@@ -16,6 +16,8 @@ const notoFont = fs.readFileSync(path.join(publicDir, 'vendor', 'fonts', 'NotoSa
 test('主渲染器使用本地 CSS、JS 和字体资源', () => {
   assert.match(index, /<link rel="stylesheet" href="app\.css">/);
   assert.match(index, /<script src="app\.js"><\/script>/);
+  assert.match(index, /<script src="startup-theme-colors\.js"><\/script>/);
+  assert.match(index, /<script src="startup-plugin-theme\.js"><\/script>/);
   assert.doesNotMatch(index, /fonts\.googleapis\.com/);
   assert.doesNotMatch(index, /v1\.0\.10/);
   assert.doesNotMatch(index, /<style>/);

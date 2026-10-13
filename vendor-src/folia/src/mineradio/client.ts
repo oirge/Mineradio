@@ -38,6 +38,8 @@ export interface HostState {
     volume: number;
     muted: boolean;
     playMode: 'loop' | 'shuffle' | 'single';
+    playbackPlaylistId?: string;
+    playbackPlaylistName?: string;
     queueRevision: string | number;
     libraryRevision: string | number;
     lyricsRevision: string | number;

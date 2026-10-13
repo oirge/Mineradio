@@ -5,11 +5,12 @@ import { useTranslation } from 'react-i18next';
 import type { HostState } from '../client';
 import type { LocalCommand } from './useLibraryPage';
 import { formatTime } from './formatTime';
+import PlaylistSwitcher from './PlaylistSwitcher';
 
 // src/mineradio/local/PlayerControls.tsx
 // Transport shares the host's sole audio output; the continuous playhead stays outside React state.
-interface Props { state: HostState | null; currentTime: MotionValue<number>; command: LocalCommand; onQueue: () => void; }
-export default function PlayerControls({ state, currentTime, command, onQueue }: Props) {
+interface Props { state: HostState | null; currentTime: MotionValue<number>; command: LocalCommand; onQueue: () => void; onLibrary: () => void; }
+export default function PlayerControls({ state, currentTime, command, onQueue, onLibrary }: Props) {
     const { t } = useTranslation('localPlayer');
     const progress = useRef<HTMLInputElement>(null);
     const elapsed = useRef<HTMLSpanElement>(null);
@@ -44,6 +45,7 @@ export default function PlayerControls({ state, currentTime, command, onQueue }:
                 <button title={t(mode)} aria-label={t(mode)} data-testid="local-play-mode" onClick={() => run('setPlayMode', { mode: nextMode })}><ModeIcon size={19} /></button>
                 <button title={t(state?.currentTrack?.liked ? 'unlike' : 'like')} aria-label={t(state?.currentTrack?.liked ? 'unlike' : 'like')} className={state?.currentTrack?.liked ? 'is-liked' : ''} disabled={!state?.currentTrack} data-testid="local-like"
                     onClick={() => run('toggleLike', { id: state?.currentTrack?.id })}><Heart size={19} fill={state?.currentTrack?.liked ? 'currentColor' : 'none'} /></button>
+                <PlaylistSwitcher state={state} command={command} onManage={onLibrary} />
             </div>
             <div className="local-transport-main">
                 <button aria-label={t('previous')} title={t('previous')} data-testid="local-previous" onClick={() => run('previous')}><SkipBack size={22} fill="currentColor" /></button>

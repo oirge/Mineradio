@@ -148,6 +148,46 @@ test('app.css 的关键面板都改成 var(--th-*, 原字面值) 而不是写死
   assert.doesNotMatch(css, /--th-[a-z-]*filter/);
 });
 
+function lastCssRule(selector, property = 'background') {
+  const css = read('public/app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  let found = '';
+  for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (match[1].split(',').some((part) => part.trim() === selector) && match[2].includes(property + ':')) found = match[2];
+  }
+  assert.ok(found, 'Missing CSS rule: ' + selector);
+  return found;
+}
+
+test('空库首页面板接主题令牌，未启用主题时保留原来的玻璃底色', () => {
+  const hero = lastCssRule('.home-hero');
+  assert.match(hero, /background:var\(--th-panel-bg,linear-gradient\(145deg,rgba\(var\(--home-accent-rgb\),\.14\),rgba\(14,14,19,\.74\) 44%,rgba\(2,3,5,\.72\)\)\)!important/);
+  assert.match(hero, /border-color:var\(--th-panel-border,rgba\(255,255,255,\.075\)\)!important/);
+  assert.match(hero, /box-shadow:var\(--th-panel-shadow,var\(--panel-glass-shadow\)\)!important/);
+  assert.match(hero, /backdrop-filter:blur\(26px\) saturate\(1\.16\)!important/);
+  assert.doesNotMatch(hero, /--th-[a-z-]*filter/);
+});
+
+test('空库导入按钮及悬停跟随主题，默认尺寸与样式不变', () => {
+  const action = lastCssRule('.home-local-action');
+  const hover = lastCssRule('.home-local-action:hover');
+  assert.match(action, /height:54px/);
+  assert.match(action, /border:1px solid var\(--th-chip-border,rgba\(255,255,255,\.12\)\)/);
+  assert.match(action, /background:var\(--th-chip-bg,linear-gradient\(145deg,rgba\(255,255,255,\.075\),rgba\(255,255,255,\.035\)\)\)/);
+  assert.match(action, /color:var\(--th-text-strong,rgba\(255,255,255,\.92\)\)/);
+  assert.match(action, /box-shadow:var\(--th-row-shadow,0 16px 44px rgba\(0,0,0,\.24\),inset 0 1px 0 rgba\(255,255,255,\.10\)\)/);
+  assert.match(hover, /border-color:var\(--th-chip-hover-border,rgba\(var\(--fc-accent-rgb\),\.42\)\)/);
+  assert.match(hover, /background:var\(--th-chip-hover-bg,linear-gradient\(145deg,rgba\(var\(--fc-accent-rgb\),\.12\),rgba\(255,255,255,\.045\)\)\)/);
+  assert.match(hover, /box-shadow:var\(--th-row-shadow,0 22px 58px rgba\(0,0,0,\.30\),0 0 28px rgba\(var\(--fc-accent-rgb\),\.10\),inset 0 1px 0 rgba\(255,255,255,\.13\)\)/);
+  assert.doesNotMatch(hover, /rgba\(0,245,212,/);
+});
+
+test('空库首页装饰线接主题色，不能在浅色主题下残留默认青光', () => {
+  const before = lastCssRule('.home-hero::before');
+  const after = lastCssRule('.home-hero::after');
+  assert.match(before, /var\(--th-hairline-soft,rgba\(var\(--home-accent-rgb\),\.11\)\)/);
+  assert.match(after, /background:var\(--th-hairline,linear-gradient\(90deg,color-mix\(in srgb,var\(--home-accent\)/);
+});
+
 test('主题可轻量改背景底色与封面色调，用户自定义背景仍保持优先', () => {
   const css = read('public/app.css');
   const app = read('public/app.js');

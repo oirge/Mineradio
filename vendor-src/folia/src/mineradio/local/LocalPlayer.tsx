@@ -63,7 +63,9 @@ export default function LocalPlayer() {
         {isLyrics && track && !player.lines.length && <div className="local-no-lyrics"><Music2 size={28} /><h2>{track.title}</h2><p>{track.artist || t('unknownArtist')}</p><small>{t('noLyrics')}</small></div>}
         {!focus && <>
             {isLyrics && <div className="local-current-track" data-testid="local-current-track"><div className="local-current-cover">{track?.cover ? <img src={track.cover} alt="" /> : <Music2 size={24} />}</div><div><small>{t('nowPlaying')}</small><strong>{track?.title || t('chooseSong')}</strong><span>{track?.artist || ''}</span></div></div>}
-            {isLyrics && <PlayerControls state={player.state} currentTime={player.currentTime} command={player.command} onQueue={() => { setQueue(true); setLibraryOpen(!libraryOpen || !queue); setSettingsOpen(false); }} />}
+            {isLyrics && <PlayerControls state={player.state} currentTime={player.currentTime} command={player.command}
+                onLibrary={() => { setQueue(false); setLibraryOpen(true); setSettingsOpen(false); }}
+                onQueue={() => { setQueue(true); setLibraryOpen(!libraryOpen || !queue); setSettingsOpen(false); }} />}
             {libraryOpen && <LibraryPanel state={player.state} command={player.command} queue={queue} onTab={setQueue} onClose={() => setLibraryOpen(false)} />}
             {settingsOpen && <VisualSettings assets={assets} theme={theme} onClose={() => setSettingsOpen(false)} />}
         </>}
