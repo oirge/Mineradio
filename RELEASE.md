@@ -4,8 +4,15 @@
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.7`。
 - **内容**：首帧直接显示现有本地导入主页并隐藏登录入口；读取已有界面偏好，恢复 Folia 时先显示其容器，宿主接管后清除预载态。不改曲库恢复 single-flight、700/420 ms 时序或音频所有权。
-- **已完成验证**：8 种首帧加载场景、真实文件导入与播放、Folia 往返切换通过；加强后的启动与 Folia 定向测试 `30/30`。`2.4.7` 全量 Node 回归 `1457` 项通过、1 项可选性能基准跳过、0 失败；Folia 重建、版本/编码/公告解析 `14/14`、JavaScript 语法与空白检查通过。本地 `2.4.6` 修复预览已覆盖原安装路径并完成 Electron 渲染截图检查，源码、曲库与设置未被重装清理。官方构建待最终复验。
-- **发布状态**：用户于 `2026-10-13` 明确授权发布 `2.4.7`。经分支、PR 和 Verify 后建立独立 tag，运行 Windows Release workflow；不得重发或移动 `v2.4.6`。正式 Release、tag/commit 与线上资产校验结果在发布完成后补录。
+- **已完成验证**：8 种首帧加载场景、真实文件导入与播放、Folia 往返切换通过；加强后的启动与 Folia 定向测试 `30/30`。`2.4.7` 全量 Node 回归 `1457` 项通过、1 项可选性能基准跳过、0 失败；Folia 重建、类型检查、内嵌歌词 `8/8`、版本/编码/公告解析 `14/14`、JavaScript 语法与空白检查通过。本地 `2.4.6` 修复预览已覆盖原安装路径并完成 Electron 渲染截图检查，源码、曲库与设置未被重装清理。
+- **Windows 本地构建**：NSIS 构建成功，安装器 `120696291` B，SHA256 `ce934415974c4c90e5510f4593e2588815f258ca87984fb8e083427b45eeac22`；本地 `latest.yml` 的版本、大小及 SHA-512 与安装器实测一致。ASAR 四个修复文件、main/preload/server 与源码一致，38 个 unpacked 文件完整，Windows x64 原生模块存在；安装器 7-Zip 校验成功。本地 `2.4.7` 隔离运行被执行工具策略阻止，未执行，不将此前 `2.4.6` 修复预览的画面检查等同于新发行二进制运行验证。
+- **提交与 CI**：用户于 `2026-10-13` 明确授权发布；PR #130 以 merge commit `1961b97250a0f0e7ead04a719ce5de7c0ed01b65` 合入 `main`，两组 PR Verify `38346526752` / `38346566990` 和合并后 Verify `38346799917` 成功。annotated tag `v2.4.7`（tag object `a46a60baa49069bfa845b957d499311fb329dac8`）固定在版本提交 `17c8b504bc974b28f85883c504411713ab702cd2`，Windows Build and Release `38347034504` 成功并上传四项资产。
+- **正式发布（2026-10-13）**：Release `411277915` 于北京时间 `2026-10-13 12:41:44` 公开并设为 Latest，`draft=false` / `prerelease=false`；`releases/latest` 返回 `v2.4.7`。正文仅包含首次打开主页和 Folia 恢复两条用户可见修复；`v2.4.6` 标签及发布资产保持原样。
+- **官方资产核验**：四项均已完整回下载，大小和本机 SHA256 与 GitHub API digest 一致，SHA256 清单三项全部一致；官方安装器本机 SHA-512 为 `es9011bKTFUUDjk3GuU0z83A6WSjGnvtL9fa38sgiFAFZxl3uSjuqwgi2VQi6ihgSwnVxnxYNLEscV4qcAhQGA==`，匹配 `latest.yml`。公开 `releases/latest/download/latest.yml` 已下载，版本为 `2.4.7`，与已校验的官方文件逐字节一致。此次验证为官方资产完整性和更新通道验证，未运行官方 NSIS 安装器。
+  - `Mineradio-oirge-2.4.7-Setup.exe`：120696374 B，SHA256 `86e9e0141f5131ec049618b166197e0580d1e4690843233e202ec007e2a8818f`。
+  - `Mineradio-oirge-2.4.7-Setup.exe.blockmap`：127780 B，SHA256 `19a18b86d9c7a75ee59c4104473061264c42381476d86f5e21a92c7785e28c1b`。
+  - `latest.yml`：359 B，SHA256 `8551dd7635cab64208a91696973bf4f043c728c3792f7be5c49aa96d904fd325`。
+  - `Mineradio-oirge-2.4.7-SHA256SUMS.txt`：282 B，SHA256 `c0c04b9d2ec22f7e2ad3a2d8c42b93b568c9521711cdc4c77acc5aa668d9f7c2`。
 
 ## v2.4.6 移除启动动画与修复 Folia 按钮布局
 
