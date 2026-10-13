@@ -43403,20 +43403,18 @@ function initializePlayerHome() {
     activateHomeWallpaperPreview({ instant: true });
   }
   if (typeof scheduleSavedLocalMusicFolderRestore === 'function') scheduleSavedLocalMusicFolderRestore(420);
+  var homeShown = updateEmptyHomeVisibility({ forceLoad: true });
+  if (!homeShown && shouldForceEmptyHome()) {
+    homeSuppressed = false;
+    homeForcedOpen = true;
+    homeShown = updateEmptyHomeVisibility({ forceLoad: true });
+  }
   markAppPerf('home-revealed');
   requestAnimationFrame(function(){
-    var homeShown = updateEmptyHomeVisibility({ forceLoad: true });
-    if (!homeShown && shouldForceEmptyHome()) {
-      homeSuppressed = false;
-      homeForcedOpen = true;
-      homeShown = updateEmptyHomeVisibility({ forceLoad: true });
-    }
-    requestAnimationFrame(function(){
-      var guideStarted = maybeRunStartupVisualGuide('startup');
-      if (!guideStarted && !hasAnyPlatformLogin()) maybeRunStartupLoginGuide('startup');
-      else if (!guideStarted && !homeShown) maybeRunStartupLoginGuide('startup');
-      setTimeout(maybeShowUploadTipOnce, 5200);
-    });
+    var guideStarted = maybeRunStartupVisualGuide('startup');
+    if (!guideStarted && !hasAnyPlatformLogin()) maybeRunStartupLoginGuide('startup');
+    else if (!guideStarted && !homeShown) maybeRunStartupLoginGuide('startup');
+    setTimeout(maybeShowUploadTipOnce, 5200);
   });
 }
 
