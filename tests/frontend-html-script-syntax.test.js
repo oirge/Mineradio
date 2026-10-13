@@ -35,11 +35,25 @@ test('全部发布页面的内联脚本均可完整解析', () => {
   }
 });
 
-test('主窗口 vendor 脚本位于 body 末尾且先于 app.js，head 不再被阻塞', () => {
+test('主窗口在 head 同步恢复首帧配色与主题，vendor 脚本仍位于 body 末尾', () => {
   const html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
   const head = /<head>([\s\S]*?)<\/head>/.exec(html);
   assert.ok(head, 'index.html 必须有 head');
-  assert.doesNotMatch(head[1], /<script[^>]*\bsrc=/, 'head 不允许出现外链脚本阻塞首帧解析');
+  const earlyScripts = Array.from(head[1].matchAll(/<script\b[^>]*\bsrc\s*=[^>]*>[\s\S]*?<\/script>/gi), match => match[0]);
+  assert.deepEqual(earlyScripts, [
+    '<script src="startup-theme-colors.js"></script>',
+    '<script src="plugin-manifest.js"></script>',
+    '<script src="startup-plugin-theme.js"></script>',
+  ], 'head 只允许首帧脚本与共用纯清洗器，不能提前加载主渲染器或 vendor');
+  assert.ok(head[1].indexOf(earlyScripts[0]) < head[1].indexOf('href="app.css"'), '首帧配色必须早于主样式表同步恢复');
+  const startupColors = fs.readFileSync(path.join(publicDir, 'startup-theme-colors.js'), 'utf8');
+  assert.ok(startupColors.length < 2400, '首帧脚本不能膨胀为主渲染器');
+  assert.doesNotThrow(() => new vm.Script(startupColors, { filename: 'startup-theme-colors.js' }));
+  const startupTheme = fs.readFileSync(path.join(publicDir, 'startup-plugin-theme.js'), 'utf8');
+  assert.ok(startupTheme.length < 2000, '主题预加载不能膨胀为插件运行时');
+  assert.doesNotThrow(() => new vm.Script(startupTheme, { filename: 'startup-plugin-theme.js' }));
+  assert.ok(head[1].indexOf(earlyScripts[2]) > head[1].indexOf('href="folia-host.css"'), '主题样式必须位于全部宿主样式之后');
+  assert.equal((html.match(/src="plugin-manifest.js"/g) || []).length, 1, '共用清洗器不能加载两遍');
   const threeAt = html.indexOf('<script src="vendor/three.r128.min.js"></script>');
   const gsapAt = html.indexOf('<script src="vendor/gsap.min.js"></script>');
   const appAt = html.indexOf('<script src="app.js"></script>');

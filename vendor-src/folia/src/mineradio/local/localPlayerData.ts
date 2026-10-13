@@ -82,7 +82,7 @@ export function localStateSignature(state: HostState): string {
     return JSON.stringify([
         state.currentTrack, state.currentIndex, state.duration, state.playing, state.playbackRate,
         state.volume, state.muted, state.playMode, state.queueRevision, state.libraryRevision,
-        state.lyricsRevision, state.interface,
+        state.lyricsRevision, state.interface, state.playbackPlaylistId, state.playbackPlaylistName,
     ]);
 }
 

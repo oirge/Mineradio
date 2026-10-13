@@ -116,11 +116,17 @@
     syncRevisions();
     var media = global.audio;
     var volume = clamp(number(global.targetVolume, media ? media.volume : 1), 0, 1);
+    var playbackPlaylistId = typeof global.normalizeLocalPlaylistKind === 'function'
+      ? global.normalizeLocalPlaylistKind(global.localLibraryPlaybackSelection) : 'library';
+    if (playbackPlaylistId.indexOf('local-playlist:') === 0 && !call('localPlaylistById', playbackPlaylistId)) playbackPlaylistId = 'library';
+    var playbackPlaylistName = typeof global.localPlaybackPlaylistSourceName === 'function'
+      ? global.localPlaybackPlaylistSourceName(playbackPlaylistId) : (playbackPlaylistId === 'special-liked' ? '特别喜欢' : '全部音乐');
     return {
       currentTrack: projectCurrentTrack(currentSong()), currentIndex: number(global.currentIdx, -1),
       position: number(call('getPlaybackCurrentSeconds'), 0), duration: number(call('getPlaybackDurationSeconds'), 0),
       playing: !!(media && media.src && !media.paused && !media.ended), playbackRate: media ? number(media.playbackRate, 1) : 1, volume: volume,
       muted: volume <= 0.0001 || !!(media && media.muted), playMode: global.playMode || 'loop',
+      playbackPlaylistId: playbackPlaylistId, playbackPlaylistName: playbackPlaylistName,
       queueRevision: queueRevision, libraryRevision: libraryRevision, lyricsRevision: lyricsRevision,
       interface: active ? 'folia' : 'mineradio'
     };
@@ -359,7 +365,7 @@
   // via a body class + an injected stylesheet, so React re-renders never fight it.
   var CHROME_HIDE_DELAY = 2500, BAR_HIDE_DELAY = 2500, TOP_BAND = 96, BOTTOM_BAND = 170;
   var chromeHideTimer = 0, barHideTimer = 0, topHideTimer = 0;
-  var chromeHoverLock = false, barLock = false, barDragging = false, barZone = false, topLock = false, topZone = false, chromeZone = false;
+  var chromeHoverLock = false, barLock = false, barDragging = false, barFocused = false, barZone = false, topLock = false, topZone = false, chromeZone = false;
   var chromeListening = false, frameActivityDoc = null;
   function setChromeHidden(h) { document.body.classList.toggle('folia-chrome-hidden', !!h); }
   function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h); }
@@ -375,8 +381,8 @@
   }
   function scheduleBarHide() {
     if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
-    if (!active || barLock || barDragging) return;
-    barHideTimer = global.setTimeout(function () { barHideTimer = 0; if (active && !barLock && !barDragging) setBarHidden(true); }, BAR_HIDE_DELAY);
+    if (!active || barLock || barDragging || barFocused) return;
+    barHideTimer = global.setTimeout(function () { barHideTimer = 0; if (active && !barLock && !barDragging && !barFocused) setBarHidden(true); }, BAR_HIDE_DELAY);
   }
   function revealBar(persist) {
     setBarHidden(false);
@@ -421,9 +427,17 @@
   }
   function onFramePointerDown(e) {
     if (e.pointerType === 'touch') { revealChrome(false); revealTop(false); revealBar(false); }
-    if (e.target && e.target.closest && e.target.closest('.local-controls')) { barDragging = true; revealBar(true); }
+    if (e.target && e.target.closest && e.target.closest('.local-controls')) { barDragging = e.target.tagName !== 'SELECT'; revealBar(true); }
   }
   function onFramePointerUp() { if (barDragging) { barDragging = false; scheduleBarHide(); } }
+  function onFrameFocusIn(e) {
+    if (e.target && e.target.closest && e.target.closest('.local-controls')) { barFocused = true; revealBar(true); }
+  }
+  function onFrameFocusOut(e) {
+    if (!barFocused) return;
+    barFocused = !!(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.local-controls'));
+    if (!barFocused) scheduleBarHide();
+  }
   function injectBarStyle(doc) {
     if (!doc || !doc.head || doc.getElementById('mineradio-immersive-bar-style')) return;
     var style = doc.createElement('style');
@@ -449,18 +463,22 @@
     doc.addEventListener('pointermove', onFramePointerMove, true);
     doc.addEventListener('pointerdown', onFramePointerDown, true);
     doc.addEventListener('pointerup', onFramePointerUp, true);
+    doc.addEventListener('focusin', onFrameFocusIn, true);
+    doc.addEventListener('focusout', onFrameFocusOut, true);
     if (active) { scheduleBarHide(); scheduleTopHide(); }
   }
   function detachFrameActivity() {
     if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
     if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
-    barLock = barDragging = barZone = topLock = topZone = false;
+    barLock = barDragging = barFocused = barZone = topLock = topZone = false;
     if (!frameActivityDoc) return;
     try {
       setBarHidden(false); setTopHidden(false);
       frameActivityDoc.removeEventListener('pointermove', onFramePointerMove, true);
       frameActivityDoc.removeEventListener('pointerdown', onFramePointerDown, true);
       frameActivityDoc.removeEventListener('pointerup', onFramePointerUp, true);
+      frameActivityDoc.removeEventListener('focusin', onFrameFocusIn, true);
+      frameActivityDoc.removeEventListener('focusout', onFrameFocusOut, true);
     } catch (_e) {}
     frameActivityDoc = null;
   }
@@ -579,6 +597,17 @@
       case 'getState': return getState();
       case 'listTracks': return pageTracks(playlistSongs(params.playlistId), params);
       case 'listPlaylists': return listPlaylists();
+      case 'switchPlaylist': {
+        var playlistId = params.playlistId;
+        if (typeof playlistId !== 'string' || !playlistId || playlistId.length > 8192) fail('INVALID_PLAYLIST', '歌单标识无效');
+        if (playlistId !== 'library' && playlistId !== 'special-liked'
+          && (playlistId.indexOf('local-playlist:') !== 0 || !call('localPlaylistById', playlistId))) fail('PLAYLIST_NOT_FOUND', '歌单不存在');
+        // Use live membership: an empty or removed source must not replace the playing queue.
+        source = call('localPlaylistSongs', playlistId);
+        if (!Array.isArray(source) || !source.length) fail('PLAYLIST_EMPTY', '歌单暂无可播放歌曲');
+        if (call('selectLocalPlaybackPlaylistSource', playlistId) === false) fail('PLAYLIST_SWITCH_FAILED', '歌单暂时无法播放');
+        return getState();
+      }
       case 'getQueue': {
         syncRevisions();
         var page = pageTracks(global.playQueue || [], params);

@@ -18,6 +18,7 @@ const playlistSource = block('function normalizeLocalPlaylistKind(kind)', 'funct
 const favoriteSource = block('function specialLikedSongPath(song)', 'function isSongLiked(song)');
 const volumeSource = block('function setVolume(value, silent)', 'function adjustVolumeByKeyboard(delta)');
 const shuffleSource = block('function shufflePlayQueueOnce(opts)', '/**\n * 下一首');
+const playbackPlaylistSource = block('function localSongIndexByKey(songs, key)', 'function openLocalPlaybackPlaylistManager()');
 
 function element(id, tagName = 'DIV') {
     const classes = new Set();
@@ -367,6 +368,131 @@ test('getQueue includes the fresh revision when native code replaced the array b
     const after = await h.request('getQueue');
     assert.ok(after.result.revision > before.result.revision);
     assert.deepEqual(after.result.items.map(song => song.id), ['local-key:c', 'local-key:b', 'local-key:a']);
+});
+
+test('Folia state reports the restored playback source, live names and temporary categories without writing settings', async () => {
+    const h = harness();
+    const playlist = h.context.createLocalPlaylist('Night drive', h.tracks[0]);
+    h.storage.set('playback-source', playlist.id);
+    h.context.localLibraryPlaybackSelection = h.context.readSavedLocalPlaybackPlaylistSelection();
+    let state = (await h.request('getState')).result;
+    assert.equal(state.playbackPlaylistId, playlist.id);
+    assert.equal(state.playbackPlaylistName, 'Night drive');
+    h.context.renameLocalPlaylist(playlist.id, 'Evening');
+    state = (await h.request('getState')).result;
+    assert.equal(state.playbackPlaylistName, 'Evening');
+    h.context.localLibraryPlaybackSelection = 'library-value:artist:Artist';
+    state = (await h.request('getState')).result;
+    assert.equal(state.playbackPlaylistId, 'library-value:artist:Artist');
+    assert.equal(state.playbackPlaylistName, 'Artist');
+    assert.equal(h.storage.get('playback-source'), playlist.id);
+    for (const invalid of [undefined, '', 'invalid', 'local-playlist:removed']) {
+        h.context.localLibraryPlaybackSelection = invalid;
+        state = (await h.request('getState')).result;
+        assert.equal(state.playbackPlaylistId, 'library');
+        assert.equal(state.playbackPlaylistName, '全部音乐');
+        assert.equal(h.storage.get('playback-source'), playlist.id);
+    }
+});
+
+test('switchPlaylist calls the native source picker for all music, favorites and custom playlists', async () => {
+    const h = harness(), selected = [];
+    const custom = h.context.createLocalPlaylist('Night drive', h.tracks[1]);
+    h.context.writeSpecialLikedSongRefs([h.context.specialLikedSongRef(h.tracks[0])]);
+    h.context.selectLocalPlaybackPlaylistSource = id => {
+        selected.push(id);
+        h.context.setLocalPlaybackPlaylistSelection(id);
+        return true;
+    };
+    const media = h.context.audio;
+    for (const id of [custom.id, 'special-liked', 'library']) {
+        const response = await h.request('switchPlaylist', { playlistId: id });
+        assert.equal(response.ok, true);
+        assert.equal(response.result.playbackPlaylistId, id);
+        assert.equal(h.storage.get('playback-source'), id);
+        assert.equal(h.context.audio, media);
+        assert.equal(media.currentTime, 37);
+    }
+    assert.deepEqual(selected, [custom.id, 'special-liked', 'library']);
+});
+
+test('switchPlaylist rejects empty and invalid sources before touching the queue or selection', async () => {
+    const h = harness(), empty = h.context.createLocalPlaylist('Empty');
+    const before = (await h.request('getState')).result;
+    const queue = h.context.playQueue, current = h.context.currentLocalSong, media = h.context.audio;
+    const stored = new Map(h.storage), callsBefore = [...h.calls];
+    let nativeCalls = 0;
+    h.context.selectLocalPlaybackPlaylistSource = () => { nativeCalls++; return true; };
+    for (const [playlistId, code] of [
+        [empty.id, 'PLAYLIST_EMPTY'], ['special-liked', 'PLAYLIST_EMPTY'],
+        ['local-playlist:missing', 'PLAYLIST_NOT_FOUND'], ['unknown', 'PLAYLIST_NOT_FOUND'],
+        ['library-cat:all', 'PLAYLIST_NOT_FOUND'], ['', 'INVALID_PLAYLIST'],
+        [null, 'INVALID_PLAYLIST'], [17, 'INVALID_PLAYLIST'], ['x'.repeat(8193), 'INVALID_PLAYLIST'],
+    ]) {
+        const response = await h.request('switchPlaylist', { playlistId });
+        assert.equal(response.ok, false);
+        assert.equal(response.error.code, code);
+        assert.equal(h.context.playQueue, queue);
+        assert.equal(h.context.currentLocalSong, current);
+        assert.equal(h.context.audio, media);
+        assert.equal(media.currentTime, 37);
+        assert.equal(h.context.localLibraryPlaybackSelection, 'library');
+        assert.deepEqual(h.storage, stored);
+    }
+    assert.equal(nativeCalls, 0);
+    assert.deepEqual(h.calls, callsBefore);
+    assert.equal((await h.request('getState')).result.queueRevision, before.queueRevision);
+});
+
+test('switchPlaylist checks fresh playlist membership and reports a native refusal', async () => {
+    const h = harness(), custom = h.context.createLocalPlaylist('Night drive', h.tracks[0]);
+    await h.request('listTracks', { playlistId: custom.id });
+    h.context.localPlaylistById(custom.id).songRefs = [];
+    let nativeCalls = 0;
+    h.context.selectLocalPlaybackPlaylistSource = () => { nativeCalls++; return false; };
+    assert.equal((await h.request('switchPlaylist', { playlistId: custom.id })).error.code, 'PLAYLIST_EMPTY');
+    const refused = await h.request('switchPlaylist', { playlistId: 'library' });
+    assert.equal(refused.error.code, 'PLAYLIST_SWITCH_FAILED');
+    assert.equal(nativeCalls, 1);
+    assert.equal(h.context.audio.currentTime, 37);
+    assert.equal(h.context.localLibraryPlaybackSelection, 'library');
+});
+
+test('switchPlaylist reuses the native picker to preserve the current track position or start at the first song', async () => {
+    const h = harness(), selections = [];
+    h.context.queueItemKey = song => song ? h.context.specialLikedSongKey(song) : '';
+    h.context.currentCoverSong = () => h.context.currentLocalSong;
+    h.context.playLocalLibrarySong = (index, kind, options) => {
+        selections.push({ index, kind, resumeAt: options.resumeAt });
+        h.context.playQueue = h.context.cloneSongList(h.context.localPlaylistSongs(kind));
+        h.context.currentIdx = index;
+        h.context.currentLocalSong = h.context.playQueue[index];
+        h.context.audio.currentTime = options.resumeAt;
+        h.context.setLocalPlaybackPlaylistSelection(kind);
+        return true;
+    };
+    vm.runInContext(playbackPlaylistSource, h.context);
+    const shared = h.context.createLocalPlaylist('Shared', h.tracks[2]);
+    h.context.addSongToLocalPlaylist(shared.id, h.tracks[0]);
+    const next = h.context.createLocalPlaylist('Next', h.tracks[1]);
+    const media = h.context.audio;
+    const kept = await h.request('switchPlaylist', { playlistId: shared.id });
+    assert.equal(kept.ok, true);
+    assert.equal(kept.result.currentTrack.id, 'local-key:a');
+    assert.equal(kept.result.position, 37);
+    assert.equal(kept.result.playbackPlaylistId, shared.id);
+    assert.equal(kept.result.playbackPlaylistName, 'Shared');
+    const started = await h.request('switchPlaylist', { playlistId: next.id });
+    assert.equal(started.ok, true);
+    assert.equal(started.result.currentTrack.id, 'local-key:b');
+    assert.equal(started.result.position, 0);
+    assert.equal(h.context.audio, media);
+    assert.deepEqual(selections, [
+        { index: 1, kind: shared.id, resumeAt: 37 },
+        { index: 0, kind: next.id, resumeAt: 0 },
+    ]);
+    await h.request('switchPlaylist', { playlistId: next.id });
+    assert.equal(selections.length, 2, 'an unchanged source does not restart the current song');
 });
 
 test('replacing a playback queue saves the old audio position until the new track has loaded', async () => {

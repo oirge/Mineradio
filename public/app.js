@@ -627,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.7';
+var APP_VERSION = '2.4.8';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -680,10 +680,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '首次打开直接显示播放器，恢复 Folia 不再闪出原界面。',
+  hero: 'Folia 收藏按钮旁可切换歌单，启动直接使用已保存的主题。',
   notes: [
-    '修复首次打开时短暂出现空白界面和登录入口的问题，直接显示本地音乐导入主页。',
-    '恢复上次使用的 Folia 界面时不再闪出原界面，保留曲库、设置和原有播放恢复。'
+    'Folia 播放控制栏在收藏按钮旁新增歌单切换，可选择全部音乐、特别喜欢和本地歌单。',
+    '修复启用主题插件时启动先显示默认配色再变色的问题，主页和导入按钮直接使用已保存的主题。',
+    '空曲库首次打开时隐藏 Folia 切换入口，导入音乐后恢复显示。'
   ]
 };
 function readSavedVolume() {

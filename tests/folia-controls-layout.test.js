@@ -8,6 +8,28 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const css = fs.readFileSync(path.join(root, 'public/folia-host.css'), 'utf8');
 const appCss = fs.readFileSync(path.join(root, 'public/app.css'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+const localCss = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/local.css'), 'utf8');
+const controls = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/PlayerControls.tsx'), 'utf8');
+const switcher = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/PlaylistSwitcher.tsx'), 'utf8');
+const host = fs.readFileSync(path.join(root, 'public/folia-host.js'), 'utf8');
+
+test('empty Mineradio Home hides both Folia entries from the first frame', () => {
+  assert.match(html, /<body class="[^"]*\bempty-home-active\b[^"]*">/);
+  const rule = css.match(/(html:not\(\.folia-mode-preload\) body\.empty-home-active:not\(\.folia-interface-active\) #folia-switch-btn,\s*html:not\(\.folia-mode-preload\) body\.empty-home-active:not\(\.folia-interface-active\) #folia-floating-switch)\{([^}]+)\}/);
+  assert.ok(rule, 'Both Folia entries need the same empty-Home gate');
+  assert.match(rule[2], /display:none!important/);
+});
+
+test('empty-Home hiding preserves saved and active Folia return entries', () => {
+  const gates = css.match(/html[^{,]+body\.empty-home-active[^{,]+#folia-(?:switch-btn|floating-switch)/g) || [];
+  assert.equal(gates.length, 2);
+  for (const selector of gates) {
+    assert.match(selector, /html:not\(\.folia-mode-preload\)/);
+    assert.match(selector, /body\.empty-home-active:not\(\.folia-interface-active\)/);
+  }
+  assert.match(html, /localStorage\.getItem\('mineradio-player-interface-v1'\) === 'folia'[\s\S]+classList\.add\('folia-mode-preload'\)/);
+});
 
 test('browser Folia entry sits below Home without changing the active Folia view', () => {
   const rule = css.match(/body:not\(\.desktop-shell\):not\(\.folia-interface-active\) #folia-floating-switch\{([^}]+)\}/);
@@ -39,4 +61,30 @@ test('wide fullscreen keeps measured alignment and windowed desktop keeps one Fo
   assert.match(css, /right:var\(--folia-fs-switch-right,312px\)/);
   assert.match(css, /body\.desktop-shell:not\(\.desktop-fullscreen\) #folia-floating-switch\{display:none\}/);
   assert.match(css, /body\.folia-interface-active\.folia-chrome-hidden #folia-floating-switch/);
+});
+
+test('Folia playlist button follows the heart without adding another control row', () => {
+  assert.match(controls, /data-testid="local-like"[\s\S]*?<Heart[^]*?<\/button>\s*<PlaylistSwitcher state=\{state\} command=\{command\} onManage=\{onLibrary\} \/>/);
+  assert.ok(controls.indexOf('<PlaylistSwitcher') > controls.indexOf('<div className="local-transport">'));
+  assert.doesNotMatch(localCss, /\.local-playlist-row|\.local-playlist-picker/);
+  assert.match(localCss, /\.local-player \.local-playlist-trigger\{[^}]*width:82px;height:34px;min-height:34px/);
+  assert.match(localCss, /\.local-current-track\{left:21px;bottom:133px/);
+  assert.match(localCss, /@media\(max-width:1150px\)\{[^}]+\}[^}]*\.local-playlist-label\{display:none\}/);
+});
+
+test('Folia playlist popup escapes transport clipping but stays inside its focus boundary', () => {
+  assert.match(switcher, /closest<HTMLElement>\('\.local-controls'\)/);
+  assert.match(switcher, /createPortal\(<PlaylistSwitcherMenu[\s\S]*?\/>, controls\)/);
+  assert.match(localCss, /\.local-playlist-menu\{position:absolute;bottom:calc\(100% \+ 10px\)/);
+  assert.match(localCss, /\.local-controls\.local-playlist-open\{z-index:20\}/);
+  assert.match(host, /\.local-transport\{[^']*overflow:hidden;max-height:80px/);
+});
+
+test('keyboard focus keeps the Folia controls visible while choosing a playlist', () => {
+  assert.match(host, /if \(!active \|\| barLock \|\| barDragging \|\| barFocused\) return/);
+  assert.match(host, /barDragging = e\.target\.tagName !== 'SELECT'/);
+  for (const [event, handler] of [['focusin', 'onFrameFocusIn'], ['focusout', 'onFrameFocusOut']]) {
+    assert.ok(host.includes(`doc.addEventListener('${event}', ${handler}, true)`));
+    assert.ok(host.includes(`frameActivityDoc.removeEventListener('${event}', ${handler}, true)`));
+  }
 });

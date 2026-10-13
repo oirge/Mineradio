@@ -49,6 +49,8 @@ describe('isolated Mineradio local display projection', () => {
         expect(localStateSignature({ ...state, position: 90 })).toBe(localStateSignature(state));
         expect(localStateSignature({ ...state, playing: false })).not.toBe(localStateSignature(state));
         expect(localStateSignature({ ...state, lyricsRevision: 2 })).not.toBe(localStateSignature(state));
+        expect(localStateSignature({ ...state, playbackPlaylistId: 'special-liked' })).not.toBe(localStateSignature(state));
+        expect(localStateSignature({ ...state, playbackPlaylistName: 'Renamed playlist' })).not.toBe(localStateSignature(state));
     });
 
     it('uses source FFT resolution and the original Folia energy response curves', () => {
