@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="local-only-mode">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,6 +14,11 @@ try {
 } catch (e) {
   document.documentElement.classList.add('simple-mode-preload');
 }
+try {
+  if (localStorage.getItem('mineradio-player-interface-v1') === 'folia') {
+    document.documentElement.classList.add('folia-mode-preload');
+  }
+} catch (e) {}
 if (document.fonts && document.fonts.load) {
   document.fonts.load('600 16px Inter').catch(function(){});
   document.fonts.load('500 16px "Noto Sans SC"').catch(function(){});
@@ -23,7 +28,7 @@ if (document.fonts && document.fonts.load) {
 <link rel="stylesheet" href="wallpaper-engine.css">
 <link rel="stylesheet" href="folia-host.css">
 </head>
-<body>
+<body class="local-only-mode empty-home-active">
 <div id="desktop-window-shell">
 <div id="desktop-titlebar" aria-label="window controls">
   <div class="desktop-drag-region">

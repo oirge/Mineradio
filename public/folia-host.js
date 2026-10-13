@@ -826,6 +826,7 @@
     };
   }
   try { if (global.localStorage.getItem(MODE_KEY) === 'folia') setInterface('folia'); } catch (error) { console.warn('[FoliaHostRestore]', error); }
+  finally { if (document.documentElement) document.documentElement.classList.remove('folia-mode-preload'); }
   global.addEventListener('beforeunload', function () {
     stopTimers(); stopChromeAutoHide(); if (loadTimer) global.clearTimeout(loadTimer);
     if (trackChangeTimer) global.clearTimeout(trackChangeTimer);

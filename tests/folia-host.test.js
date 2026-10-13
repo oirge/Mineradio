@@ -35,9 +35,14 @@ function element(id, tagName = 'DIV') {
     };
 }
 
-function harness() {
-    const storage = new Map(), listeners = new Map(), timers = new Map(), messages = [], calls = [], dbFavorites = [];
+function harness(options = {}) {
+    const storage = new Map(), listeners = new Map(), timers = new Map(), messages = [], calls = [], dbFavorites = [], preloadReleases = [];
+    if (options.savedMode) storage.set('mineradio-player-interface-v1', options.savedMode);
+    const documentElement = element('html');
+    if (options.preloadFolia) documentElement.classList.toggle('folia-mode-preload', true);
     const mount = element('folia-interface'), status = element('folia-load-status'), original = element('renderer'), titlebar = element('desktop-titlebar');
+    mount.hidden = true;
+    mount.setAttribute('aria-hidden', 'true');
     const fileInput = element('file-input', 'INPUT'); fileInput.type = 'file';
     const video = element('background', 'VIDEO');
     video.src = 'blob:background'; video.paused = false;
@@ -49,23 +54,31 @@ function harness() {
     let timerId = 0, requestId = 0;
     const tracks = ['a', 'b', 'c'].map(id => ({ type: 'local', localKey: id, localPath: `D:/Music/${id}.flac`, name: `Track ${id}`, artist: 'Artist', album: 'Album', duration: 200, localFile: { privateAudio: true } }));
     const document = {
-        hidden: false, body: element('body'), listeners: new Map(),
+        hidden: false, documentElement, body: element('body'), listeners: new Map(),
         getElementById: id => nodes.get(id) || null,
         querySelectorAll: query => query === '[data-folia-switch]' ? [button] : query === '#desktop-window-shell video' ? [video] : [],
         addEventListener(name, callback) { this.listeners.set(name, callback); },
         createElement(tag) {
             assert.equal(tag, 'iframe', 'the bridge must never create an audio element');
+            if (options.frameError) throw new Error('Frame creation failed');
             const frame = element('', 'IFRAME');
             frame.contentWindow = { postMessage(data, origin) { messages.push({ ...structuredClone(data), origin }); } };
             return frame;
         },
     };
     const context = vm.createContext({
-        console, document, location: { origin: 'http://127.0.0.1:3000' }, URL, Blob,
+        console: { ...console, warn() { calls.push('restore-warning'); } },
+        document, location: { origin: 'http://127.0.0.1:3000' }, URL, Blob,
         addEventListener: (name, callback) => listeners.set(name, callback),
         setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
         clearTimeout: id => timers.delete(id),
-        localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
+        localStorage: {
+            getItem(key) {
+                if (options.modeReadError && key === 'mineradio-player-interface-v1') throw new Error('Storage unavailable');
+                return storage.get(key) || null;
+            },
+            setItem: (key, value) => storage.set(key, value),
+        },
         setPersistentLocalStorageItem: (key, value) => storage.set(key, value),
         localLibrarySongs: tracks, localLibraryReady: true, playQueue: tracks.map(song => ({ ...song })), currentIdx: 0,
         audio: { src: 'blob:host-audio', currentTime: 37, duration: 200, playbackRate: 1, volume: 1, paused: false, ended: false, muted: false },
@@ -99,8 +112,22 @@ function harness() {
     });
     context.window = context;
     context.currentLocalSong = context.playQueue[0];
+    const removeRootClass = documentElement.classList.remove;
+    documentElement.classList.remove = name => {
+        if (name === 'folia-mode-preload' && documentElement.classList.contains(name)) {
+            preloadReleases.push({
+                active: context.isFoliaInterfaceActive(),
+                bodyActive: document.body.classList.contains('folia-interface-active'),
+                hidden: mount.hidden,
+                ariaHidden: mount.attributes['aria-hidden'],
+                inert: original.inert,
+                renderSuspended: calls.includes('suspend-render'),
+            });
+        }
+        removeRootClass(name);
+    };
     vm.runInContext(`${playlistSource}\n${favoriteSource}\n${volumeSource}\n${shuffleSource}\n${bridgeSource}`, context);
-    context.MineradioFoliaHost.setInterface('folia');
+    if (options.activate !== false) context.MineradioFoliaHost.setInterface('folia');
     const frame = () => mount.children[0];
     async function request(method, params = {}, envelope = {}) {
         const id = String(++requestId);
@@ -113,8 +140,50 @@ function harness() {
         assert.ok(entry, `Expected timer with ${delay}ms delay`);
         timers.delete(entry[0]); entry[1].callback();
     }
-    return { context, tracks, document, mount, frame, status, original, titlebar, video, fileInput, storage, messages, calls, dbFavorites, timers, listeners, request, runTimer };
+    return { context, tracks, document, mount, frame, status, original, titlebar, video, fileInput, storage, messages, calls, dbFavorites, preloadReleases, timers, listeners, request, runTimer };
 }
+
+test('saved Folia startup takes ownership before releasing the first-paint state', () => {
+    const h = harness({ savedMode: 'folia', preloadFolia: true, activate: false });
+    assert.equal(h.document.documentElement.classList.contains('folia-mode-preload'), false);
+    assert.equal(h.context.isFoliaInterfaceActive(), true);
+    assert.equal(h.document.body.classList.contains('folia-interface-active'), true);
+    assert.equal(h.mount.hidden, false);
+    assert.equal(h.mount.attributes['aria-hidden'], 'false');
+    assert.deepEqual(h.preloadReleases, [{
+        active: true, bodyActive: true, hidden: false, ariaHidden: 'false', inert: true, renderSuspended: true,
+    }]);
+    assert.equal(h.original.inert, true);
+    assert.equal(h.calls.filter(call => call === 'suspend-render').length, 1);
+    assert.equal(h.context.audio.currentTime, 37);
+    assert.equal(h.context.audio.paused, false);
+    assert.deepEqual(Array.from(h.context.playQueue, song => song.localKey), ['a', 'b', 'c']);
+    assert.equal(h.calls.includes('play-track'), false);
+
+    h.context.MineradioFoliaHost.setInterface('mineradio');
+    assert.equal(h.document.documentElement.classList.contains('folia-mode-preload'), false);
+    assert.equal(h.mount.hidden, true);
+    assert.equal(h.original.inert, false);
+    assert.equal(h.calls.includes('resume-render'), true);
+});
+
+test('unavailable Folia startup always releases the first-paint state back to Home', () => {
+    for (const options of [
+        { savedMode: 'mineradio' }, { savedMode: 'invalid' },
+        { savedMode: 'folia', modeReadError: true },
+        { savedMode: 'folia', frameError: true }
+    ]) {
+        const h = harness({ ...options, preloadFolia: true, activate: false });
+        assert.equal(h.document.documentElement.classList.contains('folia-mode-preload'), false);
+        assert.equal(h.context.isFoliaInterfaceActive(), false);
+        assert.equal(h.document.body.classList.contains('folia-interface-active'), false);
+        assert.equal(h.mount.hidden, true);
+        assert.equal(h.mount.attributes['aria-hidden'], 'true');
+        assert.equal(h.original.inert, false);
+        assert.equal(h.calls.includes('suspend-render'), false);
+        assert.equal(h.context.audio.currentTime, 37);
+    }
+});
 
 test('Folia host accepts only versioned messages from its iframe and exact origin', async () => {
     const h = harness();

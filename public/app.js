@@ -627,7 +627,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.6';
+var APP_VERSION = '2.4.7';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -680,10 +680,10 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '移除启动动画，修复 Folia 切换按钮重叠。',
+  hero: '首次打开直接显示播放器，恢复 Folia 不再闪出原界面。',
   notes: [
-    '启动后直接进入播放器主页，移除启动动画、启动音效及相关 Canvas/WebGL 工作。',
-    '调整 Folia 按钮在普通窗口、全屏和窄屏下的位置，避免与右上角控件和搜索区重叠。'
+    '修复首次打开时短暂出现空白界面和登录入口的问题，直接显示本地音乐导入主页。',
+    '恢复上次使用的 Folia 界面时不再闪出原界面，保留曲库、设置和原有播放恢复。'
   ]
 };
 function readSavedVolume() {
@@ -43403,20 +43403,18 @@ function initializePlayerHome() {
     activateHomeWallpaperPreview({ instant: true });
   }
   if (typeof scheduleSavedLocalMusicFolderRestore === 'function') scheduleSavedLocalMusicFolderRestore(420);
+  var homeShown = updateEmptyHomeVisibility({ forceLoad: true });
+  if (!homeShown && shouldForceEmptyHome()) {
+    homeSuppressed = false;
+    homeForcedOpen = true;
+    homeShown = updateEmptyHomeVisibility({ forceLoad: true });
+  }
   markAppPerf('home-revealed');
   requestAnimationFrame(function(){
-    var homeShown = updateEmptyHomeVisibility({ forceLoad: true });
-    if (!homeShown && shouldForceEmptyHome()) {
-      homeSuppressed = false;
-      homeForcedOpen = true;
-      homeShown = updateEmptyHomeVisibility({ forceLoad: true });
-    }
-    requestAnimationFrame(function(){
-      var guideStarted = maybeRunStartupVisualGuide('startup');
-      if (!guideStarted && !hasAnyPlatformLogin()) maybeRunStartupLoginGuide('startup');
-      else if (!guideStarted && !homeShown) maybeRunStartupLoginGuide('startup');
-      setTimeout(maybeShowUploadTipOnce, 5200);
-    });
+    var guideStarted = maybeRunStartupVisualGuide('startup');
+    if (!guideStarted && !hasAnyPlatformLogin()) maybeRunStartupLoginGuide('startup');
+    else if (!guideStarted && !homeShown) maybeRunStartupLoginGuide('startup');
+    setTimeout(maybeShowUploadTipOnce, 5200);
   });
 }
 

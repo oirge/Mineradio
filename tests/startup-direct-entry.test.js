@@ -10,6 +10,7 @@ const root = path.join(__dirname, '..');
 const appSource = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const indexSource = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const appCss = fs.readFileSync(path.join(root, 'public', 'app.css'), 'utf8');
+const foliaCss = fs.readFileSync(path.join(root, 'public', 'folia-host.css'), 'utf8');
 
 function extractFunction(name) {
   const start = appSource.indexOf(`function ${name}(`);
@@ -128,6 +129,46 @@ test('startup markup and styles have no splash overlay or startup-only hiding', 
   assert.doesNotMatch(appSource, /classList\.add\(['"](?:splash-active|startup-active)['"]\)/);
 });
 
+test('initial HTML reveals the local import Home and hides login before vendor scripts run', () => {
+  const htmlTag = indexSource.match(/<html\b[^>]*>/i)[0];
+  const bodyTag = indexSource.match(/<body\b[^>]*>/i)[0];
+  assert.match(htmlTag, /\bclass="[^"]*\blocal-only-mode\b[^"]*"/);
+  assert.match(bodyTag, /\bclass="[^"]*\blocal-only-mode\b[^"]*"/);
+  assert.match(bodyTag, /\bclass="[^"]*\bempty-home-active\b[^"]*"/);
+  assert.match(indexSource, /id="empty-home"[\s\S]*class="home-local-action"/);
+  assert.match(appCss, /body\.empty-home-active #empty-home\{opacity:1;pointer-events:auto;/);
+  assert.match(appCss, /body\.local-only-mode #user-btn,[\s\S]*?display:none!important/);
+  assert.match(appCss, /html\.local-only-mode #empty-home \.empty-home-shell/);
+});
+
+test('only the saved Folia interface is preloaded without writing preferences', () => {
+  const bootstrap = indexSource.match(/<head>[\s\S]*?<script>([\s\S]*?)<\/script>/)[1];
+  for (const setup of [
+    { mode: null }, { mode: 'mineradio' }, { mode: 'invalid' },
+    { mode: 'folia' }, { mode: 'folia', diy: true },
+    { mode: 'folia', deniedKey: 'mineradio-diy-player-mode-v1' },
+    { mode: 'folia', deniedKey: 'mineradio-player-interface-v1' }
+  ]) {
+    const classes = new Set();
+    const context = {
+      document: { documentElement: { classList: { add(name) { classes.add(name); } } } },
+      localStorage: {
+        getItem(key) {
+          if (key === setup.deniedKey) throw new Error('Storage unavailable');
+          return key === 'mineradio-player-interface-v1' ? setup.mode : setup.diy ? '1' : null;
+        },
+        setItem() { assert.fail('First paint must not write preferences'); }
+      }
+    };
+    assert.doesNotThrow(() => vm.runInNewContext(bootstrap, context));
+    assert.equal(classes.has('folia-mode-preload'),
+      setup.mode === 'folia' && setup.deniedKey !== 'mineradio-player-interface-v1');
+    assert.equal(classes.has('simple-mode-preload'), setup.diy !== true);
+  }
+  assert.match(foliaCss, /html\.folia-mode-preload #folia-interface\[hidden\]\{display:block!important\}/);
+  assert.match(foliaCss, /html\.folia-mode-preload #desktop-window-shell>:not\(#folia-interface\):not\(#desktop-titlebar\):not\(#fullscreen-diy-zone\),\s*body\.folia-interface-active[^{}]*\{visibility:hidden!important;pointer-events:none!important\}/);
+});
+
 test('DOMContentLoaded directly reveals Home without a splash node, click or animation timer', () => {
   const harness = loadStartupHarness();
   assert.deepEqual([...harness.listeners.keys()], ['DOMContentLoaded']);
@@ -137,6 +178,7 @@ test('DOMContentLoaded directly reveals Home without a splash node, click or ani
   assert.deepEqual(harness.marks, ['dom-content-loaded', 'home-revealed']);
   assert.deepEqual(harness.wallpaper, [{ instant: true }]);
   assert.deepEqual(harness.restoreDelays, [420]);
+  assert.deepEqual(harness.homeUpdates, [{ forceLoad: true }]);
   assert.equal(harness.frames.length, 1);
   assert.deepEqual(harness.timers, []);
   assert.equal(harness.classes.has('splash-active'), false);
@@ -182,11 +224,42 @@ test('instant startup wallpaper stays fully visible after an earlier reveal twee
 
 test('direct entry respects active playback while still scheduling local library restore', () => {
   for (const setup of [{ playing: true }, { paused: false }]) {
-    const harness = loadStartupHarness(setup);
+    const harness = loadStartupHarness({ ...setup, homeResults: [false] });
     harness.start();
     assert.deepEqual(harness.wallpaper, []);
     assert.deepEqual(harness.restoreDelays, [420]);
     assert.deepEqual(harness.marks, ['dom-content-loaded', 'home-revealed']);
+    assert.deepEqual(harness.homeUpdates, [{ forceLoad: true }]);
+    assert.equal(harness.context.homeForcedOpen, false);
+  }
+});
+
+test('real Home predicates preserve playback, immersive mode and focused shelf content at startup', () => {
+  for (const setup of [
+    { playing: true },
+    { audio: { src: 'blob:playing', paused: false }, localLibraryPassiveQueue: true, playQueue: [{}], currentIdx: 0 },
+    { immersiveMode: true },
+    { shelfPinnedOpen: true },
+    { shelfManager: { hasOpenContent() { return true; } } }
+  ]) {
+    const harness = loadStartupHarness();
+    Object.assign(harness.context, {
+      localLibraryPassiveQueue: false, playQueue: [], currentIdx: -1
+    }, setup);
+    vm.runInNewContext([
+      extractFunction('shouldShowEmptyHome'),
+      extractFunction('shouldForceEmptyHome')
+    ].join('\n'), harness.context);
+    harness.context.updateEmptyHomeVisibility = options => {
+      harness.homeUpdates.push(plain(options));
+      return harness.context.shouldShowEmptyHome();
+    };
+    harness.start();
+    assert.equal(harness.context.shouldShowEmptyHome(), false);
+    assert.equal(harness.context.shouldForceEmptyHome(), false);
+    assert.equal(harness.context.homeForcedOpen, false);
+    assert.deepEqual(harness.homeUpdates, [{ forceLoad: true }]);
+    assert.deepEqual(harness.restoreDelays, [420]);
   }
 });
 
@@ -219,11 +292,10 @@ test('existing library restore scheduling stays single-flight without a splash r
   assert.equal(restores, 1);
 });
 
-test('Home visibility and deferred guides run on frames without user interaction', () => {
+test('Home visibility is corrected synchronously and guides wait for the next frame', () => {
   const harness = loadStartupHarness();
   harness.start();
 
-  harness.nextFrame();
   assert.deepEqual(harness.homeUpdates, [{ forceLoad: true }]);
   assert.equal(harness.context.homeForcedOpen, false);
   assert.deepEqual(harness.guides, []);
@@ -244,7 +316,6 @@ test('suppressed empty Home is forced open before startup guides run', () => {
     forceHome: true
   });
   harness.start();
-  harness.nextFrame();
 
   assert.equal(harness.context.homeSuppressed, false);
   assert.equal(harness.context.homeForcedOpen, true);
@@ -261,7 +332,6 @@ test('visual guide retains priority and login fallback respects Home visibility'
   ]) {
     const harness = loadStartupHarness(setup);
     harness.start();
-    harness.nextFrame();
     harness.nextFrame();
     assert.deepEqual(harness.guides.map(([kind]) => kind), setup.expected);
     assert.ok(harness.guides.every(([, source]) => source === 'startup'));

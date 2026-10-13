@@ -43,7 +43,8 @@ test('主窗口 vendor 脚本位于 body 末尾且先于 app.js，head 不再被
   const threeAt = html.indexOf('<script src="vendor/three.r128.min.js"></script>');
   const gsapAt = html.indexOf('<script src="vendor/gsap.min.js"></script>');
   const appAt = html.indexOf('<script src="app.js"></script>');
-  const bodyAt = html.indexOf('<body>');
+  const bodyAt = html.search(/<body\b[^>]*>/i);
+  assert.ok(bodyAt >= 0, 'index.html 必须有 body');
   assert.ok(threeAt >= 0, '必须保留 three.js 外链脚本');
   assert.ok(gsapAt > threeAt, 'gsap 必须在 three.js 之后');
   assert.ok(threeAt > bodyAt, 'three.js 必须在 body 内（body 末尾），不阻塞解析');
