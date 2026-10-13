@@ -78,8 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '启动后直接进入播放器主页，移除启动动画、启动音效及相关 Canvas/WebGL 工作。',
-  '调整 Folia 按钮在普通窗口、全屏和窄屏下的位置，避免与右上角控件和搜索区重叠。',
+  '修复首次打开时短暂出现空白界面和登录入口的问题，直接显示本地音乐导入主页。',
+  '恢复上次使用的 Folia 界面时不再闪出原界面，保留曲库、设置和原有播放恢复。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
