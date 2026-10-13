@@ -4,9 +4,13 @@
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.6`。
 - **内容**：移除启动页 DOM、动画、音效、Canvas/WebGL 绘制与相关生命周期；启动时直接进入 Home，并保留原有启动恢复和 reduced-motion 登录引导。调整 Folia 切换按钮在普通窗口、全屏和窄屏下的位置，避开右上角控件与搜索区。
-- **发布前验证**：全量 Node 回归 `1452` 项通过、`1` 项可选基准跳过；Folia 产物检查、`server.js` / `public/app.js` / `public/shelf-classic.js` 语法检查和 `git diff --check` 通过。
-- **本地 Windows x64 安装器**：`120695959` 字节，SHA256 `bb009277a144d6afe9d8f81bf9ece1614ca0c7492095fd1ecd25894d164cdd98`；`latest.yml` 声明版本、文件名、大小与 SHA-512 均和安装器匹配。正式发布资产将由 GitHub Actions 在发布标签上重建并单独核验。
-- **发布状态**：GitHub Latest 仍为 `v2.4.4`；`v2.4.6` tag 与 Release 尚不存在。提交、推送、CI 构建及正式发布结果待补录。
+- **发布前验证**：PR #128 所在的 release commit Verify `38278277887` 成功：全量测试 `1452` 项通过、1 项可选基准跳过；嵌入 Folia 测试 `5/5` 通过。本地启动与按钮布局定向测试 `24/24`、更新说明解析测试 `22/22`、Folia 产物检查、`server.js` / `public/app.js` / `public/shelf-classic.js` 语法检查和 `git diff --check` 通过。
+- **GitHub 发布结果（2026-10-13）**：tag `v2.4.6`（annotated tag object `53be2d76ad3e165f141f8f03d7f084ade10b424e`）指向版本提交 `6c12a73612f2530fe7f50bc6db1eb92b60f7b47d`。Windows Build and Release run `38332180306` 成功。Release `411144413` 于北京时间 `2026-10-13 10:23:39` 正式发布，设为 Latest；`releases/latest` 已确认返回 `v2.4.6`。正文仅含启动直入主页和 Folia 按钮布局两项用户可见改动。
+- **线上资产核验**：官方 Release 含安装器、blockmap、`latest.yml` 和 SHA256 清单四项。下载到本地的后 3 项均按文件大小和 GitHub API SHA256 digest 复核；checksum 清单登记值也与安装器、blockmap、`latest.yml` 的线上 digest 一致。官方安装器为 `120696001` 字节，GitHub API digest / 清单 SHA256 为 `e29bc436d3b5284e86635862233f638cee12ae5a2cc03fc4f05d3dd4e8f07ff3`；`latest.yml` 声明版本、文件名、大小相符，SHA-512 为 `q5PEltL/ZW/aHy7pVJxckX3ZXWFdH2HV8THdv2rg7r1VZzGzwne8924nGY+vpEgziFGYcGAbFNcKrNKNh5tSIQ==`。本机代理未能完整回下载 120 MB 安装器，因此未把该 SHA-512 写成本机重算结果。
+  - `Mineradio-oirge-2.4.6-Setup.exe`：120696001 B，GitHub API SHA256 `e29bc436d3b5284e86635862233f638cee12ae5a2cc03fc4f05d3dd4e8f07ff3`。
+  - `Mineradio-oirge-2.4.6-Setup.exe.blockmap`：127566 B，SHA256 `44b4f42b4a760bdf5a6a47894e2d64692969e52d0564195633af28e79528ba7a`。
+  - `latest.yml`：359 B，SHA256 `3330c9aa7d9e57359849e074076aa786d6f30cd167002c8b6a6a00c6a83a2233`。
+  - `Mineradio-oirge-2.4.6-SHA256SUMS.txt`：282 B，SHA256 `4c267a059b485f93ff6e79d2692e828579699ecaa46c1d05b99ff1e6cfd18cd2`。
 
 ## v2.4.3 Folia 海报墙切歌刷新优化
 
