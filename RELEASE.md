@@ -5,8 +5,14 @@
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.8`；Folia 上游版本保留 `0.7.16`，安装身份、数据目录与更新线路不变。
 - **内容**：Folia 收藏按钮旁增加同栏歌单切换和向上弹出菜单，复用宿主歌单与唯一音频；菜单包含封面、歌曲数、选中标记与管理入口，适配窄屏并保留原控制栏高度。首次绘制前恢复已保存的配色和声明式主题；空曲库的 Mineradio 导入主页隐藏 Folia 切换入口。
 - **已有验证**：Folia 控制栏布局测试 `10/10`、歌单组件测试 `7/7` 通过；Folia 重建、`server.js` 语法和 `git diff --check` 通过。真实浏览器检查 `1388`、`960`、`721`、`390` px 宽度、歌单切换、共享音频、菜单边界和管理入口，未出现页面错误。
-- **验证边界**：本轮不改 NSIS 安装器，不将此前安装等待问题宣称为已修复；未改歌词效果、SVG 玻璃或共享音频引擎。此前本机预览包仍为 `2.4.7`，不作为正式 `2.4.8` 资产或摘要。
-- **发布状态**：用户于 `2026-10-13` 明确授权发布。正式发布走功能分支、PR、merge commit、annotated tag 和 Windows Build and Release；公开前核验安装器、blockmap、`latest.yml` 与 SHA256 清单，发布后另走文档 PR 补录事实。既有 `v2.4.7` 标签和资产保持原样。
+- **验证边界**：本轮不改 NSIS 安装器，不将此前安装等待问题宣称为已修复；未改歌词效果、SVG 玻璃或共享音频引擎。此前本机预览包仍为 `2.4.7`，不作为正式 `2.4.8` 资产或摘要。本轮未做本机 Windows 构建，安装器验收以 CI 官方产物和资产核验为准。
+- **提交与 CI**：用户于 `2026-10-13` 明确授权发布；PR #132 以 merge commit `6b9806e170b8b41477ca2f8f5c6fa966ffc56fc0` 合入 `main`，PR 两组 Verify `38380291212` / `38380343995` 和合并后 Verify `38390262862` 成功。annotated tag `v2.4.8`（tag object `50d2264ac4942a2c0e130d1e5a5f6b7a4c417a17`）固定在版本提交 `10ee1fcb035fde5435d14839c345b3ea19082f95`，Windows Build and Release `38390312973` 成功并上传四项资产。
+- **正式发布（2026-10-13）**：Release `411602037` 于北京时间 `2026-10-13 19:47:01` 公开并设为 Latest，`draft=false` / `prerelease=false`；`releases/latest` 返回 `v2.4.8`。正文仅包含歌单切换、启动主题恢复和空曲库隐藏切换入口三条用户可见变更；`v2.4.7` 标签及发布资产保持原样。
+- **官方资产核验**：四项资产在草稿阶段即完整回下载（安装器首次下载中断，改走本机代理重试后完成），大小和本机 SHA256 与 GitHub API digest 一致，SHA256 清单三项全部一致；官方安装器本机 SHA-512 为 `Ftkrf4NWlFT/kVhllC+tTfqjTzSc1Kw7OvlX/5IzL/cl1BQKY0ETq2yqE7hCPoBeDURWawLy+ZJK5+bOU2M0Vg==`，匹配 `latest.yml`。公开后下载的 `releases/latest/download/latest.yml` 版本为 `2.4.8`，与已校验的官方文件逐字节一致。此次验证为官方资产完整性和更新通道验证，未运行官方 NSIS 安装器。
+  - `Mineradio-oirge-2.4.8-Setup.exe`：120701603 B，SHA256 `aa83c9ae495f3fe237c8861243b27bbc63c22589255c574b4cdd5a393a2f95f7`。
+  - `Mineradio-oirge-2.4.8-Setup.exe.blockmap`：127597 B，SHA256 `0be4f8aafae42e291a3c554737836f7d9ac2bd7308fb5bf1a6bc18e0fe0d2106`。
+  - `latest.yml`：359 B，SHA256 `7526ad284e671dbd26d9dd78f4c478b2bf9a14e5e1eb027819d6f5ac0f5774bf`。
+  - `Mineradio-oirge-2.4.8-SHA256SUMS.txt`：282 B，SHA256 `35e657aa50cc4dc6e4c1af9db09bc04b7dcc1853e4bf0da8d7eca9adba1acdf5`。
 
 ## v2.4.7 修复首次打开的过渡界面
 
