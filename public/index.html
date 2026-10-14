@@ -209,7 +209,14 @@ if (document.fonts && document.fonts.load) {
 <!-- 控制台 (右侧贴边自动显示, 无关闭按钮) -->
 <div id="fx-panel">
   <div class="fx-head">
-    <div><div class="fx-title">视觉控制台</div><div class="fx-sub">MINERADIO VISUALS · 鼠标移开自动隐藏</div></div>
+    <div><div class="fx-title" data-i18n="视觉控制台">视觉控制台</div><div class="fx-sub" data-i18n="MINERADIO VISUALS · 鼠标移开自动隐藏">MINERADIO VISUALS · 鼠标移开自动隐藏</div></div>
+    <div class="fx-language-tools">
+      <span class="fx-language-label" data-i18n="界面语言">界面语言</span>
+      <div id="fx-language-switch" class="fx-language-switch" role="group" aria-label="界面语言">
+        <button type="button" data-ui-language="zh-CN" aria-pressed="true">中文</button>
+        <button type="button" data-ui-language="en" aria-pressed="false">English</button>
+      </div>
+    </div>
   </div>
 
   <div class="fx-section-label">视觉预设</div>

@@ -68,6 +68,7 @@ const PLAYER_KEYS = {
   REPLAY_GAIN_STORE_KEY: 'mineradio-replay-gain-v1',
   GAPLESS_STORE_KEY: 'mineradio-gapless-v1',
   HOTKEY_SETTINGS_STORE_KEY: 'mineradio-hotkey-settings-v1',
+  UI_LANGUAGE_STORE_KEY: 'mineradio-ui-language-v1',
   UPDATE_ROUTE_STORE_KEY: 'mineradio-update-route-v1',
   VISUAL_GUIDE_SEEN_STORE_KEY: 'mineradio-visual-guide-seen-v2',
   UPLOAD_TIP_STORE_KEY: 'mineradio-upload-tip-seen',
@@ -723,7 +724,7 @@ test('config.player 只认白名单键，备份文件塞不进任意 localStorag
 test('白名单与 app.js 里的持久化键常量一一对应', () => {
   const mod = loadBackupModule({});
   const list = plain(mod.context.MINERADIO_BACKUP_PLAYER_KEYS);
-  assert.equal(list.length, 20);
+  assert.equal(list.length, 21);
   assert.deepEqual(list.slice().sort(), Object.values(PLAYER_KEYS).sort());
   Object.keys(PLAYER_KEYS).forEach((name) => {
     assert.match(appSource, new RegExp('var ' + name + " = '" + PLAYER_KEYS[name] + "';"), name + ' 常量值漂了');

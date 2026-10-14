@@ -65,6 +65,9 @@ var wallpaperEnginePointerActivityLatestY = 32768;
 var wallpaperEnginePointerActivityHasPoint = false;
 var wallpaperEngineRuntimeError = '';
 var wallpaperEngineProjectDetailsId = '';
+var wallpaperEngineProjectDetailsSnapshot = null;
+var wallpaperEngineProjectDetailsError = '';
+var wallpaperEngineLibraryError = '';
 var WALLPAPER_ENGINE_SWITCH_FADE_MS = 440;
 var WALLPAPER_ENGINE_PREPARED_STREAM_TTL_MS = 12000;
 var WALLPAPER_ENGINE_FIRST_FRAME_TIMEOUT_MS = 8000;
@@ -271,15 +274,55 @@ function wallpaperEngineMediaUrl(item, kind) {
   return 'mineradio-wallpaper://' + kind + '/' + encodeURIComponent(item.id || '') + '?v=' + encodeURIComponent(String(item.updatedAt || 0)) + '&token=' + encodeURIComponent(wallpaperEngineMediaToken);
 }
 
+function wallpaperEngineUiText(chinese, english) {
+  if (typeof uiLanguage === 'undefined' || uiLanguage !== 'en') return chinese;
+  if (english != null) return english;
+  var errors = {
+    '项目离线': 'Project offline',
+    '媒体不可用': 'Media unavailable',
+    'WE 引擎运行失败': 'WE engine failed',
+    'Mineradio 正以管理员身份运行，无法捕获 WE 实时窗口；请取消“以管理员身份运行”后重启播放器': 'Mineradio is running as administrator and cannot capture WE. Restart the player without administrator privileges.',
+    '未找到 Wallpaper Engine 本体': 'Wallpaper Engine was not found',
+    'Wallpaper Engine 运行时签名无效': 'Wallpaper Engine runtime signature is invalid',
+    '上一次 Mineradio 实时壁纸窗口仍在收尾，请稍后重试；Wallpaper Engine 本体会保留': 'The previous live wallpaper window is still closing. Try again shortly; Wallpaper Engine will remain open.',
+    'WE 原生鼠标视差连接失败，本次会话已关闭；请再次点击重连': 'WE mouse parallax connection failed and this session was closed. Click again to reconnect.',
+    'WE 场景控制暂时未就绪，请稍后重试': 'WE scene controls are not ready. Try again shortly.',
+    'WE 场景窗口启动超时': 'WE scene window startup timed out',
+    '当前系统不支持实时窗口捕获': 'This system does not support live window capture',
+    'WE 实时画面连接需要 Mineradio 保持在前台': 'Keep Mineradio in the foreground to connect to the WE live view',
+    'WE 实时画面捕获权限被拒绝': 'Permission to capture the WE live view was denied',
+    'WE 实时捕获通道暂时忙，已清理本次会话；请再次点击重连': 'WE capture is temporarily busy. This session was cleared; click again to reconnect.',
+    'WE 实时窗口正在切换，请重试': 'The WE live window is switching. Try again.',
+    'WE 实时画面连接超时': 'WE live view connection timed out',
+    'WE 实时画面连接尚未准备完成': 'WE live view connection is not ready',
+    'WE 实时画面连接失败': 'WE live view connection failed',
+    '所选 .pkg/.pak 不是有效的 Wallpaper Engine PKGV 场景包': 'The selected .pkg/.pak is not a valid Wallpaper Engine PKGV scene package',
+    '该场景缺少有效的 project.json': 'This scene has no valid project.json',
+    '没有找到该项目的有效场景包': 'No valid scene package was found for this project',
+    '当前环境不支持读取 Wallpaper Engine 项目设置': 'This environment cannot read Wallpaper Engine project settings',
+    '项目设置格式无效': 'Invalid project settings format',
+    '读取失败': 'Failed to read',
+    '打开失败': 'Failed to open',
+    '扫描失败': 'Scan failed',
+    '导入失败': 'Import failed',
+    '项目文件导入失败': 'Project file import failed',
+    'Wallpaper Engine 目录导入失败': 'Wallpaper Engine folder import failed',
+    '移除失败': 'Failed to remove',
+    '目录移除失败': 'Failed to remove folder',
+    '仅桌面版支持本地壁纸识别': 'Local wallpaper detection requires the desktop app'
+  };
+  return errors[chinese] || (typeof uiText === 'function' ? uiText(chinese) : chinese);
+}
+
 function wallpaperEngineProjectLabel(item) {
   item = item || {};
-  if (item.playable && item.mediaType === 'video') return 'Video · 动态播放';
-  if (item.playable && item.mediaType === 'image') return '图片 · 原图显示';
-  if (item.projectType === 'scene' && item.enginePlayable) return 'Scene · Wallpaper Engine 原生实时运行';
-  if (item.projectType === 'scene') return 'Scene · 预览（未找到有效 PKGV 场景包）';
-  if (item.projectType === 'web') return 'Web · 安全预览（未执行 HTML）';
-  if (item.projectType === 'application') return 'Application · 安全预览（未运行程序）';
-  return '本地项目 · 安全预览';
+  if (item.playable && item.mediaType === 'video') return wallpaperEngineUiText('Video · 动态播放', 'Video · Playback');
+  if (item.playable && item.mediaType === 'image') return wallpaperEngineUiText('图片 · 原图显示', 'Image · Original image');
+  if (item.projectType === 'scene' && item.enginePlayable) return wallpaperEngineUiText('Scene · Wallpaper Engine 原生实时运行', 'Scene · Wallpaper Engine live rendering');
+  if (item.projectType === 'scene') return wallpaperEngineUiText('Scene · 预览（未找到有效 PKGV 场景包）', 'Scene · Preview (no valid PKGV package found)');
+  if (item.projectType === 'web') return wallpaperEngineUiText('Web · 安全预览（未执行 HTML）', 'Web · Safe preview (HTML is not executed)');
+  if (item.projectType === 'application') return wallpaperEngineUiText('Application · 安全预览（未运行程序）', 'Application · Safe preview (program is not run)');
+  return wallpaperEngineUiText('本地项目 · 安全预览', 'Local project · Safe preview');
 }
 
 function updateWallpaperEngineEntryUi(message) {
@@ -289,24 +332,25 @@ function updateWallpaperEngineEntryUi(message) {
   var active = wallpaperEngineBackgroundActive();
   var selected = !!wallpaperEngineSelection.active;
   if (value) {
+    value.setAttribute('data-i18n-skip', '');
     if (message) value.textContent = message;
-    else if (active && wallpaperEngineRuntimeError) value.textContent = wallpaperEngineRuntimeError + ' · 已显示原背景';
+    else if (active && wallpaperEngineRuntimeError) value.textContent = wallpaperEngineUiText(wallpaperEngineRuntimeError) + wallpaperEngineUiText(' · 已显示原背景', ' · Original background shown');
     else if (active && wallpaperEngineSelection.kind === 'engine' && wallpaperEngineDesktopPreviewActive) {
-      value.textContent = (wallpaperEngineSelection.title || '已选择')
-        + (wallpaperEngineDesktopPreviewUsesAsset ? ' · 桌面被动模式 · 项目预览' : ' · 桌面被动模式 · 原背景');
+      value.textContent = (wallpaperEngineSelection.title || wallpaperEngineUiText('已选择', 'Selected'))
+        + (wallpaperEngineDesktopPreviewUsesAsset ? wallpaperEngineUiText(' · 桌面被动模式 · 项目预览', ' · Passive desktop mode · Project preview') : wallpaperEngineUiText(' · 桌面被动模式 · 原背景', ' · Passive desktop mode · Original background'));
     }
-    else if (active && wallpaperEngineSelection.kind === 'engine') value.textContent = (wallpaperEngineSelection.title || '已选择') + ' · WE 引擎实时运行';
-    else if (active) value.textContent = (wallpaperEngineSelection.title || '已选择') + ' · 原背景保留';
-    else value.textContent = '未启用 · 原背景保留';
+    else if (active && wallpaperEngineSelection.kind === 'engine') value.textContent = (wallpaperEngineSelection.title || wallpaperEngineUiText('已选择', 'Selected')) + wallpaperEngineUiText(' · WE 引擎实时运行', ' · WE live rendering');
+    else if (active) value.textContent = (wallpaperEngineSelection.title || wallpaperEngineUiText('已选择', 'Selected')) + wallpaperEngineUiText(' · 原背景保留', ' · Original background kept');
+    else value.textContent = wallpaperEngineUiText('未启用 · 原背景保留', 'Disabled · Original background kept');
   }
   if (value && !message && selected && !active) {
-    value.textContent = (wallpaperEngineSelection.title || '已选择') + ' · 未启用';
+    value.textContent = (wallpaperEngineSelection.title || wallpaperEngineUiText('已选择', 'Selected')) + wallpaperEngineUiText(' · 未启用', ' · Disabled');
   }
   if (toggle) {
     toggle.disabled = !wallpaperEngineEnabled && wallpaperEngineLibraryBusy;
     toggle.classList.toggle('on', wallpaperEngineEnabled);
-    toggle.textContent = wallpaperEngineEnabled ? '停用' : '启用';
-    toggle.title = wallpaperEngineEnabled ? '停用 Wallpaper Engine，恢复原背景' : (selected ? '启用已选择的 Wallpaper Engine 壁纸' : '先选择 Wallpaper Engine 壁纸');
+    toggle.textContent = wallpaperEngineEnabled ? wallpaperEngineUiText('停用', 'Disable') : wallpaperEngineUiText('启用', 'Enable');
+    toggle.title = wallpaperEngineEnabled ? wallpaperEngineUiText('停用 Wallpaper Engine，恢复原背景', 'Disable Wallpaper Engine and restore the original background') : (selected ? wallpaperEngineUiText('启用已选择的 Wallpaper Engine 壁纸', 'Enable the selected Wallpaper Engine wallpaper') : wallpaperEngineUiText('先选择 Wallpaper Engine 壁纸', 'Select a Wallpaper Engine wallpaper first'));
     toggle.setAttribute('aria-pressed', wallpaperEngineEnabled ? 'true' : 'false');
   }
   if (restore) restore.disabled = !active;
@@ -881,7 +925,7 @@ window.__mineradioPrepareWallpaperEngineDesktopPreview = function (sessionId, re
   clearWallpaperEngineLayerMedia(0);
 
   if (!item || !item.hasPreview) {
-    updateWallpaperEngineEntryUi('桌面被动模式 · 已显示原背景');
+    updateWallpaperEngineEntryUi(wallpaperEngineUiText('桌面被动模式 · 已显示原背景', 'Passive desktop mode · Original background shown'));
     return Promise.resolve({
       ok: true,
       preview: false,
@@ -894,7 +938,7 @@ window.__mineradioPrepareWallpaperEngineDesktopPreview = function (sessionId, re
   var layer = document.getElementById('wallpaper-engine-layer');
   var image = document.getElementById('wallpaper-engine-image');
   if (!layer || !image) {
-    updateWallpaperEngineEntryUi('桌面被动模式 · 已显示原背景');
+    updateWallpaperEngineEntryUi(wallpaperEngineUiText('桌面被动模式 · 已显示原背景', 'Passive desktop mode · Original background shown'));
     return Promise.resolve({
       ok: true,
       preview: false,
@@ -904,7 +948,7 @@ window.__mineradioPrepareWallpaperEngineDesktopPreview = function (sessionId, re
     });
   }
 
-  updateWallpaperEngineEntryUi('正在准备桌面壁纸预览…');
+  updateWallpaperEngineEntryUi(wallpaperEngineUiText('正在准备桌面壁纸预览…', 'Preparing desktop wallpaper preview…'));
   return new Promise(function (resolve) {
     var settled = false;
     var timer = 0;
@@ -929,7 +973,7 @@ window.__mineradioPrepareWallpaperEngineDesktopPreview = function (sessionId, re
       }
       restoreOriginalBackgroundAfterWallpaperEngine();
       clearWallpaperEngineLayerMedia(0);
-      updateWallpaperEngineEntryUi('桌面被动模式 · 已显示原背景');
+      updateWallpaperEngineEntryUi(wallpaperEngineUiText('桌面被动模式 · 已显示原背景', 'Passive desktop mode · Original background shown'));
       finish({
         ok: true,
         preview: false,
@@ -954,7 +998,7 @@ window.__mineradioPrepareWallpaperEngineDesktopPreview = function (sessionId, re
       }
       wallpaperEngineDesktopPreviewUsesAsset = true;
       wallpaperEngineLayerReady('image', token);
-      updateWallpaperEngineEntryUi('桌面被动模式 · 项目预览');
+      updateWallpaperEngineEntryUi(wallpaperEngineUiText('桌面被动模式 · 项目预览', 'Passive desktop mode · Project preview'));
       finish({
         ok: true,
         preview: true,
@@ -1573,7 +1617,7 @@ function wallpaperEngineLayerFailed(item, attemptedKind, token) {
       wallpaperEngineRuntimeError = '';
       restoreOriginalBackgroundAfterWallpaperEngine();
       clearWallpaperEngineLayerMedia(0);
-      updateWallpaperEngineEntryUi('正在恢复 ' + (item && item.title || 'Wallpaper Engine') + '…');
+      updateWallpaperEngineEntryUi(wallpaperEngineUiText('正在恢复 ', 'Restoring ') + (item && item.title || 'Wallpaper Engine') + '…');
       Promise.resolve(nativeStopPromise).finally(function () {
         if (!wallpaperEngineHostRecoveryInFlight || wallpaperEngineHostRecoveryRetryTimer) return;
         wallpaperEngineHostRecoveryRetryTimer = setTimeout(function () {
@@ -1593,7 +1637,7 @@ function wallpaperEngineLayerFailed(item, attemptedKind, token) {
   if ((attemptedKind === 'media' || attemptedKind === 'engine') && item && item.hasPreview) {
     wallpaperEngineSelection.kind = 'preview';
     wallpaperEngineSelection.mediaType = 'image';
-    showToast(attemptedKind === 'engine' ? ((wallpaperEngineRuntimeError || 'Wallpaper Engine 实时运行失败') + '，已切换到项目预览；再次点击可重试') : '动态媒体解码失败，已切换到安全预览');
+    showToast(attemptedKind === 'engine' ? (wallpaperEngineUiText(wallpaperEngineRuntimeError || 'WE 引擎运行失败') + wallpaperEngineUiText('，已切换到项目预览；再次点击可重试', '; switched to project preview. Click again to retry.')) : wallpaperEngineUiText('动态媒体解码失败，已切换到安全预览', 'Dynamic media decoding failed; switched to safe preview'));
     applyWallpaperEngineBackground(item, true);
     return;
   }
@@ -1601,7 +1645,7 @@ function wallpaperEngineLayerFailed(item, attemptedKind, token) {
   restoreOriginalBackgroundAfterWallpaperEngine();
   clearWallpaperEngineLayerMedia(0);
   updateWallpaperEngineEntryUi();
-  showToast('壁纸媒体不可用，已恢复原背景');
+  showToast(wallpaperEngineUiText('壁纸媒体不可用，已恢复原背景', 'Wallpaper media is unavailable; the original background was restored'));
 }
 
 function applyWallpaperEngineBackground(item, quiet) {
@@ -1610,7 +1654,7 @@ function applyWallpaperEngineBackground(item, quiet) {
     wallpaperEngineRuntimeError = item ? '' : '项目离线';
     restoreOriginalBackgroundAfterWallpaperEngine();
     clearWallpaperEngineLayerMedia(0);
-    updateWallpaperEngineEntryUi(item ? '' : '项目离线 · 已显示原背景');
+    updateWallpaperEngineEntryUi(item ? '' : wallpaperEngineUiText('项目离线 · 已显示原背景', 'Project offline · Original background shown'));
     return false;
   }
   var kind = wallpaperEngineSelection.kind === 'engine' && item.enginePlayable
@@ -1634,7 +1678,7 @@ function applyWallpaperEngineBackground(item, quiet) {
   document.body.classList.add('wallpaper-engine-loading');
   if (window.__mineradioWeDiag) window.__mineradioWeDiag('renderer-load-begin', { kind: kind, hasPreview: item.hasPreview === true });
   if (!layer || !image || !video) return false;
-  updateWallpaperEngineEntryUi('正在加载 ' + (item.title || '壁纸') + '…');
+  updateWallpaperEngineEntryUi(wallpaperEngineUiText('正在加载 ', 'Loading ') + (item.title || wallpaperEngineUiText('壁纸', 'wallpaper')) + '…');
 
   function beginWallpaperEngineMediaLoad() {
     if (token !== wallpaperEngineLayerToken || !wallpaperEngineBackgroundActive() || wallpaperEngineSelection.id !== item.id) return;
@@ -1697,14 +1741,14 @@ function applyWallpaperEngineBackground(item, quiet) {
     clearWallpaperEngineLayerMedia(0);
     beginWallpaperEngineMediaLoad();
   }
-  if (!quiet) showToast(kind === 'engine' ? '正在用 Wallpaper Engine 原生引擎载入 Scene…' : (kind === 'media' ? 'Wallpaper Engine 壁纸已启用' : '已启用安全预览，原背景仍保留'));
+  if (!quiet) showToast(kind === 'engine' ? wallpaperEngineUiText('正在用 Wallpaper Engine 原生引擎载入 Scene…', 'Loading the Scene with the native Wallpaper Engine runtime…') : (kind === 'media' ? wallpaperEngineUiText('Wallpaper Engine 壁纸已启用', 'Wallpaper Engine wallpaper enabled') : wallpaperEngineUiText('已启用安全预览，原背景仍保留', 'Safe preview enabled; the original background is kept')));
   return true;
 }
 
 function activateWallpaperEngineItem(id) {
   var item = wallpaperEngineProjectById(id);
   if (!item || (!item.playable && !item.enginePlayable && !item.hasPreview)) {
-    showToast('该项目没有可安全导入的媒体');
+    showToast(wallpaperEngineUiText('该项目没有可安全导入的媒体', 'This project has no media that can be safely imported'));
     return;
   }
   wallpaperEngineSelection = normalizeWallpaperEngineSelection({
@@ -1728,7 +1772,7 @@ function activateWallpaperEngineItem(id) {
     applyWallpaperEngineBackground(item, false);
   } else {
     updateWallpaperEngineEntryUi();
-    showToast('已选择 Wallpaper Engine 壁纸，请点击启用');
+    showToast(wallpaperEngineUiText('已选择 Wallpaper Engine 壁纸，请点击启用', 'Wallpaper Engine wallpaper selected. Click Enable.'));
   }
   closeWallpaperEngineLibrary();
 }
@@ -1740,12 +1784,12 @@ function toggleWallpaperEngineBackground() {
   }
   if (wallpaperEngineLibraryBusy) {
     updateWallpaperEngineEntryUi();
-    showToast('Wallpaper Engine 库正在更新，请稍后再启用');
+    showToast(wallpaperEngineUiText('Wallpaper Engine 库正在更新，请稍后再启用', 'The Wallpaper Engine library is updating. Enable it after the update.'));
     return;
   }
   if (!wallpaperEngineSelection.active || !wallpaperEngineSelection.id) {
     updateWallpaperEngineEntryUi();
-    showToast('请先识别并选择 Wallpaper Engine 壁纸');
+    showToast(wallpaperEngineUiText('请先识别并选择 Wallpaper Engine 壁纸', 'Detect and select a Wallpaper Engine wallpaper first'));
     openWallpaperEngineLibrary();
     return;
   }
@@ -1768,7 +1812,7 @@ function toggleWallpaperEngineBackground() {
     saveWallpaperEngineEnabled();
     wallpaperEngineRuntimeError = '项目离线';
     updateWallpaperEngineEntryUi();
-    showToast('未找到已选择的 Wallpaper Engine 项目');
+    showToast(wallpaperEngineUiText('未找到已选择的 Wallpaper Engine 项目', 'The selected Wallpaper Engine project was not found'));
   });
 }
 
@@ -1796,7 +1840,7 @@ function deactivateWallpaperEngineBackground(quiet) {
   clearWallpaperEngineLayerMedia(0);
   updateWallpaperEngineEntryUi();
   renderWallpaperEngineLibrary();
-  if (!quiet) showToast('已恢复原背景媒体，原设置没有被覆盖');
+  if (!quiet) showToast(wallpaperEngineUiText('已恢复原背景媒体，原设置没有被覆盖', 'The original background media and settings were restored'));
 }
 
 function restartWallpaperEngineAfterHostBoundsChange() {
@@ -1817,7 +1861,7 @@ function restartWallpaperEngineAfterHostBoundsChange() {
   wallpaperEngineHostRecoveryInFlight = true;
   wallpaperEngineHostRecoveryAttempt += 1;
   wallpaperEngineRuntimeError = '';
-  updateWallpaperEngineEntryUi('正在恢复 ' + (item.title || 'Wallpaper Engine') + '…');
+  updateWallpaperEngineEntryUi(wallpaperEngineUiText('正在恢复 ', 'Restoring ') + (item.title || 'Wallpaper Engine') + '…');
   startWallpaperEngineNativeBackground(item, token).catch(function (error) {
     if (token !== wallpaperEngineLayerToken) return;
     if (wallpaperEngineNativeHostUnavailable() || /WALLPAPER_ENGINE_START_SUPERSEDED/.test(String(error && (error.code || error.message) || error || ''))) return;
@@ -1946,8 +1990,8 @@ function renderWallpaperEngineManualRoots() {
     ? wallpaperEngineLibrarySnapshot.manualRoots : [];
   host.innerHTML = roots.map(function (root) {
     var isMedia = root.kind === 'media';
-    return '<span class="wallpaper-engine-root-chip"><span title="' + (isMedia ? '手动导入文件' : '手动导入目录') + '">' + escHtml(root.name || (isMedia ? '导入视频' : '导入目录')) + '</span>' +
-      '<button type="button" data-wallpaper-action="remove-root" data-root-id="' + escHtml(root.id || '') + '" title="' + (isMedia ? '移除此索引文件' : '移除此索引目录') + '">×</button></span>';
+    return '<span class="wallpaper-engine-root-chip"><span title="' + (isMedia ? wallpaperEngineUiText('手动导入文件', 'Manually imported file') : wallpaperEngineUiText('手动导入目录', 'Manually imported folder')) + '"><span data-i18n-skip>' + escHtml(root.name || (isMedia ? wallpaperEngineUiText('导入视频', 'Imported video') : wallpaperEngineUiText('导入目录', 'Imported folder'))) + '</span></span>' +
+      '<button type="button" data-wallpaper-action="remove-root" data-root-id="' + escHtml(root.id || '') + '" title="' + (isMedia ? wallpaperEngineUiText('移除此索引文件', 'Remove this file from the index') : wallpaperEngineUiText('移除此索引目录', 'Remove this folder from the index')) + '">×</button></span>';
   }).join('');
 }
 
@@ -1961,12 +2005,12 @@ function renderWallpaperEngineLibrary() {
   }
   disconnectWallpaperEnginePreviewObserver();
   if (wallpaperEngineLibraryBusy) {
-    grid.innerHTML = '<div class="wallpaper-engine-empty">正在读取 project.json 元数据，不扫描 94GB 素材文件…</div>';
+    grid.innerHTML = '<div class="wallpaper-engine-empty">' + wallpaperEngineUiText('正在读取 project.json 元数据，不扫描 94GB 素材文件…', 'Reading project.json metadata without scanning large asset files…') + '</div>';
     return;
   }
   var items = wallpaperEngineFilteredProjects();
   if (!items.length) {
-    grid.innerHTML = '<div class="wallpaper-engine-empty">' + (wallpaperEngineProjects.length ? '没有符合筛选条件的壁纸' : '没有识别到 Wallpaper Engine 项目<br>可以点击“导入目录”手动选择项目或素材库') + '</div>';
+    grid.innerHTML = '<div class="wallpaper-engine-empty">' + (wallpaperEngineProjects.length ? wallpaperEngineUiText('没有符合筛选条件的壁纸', 'No wallpapers match the filter') : wallpaperEngineUiText('没有识别到 Wallpaper Engine 项目<br>可以点击“导入目录”手动选择项目或素材库', 'No Wallpaper Engine projects found<br>Click "Import Folder" to select a project or asset library')) + '</div>';
     return;
   }
   grid.innerHTML = items.map(function (item) {
@@ -1975,10 +2019,10 @@ function renderWallpaperEngineLibrary() {
     var preview = item.hasPreview ? wallpaperEngineMediaUrl(item, 'preview') : '';
     return '<article class="wallpaper-engine-card' + (favorite ? ' favorite' : '') + (active ? ' active' : '') + '" tabindex="0" role="button" data-wallpaper-id="' + item.id + '">' +
       (preview ? '<img class="wallpaper-engine-card-preview" data-src="' + escHtml(preview) + '" data-animated="' + (item.previewAnimated ? '1' : '0') + '" alt="" loading="lazy" decoding="async">' : '<div class="wallpaper-engine-card-placeholder"></div>') +
-      '<button class="wallpaper-engine-card-star' + (favorite ? ' active' : '') + '" type="button" data-wallpaper-action="favorite" data-wallpaper-id="' + item.id + '" title="' + (favorite ? '取消星标' : '星标并置顶') + '">' + (favorite ? '★' : '☆') + '</button>' +
-      '<button class="wallpaper-engine-card-settings" type="button" data-wallpaper-action="details" data-wallpaper-id="' + item.id + '" title="读取项目设置">⚙</button>' +
-      '<button class="wallpaper-engine-card-hide" type="button" data-wallpaper-action="hide" data-wallpaper-id="' + item.id + '" title="从列表隐藏">×</button>' +
-      '<div class="wallpaper-engine-card-meta">' + escHtml(item.title) + '<small>' + escHtml(wallpaperEngineProjectLabel(item)) + '</small></div>' +
+      '<button class="wallpaper-engine-card-star' + (favorite ? ' active' : '') + '" type="button" data-wallpaper-action="favorite" data-wallpaper-id="' + item.id + '" title="' + (favorite ? wallpaperEngineUiText('取消星标', 'Remove star') : wallpaperEngineUiText('星标并置顶', 'Star and pin to top')) + '">' + (favorite ? '★' : '☆') + '</button>' +
+      '<button class="wallpaper-engine-card-settings" type="button" data-wallpaper-action="details" data-wallpaper-id="' + item.id + '" title="' + wallpaperEngineUiText('读取项目设置', 'Read project settings') + '">⚙</button>' +
+      '<button class="wallpaper-engine-card-hide" type="button" data-wallpaper-action="hide" data-wallpaper-id="' + item.id + '" title="' + wallpaperEngineUiText('从列表隐藏', 'Hide from list') + '">×</button>' +
+      '<div class="wallpaper-engine-card-meta"><span data-i18n-skip>' + escHtml(item.title) + '</span><small>' + escHtml(wallpaperEngineProjectLabel(item)) + '</small></div>' +
       '</article>';
   }).join('');
   observeWallpaperEnginePreviews();
@@ -2031,13 +2075,15 @@ function wallpaperEnginePropertyValueLabel(property) {
     var selected = property.options.find(function (option) { return String(option.value) === String(property.value); });
     if (selected) return selected.label;
   }
-  if (typeof property.value === 'boolean') return property.value ? '开启' : '关闭';
+  if (typeof property.value === 'boolean') return property.value ? wallpaperEngineUiText('开启', 'On') : wallpaperEngineUiText('关闭', 'Off');
   if (typeof property.value === 'number') return String(Math.round(property.value * 1000) / 1000);
   if (typeof property.value === 'string' && property.value) return property.value;
-  return '未设置';
+  return wallpaperEngineUiText('未设置', 'Not Set');
 }
 
 function renderWallpaperEngineProjectDetails(details, error) {
+  wallpaperEngineProjectDetailsSnapshot = details || null;
+  wallpaperEngineProjectDetailsError = error || '';
   var drawer = document.getElementById('wallpaper-engine-details-drawer');
   var title = document.getElementById('wallpaper-engine-details-title');
   var summary = document.getElementById('wallpaper-engine-details-summary');
@@ -2047,34 +2093,39 @@ function renderWallpaperEngineProjectDetails(details, error) {
   if (!drawer || !title || !summary || !properties) return;
   drawer.classList.add('show');
   drawer.setAttribute('aria-hidden', 'false');
+  summary.setAttribute('data-i18n-skip', '');
   if (error) {
-    title.textContent = '项目设置';
-    summary.textContent = error;
-    properties.innerHTML = '<div class="wallpaper-engine-details-empty">无法读取此项目的 project.json 设置。</div>';
+    title.removeAttribute('data-i18n-skip');
+    title.textContent = wallpaperEngineUiText('项目设置', 'Project Settings');
+    summary.textContent = wallpaperEngineUiText(error);
+    properties.innerHTML = '<div class="wallpaper-engine-details-empty">' + wallpaperEngineUiText('无法读取此项目的 project.json 设置。', 'Unable to read this project’s project.json settings.') + '</div>';
     if (weButton) weButton.disabled = true;
     if (workshopButton) workshopButton.disabled = true;
     return;
   }
   if (!details) {
-    title.textContent = '正在读取项目设置…';
-    summary.textContent = '只读取 project.json 元数据，不解包大型 Scene 文件。';
-    properties.innerHTML = '<div class="wallpaper-engine-details-empty">读取中…</div>';
+    title.removeAttribute('data-i18n-skip');
+    title.textContent = wallpaperEngineUiText('正在读取项目设置…', 'Reading project settings…');
+    summary.textContent = wallpaperEngineUiText('只读取 project.json 元数据，不解包大型 Scene 文件。', 'Only project.json metadata is read; large Scene files are not unpacked.');
+    properties.innerHTML = '<div class="wallpaper-engine-details-empty">' + wallpaperEngineUiText('读取中…', 'Reading…') + '</div>';
     if (weButton) weButton.disabled = true;
     if (workshopButton) workshopButton.disabled = true;
     return;
   }
+  title.setAttribute('data-i18n-skip', '');
   title.textContent = details.title;
-  summary.textContent = '已读取 ' + details.propertyCount + ' 项设置 · 检测到 ' + details.audioPropertyCount +
-    ' 项音频控制 · 每次加载自动静音 ' + details.mutedAudioPropertyCount + ' 项';
+  summary.textContent = wallpaperEngineUiText('已读取 ' + details.propertyCount + ' 项设置 · 检测到 ' + details.audioPropertyCount +
+    ' 项音频控制 · 每次加载自动静音 ' + details.mutedAudioPropertyCount + ' 项',
+    details.propertyCount + ' settings read · ' + details.audioPropertyCount + ' audio controls · ' + details.mutedAudioPropertyCount + ' automatically muted on each load');
   properties.innerHTML = details.properties.length ? details.properties.map(function (property) {
     var badge = property.audio
-      ? '<span class="wallpaper-engine-property-badge' + (property.autoMuted ? '' : ' warning') + '">' + (property.autoMuted ? '加载时静音' : '音频相关') + '</span>'
+      ? '<span class="wallpaper-engine-property-badge' + (property.autoMuted ? '' : ' warning') + '">' + (property.autoMuted ? wallpaperEngineUiText('加载时静音', 'Muted on load') : wallpaperEngineUiText('音频相关', 'Audio')) + '</span>'
       : '';
     return '<div class="wallpaper-engine-property-row">' +
-      '<div class="wallpaper-engine-property-copy"><strong>' + escHtml(property.label) + '</strong><small>' +
+      '<div class="wallpaper-engine-property-copy" data-i18n-skip><strong>' + escHtml(property.label) + '</strong><small>' +
       escHtml(property.key + ' · ' + property.type) + '</small></div>' +
-      badge + '<span class="wallpaper-engine-property-value">' + escHtml(wallpaperEnginePropertyValueLabel(property)) + '</span></div>';
-  }).join('') : '<div class="wallpaper-engine-details-empty">这个项目没有声明可调整的用户属性。</div>';
+      badge + '<span class="wallpaper-engine-property-value" data-i18n-skip>' + escHtml(wallpaperEnginePropertyValueLabel(property)) + '</span></div>';
+  }).join('') : '<div class="wallpaper-engine-details-empty">' + wallpaperEngineUiText('这个项目没有声明可调整的用户属性。', 'This project has no adjustable user properties.') + '</div>';
   var canOpen = /^\d{5,32}$/.test(details.workshopId);
   if (weButton) weButton.disabled = !canOpen;
   if (workshopButton) workshopButton.disabled = !canOpen;
@@ -2103,6 +2154,8 @@ async function showWallpaperEngineProjectDetails(id) {
 
 function closeWallpaperEngineProjectDetails() {
   wallpaperEngineProjectDetailsId = '';
+  wallpaperEngineProjectDetailsSnapshot = null;
+  wallpaperEngineProjectDetailsError = '';
   var drawer = document.getElementById('wallpaper-engine-details-drawer');
   if (drawer) {
     drawer.classList.remove('show');
@@ -2117,13 +2170,13 @@ async function launchWallpaperEngineProjectDetails(target) {
   try {
     var response = await api.openWallpaperEngineProjectDetails(id, target === 'workshop' ? 'workshop' : 'we');
     if (!response || response.ok === false) throw new Error(response && response.error || '打开失败');
-    if (response.opened === 'wallpaper-engine') showToast('已在 Wallpaper Engine 中定位此壁纸；可打开项目设置栏调整');
-    else if (response.fallback) showToast('当前 WE 版本无法直接定位，已打开创意工坊详情');
-    else showToast('已打开创意工坊详情');
+    if (response.opened === 'wallpaper-engine') showToast(wallpaperEngineUiText('已在 Wallpaper Engine 中定位此壁纸；可打开项目设置栏调整', 'Wallpaper located in Wallpaper Engine; open its project settings to adjust it'));
+    else if (response.fallback) showToast(wallpaperEngineUiText('当前 WE 版本无法直接定位，已打开创意工坊详情', 'This WE version cannot locate the project directly; Workshop details were opened'));
+    else showToast(wallpaperEngineUiText('已打开创意工坊详情', 'Workshop details opened'));
   } catch (error) {
     showToast(error.message === 'WALLPAPER_ENGINE_WORKSHOP_DETAILS_UNAVAILABLE'
-      ? '手动导入项目没有 Workshop ID，暂时无法在 WE 中定位'
-      : (error.message || '无法打开 Wallpaper Engine 项目详情'));
+      ? wallpaperEngineUiText('手动导入项目没有 Workshop ID，暂时无法在 WE 中定位', 'Manually imported projects have no Workshop ID and cannot be located in WE')
+      : wallpaperEngineUiText(error.message || '无法打开 Wallpaper Engine 项目详情', error.message ? null : 'Unable to open Wallpaper Engine project details'));
   }
 }
 
@@ -2136,19 +2189,32 @@ function scheduleWallpaperEngineLibraryRender() {
 }
 
 function updateWallpaperEngineLibraryStatus(snapshot, error) {
+  wallpaperEngineLibraryError = error || '';
   var status = document.getElementById('wallpaper-engine-library-status');
   if (!status) return;
   status.classList.toggle('loading', wallpaperEngineLibraryBusy);
   if (wallpaperEngineLibraryBusy) {
-    status.textContent = '正在识别 Steam 创意工坊与本地项目…';
+    status.textContent = wallpaperEngineUiText('正在识别 Steam 创意工坊与本地项目…', 'Detecting Steam Workshop and local projects…');
   } else if (error) {
-    status.textContent = '识别失败：' + error;
+    status.textContent = wallpaperEngineUiText('识别失败：', 'Detection failed: ') + wallpaperEngineUiText(error);
   } else if (snapshot) {
-    var runtimeText = snapshot.runtime && snapshot.runtime.available === false ? ' · 未找到可用的 Wallpaper Engine 本体' : '';
-    status.textContent = '已识别 ' + (snapshot.count || 0) + ' 个项目 · ' + (snapshot.dynamicCount || 0) + ' 个媒体动态 · ' +
-      (snapshot.enginePlayableCount || 0) + ' 个 Scene 原生运行 · ' + (snapshot.previewOnlyCount || 0) + ' 个安全预览 · 用时 ' + (snapshot.elapsedMs || 0) + 'ms' + runtimeText;
+    var runtimeText = snapshot.runtime && snapshot.runtime.available === false ? wallpaperEngineUiText(' · 未找到可用的 Wallpaper Engine 本体', ' · No usable Wallpaper Engine installation found') : '';
+    status.textContent = wallpaperEngineUiText('已识别 ' + (snapshot.count || 0) + ' 个项目 · ' + (snapshot.dynamicCount || 0) + ' 个媒体动态 · ' +
+      (snapshot.enginePlayableCount || 0) + ' 个 Scene 原生运行 · ' + (snapshot.previewOnlyCount || 0) + ' 个安全预览 · 用时 ' + (snapshot.elapsedMs || 0) + 'ms',
+      (snapshot.count || 0) + ' projects · ' + (snapshot.dynamicCount || 0) + ' dynamic media · ' + (snapshot.enginePlayableCount || 0) + ' native Scenes · ' + (snapshot.previewOnlyCount || 0) + ' safe previews · ' + (snapshot.elapsedMs || 0) + 'ms') + runtimeText;
   } else {
-    status.textContent = '等待识别本机 Wallpaper Engine 库';
+    status.textContent = wallpaperEngineUiText('等待识别本机 Wallpaper Engine 库', 'Waiting to detect the local Wallpaper Engine library');
+  }
+}
+
+function refreshWallpaperEngineUiLanguage() {
+  updateWallpaperEngineEntryUi();
+  renderWallpaperEngineManualRoots();
+  updateWallpaperEngineLibraryStatus(wallpaperEngineLibrarySnapshot, wallpaperEngineLibraryError);
+  renderWallpaperEngineLibrary();
+  var drawer = document.getElementById('wallpaper-engine-details-drawer');
+  if (drawer && drawer.classList.contains('show')) {
+    renderWallpaperEngineProjectDetails(wallpaperEngineProjectDetailsSnapshot, wallpaperEngineProjectDetailsError);
   }
 }
 
@@ -2184,7 +2250,7 @@ function loadWallpaperEngineLibrary(force, showNotice) {
   var api = wallpaperEngineDesktopApi();
   if (!api || typeof api.listWallpaperEngineProjects !== 'function') {
     updateWallpaperEngineLibraryStatus(null, '仅桌面版支持本地壁纸识别');
-    if (showNotice) showToast('当前环境不支持 Wallpaper Engine 本地识别');
+    if (showNotice) showToast(wallpaperEngineUiText('当前环境不支持 Wallpaper Engine 本地识别', 'This environment does not support local Wallpaper Engine detection'));
     return Promise.resolve([]);
   }
   if (wallpaperEngineLibraryBusy) return wallpaperEngineLibraryLoadPromise || Promise.resolve(wallpaperEngineProjects);
@@ -2197,14 +2263,14 @@ function loadWallpaperEngineLibrary(force, showNotice) {
       var snapshot = await api.listWallpaperEngineProjects({ force: force === true });
       if (!snapshot || snapshot.ok === false) throw new Error(snapshot && snapshot.error || '扫描失败');
       consumeWallpaperEngineSnapshot(snapshot);
-      if (showNotice) showToast(snapshot.count ? ('已识别 ' + snapshot.count + ' 个 Wallpaper Engine 项目') : '没有识别到 Wallpaper Engine 项目');
+      if (showNotice) showToast(snapshot.count ? wallpaperEngineUiText('已识别 ' + snapshot.count + ' 个 Wallpaper Engine 项目', snapshot.count + ' Wallpaper Engine projects detected') : wallpaperEngineUiText('没有识别到 Wallpaper Engine 项目', 'No Wallpaper Engine projects found'));
       return wallpaperEngineProjects;
     } catch (e) {
       failure = e.message || '扫描失败';
       wallpaperEngineProjects = [];
       wallpaperEngineLibrarySnapshot = null;
       wallpaperEngineMediaToken = '';
-      if (showNotice) showToast('Wallpaper Engine 识别失败');
+      if (showNotice) showToast(wallpaperEngineUiText('Wallpaper Engine 识别失败', 'Wallpaper Engine detection failed'));
       return [];
     } finally {
       wallpaperEngineLibraryBusy = false;
@@ -2250,7 +2316,7 @@ async function refreshWallpaperEngineLibrary() {
 async function chooseWallpaperEngineDirectory() {
   var api = wallpaperEngineDesktopApi();
   if (!api || typeof api.chooseWallpaperEngineDirectory !== 'function') {
-    showToast('当前环境不支持目录导入');
+    showToast(wallpaperEngineUiText('当前环境不支持目录导入', 'This environment does not support folder import'));
     return;
   }
   if (wallpaperEngineLibraryBusy) return;
@@ -2263,10 +2329,10 @@ async function chooseWallpaperEngineDirectory() {
     if (snapshot && snapshot.canceled) return;
     if (!snapshot || snapshot.ok === false) throw new Error(snapshot && snapshot.error || '导入失败');
     consumeWallpaperEngineSnapshot(snapshot);
-    showToast('目录已加入壁纸索引，共识别 ' + (snapshot.count || 0) + ' 个项目');
+    showToast(wallpaperEngineUiText('目录已加入壁纸索引，共识别 ' + (snapshot.count || 0) + ' 个项目', 'Folder added to the wallpaper index; ' + (snapshot.count || 0) + ' projects detected'));
   } catch (e) {
     failure = e.message || '导入失败';
-    showToast(e.message || 'Wallpaper Engine 目录导入失败');
+    showToast(wallpaperEngineUiText(e.message || 'Wallpaper Engine 目录导入失败'));
   } finally {
     wallpaperEngineLibraryBusy = false;
     updateWallpaperEngineLibraryStatus(wallpaperEngineLibrarySnapshot, failure);
@@ -2277,7 +2343,7 @@ async function chooseWallpaperEngineDirectory() {
 async function chooseWallpaperEngineProjectFile() {
   var api = wallpaperEngineDesktopApi();
   if (!api || typeof api.chooseWallpaperEngineProjectFile !== 'function') {
-    showToast('当前环境不支持 Wallpaper Engine 场景包导入');
+    showToast(wallpaperEngineUiText('当前环境不支持 Wallpaper Engine 场景包导入', 'This environment does not support Wallpaper Engine scene package import'));
     return;
   }
   if (wallpaperEngineLibraryBusy) return;
@@ -2290,10 +2356,10 @@ async function chooseWallpaperEngineProjectFile() {
     if (snapshot && snapshot.canceled) return;
     if (!snapshot || snapshot.ok === false) throw new Error(snapshot && snapshot.error || '导入失败');
     consumeWallpaperEngineSnapshot(snapshot);
-    showToast('已加入壁纸索引：视频/图片直接播放，Scene 由本机 Wallpaper Engine 原生引擎实时运行');
+    showToast(wallpaperEngineUiText('已加入壁纸索引：视频/图片直接播放，Scene 由本机 Wallpaper Engine 原生引擎实时运行', 'Added to the wallpaper index: videos and images play directly; Scenes use the local native Wallpaper Engine runtime'));
   } catch (e) {
     failure = e.message || '项目文件导入失败';
-    showToast(failure);
+    showToast(wallpaperEngineUiText(failure));
   } finally {
     wallpaperEngineLibraryBusy = false;
     updateWallpaperEngineLibraryStatus(wallpaperEngineLibrarySnapshot, failure);
@@ -2313,10 +2379,10 @@ async function removeWallpaperEngineDirectory(rootId) {
     var snapshot = await api.removeWallpaperEngineDirectory(rootId);
     if (!snapshot || snapshot.ok === false) throw new Error(snapshot && snapshot.error || '移除失败');
     consumeWallpaperEngineSnapshot(snapshot);
-    showToast('已移除手动导入目录，Steam 自动识别不受影响');
+    showToast(wallpaperEngineUiText('已移除手动导入目录，Steam 自动识别不受影响', 'Manually imported folder removed; automatic Steam detection is unchanged'));
   } catch (e) {
     failure = e.message || '目录移除失败';
-    showToast(e.message || '目录移除失败');
+    showToast(wallpaperEngineUiText(e.message || '目录移除失败'));
   } finally {
     wallpaperEngineLibraryBusy = false;
     updateWallpaperEngineLibraryStatus(wallpaperEngineLibrarySnapshot, failure);
@@ -2341,13 +2407,13 @@ function hideWallpaperEngineItem(id) {
 
 function restoreHiddenWallpaperEngineItems() {
   if (!hiddenWallpaperEngineIds.size) {
-    showToast('没有已隐藏的壁纸');
+    showToast(wallpaperEngineUiText('没有已隐藏的壁纸', 'No hidden wallpapers'));
     return;
   }
   hiddenWallpaperEngineIds.clear();
   saveWallpaperEngineIdSet(WALLPAPER_ENGINE_HIDDEN_STORE_KEY, hiddenWallpaperEngineIds);
   renderWallpaperEngineLibrary();
-  showToast('已恢复全部隐藏壁纸');
+  showToast(wallpaperEngineUiText('已恢复全部隐藏壁纸', 'All hidden wallpapers restored'));
 }
 
 function bindWallpaperEngineLibraryEvents() {
@@ -2479,7 +2545,7 @@ function initializeWallpaperEngineLibrary() {
       if (item) applyWallpaperEngineBackground(item, true);
       else {
         wallpaperEngineRuntimeError = '项目离线';
-        updateWallpaperEngineEntryUi('项目离线 · 已显示原背景');
+        updateWallpaperEngineEntryUi(wallpaperEngineUiText('项目离线 · 已显示原背景', 'Project offline · Original background shown'));
       }
     });
   }, 120);

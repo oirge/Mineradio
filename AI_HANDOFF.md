@@ -2,6 +2,17 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
+## 2026-10-14（WIP：设置面板中英文切换）
+
+- 基于远端 `origin/main` 的 `6491829`，当前工作分支为 `codex/settings-i18n-wip-20261014`；`package.json` 版本保持 `2.4.9`，本轮只保存续开发代码，不创建 Release、不改版本。
+- 当前 Git 工作树：`C:/Users/oirg/Desktop/Mineradio-main/.tmp-settings-i18n-20261014`。原源码目录 `C:/Users/oirg/Desktop/Mineradio-main` 无 `.git`，本次只把语言改动移入该独立工作树；明天接续该分支或从 GitHub 获取它，勿从旧本地 `main` 覆盖。
+- 设置面板新增 `中文 / English` 切换并持久化到 `mineradio-ui-language-v1`；键已同步到 `public/app.js`、`desktop/preload.js`、`desktop/main.js` 和整机备份白名单。
+- 翻译覆盖视觉控制台、颜色弹层、歌词、动态、迷你播放器、3D / 手势、自动播放、音量均衡、无缝播放、倍速、睡眠、输出设备、音效链、插件、备份、曲库目录、高级参数和 Wallpaper Engine 弹窗。动态节点使用 `data-i18n` / `data-i18n-skip` 与 `MutationObserver`，歌曲名、歌单名、路径、设备名、插件元数据等用户或第三方数据保留原文。
+- 新增 `tests/ui-language.test.js` 与 `scripts/verify-ui-language.py`。当前定向 Node 回归为 `92/92`（语言 9、整机备份 23、全局热键 20、鼠标热键 40），`public/app.js`、`public/wallpaper-engine.js`、`desktop/main.js`、`desktop/preload.js` 语法检查通过，`git diff --check` 通过。
+- 保存前完整 `npm test`：`1497` 通过、`1` 失败、`1` 可选基准跳过。唯一失败的 `tests/mini-player-visual.test.js` 用例仍精确匹配旧二元 `tabMeta`（557 行）和中文状态赋值（559 行），当前语言层已改为三元 `['mini', '迷你', 'Mini']` 与中英文条件文案；行为断言通过，明天同步该用例并重跑回归。文档编码 `5/5` 通过。
+- 浏览器验证已覆盖 English 切换、设置标签页、热键弹窗、切回中文和刷新保持 English；截图在本地 `artifacts/ui-language/`（该目录不纳入提交）。
+- 明天继续前先补：英文审计中仍有少量固定提示未覆盖（封面渐变、歌词溢光/歌词源 title），默认用户存档名和插件名称需要继续保持用户/第三方原文；再做完整动态回归与必要的视觉布局检查。
+
 ## 当前权威入口（2026-10-11；v2.4.3 进行中）
 
 - **当前正式版是 v2.4.2**：PR #125 已合并，tag 指向 `492cc434577be0a6713862767dcbd7f1e4b19808`，Windows Build and Release `38104911581` 成功。Release `409344608` 于北京时间 `2026-10-11 10:25:46` 正式发布并设为 Latest。四项官方资产完整回下载的 SHA256 与 GitHub digest/清单一致，EXE SHA-512 与 `latest.yml` 一致，公开更新清单复核通过。
@@ -93,6 +104,10 @@
 这个目录是人工归档区，不参与软件更新流程。
 
 ## 已完成工作日志
+
+### 2026-10-14（设置中英文切换 WIP 保存）
+
+- 用户要求先推送现有更新、明天继续；本次快照分支 `codex/settings-i18n-wip-20261014`，基于 `6491829`，不发版、不合并主分支。改动范围与验证结果见顶部 WIP 入口。
 
 ### 2026-10-11（v2.4.3 海报墙切歌优化，待 GitHub 发布）
 
@@ -296,6 +311,7 @@
 
 ## 未完成/待确认事项
 
+- 设置中英文切换尚待完整验收：补英文残留 title / 封面渐变，保护存档名和插件元数据原文与正在编辑的命名草稿，完成动态和布局回归；同步 `mini-player-visual.test.js:557` 的旧 `tabMeta` 静态断言。接续 `codex/settings-i18n-wip-20261014`，不要从 `main` 丢掉本轮 WIP。
 - 本轮 v2.4.3 的代码、界面与本地安装包验证已完成；待完成 PR/CI、GitHub 正式发布及线上资产校验，完成后以顶部权威入口和 `RELEASE.md` 为准。
 - 桌面歌词热修已在本机安装并验证，源码尚未提交、推送或发布；下次用户授权发版时应包含恢复模块与测试，避免重装原版 2.2.6 覆盖热修。真实系统休眠/显示器热拔插未主动执行，仅验证接线和恢复入口；不把模拟验证写成真实电源/硬件测试。
 - `includeLyrics:false` 目前只阻止把歌词应用到歌曲对象，IndexedDB `store.get()` 仍会 structured-clone 完整合并记录；真正降低大批量补水峰值需要把轻量资产摘要与歌词重载荷拆成独立记录/存储，不能只增加无效 selection 参数。
