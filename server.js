@@ -78,9 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 播放控制栏在收藏按钮旁新增歌单切换，可选择全部音乐、特别喜欢和本地歌单。',
-  '修复启用主题插件时启动先显示默认配色再变色的问题，主页和导入按钮直接使用已保存的主题。',
-  '空曲库首次打开时隐藏 Folia 切换入口，导入音乐后恢复显示。',
+  '应用内更新下载的安装包不再无限堆积：启动和发起下载前自动清理比当前版本旧的安装包和校验失败残留。',
+  '当前版本安装包、待安装的新版本及其续传进度一律保留，更新和断点续传不受影响。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -1456,6 +1455,69 @@ function moveInvalidUpdateFile(filePath, reason) {
     console.warn('[UpdateDownload] failed to move invalid cached installer:', e.message);
   }
 }
+/**
+ * 从下载目录的文件名里取出版本号。
+ * @param {string} fileName 文件名，例如 `Mineradio-oirge-2.4.8-Setup.exe`。
+ * @returns {string} 解析到的版本号；认不出来时返回空串。
+ */
+function installerCacheVersionFromName(fileName) {
+  const match = /(\d+(?:\.\d+)+)/.exec(String(fileName || ''));
+  return match ? match[1] : '';
+}
+/**
+ * 清理安装包下载缓存。应用内更新每下一版就在 `updates/downloads/` 留一个上百兆的安装包，
+ * 过去从不回收（本机实测攒到 74 个 / 7.15 GB）。比当前版本旧的安装包永远不会再成为一次
+ * 有效更新，只有当前版本本体（重装修复用）和更高版本（用户还没装的待更新）值得留。
+ * 保留规则按「宁可少删，不可误删待装更新」排：
+ * - 版本号 >= 当前版本的安装包和 `.download` 续传半包一律保留；
+ * - 比当前版本旧的安装包和续传半包删除；
+ * - 校验失败被 `moveInvalidUpdateFile` 挪开的 `.invalid-*` 残留删除；
+ * - 版本号解析不出来的文件原样不动，避免误删用户自己放进来的文件。
+ * @param {string} currentVersion 当前运行版本，通常是 `APP_VERSION`。
+ * @returns {{removed: Array<string>, removedBytes: number}} 实际删掉的文件名与释放字节数。
+ */
+function pruneUpdateDownloadCache(currentVersion) {
+  const result = { removed: [], removedBytes: 0 };
+  const current = normalizeVersion(currentVersion);
+  // 读不到当前版本就一个都不删，否则会把整个缓存误判成“旧版本”清空。
+  if (!current) return result;
+  let names;
+  try {
+    names = fs.readdirSync(UPDATE_DOWNLOAD_DIR);
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') {
+      console.warn('[UpdateDownload] failed to scan installer cache:', err && err.message || err);
+    }
+    return result;
+  }
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    const filePath = path.join(UPDATE_DOWNLOAD_DIR, name);
+    let stat;
+    try {
+      stat = fs.statSync(filePath);
+    } catch (_statError) {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    if (!/\.invalid-\d+/.test(name)) {
+      const version = installerCacheVersionFromName(name);
+      if (!version || compareVersions(version, current) >= 0) continue;
+    }
+    try {
+      fs.unlinkSync(filePath);
+      result.removed.push(name);
+      result.removedBytes += stat.size || 0;
+    } catch (err) {
+      console.warn('[UpdateDownload] failed to remove cached installer:', name, err && err.message || err);
+    }
+  }
+  if (result.removed.length) {
+    console.log('[UpdateDownload] installer cache pruned: removed ' + result.removed.length
+      + ' file(s), freed ' + (result.removedBytes / (1024 * 1024)).toFixed(1) + ' MB');
+  }
+  return result;
+}
 function normalizeInstallerReuseIdentity(opts) {
   const rawFilePath = String(opts && opts.filePath || '').trim();
   if (!rawFilePath) return null;
@@ -2427,6 +2489,9 @@ async function startUpdateDownloadJob(info, opts) {
 
   const fileName = safeUpdateFileName(asset.name || '', version);
   const filePath = path.join(UPDATE_DOWNLOAD_DIR, fileName);
+  // 新包动辄上百兆，开工前先回收旧版本安装包腾地方。待装新版本（含它的续传半包）版本号
+  // 不低于当前版本，不会被清掉，下面的缓存复用和续传照常命中。
+  pruneUpdateDownloadCache(APP_VERSION);
   const downloadCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, asset), {
     useMirrors: route !== 'direct' && route !== 'proxy',
   });
@@ -3331,6 +3396,12 @@ server.listen(PORT, HOST, () => {
   console.log('======================================================');
   console.log(' 粒子音乐可视化 v2  →  http://localhost:' + PORT);
   console.log('======================================================');
+  // 升级装完后新版本会从这里起来，上一版的安装包此时已经没用，顺手回收。
+  try {
+    pruneUpdateDownloadCache(APP_VERSION);
+  } catch (err) {
+    console.warn('[UpdateDownload] installer cache prune failed:', err && err.message || err);
+  }
 });
 
 server.setLocalFileAuthorizer = setLocalFileAuthorizer;

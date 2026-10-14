@@ -1,5 +1,13 @@
 # 发布流程
 
+## v2.4.9 更新安装包自动回收
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.9`；Folia 上游版本保留 `0.7.16`，安装身份、数据目录与更新线路不变。
+- **内容**：`server.js` 新增 `pruneUpdateDownloadCache`，在本地服务启动和发起安装包下载前回收 `updates/downloads/`：删除比当前版本旧的安装包、旧版本遗留的 `.download` 续传半包与校验失败挪开的 `.invalid-*` 残留；版本号不低于当前版本的安装包和半包（当前版本本体与待装更新）一律保留，版本号认不出来的文件原样不动，读不到当前版本时一个都不删。此前该目录从不回收，每下一版留一个上百兆安装包。
+- **已有验证**：新增 `tests/update-download-cache-prune.test.js` 9 项全通过；全量 `node --test --test-concurrency=1 tests/*.test.js` 为 1469 项、1468 通过、0 失败、1 skipped。`node --check server.js` 与 `git diff --check` 通过。真实启动验证：`MINERADIO_UPDATE_DOWNLOAD_DIR` 指向临时目录并放入 `2.4.3` 半包、`2.4.5` `.invalid` 残留、`2.4.6`/`2.4.7`/`2.4.8`/`2.4.9` 安装包与 `2.5.0` 半包，`node server.js` 启动后日志打出 `installer cache pruned: removed 4 file(s), freed 2.8 MB`，目录仅剩 `2.4.8`、`2.4.9` 与 `2.5.0` 半包。
+- **验证边界**：下载链路里的清理调用点为逻辑级接线，未真实触发一次线上更新下载；未改更新线路、校验算法、NSIS 安装器、UI 布局与文案。本机存量 7.04 GB 旧安装包已于发布前按同一策略手动清理（74 个文件减到 1 个），属一次性运维动作，不作为本次代码验证证据。
+- **发布状态**：用户于 `2026-10-14` 明确授权发布。正式发布走功能分支、PR、merge commit、annotated tag 和 Windows Build and Release；公开前核验安装器、blockmap、`latest.yml` 与 SHA256 清单，发布后另走文档 PR 补录事实。既有 `v2.4.8` 标签和资产保持原样。
+
 ## v2.4.8 歌单切换与启动主题修复
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新说明与 Release workflow 默认 tag 统一为 `2.4.8`；Folia 上游版本保留 `0.7.16`，安装身份、数据目录与更新线路不变。
