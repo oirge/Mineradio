@@ -78,9 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 播放控制栏在收藏按钮旁新增歌单切换，可选择全部音乐、特别喜欢和本地歌单。',
-  '修复启用主题插件时启动先显示默认配色再变色的问题，主页和导入按钮直接使用已保存的主题。',
-  '空曲库首次打开时隐藏 Folia 切换入口，导入音乐后恢复显示。',
+  '应用内更新下载的安装包不再无限堆积：启动和发起下载前自动清理比当前版本旧的安装包和校验失败残留。',
+  '当前版本安装包、待安装的新版本及其续传进度一律保留，更新和断点续传不受影响。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
