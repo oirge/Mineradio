@@ -39,7 +39,7 @@ const sameSong = (song: LocalWallSong, track: HostTrack): boolean => song.name =
     && song.durationMs === Math.max(0, track.duration || 0) * 1000;
 
 export function patchWallCatalogTracks(previous: WallCatalogSnapshot, scope: string, updates: readonly HostTrack[]): WallCatalogSnapshot {
-    if (previous.scope !== scope || !previous.loaded) return previous;
+    if (previous.scope !== scope || !previous.tracks.length) return previous;
     let tracks: HostTrack[] | undefined, songs: LocalWallSong[] | undefined;
     for (const track of updates) {
         const index = previous.trackIndex.get(track.id);
@@ -56,6 +56,14 @@ export function patchWallCatalogTracks(previous: WallCatalogSnapshot, scope: str
         }
     }
     return tracks || songs ? { ...previous, tracks: tracks ?? previous.tracks, songs: songs ?? previous.songs } : previous;
+}
+
+// First-load previews never truncate an already complete wall during background refreshes.
+export function previewWallCatalogRefresh(previous: WallCatalogSnapshot, scope: string, incoming: HostTrack[],
+    recentUpdates?: ReadonlyMap<string, HostTrack>): WallCatalogSnapshot {
+    if (previous.scope !== scope || previous.loaded) return previous;
+    const next = completeWallCatalogRefresh(previous, scope, incoming, recentUpdates);
+    return { ...next, loaded: false, loading: true };
 }
 
 // Reuse by ID and keep the index when collection order does not change.

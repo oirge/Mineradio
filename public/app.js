@@ -778,13 +778,214 @@ var UI_LANGUAGE_PAIRS = [
   ['在 WE 中打开设置（实验）', 'Open Settings in WE (Experimental)'],
   ['创意工坊详情', 'Workshop Details'],
   ['每次载入自动应用静音值（音量 0 / 静音开启 / 音频关闭）；Scene 包只处理缓存副本，原文件不变。其他视觉设置仍由 Wallpaper Engine 管理。', 'Mute settings apply on each load (volume 0 / mute on / audio off). Scene packages use cached copies, leaving originals unchanged. Wallpaper Engine manages other visual settings.'],
+  // 主窗口标题栏、首页、播放控制条与队列面板的悬停提示与按钮文案。
+  ['查看使用引导', 'Show the guide'],
+  ['检测更新', 'Check for updates'],
+  ['开启 DIY 玩家模式', 'Enable DIY mode'],
+  ['最小化', 'Minimize'],
+  ['退出全屏', 'Exit fullscreen'],
+  ['导入单首音乐或封面', 'Import a song or artwork'],
+  ['导入本地音乐文件夹', 'Import a local music folder'],
+  ['取消自定义封面', 'Clear custom artwork'],
+  ['关闭提示', 'Close tip'],
+  ['导入文件夹', 'Import folder'],
+  ['导入本地文件', 'Import local files'],
+  ['自动隐藏账号胶囊', 'Auto-hide the account capsule'],
+  ['自动隐藏 Home 按钮', 'Auto-hide the Home button'],
+  ['回到 Home', 'Back to Home'],
+  ['登录账号', 'Sign in'],
+  ['自动隐藏视觉控制台', 'Auto-hide the visual console'],
+  ['搜索本地歌曲、歌手、文件名...', 'Search local songs, artists, filenames...'],
+  ['本地导入', 'Local import'],
+  ['支持 10 种音频格式，并自动匹配 LRC/TXT/SRT/VTT/ASS/YRC 歌词和常用封面图片。', 'Supports 10 audio formats and matches LRC/TXT/SRT/VTT/ASS/YRC lyrics and common artwork automatically.'],
+  ['封面 / 歌词加载完成', 'Artwork / lyrics loaded'],
+  ['仅播放试听片段', 'Preview clip only'],
+  ['AI 深度估计…', 'Estimating depth…'],
+  ['分析节奏…', 'Analyzing rhythm…'],
+  ['翻译歌词…', 'Translating lyrics…'],
+  ['手势：', 'Gesture:'],
+  ['待命', 'Standby'],
+  ['将手放进摄像头视野', 'Place your hand in the camera view'],
+  ['手掌推开粒子 · 捏合旋转 · 握拳收束', 'Palm pushes particles · Pinch rotates · Fist gathers'],
+  ['拖放音乐或封面', 'Drop music or artwork'],
+  ['播放顺序', 'Play order'],
+  ['选择收藏到任意歌单', 'Add to a playlist'],
+  ['音量 / 静音', 'Volume / Mute'],
+  ['正常速度', 'Normal speed'],
+  ['关闭睡眠定时', 'Disable sleep timer'],
+  ['15 分钟后暂停', 'Pause after 15 minutes'],
+  ['30 分钟后暂停', 'Pause after 30 minutes'],
+  ['60 分钟后暂停', 'Pause after 60 minutes'],
+  ['播完本曲后暂停', 'Pause after this track'],
+  ['无缝播放：提前解码下一首', 'Gapless: preload the next track'],
+  ['音量均衡：拉平不同歌曲的响度', 'Normalization: level the loudness across tracks'],
+  ['鼠标滚轮悬停在音量键上滚动即可调整音量，这里设置每滚一格的幅度', 'Scroll over the volume button to adjust volume; this sets the step per notch'],
+  ['滚轮音量步进（百分比）', 'Volume wheel step (percent)'],
+  ['把当前队列顺序存成一份存档', 'Save the current queue order as an archive'],
+  ['播放完当前歌曲后停止', 'Stop after the current track'],
+  ['队列循环', 'Repeat queue'],
+  ['单曲循环', 'Repeat one'],
+  ['顺序循环', 'Repeat all'],
+  ['播完即停', 'Stop after current'],
+  ['当前队列', 'Current queue'],
+  ['歌单', 'Playlists'],
+  ['音乐库', 'Music library'],
+  ['队列存档', 'Queue archives'],
+  ['存队列', 'Save queue'],
+  ['清空', 'Clear'],
+  ['常开歌单', 'Pin playlist panel'],
+  ['选择播放歌单', 'Choose a playlist'],
+  ['管理 / 新建歌单', 'Manage / New playlist'],
+  ['3D 歌单架', '3D shelf'],
+  ['3D 歌单架：侧栏 / 舞台', '3D shelf: sidebar / stage'],
+  ['3D 歌单架控制', '3D shelf controls'],
+  ['歌曲详情', 'Track details'],
+  ['歌手详情', 'Artist details'],
+  ['音质', 'Audio quality'],
+  ['音质: 本地文件按原始编码播放', 'Quality: local files play at their original encoding'],
+  ['本地文件按原始编码播放', 'Local files play at their original encoding'],
+  ['红心喜欢', 'Like'],
+  ['播放/暂停', 'Play / Pause'],
+  ['播放器控制台', 'Player console'],
+  ['展开播放器控制台', 'Expand the player console'],
+  ['全沉浸式', 'Immersive mode'],
+  ['自由镜头', 'Free camera'],
+  ['全部', 'All'],
+  ['高解', 'Hi-Res'],
+  ['超清母带', 'Master'],
+  ['高解析度', 'Hi-Res'],
+  ['无损', 'Lossless'],
+  ['极高', 'Very high'],
+  ['会员最高档', 'Top membership tier'],
+  ['约 128K', '~128K'],
+  ['HQ / 约 320K', 'HQ / ~320K'],
+  ['随机', 'Shuffle'],
+  ['本地音乐与独立歌单', 'Local music and custom playlists'],
+  ['还没有存档，点「存队列」把现在的顺序留下来', 'No archives yet. Click "Save queue" to keep the current order.'],
+  ['开启桌面歌词', 'Enable desktop lyrics'],
+  ['关闭桌面歌词', 'Disable desktop lyrics'],
+  ['桌面歌词开发中', 'Desktop lyrics in development'],
+  ['恢复当前滑条默认值', 'Restore this slider to its default'],
+  ['开发中，暂不可用', 'In development, not yet available'],
+  ['导入本地音乐', 'Import local music'],
+  // 底部控制条、歌单面板、标题栏与确认弹窗。
+  ['登录', 'Sign in'],
+  ['本地音乐库', 'Local music library'],
+  ['选择本地音乐目录', 'Choose a local music folder'],
+  ['播放本地音乐', 'Play local music'],
+  ['继续听', 'Continue listening'],
+  ['为你准备', 'Made for you'],
+  ['正在整理推荐', 'Preparing recommendations'],
+  ['后台加载准备中', 'Preparing background loading'],
+  ['歌单 / 队列', 'Playlists / Queue'],
+  ['QUEUE · 鼠标移开自动隐藏', 'QUEUE · Hides when the pointer leaves'],
+  ['速度', 'Speed'],
+  ['睡眠', 'Sleep'],
+  ['关', 'Off'],
+  ['本曲', 'This track'],
+  ['滚轮', 'Wheel'],
+  ['% / 格', '% / notch'],
+  ['无缝', 'Gapless'],
+  ['均衡', 'Normalize'],
+  ['Hi-Res / 默认', 'Hi-Res / Default'],
+  ['裁剪封面', 'Crop artwork'],
+  ['缩放', 'Zoom'],
+  ['使用封面', 'Use artwork'],
+  ['收藏到歌单', 'Add to playlist'],
+  ['新建歌单名称', 'New playlist name'],
+  ['删除这个歌单？', 'Delete this playlist?'],
+  ['未命名歌单', 'Untitled playlist'],
+  ['只会删除歌单列表，不会删除本地音乐文件。', 'Only the playlist is deleted; local music files are kept.'],
+  ['删除歌单', 'Delete playlist'],
+  ['清空最近播放记录？', 'Clear listening history?'],
+  ['最近播放', 'Recently played'],
+  ['「只清最近播放」清掉最近播放列表和播放时间，播放次数与累计时长仍然保留；「全部清空」连播放次数、累计时长和断点续播位置一起归零。两种都不会删除本地音乐文件。', '"Recent only" clears the recent list and play times while keeping play counts and total time. "Clear everything" also resets play counts, total time and resume positions. Neither deletes local music files.'],
+  ['只清最近播放', 'Recent only'],
+  ['全部清空', 'Clear everything'],
+  ['本地节奏分析', 'Local rhythm analysis'],
+  ['选择一种电影视角分析方式', 'Choose a cinema-style analysis mode'],
+  ['MR 分析', 'MR analysis'],
+  ['日常电影视角', 'Everyday cinema view'],
+  ['DJ 分析', 'DJ analysis'],
+  ['长混音/强节奏', 'Long mix / strong rhythm'],
+  ['暂不分析', 'Not now'],
+  ['开始分析', 'Start analysis'],
+  ['更新线路', 'Update route'],
+  ['自动测速，挑当前最快的线路下载。', 'Tests speed and picks the fastest route.'],
+  ['自动', 'Auto'],
+  ['直连', 'Direct'],
+  ['国内加速', 'China mirror'],
+  ['本机代理', 'Local proxy'],
+  ['立即更新', 'Update now'],
+  ['已是最新', 'Up to date'],
+  ['自动换源', 'Auto source switch'],
+  ['点击空白处也可以继续', 'Click anywhere to continue'],
+  ['跳过', 'Skip'],
+  ['下一步', 'Next'],
+  ['控制条自动隐藏', 'Auto-hide the control bar'],
+  ['全屏 (F)', 'Fullscreen (F)'],
+  ['当前没有自定义封面', 'No custom artwork'],
+  ['更新说明与下载线路', 'Release notes and download routes'],
+  ['喜欢', 'Liked'],
+  ['特别喜欢', 'Favorites'],
+  ['本曲播完后停止（再点一下取消）', 'Stop after this track (click again to cancel)'],
+  // 详情弹窗与歌单选择器的静态字段。
+  ['未知', 'Unknown'],
+  ['未知歌手', 'Unknown artist'],
+  ['未知专辑', 'Unknown album'],
+  ['本地上传', 'Local upload'],
+  ['本地音乐', 'Local music'],
+  ['歌曲名', 'Title'],
+  ['歌手', 'Artist'],
+  ['专辑', 'Album'],
+  ['时长', 'Duration'],
+  ['来源', 'Source'],
+  ['歌词源', 'Lyric source'],
+  ['音质', 'Audio quality'],
+  ['文件路径', 'File path'],
+  ['歌词文件', 'Lyric file'],
+  ['封面文件', 'Artwork file'],
+  ['未匹配', 'Not matched'],
+  ['内嵌封面', 'Embedded artwork'],
+  ['红心喜欢', 'Liked'],
+  ['自定义封面', 'Custom artwork'],
+  ['自定义歌词', 'Custom lyrics'],
+  ['本地信息', 'Local information'],
+  ['本地歌曲不加载在线评论。', 'Local tracks do not load online comments.'],
+  ['纯本地模式仅显示当前文件里的歌手信息。', 'Local-only mode shows artist information from the current file.'],
+  ['来自当前播放', 'From the current track'],
+  ['关联歌手', 'Related artists'],
+  ['所属专辑', 'Album'],
+  ['本地文件', 'Local files'],
+  ['本地曲库', 'Local library'],
+  ['可直接切换播放', 'Ready to play'],
+  ['创建', 'Create'],
+  ['智能分类', 'Smart category'],
+  ['全部', 'All'],
+  ['最近添加', 'Recently added'],
+  ['播放最多', 'Most played'],
+  ['未播放', 'Never played'],
+  ['所有歌曲', 'All songs'],
+  ['艺术家', 'Artists'],
+  ['专辑', 'Albums'],
+  ['专辑艺术家', 'Album artists'],
+  ['流派', 'Genres'],
+  ['年代', 'Decades'],
+  ['重复检测', 'Duplicate detection'],
+  ['R 固定/退出 · WASD 移动 · 鼠标转向 · Shift 加速 · Space/Ctrl 升降 · Q/E 轻微旋转 · 滚轮景深 · K 回正', 'R lock/exit · WASD move · Mouse look · Shift boost · Space/Ctrl up-down · Q/E tilt · Wheel depth · K reset'],
 ];
 
 var uiLanguage = 'zh-CN';
 var uiLanguageObserver = null;
+var uiLanguageAttributeObserver = null;
 var uiLanguageApplying = false;
 var uiLanguageSources = new WeakMap();
-var UI_LANGUAGE_SCOPE_IDS = ['fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal', 'custom-lyric-modal'];
+var UI_LANGUAGE_SCOPE_IDS = [
+  'fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal', 'custom-lyric-modal',
+  'desktop-titlebar', 'fullscreen-diy-zone', 'search-area', 'empty-home', 'top-right', 'playlist-panel', 'trial-banner', 'gesture-hud', 'bottom-bar',
+  'drop-overlay', 'free-camera-hint', 'ai-depth-chip', 'beat-chip', 'lyric-translate-chip', 'cover-crop-modal', 'collect-modal',
+  'local-playlist-delete-modal', 'listen-history-clear-modal', 'local-beat-modal', 'track-detail-modal', 'update-modal', 'visual-guide', 'source-fallback-notice'
+];
 var uiLanguageZhToEn = Object.create(null);
 var uiLanguageEnToZh = Object.create(null);
 for (var uiLanguagePairIndex = 0; uiLanguagePairIndex < UI_LANGUAGE_PAIRS.length; uiLanguagePairIndex++) {
@@ -803,7 +1004,57 @@ function readUiLanguage() {
 }
 function translateUiCountText(value) {
   var text = String(value == null ? '' : value);
-  var match = text.match(/^已保存\s*(\d+)\s*行，并切换为自定义歌词$/);
+  var match = text.match(/^已同步\s*(\d+)\s*首歌曲$/);
+  if (match) return uiLanguage === 'en' ? 'Synced ' + match[1] + ' tracks' : text;
+  match = text.match(/^Synced\s+(\d+)\s+tracks$/);
+  if (match) return uiLanguage === 'zh-CN' ? '已同步 ' + match[1] + ' 首歌曲' : text;
+  match = text.match(/^当前：(.+)，点击选择播放歌单$/);
+  if (match) return uiLanguage === 'en' ? 'Current: ' + uiText(match[1]) + ', click to choose a playlist' : text;
+  match = text.match(/^Current: (.+), click to choose a playlist$/);
+  if (match) return uiLanguage === 'zh-CN' ? '当前：' + uiText(match[1]) + '，点击选择播放歌单' : text;
+  match = text.match(/^(\d+)\s*首歌曲$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' tracks' : text;
+  match = text.match(/^(\d+)\s*首$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' tracks' : text;
+  match = text.match(/^(\d+)\s*tracks$/);
+  if (match) return uiLanguage === 'zh-CN' ? match[1] + ' 首' : text;
+  match = text.match(/^(\d+)\s*个独立歌单$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' playlists' : text;
+  match = text.match(/^(\d+)\s*playlists$/);
+  if (match) return uiLanguage === 'zh-CN' ? match[1] + ' 个独立歌单' : text;
+  match = text.match(/^后台加载封面\/歌词\s*(\d+)\/(\d+)$/);
+  if (match) return uiLanguage === 'en' ? 'Loading artwork / lyrics ' + match[1] + '/' + match[2] : text;
+  match = text.match(/^Loading artwork \/ lyrics\s+(\d+)\/(\d+)$/);
+  if (match) return uiLanguage === 'zh-CN' ? '后台加载封面/歌词 ' + match[1] + '/' + match[2] : text;
+  match = text.match(/^已导入\s*(\d+)\s*首\s*·\s*点击即可播放$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' tracks imported · Click to play' : text;
+  match = text.match(/^(\d+)\s*tracks imported · Click to play$/);
+  if (match) return uiLanguage === 'zh-CN' ? '已导入 ' + match[1] + ' 首 · 点击即可播放' : text;
+  match = text.match(/^常听歌手\s*·\s*(\d+)\s*次$/);
+  if (match) return uiLanguage === 'en' ? 'Top artist · ' + match[1] + ' plays' : text;
+  match = text.match(/^Top artist ·\s*(\d+)\s*plays$/);
+  if (match) return uiLanguage === 'zh-CN' ? '常听歌手 · ' + match[1] + ' 次' : text;
+  match = text.match(/^(\d+)\s*条记录$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' records' : text;
+  match = text.match(/^(\d+)\s*records$/);
+  if (match) return uiLanguage === 'zh-CN' ? match[1] + ' 条记录' : text;
+  match = text.match(/^(\d+)\s*首歌有统计$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' tracks with stats' : text;
+  match = text.match(/^(\d+)\s*tracks with stats$/);
+  if (match) return uiLanguage === 'zh-CN' ? match[1] + ' 首歌有统计' : text;
+  match = text.match(/^最近播放\s*·\s*(\d+)\s*首$/);
+  if (match) return uiLanguage === 'en' ? 'Recently played · ' + match[1] + ' tracks' : text;
+  match = text.match(/^Recently played ·\s*(\d+)\s*tracks$/);
+  if (match) return uiLanguage === 'zh-CN' ? '最近播放 · ' + match[1] + ' 首' : text;
+  match = text.match(/^当前版本\s*(v[0-9.]+)\s*已是最新。$/);
+  if (match) return uiLanguage === 'en' ? 'Version ' + match[1] + ' is up to date.' : text;
+  match = text.match(/^Version\s*(v[0-9.]+)\s*is up to date\.$/);
+  if (match) return uiLanguage === 'zh-CN' ? '当前版本 ' + match[1] + ' 已是最新。' : text;
+  match = text.match(/^(\d+)\s*个全局热键被系统或其他软件占用，可在「热键」里改键$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' global hotkeys are in use by the system or other apps; change them under Hotkeys.' : text;
+  match = text.match(/^(\d+)\s*global hotkeys are in use by the system or other apps; change them under Hotkeys\.$/);
+  if (match) return uiLanguage === 'zh-CN' ? match[1] + ' 个全局热键被系统或其他软件占用，可在「热键」里改键' : text;
+  match = text.match(/^已保存\s*(\d+)\s*行，并切换为自定义歌词$/);
   if (match) return uiLanguage === 'en'
     ? 'Saved ' + match[1] + ' ' + (match[1] === '1' ? 'line' : 'lines') + ' and switched to custom lyrics'
     : text;
@@ -847,6 +1098,20 @@ function uiLanguageSkipNode(node) {
   var element = node && (node.nodeType === 1 ? node : node.parentElement);
   return !!(element && element.closest && element.closest('[data-i18n-skip]'));
 }
+// 关闭按钮的「关闭」要显示 Close；设置面板里的「关闭」是 Off，两处不能共用一个词条。
+function uiLanguageCloseControl(element) {
+  if (!element || !element.closest) return false;
+  if (element.closest('[data-window-action="close"], .modal-mask')) return true;
+  var control = element.closest('button, [role="button"]');
+  if (!control) return false;
+  var marker = String(control.id || '') + ' ' + (typeof control.className === 'string' ? control.className : '') + ' ' + String(control.getAttribute('onclick') || '');
+  if (/close/i.test(marker)) return true;
+  var own = '';
+  for (var i = 0; i < control.childNodes.length; i++) {
+    if (control.childNodes[i].nodeType === 3) own += control.childNodes[i].nodeValue;
+  }
+  return own.trim() === '×';
+}
 function translateUiStoredValue(node, field, value, source) {
   var values = uiLanguageSources.get(node);
   if (!values) { values = {}; uiLanguageSources.set(node, values); }
@@ -860,11 +1125,11 @@ function translateUiStoredValue(node, field, value, source) {
   var trimmed = raw.trim();
   var translated = uiText(trimmed);
   var element = node.nodeType === 1 ? node : node.parentElement;
-  if (trimmed === '关闭' && element && element.closest &&
-      element.closest('#hotkey-modal, #plugin-modal, #wallpaper-engine-modal, #custom-lyric-modal')) {
+  if (trimmed === '关闭' && uiLanguageCloseControl(element)) {
     translated = uiLanguage === 'en' ? 'Close' : '关闭';
   }
   record.last = trimmed ? raw.slice(0, raw.indexOf(trimmed)) + translated + raw.slice(raw.indexOf(trimmed) + trimmed.length) : raw;
+  record.language = uiLanguage;
   return record.last;
 }
 function translateUiTextNode(node) {
@@ -873,14 +1138,29 @@ function translateUiTextNode(node) {
   var translated = translateUiStoredValue(node, 'text', raw);
   if (translated !== raw) node.nodeValue = translated;
 }
+function translateUiAttribute(element, attr) {
+  if (uiLanguageSkipNode(element) || !element.hasAttribute(attr)) return;
+  var value = element.getAttribute(attr);
+  var translated = translateUiStoredValue(element, attr, value);
+  if (translated !== value) element.setAttribute(attr, translated);
+}
+// 悬停提示分布在设置面板之外，单独按属性遍历整窗，不碰歌曲名一类的文本节点。
+function translateUiAttributesIn(root) {
+  if (!root || root.nodeType !== 1) return;
+  translateUiAttribute(root, 'title');
+  translateUiAttribute(root, 'aria-label');
+  translateUiAttribute(root, 'placeholder');
+  if (!root.querySelectorAll) return;
+  var elements = root.querySelectorAll('[title],[aria-label],[placeholder]');
+  for (var i = 0; i < elements.length; i++) {
+    translateUiAttribute(elements[i], 'title');
+    translateUiAttribute(elements[i], 'aria-label');
+    translateUiAttribute(elements[i], 'placeholder');
+  }
+}
 function translateUiElement(element) {
   if (!element || element.nodeType !== 1 || uiLanguageSkipNode(element) || /^(SCRIPT|STYLE)$/.test(element.tagName)) return;
-  ['title', 'aria-label', 'placeholder'].forEach(function(attr){
-    if (!element.hasAttribute(attr)) return;
-    var value = element.getAttribute(attr);
-    var translated = translateUiStoredValue(element, attr, value);
-    if (translated !== value) element.setAttribute(attr, translated);
-  });
+  ['title', 'aria-label', 'placeholder'].forEach(function(attr){ translateUiAttribute(element, attr); });
   if (element.hasAttribute('data-i18n')) {
     var key = element.getAttribute('data-i18n');
     if (element.childNodes.length === 1 && element.firstChild.nodeType === 3) {
@@ -905,6 +1185,7 @@ function applyUiLanguage() {
       root.setAttribute('data-ui-locale', uiLanguage);
       translateUiElement(root);
     });
+    translateUiAttributesIn(document.body);
     var buttons = panel ? panel.querySelectorAll('#fx-language-switch [data-ui-language]') : [];
     for (var i = 0; i < buttons.length; i++) {
       var active = buttons[i].getAttribute('data-ui-language') === uiLanguage;
@@ -915,6 +1196,55 @@ function applyUiLanguage() {
     uiLanguageApplying = false;
   }
 }
+// Coalesce a delivered mutation batch: new subtrees once, existing attributes and text in place.
+function translateUiMutations(records) {
+  var roots = new Set(), texts = new Set(), attributes = new Map(), addedRoot = false;
+  function covered(node) {
+    for (var parent = node.parentElement; parent; parent = parent.parentElement) {
+      if (roots.has(parent)) return true;
+    }
+    return false;
+  }
+  function current(node, field, value) {
+    var values = uiLanguageSources.get(node), record = values && values[field];
+    return record && record.language === uiLanguage && record.last === value;
+  }
+  records.forEach(function(record){
+    if (uiLanguageNodeInScope(record.target)) {
+      if (record.type === 'characterData') texts.add(record.target);
+      if (record.type === 'attributes') {
+        var names = attributes.get(record.target);
+        if (!names) { names = new Set(); attributes.set(record.target, names); }
+        if (record.attributeName) names.add(record.attributeName);
+      }
+      if (record.type === 'childList') {
+        for (var i = 0; i < record.addedNodes.length; i++) {
+          var node = record.addedNodes[i];
+          if (node.nodeType === 3) texts.add(node);
+          else if (node.nodeType === 1) roots.add(node);
+        }
+      }
+    } else if (record.target === document.body) {
+      for (var j = 0; j < record.addedNodes.length; j++) {
+        var root = record.addedNodes[j];
+        if (root.nodeType === 1 && uiLanguageNodeInScope(root)) { roots.add(root); addedRoot = true; }
+      }
+    }
+  });
+  roots.forEach(function(root){
+    if (uiLanguageNodeInScope(root) && !covered(root)) translateUiElement(root);
+  });
+  attributes.forEach(function(names, element){
+    if (!uiLanguageNodeInScope(element) || roots.has(element) || covered(element)) return;
+    names.forEach(function(attr){
+      if (!current(element, attr, element.getAttribute(attr))) translateUiAttribute(element, attr);
+    });
+  });
+  texts.forEach(function(node){
+    if (uiLanguageNodeInScope(node) && !covered(node) && !current(node, 'text', node.nodeValue)) translateUiTextNode(node);
+  });
+  if (addedRoot) observeUiLanguagePanel();
+}
 function observeUiLanguagePanel() {
   if (typeof MutationObserver === 'undefined') return;
   if (!uiLanguageObserver) {
@@ -922,26 +1252,7 @@ function observeUiLanguagePanel() {
       if (uiLanguageApplying) return;
       uiLanguageApplying = true;
       try {
-        records.forEach(function(record){
-          if (uiLanguageNodeInScope(record.target)) {
-            if (record.type === 'characterData') translateUiTextNode(record.target);
-            if (record.type === 'attributes') translateUiElement(record.target);
-            if (record.type === 'childList') {
-              for (var i = 0; i < record.addedNodes.length; i++) {
-                var node = record.addedNodes[i];
-                if (node.nodeType === 3) translateUiTextNode(node);
-                else if (node.nodeType === 1) translateUiElement(node);
-              }
-            }
-          } else if (record.target === document.body) {
-            for (var j = 0; j < record.addedNodes.length; j++) {
-              if (uiLanguageNodeInScope(record.addedNodes[j])) {
-                translateUiElement(record.addedNodes[j]);
-                observeUiLanguagePanel();
-              }
-            }
-          }
-        });
+        translateUiMutations(records);
       } finally {
         uiLanguageApplying = false;
       }
@@ -957,6 +1268,39 @@ function observeUiLanguagePanel() {
       attributes: true,
       attributeFilter: ['title', 'aria-label', 'placeholder']
     });
+  });
+  observeUiLanguageAttributes();
+}
+// 动态写入的悬停提示（播放模式、桌面歌词开关、音质说明等）也要跟着语言走。
+function observeUiLanguageAttributes() {
+  if (typeof MutationObserver === 'undefined' || uiLanguageAttributeObserver || !document.body) return;
+  uiLanguageAttributeObserver = new MutationObserver(function(records){
+    if (uiLanguageApplying) return;
+    uiLanguageApplying = true;
+    try {
+      var pending = new Map();
+      records.forEach(function(record){
+        if (!record.attributeName || uiLanguageSkipNode(record.target)) return;
+        var names = pending.get(record.target);
+        if (!names) { names = new Set(); pending.set(record.target, names); }
+        names.add(record.attributeName);
+      });
+      pending.forEach(function(names, element){
+        names.forEach(function(attr){
+          var values = uiLanguageSources.get(element), record = values && values[attr];
+          var value = element.getAttribute(attr);
+          if (record && record.language === uiLanguage && record.last === value) return;
+          translateUiAttribute(element, attr);
+        });
+      });
+    } finally {
+      uiLanguageApplying = false;
+    }
+  });
+  uiLanguageAttributeObserver.observe(document.body, {
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['title', 'aria-label', 'placeholder']
   });
 }
 function refreshUiLanguageSettings() {
@@ -982,6 +1326,7 @@ function refreshUiLanguageSettings() {
     typeof renderPluginList === 'function' ? renderPluginList : null,
     typeof renderHotkeySettings === 'function' ? renderHotkeySettings : null,
     typeof refreshWallpaperEngineUiLanguage === 'function' ? refreshWallpaperEngineUiLanguage : null
+    , typeof refreshTrackDetailUiLanguage === 'function' ? refreshTrackDetailUiLanguage : null
   ].forEach(function(refresh){ if (refresh) refresh(); });
 }
 function setUiLanguage(value) {
@@ -990,6 +1335,7 @@ function setUiLanguage(value) {
   refreshUiLanguageSettings();
   applyUiLanguage();
   observeUiLanguagePanel();
+  if (typeof pushMiniPlayerState === 'function') pushMiniPlayerState(true);
   return uiLanguage;
 }
 function initUiLanguageControls() {
@@ -21775,12 +22121,16 @@ function renderLocalPlaybackPlaylistPicker() {
     var active = localLibraryPlaybackSelection === kind;
     var unresolvedCount = Math.max(0, storedCount - songs.length);
     var cover = songs.length ? songCoverSrc(songs[0], 72) : '';
-    var subtitle = storedCount + ' 首';
-    if (unresolvedCount) subtitle += ' · ' + unresolvedCount + ' 首待重新定位';
-    else subtitle += kind === 'library' ? ' · 本地曲库' : ' · 可直接切换播放';
+    var subtitle = storedCount + (uiLanguage === 'en' ? ' tracks' : ' 首');
+    if (unresolvedCount) subtitle += uiLanguage === 'en'
+      ? ' · ' + unresolvedCount + ' tracks need relocating'
+      : ' · ' + unresolvedCount + ' 首待重新定位';
+    else subtitle += uiLanguage === 'en'
+      ? (kind === 'library' ? ' · Local library' : ' · Ready to play')
+      : (kind === 'library' ? ' · 本地曲库' : ' · 可直接切换播放');
     html += '<button type="button" class="playlist-source-option' + (active ? ' active' : '') + (!songs.length ? ' empty' : '') + (extraClass ? ' ' + extraClass : '') + '" role="option" aria-selected="' + (active ? 'true' : 'false') + '" data-playback-playlist-kind="' + escHtml(kind) + '">' +
       (cover ? '<img class="playlist-source-option-cover" src="' + escHtml(cover) + '" alt="" loading="lazy" decoding="async">' : '<span class="playlist-source-option-cover">' + escHtml(icon || '♪') + '</span>') +
-      '<span class="playlist-source-option-info"><span class="playlist-source-option-name">' + escHtml(name) + '</span><span class="playlist-source-option-sub">' + escHtml(subtitle) + '</span></span>' +
+      '<span class="playlist-source-option-info"><span class="playlist-source-option-name">' + escHtml(uiText(name)) + '</span><span class="playlist-source-option-sub">' + escHtml(subtitle) + '</span></span>' +
       '<span class="playlist-source-option-check" aria-hidden="true">✓</span>' +
     '</button>';
   }
@@ -21801,7 +22151,7 @@ function renderLocalPlaybackPlaylistPicker() {
     appendOption(playlist.id, playlist.name, getLocalPlaylistSongsById(playlist.id), playlist.songRefs.length, '♪', 'custom');
   }
   list.innerHTML = html;
-  if (count) count.textContent = playlists.length + ' 个独立歌单';
+  if (count) count.textContent = uiLanguage === 'en' ? playlists.length + ' playlists' : playlists.length + ' 个独立歌单';
   if (localPlaybackPlaylistPickerOpen && window.gsap) {
     animateListItems(list, '.playlist-source-option', { x: 0, y: 5, stagger: 0.012, duration: 0.18, limit: 18 });
   }
@@ -21818,7 +22168,7 @@ function updateLocalPlaybackPlaylistSourceButton() {
   btn.classList.toggle('special', special);
   btn.classList.toggle('custom', !!custom);
   btn.setAttribute('aria-expanded', localPlaybackPlaylistPickerOpen ? 'true' : 'false');
-  if (label) label.textContent = special ? '喜欢' : (custom ? custom.name.slice(0, 6) : (category ? category.title.slice(0, 6) : '全部'));
+  if (label) label.textContent = special ? uiText('喜欢') : (custom ? custom.name.slice(0, 6) : (category ? uiText(category.title.slice(0, 6)) : uiText('全部')));
   if (icon) icon.textContent = special ? '♥' : (custom ? '♪' : (category ? category.icon : '≡'));
   btn.title = '当前：' + sourceName + '，点击选择播放歌单';
   btn.setAttribute('aria-label', btn.title);
@@ -22261,13 +22611,13 @@ function currentCoverSong() {
 function songDurationLabel(song) {
   var sec = playbackDurationFromSong(song);
   if (!sec && audio && isFinite(audio.duration) && audio.duration > 0) sec = audio.duration;
-  if (!sec) return '未知';
+  if (!sec) return uiText('未知');
   return formatProgramTime(sec);
 }
 function songSourceLabel(song) {
-  if (!song) return '未知';
-  if (song.type === 'local') return '本地上传';
-  return '本地音乐';
+  if (!song) return uiText('未知');
+  if (song.type === 'local') return uiText('本地上传');
+  return uiText('本地音乐');
 }
 function isLocalPlaceholderArtist(text) {
   return /^(本地文件|本地上传|本地音乐|未知歌手)$/i.test(String(text || '').trim());
@@ -22424,8 +22774,8 @@ function songDisplaySubtitle(song) {
   return text;
 }
 function detailRow(label, value) {
-  value = value == null || value === '' ? '未知' : value;
-  return '<div class="detail-k">' + escHtml(label) + '</div><div class="detail-v">' + escHtml(String(value)) + '</div>';
+  value = value == null || value === '' ? uiText('未知') : value;
+  return '<div class="detail-k">' + escHtml(uiText(label)) + '</div><div class="detail-v">' + escHtml(String(value)) + '</div>';
 }
 function currentArtistNames(song) {
   var text = songArtistText(song);
@@ -22442,6 +22792,8 @@ function currentArtistNames(song) {
   return names;
 }
 var trackDetailSeq = 0;
+// 记住当前打开的详情弹窗，语言切换后原地重绘静态字段，不重排用户数据。
+var trackDetailLastOpen = null;
 var detailArtistSongs = [];
 function normalizeArtistNameForMatch(name) {
   return String(name || '')
@@ -22533,11 +22885,21 @@ function bindTrackDetailScrollers() {
   if (body) body.querySelectorAll('.detail-scroll').forEach(bindSmoothWheelScroll);
 }
 function closeTrackDetailModal() {
+  trackDetailLastOpen = null;
   closeGsapModal(document.getElementById('track-detail-modal'));
+}
+/** 语言切换时原地重绘已打开的详情弹窗，保持滚动位置与用户数据不变。 */
+function refreshTrackDetailUiLanguage() {
+  var modal = document.getElementById('track-detail-modal');
+  if (!modal || !modal.classList.contains('show') || !trackDetailLastOpen) return;
+  var last = trackDetailLastOpen;
+  trackDetailLastOpen = null;
+  openTrackDetailModal(last.type, last.song);
 }
 function openTrackDetailModal(type, songOverride) {
   var song = songOverride || currentCoverSong();
   if (!song) { showToast('先播放或选择一首歌'); return; }
+  trackDetailLastOpen = { type: type, song: song };
   if (immersiveMode) setImmersiveMode(false);
   var heading = document.getElementById('track-detail-heading');
   var body = document.getElementById('track-detail-body');
@@ -22551,36 +22913,36 @@ function openTrackDetailModal(type, songOverride) {
     var artistName = artists.join(' / ') || songArtistText(song) || '未知歌手';
     var artistInitial = artistName && artistName !== '未知歌手' ? artistName.slice(0, 1) : '歌';
     var artistCoverHtml = '<div id="artist-detail-cover" class="detail-cover detail-artist-avatar">' + escHtml(artistInitial) + '</div>';
-    var artistEmptyText = '纯本地模式仅显示当前文件里的歌手信息。';
-    heading.textContent = '歌手详情';
+    var artistEmptyText = uiText('纯本地模式仅显示当前文件里的歌手信息。');
+    heading.textContent = uiText('歌手详情');
     body.innerHTML =
       '<div class="detail-hero">' + artistCoverHtml +
         '<div style="min-width:0;flex:1"><div class="detail-title">' + escHtml(artistName) + '</div>' +
-        '<div class="detail-sub">来自当前播放 · ' + escHtml(title) + '</div></div>' +
+        '<div class="detail-sub">' + escHtml(uiText('来自当前播放')) + ' · ' + escHtml(title) + '</div></div>' +
       '</div>' +
       '<div class="detail-grid">' +
         detailRow('当前歌曲', title) +
         detailRow('关联歌手', artistName) +
-        detailRow('所属专辑', song.album || '未知') +
+        detailRow('所属专辑', song.album || uiText('未知')) +
         detailRow('来源', songSourceLabel(song)) +
       '</div>' +
-      '<div class="detail-chip-row">' + (artists.length ? artists.map(function(name){ return '<span class="detail-chip">' + escHtml(name) + '</span>'; }).join('') : '<span class="detail-chip">未知歌手</span>') + '</div>' +
-      '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">本地信息</div></div><div id="artist-hot-songs"><div class="detail-empty">' + escHtml(artistEmptyText) + '</div></div></div>';
+      '<div class="detail-chip-row">' + (artists.length ? artists.map(function(name){ return '<span class="detail-chip">' + escHtml(name) + '</span>'; }).join('') : '<span class="detail-chip">' + escHtml(uiText('未知歌手')) + '</span>') + '</div>' +
+      '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">' + escHtml(uiText('本地信息')) + '</div></div><div id="artist-hot-songs"><div class="detail-empty">' + escHtml(artistEmptyText) + '</div></div></div>';
   } else {
-    heading.textContent = '歌曲详情';
+    heading.textContent = uiText('歌曲详情');
     var detailCanLoadComments = false;
-    var detailCommentTitle = '本地信息';
-    var detailEmptyText = '本地歌曲不加载在线评论。';
+    var detailCommentTitle = uiText('本地信息');
+    var detailEmptyText = uiText('本地歌曲不加载在线评论。');
     var detailArtist = songArtistText(song);
     var detailAlbum = String(song.album || '').trim();
     var detailQuality = song.type === 'local' ? localAudioQualityText(song) : '';
-    var detailSubtitle = songDisplaySubtitle(song) || detailQuality || '未知歌手';
+    var detailSubtitle = songDisplaySubtitle(song) || detailQuality || uiText('未知歌手');
     var detailPrimaryChip = detailQuality || songSourceLabel(song);
     var localDetailRows = song.type === 'local'
-      ? detailRow('音质', detailQuality || '未知') +
-        detailRow('文件路径', song.localPath || song.localFile && song.localFile.name || '未知') +
-        detailRow('歌词文件', song.localLyricFileName || '未匹配') +
-        detailRow('封面文件', song.localCoverFileName || ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? '内嵌封面' : '未匹配'))
+      ? detailRow('音质', detailQuality || uiText('未知')) +
+        detailRow('文件路径', song.localPath || song.localFile && song.localFile.name || uiText('未知')) +
+        detailRow('歌词文件', song.localLyricFileName || uiText('未匹配')) +
+        detailRow('封面文件', song.localCoverFileName || ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? uiText('内嵌封面') : uiText('未匹配')))
       : '';
     body.innerHTML =
       '<div class="detail-hero">' + coverHtml +
@@ -22589,8 +22951,8 @@ function openTrackDetailModal(type, songOverride) {
       '</div>' +
       '<div class="detail-grid">' +
         detailRow('歌曲名', title) +
-        detailRow('歌手', detailArtist || '未知') +
-        detailRow('专辑', detailAlbum || '未知') +
+        detailRow('歌手', detailArtist || uiText('未知')) +
+        detailRow('专辑', detailAlbum || uiText('未知')) +
         detailRow('时长', songDurationLabel(song)) +
         detailRow('来源', songSourceLabel(song)) +
         detailRow('歌词源', currentLyricSourceLabel()) +
@@ -22598,9 +22960,9 @@ function openTrackDetailModal(type, songOverride) {
       '</div>' +
       '<div class="detail-chip-row">' +
         '<span class="detail-chip">' + escHtml(detailPrimaryChip) + '</span>' +
-        (isSongLiked(song) ? '<span class="detail-chip">红心喜欢</span>' : '') +
-        (getCustomCoverForSong(song) ? '<span class="detail-chip">自定义封面</span>' : '') +
-        (hasCustomLyricForSong(song) ? '<span class="detail-chip">自定义歌词</span>' : '') +
+        (isSongLiked(song) ? '<span class="detail-chip">' + escHtml(uiText('红心喜欢')) + '</span>' : '') +
+        (getCustomCoverForSong(song) ? '<span class="detail-chip">' + escHtml(uiText('自定义封面')) + '</span>' : '') +
+        (hasCustomLyricForSong(song) ? '<span class="detail-chip">' + escHtml(uiText('自定义歌词')) + '</span>' : '') +
       '</div>' +
       songListenStatDetailHtml(song) +
       '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">' + detailCommentTitle + '</div></div><div id="song-comments">' + (detailCanLoadComments ? '<div class="detail-loading">正在载入评论...</div>' : '<div class="detail-empty">' + detailEmptyText + '</div>') + '</div></div>';
@@ -31977,6 +32339,7 @@ function invalidateMiniPlayerSyncPatch(patch) {
   if (Object.prototype.hasOwnProperty.call(patch, 'visual')) state.visualSignature = '';
   if (Object.prototype.hasOwnProperty.call(patch, 'themeVars')) state.themeSignature = null;
   if (Object.prototype.hasOwnProperty.call(patch, 'miniPlayerMode')) state.miniPlayerMode = null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'uiLanguage')) state.uiLanguage = null;
 }
 
 /**
@@ -32041,7 +32404,8 @@ function pushMiniPlayerState(force, playbackOnly) {
     pulse: null,
     visualSignature: '',
     themeSignature: null,
-    miniPlayerMode: null
+    miniPlayerMode: null,
+    uiLanguage: null
   });
   var modeChanged = state.miniPlayerMode !== miniPlayerMode;
   state.miniPlayerMode = miniPlayerMode;
@@ -32083,6 +32447,12 @@ function pushMiniPlayerState(force, playbackOnly) {
   if (force || state.desktopLyrics !== desktopLyricsEnabled) {
     state.desktopLyrics = desktopLyricsEnabled;
     patch.desktopLyrics = desktopLyricsEnabled;
+    changed = true;
+  }
+  var miniPlayerUiLanguage = typeof uiLanguage !== 'undefined' && uiLanguage === 'en' ? 'en' : 'zh-CN';
+  if (force || state.uiLanguage !== miniPlayerUiLanguage) {
+    state.uiLanguage = miniPlayerUiLanguage;
+    patch.uiLanguage = miniPlayerUiLanguage;
     changed = true;
   }
   // 主题只在非纯播放推送时对账：播放进度那条路径每 74ms 就来一次，没必要每次重算变量签名。
@@ -40565,8 +40935,12 @@ function scheduleGlobalHotkeyFailureNotice() {
   globalHotkeyFailureNotified = true;
   var meta = hotkeyActionMeta(failed[0]);
   var text = failed.length === 1
-    ? '全局热键「' + (meta && meta.label || failed[0]) + '」被系统或其他软件占用，可在「热键」里改键'
-    : failed.length + ' 个全局热键被系统或其他软件占用，可在「热键」里改键';
+    ? (uiLanguage === 'en'
+      ? 'Global hotkey "' + uiText(meta && meta.label || failed[0]) + '" is in use by the system or another app. Change it under Hotkeys.'
+      : '全局热键「' + (meta && meta.label || failed[0]) + '」被系统或其他软件占用，可在「热键」里改键')
+    : (uiLanguage === 'en'
+      ? failed.length + ' global hotkeys are in use by the system or other apps. Change them under Hotkeys.'
+      : failed.length + ' 个全局热键被系统或其他软件占用，可在「热键」里改键');
   // 启动阶段还有别的提示要出，错开一点避免叠在一起。
   setTimeout(function(){ showToast(text); }, 1800);
 }

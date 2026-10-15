@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { beginWallCatalogRefresh, completeWallCatalogRefresh, emptyWallCatalog, patchWallCatalogTracks } from '../vendor-src/folia/src/mineradio/local/wallCatalogData.ts';
+import { beginWallCatalogRefresh, completeWallCatalogRefresh, emptyWallCatalog, patchWallCatalogTracks, previewWallCatalogRefresh } from '../vendor-src/folia/src/mineradio/local/wallCatalogData.ts';
 
 // tests/folia-wall-catalog.test.mjs
 // Catalog refreshes must preserve mounted wall content and unaffected visual object identities.
@@ -8,6 +8,32 @@ const scope = JSON.stringify(['library', '']);
 const song = (id, overrides = {}) => ({ id, title: `Track ${id}`, artist: 'Artist', album: 'Album', duration: 120,
     cover: `/cover/${id}.jpg`, liked: false, filePath: `D:/Music/${id}.mp3`, format: 'mp3', ...overrides });
 const loaded = () => completeWallCatalogRefresh(emptyWallCatalog(scope), scope, [song('a'), song('b')]);
+
+test('first-page previews are usable, accept late metadata, and never truncate an already complete wall', () => {
+    const initial = previewWallCatalogRefresh(emptyWallCatalog(scope), scope, [song('a')]);
+    assert.equal(initial.loaded, false);
+    assert.equal(initial.loading, true);
+    assert.equal(initial.songs.length, 1);
+    const patched = patchWallCatalogTracks(initial, scope, [song('a', { cover: '/fresh.jpg' })]);
+    assert.equal(patched.songs[0].album.coverUrl, '/fresh.jpg');
+    const complete = completeWallCatalogRefresh(patched, scope, [song('a'), song('b')], new Map([['a', patched.tracks[0]]]));
+    assert.equal(complete.songs[0], patched.songs[0]);
+    assert.equal(complete.loaded, true);
+    assert.equal(previewWallCatalogRefresh(complete, scope, [song('a')]), complete);
+    assert.equal(previewWallCatalogRefresh(initial, 'other', [song('c')]), initial);
+});
+
+test('an incomplete first-page preview keeps the loaded prefix and reports a retryable error', () => {
+    const preview = previewWallCatalogRefresh(emptyWallCatalog(scope), scope, [song('a'), song('b')]);
+    const failed = { ...preview, loading: false, error: 'Incomplete catalog page' };
+    assert.deepEqual(failed.songs.map(item => item.id), ['a', 'b']);
+    assert.equal(failed.loaded, false);
+    assert.equal(failed.error, 'Incomplete catalog page');
+    const retrying = beginWallCatalogRefresh(failed, scope);
+    assert.equal(retrying.loading, true);
+    assert.equal(retrying.error, '');
+    assert.equal(retrying.songs, failed.songs);
+});
 
 test('revision refresh retains mounted content and never shows foreground loading', () => {
     const previous = loaded();

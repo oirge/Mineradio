@@ -296,7 +296,7 @@ test('导入入口放开了 mp4/webm 并给出视频直连说明', () => {
   const renderer = fs.readFileSync(path.join(root, 'public', 'wallpaper-engine.js'), 'utf8');
   const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
   assert.match(bridge, /extensions: \['pkg', 'pak', 'json', 'mp4', 'webm', 'mov', 'm4v'/);
-  assert.match(bridge, /{ name: '视频', extensions: \['mp4', 'webm', 'mov', 'm4v'\] }/);
+  assert.match(bridge, /translate\('视频'\), extensions: \['mp4', 'webm', 'mov', 'm4v'\]/);
   assert.match(renderer, /视频\/图片直接播放/);
   assert.match(html, /导入项目 \/ 视频/);
 });

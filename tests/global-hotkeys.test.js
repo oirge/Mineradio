@@ -126,6 +126,8 @@ function loadHotkeyModule(options) {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     },
+    uiLanguage: 'zh-CN',
+    uiText(value) { return value; },
     togglePlay() { invoked.push('togglePlay'); },
     prevTrack() { invoked.push('prevTrack'); },
     nextTrack() { invoked.push('nextTrack'); },

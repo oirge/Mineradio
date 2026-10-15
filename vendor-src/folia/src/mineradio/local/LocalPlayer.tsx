@@ -9,6 +9,7 @@ import LibraryPanel from './LibraryPanel';
 import PlayerControls from './PlayerControls';
 import VisualSettings from './VisualSettings';
 import LocalVisualStage from './LocalVisualStage';
+import LocalErrorBoundary from './LocalErrorBoundary';
 import LocalStatusToast from './LocalStatusToast';
 import LocalHeader from './LocalHeader';
 import { useLocalVisualAssets } from './useLocalVisualAssets';
@@ -57,7 +58,9 @@ export default function LocalPlayer() {
         return () => window.removeEventListener('keydown', onKey);
     }, [player.command]);
     return <main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
-        <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+        <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
+            <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+        </LocalErrorBoundary>
         {!focus && <LocalHeader view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen}
             onView={view => { visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); }}
             onLibrary={() => { setLibraryOpen(!libraryOpen); setSettingsOpen(false); }}

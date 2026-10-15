@@ -86,6 +86,7 @@ function loadImportHandler(dialogResult) {
   };
   const context = {
     ipcMain,
+    desktopUiText: value => value,
     dialog,
     fs,
     URL,

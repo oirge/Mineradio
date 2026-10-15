@@ -2,6 +2,13 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
+## 2026-10-15（播放器稳定性与 i18n 续作，已推送远端分支待续）
+
+- 用户要求先把改好的代码上传 GitHub，明天再继续。权威工作区 `C:\Users\Administrator\Desktop\Mineradio-main\Mineradio-pr136`，分支 `codex/player-stability-and-i18n`（基于 v2.5.0 之后的 `65e2ac1`，未合并、未发版）。同级无 `.git` 的 `Mineradio-main` 只是源码快照，不要覆盖。
+- 本分支内容：五项优化（Folia 加载异常恢复与重试、桌面端英文 i18n、Playwright 浏览器回归纳入 CI、Folia 首页预览、翻译监听去重）加用户实测反馈的 i18n 修复（tooltip、音量面板、歌单选择器、首页本地文件、热键重复提示、歌曲信息弹窗、迷你播放器），并恢复空 Home 上被 CSS 藏掉的 Folia 切换入口。
+- 验证：根目录全量 `npm test` 1509 项，1508 通过、0 失败、1 可选基准跳过；Folia `typecheck` 通过、定向 Vitest 36/36；`npm run check:folia` 产物校验通过；`git diff --check` 干净。顺带修了 5 处被 i18n 改动打穿的旧断言（Folia 空 Home 隐藏规则、热键测试桩缺 `uiText`/`uiLanguage`、封面内嵌文案）。
+- 未完成：用户还没在预览实例里复验音量面板、歌单选择器、本地文件按钮、歌曲信息弹窗和热键 toast；确认后再做版本号 2.5.1、CHANGELOG/RELEASE/本文件更新、PR 与发布。临时扫描文件 `.tmp-language-scan*.txt`、`scripts/.tmp-*.mjs` 仍留在本机且未提交。
+
 ## 2026-10-15（v2.5.0 已正式发布）
 
 - 用户明确授权「发布新版2.5.0」后，PR #136 已以 merge commit `c36cff3ea91637a9323ba7f047846aa76b78205e` 合入 main。发布提交 `b185d8d` 本地完整 Node 回归 `1502` 通过、`0` 失败、`1` 可选基准跳过，公告解析与元数据一致；PR 两组 Verify `38674561530` / `38674567137` 及合并后 Verify `38674836342` 全通过。

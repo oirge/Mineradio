@@ -73,6 +73,7 @@ function buildTemplate(overrides) {
     miniPlayerMode: 'standard',
     appQuitting: false,
     app: { quit: () => { calls.quit += 1; } },
+    desktopUiText: value => value,
     focusMainWindow: () => { calls.focus += 1; },
     writeDesktopShellSettings: (patch) => { calls.writes.push(patch); return patch; },
     refreshTrayMenu: () => { calls.refresh += 1; },

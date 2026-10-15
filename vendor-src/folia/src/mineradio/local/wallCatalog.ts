@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { subscribeHost, type HostPage, type HostPlaylist, type HostTrack } from '../client';
 import type { LocalPlayer } from './playerTypes';
-import { beginWallCatalogRefresh, completeWallCatalogRefresh, emptyWallCatalog, patchWallCatalogTracks } from './wallCatalogData';
+import { beginWallCatalogRefresh, completeWallCatalogRefresh, emptyWallCatalog, patchWallCatalogTracks, previewWallCatalogRefresh } from './wallCatalogData';
 
 // src/mineradio/local/wallCatalog.ts
 // Both original Folia walls receive metadata from the one Mineradio catalog and transport.
@@ -82,19 +82,27 @@ export function useLocalWallCatalog(player: LocalPlayer) {
         // Page IPC payloads; renderers virtualize the complete collection without changing its queue.
         const readCollection = async () => {
             const next: HostTrack[] = [];
-            let offset = 0;
+            let offset = 0, previewAt = 1;
             while (!cancelled) {
                 const page = await command<HostPage<HostTrack>>('listTracks', { playlistId, query, offset, limit: 1000 });
                 if (cancelled) return;
                 next.push(...page.items);
                 offset += page.items.length;
-                if (offset >= page.total || page.items.length === 0) break;
+                if (offset >= page.total) break;
+                if (page.items.length === 0) throw new Error('Incomplete catalog page');
+                if (offset >= previewAt) {
+                    // Geometric previews bound preview copying below 2N and expose even a short first page.
+                    const preview = next.slice();
+                    const overlay = recentUpdates;
+                    setSnapshot(previous => cancelled ? previous : previewWallCatalogRefresh(previous, scope, preview, overlay));
+                    previewAt = offset * 2;
+                }
             }
             if (!cancelled) {
                 const overlay = recentUpdates?.size ? recentUpdates : undefined;
                 recentUpdates = undefined;
                 reading = false;
-                setSnapshot(previous => completeWallCatalogRefresh(previous, scope, next, overlay));
+                setSnapshot(previous => cancelled ? previous : completeWallCatalogRefresh(previous, scope, next, overlay));
                 scheduleSearchRecheck();
             }
         };

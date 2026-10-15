@@ -126,6 +126,8 @@ function loadRendererHotkeys(options) {
     setTimeout(fn) { return 0; },
     isTypingTarget: () => false,
     escHtml(value) { return String(value == null ? '' : value); },
+    uiLanguage: 'zh-CN',
+    uiText(value) { return value; },
     togglePlay() { invoked.push('togglePlay'); },
     prevTrack() { invoked.push('prevTrack'); },
     nextTrack() { invoked.push('nextTrack'); },

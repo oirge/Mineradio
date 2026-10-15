@@ -41,6 +41,10 @@ jobs:
           retention-days: 7
       - name: Check document encoding
         run: node --test tests/doc-encoding-integrity.test.js
+      - name: Check embedded Folia types and behavior
+        run: |
+          npm run typecheck --prefix vendor-src/folia
+          npm test --prefix vendor-src/folia -- test/unit/mineradio
       - run: node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
       - run: |
           node --check desktop/main.js
@@ -49,3 +53,23 @@ jobs:
           node --check public/app.js
           node --check scripts/build-folia.js
           git diff --check
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-ui.txt
+      - name: Install browser test runtime
+        run: |
+          python -m pip install -r scripts/requirements-ui.txt
+          python -m playwright install chromium
+      - name: Verify bilingual UI and Folia recovery
+        timeout-minutes: 15
+        run: python scripts/verify-browser-ui.py
+      - name: Save browser regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-ui-evidence
+          path: artifacts/ui-language/
+          if-no-files-found: ignore
+          retention-days: 7
