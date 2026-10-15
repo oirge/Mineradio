@@ -1442,7 +1442,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.9';
+var APP_VERSION = '2.5.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -1495,10 +1495,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '旧版本安装包自动回收，应用内更新不再无限占磁盘。',
+  hero: '主设置与 Folia 支持中文 / English 同步切换。',
   notes: [
-    '应用内更新下载的安装包不再无限堆积：启动和发起下载前自动清理比当前版本旧的安装包和校验失败残留。',
-    '当前版本安装包、待安装的新版本及其续传进度一律保留，更新和断点续传不受影响。'
+    '主设置新增中文 / English 切换，覆盖视觉、歌词、播放、热键、插件及相关弹窗。',
+    'Folia 与主设置共用语言选择，三种视图、歌词效果和背景设置同步切换，重启后保留。',
+    '优化英文长文本布局，切换语言时保留歌词与存档改名草稿，歌曲、歌单和文件名称保持原文。'
   ]
 };
 function readSavedVolume() {
