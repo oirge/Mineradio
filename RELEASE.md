@@ -6,7 +6,13 @@
 - **内容**：主设置和嵌入式 Folia 共用中文 / English 选择并持久化，覆盖六个设置标签页、关联弹窗、三个 Folia 视图、歌词效果及背景设置；调整英文长文本布局，保护歌曲等原始信息、歌词编辑和存档改名草稿。
 - **已有验证**：功能提交的完整 Node 回归 `1502` 通过、`0` 失败、`1` 可选基准跳过；Folia 定向 `12/12`、类型检查、构建及产物校验通过。Chromium 覆盖主设置、关联弹窗、三个 Folia 视图、14 种歌词效果和 5 种背景，最终全流程及桌面标题栏检查通过。第一轮曾出现无调用栈的 null `.trim()` 异常，增加诊断后未复现，未推测性修改视觉引擎。
 - **本地安装**：同一功能的 `2.4.9` 预览安装包已安装到既有目录，NSIS 退出码 `0`，实际播放器窗口已打开供用户实测；这不是正式 `2.5.0` 二进制验收。
-- **发布状态**：用户于 `2026-10-15` 明确授权发布 `2.5.0`。沿用 PR #136，检查通过后合并，建立 annotated tag 并运行 Windows Release workflow；草稿资产核验后公开为 Latest，发布事实另走文档 PR 补录。
+- **提交与 CI**：用户于 `2026-10-15` 明确授权发布。发布提交 `b185d8dc5bcc9160a57f324db59677cdb2742ebf` 的本地完整回归仍为 `1502` 通过、`0` 失败、`1` 可选基准跳过；三条前后端公告与 CHANGELOG 一致，真实公告解析器全部保留。PR #136 的 Verify `38674561530` / `38674567137` 和合并后 Verify `38674836342` 全通过；merge commit 为 `c36cff3ea91637a9323ba7f047846aa76b78205e`。annotated tag `v2.5.0`（tag object `bc77b00315b6bc80998b95b7ad77fec3c1ce65ca`）固定在该 merge commit，Windows Build and Release `38674888053` 成功。
+- **正式发布**：[v2.5.0](https://github.com/oirge/Mineradio/releases/tag/v2.5.0)（Release ID `413381092`）于北京时间 `2026-10-15 11:15:54` 公开并设为 Latest，`draft=false` / `prerelease=false`。正文仅含本版三条用户可见变化；旧版标签与资产保持原样。
+- **官方资产核验**：四项文件在草稿阶段完整回下载，大小与本机 SHA256 均匹配 GitHub API digest，SHA256 清单三项全部一致；官方 EXE 本机 SHA-512 为 `nkWa9jJmAzAKnhkA5Vhf+g52Juti/ktyKtwCoKNgp8HWzUFcdywMDkTbfbwzm4Rq2/3FTQ1SbMGf0lqzEpzYHw==`，匹配 `latest.yml`。公开后的 `releases/latest` 返回 `v2.5.0`，公开 `releases/latest/download/latest.yml` 与已校验的官方文件逐字节一致。本轮未运行官方 `2.5.0` 安装器，不把此前 `2.4.9` 预览运行记录等同于新发行二进制验收。
+  - `Mineradio-oirge-2.5.0-Setup.exe`：120722681 B，SHA256 `e7bae0f83e773097287f6fd189b5c256569e18da872bd52bf937582020fb51ed`。
+  - `Mineradio-oirge-2.5.0-Setup.exe.blockmap`：127670 B，SHA256 `2d58aaf96712a4d5fa9551a5d3ff119e1d2388927122e408ea49688ba7982b4e`。
+  - `latest.yml`：359 B，SHA256 `a4797ed770adb50f67d49aa41a8925336bc491d0bd5fbdfaef442a481fd49f0c`。
+  - `Mineradio-oirge-2.5.0-SHA256SUMS.txt`：282 B，SHA256 `eb2e520c27ceee795c667b0f9840860a635ea478a9e32f71be9e1e9c68211875`。
 
 ## v2.4.9 更新安装包自动回收
 
