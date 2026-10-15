@@ -782,6 +782,7 @@ var UI_LANGUAGE_PAIRS = [
   ['查看使用引导', 'Show the guide'],
   ['检测更新', 'Check for updates'],
   ['开启 DIY 玩家模式', 'Enable DIY mode'],
+  ['关闭 DIY 玩家模式', 'Disable DIY mode'],
   ['最小化', 'Minimize'],
   ['退出全屏', 'Exit fullscreen'],
   ['导入单首音乐或封面', 'Import a song or artwork'],
@@ -790,6 +791,7 @@ var UI_LANGUAGE_PAIRS = [
   ['关闭提示', 'Close tip'],
   ['导入文件夹', 'Import folder'],
   ['导入本地文件', 'Import local files'],
+  ['导入文件夹后显示歌曲、歌词和封面', 'Import a folder to see songs, lyrics and artwork.'],
   ['自动隐藏账号胶囊', 'Auto-hide the account capsule'],
   ['自动隐藏 Home 按钮', 'Auto-hide the Home button'],
   ['回到 Home', 'Back to Home'],
@@ -943,7 +945,6 @@ var UI_LANGUAGE_PAIRS = [
   ['歌词源', 'Lyric source'],
   ['音质', 'Audio quality'],
   ['文件路径', 'File path'],
-  ['歌词文件', 'Lyric file'],
   ['封面文件', 'Artwork file'],
   ['未匹配', 'Not matched'],
   ['内嵌封面', 'Embedded artwork'],
@@ -1788,7 +1789,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.5.0';
+var APP_VERSION = '2.5.1';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -1841,11 +1842,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '主设置与 Folia 支持中文 / English 同步切换。',
+  hero: 'Folia 加载异常可恢复，桌面端英文界面补全。',
   notes: [
-    '主设置新增中文 / English 切换，覆盖视觉、歌词、播放、热键、插件及相关弹窗。',
-    'Folia 与主设置共用语言选择，三种视图、歌词效果和背景设置同步切换，重启后保留。',
-    '优化英文长文本布局，切换语言时保留歌词与存档改名草稿，歌曲、歌单和文件名称保持原文。'
+    'Folia 加载失败时显示可重试的恢复界面，支持导出本地诊断记录，重试后保持当前视图。',
+    '补齐桌面端与迷你播放器的英文翻译：悬停提示、音量面板、歌单选择器、歌曲信息弹窗和热键提示。',
+    '修复英文界面残留中文，并恢复空曲库首页的 Folia 切换入口。'
   ]
 };
 function readSavedVolume() {
@@ -38922,7 +38923,8 @@ function renderUserFxArchives(opts) {
       setTimeout(function(){
         if (renderGeneration !== userFxArchiveRenderGeneration || userFxArchiveEditing < 0) return;
         var currentInput = document.getElementById('user-archive-input-' + userFxArchiveEditing);
-        if (currentInput) {
+        // 已经聚焦说明用户先一步点了进来，别再全选覆盖他的光标。
+        if (currentInput && document.activeElement !== currentInput) {
           currentInput.focus();
           currentInput.select();
         }

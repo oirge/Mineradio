@@ -78,9 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '主设置新增中文 / English 切换，覆盖视觉、歌词、播放、热键、插件及相关弹窗。',
-  'Folia 与主设置共用语言选择，三种视图、歌词效果和背景设置同步切换，重启后保留。',
-  '优化英文长文本布局，切换语言时保留歌词与存档改名草稿，歌曲、歌单和文件名称保持原文。',
+  'Folia 加载失败时显示可重试的恢复界面，支持导出本地诊断记录，重试后保持当前视图。',
+  '补齐桌面端与迷你播放器的英文翻译：悬停提示、音量面板、歌单选择器、歌曲信息弹窗和热键提示。',
+  '修复英文界面残留中文，并恢复空曲库首页的 Folia 切换入口。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

@@ -2,6 +2,16 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
+## 2026-10-15（i18n 收尾修复已推送，版本号已备好 2.5.1 但未发布）
+
+- 用户先要求「完成修复发布新版」，随后改为「先不发布了把代码上传到 GitHub，明天再继续」。因此本轮只推分支，**没有建 PR、没有打 tag、没有跑发布 workflow**。
+- 修掉 CI `38711284942` 抓到的 5 处英文界面残留：DIY 关闭态 tooltip（`关闭 DIY 玩家模式`）、空曲库首页提示（`导入文件夹后显示歌曲、歌词和封面`）、更新线路提示（统一成 `自动测速，挑当前最快的线路下载。`）。歌词按钮的 `词` 图标改成 `aria-hidden` + `data-i18n-skip`，不再被语言审计当成漏翻。
+- 删掉重复词条 `['歌词文件', 'Lyric file']`：它覆盖了 `['歌词文件', 'Lyric File']`，导致自定义歌词弹窗的未命名候选显示成 `Lyric file`，和 `scripts/verify-ui-language.py` 的断言不一致。
+- 修掉存档改名输入框的真实竞态：`renderUserFxArchives()` 里 `setTimeout(0)` 的 `focus()+select()` 会晚于用户输入执行，把光标冲成全选。现在只在输入框尚未聚焦时才补聚焦，避免覆盖用户光标。该问题在 `verify-ui-language.py` 里约 5/8 概率复现，修复后连续 8 轮通过。
+- 版本元数据已按 2.5.1 备好但**尚未发布**：`package.json`、`package-lock.json`（两处）、`public/app.js` 的 `APP_VERSION`、前后端更新公告、`.github/workflows/release.yml` 默认 tag、`CHANGELOG.md` 新增 v2.5.1 条目。明天若要发布直接用；若决定不发，回退这些元数据即可。
+- 验证：全量 `npm test` 1509 项、1508 通过、0 失败、1 可选基准跳过；`version-consistency` / `doc-encoding-integrity` / `github-actions-ci` 10/10；Folia typecheck 通过、定向 Vitest 36/36、`npm run check:folia` 通过；`verify-ui-language.py`、`verify-folia-language.py`、`verify-folia-resilience.py` 均 passed（连续多轮无 pageerror）。
+- 未完成：用户还没在预览实例里复验，也没确认是否发布 2.5.1。临时脚本 `.tmp-language-scan*.txt`、`scripts/.tmp-*.mjs`、`scripts/.tmp-*.py` 仍留在本机未提交。
+
 ## 2026-10-15（播放器稳定性与 i18n 续作，已推送远端分支待续）
 
 - 用户要求先把改好的代码上传 GitHub，明天再继续。权威工作区 `C:\Users\Administrator\Desktop\Mineradio-main\Mineradio-pr136`，分支 `codex/player-stability-and-i18n`（基于 v2.5.0 之后的 `65e2ac1`，未合并、未发版）。同级无 `.git` 的 `Mineradio-main` 只是源码快照，不要覆盖。
