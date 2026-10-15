@@ -37,14 +37,15 @@ export default function LocalRecordWall({ player, theme, isDaylight, onBack, onO
     }, [command, catalog.playlistId]);
     const addToQueue = useCallback((id: string) => { void command('addToQueue', { id }).catch(() => {}); }, [command]);
     const collection = catalog.playlists.find(playlist => playlist.id === catalog.playlistId);
-    const title = collection?.name || t('allMusic');
+    const playlistLabel = (id: string, name: string) => id === 'library' ? t('allMusic') : id === 'special-liked' ? t('liked') : name;
+    const title = collection ? playlistLabel(collection.id, collection.name) : t('allMusic');
     const style = { '--bg-color': theme.backgroundColor, '--text-primary': theme.primaryColor,
         '--text-secondary': theme.secondaryColor, '--text-accent': theme.accentColor,
         backgroundColor: theme.backgroundColor, color: theme.primaryColor } as CSSProperties;
     return <section className="local-record-wall" data-testid="local-record-wall" style={style}>
         {collection?.cover && <div className="local-record-backdrop" style={{ opacity: isDaylight ? 0.18 : 0.12 }}>
             <img src={collection.cover} alt="" /></div>}
-        <button className="local-record-back" onClick={onBack} aria-label={t('back', { defaultValue: '返回歌词' })}
+        <button className="local-record-back" onClick={onBack} aria-label={t('back')}
             data-testid="local-record-back"><ChevronLeft size={20} /></button>
         <button className="local-record-title" onClick={() => setShowCatalog(!showCatalog)} aria-expanded={showCatalog} data-testid="local-record-collection-toggle">
             <strong>{title}<ChevronDown size={13} /></strong><small>{t('tracks', { count: items.length })}</small>
@@ -59,7 +60,7 @@ export default function LocalRecordWall({ player, theme, isDaylight, onBack, onO
         {showCatalog && <div className="local-record-catalog theme-glass-panel" data-wheel-scroll-region>
             <div className="local-record-catalog-heading"><strong>{t('collection')}</strong><button onClick={() => setShowCatalog(false)} aria-label={t('close')}><X size={16} /></button></div>
             <select aria-label={t('collection')} value={catalog.playlistId} onChange={event => catalog.setPlaylistId(event.target.value)}>
-                {catalog.playlists.length ? catalog.playlists.map(playlist => <option key={playlist.id} value={playlist.id}>{playlist.name} · {playlist.count}</option>) : <option value="library">{t('allMusic')}</option>}
+                {catalog.playlists.length ? catalog.playlists.map(playlist => <option key={playlist.id} value={playlist.id}>{playlistLabel(playlist.id, playlist.name)} · {playlist.count}</option>) : <option value="library">{t('allMusic')}</option>}
             </select>
             <label><Search size={16} /><input autoFocus aria-label={t('search')} placeholder={t('search')} value={catalog.query} onChange={event => catalog.setQuery(event.target.value)} /></label>
         </div>}

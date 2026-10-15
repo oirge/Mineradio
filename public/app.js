@@ -151,6 +151,7 @@ var GAPLESS_STORE_KEY = 'mineradio-gapless-v1';
 var PLAYBACK_RATE_STORE_KEY = 'mineradio-playback-rate-v1';
 var SLEEP_TIMER_STORE_KEY = 'mineradio-sleep-timer-v1';
 var OUTPUT_DEVICE_STORE_KEY = 'mineradio-output-device-v1';
+var UI_LANGUAGE_STORE_KEY = 'mineradio-ui-language-v1';
 var UPDATE_ROUTE_STORE_KEY = 'mineradio-update-route-v1';
 // genre 是向前生效字段：新解析的曲目会写入曲库与缓存，旧记录不带该键，
 // 因此 applyLocalAssetCacheToSong 的 hasOwnProperty 判定会跳过它，升级后不会整库回落文件名重解析。
@@ -188,11 +189,825 @@ var PERSISTENT_UI_STATE_KEYS = [
   PLAYBACK_RATE_STORE_KEY,
   SLEEP_TIMER_STORE_KEY,
   OUTPUT_DEVICE_STORE_KEY,
+  UI_LANGUAGE_STORE_KEY,
   UPDATE_ROUTE_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
   UPLOAD_TIP_STORE_KEY
 ];
+
+// 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
+// 不在这里登记，因此不会被语言切换改写。
+var UI_LANGUAGE_PAIRS = [
+  ['Folia 本地播放器', 'Folia Local Player'],
+  ['正在加载 Folia…', 'Loading Folia…'],
+  ['正在重新加载 Folia…', 'Reloading Folia…'],
+  ['正在连接播放器…', 'Connecting to the player…'],
+  ['Folia 界面未能加载。可以切回 Mineradio 后重试。', 'Folia could not load. Switch back to Mineradio and retry.'],
+  ['导入音乐文件', 'Import music files'],
+  ['导入文件', 'Import files'],
+  ['展开导航', 'Expand navigation'],
+  ['收起导航', 'Collapse navigation'],
+  ['不支持的界面语言', 'Unsupported interface language'],
+  ['播放器队列尚未准备好', 'The playback queue is not ready'],
+  ['播放器尚未准备好', 'The player is not ready'],
+  ['文件选择器未准备好', 'The file picker is not ready'],
+  ['Folia 容器未加载', 'The Folia container is not loaded'],
+  ['队列位置无效', 'Invalid queue position'],
+  ['界面名称无效', 'Invalid interface name'],
+  ['静音状态无效', 'Invalid mute state'],
+  ['请输入歌单名称', 'Enter a playlist name'],
+  ['播放模式无效', 'Invalid playback mode'],
+  ['歌单标识无效', 'Invalid playlist ID'],
+  ['当前歌曲还不能跳转', 'This track is not ready for seeking'],
+  ['歌曲标识无效', 'Invalid track ID'],
+  ['歌曲列表无效', 'Invalid track list'],
+  ['音量无效', 'Invalid volume'],
+  ['不支持的播放器操作', 'Unsupported player command'],
+  ['歌单暂无可播放歌曲', 'This playlist has no playable tracks'],
+  ['歌单不存在', 'Playlist not found'],
+  ['只能编辑自建歌单', 'Only custom playlists can be edited'],
+  ['歌单暂时无法播放', 'This playlist cannot be played right now'],
+  ['这首歌曲已不在本地曲库', 'This track is no longer in the local library'],
+  ['歌单中没有这首歌曲', 'This track is not in the playlist'],
+  ['播放器操作失败', 'Player command failed'],
+  ['视觉控制台', 'Visual Console'],
+  ['MINERADIO VISUALS · 鼠标移开自动隐藏', 'MINERADIO VISUALS · Hides when the pointer leaves'],
+  ['视觉预设', 'Visual Presets'],
+  ['预设与存档', 'Presets & Archives'],
+  ['外观', 'Appearance'],
+  ['歌词', 'Lyrics'],
+  ['动态', 'Motion'],
+  ['迷你', 'Mini'],
+  ['高级', 'Advanced'],
+  ['用户存档', 'User Archives'],
+  ['自定义颜色', 'Custom Colors'],
+  ['界面与背景', 'Interface & Background'],
+  ['界面语言', 'Interface Language'],
+  ['中文', '中文'],
+  ['默认', 'Default'],
+  ['视觉主色', 'Visual Tint'],
+  ['封面取色', 'From Cover'],
+  ['封面', 'Cover'],
+  ['Cover Picker', 'Cover Picker'],
+  ['点击专辑封面任意位置取色，或使用下方推荐色。', 'Click anywhere on the album cover, or use a suggested color below.'],
+  ['Home 填充', 'Home Fill'],
+  ['主页图标', 'Home Icon'],
+  ['视觉图标', 'Visual Icon'],
+  ['背景颜色', 'Background Color'],
+  ['选择', 'Choose'],
+  ['背景媒体', 'Background Media'],
+  ['未设置', 'Not Set'],
+  ['清除', 'Clear'],
+  ['未启用 · 原背景保留', 'Disabled · Original background kept'],
+  ['启用', 'Enable'],
+  ['识别 / 导入', 'Detect / Import'],
+  ['恢复原背景', 'Restore Original'],
+  ['背景透明度', 'Background Opacity'],
+  ['窗口背景透明', 'Window Background Opacity'],
+  ['毛玻璃透明', 'Glass Opacity'],
+  ['控制台玻璃色差', 'Console Glass Aberration'],
+  ['玻璃色差', 'Glass Aberration'],
+  ['左栏雾面', 'Sidebar Blur'],
+  ['左栏遮挡', 'Sidebar Density'],
+  ['左栏唤出秒数', 'Sidebar Open Seconds'],
+  ['左栏掀起秒数', 'Sidebar Close Seconds'],
+  ['主控', 'Main Controls'],
+  ['画面基础', 'Visual Basics'],
+  ['律动强度', 'Motion Strength'],
+  ['立体感', 'Depth'],
+  ['画面景深', 'Visual Depth'],
+  ['封面清晰度', 'Cover Resolution'],
+  ['镜头晃动', 'Camera Shake'],
+  ['电影镜头', 'Cinema Camera'],
+  ['歌词溢光', 'Lyric Glow'],
+  ['歌词开关', 'Lyric Switches'],
+  ['歌词溢光强度', 'Lyric Glow Strength'],
+  ['溢光强度', 'Glow Strength'],
+  ['封面渐变', 'Cover Gradient'],
+  ['点击后单独设置溢光颜色', 'Click to set a separate glow color'],
+  ['点击后让溢光跟随高亮', 'Click to match glow to the highlight color'],
+  ['歌词外观', 'Lyrics Appearance'],
+  ['颜色 / 来源 / 位置', 'Color / Source / Position'],
+  ['显示与翻译', 'Display & Translation'],
+  ['自定义歌词', 'Custom Lyrics'],
+  ['当前歌曲', 'Current Song'],
+  ['支持 LRC 时间轴，也可以直接输入纯文本歌词', 'Supports LRC timestamps or plain-text lyrics.'],
+  ['[00:12.00] 第一行歌词\n[00:16.50] 第二行歌词\n\n没有时间轴也可以，每一行会按歌曲时长自动铺开', '[00:12.00] First lyric line\n[00:16.50] Second lyric line\n\nWithout timestamps, lines are spaced across the track.'],
+  ['保存使用', 'Save & Apply'],
+  ['歌词文件', 'Lyric File'],
+  ['未知格式', 'Unknown Format'],
+  ['使用本地歌词或音频内嵌歌词', 'Use local or embedded lyrics'],
+  ['打开并编辑自定义歌词', 'Open and edit custom lyrics'],
+  ['新增自定义歌词', 'Add custom lyrics'],
+  ['已读取本地自定义歌词', 'Loaded local custom lyrics'],
+  ['提示：带 [00:12.00] 时间轴会更精准；纯文本会自动铺开', 'Tip: [00:12.00] timestamps improve alignment; plain text is auto-spaced.'],
+  ['请先播放或选择一首歌', 'Play or select a song first'],
+  ['请输入歌词内容', 'Enter lyric text'],
+  ['没有识别到可显示的歌词行', 'No displayable lyric lines found'],
+  ['已应用，但本地存储空间不足', 'Applied, but local storage is full'],
+  ['当前歌曲没有自定义歌词', 'This song has no custom lyrics'],
+  ['已删除，恢复原歌词', 'Deleted; original lyrics restored'],
+  ['这个歌词文件没读到可用歌词', 'No usable lyrics found in this file'],
+  ['当前用的就是', 'Already using'],
+  ['正在读取', 'Loading'],
+  ['已切换到', 'Switched to'],
+  ['这个歌词文件', 'this lyric file'],
+  ['所选歌词文件', 'the selected lyric file'],
+  ['单行', 'Single'],
+  ['双行', 'Double'],
+  ['三行', 'Triple'],
+  ['沉浸', 'Cinema'],
+  ['自定', 'Custom'],
+  ['显示行数', 'Visible Lines'],
+  ['关闭', 'Off'],
+  ['开启', 'On'],
+  ['目标语言', 'Target Language'],
+  ['译文间距', 'Translation Gap'],
+  ['译文字号', 'Translation Scale'],
+  ['译文透明', 'Translation Opacity'],
+  ['歌词颜色', 'Lyric Color'],
+  ['文字颜色', 'Text Colors'],
+  ['高亮颜色', 'Highlight Color'],
+  ['跟随歌词', 'Follow Lyrics'],
+  ['跟随', 'Follow'],
+  ['溢光颜色', 'Glow Color'],
+  ['跟随高亮', 'Follow Highlight'],
+  ['链接', 'Link'],
+  ['独立', 'Independent'],
+  ['歌词溢光颜色', 'Lyric Glow Color'],
+  ['歌词源', 'Lyric Source'],
+  ['歌词来源', 'Lyric Source'],
+  ['原词', 'Original'],
+  ['自定义', 'Custom'],
+  ['歌词字体', 'Lyric Font'],
+  ['字体与字距', 'Font & Spacing'],
+  ['黑体', 'Hei'],
+  ['宋体', 'Song'],
+  ['粗宋', 'Bold Song'],
+  ['石印宋', 'Stone Song'],
+  ['楷宋', 'Kai Song'],
+  ['等宽', 'Mono'],
+  ['标题', 'Display'],
+  ['字间距', 'Letter Spacing'],
+  ['行距', 'Line Height'],
+  ['字重', 'Weight'],
+  ['歌词布局', 'Lyric Layout'],
+  ['位置与角度', 'Position & Rotation'],
+  ['歌词大小', 'Lyric Size'],
+  ['水平位置', 'Horizontal Position'],
+  ['左右位置', 'Horizontal Position'],
+  ['垂直位置', 'Vertical Position'],
+  ['上下位置', 'Vertical Position'],
+  ['景深位置', 'Depth Position'],
+  ['上下角度', 'Vertical Rotation'],
+  ['左右角度', 'Horizontal Rotation'],
+  ['上下旋转', 'Vertical Rotation'],
+  ['左右旋转', 'Horizontal Rotation'],
+  ['叠加效果', 'Overlay Effects'],
+  ['粒子 / 镜头 / 溢光', 'Particles / Camera / Glow'],
+  ['镜头与叠加', 'Camera & Overlay'],
+  ['浮空粒子层', 'Floating Particles'],
+  ['鼓点溢光', 'Beat Glow'],
+  ['歌词光粒', 'Lyric Particles'],
+  ['歌词镜头绑定', 'Bind Lyrics to Camera'],
+  ['粒子溢光', 'Particle Bloom'],
+  ['轮廓高亮', 'Edge Highlight'],
+  ['桌面歌词', 'Desktop Lyrics'],
+  ['桌面歌词锁定', 'Lock Desktop Lyrics'],
+  ['固定歌词位置', 'Stable Lyric Position'],
+  ['桌面歌词电影震动', 'Desktop Cinema Motion'],
+  ['桌面歌词高亮跟随', 'Desktop Lyric Progress'],
+  ['桌面歌词翻译', 'Desktop Lyric Translation'],
+  ['壁纸模式', 'Wallpaper Mode'],
+  ['桌面 / 壁纸', 'Desktop / Wallpaper'],
+  ['关闭到托盘', 'Close to Tray'],
+  ['开机启动', 'Launch at Startup'],
+  ['桌面歌词大小', 'Desktop Lyric Size'],
+  ['桌面歌词透明', 'Desktop Lyric Opacity'],
+  ['桌面歌词透明度', 'Desktop Lyric Opacity'],
+  ['桌面歌词高度', 'Desktop Lyric Height'],
+  ['桌面帧数', 'Desktop FPS'],
+  ['无上限', 'Unlimited'],
+  ['桌面歌词布局', 'Desktop Lyric Layout'],
+  ['左对齐', 'Left'],
+  ['居中', 'Center'],
+  ['右对齐', 'Right'],
+  ['壁纸展示位置', 'Wallpaper Surface'],
+  ['桌面壁纸层', 'Desktop Wallpaper'],
+  ['播放器背景板', 'Player Background Board'],
+  ['壁纸透明度', 'Wallpaper Opacity'],
+  ['迷你播放器', 'Mini Player'],
+  ['开关、样式与悬停展开', 'Switches, Style & Hover Expand'],
+  ['最小化迷你播放器', 'Show Mini Player on Minimize'],
+  ['迷你播放器样式', 'Mini Player Style'],
+  ['标准', 'Standard'],
+  ['极简', 'Compact'],
+  ['自动收回', 'Auto Collapse'],
+  ['开启后移开鼠标会回到封面；关闭后保持完整迷你播放器。', 'When enabled, leaving the panel returns to the cover; when disabled, the full mini player stays open.'],
+  ['封面效果', 'Cover Effects'],
+  ['封面律动', 'Cover Pulse'],
+  ['封面光晕', 'Cover Glow'],
+  ['封面律动强度', 'Cover Pulse Strength'],
+  ['封面光晕强度', 'Cover Glow Strength'],
+  ['封面圆角', 'Cover Radius'],
+  ['3D / 手势', '3D / Gesture'],
+  ['歌单架 / 摄像头交互', 'Shelf / Camera Interaction'],
+  ['3D 歌单架', '3D Shelf'],
+  ['侧栏', 'Sidebar'],
+  ['舞台', 'Stage'],
+  ['歌单架镜头', 'Shelf Camera'],
+  ['动态镜头', 'Dynamic Camera'],
+  ['静态镜头', 'Static Camera'],
+  ['歌单架显示', 'Shelf Visibility'],
+  ['自动隐藏', 'Auto Hide'],
+  ['常驻', 'Always Visible'],
+  ['歌单架内容', 'Shelf Content'],
+  ['合并收藏歌单', 'Merge Liked Playlist'],
+  ['歌单架外观', 'Shelf Appearance'],
+  ['歌单架颜色', 'Shelf Color'],
+  ['歌单架参数', 'Shelf Parameters'],
+  ['歌单架大小', 'Shelf Size'],
+  ['前后景深', 'Depth Offset'],
+  ['侧向角度', 'Side Angle'],
+  ['整体透明度', 'Overall Opacity'],
+  ['详情页位置（原版）', 'Detail Position (Classic)'],
+  ['详情左右', 'Detail Horizontal'],
+  ['详情上下', 'Detail Vertical'],
+  ['详情前后', 'Detail Depth'],
+  ['详情大小', 'Detail Scale'],
+  ['详情俯仰', 'Detail Pitch'],
+  ['详情侧旋', 'Detail Yaw'],
+  ['详情行距', 'Detail Row Gap'],
+  ['详情页动画（原版）', 'Detail Animation (Classic)'],
+  ['展开时长', 'Open Duration'],
+  ['收起时长', 'Close Duration'],
+  ['行入场时长', 'Row Duration'],
+  ['展开位移', 'Intro Offset'],
+  ['悬浮视差', 'Hover Parallax'],
+  ['唤出动画（原版）', 'Summon Animation (Classic)'],
+  ['唤出时长', 'Summon Duration'],
+  ['镜头速度（原版）', 'Camera Speed (Classic)'],
+  ['进入速度', 'Enter Speed'],
+  ['离开速度', 'Exit Speed'],
+  ['摄像头交互', 'Camera Interaction'],
+  ['手势触碰', 'Gesture Touch'],
+  ['自动播放', 'Autoplay'],
+  ['启动继续 / 随机与播放歌单', 'Resume / Shuffle & Playlist'],
+  ['启动自动播放', 'Autoplay on Startup'],
+  ['继续播放', 'Resume'],
+  ['随机播放', 'Shuffle'],
+  ['关闭时启动只恢复上次播放位置，不会自动出声。', 'When off, startup only restores the last position and does not start playback.'],
+  ['自动播放歌单', 'Autoplay Playlist'],
+  ['当前歌单', 'Current Playlist'],
+  ['全部音乐', 'All Music'],
+  ['自动播放使用底部控制栏选中的播放歌单，切换后下次启动生效。', 'Autoplay uses the playlist selected in the bottom controls; changes apply on the next startup.'],
+  ['断点续播', 'Resume Playback'],
+  ['记住单曲断点', 'Remember Track Position'],
+  ['已记断点', 'Saved Positions'],
+  ['暂无断点', 'No Saved Positions'],
+  ['继续上次播放', 'Resume Last Playback'],
+  ['每首歌单独记住上次听到哪儿，下次播到同一首自动从断点接上。', 'Remember each track position and resume it automatically next time.'],
+  ['只有听过 15 秒以上、且离结尾还有 20 秒以上的位置才会记成断点；听完一首会自动清掉它的断点。', 'Positions are saved after 15 seconds and cleared when a track finishes; positions within 20 seconds of the end are ignored.'],
+  ['音量均衡', 'Volume Normalization'],
+  ['ReplayGain 整轨 / 整专辑与防削波', 'ReplayGain Track / Album & Clip Guard'],
+  ['音量归一化', 'Normalize Volume'],
+  ['防削波', 'Clip Guard'],
+  ['均衡基准', 'Normalization Mode'],
+  ['整轨', 'Track'],
+  ['整专辑', 'Album'],
+  ['预增益 Preamp', 'Preamp'],
+  ['关闭时按文件原始电平播放，不做任何增益修正。', 'When disabled, files play at their original level without gain correction.'],
+  ['无缝播放', 'Gapless Playback'],
+  ['Gapless 接续与 0~10 秒交叉淡入淡出', 'Gapless handoff with 0–10 s crossfade'],
+  ['交叉淡入淡出', 'Crossfade'],
+  ['无缝播放：提前解码下一首，自动续播时直接接上，任何时刻只有一路声音。', 'Gapless playback preloads the next track so automatic playback continues without a gap.'],
+  ['交叉为 0 时保持原来的播放逻辑；手动切歌、上一首、下一首、随机播放与自动播放都不受影响。', 'At 0, the original playback flow is kept; manual changes, previous/next, shuffle and autoplay are unaffected.'],
+  ['播放速度', 'Playback Speed'],
+  ['0.5× 到 2.0×，音高不变', '0.5× to 2.0×, pitch preserved'],
+  ['倍速', 'Speed'],
+  ['正常速度；可切换 0.5× 到 2.0×，音高不变。', 'Normal speed; switch between 0.5× and 2.0× without changing pitch.'],
+  ['睡眠定时', 'Sleep Timer'],
+  ['到点淡出并暂停', 'Fade out and pause at the deadline'],
+  ['定时关闭', 'Timer'],
+  ['15 分', '15 min'],
+  ['30 分', '30 min'],
+  ['60 分', '60 min'],
+  ['播完本曲', 'End of Track'],
+  ['关闭时不受影响；到点会淡出并暂停，不改变播放模式。', 'Off does nothing; at the deadline playback fades out and pauses without changing the play mode.'],
+  ['输出设备', 'Output Device'],
+  ['选择声音从哪个设备播放', 'Choose the audio output device'],
+  ['音频输出', 'Audio Output'],
+  ['系统默认', 'System Default'],
+  ['切换后立即生效；"系统默认"跟随 Windows 当前输出设备。', 'Changes apply immediately; "System Default" follows the current Windows output.'],
+  ['音效链', 'Audio Chain'],
+  ['预设 → EQ → Preamp → Limiter → Spatial', 'Preset → EQ → Preamp → Limiter → Spatial'],
+  ['自动预增益', 'Auto Preamp'],
+  ['限幅保护', 'Limiter Protection'],
+  ['立体声扩展', 'Stereo Width'],
+  ['预设', 'Preset'],
+  ['10 段均衡', '10-Band EQ'],
+  ['预增益与限幅', 'Preamp & Limiter'],
+  ['限幅阈值', 'Limiter Threshold'],
+  ['声场 Spatial', 'Spatial'],
+  ['立体声宽度', 'Stereo Width'],
+  ['音效档案', 'Audio Profiles'],
+  ['当前档案', 'Current Profile'],
+  ['导出', 'Export'],
+  ['档案文件', 'Profile File'],
+  ['导入', 'Import'],
+  ['关闭时整条链保持中性：EQ 全 0 dB、限幅旁通、声场原样输出。', 'When disabled, the chain stays neutral: EQ at 0 dB, limiter bypassed and spatial output unchanged.'],
+  ['链路顺序固定为 预设 → EQ → Preamp → Limiter → Spatial → Output，接在音量均衡之后、音量与淡入淡出之前。', 'The fixed order is Preset → EQ → Preamp → Limiter → Spatial → Output, after normalization and before volume and fades.'],
+  ['插件', 'Plugins'],
+  ['主题', 'Themes'],
+  ['已安装插件', 'Installed Plugins'],
+  ['插件数量', 'Plugin Count'],
+  ['管理', 'Manage'],
+  ['插件只换外观：主题跑在独立沙箱里，没有联网能力，也拿不到本地文件。', 'Plugins only change appearance: themes run in a sandbox with no network or local-file access.'],
+  ['备份', 'Backup'],
+  ['换机', 'Move to Another PC'],
+  ['整机备份', 'Full Backup'],
+  ['导出备份', 'Export Backup'],
+  ['导入备份', 'Import Backup'],
+  ['换机恢复', 'Restore on Another PC'],
+  ['备份只存索引与设置：音频文件、封面缓存和临时文件都不进去，几万首歌也就几 MB。', 'Backups contain indexes and settings only; audio, cover caches and temporary files are excluded.'],
+  ['新电脑导入时会先找备份里的音乐文件夹，找不到就让你重选一个，歌单与收藏按新路径重新挂上。', 'On a new PC, Mineradio first looks for the backed-up music folders; if needed, choose a new folder and playlists will be relinked.'],
+  ['音乐文件夹', 'Music Folders'],
+  ['多目录', 'Multiple Folders'],
+  ['已监控目录', 'Monitored Folders'],
+  ['添加目录', 'Add Folder'],
+  ['添加', 'Add'],
+  ['可以同时监控多个音乐文件夹，曲库是它们的并集；改动任一目录都会自动同步。', 'Multiple music folders can be monitored together; changes in any folder sync automatically.'],
+  ['高级参数', 'Advanced'],
+  ['直播 / 后台', 'Live / Background'],
+  ['自动优化', 'Auto Optimize'],
+  ['保持运行', 'Keep Running'],
+  ['停止释放', 'Stop & Release'],
+  ['画质档位', 'Quality'],
+  ['低', 'Low'],
+  ['中', 'Medium'],
+  ['高', 'High'],
+  ['超高', 'Ultra'],
+  ['直播后台保持', 'Keep Live Rendering in Background'],
+  ['粒子高级参数', 'Advanced Particle Parameters'],
+  ['粒子尺寸', 'Particle Size'],
+  ['流速', 'Flow Speed'],
+  ['扭曲', 'Distortion'],
+  ['色彩张力', 'Color Tension'],
+  ['离散感', 'Scatter'],
+  ['背景压暗', 'Background Fade'],
+  ['背景压缩', 'Background Fade'],
+  ['恢复默认', 'Reset Defaults'],
+  ['热键', 'Hotkeys'],
+  ['支持图片 / 视频上传', 'Image / video upload supported'],
+  ['不可用', 'Unavailable'],
+  ['还没有添加音乐文件夹，点下方「添加」选择。', 'No music folders yet. Click "Add" below to choose one.'],
+  ['移除', 'Remove'],
+  ['把这个目录从曲库移除', 'Remove this folder from the library'],
+  ['插件运行时未加载', 'Plugin runtime is not loaded'],
+  ['还没有安装插件。插件是一个 .js 或 .json 文件。', 'No plugins installed. A plugin is a .js or .json file.'],
+  ['0 个', '0 items'],
+  ['界面高亮色', 'Interface accent color'],
+  ['视觉主色', 'Visual tint'],
+  ['Home 填充色', 'Home fill color'],
+  ['色轮取色', 'Pick from color wheel'],
+  ['高亮取色', 'Pick highlight color'],
+  ['溢光取色', 'Pick glow color'],
+  ['全屏幕置顶歌词', 'Fullscreen always-on-top lyrics'],
+  ['锁定后防误触；鼠标移到桌面歌词上按中键可锁定/解锁', 'Prevents accidental clicks when locked; middle-click desktop lyrics to lock/unlock'],
+  ['固定歌词位置，不随播放上下浮动', 'Keep lyrics fixed instead of floating with playback'],
+  ['桌面歌词绑定鼓点电影震动，基础漂浮始终保留', 'Bind desktop lyrics to beat-driven cinema motion; base float remains'],
+  ['桌面歌词按播放进度高亮，金色到青色的进度光带沿歌词流动', 'Highlight desktop lyrics by playback progress with a gold-to-cyan sweep'],
+  ['桌面歌词在原文下方显示翻译（需在上方歌词面板开启翻译）', 'Show translation below the original (enable translation above first)'],
+  ['封面光晕粒子壁纸，可切换画到桌面壁纸层或播放器背景板', 'Cover glow particle wallpaper; choose desktop wallpaper or player board'],
+  ['点击窗口关闭按钮时隐藏到系统托盘', 'Hide to the system tray when the close button is clicked'],
+  ['登录 Windows 后自动启动 Mineradio', 'Launch Mineradio when you sign in to Windows'],
+  ['全屏挂到桌面壁纸层，在桌面图标和其它窗口后面显示', 'Render fullscreen behind desktop icons and other windows'],
+  ['画在播放器窗口内，作为界面最底层背景板', 'Render inside the player as the bottom background layer'],
+  ['主窗口最小化或关闭到托盘时显示歌曲信息和播放控制', 'Show track info and controls when the main window is minimized or sent to tray'],
+  ['使用带封面的标准迷你播放器', 'Use the standard mini player with cover art'],
+  ['使用无封面的极简迷你播放器', 'Use the compact mini player without cover art'],
+  ['自动收回已开启：离开完整面板后回到封面；点击可保持完整迷你播放器', 'Auto-collapse is on: leaving the full panel returns to the cover; click to keep it open'],
+  ['让标准迷你播放器封面跟随音乐能量缩放', 'Scale the standard mini-player cover with music energy'],
+  ['显示封面外沿跟随音乐的律动光晕', 'Show a music-reactive glow around the cover'],
+  ['开启后我的歌单与收藏歌单按一条线连续滚动', 'Scroll My Playlists and Liked Playlist as one continuous shelf'],
+  ['控制播放器启动载入本地曲库后是否自动出声', 'Control whether playback starts after the local library loads'],
+  ['启动只恢复上次播放位置，不自动出声', 'Restore the last position on startup without playing'],
+  ['启动后自动接着上次的歌曲和进度继续播放', 'Resume the last track and position on startup'],
+  ['启动后从播放歌单里随机挑一首开始播放', 'Start a random track from the playback playlist on startup'],
+  ['打开底部控制栏的播放歌单选择器', 'Open the playback playlist picker'],
+  ['每首歌单独记住上次听到哪儿，下次播到同一首自动从断点接上', 'Remember each track position and resume it automatically'],
+  ['立刻接着上次的歌曲和进度继续播放', 'Resume the last track and position now'],
+  ['读取文件里的 ReplayGain 标签，把不同专辑的响度拉到同一水平', 'Read ReplayGain tags and match loudness across albums'],
+  ['按标签里的峰值封顶增益，避免提升后削波爆音', 'Cap gain by peak tags to prevent clipping'],
+  ['整轨让每首歌一样响，整专辑保留专辑内部的响度起伏', 'Normalize each track; album mode preserves album dynamics'],
+  ['每首歌单独拉平，随机播放最稳', 'Normalize each track; best for shuffle'],
+  ['按整张专辑统一增益，保留专辑内的动态设计', 'Normalize the album while preserving internal dynamics'],
+  ['提前解码下一首，自动续播时直接接上，相邻两首之间没有可闻的停顿', 'Decode the next track early so automatic playback continues without an audible gap'],
+  ['改变播放速度，音高保持不变', 'Change playback speed while preserving pitch'],
+  ['到点后淡出并暂停播放', 'Fade out and pause playback at the deadline'],
+  ['打开后 10 段 EQ、预增益、限幅与声场才会生效', 'Enable the 10-band EQ, preamp, limiter and spatial controls'],
+  ['按最大提升量自动垫出余量，避免抬高频段后削波', 'Add headroom based on the maximum boost to avoid clipping'],
+  ['链路末端加限幅，压住瞬时过冲', 'Add a limiter at the end of the chain to control peaks'],
+  ['用中/侧矩阵调整声场宽度，关闭时逐样本原样输出', 'Use a mid/side matrix for width; off outputs samples unchanged'],
+  ['选一条内置曲线，拖动任意频段后自动变成自定义', 'Choose a built-in curve; moving any band switches to Custom'],
+  ['全 0 dB，完全不改音色', '0 dB across all bands; no tonal change'],
+  ['两端抬高的 V 型曲线', 'V-shaped curve with boosted lows and highs'],
+  ['中频前推，人声与主旋律更贴耳', 'Forward mids for closer vocals and lead melodies'],
+  ['两端轻抬，中频保持干净', 'Gently lifted ends with clean mids'],
+  ['低频温暖，高频留出空气感', 'Warm lows with airy highs'],
+  ['重低频大幅提升，建议配合自动预增益', 'Strong bass boost; use with Auto Preamp'],
+  ['突出人声频段，压低两端', 'Emphasize vocals and reduce both ends'],
+  ['自己拖出来的曲线，可导出成 .eq.json', 'A curve you draw yourself; export as .eq.json'],
+  ['把当前曲线与各级参数存成 xxx.eq.json', 'Export the current curve and parameters as xxx.eq.json'],
+  ['读入之前导出的 .eq.json 音效档案', 'Import a previously exported .eq.json profile'],
+  ['打开插件管理，安装或启停插件', 'Open plugin management to install or enable plugins'],
+  ['把曲库信息、歌单、收藏、听歌历史与全部设置存成 mineradio.backup', 'Save library info, playlists, favorites, listening history and all settings as mineradio.backup'],
+  ['读入 mineradio.backup 覆盖本机数据，点两次确认后自动重启', 'Import mineradio.backup to replace local data; confirm twice to restart'],
+  ['选择要加入曲库的音乐文件夹，可以同时监控多个', 'Choose music folders to add; multiple folders are supported'],
+  ['控制窗口隐藏、最小化或后台运行时的渲染策略', 'Control rendering while hidden, minimized or running in the background'],
+  ['控制可见状态下的渲染像素预算，重启后保留', 'Control the visible render pixel budget; kept after restart'],
+  ['开启后后台或最小化时保持视觉渲染，不进入低占用暂停', 'Keep visuals rendering in the background or while minimized'],
+  ['界面高亮', 'Interface Accent'],
+  ['留空=自动（非中→中，中→英）', 'Blank = Auto (non-Chinese to Chinese; Chinese to English)'],
+  ['1.00 是标准力度，往右调越明显；调到 0 或关掉上面的开关即停用。', '1.00 is the standard strength. Increase it for a stronger effect; set it to 0 or turn off the switch above to disable it.'],
+  ['每首歌单独记住上次听到哪儿，下次播到同一首会自动从断点接上。', 'Remember each track position and resume it automatically next time.'],
+  ['支持 FLAC / OGG / OPUS / MP3 / WAV / APE / M4A / DSF 里的 ReplayGain 与 R128 标签；没有标签的歌曲保持原始电平。', 'Supports ReplayGain and R128 tags in FLAC / OGG / OPUS / MP3 / WAV / APE / M4A / DSF. Tracks without tags keep their original level.'],
+  ['跟唱高亮', 'Karaoke Highlight'],
+  ['桌面歌词帧率', 'Desktop Lyric Frame Rate'],
+  ['运动速度', 'Motion Speed'],
+  ['粒子扭曲', 'Particle Distortion'],
+  ['光晕强度', 'Bloom Strength'],
+  ['支持图片 JPG / PNG / WebP 与视频 MP4 / WebM / MOV 上传', 'Supports JPG / PNG / WebP images and MP4 / WebM / MOV videos'],
+  ['关闭切行弹入与上下漂浮，歌词垂直位置保持固定', 'Disable line-entry motion and vertical floating to keep the lyric position fixed'],
+  ['桌面歌词在原文下方显示翻译（需在歌词面板开启翻译）', 'Show translation below the original (enable translation in the lyrics panel first)'],
+  ['开发中，暂不可用', 'In development; currently unavailable'],
+  ['恢复当前滑条默认值', 'Reset this slider to its default value'],
+  ['emily专辑封面', 'Emily Album Cover'],
+  ['封面粒子 · 快速入场', 'Cover particles · Quick entrance'],
+  ['滚筒', 'Tunnel'],
+  ['隧道 · 沉浸感', 'Tunnel · Immersive'],
+  ['星球', 'Planet'],
+  ['星球 · 雕塑感', 'Planet · Sculptural'],
+  ['虚空', 'Void'],
+  ['无粒子 · 自定义背景', 'No particles · Custom background'],
+  ['唱片', 'Vinyl'],
+  ['唱片 · 圆形封面', 'Vinyl · Circular cover'],
+  ['星河', 'Galaxy'],
+  ['壁纸粒子 · 音乐律动', 'Wallpaper particles · Music motion'],
+  ['安魂', 'Requiem'],
+  ['骷髅·YUI7W', 'Skull · YUI7W'],
+  ['骷髅·', 'Skull ·'],
+  ['音域回响', 'Sonic Topography'],
+  ['移植 Ajin', 'Ported by Ajin'],
+  ['移植', 'Ported by'],
+  ['原作 CmzYa', 'Original by CmzYa'],
+  ['原作', 'Original by'],
+  ['极黑', 'Pure Black'],
+  ['极白', 'Pure White'],
+  ['克莱因蓝', 'Klein Blue'],
+  ['法拉利红', 'Ferrari Red'],
+  ['香槟金', 'Champagne Gold'],
+  ['孔雀绿', 'Peacock Green'],
+  ['午夜紫', 'Midnight Purple'],
+  ['银雾', 'Silver Mist'],
+  ['雾蓝', 'Mist Blue'],
+  ['银蓝', 'Silver Blue'],
+  ['冰川', 'Glacier'],
+  ['青绿', 'Jade'],
+  ['松针', 'Pine'],
+  ['月白', 'Moon White'],
+  ['岩金', 'Stone Gold'],
+  ['琥珀', 'Amber'],
+  ['暮粉', 'Dusk Pink'],
+  ['玫红', 'Rose'],
+  ['烟紫', 'Smoky Purple'],
+  ['电紫', 'Electric Purple'],
+  ['靛蓝', 'Indigo'],
+  ['海蓝', 'Ocean Blue'],
+  ['霓青', 'Neon Cyan'],
+  ['夜绿', 'Night Green'],
+  ['酒红', 'Burgundy'],
+  ['墨黑', 'Ink Black'],
+  ['空白新建，保存当前视觉参数；支持拖拽 JSON 导入，也可以导出为文件备份。', 'Create a blank archive and save the current visual settings. Drag in JSON to import, or export a file for backup.'],
+  ['新建', 'New'],
+  ['加载用户存档', 'Load User Archives'],
+  ['首次打开时读取，减少启动解析', 'Loaded when first opened to reduce startup work'],
+  ['确定', 'Confirm'],
+  ['取消', 'Cancel'],
+  ['应用', 'Apply'],
+  ['保存', 'Save'],
+  ['命名', 'Rename'],
+  ['删除', 'Delete'],
+  ['空白存档，点击保存写入当前视觉', 'Blank archive. Save to store the current visuals.'],
+  ['＋ 新建空白存档', '+ New Blank Archive'],
+  ['可继续创建，不限制 4 个', 'Create more archives; no four-slot limit'],
+  ['热键设置', 'Hotkey Settings'],
+  ['局内热键只在 Mineradio 窗口内生效；全局热键会向系统注册，并检测是否被占用。鼠标中键与两个侧键也能绑，但系统级鼠标键只是「监听」，原本的后退 / 前进动作仍会照常发生。', 'Local hotkeys work inside Mineradio. Global hotkeys register with the system and are checked for conflicts. The middle and side mouse buttons can also be bound; global mouse bindings still allow their normal back / forward actions.'],
+  ['局内热键', 'Local Hotkeys'],
+  ['全局热键', 'Global Hotkeys'],
+  ['按 Backspace / Delete 可清空；录入时也能直接按鼠标中键 / 侧键', 'Use Backspace / Delete to clear; the middle and side mouse buttons can also be captured'],
+  ['正在录入组合键，按 Esc 取消。', 'Recording a shortcut. Press Esc to cancel.'],
+  ['按下组合键...', 'Press a shortcut...'],
+  ['播放 / 暂停', 'Play / Pause'],
+  ['播放', 'Playback'],
+  ['上一首', 'Previous Track'],
+  ['下一首', 'Next Track'],
+  ['音量增加', 'Volume Up'],
+  ['音量降低', 'Volume Down'],
+  ['静音 / 取消静音', 'Mute / Unmute'],
+  ['音量', 'Volume'],
+  ['全屏', 'Fullscreen'],
+  ['显示 / 隐藏主窗口', 'Show / Hide Main Window'],
+  ['窗口', 'Window'],
+  ['媒体播放键', 'Media Play / Pause'],
+  ['媒体下一首键', 'Media Next Track'],
+  ['媒体上一首键', 'Media Previous Track'],
+  ['媒体停止键', 'Media Stop'],
+  ['音量+键', 'Volume Up Key'],
+  ['音量-键', 'Volume Down Key'],
+  ['静音键', 'Mute Key'],
+  ['鼠标中键', 'Middle Mouse Button'],
+  ['鼠标侧键 1 · 后退', 'Mouse Side Button 1 · Back'],
+  ['鼠标侧键 2 · 前进', 'Mouse Side Button 2 · Forward'],
+  ['Mineradio 内部重复', 'Duplicate in Mineradio'],
+  ['可用', 'Available'],
+  ['不能作为全局热键', 'Cannot Be a Global Hotkey'],
+  ['待检测', 'Awaiting Check'],
+  ['系统 / 其他软件', 'System / Other Software'],
+  ['这个按键不能注册成全局热键，请换一组', 'This key cannot be registered as a global hotkey. Choose another shortcut.'],
+  ['全局热键至少要带 Ctrl、Alt 或 Win，否则会在所有软件里抢走这个键', 'Global hotkeys must include Ctrl, Alt or Win so the key remains available in other apps'],
+  ['桌面端不支持', 'Unsupported by the Desktop App'],
+  ['当前桌面端没有全局鼠标钩子，鼠标键只能在 Mineradio 窗口内生效', 'This desktop app has no global mouse hook; mouse hotkeys only work inside Mineradio'],
+  ['不支持该组合键', 'Unsupported Shortcut'],
+  ['这个按键无法注册成系统级全局热键，请换一组', 'This key cannot be registered as a system global hotkey. Choose another shortcut.'],
+  ['该组合键已被占用或被系统保留', 'This shortcut is in use or reserved by the system'],
+  ['不支持这个鼠标键', 'Unsupported Mouse Button'],
+  ['只有中键和两个侧键能绑定，左右键要留给正常点击', 'Only the middle and two side buttons can be bound; left and right buttons remain available for clicks'],
+  ['系统鼠标钩子不可用', 'System Mouse Hook Unavailable'],
+  ['这台机器装不上低层鼠标钩子，鼠标键只能在 Mineradio 窗口内生效', 'The low-level mouse hook is unavailable on this PC; mouse hotkeys only work inside Mineradio'],
+  ['同一个鼠标组合绑到了多个功能', 'The same mouse shortcut is bound to multiple actions'],
+  ['插件管理', 'Plugin Management'],
+  ['插件只能换外观：主题在独立沙箱里运行，拿不到本地文件、账号，也没有任何联网能力。只安装你信得过的插件。', 'Plugins only change appearance. Themes run in an isolated sandbox without local-file, account or network access. Only install plugins you trust.'],
+  ['安装插件文件', 'Install Plugin File'],
+  ['禁用', 'Disable'],
+  ['卸载', 'Uninstall'],
+  ['插件文件是空的', 'The plugin file is empty'],
+  ['插件文件太大（上限 512KB）', 'The plugin file exceeds the 512 KB limit'],
+  ['插件包不是合法 JSON', 'The plugin package is not valid JSON'],
+  ['插件缺少 @id', 'The plugin is missing @id'],
+  ['插件缺少 @name', 'The plugin is missing @name'],
+  ['插件 @kind 必须是 theme（只支持主题插件）', 'Plugin @kind must be theme (only theme plugins are supported)'],
+  ['插件里没有可用内容', 'The plugin contains no usable content'],
+  ['插件数量已达上限', 'The plugin limit has been reached'],
+  ['当前环境不支持从文件安装插件', 'This environment cannot install plugins from files'],
+  ['读取插件文件失败', 'Failed to read the plugin file'],
+  ['插件没有实现这个功能', 'The plugin does not implement this feature'],
+  ['插件响应超时', 'The plugin response timed out'],
+  ['插件操作失败', 'The plugin operation failed'],
+  ['Wallpaper Engine 壁纸导入', 'Wallpaper Engine Import'],
+  ['只建立本地索引，不复制大型项目；Video 与直接导入的 mp4/图片直接播放，Scene 项目与有效 PKGV 场景包由本机 Wallpaper Engine 原生引擎实时运行。', 'Creates a local index without copying large projects. Video projects and imported MP4 / images play directly; Scene projects and valid PKGV packages run in the local Wallpaper Engine native engine.'],
+  ['搜索壁纸名称', 'Search wallpaper names'],
+  ['导入项目 / 视频', 'Import Project / Video'],
+  ['导入目录', 'Import Folder'],
+  ['刷新识别', 'Refresh Detection'],
+  ['恢复隐藏', 'Restore Hidden Items'],
+  ['等待识别本机 Wallpaper Engine 库', 'Waiting to detect the local Wallpaper Engine library'],
+  ['项目设置', 'Project Settings'],
+  ['关闭项目设置', 'Close Project Settings'],
+  ['在 WE 中打开设置（实验）', 'Open Settings in WE (Experimental)'],
+  ['创意工坊详情', 'Workshop Details'],
+  ['每次载入自动应用静音值（音量 0 / 静音开启 / 音频关闭）；Scene 包只处理缓存副本，原文件不变。其他视觉设置仍由 Wallpaper Engine 管理。', 'Mute settings apply on each load (volume 0 / mute on / audio off). Scene packages use cached copies, leaving originals unchanged. Wallpaper Engine manages other visual settings.'],
+];
+
+var uiLanguage = 'zh-CN';
+var uiLanguageObserver = null;
+var uiLanguageApplying = false;
+var uiLanguageSources = new WeakMap();
+var UI_LANGUAGE_SCOPE_IDS = ['fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal', 'custom-lyric-modal'];
+var uiLanguageZhToEn = Object.create(null);
+var uiLanguageEnToZh = Object.create(null);
+for (var uiLanguagePairIndex = 0; uiLanguagePairIndex < UI_LANGUAGE_PAIRS.length; uiLanguagePairIndex++) {
+  var uiLanguagePair = UI_LANGUAGE_PAIRS[uiLanguagePairIndex];
+  uiLanguageZhToEn[uiLanguagePair[0]] = uiLanguagePair[1];
+  uiLanguageEnToZh[uiLanguagePair[1]] = uiLanguagePair[0];
+}
+
+function normalizeUiLanguage(value) {
+  var text = String(value == null ? '' : value).trim().toLowerCase();
+  if (text === 'en' || text === 'en-us' || text === 'english') return 'en';
+  return 'zh-CN';
+}
+function readUiLanguage() {
+  try { return normalizeUiLanguage(localStorage.getItem(UI_LANGUAGE_STORE_KEY)); } catch (e) { return 'zh-CN'; }
+}
+function translateUiCountText(value) {
+  var text = String(value == null ? '' : value);
+  var match = text.match(/^已保存\s*(\d+)\s*行，并切换为自定义歌词$/);
+  if (match) return uiLanguage === 'en'
+    ? 'Saved ' + match[1] + ' ' + (match[1] === '1' ? 'line' : 'lines') + ' and switched to custom lyrics'
+    : text;
+  match = text.match(/^Saved\s+(\d+)\s+lines?\s+and switched to custom lyrics$/);
+  if (match) return uiLanguage === 'zh-CN' ? '已保存 ' + match[1] + ' 行，并切换为自定义歌词' : text;
+  match = text.match(/^(\d+)\s*个$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' items' : match[1] + ' 个';
+  match = text.match(/^(\d+)\s*个断点$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' breakpoints' : match[1] + ' 个断点';
+  match = text.match(/^(\d+)\s*个\s*·\s*启用\s*(\d+)$/);
+  if (match) return uiLanguage === 'en' ? match[1] + ' · ' + match[2] + ' enabled' : match[1] + ' 个 · 启用 ' + match[2];
+  match = text.match(/^约\s*(\d+)\s*分钟后淡出暂停。$/);
+  if (match) return uiLanguage === 'en' ? 'Fades out and pauses in about ' + match[1] + ' min.' : text;
+  match = text.match(/^(\d+)\s*items$/);
+  if (match) return uiLanguage === 'zh-CN' ? match[1] + ' 个' : text;
+  match = text.match(/^(\d+)\s*breakpoints$/);
+  if (match) return uiLanguage === 'zh-CN' ? match[1] + ' 个断点' : text;
+  match = text.match(/^(\d+)\s*·\s*(\d+)\s*enabled$/);
+  if (match) return uiLanguage === 'zh-CN' ? match[1] + ' 个 · 启用 ' + match[2] : text;
+  match = text.match(/^Fades out and pauses in about\s+(\d+)\s+min\.$/);
+  if (match) return uiLanguage === 'zh-CN' ? '约 ' + match[1] + ' 分钟后淡出暂停。' : text;
+  return text;
+}
+function uiText(value) {
+  var text = String(value == null ? '' : value);
+  var mapped = uiLanguage === 'en' ? uiLanguageZhToEn[text] : uiLanguageEnToZh[text];
+  return mapped == null ? translateUiCountText(text) : mapped;
+}
+function uiLanguageRoots() {
+  return UI_LANGUAGE_SCOPE_IDS.map(function(id){ return document.getElementById(id); }).filter(Boolean);
+}
+function uiLanguageNodeInScope(node) {
+  var element = node && (node.nodeType === 1 ? node : node.parentElement);
+  while (element) {
+    if (UI_LANGUAGE_SCOPE_IDS.indexOf(element.id) >= 0) return true;
+    element = element.parentElement;
+  }
+  return false;
+}
+function uiLanguageSkipNode(node) {
+  var element = node && (node.nodeType === 1 ? node : node.parentElement);
+  return !!(element && element.closest && element.closest('[data-i18n-skip]'));
+}
+function translateUiStoredValue(node, field, value, source) {
+  var values = uiLanguageSources.get(node);
+  if (!values) { values = {}; uiLanguageSources.set(node, values); }
+  var record = values[field];
+  // Keep each node's source: several distinct Chinese labels share an English translation.
+  if (!record || record.last !== value || source != null) {
+    record = { source: source == null ? value : source, last: value };
+    values[field] = record;
+  }
+  var raw = String(record.source || '');
+  var trimmed = raw.trim();
+  var translated = uiText(trimmed);
+  var element = node.nodeType === 1 ? node : node.parentElement;
+  if (trimmed === '关闭' && element && element.closest &&
+      element.closest('#hotkey-modal, #plugin-modal, #wallpaper-engine-modal, #custom-lyric-modal')) {
+    translated = uiLanguage === 'en' ? 'Close' : '关闭';
+  }
+  record.last = trimmed ? raw.slice(0, raw.indexOf(trimmed)) + translated + raw.slice(raw.indexOf(trimmed) + trimmed.length) : raw;
+  return record.last;
+}
+function translateUiTextNode(node) {
+  if (!node || node.nodeType !== 3 || uiLanguageSkipNode(node)) return;
+  var raw = String(node.nodeValue || '');
+  var translated = translateUiStoredValue(node, 'text', raw);
+  if (translated !== raw) node.nodeValue = translated;
+}
+function translateUiElement(element) {
+  if (!element || element.nodeType !== 1 || uiLanguageSkipNode(element) || /^(SCRIPT|STYLE)$/.test(element.tagName)) return;
+  ['title', 'aria-label', 'placeholder'].forEach(function(attr){
+    if (!element.hasAttribute(attr)) return;
+    var value = element.getAttribute(attr);
+    var translated = translateUiStoredValue(element, attr, value);
+    if (translated !== value) element.setAttribute(attr, translated);
+  });
+  if (element.hasAttribute('data-i18n')) {
+    var key = element.getAttribute('data-i18n');
+    if (element.childNodes.length === 1 && element.firstChild.nodeType === 3) {
+      var child = element.firstChild;
+      var translatedKey = translateUiStoredValue(child, 'text', child.nodeValue, key);
+      if (child.nodeValue !== translatedKey) child.nodeValue = translatedKey;
+    }
+  }
+  if (/^(INPUT|TEXTAREA)$/.test(element.tagName)) return;
+  for (var i = 0; i < element.childNodes.length; i++) {
+    var child = element.childNodes[i];
+    if (child.nodeType === 3) translateUiTextNode(child);
+    else if (child.nodeType === 1) translateUiElement(child);
+  }
+}
+function applyUiLanguage() {
+  var panel = document.getElementById('fx-panel');
+  uiLanguageApplying = true;
+  try {
+    document.documentElement.lang = uiLanguage === 'en' ? 'en-US' : 'zh-CN';
+    uiLanguageRoots().forEach(function(root){
+      root.setAttribute('data-ui-locale', uiLanguage);
+      translateUiElement(root);
+    });
+    var buttons = panel ? panel.querySelectorAll('#fx-language-switch [data-ui-language]') : [];
+    for (var i = 0; i < buttons.length; i++) {
+      var active = buttons[i].getAttribute('data-ui-language') === uiLanguage;
+      buttons[i].classList.toggle('active', active);
+      buttons[i].setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  } finally {
+    uiLanguageApplying = false;
+  }
+}
+function observeUiLanguagePanel() {
+  if (typeof MutationObserver === 'undefined') return;
+  if (!uiLanguageObserver) {
+    uiLanguageObserver = new MutationObserver(function(records){
+      if (uiLanguageApplying) return;
+      uiLanguageApplying = true;
+      try {
+        records.forEach(function(record){
+          if (uiLanguageNodeInScope(record.target)) {
+            if (record.type === 'characterData') translateUiTextNode(record.target);
+            if (record.type === 'attributes') translateUiElement(record.target);
+            if (record.type === 'childList') {
+              for (var i = 0; i < record.addedNodes.length; i++) {
+                var node = record.addedNodes[i];
+                if (node.nodeType === 3) translateUiTextNode(node);
+                else if (node.nodeType === 1) translateUiElement(node);
+              }
+            }
+          } else if (record.target === document.body) {
+            for (var j = 0; j < record.addedNodes.length; j++) {
+              if (uiLanguageNodeInScope(record.addedNodes[j])) {
+                translateUiElement(record.addedNodes[j]);
+                observeUiLanguagePanel();
+              }
+            }
+          }
+        });
+      } finally {
+        uiLanguageApplying = false;
+      }
+    });
+    // Only watch direct additions outside settings, so new dialogs are included without observing player updates.
+    if (document.body) uiLanguageObserver.observe(document.body, { childList: true });
+  }
+  uiLanguageRoots().forEach(function(root){
+    uiLanguageObserver.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['title', 'aria-label', 'placeholder']
+    });
+  });
+}
+function refreshUiLanguageSettings() {
+  [
+    typeof refreshFoliaUiLanguage === 'function' ? refreshFoliaUiLanguage : null,
+    typeof refreshCustomLyricUiLanguage === 'function' ? refreshCustomLyricUiLanguage : null,
+    typeof updateLyricTranslationExtraControls === 'function' ? updateLyricTranslationExtraControls : null,
+    typeof updateGaplessControls === 'function' ? updateGaplessControls : null,
+    typeof updatePlaybackRateControls === 'function' ? updatePlaybackRateControls : null,
+    typeof updateSleepTimerControls === 'function' ? updateSleepTimerControls : null,
+    typeof updateOutputDeviceControls === 'function' ? updateOutputDeviceControls : null,
+    typeof updateAutoPlaybackControls === 'function' ? updateAutoPlaybackControls : null,
+    typeof updateSongResumeControls === 'function' ? updateSongResumeControls : null,
+    typeof updateReplayGainControls === 'function' ? updateReplayGainControls : null,
+    typeof updateAudioChainControls === 'function' ? updateAudioChainControls : null,
+    typeof applyMiniPlayerVisualControls === 'function' ? applyMiniPlayerVisualControls : null,
+    typeof renderLocalLibraryFolderSettings === 'function' ? renderLocalLibraryFolderSettings : null,
+    typeof renderUserFxArchives === 'function' ? renderUserFxArchives : null,
+    typeof buildPresetGrid === 'function' ? buildPresetGrid : null,
+    typeof buildLyricColorControls === 'function' ? buildLyricColorControls : null,
+    typeof updateDevelopmentFxControls === 'function' ? updateDevelopmentFxControls : null,
+    typeof updatePluginCountLabel === 'function' ? updatePluginCountLabel : null,
+    typeof renderPluginList === 'function' ? renderPluginList : null,
+    typeof renderHotkeySettings === 'function' ? renderHotkeySettings : null,
+    typeof refreshWallpaperEngineUiLanguage === 'function' ? refreshWallpaperEngineUiLanguage : null
+  ].forEach(function(refresh){ if (refresh) refresh(); });
+}
+function setUiLanguage(value) {
+  uiLanguage = normalizeUiLanguage(value);
+  setPersistentLocalStorageItem(UI_LANGUAGE_STORE_KEY, uiLanguage);
+  refreshUiLanguageSettings();
+  applyUiLanguage();
+  observeUiLanguagePanel();
+  return uiLanguage;
+}
+function initUiLanguageControls() {
+  uiLanguage = readUiLanguage();
+  var switcher = document.getElementById('fx-language-switch');
+  if (switcher && !switcher._mineradioLanguageBound) {
+    switcher._mineradioLanguageBound = true;
+    switcher.addEventListener('click', function(e){
+      var button = e.target && e.target.closest ? e.target.closest('[data-ui-language]') : null;
+      if (!button) return;
+      e.preventDefault();
+      setUiLanguage(button.getAttribute('data-ui-language'));
+    });
+  }
+  refreshUiLanguageSettings();
+  applyUiLanguage();
+  observeUiLanguagePanel();
+}
 var persistentUiStateBackupPendingPatch = null;
 var persistentUiStateBackupTimer = 0;
 var PERSISTENT_UI_STATE_BACKUP_DELAY = 180;
@@ -627,7 +1442,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.4.9';
+var APP_VERSION = '2.5.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -680,10 +1495,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '旧版本安装包自动回收，应用内更新不再无限占磁盘。',
+  hero: '主设置与 Folia 支持中文 / English 同步切换。',
   notes: [
-    '应用内更新下载的安装包不再无限堆积：启动和发起下载前自动清理比当前版本旧的安装包和校验失败残留。',
-    '当前版本安装包、待安装的新版本及其续传进度一律保留，更新和断点续传不受影响。'
+    '主设置新增中文 / English 切换，覆盖视觉、歌词、播放、热键、插件及相关弹窗。',
+    'Folia 与主设置共用语言选择，三种视图、歌词效果和背景设置同步切换，重启后保留。',
+    '优化英文长文本布局，切换语言时保留歌词与存档改名草稿，歌曲、歌单和文件名称保持原文。'
   ]
 };
 function readSavedVolume() {
@@ -10325,6 +11141,7 @@ function retryLyricLlmTranslation() {
   scheduleLyricLlmTranslation(true);
 }
 function updateLyricTranslationExtraControls() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var target = document.getElementById('lyric-translate-target');
   if (!target || !target.parentElement || !target.parentElement.parentElement) return;
   var actions = document.getElementById('lyric-translation-retry-actions');
@@ -10334,7 +11151,7 @@ function updateLyricTranslationExtraControls() {
     actions.className = 'fx-seg';
     var retry = document.createElement('button');
     retry.type = 'button';
-    retry.textContent = '重试未译歌词';
+    retry.id = 'lyric-translation-retry-button';
     retry.onclick = retryLyricLlmTranslation;
     actions.appendChild(retry);
     var fallback = document.createElement('button');
@@ -10351,14 +11168,20 @@ function updateLyricTranslationExtraControls() {
     var parent = target.parentElement.parentElement;
     parent.insertBefore(actions, target.parentElement.nextSibling);
     var note = document.createElement('div');
-    note.textContent = '中英备用使用 MyMemory。开启即允许发送待译歌词；该服务可能长期保存文本并交由合作伙伴处理。免费额度有限。';
+    note.id = 'lyric-translation-fallback-note';
     note.style.cssText = 'font-size:11px;line-height:1.6;color:rgba(232,236,239,.6);margin:0 0 10px;';
     parent.insertBefore(note, actions.nextSibling);
   }
+  var retryButton = document.getElementById('lyric-translation-retry-button');
+  if (retryButton) retryButton.textContent = english ? 'Retry Untranslated Lyrics' : '重试未译歌词';
+  var fallbackNote = document.getElementById('lyric-translation-fallback-note');
+  if (fallbackNote) fallbackNote.textContent = english
+    ? 'The Chinese/English fallback uses MyMemory. Enabling it allows lyric text to be sent; the service may retain it long term and share it with partners. Free quotas are limited.'
+    : '中英备用使用 MyMemory。开启即允许发送待译歌词；该服务可能长期保存文本并交由合作伙伴处理。免费额度有限。';
   var button = document.getElementById('lyric-translation-fallback-toggle');
   if (button) {
     var enabled = lyricTranslateFallbackEnabled();
-    button.textContent = '中英免费备用：' + (enabled ? '开' : '关');
+    button.textContent = english ? 'Free Chinese/English Fallback: ' + (enabled ? 'On' : 'Off') : '中英免费备用：' + (enabled ? '开' : '关');
     button.classList.toggle('active', enabled);
     button.setAttribute('aria-pressed', String(enabled));
   }
@@ -22258,12 +23081,36 @@ function currentLyricSourceLabel() {
   if (lyricSourceMode === 'custom') return '自定义歌词';
   return lyricsTimingSource === 'fallback' ? '占位歌词' : '原词';
 }
+function refreshCustomLyricUiLanguage() {
+  updateCustomLyricControls();
+  // Rebuild only the candidate buttons; the open editor's draft and status stay intact.
+  renderLocalLyricPickRow(currentLyricSong());
+}
 function setCustomLyricStatus(text, tone) {
   var el = document.getElementById('custom-lyric-status');
   if (!el) return;
   el.textContent = text || '';
   el.classList.toggle('good', tone === 'good');
   el.classList.toggle('fail', tone === 'fail');
+  if (typeof translateUiElement === 'function') translateUiElement(el);
+}
+function setCustomLyricStatusParts(prefix, userValue, suffix, tone) {
+  var el = document.getElementById('custom-lyric-status');
+  if (!el) return;
+  el.textContent = '';
+  function appendStatusPart(text, skip) {
+    if (!text) return;
+    var part = document.createElement('span');
+    part.textContent = text;
+    if (skip) part.setAttribute('data-i18n-skip', '');
+    el.appendChild(part);
+  }
+  appendStatusPart(prefix, false);
+  appendStatusPart(userValue, true);
+  appendStatusPart(suffix, false);
+  el.classList.toggle('good', tone === 'good');
+  el.classList.toggle('fail', tone === 'fail');
+  if (typeof translateUiElement === 'function') translateUiElement(el);
 }
 /**
  * 渲染同名多歌词候选的切换按钮。只有一个候选时整行隐藏，界面保持原样。
@@ -22296,8 +23143,9 @@ function buildLocalLyricPickButton(song, candidate, activeId) {
   var btn = document.createElement('button');
   var pickId = localLyricPickId(candidate);
   btn.className = pickId && pickId === activeId ? 'modal-btn primary' : 'modal-btn';
-  btn.textContent = candidate.name || '歌词文件';
-  btn.title = (localFilePath(candidate) || candidate.name || '') + ' · ' + (localLyricFileExt(candidate).toUpperCase() || '未知格式');
+  btn.setAttribute('data-i18n-skip', '');
+  btn.textContent = candidate.name || uiText('歌词文件');
+  btn.title = (localFilePath(candidate) || candidate.name || '') + ' · ' + (localLyricFileExt(candidate).toUpperCase() || uiText('未知格式'));
   btn.onclick = function(){ useLocalLyricCandidate(song, candidate); };
   return btn;
 }
@@ -22310,7 +23158,7 @@ function buildLocalLyricPickButton(song, candidate, activeId) {
 function useLocalLyricCandidate(song, candidate) {
   if (!song || !candidate) return;
   if (song.localLyricFile === candidate) {
-    setCustomLyricStatus('当前用的就是 ' + (candidate.name || '这个歌词文件'), 'good');
+    setCustomLyricStatusParts('当前用的就是 ', candidate.name || '', candidate.name ? '' : '这个歌词文件', 'good');
     return;
   }
   setLocalLyricPickForSong(song, localLyricPickId(candidate));
@@ -22325,9 +23173,10 @@ function useLocalLyricCandidate(song, candidate) {
   song.localLyricResidencyReleased = false;
   propagateLocalLyricPick(song);
   renderLocalLyricPickRow(song);
-  setCustomLyricStatus('正在读取 ' + (candidate.name || '所选歌词文件'), '');
+  setCustomLyricStatusParts('正在读取 ', candidate.name || '', candidate.name ? '' : '所选歌词文件', '');
   ensureLocalLyricsForSong(song, { applyCurrent: true, token: trackSwitchToken }).then(function(ok){
-    setCustomLyricStatus(ok ? ('已切换到 ' + (candidate.name || '所选歌词文件')) : '这个歌词文件没读到可用歌词', ok ? 'good' : 'fail');
+    if (ok) setCustomLyricStatusParts('已切换到 ', candidate.name || '', candidate.name ? '' : '所选歌词文件', 'good');
+    else setCustomLyricStatus('这个歌词文件没读到可用歌词', 'fail');
     if (ok) showToast('已切换歌词文件：' + (candidate.name || ''));
     scheduleLocalAssetUiRefresh(song, 'local-lyric-pick');
   });
@@ -22363,10 +23212,15 @@ function openCustomLyricModal() {
   if (immersiveMode) setImmersiveMode(false);
   var entry = getCustomLyricEntry(song);
   var title = document.getElementById('custom-lyric-title');
-  var sub = document.getElementById('custom-lyric-sub');
+  var trackMeta = document.getElementById('custom-lyric-track-meta');
   var input = document.getElementById('custom-lyric-input');
-  if (title) title.textContent = song.name || '当前歌曲';
-  if (sub) sub.textContent = (songDisplaySubtitle(song) || '') + (entry ? ' · 已保存自定义歌词' : ' · 可粘贴 LRC 或逐行输入');
+  if (title) {
+    if (song.name) title.setAttribute('data-i18n-skip', '');
+    else title.removeAttribute('data-i18n-skip');
+    title.textContent = song.name || '当前歌曲';
+    if (!song.name && typeof translateUiElement === 'function') translateUiElement(title);
+  }
+  if (trackMeta) trackMeta.textContent = songDisplaySubtitle(song) || '';
   if (input) input.value = entry ? (entry.text || '') : '';
   renderLocalLyricPickRow(song);
   setCustomLyricStatus(entry ? '已读取本地自定义歌词' : '提示：带 [00:12.00] 时间轴会更精准；纯文本会自动铺开', entry ? 'good' : '');
@@ -24926,11 +25780,13 @@ function formatGaplessSeconds(value) {
  * @returns {string} 说明文本。
  */
 function gaplessHintText() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   if (gaplessSettings.crossfadeSeconds > 0) {
+    if (english) return 'Crossfade ' + formatGaplessSeconds(gaplessSettings.crossfadeSeconds) + ' s: equal-power overlap between tracks; manual changes and previous/next are unaffected.';
     return '交叉淡入淡出 ' + formatGaplessSeconds(gaplessSettings.crossfadeSeconds) + ' 秒：等功率对交叉，相邻两首重叠过渡，手动切歌与上下首不受影响。';
   }
-  if (gaplessSettings.enabled) return '无缝播放：提前解码下一首，自动续播时直接接上，任何时刻只有一路声音。';
-  return '已关闭：完全按旧流程切歌，每首开头保留 460 ms 淡入。';
+  if (gaplessSettings.enabled) return english ? 'Gapless playback preloads the next track so automatic playback continues without a gap.' : '无缝播放：提前解码下一首，自动续播时直接接上，任何时刻只有一路声音。';
+  return english ? 'Off: tracks follow the original playback flow, with a 460 ms fade-in at each start.' : '已关闭：完全按旧流程切歌，每首开头保留 460 ms 淡入。';
 }
 
 /**
@@ -24944,7 +25800,7 @@ function updateGaplessControls() {
   if (slider) {
     if (Math.abs(Number(slider.value) - gaplessSettings.crossfadeSeconds) > 0.01) slider.value = String(gaplessSettings.crossfadeSeconds);
     var out = slider.parentNode ? slider.parentNode.querySelector('output') : null;
-    if (out) out.textContent = gaplessSettings.crossfadeSeconds > 0 ? formatGaplessSeconds(gaplessSettings.crossfadeSeconds) + ' s' : '关';
+    if (out) out.textContent = gaplessSettings.crossfadeSeconds > 0 ? formatGaplessSeconds(gaplessSettings.crossfadeSeconds) + ' s' : (typeof uiLanguage !== 'undefined' && uiLanguage === 'en' ? 'Off' : '关');
   }
   var hint = document.getElementById('gapless-hint');
   if (hint) hint.textContent = gaplessHintText();
@@ -25371,6 +26227,7 @@ function formatPlaybackRateLabel(rate) {
  * @returns {void}
  */
 function updatePlaybackRateControls() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var segButtons = document.querySelectorAll('#playback-rate-seg-a [data-playback-rate], #playback-rate-seg-b [data-playback-rate]');
   for (var i = 0; i < segButtons.length; i++) {
     var btn = segButtons[i];
@@ -25379,8 +26236,8 @@ function updatePlaybackRateControls() {
   }
   var hint = document.getElementById('playback-rate-hint');
   if (hint) hint.textContent = playbackRateSetting === 1
-    ? '正常速度；可切换 0.5× 到 2.0×，音高不变。'
-    : '当前 ' + formatPlaybackRateLabel(playbackRateSetting) + '；音高不变，歌词与节拍会跟着走。';
+    ? (english ? 'Normal speed; switch between 0.5× and 2.0× without changing pitch.' : '正常速度；可切换 0.5× 到 2.0×，音高不变。')
+    : (english ? 'Current speed: ' + formatPlaybackRateLabel(playbackRateSetting) + '; pitch is preserved, and lyrics and beats stay in sync.' : '当前 ' + formatPlaybackRateLabel(playbackRateSetting) + '；音高不变，歌词与节拍会跟着走。');
   if (typeof updateMainQuickControls === 'function') updateMainQuickControls();
 }
 
@@ -25515,6 +26372,7 @@ function cancelSleepTimer() {
  * @returns {void}
  */
 function updateSleepTimerControls() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var mode = normalizeSleepTimerMode(sleepTimerState.mode);
   var buttons = document.querySelectorAll('#sleep-timer-seg-a [data-sleep-mode], #sleep-timer-seg-b [data-sleep-mode]');
   for (var i = 0; i < buttons.length; i++) {
@@ -25524,11 +26382,11 @@ function updateSleepTimerControls() {
   }
   var hint = document.getElementById('sleep-timer-hint');
   if (!hint) { if (typeof updateMainQuickControls === 'function') updateMainQuickControls(); return; }
-  if (mode === 'off') hint.textContent = '关闭时不受影响；到点会淡出并暂停，不改变播放模式。';
-  else if (mode === 'track') hint.textContent = '本曲自然播完后淡出暂停。';
+  if (mode === 'off') hint.textContent = english ? 'Off does nothing; at the deadline playback fades out and pauses without changing the play mode.' : '关闭时不受影响；到点会淡出并暂停，不改变播放模式。';
+  else if (mode === 'track') hint.textContent = english ? 'Fades out and pauses when the current track finishes naturally.' : '本曲自然播完后淡出暂停。';
   else {
     var leftMin = sleepTimerState.dueAt ? Math.max(0, Math.ceil((sleepTimerState.dueAt - Date.now()) / 60000)) : Number(mode);
-    hint.textContent = '约 ' + leftMin + ' 分钟后淡出暂停。';
+    hint.textContent = english ? 'Fades out and pauses in about ' + leftMin + ' min.' : '约 ' + leftMin + ' 分钟后淡出暂停。';
   }
   if (typeof updateMainQuickControls === 'function') updateMainQuickControls();
 }
@@ -25582,7 +26440,7 @@ var outputDeviceEnumerationReliable = false;
 var outputDeviceRefreshSerial = 0;
 var outputDeviceApplySerial = 0;
 var outputDeviceApplyQueue = Promise.resolve();
-var outputDeviceRuntime = { status: 'idle', actualId: '', message: '' };
+var outputDeviceRuntime = { status: 'idle', actualId: '', message: '', errorName: '', needsPermission: false };
 
 /**
  * 归一化输出设备设置。
@@ -25619,11 +26477,14 @@ function outputDeviceSelectionSupported() {
 }
 
 function outputDeviceLabel(deviceId) {
-  if (!deviceId) return '系统默认';
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
+  if (!deviceId) return english ? 'System Default' : '系统默认';
   for (var i = 0; i < outputDeviceList.length; i++) {
-    if (outputDeviceList[i].deviceId === deviceId) return outputDeviceList[i].label;
+    if (outputDeviceList[i].deviceId === deviceId) {
+      return outputDeviceList[i].fallbackIndex ? (english ? 'Output Device ' : '输出设备 ') + outputDeviceList[i].fallbackIndex : outputDeviceList[i].label;
+    }
   }
-  return deviceId === outputDeviceSetting.deviceId ? (outputDeviceSetting.label || '已选设备') : '上一个设备';
+  return deviceId === outputDeviceSetting.deviceId ? (outputDeviceSetting.label || (english ? 'Selected Device' : '已选设备')) : (english ? 'Previous Device' : '上一个设备');
 }
 function outputDeviceIsAvailable(deviceId) {
   if (!deviceId || !outputDeviceListReady) return true;
@@ -25631,11 +26492,24 @@ function outputDeviceIsAvailable(deviceId) {
   return false;
 }
 function outputDeviceErrorText(err) {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var name = err && err.name;
-  if (name === 'NotFoundError') return '设备当前不可用';
-  if (name === 'NotAllowedError' || name === 'SecurityError') return '系统未允许使用该设备';
-  if (name === 'AbortError') return '设备切换被中断';
-  return '无法切换输出设备';
+  if (name === 'NotFoundError') return english ? 'Device is currently unavailable' : '设备当前不可用';
+  if (name === 'NotAllowedError' || name === 'SecurityError') return english ? 'The system has not allowed access to this device' : '系统未允许使用该设备';
+  if (name === 'AbortError') return english ? 'Device switch was interrupted' : '设备切换被中断';
+  return english ? 'Cannot switch output device' : '无法切换输出设备';
+}
+function outputDeviceHintText() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
+  var status = outputDeviceRuntime.status;
+  if (status === 'deferred') return english ? 'Selection saved; it will be applied when playback starts.' : '选择已保存，将在开始播放时应用。';
+  if (status === 'pending') return english ? 'Switching output device…' : '正在切换输出设备…';
+  if (status === 'fallback') return english ? 'Selected device is unavailable; using System Default temporarily. It will be restored when the device reconnects.' : '所选设备当前不可用，已临时使用系统默认；设备重连后自动恢复。';
+  var current = english ? 'Current output: ' + outputDeviceLabel(outputDeviceRuntime.actualId) + '.' : '当前输出：' + outputDeviceLabel(outputDeviceRuntime.actualId) + '。';
+  if (status === 'error') return outputDeviceErrorText({ name: outputDeviceRuntime.errorName }) + (english ? '; ' : '；') + current;
+  if (status === 'applied') return current;
+  if (outputDeviceRuntime.needsPermission) return english ? 'Device names appear after the system grants microphone access; System Default can still play normally.' : '设备名称需在系统授权麦克风访问后显示；系统默认输出仍可正常播放。';
+  return english ? '"System Default" follows the current Windows output device.' : '"系统默认"跟随 Windows 当前输出设备。';
 }
 /**
  * 串行应用所选设备；暂时缺失时回到默认输出，同时保留重连后的首选设备。
@@ -25648,13 +26522,13 @@ function applyOutputDeviceToAudioContext(opts) {
   var context = audioCtx;
   if (!context || typeof context.setSinkId !== 'function') {
     outputDeviceRuntime.status = 'deferred';
-    outputDeviceRuntime.message = '选择已保存，将在开始播放时应用。';
+    outputDeviceRuntime.message = outputDeviceHintText();
     updateOutputDeviceControls();
     if (opts.toast) showToast(outputDeviceRuntime.message);
     return Promise.resolve(false);
   }
   outputDeviceRuntime.status = 'pending';
-  outputDeviceRuntime.message = '正在切换输出设备…';
+  outputDeviceRuntime.message = outputDeviceHintText();
   updateOutputDeviceControls();
   // setSinkId 本身不可取消：串行执行，旧请求完成后才能提交新请求，避免迟到回包把声音切回旧设备。
   var operation = outputDeviceApplyQueue.then(async function() {
@@ -25680,9 +26554,8 @@ function applyOutputDeviceToAudioContext(opts) {
     }
     outputDeviceRuntime.actualId = typeof context.sinkId === 'string' ? context.sinkId : '';
     outputDeviceRuntime.status = failure ? 'error' : (missing ? 'fallback' : 'applied');
-    outputDeviceRuntime.message = failure
-      ? outputDeviceErrorText(failure) + '；当前输出：' + outputDeviceLabel(outputDeviceRuntime.actualId) + '。'
-      : (missing ? '所选设备当前不可用，已临时使用系统默认；设备重连后自动恢复。' : '当前输出：' + outputDeviceLabel(outputDeviceRuntime.actualId) + '。');
+    outputDeviceRuntime.errorName = failure && failure.name || '';
+    outputDeviceRuntime.message = outputDeviceHintText();
     updateOutputDeviceControls();
     if (opts.toast) showToast(outputDeviceRuntime.message);
     return !failure && !missing;
@@ -25696,9 +26569,10 @@ function applyOutputDeviceToAudioContext(opts) {
  * @returns {Promise<Array<{deviceId:string, label:string}>>} 设备列表，首项恒为"系统默认"。
  */
 async function listAudioOutputDevices() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var devices = [];
   // 默认设备永远排在第一位，deviceId 用空串表示"跟随系统"。
-  devices.push({ deviceId: '', label: '系统默认' });
+  devices.push({ deviceId: '', label: english ? 'System Default' : '系统默认' });
   if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') return devices;
   try {
     var list = await navigator.mediaDevices.enumerateDevices();
@@ -25714,12 +26588,14 @@ async function listAudioOutputDevices() {
       explicitOutputDevice = true;
       devices.push({
         deviceId: String(d.deviceId || ''),
-        label: String(d.label || '') || ('输出设备 ' + idx)
+        label: String(d.label || '') || ((english ? 'Output Device ' : '输出设备 ') + idx),
+        fallbackIndex: d.label ? 0 : idx
       });
     }
     outputDeviceEnumerationReliable = explicitOutputDevice || permissionLabelsVisible;
+    outputDeviceRuntime.needsPermission = !outputDeviceEnumerationReliable;
     if (!outputDeviceEnumerationReliable) {
-      outputDeviceRuntime.message = '设备名称需在系统授权麦克风访问后显示；系统默认输出仍可正常播放。';
+      outputDeviceRuntime.message = english ? 'Device names appear after the system grants microphone access; System Default can still play normally.' : '设备名称需在系统授权麦克风访问后显示；系统默认输出仍可正常播放。';
     } else if (outputDeviceRuntime.status === 'idle') outputDeviceRuntime.message = '';
   } catch (e) {
     console.warn('[OutputDevice]', e);
@@ -25733,6 +26609,7 @@ async function listAudioOutputDevices() {
  * @returns {void}
  */
 function updateOutputDeviceControls() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var select = document.getElementById('output-device-select');
   var hint = document.getElementById('output-device-hint');
   var supported = outputDeviceSelectionSupported();
@@ -25745,21 +26622,24 @@ function updateOutputDeviceControls() {
     }
     // 保存的设备当前不在列表里（耳机拔了/驱动变了）时，补一条提示项，避免静默落到错误的项上。
     var displayList = !found && want
-      ? outputDeviceList.concat([{ deviceId: want, label: (outputDeviceSetting.label || '上次的设备') + '（当前不可用）' }])
+      ? outputDeviceList.concat([{ deviceId: want, label: (outputDeviceSetting.label || (english ? 'Previous Device' : '上次的设备')) + (english ? ' (Unavailable)' : '（当前不可用）') }])
       : outputDeviceList;
     select.textContent = '';
     for (var j = 0; j < displayList.length; j++) {
       var opt = document.createElement('option');
       opt.value = displayList[j].deviceId;
-      opt.textContent = displayList[j].label;
+      opt.textContent = !displayList[j].deviceId ? (english ? 'System Default' : '系统默认')
+        : (displayList[j].fallbackIndex ? (english ? 'Output Device ' : '输出设备 ') + displayList[j].fallbackIndex : displayList[j].label);
+      opt.setAttribute('data-i18n-skip', '');
       if (displayList[j].deviceId === want) opt.selected = true;
       select.appendChild(opt);
     }
   }
   if (hint) {
+    hint.setAttribute('data-i18n-skip', '');
     hint.textContent = supported
-      ? (outputDeviceRuntime.message || '"系统默认"跟随 Windows 当前输出设备。')
-      : '当前环境不支持选择输出设备（需要 Electron / Chromium 的 AudioContext.setSinkId）。';
+      ? outputDeviceHintText()
+      : (english ? 'Output device selection is unavailable in this environment (requires Electron / Chromium AudioContext.setSinkId).' : '当前环境不支持选择输出设备（需要 Electron / Chromium 的 AudioContext.setSinkId）。');
   }
 }
 
@@ -25776,7 +26656,7 @@ function setOutputDevice(deviceId, opts) {
   for (var i = 0; i < outputDeviceList.length; i++) {
     if (outputDeviceList[i].deviceId === id) { label = outputDeviceList[i].label; break; }
   }
-  outputDeviceSetting = { deviceId: id, label: label === '系统默认' ? '' : label };
+  outputDeviceSetting = { deviceId: id, label: id ? label : '' };
   try { setPersistentLocalStorageItem(OUTPUT_DEVICE_STORE_KEY, JSON.stringify(outputDeviceSetting)); } catch (e) {}
   return applyOutputDeviceToAudioContext({ toast: opts.toast !== false });
 }
@@ -26137,10 +27017,11 @@ function readSavedAutoPlaybackMode() {
  * @returns {string} 展示用名称。
  */
 function autoPlaybackModeLabel(mode) {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var value = normalizeAutoPlaybackMode(mode);
-  if (value === 'continue') return '继续播放';
-  if (value === 'shuffle') return '随机播放';
-  return '关闭';
+  if (value === 'continue') return english ? 'Resume' : '继续播放';
+  if (value === 'shuffle') return english ? 'Shuffle' : '随机播放';
+  return english ? 'Off' : '关闭';
 }
 
 /**
@@ -26149,10 +27030,11 @@ function autoPlaybackModeLabel(mode) {
  * @returns {string} 说明文案。
  */
 function autoPlaybackHintText(mode) {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var value = normalizeAutoPlaybackMode(mode);
-  if (value === 'continue') return '启动后自动接着上次的歌曲和进度继续播放。';
-  if (value === 'shuffle') return '启动后从下方播放歌单里随机挑一首开始播放。';
-  return '关闭时启动只恢复上次播放位置，不会自动出声。';
+  if (value === 'continue') return english ? 'Resume the last track and position automatically on startup.' : '启动后自动接着上次的歌曲和进度继续播放。';
+  if (value === 'shuffle') return english ? 'Start a random track from the playback playlist below on startup.' : '启动后从下方播放歌单里随机挑一首开始播放。';
+  return english ? 'When off, startup only restores the last position and does not start playback.' : '关闭时启动只恢复上次播放位置，不会自动出声。';
 }
 
 /**
@@ -26169,7 +27051,16 @@ function updateAutoPlaybackControls() {
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
   var sourceValue = document.getElementById('autoplay-source-value');
-  if (sourceValue) sourceValue.textContent = localPlaybackPlaylistSourceName(localLibraryPlaybackSelection);
+  if (sourceValue) {
+    var sourceName = localPlaybackPlaylistSourceName(localLibraryPlaybackSelection);
+    var sourceKind = String(localLibraryPlaybackSelection || '');
+    if (typeof uiLanguage !== 'undefined' && uiLanguage === 'en' && sourceKind.indexOf('local-playlist:') !== 0) {
+      if (sourceName === '全部音乐') sourceName = 'All Music';
+      else if (typeof SPECIAL_LIKED_PLAYLIST_ID !== 'undefined' && sourceKind === SPECIAL_LIKED_PLAYLIST_ID) sourceName = 'Favorites';
+    }
+    sourceValue.setAttribute('data-i18n-skip', '');
+    sourceValue.textContent = sourceName;
+  }
   var hint = document.getElementById('autoplay-hint');
   if (hint) hint.textContent = autoPlaybackHintText(mode);
 }
@@ -26332,6 +27223,7 @@ function resumeLastPlayback(source) {
  * @returns {void}
  */
 function updateSongResumeControls() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var on = songResumeEnabled();
   var toggle = document.getElementById('t-songResume');
   if (toggle) {
@@ -26345,13 +27237,13 @@ function updateSongResumeControls() {
     for (var key in songs) {
       if (Object.prototype.hasOwnProperty.call(songs, key)) count++;
     }
-    value.textContent = count ? count + ' 个断点' : '暂无断点';
+    value.textContent = count ? (english ? count + ' saved positions' : count + ' 个断点') : (english ? 'No Saved Positions' : '暂无断点');
   }
   var hint = document.getElementById('song-resume-hint');
   if (hint) {
     hint.textContent = on
-      ? '每首歌单独记住上次听到哪儿，下次播到同一首会自动从断点接上。'
-      : '关闭后不再记住单曲断点，每首歌都从头开始播放。';
+      ? (english ? 'Remember each track position and resume it automatically next time.' : '每首歌单独记住上次听到哪儿，下次播到同一首会自动从断点接上。')
+      : (english ? 'When off, track positions are not saved and every track starts from the beginning.' : '关闭后不再记住单曲断点，每首歌都从头开始播放。');
   }
 }
 
@@ -26377,7 +27269,14 @@ function initSongResumeControls() {
  * @returns {string} 说明文案。
  */
 function replayGainHintText() {
-  if (!replayGainSettings.enabled) return '关闭时按文件原始电平播放，不做任何增益修正。';
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
+  if (!replayGainSettings.enabled) return english ? 'When disabled, files play at their original level without gain correction.' : '关闭时按文件原始电平播放，不做任何增益修正。';
+  if (english) {
+    var modeLabel = replayGainSettings.mode === 'album' ? 'Album gain' : 'Track gain';
+    if (replayGainActive.source === 'none') return modeLabel + ': this track has no ReplayGain tags; its original level is kept.';
+    if (replayGainActive.source === 'off') return modeLabel + ': waiting for track tags.';
+    return modeLabel + ': applied gain ' + (replayGainActive.appliedDb > 0 ? '+' : '') + replayGainActive.appliedDb.toFixed(1) + ' dB' + (replayGainActive.clipped ? ', capped by peak tags to prevent clipping' : '') + '.';
+  }
   var modeText = replayGainSettings.mode === 'album' ? '整专辑增益（Album）' : '整轨增益（Track）';
   if (replayGainActive.source === 'none') return modeText + '：当前歌曲没有 ReplayGain 标签，保持原始电平。';
   if (replayGainActive.source === 'off') return modeText + '：等待歌曲标签解析。';
@@ -26494,7 +27393,7 @@ function audioChainProfileLabel() {
   var activePreset = matchAudioChainPreset(audioChainSettings.gains);
   if (activePreset === 'custom' && audioChainSettings.profileName) return audioChainSettings.profileName;
   var preset = audioChainPresetById(activePreset);
-  return preset ? preset.label : 'Normal';
+  return preset ? (typeof uiText === 'function' ? uiText(preset.label) : preset.label) : 'Normal';
 }
 
 /**
@@ -26502,14 +27401,15 @@ function audioChainProfileLabel() {
  * @returns {string} 说明文案。
  */
 function audioChainHintText() {
-  if (!audioChainSettings.enabled) return '关闭时整条链保持中性：EQ 全 0 dB、限幅旁通、声场原样输出。';
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
+  if (!audioChainSettings.enabled) return english ? 'When disabled, the chain stays neutral: EQ at 0 dB, limiter bypassed and spatial output unchanged.' : '关闭时整条链保持中性：EQ 全 0 dB、限幅旁通、声场原样输出。';
   var state = audioChainActive || resolveAudioChainState(audioChainSettings);
-  var preampText = '预增益 ' + (state.totalPreampDb > 0 ? '+' : '') + state.totalPreampDb.toFixed(1) + ' dB';
-  if (state.autoPreampDb < 0) preampText += '（含自动留余量 ' + state.autoPreampDb.toFixed(1) + ' dB）';
+  var preampText = (english ? 'Preamp ' : '预增益 ') + (state.totalPreampDb > 0 ? '+' : '') + state.totalPreampDb.toFixed(1) + ' dB';
+  if (state.autoPreampDb < 0) preampText += english ? ' (includes ' + state.autoPreampDb.toFixed(1) + ' dB auto headroom)' : '（含自动留余量 ' + state.autoPreampDb.toFixed(1) + ' dB）';
   var parts = ['EQ ' + audioChainProfileLabel(), preampText];
-  parts.push(state.limiter.enabled ? '限幅 ' + state.limiter.thresholdDb.toFixed(1) + ' dB' : '限幅旁通');
-  parts.push(state.width === 1 ? '声场原样' : '声场 ' + Math.round(state.width * 100) + '%');
-  return parts.join(' · ') + '。';
+  parts.push(state.limiter.enabled ? (english ? 'Limiter ' : '限幅 ') + state.limiter.thresholdDb.toFixed(1) + ' dB' : (english ? 'Limiter bypassed' : '限幅旁通'));
+  parts.push(state.width === 1 ? (english ? 'Spatial unchanged' : '声场原样') : (english ? 'Spatial ' : '声场 ') + Math.round(state.width * 100) + '%');
+  return parts.join(' · ') + (english ? '.' : '。');
 }
 
 /**
@@ -26556,9 +27456,15 @@ function updateAudioChainControls() {
   syncAudioChainSlider('eq-limiter-threshold', audioChainSettings.limiterThresholdDb, 1);
   syncAudioChainSlider('eq-spatial-width', audioChainSettings.widthRatio, 0);
   var nameValue = document.getElementById('eq-profile-name');
-  if (nameValue) nameValue.textContent = audioChainProfileLabel();
+  if (nameValue) {
+    nameValue.setAttribute('data-i18n-skip', '');
+    nameValue.textContent = audioChainProfileLabel();
+  }
   var hint = document.getElementById('eq-hint');
-  if (hint) hint.textContent = audioChainHintText();
+  if (hint) {
+    hint.setAttribute('data-i18n-skip', '');
+    hint.textContent = audioChainHintText();
+  }
 }
 
 /**
@@ -31219,6 +32125,7 @@ function pushMiniPlayerState(force, playbackOnly) {
 }
 
 function applyMiniPlayerVisualControls() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var pulse = document.getElementById('fx-miniplayerpulse');
   var glow = document.getElementById('fx-miniplayerglow');
   var radius = document.getElementById('fx-miniplayerradius');
@@ -31246,10 +32153,10 @@ function applyMiniPlayerVisualControls() {
   if (hoverButton) {
     hoverButton.setAttribute('aria-pressed', hoverExpandEnabled ? 'true' : 'false');
     hoverButton.title = hoverExpandEnabled
-      ? '自动收回已开启：离开完整面板后回到封面；点击可保持完整迷你播放器'
-      : '自动收回已关闭：迷你播放器保持完整面板；点击可恢复封面自动收回';
+      ? (english ? 'Auto-collapse is on: leaving the full panel returns to the cover; click to keep it open' : '自动收回已开启：离开完整面板后回到封面；点击可保持完整迷你播放器')
+      : (english ? 'Auto-collapse is off: the full mini player stays open; click to restore auto-collapse' : '自动收回已关闭：迷你播放器保持完整面板；点击可恢复封面自动收回');
   }
-  if (hoverState) hoverState.textContent = hoverExpandEnabled ? '开启' : '关闭';
+  if (hoverState) hoverState.textContent = hoverExpandEnabled ? (english ? 'On' : '开启') : (english ? 'Off' : '关闭');
   syncMiniPlayerPulseTimer();
 }
 
@@ -36545,16 +37452,17 @@ function clearEmptyLocalLibrary(folderPath, opts) {
  * @returns {void}
  */
 function renderLocalLibraryFolderSettings() {
+  var english = typeof uiLanguage !== 'undefined' && uiLanguage === 'en';
   var box = document.getElementById('library-folder-list');
   if (!box) return;
   var countEl = document.getElementById('library-folder-count');
   var roots = savedLocalLibraryFolderPaths();
-  if (countEl) countEl.textContent = roots.length + ' 个';
+  if (countEl) countEl.textContent = english ? roots.length + ' folders' : roots.length + ' 个';
   box.textContent = '';
   if (!roots.length) {
     var empty = document.createElement('div');
     empty.className = 'mini-player-collapse-hint';
-    empty.textContent = '还没有添加音乐文件夹，点下方「添加」选择。';
+    empty.textContent = english ? 'No music folders yet. Click "Add" below to choose one.' : '还没有添加音乐文件夹，点下方「添加」选择。';
     box.appendChild(empty);
     return;
   }
@@ -36563,14 +37471,15 @@ function renderLocalLibraryFolderSettings() {
     row.className = 'library-folder-row';
     var label = document.createElement('span');
     label.className = 'library-folder-path';
+    label.setAttribute('data-i18n-skip', '');
     label.textContent = roots[i];
     label.title = roots[i];
     var remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'fx-mini-btn ghost';
-    remove.textContent = '移除';
+    remove.textContent = english ? 'Remove' : '移除';
     remove.setAttribute('data-library-folder-remove', roots[i]);
-    remove.setAttribute('title', '把这个目录从曲库移除');
+    remove.setAttribute('title', english ? 'Remove this folder from the library' : '把这个目录从曲库移除');
     row.appendChild(label);
     row.appendChild(remove);
     box.appendChild(row);
@@ -37535,6 +38444,7 @@ function applyFxArchiveSnapshot(snapshot) {
 var userFxArchives = [];
 var userFxArchivesHydrated = false;
 var userFxArchiveEditing = -1;
+var userFxArchiveRenderGeneration = 0;
 function ensureUserFxArchives() {
   if (userFxArchivesHydrated) return userFxArchives;
   var hadStored = hasStoredUserFxArchives();
@@ -37579,6 +38489,20 @@ function renderUserFxArchives(opts) {
   opts = opts || {};
   var grid = document.getElementById('user-archive-grid');
   if (!grid) return;
+  var editingDraft = null;
+  if (userFxArchiveEditing >= 0) {
+    var previousInput = document.getElementById('user-archive-input-' + userFxArchiveEditing);
+    if (previousInput) {
+      editingDraft = {
+        value: previousInput.value,
+        selectionStart: previousInput.selectionStart,
+        selectionEnd: previousInput.selectionEnd,
+        selectionDirection: previousInput.selectionDirection,
+        focused: document.activeElement === previousInput
+      };
+    }
+  }
+  var renderGeneration = ++userFxArchiveRenderGeneration;
   var toolbar =
     '<div class="user-archive-toolbar">' +
       '<div class="user-archive-note">空白新建，保存当前视觉参数；支持拖拽 JSON 导入，也可以导出为文件备份。</div>' +
@@ -37597,8 +38521,8 @@ function renderUserFxArchives(opts) {
     var hasSave = !!slot.snapshot;
     var editing = userFxArchiveEditing === index;
     var nameHtml = editing
-      ? '<input class="user-archive-input" id="user-archive-input-' + index + '" type="text" maxlength="28" value="' + escHtml(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
-      : '<div class="user-archive-name" title="' + escHtml(slot.name) + '">' + escHtml(slot.name) + '</div>';
+      ? '<input class="user-archive-input" id="user-archive-input-' + index + '" data-i18n-skip type="text" maxlength="28" value="' + escHtml(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
+      : '<div class="user-archive-name" data-i18n-skip title="' + escHtml(slot.name) + '">' + escHtml(slot.name) + '</div>';
     var actionsHtml = editing
       ? '<button type="button" onclick="commitUserFxArchiveRename(' + index + ')">确定</button>' +
         '<button type="button" onclick="cancelUserFxArchiveRename()">取消</button>'
@@ -37617,13 +38541,23 @@ function renderUserFxArchives(opts) {
   grid.innerHTML = toolbar + cards + addCard;
   bindUserFxArchiveDrop();
   if (userFxArchiveEditing >= 0) {
-    setTimeout(function(){
-      var input = document.getElementById('user-archive-input-' + userFxArchiveEditing);
-      if (input) {
-        input.focus();
-        input.select();
+    var input = document.getElementById('user-archive-input-' + userFxArchiveEditing);
+    if (input && editingDraft) {
+      input.value = editingDraft.value;
+      if (editingDraft.focused) input.focus();
+      if (editingDraft.selectionStart != null && editingDraft.selectionEnd != null && input.setSelectionRange) {
+        input.setSelectionRange(editingDraft.selectionStart, editingDraft.selectionEnd, editingDraft.selectionDirection || 'none');
       }
-    }, 0);
+    } else if (input) {
+      setTimeout(function(){
+        if (renderGeneration !== userFxArchiveRenderGeneration || userFxArchiveEditing < 0) return;
+        var currentInput = document.getElementById('user-archive-input-' + userFxArchiveEditing);
+        if (currentInput) {
+          currentInput.focus();
+          currentInput.select();
+        }
+      }, 0);
+    }
   }
 }
 function createUserFxArchive() {
@@ -38919,12 +39853,12 @@ function organizeFxPanel() {
   }
   var head = panel.querySelector('.fx-head');
   var tabMeta = [
-    ['presets', '\u9884\u8bbe'],
-    ['appearance', '\u5916\u89c2'],
-    ['lyrics', '\u6b4c\u8bcd'],
-    ['motion', '\u52a8\u6001'],
-    ['mini', '\u8ff7\u4f60'],
-    ['advanced', '\u9ad8\u7ea7']
+    ['presets', '预设', 'Presets'],
+    ['appearance', '外观', 'Appearance'],
+    ['lyrics', '歌词', 'Lyrics'],
+    ['motion', '动态', 'Motion'],
+    ['mini', '迷你', 'Mini'],
+    ['advanced', '高级', 'Advanced']
   ];
   var tabs = document.createElement('div');
   tabs.className = 'fx-panel-tabs';
@@ -38933,7 +39867,8 @@ function organizeFxPanel() {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.setAttribute('data-fx-tab', meta[0]);
-    btn.textContent = meta[1];
+    btn.setAttribute('data-i18n', meta[1]);
+    btn.textContent = uiText(meta[1]);
     tabs.appendChild(btn);
   });
   if (head && head.nextSibling) panel.insertBefore(tabs, head.nextSibling);
@@ -38990,12 +39925,12 @@ function setFxSectionBefore(id, text) {
     prev.className = 'fx-section-label';
     block.parentNode.insertBefore(prev, block);
   }
-  prev.textContent = text;
+  prev.textContent = uiText(text);
 }
 function setFxSliderLabel(id, text) {
   var block = fxControlBlock(id);
   var label = block && block.querySelector ? block.querySelector('label') : null;
-  if (label) label.textContent = text;
+  if (label) label.textContent = uiText(text);
 }
 function setFxSectionBeforeNode(node, text) {
   if (!node || !node.parentNode) return;
@@ -39005,7 +39940,7 @@ function setFxSectionBeforeNode(node, text) {
     prev.className = 'fx-section-label';
     node.parentNode.insertBefore(prev, node);
   }
-  prev.textContent = text;
+  prev.textContent = uiText(text);
 }
 function moveToggleToGrid(toggleId, grid) {
   var node = document.getElementById(toggleId);
@@ -39020,7 +39955,7 @@ function ensureLyricPrimaryControls() {
     var label = document.createElement('div');
     label.className = 'fx-section-label';
     label.id = 'fx-lyric-primary-label';
-    label.textContent = '歌词开关';
+    label.textContent = uiText('歌词开关');
     grid = document.createElement('div');
     grid.className = 'fx-toggle-grid lyric-primary-toggle-grid';
     grid.id = 'fx-lyric-primary-controls';
@@ -39044,19 +39979,21 @@ function applyBackgroundMediaHint() {
   var value = document.getElementById('bg-image-value');
   if (value && !value.dataset.mediaHint) {
     value.dataset.mediaHint = '1';
-    value.title = '支持图片 JPG / PNG / WebP 与视频 MP4 / WebM / MOV 上传';
+    value.title = uiLanguage === 'en'
+      ? 'Supports JPG / PNG / WebP images and MP4 / WebM / MOV videos'
+      : '支持图片 JPG / PNG / WebP 与视频 MP4 / WebM / MOV 上传';
   }
   var label = value && value.closest ? value.closest('.fx-color-row-label') : null;
   if (label && !document.getElementById('bg-media-hint')) {
     var hint = document.createElement('small');
     hint.id = 'bg-media-hint';
-    hint.textContent = '支持图片 / 视频上传';
+    hint.textContent = uiText('支持图片 / 视频上传');
     label.appendChild(hint);
   }
 }
 function relabelFxPanelControls() {
   var title = document.querySelector('#fx-panel .fx-title');
-  if (title) title.textContent = '视觉控制台';
+  if (title) title.textContent = uiText('视觉控制台');
   ensureLyricPrimaryControls();
   applyBackgroundMediaHint();
   var overlayGrid = document.getElementById('t-cinema');
@@ -39118,6 +40055,7 @@ function relabelFxPanelControls() {
   setFxSliderLabel('fx-bloom', '光晕强度');
   setFxSliderLabel('fx-scatter', '离散感');
   setFxSliderLabel('fx-bgfade', '背景压暗');
+  applyUiLanguage();
 }
 
 function getHotkeyDefaults() {
@@ -39185,7 +40123,7 @@ function hotkeyDisplayPart(part) {
   if (part === 'Shift') return 'Shift';
   if (part === 'Meta') return 'Win';
   var info = hotkeyKeyInfo(part);
-  return info ? info.label : part;
+  return info ? (typeof uiText === 'function' ? uiText(info.label) : info.label) : part;
 }
 /**
  * 取组合键末位的鼠标词元定义。
@@ -39228,7 +40166,7 @@ function normalizeHotkeyMouseEvent(e) {
 }
 function formatHotkey(hotkey) {
   hotkey = String(hotkey || '').trim();
-  if (!hotkey) return '未设置';
+  if (!hotkey) return typeof uiText === 'function' ? uiText('未设置') : '未设置';
   return hotkey.split('+').map(hotkeyDisplayPart).join(' + ');
 }
 /**
@@ -39366,7 +40304,7 @@ function ensureHotkeySettingsButton() {
   btn.id = 'hotkey-settings-btn';
   btn.type = 'button';
   btn.className = 'fx-mini-btn ghost';
-  btn.textContent = '热键';
+  btn.textContent = uiText('热键');
   btn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openHotkeySettings(); });
   actions.appendChild(btn);
   head.appendChild(actions);
@@ -39443,7 +40381,7 @@ function renderHotkeyScope(scope) {
       // 单独发明一套 .hotkey-key 底色就会在换主题时留成一块深色补丁。
       html += '<div class="hotkey-row' + (capturing ? ' capturing' : '') + '">' +
         '<div class="hotkey-name">' + escHtml(action.label) + '</div>' +
-        '<button class="fx-mini-btn hotkey-key' + (capturing ? ' capturing' : '') + '" type="button" data-hotkey-bind="' + scope + '" data-hotkey-action="' + action.key + '">' + escHtml(capturing ? '按下组合键...' : formatHotkey(binding)) + '</button>' +
+        '<button class="fx-mini-btn hotkey-key' + (capturing ? ' capturing' : '') + '" type="button" data-i18n-skip data-hotkey-bind="' + scope + '" data-hotkey-action="' + action.key + '">' + escHtml(capturing ? (typeof uiText === 'function' ? uiText('按下组合键...') : '按下组合键...') : formatHotkey(binding)) + '</button>' +
         '<button class="fx-mini-btn ghost hotkey-reset" type="button" data-hotkey-reset="' + scope + '" data-hotkey-action="' + action.key + '">默认</button>' +
         hotkeyStatusMarkup(scope, action.key, binding, duplicate) +
       '</div>';
@@ -39458,7 +40396,15 @@ function renderHotkeySettings() {
   modal.classList.toggle('capturing', !!hotkeyCaptureState);
   modal.classList.toggle('warn', !!hotkeyCaptureNotice);
   var tip = document.getElementById('hotkey-capture-tip');
-  if (tip) tip.textContent = hotkeyCaptureNotice || '正在录入组合键，按 Esc 取消。';
+  if (tip) {
+    var notice = hotkeyCaptureNotice;
+    if (notice && setHotkeyCaptureNotice.binding) {
+      var reason = typeof uiText === 'function' ? uiText(setHotkeyCaptureNotice.reason) : setHotkeyCaptureNotice.reason;
+      notice = formatHotkey(setHotkeyCaptureNotice.binding) + (typeof uiLanguage !== 'undefined' && uiLanguage === 'en' ? ': ' : '：') + reason;
+    }
+    tip.textContent = notice || (typeof uiText === 'function' ? uiText('正在录入组合键，按 Esc 取消。') : '正在录入组合键，按 Esc 取消。');
+    tip.setAttribute('data-i18n-skip', '');
+  }
   modal.querySelectorAll('[data-hotkey-scope]').forEach(function(btn){
     btn.classList.toggle('active', btn.getAttribute('data-hotkey-scope') === active);
   });
@@ -39468,14 +40414,17 @@ function renderHotkeySettings() {
   if (global) global.classList.toggle('active', active === 'global');
   renderHotkeyScope('local');
   renderHotkeyScope('global');
+  if (typeof applyUiLanguage === 'function') applyUiLanguage();
 }
 /**
  * 更新录入区提示。传空串恢复默认提示并撤掉告警配色。
  * @param {string} message 提示文案。
  * @returns {void}
  */
-function setHotkeyCaptureNotice(message) {
-  hotkeyCaptureNotice = String(message || '');
+function setHotkeyCaptureNotice(message, binding) {
+  setHotkeyCaptureNotice.binding = binding || '';
+  setHotkeyCaptureNotice.reason = String(message || '');
+  hotkeyCaptureNotice = binding ? formatHotkey(binding) + '：' + message : String(message || '');
   renderHotkeySettings();
 }
 function setHotkeyModalScope(scope) {
@@ -39670,7 +40619,7 @@ document.addEventListener('keydown', function(e){
   if (target.scope === 'global') {
     var reject = globalHotkeyRejectReason(combo);
     // 录入状态保留，用户可以直接再按一组，不用重新点按钮。
-    if (reject) { setHotkeyCaptureNotice(formatHotkey(combo) + '：' + reject); return; }
+    if (reject) { setHotkeyCaptureNotice(reject, combo); return; }
   }
   hotkeyCaptureState = null;
   hotkeyCaptureNotice = '';
@@ -39690,7 +40639,7 @@ document.addEventListener('mousedown', function(e){
   var mouseTarget = hotkeyCaptureState;
   if (mouseTarget.scope === 'global') {
     var mouseReject = globalHotkeyRejectReason(combo);
-    if (mouseReject) { setHotkeyCaptureNotice(formatHotkey(combo) + '：' + mouseReject); return; }
+    if (mouseReject) { setHotkeyCaptureNotice(mouseReject, combo); return; }
   }
   hotkeyCaptureState = null;
   hotkeyCaptureNotice = '';
@@ -44830,7 +45779,7 @@ function renderPluginList() {
     var p = list[i];
     var id = escHtml(p.id);
     html += '<div class="plugin-item' + (p.enabled ? ' on' : '') + '">' +
-      '<div class="plugin-item-main">' +
+      '<div class="plugin-item-main" data-i18n-skip>' +
         '<div class="plugin-item-title">' + escHtml(p.name) +
           (p.version ? '<span class="plugin-item-ver">v' + escHtml(p.version) + '</span>' : '') +
         '</div>' +
@@ -44874,6 +45823,7 @@ var MINERADIO_BACKUP_PLAYER_KEYS = [
   REPLAY_GAIN_STORE_KEY,
   GAPLESS_STORE_KEY,
   HOTKEY_SETTINGS_STORE_KEY,
+  UI_LANGUAGE_STORE_KEY,
   UPDATE_ROUTE_STORE_KEY,
   VISUAL_GUIDE_SEEN_STORE_KEY,
   UPLOAD_TIP_STORE_KEY,
@@ -46001,6 +46951,7 @@ function startLocalUserStateHydration() {
 startLocalUserStateHydration();
 applyDiyMode(diyPlayerMode, { save: false });
 bindFxPanel();
+initUiLanguageControls();
 applySavedLyricPaletteState();
 bindQualityControl();
 bindVolumeControls();

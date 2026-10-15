@@ -46,7 +46,7 @@ assert.ok(assetUiRefreshStart >= 0 && assetUiRefreshEnd > assetUiRefreshStart);
 const assetUiRefreshSource = appSource.slice(assetUiRefreshStart, assetUiRefreshEnd);
 
 function node(id) {
-    return { id, children: [], classList: { toggle() {}, remove() {} }, setAttribute() {}, addEventListener() {}, focus() {},
+    return { id, children: [], classList: { toggle() {}, remove() {}, contains() { return false; } }, setAttribute() {}, addEventListener() {}, focus() {},
         appendChild(child) { this.children.push(child); } };
 }
 

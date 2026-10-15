@@ -17,8 +17,13 @@ import './local.css';
 // src/mineradio/local/LocalPlayer.tsx
 // Embedded local-player composition: upstream effects, host transport, and a bounded local catalog.
 export default function LocalPlayer() {
-    const { t } = useTranslation('localPlayer');
+    const { t, i18n } = useTranslation('localPlayer');
     const player = useLocalPlayer();
+    useEffect(() => {
+        const language = player.state?.uiLanguage;
+        if (language && language !== i18n.language) void i18n.changeLanguage(language);
+    }, [player.state?.uiLanguage, i18n]);
+    useEffect(() => { document.title = t('windowTitle'); }, [t]);
     const visuals = useVisualSettings();
     const assets = useLocalVisualAssets();
     const [libraryOpen, setLibraryOpen] = useState(false);
@@ -67,7 +72,8 @@ export default function LocalPlayer() {
                 onLibrary={() => { setQueue(false); setLibraryOpen(true); setSettingsOpen(false); }}
                 onQueue={() => { setQueue(true); setLibraryOpen(!libraryOpen || !queue); setSettingsOpen(false); }} />}
             {libraryOpen && <LibraryPanel state={player.state} command={player.command} queue={queue} onTab={setQueue} onClose={() => setLibraryOpen(false)} />}
-            {settingsOpen && <VisualSettings assets={assets} theme={theme} onClose={() => setSettingsOpen(false)} />}
+            {settingsOpen && <VisualSettings assets={assets} theme={theme} onClose={() => setSettingsOpen(false)}
+                onLanguage={language => run('setUiLanguage', { language })} />}
         </>}
         <LocalStatusToast />
         {player.error && <div className="local-error" role="alert" data-testid="local-error"><span>{player.error}</span><button aria-label={t('close')} onClick={player.clearError}><X size={16} /></button></div>}

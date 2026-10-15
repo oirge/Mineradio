@@ -29,6 +29,7 @@ export interface HostPage<T> {
 }
 
 export interface HostState {
+    uiLanguage?: 'en' | 'zh-CN';
     currentTrack: HostTrack | null;
     currentIndex: number;
     position: number;

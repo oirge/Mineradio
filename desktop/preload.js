@@ -31,6 +31,7 @@ const PERSISTENT_UI_STATE_KEYS = [
   'mineradio-playback-rate-v1',
   'mineradio-sleep-timer-v1',
   'mineradio-output-device-v1',
+  'mineradio-ui-language-v1',
 ];
 
 function restorePersistentUiState() {

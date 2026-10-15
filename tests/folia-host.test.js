@@ -144,6 +144,26 @@ function harness(options = {}) {
     return { context, tracks, document, mount, frame, status, original, titlebar, video, fileInput, storage, messages, calls, dbFavorites, preloadReleases, timers, listeners, request, runTimer };
 }
 
+test('Folia language commands use the host preference without changing playback or metadata', async () => {
+    const h = harness();
+    h.context.setUiLanguage = language => {
+        h.context.uiLanguage = language;
+        h.context.setPersistentLocalStorageItem('mineradio-ui-language-v1', language);
+    };
+    h.tracks[0].name = '歌词';
+    assert.equal(h.context.MineradioFoliaHost.getState().uiLanguage, 'zh-CN');
+    const reply = await h.request('setUiLanguage', { language: 'en' });
+    assert.equal(reply.ok, true);
+    assert.equal(reply.result.uiLanguage, 'en');
+    assert.equal(h.storage.get('mineradio-ui-language-v1'), 'en');
+    assert.equal(h.context.audio.currentTime, 37);
+    assert.equal(h.tracks[0].name, '歌词');
+    const invalid = await h.request('setUiLanguage', { language: 'invalid' });
+    assert.equal(invalid.ok, false);
+    assert.equal(invalid.error.code, 'INVALID_LANGUAGE');
+    assert.equal(h.context.uiLanguage, 'en');
+});
+
 test('saved Folia startup takes ownership before releasing the first-paint state', () => {
     const h = harness({ savedMode: 'folia', preloadFolia: true, activate: false });
     assert.equal(h.document.documentElement.classList.contains('folia-mode-preload'), false);

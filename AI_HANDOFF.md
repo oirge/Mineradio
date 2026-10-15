@@ -2,6 +2,39 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
+## 2026-10-15（v2.5.0 发布进行中）
+
+- 用户已明确要求「发布新版2.5.0」，取代此前保持草稿、不合并和不发布的阶段约束。沿用分支 `codex/settings-i18n-wip-20261014` 与 PR #136；版本和三条中文公告已统一为 `2.5.0`，下一步完成检查、合并、annotated tag、官方 Windows 构建、四项资产核验及正式发布。
+- 本机已构建并安装功能预览（版本仍为 `2.4.9`，提交 `fc516e9`）到 `D:/Mineradio-oirge`；NSIS 退出码 `0`，已打开实际播放器窗口。用户要求自行实测，未继续操作其界面。包内 117 个功能及 Folia 资源与源码逐字节一致；本地记录在忽略的 `artifacts/ui-language/local-install-manifest.json`。
+- 发布完成后更新本入口和 `RELEASE.md`，注明官方资产核验结果；不要将本机预览包当作官方 `2.5.0` 安装器。
+
+## 历史：2026-10-15（PR #136：主设置与 Folia 中英文切换已完成本地验收）
+
+- 权威分支仍为 `codex/settings-i18n-wip-20261014`，PR 为 `https://github.com/oirge/Mineradio/pull/136`。本机在仓库检出 `Mineradio-pr136` 续做，勿覆盖同级无 `.git` 的源码快照；换机按远端分支定位。版本保持 `2.4.9`，PR 保持草稿，本轮不合并、不发版。
+- 补齐背景色「封面渐变」（源代码使用 Unicode 转义）、歌词溢光两种状态的 title 与「独立」标签、歌词来源 title。自定义歌词弹窗接入语言层，标题、帮助、placeholder、校验与动态行数状态支持中英往返。
+- 歌曲名/歌手/专辑、歌词文件名/路径、存档名、插件元数据保留原文。包含文件名的状态拆为 UI 文案与原文节点；空歌名、无名歌词文件及未知格式仍随语言切换。`refreshCustomLyricUiLanguage()` 只刷新来源控件与候选按钮，不重置歌词草稿或状态。
+- `renderUserFxArchives()` 重绘时保留改名草稿、光标选区与原先处于输入框的焦点；代次守卫阻止过期定时器重选文本。鼠标点击语言按钮后保持正常按钮焦点，不会提交改名。
+- 英文布局规则仅作用于 `#fx-panel[data-ui-locale="en"]`：标题与操作区分行，状态行标签与值分开，修复长英文重叠。中文规则与玻璃主题保持原有设置。
+- 验证：最终完整 `npm test` 为 **1502 通过、0 失败、1 可选基准跳过**；相关 JavaScript 语法及 `git diff --check` 通过。修复原迷你播放器旧静态断言，并为歌词候选/宿主性能测试补齐 DOM 接口；新增语言用例覆盖歌词弹窗、动态保存行数、改名重绘及 Folia 语言 RPC。
+- Playwright 已验六个标签页、热键/歌词/插件弹窗、动态属性、歌词草稿与命名草稿、用户数据保护、刷新持久化、1440×960 和 1280×720 布局。11 轮英文扫描无固定中文残留、无浏览器异常；截图核对英文状态行无重叠。
+- 用户随后追加检查 Folia：原嵌入界面没有接通主设置，已在 host state 与 `setUiLanguage` RPC 中传递语言，`localStateSignature` 纳入语言以触发 React 更新。启动从同一 `mineradio-ui-language-v1` 读取，覆盖旧 Folia 偏好；Folia 效果面板提供中文/English 选择，双向同步主设置，不写入视觉存档。
+- Folia 补齐唱片墙返回/无障碍标签、内置歌单名称、文档标题、宿主导入/导航/加载及固定错误文案；歌曲与自建歌单名保留原文。修改的是 `src/mineradio` 嵌入入口及 host，不加载上游完整设置应用。已执行 `npm run build:folia` 并更新仓库内 `public/vendor/folia` 静态产物。
+- Folia 验证：定向 Vitest **12/12**、`npm run typecheck`、构建及产物校验通过；`python scripts/verify-folia-language.py` 验证三个视图、14 种歌词效果、5 种背景面板、明暗主题、双向语言同步、刷新与中文歌曲元数据，最终 26 轮扫描无固定中文残留、无浏览器异常。另验 1280×720 桌面标题栏 portal、宿主按钮翻译和导航不与窗口按钮重叠。报告为 `artifacts/ui-language/folia-report.json`。
+- 验证边界：第一轮 Folia 自动化曾捕获一次 `Cannot read properties of null (reading 'trim')`，当时未收集调用栈；增加 stack/阶段记录后全流程重跑及标题栏验收均未复现。未据此修改视觉引擎；如后续复现，按报告中的 stack 定位，不归因于语言层。
+- 复验：终端设置 `PORT=3268`、`HOST=127.0.0.1` 后运行 `node server.js`，另一个终端运行 `python scripts/verify-ui-language.py`；可用 `--url` 指定端口。结果与截图写到已忽略的 `artifacts/ui-language/`，`report.json` 包含断言结果，发现残留/重叠/异常会非零退出。脚本使用隔离浏览器数据，不依赖本机曲库或插件。
+- 未完成事项：远端 CI 状态以 PR 最新提交为准；合并与发布尚未进行。下节为上一轮历史记录，其中待办和失败结果已由本节替代。
+
+## 历史：2026-10-14（WIP：设置面板中英文切换）
+
+- 基于远端 `origin/main` 的 `6491829`，当前工作分支为 `codex/settings-i18n-wip-20261014`；`package.json` 版本保持 `2.4.9`，本轮只保存续开发代码，不创建 Release、不改版本。
+- 当前 Git 工作树：`C:/Users/oirg/Desktop/Mineradio-main/.tmp-settings-i18n-20261014`。原源码目录 `C:/Users/oirg/Desktop/Mineradio-main` 无 `.git`，本次只把语言改动移入该独立工作树；明天接续该分支或从 GitHub 获取它，勿从旧本地 `main` 覆盖。
+- 设置面板新增 `中文 / English` 切换并持久化到 `mineradio-ui-language-v1`；键已同步到 `public/app.js`、`desktop/preload.js`、`desktop/main.js` 和整机备份白名单。
+- 翻译覆盖视觉控制台、颜色弹层、歌词、动态、迷你播放器、3D / 手势、自动播放、音量均衡、无缝播放、倍速、睡眠、输出设备、音效链、插件、备份、曲库目录、高级参数和 Wallpaper Engine 弹窗。动态节点使用 `data-i18n` / `data-i18n-skip` 与 `MutationObserver`，歌曲名、歌单名、路径、设备名、插件元数据等用户或第三方数据保留原文。
+- 新增 `tests/ui-language.test.js` 与 `scripts/verify-ui-language.py`。当前定向 Node 回归为 `92/92`（语言 9、整机备份 23、全局热键 20、鼠标热键 40），`public/app.js`、`public/wallpaper-engine.js`、`desktop/main.js`、`desktop/preload.js` 语法检查通过，`git diff --check` 通过。
+- 保存前完整 `npm test`：`1497` 通过、`1` 失败、`1` 可选基准跳过。唯一失败的 `tests/mini-player-visual.test.js` 用例仍精确匹配旧二元 `tabMeta`（557 行）和中文状态赋值（559 行），当前语言层已改为三元 `['mini', '迷你', 'Mini']` 与中英文条件文案；行为断言通过，明天同步该用例并重跑回归。文档编码 `5/5` 通过。
+- 浏览器验证已覆盖 English 切换、设置标签页、热键弹窗、切回中文和刷新保持 English；截图在本地 `artifacts/ui-language/`（该目录不纳入提交）。
+- 明天继续前先补：英文审计中仍有少量固定提示未覆盖（封面渐变、歌词溢光/歌词源 title），默认用户存档名和插件名称需要继续保持用户/第三方原文；再做完整动态回归与必要的视觉布局检查。
+
 ## 当前权威入口（2026-10-11；v2.4.3 进行中）
 
 - **当前正式版是 v2.4.2**：PR #125 已合并，tag 指向 `492cc434577be0a6713862767dcbd7f1e4b19808`，Windows Build and Release `38104911581` 成功。Release `409344608` 于北京时间 `2026-10-11 10:25:46` 正式发布并设为 Latest。四项官方资产完整回下载的 SHA256 与 GitHub digest/清单一致，EXE SHA-512 与 `latest.yml` 一致，公开更新清单复核通过。
@@ -93,6 +126,10 @@
 这个目录是人工归档区，不参与软件更新流程。
 
 ## 已完成工作日志
+
+### 2026-10-14（设置中英文切换 WIP 保存）
+
+- 用户要求先推送现有更新、明天继续；本次快照分支 `codex/settings-i18n-wip-20261014`，基于 `6491829`，不发版、不合并主分支。改动范围与验证结果见顶部 WIP 入口。
 
 ### 2026-10-11（v2.4.3 海报墙切歌优化，待 GitHub 发布）
 
@@ -296,6 +333,7 @@
 
 ## 未完成/待确认事项
 
+- 设置中英文切换尚待完整验收：补英文残留 title / 封面渐变，保护存档名和插件元数据原文与正在编辑的命名草稿，完成动态和布局回归；同步 `mini-player-visual.test.js:557` 的旧 `tabMeta` 静态断言。接续 `codex/settings-i18n-wip-20261014`，不要从 `main` 丢掉本轮 WIP。
 - 本轮 v2.4.3 的代码、界面与本地安装包验证已完成；待完成 PR/CI、GitHub 正式发布及线上资产校验，完成后以顶部权威入口和 `RELEASE.md` 为准。
 - 桌面歌词热修已在本机安装并验证，源码尚未提交、推送或发布；下次用户授权发版时应包含恢复模块与测试，避免重装原版 2.2.6 覆盖热修。真实系统休眠/显示器热拔插未主动执行，仅验证接线和恢复入口；不把模拟验证写成真实电源/硬件测试。
 - `includeLyrics:false` 目前只阻止把歌词应用到歌曲对象，IndexedDB `store.get()` 仍会 structured-clone 完整合并记录；真正降低大批量补水峰值需要把轻量资产摘要与歌词重载荷拆成独立记录/存储，不能只增加无效 selection 参数。

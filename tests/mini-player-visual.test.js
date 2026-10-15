@@ -554,9 +554,9 @@ test('自动收回设置常驻样式选择区并支持双向持久化', () => {
   assert.match(index, /开启后移开鼠标会回到封面；关闭后保持完整迷你播放器/);
   assert.match(renderer, /var allowed = \{[^}]*mini:1/);
   assert.match(renderer, /id === 'fx-mini-player-settings'\) return 'mini'/);
-  assert.ok(renderer.includes("['mini', '\\u8ff7\\u4f60']"));
+  assert.match(renderer, /\['mini', '迷你', 'Mini'\]/);
   assert.match(renderer, /hoverButton\.setAttribute\('aria-pressed'/);
-  assert.match(renderer, /hoverState\.textContent = hoverExpandEnabled \? '开启' : '关闭'/);
+  assert.match(renderer, /hoverState\.textContent = hoverExpandEnabled \? \(english \? 'On' : '开启'\) : \(english \? 'Off' : '关闭'\)/);
   assert.match(renderer, /miniPlayerHoverExpand:\s*raw\.miniPlayerHoverExpand !== false/);
   assert.match(renderer, /miniPlayerHoverExpand:\s*fx\.miniPlayerHoverExpand !== false/);
   assert.match(renderer, /hoverExpand:\s*fx\.miniPlayerHoverExpand !== false/);

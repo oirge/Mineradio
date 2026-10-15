@@ -38,7 +38,7 @@ function RecordWallViewport({ items, theme, isDaylight, onPlay, onAddQueue }: {
     }, []);
 
     return <div ref={container} className="local-record-viewport" tabIndex={0} data-testid="local-record-viewport"
-        aria-label={t('localPlayer:recordWall', { defaultValue: '唱片墙' })}
+        aria-label={t('localPlayer:recordWall')}
         onKeyDown={event => {
             const target = event.target as HTMLElement;
             if (target.isContentEditable || target.closest('button,input,textarea,select,a')) return;

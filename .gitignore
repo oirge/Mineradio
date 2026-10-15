@@ -43,6 +43,7 @@ public/index.*.html
 !public/index.html
 
 # Screenshots and transient verification artifacts
+artifacts/ui-language/
 .playwright-cli/
 output/
 tmp/
