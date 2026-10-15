@@ -192,6 +192,7 @@ function createLyricPickStore() {
  */
 function createElementStub(tag) {
   let text = '';
+  const attributes = new Map();
   const node = {
     tagName: String(tag).toUpperCase(),
     className: '',
@@ -199,6 +200,8 @@ function createElementStub(tag) {
     onclick: null,
     style: {},
     children: [],
+    setAttribute(name, value) { attributes.set(name, String(value)); },
+    getAttribute(name) { return attributes.get(name) ?? null; },
     /** @returns {object} 追加的子节点。 */
     appendChild(child) { node.children.push(child); return child; },
   };
@@ -242,6 +245,8 @@ function createLyricPickUi() {
     setLocalLyricPickForSong: (song, pickId) => { calls.picks.push({ key: song && song.localKey, pickId }); return true; },
     /** @returns {void} 记录状态文案。 */
     setCustomLyricStatus: (text, tone) => { calls.statuses.push({ text, tone }); },
+    setCustomLyricStatusParts: (prefix, value, suffix, tone) => { calls.statuses.push({ text: prefix + value + suffix, tone }); },
+    uiText: text => text,
     /** @returns {void} 记录 toast。 */
     showToast: text => { calls.toasts.push(text); },
     /** @returns {void} 记录界面刷新。 */

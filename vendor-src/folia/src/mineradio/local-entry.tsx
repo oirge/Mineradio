@@ -14,6 +14,10 @@ Object.assign(globalThis, { Buffer });
 for (const [language, resources] of Object.entries(LOCAL_UI_RESOURCES)) {
     i18n.addResourceBundle(language, 'localPlayer', resources, true, true);
 }
+// Seed the embedded surface from Mineradio's persisted choice before its first render.
+let language = 'zh-CN';
+try { if (localStorage.getItem('mineradio-ui-language-v1') === 'en') language = 'en'; } catch { /* Storage may be unavailable. */ }
+void i18n.changeLanguage(language);
 installMineradioSurfaceLifecycle();
 installGlobalVisualizerFrameRateLimiter();
 const mount = document.getElementById('root');

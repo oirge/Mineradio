@@ -109,6 +109,99 @@ test('运行时重新写入的设置状态沿用当前语言并能切回中文',
   assert.equal(element.firstChild.nodeValue, '7 个断点');
 });
 
+test('动态歌词保存状态保留行数并支持中英往返', () => {
+  const context = languageContext();
+  const element = textElement('已保存 2 行，并切换为自定义歌词');
+  context.setUiLanguage('en');
+  context.translateUiElement(element);
+  assert.equal(element.firstChild.nodeValue, 'Saved 2 lines and switched to custom lyrics');
+  context.setUiLanguage('zh-CN');
+  context.translateUiElement(element);
+  assert.equal(element.firstChild.nodeValue, '已保存 2 行，并切换为自定义歌词');
+});
+
+test('自定义歌词弹窗纳入语言范围，歌曲信息与歌词文件名保持原文', () => {
+  const context = languageContext();
+  const songTitle = textElement('高级', { 'data-i18n-skip': '' });
+  const lyricFile = textElement('主题', { 'data-i18n-skip': '', title: 'Lyrics' });
+  const placeholder = textElement('', { placeholder: '[00:12.00] 第一行歌词\n[00:16.50] 第二行歌词\n\n没有时间轴也可以，每一行会按歌曲时长自动铺开' });
+  placeholder.childNodes = [];
+  placeholder.firstChild = null;
+  assert.match(APP, /'custom-lyric-modal'\]/);
+  assert.match(HTML, /id="custom-lyric-modal"[\s\S]*?data-i18n="自定义歌词"/);
+  assert.match(HTML, /id="custom-lyric-track-meta"[^>]+data-i18n-skip/);
+  context.setUiLanguage('en');
+  [songTitle, lyricFile, placeholder].forEach(element => context.translateUiElement(element));
+  assert.equal(songTitle.firstChild.nodeValue, '高级');
+  assert.equal(lyricFile.firstChild.nodeValue, '主题');
+  assert.equal(lyricFile.getAttribute('title'), 'Lyrics');
+  assert.equal(
+    placeholder.getAttribute('placeholder'),
+    '[00:12.00] First lyric line\n[00:16.50] Second lyric line\n\nWithout timestamps, lines are spaced across the track.',
+  );
+  assert.match(APP, /function setCustomLyricStatusParts\(prefix, userValue, suffix, tone\)/);
+  assert.match(APP, /data-i18n-skip/);
+});
+
+test('存档列表语言切换重绘保留未提交改名、焦点与光标选区', () => {
+  const start = APP.indexOf('function renderUserFxArchives(opts)');
+  const end = APP.indexOf('\nfunction createUserFxArchive()', start);
+  assert.ok(start >= 0 && end > start);
+  const source = APP.slice(start, end);
+  const document = { activeElement: null };
+  let input;
+  const grid = {
+    set innerHTML(html) {
+      const match = html.match(/<input class="user-archive-input"[^>]*value="([^"]*)"/);
+      input = match ? {
+        value: match[1],
+        selectionStart: 0,
+        selectionEnd: 0,
+        selectionDirection: 'none',
+        focus() { document.activeElement = this; },
+        setSelectionRange(startAt, endAt, direction) {
+          this.selectionStart = startAt;
+          this.selectionEnd = endAt;
+          this.selectionDirection = direction;
+        },
+      } : null;
+    },
+  };
+  const previousInput = {
+    value: 'My Draft',
+    selectionStart: 3,
+    selectionEnd: 7,
+    selectionDirection: 'backward',
+  };
+  document.activeElement = previousInput;
+  const context = {
+    document: {
+      get activeElement() { return document.activeElement; },
+      getElementById(id) {
+        if (id === 'user-archive-grid') return grid;
+        if (id === 'user-archive-input-0') return input || previousInput;
+        return null;
+      },
+    },
+    userFxArchiveEditing: 0,
+    userFxArchiveRenderGeneration: 0,
+    userFxArchivesHydrated: true,
+    userFxArchives: [{ name: 'Original name', snapshot: null, savedAt: 0 }],
+    ensureUserFxArchives() { return this.userFxArchives; },
+    isUserFxArchivePanelVisible() { return true; },
+    escHtml(value) { return String(value); },
+    bindUserFxArchiveDrop() {},
+    setTimeout() { throw new Error('existing rename draft should not schedule a new-edit focus'); },
+  };
+  vm.runInNewContext(source + '\nthis.render = renderUserFxArchives;', context);
+  context.render();
+  assert.equal(input.value, 'My Draft');
+  assert.equal(document.activeElement, input);
+  assert.equal(input.selectionStart, 3);
+  assert.equal(input.selectionEnd, 7);
+  assert.equal(input.selectionDirection, 'backward');
+});
+
 test('语言偏好只接受中文和英文，脏值回落中文', () => {
   const source = sliceBetween(APP, 'function normalizeUiLanguage(value)', 'function readUiLanguage()');
   const context = {};
@@ -166,4 +259,6 @@ test('重标记和动态设置节点会重新应用当前语言', () => {
   assert.match(APP, /relabelFxPanelControls\(\)[\s\S]{0,6000}applyUiLanguage\(\)/);
   assert.match(APP, /MutationObserver/);
   assert.match(APP, /data-i18n/);
+  assert.match(APP, /plugin-item-main" data-i18n-skip/);
+  assert.match(APP, /user-archive-name" data-i18n-skip/);
 });

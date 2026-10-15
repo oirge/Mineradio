@@ -48,6 +48,7 @@ describe('isolated Mineradio local display projection', () => {
     it('ignores clock-only snapshots while retaining discrete playback and lyric changes', () => {
         expect(localStateSignature({ ...state, position: 90 })).toBe(localStateSignature(state));
         expect(localStateSignature({ ...state, playing: false })).not.toBe(localStateSignature(state));
+        expect(localStateSignature({ ...state, uiLanguage: 'en' })).not.toBe(localStateSignature({ ...state, uiLanguage: 'zh-CN' }));
         expect(localStateSignature({ ...state, lyricsRevision: 2 })).not.toBe(localStateSignature(state));
         expect(localStateSignature({ ...state, playbackPlaylistId: 'special-liked' })).not.toBe(localStateSignature(state));
         expect(localStateSignature({ ...state, playbackPlaylistName: 'Renamed playlist' })).not.toBe(localStateSignature(state));

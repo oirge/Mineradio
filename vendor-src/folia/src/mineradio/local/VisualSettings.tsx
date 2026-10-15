@@ -12,8 +12,8 @@ import type { LocalVisualAssets } from './useLocalVisualAssets';
 
 // src/mineradio/local/VisualSettings.tsx
 // Visual-only controls reuse Folia's registry and tuning panels without its global Settings application.
-export default function VisualSettings({ theme, onClose, assets }: { theme: Theme; onClose: () => void; assets: LocalVisualAssets }) {
-    const { t } = useTranslation('localPlayer');
+export default function VisualSettings({ theme, onClose, assets, onLanguage }: { theme: Theme; onClose: () => void; assets: LocalVisualAssets; onLanguage: (language: string) => void }) {
+    const { t, i18n } = useTranslation('localPlayer');
     const { t: translate } = useTranslation();
     const settings = useVisualSettings();
     const label = (key: string) => String(translate(key));
@@ -45,6 +45,9 @@ export default function VisualSettings({ theme, onClose, assets }: { theme: Them
     return <aside className="local-settings local-glass" data-testid="local-visual-settings">
         <div className="local-panel-title"><strong>{t('visuals')}</strong><div><button aria-label={t('reset')} title={t('reset')} onClick={settings.reset}><RotateCcw size={16} /></button><button aria-label={t('close')} onClick={onClose}><X size={18} /></button></div></div>
         <div className="local-settings-body">
+            <label className="local-setting"><span>{t('interfaceLanguage')}</span><select aria-label={t('interfaceLanguage')} data-testid="local-ui-language" value={i18n.resolvedLanguage === 'en' ? 'en' : 'zh-CN'} onChange={event => onLanguage(event.target.value)}>
+                <option value="zh-CN">中文</option><option value="en">English</option>
+            </select></label>
             <label className="local-setting"><span>{t('lyricMode')}</span><select aria-label={t('lyricMode')} data-testid="local-visualizer-mode" value={settings.mode} onChange={(event) => settings.update({ mode: event.target.value as VisualizerMode })}>
                 {VISUALIZER_REGISTRY.filter((entry) => !entry.mode.startsWith('mod:')).map((entry) => <option key={entry.mode} value={entry.mode}>{getVisualizerModeLabel(entry.mode, label)}</option>)}
             </select></label>

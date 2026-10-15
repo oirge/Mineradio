@@ -2,7 +2,23 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
-## 2026-10-14（WIP：设置面板中英文切换）
+## 2026-10-15（PR #136：主设置与 Folia 中英文切换已完成本地验收）
+
+- 权威分支仍为 `codex/settings-i18n-wip-20261014`，PR 为 `https://github.com/oirge/Mineradio/pull/136`。本机在仓库检出 `Mineradio-pr136` 续做，勿覆盖同级无 `.git` 的源码快照；换机按远端分支定位。版本保持 `2.4.9`，PR 保持草稿，本轮不合并、不发版。
+- 补齐背景色「封面渐变」（源代码使用 Unicode 转义）、歌词溢光两种状态的 title 与「独立」标签、歌词来源 title。自定义歌词弹窗接入语言层，标题、帮助、placeholder、校验与动态行数状态支持中英往返。
+- 歌曲名/歌手/专辑、歌词文件名/路径、存档名、插件元数据保留原文。包含文件名的状态拆为 UI 文案与原文节点；空歌名、无名歌词文件及未知格式仍随语言切换。`refreshCustomLyricUiLanguage()` 只刷新来源控件与候选按钮，不重置歌词草稿或状态。
+- `renderUserFxArchives()` 重绘时保留改名草稿、光标选区与原先处于输入框的焦点；代次守卫阻止过期定时器重选文本。鼠标点击语言按钮后保持正常按钮焦点，不会提交改名。
+- 英文布局规则仅作用于 `#fx-panel[data-ui-locale="en"]`：标题与操作区分行，状态行标签与值分开，修复长英文重叠。中文规则与玻璃主题保持原有设置。
+- 验证：最终完整 `npm test` 为 **1502 通过、0 失败、1 可选基准跳过**；相关 JavaScript 语法及 `git diff --check` 通过。修复原迷你播放器旧静态断言，并为歌词候选/宿主性能测试补齐 DOM 接口；新增语言用例覆盖歌词弹窗、动态保存行数、改名重绘及 Folia 语言 RPC。
+- Playwright 已验六个标签页、热键/歌词/插件弹窗、动态属性、歌词草稿与命名草稿、用户数据保护、刷新持久化、1440×960 和 1280×720 布局。11 轮英文扫描无固定中文残留、无浏览器异常；截图核对英文状态行无重叠。
+- 用户随后追加检查 Folia：原嵌入界面没有接通主设置，已在 host state 与 `setUiLanguage` RPC 中传递语言，`localStateSignature` 纳入语言以触发 React 更新。启动从同一 `mineradio-ui-language-v1` 读取，覆盖旧 Folia 偏好；Folia 效果面板提供中文/English 选择，双向同步主设置，不写入视觉存档。
+- Folia 补齐唱片墙返回/无障碍标签、内置歌单名称、文档标题、宿主导入/导航/加载及固定错误文案；歌曲与自建歌单名保留原文。修改的是 `src/mineradio` 嵌入入口及 host，不加载上游完整设置应用。已执行 `npm run build:folia` 并更新仓库内 `public/vendor/folia` 静态产物。
+- Folia 验证：定向 Vitest **12/12**、`npm run typecheck`、构建及产物校验通过；`python scripts/verify-folia-language.py` 验证三个视图、14 种歌词效果、5 种背景面板、明暗主题、双向语言同步、刷新与中文歌曲元数据，最终 26 轮扫描无固定中文残留、无浏览器异常。另验 1280×720 桌面标题栏 portal、宿主按钮翻译和导航不与窗口按钮重叠。报告为 `artifacts/ui-language/folia-report.json`。
+- 验证边界：第一轮 Folia 自动化曾捕获一次 `Cannot read properties of null (reading 'trim')`，当时未收集调用栈；增加 stack/阶段记录后全流程重跑及标题栏验收均未复现。未据此修改视觉引擎；如后续复现，按报告中的 stack 定位，不归因于语言层。
+- 复验：终端设置 `PORT=3268`、`HOST=127.0.0.1` 后运行 `node server.js`，另一个终端运行 `python scripts/verify-ui-language.py`；可用 `--url` 指定端口。结果与截图写到已忽略的 `artifacts/ui-language/`，`report.json` 包含断言结果，发现残留/重叠/异常会非零退出。脚本使用隔离浏览器数据，不依赖本机曲库或插件。
+- 未完成事项：远端 CI 状态以 PR 最新提交为准；合并与发布尚未进行。下节为上一轮历史记录，其中待办和失败结果已由本节替代。
+
+## 历史：2026-10-14（WIP：设置面板中英文切换）
 
 - 基于远端 `origin/main` 的 `6491829`，当前工作分支为 `codex/settings-i18n-wip-20261014`；`package.json` 版本保持 `2.4.9`，本轮只保存续开发代码，不创建 Release、不改版本。
 - 当前 Git 工作树：`C:/Users/oirg/Desktop/Mineradio-main/.tmp-settings-i18n-20261014`。原源码目录 `C:/Users/oirg/Desktop/Mineradio-main` 无 `.git`，本次只把语言改动移入该独立工作树；明天接续该分支或从 GitHub 获取它，勿从旧本地 `main` 覆盖。

@@ -2180,6 +2180,15 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 .fx-tab-page{display:none}
 .fx-tab-page.active{display:block}
 .fx-tab-page>.fx-section-label:first-child{margin-top:0}
+/* English settings labels need more room than the compact Chinese columns. */
+#fx-panel[data-ui-locale="en"] .fx-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}
+#fx-panel[data-ui-locale="en"] .fx-head-main{grid-column:1 / -1}
+#fx-panel[data-ui-locale="en"] .fx-language-tools{margin-left:0}
+#fx-panel[data-ui-locale="en"] .fx-head-actions{margin-left:0;justify-self:end}
+#fx-panel[data-ui-locale="en"] .lyric-color-row:has(>strong){grid-template-columns:minmax(0,1fr) auto}
+#fx-panel[data-ui-locale="en"] .lyric-color-row:has(>strong)>span:first-child{grid-column:1 / -1;font-size:11px;line-height:1.4}
+#fx-panel[data-ui-locale="en"] .lyric-color-row>strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fx-panel[data-ui-locale="en"] .lyric-color-row:has(>strong)>.fx-mini-btn{height:auto;min-height:30px;max-width:112px;padding:6px 10px;line-height:1.3;white-space:normal}
 #fx-panel .fx-fold{margin-top:10px}
 #fx-panel .fx-fold.open{background:rgba(255,255,255,.026)}
 .lyric-color-row.bg-cover-mode #bg-color-picker{

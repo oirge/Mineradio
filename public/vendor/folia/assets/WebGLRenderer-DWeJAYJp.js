@@ -1,0 +1,1 @@
+import{WebGLRenderer as e}from"./lib-DoxgLGdY.js";export{e as WebGLRenderer};

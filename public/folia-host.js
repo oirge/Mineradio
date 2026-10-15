@@ -27,6 +27,7 @@
   var TRACK_CHANGE_DELAY_MS = 180, TRACK_CHANGE_DRAIN_DELAY_MS = 32, TRACK_CHANGE_BATCH_LIMIT = 180;
 
   function number(value, fallback) { var result = Number(value); return Number.isFinite(result) ? result : fallback; }
+  function uiText(value) { return typeof global.uiText === 'function' ? global.uiText(value) : value; }
   function clamp(value, low, high) { return Math.max(low, Math.min(high, value)); }
   function fail(code, message) { var error = new Error(message); error.code = code; throw error; }
   function call(name) {
@@ -128,6 +129,7 @@
       muted: volume <= 0.0001 || !!(media && media.muted), playMode: global.playMode || 'loop',
       playbackPlaylistId: playbackPlaylistId, playbackPlaylistName: playbackPlaylistName,
       queueRevision: queueRevision, libraryRevision: libraryRevision, lyricsRevision: lyricsRevision,
+      uiLanguage: global.uiLanguage === 'en' ? 'en' : 'zh-CN',
       interface: active ? 'folia' : 'mineradio'
     };
   }
@@ -300,7 +302,7 @@
   function event(name, data) { post({ type: 'event', event: name, data: data }); }
   function updateStatus(message, failed) {
     var status = document.getElementById('folia-load-status');
-    if (status) { status.textContent = message; status.classList.toggle('failed', !!failed); }
+    if (status) { status.textContent = uiText(message); status.classList.toggle('failed', !!failed); }
     var mount = document.getElementById('folia-interface');
     if (mount) mount.classList.toggle('folia-ready', ready);
   }
@@ -310,7 +312,7 @@
     var mount = document.getElementById('folia-interface');
     if (!mount) fail('HOST_NOT_READY', 'Folia 容器未加载');
     frame = document.createElement('iframe');
-    frame.id = 'folia-frame'; frame.title = 'Folia 本地播放器'; frame.src = '/vendor/folia/index.html?host=mineradio&surface=local-player-v3';
+    frame.id = 'folia-frame'; frame.title = uiText('Folia 本地播放器'); frame.src = '/vendor/folia/index.html?host=mineradio&surface=local-player-v3';
     frame.setAttribute('allow', 'fullscreen');
     frame.addEventListener('load', function () {
       event('visibility', { active: active });
@@ -356,6 +358,9 @@
       button.title = button.textContent;
       button.setAttribute('aria-label', button.title); button.setAttribute('aria-pressed', String(active));
       button.classList.toggle('on', true);
+    });
+    document.querySelectorAll('[data-folia-import]').forEach(function (button) {
+      button.textContent = uiText('导入文件'); button.title = uiText('导入音乐文件');
     });
   }
   // ---- Immersive chrome: top host titlebar + bottom Folia player bar auto-hide on idle ----
@@ -595,6 +600,10 @@
     var song, index, source;
     switch (method) {
       case 'getState': return getState();
+      case 'setUiLanguage':
+        if (params.language !== 'en' && params.language !== 'zh-CN') fail('INVALID_LANGUAGE', '不支持的界面语言');
+        call('setUiLanguage', params.language);
+        return getState();
       case 'listTracks': return pageTracks(playlistSongs(params.playlistId), params);
       case 'listPlaylists': return listPlaylists();
       case 'switchPlaylist': {
@@ -755,7 +764,7 @@
       var result = await handle(data.method, params);
       post({ type: 'response', id: data.id, ok: true, result: result });
     } catch (error) {
-      post({ type: 'response', id: data.id, ok: false, error: { code: error.code || 'HOST_ERROR', message: error.message || '播放器操作失败' } });
+      post({ type: 'response', id: data.id, ok: false, error: { code: error.code || 'HOST_ERROR', message: uiText(error.message || '播放器操作失败') } });
     } finally { inFlight.delete(data.id); }
   }
   function observeMutation(name, kind) {
@@ -817,9 +826,17 @@
   function setFoliaNavCollapsed(collapsed, persist) {
     document.body.classList.toggle('folia-nav-collapsed', !!collapsed);
     var btn = document.getElementById('folia-expand-proxy');
-    if (btn) { btn.title = collapsed ? '展开导航' : '收起导航'; btn.setAttribute('aria-label', btn.title); btn.setAttribute('aria-pressed', String(!!collapsed)); }
+    if (btn) { btn.title = uiText(collapsed ? '展开导航' : '收起导航'); btn.setAttribute('aria-label', btn.title); btn.setAttribute('aria-pressed', String(!!collapsed)); }
     if (persist) { try { global.localStorage.setItem(NAV_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (_e) {} }
   }
+  global.refreshFoliaUiLanguage = function () {
+    updateButtons();
+    setFoliaNavCollapsed(document.body.classList.contains('folia-nav-collapsed'), false);
+    if (frame) frame.title = uiText('Folia 本地播放器');
+    var status = document.getElementById('folia-load-status');
+    if (status) status.textContent = uiText(status.textContent);
+    if (ready) event('state', getState());
+  };
   var foliaNavToggle = document.getElementById('folia-expand-proxy');
   if (foliaNavToggle) {
     foliaNavToggle.addEventListener('click', function () {
@@ -846,7 +863,7 @@
   observeMutation('setCustomCoverForCurrent', 'custom-cover');
   observeMutation('clearCustomCoverForCurrent', 'custom-cover');
   observeMutation('writeSpecialLikedSongRefs', 'favorites');
-  observeMutation('markQueueContentChanged', 'queue'); observeMutation('applyLyricsState', 'lyrics'); updateButtons();
+  observeMutation('markQueueContentChanged', 'queue'); observeMutation('applyLyricsState', 'lyrics'); global.refreshFoliaUiLanguage();
   if (global.MineradioSonicWorkshop) {
     var workshopPresetChanged = global.MineradioSonicWorkshop.onPresetChange;
     global.MineradioSonicWorkshop.onPresetChange = function () {

@@ -199,6 +199,38 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['Folia 本地播放器', 'Folia Local Player'],
+  ['正在加载 Folia…', 'Loading Folia…'],
+  ['正在重新加载 Folia…', 'Reloading Folia…'],
+  ['正在连接播放器…', 'Connecting to the player…'],
+  ['Folia 界面未能加载。可以切回 Mineradio 后重试。', 'Folia could not load. Switch back to Mineradio and retry.'],
+  ['导入音乐文件', 'Import music files'],
+  ['导入文件', 'Import files'],
+  ['展开导航', 'Expand navigation'],
+  ['收起导航', 'Collapse navigation'],
+  ['不支持的界面语言', 'Unsupported interface language'],
+  ['播放器队列尚未准备好', 'The playback queue is not ready'],
+  ['播放器尚未准备好', 'The player is not ready'],
+  ['文件选择器未准备好', 'The file picker is not ready'],
+  ['Folia 容器未加载', 'The Folia container is not loaded'],
+  ['队列位置无效', 'Invalid queue position'],
+  ['界面名称无效', 'Invalid interface name'],
+  ['静音状态无效', 'Invalid mute state'],
+  ['请输入歌单名称', 'Enter a playlist name'],
+  ['播放模式无效', 'Invalid playback mode'],
+  ['歌单标识无效', 'Invalid playlist ID'],
+  ['当前歌曲还不能跳转', 'This track is not ready for seeking'],
+  ['歌曲标识无效', 'Invalid track ID'],
+  ['歌曲列表无效', 'Invalid track list'],
+  ['音量无效', 'Invalid volume'],
+  ['不支持的播放器操作', 'Unsupported player command'],
+  ['歌单暂无可播放歌曲', 'This playlist has no playable tracks'],
+  ['歌单不存在', 'Playlist not found'],
+  ['只能编辑自建歌单', 'Only custom playlists can be edited'],
+  ['歌单暂时无法播放', 'This playlist cannot be played right now'],
+  ['这首歌曲已不在本地曲库', 'This track is no longer in the local library'],
+  ['歌单中没有这首歌曲', 'This track is not in the playlist'],
+  ['播放器操作失败', 'Player command failed'],
   ['视觉控制台', 'Visual Console'],
   ['MINERADIO VISUALS · 鼠标移开自动隐藏', 'MINERADIO VISUALS · Hides when the pointer leaves'],
   ['视觉预设', 'Visual Presets'],
@@ -252,9 +284,36 @@ var UI_LANGUAGE_PAIRS = [
   ['歌词开关', 'Lyric Switches'],
   ['歌词溢光强度', 'Lyric Glow Strength'],
   ['溢光强度', 'Glow Strength'],
+  ['封面渐变', 'Cover Gradient'],
+  ['点击后单独设置溢光颜色', 'Click to set a separate glow color'],
+  ['点击后让溢光跟随高亮', 'Click to match glow to the highlight color'],
   ['歌词外观', 'Lyrics Appearance'],
   ['颜色 / 来源 / 位置', 'Color / Source / Position'],
   ['显示与翻译', 'Display & Translation'],
+  ['自定义歌词', 'Custom Lyrics'],
+  ['当前歌曲', 'Current Song'],
+  ['支持 LRC 时间轴，也可以直接输入纯文本歌词', 'Supports LRC timestamps or plain-text lyrics.'],
+  ['[00:12.00] 第一行歌词\n[00:16.50] 第二行歌词\n\n没有时间轴也可以，每一行会按歌曲时长自动铺开', '[00:12.00] First lyric line\n[00:16.50] Second lyric line\n\nWithout timestamps, lines are spaced across the track.'],
+  ['保存使用', 'Save & Apply'],
+  ['歌词文件', 'Lyric File'],
+  ['未知格式', 'Unknown Format'],
+  ['使用本地歌词或音频内嵌歌词', 'Use local or embedded lyrics'],
+  ['打开并编辑自定义歌词', 'Open and edit custom lyrics'],
+  ['新增自定义歌词', 'Add custom lyrics'],
+  ['已读取本地自定义歌词', 'Loaded local custom lyrics'],
+  ['提示：带 [00:12.00] 时间轴会更精准；纯文本会自动铺开', 'Tip: [00:12.00] timestamps improve alignment; plain text is auto-spaced.'],
+  ['请先播放或选择一首歌', 'Play or select a song first'],
+  ['请输入歌词内容', 'Enter lyric text'],
+  ['没有识别到可显示的歌词行', 'No displayable lyric lines found'],
+  ['已应用，但本地存储空间不足', 'Applied, but local storage is full'],
+  ['当前歌曲没有自定义歌词', 'This song has no custom lyrics'],
+  ['已删除，恢复原歌词', 'Deleted; original lyrics restored'],
+  ['这个歌词文件没读到可用歌词', 'No usable lyrics found in this file'],
+  ['当前用的就是', 'Already using'],
+  ['正在读取', 'Loading'],
+  ['已切换到', 'Switched to'],
+  ['这个歌词文件', 'this lyric file'],
+  ['所选歌词文件', 'the selected lyric file'],
   ['单行', 'Single'],
   ['双行', 'Double'],
   ['三行', 'Triple'],
@@ -275,6 +334,7 @@ var UI_LANGUAGE_PAIRS = [
   ['溢光颜色', 'Glow Color'],
   ['跟随高亮', 'Follow Highlight'],
   ['链接', 'Link'],
+  ['独立', 'Independent'],
   ['歌词溢光颜色', 'Lyric Glow Color'],
   ['歌词源', 'Lyric Source'],
   ['歌词来源', 'Lyric Source'],
@@ -724,7 +784,7 @@ var uiLanguage = 'zh-CN';
 var uiLanguageObserver = null;
 var uiLanguageApplying = false;
 var uiLanguageSources = new WeakMap();
-var UI_LANGUAGE_SCOPE_IDS = ['fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal'];
+var UI_LANGUAGE_SCOPE_IDS = ['fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal', 'custom-lyric-modal'];
 var uiLanguageZhToEn = Object.create(null);
 var uiLanguageEnToZh = Object.create(null);
 for (var uiLanguagePairIndex = 0; uiLanguagePairIndex < UI_LANGUAGE_PAIRS.length; uiLanguagePairIndex++) {
@@ -743,7 +803,13 @@ function readUiLanguage() {
 }
 function translateUiCountText(value) {
   var text = String(value == null ? '' : value);
-  var match = text.match(/^(\d+)\s*个$/);
+  var match = text.match(/^已保存\s*(\d+)\s*行，并切换为自定义歌词$/);
+  if (match) return uiLanguage === 'en'
+    ? 'Saved ' + match[1] + ' ' + (match[1] === '1' ? 'line' : 'lines') + ' and switched to custom lyrics'
+    : text;
+  match = text.match(/^Saved\s+(\d+)\s+lines?\s+and switched to custom lyrics$/);
+  if (match) return uiLanguage === 'zh-CN' ? '已保存 ' + match[1] + ' 行，并切换为自定义歌词' : text;
+  match = text.match(/^(\d+)\s*个$/);
   if (match) return uiLanguage === 'en' ? match[1] + ' items' : match[1] + ' 个';
   match = text.match(/^(\d+)\s*个断点$/);
   if (match) return uiLanguage === 'en' ? match[1] + ' breakpoints' : match[1] + ' 个断点';
@@ -795,7 +861,7 @@ function translateUiStoredValue(node, field, value, source) {
   var translated = uiText(trimmed);
   var element = node.nodeType === 1 ? node : node.parentElement;
   if (trimmed === '关闭' && element && element.closest &&
-      element.closest('#hotkey-modal, #plugin-modal, #wallpaper-engine-modal')) {
+      element.closest('#hotkey-modal, #plugin-modal, #wallpaper-engine-modal, #custom-lyric-modal')) {
     translated = uiLanguage === 'en' ? 'Close' : '关闭';
   }
   record.last = trimmed ? raw.slice(0, raw.indexOf(trimmed)) + translated + raw.slice(raw.indexOf(trimmed) + trimmed.length) : raw;
@@ -895,6 +961,8 @@ function observeUiLanguagePanel() {
 }
 function refreshUiLanguageSettings() {
   [
+    typeof refreshFoliaUiLanguage === 'function' ? refreshFoliaUiLanguage : null,
+    typeof refreshCustomLyricUiLanguage === 'function' ? refreshCustomLyricUiLanguage : null,
     typeof updateLyricTranslationExtraControls === 'function' ? updateLyricTranslationExtraControls : null,
     typeof updateGaplessControls === 'function' ? updateGaplessControls : null,
     typeof updatePlaybackRateControls === 'function' ? updatePlaybackRateControls : null,
@@ -23012,12 +23080,36 @@ function currentLyricSourceLabel() {
   if (lyricSourceMode === 'custom') return '自定义歌词';
   return lyricsTimingSource === 'fallback' ? '占位歌词' : '原词';
 }
+function refreshCustomLyricUiLanguage() {
+  updateCustomLyricControls();
+  // Rebuild only the candidate buttons; the open editor's draft and status stay intact.
+  renderLocalLyricPickRow(currentLyricSong());
+}
 function setCustomLyricStatus(text, tone) {
   var el = document.getElementById('custom-lyric-status');
   if (!el) return;
   el.textContent = text || '';
   el.classList.toggle('good', tone === 'good');
   el.classList.toggle('fail', tone === 'fail');
+  if (typeof translateUiElement === 'function') translateUiElement(el);
+}
+function setCustomLyricStatusParts(prefix, userValue, suffix, tone) {
+  var el = document.getElementById('custom-lyric-status');
+  if (!el) return;
+  el.textContent = '';
+  function appendStatusPart(text, skip) {
+    if (!text) return;
+    var part = document.createElement('span');
+    part.textContent = text;
+    if (skip) part.setAttribute('data-i18n-skip', '');
+    el.appendChild(part);
+  }
+  appendStatusPart(prefix, false);
+  appendStatusPart(userValue, true);
+  appendStatusPart(suffix, false);
+  el.classList.toggle('good', tone === 'good');
+  el.classList.toggle('fail', tone === 'fail');
+  if (typeof translateUiElement === 'function') translateUiElement(el);
 }
 /**
  * 渲染同名多歌词候选的切换按钮。只有一个候选时整行隐藏，界面保持原样。
@@ -23050,8 +23142,9 @@ function buildLocalLyricPickButton(song, candidate, activeId) {
   var btn = document.createElement('button');
   var pickId = localLyricPickId(candidate);
   btn.className = pickId && pickId === activeId ? 'modal-btn primary' : 'modal-btn';
-  btn.textContent = candidate.name || '歌词文件';
-  btn.title = (localFilePath(candidate) || candidate.name || '') + ' · ' + (localLyricFileExt(candidate).toUpperCase() || '未知格式');
+  btn.setAttribute('data-i18n-skip', '');
+  btn.textContent = candidate.name || uiText('歌词文件');
+  btn.title = (localFilePath(candidate) || candidate.name || '') + ' · ' + (localLyricFileExt(candidate).toUpperCase() || uiText('未知格式'));
   btn.onclick = function(){ useLocalLyricCandidate(song, candidate); };
   return btn;
 }
@@ -23064,7 +23157,7 @@ function buildLocalLyricPickButton(song, candidate, activeId) {
 function useLocalLyricCandidate(song, candidate) {
   if (!song || !candidate) return;
   if (song.localLyricFile === candidate) {
-    setCustomLyricStatus('当前用的就是 ' + (candidate.name || '这个歌词文件'), 'good');
+    setCustomLyricStatusParts('当前用的就是 ', candidate.name || '', candidate.name ? '' : '这个歌词文件', 'good');
     return;
   }
   setLocalLyricPickForSong(song, localLyricPickId(candidate));
@@ -23079,9 +23172,10 @@ function useLocalLyricCandidate(song, candidate) {
   song.localLyricResidencyReleased = false;
   propagateLocalLyricPick(song);
   renderLocalLyricPickRow(song);
-  setCustomLyricStatus('正在读取 ' + (candidate.name || '所选歌词文件'), '');
+  setCustomLyricStatusParts('正在读取 ', candidate.name || '', candidate.name ? '' : '所选歌词文件', '');
   ensureLocalLyricsForSong(song, { applyCurrent: true, token: trackSwitchToken }).then(function(ok){
-    setCustomLyricStatus(ok ? ('已切换到 ' + (candidate.name || '所选歌词文件')) : '这个歌词文件没读到可用歌词', ok ? 'good' : 'fail');
+    if (ok) setCustomLyricStatusParts('已切换到 ', candidate.name || '', candidate.name ? '' : '所选歌词文件', 'good');
+    else setCustomLyricStatus('这个歌词文件没读到可用歌词', 'fail');
     if (ok) showToast('已切换歌词文件：' + (candidate.name || ''));
     scheduleLocalAssetUiRefresh(song, 'local-lyric-pick');
   });
@@ -23117,10 +23211,15 @@ function openCustomLyricModal() {
   if (immersiveMode) setImmersiveMode(false);
   var entry = getCustomLyricEntry(song);
   var title = document.getElementById('custom-lyric-title');
-  var sub = document.getElementById('custom-lyric-sub');
+  var trackMeta = document.getElementById('custom-lyric-track-meta');
   var input = document.getElementById('custom-lyric-input');
-  if (title) title.textContent = song.name || '当前歌曲';
-  if (sub) sub.textContent = (songDisplaySubtitle(song) || '') + (entry ? ' · 已保存自定义歌词' : ' · 可粘贴 LRC 或逐行输入');
+  if (title) {
+    if (song.name) title.setAttribute('data-i18n-skip', '');
+    else title.removeAttribute('data-i18n-skip');
+    title.textContent = song.name || '当前歌曲';
+    if (!song.name && typeof translateUiElement === 'function') translateUiElement(title);
+  }
+  if (trackMeta) trackMeta.textContent = songDisplaySubtitle(song) || '';
   if (input) input.value = entry ? (entry.text || '') : '';
   renderLocalLyricPickRow(song);
   setCustomLyricStatus(entry ? '已读取本地自定义歌词' : '提示：带 [00:12.00] 时间轴会更精准；纯文本会自动铺开', entry ? 'good' : '');
@@ -38344,6 +38443,7 @@ function applyFxArchiveSnapshot(snapshot) {
 var userFxArchives = [];
 var userFxArchivesHydrated = false;
 var userFxArchiveEditing = -1;
+var userFxArchiveRenderGeneration = 0;
 function ensureUserFxArchives() {
   if (userFxArchivesHydrated) return userFxArchives;
   var hadStored = hasStoredUserFxArchives();
@@ -38388,6 +38488,20 @@ function renderUserFxArchives(opts) {
   opts = opts || {};
   var grid = document.getElementById('user-archive-grid');
   if (!grid) return;
+  var editingDraft = null;
+  if (userFxArchiveEditing >= 0) {
+    var previousInput = document.getElementById('user-archive-input-' + userFxArchiveEditing);
+    if (previousInput) {
+      editingDraft = {
+        value: previousInput.value,
+        selectionStart: previousInput.selectionStart,
+        selectionEnd: previousInput.selectionEnd,
+        selectionDirection: previousInput.selectionDirection,
+        focused: document.activeElement === previousInput
+      };
+    }
+  }
+  var renderGeneration = ++userFxArchiveRenderGeneration;
   var toolbar =
     '<div class="user-archive-toolbar">' +
       '<div class="user-archive-note">空白新建，保存当前视觉参数；支持拖拽 JSON 导入，也可以导出为文件备份。</div>' +
@@ -38406,8 +38520,8 @@ function renderUserFxArchives(opts) {
     var hasSave = !!slot.snapshot;
     var editing = userFxArchiveEditing === index;
     var nameHtml = editing
-      ? '<input class="user-archive-input" id="user-archive-input-' + index + '" type="text" maxlength="28" value="' + escHtml(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
-      : '<div class="user-archive-name" title="' + escHtml(slot.name) + '">' + escHtml(slot.name) + '</div>';
+      ? '<input class="user-archive-input" id="user-archive-input-' + index + '" data-i18n-skip type="text" maxlength="28" value="' + escHtml(slot.name) + '" onkeydown="handleUserFxArchiveRenameKey(event,' + index + ')">'
+      : '<div class="user-archive-name" data-i18n-skip title="' + escHtml(slot.name) + '">' + escHtml(slot.name) + '</div>';
     var actionsHtml = editing
       ? '<button type="button" onclick="commitUserFxArchiveRename(' + index + ')">确定</button>' +
         '<button type="button" onclick="cancelUserFxArchiveRename()">取消</button>'
@@ -38426,13 +38540,23 @@ function renderUserFxArchives(opts) {
   grid.innerHTML = toolbar + cards + addCard;
   bindUserFxArchiveDrop();
   if (userFxArchiveEditing >= 0) {
-    setTimeout(function(){
-      var input = document.getElementById('user-archive-input-' + userFxArchiveEditing);
-      if (input) {
-        input.focus();
-        input.select();
+    var input = document.getElementById('user-archive-input-' + userFxArchiveEditing);
+    if (input && editingDraft) {
+      input.value = editingDraft.value;
+      if (editingDraft.focused) input.focus();
+      if (editingDraft.selectionStart != null && editingDraft.selectionEnd != null && input.setSelectionRange) {
+        input.setSelectionRange(editingDraft.selectionStart, editingDraft.selectionEnd, editingDraft.selectionDirection || 'none');
       }
-    }, 0);
+    } else if (input) {
+      setTimeout(function(){
+        if (renderGeneration !== userFxArchiveRenderGeneration || userFxArchiveEditing < 0) return;
+        var currentInput = document.getElementById('user-archive-input-' + userFxArchiveEditing);
+        if (currentInput) {
+          currentInput.focus();
+          currentInput.select();
+        }
+      }, 0);
+    }
   }
 }
 function createUserFxArchive() {
@@ -45654,7 +45778,7 @@ function renderPluginList() {
     var p = list[i];
     var id = escHtml(p.id);
     html += '<div class="plugin-item' + (p.enabled ? ' on' : '') + '">' +
-      '<div class="plugin-item-main">' +
+      '<div class="plugin-item-main" data-i18n-skip>' +
         '<div class="plugin-item-title">' + escHtml(p.name) +
           (p.version ? '<span class="plugin-item-ver">v' + escHtml(p.version) + '</span>' : '') +
         '</div>' +
