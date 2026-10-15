@@ -78,9 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '主设置新增中文 / English 切换，覆盖视觉、歌词、播放、热键、插件及相关弹窗。',
-  'Folia 与主设置共用语言选择，三种视图、歌词效果和背景设置同步切换，重启后保留。',
-  '优化英文长文本布局，切换语言时保留歌词与存档改名草稿，歌曲、歌单和文件名称保持原文。',
+  '延续 v2.5.0 的主设置与 Folia 中文 / English 同步切换。',
+  '本版只更新发行元数据并重新生成官方 Windows 安装包，不改变现有功能。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
