@@ -920,6 +920,9 @@ var UI_LANGUAGE_PAIRS = [
   ['本机代理', 'Local proxy'],
   ['立即更新', 'Update now'],
   ['已是最新', 'Up to date'],
+  ['正在检测更新…', 'Checking for updates…'],
+  ['检测中…', 'Checking…'],
+  ['暂无可用更新', 'No update available'],
   ['自动换源', 'Auto source switch'],
   ['点击空白处也可以继续', 'Click anywhere to continue'],
   ['跳过', 'Skip'],
@@ -1051,6 +1054,10 @@ function translateUiCountText(value) {
   if (match) return uiLanguage === 'en' ? 'Version ' + match[1] + ' is up to date.' : text;
   match = text.match(/^Version\s*(v[0-9.]+)\s*is up to date\.$/);
   if (match) return uiLanguage === 'zh-CN' ? '当前版本 ' + match[1] + ' 已是最新。' : text;
+  match = text.match(/^发现新版本\s*(v[0-9.]+)$/);
+  if (match) return uiLanguage === 'en' ? 'New version ' + match[1] + ' available' : text;
+  match = text.match(/^New version\s*(v[0-9.]+)\s*available$/);
+  if (match) return uiLanguage === 'zh-CN' ? '发现新版本 ' + match[1] : text;
   match = text.match(/^(\d+)\s*个全局热键被系统或其他软件占用，可在「热键」里改键$/);
   if (match) return uiLanguage === 'en' ? match[1] + ' global hotkeys are in use by the system or other apps; change them under Hotkeys.' : text;
   match = text.match(/^(\d+)\s*global hotkeys are in use by the system or other apps; change them under Hotkeys\.$/);
