@@ -206,6 +206,127 @@ var UI_LANGUAGE_PAIRS = [
   ['Folia 界面未能加载。可以切回 Mineradio 后重试。', 'Folia could not load. Switch back to Mineradio and retry.'],
   ['导入音乐文件', 'Import music files'],
   ['导入文件', 'Import files'],
+  ['导入文件夹', 'Import Folder'],
+  ['本地文件', 'Local Files'],
+  ['导入本地文件', 'Import Local Files'],
+  ['导入本地音乐', 'Import Local Music'],
+  ['本地模式', 'Local Mode'],
+  ['本地上传', 'Local Import'],
+  ['导入单首音乐或封面', 'Import a track or cover'],
+  ['导入本地音乐文件夹', 'Import a local music folder'],
+  ['取消自定义封面', 'Remove custom cover'],
+  ['当前没有自定义封面', 'No custom cover'],
+  ['本地导入', 'Local Import'],
+  ['关闭提示', 'Dismiss'],
+  ['支持 10 种音频格式，并自动匹配 LRC/TXT/SRT/VTT/ASS/YRC 歌词和常用封面图片。', 'Supports 10 audio formats and matches LRC/TXT/SRT/VTT/ASS/YRC lyrics and cover images.'],
+  ['搜索本地歌曲、歌手、文件名...', 'Search local tracks, artists or filenames...'],
+  ['选择播放歌单', 'Choose Playlist'],
+  ['管理 / 新建歌单', 'Manage / New Playlist'],
+  ['本地曲库', 'Local Library'],
+  ['可直接切换播放', 'Ready to Play'],
+  ['特别喜欢', 'Favorites'],
+  ['智能分类', 'Smart Categories'],
+  ['所有歌曲', 'All Tracks'],
+  ['最近添加', 'Recently Added'],
+  ['最近播放', 'Recently Played'],
+  ['播放最多', 'Most Played'],
+  ['未播放', 'Never Played'],
+  ['艺术家', 'Artist'],
+  ['专辑艺术家', 'Album Artist'],
+  ['流派', 'Genre'],
+  ['年代', 'Decade'],
+  ['暂无评论', 'No comments'],
+  ['暂无热门歌曲', 'No popular tracks'],
+  ['音乐用户', 'Music User'],
+  ['赞', 'Likes'],
+  ['这首歌还没有播放记录，听过之后会显示播放次数和累计时长。', 'No playback history yet. Play this track to see play counts and listening time.'],
+  ['暂无播放统计', 'No playback statistics'],
+  ['占位歌词', 'Placeholder Lyrics'],
+  ['喜欢', 'Liked'],
+  ['全部', 'All'],
+  ['歌曲详情', 'Track Details'],
+  ['歌手详情', 'Artist Details'],
+  ['歌曲名', 'Track Name'],
+  ['歌手', 'Artist'],
+  ['专辑', 'Album'],
+  ['关联歌手', 'Related Artists'],
+  ['所属专辑', 'Album'],
+  ['时长', 'Duration'],
+  ['来源', 'Source'],
+  ['本地信息', 'Local Information'],
+  ['来自当前播放 ·', 'Currently Playing ·'],
+  ['音质', 'Audio Quality'],
+  ['音质: 本地文件按原始编码播放', 'Audio quality: Local files use their original encoding'],
+  ['本地文件按原始编码播放', 'Local files use their original encoding'],
+  ['文件路径', 'File Path'],
+  ['封面文件', 'Cover File'],
+  ['未知', 'Unknown'],
+  ['未知歌手', 'Unknown Artist'],
+  ['未知专辑', 'Unknown Album'],
+  ['未匹配', 'Not Matched'],
+  ['内嵌封面', 'Embedded Cover'],
+  ['红心喜欢', 'Liked'],
+  ['自定义封面', 'Custom Cover'],
+  ['纯本地模式仅显示当前文件里的歌手信息。', 'Local mode only shows artist information from the current file.'],
+  ['本地歌曲不加载在线评论。', 'Online comments are unavailable for local tracks.'],
+  ['播放统计', 'Playback Statistics'],
+  ['播放次数', 'Play Count'],
+  ['完整播放', 'Completed Plays'],
+  ['累计播放时长', 'Total Listening Time'],
+  ['最近播放时间', 'Last Played'],
+  ['最后播放位置', 'Last Position'],
+  ['暂无', 'None'],
+  ['无断点', 'No Resume Point'],
+  ['当前队列', 'Current Queue'],
+  ['选择收藏到任意歌单', 'Add to a playlist'],
+  ['下一首播放', 'Play next'],
+  ['移出特别喜欢', 'Remove from favorites'],
+  ['加入特别喜欢', 'Add to favorites'],
+  ['取消红心', 'Unlike'],
+  ['移除', 'Remove'],
+  ['拖动调整顺序', 'Drag to reorder'],
+  ['查看使用引导', 'View guide'],
+  ['检测更新', 'Check for updates'],
+  ['正在检测更新…', 'Checking for updates…'],
+  ['最小化', 'Minimize'],
+  ['退出全屏', 'Exit Fullscreen'],
+  ['回到 Home', 'Go to Home'],
+  ['自动隐藏账号胶囊', 'Auto-hide account control'],
+  ['取消自动隐藏账号胶囊', 'Keep account control visible'],
+  ['自动隐藏 Home 按钮', 'Auto-hide Home button'],
+  ['取消自动隐藏 Home 按钮', 'Keep Home button visible'],
+  ['自动隐藏视觉控制台', 'Auto-hide Visual Console'],
+  ['取消自动隐藏视觉控制台', 'Keep Visual Console visible'],
+  ['开启 DIY 玩家模式', 'Enable DIY mode'],
+  ['关闭 DIY 玩家模式', 'Disable DIY mode'],
+  ['播放器控制台', 'Player Controls'],
+  ['展开播放器控制台', 'Expand Player Controls'],
+  ['播放顺序', 'Play Order'],
+  ['播放/暂停', 'Play / Pause'],
+  ['3D 歌单架：侧栏 / 舞台', '3D Shelf: Sidebar / Stage'],
+  ['音量 / 静音', 'Volume / Mute'],
+  ['正常速度', 'Normal Speed'],
+  ['速度', 'Speed'],
+  ['睡眠', 'Sleep'],
+  ['关', 'Off'],
+  ['本曲', 'Track'],
+  ['关闭睡眠定时', 'Turn off sleep timer'],
+  ['15 分钟后暂停', 'Pause after 15 minutes'],
+  ['30 分钟后暂停', 'Pause after 30 minutes'],
+  ['60 分钟后暂停', 'Pause after 60 minutes'],
+  ['播完本曲后暂停', 'Pause after this track'],
+  ['滚轮', 'Wheel'],
+  ['% / 格', '% / Notch'],
+  ['滚轮音量步进（百分比）', 'Volume wheel step (percent)'],
+  ['鼠标滚轮悬停在音量键上滚动即可调整音量，这里设置每滚一格的幅度', 'Scroll over the volume button to adjust volume; set the amount per notch here'],
+  ['无缝', 'Gapless'],
+  ['均衡', 'Normalize'],
+  ['无缝播放：提前解码下一首', 'Gapless playback: preload the next track'],
+  ['音量均衡：拉平不同歌曲的响度', 'Volume normalization: balance track loudness'],
+  ['控制条自动隐藏', 'Auto-hide controls'],
+  ['全沉浸式', 'Immersive Mode'],
+  ['退出全沉浸式', 'Exit Immersive Mode'],
+  ['全屏 (F)', 'Fullscreen (F)'],
   ['展开导航', 'Expand navigation'],
   ['收起导航', 'Collapse navigation'],
   ['不支持的界面语言', 'Unsupported interface language'],
@@ -870,6 +991,34 @@ var UI_LANGUAGE_PAIRS = [
   ['恢复当前滑条默认值', 'Restore this slider to its default'],
   ['开发中，暂不可用', 'In development, not yet available'],
   ['导入本地音乐', 'Import local music'],
+  // 播放统计、歌曲/歌手详情与歌单菜单的动态文案。
+  ['本地模式', 'Local Mode'],
+  ['暂无评论', 'No comments'],
+  ['暂无热门歌曲', 'No popular tracks'],
+  ['音乐用户', 'Music User'],
+  ['赞', 'Likes'],
+  ['这首歌还没有播放记录，听过之后会显示播放次数和累计时长。', 'No playback history yet. Play this track to see play counts and listening time.'],
+  ['暂无播放统计', 'No playback statistics'],
+  ['占位歌词', 'Placeholder Lyrics'],
+  ['来自当前播放 ·', 'Currently Playing ·'],
+  ['播放统计', 'Playback Statistics'],
+  ['播放次数', 'Play Count'],
+  ['完整播放', 'Completed Plays'],
+  ['累计播放时长', 'Total Listening Time'],
+  ['最近播放时间', 'Last Played'],
+  ['最后播放位置', 'Last Position'],
+  ['暂无', 'None'],
+  ['无断点', 'No Resume Point'],
+  ['下一首播放', 'Play next'],
+  ['移出特别喜欢', 'Remove from favorites'],
+  ['加入特别喜欢', 'Add to favorites'],
+  ['取消红心', 'Unlike'],
+  ['拖动调整顺序', 'Drag to reorder'],
+  ['取消自动隐藏账号胶囊', 'Keep account control visible'],
+  ['取消自动隐藏 Home 按钮', 'Keep Home button visible'],
+  ['取消自动隐藏视觉控制台', 'Keep Visual Console visible'],
+  ['退出全沉浸式', 'Exit Immersive Mode'],
+  ['移除', 'Remove'],
   // 底部控制条、歌单面板、标题栏与确认弹窗。
   ['登录', 'Sign in'],
   ['本地音乐库', 'Local music library'],
@@ -1140,8 +1289,13 @@ function translateUiStoredValue(node, field, value, source) {
   record.language = uiLanguage;
   return record.last;
 }
+// data-i18n-attrs：只翻译属性，元素里的文本是歌名、歌单名一类的用户数据。
+function uiLanguageTextSkipNode(node) {
+  var element = node && (node.nodeType === 1 ? node : node.parentElement);
+  return !!(element && element.closest && element.closest('[data-i18n-skip], [data-i18n-attrs]'));
+}
 function translateUiTextNode(node) {
-  if (!node || node.nodeType !== 3 || uiLanguageSkipNode(node)) return;
+  if (!node || node.nodeType !== 3 || uiLanguageTextSkipNode(node)) return;
   var raw = String(node.nodeValue || '');
   var translated = translateUiStoredValue(node, 'text', raw);
   if (translated !== raw) node.nodeValue = translated;
@@ -1169,6 +1323,7 @@ function translateUiAttributesIn(root) {
 function translateUiElement(element) {
   if (!element || element.nodeType !== 1 || uiLanguageSkipNode(element) || /^(SCRIPT|STYLE)$/.test(element.tagName)) return;
   ['title', 'aria-label', 'placeholder'].forEach(function(attr){ translateUiAttribute(element, attr); });
+  if (element.hasAttribute('data-i18n-attrs')) return;
   if (element.hasAttribute('data-i18n')) {
     var key = element.getAttribute('data-i18n');
     if (element.childNodes.length === 1 && element.firstChild.nodeType === 3) {
@@ -1315,6 +1470,8 @@ function refreshUiLanguageSettings() {
   [
     typeof refreshFoliaUiLanguage === 'function' ? refreshFoliaUiLanguage : null,
     typeof refreshCustomLyricUiLanguage === 'function' ? refreshCustomLyricUiLanguage : null,
+    typeof updateLocalPlaybackPlaylistSourceButton === 'function' ? updateLocalPlaybackPlaylistSourceButton : null,
+    typeof renderUserBtn === 'function' ? renderUserBtn : null,
     typeof updateLyricTranslationExtraControls === 'function' ? updateLyricTranslationExtraControls : null,
     typeof updateGaplessControls === 'function' ? updateGaplessControls : null,
     typeof updatePlaybackRateControls === 'function' ? updatePlaybackRateControls : null,
@@ -20603,19 +20760,19 @@ function songListenStatDetailHtml(song) {
   var resume = songResumePositionText(song);
   var inner;
   if (!stat && !resume) {
-    inner = '<div class="detail-empty">这首歌还没有播放记录，听过之后会显示播放次数和累计时长。</div>';
+    inner = '<div class="detail-empty">' + escHtml(uiText('这首歌还没有播放记录，听过之后会显示播放次数和累计时长。')) + '</div>';
   } else {
     var plays = stat && Number(stat.plays) || 0;
     var completed = stat && Number(stat.completed) || 0;
     inner = '<div class="detail-grid">' +
-      detailRow('播放次数', plays ? plays + ' 次' : '暂无') +
-      detailRow('完整播放', completed ? completed + ' 次' : '暂无') +
-      detailRow('累计播放时长', formatListenDurationText(stat && stat.listenMs)) +
-      detailRow('最近播放时间', formatListenTimeText(stat && stat.lastPlayedAt) || '暂无') +
-      detailRow('最后播放位置', resume || '无断点') +
+      detailRow(uiText('播放次数'), plays ? plays + ' 次' : uiText('暂无')) +
+      detailRow(uiText('完整播放'), completed ? completed + ' 次' : uiText('暂无')) +
+      detailRow(uiText('累计播放时长'), formatListenDurationText(stat && stat.listenMs)) +
+      detailRow(uiText('最近播放时间'), formatListenTimeText(stat && stat.lastPlayedAt) || uiText('暂无')) +
+      detailRow(uiText('最后播放位置'), resume || uiText('无断点')) +
     '</div>';
   }
-  return '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">播放统计</div></div>' + inner + '</div>';
+  return '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">' + escHtml(uiText('播放统计')) + '</div></div>' + inner + '</div>';
 }
 /** 每首歌只留一条断点，超过这个条数按最后记录时间淘汰。 */
 var SONG_RESUME_MAX_ENTRIES = 400;
@@ -22129,37 +22286,38 @@ function renderLocalPlaybackPlaylistPicker() {
     var active = localLibraryPlaybackSelection === kind;
     var unresolvedCount = Math.max(0, storedCount - songs.length);
     var cover = songs.length ? songCoverSrc(songs[0], 72) : '';
-    var subtitle = storedCount + (uiLanguage === 'en' ? ' tracks' : ' 首');
-    if (unresolvedCount) subtitle += uiLanguage === 'en'
-      ? ' · ' + unresolvedCount + ' tracks need relocating'
-      : ' · ' + unresolvedCount + ' 首待重新定位';
-    else subtitle += uiLanguage === 'en'
-      ? (kind === 'library' ? ' · Local library' : ' · Ready to play')
-      : (kind === 'library' ? ' · 本地曲库' : ' · 可直接切换播放');
+    var subtitle = uiLanguage === 'en' ? storedCount + ' tracks' : storedCount + ' 首';
+    if (unresolvedCount) {
+      subtitle += uiLanguage === 'en' ? ' · ' + unresolvedCount + ' need relinking' : ' · ' + unresolvedCount + ' 首待重新定位';
+    } else {
+      subtitle += ' · ' + uiText(kind === 'library' ? '本地曲库' : '可直接切换播放');
+    }
     html += '<button type="button" class="playlist-source-option' + (active ? ' active' : '') + (!songs.length ? ' empty' : '') + (extraClass ? ' ' + extraClass : '') + '" role="option" aria-selected="' + (active ? 'true' : 'false') + '" data-playback-playlist-kind="' + escHtml(kind) + '">' +
       (cover ? '<img class="playlist-source-option-cover" src="' + escHtml(cover) + '" alt="" loading="lazy" decoding="async">' : '<span class="playlist-source-option-cover">' + escHtml(icon || '♪') + '</span>') +
-      '<span class="playlist-source-option-info"><span class="playlist-source-option-name">' + escHtml(uiText(name)) + '</span><span class="playlist-source-option-sub">' + escHtml(subtitle) + '</span></span>' +
+      '<span class="playlist-source-option-info"><span class="playlist-source-option-name">' + escHtml(name) + '</span><span class="playlist-source-option-sub">' + escHtml(subtitle) + '</span></span>' +
       '<span class="playlist-source-option-check" aria-hidden="true">✓</span>' +
     '</button>';
   }
   var librarySongs = localSearchPool();
-  appendOption('library', '全部音乐', librarySongs, librarySongs.length, '≡', 'library');
+  appendOption('library', uiText('全部音乐'), librarySongs, librarySongs.length, '≡', 'library');
   /* 智能分类是现算出来的临时来源，只有正在用它播放时才占一格，不常驻这个列表。 */
   if (isLocalLibraryCategoryKind(localLibraryPlaybackSelection)) {
     var categoryView = localLibraryCategoryView(localLibraryPlaybackSelection);
     var categorySongs = localPlaylistSongs(localLibraryPlaybackSelection);
-    appendOption(localLibraryPlaybackSelection, categoryView ? categoryView.title : '智能分类',
+    appendOption(localLibraryPlaybackSelection, categoryView
+      ? (categoryView.mode === 'value' ? categoryView.title : uiText(categoryView.title))
+      : uiText('智能分类'),
       categorySongs, categorySongs.length, categoryView ? categoryView.icon : '≡', 'library');
   }
   var specialSongs = getSpecialLikedSongs();
-  appendOption(SPECIAL_LIKED_PLAYLIST_ID, '特别喜欢', specialSongs, specialSongs.length, '♥', 'liked');
+  appendOption(SPECIAL_LIKED_PLAYLIST_ID, uiText('特别喜欢'), specialSongs, specialSongs.length, '♥', 'liked');
   var playlists = readLocalPlaylists();
   for (var i = 0; i < playlists.length; i++) {
     var playlist = playlists[i];
     appendOption(playlist.id, playlist.name, getLocalPlaylistSongsById(playlist.id), playlist.songRefs.length, '♪', 'custom');
   }
   list.innerHTML = html;
-  if (count) count.textContent = uiLanguage === 'en' ? playlists.length + ' playlists' : playlists.length + ' 个独立歌单';
+  if (count) count.textContent = uiLanguage === 'en' ? playlists.length + ' custom playlists' : playlists.length + ' 个独立歌单';
   if (localPlaybackPlaylistPickerOpen && window.gsap) {
     animateListItems(list, '.playlist-source-option', { x: 0, y: 5, stagger: 0.012, duration: 0.18, limit: 18 });
   }
@@ -22172,13 +22330,17 @@ function updateLocalPlaybackPlaylistSourceButton() {
   var category = isLocalLibraryCategoryKind(localLibraryPlaybackSelection) ? localLibraryCategoryView(localLibraryPlaybackSelection) : null;
   var label = document.getElementById('playlist-source-label');
   var icon = document.getElementById('playlist-source-icon');
-  var sourceName = special ? '特别喜欢' : (custom ? custom.name : (category ? category.title : '全部音乐'));
+  var sourceName = special ? uiText('特别喜欢') : (custom ? custom.name : (category
+    ? (category.mode === 'value' ? category.title : uiText(category.title))
+    : uiText('全部音乐')));
   btn.classList.toggle('special', special);
   btn.classList.toggle('custom', !!custom);
   btn.setAttribute('aria-expanded', localPlaybackPlaylistPickerOpen ? 'true' : 'false');
-  if (label) label.textContent = special ? uiText('喜欢') : (custom ? custom.name.slice(0, 6) : (category ? uiText(category.title.slice(0, 6)) : uiText('全部')));
+  if (label) label.textContent = special ? uiText('喜欢') : (custom ? custom.name.slice(0, 6) : (category ? (category.mode === 'value' ? category.title.slice(0, 6) : uiText(category.title).slice(0, 6)) : uiText('全部')));
   if (icon) icon.textContent = special ? '♥' : (custom ? '♪' : (category ? category.icon : '≡'));
-  btn.title = '当前：' + sourceName + '，点击选择播放歌单';
+  btn.title = uiLanguage === 'en'
+    ? 'Current: ' + sourceName + ', click to choose a playlist'
+    : '当前：' + sourceName + '，点击选择播放歌单';
   btn.setAttribute('aria-label', btn.title);
   if (localPlaybackPlaylistPickerOpen) renderLocalPlaybackPlaylistPicker();
 }
@@ -22783,7 +22945,7 @@ function songDisplaySubtitle(song) {
 }
 function detailRow(label, value) {
   value = value == null || value === '' ? uiText('未知') : value;
-  return '<div class="detail-k">' + escHtml(uiText(label)) + '</div><div class="detail-v">' + escHtml(String(value)) + '</div>';
+  return '<div class="detail-k">' + escHtml(uiText(label)) + '</div><div class="detail-v" data-i18n-skip>' + escHtml(String(value)) + '</div>';
 }
 function currentArtistNames(song) {
   var text = songArtistText(song);
@@ -22830,7 +22992,7 @@ function commentTimeLabel(ms) {
   }
 }
 function renderDetailComments(comments) {
-  if (!comments || !comments.length) return '<div class="detail-empty">暂无评论</div>';
+  if (!comments || !comments.length) return '<div class="detail-empty">' + escHtml(uiText('暂无评论')) + '</div>';
   var html = '<div class="detail-scroll">';
   for (var i = 0; i < comments.length; i++) {
     var c = comments[i] || {};
@@ -22838,15 +23000,15 @@ function renderDetailComments(comments) {
     var avatar = user.avatar ? coverUrlWithSize(user.avatar, 64) : '';
     html += '<div class="comment-item">' +
       (avatar ? '<img class="comment-avatar" src="' + avatar + '" alt="">' : '<div class="comment-avatar"></div>') +
-      '<div class="comment-main"><div class="comment-meta">' + escHtml(user.nickname || '音乐用户') + (c.likedCount ? (' · ' + c.likedCount + ' 赞') : '') + (c.time ? (' · ' + escHtml(commentTimeLabel(c.time))) : '') + '</div>' +
-      '<div class="comment-text">' + escHtml(c.content || '') + '</div></div>' +
+      '<div class="comment-main"><div class="comment-meta"><span data-i18n-skip>' + escHtml(user.nickname || uiText('音乐用户')) + '</span>' + (c.likedCount ? (' · ' + c.likedCount + ' ' + uiText('赞')) : '') + (c.time ? (' · ' + escHtml(commentTimeLabel(c.time))) : '') + '</div>' +
+      '<div class="comment-text" data-i18n-skip>' + escHtml(c.content || '') + '</div></div>' +
     '</div>';
   }
   return html + '</div>';
 }
 function renderArtistSongList(songs) {
   detailArtistSongs = cloneSongList(songs);
-  if (!detailArtistSongs.length) return '<div class="detail-empty">暂无热门歌曲</div>';
+  if (!detailArtistSongs.length) return '<div class="detail-empty">' + escHtml(uiText('暂无热门歌曲')) + '</div>';
   var html = '<div class="detail-scroll">';
   for (var i = 0; i < detailArtistSongs.length; i++) {
     var s = detailArtistSongs[i];
@@ -22859,8 +23021,8 @@ function renderArtistSongList(songs) {
     return '<div class="artist-song-item" onclick="playArtistDetailSong(' + i + ')">' +
       '<div class="artist-song-rank">' + String(i + 1).padStart(2, '0') + '</div>' +
       coverHtml +
-      '<div class="artist-song-main"><div class="artist-song-name">' + escHtml(s.name || '') + '</div>' +
-      '<div class="artist-song-meta">' + escHtml((s.album || '未知专辑') + (s.duration ? (' · ' + songDurationLabel(s)) : '')) + '</div></div>' +
+      '<div class="artist-song-main"><div class="artist-song-name" data-i18n-skip>' + escHtml(s.name || '') + '</div>' +
+      '<div class="artist-song-meta" data-i18n-skip>' + escHtml((s.album || uiText('未知专辑')) + (s.duration ? (' · ' + songDurationLabel(s)) : '')) + '</div></div>' +
       actionsHtml +
     '</div>';
   }
@@ -22914,27 +23076,27 @@ function openTrackDetailModal(type, songOverride) {
   if (!heading || !body) return;
   var cover = songCoverSrc(song, 180);
   var coverHtml = cover ? '<img class="detail-cover" src="' + cover + '" alt="">' : '<div class="detail-cover"></div>';
-  var title = song.name || '当前歌曲';
+  var title = song.name || uiText('当前歌曲');
   var artists = currentArtistNames(song);
   var seq = ++trackDetailSeq;
   if (type === 'artist') {
-    var artistName = artists.join(' / ') || songArtistText(song) || '未知歌手';
-    var artistInitial = artistName && artistName !== '未知歌手' ? artistName.slice(0, 1) : '歌';
+    var artistName = artists.join(' / ') || songArtistText(song) || uiText('未知歌手');
+    var artistInitial = artistName && artistName !== uiText('未知歌手') ? artistName.slice(0, 1) : '歌';
     var artistCoverHtml = '<div id="artist-detail-cover" class="detail-cover detail-artist-avatar">' + escHtml(artistInitial) + '</div>';
     var artistEmptyText = uiText('纯本地模式仅显示当前文件里的歌手信息。');
     heading.textContent = uiText('歌手详情');
     body.innerHTML =
       '<div class="detail-hero">' + artistCoverHtml +
-        '<div style="min-width:0;flex:1"><div class="detail-title">' + escHtml(artistName) + '</div>' +
-        '<div class="detail-sub">' + escHtml(uiText('来自当前播放')) + ' · ' + escHtml(title) + '</div></div>' +
+        '<div style="min-width:0;flex:1"><div class="detail-title" data-i18n-skip>' + escHtml(artistName) + '</div>' +
+        '<div class="detail-sub">' + escHtml(uiText('来自当前播放 ·')) + ' <span data-i18n-skip>' + escHtml(title) + '</span></div></div>' +
       '</div>' +
       '<div class="detail-grid">' +
-        detailRow('当前歌曲', title) +
-        detailRow('关联歌手', artistName) +
-        detailRow('所属专辑', song.album || uiText('未知')) +
-        detailRow('来源', songSourceLabel(song)) +
+        detailRow(uiText('当前歌曲'), title) +
+        detailRow(uiText('关联歌手'), artistName) +
+        detailRow(uiText('所属专辑'), song.album || uiText('未知')) +
+        detailRow(uiText('来源'), uiText(songSourceLabel(song))) +
       '</div>' +
-      '<div class="detail-chip-row">' + (artists.length ? artists.map(function(name){ return '<span class="detail-chip">' + escHtml(name) + '</span>'; }).join('') : '<span class="detail-chip">' + escHtml(uiText('未知歌手')) + '</span>') + '</div>' +
+      '<div class="detail-chip-row">' + (artists.length ? artists.map(function(name){ return '<span class="detail-chip" data-i18n-skip>' + escHtml(name) + '</span>'; }).join('') : '<span class="detail-chip">' + escHtml(uiText('未知歌手')) + '</span>') + '</div>' +
       '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">' + escHtml(uiText('本地信息')) + '</div></div><div id="artist-hot-songs"><div class="detail-empty">' + escHtml(artistEmptyText) + '</div></div></div>';
   } else {
     heading.textContent = uiText('歌曲详情');
@@ -22945,35 +23107,35 @@ function openTrackDetailModal(type, songOverride) {
     var detailAlbum = String(song.album || '').trim();
     var detailQuality = song.type === 'local' ? localAudioQualityText(song) : '';
     var detailSubtitle = songDisplaySubtitle(song) || detailQuality || uiText('未知歌手');
-    var detailPrimaryChip = detailQuality || songSourceLabel(song);
+    var detailPrimaryChip = detailQuality || uiText(songSourceLabel(song));
     var localDetailRows = song.type === 'local'
-      ? detailRow('音质', detailQuality || uiText('未知')) +
-        detailRow('文件路径', song.localPath || song.localFile && song.localFile.name || uiText('未知')) +
-        detailRow('歌词文件', song.localLyricFileName || uiText('未匹配')) +
-        detailRow('封面文件', song.localCoverFileName || ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? uiText('内嵌封面') : uiText('未匹配')))
+      ? detailRow(uiText('音质'), detailQuality || uiText('未知')) +
+        detailRow(uiText('文件路径'), song.localPath || song.localFile && song.localFile.name || uiText('未知')) +
+        detailRow(uiText('歌词文件'), song.localLyricFileName || uiText('未匹配')) +
+        detailRow(uiText('封面文件'), song.localCoverFileName || ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? uiText('内嵌封面') : uiText('未匹配')))
       : '';
     body.innerHTML =
       '<div class="detail-hero">' + coverHtml +
-        '<div style="min-width:0;flex:1"><div class="detail-title">' + escHtml(title) + '</div>' +
-        '<div class="detail-sub">' + escHtml(detailSubtitle) + '</div></div>' +
+        '<div style="min-width:0;flex:1"><div class="detail-title" data-i18n-skip>' + escHtml(title) + '</div>' +
+        '<div class="detail-sub" data-i18n-skip>' + escHtml(detailSubtitle) + '</div></div>' +
       '</div>' +
       '<div class="detail-grid">' +
-        detailRow('歌曲名', title) +
-        detailRow('歌手', detailArtist || uiText('未知')) +
-        detailRow('专辑', detailAlbum || uiText('未知')) +
-        detailRow('时长', songDurationLabel(song)) +
-        detailRow('来源', songSourceLabel(song)) +
-        detailRow('歌词源', currentLyricSourceLabel()) +
+        detailRow(uiText('歌曲名'), title) +
+        detailRow(uiText('歌手'), detailArtist || uiText('未知')) +
+        detailRow(uiText('专辑'), detailAlbum || uiText('未知')) +
+        detailRow(uiText('时长'), songDurationLabel(song)) +
+        detailRow(uiText('来源'), uiText(songSourceLabel(song))) +
+        detailRow(uiText('歌词源'), uiText(currentLyricSourceLabel())) +
         localDetailRows +
       '</div>' +
       '<div class="detail-chip-row">' +
-        '<span class="detail-chip">' + escHtml(detailPrimaryChip) + '</span>' +
+        '<span class="detail-chip" data-i18n-skip>' + escHtml(detailPrimaryChip) + '</span>' +
         (isSongLiked(song) ? '<span class="detail-chip">' + escHtml(uiText('红心喜欢')) + '</span>' : '') +
         (getCustomCoverForSong(song) ? '<span class="detail-chip">' + escHtml(uiText('自定义封面')) + '</span>' : '') +
         (hasCustomLyricForSong(song) ? '<span class="detail-chip">' + escHtml(uiText('自定义歌词')) + '</span>' : '') +
       '</div>' +
       songListenStatDetailHtml(song) +
-      '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">' + detailCommentTitle + '</div></div><div id="song-comments">' + (detailCanLoadComments ? '<div class="detail-loading">正在载入评论...</div>' : '<div class="detail-empty">' + detailEmptyText + '</div>') + '</div></div>';
+      '<div class="detail-section"><div class="detail-section-head"><div class="detail-section-title">' + escHtml(detailCommentTitle) + '</div></div><div id="song-comments">' + (detailCanLoadComments ? '<div class="detail-loading">' + escHtml(uiText('正在载入评论...')) + '</div>' : '<div class="detail-empty">' + escHtml(detailEmptyText) + '</div>') + '</div></div>';
   }
   bindTrackDetailScrollers();
   openGsapModal(document.getElementById('track-detail-modal'));
@@ -40730,17 +40892,17 @@ function ensureHotkeyModal() {
   return modal;
 }
 function hotkeyStatusMarkup(scope, actionKey, binding, duplicate) {
-  if (!binding) return '<span class="hotkey-status">未设置</span>';
-  if (duplicate && duplicate[binding] > 1) return '<span class="hotkey-status conflict"><span class="source-icon">!</span>Mineradio 内部重复</span>';
-  if (scope === 'local') return '<span class="hotkey-status ok">可用</span>';
+  if (!binding) return '<span class="hotkey-status">' + escHtml(uiText('未设置')) + '</span>';
+  if (duplicate && duplicate[binding] > 1) return '<span class="hotkey-status conflict"><span class="source-icon">!</span>' + escHtml(uiText('Mineradio 内部重复')) + '</span>';
+  if (scope === 'local') return '<span class="hotkey-status ok">' + escHtml(uiText('可用')) + '</span>';
   var reject = globalHotkeyRejectReason(binding);
-  if (reject) return '<span class="hotkey-status conflict" title="' + escHtml(reject) + '"><span class="source-icon">!</span>不能作为全局热键</span>';
+  if (reject) return '<span class="hotkey-status conflict" title="' + escHtml(uiText(reject)) + '"><span class="source-icon">!</span>' + escHtml(uiText('不能作为全局热键')) + '</span>';
   var status = hotkeyGlobalStatus[actionKey];
-  if (!status) return '<span class="hotkey-status">待检测</span>';
-  if (status.ok) return '<span class="hotkey-status ok">可用</span>';
+  if (!status) return '<span class="hotkey-status">' + escHtml(uiText('待检测')) + '</span>';
+  if (status.ok) return '<span class="hotkey-status ok">' + escHtml(uiText('可用')) + '</span>';
   var source = status.conflict && status.conflict.sourceName || '系统 / 其他软件';
   var reason = status.conflict && status.conflict.reason || '';
-  return '<span class="hotkey-status conflict"' + (reason ? ' title="' + escHtml(reason) + '"' : '') + '><span class="source-icon">!</span>' + escHtml(source) + '</span>';
+  return '<span class="hotkey-status conflict"' + (reason ? ' title="' + escHtml(uiText(reason)) + '"' : '') + '><span class="source-icon">!</span>' + escHtml(uiText(source)) + '</span>';
 }
 function renderHotkeyScope(scope) {
   var wrap = document.getElementById(scope === 'global' ? 'hotkey-global-section' : 'hotkey-local-section');

@@ -163,8 +163,8 @@ test('收藏弹窗、左侧歌单页和 3D 歌单架都接入独立歌单', () =
   assert.match(source, /items\.push\(makePlaylistShelfItem\(playlist\.id, playlist\.name/);
   assert.match(source, /var tracks = localPlaylistSongs\(playlistSourceKind\);/);
   assert.match(source, /items = items \|\| allItems;/);
-  assert.match(source, /appendOption\('library', '全部音乐'/);
-  assert.match(source, /appendOption\(SPECIAL_LIKED_PLAYLIST_ID, '特别喜欢'/);
+  assert.match(source, /appendOption\('library', uiText\('全部音乐'\)/);
+  assert.match(source, /appendOption\(SPECIAL_LIKED_PLAYLIST_ID, uiText\('特别喜欢'\)/);
   assert.match(source, /appendOption\(playlist\.id, playlist\.name/);
   assert.match(source, /selectLocalPlaybackPlaylistSource\(option\.getAttribute\('data-playback-playlist-kind'\)\)/);
   assert.match(source, /function showLocalPlaylistPanelAutoHide\(\)/);

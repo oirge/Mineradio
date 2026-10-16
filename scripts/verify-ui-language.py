@@ -18,7 +18,7 @@ def audit(page, label):
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) {
           const node = walker.currentNode, parent = node.parentElement;
-          if (parent.closest('[data-i18n-skip], [data-ui-language="zh-CN"]')) continue;
+          if (parent.closest('[data-i18n-skip], [data-i18n-attrs], [data-ui-language="zh-CN"]')) continue;
           if (/\p{Script=Han}/u.test(node.nodeValue))
             residual.push({id:parent.id, text:node.nodeValue.trim()});
         }

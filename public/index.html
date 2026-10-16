@@ -120,7 +120,7 @@ if (document.fonts && document.fonts.load) {
   <div class="empty-home-shell">
     <div class="home-hero">
       <div class="home-hero-inner home-local-import-inner">
-        <div class="home-local-actions">
+        <div id="home-local-actions" class="home-local-actions">
           <button class="home-local-action" type="button" onclick="openLocalFolderImport()" aria-label="导入文件夹">
             <svg fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 14h6"/><path d="M12 11v6"/></svg>
             <span>导入文件夹</span>
@@ -879,8 +879,8 @@ if (document.fonts && document.fonts.load) {
 <div id="thumb-wrap">
   <img id="thumb-cover" src="" alt="" onclick="openTrackDetailModal('song')" title="歌曲详情">
   <div id="thumb-info">
-    <div id="thumb-title" onclick="openTrackDetailModal('song')" title="歌曲详情"></div>
-    <div id="thumb-artist" onclick="openTrackDetailModal('artist')" title="歌手详情"></div>
+    <div id="thumb-title" data-i18n-attrs onclick="openTrackDetailModal('song')" title="歌曲详情"></div>
+    <div id="thumb-artist" data-i18n-attrs onclick="openTrackDetailModal('artist')" title="歌手详情"></div>
   </div>
 </div>
 
@@ -961,8 +961,8 @@ if (document.fonts && document.fonts.load) {
       <div class="control-track">
         <div id="control-cover" class="control-cover cover-empty" aria-hidden="true"></div>
         <div class="control-meta">
-          <div id="control-title" class="control-title" data-i18n-skip onclick="openTrackDetailModal('song')" title="歌曲详情"></div>
-          <div id="control-artist" class="control-artist" data-i18n-skip onclick="openTrackDetailModal('artist')" title="歌手详情"></div>
+    <div id="control-title" class="control-title" data-i18n-attrs onclick="openTrackDetailModal('song')" title="歌曲详情"></div>
+    <div id="control-artist" class="control-artist" data-i18n-attrs onclick="openTrackDetailModal('artist')" title="歌手详情"></div>
         </div>
       </div>
       <div id="quality-control" class="quality-control">
