@@ -12,6 +12,7 @@ const RESUME_TIMEOUT_MS = 30000;
 const ALLOWED_PERMS = new Set(['speaker-selection', 'pointerLock', 'pointer-lock']);
 
 function createWallpaperEngineBridge(options = {}) {
+  const translate = typeof options.translate === 'function' ? options.translate : value => value;
   const getMainWindow = typeof options.getMainWindow === 'function' ? options.getMainWindow : () => null;
   const getMainServerPort = typeof options.getMainServerPort === 'function' ? options.getMainServerPort : () => 0;
   const isAppQuitting = typeof options.isAppQuitting === 'function' ? options.isAppQuitting : () => false;
@@ -530,7 +531,7 @@ function createWallpaperEngineBridge(options = {}) {
       try {
         if (!isTrustedIpc(event)) return { ok: false, canceled: false, projects: [], count: 0, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
         const win = mainWindow();
-        const options = { title: '导入 Wallpaper Engine 项目', buttonLabel: '导入此目录', properties: ['openDirectory'] };
+        const options = { title: translate('导入 Wallpaper Engine 项目'), buttonLabel: translate('导入此目录'), properties: ['openDirectory'] };
         const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
         if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: true, canceled: true };
         const snapshot = await library.addManualRoot(result.filePaths[0]);
@@ -546,17 +547,17 @@ function createWallpaperEngineBridge(options = {}) {
         if (!isTrustedIpc(event)) return { ok: false, canceled: false, projects: [], count: 0, error: 'WALLPAPER_ENGINE_UNTRUSTED_CALLER' };
         const win = mainWindow();
         const options = {
-          title: '选择 project.json、场景包 (.pkg/.pak) 或视频/图片',
-          buttonLabel: '导入到壁纸索引',
+          title: translate('选择 project.json、场景包 (.pkg/.pak) 或视频/图片'),
+          buttonLabel: translate('导入到壁纸索引'),
           properties: ['openFile'],
           filters: [
             {
-              name: 'Wallpaper Engine 项目 / 视频 / 图片',
+              name: translate('Wallpaper Engine 项目 / 视频 / 图片'),
               extensions: ['pkg', 'pak', 'json', 'mp4', 'webm', 'mov', 'm4v', 'jpg', 'jpeg', 'png', 'webp', 'gif'],
             },
-            { name: '视频', extensions: ['mp4', 'webm', 'mov', 'm4v'] },
-            { name: '图片', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] },
-            { name: '所有文件', extensions: ['*'] },
+            { name: translate('视频'), extensions: ['mp4', 'webm', 'mov', 'm4v'] },
+            { name: translate('图片'), extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] },
+            { name: translate('所有文件'), extensions: ['*'] },
           ],
         };
         const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);

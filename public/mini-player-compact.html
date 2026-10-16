@@ -204,7 +204,44 @@
     var playButton = document.getElementById('play');
     var desktopLyricsButton = document.getElementById('desktop-lyrics');
     var controls = [document.getElementById('previous'), playButton, document.getElementById('next')];
-    var miniState = { title:'Mineradio', artist:'', playing:false, hasTrack:false, desktopLyrics:false };
+    var miniState = { title:'Mineradio', artist:'', playing:false, hasTrack:false, desktopLyrics:false, uiLanguage:'zh-CN' };
+    var miniUiLanguage = 'zh-CN';
+    var MINI_UI_TEXT = {
+      '上一首': 'Previous track',
+      '下一首': 'Next track',
+      '播放': 'Play',
+      '暂停': 'Pause',
+      '开启桌面歌词': 'Enable desktop lyrics',
+      '关闭桌面歌词': 'Disable desktop lyrics',
+      '返回主界面': 'Back to main window',
+      'Mineradio 极简迷你播放器': 'Mineradio Compact Mini Player',
+      '等待播放': 'Waiting',
+      '本地音乐': 'Local music',
+      '未知歌曲': 'Unknown track',
+    };
+    function miniUiText(value) {
+      return miniUiLanguage === 'en' ? (MINI_UI_TEXT[value] || value) : value;
+    }
+
+    /** 把当前语言应用到极简迷你播放器的悬停提示与无障碍标签。 */
+    function applyMiniLanguage() {
+      miniUiLanguage = miniState.uiLanguage === 'en' ? 'en' : 'zh-CN';
+      document.documentElement.lang = miniUiLanguage === 'en' ? 'en-US' : 'zh-CN';
+      var previousButton = document.getElementById('previous');
+      var nextButton = document.getElementById('next');
+      var restoreButton = document.getElementById('restore');
+      previousButton.title = miniUiText('上一首');
+      previousButton.setAttribute('aria-label', previousButton.title);
+      nextButton.title = miniUiText('下一首');
+      nextButton.setAttribute('aria-label', nextButton.title);
+      restoreButton.title = miniUiText('返回主界面');
+      restoreButton.setAttribute('aria-label', restoreButton.title);
+      miniShell.setAttribute('aria-label', miniUiText('Mineradio 极简迷你播放器'));
+      playButton.title = miniUiText(miniState.hasTrack === true && miniState.playing === true ? '暂停' : '播放');
+      playButton.setAttribute('aria-label', playButton.title);
+      desktopLyricsButton.title = miniUiText(miniState.desktopLyrics === true ? '关闭桌面歌词' : '开启桌面歌词');
+      desktopLyricsButton.setAttribute('aria-label', desktopLyricsButton.title);
+    }
     var renderedPlaying = null;
     var renderedHasTrack = null;
     var shellDrag = null;
@@ -373,11 +410,12 @@
     function applyState(patch) {
       patch = patch || {};
       miniState = Object.assign({}, miniState, patch);
+      miniUiLanguage = miniState.uiLanguage === 'en' ? 'en' : 'zh-CN';
       var next = miniState;
       var hasTrack = next.hasTrack === true;
       var playing = hasTrack && next.playing === true;
-      var nextTitle = hasTrack ? String(next.title || '未知歌曲') : 'Mineradio';
-      var nextArtist = hasTrack ? String(next.artist || '本地音乐') : '等待播放';
+      var nextTitle = hasTrack ? String(next.title || miniUiText('未知歌曲')) : 'Mineradio';
+      var nextArtist = hasTrack ? String(next.artist || miniUiText('本地音乐')) : miniUiText('等待播放');
       if (title.textContent !== nextTitle) title.textContent = nextTitle;
       if (artist.textContent !== nextArtist) artist.textContent = nextArtist;
       title.title = nextTitle;
@@ -385,7 +423,7 @@
       if (renderedPlaying !== playing) {
         renderedPlaying = playing;
         document.body.setAttribute('data-playing', playing ? 'true' : 'false');
-        playButton.title = playing ? '暂停' : '播放';
+        playButton.title = miniUiText(playing ? '暂停' : '播放');
         playButton.setAttribute('aria-label', playButton.title);
       }
       if (renderedHasTrack !== hasTrack) {
@@ -395,9 +433,10 @@
       var desktopLyricsEnabled = next.desktopLyrics === true;
       desktopLyricsButton.classList.toggle('active', desktopLyricsEnabled);
       desktopLyricsButton.setAttribute('aria-pressed', desktopLyricsEnabled ? 'true' : 'false');
-      desktopLyricsButton.title = desktopLyricsEnabled ? '关闭桌面歌词' : '开启桌面歌词';
+      desktopLyricsButton.title = miniUiText(desktopLyricsEnabled ? '关闭桌面歌词' : '开启桌面歌词');
       desktopLyricsButton.setAttribute('aria-label', desktopLyricsButton.title);
       if (Object.prototype.hasOwnProperty.call(patch, 'themeVars')) applyMiniThemeVars(patch.themeVars);
+      if (patch.uiLanguage) applyMiniLanguage();
     }
 
     // 入场动画只跑一次，条件是窗口已经显示且首帧状态到位。

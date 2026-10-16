@@ -348,7 +348,27 @@
     var controls = [document.getElementById('previous'), playButton, document.getElementById('next')];
     var lastCover = '';
     var failedCover = '';
-    var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false, pulse:0, expandDirection:'right', visual:{ pulseEnabled:true, pulseStrength:1, glowEnabled:true, glowStrength:1, hoverExpand:true, radius:12 } };
+    var miniState = { title:'Mineradio', artist:'', cover:'', playing:false, hasTrack:false, desktopLyrics:false, pulse:0, expandDirection:'right', uiLanguage:'zh-CN', visual:{ pulseEnabled:true, pulseStrength:1, glowEnabled:true, glowStrength:1, hoverExpand:true, radius:12 } };
+    var miniUiLanguage = 'zh-CN';
+    var MINI_UI_TEXT = {
+      '上一首': 'Previous track',
+      '下一首': 'Next track',
+      '播放': 'Play',
+      '暂停': 'Pause',
+      '开启桌面歌词': 'Enable desktop lyrics',
+      '关闭桌面歌词': 'Disable desktop lyrics',
+      '返回主界面': 'Back to main window',
+      'Mineradio 迷你播放器': 'Mineradio Mini Player',
+      '展开迷你播放器': 'Expand mini player',
+      '完整迷你播放器': 'Full mini player',
+      '迷你播放器已展开': 'Mini player expanded',
+      '等待播放': 'Waiting',
+      '本地音乐': 'Local music',
+      '未知歌曲': 'Unknown track',
+    };
+    function miniUiText(value) {
+      return miniUiLanguage === 'en' ? (MINI_UI_TEXT[value] || value) : value;
+    }
     var MINI_EFFECT_STRENGTH_MAX = 3;
     var renderedPlaying = null;
     var renderedHasTrack = null;
@@ -804,14 +824,41 @@
       next = !!next;
       if (immediate) miniShell.setAttribute('data-instant', 'true');
       miniShell.setAttribute('data-collapsed', next ? 'false' : 'true');
-      coverWrap.setAttribute('aria-expanded', next ? 'true' : 'false');
-      coverWrap.setAttribute('aria-label', hoverExpandEnabled()
-        ? (next ? '迷你播放器已展开' : '展开迷你播放器')
-        : '完整迷你播放器');
+      syncCoverAria();
       syncPointerPassthrough();
       if (immediate) {
         window.requestAnimationFrame(function(){ miniShell.removeAttribute('data-instant'); });
       }
+    }
+
+    /** 封面按钮的展开态文案跟随界面语言。 */
+    function syncCoverAria() {
+      var expanded = miniShell.getAttribute('data-collapsed') !== 'true';
+      coverWrap.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      coverWrap.setAttribute('aria-label', hoverExpandEnabled()
+        ? miniUiText(expanded ? '迷你播放器已展开' : '展开迷你播放器')
+        : miniUiText('完整迷你播放器'));
+    }
+
+    /** 把当前语言应用到迷你播放器的悬停提示与无障碍标签。 */
+    function applyMiniLanguage() {
+      miniUiLanguage = miniState.uiLanguage === 'en' ? 'en' : 'zh-CN';
+      document.documentElement.lang = miniUiLanguage === 'en' ? 'en-US' : 'zh-CN';
+      var previousButton = document.getElementById('previous');
+      var nextButton = document.getElementById('next');
+      var restoreButton = document.getElementById('restore');
+      previousButton.title = miniUiText('上一首');
+      previousButton.setAttribute('aria-label', previousButton.title);
+      nextButton.title = miniUiText('下一首');
+      nextButton.setAttribute('aria-label', nextButton.title);
+      restoreButton.title = miniUiText('返回主界面');
+      restoreButton.setAttribute('aria-label', restoreButton.title);
+      miniShell.setAttribute('aria-label', miniUiText('Mineradio 迷你播放器'));
+      playButton.title = miniUiText(miniState.hasTrack === true && miniState.playing === true ? '暂停' : '播放');
+      playButton.setAttribute('aria-label', playButton.title);
+      desktopLyricsButton.title = miniUiText(miniState.desktopLyrics === true ? '关闭桌面歌词' : '开启桌面歌词');
+      desktopLyricsButton.setAttribute('aria-label', desktopLyricsButton.title);
+      syncCoverAria();
     }
 
     function syncHoverExpandMode(immediate) {
@@ -1096,6 +1143,7 @@
     function applyState(patch, immediate) {
        patch = patch || {};
        miniState = Object.assign({}, miniState, patch);
+       miniUiLanguage = miniState.uiLanguage === 'en' ? 'en' : 'zh-CN';
        if (Object.prototype.hasOwnProperty.call(patch, 'dragGeneration')) {
          syncCoverDragGeneration(patch.dragGeneration);
        }
@@ -1103,8 +1151,8 @@
       var hasTrack = next.hasTrack === true;
       var playing = hasTrack && next.playing === true;
       miniShell.setAttribute('data-has-track', hasTrack ? 'true' : 'false');
-      var nextTitle = hasTrack ? String(next.title || '未知歌曲') : 'Mineradio';
-      var nextArtist = hasTrack ? String(next.artist || '本地音乐') : '等待播放';
+      var nextTitle = hasTrack ? String(next.title || miniUiText('未知歌曲')) : 'Mineradio';
+      var nextArtist = hasTrack ? String(next.artist || miniUiText('本地音乐')) : miniUiText('等待播放');
       if (title.textContent !== nextTitle) title.textContent = nextTitle;
       if (artist.textContent !== nextArtist) artist.textContent = nextArtist;
       title.title = nextTitle;
@@ -1112,7 +1160,7 @@
       if (renderedPlaying !== playing) {
         renderedPlaying = playing;
         document.body.setAttribute('data-playing', playing ? 'true' : 'false');
-        playButton.title = playing ? '暂停' : '播放';
+        playButton.title = miniUiText(playing ? '暂停' : '播放');
         playButton.setAttribute('aria-label', playButton.title);
       }
       if (renderedHasTrack !== hasTrack) {
@@ -1122,7 +1170,7 @@
       var desktopLyricsEnabled = next.desktopLyrics === true;
       desktopLyricsButton.classList.toggle('active', desktopLyricsEnabled);
       desktopLyricsButton.setAttribute('aria-pressed', desktopLyricsEnabled ? 'true' : 'false');
-      desktopLyricsButton.title = desktopLyricsEnabled ? '关闭桌面歌词' : '开启桌面歌词';
+      desktopLyricsButton.title = miniUiText(desktopLyricsEnabled ? '关闭桌面歌词' : '开启桌面歌词');
       desktopLyricsButton.setAttribute('aria-label', desktopLyricsButton.title);
       syncExpandDirection(next.expandDirection);
       if (Object.prototype.hasOwnProperty.call(patch, 'themeVars')) applyMiniThemeVars(patch.themeVars);
@@ -1143,6 +1191,7 @@
         syncHoverExpandMode(immediate === true);
       }
       setCover(hasTrack ? next.cover : '');
+      if (patch.uiLanguage) applyMiniLanguage();
     }
 
     function receiveState(patch) {

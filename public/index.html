@@ -97,7 +97,7 @@ if (document.fonts && document.fonts.load) {
     <div id="search-mode-tabs" class="search-mode-tabs" role="tablist" aria-label="Search mode">
       <button id="search-mode-song" class="active" type="button" onclick="setSearchMode('song')" aria-selected="true">Local</button>
     </div>
-    <div id="search-results"></div>
+    <div id="search-results" data-i18n-skip></div>
   </div>
   <div id="upload-actions">
     <button id="upload-btn" class="icon-btn" onclick="document.getElementById('file-input').click()" title="导入单首音乐或封面">
@@ -150,31 +150,31 @@ if (document.fonts && document.fonts.load) {
       <button class="home-card" data-home-tone="mix" type="button" onclick="playHomeSong(0)">
         <div class="home-card-label">Local</div>
         <div class="home-card-title" id="home-daily-title">播放本地音乐</div>
-        <div class="home-card-sub" id="home-daily-sub">导入后从第一首开始播放</div>
+        <div class="home-card-sub" id="home-daily-sub" data-i18n-skip>导入后从第一首开始播放</div>
         <div class="home-card-art" id="home-daily-art"></div>
       </button>
       <button class="home-card" data-home-tone="playlist" type="button" onclick="playHomeSong(1)">
         <div class="home-card-label">Queue</div>
-        <div class="home-card-title" id="home-private-title">本地队列</div>
-        <div class="home-card-sub" id="home-private-sub">查看已导入的歌曲</div>
+        <div class="home-card-title" id="home-private-title" data-i18n-skip>本地队列</div>
+        <div class="home-card-sub" id="home-private-sub" data-i18n-skip>查看已导入的歌曲</div>
         <div class="home-card-art" id="home-private-art"></div>
       </button>
       <button class="home-card" data-home-tone="mix" type="button" onclick="playHomeRecent()">
         <div class="home-card-label">Continue</div>
         <div class="home-card-title" id="home-continue-title">继续听</div>
-        <div class="home-card-sub" id="home-continue-sub">最近播放会出现在这里</div>
+        <div class="home-card-sub" id="home-continue-sub" data-i18n-skip>最近播放会出现在这里</div>
         <div class="home-card-art" id="home-continue-art"></div>
       </button>
       <button class="home-card" data-home-tone="local" type="button" onclick="openHomeInsight()">
         <div class="home-card-label">Stats</div>
-        <div class="home-card-title" id="home-profile-title">听歌画像</div>
-        <div class="home-card-sub" id="home-profile-sub">播放几首后生成偏好</div>
+        <div class="home-card-title" id="home-profile-title" data-i18n-skip>听歌画像</div>
+        <div class="home-card-sub" id="home-profile-sub" data-i18n-skip>播放几首后生成偏好</div>
         <div class="home-card-art" id="home-profile-art"></div>
       </button>
       <button class="home-card" data-home-tone="local" type="button" onclick="playHomeSong(2)">
         <div class="home-card-label">Search</div>
-        <div class="home-card-title" id="home-library-title">搜索本地库</div>
-        <div class="home-card-sub" id="home-library-sub">按歌名、歌手或文件名查找</div>
+        <div class="home-card-title" id="home-library-title" data-i18n-skip>搜索本地库</div>
+        <div class="home-card-sub" id="home-library-sub" data-i18n-skip>按歌名、歌手或文件名查找</div>
         <div class="home-card-art" id="home-library-art"></div>
       </button>
     </div>
@@ -184,7 +184,7 @@ if (document.fonts && document.fonts.load) {
         <div class="home-section-title" id="home-rail-title">为你准备</div>
         <div class="home-section-note" id="home-rail-note">正在整理推荐</div>
       </div>
-      <div id="home-tile-row" class="home-tile-row"></div>
+      <div id="home-tile-row" class="home-tile-row" data-i18n-skip></div>
     </div>
   </div>
 </section>
@@ -827,11 +827,11 @@ if (document.fonts && document.fonts.load) {
       <button type="button" id="queue-mode-shuffle" class="queue-mode-btn" onclick="setPlayMode('shuffle')" aria-pressed="false" title="随机播放">随机</button>
       <button type="button" id="queue-stop-after-btn" class="queue-mode-btn stop-after" onclick="toggleStopAfterCurrent()" aria-pressed="false" title="播放完当前歌曲后停止">播完即停</button>
     </div>
-    <div id="queue-next-up" class="queue-next-up"></div>
-    <div id="queue-list" class="queue-list"></div>
+    <div id="queue-next-up" class="queue-next-up" data-i18n-skip></div>
+    <div id="queue-list" class="queue-list" data-i18n-skip></div>
     <div class="queue-archive">
       <div class="queue-archive-head">队列存档</div>
-      <div id="queue-archive-list" class="queue-archive-list"></div>
+      <div id="queue-archive-list" class="queue-archive-list" data-i18n-skip></div>
     </div>
   </div>
   <div id="pl-pane" style="display:none">
@@ -842,7 +842,7 @@ if (document.fonts && document.fonts.load) {
         <button class="fx-mini-btn ghost" onclick="openLocalFolderImport()" style="height:26px;padding:0 10px;font-size:11px">导入</button>
       </div>
     </div>
-    <div id="pl-list" style="margin-top:6px"></div>
+    <div id="pl-list" style="margin-top:6px" data-i18n-skip></div>
   </div>
 </div>
 
@@ -953,7 +953,7 @@ if (document.fonts && document.fonts.load) {
       </div>
       <button class="fx-mini-btn ghost" onclick="closeMiniQueue()" title="关闭" style="height:26px;padding:0 9px;font-size:13px">×</button>
     </div>
-    <div id="mini-queue-list" class="mini-queue-list"></div>
+    <div id="mini-queue-list" class="mini-queue-list" data-i18n-skip></div>
   </div>
   <div id="progress-bar"><div id="progress-fill"></div><div id="progress-thumb" aria-hidden="true"></div></div>
   <div id="controls">
@@ -961,8 +961,8 @@ if (document.fonts && document.fonts.load) {
       <div class="control-track">
         <div id="control-cover" class="control-cover cover-empty" aria-hidden="true"></div>
         <div class="control-meta">
-          <div id="control-title" class="control-title" data-i18n-attrs onclick="openTrackDetailModal('song')" title="歌曲详情"></div>
-          <div id="control-artist" class="control-artist" data-i18n-attrs onclick="openTrackDetailModal('artist')" title="歌手详情"></div>
+          <div id="control-title" class="control-title" data-i18n-skip onclick="openTrackDetailModal('song')" title="歌曲详情"></div>
+          <div id="control-artist" class="control-artist" data-i18n-skip onclick="openTrackDetailModal('artist')" title="歌手详情"></div>
         </div>
       </div>
       <div id="quality-control" class="quality-control">
@@ -985,17 +985,17 @@ if (document.fonts && document.fonts.load) {
     <button id="next-btn" class="ctrl-btn" onclick="nextTrack()" title="下一首"><svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
     <button id="mini-queue-btn" class="ctrl-btn" onclick="toggleMiniQueue(event)" title="当前队列"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></button>
     <div id="playlist-source-control" class="playlist-source-control">
-      <button id="playlist-source-btn" class="ctrl-btn playlist-source-btn" data-i18n-skip onclick="toggleLocalPlaybackPlaylistSource(event)" title="当前：全部音乐，点击选择播放歌单" aria-label="当前：全部音乐，点击选择播放歌单" aria-haspopup="listbox" aria-expanded="false"><span id="playlist-source-icon" class="playlist-source-icon" aria-hidden="true">≡</span><span id="playlist-source-label">全部</span><span class="playlist-source-caret" aria-hidden="true">⌃</span></button>
+      <button id="playlist-source-btn" class="ctrl-btn playlist-source-btn" onclick="toggleLocalPlaybackPlaylistSource(event)" title="当前：全部音乐，点击选择播放歌单" aria-label="当前：全部音乐，点击选择播放歌单" aria-haspopup="listbox" aria-expanded="false"><span id="playlist-source-icon" class="playlist-source-icon" aria-hidden="true">≡</span><span id="playlist-source-label" data-i18n-skip>全部</span><span class="playlist-source-caret" aria-hidden="true">⌃</span></button>
       <div id="playlist-source-popover" class="playlist-source-popover" role="dialog" aria-label="选择播放歌单" onclick="event.stopPropagation()">
         <div class="playlist-source-head"><div><b>选择播放歌单</b><span id="playlist-source-count">0 个独立歌单</span></div><button type="button" onclick="closeLocalPlaybackPlaylistPicker()" title="关闭">×</button></div>
-        <div id="playlist-source-list" class="playlist-source-list" role="listbox"></div>
+        <div id="playlist-source-list" class="playlist-source-list" role="listbox" data-i18n-skip></div>
         <button type="button" class="playlist-source-manage" onclick="openLocalPlaybackPlaylistManager()">管理 / 新建歌单</button>
       </div>
     </div>
     </div>
     <div class="control-cluster modes">
     <button id="shelf-view-btn" class="ctrl-btn" onclick="toggleShelfStageMode()" title="3D 歌单架：侧栏 / 舞台" aria-label="3D 歌单架" aria-pressed="false"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.2"/><path d="M7 9h10"/><path d="M7 12.5h10"/><path d="M7 16h6"/></svg></button>
-    <button class="ctrl-btn lyrics-toggle-btn" onclick="toggleLyricsPanel()" title="歌词"><span class="lyrics-word-icon">词</span></button>
+    <button class="ctrl-btn lyrics-toggle-btn" onclick="toggleLyricsPanel()" title="歌词"><span class="lyrics-word-icon" aria-hidden="true" data-i18n-skip>词</span></button>
     <button id="desktop-lyrics-btn" class="ctrl-btn" onclick="toggleFx('desktopLyrics')" title="桌面歌词" aria-label="桌面歌词" aria-pressed="false"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2.2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M8 10h8"/><path d="M9.5 13h5"/></svg></button>
     <div id="volume-control" class="volume-control">
       <button id="volume-btn" class="ctrl-btn" onclick="toggleVolumePanel(event)" title="音量 / 静音"><svg id="volume-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15 9.5a4 4 0 0 1 0 5"/></svg></button>
@@ -1126,12 +1126,12 @@ if (document.fonts && document.fonts.load) {
 <div id="collect-modal" class="modal-mask">
   <div class="modal collect-modal">
     <h2 id="collect-modal-title">收藏到歌单</h2>
-    <div id="collect-current" class="collect-current"></div>
+    <div id="collect-current" class="collect-current" data-i18n-skip></div>
     <div class="collect-create">
       <input id="collect-new-name" type="text" placeholder="新建歌单名称" autocomplete="off" maxlength="40">
       <button class="modal-btn primary" onclick="createPlaylistFromCollect()">创建</button>
     </div>
-    <div id="collect-list" class="collect-list"></div>
+    <div id="collect-list" class="collect-list" data-i18n-skip></div>
     <div class="btn-row">
       <button class="modal-btn" onclick="closeCollectModal()">关闭</button>
     </div>
@@ -1168,7 +1168,7 @@ if (document.fonts && document.fonts.load) {
     <div class="playlist-delete-kicker">PLAYLIST MANAGEMENT</div>
     <h2 id="local-playlist-delete-title">删除这个歌单？</h2>
     <div class="playlist-delete-target">
-      <div id="local-playlist-delete-name" class="playlist-delete-name">未命名歌单</div>
+      <div id="local-playlist-delete-name" class="playlist-delete-name" data-i18n-skip>未命名歌单</div>
       <div id="local-playlist-delete-meta" class="playlist-delete-meta">0 首歌曲</div>
     </div>
     <p class="playlist-delete-note">只会删除歌单列表，不会删除本地音乐文件。</p>
@@ -1208,8 +1208,8 @@ if (document.fonts && document.fonts.load) {
   <div class="modal local-beat-modal">
     <h2>本地节奏分析</h2>
     <div class="local-beat-track">
-      <div id="local-beat-title" class="local-beat-track-title">本地歌曲</div>
-      <div id="local-beat-sub" class="local-beat-track-sub">选择一种电影视角分析方式</div>
+      <div id="local-beat-title" class="local-beat-track-title" data-i18n-skip>本地歌曲</div>
+      <div id="local-beat-sub" class="local-beat-track-sub" data-i18n-skip>选择一种电影视角分析方式</div>
     </div>
     <div class="local-beat-tabs">
       <button id="local-beat-tab-mr" class="local-beat-tab active" type="button" onclick="selectLocalBeatMode('mr')">
@@ -1251,7 +1251,7 @@ if (document.fonts && document.fonts.load) {
 <div id="track-detail-modal" class="modal-mask">
   <div class="modal track-detail-modal">
     <h2 id="track-detail-heading">歌曲详情</h2>
-    <div id="track-detail-body"></div>
+    <div id="track-detail-body" data-i18n-skip></div>
     <div class="btn-row">
       <button class="modal-btn" onclick="closeTrackDetailModal()">关闭</button>
     </div>
@@ -1279,14 +1279,14 @@ if (document.fonts && document.fonts.load) {
       </div>
       <div class="update-panel-body" tabindex="0" role="region" aria-label="更新说明与下载线路">
       <div class="update-hero">
-        <div id="update-hero-main" class="update-hero-main">电影镜头更稳，音源兜底更顺。</div>
-        <div id="update-hero-sub" class="update-hero-sub"></div>
+        <div id="update-hero-main" class="update-hero-main" data-i18n-skip>电影镜头更稳，音源兜底更顺。</div>
+        <div id="update-hero-sub" class="update-hero-sub" data-i18n-skip></div>
       </div>
-      <div id="update-list" class="update-list"></div>
+      <div id="update-list" class="update-list" data-i18n-skip></div>
       <div class="update-route">
         <div class="update-route-head">
           <div class="update-route-title">更新线路</div>
-          <div id="update-route-hint" class="update-route-hint">自动测速，挑最快的线路下载。</div>
+          <div id="update-route-hint" class="update-route-hint">自动测速，挑当前最快的线路下载。</div>
         </div>
         <div id="update-route-seg" class="update-route-seg" role="group" aria-label="更新线路">
           <button type="button" data-update-route="auto" aria-pressed="true">自动</button>
@@ -1303,7 +1303,7 @@ if (document.fonts && document.fonts.load) {
         </button>
         <button id="update-secondary-btn" class="update-secondary-btn" type="button" onclick="handleUpdateSecondaryAction()">取消</button>
       </div>
-      <div id="update-footnote" class="update-footnote" tabindex="0">预览版只演示更新手感，不会真的下载安装。</div>
+      <div id="update-footnote" class="update-footnote" tabindex="0" data-i18n-skip>预览版只演示更新手感，不会真的下载安装。</div>
     </div>
   </div>
 </div>
@@ -1314,7 +1314,7 @@ if (document.fonts && document.fonts.load) {
     <div id="source-fallback-title" class="source-fallback-title">自动换源</div>
     <button class="source-fallback-close" type="button" onclick="closeSourceFallbackNotice()">×</button>
   </div>
-  <div id="source-fallback-body" class="source-fallback-body"></div>
+  <div id="source-fallback-body" class="source-fallback-body" data-i18n-skip></div>
 </div>
 
 <div id="visual-guide" aria-live="polite" aria-hidden="true">
@@ -1322,8 +1322,8 @@ if (document.fonts && document.fonts.load) {
   <div id="visual-guide-ring" class="visual-guide-ring"></div>
   <div id="visual-guide-card" class="visual-guide-card">
     <div id="visual-guide-kicker" class="visual-guide-kicker">Guide</div>
-    <div id="visual-guide-title" class="visual-guide-title"></div>
-    <div id="visual-guide-body" class="visual-guide-body"></div>
+    <div id="visual-guide-title" class="visual-guide-title" data-i18n-skip></div>
+    <div id="visual-guide-body" class="visual-guide-body" data-i18n-skip></div>
     <div id="visual-guide-hint" class="visual-guide-hint">点击空白处也可以继续</div>
     <div class="visual-guide-actions">
       <button type="button" onclick="closeVisualGuide(true)">跳过</button>

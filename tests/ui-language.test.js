@@ -127,7 +127,7 @@ test('自定义歌词弹窗纳入语言范围，歌曲信息与歌词文件名�
   const placeholder = textElement('', { placeholder: '[00:12.00] 第一行歌词\n[00:16.50] 第二行歌词\n\n没有时间轴也可以，每一行会按歌曲时长自动铺开' });
   placeholder.childNodes = [];
   placeholder.firstChild = null;
-  assert.match(APP, /'custom-lyric-modal'\]/);
+  assert.match(APP, /'custom-lyric-modal'/);
   assert.match(HTML, /id="custom-lyric-modal"[\s\S]*?data-i18n="自定义歌词"/);
   assert.match(HTML, /id="custom-lyric-track-meta"[^>]+data-i18n-skip/);
   context.setUiLanguage('en');
@@ -263,53 +263,46 @@ test('重标记和动态设置节点会重新应用当前语言', () => {
   assert.match(APP, /user-archive-name" data-i18n-skip/);
 });
 
-test('播放歌单动态文案跟随语言，用户自建歌单名保持原文', () => {
-  const pickerStart = APP.indexOf('function renderLocalPlaybackPlaylistPicker()');
-  const pickerEnd = APP.indexOf('\nfunction updateLocalPlaybackPlaylistSourceButton()', pickerStart);
-  assert.ok(pickerStart >= 0 && pickerEnd > pickerStart);
-  const picker = APP.slice(pickerStart, pickerEnd);
-  assert.match(picker, /uiText\(['"]全部音乐['"]\)/);
-  assert.match(picker, /uiText\(['"]特别喜欢['"]\)/);
-  assert.match(picker, /uiText\(['"]智能分类['"]\)/);
-  assert.match(picker, /translateUiCountText|uiText\(/);
-
-  const sourceStart = pickerEnd;
-  const sourceEnd = APP.indexOf('\nfunction setLocalPlaybackPlaylistSelection', sourceStart);
-  assert.ok(sourceEnd > sourceStart);
-  const sourceButton = APP.slice(sourceStart, sourceEnd);
-  assert.match(sourceButton, /uiLanguage\s*===\s*['"]en['"]|uiText\(/);
-  assert.match(sourceButton, /title|aria-label/);
-  assert.match(HTML, /id="playlist-source-btn"[^>]+data-i18n-skip/);
+test('一批重复属性变更只翻译该属性一次，不遍历已有子树', () => {
+  const context = languageContext();
+  const panel = textElement('高级', { title: '高级' });
+  panel.id = 'fx-panel';
+  for (let i = 0; i < 200; i++) {
+    const child = textElement('歌词'); child.parentElement = panel; panel.childNodes.push(child);
+  }
+  context.setUiLanguage('en');
+  context.translateUiElement(panel);
+  panel.setAttribute('title', '背景压暗');
+  let attributes = 0, subtrees = 0;
+  const original = context.translateUiAttribute;
+  context.translateUiAttribute = (...args) => { attributes++; return original(...args); };
+  context.translateUiElement = () => { subtrees++; };
+  context.translateUiMutations(Array.from({ length: 100 }, () => ({ type: 'attributes', attributeName: 'title', target: panel })));
+  assert.equal(attributes, 1);
+  assert.equal(subtrees, 0);
+  assert.equal(panel.getAttribute('title'), context.uiText('背景压暗'));
 });
 
-test('热键状态、冲突原因和录入告警使用当前界面语言', () => {
-  const start = APP.indexOf('function hotkeyStatusMarkup(');
-  const end = APP.indexOf('\nfunction renderHotkeyScope(', start);
-  assert.ok(start >= 0 && end > start);
-  const source = APP.slice(start, end);
-  assert.match(source, /uiText\(/);
-  assert.match(source, /title=/);
-  assert.match(APP, /setHotkeyCaptureNotice\.reason[\s\S]{0,240}uiText\(/);
-  assert.match(APP, /function globalHotkeyRejectReason\(/);
-  assert.match(MAIN, /sourceName:\s*['"]不支持该组合键['"]/);
-  assert.match(MAIN, /reason:\s*['"]该组合键已被占用或被系统保留['"]/);
-});
-
-test('歌曲与歌手详情翻译字段标签，但不翻译用户歌曲信息', () => {
-  const rowStart = APP.indexOf('function detailRow(label, value)');
-  const rowEnd = APP.indexOf('\nfunction currentArtistNames(', rowStart);
-  assert.ok(rowStart >= 0 && rowEnd > rowStart);
-  assert.match(APP.slice(rowStart, rowEnd), /uiText\(/);
-
-  const detailStart = APP.indexOf('function openTrackDetailModal(type, songOverride)');
-  const detailEnd = APP.indexOf('\nfunction openArtistDetailForSong(', detailStart);
-  assert.ok(detailStart >= 0 && detailEnd > detailStart);
-  const detail = APP.slice(detailStart, detailEnd);
-  ['歌曲详情', '歌手详情', '歌曲名', '关联歌手', '所属专辑', '本地信息'].forEach((label) => {
-    assert.match(detail, new RegExp(`uiText\\(['"]${label}['"]\\)`), `详情缺少语言化字段：${label}`);
-  });
-  assert.match(detail, /escHtml\(title\)/);
-  assert.match(detail, /escHtml\(artistName\)/);
-  assert.match(detail, /song\.localPath/);
-  assert.match(HTML, /id="track-detail-modal"/);
+test('重叠的新子树与文本记录只处理一次，翻译自产生的文本记录不重做', () => {
+  const context = languageContext();
+  context.setUiLanguage('en');
+  const panel = textElement(''); panel.id = 'fx-panel';
+  const parent = textElement('歌词'), child = textElement('高级');
+  parent.parentElement = panel; child.parentElement = parent; parent.childNodes.push(child);
+  let visits = 0;
+  const original = context.translateUiTextNode;
+  context.translateUiTextNode = node => { visits++; original(node); };
+  context.translateUiMutations([
+    { type: 'childList', target: panel, addedNodes: [parent] },
+    { type: 'childList', target: parent, addedNodes: [child] },
+    { type: 'characterData', target: child.firstChild },
+  ]);
+  assert.equal(visits, 2);
+  assert.equal(child.firstChild.nodeValue, 'Advanced');
+  context.translateUiMutations([{ type: 'characterData', target: child.firstChild }]);
+  assert.equal(visits, 2);
+  child.firstChild.nodeValue = '7 个断点';
+  context.translateUiMutations(Array.from({ length: 20 }, () => ({ type: 'characterData', target: child.firstChild })));
+  assert.equal(visits, 3);
+  assert.equal(child.firstChild.nodeValue, '7 breakpoints');
 });

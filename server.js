@@ -78,8 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '延续 v2.5.0 的主设置与 Folia 中文 / English 同步切换。',
-  '本版只更新发行元数据并重新生成官方 Windows 安装包，不改变现有功能。',
+  'Folia 加载失败时显示可重试的恢复界面，支持导出本地诊断记录，重试后保持当前视图。',
+  '补齐桌面端与迷你播放器的英文翻译：悬停提示、音量面板、歌单选择器、歌曲信息弹窗和热键提示。',
+  '修复英文界面残留中文，并恢复空曲库首页的 Folia 切换入口。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

@@ -100,6 +100,7 @@ function createEmptyMiniPlayerState() {
     pulse: 0,
     visual: createDefaultMiniPlayerVisual(),
     metaSignature: '',
+    uiLanguage: 'zh-CN',
   };
 }
 
@@ -178,6 +179,7 @@ class MiniPlayerStateCache {
     if (Object.prototype.hasOwnProperty.call(source, 'visual')) next.visual = normalizeMiniPlayerVisual(source.visual, next.visual);
     if (Object.prototype.hasOwnProperty.call(source, 'themeVars')) next.themeVars = normalizeMiniPlayerThemeVars(source.themeVars);
     if (Object.prototype.hasOwnProperty.call(source, 'metaSignature')) next.metaSignature = String(source.metaSignature || '').slice(0, 240);
+    if (Object.prototype.hasOwnProperty.call(source, 'uiLanguage')) next.uiLanguage = source.uiLanguage === 'en' ? 'en' : 'zh-CN';
     this.value = next;
     return true;
   }

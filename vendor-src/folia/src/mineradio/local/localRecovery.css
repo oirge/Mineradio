@@ -1,0 +1,8 @@
+/* src/mineradio/local/localRecovery.css — only visible after a surface failure. */
+.local-recovery{position:absolute;inset:74px 20px 120px;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;color:var(--local-text,#e8e9ef);background:var(--local-bg,#111217);padding:24px;border-radius:18px;font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif}
+.local-recovery-root{position:fixed;inset:0;border-radius:0}
+.local-recovery p{max-width:440px;line-height:1.6;opacity:.72}
+.local-recovery>div{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
+.local-recovery button{font:inherit;color:inherit;border:1px solid currentColor!important;border-radius:12px;padding:9px 14px;background:transparent;cursor:pointer}
+.local-recovery button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.local-catalog-retry{position:absolute;z-index:15;left:24px;bottom:100px;display:flex;align-items:center;gap:12px;max-width:calc(100% - 48px);padding:10px 14px;border:1px solid var(--local-line);border-radius:12px;background:var(--local-glass);color:var(--local-text);font-size:12px}

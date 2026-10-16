@@ -349,7 +349,7 @@ test('本地模式显示歌单与红心入口并绑定特别喜欢事件', () =>
 
   assert.match(html, /id="tab-pl"[^>]*>歌单<\/button>/);
   assert.match(html, /id="playlist-source-btn"[^>]*onclick="toggleLocalPlaybackPlaylistSource\(event\)"/);
-  assert.match(html, /id="playlist-source-label">全部<\/span>/);
+  assert.match(html, /id="playlist-source-label"[^>]*>全部<\/span>/);
   assert.match(html, /id="playlist-source-popover"/);
   assert.match(appSource, /data-playback-playlist-kind=/);
   assert.doesNotMatch(localModeRule, /#tab-pl|#pl-pane|#heart-btn|#search-results \.song-action-btn|#queue-pane/);

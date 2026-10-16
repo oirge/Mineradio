@@ -6,6 +6,7 @@ import '../index.css';
 import { installGlobalVisualizerFrameRateLimiter } from '../utils/frameRateLimiter';
 import { installMineradioSurfaceLifecycle } from './lifecycle';
 import LocalPlayer from './local/LocalPlayer';
+import LocalErrorBoundary from './local/LocalErrorBoundary';
 import { LOCAL_UI_RESOURCES } from './local/locale';
 
 // src/mineradio/local-entry.tsx
@@ -22,4 +23,4 @@ installMineradioSurfaceLifecycle();
 installGlobalVisualizerFrameRateLimiter();
 const mount = document.getElementById('root');
 if (!mount) throw new Error('Local player mount is missing');
-createRoot(mount).render(<React.StrictMode><LocalPlayer /></React.StrictMode>);
+createRoot(mount).render(<React.StrictMode><LocalErrorBoundary surface="player" root><LocalPlayer /></LocalErrorBoundary></React.StrictMode>);
