@@ -83,6 +83,55 @@ it('keeps a newer host update when an earlier catalog request finishes later', a
     expect(catalog.songs.map(song => song.album.coverUrl)).toEqual(['/cover/a.jpg', '/new-b.jpg']);
 });
 
+it('publishes the first page while later pages load and then completes the full catalog', async () => {
+    const firstPage = Array.from({ length: 1000 }, (_, index) => track(String(index)));
+    const secondPage = [track('1000'), track('1001')];
+    let finishSecondPage!: (page: unknown) => void;
+    command.mockImplementation(async (method: string, params?: { offset?: number }) => {
+        if (method === 'listPlaylists') return [];
+        if (params?.offset === 1000) {
+            return new Promise(resolve => { finishSecondPage = resolve; });
+        }
+        return { items: firstPage, total: 1002, offset: 0, limit: 1000 };
+    });
+    await mountCatalog();
+    await settlePage();
+    expect(catalog.songs).toHaveLength(1000);
+    expect(catalog.loading).toBe(true);
+    expect(command.mock.calls.filter(([method]) => method === 'listTracks').map(([, params]) => params?.offset))
+        .toEqual([0, 1000]);
+    await act(async () => finishSecondPage({ items: secondPage, total: 1002, offset: 1000, limit: 1000 }));
+    expect(catalog.songs).toHaveLength(1002);
+    expect(catalog.loading).toBe(false);
+    expect(catalog.songs.at(-1)?.id).toBe('1001');
+});
+
+it('keeps a partial first load visible after a later page fails and clears it on retry', async () => {
+    const firstPage = Array.from({ length: 1000 }, (_, index) => track(String(index)));
+    let failSecondPage = true;
+    command.mockImplementation(async (method: string, params?: { offset?: number }) => {
+        if (method === 'listPlaylists') return [];
+        if (params?.offset === 1000 && failSecondPage) throw new Error('temporary page failure');
+        return params?.offset === 1000
+            ? { items: [track('1000')], total: 1001, offset: 1000, limit: 1000 }
+            : { items: firstPage, total: 1001, offset: 0, limit: 1000 };
+    });
+    await mountCatalog();
+    await settlePage();
+    expect(catalog.songs).toHaveLength(1000);
+    await settlePage();
+    expect(catalog.loading).toBe(false);
+    expect(catalog.error).toBe('temporary page failure');
+    expect(catalog.songs).toHaveLength(1000);
+
+    failSecondPage = false;
+    await act(async () => catalog.refresh());
+    await settlePage();
+    expect(catalog.error).toBe('');
+    expect(catalog.songs).toHaveLength(1001);
+    expect(catalog.loading).toBe(false);
+});
+
 it('requeries a nonempty search when changed metadata creates a new match', async () => {
     let songs = [track('a'), track('b')];
     command.mockImplementation(async (method: string, params?: { query?: string }) => {

@@ -14,6 +14,7 @@ import { hostTrackToWallSong, useLocalWallCatalog } from './wallCatalog';
 import { buildPosterWallTiles, type PosterWallTiles } from './wallViewData';
 import { LocalLatticeActionsContext } from './LocalLatticeExtraControls';
 import LocalLatticeTools from './LocalLatticeTools';
+import LocalCatalogRetry from './LocalCatalogRetry';
 import type { LocalPlayer } from './playerTypes';
 import '../../components/app/lattice/Lattice.css';
 import './localPosterWall.css';
@@ -79,6 +80,7 @@ export default function LocalPosterWall({ player, theme, isDaylight, onBack, onO
                     {!tiles.length && <div className="lattice-empty"><strong>{catalog.loading ? localText('loading') : t('home.latticeEmptyTitle')}</strong>
                         <span>{catalog.error || t('home.latticeEmptyText')}</span></div>}
                 </section>
+                <LocalCatalogRetry error={catalog.error} retry={catalog.refresh} />
                 {track && <button type="button" className="local-poster-now-playing" data-testid="local-poster-now-playing" style={style}
                     onClick={() => focusCurrentSong?.()} aria-label={t('home.latticeFocusCurrent')}>
                     {track.cover ? <img src={track.cover} alt="" /> : <Music2 size={25} />}

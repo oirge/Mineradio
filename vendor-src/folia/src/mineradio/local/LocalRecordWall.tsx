@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ChevronDown, ChevronLeft, List, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import LocalCatalogRetry from './LocalCatalogRetry';
 import type { Theme } from '../../types';
 import { SlideActionButton } from '../../components/shared/SlideActionButton';
 import { useLocalWallCatalog } from './wallCatalog';
@@ -43,6 +44,7 @@ export default function LocalRecordWall({ player, theme, isDaylight, onBack, onO
         '--text-secondary': theme.secondaryColor, '--text-accent': theme.accentColor,
         backgroundColor: theme.backgroundColor, color: theme.primaryColor } as CSSProperties;
     return <section className="local-record-wall" data-testid="local-record-wall" style={style}>
+        <LocalCatalogRetry error={catalog.error} retry={catalog.refresh} />
         {collection?.cover && <div className="local-record-backdrop" style={{ opacity: isDaylight ? 0.18 : 0.12 }}>
             <img src={collection.cover} alt="" /></div>}
         <button className="local-record-back" onClick={onBack} aria-label={t('back')}
@@ -50,9 +52,9 @@ export default function LocalRecordWall({ player, theme, isDaylight, onBack, onO
         <button className="local-record-title" onClick={() => setShowCatalog(!showCatalog)} aria-expanded={showCatalog} data-testid="local-record-collection-toggle">
             <strong>{title}<ChevronDown size={13} /></strong><small>{t('tracks', { count: items.length })}</small>
         </button>
-        {!catalog.loading && items.length > 0 && <RecordWallViewport key={`${catalog.playlistId}:${catalog.query}`}
+        {items.length > 0 && <RecordWallViewport key={`${catalog.playlistId}:${catalog.query}`}
             items={items} theme={theme} isDaylight={isDaylight} onPlay={play} onAddQueue={addToQueue} />}
-        {(catalog.loading || !items.length) && <div className="local-record-empty">
+        {!items.length && <div className="local-record-empty">
             {catalog.loading ? <><Loader2 className="animate-spin" size={32} /><span>{t('loading')}</span></>
                 : <><strong>{catalog.error || t(catalog.query ? 'noResults' : 'emptyLibrary')}</strong><p>{t('emptyHint')}</p>
                     <button onClick={() => { void command('importFiles').catch(() => {}); }}>{t('importFiles')}</button></>}

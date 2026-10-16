@@ -2,6 +2,9 @@
 // Local-player copy is kept separate from Folia's complete application navigation.
 export const LOCAL_UI_RESOURCES = {
     'zh-CN': {
+        effectFailed: '当前效果暂时无法显示', playerFailed: 'Folia 界面暂时无法显示',
+        recoveryHint: '可以重试或返回 Mineradio，播放和已保存的设置会保留。',
+        retrySurface: '重试', exportDiagnostics: '导出诊断', catalogIncomplete: '部分歌曲尚未加载',
         interfaceLanguage: '界面语言', windowTitle: 'Folia 本地播放器 · Mineradio', back: '返回歌词', recordWall: '唱片墙',
         lyricsView: '歌词播放', recordsView: '悬浮唱片', postersView: '封面拼贴', playbackView: '播放界面',
         localMusic: '本地音乐', library: '音乐库', queue: '播放队列', search: '搜索本地歌曲、歌手、专辑',
@@ -22,6 +25,9 @@ export const LOCAL_UI_RESOURCES = {
         connected: 'Folia · 本地播放', connecting: '正在连接本地播放器…', retry: '重新连接',
     },
     en: {
+        effectFailed: 'This effect could not be displayed', playerFailed: 'Folia could not be displayed',
+        recoveryHint: 'Retry or return to Mineradio. Playback and saved settings are preserved.',
+        retrySurface: 'Retry', exportDiagnostics: 'Export diagnostics', catalogIncomplete: 'Some tracks could not be loaded',
         interfaceLanguage: 'Interface language', windowTitle: 'Folia Local Player · Mineradio', back: 'Back to lyrics', recordWall: 'Record wall',
         lyricsView: 'Lyric player', recordsView: 'Record wall', postersView: 'Poster wall', playbackView: 'Playback view',
         localMusic: 'Local music', library: 'Library', queue: 'Play queue', search: 'Search local songs, artists, albums',

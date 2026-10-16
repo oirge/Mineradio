@@ -15,6 +15,12 @@ const {
   updateMiniPlayerCoverDrag,
 } = require('./mini-player-cover-drag');
 const { launchUpdateInstaller } = require('./update-installer-launcher');
+const { createDesktopUiLanguage } = require('./ui-language');
+const desktopLanguage = createDesktopUiLanguage({
+  readValues: () => readDesktopUiState().values,
+  onChange: () => refreshTrayMenu(),
+});
+const desktopUiText = desktopLanguage.text;
 const { createWallpaperEngineBridge, registerWallpaperEngineScheme } = require('./wallpaper-engine-bridge');
 const {
   resolveInstanceProfile,
@@ -124,6 +130,7 @@ const wallpaperEngineBridge = createWallpaperEngineBridge({
   userDataPath: app.getPath('userData'),
   nativeTempPath: wallpaperEngineNativeTempPath,
   desktopCapturer,
+  translate: desktopUiText,
 });
 wallpaperEngineBridge.registerIpc();
 
@@ -1811,6 +1818,7 @@ function writeDesktopUiStatePatch(patch) {
   const file = desktopUiStatePath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(next, null, 2), 'utf8');
+  desktopLanguage.apply(next.values);
   return next;
 }
 
@@ -2070,30 +2078,30 @@ function reconcileStartupEntryPath() {
  */
 function buildAppContextMenuTemplate() {
   return [
-    { label: '显示 Mineradio', click: focusMainWindow },
+    { label: desktopUiText('显示 Mineradio'), click: focusMainWindow },
     {
-      label: '关闭按钮最小化到托盘',
+      label: desktopUiText('关闭按钮最小化到托盘'),
       type: 'checkbox',
       checked: closeToTrayEnabled,
       click: (item) => setCloseToTrayEnabled(item.checked),
     },
     {
-      label: '最小化时显示迷你播放器',
+      label: desktopUiText('最小化时显示迷你播放器'),
       type: 'checkbox',
       checked: miniPlayerEnabled,
       click: (item) => setMiniPlayerEnabled(item.checked),
     },
     {
-      label: '迷你播放器样式',
+      label: desktopUiText('迷你播放器样式'),
       submenu: [
         {
-          label: '标准（带封面）',
+          label: desktopUiText('标准（带封面）'),
           type: 'radio',
           checked: miniPlayerMode === 'standard',
           click: () => setMiniPlayerMode('standard'),
         },
         {
-          label: '极简（无封面）',
+          label: desktopUiText('极简（无封面）'),
           type: 'radio',
           checked: miniPlayerMode === 'compact',
           click: () => setMiniPlayerMode('compact'),
@@ -2101,7 +2109,7 @@ function buildAppContextMenuTemplate() {
       ],
     },
     {
-      label: '开机自动启动',
+      label: desktopUiText('开机自动启动'),
       type: 'checkbox',
       checked: isStartupEnabled(),
       click: (item) => {
@@ -2112,7 +2120,7 @@ function buildAppContextMenuTemplate() {
     },
     { type: 'separator' },
     {
-      label: '退出 Mineradio',
+      label: desktopUiText('退出 Mineradio'),
       click: () => {
         appQuitting = true;
         app.quit();
@@ -3706,6 +3714,7 @@ function sendMiniPlayerState(force = false) {
     hasTrack: !!state.hasTrack,
     desktopLyrics: state.desktopLyrics === true,
     metaSignature: state.metaSignature || '',
+    uiLanguage: state.uiLanguage === 'en' ? 'en' : 'zh-CN',
   };
   if (includeCover) {
     next.cover = state.cover || '';
@@ -3740,6 +3749,10 @@ function sendMiniPlayerState(force = false) {
   }
   if (force || !previous || next.desktopLyrics !== previous.desktopLyrics) {
     patch.desktopLyrics = next.desktopLyrics;
+    changed = true;
+  }
+  if (force || !previous || next.uiLanguage !== previous.uiLanguage) {
+    patch.uiLanguage = next.uiLanguage;
     changed = true;
   }
   // 主题变量整表发：迷你窗口拿到的是最终值，自己不需要知道哪个插件在生效。
@@ -4694,11 +4707,11 @@ ipcMain.handle('mineradio-export-backup-file', trustedMainFrameHandler(async (ev
     const rawName = String(payload.defaultName || 'mineradio.backup').replace(/[\\/:*?"<>|]+/g, '-');
     const defaultName = rawName.toLowerCase().endsWith('.backup') ? rawName : `${rawName}.backup`;
     const result = await dialog.showSaveDialog(owner, {
-      title: '导出 Mineradio 备份',
+      title: desktopUiText('导出 Mineradio 备份'),
       defaultPath: defaultName,
       filters: [
-        { name: 'Mineradio 备份', extensions: ['backup'] },
-        { name: '所有文件', extensions: ['*'] },
+        { name: desktopUiText('Mineradio 备份'), extensions: ['backup'] },
+        { name: desktopUiText('所有文件'), extensions: ['*'] },
       ],
     });
     if (result.canceled || !result.filePath) return { ok: false, canceled: true };
@@ -4720,11 +4733,11 @@ ipcMain.handle('mineradio-import-backup-file', trustedMainFrameHandler(async (ev
   try {
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
-      title: '导入 Mineradio 备份',
+      title: desktopUiText('导入 Mineradio 备份'),
       properties: ['openFile'],
       filters: [
-        { name: 'Mineradio 备份', extensions: ['backup'] },
-        { name: '所有文件', extensions: ['*'] },
+        { name: desktopUiText('Mineradio 备份'), extensions: ['backup'] },
+        { name: desktopUiText('所有文件'), extensions: ['*'] },
       ],
     });
     if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true };
@@ -4744,7 +4757,7 @@ ipcMain.handle('mineradio-export-json-file', trustedMainFrameHandler(async (even
     const owner = getSenderWindow(event);
     const defaultName = String(payload.defaultName || 'mineradio-export.json').replace(/[\\/:*?"<>|]+/g, '-');
     const result = await dialog.showSaveDialog(owner, {
-      title: '导出 Mineradio 存档',
+      title: desktopUiText('导出 Mineradio 存档'),
       defaultPath: defaultName.toLowerCase().endsWith('.json') ? defaultName : `${defaultName}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
@@ -4767,7 +4780,7 @@ ipcMain.handle('mineradio-import-json-file', trustedMainFrameHandler(async (even
   try {
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
-      title: '导入 Mineradio 存档',
+      title: desktopUiText('导入 Mineradio 存档'),
       properties: ['openFile'],
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
@@ -4794,11 +4807,11 @@ ipcMain.handle('mineradio-import-plugin-file', trustedMainFrameHandler(async (ev
   try {
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
-      title: '导入 Mineradio 插件',
+      title: desktopUiText('导入 Mineradio 插件'),
       properties: ['openFile'],
       filters: [
-        { name: 'Mineradio 插件', extensions: ['js', 'json'] },
-        { name: '所有文件', extensions: ['*'] },
+        { name: desktopUiText('Mineradio 插件'), extensions: ['js', 'json'] },
+        { name: desktopUiText('所有文件'), extensions: ['*'] },
       ],
     });
     if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true };
@@ -4834,7 +4847,7 @@ ipcMain.handle('mineradio-local-music-choose-folder', trustedMainFrameHandler(as
   try {
     const owner = getSenderWindow(event);
     const result = await dialog.showOpenDialog(owner, {
-      title: '选择本地音乐文件夹',
+      title: desktopUiText('选择本地音乐文件夹'),
       properties: ['openDirectory'],
     });
     if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true };

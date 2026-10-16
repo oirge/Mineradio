@@ -14,20 +14,16 @@ const controls = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio
 const switcher = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/PlaylistSwitcher.tsx'), 'utf8');
 const host = fs.readFileSync(path.join(root, 'public/folia-host.js'), 'utf8');
 
-test('empty Mineradio Home hides both Folia entries from the first frame', () => {
+test('empty Mineradio Home keeps the Folia switch reachable', () => {
   assert.match(html, /<body class="[^"]*\bempty-home-active\b[^"]*">/);
-  const rule = css.match(/(html:not\(\.folia-mode-preload\) body\.empty-home-active:not\(\.folia-interface-active\) #folia-switch-btn,\s*html:not\(\.folia-mode-preload\) body\.empty-home-active:not\(\.folia-interface-active\) #folia-floating-switch)\{([^}]+)\}/);
-  assert.ok(rule, 'Both Folia entries need the same empty-Home gate');
-  assert.match(rule[2], /display:none!important/);
+  assert.match(html, /id="folia-switch-btn"/);
+  // 空 Home 不再隐藏 Folia 入口：藏起来会让用户找不到回 Folia 的路。
+  assert.doesNotMatch(css, /body\.empty-home-active[^{,]*#folia-(?:switch-btn|floating-switch)/);
 });
 
-test('empty-Home hiding preserves saved and active Folia return entries', () => {
+test('empty-Home keeps the Folia return entry and the saved Folia preload', () => {
   const gates = css.match(/html[^{,]+body\.empty-home-active[^{,]+#folia-(?:switch-btn|floating-switch)/g) || [];
-  assert.equal(gates.length, 2);
-  for (const selector of gates) {
-    assert.match(selector, /html:not\(\.folia-mode-preload\)/);
-    assert.match(selector, /body\.empty-home-active:not\(\.folia-interface-active\)/);
-  }
+  assert.equal(gates.length, 0, '空 Home 不能再隐藏 Folia 入口');
   assert.match(html, /localStorage\.getItem\('mineradio-player-interface-v1'\) === 'folia'[\s\S]+classList\.add\('folia-mode-preload'\)/);
 });
 

@@ -189,7 +189,7 @@ function testCloneSongSkipsFullCover() {
 function testThumbnailPreservesEmbeddedCoverMetadata() {
   const source = readRendererSource();
   assert.match(source, /localCoverSource: song\.localCoverFile \? 'file' : \(\(song\.localCoverThumbDataUrl \|\| song\.localCoverDataUrl\) \? 'embedded'/);
-  assert.match(source, /song\.localCoverFileName \|\| \(\(song\.localCoverThumbDataUrl \|\| song\.localCoverDataUrl\) \? '内嵌封面'/);
+  assert.match(source, /song\.localCoverFileName \|\| \(\(song\.localCoverThumbDataUrl \|\| song\.localCoverDataUrl\) \? uiText\('内嵌封面'\)/);
 }
 
 /**

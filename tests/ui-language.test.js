@@ -127,7 +127,7 @@ test('自定义歌词弹窗纳入语言范围，歌曲信息与歌词文件名�
   const placeholder = textElement('', { placeholder: '[00:12.00] 第一行歌词\n[00:16.50] 第二行歌词\n\n没有时间轴也可以，每一行会按歌曲时长自动铺开' });
   placeholder.childNodes = [];
   placeholder.firstChild = null;
-  assert.match(APP, /'custom-lyric-modal'\]/);
+  assert.match(APP, /'custom-lyric-modal'/);
   assert.match(HTML, /id="custom-lyric-modal"[\s\S]*?data-i18n="自定义歌词"/);
   assert.match(HTML, /id="custom-lyric-track-meta"[^>]+data-i18n-skip/);
   context.setUiLanguage('en');
@@ -261,4 +261,48 @@ test('重标记和动态设置节点会重新应用当前语言', () => {
   assert.match(APP, /data-i18n/);
   assert.match(APP, /plugin-item-main" data-i18n-skip/);
   assert.match(APP, /user-archive-name" data-i18n-skip/);
+});
+
+test('一批重复属性变更只翻译该属性一次，不遍历已有子树', () => {
+  const context = languageContext();
+  const panel = textElement('高级', { title: '高级' });
+  panel.id = 'fx-panel';
+  for (let i = 0; i < 200; i++) {
+    const child = textElement('歌词'); child.parentElement = panel; panel.childNodes.push(child);
+  }
+  context.setUiLanguage('en');
+  context.translateUiElement(panel);
+  panel.setAttribute('title', '背景压暗');
+  let attributes = 0, subtrees = 0;
+  const original = context.translateUiAttribute;
+  context.translateUiAttribute = (...args) => { attributes++; return original(...args); };
+  context.translateUiElement = () => { subtrees++; };
+  context.translateUiMutations(Array.from({ length: 100 }, () => ({ type: 'attributes', attributeName: 'title', target: panel })));
+  assert.equal(attributes, 1);
+  assert.equal(subtrees, 0);
+  assert.equal(panel.getAttribute('title'), context.uiText('背景压暗'));
+});
+
+test('重叠的新子树与文本记录只处理一次，翻译自产生的文本记录不重做', () => {
+  const context = languageContext();
+  context.setUiLanguage('en');
+  const panel = textElement(''); panel.id = 'fx-panel';
+  const parent = textElement('歌词'), child = textElement('高级');
+  parent.parentElement = panel; child.parentElement = parent; parent.childNodes.push(child);
+  let visits = 0;
+  const original = context.translateUiTextNode;
+  context.translateUiTextNode = node => { visits++; original(node); };
+  context.translateUiMutations([
+    { type: 'childList', target: panel, addedNodes: [parent] },
+    { type: 'childList', target: parent, addedNodes: [child] },
+    { type: 'characterData', target: child.firstChild },
+  ]);
+  assert.equal(visits, 2);
+  assert.equal(child.firstChild.nodeValue, 'Advanced');
+  context.translateUiMutations([{ type: 'characterData', target: child.firstChild }]);
+  assert.equal(visits, 2);
+  child.firstChild.nodeValue = '7 个断点';
+  context.translateUiMutations(Array.from({ length: 20 }, () => ({ type: 'characterData', target: child.firstChild })));
+  assert.equal(visits, 3);
+  assert.equal(child.firstChild.nodeValue, '7 breakpoints');
 });

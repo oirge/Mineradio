@@ -58,6 +58,7 @@ function testDisabledCacheReleasesAndRejectsState() {
       hoverExpand: true,
       radius: 12,
     },
+    uiLanguage: 'zh-CN',
     metaSignature: '',
   });
   assert.equal(cache.apply({
