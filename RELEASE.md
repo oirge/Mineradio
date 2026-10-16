@@ -4,7 +4,14 @@
 
 - **版本元数据**：package、lock 两处、前端版本、前后端更新公告和 Release workflow 默认 tag 统一为 `2.5.1`；Folia 上游版本保持 `0.7.16`。
 - **内容**：合并功能分支与发布分支。Folia 加载异常可恢复（错误边界、重试、诊断导出）；补齐桌面端与迷你播放器英文，覆盖歌单选择器、歌曲/歌手详情、播放统计、热键与更新检测状态；恢复空曲库首页的 Folia 切换入口；CI 增加 Folia 类型/单测与 Playwright 浏览器回归。
-- **发布状态**：用户于 `2026-10-16` 要求合并本机与远端 PR 后发布 `2.5.1`。完成本地回归后走 PR、merge commit、annotated tag 和 Windows Build and Release；公开前核验安装器、blockmap、`latest.yml` 与 SHA256 清单。
+- **已有验证**：合并结果的完整 Node 回归 `1512` 项、`1511` 通过、`0` 失败、`1` 可选基准跳过；Folia 类型检查、定向 Vitest `36/36`、`npm run check:folia` 通过；`verify-browser-ui.py`（主界面双语、Folia 双语、Folia 恢复）全绿。
+- **提交与 CI**：用户于 `2026-10-16` 要求合并本机与远端 PR 后发布 `2.5.1`。本机分支 PR #139 以 merge commit `1a450311870547eac7f8cb76488c324e5b3e43d3` 合入 main，两组 Verify `38837614486` / `38837651209` 通过；发布分支 PR #138 以 merge commit `de241d55778766ff89f5d63586167c70d0e7f99c` 合入 main，两组 Verify `38840265290` / `38840269580` 通过。annotated tag `v2.5.1`（tag object `cc8564e819a5d9e3a103bc351f4691bd3f609f72`）固定在 `de241d5`，Windows Build and Release `38840964090` 成功（12m15s）。
+- **正式发布**：[v2.5.1](https://github.com/oirge/Mineradio/releases/tag/v2.5.1)（Release ID `414480606`）于北京时间 `2026-10-16 10:48:18` 公开并设为 Latest，`draft=false` / `prerelease=false`。正文仅含本版三条用户可见变化；旧版标签与资产保持原样。
+- **官方资产核验**：四项文件完整回下载，大小与本机 SHA256 均匹配 GitHub API digest，SHA256 清单三项全部一致；官方 EXE 本机 SHA-512 为 `ZacwBDt52loxWupCrmYL5/8lrGFmSTpCxw9MLsMLqs7ft4heIxBdv68XaRLSxTKLfZHrSpE+8VG3RU/AYW0Ubw==`，匹配 `latest.yml`。公开 `releases/latest/download/latest.yml` 与已校验文件逐字节一致。本轮未运行官方 `2.5.1` 安装器。
+  - `Mineradio-oirge-2.5.1-Setup.exe`：120732243 B，SHA256 `423a698431431fe27af7c9e8cd8528afacbec4b367eb7187d54b0bea490c0c1c`。
+  - `Mineradio-oirge-2.5.1-Setup.exe.blockmap`：127571 B，SHA256 `687a7ef98ac86fb4c10b9261d5b666b8e5f594f38504e7c244e6d9a7f613823f`。
+  - `latest.yml`：359 B，SHA256 `9743a94ca5c48fa01548a181512959324a06b61087dabbb39b1b9da65012c52f`。
+  - `Mineradio-oirge-2.5.1-SHA256SUMS.txt`：282 B，SHA256 `7245392bbf64f8a23d598dc2758e0cdc4ba9a3a3dc797051f95b1dc951c43bc0`。
 
 ## v2.5.0 主设置与 Folia 中英文切换
 
