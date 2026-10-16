@@ -105,6 +105,9 @@ function loadClearModule(options) {
       return Math.floor(total / 60) + ':' + (total % 60 < 10 ? '0' : '') + (total % 60);
     },
     detailRow(label, value) { return '<div class="detail-row"><span>' + label + '</span><b>' + value + '</b></div>'; },
+    // 详情文案现在先过语言层，harness 按原文返回即可，断言仍盯中文标签。
+    uiText(value) { return String(value == null ? '' : value); },
+    escHtml(value) { return String(value == null ? '' : value); },
     openGsapModal(el) { calls.push('open:' + (el && el.id)); if (el) el.classList.add('show'); },
     closeGsapModal(el, after) {
       calls.push('close:' + (el && el.id));

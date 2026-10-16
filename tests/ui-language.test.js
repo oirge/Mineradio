@@ -306,3 +306,55 @@ test('重叠的新子树与文本记录只处理一次，翻译自产生的文�
   assert.equal(visits, 3);
   assert.equal(child.firstChild.nodeValue, '7 breakpoints');
 });
+
+test('播放歌单动态文案跟随语言，用户自建歌单名保持原文', () => {
+  const pickerStart = APP.indexOf('function renderLocalPlaybackPlaylistPicker()');
+  const pickerEnd = APP.indexOf('\nfunction updateLocalPlaybackPlaylistSourceButton()', pickerStart);
+  assert.ok(pickerStart >= 0 && pickerEnd > pickerStart);
+  const picker = APP.slice(pickerStart, pickerEnd);
+  assert.match(picker, /uiText\(['"]全部音乐['"]\)/);
+  assert.match(picker, /uiText\(['"]特别喜欢['"]\)/);
+  assert.match(picker, /uiText\(['"]智能分类['"]\)/);
+  assert.match(picker, /translateUiCountText|uiText\(/);
+
+  const sourceStart = pickerEnd;
+  const sourceEnd = APP.indexOf('\nfunction setLocalPlaybackPlaylistSelection', sourceStart);
+  assert.ok(sourceEnd > sourceStart);
+  const sourceButton = APP.slice(sourceStart, sourceEnd);
+  assert.match(sourceButton, /uiLanguage\s*===\s*['"]en['"]|uiText\(/);
+  assert.match(sourceButton, /title|aria-label/);
+  // 用户歌单名只在标签节点上跳过翻译，按钮的悬停提示仍要跟着语言走。
+  assert.match(HTML, /id="playlist-source-label"[^>]*data-i18n-skip/);
+});
+
+test('热键状态、冲突原因和录入告警使用当前界面语言', () => {
+  const start = APP.indexOf('function hotkeyStatusMarkup(');
+  const end = APP.indexOf('\nfunction renderHotkeyScope(', start);
+  assert.ok(start >= 0 && end > start);
+  const source = APP.slice(start, end);
+  assert.match(source, /uiText\(/);
+  assert.match(source, /title=/);
+  assert.match(APP, /setHotkeyCaptureNotice\.reason[\s\S]{0,240}uiText\(/);
+  assert.match(APP, /function globalHotkeyRejectReason\(/);
+  assert.match(MAIN, /sourceName:\s*['"]不支持该组合键['"]/);
+  assert.match(MAIN, /reason:\s*['"]该组合键已被占用或被系统保留['"]/);
+});
+
+test('歌曲与歌手详情翻译字段标签，但不翻译用户歌曲信息', () => {
+  const rowStart = APP.indexOf('function detailRow(label, value)');
+  const rowEnd = APP.indexOf('\nfunction currentArtistNames(', rowStart);
+  assert.ok(rowStart >= 0 && rowEnd > rowStart);
+  assert.match(APP.slice(rowStart, rowEnd), /uiText\(/);
+
+  const detailStart = APP.indexOf('function openTrackDetailModal(type, songOverride)');
+  const detailEnd = APP.indexOf('\nfunction openArtistDetailForSong(', detailStart);
+  assert.ok(detailStart >= 0 && detailEnd > detailStart);
+  const detail = APP.slice(detailStart, detailEnd);
+  ['歌曲详情', '歌手详情', '歌曲名', '关联歌手', '所属专辑', '本地信息'].forEach((label) => {
+    assert.match(detail, new RegExp(`uiText\\(['"]${label}['"]\\)`), `详情缺少语言化字段：${label}`);
+  });
+  assert.match(detail, /escHtml\(title\)/);
+  assert.match(detail, /escHtml\(artistName\)/);
+  assert.match(detail, /song\.localPath/);
+  assert.match(HTML, /id="track-detail-modal"/);
+});

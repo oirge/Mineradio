@@ -1,10 +1,10 @@
 # 发布流程
 
-## v2.5.1 维护性发布
+## v2.5.1 播放器稳定性与英文界面补全
 
 - **版本元数据**：package、lock 两处、前端版本、前后端更新公告和 Release workflow 默认 tag 统一为 `2.5.1`；Folia 上游版本保持 `0.7.16`。
-- **内容**：本版是基于已发布 `v2.5.0` 的维护性重建，延续主设置与 Folia 中文 / English 同步切换，不引入新的功能代码。
-- **发布状态**：用户于 `2026-10-15` 明确要求继续完成 `2.5.1` 发布。完成本地回归后走功能分支、PR、merge commit、annotated tag 和 Windows Build and Release；公开前核验安装器、blockmap、`latest.yml` 与 SHA256 清单。
+- **内容**：合并功能分支与发布分支。Folia 加载异常可恢复（错误边界、重试、诊断导出）；补齐桌面端与迷你播放器英文，覆盖歌单选择器、歌曲/歌手详情、播放统计、热键与更新检测状态；恢复空曲库首页的 Folia 切换入口；CI 增加 Folia 类型/单测与 Playwright 浏览器回归。
+- **发布状态**：用户于 `2026-10-16` 要求合并本机与远端 PR 后发布 `2.5.1`。完成本地回归后走 PR、merge commit、annotated tag 和 Windows Build and Release；公开前核验安装器、blockmap、`latest.yml` 与 SHA256 清单。
 
 ## v2.5.0 主设置与 Folia 中英文切换
 
