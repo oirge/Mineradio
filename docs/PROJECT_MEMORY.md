@@ -51,6 +51,13 @@
 
 ## Release Memory
 
+## v2.5.2：Folia 顶栏升级入口与音量数值（已发布，2026-10-18）
+
+- 用户要求 Folia 顶栏在「Mineradio」与「导入文件」之间加一个图标式升级按钮、Folia 底部音量条显示具体数值，并把其他实质性更新一起发成 `2.5.2`。
+- `#folia-update-btn`（30×30 上箭头图标，只在 `body.folia-interface-active` 下显示）复用现有更新面板，`setUpdatePreviewVisible` / `syncUpdatePreviewStateClass` / `openUpdatePanel` 三处共同驱动四态。**Folia 下更新面板能显示但点不动**的根因是 `public/folia-host.js` 的 `setOriginalVisualsVisible(false)` 会给 shell 内除标题栏 / iframe 外的每个子节点加 `inert`；`update-modal` 必须留在豁免名单里，同时从 Folia 的 `visibility:hidden` 清扫中摘出并提升层级。Folia 音量条新增 `local-volume-value` 显示 `Math.round(volume*100)%`。
+- PR #141 以 merge commit `391823f` 合入 main（Verify `39098349448` / `39098452395` 通过）；annotated tag `v2.5.2`（tag object `9c69990`）固定在该 commit，Windows Build and Release `39098867901` 成功。Release `416242724` 于北京时间 `2026-10-18 13:12:16` 公开为 Latest，四项资产回下载核验通过（EXE `120733019` B，SHA256 `c148fa14…`）。
+- 回归 `1514` 项、`1513` 通过、`0` 失败、`1` 可选基准跳过；`npm run build:folia` 重建并校验通过。
+
 ## v2.5.1：播放器稳定性与英文界面补全（已发布，2026-10-16）
 
 - 两条并行分支合并：本机 `codex/player-stability-and-i18n`（Folia 韧性、翻译引擎、CI 浏览器回归）与远端 `codex/release-v2.5.1`（动态文案覆盖、发布元数据）。合并保留本机翻译引擎与批量去重，吸收远端 27 条独有词条与歌单/详情/统计/热键动态文案，并新增 `data-i18n-attrs`（只翻译属性、跳过用户数据文本）。

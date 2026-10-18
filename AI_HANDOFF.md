@@ -2,6 +2,15 @@
 
 这个文件是给后续接管本工作区的 AI 看的。每次完成一个任务后，都要更新本文件的「工作日志」和「未完成事项」，让下一位接手者能快速知道用户偏好、当前状态和最近做过什么。
 
+## 2026-10-18（Folia 顶栏升级入口与音量数值，v2.5.2 已正式发布）
+
+- 用户要求：Folia 顶栏在「Mineradio」与「导入文件」之间加一个**图标式**升级按钮（「升级按钮使用图标啊」），Folia 底部音量条显示**具体数值**；随后要求「其他实质性更新都更新一下然后发布 2.5.2 版本」。
+- 实现：`public/index.html` 的 `#folia-switch-btn` 与 `#folia-import-files` 之间插入 `#folia-update-btn`（30×30 上箭头图标），`public/app.css` 只在 `body.folia-interface-active` 下启用 `display:grid`，并给出 `has-update` / `checking` / `downloading` / `ready` 四态；`public/app.js` 的 `setUpdatePreviewVisible` / `syncUpdatePreviewStateClass` / `openUpdatePanel` 三处同时驱动它，`UI_LANGUAGE_PAIRS` 补 `['升级 Mineradio','Update Mineradio']`。Folia 侧 `vendor-src/folia/src/mineradio/local/PlayerControls.tsx` + `local.css` 新增 `local-volume-value`（`Math.round(volume*100)%`，tabular-nums 右对齐），重建走 `npm run build:folia`。
+- **踩到的真实缺陷**：Folia 下更新面板能显示但点不动——`public/folia-host.js` 的 `setOriginalVisualsVisible(false)` 会给 shell 内除标题栏 / iframe 外的每个子节点加 `inert`，把 `update-modal` 一起扫进去；现在 `update-modal` 在豁免名单里（`public/folia-host.css` 同时把它从 Folia 的 `visibility:hidden` 清扫里摘出，并在 Folia 激活时把层级提到 `2147483000`）。`tests/folia-host.test.js` 新增一例钉住。
+- 发布结果：功能提交 `dba7e6e` 经 PR #141 以 merge commit `391823f` 合入 main（两组 Verify `39098349448` / `39098452395` 通过）；annotated tag `v2.5.2`（tag object `9c69990`）固定在该 merge commit，Windows Build and Release `39098867901` 成功。Release `416242724` 于北京时间 `2026-10-18 13:12:16` 公开并设为 Latest。
+- 资产核验：四项文件完整回下载，大小与 SHA256 全部匹配 GitHub digest 与清单；EXE SHA-512 匹配 `latest.yml`；公开 `releases/latest/download/latest.yml` 与已校验文件逐字节一致。本轮未运行官方 `2.5.2` 安装器。完整摘要见 `RELEASE.md`。
+- 验证：完整 Node 回归 `1514` 项、`1513` 通过、`0` 失败、`1` 可选基准跳过；`npm run build:folia` 重建并校验通过；Chromium 真机验证按钮位置（x=1014，正好夹在「Mineradio」与「导入文件」之间）、更新面板在 Folia 上层可点击（命中测试落在面板内按钮）、音量显示 `100%` → `42%` → `58%`。
+
 ## 2026-10-16（合并本机与远端分支，v2.5.1 已正式发布）
 
 - 用户要求把本机分支与远端 PR 一起处理完再发布 `2.5.1`。远端 `codex/release-v2.5.1` 是从 `origin/main` 独立重建的发布分支（自带一套 i18n 动态文案与发布元数据），与本机 `codex/player-stability-and-i18n` 在 `public/app.js` 有 16 处冲突。
