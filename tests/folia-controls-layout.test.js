@@ -84,3 +84,8 @@ test('keyboard focus keeps the Folia controls visible while choosing a playlist'
     assert.ok(host.includes(`frameActivityDoc.removeEventListener('${event}', ${handler}, true)`));
   }
 });
+
+test('Folia 音量条在滑块右侧显示具体百分比数值', () => {
+  assert.match(controls, /data-testid="local-volume"[\s\S]{0,400}?<span className="local-volume-value" data-testid="local-volume-value">\{Math\.round\(\(state\?\.volume \?\? 1\) \* 100\)\}%<\/span>/);
+  assert.match(localCss, /\.local-volume-value\{[^}]*min-width:30px[^}]*text-align:right[^}]*font-variant-numeric:tabular-nums/);
+});

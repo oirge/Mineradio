@@ -63,6 +63,7 @@
 .local-player .local-play-button:hover{opacity:.86;background:var(--local-text)}
 .local-volume{justify-content:flex-end}
 .local-volume input{width:62px;min-width:16px;flex:0 1 62px}
+.local-volume-value{min-width:30px;text-align:right;font-size:10px;font-variant-numeric:tabular-nums;color:var(--local-muted)}
 .local-glass{background:var(--local-glass);border:1px solid var(--local-line);backdrop-filter:blur(32px);box-shadow:0 24px 70px #0002;border-radius:24px;animation:local-panel-in .22s ease-out}
 .local-library{position:absolute;z-index:12;left:24px;top:78px;bottom:140px;width:min(430px,calc(100vw - 48px));display:flex;flex-direction:column;overflow:hidden}
 .local-panel-title{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--local-line);font-size:13px;flex-shrink:0}

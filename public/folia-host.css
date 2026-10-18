@@ -32,10 +32,12 @@ body.desktop-shell.folia-interface-active #folia-titlebar-controls{display:flex}
 #folia-titlebar-controls .local-view-switch{display:flex;align-items:center;gap:2px;padding-right:5px;margin-right:1px;border-right:1px solid rgba(255,255,255,.12)}
 @media(max-width:1100px){#folia-titlebar-controls nav{gap:2px}#folia-titlebar-controls button{padding:0 8px}body.desktop-shell.folia-interface-active .desktop-window-controls{gap:4px}body.desktop-shell.folia-interface-active .desktop-mode-btn{min-width:0;padding:0 8px;letter-spacing:0;gap:4px}}
 body.desktop-shell.desktop-fullscreen #folia-interface,html:fullscreen body.desktop-shell #folia-interface{top:0}
-html.folia-mode-preload #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone),
-body.folia-interface-active #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone){visibility:hidden!important;pointer-events:none!important}
-html.folia-mode-preload #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone) *,
-body.folia-interface-active #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone) *{visibility:hidden!important;animation-play-state:paused!important}
+html.folia-mode-preload #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone):not(#update-modal),
+body.folia-interface-active #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone):not(#update-modal){visibility:hidden!important;pointer-events:none!important}
+html.folia-mode-preload #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone):not(#update-modal) *,
+body.folia-interface-active #desktop-window-shell>:not(#folia-interface):not(#desktop-titlebar):not(#fullscreen-diy-zone):not(#update-modal) *{visibility:hidden!important;animation-play-state:paused!important}
+/* Folia: the shared updater stays above the embedded interface when opened from the titlebar. */
+body.folia-interface-active #update-modal.modal-mask{z-index:2147483000}
 body.folia-interface-active #diy-mode-btn,body.folia-interface-active #visual-guide-btn,body.folia-interface-active #update-entry{display:none!important}
 #folia-floating-switch{position:fixed;top:14px;right:16px;z-index:650;min-width:76px;height:30px;padding:0 12px;border:1px solid rgba(180,180,205,.25);border-radius:9px;background:#292930;color:#e4e3ef;font:600 11px var(--font-sans);cursor:pointer;-webkit-app-region:no-drag}
 #folia-floating-switch.on{color:#f3f5f9;border-color:rgba(255,255,255,.20);background:rgba(32,32,38,.88);box-shadow:0 10px 30px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.06)}
