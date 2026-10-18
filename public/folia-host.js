@@ -331,7 +331,8 @@
   function setOriginalVisualsVisible(visible) {
     var shell = document.getElementById('desktop-window-shell');
     if (shell) Array.prototype.forEach.call(shell.children, function (node) {
-      if (['desktop-titlebar', 'fullscreen-diy-zone', 'folia-interface'].indexOf(node.id) >= 0) return;
+      // update-modal 是顶栏升级入口共用的更新面板：它必须保持可交互，否则在 Folia 里只能看见、点不动。
+      if (['desktop-titlebar', 'fullscreen-diy-zone', 'folia-interface', 'update-modal'].indexOf(node.id) >= 0) return;
       if (node.tagName === 'INPUT' && node.type === 'file') return;
       if (!visible) { if (!oldInert.has(node)) oldInert.set(node, node.inert); node.inert = true; }
       else if (oldInert.has(node)) node.inert = oldInert.get(node);

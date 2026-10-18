@@ -288,6 +288,7 @@ var UI_LANGUAGE_PAIRS = [
   ['查看使用引导', 'View guide'],
   ['检测更新', 'Check for updates'],
   ['正在检测更新…', 'Checking for updates…'],
+  ['升级 Mineradio', 'Update Mineradio'],
   ['最小化', 'Minimize'],
   ['退出全屏', 'Exit Fullscreen'],
   ['回到 Home', 'Go to Home'],
@@ -1953,7 +1954,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.5.1';
+var APP_VERSION = '2.5.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2006,11 +2007,10 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 加载异常可恢复，桌面端英文界面补全。',
+  hero: 'Folia 顶栏新增升级入口，音量条显示具体数值。',
   notes: [
-    'Folia 加载失败时显示可重试的恢复界面，支持导出本地诊断记录，重试后保持当前视图。',
-    '补齐桌面端与迷你播放器的英文翻译：悬停提示、音量面板、歌单选择器、歌曲信息弹窗和热键提示。',
-    '修复英文界面残留中文，并恢复空曲库首页的 Folia 切换入口。'
+    'Folia 顶栏在「Mineradio」与「导入文件」之间新增升级入口，点击直接打开更新面板。',
+    'Folia 底部音量条在滑块右侧显示具体百分比数值，随音量实时更新。'
   ]
 };
 function readSavedVolume() {
@@ -42058,6 +42058,8 @@ function finishCanceledUpdateJob(job) {
 function setUpdatePreviewVisible(visible) {
   updatePreviewState.visible = !!visible;
   var entry = document.getElementById('update-entry');
+  var foliaEntry = document.getElementById('folia-update-btn');
+  if (foliaEntry) foliaEntry.hidden = !updatePreviewState.visible;
   if (!entry) {
     stopUpdateIconBreathing(false);
     return;
@@ -42311,6 +42313,7 @@ function syncUpdatePreviewStateClass() {
   if (classSignature === updatePreviewState.lastClassSignature) return;
   updatePreviewState.lastClassSignature = classSignature;
   var entry = document.getElementById('update-entry');
+  var foliaEntry = document.getElementById('folia-update-btn');
   var modal = document.querySelector('#update-modal .update-modal');
   var isDownloading = updatePreviewState.status === 'downloading';
   var isReady = updatePreviewState.status === 'ready';
@@ -42328,6 +42331,16 @@ function syncUpdatePreviewStateClass() {
     entry.setAttribute('aria-busy', isChecking ? 'true' : 'false');
     entry.title = isChecking ? '正在检测更新…' : (updatePreviewState.updateAvailable ? '发现新版本 v' + updatePreviewState.version : '检测更新');
     entry.setAttribute('aria-label', entry.title);
+  }
+  if (foliaEntry) {
+    foliaEntry.hidden = !updatePreviewState.visible;
+    foliaEntry.classList.toggle('downloading', isDownloading || isOpening);
+    foliaEntry.classList.toggle('ready', isReady);
+    foliaEntry.classList.toggle('checking', isChecking);
+    foliaEntry.classList.toggle('has-update', updatePreviewState.updateAvailable);
+    foliaEntry.setAttribute('aria-busy', isChecking ? 'true' : 'false');
+    foliaEntry.title = isChecking ? '正在检测更新…' : (updatePreviewState.updateAvailable ? '发现新版本 v' + updatePreviewState.version : '升级 Mineradio');
+    foliaEntry.setAttribute('aria-label', foliaEntry.title);
   }
   if (modal) {
     modal.classList.toggle('ready', isReady);
@@ -42409,13 +42422,15 @@ function updateUpdatePreviewProgress(progress) {
 function openUpdatePanel() {
   var mask = document.getElementById('update-modal');
   var entry = document.getElementById('update-entry');
+  var foliaEntry = document.getElementById('folia-update-btn');
   if (!mask) return;
   updatePreviewState.open = true;
   // 面板可能在延迟初始化（9~12 秒）之前就被打开，这里补一次幂等绑定，否则线路分段按钮点了没反应。
   initUpdateRouteControls();
   renderUpdatePreviewPanel();
-  if (entry && window.gsap) {
-    window.gsap.fromTo(entry, { scale: 0.93 }, { scale: 1, duration: 0.42, ease: 'back.out(1.7)', overwrite: 'auto' });
+  var activeEntry = document.body.classList.contains('folia-interface-active') ? foliaEntry : entry;
+  if (activeEntry && window.gsap) {
+    window.gsap.fromTo(activeEntry, { scale: 0.93 }, { scale: 1, duration: 0.42, ease: 'back.out(1.7)', overwrite: 'auto' });
   }
   if (updatePreviewState.status !== 'downloading' && updatePreviewState.status !== 'opening') checkLatestUpdate({ force: true, announce: true });
   loadUpdateRouteInfo();

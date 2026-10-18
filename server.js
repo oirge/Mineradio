@@ -78,9 +78,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 加载失败时显示可重试的恢复界面，支持导出本地诊断记录，重试后保持当前视图。',
-  '补齐桌面端与迷你播放器的英文翻译：悬停提示、音量面板、歌单选择器、歌曲信息弹窗、歌手详情、播放统计、热键提示和更新检测状态。',
-  '修复英文界面残留中文，并恢复空曲库首页的 Folia 切换入口。',
+  'Folia 顶栏在「Mineradio」与「导入文件」之间新增升级入口，点击直接打开更新面板。',
+  'Folia 底部音量条在滑块右侧显示具体百分比数值，随音量实时更新。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

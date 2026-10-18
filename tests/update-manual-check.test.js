@@ -10,6 +10,7 @@ const root = path.join(__dirname, '..');
 const appSource = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const htmlSource = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const cssSource = fs.readFileSync(path.join(root, 'public', 'app.css'), 'utf8');
+const foliaCssSource = fs.readFileSync(path.join(root, 'public', 'folia-host.css'), 'utf8');
 
 function loadUpdateCheckHarness() {
   const start = appSource.indexOf('function updateCheckFailureReason(data) {');
@@ -61,9 +62,17 @@ function loadUpdateCheckHarness() {
 
 test('更新入口常驻并提供独立检测按钮', () => {
   assert.match(htmlSource, /id="update-entry" class="update-entry available"[^>]+title="检测更新"/);
+  assert.match(htmlSource, /id="folia-switch-btn"[^>]*>Folia<\/button>\s*<button id="folia-update-btn"[^>]+onclick="openUpdatePanel\(\)"[^>]*>\s*<svg[\s\S]*?<path d="M12 16\.5V7\.5"><\/path>\s*<path d="M8\.7 10\.7 12 7\.4l3\.3 3\.3"><\/path>\s*<\/svg>\s*<\/button>\s*<button id="folia-import-files"/);
   assert.match(htmlSource, /id="update-check-btn"[\s\S]*?checkLatestUpdate\(\{ force: true, announce: true \}\)/);
   assert.match(cssSource, /\.update-check-btn\.checking svg\{animation:update-check-spin/);
   assert.match(appSource, /openUpdatePanel\(\)[\s\S]*?checkLatestUpdate\(\{ force: true, announce: true \}\)/);
+  assert.match(appSource, /function syncUpdatePreviewStateClass\(\)[\s\S]*?var foliaEntry = document\.getElementById\('folia-update-btn'\);[\s\S]*?foliaEntry\.title = isChecking \? '正在检测更新…'/);
+  assert.match(appSource, /function openUpdatePanel\(\)[\s\S]*?var activeEntry = document\.body\.classList\.contains\('folia-interface-active'\) \? foliaEntry : entry;[\s\S]*?window\.gsap\.fromTo\(activeEntry/);
+  assert.match(cssSource, /#folia-update-btn\{display:none;width:30px;height:30px;flex:0 0 auto;place-items:center;padding:0;/);
+  assert.match(cssSource, /body\.folia-interface-active #folia-update-btn\{display:grid\}/);
+  assert.match(cssSource, /body\.folia-interface-active #folia-update-btn\[hidden\]\{display:none!important\}/);
+  assert.match(foliaCssSource, /body\.folia-interface-active #desktop-window-shell>:not\(#folia-interface\):not\(#desktop-titlebar\):not\(#fullscreen-diy-zone\):not\(#update-modal\)/);
+  assert.match(foliaCssSource, /body\.folia-interface-active #update-modal\.modal-mask\{z-index:2147483000\}/);
 });
 
 test('标题栏更新按钮只做光效呼吸，不再上下漂移', () => {

@@ -59,6 +59,15 @@ body.desktop-shell #desktop-titlebar #update-entry::before,
 body.desktop-shell #desktop-titlebar #update-entry::after{display:none}
 body.desktop-shell #desktop-titlebar #visual-guide-btn:hover,
 body.desktop-shell #desktop-titlebar #update-entry:hover{background:rgba(255,83,103,.10);border-color:rgba(255,83,103,.32);color:#fff;transform:translateY(-1px)}
+#folia-update-btn{display:none;width:30px;height:30px;flex:0 0 auto;place-items:center;padding:0;border:1px solid rgba(255,255,255,.08);border-radius:50%;background:rgba(4,8,10,.42);color:rgba(224,250,255,.70);cursor:pointer;transition:background .18s,color .18s,transform .18s,border-color .18s}
+#folia-update-btn svg{width:15px;height:15px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#folia-update-btn:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff;transform:translateY(-1px)}
+body.folia-interface-active #folia-update-btn{display:grid}
+body.folia-interface-active #folia-update-btn[hidden]{display:none!important}
+body.folia-interface-active #folia-update-btn.has-update{color:rgba(255,236,184,.96);border-color:rgba(244,210,138,.34);box-shadow:0 0 12px rgba(244,210,138,.13),inset 0 1px 0 rgba(255,255,255,.08)}
+body.folia-interface-active #folia-update-btn.checking svg{animation:update-check-spin .9s linear infinite}
+body.folia-interface-active #folia-update-btn.downloading svg{animation:update-check-spin 1.4s linear infinite}
+body.folia-interface-active #folia-update-btn.ready{color:rgba(186,244,211,.94);border-color:rgba(150,231,186,.28)}
 body.desktop-shell #search-area{top:-92px}
 body.desktop-shell #search-area.peek{top:44px}
 body.desktop-shell #search-area.stage-mode.peek{top:42px}

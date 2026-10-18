@@ -166,7 +166,7 @@ test('only the saved Folia interface is preloaded without writing preferences', 
     assert.equal(classes.has('simple-mode-preload'), setup.diy !== true);
   }
   assert.match(foliaCss, /html\.folia-mode-preload #folia-interface\[hidden\]\{display:block!important\}/);
-  assert.match(foliaCss, /html\.folia-mode-preload #desktop-window-shell>:not\(#folia-interface\):not\(#desktop-titlebar\):not\(#fullscreen-diy-zone\),\s*body\.folia-interface-active[^{}]*\{visibility:hidden!important;pointer-events:none!important\}/);
+  assert.match(foliaCss, /html\.folia-mode-preload #desktop-window-shell>:not\(#folia-interface\):not\(#desktop-titlebar\):not\(#fullscreen-diy-zone\):not\(#update-modal\),\s*body\.folia-interface-active[^{}]*\{visibility:hidden!important;pointer-events:none!important\}/);
 });
 
 test('DOMContentLoaded directly reveals Home without a splash node, click or animation timer', () => {

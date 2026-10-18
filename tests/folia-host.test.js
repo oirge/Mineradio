@@ -42,6 +42,7 @@ function harness(options = {}) {
     const documentElement = element('html');
     if (options.preloadFolia) documentElement.classList.toggle('folia-mode-preload', true);
     const mount = element('folia-interface'), status = element('folia-load-status'), original = element('renderer'), titlebar = element('desktop-titlebar');
+    const updateModal = element('update-modal');
     mount.hidden = true;
     mount.setAttribute('aria-hidden', 'true');
     const fileInput = element('file-input', 'INPUT'); fileInput.type = 'file';
@@ -49,7 +50,7 @@ function harness(options = {}) {
     video.src = 'blob:background'; video.paused = false;
     video.pause = () => { video.paused = true; calls.push('video-pause'); };
     video.play = () => { video.paused = false; calls.push('video-play'); return Promise.resolve(); };
-    const shell = element('desktop-window-shell'); shell.children = [titlebar, original, video, fileInput, mount];
+    const shell = element('desktop-window-shell'); shell.children = [titlebar, original, video, fileInput, mount, updateModal];
     const nodes = new Map([shell, mount, status, fileInput].map(node => [node.id, node]));
     const button = element('switch', 'BUTTON');
     let timerId = 0, requestId = 0;
@@ -141,7 +142,7 @@ function harness(options = {}) {
         assert.ok(entry, `Expected timer with ${delay}ms delay`);
         timers.delete(entry[0]); entry[1].callback();
     }
-    return { context, tracks, document, mount, frame, status, original, titlebar, video, fileInput, storage, messages, calls, dbFavorites, preloadReleases, timers, listeners, request, runTimer };
+    return { context, tracks, document, mount, frame, status, original, titlebar, updateModal, video, fileInput, storage, messages, calls, dbFavorites, preloadReleases, timers, listeners, request, runTimer };
 }
 
 test('Folia language commands use the host preference without changing playback or metadata', async () => {
@@ -186,6 +187,14 @@ test('saved Folia startup takes ownership before releasing the first-paint state
     assert.equal(h.mount.hidden, true);
     assert.equal(h.original.inert, false);
     assert.equal(h.calls.includes('resume-render'), true);
+});
+
+test('升级面板在 Folia 激活时保持可交互，不被 inert 清扫', () => {
+  const h = harness();
+  assert.equal(h.original.inert, true, '原界面仍然要被 inert');
+  assert.equal(h.updateModal.inert, false, 'Folia 激活时更新面板不能被 inert，否则只能看见、点不动');
+  h.context.MineradioFoliaHost.setInterface('mineradio');
+  assert.equal(h.updateModal.inert, false, '切回 Mineradio 后更新面板同样可交互');
 });
 
 test('unavailable Folia startup always releases the first-paint state back to Home', () => {

@@ -59,6 +59,7 @@ export default function PlayerControls({ state, currentTime, command, onQueue, o
                     {state?.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                 </button>
                 <input data-testid="local-volume" aria-label={t('volume')} type="range" min="0" max="1" step="0.01" value={state?.volume ?? 1} onChange={(event) => run('setVolume', { volume: Number(event.currentTarget.value) })} />
+                <span className="local-volume-value" data-testid="local-volume-value">{Math.round((state?.volume ?? 1) * 100)}%</span>
                 <button aria-label={t('queue')} title={t('queue')} onClick={onQueue}><ListMusic size={19} /></button>
             </div>
         </div>

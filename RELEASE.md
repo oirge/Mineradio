@@ -1,5 +1,12 @@
 # 发布流程
 
+## v2.5.2 Folia 顶栏升级入口与音量数值
+
+- **版本元数据**：package、lock 两处、前端版本、前后端更新公告和 Release workflow 默认 tag 统一为 `2.5.2`；Folia 上游版本保持 `0.7.16`，安装身份、数据目录与更新线路不变。
+- **内容**：Folia 顶栏在「Mineradio」与「导入文件」之间新增升级入口按钮，点击复用现有更新面板；Folia 底部音量条在滑块右侧显示具体百分比数值。更新面板在 Folia 模式下保持可用：模态从 Folia 的隐藏规则中豁免，并在 Folia 激活时提升层级。
+- **已有验证**：完整 Node 回归 `1514` 项、`1513` 通过、`0` 失败、`1` 可选基准跳过；`npm run build:folia` 重建并校验通过。Chromium 真机验证：升级按钮位于「Mineradio」与「导入文件」之间（30×30 图标，x=1014/1010 两档），点击后更新面板在 Folia 上层正常显示且可点击（命中测试为面板内按钮，检测更新按钮可触发）；Folia 音量条显示 `100%` → `42%` → `58%` 随滑块实时更新。**修复过程中发现并解决的真实缺陷**：`setOriginalVisualsVisible(false)` 会把 shell 内除标题栏/iframe 外的全部子节点设为 `inert`，更新面板因此在 Folia 下只能看见、点不动；现将 `update-modal` 加入豁免名单，并新增 `tests/folia-host.test.js` 用例钉住。
+- **发布状态**：用户于 `2026-10-18` 明确要求发布 `2.5.2`。走功能分支、PR、merge commit、annotated tag 和 Windows Build and Release；公开前核验安装器、blockmap、`latest.yml` 与 SHA256 清单。
+
 ## v2.5.1 播放器稳定性与英文界面补全
 
 - **版本元数据**：package、lock 两处、前端版本、前后端更新公告和 Release workflow 默认 tag 统一为 `2.5.1`；Folia 上游版本保持 `0.7.16`。
