@@ -25,17 +25,6 @@
 </div>
 
 ---
-
-## ✨ 功能特性
-
-### 🌿 Folia 本地播放（v2.4.0）
-
-- 在标题栏切换 **Mineradio / Folia**；Folia 内可选歌词播放、悬浮 Polaroid 唱片墙和 Lattice 封面拼贴墙，切换视图时音乐继续播放。
-- 14 种内置歌词效果：Classic、Partita、Tempera、Lumiere、Cadenza、Fume、Claddagh、Cappella、Tilt、Diorama、Monet、Pendolo、Sonnet、Still。其中 12 种提供原版专属参数面板。
-- 5 种本地背景：Common、Latent、Sora、Monet、Nomand；支持主题、字号、译文、图片素材及视觉偏好保存。
-- 音乐库、收藏、歌单和队列共用 Mineradio 的本地数据，播放仍由 Mineradio 的音频引擎负责。
-- 只集成 Folia 的本地播放功能和视觉组件，不接入它的在线音乐、账号或同步服务。实现与源码说明见 [Folia 本地集成文档](./docs/FOLIA_INTEGRATION.md)。
-
 ### 🎵 音频格式支持
 - **MP3** - MPEG Audio Layer 3
 - **MP2** - MPEG Audio Layer 2
