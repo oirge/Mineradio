@@ -1,5 +1,12 @@
 # 发布流程
 
+## v2.5.3 Folia 音量滚轮
+
+- **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新公告和 Release workflow 默认 tag 统一为 `2.5.3`；Folia 上游版本保持 `0.7.16`，安装身份、数据目录和更新线路不变。
+- **内容**：Folia 歌词页底部音量控件支持鼠标滚轮，向上增大、向下减小；步进沿用主界面的 `mineradio-volume-wheel-step-v1` 设置和 1%–50% 夹取规则。监听只覆盖音量图标与滑块，不包含队列按钮；原生 `{ passive: false }` 拦住背景滚动。`2.5.2` 新增的音量百分比继续显示在滑块右侧。
+- **发布状态**：用户于 `2026-10-20` 要求发布新版。计划通过功能分支、PR、merge commit、annotated tag `v2.5.3` 和 Windows Build and Release 发布；正式资产核验结果在发布完成后补录。
+# 发布流程
+
 ## v2.5.2 Folia 顶栏升级入口与音量数值
 
 - **版本元数据**：package、lock 两处、前端版本、前后端更新公告和 Release workflow 默认 tag 统一为 `2.5.2`；Folia 上游版本保持 `0.7.16`，安装身份、数据目录与更新线路不变。

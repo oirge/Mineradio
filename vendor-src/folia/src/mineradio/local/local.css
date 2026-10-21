@@ -62,6 +62,7 @@
 .local-player .local-play-button{width:45px;height:45px;border-radius:50%;background:var(--local-text);color:var(--local-bg)}
 .local-player .local-play-button:hover{opacity:.86;background:var(--local-text)}
 .local-volume{justify-content:flex-end}
+.local-volume-control{display:flex;align-items:center;gap:2px;min-width:0}
 .local-volume input{width:62px;min-width:16px;flex:0 1 62px}
 .local-volume-value{min-width:30px;text-align:right;font-size:10px;font-variant-numeric:tabular-nums;color:var(--local-muted)}
 .local-glass{background:var(--local-glass);border:1px solid var(--local-line);backdrop-filter:blur(32px);box-shadow:0 24px 70px #0002;border-radius:24px;animation:local-panel-in .22s ease-out}

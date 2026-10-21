@@ -13,17 +13,17 @@ const localCss = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio
 const controls = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/PlayerControls.tsx'), 'utf8');
 const switcher = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/PlaylistSwitcher.tsx'), 'utf8');
 const host = fs.readFileSync(path.join(root, 'public/folia-host.js'), 'utf8');
+const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 
 test('empty Mineradio Home keeps the Folia switch reachable', () => {
   assert.match(html, /<body class="[^"]*\bempty-home-active\b[^"]*">/);
   assert.match(html, /id="folia-switch-btn"/);
-  // 空 Home 不再隐藏 Folia 入口：藏起来会让用户找不到回 Folia 的路。
   assert.doesNotMatch(css, /body\.empty-home-active[^{,]*#folia-(?:switch-btn|floating-switch)/);
 });
 
 test('empty-Home keeps the Folia return entry and the saved Folia preload', () => {
   const gates = css.match(/html[^{,]+body\.empty-home-active[^{,]+#folia-(?:switch-btn|floating-switch)/g) || [];
-  assert.equal(gates.length, 0, '空 Home 不能再隐藏 Folia 入口');
+  assert.equal(gates.length, 0, 'The empty Home must not hide the Folia return entry');
   assert.match(html, /localStorage\.getItem\('mineradio-player-interface-v1'\) === 'folia'[\s\S]+classList\.add\('folia-mode-preload'\)/);
 });
 
@@ -85,7 +85,32 @@ test('keyboard focus keeps the Folia controls visible while choosing a playlist'
   }
 });
 
-test('Folia 音量条在滑块右侧显示具体百分比数值', () => {
-  assert.match(controls, /data-testid="local-volume"[\s\S]{0,400}?<span className="local-volume-value" data-testid="local-volume-value">\{Math\.round\(\(state\?\.volume \?\? 1\) \* 100\)\}%<\/span>/);
+test('Folia volume bar keeps the percentage beside the slider', () => {
+  assert.match(controls, /data-testid="local-volume"[\s\S]{0,500}?<span className="local-volume-value" data-testid="local-volume-value">\{Math\.round\(\(state\?\.volume \?\? 1\) \* 100\)\}%<\/span>/);
   assert.match(localCss, /\.local-volume-value\{[^}]*min-width:30px[^}]*text-align:right[^}]*font-variant-numeric:tabular-nums/);
+});
+test('Folia volume wheel uses Mineradio direction and configured step', () => {
+  assert.match(controls, /const VOLUME_WHEEL_STEP_STORE_KEY = 'mineradio-volume-wheel-step-v1'/);
+  assert.match(controls, /const VOLUME_WHEEL_STEP_DEFAULT = 0\.05/);
+  assert.match(controls, /const VOLUME_WHEEL_STEP_MIN = 0\.01/);
+  assert.match(controls, /const VOLUME_WHEEL_STEP_MAX = 0\.5/);
+  assert.match(controls, /Math\.max\(VOLUME_WHEEL_STEP_MIN, Math\.min\(VOLUME_WHEEL_STEP_MAX, Math\.round\(step \* 100\) \/ 100\)\)/);
+  assert.match(controls, /localStorage\.getItem\(VOLUME_WHEEL_STEP_STORE_KEY\)/);
+  assert.match(app, /VOLUME_WHEEL_STEP_DEFAULT = 0\.05;[\s\S]*?VOLUME_WHEEL_STEP_MIN = 0\.01;[\s\S]*?VOLUME_WHEEL_STEP_MAX = 0\.5;/);
+});
+
+test('Folia volume wheel adjusts only the volume control and clamps to 0..1', () => {
+  assert.match(controls, /const handleVolumeWheel = useCallback\(\(event: WheelEvent\) => \{[\s\S]*?if \(!event\.deltaY\) return;[\s\S]*?event\.preventDefault\(\);[\s\S]*?event\.deltaY < 0 \? 1 : -1[\s\S]*?volumeWheelStep\(\)/);
+  assert.match(controls, /Math\.max\(0, Math\.min\(1, volume\)\)/);
+  assert.match(controls, /<div ref=\{volumeControl\} className="local-volume-control" data-testid="local-volume-control">/);
+  assert.match(controls, /<div className="local-transport-side local-volume">[\s\S]*?<div ref=\{volumeControl\} className="local-volume-control"[\s\S]*?<\/div>[\s\S]*?<button aria-label=\{t\('queue'\)\}/);
+  assert.match(controls, /element\.addEventListener\('wheel', handleVolumeWheel, \{ passive: false \}\)/);
+  assert.doesNotMatch(controls, /<footer[^>]*onWheel=/);
+});
+
+test('rapid Folia wheel input starts from the latest pending volume', () => {
+  assert.match(controls, /const pendingVolume = useRef<\{ volume: number; command: LocalCommand \} \| null>\(null\)/);
+  assert.match(controls, /pendingVolume\.current = \{ volume: next, command \}/);
+  assert.match(controls, /pending\?\.command === command \? pending\.volume : latestVolume\.current/);
+  assert.match(controls, /request === volumeRequest\.current\) pendingVolume\.current = null/);
 });
