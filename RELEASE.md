@@ -4,7 +4,14 @@
 
 - **版本元数据**：`package.json`、`package-lock.json`（两处）、前端 `APP_VERSION`、前后端更新公告和 Release workflow 默认 tag 统一为 `2.5.3`；Folia 上游版本保持 `0.7.16`，安装身份、数据目录和更新线路不变。
 - **内容**：Folia 歌词页底部音量控件支持鼠标滚轮，向上增大、向下减小；步进沿用主界面的 `mineradio-volume-wheel-step-v1` 设置和 1%–50% 夹取规则。监听只覆盖音量图标与滑块，不包含队列按钮；原生 `{ passive: false }` 拦住背景滚动。`2.5.2` 新增的音量百分比继续显示在滑块右侧。
-- **发布状态**：用户于 `2026-10-20` 要求发布新版。计划通过功能分支、PR、merge commit、annotated tag `v2.5.3` 和 Windows Build and Release 发布；正式资产核验结果在发布完成后补录。
+- **验证**：全量 Node 回归 `1517` 项、`1516` 通过、`0` 失败、`1` 项可选基准跳过；Folia 定向测试 `48/48`、Folia 构建与产物检查、三个 JavaScript 语法检查和 `git diff --check` 通过。
+- **提交与 CI**：用户于 `2026-10-21` 继续要求发布。PR #144 的 merge commit 为 `8ee2cf3d798dc67f041037ebae3947a097a24054`，两组 PR Verify `39534586932` / `39534631047` 均通过；tag `v2.5.3` 指向该提交。首次 Windows Build and Release `39535429442` 已完成安装包构建与摘要生成，但在上传前因误建两个空草稿被工作流判为重复 Release；删除两个空草稿后重跑同一 run 成功（1m54s）。
+- **正式发布**：[v2.5.3](https://github.com/oirge/Mineradio/releases/tag/v2.5.3)（Release ID `419095215`）于北京时间 `2026-10-21 10:59:48` 公开，`draft=false` / `prerelease=false`，并确认为 Latest。正文仅含滚轮调整、步进复用和触发范围三条用户可见变化。
+- **官方资产核验**：四项资产均完整回下载，大小与本机 SHA256 匹配 GitHub API digest，SHA256 清单三项全部一致；官方安装器本机 SHA-512 为 `o2hjT4/vawyCElMcDeXKf1gM8MGZaCrwmWEHYZtJ8KOs8UJAgjt+pkidMEKAyzRtcs9elQq83Qat9Y2+NAESog==`，与 `latest.yml` 一致。公开 `releases/latest` 返回 `v2.5.3`，公开 `releases/latest/download/latest.yml` 已回下载并与已校验文件逐字节一致。
+  - `Mineradio-oirge-2.5.3-Setup.exe`：120733972 B，SHA256 `eec2bac0e4200540513ec57983c379583d85913600fed8402f2417f521adef7a`。
+  - `Mineradio-oirge-2.5.3-Setup.exe.blockmap`：127763 B，SHA256 `b231740103b84b0020bae71ff915c4f31571a83105119305a35107f93a3ae1ba`。
+  - `latest.yml`：359 B，SHA256 `544ec13e921cf2c959291658bcc7cccb68e3e8e56a7d053ef0707fd83cbfde76`。
+  - `Mineradio-oirge-2.5.3-SHA256SUMS.txt`：282 B，SHA256 `2c5231ece9e52df67ea2b99717aec1ae898fdc7c990b081740c2ddf10f58728a`。
 # 发布流程
 
 ## v2.5.2 Folia 顶栏升级入口与音量数值
