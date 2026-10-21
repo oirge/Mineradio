@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useMotionValueEvent, type MotionValue } from 'framer-motion';
 import { Heart, ListMusic, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -9,15 +9,58 @@ import PlaylistSwitcher from './PlaylistSwitcher';
 
 // src/mineradio/local/PlayerControls.tsx
 // Transport shares the host's sole audio output; the continuous playhead stays outside React state.
+const VOLUME_WHEEL_STEP_STORE_KEY = 'mineradio-volume-wheel-step-v1';
+const VOLUME_WHEEL_STEP_DEFAULT = 0.05;
+const VOLUME_WHEEL_STEP_MIN = 0.01;
+const VOLUME_WHEEL_STEP_MAX = 0.5;
+
+function volumeWheelStep(): number {
+    try {
+        const step = Number(localStorage.getItem(VOLUME_WHEEL_STEP_STORE_KEY));
+        if (!Number.isFinite(step) || step <= 0) return VOLUME_WHEEL_STEP_DEFAULT;
+        return Math.max(VOLUME_WHEEL_STEP_MIN, Math.min(VOLUME_WHEEL_STEP_MAX, Math.round(step * 100) / 100));
+    } catch {
+        return VOLUME_WHEEL_STEP_DEFAULT;
+    }
+}
+
 interface Props { state: HostState | null; currentTime: MotionValue<number>; command: LocalCommand; onQueue: () => void; onLibrary: () => void; }
 export default function PlayerControls({ state, currentTime, command, onQueue, onLibrary }: Props) {
     const { t } = useTranslation('localPlayer');
     const progress = useRef<HTMLInputElement>(null);
     const elapsed = useRef<HTMLSpanElement>(null);
+    const volumeControl = useRef<HTMLDivElement>(null);
     const dragging = useRef(false);
     const lastSecond = useRef(-1);
+    const pendingVolume = useRef<{ volume: number; command: LocalCommand } | null>(null);
+    const latestVolume = useRef(state?.volume ?? 1);
+    const volumeRequest = useRef(0);
     const duration = Math.max(0, state?.duration || 0);
     const run = (method: string, params?: Record<string, unknown>) => { void command(method, params).catch(() => {}); };
+    latestVolume.current = state?.volume ?? 1;
+    const commitVolume = useCallback((volume: number) => {
+        const next = Math.max(0, Math.min(1, volume));
+        const request = ++volumeRequest.current;
+        pendingVolume.current = { volume: next, command };
+        void command('setVolume', { volume: next })
+            .catch(() => {})
+            .finally(() => {
+                if (request === volumeRequest.current) pendingVolume.current = null;
+            });
+    }, [command]);
+    const handleVolumeWheel = useCallback((event: WheelEvent) => {
+        if (!event.deltaY) return;
+        event.preventDefault();
+        const pending = pendingVolume.current;
+        const current = pending?.command === command ? pending.volume : latestVolume.current;
+        commitVolume(current + (event.deltaY < 0 ? 1 : -1) * volumeWheelStep());
+    }, [command, commitVolume]);
+    useEffect(() => {
+        const element = volumeControl.current;
+        if (!element) return;
+        element.addEventListener('wheel', handleVolumeWheel, { passive: false });
+        return () => element.removeEventListener('wheel', handleVolumeWheel);
+    }, [handleVolumeWheel]);
     const syncTime = (seconds: number) => {
         if (!dragging.current && progress.current) progress.current.value = String(seconds);
         const second = Math.floor(seconds);
@@ -55,11 +98,14 @@ export default function PlayerControls({ state, currentTime, command, onQueue, o
                 <button aria-label={t('next')} title={t('next')} data-testid="local-next" onClick={() => run('next')}><SkipForward size={22} fill="currentColor" /></button>
             </div>
             <div className="local-transport-side local-volume">
-                <button aria-label={t('mute')} title={t('mute')} aria-pressed={state?.muted || false} onClick={() => run('setMuted', { muted: !state?.muted })}>
-                    {state?.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                </button>
-                <input data-testid="local-volume" aria-label={t('volume')} type="range" min="0" max="1" step="0.01" value={state?.volume ?? 1} onChange={(event) => run('setVolume', { volume: Number(event.currentTarget.value) })} />
-                <span className="local-volume-value" data-testid="local-volume-value">{Math.round((state?.volume ?? 1) * 100)}%</span>
+                <div ref={volumeControl} className="local-volume-control" data-testid="local-volume-control">
+                    <button aria-label={t('mute')} title={t('mute')} aria-pressed={state?.muted || false} onClick={() => run('setMuted', { muted: !state?.muted })}>
+                        {state?.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                    </button>
+                    <input data-testid="local-volume" aria-label={t('volume')} type="range" min="0" max="1" step="0.01" value={state?.volume ?? 1}
+                        onChange={(event) => commitVolume(Number(event.currentTarget.value))} />
+                    <span className="local-volume-value" data-testid="local-volume-value">{Math.round((state?.volume ?? 1) * 100)}%</span>
+                </div>
                 <button aria-label={t('queue')} title={t('queue')} onClick={onQueue}><ListMusic size={19} /></button>
             </div>
         </div>

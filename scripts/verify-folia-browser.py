@@ -179,6 +179,15 @@ with sync_playwright() as p:
         expect(child.get_by_test_id("local-like")).to_have_class(re.compile(r"is-liked"))
         set_range(child.get_by_test_id("local-volume"), 0.37)
         page.wait_for_function("Math.abs(targetVolume - 0.37) < 0.01")
+        child.evaluate("localStorage.setItem('mineradio-volume-wheel-step-v1', '0.1')")
+        volume_control = child.get_by_test_id("local-volume-control")
+        volume_box = volume_control.bounding_box()
+        page.mouse.move(volume_box["x"] + volume_box["width"] * 0.5, volume_box["y"] + volume_box["height"] * 0.5)
+        page.mouse.wheel(0, -100)
+        page.wait_for_function("Math.abs(targetVolume - 0.47) < 0.02")
+        page.mouse.wheel(0, 100)
+        page.wait_for_function("Math.abs(targetVolume - 0.37) < 0.02")
+        child.evaluate("localStorage.setItem('mineradio-volume-wheel-step-v1', '0.05')")
         checkpoint("local-controls-pause-seek-lyrics-next-previous-favorite-volume")
 
         # Exercise production protocol CRUD after validating the actual visible controls.
