@@ -1,12 +1,19 @@
 # 发布流程
 
-## v2.5.4 桌面歌词恢复与 GPU 稳定性（发布准备）
+## v2.5.4 桌面歌词恢复与 GPU 稳定性
 
 - **授权与基线**：用户于北京时间 `2026-10-25` 明确要求「全部修复好后发布新版」。基于远端 `ba5dd1b`（线上 Latest 为 `v2.5.3`）准备本版。
 - **内容**：纠正歌词文字完全移出显示器的持久化坐标，解锁拖动时同步纠正真实窗口；意外隐藏、最小化、丢失置顶及持续无响应可有限恢复。桌面歌词绘制保持单个 RAF/空闲定时器，避免切换前后台后重复绘制。GPU 只累计十分钟内的异常故障，所有型号统一在冷却到期后的下次启动试运行兼容硬件，稳定两分钟且硬件合成启用才保存恢复结果。首次冷却 24 小时，失败后每次 7 天，不设终身尝试上限，成功清零连续次数。
 - **验证**：完整 Node 回归 `1565` 项、`1564` 通过、`0` 失败、`1` 可选基准跳过；GPU 定向检查 `45/45`、发布定向检查 `14/14` 通过。隔离 Electron 实测歌词屏外恢复、拖动 IPC、意外隐藏/丢失置顶、主动关闭/重开、普通前景窗口覆盖及 renderer 崩溃恢复；从已尝试 8 次的软件档启动，真实 WebGL 使用 NVIDIA RTX 4060，两分钟后保存 `compatible` 并清零次数。双屏几何与拖动通过模拟测试，未进行真实热拔插/休眠验证。
 - **本地构建**：最终 `npm run build:win` 成功生成 `Mineradio-oirge-2.5.4-Setup.exe`（120733357 B）。本地重建 Folia 因复用依赖目录产生的路径与 chunk 哈希差异已归档，Folia 源码未改动；正式资产由 GitHub Actions 使用 lockfile 全新安装依赖并重新构建。
-- **详细诊断与本机备份**：见 `docs/DESKTOP_LYRICS_GPU_RECOVERY.md`。旧安装包已备份，备用热修包未安装；正式发布资产、CI 与校验结果在发布后补录。
+- **提交与 CI**：功能提交 `7e70463b01010577ddea899f90c4768125ad05af` 经 PR #147 以 merge commit `fad13dd767cf08375b854595fca5e2e7ee5a810d` 合入 `main`（合并时间 `2026-10-25T13:20:18Z`）。PR Verify `40195697831` 与合并后 Verify `40197149066` 均通过。
+- **正式发布**：[v2.5.4](https://github.com/oirge/Mineradio/releases/tag/v2.5.4)（Release ID `423419267`）于北京时间 `2026-10-25 21:52:42` 公开，`draft=false` / `prerelease=false`，并已设为 Latest；公开 `releases/latest` 跳转到 `v2.5.4`。annotated tag `v2.5.4`（tag object `8679e2b7f9ca96e2fb6aeabee94210793e200126`）固定在该 merge commit；Windows Build and Release `40197346731` 成功（2m31s）。
+- **官方资产核验**：四项资产完整回下载，大小与 SHA256 均匹配 GitHub API digest，SHA256 清单三项全部一致；官方 EXE 本机 SHA-512 为 `WVy1Xt4kCR9BfWhGNtZhcon5xXfGstgTFfR3xAScic803PeKgA3HhvaOhmKi/Xg2unBRMqk1GheyTFdbczlRVA==`，与 `latest.yml` 一致。公开 `releases/latest/download/latest.yml` 与已校验文件逐字节一致。本轮未运行官方 `2.5.4` 安装器。
+  - `Mineradio-oirge-2.5.4-Setup.exe`：120737008 B，SHA256 `a8ca753a4a42583770a88d8e9029c8d3bb95722683147b27a2bcb8c4237b1e45`。
+  - `Mineradio-oirge-2.5.4-Setup.exe.blockmap`：127678 B，SHA256 `cdd405c0e1fe2205eb1035402135848ed661911d23c60241cf131ed41eb2800c`。
+  - `latest.yml`：359 B，SHA256 `8ac0a975d48cad7fa6b4b3ac7a30c2b2528ff325150e27f4b4c3ee975e306af4`。
+  - `Mineradio-oirge-2.5.4-SHA256SUMS.txt`：282 B，SHA256 `3d6ede4a48da69a2ff8a38077a81e24875fb3bf884e088898453718c8943dae8`。
+- **详细诊断与本机备份**：见 `docs/DESKTOP_LYRICS_GPU_RECOVERY.md`。旧安装包已备份，备用热修包未安装；本轮只完成正式资产核验，本机运行的是旧版安装包。
 
 ## v2.5.3 Folia 音量滚轮
 
