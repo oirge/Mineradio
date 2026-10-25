@@ -51,13 +51,16 @@ const {
 const { createLocalLibraryWatcher } = require('./local-library-watcher');
 const {
   DEFAULT_GPU_FAILURE_THRESHOLD,
+  GPU_RECOVERY_STABLE_MS,
   describeGpuMode,
   gpuSwitchesForMode,
   noteGpuFailure,
+  noteGpuRecoverySuccess,
   normalizeGpuMode,
   OPT_IN_GPU_SWITCHES,
   resolveGpuMode,
   shouldDisableHardwareAcceleration,
+  shouldCountGpuFailure,
 } = require('./gpu-guard');
 registerWallpaperEngineScheme(protocol);
 
@@ -275,13 +278,27 @@ const DESKTOP_UI_STATE_KEYS = new Set([
 // 恰好是那些驱动最容易渲染成全黑的形态；GPU 进程反复崩溃再退回软件合成就是肉眼的卡顿。
 // 现在按持久化的档位决定加哪些开关，GPU 进程连续异常退出会自动降档并重启一次。
 // 用户可以用 `MINERADIO_GPU_MODE=default|compatible|software` 一次性覆盖，不写盘。
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 const GPU_GUARD_ENV_MODE = normalizeGpuMode(process.env.MINERADIO_GPU_MODE);
-const gpuGuardDecision = resolveGpuMode(readDesktopShellSettings(), {
+let gpuGuardDecision = resolveGpuMode(readDesktopShellSettings(), {
   envMode: GPU_GUARD_ENV_MODE,
   appVersion: app.getVersion(),
+  at: gotSingleInstanceLock ? Date.now() : undefined,
 });
+if (gotSingleInstanceLock && gpuGuardDecision.startupState) {
+  try {
+    // 先记录试运行次数、冷却与软件回退。第二实例不能把正在运行的试探误判为启动失败。
+    writeDesktopShellSettings(gpuGuardDecision.startupState);
+  } catch (e) {
+    console.warn('GPU 恢复记录写盘失败，继续使用软件合成：', e.message);
+    gpuGuardDecision = { mode: 'software', reason: 'recovery-write-failed', forced: false, resetOnVersionChange: false };
+  }
+}
 let activeGpuMode = gpuGuardDecision.mode;
 let gpuGuardRelaunching = false;
+let gpuRecoveryStabilityTimer = null;
+let gpuRecoveryStabilityStarted = false;
+let gpuRecoveryStabilityFailed = false;
 console.log(`GPU 档位：${describeGpuMode(activeGpuMode, gpuGuardDecision.reason)}`);
 for (const [name, value] of gpuSwitchesForMode(activeGpuMode)) {
   if (value == null) app.commandLine.appendSwitch(name);
@@ -297,7 +314,7 @@ if (activeGpuMode === 'default') {
   }
 }
 if (shouldDisableHardwareAcceleration(activeGpuMode)) app.disableHardwareAcceleration();
-if (gpuGuardDecision.resetOnVersionChange) {
+if (gotSingleInstanceLock && gpuGuardDecision.resetOnVersionChange) {
   // 换过版本只重置失败计数、保留已降到的档位：避免每次更新都退回硬件 GPU → 崩溃 → 兜底重启的
   // 「更新后一直重启」。gpuMode 写 activeGpuMode（= 保留的档位），不再强制回 default。
   try {
@@ -311,7 +328,6 @@ if (gpuGuardDecision.resetOnVersionChange) {
     console.warn('GPU 档位重置写盘失败：', e.message);
   }
 }
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 /**
  * 处理一次 GPU 进程异常退出：累计次数，达到阈值就降档写盘并立刻重启一次。
@@ -322,11 +338,17 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
  * @returns {void}
  */
 function handleGpuProcessGone(reason, exitCode) {
-  if (appQuitting || gpuGuardRelaunching) return;
+  if (!gotSingleInstanceLock || appQuitting || gpuGuardRelaunching || !shouldCountGpuFailure(reason)) return;
   if (gpuGuardDecision.forced) {
     // 用户用环境变量显式点了档位，就不要自作主张改他的选择，只留一行日志。
     console.warn(`GPU 进程异常退出（${reason || 'unknown'}），当前档位由 MINERADIO_GPU_MODE 指定，不自动降档。`);
     return;
+  }
+  // 即使这次失败写盘不成功，迟到的稳定计时器也不能把它判为硬件恢复成功。
+  gpuRecoveryStabilityFailed = true;
+  if (gpuRecoveryStabilityTimer) {
+    clearTimeout(gpuRecoveryStabilityTimer);
+    gpuRecoveryStabilityTimer = null;
   }
   let result = null;
   try {
@@ -362,6 +384,31 @@ function handleGpuProcessGone(reason, exitCode) {
 app.on('child-process-gone', (_event, details) => {
   if (!details || details.type !== 'GPU') return;
   handleGpuProcessGone(details.reason, details.exitCode);
+});
+
+app.on('gpu-info-update', () => {
+  if (!gotSingleInstanceLock || !gpuGuardDecision.recoveryProbe || gpuGuardDecision.forced
+    || gpuRecoveryStabilityStarted || gpuRecoveryStabilityFailed || appQuitting || gpuGuardRelaunching) return;
+  gpuRecoveryStabilityStarted = true;
+  // GPU 功能状态在此事件之后才有效；给实际渲染留出稳定时间，只检查一次，不轮询驱动。
+  gpuRecoveryStabilityTimer = setTimeout(() => {
+    gpuRecoveryStabilityTimer = null;
+    if (appQuitting || gpuGuardRelaunching || gpuRecoveryStabilityFailed || activeGpuMode !== 'compatible') return;
+    try {
+      const status = app.getGPUFeatureStatus();
+      const state = noteGpuRecoverySuccess(readDesktopShellSettings(), {
+        mode: activeGpuMode,
+        at: Date.now(),
+        hardwareAccelerated: /^enabled(?:_|$)/.test(String(status.gpu_compositing || '')),
+      });
+      if (!state) return;
+      writeDesktopShellSettings(state);
+      console.log('GPU 兼容硬件试运行稳定，已恢复硬件加速。');
+    } catch (e) {
+      console.warn('GPU 恢复确认失败，保留软件回退：', e.message);
+    }
+  }, GPU_RECOVERY_STABLE_MS);
+  if (typeof gpuRecoveryStabilityTimer.unref === 'function') gpuRecoveryStabilityTimer.unref();
 });
 
 function findOpenPort(startPort) {
@@ -2493,7 +2540,20 @@ function desktopLyricsBoundsSignature(bounds) {
 }
 
 function desktopLyricsBoundsHasReachableArea(bounds, area) {
-  return boundsHasReachableArea(bounds, area);
+  // 歌词位于透明窗口中央；只剩透明边角可见不能算作歌词可达。
+  // 保留贴屏幕边缘的合法手动位置（包括上方透明留白移出屏幕）。
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  // 显示器接缝不留禁区，避免在相邻双屏之间慢拖时突然弹回。
+  function reachable(displayArea) {
+    return boundsHasReachableArea(bounds, displayArea)
+      && centerX >= displayArea.x && centerX <= displayArea.x + displayArea.width
+      && centerY >= displayArea.y && centerY <= displayArea.y + displayArea.height;
+  }
+  if (reachable(area)) return true;
+  // 最大交叠面积的屏幕未必包含文字中心（例如相邻屏幕的尺寸不一致）。
+  const displays = typeof screen.getAllDisplays === 'function' ? screen.getAllDisplays() : [];
+  return displays.some(display => reachable(display.bounds));
 }
 
 function savedDesktopLyricsBounds(value) {
@@ -5434,7 +5494,8 @@ async function handleDesktopLyricsMoveBy(event, dx, dy) {
       x: Math.round(bounds.x + clampNumber(dx, -160, 160, 0)),
       y: Math.round(bounds.y + clampNumber(dy, -160, 160, 0)),
     };
-    desktopLyricsWindow.setBounds(next, false);
+    // 先纠正实际窗口，再保存同一位置，避免只把安全坐标写盘而窗口仍在屏外。
+    desktopLyricsWindow.setBounds(constrainDesktopLyricsBounds(next, { allowPartial: true }), false);
     sendDesktopLyricsWindowGeometry(true);
     rememberDesktopLyricsBounds({ force: true });
     return { ok: true };

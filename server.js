@@ -78,8 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 顶栏在「Mineradio」与「导入文件」之间新增升级入口，点击直接打开更新面板。',
-  'Folia 底部音量条在滑块右侧显示具体百分比数值，随音量实时更新。',
+  '修复桌面歌词移出屏幕或被意外隐藏后无法显示的问题，自动恢复可见位置，无需清空 AppData。',
+  '桌面歌词持续无响应时自动恢复，短暂卡顿保留宽限，避免反复重载。',
+  '减少桌面歌词状态同步中的重复绘制，降低不必要的 CPU 开销。',
+  '显卡故障恢复不限制品牌或型号，冷却后自动重试硬件加速，多次失败也不会永久锁在 CPU 渲染。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

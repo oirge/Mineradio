@@ -339,6 +339,8 @@
     var lastBeatGlowVar = '';
     var lastScrollX = '';
     var overlayRenderPaused = document.hidden === true;
+    var overlayDrawFrame = null;
+    var overlayDrawTimer = null;
     var lastLineRect = null;
     var lastLineRectKey = '';
     var glyphWidthCache = Object.create(null);
@@ -1081,6 +1083,7 @@
     }
     function applyState(next){
       next = next || {};
+      var wasEnabledBeforeApply = !!state.enabled;
       // 记录并入前锁定态，用于检测「主进程解锁」这一跳变（左键/中键命中热区解锁后自动唤出控制栏）。
       var wasLockedBeforeApply = isLocked();
       state = Object.assign({}, state, next);
@@ -1173,6 +1176,7 @@
         replayLineAnimation();
       }
       fitLyricText(false);
+      if (!!state.enabled !== wasEnabledBeforeApply) scheduleNextDraw(true);
     }
     function currentDisplayProgress() {
       var target = clamp(state.progress, 0, 1, 0);
@@ -1458,13 +1462,32 @@
       }
       scheduleNextDraw();
     }
-    function scheduleNextDraw() {
-      if (overlayRenderPaused) return;
-      if (!state.enabled) {
-        setTimeout(function(){ requestAnimationFrame(draw); }, 250);
+    function cancelScheduledDraw() {
+      if (overlayDrawFrame !== null) cancelAnimationFrame(overlayDrawFrame);
+      if (overlayDrawTimer !== null) clearTimeout(overlayDrawTimer);
+      overlayDrawFrame = null;
+      overlayDrawTimer = null;
+    }
+    function scheduleNextDraw(immediate) {
+      if (overlayRenderPaused || overlayDrawFrame !== null) return;
+      if (!state.enabled && !immediate) {
+        if (overlayDrawTimer !== null) return;
+        var timer = setTimeout(function(){
+          if (overlayDrawTimer !== timer) return;
+          overlayDrawTimer = null;
+          scheduleNextDraw(true);
+        }, 250);
+        overlayDrawTimer = timer;
         return;
       }
-      requestAnimationFrame(draw);
+      if (overlayDrawTimer !== null) clearTimeout(overlayDrawTimer);
+      overlayDrawTimer = null;
+      var frame = requestAnimationFrame(function(nowMs){
+        if (overlayDrawFrame !== frame) return;
+        overlayDrawFrame = null;
+        draw(nowMs);
+      });
+      overlayDrawFrame = frame;
     }
     function normalizeFrameRate(value) {
       var n = Number(value);
@@ -1695,9 +1718,10 @@
       paused = !!paused;
       if (overlayRenderPaused === paused) return;
       overlayRenderPaused = paused;
+      cancelScheduledDraw();
       if (!paused) {
         lastDrawAt = 0;
-        requestAnimationFrame(draw);
+        scheduleNextDraw(true);
       }
     }
     document.addEventListener('visibilitychange', function(){ setOverlayRenderPaused(document.hidden); });
@@ -1793,7 +1817,7 @@
         if (hintVisible) positionInteractionHint();
       });
     }
-    requestAnimationFrame(draw);
+    scheduleNextDraw(true);
   </script>
 </body>
 </html>
