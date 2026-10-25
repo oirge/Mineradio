@@ -1,15 +1,16 @@
 'use strict';
 
-// GPU 档位阶梯。`default` 是历史行为（全部性能开关都拍上去），`compatible` 不再对 GPU 做任何
-// 指定、把决定权交回 Chromium 自己的屏蔽名单，`software` 彻底关掉硬件加速。
-// 黑屏与持续卡顿几乎都出在 `default` 档强行越过屏蔽名单之后：屏蔽名单里躺着的正是那些
-// 会把画面渲染成全黑的驱动组合，而 GPU 进程反复崩溃再退回软件合成，就是肉眼看到的卡顿。
-// 所以这三档必须能自动逐级降级；换过版本时保留已降到的档位、只重置失败计数（不再自动退回 default，避免更新后反复崩溃重启）。
+// GPU 档位阶梯。default 使用性能开关，compatible 由 Chromium 选择硬件后端，software 关闭硬件加速。
+// 连续故障可以降档；所有显卡都在软件档冷却后试运行 compatible，不按品牌/型号分支，也不设终身重试上限。
 const GPU_MODES = ['default', 'compatible', 'software'];
 
 // 连续多少次 GPU 进程异常退出就降一档。设成 2 是因为单次崩溃可能只是驱动瞬时抽风，
 // 连着两次才说明这台机器在当前档位上真的走不通。
 const DEFAULT_GPU_FAILURE_THRESHOLD = 2;
+const GPU_FAILURE_WINDOW_MS = 10 * 60 * 1000;
+const GPU_RECOVERY_FIRST_DELAY_MS = 24 * 60 * 60 * 1000;
+const GPU_RECOVERY_RETRY_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
+const GPU_RECOVERY_STABLE_MS = 2 * 60 * 1000;
 
 // 任何档位都必须保留的非 GPU 开关。`autoplay-policy` 决定的是能不能自动起播，
 // 属于功能开关而不是性能开关，降级时绝对不能跟着被摘掉。
@@ -36,9 +37,6 @@ const OPT_IN_GPU_SWITCHES = [
   ['ignore-gpu-blocklist', null, 'MINERADIO_IGNORE_GPU_BLOCKLIST'],
   ['force_high_performance_gpu', null, 'MINERADIO_FORCE_HIGH_PERFORMANCE_GPU'],
 ];
-
-// 任何档位都必须保留的非 GPU 开关。`autoplay-policy` 决定的是能不能自动起播，
-// 属于功能开关而不是性能开关，降级时绝对不能跟着被摘掉。
 
 // `software` 档要显式关掉 GPU 合成。只调 `app.disableHardwareAcceleration()` 有可能仍留在
 // 半 GPU 的合成路径上，而透明无边框窗口正是在那条路径上变黑的。
@@ -79,10 +77,11 @@ function isLowestGpuMode(mode) {
  * 环境变量优先级最高且不写盘，方便用户在黑屏时用一次性环境变量把界面救出来；
  * 记录里的档位属于上一次自动降级的结论；换版本时保留该档位，只重置失败计数重新评估，
  * 避免每次更新都退回硬件 GPU 再崩溃重启（更新后一串「一直重启」的根因）。
- * 想在新版本重新试硬件的用户，用一次性 `MINERADIO_GPU_MODE=default` 覆盖即可。
+ * 传入启动时间 at 时，软件档按独立冷却试运行 compatible，每次启动最多一次。
+ * 调用方须在拿到单实例锁后、配置 Chromium 开关前成功写入 startupState；写盘失败必须保留 software。
  * @param {{gpuMode?: string, appVersion?: string}} saved 已持久化的 GPU 守卫记录。
- * @param {{envMode?: string, appVersion?: string}} options 本次启动的环境覆盖与当前版本号。
- * @returns {{mode: string, reason: string, forced: boolean, resetOnVersionChange: boolean}} 档位决议。
+ * @param {{envMode?: string, appVersion?: string, at?: number}} options 本次启动的环境覆盖、版本与时间。
+ * @returns {{mode: string, reason: string, forced: boolean, resetOnVersionChange: boolean, recoveryProbe?: boolean, startupState?: object}} 档位决议。
  */
 function resolveGpuMode(saved, options) {
   const opts = options || {};
@@ -97,6 +96,40 @@ function resolveGpuMode(saved, options) {
 
   const currentVersion = String(opts.appVersion == null ? '' : opts.appVersion);
   const savedVersion = String(record.appVersion == null ? '' : record.appVersion);
+  const now = Number(opts.at);
+  if (savedMode === 'software' && Number.isFinite(now) && now > 0) {
+    if (record.gpuRecoveryPending === true) {
+      // 上次可能在初始化/试运行中整个应用崩溃；这次先安全启动，不把它立即再送进硬件路径。
+      return {
+        mode: 'software', reason: 'recovery-interrupted', forced: false, resetOnVersionChange: false,
+        startupState: { ...record, gpuRecoveryPending: false, gpuRecoveryAt: now, appVersion: currentVersion || savedVersion },
+      };
+    }
+    const rawAttempts = Number(record.gpuRecoveryAttempts || 0);
+    const attempts = Number.isFinite(rawAttempts) && rawAttempts >= 0
+      ? Math.min(Number.MAX_SAFE_INTEGER - 1, Math.floor(rawAttempts)) : 1;
+    const recoveryAt = Number(record.gpuRecoveryAt) || 0;
+    const failureAt = Number(record.gpuFailureAt) || 0;
+    const lastAttemptAt = Math.max(recoveryAt, failureAt);
+    const cooldown = attempts > 0 ? GPU_RECOVERY_RETRY_DELAY_MS : GPU_RECOVERY_FIRST_DELAY_MS;
+    // 次数只决定冷却，不永久停用恢复：驱动更新或临时故障消失后仍有自动恢复机会。
+    if (lastAttemptAt === 0 || (Number.isFinite(lastAttemptAt) && now - lastAttemptAt >= cooldown)) {
+      return {
+        mode: 'compatible', reason: 'recovery-probe', forced: false, resetOnVersionChange: false,
+        recoveryProbe: true,
+        startupState: {
+          ...record,
+          gpuMode: 'software',
+          gpuRecoveryPending: true,
+          gpuRecoveryAttempts: attempts + 1,
+          gpuRecoveryAt: now,
+          gpuFailureMode: 'compatible',
+          gpuFailureCount: 0,
+          appVersion: currentVersion || savedVersion,
+        },
+      };
+    }
+  }
   if (currentVersion && savedVersion && currentVersion !== savedVersion) {
     // 换版本不再强退回 default（硬件）：之前已稳定在 compatible/software 的机器，更新后保留该档，
     // 只重置失败计数重新评估，避免每次更新都退回硬件 GPU → 崩溃 → 兜底重启的一串「更新后一直重启」。
@@ -104,6 +137,32 @@ function resolveGpuMode(saved, options) {
     return { mode: savedMode, reason: 'version-changed', forced: false, resetOnVersionChange: true };
   }
   return { mode: savedMode, reason: 'saved', forced: false, resetOnVersionChange: false };
+}
+
+/** 正常退出和外部终止不构成驱动故障，不应触发永久降档。 */
+function shouldCountGpuFailure(reason) {
+  return reason !== 'clean-exit' && reason !== 'killed';
+}
+
+/** 只有试运行稳定且实测硬件加速可用，才将 compatible 作为后续启动档位。 */
+function noteGpuRecoverySuccess(saved, options) {
+  const record = saved && typeof saved === 'object' ? saved : {};
+  const opts = options || {};
+  if (record.gpuRecoveryPending !== true || record.gpuMode !== 'software'
+    || opts.mode !== 'compatible' || opts.hardwareAccelerated !== true) return null;
+  const now = Number(opts.at);
+  const startedAt = Number(record.gpuRecoveryAt);
+  if (!Number.isFinite(now) || !Number.isFinite(startedAt) || startedAt <= 0
+    || now - startedAt < GPU_RECOVERY_STABLE_MS) return null;
+  return {
+    ...record,
+    gpuMode: 'compatible',
+    gpuRecoveryPending: false,
+    gpuRecoveryAttempts: 0,
+    gpuRecoverySucceededAt: now,
+    gpuFailureMode: 'compatible',
+    gpuFailureCount: 0,
+  };
 }
 
 /**
@@ -139,20 +198,27 @@ function noteGpuFailure(saved, options) {
   const record = saved && typeof saved === 'object' ? saved : {};
   const activeMode = normalizeGpuMode(opts.mode) || normalizeGpuMode(record.gpuMode) || GPU_MODES[0];
   const recordedMode = normalizeGpuMode(record.gpuFailureMode);
-  const previous = recordedMode === activeMode ? Number(record.gpuFailureCount) || 0 : 0;
+  const at = Number.isFinite(Number(opts.at)) ? Number(opts.at) : Date.now();
+  const previousAt = Number(record.gpuFailureAt);
+  const recentFailure = Number.isFinite(previousAt) && at >= previousAt && at - previousAt <= GPU_FAILURE_WINDOW_MS;
+  const count = Number(record.gpuFailureCount);
+  const previous = recordedMode === activeMode && recentFailure && Number.isFinite(count)
+    ? Math.max(0, Math.floor(count)) : 0;
   const failureCount = previous + 1;
   const threshold = Number(opts.threshold) > 0 ? Number(opts.threshold) : DEFAULT_GPU_FAILURE_THRESHOLD;
-  const escalated = failureCount >= threshold && !isLowestGpuMode(activeMode);
+  const failedProbe = record.gpuRecoveryPending === true && record.gpuMode === 'software' && activeMode === 'compatible';
+  const escalated = (failedProbe || failureCount >= threshold) && !isLowestGpuMode(activeMode);
   const mode = escalated ? escalateGpuMode(activeMode) : activeMode;
   const state = {
     ...record,
     gpuMode: mode,
     gpuFailureMode: mode,
     gpuFailureCount: escalated ? 0 : failureCount,
-    gpuFailureAt: Number(opts.at) || 0,
+    gpuFailureAt: at,
     gpuFailureReason: String(opts.reason == null ? '' : opts.reason).slice(0, 120),
     appVersion: String(opts.appVersion == null ? (record.appVersion || '') : opts.appVersion),
   };
+  if (failedProbe) state.gpuRecoveryPending = false;
   return { state, mode, escalated, failureCount };
 }
 
@@ -175,6 +241,10 @@ function describeGpuMode(mode, reason) {
 module.exports = {
   GPU_MODES,
   DEFAULT_GPU_FAILURE_THRESHOLD,
+  GPU_FAILURE_WINDOW_MS,
+  GPU_RECOVERY_FIRST_DELAY_MS,
+  GPU_RECOVERY_RETRY_DELAY_MS,
+  GPU_RECOVERY_STABLE_MS,
   BASE_SWITCHES,
   PERFORMANCE_GPU_SWITCHES,
   OPT_IN_GPU_SWITCHES,
@@ -186,5 +256,7 @@ module.exports = {
   gpuSwitchesForMode,
   shouldDisableHardwareAcceleration,
   noteGpuFailure,
+  shouldCountGpuFailure,
+  noteGpuRecoverySuccess,
   describeGpuMode,
 };

@@ -46,7 +46,11 @@ test('桌面歌词和壁纸覆盖层在后台停止 RAF，并保留可见恢复�
   assert.match(mainSource, /backgroundThrottling:\s*true/);
   assert.match(lyricsSource, /if \(overlayRenderPaused\) return;/);
   assert.match(lyricsSource, /document\.addEventListener\('visibilitychange'/);
-  assert.match(lyricsSource, /if \(overlayRenderPaused\) return;[\s\S]*requestAnimationFrame\(draw\)/);
+  assert.match(lyricsSource, /function scheduleNextDraw\(immediate\) \{\s*if \(overlayRenderPaused \|\| overlayDrawFrame !== null\) return;/);
+  assert.match(lyricsSource, /function cancelScheduledDraw\(\) \{\s*if \(overlayDrawFrame !== null\) cancelAnimationFrame\(overlayDrawFrame\);\s*if \(overlayDrawTimer !== null\) clearTimeout\(overlayDrawTimer\);/);
+  assert.match(lyricsSource, /overlayRenderPaused = paused;\s*cancelScheduledDraw\(\);\s*if \(!paused\) \{\s*lastDrawAt = 0;\s*scheduleNextDraw\(true\);/);
+  assert.match(lyricsSource, /scheduleNextDraw\(true\);\s*<\/script>/);
+  assert.doesNotMatch(lyricsSource, /requestAnimationFrame\(draw\)/);
   assert.match(wallpaperSource, /if \(overlayRenderPaused\) return;/);
   assert.match(wallpaperSource, /document\.addEventListener\('visibilitychange'/);
 });
