@@ -4,10 +4,14 @@
 
 - **授权与基线**：用户于北京时间 `2026-10-31` 要求在已完成修复后「发布新版」。线上 Latest 为 `v2.5.4`，本轮以远端 `6a6dc36` 为基线，在 `codex/release-v2.5.5` 分支准备本版。
 - **内容**：仅在 Folia 启动预加载阶段隐藏 `[data-folia-switch]` 两个真实切换入口（桌面标题栏与全屏浮动按钮），加载画面保留「正在加载 Folia...」文字。宿主脚本完成模式恢复与按钮文字同步后由原有 `finally` 释放预加载状态，按钮随之出现；不改 iframe 就绪时机，因此加载失败时仍可切回 Mineradio 并重试。
-- **验证**：待补。
-- **提交与 CI**：待补。
-- **正式发布**：待补。
-- **官方资产核验**：待补。
+- **验证**：完整 Node 回归 `1567` 项、`1566` 通过、`0` 失败、`1` 可选基准跳过；定向启动/宿主/布局/更新入口测试 `58/58`；`npm run check:folia`、四个 JavaScript 语法检查与 `git diff --check` 通过。真实 Chromium 静态服务下验证修前/修后三种布局的启动对照与正常切换；首轮并发 `9` 场景中 `8` 个通过，最后一个全屏超时场景在重入等待 ready 时超过 `30` 秒未完成，不记作 `9/9`；保持真实 `20000ms` 定时器与普通点击单独串行复验通过（约 `19.9` 秒失败→返回→新 iframe 重试成功，无未捕获页面错误）。桌面/全屏为 CSS 类模拟，不等同于原生 Electron 或已安装二进制验收。
+- **提交与 CI**：功能提交 `0f76040` 经 PR #149 以 merge commit `65c924585aff4133a166a192e7a9399ae895a75b` 合入 `main`（合并时间 `2026-10-31T05:10:01Z`）。PR Verify `41170912864` 与 `41170918121` 均通过（`5m5s` / `6m13s`）。annotated tag `v2.5.5`（tag object `7f1826420dccd2f13abe1efc0ec5ec795794c14b`）固定在该 merge commit。
+- **正式发布**：[v2.5.5](https://github.com/oirge/Mineradio/releases/tag/v2.5.5)（Release ID `429737667`）于北京时间 `2026-10-31 14:34:07` 公开，`draft=false` / `prerelease=false`，并已设为 Latest。Windows Build and Release `41171580289` 成功（`2m18s`），四项资产上传完成。正文仅含加载画面隐藏按钮、恢复后正常显示和失败仍可返回重试三条用户可见变化。
+- **官方资产核验**：四项资产完整回下载，大小与 SHA256 均匹配 GitHub API digest，SHA256 清单三项全部一致；官方安装器本机 SHA-512 为 `TAhDeHp6/Y+2gZZxHWlUpnT4SsViwcFUWmUam7xRNmRed1pe9ctuOWeB3Iyu+gc1wzzp6acyrecACG687yCuTA==`，与 `latest.yml` 一致。公开 `releases/latest` 返回 `v2.5.5`，公开 `releases/latest/download/latest.yml` 已回下载并与已校验文件逐字节一致。官方资产下载走本机代理 `127.0.0.1:7897`；直连约 `34 KB/s`。本轮未运行官方 `2.5.5` 安装器。
+  - `Mineradio-oirge-2.5.5-Setup.exe`：120737371 B，SHA256 `fb358ebc3d3a73343b9594a84eb58b9741580173fd54a767d20e518d7968aae7`。
+  - `Mineradio-oirge-2.5.5-Setup.exe.blockmap`：127865 B，SHA256 `c62691f1e13ca2aedbbed78145314fcd16486ebc83aadce697f8c0727ad79d2c`。
+  - `latest.yml`：359 B，SHA256 `59cfd9507c9bf1e779acc3953dfdbdfbf19709b6cc2730bed6093e80f7e27d1a`。
+  - `Mineradio-oirge-2.5.5-SHA256SUMS.txt`：282 B，SHA256 `3be7c3ba1a63609df61389fef99491c9b8861d20a37e025b5e2eb780073c293b`。
 
 ## v2.5.4 桌面歌词恢复与 GPU 稳定性
 
