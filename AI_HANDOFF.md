@@ -1,5 +1,13 @@
 # Mineradio AI Handoff
 
+## 2026-10-31 启动加载画面隐藏 Folia 切换按钮（v2.5.5 准备发布）
+
+- 用户先要求「开启时移除这个」并圈出「正在加载 Folia...」右上角提前出现的 Folia 按钮，随后要求「发布新版」。修复只改 [宿主样式](public/folia-host.css)：`html.folia-mode-preload [data-folia-switch]{display:none!important}`，同时隐藏桌面标题栏与全屏浮动两个真实切换按钮；`public/folia-host.js` 未改，宿主恢复模式并同步按钮文字后由原有 `finally` 释放预加载类。
+- 不把显示时机改成「等 iframe ready」：Folia 加载失败（20 秒超时或资源失败）时仍需保留返回 Mineradio 与重试入口。[启动回归](tests/startup-direct-entry.test.js) 与 [宿主回归](tests/folia-host.test.js) 钉住两个按钮、预加载 CSS 守卫、加载文字仍可见、超时后点击返回与重试替换失败 iframe。
+- 浏览器实测：真实 Chromium 静态服务下桌面/全屏为 CSS 类模拟，修前修后启动对照与正常切换符合预期。首轮并发 9 场景中 8 个通过；最后一个全屏超时场景在重入等待 ready 时超过 30 秒未完成，不能记作 9/9；保持真实 20000ms 定时器和普通点击单独串行复验通过（约 19.9 秒失败→返回→新 iframe 重试成功）。这是浏览器验证，不等同于原生 Electron 窗口或已安装二进制验收。
+- 本版改动：`package.json` / `package-lock.json` 两处 / `public/app.js` 的 `APP_VERSION` / 前后端更新公告 / `CHANGELOG.md` / `RELEASE.md` / `AGENTS.md` / Release workflow 默认 tag 统一到 `2.5.5`；Folia 上游版本 `0.7.16` 与安装身份不变。
+- 待办：提交、PR、合并、annotated tag `v2.5.5`、Windows Build and Release、资产核验与文档补录。本轮未运行官方 `2.5.5` 安装器。
+
 ## 2026-10-25 桌面歌词与 GPU 恢复（v2.5.4 已正式发布）
 
 - 用户明确要求全部修复后发布新版。线上 Latest 已核实为 v2.5.3，本轮以远端 `ba5dd1b` 为基线，在 `fix/desktop-lyrics-gpu-recovery` 分支准备 v2.5.4。

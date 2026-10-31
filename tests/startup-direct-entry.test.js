@@ -169,6 +169,18 @@ test('only the saved Folia interface is preloaded without writing preferences', 
   assert.match(foliaCss, /html\.folia-mode-preload #desktop-window-shell>:not\(#folia-interface\):not\(#desktop-titlebar\):not\(#fullscreen-diy-zone\):not\(#update-modal\),\s*body\.folia-interface-active[^{}]*\{visibility:hidden!important;pointer-events:none!important\}/);
 });
 
+test('Folia preload hides both switch controls before host initialization, not the loading status', () => {
+  assert.match(foliaCss, /html\.folia-mode-preload \[data-folia-switch\]\s*\{\s*display:\s*none\s*!important\s*;?\s*\}/);
+  for (const id of ['folia-switch-btn', 'folia-floating-switch']) {
+    const button = indexSource.match(new RegExp(`<button\\b[^>]*id="${id}"[^>]*>`));
+    assert.ok(button, `Missing interface switch: ${id}`);
+    assert.match(button[0], /\bdata-folia-switch\b/);
+    assert.doesNotMatch(button[0], /\s(?:hidden|disabled)(?:[\s=>])/);
+  }
+  assert.match(indexSource, /<head>[\s\S]*<link rel="stylesheet" href="folia-host\.css">[\s\S]*<\/head>/);
+  assert.match(foliaCss, /#folia-load-status\{[^}]*display:flex;/);
+});
+
 test('DOMContentLoaded directly reveals Home without a splash node, click or animation timer', () => {
   const harness = loadStartupHarness();
   assert.deepEqual([...harness.listeners.keys()], ['DOMContentLoaded']);

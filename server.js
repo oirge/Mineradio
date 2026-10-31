@@ -1,4 +1,4 @@
-﻿// ====================================================================
+// ====================================================================
 //  Mineradio local desktop server
 //  - 本地文件代理 / 本地节奏缓存 / 更新检查
 //  - 默认纯本地模式，不再加载网易云 / QQ 音乐运行依赖
@@ -78,10 +78,9 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复桌面歌词移出屏幕或被意外隐藏后无法显示的问题，自动恢复可见位置，无需清空 AppData。',
-  '桌面歌词持续无响应时自动恢复，短暂卡顿保留宽限，避免反复重载。',
-  '减少桌面歌词状态同步中的重复绘制，降低不必要的 CPU 开销。',
-  '显卡故障恢复不限制品牌或型号，冷却后自动重试硬件加速，多次失败也不会永久锁在 CPU 渲染。',
+  '修复启动加载 Folia 时右上角提前露出 Folia / Mineradio 切换按钮的问题，加载画面只保留加载提示。',
+  '界面模式与按钮文字恢复完成后切换按钮照常出现，桌面标题栏和全屏浮动入口都适用。',
+  'Folia 加载失败时仍可正常切回 Mineradio 并重试，不会因为本次隐藏而失去恢复入口。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
