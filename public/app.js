@@ -1954,7 +1954,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.5.4';
+var APP_VERSION = '2.5.5';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2007,12 +2007,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '桌面歌词自动恢复，显卡故障后自动重试硬件加速。',
+  hero: '启动加载时不再提前显示 Folia 切换按钮。',
   notes: [
-    '修复桌面歌词移出屏幕或被意外隐藏后无法显示的问题，自动恢复可见位置，无需清空 AppData。',
-    '桌面歌词持续无响应时自动恢复，短暂卡顿保留宽限，避免反复重载。',
-    '减少桌面歌词状态同步中的重复绘制，降低不必要的 CPU 开销。',
-    '显卡故障恢复不限制品牌或型号，冷却后自动重试硬件加速，多次失败也不会永久锁在 CPU 渲染。'
+    '修复启动加载 Folia 时右上角提前露出 Folia / Mineradio 切换按钮的问题，加载画面只保留加载提示。',
+    '界面模式与按钮文字恢复完成后切换按钮照常出现，桌面标题栏和全屏浮动入口都适用。',
+    'Folia 加载失败时仍可正常切回 Mineradio 并重试，不会因为本次隐藏而失去恢复入口。'
   ]
 };
 function readSavedVolume() {

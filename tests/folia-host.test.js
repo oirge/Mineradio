@@ -52,13 +52,13 @@ function harness(options = {}) {
     video.play = () => { video.paused = false; calls.push('video-play'); return Promise.resolve(); };
     const shell = element('desktop-window-shell'); shell.children = [titlebar, original, video, fileInput, mount, updateModal];
     const nodes = new Map([shell, mount, status, fileInput].map(node => [node.id, node]));
-    const button = element('switch', 'BUTTON');
+    const buttons = ['folia-switch-btn', 'folia-floating-switch'].map(id => element(id, 'BUTTON'));
     let timerId = 0, requestId = 0;
     const tracks = ['a', 'b', 'c'].map(id => ({ type: 'local', localKey: id, localPath: `D:/Music/${id}.flac`, name: `Track ${id}`, artist: 'Artist', album: 'Album', duration: 200, localFile: { privateAudio: true } }));
     const document = {
         hidden: false, documentElement, body: element('body'), listeners: new Map(),
         getElementById: id => nodes.get(id) || null,
-        querySelectorAll: query => query === '[data-folia-switch]' ? [button] : query === '#desktop-window-shell video' ? [video] : [],
+        querySelectorAll: query => query === '[data-folia-switch]' ? buttons : query === '#desktop-window-shell video' ? [video] : [],
         addEventListener(name, callback) { this.listeners.set(name, callback); },
         createElement(tag) {
             assert.equal(tag, 'iframe', 'the bridge must never create an audio element');
@@ -124,6 +124,7 @@ function harness(options = {}) {
                 ariaHidden: mount.attributes['aria-hidden'],
                 inert: original.inert,
                 renderSuspended: calls.includes('suspend-render'),
+                switchLabels: buttons.map(button => button.textContent),
             });
         }
         removeRootClass(name);
@@ -174,6 +175,7 @@ test('saved Folia startup takes ownership before releasing the first-paint state
     assert.equal(h.mount.attributes['aria-hidden'], 'false');
     assert.deepEqual(h.preloadReleases, [{
         active: true, bodyActive: true, hidden: false, ariaHidden: 'false', inert: true, renderSuspended: true,
+        switchLabels: ['Mineradio', 'Mineradio'],
     }]);
     assert.equal(h.original.inert, true);
     assert.equal(h.calls.filter(call => call === 'suspend-render').length, 1);
@@ -187,6 +189,32 @@ test('saved Folia startup takes ownership before releasing the first-paint state
     assert.equal(h.mount.hidden, true);
     assert.equal(h.original.inert, false);
     assert.equal(h.calls.includes('resume-render'), true);
+});
+
+test('startup switches remain usable after a Folia timeout and allow a fresh retry', () => {
+    for (const id of ['folia-switch-btn', 'folia-floating-switch']) {
+        const h = harness({ savedMode: 'folia', preloadFolia: true, activate: false });
+        const button = h.document.querySelectorAll('[data-folia-switch]').find(node => node.id === id);
+        const frame = h.frame();
+        h.runTimer(20000);
+        assert.equal(h.status.classList.contains('failed'), true);
+        assert.equal(h.document.documentElement.classList.contains('folia-mode-preload'), false);
+        assert.equal(button.textContent, 'Mineradio');
+        assert.equal(button.attributes['aria-pressed'], 'true');
+
+        button.listeners.get('click')();
+        assert.equal(h.context.isFoliaInterfaceActive(), false);
+        assert.equal(h.mount.hidden, true);
+        assert.equal(button.textContent, 'Folia');
+        assert.equal(button.attributes['aria-pressed'], 'false');
+
+        button.listeners.get('click')();
+        assert.equal(h.context.isFoliaInterfaceActive(), true);
+        assert.equal(h.mount.hidden, false);
+        assert.equal(button.textContent, 'Mineradio');
+        assert.notEqual(h.frame(), frame, 'Retry must replace the failed iframe');
+        assert.equal(h.status.classList.contains('failed'), false);
+    }
 });
 
 test('升级面板在 Folia 激活时保持可交互，不被 inert 清扫', () => {
