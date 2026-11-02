@@ -1,5 +1,11 @@
 .local-random-pool{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:12px 0}
 .local-random-pool label{display:flex;align-items:center;gap:7px;font-size:12px}
+.local-random-pool input:disabled{opacity:.45}
+.local-preset-actions{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.local-preset-actions button{padding:7px 10px;border:1px solid var(--local-line);border-radius:8px;font-size:12px}
+.local-preset-actions button:disabled{opacity:.4;cursor:default}
+.local-visual-presets .local-setting input{width:100%;min-width:0;padding:8px;border:1px solid var(--local-line);border-radius:8px;background:var(--local-hover);color:var(--local-text)}
+.local-visual-presets small{display:block;margin:6px 0;color:var(--local-muted)}
 .local-reroll{padding:9px 14px;border:1px solid var(--local-line);border-radius:10px}
 .local-live-preview{flex:none;margin:18px 0;border:1px solid var(--local-line);border-radius:12px;overflow:hidden}
 .local-preview-tabs{display:flex;gap:4px;padding:7px;background:var(--local-hover)}

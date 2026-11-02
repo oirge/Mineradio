@@ -84,8 +84,7 @@ with sync_playwright() as p:
         pool = child.locator('.local-random-pool')
         pool.locator('..').locator('summary').click()
         for box in pool.locator('input').all():
-            name = box.locator('..').inner_text().strip()
-            if name not in ['流光', '云阶']:
+            if box.get_attribute('data-mode') not in ['classic', 'partita']:
                 box.uncheck()
         expect(pool.locator('input:checked')).to_have_count(2)
         child.get_by_test_id('local-random-mode').check()

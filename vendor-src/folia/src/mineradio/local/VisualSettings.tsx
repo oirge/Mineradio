@@ -1,4 +1,5 @@
 import LocalVisualOptions from './LocalVisualOptions';
+import LocalVisualPresets from './LocalVisualPresets';
 import LocalVisualPreview from './LocalVisualPreview';
 import LocalRenderQuality, { LocalStyleRenderQuality } from './LocalRenderQuality';
 import { settingsTokens } from '../../components/modal/settings/kit/kitTheme';
@@ -53,6 +54,7 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage }: {
             <label className="local-setting"><span>{t('interfaceLanguage')}</span><select aria-label={t('interfaceLanguage')} data-testid="local-ui-language" value={i18n.resolvedLanguage === 'en' ? 'en' : 'zh-CN'} onChange={event => onLanguage(event.target.value)}>
                 <option value="zh-CN">中文</option><option value="en">English</option>
             </select></label>
+            <LocalVisualPresets />
             <label className="local-setting"><span>{t('lyricMode')}</span><select aria-label={t('lyricMode')} data-testid="local-visualizer-mode" value={settings.mode} onChange={(event) => settings.update({ mode: event.target.value as VisualizerMode })}>
                 {VISUALIZER_REGISTRY.filter((entry) => !entry.mode.startsWith('mod:')).map((entry) => <option key={entry.mode} value={entry.mode}>{getVisualizerModeLabel(entry.mode, label)}</option>)}
             </select></label>
@@ -64,6 +66,8 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage }: {
             <label className="local-setting local-toggle-setting"><span>{t('translation')}</span><input type="checkbox" checked={settings.translation} onChange={(event) => settings.update({ translation: event.target.checked })} /></label>
             <label className="local-setting local-toggle-setting"><span>{t('transparentPlayer')}</span><input data-testid="local-transparent-player" type="checkbox" checked={settings.background.transparent === true} onChange={event => settings.update({ background: { ...settings.background, transparent: event.target.checked } })} /></label>
             <LocalRenderQuality />
+            <label className="local-setting local-toggle-setting"><span>{t('rhythmResponse')}</span><input data-testid="local-rhythm" type="checkbox" checked={settings.rhythm} onChange={event => settings.update({ rhythm: event.target.checked })} /></label>
+            <small>{t('rhythmHint')}</small>
             <LocalVisualOptions label={label} />
             <LocalVisualPreview theme={theme} assets={assets} />
             {modeEntry.renderSettingsPanel && <details className="local-tuning" data-testid="local-effect-tuning" key={settings.mode}><summary>{t('tuning')} · {getVisualizerModeLabel(settings.mode, label)}</summary><LocalStyleRenderQuality /><Suspense fallback={null}>{modeEntry.renderSettingsPanel(panelProps)}</Suspense></details>}

@@ -15,10 +15,9 @@ export default function LocalVisualOptions({ label }: { label: (key: string) => 
         <label className="local-setting local-toggle-setting"><span>{text('每首歌随机歌词样式', 'Random style per song')}</span><input data-testid="local-random-mode" type="checkbox" checked={settings.randomMode} onChange={e => settings.update({ randomMode: e.target.checked })} /></label>
         <details className="local-tuning"><summary>{text('自选随机池', 'Random style pool')} · {settings.randomPool.length}</summary>
             <div className="local-random-pool">{VISUALIZER_REGISTRY.map(entry => <label key={entry.mode}>
-                <input type="checkbox" checked={settings.randomPool.includes(entry.mode)} onChange={event => {
-                    const pool = event.target.checked ? [...settings.randomPool, entry.mode] : settings.randomPool.filter(mode => mode !== entry.mode);
-                    if (pool.length) settings.update({ randomPool: pool });
-                }} />{getVisualizerModeLabel(entry.mode, label)}
+                <input type="checkbox" data-mode={entry.mode} checked={settings.randomPool.includes(entry.mode)}
+                    disabled={settings.randomPool.length === 1 && settings.randomPool[0] === entry.mode}
+                    onChange={event => settings.toggleRandomPool(entry.mode, event.target.checked)} />{getVisualizerModeLabel(entry.mode, label)}
             </label>)}</div>
             <small>{text('至少保留一种；两种以上时不会连续重复。', 'Keep at least one style. Two or more styles never repeat consecutively.')}</small>
         </details>

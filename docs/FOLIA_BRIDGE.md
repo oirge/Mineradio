@@ -21,6 +21,7 @@ All times are **seconds**. Track IDs are opaque stable Mineradio IDs. Read resul
 - `Playlist`: `{id,name,count,cover,readOnly}`. Built-ins: `library` (all tracks), `special-liked` (favorites). User lists use opaque `local-playlist:*` IDs.
 - `State`: `{currentTrack,currentIndex,position,duration,playing,playbackRate,volume,muted,playMode,queueRevision,libraryRevision,lyricsRevision,interface}`. `volume` is 0–1; `playbackRate` drives local playhead interpolation without becoming a second playback clock. Native `playMode` is `loop` (ordered repeat all), `shuffle` (shuffled queue), or `single` (repeat one). `interface` is `folia` or `mineradio`.
 - `Lyrics`: `{trackId,lines:[{time,endTime,text,translation,words:[{time,duration,text}]}]}`. Lines without genuine lyrics are omitted. Words may be empty.
+- `Analysis`: `{trackId,revision,source:'cache'|'live',until?,beats,drums,vocal}`. Beat events use Folia's original `BeatFxEvent` contract. Drums carry typed `times/strengths/kinds`; the optional 50 Hz vocal-band envelope carries `db/top/onsets/from`. These are estimates from the host's existing beat/band analysis, not separated stems. `until` limits partial-cache coverage; use live FFT outside it. No large arrays travel in State.
 - A page is `{items,total,offset,limit}`. `limit` defaults to 100 and is clamped to 1–1000.
 
 ## Methods
@@ -32,6 +33,7 @@ All times are **seconds**. Track IDs are opaque stable Mineradio IDs. Read resul
 | `listPlaylists` | `{}` | Playlist[] |
 | `getQueue` | `{offset?,limit?,query?}` | Track page plus `currentIndex,revision` |
 | `getLyrics` | `{}` | Lyrics for current track |
+| `getAnalysis` | `{}` | Current Analysis; reads existing cache only, never starts an analysis job or changes playback/cinema preferences |
 | `play` | `{id,playlistId?}` | State; use playlist as queue when supplied |
 | `playQueue` | `{index}` | State |
 | `togglePlay`, `pause`, `resume`, `next`, `previous` | `{}` | State |
@@ -57,7 +59,8 @@ All times are **seconds**. Track IDs are opaque stable Mineradio IDs. Read resul
 - `tracksChanged`: `{updates:[{track,searchableChanged}]}` for batched local metadata or cover changes. Patch matching visible tracks without refetching the whole catalog; a nonempty search must recheck membership when `searchableChanged` is true. This event does not increment `libraryRevision`.
 - `queueChanged`: `{revision}` after queue structure changes. Refetch queue pages.
 - `lyrics`: full current Lyrics after lyric source or translation changes; never all library lyrics.
-- `audio`: `{frequency:Uint8Array,sampleRate,fftSize}`. Raw Web Audio frequency bytes (0–255), approximately 30 Hz while playing and Folia active, slower while paused. Frequency length is `fftSize / 2`; the unused time-domain data is not sent. Folia also accepts a legacy `number[]` frequency payload. Use the existing analyser; no new output graph.
+- `audio`: `{frequency:Uint8Array,sampleRate,fftSize,trackId,position,playing}`. Raw Web Audio frequency bytes (0–255), approximately 30 Hz while playing and Folia active, slower while paused. Frequency length is `fftSize / 2`; the unused time-domain data is not sent. Folia also accepts a legacy `number[]` frequency payload. Reject frames owned by another track; use the existing analyser, no new output graph.
+- `analysis`: full current Analysis only on a track/cache revision change. Late asynchronous disk responses must match both the current track and read ticket. Folia checks track ownership and revision again. The local player advances the original beat clock and MotionValues from its existing RAF; `state.outputLatency` and playback rate compensate the heard time once. Pause/visibility stops the same clock and seek repositions without replaying old beats.
 - `visibility`: `{active:boolean}`. Suspend Folia rendering while inactive.
 
 Initial synchronization: install the listener, call `getState`, `listPlaylists`, first `listTracks` page, `getQueue`, and `getLyrics`. Keep the iframe mounted when switching back so settings and navigation survive. Neither interface switch rebuilds the audio engine or changes playback. Host suspend/resume applies to visual loops only; desktop lyrics and audio remain live.
@@ -68,6 +71,6 @@ Initial synchronization: install the listener, call `getState`, `listPlaylists`,
 
 Both walls use the shared local catalog adapter to page through `listTracks` and project `Track` into Folia's display-only `SongResult`: `id` stays unchanged, `sourceRef` is `{kind:'local',mediaId:id}`, and `localRef.songId` is the host ID. Only `durationMs` is converted to milliseconds for original card labels. Playback still sends `play {id,playlistId}` for the complete collection; browsing/searching a wall does not replace the queue with its visible tiles. Card transforms, Lattice camera/lyrics, images and settings are local UI work and require no new bridge-side audio service.
 
-The view choice and renderer tuning live in `mineradio-folia-local-visuals-v1`; Lattice appearance lives in `mineradio-folia-local-lattice-v1`. Imported visual images use the separate `mineradio-folia-visual-assets-v1` IndexedDB cache. These are visual preferences/assets, not Folia library, account, synchronization, or audio state.
+The view choice, renderer tuning, rhythm-response toggle and named `presets` live in `mineradio-folia-local-visuals-v1`; Lattice appearance lives in `mineradio-folia-local-lattice-v1`. Presets snapshot visual parameters, excluding view routing, playback, the preset collection and image leases. Resetting the current appearance preserves presets. Imported visual images use the separate shared `mineradio-folia-visual-assets-v1` IndexedDB cache. These are visual preferences/assets, not Folia library, account, synchronization, or audio state.
 
 The iframe URL is `/vendor/folia/index.html?host=mineradio&surface=local-player-v3`. Current cover data URLs are converted to bounded host-owned image Blob URLs to avoid copying full cover bytes with every 200 ms state update. Catalog pages retain existing thumbnail URLs. These are image leases only, never audio output or media-file copies.

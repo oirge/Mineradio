@@ -1,10 +1,10 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { motionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import VisualizerRenderer from '../../components/visualizer/VisualizerRenderer';
 import { getVisualizerBackgroundRegistryEntry } from '../../components/visualizer/backgrounds/registry';
 import type { AudioBands, Line, Theme } from '../../types';
-import { useVisualSettings } from './useVisualSettings';
+import { useVisualSceneSettings } from './useVisualSettings';
 import type { LocalVisualAssets } from './useLocalVisualAssets';
 import LocalErrorBoundary from './LocalErrorBoundary';
 import './localVisualOptions.css';
@@ -15,8 +15,8 @@ const lines: Line[] = ['让音乐照亮此刻', '烟花在夜空中盛开', '雨
     words: [...text].map((char, word) => ({ text: char, startTime: index * 6 + word * 0.5, endTime: index * 6 + word * 0.5 + 0.5 })),
 }));
 
-export default function LocalVisualPreview({ theme, assets }: { theme: Theme; assets: LocalVisualAssets }) {
-    const settings = useVisualSettings();
+export default memo(function LocalVisualPreview({ theme, assets }: { theme: Theme; assets: LocalVisualAssets }) {
+    const settings = useVisualSceneSettings();
     const { i18n } = useTranslation();
     const en = i18n.resolvedLanguage === 'en';
     const [surface, setSurface] = useState<'lyrics' | 'background'>('lyrics');
@@ -69,4 +69,4 @@ export default function LocalVisualPreview({ theme, assets }: { theme: Theme; as
             </div>
         </div>
     </section>;
-}
+});

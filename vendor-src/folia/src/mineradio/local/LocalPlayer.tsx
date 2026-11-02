@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { colorWithAlpha, mixColors } from '../../components/visualizer/colorMix';
 import { DEFAULT_THEME, DAYLIGHT_THEME } from '../../services/baseThemes';
 import { useLocalPlayer } from './useLocalPlayer';
-import { useVisualSettings } from './useVisualSettings';
+import { useVisualSceneSettings, useVisualSettings } from './useVisualSettings';
 import LibraryPanel from './LibraryPanel';
 import PlayerControls from './PlayerControls';
 import VisualSettings from './VisualSettings';
@@ -27,7 +27,7 @@ export default function LocalPlayer() {
         if (language && language !== i18n.language) void i18n.changeLanguage(language);
     }, [player.state?.uiLanguage, i18n]);
     useEffect(() => { document.title = t('windowTitle'); }, [t]);
-    const visuals = useVisualSettings();
+    const visuals = useVisualSceneSettings();
     const assets = useLocalVisualAssets();
     const [libraryOpen, setLibraryOpen] = useState(false);
     const [queue, setQueue] = useState(false);
