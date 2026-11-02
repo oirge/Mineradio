@@ -9,6 +9,18 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      browser_suite:
+        description: Browser regression suite
+        type: choice
+        default: all
+        options:
+          - all
+          - visuals
+      ui_diagnostics:
+        description: Enable detailed Playwright action logs
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -65,7 +77,9 @@ jobs:
           python -m playwright install chromium
       - name: Verify bilingual UI and Folia recovery
         timeout-minutes: 15
-        run: python scripts/verify-browser-ui.py
+        env:
+          MINERADIO_UI_DIAGNOSTICS: ${{ inputs.ui_diagnostics && '1' || '' }}
+        run: python scripts/verify-browser-ui.py --suite "${{ inputs.browser_suite || 'all' }}"
       - name: Save browser regression evidence
         if: always()
         uses: actions/upload-artifact@v4
