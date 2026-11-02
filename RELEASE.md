@@ -6,7 +6,16 @@
 - 功能验证：PR #158 的功能提交 `754aaab` 已通过完整 Windows [Verify `41467393540`](https://github.com/oirge/Mineradio/actions/runs/41467393540)，Folia 类型检查及 `71＋108` 项行为测试、Node `1587` 项中 `1586` 通过／`0` 失败／`1` 可选基准跳过、六组浏览器验收全部通过。本轮仅做发布定向检查，不重复整套功能验收。
 - 验收维护：六组脚本共用完整 Chromium／SwiftShader 后端，截图冻结 CSS 动画，保留正常点击、全部断言与原超时；旧 CI 有同版本一过一败证据，不把单一渲染假设写成已确诊产品根因。
 - 发布定向检查：版本、公告、文档编码、打包与安装身份 `34/34`；语法／空白与 `check:folia` 通过。真实更新公告解析器保留四条，前后端公告一致，hero 与四条公告均有英文词条。
-- 发布准备：正式 Windows 构建、四项资产回下载及公开自动更新清单校验完成后，在此补录最终结果。官方安装器尚未在本机安装运行。
+- 提交与构建：[PR #159](https://github.com/oirge/Mineradio/pull/159) 以 merge commit `48732efe8dd5d11c07b8dba50db4bf893c9fbe23` 合入 main；annotated tag `v2.6.3`（tag object `1bdaae87fc9e5b0418c73e213a64da7db6910333`）固定在该提交。[Windows Build and Release `41471341266`](https://github.com/oirge/Mineradio/actions/runs/41471341266) 成功，构建时重新生成并校验 Folia，四项官方资产上传完成。
+- 正式发布：[v2.6.3](https://github.com/oirge/Mineradio/releases/tag/v2.6.3)（Release ID `431628261`）于北京时间 `2026-11-02 23:30:36`（`2026-11-02T15:30:36Z`）公开并设 Latest，`draft=false` / `prerelease=false`；公开 Latest API 返回 `v2.6.3`。
+- 官方资产核验：四项文件完整回下载，大小与 SHA256 均匹配 GitHub API digest；SHA256 清单三项全部一致、LF 且无 BOM；安装器 SHA-512 与 `latest.yml` 两处 sha512、size、path 一致。公开 `releases/latest/download/latest.yml` 返回 `2.6.3`，与已校验清单逐字节一致；安装器只读版本元数据为 `2.6.3`／`Mineradio 二创`。
+  - `Mineradio-oirge-2.6.3-Setup.exe`：122619114 B，SHA256 `4161d09f6c895b5778180c08326451d8d110d69606dbbf71fea4d0285293c405`。
+  - `Mineradio-oirge-2.6.3-Setup.exe.blockmap`：130010 B，SHA256 `4075a8a42457983f3b2fe31526489825d5309e4db975b0e00db41076f2843cf9`。
+  - `latest.yml`：359 B，SHA256 `3abfc08cb1f477002a20fb86d43274376fcfabfcf0a2047999f245bab867969e`。
+  - `Mineradio-oirge-2.6.3-SHA256SUMS.txt`：282 B，SHA256 `e99578a76dadbb5e6c261305d953d2d7fafcad0dadaa4171aa33d198b2159a5c`。
+  - 安装器 SHA-512：`K+XO4yFibdDG8Cf4vaj4tAhxuvMMFrSvTSGIpdRt8ciaxX+VkHN6aQfXnFEq8HEuC5YLOVZVQKGnVuhtsty7Vw==`。
+- CI 实际边界：功能提交完整 Verify `41467393540` 已通过。后续纯记录提交的重复 [Verify `41470176879`](https://github.com/oirge/Mineradio/actions/runs/41470176879) 仍在 Folia 语言验收的町景设置 summary 点击超过 30000ms，失败截图超过 5000ms；不能把验收后端统一写成间歇超时已彻底解决。发布 PR Verify `41471200578` 与合并 Verify `41471313583` 截至公开资产核验完成时仍在浏览器步骤运行，未作为发布前置，不宣称本轮重复 CI 全绿。
+- 验证边界：官方安装器未在本机安装运行。最终核验输出保存于忽略目录 `verification/release-v2.6.3/`，发布记录经 `docs/record-v2.6.3-release` 分支补录，不替换旧版本 tag 或资产。
 
 # v2.6.2 Folia 节拍联动与视觉预设
 
