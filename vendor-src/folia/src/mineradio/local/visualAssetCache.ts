@@ -23,7 +23,9 @@ function withAssetStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectSt
             database.onversionchange = () => database.close();
             try {
                 const transaction = database.transaction(STORE, mode);
-                const request = action(transaction.objectStore(STORE));
+                let request: IDBRequest;
+                try { request = action(transaction.objectStore(STORE)); }
+                catch (error) { transaction.abort(); throw error; }
                 transaction.oncomplete = () => {
                     database.close();
                     if (!settled) { settled = true; resolve(request.result as T); }
@@ -45,4 +47,17 @@ export async function saveToCache(key: string, data: unknown): Promise<void> {
 export async function removeFromCache(key: string): Promise<void> {
     checkKey(key);
     await withAssetStore('readwrite', (store) => store.delete(key));
+}
+
+export const VISUAL_ASSETS_CHANGED = 'mineradio-visual-assets-changed';
+// A preset's attached images replace only the included categories, in one transaction.
+export async function saveVisualAssetLibrary(entries: Record<string, unknown>): Promise<void> {
+    const keys = Object.keys(entries);
+    keys.forEach(checkKey);
+    if (!keys.length) return;
+    await withAssetStore('readwrite', store => {
+        for (const key of keys) store.put(entries[key], key);
+        return store.count();
+    });
+    window.dispatchEvent(new Event(VISUAL_ASSETS_CHANGED));
 }

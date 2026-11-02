@@ -1,10 +1,11 @@
-import { useRef, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Minimize2, Music2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { colorWithAlpha, mixColors } from '../../components/visualizer/colorMix';
 import { DEFAULT_THEME, DAYLIGHT_THEME } from '../../services/baseThemes';
 import { useLocalPlayer } from './useLocalPlayer';
-import { useVisualSceneSettings, useVisualSettings } from './useVisualSettings';
+import { useVisualSceneSettings } from './useVisualSettings';
+import { usePlaylistVisualPreset } from './usePlaylistVisualPreset';
 import LibraryPanel from './LibraryPanel';
 import PlayerControls from './PlayerControls';
 import VisualSettings from './VisualSettings';
@@ -64,13 +65,7 @@ export default function LocalPlayer() {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [player.command]);
-    const previousTrack = useRef<string | null>(null);
-    useEffect(() => {
-        const id = track?.id;
-        if (!id || id === previousTrack.current) return;
-        previousTrack.current = id;
-        if (useVisualSettings.getState().randomMode) useVisualSettings.getState().reroll();
-    }, [track?.id]);
+    usePlaylistVisualPreset(track?.id, player.state?.playbackPlaylistId);
     return <main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
             <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
@@ -89,7 +84,7 @@ export default function LocalPlayer() {
                 onLibrary={() => { setQueue(false); setLibraryOpen(true); setSettingsOpen(false); }}
                 onQueue={() => { setQueue(true); setLibraryOpen(!libraryOpen || !queue); setSettingsOpen(false); }} />}
             {libraryOpen && <LibraryPanel state={player.state} command={player.command} queue={queue} onTab={setQueue} onClose={() => setLibraryOpen(false)} />}
-            {settingsOpen && <VisualSettings assets={assets} theme={theme} onClose={() => setSettingsOpen(false)}
+            {settingsOpen && <VisualSettings assets={assets} theme={theme} state={player.state} command={player.command} onClose={() => setSettingsOpen(false)}
                 onLanguage={language => run('setUiLanguage', { language })} />}
         </>}
         <LocalStatusToast />

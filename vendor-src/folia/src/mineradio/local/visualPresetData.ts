@@ -8,6 +8,13 @@ export const LOCAL_PRESET_LIMIT = 24;
 export const LOCAL_PRESET_NAME_LIMIT = 48;
 export const presetName = (value: unknown) => typeof value === 'string' ? value.trim().slice(0, LOCAL_PRESET_NAME_LIMIT) : '';
 
+export function restorePlaylistPresets(raw: unknown, presets: LocalVisualPreset[]): Record<string, string> {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const ids = new Set(presets.map(preset => preset.id));
+    return Object.fromEntries(Object.entries(raw).filter(([key, id]) => key.length > 0 && key.length <= 200
+        && !['__proto__', 'constructor', 'prototype'].includes(key) && typeof id === 'string' && ids.has(id)).slice(0, 1000));
+}
+
 export function captureVisualPreset(value: VisualPreferences): LocalVisualSnapshot {
     const { mode, background, daylight, lyricsFontScale, translation, tunings, lyricRenderQuality,
         randomMode, randomPool, subtitleLayout, harmony, rhythm } = value;

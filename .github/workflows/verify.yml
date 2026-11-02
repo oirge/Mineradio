@@ -17,6 +17,7 @@ on:
         options:
           - all
           - visuals
+          - portability
       ui_diagnostics:
         description: Enable detailed Playwright action logs
         type: boolean

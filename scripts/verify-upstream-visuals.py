@@ -1,5 +1,6 @@
 """Accept the synchronized visual preferences against the real embedded player and host."""
 import argparse
+from ui_browser import launch_browser, capture_screenshot
 import json
 import math
 import os
@@ -43,12 +44,9 @@ def set_range(locator, value):
 with sync_playwright() as p:
     print('Starting synchronized visual acceptance:', args.url, flush=True)
     # Keep WebGL acceptance on the same software backend locally and on Windows runners.
-    browser = p.chromium.launch(headless=True, channel='chromium', timeout=30000, args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'])
+    browser = launch_browser(p)
     page = browser.new_page(viewport={'width': 1440, 'height': 900}, locale='zh-CN')
     page.set_default_timeout(30000)
-    if os.environ.get('MINERADIO_UI_DIAGNOSTICS'):
-        gpu = browser.new_browser_cdp_session().send('SystemInfo.getInfo')['gpu']
-        print('Browser GPU devices:', json.dumps(gpu['devices']), flush=True)
     page.add_init_script("localStorage.setItem('mineradio-visual-guide-seen-v2','1')")
     errors, passed = [], []
     page.on('pageerror', lambda error: errors.append(str(error)))
@@ -132,14 +130,14 @@ with sync_playwright() as p:
             expect(child.get_by_test_id('local-error')).to_have_count(0)
             expect(child.get_by_test_id('local-recovery')).to_have_count(0)
             page.wait_for_timeout(700)
-            page.screenshot(path=str(OUT / f'preview-{value}.png'))
+            capture_screenshot(page, path=str(OUT / f'preview-{value}.png'))
         background_tab = child.get_by_role('button', name='背景预览', exact=True)
         background_tab.scroll_into_view_if_needed()
         background_tab.click()
         expect(preview).to_have_attribute('data-surface', 'background')
         child.get_by_test_id('local-background-mode').select_option('sora')
         preview.scroll_into_view_if_needed()
-        page.screenshot(path=str(OUT / 'preview.png'))
+        capture_screenshot(page, path=str(OUT / 'preview.png'))
         done('new lyric effects and background share an active live preview')
 
         with child.expect_navigation(wait_until='domcontentloaded'):
@@ -157,7 +155,7 @@ with sync_playwright() as p:
             page.evaluate('(index) => setPreset(index)', index)
             page.wait_for_timeout(400)
             assert page.evaluate('fx.preset') == index
-        page.screenshot(path=str(OUT / 'new-particle-preset.png'))
+        capture_screenshot(page, path=str(OUT / 'new-particle-preset.png'))
         done('four particle presets apply through the production renderer')
         page.evaluate('openWallpaperEngineLibrary()')
         page.locator('.wallpaper-engine-visual-controls summary').click()
@@ -171,5 +169,5 @@ with sync_playwright() as p:
     finally:
         (OUT / 'acceptance.json').write_text(json.dumps({'passed': passed, 'pageErrors': errors}, ensure_ascii=False, indent=2), encoding='utf-8')
         if not page.is_closed():
-            page.screenshot(path=str(OUT / 'last-state.png'))
+            capture_screenshot(page, path=str(OUT / 'last-state.png'))
         browser.close()

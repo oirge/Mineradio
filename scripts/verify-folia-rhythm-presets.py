@@ -1,5 +1,6 @@
 """Focused browser acceptance for host analysis, named visual presets and rapid random-pool edits."""
 import argparse
+from ui_browser import launch_browser, capture_screenshot
 import json
 import math
 from pathlib import Path
@@ -26,7 +27,7 @@ for name in ['Beat-A', 'Beat-B']:
 
 with sync_playwright() as p:
     # Match the original visual acceptance suite instead of inheriting the runner's virtual GPU.
-    browser = p.chromium.launch(headless=True, channel='chromium', args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'])
+    browser = launch_browser(p)
     page = browser.new_page(viewport={'width': 1440, 'height': 900}, locale='zh-CN')
     page.set_default_timeout(15000)
     page.add_init_script("""localStorage.setItem('mineradio-visual-guide-seen-v2', '1');
@@ -97,7 +98,7 @@ with sync_playwright() as p:
         presets.get_by_label('选择预设', exact=True).select_option(label='Night')
         presets.get_by_role('button', name='应用', exact=True).click()
         expect(child.get_by_test_id('local-background-mode')).to_have_value('latent')
-        page.screenshot(path=str(OUT / 'presets.png'))
+        capture_screenshot(page, path=str(OUT / 'presets.png'))
         presets.get_by_role('button', name='删除', exact=True).click()
         expect(presets.locator('option')).to_have_count(1)
         done('preset collection persists through reload and deletion removes the selected entry')
@@ -125,5 +126,5 @@ with sync_playwright() as p:
     finally:
         (OUT / 'acceptance.json').write_text(json.dumps({'checks': checks, 'errors': errors}, ensure_ascii=False, indent=2), encoding='utf-8')
         if not page.is_closed():
-            page.screenshot(path=str(OUT / 'last-state.png'), timeout=10000)
+            capture_screenshot(page, path=str(OUT / 'last-state.png'), timeout=10000)
         browser.close()

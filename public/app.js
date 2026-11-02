@@ -46183,6 +46183,9 @@ var MINERADIO_BACKUP_IMPORT_ARM_MS = 12000;
  * 故意排除：曲库文件夹（进 paths）、曲库快照与索引、队列快照与续播位置（临时文件）、
  * 歌单与特别喜欢（进 database）、音效链与视觉预设（进 config.eq / config.theme）。 */
 var MINERADIO_BACKUP_PLAYER_KEYS = [
+  'mineradio-player-interface-v1',
+  'mineradio-folia-local-visuals-v1',
+  'mineradio-folia-local-lattice-v1',
   VOLUME_STORE_KEY,
   PLAYBACK_RATE_STORE_KEY,
   LYRIC_LLM_TRANSLATE_STORE_KEY,

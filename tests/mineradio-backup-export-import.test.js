@@ -721,11 +721,30 @@ test('config.player 只认白名单键，备份文件塞不进任意 localStorag
   assert.equal({}.polluted, undefined, '原型没被污染');
 });
 
+test('Folia 设置、命名预设、歌单绑定和 Lattice 设置随整机备份恢复，旧备份保留本机值', async () => {
+  const visuals = JSON.stringify({ state: { mode: 'nebbia', randomPool: ['classic', 'nebbia'],
+    presets: [{ id: 'rain', name: '雨夜', settings: { mode: 'nebbia' } }], playlistPresets: { road: 'rain' } }, version: 0 });
+  const saved = { 'mineradio-folia-local-visuals-v1': visuals,
+    'mineradio-folia-local-lattice-v1': '{"state":{"latticeLightsOn":false},"version":0}',
+    'mineradio-player-interface-v1': 'folia' };
+  const source = loadBackupModule({ localStorage: saved });
+  const payload = await source.context.collectMineradioBackupPayload();
+  for (const key of Object.keys(saved)) assert.equal(payload.config.player[key], saved[key]);
+  const destination = loadBackupModule();
+  await destination.context.applyMineradioBackup(destination.context.parseMineradioBackupText(JSON.stringify(payload)));
+  for (const key of Object.keys(saved)) assert.equal(destination.context.localStorage.getItem(key), saved[key]);
+  payload.config.player = {};
+  await destination.context.applyMineradioBackup(destination.context.parseMineradioBackupText(JSON.stringify(payload)));
+  assert.equal(destination.context.localStorage.getItem('mineradio-folia-local-visuals-v1'), visuals);
+});
+
 test('白名单与 app.js 里的持久化键常量一一对应', () => {
   const mod = loadBackupModule({});
   const list = plain(mod.context.MINERADIO_BACKUP_PLAYER_KEYS);
-  assert.equal(list.length, 21);
-  assert.deepEqual(list.slice().sort(), Object.values(PLAYER_KEYS).sort());
+  assert.equal(list.length, 24);
+  assert.deepEqual(list.slice().sort(), Object.values(PLAYER_KEYS).concat([
+    'mineradio-player-interface-v1', 'mineradio-folia-local-visuals-v1', 'mineradio-folia-local-lattice-v1'
+  ]).sort());
   Object.keys(PLAYER_KEYS).forEach((name) => {
     assert.match(appSource, new RegExp('var ' + name + " = '" + PLAYER_KEYS[name] + "';"), name + ' 常量值漂了');
   });

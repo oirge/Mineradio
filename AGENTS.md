@@ -4,6 +4,8 @@
 
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
+- 未发布增量：Folia 整机备份、预设 JSON 导入／导出（可携带图片）、歌单绑定。视觉状态仍用 `mineradio-folia-local-visuals-v1`，绑定为 `playlistPresets`；备份需同时覆盖界面选择与 lattice 三键。预设交换不得写入播放／视图状态，Tempera 图片导入重映射 ID，图片事务失败须撤回新预设。验收共用 `scripts/ui_browser.py` 的 Chromium／SwiftShader 后端，截图冻结 CSS 动画但继续保留所有正常交互断言与原超时。
+
 - Git 仓库以远端 `https://github.com/oirge/Mineradio.git` 为准，本地检出路径随机器变化；不要沿用旧文档里的 `C:\Users\Administrator\Desktop\...` 或 `C:\Users\oirg\Desktop\mok\Mineradio-sync`。
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
 - 当前源码续版：`v2.6.2`（Folia 节拍／鼓点／人声频段联动、随机样式池稳定性与命名视觉预设。功能 PR #155 → merge `b1a754e`，完整 Windows Verify `41445712793` 通过：Folia 62＋108 项、Node 1585 通过／0 失败／1 可选基准跳过，中英文、恢复与全部视觉验收通过。发布 PR #156 → merge `ecc35bedae1f81335ac099476c787994f9cc6c65`；annotated tag `v2.6.2`（tag object `cc0876b09df05eee354aa825ca48e77b4c6cbf65`）；Windows Build and Release `41448291635` 成功，Release `431462848` 于北京时间 `2026-11-02 21:03:24` 公开并设 Latest。四项资产完整回下载，大小、SHA256 与 GitHub digest／清单一致，安装器 SHA-512 与公开 `latest.yml` 一致。发布元数据重复 Verify `41448173542` 在命名预设断言通过后的截图步骤超过 15 秒，总体 failure，不能记为完整 CI 全绿；官方安装器未在本机安装运行。完整发布与核验证据见 RELEASE.md 顶部。）

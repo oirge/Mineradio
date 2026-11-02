@@ -1,0 +1,1 @@
+import{WebGLRenderer as e}from"./lib-B4j7t7qX.js";export{e as WebGLRenderer};
