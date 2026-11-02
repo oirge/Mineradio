@@ -5,6 +5,7 @@
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
 - 未发布增量：Folia 整机备份、预设 JSON 导入／导出（可携带图片）、歌单绑定。视觉状态仍用 `mineradio-folia-local-visuals-v1`，绑定为 `playlistPresets`；备份需同时覆盖界面选择与 lattice 三键。预设交换不得写入播放／视图状态，Tempera 图片导入重映射 ID，图片事务失败须撤回新预设。验收共用 `scripts/ui_browser.py` 的 Chromium／SwiftShader 后端，截图冻结 CSS 动画但继续保留所有正常交互断言与原超时。
+- 上述增量通过 PR #158 交付；功能提交 `754aaab` 的完整 Windows Verify `41467393540` 成功，Folia `71＋108` 项行为测试、Node `1586` 通过／`0` 失败／`1` 可选跳过、六组浏览器验收全部通过。版本仍为 `2.6.2`，尚未打包发布。
 
 - Git 仓库以远端 `https://github.com/oirge/Mineradio.git` 为准，本地检出路径随机器变化；不要沿用旧文档里的 `C:\Users\Administrator\Desktop\...` 或 `C:\Users\oirg\Desktop\mok\Mineradio-sync`。
 - GitHub 仓库：`https://github.com/oirge/Mineradio.git`
