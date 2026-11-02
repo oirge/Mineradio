@@ -677,3 +677,9 @@ body.custom-bg-glass-active #custom-bg::after {
 .wallpaper-engine-row .wallpaper-engine-actions {
   width: 100%
 }
+
+#wallpaper-engine-layer.ready{opacity:var(--wallpaper-engine-visual-opacity,1)}
+#wallpaper-engine-image,#wallpaper-engine-video{transform:translate(var(--wallpaper-engine-visual-x,0%),var(--wallpaper-engine-visual-y,0%)) scale(var(--wallpaper-engine-visual-scale,1.08));transform-origin:center}
+.wallpaper-engine-visual-controls{margin:0 22px 14px;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px}
+.wallpaper-engine-visual-controls summary{cursor:pointer;font-size:12px}.wallpaper-engine-visual-controls>div{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding-top:14px}
+.wallpaper-engine-visual-controls label{display:grid;grid-template-columns:65px 1fr 45px;align-items:center;gap:8px;font-size:11px}.wallpaper-engine-visual-controls input{width:100%;accent-color:#a8cbbf}.wallpaper-engine-visual-controls output{text-align:right;font-variant-numeric:tabular-nums}

@@ -117,7 +117,7 @@ var LYRIC_LAYOUT_STORE_KEY = 'mineradio-lyric-layout-v1';
 var VISUAL_PRESET_SCHEMA = 'skull-preset-v2';
 // 启动读档发生在 presetMeta 声明之前；这里保留一份启动期上限，
 // 运行到面板代码后由 maxVisualPresetIndex() 自动切回数据驱动的长度。
-var VISUAL_PRESET_BOOT_MAX_INDEX = 8;
+var VISUAL_PRESET_BOOT_MAX_INDEX = 12;
 var PLAYBACK_QUALITY_STORE_KEY = 'mineradio-playback-quality-v1';
 var UPLOAD_TIP_STORE_KEY = 'mineradio-upload-tip-seen';
 var DIY_MODE_STORE_KEY = 'mineradio-diy-player-mode-v1';
@@ -199,6 +199,41 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['17 种 Folia 歌词效果、随机样式与实时预览。', '17 Folia lyric styles, random selection and live previews.'],
+  ['Folia 新增花火、雾笺、町景，歌词效果扩展至 17 种，并带入雾笺性能优化。', 'Folia adds Hanabi, Nebbia and Machi for 17 lyric styles, including Nebbia performance improvements.'],
+  ['支持底部单行、双行、三行字幕和 Lattice 和声字幕。', 'Choose one, two or three bottom subtitle rows, with harmony subtitles in Lattice.'],
+  ['新增自选随机池、每首歌随机样式、不连续重复、手动重抽及歌词与背景实时预览。', 'Choose a random style pool, avoid consecutive repeats, reroll manually, and preview lyrics and backgrounds live.'],
+  ['新增月蚀圣环、雨幕霓虹、折光蝶群、深海绽放四个粒子预设。', 'Four new particle presets: Eclipse Halo, Neon Drizzle, Prism Flock and Abyssal Bloom.'],
+  ['扩展播放、收藏、歌词、音量、切歌手势，支持灵敏度、动作冷却和推理防重入。', 'Control playback, likes, lyrics, volume and tracks with gestures, sensitivity settings, cooldowns and single-flight inference.'],
+  ['支持 Wallpaper Engine 原生画面的透明度、位置和缩放调整。', 'Adjust opacity, position and scale of the native Wallpaper Engine picture.'],
+  ['月蚀圣环', 'Eclipse Halo'], ['黑曜轨道 · 冷金日冕', 'Obsidian orbits · Pale gold corona'],
+  ['雨幕霓虹', 'Neon Drizzle'], ['城市雨丝 · 色谱残光', 'City rainfall · Spectral afterglow'],
+  ['折光蝶群', 'Prism Flock'], ['折纸翼阵 · 光谱迁徙', 'Origami wings · Spectral migration'],
+  ['深海绽放', 'Abyssal Bloom'], ['生物荧光 · 潮汐花冠', 'Bioluminescence · Tidal bloom'],
+  ['播放手势', 'Playback gestures'], ['稳定保持才执行，降低误触', 'Hold a steady pose to confirm'],
+  ['播放器动作', 'Player actions'], ['手部光迹', 'Hand trails'], ['识别灵敏度', 'Gesture sensitivity'],
+  ['稳健', 'Steady'], ['灵敏', 'Quick'], ['保持', 'Hold'], ['快速滑动', 'Quick swipe'],
+  ['上一首 / 下一首', 'Previous / Next'], ['保持并上下', 'Hold and move vertically'],
+  ['喜欢歌曲', 'Like song'], ['三指保持', 'Hold three fingers'], ['歌词显隐', 'Toggle lyrics'],
+  ['张掌 / 捏合 / 握拳', 'Open / Pinch / Fist'], ['粒子交互', 'Particle interaction'],
+  ['画面调整', 'Picture adjustments'], ['透明度', 'Opacity'], ['重置画面', 'Reset picture'],
+  ['WE 透明度', 'WE opacity'], ['WE 水平位置', 'WE horizontal position'],
+  ['WE 垂直位置', 'WE vertical position'], ['WE 缩放', 'WE scale'],
+  ['张掌推开 · 捏合旋转 · 握拳收束 · 左右滑切歌 · V 手势播放 · 食指音量 · 拇指收藏 · 三指歌词', 'Open to push · Pinch to rotate · Fist to gather · Swipe to skip · V to play · Index to adjust volume · Thumb to like · Three fingers to toggle lyrics'],
+  ['待命', 'Ready'], ['把手放进视野', 'Place your hand in view'], ['将手放进摄像头视野', 'Place your hand in view'],
+  ['已执行，松手后可再次触发', 'Done; release your hand to repeat'],
+  ['V 手势 · 播放', 'V gesture · Play'], ['保持以播放 / 暂停', 'Hold to play / pause'],
+  ['拇指向上 · 喜欢', 'Thumb up · Like'], ['保持以收藏 / 取消收藏', 'Hold to like / unlike'],
+  ['三指 · 歌词', 'Three fingers · Lyrics'], ['保持以显示 / 隐藏歌词', 'Hold to show / hide lyrics'],
+  ['食指音量', 'Index finger volume'], ['保持后上下移动调节音量', 'Hold, then move up or down to adjust volume'],
+  ['食指向上增加 · 向下降低', 'Move up to raise · Down to lower'],
+  ['左滑 · 下一首', 'Swipe left · Next'], ['右滑 · 上一首', 'Swipe right · Previous'],
+  ['已执行，回到中央后可继续', 'Done; return to the center to repeat'],
+  ['手势: 播放 / 暂停', 'Gesture: Play / Pause'], ['手势: 喜欢当前歌曲', 'Gesture: Like current song'],
+  ['手势: 已显示歌词', 'Gesture: Lyrics shown'], ['手势: 已隐藏歌词', 'Gesture: Lyrics hidden'],
+  ['手势: 下一首', 'Gesture: Next'], ['手势: 上一首', 'Gesture: Previous'],
+  ['播放器手势已开启', 'Player gestures enabled'], ['仅保留粒子视觉手势', 'Particle gestures only'],
+  ['手部光迹已显示', 'Hand trails shown'], ['手部光迹已隐藏，识别继续运行', 'Hand trails hidden; recognition remains active'],
   ['Folia 本地播放器', 'Folia Local Player'],
   ['正在加载 Folia…', 'Loading Folia…'],
   ['正在重新加载 Folia…', 'Reloading Folia…'],
@@ -1954,7 +1989,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.5.5';
+var APP_VERSION = '2.6.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2007,11 +2042,14 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '启动加载时不再提前显示 Folia 切换按钮。',
+  hero: '17 种 Folia 歌词效果、随机样式与实时预览。',
   notes: [
-    '修复启动加载 Folia 时右上角提前露出 Folia / Mineradio 切换按钮的问题，加载画面只保留加载提示。',
-    '界面模式与按钮文字恢复完成后切换按钮照常出现，桌面标题栏和全屏浮动入口都适用。',
-    'Folia 加载失败时仍可正常切回 Mineradio 并重试，不会因为本次隐藏而失去恢复入口。'
+    'Folia 新增花火、雾笺、町景，歌词效果扩展至 17 种，并带入雾笺性能优化。',
+    '支持底部单行、双行、三行字幕和 Lattice 和声字幕。',
+    '新增自选随机池、每首歌随机样式、不连续重复、手动重抽及歌词与背景实时预览。',
+    '新增月蚀圣环、雨幕霓虹、折光蝶群、深海绽放四个粒子预设。',
+    '扩展播放、收藏、歌词、音量、切歌手势，支持灵敏度、动作冷却和推理防重入。',
+    '支持 Wallpaper Engine 原生画面的透明度、位置和缩放调整。'
   ]
 };
 function readSavedVolume() {
@@ -2656,6 +2694,7 @@ var fxDefaults = {
   performanceBackground: 'auto',
   performanceQuality: 'high',
   liveBackgroundKeep: false,
+  gesturePlayerActions: true, gestureHandOverlay: true, gestureSensitivity: 'balanced',
   cam: 'off',
 };
 var PACKAGED_DEFAULT_USER_FX_ARCHIVE_NAME = '默认测试';
@@ -2757,6 +2796,7 @@ var PACKAGED_DEFAULT_FX_SNAPSHOT = Object.freeze({
   shelfOpacity: 1,
   shelfBgOpacity: 0.9,
   shelfAccentColor: '#ffffff',
+  gesturePlayerActions: true, gestureHandOverlay: true, gestureSensitivity: 'balanced',
   cam: 'off'
 });
 function clonePackagedDefaultFxSnapshot() {
@@ -3152,6 +3192,7 @@ function updateDesktopRuntimeState(state) {
   desktopRuntimeState.minimized = !!state.isMinimized;
   desktopRuntimeState.visible = state.isVisible !== false;
   desktopRuntimeState.focused = state.isFocused !== false;
+  if (typeof syncGestureControlHostVisibility === 'function') syncGestureControlHostVisibility('desktop-runtime-state');
   desktopRuntimeState.fullscreen = !!(state.isFullScreen || state.isNativeFullScreen || state.isHtmlFullScreen || state.isWindowFullScreen);
   updateRenderPowerClasses();
   applyRendererPowerMode();
@@ -6063,7 +6104,7 @@ void main(){
   //  and cover-colored audio flow.
   //  预设 7 (音域回响) 的地形层是独立的 InstancedMesh, 这里的粒子只当背景星河。
   // ====================================================
-  else {
+  else if (uPreset < 8.5) {
     float bassGlow = smoothstep(0.07, 0.78, uBass) * 0.34 + uBeat * 0.014;
     float midGlow = smoothstep(0.07, 0.62, uMid) * 0.42;
     float highGlow = smoothstep(0.04, 0.46, uTreble) * 0.46;
@@ -6132,6 +6173,131 @@ void main(){
       vAlpha *= 0.86 + bloom * 0.22;
       maxRippleAmp = max(maxRippleAmp, bloom * 0.10);
     }
+  }
+
+  // ====================================================
+  //  Preset 9: ECLIPSE HALO — obsidian orbital reliquary
+  // ====================================================
+  else if (uPreset < 9.5) {
+float ringIndex = floor(aUv.y * 8.0);
+float ringLocal = fract(aUv.y * 8.0);
+float ringN = (ringIndex + 0.5) / 8.0;
+float ringSeed = hash11(ringIndex * 19.73 + 2.1);
+float theta = aUv.x * 2.0 * PI + ringIndex * 0.47 + t * (0.035 + ringN * 0.026);
+float eclipseDrive = smoothstep(0.06, 0.76, uBass) * 0.17 + uBeat * 0.08;
+float ridge = exp(-pow((ringLocal - 0.5) / (0.17 + ringSeed * 0.045), 2.0));
+float radius = 0.92 + ringN * 3.18 + (ringLocal - 0.5) * 0.24 + eclipseDrive * (0.18 + ringN * 0.34);
+float eccentric = 0.49 + ringN * 0.20;
+float xh = cos(theta) * radius * (1.18 + ringN * 0.10);
+float yh = sin(theta) * radius * eccentric;
+float zh = (ringN - 0.5) * 1.34 + sin(theta * 2.0 + ringSeed * 6.0) * (0.10 + ringN * 0.09);
+float tilt = -0.34 + ringN * 0.72;
+float ct = cos(tilt), st = sin(tilt);
+pos = vec3(xh, yh * ct - zh * st, yh * st + zh * ct);
+
+vec3 coldRim = vec3(0.48, 0.82, 1.0);
+vec3 antiqueGold = vec3(0.93, 0.72, 0.38);
+vec3 haloColor = mix(coldRim, antiqueGold, smoothstep(0.18, 0.84, ringN + sin(theta) * 0.08));
+haloColor = mix(haloColor, vec3(0.98, 0.96, 0.88), ridge * (0.28 + uTreble * 0.18));
+vColor = mix(coverColor * 0.72, haloColor, 0.62 + ridge * 0.20);
+float corona = pow(0.5 + 0.5 * sin(theta * (13.0 + ringIndex) - t * 0.52 + ringSeed * 9.0), 8.0);
+vAlpha = (0.18 + ridge * 0.74 + corona * (0.08 + uTreble * 0.18)) * smoothstep(0.02, 0.14, aUv.y) * (1.0 - smoothstep(0.93, 1.0, aUv.y));
+maxRippleAmp = max(maxRippleAmp, ridge * (0.12 + eclipseDrive * 0.20) + corona * uTreble * 0.13);
+  }
+
+  // ====================================================
+  //  Preset 10: NEON DRIZZLE — refracted city rain
+  // ====================================================
+  else if (uPreset < 10.5) {
+float column = floor(aUv.x * 52.0);
+float columnN = (column + 0.5) / 52.0;
+float columnLocal = fract(aUv.x * 52.0);
+float rainSeed = hash11(column * 41.17 + floor(columnLocal * 5.0) * 7.9);
+float rainSpeed = 0.026 + rainSeed * 0.052 + smoothstep(0.08, 0.76, uBass) * 0.014;
+float fall = fract(1.0 - aUv.y + t * rainSpeed + rainSeed * 0.87);
+float xRain = (columnN - 0.5) * 11.8 + (columnLocal - 0.5) * 0.11;
+float yRain = (0.5 - fall) * 8.8;
+float cityDepth = mix(-3.8, 2.6, hash11(column * 11.3 + 0.7));
+float wind = sin(t * 0.17 + column * 0.63 + fall * 3.4) * (0.08 + rainSeed * 0.12);
+float perspective = 0.76 + smoothstep(-3.8, 2.6, cityDepth) * 0.34;
+pos = vec3((xRain + wind) * perspective, yRain, cityDepth + sin(fall * PI * 2.0 + rainSeed * 7.0) * 0.05);
+
+float dash = pow(0.5 + 0.5 * sin(fall * (52.0 + rainSeed * 38.0) - t * 0.32), 10.0);
+float dropHead = pow(0.5 + 0.5 * sin(fall * 17.0 + rainSeed * 12.0), 18.0);
+vec3 neonA = vec3(0.20, 0.88, 1.0);
+vec3 neonB = vec3(1.0, 0.26, 0.63);
+vec3 neonC = vec3(1.0, 0.72, 0.30);
+vec3 rainColor = mix(neonA, neonB, smoothstep(0.18, 0.78, rainSeed));
+rainColor = mix(rainColor, neonC, smoothstep(0.84, 0.99, rainSeed));
+vColor = mix(coverColor * 0.82, rainColor, 0.58 + dash * 0.18);
+vAlpha = 0.09 + dash * 0.40 + dropHead * (0.22 + uTreble * 0.30);
+vAlpha *= 0.58 + perspective * 0.42;
+pos.x += dropHead * sin(t * 0.8 + rainSeed * 8.0) * uTreble * 0.055;
+maxRippleAmp = max(maxRippleAmp, dash * uMid * 0.10 + dropHead * (0.10 + uTreble * 0.22));
+  }
+
+  // ====================================================
+  //  Preset 11: PRISM FLOCK — folded spectral migration
+  // ====================================================
+  else if (uPreset < 11.5) {
+float flockIndex = floor(aUv.y * 12.0);
+float wingY = fract(aUv.y * 12.0) * 2.0 - 1.0;
+float wingX = aUv.x * 2.0 - 1.0;
+float flockSeed = hash11(flockIndex * 23.73 + 4.0);
+float gx = mod(flockIndex, 4.0) - 1.5;
+float gy = floor(flockIndex / 4.0) - 1.0;
+float migrate = t * (0.018 + flockSeed * 0.018);
+vec2 flockCenter = vec2(gx * 2.42 + sin(migrate + flockSeed * 8.0) * 0.48,
+                        gy * 2.10 + cos(migrate * 0.83 + flockSeed * 9.0) * 0.36);
+float ax = abs(wingX);
+float wingMask = 1.0 - smoothstep(0.72, 1.18, abs(wingY) + ax * 0.38);
+float bodyMask = exp(-pow(wingX / 0.075, 2.0)) * (1.0 - smoothstep(0.62, 1.0, abs(wingY)));
+float flap = sin(t * (0.72 + flockSeed * 0.35) + flockIndex * 1.7) * (0.34 + uMid * 0.42 + uBeat * 0.16);
+float lx = sign(wingX) * (0.12 + pow(ax, 0.76) * 0.88);
+float ly = wingY * (0.48 + (1.0 - ax) * 0.22);
+float lz = ax * (0.42 + flap) + (1.0 - abs(wingY)) * 0.08;
+float heading = -0.20 + (flockSeed - 0.5) * 0.70;
+float ch = cos(heading), sh = sin(heading);
+vec2 folded = mat2(ch, -sh, sh, ch) * vec2(lx, ly);
+pos = vec3(flockCenter + folded, (flockSeed - 0.5) * 3.4 + lz);
+
+vec3 prismLeft = vec3(0.42, 0.94, 0.82);
+vec3 prismRight = vec3(0.96, 0.62, 0.92);
+vec3 prism = mix(prismLeft, prismRight, smoothstep(-0.8, 0.8, wingX));
+prism = mix(prism, vec3(1.0, 0.91, 0.64), smoothstep(0.72, 1.0, ax));
+vColor = mix(coverColor * 0.78, prism, 0.60 + wingMask * 0.18);
+vAlpha = wingMask * (0.22 + (1.0 - ax) * 0.42 + uTreble * 0.16) + bodyMask * 0.68;
+maxRippleAmp = max(maxRippleAmp, wingMask * (0.07 + abs(flap) * 0.12) + bodyMask * uBass * 0.12);
+  }
+
+  // ====================================================
+  //  Preset 12: ABYSSAL BLOOM — bioluminescent tide crown
+  // ====================================================
+  else {
+float bloomR = pow(aUv.y, 0.72);
+float bloomTheta = aUv.x * 2.0 * PI + bloomR * 0.72 + t * 0.018;
+float petalWave = 0.5 + 0.5 * cos(bloomTheta * 9.0 - bloomR * 3.8);
+float bloomDrive = smoothstep(0.06, 0.74, uBass) * 0.26 + uBeat * 0.10;
+float radiusBloom = bloomR * (3.30 + bloomDrive) * (0.78 + petalWave * 0.34);
+float petalFold = sin(bloomTheta * 9.0 - bloomR * 5.4 + t * 0.13);
+float bowl = (1.0 - bloomR) * 1.12 - bloomR * bloomR * 0.52;
+pos.x = cos(bloomTheta) * radiusBloom;
+pos.y = sin(bloomTheta) * radiusBloom * 0.82;
+pos.z = bowl + petalFold * (0.13 + bloomR * 0.47) + sin(bloomTheta * 3.0 + t * 0.07) * 0.08;
+float bloomTilt = -0.30;
+float cb = cos(bloomTilt), sb = sin(bloomTilt);
+pos.yz = mat2(cb, -sb, sb, cb) * pos.yz;
+
+vec3 abyss = vec3(0.12, 0.58, 0.56);
+vec3 violet = vec3(0.38, 0.32, 0.95);
+vec3 pearl = vec3(0.82, 1.0, 0.94);
+vec3 bloomColor = mix(abyss, violet, smoothstep(0.18, 0.88, bloomR + petalWave * 0.10));
+float luminousEdge = smoothstep(0.64, 0.98, bloomR) * (0.55 + petalWave * 0.45);
+bloomColor = mix(bloomColor, pearl, luminousEdge * (0.32 + uTreble * 0.22));
+vColor = mix(coverColor * 0.72, bloomColor, 0.68);
+float filament = pow(0.5 + 0.5 * sin(bloomTheta * 18.0 + bloomR * 19.0 - t * 0.26), 7.0);
+vAlpha = (0.16 + petalWave * 0.31 + filament * 0.26 + luminousEdge * 0.30) * smoothstep(0.01, 0.10, bloomR);
+maxRippleAmp = max(maxRippleAmp, petalWave * bloomDrive * 0.18 + filament * uTreble * 0.17 + luminousEdge * uMid * 0.09);
   }
 
   // ====================================================
@@ -7688,6 +7854,8 @@ function readSavedLyricLayout() {
       shelfOpacity: clampRange(raw.shelfOpacity == null ? fxDefaults.shelfOpacity : Number(raw.shelfOpacity), 0.25, 1),
       shelfBgOpacity: clampRange(raw.shelfBgOpacity == null ? fxDefaults.shelfBgOpacity : Number(raw.shelfBgOpacity), 0.25, 0.98),
       shelfAccentColor: normalizeHexColor(raw.shelfAccentColor || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor),
+      gesturePlayerActions: raw.gesturePlayerActions !== false, gestureHandOverlay: raw.gestureHandOverlay !== false,
+      gestureSensitivity: normalizeGestureSensitivity(raw.gestureSensitivity),
       cam: /^(off|gesture)$/.test(String(raw.cam || '')) ? raw.cam : fxDefaults.cam
     };
     var classicShelfFx = normalizeClassicShelfFx(raw);
@@ -7807,6 +7975,8 @@ function saveLyricLayout() {
       shelfOpacity: clampRange(fx.shelfOpacity == null ? fxDefaults.shelfOpacity : Number(fx.shelfOpacity), 0.25, 1),
       shelfBgOpacity: clampRange(fx.shelfBgOpacity == null ? fxDefaults.shelfBgOpacity : Number(fx.shelfBgOpacity), 0.25, 0.98),
       shelfAccentColor: normalizeHexColor(fx.shelfAccentColor || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor),
+      gesturePlayerActions: fx.gesturePlayerActions !== false, gestureHandOverlay: fx.gestureHandOverlay !== false,
+      gestureSensitivity: normalizeGestureSensitivity(fx.gestureSensitivity),
       cam: /^(off|gesture)$/.test(String(fx.cam || '')) ? fx.cam : fxDefaults.cam
     };
     var classicShelfFxSave = normalizeClassicShelfFx(fx);
@@ -30947,6 +31117,7 @@ function ttmlClockToMs(value) {
  * @returns {Array<object>} 标准化歌词行。
  */
 function parseTtmlText(text) {
+  if (typeof parseTtmlRichLyrics === 'function') { var rich = parseTtmlRichLyrics(text); if (rich) return rich; }
   var raw = String(text || '');
   var lines = [];
   var pRe = /<p\b([^>]*)>([\s\S]*?)<\/p\s*>/gi, pm;
@@ -38730,6 +38901,10 @@ var presetMeta = [
   // 7 与 8 是同一件作品的两条实现: 7 是 Ajin 的 three.js 重写, 8 是 CmzYa 的 Wallpaper Engine 原作。
   { name: '音域回响', nameHtml: '音域回响 <span class="pc-name-en">Sonic-Topography</span>', desc: '移植 Ajin', descHtml: '移植 <span class="pc-author-ajin">Ajin</span>' },
   { name: '音域回响', nameHtml: '音域回响 <span class="pc-name-en">Wallpaper Engine</span>', desc: '原作 CmzYa', descHtml: '原作 <span class="pc-author-cmzya">CmzYa</span>' },
+  { name: '月蚀圣环', nameHtml: '月蚀圣环 <span class="pc-name-en">ECLIPSE HALO</span>', desc: '黑曜轨道 · 冷金日冕', premiumVisual: true, accent: '#e8c98d', accent2: '#8fd8ff' },
+  { name: '雨幕霓虹', nameHtml: '雨幕霓虹 <span class="pc-name-en">NEON DRIZZLE</span>', desc: '城市雨丝 · 色谱残光', premiumVisual: true, accent: '#67efff', accent2: '#ff6bb5' },
+  { name: '折光蝶群', nameHtml: '折光蝶群 <span class="pc-name-en">PRISM FLOCK</span>', desc: '折纸翼阵 · 光谱迁徙', premiumVisual: true, accent: '#f0d7ff', accent2: '#75e6d1' },
+  { name: '深海绽放', nameHtml: '深海绽放 <span class="pc-name-en">ABYSSAL BLOOM</span>', desc: '生物荧光 · 潮汐花冠', premiumVisual: true, accent: '#75f0d0', accent2: '#8178ff' },
 ];
 var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 14c3-2 5-2 8 0s5 2 8 0M3 10c3-2 5-2 8 0s5 2 8 0M3 18c3-2 5-2 8 0s5 2 8 0"/></svg>',
@@ -38741,8 +38916,12 @@ var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.2h4v6.2h4.2v3.8H14v7.6h-4v-7.6H5.8V9.4H10z"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 12.4V7.6"/><path d="M9 12.4V9.8"/><path d="M15 12.4V9.1"/><path d="M6.5 15.1a7.2 7.2 0 0 1 11 0"/><path d="M3.5 18a11 11 0 0 1 17 0"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M5 15c1.4-4 2.8-4 4.2 0s2.8 4 4.2 0 2.8-4 4.6 0"/><path d="M4 10c2-2 4-2 6 0s4 2 6 0 3-2 4 0"/><path d="M7 6h10"/><circle cx="18.2" cy="5.8" r="1.35" fill="currentColor"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.45"><ellipse cx="12" cy="12" rx="9" ry="3.8" transform="rotate(-18 12 12)"/><ellipse cx="12" cy="12" rx="6.3" ry="2.2" transform="rotate(24 12 12)"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"><path d="M5 3v8M9 2v15M13 5v8M17 2v18M21 6v9"/><path d="M4 19c4-3 8 3 16-1" opacity=".7"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"><path d="M12 12 3 6l3 9 6-3 6 3 3-9-9 6Z"/><path d="M12 12V4M6 15l3 4 3-7 3 7 3-4"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"><path d="M12 20c-1-5-7-5-7-10 4 0 6 2 7 5 1-3 3-5 7-5 0 5-6 5-7 10Z"/><path d="M12 15c-3-3-2-7 0-11 2 4 3 8 0 11Z"/><circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none"/></svg>',
 ];
-var presetDisplayOrder = [0, 7, 8, 6, 5, 4, 2, 1, 3];
+var presetDisplayOrder = [0, 9, 10, 11, 12, 7, 8, 6, 5, 4, 2, 1, 3];
 var lyricColorPresets = [
   { name:'雾蓝', color:'#a9b8c8' },
   { name:'银蓝', color:'#9db8cf' },
@@ -38874,6 +39053,8 @@ function normalizeFxArchiveSnapshot(raw) {
     shelfOpacity: archiveNumber(raw, 'shelfOpacity', fxDefaults.shelfOpacity, 0.25, 1),
     shelfBgOpacity: archiveNumber(raw, 'shelfBgOpacity', fxDefaults.shelfBgOpacity, 0.25, 0.98),
     shelfAccentColor: normalizeHexColor(raw.shelfAccentColor || fxDefaults.shelfAccentColor, fxDefaults.shelfAccentColor),
+    gesturePlayerActions: raw.gesturePlayerActions !== false, gestureHandOverlay: raw.gestureHandOverlay !== false,
+    gestureSensitivity: normalizeGestureSensitivity(raw.gestureSensitivity),
     cam: archiveMode(raw, 'cam', /^(off|gesture)$/, fxDefaults.cam)
   };
   classicShelfFxRanges();
@@ -39866,23 +40047,27 @@ function buildPresetGrid() {
   var grid = document.getElementById('preset-grid');
   if (!grid) return;
   var seen = {};
-  var order = presetDisplayOrder.filter(function(id){
+  var order = presetDisplayOrder.filter(function (id) {
     var ok = id >= 0 && id < presetMeta.length && !seen[id];
     seen[id] = true;
     return ok;
   });
-  presetMeta.forEach(function(_, id){
+  presetMeta.forEach(function (_, id) {
     if (!seen[id]) order.push(id);
   });
-  grid.innerHTML = order.map(function(i){
+  grid.innerHTML = order.map(function (i) {
     var p = presetMeta[i];
-    var desc = p.descHtml || p.desc;
     var name = p.nameHtml || p.name;
-    return '<div class="preset-card" data-preset="' + i + '" onclick="setPreset(' + i + ')">' +
+    var desc = p.descHtml || p.desc;
+    var cardClass = p.premiumVisual ? ' preset-card-premium' : '';
+    var cardStyle = p.premiumVisual
+      ? ' style="--preset-accent:' + p.accent + ';--preset-accent-2:' + p.accent2 + '"'
+      : '';
+    return '<div class="preset-card' + cardClass + '" data-preset="' + i + '"' + cardStyle + ' onclick="setPreset(' + i + ')">' +
       '<div class="pc-icon">' + presetIcons[i] + '</div>' +
       '<div class="pc-name">' + name + '</div>' +
       '<div class="pc-desc">' + desc + '</div>' +
-    '</div>';
+      '</div>';
   }).join('');
   refreshPresetGrid();
 }
@@ -39960,6 +40145,10 @@ function setPreset(p, opts) {
     else if (p === 3) { orbit.userRadius = 8.0; orbit.userPhi = 0.05; orbit.userTheta = 0.0; orbit.baselineRadius = 8.0; orbit.baselinePhi = 0.05; }
     else if (p === 4) { orbit.userRadius = 6.5; orbit.userPhi = 0.04; orbit.userTheta = 0.0; orbit.baselineRadius = 6.5; orbit.baselinePhi = 0.04; }
     else if (p === 5) { orbit.userRadius = 9.4; orbit.userPhi = 0.34; orbit.userTheta = -0.52; orbit.baselineRadius = 9.4; orbit.baselinePhi = 0.34; }
+    else if (p === 9) { orbit.userRadius = 7.4; orbit.userPhi = 0.12; orbit.userTheta = -0.08; orbit.baselineRadius = 7.4; orbit.baselinePhi = 0.12; }
+    else if (p === 10) { orbit.userRadius = 7.15; orbit.userPhi = 0.02; orbit.userTheta = 0; orbit.baselineRadius = 7.15; orbit.baselinePhi = 0.02; }
+    else if (p === 11) { orbit.userRadius = 7.0; orbit.userPhi = 0.11; orbit.userTheta = 0.1; orbit.baselineRadius = 7.0; orbit.baselinePhi = 0.11; }
+    else if (p === 12) { orbit.userRadius = 7.35; orbit.userPhi = 0.18; orbit.userTheta = -0.12; orbit.baselineRadius = 7.35; orbit.baselinePhi = 0.18; }
     else if (p === 6) { orbit.userRadius = 7.4; orbit.userPhi = 0.10; orbit.userTheta = 0.18; orbit.baselineRadius = 7.4; orbit.baselinePhi = 0.10; }
     else if (p === 7) { orbit.userRadius = 8.4; orbit.userPhi = 0.18; orbit.userTheta = 0.0; orbit.baselineRadius = 8.4; orbit.baselinePhi = 0.18; }
     else              { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
@@ -40187,6 +40376,7 @@ function setPerformanceQualityMode(mode, silent) {
   }
 }
 function updateFxInputs() {
+  applyGestureSettingsUi();
   normalizeDevelopmentLockedFxState();
   applyShelfCameraDefaultAngle(false);
   setRange('fx-intensity', fx.intensity);
@@ -44011,416 +44201,7 @@ function loadScriptOnce(src) {
 //   - 捏合 = 拖动旋转封面 (Y 反向修正)
 //   - 没有挥扫 / 没有手势切歌
 // ============================================================
-function startHeadTracking(){}     // stub: 兼容旧调用
-function stopHeadTracking(){}      // stub
-
-var gestureVideo = null, gestureCamera = null, gestureHands = null;
-var gestureActive = false;
-// 21 个关键点的平滑缓存 (EMA): [{x,y}, ...]
-var handLmSmooth = null;
-var handLmLastSeen = 0;
-// 捏合状态
-var pinchState = { active:false, lastX:0, lastY:0, lastT:0 };
-// 物理旋转: 给 particles 一个角速度, 每帧衰减
-var particleSpin = { vx: 0, vy: 0, damping: 0.90 };
-// 手势驱动的总旋转 (累计角度), 输出到 particles
-var gestureRotation = { x: 0, y: 0 };
-var gestureGrip = { value: 0, target: 0, openness: 1, lastState: 'open', pulse: 0 };
-var PARTICLE_POINTER_SPIN_X = 0.0032;
-var PARTICLE_POINTER_SPIN_Y = 0.0034;
-var PARTICLE_HAND_SPIN_X = 4.15;
-var PARTICLE_HAND_SPIN_Y = 4.30;
-var PARTICLE_SPIN_MAX = 6.2;
-
-function clampParticleSpinVelocity(v) {
-  if (!isFinite(v)) return 0;
-  return Math.max(-PARTICLE_SPIN_MAX, Math.min(PARTICLE_SPIN_MAX, v));
-}
-
-function applyParticleSpinDrag(dx, dy, dt) {
-  var rx = dy * PARTICLE_POINTER_SPIN_X;
-  var ry = dx * PARTICLE_POINTER_SPIN_Y;
-  gestureRotation.x += rx;
-  gestureRotation.y += ry;
-  if (dt > 0) {
-    particleSpin.vx = clampParticleSpinVelocity(rx / dt * 0.46);
-    particleSpin.vy = clampParticleSpinVelocity(ry / dt * 0.46);
-  }
-}
-
-function resetParticleRotationTarget(syncVisual) {
-  gestureRotation.x = 0;
-  gestureRotation.y = 0;
-  particleSpin.vx = 0;
-  particleSpin.vy = 0;
-  if (syncVisual && particles) {
-    particles.rotation.set(0, 0, 0);
-    if (bloomParticles) bloomParticles.rotation.set(0, 0, 0);
-    if (floatGroup) floatGroup.rotation.set(0, 0, 0);
-    if (backCoverGroup) backCoverGroup.rotation.set(0, 0, 0);
-  }
-}
-
-function rebaseParticleRotationAxis(axis) {
-  var limit = Math.PI * 10;
-  if (Math.abs(gestureRotation[axis]) < limit) return;
-  var offset = Math.round(gestureRotation[axis] / (Math.PI * 2)) * Math.PI * 2;
-  gestureRotation[axis] -= offset;
-  if (particles) particles.rotation[axis] -= offset;
-  if (bloomParticles) bloomParticles.rotation[axis] -= offset;
-  if (floatGroup) floatGroup.rotation[axis] -= offset;
-  if (backCoverGroup) backCoverGroup.rotation[axis] -= offset;
-  if (skullParticleGroup) skullParticleGroup.rotation[axis] -= offset;
-  if (stageLyrics.group) stageLyrics.group.rotation[axis] -= offset;
-}
-
-function rebaseParticleRotationIfNeeded() {
-  rebaseParticleRotationAxis('x');
-  rebaseParticleRotationAxis('y');
-}
-// 手骨架 canvas
-var handCanvas = null, handCanvasCtx = null;
-// 平滑系数 (越小越平滑, 但反应越慢)
-var HAND_SMOOTH_ALPHA = 0.35;
-var handPalmScratch = { x: 0, y: 0 };
-var HAND_OPENNESS_TIPS = [8, 12, 16, 20];
-var HAND_SKELETON_TIPS = [4, 8, 12, 16, 20];
-
-async function startGestureControl() {
-  if (gestureActive) return;
-  showToast('正在加载手势识别…');
-  try {
-    await loadScriptOnce('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
-    await loadScriptOnce('https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js');
-    gestureVideo = document.createElement('video');
-    gestureVideo.playsInline = true; gestureVideo.muted = true;
-    gestureVideo.style.display = 'none';
-    document.body.appendChild(gestureVideo);
-    gestureHands = new Hands({ locateFile: function(f){ return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' + f; } });
-    // modelComplexity:1 比 0 更稳定, 但仍流畅. 提高 confidence 减少误检
-    gestureHands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
-    gestureHands.onResults(function(res){
-      if (!gestureActive) return;
-      var lm = res.multiHandLandmarks && res.multiHandLandmarks[0];
-      if (!lm) { onHandLost(); return; }
-      processHandFrame(lm);
-    });
-    gestureCamera = new Camera(gestureVideo, { onFrame: async function(){ if (gestureHands) await gestureHands.send({ image: gestureVideo }); }, width: 480, height: 360 });
-    await gestureCamera.start();
-    gestureActive = true;
-    // 准备 hand canvas
-    handCanvas = document.getElementById('hand-canvas');
-    handCanvasCtx = handCanvas.getContext('2d');
-    resizeHandCanvas();
-    handCanvas.classList.add('show');
-    showToast('手势已开启: 手掌推开 · 捏合旋转 · 握拳收束');
-    showGestureHUD('待命', 0, '把手放进视野');
-  } catch (e) {
-    console.warn('Gesture failed:', e);
-    showToast('手势启动失败 (需要摄像头权限)');
-    fx.cam = 'off';
-    document.querySelectorAll('#cam-seg button').forEach(function(b){ b.classList.toggle('active', b.dataset.cam === 'off'); });
-  }
-}
-
-function stopGestureControl() {
-  if (!gestureActive) return;
-  try { if (gestureCamera && gestureCamera.stop) gestureCamera.stop(); } catch(e){}
-  try { if (gestureVideo && gestureVideo.srcObject) gestureVideo.srcObject.getTracks().forEach(function(t){ t.stop(); }); } catch(e){}
-  try { if (gestureVideo) gestureVideo.remove(); } catch(e){}
-  gestureVideo = null; gestureHands = null; gestureCamera = null;
-  gestureActive = false;
-  pinchState.active = false;
-  handLmSmooth = null;
-  uniforms.uHandActive.value = 0;
-  if (uniforms.uGestureGrip) uniforms.uGestureGrip.value = 0;
-  gestureGrip.value = 0;
-  gestureGrip.target = 0;
-  gestureGrip.openness = 1;
-  document.getElementById('gesture-hud').classList.remove('show');
-  if (handCanvas) {
-    handCanvas.classList.remove('show');
-    if (handCanvasCtx) handCanvasCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-  }
-}
-
-function resizeHandCanvas() {
-  if (!handCanvas) return;
-  if (isFullscreenTransitionCovered()) {
-    deferFullscreenTransitionWork('handCanvas');
-    return;
-  }
-  var dpr = Math.min(devicePixelRatio || 1, 2);
-  handCanvas.width = innerWidth * dpr;
-  handCanvas.height = innerHeight * dpr;
-  handCanvas.style.width = innerWidth + 'px';
-  handCanvas.style.height = innerHeight + 'px';
-  handCanvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-window.addEventListener('resize', resizeHandCanvas);
-
-function onHandLost() {
-  // 平滑淡出, 不立即清零 — 给一点缓冲
-  if (pinchState.active) pinchState.active = false;
-  gestureGrip.target = 0;
-  uniforms.uHandActive.value *= 0.9;
-  if (uniforms.uHandActive.value < 0.02) uniforms.uHandActive.value = 0;
-  if (performance.now() - handLmLastSeen > 600) {
-    handLmSmooth = null;
-    if (handCanvasCtx) handCanvasCtx.clearRect(0, 0, innerWidth, innerHeight);
-    showGestureHUD('待命', 0, '把手放进视野');
-  }
-}
-
-// 把单帧 21 个 landmark 平滑到 handLmSmooth, 镜像 X (摄像头是反的)
-function smoothLandmarks(lm) {
-  if (!handLmSmooth) {
-    handLmSmooth = lm.map(function(p){ return { x: 1 - p.x, y: p.y, z: p.z || 0 }; });
-    return handLmSmooth;
-  }
-  var a = HAND_SMOOTH_ALPHA;
-  for (var i = 0; i < 21; i++) {
-    var srcX = 1 - lm[i].x;
-    handLmSmooth[i].x += (srcX - handLmSmooth[i].x) * a;
-    handLmSmooth[i].y += (lm[i].y - handLmSmooth[i].y) * a;
-    handLmSmooth[i].z += ((lm[i].z || 0) - handLmSmooth[i].z) * a;
-  }
-  return handLmSmooth;
-}
-
-// 手掌中心 ≈ wrist(0) 和 mcp 平均 (5,9,13,17 是各指根)
-function palmCenter(lm, out) {
-  var px = (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5;
-  var py = (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5;
-  var target = out || { x: 0, y: 0 };
-  target.x = px;
-  target.y = py;
-  return target;
-}
-
-function handOpenness(lm, palm) {
-  var span = Math.hypot(lm[5].x - lm[17].x, lm[5].y - lm[17].y);
-  span = Math.max(0.055, span);
-  var tips = HAND_OPENNESS_TIPS;
-  var avg = 0;
-  for (var i = 0; i < tips.length; i++) avg += Math.hypot(lm[tips[i]].x - palm.x, lm[tips[i]].y - palm.y);
-  avg /= tips.length;
-  return clampRange((avg / span - 0.62) / 0.78, 0, 1);
-}
-
-function processHandFrame(rawLm) {
-  handLmLastSeen = performance.now();
-  var lm = smoothLandmarks(rawLm);
-
-  // 推开粒子位置: 手掌中心 (而非单一食指)
-  var palm = palmCenter(lm, handPalmScratch);
-  var openness = handOpenness(lm, palm);
-  gestureGrip.openness += (openness - gestureGrip.openness) * 0.28;
-  var gripTarget = clampRange(1 - openness, 0, 1);
-  gestureGrip.target = gripTarget > 0.55 ? gripTarget : 0;
-  var ndcX = palm.x * 2 - 1;
-  var ndcY = -(palm.y * 2 - 1);
-  var handLocalX = ndcX * PLANE_SIZE * 0.62;
-  var handLocalY = ndcY * PLANE_SIZE * 0.62;
-  if (particleLocalPointFromNdc(ndcX, ndcY, particlePointerLocalHit)) {
-    // 平滑推动 (避免 uHandXY 跳变)
-    handLocalX = particlePointerLocalHit.x;
-    handLocalY = particlePointerLocalHit.y;
-  }
-  var cur = uniforms.uHandXY.value;
-  cur.x += (handLocalX - cur.x) * 0.48;
-  cur.y += (handLocalY - cur.y) * 0.48;
-  var tgtActive = 0.44 + openness * 0.56;
-  uniforms.uHandActive.value += (tgtActive - uniforms.uHandActive.value) * 0.26;
-
-  // 捏合检测 (拇指 4 与食指 8)
-  var pinchDist = Math.hypot(lm[8].x - lm[4].x, lm[8].y - lm[4].y);
-  var isPinch = pinchDist < 0.075 && openness > 0.28;
-  var isFist = !isPinch && gripTarget > 0.68;
-
-  if (isPinch && !pinchState.active) {
-    unlockCenteredView();
-    pinchState.active = true;
-    pinchState.lastX = palm.x;
-    pinchState.lastY = palm.y;
-    pinchState.lastT = performance.now();
-    particleSpin.vx = particleSpin.vy = 0;
-    gestureGrip.target = Math.min(0.34, gestureGrip.target);
-    showGestureHUD('捏合拖动', 1, '移动手掌 -> 旋转封面');
-  } else if (isPinch && pinchState.active) {
-    unlockCenteredView();
-    var dx = palm.x - pinchState.lastX;
-    var dy = palm.y - pinchState.lastY;
-    var nowPinch = performance.now();
-    var pinchDt = Math.max(1 / 120, Math.min(0.08, (nowPinch - pinchState.lastT) / 1000 || 1 / 60));
-    // v8: 方向修正 - 上下手与封面旋转同向
-    var spinY = dx * PARTICLE_HAND_SPIN_Y;
-    var spinX = dy * PARTICLE_HAND_SPIN_X;
-    gestureRotation.y += spinY;
-    gestureRotation.x += spinX;
-    particleSpin.vy = clampParticleSpinVelocity(spinY / pinchDt * 0.48);
-    particleSpin.vx = clampParticleSpinVelocity(spinX / pinchDt * 0.48);
-    pinchState.lastX = palm.x;
-    pinchState.lastY = palm.y;
-    pinchState.lastT = nowPinch;
-    gestureGrip.target = Math.min(0.34, gestureGrip.target);
-    showGestureHUD('拖动中', 1, '松手后保留惯性');
-  } else if (!isPinch && pinchState.active) {
-    pinchState.active = false;
-    showGestureHUD('松开', 0.4, '可继续触碰或捏合');
-  } else if (isFist) {
-    if (gestureGrip.lastState !== 'fist') {
-      gestureGrip.pulse = 1;
-      uniforms.uBurstAmt.value = Math.max(uniforms.uBurstAmt.value, 0.26);
-    }
-    gestureGrip.lastState = 'fist';
-    showGestureHUD('握拳收束', Math.max(0.55, gripTarget), '粒子向中心收缩');
-  } else {
-    if (gestureGrip.lastState === 'fist' && openness > 0.58) {
-      uniforms.uBurstAmt.value = Math.max(uniforms.uBurstAmt.value, 0.18);
-    }
-    gestureGrip.lastState = openness > 0.62 ? 'open' : 'hover';
-    showGestureHUD(openness > 0.62 ? '张开恢复' : '悬停', 0.30 + openness * 0.34, '手掌推开粒子 / 捏合旋转 / 握拳收束');
-  }
-
-  drawHandSkeleton(lm, isPinch, openness, isFist, palm);
-}
-
-// 画手掌骨架: 连线 + 关节圆点
-//   骨架连接表 (MediaPipe 标准)
-var HAND_BONES = [
-  [0,1],[1,2],[2,3],[3,4],        // 拇指
-  [0,5],[5,6],[6,7],[7,8],        // 食指
-  [0,9],[9,10],[10,11],[11,12],   // 中指
-  [0,13],[13,14],[14,15],[15,16], // 无名指
-  [0,17],[17,18],[18,19],[19,20], // 小指
-  [5,9],[9,13],[13,17],           // 掌横连
-];
-function drawHandSkeleton(lm, isPinch, openness, isFist, palm) {
-  if (!handCanvasCtx) return;
-  var ctx = handCanvasCtx;
-  ctx.clearRect(0, 0, innerWidth, innerHeight);
-  var W = innerWidth, H = innerHeight;
-  openness = clampRange(openness == null ? 1 : openness, 0, 1);
-  palm = palm || palmCenter(lm, handPalmScratch);
-  var px = palm.x * W, py = palm.y * H;
-  var primary = isFist ? 'rgba(244,210,138,0.92)' : (isPinch ? 'rgba(156,255,223,0.95)' : 'rgba(226,247,255,0.92)');
-  var soft = isFist ? 'rgba(244,210,138,0.18)' : (isPinch ? 'rgba(156,255,223,0.20)' : 'rgba(143,233,255,0.18)');
-  var coreR = 26 + openness * 34;
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  var aura = ctx.createRadialGradient(px, py, 0, px, py, coreR * 2.15);
-  aura.addColorStop(0, isFist ? 'rgba(244,210,138,0.26)' : 'rgba(255,255,255,0.22)');
-  aura.addColorStop(0.28, soft);
-  aura.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = aura;
-  ctx.beginPath();
-  ctx.arc(px, py, coreR * 2.15, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  var ringR = 34 + openness * 48;
-  for (var r = 0; r < 3; r++) {
-    var alpha = (0.18 - r * 0.045) + (isFist ? 0.08 : 0);
-    ctx.strokeStyle = primary.replace(/0\.\d+\)/, alpha.toFixed(3) + ')');
-    ctx.lineWidth = 1.2 + r * 0.55;
-    ctx.beginPath();
-    ctx.arc(px, py, ringR + r * 13 + Math.sin(uniforms.uTime.value * 1.5 + r) * 2, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  var tips = HAND_SKELETON_TIPS;
-  for (var i = 0; i < tips.length; i++) {
-    var p = lm[tips[i]];
-    var tx = p.x * W, ty = p.y * H;
-    var dx = tx - px, dy = ty - py;
-    var dist = Math.sqrt(dx * dx + dy * dy);
-    var beamAlpha = clampRange(0.26 - dist / 720, 0.045, 0.18) * (0.55 + openness * 0.45);
-    var grad = ctx.createLinearGradient(px, py, tx, ty);
-    grad.addColorStop(0, 'rgba(255,255,255,' + (beamAlpha * 0.20).toFixed(3) + ')');
-    grad.addColorStop(0.65, 'rgba(255,255,255,' + (beamAlpha * 0.42).toFixed(3) + ')');
-    grad.addColorStop(1, primary.replace(/0\.\d+\)/, Math.min(0.72, beamAlpha + 0.14).toFixed(3) + ')'));
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = tips[i] === 8 || tips[i] === 4 ? 1.7 : 1.05;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.quadraticCurveTo(px + dx * 0.42 - dy * 0.05, py + dy * 0.42 + dx * 0.05, tx, ty);
-    ctx.stroke();
-    var dotR = (tips[i] === 8 || tips[i] === 4 ? 4.2 : 3.0) + (isFist ? 0.8 : 0);
-    var dot = ctx.createRadialGradient(tx, ty, 0, tx, ty, dotR * 4.2);
-    dot.addColorStop(0, 'rgba(255,255,255,0.92)');
-    dot.addColorStop(0.32, primary);
-    dot.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = dot;
-    ctx.beginPath();
-    ctx.arc(tx, ty, dotR * 4.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.beginPath();
-  ctx.arc(px, py, isFist ? 7.2 : 5.4, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,' + (isFist ? 0.82 : 0.62).toFixed(3) + ')';
-  ctx.fill();
-
-  if (isPinch) {
-    var t1 = lm[4], t2 = lm[8];
-    ctx.strokeStyle = 'rgba(220,255,241,0.88)';
-    ctx.lineWidth = 2.0;
-    ctx.shadowColor = 'rgba(126,226,168,0.82)';
-    ctx.shadowBlur = 20;
-    ctx.beginPath();
-    ctx.moveTo(t1.x * W, t1.y * H);
-    ctx.lineTo(t2.x * W, t2.y * H);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-/**
- * 推进手势惯性旋转和手部活跃度衰减，并复用主循环当前帧时间。
- * @param {number} dt 当前帧秒数。
- * @param {number=} frameNow 当前帧的 performance.now() 毫秒时间；省略时在手势衰减路径自行读取。
- * @returns {void}
- */
-function tickGestureRotation(dt, frameNow) {
-  if (Math.abs(particleSpin.vx) > 0.0001 || Math.abs(particleSpin.vy) > 0.0001) {
-    var rx = particleSpin.vx * dt;
-    var ry = particleSpin.vy * dt;
-    gestureRotation.x += rx;
-    gestureRotation.y += ry;
-    rebaseParticleRotationIfNeeded();
-  }
-  particleSpin.vx *= Math.pow(particleSpin.damping, dt * 60);
-  particleSpin.vy *= Math.pow(particleSpin.damping, dt * 60);
-  if (Math.abs(particleSpin.vx) < 0.01) particleSpin.vx = 0;
-  if (Math.abs(particleSpin.vy) < 0.01) particleSpin.vy = 0;
-  gestureGrip.value += (gestureGrip.target - gestureGrip.value) * (gestureGrip.target > gestureGrip.value ? 0.18 : 0.10);
-  gestureGrip.pulse *= Math.pow(0.84, dt * 60);
-  if (uniforms.uGestureGrip) uniforms.uGestureGrip.value = clampRange(gestureGrip.value + gestureGrip.pulse * 0.16, 0, 1);
-  // 只有手部追踪超过 200 毫秒没有新结果时才衰减活跃度，避免正常追踪被误判为无手。
-  if (gestureActive && handLmSmooth) {
-    var now = frameNow == null ? performance.now() : frameNow;
-    if (now - handLmLastSeen > 200) {
-      uniforms.uHandActive.value *= 0.94;
-      gestureGrip.target *= 0.92;
-      if (uniforms.uHandActive.value < 0.02) uniforms.uHandActive.value = 0;
-    }
-  }
-}
-
-function showGestureHUD(label, progress, detail) {
-  var hud = document.getElementById('gesture-hud');
-  if (!hud) return;
-  document.getElementById('gesture-label').textContent = label || '待命';
-  document.getElementById('gesture-confirm').textContent = detail || '将手放进摄像头视野';
-  var fill = document.getElementById('gesture-fill');
-  if (fill) fill.style.width = Math.max(0, Math.min(100, (progress || 0) * 100)) + '%';
-  hud.classList.add('show');
-}
-function showGestureCursor(){}  // stub: 兼容旧调用
-function hideGestureCursor(){}  // stub: 兼容旧调用
-
+// Gesture runtime lives in gesture-controls.js.
 
 // ============================================================
 //  Resize / 快捷键
@@ -48027,9 +47808,14 @@ function animate() {
   treble = Math.min(0.62, smoothTreb * 1.20) * fx.intensity;
   if (fx.preset >= 4) {
     var wallpaperAudio = fx.preset === 5;
-    var ringBass = smoothBass * (wallpaperAudio ? 1.10 : 1.58) + beatPulse * (wallpaperAudio ? 0.18 : 0.42) - smoothMid * 0.16 - smoothTreb * 0.06;
-    var ringMid = smoothMid * (wallpaperAudio ? 1.16 : 1.82) - smoothBass * 0.14 - smoothTreb * 0.07;
-    var ringTreble = smoothTreb * (wallpaperAudio ? 1.34 : 2.28) - smoothMid * 0.10 - smoothBass * 0.05;
+    var authoredParticles = fx.preset >= 9 && fx.preset <= 12;
+    var ringBassGain = wallpaperAudio ? 1.10 : (authoredParticles ? 1.32 : 1.58);
+    var ringMidGain = wallpaperAudio ? 1.16 : (authoredParticles ? 1.48 : 1.82);
+    var ringTrebleGain = wallpaperAudio ? 1.34 : (authoredParticles ? 1.72 : 2.28);
+    var ringBeatGain = wallpaperAudio ? 0.18 : (authoredParticles ? 0.31 : 0.42);
+    var ringBass = smoothBass * ringBassGain + beatPulse * ringBeatGain - smoothMid * 0.16 - smoothTreb * 0.06;
+    var ringMid = smoothMid * ringMidGain - smoothBass * 0.14 - smoothTreb * 0.07;
+    var ringTreble = smoothTreb * ringTrebleGain - smoothMid * 0.10 - smoothBass * 0.05;
     bass = Math.pow(clamp01((ringBass - 0.050) / 0.58), 0.72) * fx.intensity;
     mid = Math.pow(clamp01((ringMid - 0.045) / 0.46), 0.78) * fx.intensity;
     treble = Math.pow(clamp01((ringTreble - 0.030) / 0.34), 0.84) * fx.intensity;

@@ -62,8 +62,6 @@ const FoliumSubtitleOverlay: React.FC<VisualizerSharedProps> = (props) => {
             subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
             isPlayerChromeHidden={isPlayerChromeHidden}
             hideTranslationSubtitle={hideTranslationSubtitle}
-            showSubtitleTranslation={showSubtitleTranslation}
-            subtitleContentMode={subtitleContentMode}
         />
     );
 };

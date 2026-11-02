@@ -66,6 +66,8 @@ export interface VisualizerSharedProps {
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;
     subtitleContentMode?: SubtitleContentMode;
+    subtitleOverlayLayout?: import('../../types').SubtitleOverlayLayout;
+    onVisualizerTuningChange?: (patch: object) => void;
     paused?: boolean;
     onBack?: () => void;
     isPanelOpen?: boolean;
@@ -98,7 +100,9 @@ export interface VisualizerSharedProps {
     onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
 }
 
-export interface VisualizerSettingsPanelProps {
+export interface VisualizerSettingsPanelProps<T = any> {
+    tuning?: T;
+    onTuningChange: (patch: Partial<T>) => void;
     t: (key: string) => string;
     isDaylight: boolean;
     theme: Theme;
@@ -177,7 +181,15 @@ export interface VisualizerRegistryEntry {
     labelFallback: string;
     previewSeed: string;
     previewStartOffset: number;
-    tuningKind: VisualizerTuningKind;
+    tuningKind?: VisualizerTuningKind;
+    glyph?: React.ReactNode;
+    command?: { title: string; description: string; keywords: string[] };
+    background?: false | ((props: VisualizerSharedProps) => VisualizerBackgroundConfig | undefined);
+    beatEffects?: readonly unknown[];
+    prewarmWhenIdle?: boolean;
+    prewarm?: () => void;
+    ownFontSizeNoticeKey?: string;
+    renderQuickControls?: (props: VisualizerQuickControlsProps) => React.ReactNode;
     /*
      * 各模式的 entry.tsx 把真正的 renderer 包成 React.lazy —— registry 用 eager glob 发现
      * entry，如果 entry 静态 import renderer，任何碰 visualizer 设置的模块都会连带拉进 13 个
@@ -216,3 +228,5 @@ export interface VisualizerEntryModule {
 }
 
 export const defineVisualizer = (entry: VisualizerRegistryEntry) => entry;
+
+export interface VisualizerQuickControlsProps<T = any> { t: (key: string) => string; isDaylight: boolean; theme: Theme; tuning: T; onTuningChange: (patch: Partial<T>) => void; settings?: object; onClosePanel?: () => void; }

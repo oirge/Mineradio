@@ -770,6 +770,8 @@ declare global {
 
   interface Window {
     electron?: {
+      getBeatThisGpuWeights?: (model?: 'beat_this') => Promise<{ weights: Uint8Array<ArrayBuffer>; manifest: object } | null>;
+      getHtdemucsGpuWeights?: () => Promise<{ weights: Uint8Array<ArrayBuffer>; manifest: object } | null>;
       webUtils?: {
         /** Resolves the OS path of a dropped File (File.path was removed in modern Electron). */
         getPathForFile: (file: File) => string;

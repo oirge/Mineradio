@@ -1,3 +1,10 @@
+## 2026-11-02：v2.6.0 上游视觉功能同步
+
+用户已授权补齐全部七类功能并发布。工作分支 `feat/sync-upstream-visual-controls`，基线 `4c78972`。
+新增功能和来源见 CHANGELOG.md 与 RELEASE.md 顶部。Folia 仍为独立嵌入界面，共享主播放器音频。
+Node 1577 项中 1576 通过、1 可选基准跳过；Folia 类型检查和定向 53 项通过。浏览器验收与正式发布完成后继续补录。
+新控件中英文已补齐。手势模块从 app.js 拆出；TTML 和声由 lyric-vocals.js 保留；WE 参数经 preload / bridge / runtime 传入 helper。
+
 # Mineradio AI Handoff
 
 ## 2026-10-31 启动加载画面隐藏 Folia 切换按钮（v2.5.5 已正式发布）

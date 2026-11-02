@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`swiss-franc`,size:24,node:[[`path`,{d:`M10 21V3h8`,key:`br2l0g`}],[`path`,{d:`M6 16h9`,key:`2py0wn`}],[`path`,{d:`M10 9.5h7`,key:`13dmhz`}]]};r.node;var i=t(r);export{n,i as t};

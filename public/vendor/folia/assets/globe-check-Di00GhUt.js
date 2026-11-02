@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`globe-check`,size:24,node:[[`path`,{d:`m15 6 2 2 4-4`,key:`levio8`}],[`path`,{d:`M2 12h20A10 10 0 1 1 12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 4-10`,key:`46evmv`}]]};r.node;var i=t(r);export{n,i as t};

@@ -1,22 +1,11 @@
 import type { Filter, Texture, UniformGroup } from 'pixi.js';
+import { PIXI_FILTER_VERTEX } from '../../../visualizer/pixiFilterVertex';
 
 // src/components/app/lattice/lyrics/latticeLyricFilters.ts
 type Pixi = typeof import('pixi.js');
 
 /** Filter vertex stage (Pixi filter conventions): used by the whole-stage edge fade only. */
-const filterVertex = `
-in vec2 aPosition;
-out vec2 vTextureCoord;
-uniform vec4 uInputSize;
-uniform vec4 uOutputFrame;
-uniform vec4 uOutputTexture;
-void main() {
-    vec2 position = aPosition * uOutputFrame.zw + uOutputFrame.xy;
-    position.x = position.x * (2.0 / uOutputTexture.x) - 1.0;
-    position.y = position.y * (2.0 * uOutputTexture.z / uOutputTexture.y) - uOutputTexture.z;
-    gl_Position = vec4(position, 0.0, 1.0);
-    vTextureCoord = aPosition * (uOutputFrame.zw * uInputSize.zw);
-}`;
+const filterVertex = PIXI_FILTER_VERTEX;
 const fade = `
 in vec2 vTextureCoord;
 out vec4 finalColor;

@@ -703,6 +703,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
         subtitleUpcomingLyricsBlur,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        subtitleOverlayLayout,
         showSubtitleTranslation = true,
         subtitleContentMode,
     } = props;
@@ -930,7 +931,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                 </AnimatePresence>
             </motion.div>
 
-            <VisualizerSubtitleOverlay
+            <VisualizerSubtitleOverlay subtitleOverlayLayout={subtitleOverlayLayout}
                 showText={showText}
                 activeLine={activeLine}
                 recentCompletedLine={recentCompletedLine}
@@ -945,8 +946,6 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                 subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
-                showSubtitleTranslation={showSubtitleTranslation}
-                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

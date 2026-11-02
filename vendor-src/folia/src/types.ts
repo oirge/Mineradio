@@ -1417,3 +1417,49 @@ export interface AudioBands {
     treble: MotionValue<number>;  // 3500Hz+ (Crosses)
     spectrum?: MotionValue<Uint8Array<ArrayBuffer>>; // Raw analyser FFT magnitude bins for full-spectrum visualizers
   }
+
+export type SubtitleOverlayRowSource = 'current' | 'next' | 'translation' | 'romanization';
+export type SubtitleOverlayFollowRow = Exclude<SubtitleOverlayRowSource, 'current'>;
+// The shared bottom subtitle overlay's rows, top to bottom, joined with '+' (stored and carried as this string).
+// One row is the current line, its translation or its romanization; two or three rows open with the current line,
+// and each row after it is the next line, the translation or the romanization.
+export type SubtitleOverlayLayout =
+  | Exclude<SubtitleOverlayRowSource, 'next'>
+  | `current+${SubtitleOverlayFollowRow}`
+  | `current+${SubtitleOverlayFollowRow}+${SubtitleOverlayFollowRow}`;
+
+
+export interface BeatEffectSetting {
+  on: boolean;
+  strength: number;
+  /**
+   * An effect made of parts, each with its own slider (BeatEffectDef `parts`, 雾笺's 疏雨轻车): their
+   * strengths by part key, 0..2, a part never touched at 1. `strength` is then unused.
+   */
+  parts?: Record<string, number>;
+}
+
+/**
+ * 智能动感模式's three settings (2026-10-17, the user's 全开 / 半开 / 不开):
+ * - `on`: the effects play, and a track with nothing stored is analysed now on the GPU.
+ * - `cached`: the effects play from what is already stored - a track analysed before under `on`, or
+ *   whose beats automix analysed - and nothing is ever started for them: no model run, no decode, no
+ *   stream read. A track with nothing stored keeps its original picture. Runs already in flight
+ *   elsewhere (automix's) are waited for and used, as they cost nothing more. Automix itself is not
+ *   changed by this setting.
+ * - `off`: every picture exactly as it was; nothing read, nothing run.
+ */
+export type SmartBeatMode = 'off' | 'cached' | 'on';
+
+/**
+ * 智能动感模式, one setting for every visualizer and background that draws beat FX, and each effect's
+ * own setting. The effects a picture has are declared on its registry entry (`beatEffects`), each
+ * reading beat_this' beats or htdemucs' drum hits (src/services/beatFx). An effect with nothing
+ * stored plays at strength 1. Read `mode` through `smartBeatActive` / `smartBeatMayAnalyse`
+ * (services/beatFx/beatEffects.ts), never by comparing it in place.
+ */
+export interface SmartBeatSettings {
+  mode: SmartBeatMode;
+  /** Keyed by effect id (`sonnet.lensTear`); only the effects the user has touched. */
+  effects: Readonly<Record<string, BeatEffectSetting>>;
+}

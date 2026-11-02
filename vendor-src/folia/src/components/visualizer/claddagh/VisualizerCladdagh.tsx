@@ -786,6 +786,7 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
         subtitleOverlayBackground,
         subtitleUpcomingLyricsBlur,
         hideTranslationSubtitle,
+        subtitleOverlayLayout,
         showSubtitleTranslation,
         subtitleContentMode,
         audioPower,
@@ -1061,7 +1062,7 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
             </motion.div>
 
             {showText && (
-                <VisualizerSubtitleOverlay
+                <VisualizerSubtitleOverlay subtitleOverlayLayout={subtitleOverlayLayout}
                     showText={showText}
                     activeLine={activeLine}
                     recentCompletedLine={recentCompletedLine}
@@ -1075,8 +1076,6 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
                     subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                     subtitleFontScale={subtitleFontScale}
                     hideTranslationSubtitle={hideTranslationSubtitle}
-                    showSubtitleTranslation={showSubtitleTranslation}
-                    subtitleContentMode={subtitleContentMode}
                 />
             )}
         </VisualizerShell>

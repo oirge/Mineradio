@@ -41,6 +41,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         songAlbum,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        subtitleOverlayLayout,
         showSubtitleTranslation = true,
         subtitleContentMode,
         subtitleTheme,
@@ -206,7 +207,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                 )}
             </div>
 
-            <VisualizerSubtitleOverlay
+            <VisualizerSubtitleOverlay subtitleOverlayLayout={subtitleOverlayLayout}
                 showText={showText}
                 activeLine={activeLine}
                 recentCompletedLine={creditsRecentCompletedLine}
@@ -221,8 +222,6 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                 subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
-                showSubtitleTranslation={showSubtitleTranslation}
-                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

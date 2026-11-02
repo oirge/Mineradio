@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`square-equal`,size:24,node:[[`rect`,{width:`18`,height:`18`,x:`3`,y:`3`,rx:`2`,key:`afitv7`}],[`path`,{d:`M7 10h10`,key:`1101jm`}],[`path`,{d:`M7 14h10`,key:`1mhdw3`}]],aliases:[`equal-square`]};r.node;var i=t(r);export{n,i as t};

@@ -78,9 +78,12 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复启动加载 Folia 时右上角提前露出 Folia / Mineradio 切换按钮的问题，加载画面只保留加载提示。',
-  '界面模式与按钮文字恢复完成后切换按钮照常出现，桌面标题栏和全屏浮动入口都适用。',
-  'Folia 加载失败时仍可正常切回 Mineradio 并重试，不会因为本次隐藏而失去恢复入口。',
+  'Folia 新增花火、雾笺、町景，歌词效果扩展至 17 种，并带入雾笺性能优化。',
+  '支持底部单行、双行、三行字幕和 Lattice 和声字幕。',
+  '新增自选随机池、每首歌随机样式、不连续重复、手动重抽及歌词与背景实时预览。',
+  '新增月蚀圣环、雨幕霓虹、折光蝶群、深海绽放四个粒子预设。',
+  '扩展播放、收藏、歌词、音量、切歌手势，支持灵敏度、动作冷却和推理防重入。',
+  '支持 Wallpaper Engine 原生画面的透明度、位置和缩放调整。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

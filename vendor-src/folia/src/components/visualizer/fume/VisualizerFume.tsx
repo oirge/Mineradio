@@ -60,6 +60,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         subtitleUpcomingLyricsBlur,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        subtitleOverlayLayout,
         showSubtitleTranslation = true,
         subtitleContentMode,
         paused = false,
@@ -375,7 +376,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                 )}
             </div>
 
-            <VisualizerSubtitleOverlay
+            <VisualizerSubtitleOverlay subtitleOverlayLayout={subtitleOverlayLayout}
                 showText={showText}
                 activeLine={runtime.activeLine}
                 recentCompletedLine={runtime.recentCompletedLine}
@@ -390,8 +391,6 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                 subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
-                showSubtitleTranslation={showSubtitleTranslation}
-                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

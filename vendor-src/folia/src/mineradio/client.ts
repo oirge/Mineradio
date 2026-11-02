@@ -54,6 +54,8 @@ export interface HostLyrics {
         endTime?: number;
         text: string;
         translation?: string;
+        romanization?: string;
+        backgroundVocals?: import('../types').LyricBackgroundVocal[];
         words?: Array<{ time: number; duration: number; text: string }>;
     }>;
 }

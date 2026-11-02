@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`git-commit-vertical`,size:24,node:[[`path`,{d:`M12 3v6`,key:`1holv5`}],[`circle`,{cx:`12`,cy:`12`,r:`3`,key:`1v7zrd`}],[`path`,{d:`M12 15v6`,key:`a9ows0`}]]};r.node;var i=t(r);export{n,i as t};

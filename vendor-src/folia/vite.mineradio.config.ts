@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { nebbiaStrokesPlugin } from './dev/nebbia/nebbiaStrokesPlugin.mjs';
 
 // vite.mineradio.config.ts
 // Package only the local player and visualizer components; never Folia's application shell.
@@ -26,6 +27,7 @@ export default defineConfig({
         },
     }] },
     plugins: [
+        nebbiaStrokesPlugin(),
         {
             name: 'mineradio-visual-asset-cache',
             enforce: 'pre',
@@ -80,6 +82,7 @@ export default defineConfig({
         },
     ],
     resolve: { alias: [
+        { find: /^(?:.*\/)?services\/(?:beatFx\/beatFxLive|analysis\/(?:drumHits|vocalEnvelope))(?:\.ts)?$/, replacement: path.join(root, 'src/mineradio/local/localAnalysisBoundary.ts') },
         { find: /^(?:.*\/)?stores\/useLatticeSettingsStore(?:\.ts)?$/, replacement: path.join(root, 'src/mineradio/local/useLocalLatticeSettingsStore.ts') },
         { find: /^(?:.*\/)?services\/ponder\/loopShuffleHint(?:\.ts)?$/, replacement: path.join(root, 'src/mineradio/local/localPlayerHints.ts') },
         { find: /^(?:.*\/)?LatticeExtraControls(?:\.tsx)?$/, replacement: path.join(root, 'src/mineradio/local/LocalLatticeExtraControls.tsx') },

@@ -1534,6 +1534,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
         subtitleUpcomingLyricsBlur,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        subtitleOverlayLayout,
         showSubtitleTranslation = true,
         subtitleContentMode,
         cappellaTuning = DEFAULT_CAPPELLA_TUNING,
@@ -1708,7 +1709,7 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
                 }
             `}</style>
 
-            <VisualizerSubtitleOverlay
+            <VisualizerSubtitleOverlay subtitleOverlayLayout={subtitleOverlayLayout}
                 showText={showText}
                 activeLine={activeLine}
                 recentCompletedLine={recentCompletedLine}
@@ -1723,8 +1724,6 @@ const VisualizerCappella: React.FC<VisualizerCappellaProps> = (props) => {
                 subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
-                showSubtitleTranslation={showSubtitleTranslation}
-                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

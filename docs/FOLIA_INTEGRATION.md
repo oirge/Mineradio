@@ -1,6 +1,6 @@
 # Folia 本地播放器构建与测试
 
-当前集成以 Mineradio `2.3.2` 源码为宿主，Folia `0.7.16` 为界面来源。Folia 的来源记录在 `vendor-src/folia/MINERADIO-UPSTREAM.json`，其中记录的上游 main commit 为 `d824c0b854e54d5411cb072092999823e9bd7071`，取材日期为 2026-10-10。这个记录表示取材基线，集成目录内另含本地适配修改。
+当前宿主为 Mineradio `2.6.0`；Folia 原始取材基线为 `0.7.16`，本版选择性移植 `0.7.25` 的三种歌词效果、雾笺性能补丁和字幕能力。Folia 的来源记录在 `vendor-src/folia/MINERADIO-UPSTREAM.json`，其中记录的上游 main commit 为 `d824c0b854e54d5411cb072092999823e9bd7071`，取材日期为 2026-10-10。这个记录表示取材基线，集成目录内另含本地适配修改。
 
 ## 运行边界
 
@@ -10,7 +10,7 @@
 - 入口是 `src/mineradio/local-entry.tsx`，只挂载本地播放器，复用 Folia 的原版歌词渲染器、背景、悬浮 Polaroid 唱片墙、Lattice 封面拼贴墙与视觉参数面板。保留本地曲库、收藏、歌单、队列、导入、播放控制和文件信息。
 - 不加载 `App.tsx` / `bootstrap.tsx`、首页导航、在线歌曲、登录、Navidrome、同步、AI、OBS、Stage 或 Folium 模组；不是用 CSS 隐藏整套应用。声音输出继续使用 Mineradio 的音频链。
 - 构建生成 `local-player-build.json`，记录实际打包源码模块；完整应用入口或禁止模块进入依赖图会直接构建失败。播放器偏好与视觉设置使用独立 `mineradio-*` 存储键，并经宿主保存到桌面用户档。
-- 构建适配边界：Folium 扩展槽返回空值、独立视频层不挂载；背景 registry 只导入五种本地背景；视觉资产使用独立小型缓存，不牵引上游歌曲/会话数据库。14 种内置歌词 renderer 的布局、动画和着色公式保持上游实现。
+- 构建适配边界：Folium 扩展槽返回空值、独立视频层不挂载；背景 registry 只导入五种本地背景；视觉资产使用独立小型缓存，不牵引上游歌曲/会话数据库。17 种内置歌词 renderer 的布局、动画和着色公式保持上游实现。
 
 ## 本地播放界面与效果范围
 
@@ -18,7 +18,7 @@
 
 - **悬浮 Polaroid 唱片墙**：`LocalRecordWall` 复用上游 `PolaroidCard`、六边形坐标/视口与卡片帧样式计算，保留卡片正反面、翻转入场、中心放大/边缘衰减、拖动惯性和滚轮弹簧。点卡片居中，中心播放按钮或 Enter 播放；方向键移动焦点，`+` 通过宿主 `addToQueue` 入队。底部使用原 `FloatingPlayerControls` 悬停展开胶囊与 `SlideActionButton` 列表/滑动搜索按钮。歌单选择和本地搜索只查询宿主目录。
 - **Lattice 封面拼贴墙**：`LocalPosterWall` 直接使用上游 `PosterWall`、相机/重排逻辑、当前歌曲聚焦、歌词画布和原播放进度控件。收藏、切歌、队列等动作由本地适配控件发送给宿主。暗角、灯光、换歌自动聚焦及封面染色偏好独立存入 `mineradio-folia-local-lattice-v1`。
-- **歌词与背景**：保留 Classic、Partita、Tempera、Lumiere、Cadenza、Fume、Claddagh、Cappella、Tilt、Diorama、Monet、Pendolo、Sonnet、Still 共 14 种原 renderer，以及 Common、Latent、Sora、Monet、Nomand 五种本地背景。12 个在上游提供设置面板的歌词模式直接使用其原面板；Cadenza 和 Still 的上游 entry 未提供独立设置面板。支持主题、字号、译文和各模式已有参数。
+- **歌词与背景**：保留 Classic、Partita、Tempera、Lumiere、Cadenza、Fume、Claddagh、Cappella、Tilt、Diorama、Monet、Pendolo、Sonnet、Still 共 17 种原 renderer（另含 Hanabi、Nebbia、Machi），以及 Common、Latent、Sora、Monet、Nomand 五种本地背景。15 个在上游提供设置面板的歌词模式直接使用其原面板；Cadenza 和 Still 的上游 entry 未提供独立设置面板。支持主题、字号、译文和各模式已有参数。
 - **图像素材**：Cappella 自定义表情/头像、Monet 人像、背景图片通过本地图片选择与清除操作接入原 renderer；Tempera 图层图片沿用其原素材控件。素材使用独立 `mineradio-folia-visual-assets-v1` IndexedDB 缓存及可释放的图片 Blob URL，不进入歌曲数据库或新增音频源。
 
 两种墙共用 `wallCatalog.ts`，按每页最多 1000 条从 `listTracks` 读取当前本地集合，再由原视觉组件进行视口裁剪；`HostTrack` 映射保留宿主稳定 ID，时长仅在转换为上游展示结构时从秒转为毫秒。点击歌曲传递完整 `playlistId`，不把显示页重建成播放队列。
@@ -127,3 +127,9 @@ Folia 的 `LICENSE` 与 `MINERADIO-UPSTREAM.json` 随 `public/vendor/folia` 一�
 居中修复浏览器验收覆盖1440/1387/1101/1100/1024/960px，导航中心误差均为0；960px与右侧按钮仍有11.94px间距。安装器退出码0，安装内容与已验证构建一致；本轮桌面CDP启动被自动审批拦截，因此未将上一轮desktop-smoke结果作为本轮复测结果。安装后正式主窗口恢复显示并验证响应，证据 `center-install-verification.json`、`center-window-verification.json`、`center-visible-windows.json`。
 
 按用户截图，三视图、音乐库、效果与沉浸按钮使用 React portal 放进 Mineradio 44px 桌面标题栏，保持同一份播放器状态；删除子页重复的 Mineradio 返回按钮。桌面切换仅显示 Folia/Mineradio，两态颜色一致；全屏与浏览器模式在页面顶部显示导航并保留外层切回入口。验证1440/960px不覆盖窗口按钮，跨文档portal操作、三视图、面板与全屏往返通过，音频实例不变；真实Electron复测通过。证据 `titlebar-integration.json`、`desktop-smoke.json`。
+
+## v2.6.0 新增控制
+
+视觉设置内新增自选随机池、每首歌随机样式、手动重抽、单／双／三行底部字幕与逐行来源、和声开关、歌词和背景实时预览。偏好仍存入 `mineradio-folia-local-visuals-v1`。TTML 的主句、翻译、音译和和声分别经宿主桥接，Lattice 读取同一和声设置。预览仅在可见且文档处于前台时绘制。
+
+新效果通过原 registry、runtime、settings panel 接入；雾笺包含楼群环形缓存、1/8 雾预渲染、噪声纹理与并行着色器编译。分析服务仍经过本地边界，不加载上游歌曲数据库或 AI 模型。

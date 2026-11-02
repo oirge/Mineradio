@@ -99,3 +99,9 @@ export const mixColors = (from: string, to: string, amount: number, alpha = 1) =
 
     return `rgba(${Math.round(mix(fromChannels.r, toChannels.r, normalizedAmount))}, ${Math.round(mix(fromChannels.g, toChannels.g, normalizedAmount))}, ${Math.round(mix(fromChannels.b, toChannels.b, normalizedAmount))}, ${clamp(alpha, 0, 1)})`;
 };
+
+export const resolveGlowColorStrength = (r: number, g: number, b: number): number => {
+    const value = Math.max(r, g, b);
+    const progress = clamp((value - 110) / 50, 0, 1);
+    return progress * progress * (3 - 2 * progress);
+};

@@ -1283,6 +1283,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         subtitleUpcomingLyricsBlur,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        subtitleOverlayLayout,
         showSubtitleTranslation = true,
         subtitleContentMode,
     } = props;
@@ -1721,7 +1722,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
                 </AnimatePresence>
             </div>
 
-            <VisualizerSubtitleOverlay
+            <VisualizerSubtitleOverlay subtitleOverlayLayout={subtitleOverlayLayout}
                 showText={showText}
                 activeLine={activeLine}
                 recentCompletedLine={recentCompletedLine}
@@ -1736,8 +1737,6 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
                 subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
-                showSubtitleTranslation={showSubtitleTranslation}
-                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

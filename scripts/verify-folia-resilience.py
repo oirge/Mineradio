@@ -13,7 +13,8 @@ OUTPUT.mkdir(parents=True, exist_ok=True)
 report = {'checks': [], 'errors': []}
 
 with sync_playwright() as playwright:
-    browser = playwright.chromium.launch(headless=True)
+    print('Launching Chromium for Folia recovery', flush=True)
+    browser = playwright.chromium.launch(headless=True, channel='chromium', timeout=30000)
     context = browser.new_context(accept_downloads=True, viewport={'width': 1440, 'height': 900})
     context.add_init_script("""
       localStorage.setItem('mineradio-ui-language-v1', 'en');
@@ -21,9 +22,11 @@ with sync_playwright() as playwright:
       localStorage.setItem('i18nextLng', 'zh-CN');
     """)
     page = context.new_page()
+    page.set_default_timeout(30000)
     page.on('pageerror', lambda error: report['errors'].append(str(error)))
     try:
-        page.goto(args.url, wait_until='networkidle')
+        print('Checking Folia recovery:', args.url, flush=True)
+        page.goto(args.url, wait_until='domcontentloaded')
         page.wait_for_function("typeof MineradioFoliaHost === 'object'")
         page.evaluate("MineradioFoliaHost.setInterface('folia')")
         frame_element = page.locator('#folia-frame')
@@ -37,6 +40,7 @@ with sync_playwright() as playwright:
         frame.get_by_test_id('local-open-settings').click()
         expect(frame.get_by_test_id('local-visual-settings')).to_be_visible()
         expect(frame.get_by_test_id('local-ui-language')).to_have_value('en')
+        print('PASS: recovery fixture is active in English', flush=True)
 
         frame.evaluate("""() => window.dispatchEvent(new ErrorEvent('error', {
           message: 'verification visualizer failure',
@@ -48,17 +52,20 @@ with sync_playwright() as playwright:
         errors = frame.evaluate("JSON.parse(localStorage.getItem('mineradio-folia-diagnostics-v1') || '[]')")
         assert errors and errors[-1]['message'] == 'verification visualizer failure', errors
         report['checks'].append('runtime errors are recorded locally and replaced by English recovery actions')
+        print('PASS: runtime failure and recovery actions', flush=True)
         page.screenshot(path=str(OUTPUT / 'folia-recovery.png'))
 
         with page.expect_download() as pending_download:
             recovery.get_by_role('button', name='Export diagnostics').click()
         download = pending_download.value
+        print('Checking diagnostic download', flush=True)
         diagnostics_path = OUTPUT / 'folia-diagnostics.json'
         download.save_as(str(diagnostics_path))
         exported = json.loads(diagnostics_path.read_text(encoding='utf-8'))
         assert exported['schema'] == 1
         assert exported['errors'][-1]['message'] == 'verification visualizer failure'
         report['checks'].append('diagnostic export contains the bounded local error record')
+        print('PASS: diagnostic export', flush=True)
 
         recovery.get_by_role('button', name='Retry').click()
         expect(frame.get_by_test_id('local-recovery')).to_have_count(0)

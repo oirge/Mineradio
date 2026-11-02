@@ -279,7 +279,8 @@
         return { time: Math.max(0, number(word.t, start)), duration: Math.max(0, number(word.d, 0.24)),
           text: String(word.text || word.word || String(line.text).slice(number(word.c0, 0), number(word.c1, 0))) };
       });
-      lines.push({ time: start, endTime: end, text: String(line.text), translation: String(line.translation || ''), words: words });
+      lines.push({ time: start, endTime: end, text: String(line.text), translation: String(line.translation || ''), romanization: String(line.romanization || ''),
+        backgroundVocals: Array.isArray(line.backgroundVocals) ? line.backgroundVocals : [], words: words });
     }
     return { trackId: trackId(currentSong()), lines: lines };
   }
@@ -292,7 +293,7 @@
     mix(trackId(currentSong()));
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i]; if (!line) continue;
-      mix(line.t); mix(line.duration); mix(line.text); mix(line.translation); mix(line.fallback); mix((line.words || []).length);
+      mix(line.t); mix(line.duration); mix(line.text); mix(line.translation); mix(line.romanization); mix(JSON.stringify(line.backgroundVocals || [])); mix(line.fallback); mix((line.words || []).length);
     }
     return lines.length + ':' + (hash >>> 0);
   }
@@ -432,6 +433,8 @@
     else if (barZone) { barZone = false; scheduleBarHide(); }
   }
   function onFramePointerDown(e) {
+    // Opening a panel from the top navigation must also bring the transport back into reach.
+    if (e.target && e.target.closest && e.target.closest('.local-header button')) revealBar(false);
     if (e.pointerType === 'touch') { revealChrome(false); revealTop(false); revealBar(false); }
     if (e.target && e.target.closest && e.target.closest('.local-controls')) { barDragging = e.target.tagName !== 'SELECT'; revealBar(true); }
   }
