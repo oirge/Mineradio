@@ -14547,7 +14547,7 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
     if (token !== beatMapToken) { hideBeatChip(); return null; }
     if (options.prefetch) hideBeatChip();
     else showBeatChip('节奏缓冲中…');
-    return { kicks: kicks, beats: beats, pulseBeats: pulseBeats, cameraBeats: cameraBeats, gridStep: gridStep, tempoSource: musicTempoBeats.length >= 4 ? 'music-tempo' : 'local', analysisProfile: analysisProfile.id || 'default', duration: buffer.duration, visualBeatCount: visualBeatCount, analyzedAt: Date.now() };
+    return { kicks: kicks, beats: beats, pulseBeats: pulseBeats, cameraBeats: cameraBeats, gridStep: gridStep, tempoSource: musicTempoBeats.length >= 4 ? 'music-tempo' : 'local', analysisProfile: analysisProfile.id || 'default', duration: buffer.duration, visualBeatCount: visualBeatCount, analyzedAt: Date.now(), vocalBand: buildLocalVocalBandEnvelope(vocalEnergy, sr / winSize) };
   } catch (e) {
     console.warn('beat analysis failed:', e);
     hideBeatChip();
@@ -15442,6 +15442,28 @@ function packLocalBeatNumberList(source) {
   for (var i = 0; i < rows.length; i++) out[i] = localBeatRound(rows[i], 1000);
   return out;
 }
+/** Retain the already analysed 420–2600 Hz band at 50 Hz; this is a band estimate, not a separated vocal stem. */
+function buildLocalVocalBandEnvelope(energy, fps) {
+  if (!energy || !energy.length || !Number.isFinite(fps) || fps <= 0) return null;
+  var count = Math.min(1080000, Math.floor(energy.length * 50 / fps));
+  var db = new Float32Array(count), onsets = [], lastOnset = -10;
+  for (var i = 0; i < count; i++) {
+    var start = Math.floor(i * fps / 50), end = Math.min(energy.length, Math.max(start + 1, Math.floor((i + 1) * fps / 50)));
+    var sum = 0;
+    for (var j = start; j < end; j++) sum += Math.pow(Math.max(0, Number(energy[j]) || 0), 2);
+    db[i] = Math.max(-120, 20 * Math.log10(Math.max(0.000001, Math.sqrt(sum / (end - start)))));
+    if (i > 0 && db[i] > -60 && db[i] - db[i - 1] >= 4 && i - lastOnset >= 6) { onsets.push(i); lastOnset = i; }
+  }
+  var sorted = Array.from(db).sort(function (a, b) { return a - b; });
+  return { fps: 50, db: db, top: sorted.length ? sorted[Math.floor(sorted.length * 0.95)] : -120, onsets: new Uint32Array(onsets) };
+}
+/** Validate optional band data so older beat caches continue to load without migration or reanalysis. */
+function normalizeLocalVocalBandEnvelope(value) {
+  if (!value || value.fps !== 50 || !value.db || !Number.isInteger(value.db.length) || !value.db.length || value.db.length > 1080000) return null;
+  var db = Array.from(value.db, function (sample) { return Number.isFinite(sample) ? Math.round(Math.max(-120, Math.min(0, sample)) * 10) / 10 : -120; });
+  var onsets = Array.from(value.onsets || []).filter(function (frame) { return Number.isInteger(frame) && frame >= 0 && frame < db.length; });
+  return { fps: 50, db: db, top: Number.isFinite(value.top) ? value.top : -120, onsets: onsets };
+}
 function packLocalBeatMap(map) {
   if (!map) return null;
   var camera = packLocalBeatEventList(map.cameraBeats || map.beats || map.kicks);
@@ -15457,7 +15479,8 @@ function packLocalBeatMap(map) {
     partial: !!map.partial,
     partialUntilSec: map.partialUntilSec || 0,
     cameraBeats: camera,
-    pulseBeats: pulse
+    pulseBeats: pulse,
+    vocalBand: normalizeLocalVocalBandEnvelope(map.vocalBand)
   };
 }
 function unpackLocalBeatMap(stored) {
@@ -15482,7 +15505,8 @@ function unpackLocalBeatMap(stored) {
     visualBeatCount: stored.visualBeatCount || camera.length,
     analyzedAt: stored.analyzedAt || Date.now(),
     partial: !!stored.partial,
-    partialUntilSec: stored.partialUntilSec || 0
+    partialUntilSec: stored.partialUntilSec || 0,
+    vocalBand: normalizeLocalVocalBandEnvelope(stored.vocalBand)
   };
 }
 function readLocalBeatPrefs() {

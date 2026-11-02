@@ -12,6 +12,8 @@
   var lastQueueSource = null, lastQueueLength = -1;
   var pausedVideos = new Set(), oldInert = new Map(), inFlight = new Set();
   var audioFrequency = null;
+  var analysisTrackId = null, analysisMap = null, analysisStamp = '', analysisProjection = null;
+  var analysisRevision = 0, sentAnalysisRevision = -1, analysisReadTicket = 0;
   var coverTransfers = new Map(), coverTransferBytes = 0;
   var playlistMembership = new Map();
   var trackPageIndexes = new WeakMap();
@@ -127,12 +129,82 @@
       currentTrack: projectCurrentTrack(currentSong()), currentIndex: number(global.currentIdx, -1),
       position: number(call('getPlaybackCurrentSeconds'), 0), duration: number(call('getPlaybackDurationSeconds'), 0),
       playing: !!(media && media.src && !media.paused && !media.ended), playbackRate: media ? number(media.playbackRate, 1) : 1, volume: volume,
+      outputLatency: outputLatency(),
       muted: volume <= 0.0001 || !!(media && media.muted), playMode: global.playMode || 'loop',
       playbackPlaylistId: playbackPlaylistId, playbackPlaylistName: playbackPlaylistName,
       queueRevision: queueRevision, libraryRevision: libraryRevision, lyricsRevision: lyricsRevision,
       uiLanguage: global.uiLanguage === 'en' ? 'en' : 'zh-CN',
       interface: active ? 'folia' : 'mineradio'
     };
+  }
+  function outputLatency() {
+    var ctx = global.audioCtx;
+    return ctx ? clamp(number(ctx.baseLatency, 0) + number(ctx.outputLatency, 0), 0, 0.5) : 0;
+  }
+  function cachedAnalysisMap(song) {
+    if (!song || !song.localKey) return null;
+    var key = 'local:' + song.localKey;
+    return (global.beatMapCache && global.beatMapCache[key])
+      || (typeof global.getLocalBeatEntry === 'function' && global.getLocalBeatEntry(song.localKey, 'mr'))
+      || (global.djBeatMapCache && global.djBeatMapCache[key])
+      || (typeof global.getLocalBeatEntry === 'function' && global.getLocalBeatEntry(song.localKey, 'dj')) || null;
+  }
+  // Read only this track's existing cache. Never start analysis, change cinema settings or build another audio graph.
+  function syncAnalysis() {
+    var song = currentSong(), id = song ? trackId(song) : null;
+    if (id !== analysisTrackId) {
+      analysisTrackId = id; analysisMap = null; analysisStamp = ''; analysisProjection = null; analysisRevision++;
+      var ticket = ++analysisReadTicket;
+      if (song && song.localKey && !cachedAnalysisMap(song) && typeof global.readBeatDiskCache === 'function'
+        && typeof global.localBeatDiskKey === 'function') {
+        Promise.resolve().then(function () { return global.readBeatDiskCache(global.localBeatDiskKey(song.localKey, 'mr')); })
+          .then(function (map) { return map || global.readBeatDiskCache(global.localBeatDiskKey(song.localKey, 'dj')); })
+          .then(function (map) {
+            if (ticket !== analysisReadTicket || id !== (currentSong() ? trackId(currentSong()) : null) || !map || cachedAnalysisMap(song)) return;
+            analysisMap = map; analysisStamp = ''; analysisProjection = null; analysisRevision++;
+          }).catch(function () { /* Live spectrum remains available when the optional cache cannot be read. */ });
+      }
+    }
+    var map = cachedAnalysisMap(song) || analysisMap;
+    var stamp = map ? [map.analyzedAt, map.partialUntilSec, (map.cameraBeats || map.beats || map.kicks || []).length,
+      (map.pulseBeats || []).length, map.vocalBand && map.vocalBand.db && map.vocalBand.db.length].join(':') : '';
+    if (map !== analysisMap || stamp !== analysisStamp) {
+      analysisMap = map; analysisStamp = stamp; analysisProjection = null; analysisRevision++;
+    }
+  }
+  function getAnalysis() {
+    syncAnalysis();
+    if (analysisProjection) return analysisProjection;
+    var map = analysisMap, events = [], hits = [];
+    if (map) {
+      var source = map.cameraBeats || map.beats || map.kicks || [];
+      source.forEach(function (beat) {
+        var t = typeof beat === 'number' ? beat : number(beat.time, -1);
+        if (!Number.isFinite(t) || t < 0) return;
+        var row = typeof beat === 'object' && beat ? beat : {};
+        var low = Math.max(0, number(row.low, 0.6)), mid = Math.max(0, number(row.body, 0.25)), high = Math.max(0, number(row.snap, 0.15));
+        var sum = low + mid + high || 1;
+        events.push({ t: t, kind: row.combo === 'downbeat' ? 'downbeat' : 'beat',
+          impact: clamp(number(row.impact, number(row.strength, 0.7)), 0, 1),
+          tone: { low: low / sum, mid: mid / sum, high: high / sum } });
+      });
+      (map.pulseBeats || map.kicks || source).forEach(function (beat) {
+        var t = typeof beat === 'number' ? beat : number(beat.time, -1);
+        if (!Number.isFinite(t) || t < 0) return;
+        var row = typeof beat === 'object' && beat ? beat : {};
+        hits.push({ t: t, strength: clamp(number(row.impact, number(row.strength, 0.7)), 0, 1),
+          kind: number(row.snap, 0) > number(row.low, 0.6) ? 1 : 0 });
+      });
+    }
+    events.sort(function (a, b) { return a.t - b.t; }); hits.sort(function (a, b) { return a.t - b.t; });
+    var vocal = map && map.vocalBand;
+    analysisProjection = { trackId: analysisTrackId, revision: analysisRevision, source: map ? 'cache' : 'live', beats: events,
+      until: map && map.partial && map.partialUntilSec > 0 ? map.partialUntilSec : undefined,
+      drums: hits.length ? { times: new Float64Array(hits.map(function (hit) { return hit.t; })),
+        strengths: new Float32Array(hits.map(function (hit) { return hit.strength; })), kinds: new Uint8Array(hits.map(function (hit) { return hit.kind; })) } : null,
+      vocal: vocal && vocal.fps === 50 && vocal.db ? { fps: 50, db: new Float32Array(vocal.db),
+        top: number(vocal.top, -60), onsets: new Uint32Array(vocal.onsets || []), from: number(vocal.from, 0) } : null };
+    return analysisProjection;
   }
   function findSong(id) {
     if (typeof id !== 'string' || !id || id.length > 8192) fail('INVALID_TRACK', '歌曲标识无效');
@@ -584,6 +656,10 @@
           if (signature !== lastLyricsSignature) { lastLyricsSignature = signature; lyricsRevision++; event('lyrics', getLyrics()); }
         }
         event('state', getState());
+        syncAnalysis();
+        if (analysisRevision !== sentAnalysisRevision) {
+          var analysis = getAnalysis(); sentAnalysisRevision = analysis.revision; event('analysis', analysis);
+        }
       }
       if (global.wallpaperBoardEffect && global.wallpaperBoardEffect.setPaused) global.wallpaperBoardEffect.setPaused(true);
     } catch (error) { console.warn('[FoliaHost]', error); }
@@ -598,7 +674,8 @@
           audioFrequency = new Uint8Array(analyser.frequencyBinCount);
         }
         analyser.getByteFrequencyData(audioFrequency);
-        event('audio', { frequency: audioFrequency,
+        event('audio', { frequency: audioFrequency, trackId: currentSong() ? trackId(currentSong()) : null,
+          position: number(call('getPlaybackCurrentSeconds'), 0), playing: playing,
           sampleRate: global.audioCtx ? global.audioCtx.sampleRate : 44100, fftSize: analyser.fftSize });
       } catch (_error) {}
     }
@@ -621,6 +698,7 @@
     var song, index, source;
     switch (method) {
       case 'getState': return getState();
+      case 'getAnalysis': return getAnalysis();
       case 'setUiLanguage':
         if (params.language !== 'en' && params.language !== 'zh-CN') fail('INVALID_LANGUAGE', '不支持的界面语言');
         call('setUiLanguage', params.language);

@@ -36,6 +36,7 @@ export interface HostState {
     duration: number;
     playing: boolean;
     playbackRate?: number;
+    outputLatency?: number;
     volume: number;
     muted: boolean;
     playMode: 'loop' | 'shuffle' | 'single';
@@ -61,9 +62,22 @@ export interface HostLyrics {
 }
 
 export interface HostAudio {
+    trackId?: string | null;
+    position?: number;
+    playing?: boolean;
     frequency: number[] | Uint8Array;
     sampleRate: number;
     fftSize: number;
+}
+
+export interface HostAnalysis {
+    trackId: string | null;
+    revision: number;
+    source: 'cache' | 'live';
+    until?: number;
+    beats: import('../services/beatFx/clock').BeatFxEvent[];
+    drums: { times: Float64Array; strengths: Float32Array; kinds: Uint8Array } | null;
+    vocal: { fps: number; db: Float32Array; top: number; onsets: Uint32Array; from?: number } | null;
 }
 
 type HostListener = (data: any) => void;

@@ -8,11 +8,13 @@ import { parseSubtitleOverlayLayout } from '../../utils/lyrics/subtitleOverlayLa
 import { randomLyricMode, normalizeRandomPool } from './randomLyricMode';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import * as presets from '../../types';
 import type { VisualizerTuningBundle, VisualizerTuningMode } from '../../components/visualizer/tuningRegistry';
 import type { VisualizerBackgroundConfig } from '../../components/visualizer/backgrounds/definition';
 import { isBuiltinVisualizerMode, isBuiltinVisualizerBackgroundMode } from '../../types/visualizerModes';
 import { DEFAULT_LYRIC_RENDER_QUALITY, normalizeLyricRenderOverride, normalizeLyricRenderQuality } from '../../utils/lyricRenderQuality';
+import { captureVisualPreset, restoreVisualPresets, presetName, LOCAL_PRESET_LIMIT, type LocalVisualPreset } from './visualPresetData';
 
 // src/mineradio/local/useVisualSettings.ts
 // Dedicated visual preferences for the embedded local player, without application/provider stores.
@@ -26,7 +28,8 @@ export const DEFAULT_LOCAL_TUNINGS: VisualizerTuningBundle = {
     lumiere: presets.DEFAULT_LUMIERE_TUNING,
     hanabi: DEFAULT_HANABI_TUNING, nebbia: DEFAULT_NEBBIA_TUNING, machi: DEFAULT_MACHI_TUNING,
 };
-interface VisualPreferences {
+export interface VisualPreferences {
+    rhythm: boolean;
     lyricRenderQuality: presets.LyricRenderQuality;
     randomMode: boolean;
     randomPool: presets.VisualizerMode[];
@@ -41,12 +44,19 @@ interface VisualPreferences {
     tunings: VisualizerTuningBundle;
 }
 interface VisualSettings extends VisualPreferences {
+    presets: LocalVisualPreset[];
+    savePreset: (name: string, id?: string) => string | null;
+    applyPreset: (id: string) => void;
+    renamePreset: (id: string, name: string) => boolean;
+    deletePreset: (id: string) => void;
+    toggleRandomPool: (mode: presets.VisualizerMode, checked: boolean) => void;
     update: (patch: Partial<VisualPreferences>) => void;
     tune: (mode: VisualizerTuningMode, patch: Record<string, unknown>) => void;
     reroll: () => void;
     reset: () => void;
 }
 const defaults: VisualPreferences = {
+    rhythm: true,
     lyricRenderQuality: DEFAULT_LYRIC_RENDER_QUALITY,
     randomMode: false, randomPool: normalizeRandomPool(null), subtitleLayout: 'translation', harmony: true,
     view: 'lyrics',
@@ -70,31 +80,70 @@ export function restoredTunings(value: unknown): VisualizerTuningBundle {
         return [mode, normalizeLocalTuning(mode, patch)];
     })) as VisualizerTuningBundle;
 }
-export const useVisualSettings = create<VisualSettings>()(persist((set) => ({
+export function normalizeVisualPreferences(saved: unknown): VisualPreferences {
+    const value = saved && typeof saved === 'object' ? saved as Partial<VisualPreferences> : {};
+    const background = value.background && typeof value.background === 'object' ? value.background : defaults.background;
+    return {
+        rhythm: value.rhythm !== false,
+        lyricRenderQuality: normalizeLyricRenderQuality(value.lyricRenderQuality),
+        view: value.view === 'records' || value.view === 'posters' ? value.view : 'lyrics',
+        mode: isBuiltinVisualizerMode(value.mode) ? value.mode : defaults.mode,
+        background: { ...background, mode: isBuiltinVisualizerBackgroundMode(background.mode) && background.mode !== 'url' ? background.mode : 'latent', url: undefined, customImage: undefined, transparent: background.transparent === true },
+        daylight: value.daylight === true,
+        lyricsFontScale: Number.isFinite(value.lyricsFontScale) ? Math.min(1.6, Math.max(0.6, value.lyricsFontScale!)) : 1,
+        translation: value.translation !== false,
+        randomMode: value.randomMode === true, randomPool: normalizeRandomPool(value.randomPool),
+        subtitleLayout: parseSubtitleOverlayLayout(value.subtitleLayout) ?? 'translation', harmony: value.harmony !== false,
+        tunings: restoredTunings(value.tunings),
+    };
+}
+export const useVisualSettings = create<VisualSettings>()(persist((set, get) => ({
     ...defaults,
+    presets: [],
+    savePreset: (rawName, id) => {
+        const state = get(), name = presetName(rawName);
+        const existing = id ? state.presets.find(item => item.id === id) : null;
+        if (!name || (id && !existing) || (!existing && state.presets.length >= LOCAL_PRESET_LIMIT)
+            || state.presets.some(item => item.id !== id && item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return null;
+        const preset = { id: existing?.id ?? crypto.randomUUID(), name, settings: captureVisualPreset(state) };
+        set({ presets: existing ? state.presets.map(item => item.id === id ? preset : item) : [...state.presets, preset] });
+        return preset.id;
+    },
+    applyPreset: id => {
+        const preset = get().presets.find(item => item.id === id);
+        if (preset) set(captureVisualPreset(normalizeVisualPreferences(preset.settings)));
+    },
+    renamePreset: (id, rawName) => {
+        const name = presetName(rawName), entries = get().presets;
+        if (!name || !entries.some(item => item.id === id)
+            || entries.some(item => item.id !== id && item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return false;
+        set({ presets: entries.map(item => item.id === id ? { ...item, name } : item) });
+        return true;
+    },
+    deletePreset: id => set(state => ({ presets: state.presets.filter(item => item.id !== id) })),
+    toggleRandomPool: (mode, checked) => set(state => {
+        if (!isBuiltinVisualizerMode(mode) || state.randomPool.includes(mode) === checked) return state;
+        const pool = checked ? [...state.randomPool, mode] : state.randomPool.filter(value => value !== mode);
+        return pool.length ? { randomPool: pool } : state;
+    }),
     update: (patch) => set(patch.lyricRenderQuality ? { ...patch, lyricRenderQuality: normalizeLyricRenderQuality(patch.lyricRenderQuality) } : patch),
     reroll: () => set(state => ({ mode: randomLyricMode(state.randomPool, state.mode) })),
     tune: (mode, patch) => set((state) => ({ tunings: {
         ...state.tunings, [mode]: normalizeLocalTuning(mode, { ...state.tunings[mode], ...patch }),
     } })),
-    reset: () => set(defaults),
+    reset: () => set({ ...defaults, ...captureVisualPreset(defaults) }),
 }), {
     name: 'mineradio-folia-local-visuals-v1',
     // Validate persisted routing fields so outdated/unavailable modes cannot load remote backgrounds.
     merge: (saved, current) => {
-        const value = saved && typeof saved === 'object' ? saved as Partial<VisualPreferences> : {};
-        const background = value.background && typeof value.background === 'object' ? value.background : defaults.background;
-        return { ...current,
-            lyricRenderQuality: normalizeLyricRenderQuality(value.lyricRenderQuality),
-            view: value.view === 'records' || value.view === 'posters' ? value.view : 'lyrics',
-            mode: isBuiltinVisualizerMode(value.mode) ? value.mode : defaults.mode,
-            background: { ...background, mode: isBuiltinVisualizerBackgroundMode(background.mode) && background.mode !== 'url' ? background.mode : 'latent', url: undefined, transparent: background.transparent === true },
-            daylight: value.daylight === true,
-            lyricsFontScale: Number.isFinite(value.lyricsFontScale) ? Math.min(1.6, Math.max(0.6, value.lyricsFontScale!)) : 1,
-            translation: value.translation !== false,
-            randomMode: value.randomMode === true, randomPool: normalizeRandomPool(value.randomPool),
-            subtitleLayout: parseSubtitleOverlayLayout(value.subtitleLayout) ?? 'translation', harmony: value.harmony !== false,
-            tunings: restoredTunings(value.tunings),
-        };
+        return { ...current, ...normalizeVisualPreferences(saved),
+            presets: restoreVisualPresets((saved as { presets?: unknown } | null)?.presets, normalizeVisualPreferences) };
     },
 }));
+
+// Pool edits and named-preset bookkeeping must not rebuild the GPU stage or its preview.
+export function useVisualSceneSettings() {
+    return useVisualSettings(useShallow(({ view, mode, background, daylight, lyricsFontScale, translation,
+        harmony, tunings, subtitleLayout, update, tune }) => ({ view, mode, background, daylight,
+        lyricsFontScale, translation, harmony, tunings, subtitleLayout, update, tune })));
+}

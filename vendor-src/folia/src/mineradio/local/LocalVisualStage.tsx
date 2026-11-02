@@ -3,7 +3,7 @@ import VisualizerRenderer from '../../components/visualizer/VisualizerRenderer';
 import type { Theme } from '../../types';
 import type { LocalPlayer } from './playerTypes';
 import type { LocalVisualAssets } from './useLocalVisualAssets';
-import { useVisualSettings } from './useVisualSettings';
+import { useVisualSceneSettings } from './useVisualSettings';
 
 // src/mineradio/local/LocalVisualStage.tsx
 // Each surface owns its visual runtime; transport remains in Mineradio throughout switches.
@@ -17,7 +17,7 @@ interface Props {
     onOpenQueue: () => void;
 }
 export default function LocalVisualStage({ player, theme, assets, focus, onOpenQueue }: Props) {
-    const visuals = useVisualSettings();
+    const visuals = useVisualSceneSettings();
     const track = player.state?.currentTrack;
     const lyrics = () => visuals.update({ view: 'lyrics' });
     const wallProps = { player, theme, isDaylight: visuals.daylight, onBack: lyrics, onOpenQueue, onOpenLyrics: lyrics };

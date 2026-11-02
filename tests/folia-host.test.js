@@ -149,6 +149,62 @@ function harness(options = {}) {
     return { context, tracks, document, mount, frame, status, original, titlebar, updateModal, video, fileInput, storage, messages, calls, dbFavorites, preloadReleases, timers, listeners, request, runTimer };
 }
 
+test('Folia analysis projects only the current cached track and keeps large arrays out of state', async () => {
+    const h = harness();
+    h.context.beatMapCache = { 'local:a': { cameraBeats: [
+        { time: 2, combo: 'downbeat', strength: 0.8, low: 0.8, body: 0.1, snap: 0.1 },
+        { time: 1, strength: 0.4 },
+    ], pulseBeats: [{ time: 2, strength: 0.9, low: 0.8, snap: 0.1 }],
+    vocalBand: { fps: 50, db: [-80, -20], top: -20, onsets: [1] } },
+    'local:b': { beats: [99] } };
+    h.context.audioCtx = { baseLatency: 0.02, outputLatency: 0.04 };
+    const reply = await h.request('getAnalysis');
+    assert.equal(reply.ok, true);
+    assert.equal(reply.result.trackId, 'local-key:a');
+    assert.deepEqual(reply.result.beats.map(event => event.t), [1, 2]);
+    assert.equal(reply.result.beats[1].kind, 'downbeat');
+    assert.equal(reply.result.drums.kinds[0], 0);
+    assert.equal(reply.result.vocal.db[1], -20);
+    const state = h.context.MineradioFoliaHost.getState();
+    assert.ok(Math.abs(state.outputLatency - 0.06) < 1e-8);
+    assert.equal(state.beats, undefined); assert.equal(state.drums, undefined); assert.equal(state.vocal, undefined);
+    h.context.currentIdx = 1;
+    const next = await h.request('getAnalysis');
+    assert.equal(next.result.trackId, 'local-key:b'); assert.deepEqual(next.result.beats.map(event => event.t), [99]);
+    assert.equal(next.result.vocal, null);
+});
+
+test('Folia analysis sends one snapshot per track or cache revision, not on every state/audio tick', async () => {
+    const h = harness();
+    h.context.beatMapCache = { 'local:a': { cameraBeats: [{ time: 1 }], analyzedAt: 1 } };
+    await h.request('getState'); h.messages.length = 0;
+    h.runTimer(200); h.runTimer(200); h.runTimer(200);
+    assert.equal(h.messages.filter(message => message.event === 'analysis').length, 1);
+    assert.equal(h.messages.filter(message => message.event === 'state').length, 3);
+    h.context.beatMapCache['local:a'].cameraBeats.push({ time: 2 });
+    h.runTimer(200); h.runTimer(200);
+    assert.equal(h.messages.filter(message => message.event === 'analysis').length, 2);
+    h.context.currentIdx = 2; h.runTimer(200);
+    const latest = h.messages.filter(message => message.event === 'analysis').at(-1).data;
+    assert.equal(latest.trackId, 'local-key:c'); assert.equal(latest.source, 'live'); assert.equal(latest.drums, null);
+});
+
+test('Folia discards a late disk analysis after switching tracks and never starts an analysis job', async () => {
+    const h = harness(); let resolveA;
+    h.context.localBeatDiskKey = (key, mode) => key + ':' + mode;
+    h.context.readBeatDiskCache = key => key.startsWith('a:') ? new Promise(resolve => { resolveA = resolve; }) : Promise.resolve(null);
+    h.context.startLocalBeatAnalysis = () => assert.fail('must not start a second analysis job');
+    h.context.applyLocalBeatMap = () => assert.fail('must not change the cinema mode');
+    await h.request('getAnalysis');
+    h.context.currentIdx = 1;
+    await h.request('getAnalysis');
+    resolveA({ cameraBeats: [123] });
+    await new Promise(resolve => setImmediate(resolve));
+    const result = (await h.request('getAnalysis')).result;
+    assert.equal(result.trackId, 'local-key:b'); assert.deepEqual(result.beats, []);
+    assert.equal(h.context.audio.currentTime, 37); assert.equal(h.storage.has('local-beat-prefs'), false);
+});
+
 test('Folia language commands use the host preference without changing playback or metadata', async () => {
     const h = harness();
     h.context.setUiLanguage = language => {

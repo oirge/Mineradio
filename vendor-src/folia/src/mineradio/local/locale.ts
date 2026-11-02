@@ -2,6 +2,11 @@
 // Local-player copy is kept separate from Folia's complete application navigation.
 export const LOCAL_UI_RESOURCES = {
     'zh-CN': {
+        visualPresets: '视觉预设', presetChoose: '选择预设', presetName: '预设名称', presetNew: '新建预设',
+        presetSaveNew: '保存为新预设', presetApply: '应用', presetOverwrite: '覆盖', presetRename: '重命名', presetDelete: '删除',
+        presetSaved: '已保存', presetApplied: '已应用', presetRenamed: '已重命名', presetDeleted: '已删除',
+        presetInvalid: '请使用不重复的名称，最多保存 24 套。', presetAssetsHint: '保存歌词、背景、画质和随机池等参数；图片素材共用当前素材库。',
+        rhythmResponse: '节拍联动', rhythmHint: '优先使用本地拍点缓存；无缓存时跟随实时频谱。鼓点和人声频段为音频估计。',
         transparentPlayer: '透明播放页',
         effectFailed: '当前效果暂时无法显示', playerFailed: 'Folia 界面暂时无法显示',
         recoveryHint: '可以重试或返回 Mineradio，播放和已保存的设置会保留。',
@@ -26,6 +31,11 @@ export const LOCAL_UI_RESOURCES = {
         connected: 'Folia · 本地播放', connecting: '正在连接本地播放器…', retry: '重新连接',
     },
     en: {
+        visualPresets: 'Visual presets', presetChoose: 'Choose a preset', presetName: 'Preset name', presetNew: 'New preset',
+        presetSaveNew: 'Save as new', presetApply: 'Apply', presetOverwrite: 'Overwrite', presetRename: 'Rename', presetDelete: 'Delete',
+        presetSaved: 'Saved', presetApplied: 'Applied', presetRenamed: 'Renamed', presetDeleted: 'Deleted',
+        presetInvalid: 'Use a unique name. Save up to 24 presets.', presetAssetsHint: 'Saves lyric, background, quality and random-pool settings. Image assets use the shared library.',
+        rhythmResponse: 'Beat response', rhythmHint: 'Uses local beat caches when available, otherwise live spectrum. Drum hits and the vocal band are audio estimates.',
         transparentPlayer: 'Transparent player',
         effectFailed: 'This effect could not be displayed', playerFailed: 'Folia could not be displayed',
         recoveryHint: 'Retry or return to Mineradio. Playback and saved settings are preserved.',

@@ -2,8 +2,10 @@
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import struct
+import time
 import wave
 from playwright.sync_api import sync_playwright, expect
 
@@ -13,6 +15,8 @@ OUT.mkdir(parents=True, exist_ok=True)
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--url', default='http://127.0.0.1:3018')
 args = parser.parse_args()
+if os.environ.get('MINERADIO_UI_DIAGNOSTICS'):
+    os.environ['DEBUG'] = 'pw:api'
 files = []
 ttml = '''<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata"><body><div>
 <p begin="0s" end="12s"><span begin="0s" end="12s">Main lyric</span>
@@ -38,9 +42,13 @@ def set_range(locator, value):
 
 with sync_playwright() as p:
     print('Starting synchronized visual acceptance:', args.url, flush=True)
-    browser = p.chromium.launch(headless=True, channel='chromium', timeout=30000, args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader'])
+    # Keep WebGL acceptance on the same software backend locally and on Windows runners.
+    browser = p.chromium.launch(headless=True, channel='chromium', timeout=30000, args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'])
     page = browser.new_page(viewport={'width': 1440, 'height': 900}, locale='zh-CN')
     page.set_default_timeout(30000)
+    if os.environ.get('MINERADIO_UI_DIAGNOSTICS'):
+        gpu = browser.new_browser_cdp_session().send('SystemInfo.getInfo')['gpu']
+        print('Browser GPU devices:', json.dumps(gpu['devices']), flush=True)
     page.add_init_script("localStorage.setItem('mineradio-visual-guide-seen-v2','1')")
     errors, passed = [], []
     page.on('pageerror', lambda error: errors.append(str(error)))
@@ -84,9 +92,12 @@ with sync_playwright() as p:
         pool = child.locator('.local-random-pool')
         pool.locator('..').locator('summary').click()
         for box in pool.locator('input').all():
-            name = box.locator('..').inner_text().strip()
-            if name not in ['流光', '云阶']:
+            mode_id = box.get_attribute('data-mode')
+            if mode_id not in ['classic', 'partita']:
+                started = time.monotonic()
+                print('Unchecking random-pool style:', mode_id, flush=True)
                 box.uncheck()
+                print(f'Random-pool style {mode_id} updated in {time.monotonic() - started:.2f}s', flush=True)
         expect(pool.locator('input:checked')).to_have_count(2)
         child.get_by_test_id('local-random-mode').check()
         mode.select_option('classic')
@@ -95,7 +106,8 @@ with sync_playwright() as p:
         child.get_by_test_id('local-reroll').click()
         expect(mode).to_have_value('classic')
         child.get_by_test_id('local-open-settings').click()
-        page.mouse.move(720, 880)
+        # The collapsed bar keeps its seek row visible; hovering it locks the real controls open.
+        child.get_by_test_id('local-seek').hover()
         child.get_by_test_id('local-next').click()
         expect(stage).to_have_attribute('data-mode', 'partita')
         page.evaluate('audio.pause(); audio.currentTime = 3')

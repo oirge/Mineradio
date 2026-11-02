@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import type { AudioBands, Line } from '../../types';
-import { requestHost, subscribeHost, type HostAudio, type HostLyrics, type HostState } from '../client';
+import { requestHost, subscribeHost, type HostAnalysis, type HostAudio, type HostLyrics, type HostState } from '../client';
+import { advanceLocalAnalysis, applyLocalAnalysis, applyLocalAnalysisAudio, clearLocalAnalysis } from './localAnalysisBoundary';
 import { applyLocalAudio, clearLocalAudio, createLocalActiveLineLookup, interpolatedLocalTime, localLyricLines, localStateSignature } from './localPlayerData';
 import type { LocalPlayer } from './playerTypes';
 
@@ -38,12 +39,13 @@ export function useLocalPlayer(): LocalPlayer {
         let latest: HostState | null = null, stateSignature = '';
         let lyricLines: Line[] = [], lineIndex = -1;
         let activeLineAt = createLocalActiveLineLookup(lyricLines);
-        let lyricRequest = 0, snapshotRequest = 0, anchoredAt = 0;
+        let lyricRequest = 0, snapshotRequest = 0, analysisRequest = 0, anchoredAt = 0;
         let animationFrame: number | null = null;
         const report = (failure: unknown) => {
             if (!disposed) setError(failure instanceof Error ? failure.message : String(failure));
         };
         const syncClock = (position: number) => {
+            advanceLocalAnalysis(latest?.currentTrack?.id ?? null, position, visible && !!latest?.playing, latest?.outputLatency, latest?.playbackRate);
             currentTime.set(position);
             const nextIndex = activeLineAt(position);
             if (nextIndex !== lineIndex) { lineIndex = nextIndex; setCurrentLineIndex(nextIndex); }
@@ -61,6 +63,7 @@ export function useLocalPlayer(): LocalPlayer {
         const refreshVisibility = () => {
             const nextVisible = hostActive && !document.hidden;
             if (visible !== nextVisible) { visible = nextVisible; setActive(visible); }
+            advanceLocalAnalysis(latest?.currentTrack?.id ?? null, currentTime.get(), visible && !!latest?.playing, latest?.outputLatency, latest?.playbackRate);
             if (!visible || !latest?.playing) { stopClock(); clearLocalAudio(audioBands, audioPower); }
             else if (animationFrame === null) animationFrame = requestAnimationFrame(tickClock);
         };
@@ -81,6 +84,13 @@ export function useLocalPlayer(): LocalPlayer {
                 if (!disposed && ticket === lyricRequest && trackId === latest?.currentTrack?.id && revision === latest?.lyricsRevision) applyLyrics(result);
             } catch (failure) { if (ticket === lyricRequest) report(failure); }
         };
+        const refreshAnalysis = async () => {
+            const ticket = ++analysisRequest, trackId = latest?.currentTrack?.id ?? null;
+            try {
+                const result = await requestHost<HostAnalysis>('getAnalysis');
+                if (!disposed && ticket === analysisRequest && trackId === latest?.currentTrack?.id) applyLocalAnalysis(result);
+            } catch { /* Optional cache: the host's live FFT still drives the effects. */ }
+        };
         const applyState = (next: HostState) => {
             if (disposed) return;
             const changedTrack = (next.currentTrack?.id ?? null) !== (latest?.currentTrack?.id ?? null);
@@ -91,6 +101,7 @@ export function useLocalPlayer(): LocalPlayer {
             const signature = localStateSignature(next);
             if (signature !== stateSignature) { stateSignature = signature; setState(next); }
             if (changedTrack) {
+                analysisRequest++; clearLocalAnalysis(next.currentTrack?.id ?? null);
                 lyricRequest++; lyricLines = [];
                 activeLineAt = createLocalActiveLineLookup(lyricLines);
                 setLines(lyricLines);
@@ -98,6 +109,7 @@ export function useLocalPlayer(): LocalPlayer {
             syncClock(interpolatedLocalTime(next, 0));
             refreshVisibility();
             if (changedLyrics) void refreshLyrics();
+            if (changedTrack) void refreshAnalysis();
         };
         const refreshState = async () => {
             const ticket = ++snapshotRequest;
@@ -122,7 +134,13 @@ export function useLocalPlayer(): LocalPlayer {
                 applyLyrics(value);
             }),
             subscribeHost('audio', (frame: HostAudio) => {
-                if (!disposed && visible && latest?.playing) applyLocalAudio(frame, audioBands, audioPower);
+                if (!disposed && visible && latest?.playing && (frame.trackId === undefined || frame.trackId === latest.currentTrack?.id)) {
+                    applyLocalAnalysisAudio(frame); applyLocalAudio(frame, audioBands, audioPower);
+                }
+            }),
+            subscribeHost('analysis', (value: HostAnalysis) => {
+                if (disposed || value.trackId !== (latest?.currentTrack?.id ?? null)) return;
+                analysisRequest++; applyLocalAnalysis(value);
             }),
             subscribeHost('visibility', ({ active: nextActive }: { active: boolean }) => {
                 hostActive = nextActive;
@@ -141,9 +159,10 @@ export function useLocalPlayer(): LocalPlayer {
             disposed = true;
             mounted.current = false;
             commandResult.current = null;
-            lyricRequest++; snapshotRequest++;
+            lyricRequest++; snapshotRequest++; analysisRequest++;
             stopClock();
             clearLocalAudio(audioBands, audioPower);
+            clearLocalAnalysis();
             document.removeEventListener('visibilitychange', handleVisibility);
             unsubscribe.forEach(stop => stop());
         };

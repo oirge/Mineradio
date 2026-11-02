@@ -1,4 +1,5 @@
 """Run the UI regressions against an isolated local server; usable in CI and on Windows."""
+import argparse
 import os
 from pathlib import Path
 import socket
@@ -7,6 +8,13 @@ import sys
 import tempfile
 import time
 import urllib.request
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--suite', choices=['all', 'visuals'], default='all')
+args = parser.parse_args()
+scripts = ['verify-upstream-visuals.py', 'verify-folia-rhythm-presets.py']
+if args.suite == 'all':
+    scripts = ['verify-ui-language.py', 'verify-folia-language.py', 'verify-folia-resilience.py', *scripts]
 
 root = Path(__file__).resolve().parents[1]
 output = root / 'artifacts' / 'ui-language'
@@ -38,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='mineradio-ui-') as temporary:
                 time.sleep(.25)
             else:
                 raise TimeoutError('UI server did not become ready')
-            for script in ['verify-ui-language.py', 'verify-folia-language.py', 'verify-folia-resilience.py', 'verify-upstream-visuals.py']:
+            for script in scripts:
                 subprocess.run([sys.executable, str(root / 'scripts' / script), '--url', url], cwd=root, check=True, timeout=300)
         finally:
             server.terminate()
