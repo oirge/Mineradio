@@ -4,7 +4,16 @@
 - 内容：花火、町景、雾笺的节拍／鼓点／人声频段估计联动；随机样式池原子切换、最后一项保护与场景订阅优化；命名视觉预设的保存、应用、覆盖、重命名与删除，恢复默认保留列表。
 - 版本元数据：package、lock 两处、前端版本、前后端公告及 Release workflow 默认 tag 统一为 `2.6.2`；安装身份、数据目录和 Folia 来源版本保持既有约定。
 - 已有验证：功能 PR #155 的完整 Windows [Verify `41445712793`](https://github.com/oirge/Mineradio/actions/runs/41445712793) 通过，Folia 本地 `62` 项＋上游定向 `108` 项，Node `1586` 项中 `1585` 通过／`0` 失败／`1` 可选基准跳过；中英文、错误恢复、原视觉 8 组与新功能 5 组浏览器验收均通过。
-- 发布状态：准备正式 Windows 构建；最终 tag、Release 与四项官方资产校验结果在发布完成后补录。
+- 发布定向检查：版本、公告、编码、打包与安装身份 `34/34`，语法／空白和 `check:folia` 通过；真实更新公告解析器保留四条，前后端公告及英文词条一致。
+- 提交与构建：[PR #156](https://github.com/oirge/Mineradio/pull/156) 以 merge commit `ecc35bedae1f81335ac099476c787994f9cc6c65` 合入 main；annotated tag `v2.6.2`（tag object `cc0876b09df05eee354aa825ca48e77b4c6cbf65`）固定在该提交。[Windows Build and Release `41448291635`](https://github.com/oirge/Mineradio/actions/runs/41448291635) 成功，四项官方资产上传完成。
+- CI 实际结果：发布元数据 [Verify `41448173542`](https://github.com/oirge/Mineradio/actions/runs/41448173542) 的构建、编码、Folia 类型／行为、全量 Node 与语法检查均通过；浏览器已通过中英文、恢复、原视觉八组，以及连续随机池点击和命名预设断言，随后在 `verify-folia-rhythm-presets.py:100` 的 `Page.screenshot` 超过 15000ms，总体为 failure。功能基线完整 Verify 已通过；不把这次重复 CI 写成全绿，也不追加完整浏览器重跑。
+- 正式发布：[v2.6.2](https://github.com/oirge/Mineradio/releases/tag/v2.6.2)（Release ID `431462848`）于北京时间 `2026-11-02 21:03:24`（`2026-11-02T13:03:24Z`）公开并设 Latest，`draft=false` / `prerelease=false`；公开 Latest API 返回 `v2.6.2`。
+- 官方资产核验：四项文件完整回下载，大小与 SHA256 均匹配 GitHub API digest；SHA256 清单三项全部一致、LF 且无 BOM，安装器 SHA-512 与 `latest.yml` 的两处 sha512、size、path 一致。公开 `releases/latest/download/latest.yml` 返回 `2.6.2`，与已校验文件逐字节一致；安装器只读版本元数据为 `2.6.2`／`Mineradio 二创`。
+  - `Mineradio-oirge-2.6.2-Setup.exe`：122596138 B，SHA256 `f5eaa3b467cd4d41e7542e9d205b235f4e444e35c06a095e250823b3679e7542`。
+  - `Mineradio-oirge-2.6.2-Setup.exe.blockmap`：129928 B，SHA256 `363a28eef82908e93b389c76d124e789b21f0a984c0a5a9a6f1cb6c94e0833ce`。
+  - `latest.yml`：359 B，SHA256 `2ecff6053ab1879eb90be05b33e077af3fbf1896bc0a565f3fd4451532886a26`。
+  - `Mineradio-oirge-2.6.2-SHA256SUMS.txt`：282 B，SHA256 `937ce9b9df9b5c49709ca4d3ad1304551ac48f759d8dfa48340296b10c71f51e`。
+  - 安装器 SHA-512：`3k/QHlJQInoVPmWpwt/QfGgeo1d+7D7KOxJxrXJUV7b3EkiyhBjplnNxpU0sPwqjdcfK0FwfxHsvtVa560dXDg==`。
 - 验证边界：鼓点和人声联动为频段／起音估计，未做模型分离；官方安装器尚未在本机安装运行。
 
 # v2.6.1 全局画质与雾笺扩展
