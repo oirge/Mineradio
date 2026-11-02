@@ -45,6 +45,7 @@ jobs:
         run: |
           npm run typecheck --prefix vendor-src/folia
           npm test --prefix vendor-src/folia -- test/unit/mineradio
+          npm test --prefix vendor-src/folia -- lyricRenderQuality machiProgramWarmup textDirection wordSegmentation cjkSemanticLayout latticeLyrics visualSettingsImportExport visualSettingsConfig
       - run: node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
       - run: |
           node --check desktop/main.js

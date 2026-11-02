@@ -78,12 +78,12 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 新增花火、雾笺、町景，歌词效果扩展至 17 种，并带入雾笺性能优化。',
-  '支持底部单行、双行、三行字幕和 Lattice 和声字幕。',
-  '新增自选随机池、每首歌随机样式、不连续重复、手动重抽及歌词与背景实时预览。',
-  '新增月蚀圣环、雨幕霓虹、折光蝶群、深海绽放四个粒子预设。',
-  '扩展播放、收藏、歌词、音量、切歌手势，支持灵敏度、动作冷却和推理防重入。',
-  '支持 Wallpaper Engine 原生画面的透明度、位置和缩放调整。',
+  '町景采用异步着色器编译与分阶段初始化，减少切换时的阻塞。',
+  '新增全局画布分辨率和抗锯齿设置，支持歌词效果单独覆盖并保留旧参数。',
+  '修复雾笺缩放预览的画布尺寸与笔画粗细。',
+  '修复带空格的逐字歌词分词，支持阿拉伯语等从右向左排词。',
+  '雾笺新增梦海流萤水族箱，支持水母、气泡、雨窗与凝露调节。',
+  '新增透明播放页，町景不画天空；退出或加载失败时自动恢复宿主背景。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

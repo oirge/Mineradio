@@ -3,6 +3,7 @@
   'use strict';
   var CHANNEL = 'mineradio-folia', VERSION = 1;
   var MODE_KEY = 'mineradio-player-interface-v1';
+  var VISUALS_KEY = 'mineradio-folia-local-visuals-v1';
   var active = false, frame = null, ready = false, loadFailed = false;
   var tickTimer = 0, audioTimer = 0, loadTimer = 0;
   var libraryRevision = 1, queueRevision = 1, lyricsRevision = 1, favoritesRevision = 1;
@@ -301,11 +302,26 @@
     if (frame && frame.contentWindow) frame.contentWindow.postMessage(Object.assign({ channel: CHANNEL, version: VERSION }, payload), global.location.origin);
   }
   function event(name, data) { post({ type: 'event', event: name, data: data }); }
+  function syncInterfaceTransparency(raw) {
+    var transparent = false;
+    // Keep the loading and failure surfaces opaque until the trusted player connects.
+    if (active && ready && !loadFailed) {
+      try {
+        var saved = JSON.parse(arguments.length ? raw : global.localStorage.getItem(VISUALS_KEY));
+        var state = saved && saved.state;
+        transparent = !!(state && state.view !== 'records' && state.view !== 'posters'
+          && state.background && state.background.transparent === true);
+      } catch (_error) {}
+    }
+    document.body.classList.toggle('folia-player-transparent', transparent);
+    document.documentElement.classList.toggle('folia-player-transparent', transparent);
+  }
   function updateStatus(message, failed) {
     var status = document.getElementById('folia-load-status');
     if (status) { status.textContent = uiText(message); status.classList.toggle('failed', !!failed); }
     var mount = document.getElementById('folia-interface');
     if (mount) mount.classList.toggle('folia-ready', ready);
+    syncInterfaceTransparency();
   }
   function ensureFrame() {
     if (frame && loadFailed) { frame.remove(); frame = null; ready = false; loadFailed = false; updateStatus('正在重新加载 Folia…', false); }
@@ -531,9 +547,10 @@
   function setInterface(mode) {
     var next = mode === 'folia';
     if (next) ensureFrame();
-    if (active === next) return getState();
+    if (active === next) { syncInterfaceTransparency(); return getState(); }
     active = next;
     document.body.classList.toggle('folia-interface-active', active);
+    syncInterfaceTransparency();
     document.body.classList.remove('cursor-hidden');
     var mount = document.getElementById('folia-interface');
     if (mount) { mount.hidden = !active; mount.setAttribute('aria-hidden', String(!active)); }
@@ -811,8 +828,9 @@
   global.addEventListener('message', onMessage);
   // Same-origin child preferences use the host's desktop backup, including across port changes.
   global.addEventListener('storage', function (change) {
-    if (!['mineradio-folia-local-visuals-v1', 'mineradio-folia-local-lattice-v1'].includes(change.key)
+    if (![VISUALS_KEY, 'mineradio-folia-local-lattice-v1'].includes(change.key)
       || change.storageArea !== global.localStorage) return;
+    if (change.key === VISUALS_KEY) syncInterfaceTransparency(change.newValue);
     var patch = {}; patch[change.key] = change.newValue;
     call('backupPersistentUiState', patch);
   });

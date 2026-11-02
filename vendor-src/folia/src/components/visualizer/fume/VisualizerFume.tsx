@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Hourglass } from 'lucide-react';
 import { DEFAULT_FUME_TUNING, FumeTuning } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import { colorWithAlpha } from '../colorMix';
 
 import { type VisualizerSharedProps } from '../definition';
@@ -118,6 +119,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         };
     }, [currentLineIndex, lines]);
     const resolvedFumeTuning = useMemo<FumeTuning>(() => ({
+        render: fumeTuning?.render ?? DEFAULT_FUME_TUNING.render,
         hidePrintSymbols: fumeTuning?.hidePrintSymbols ?? DEFAULT_FUME_TUNING.hidePrintSymbols,
         disableGeometricBackground: fumeTuning?.disableGeometricBackground ?? DEFAULT_FUME_TUNING.disableGeometricBackground,
         backgroundObjectOpacity: clamp(
@@ -293,7 +295,8 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         },
     }), [audioBands, audioPower, currentTime]);
 
-    useFumeCanvasStage(canvasRef, stageScene, stageDriver, paused);
+    const renderQuality = useLyricRenderQuality(fumeTuning?.render);
+    useFumeCanvasStage(canvasRef, stageScene, stageDriver, paused, props.isPreviewMode ? 1 : renderQuality.scale);
 
     return (
         <VisualizerShell

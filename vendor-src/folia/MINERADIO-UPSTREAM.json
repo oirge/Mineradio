@@ -11,5 +11,20 @@
     "commit": "20c3ecd09a518e9c8d2d53c331c54a548bf9eebf",
     "version": "0.7.25",
     "scope": "Selective port: Hanabi, Nebbia including performance patches, Machi, subtitle row layout, Lattice harmony, random styles and live previews. Existing embedded local-player boundaries are retained."
+  },
+  "incrementalSync": {
+    "retrievedAt": "2026-11-02",
+    "channel": "development",
+    "baseCommit": "20c3ecd09a518e9c8d2d53c331c54a548bf9eebf",
+    "commit": "f03e8ecad21af765976cd00c5802218cdb22c8e4",
+    "sourceCommits": [
+      "3b4f01a701f62aaf08a17da77b3b7588279d24d2",
+      "c56bf8eca8ff2aad76ac31f5e13249135f3d53d0",
+      "3dfff423efde882d44e0673b1acbd4eb995ccf2d",
+      "3f1356615f3f9bc0d539682f35f343fbbde6d403",
+      "d44eb2f3888305b1a6a9420b76d1a2b2c16dadaf",
+      "f03e8ecad21af765976cd00c5802218cdb22c8e4"
+    ],
+    "scope": "Selective follow-up port: staged/asynchronous Machi program warmup, global lyric rendering quality and per-style overrides, Nebbia preview sizing, whitespace/RTL lyric layout, Nebbia aquarium/rain/dew and transparent player integration. Not a full upstream version upgrade."
   }
 }

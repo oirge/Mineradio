@@ -1,3 +1,5 @@
+import { resolveLyricAntialias } from '../../../utils/lyricRenderQuality';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_TEMPERA_TUNING } from '../../../types';
@@ -51,6 +53,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         subtitleUpcomingLyricsBlur,
+        isPreviewMode = false,
         temperaTuning = DEFAULT_TEMPERA_TUNING,
     } = props;
     const { t } = useTranslation();
@@ -59,6 +62,14 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
     pausedRef.current = paused;
     const temperaTuningRef = useRef(temperaTuning);
     temperaTuningRef.current = temperaTuning;
+    // 分辨率与抗锯齿（#929）：全局挡位叠上本样式的覆盖。倍数乘在 textureResolution 上；抗锯齿「自动」是原来的
+    // !postProcessEnabled（开了后处理画面画进滤镜自己的多重采样目标，画布 MSAA 只剩画框边缘受益）。
+    // 预览（样式架小图、样式窗口、主题乐园）保持原来的密度和抗锯齿，不跟这两个设置。
+    const renderQuality = useLyricRenderQuality(temperaTuning.render);
+    const renderScale = isPreviewMode ? 1 : renderQuality.scale;
+    const antialias = resolveLyricAntialias(isPreviewMode ? 'auto' : renderQuality.antialias, true);
+    const renderScaleRef = useRef(renderScale);
+    renderScaleRef.current = renderScale;
     const latestSongMetadataRef = useRef<TemperaSongMetadata>({
         title: songTitle,
         artist: songArtist,
@@ -184,7 +195,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
         label: 'Tempera',
         // Only inputs that genuinely need a new WebGL context and texture pool. The song is
         // handed to the live runtime instead - see TemperaPixiRuntime.swapSong.
-        rebuildKey: [currentTime, imageBlobs, lyricsFontScale, staticMode],
+        rebuildKey: [currentTime, imageBlobs, lyricsFontScale, staticMode, antialias],
         song: songContext,
         create: async (host, song, signal) => {
             const { TemperaPixiRuntime } = await import('./createTemperaPixiRuntime');
@@ -195,6 +206,8 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
                 program: song.program,
                 theme: song.theme,
                 tuning: temperaTuningRef.current,
+                renderScale: renderScaleRef.current,
+                antialias,
                 currentTime,
                 lyricsFontScale,
                 staticMode,
@@ -209,6 +222,7 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
             runtime.setSongMetadata(latestSongMetadataRef.current);
             // The tuning may have moved on while Pixi was importing or initializing.
             runtime.setTuning(temperaTuningRef.current);
+            runtime.setRenderScale(renderScaleRef.current);
             // The pause state may have changed while Pixi was importing or initializing.
             runtime.setPaused(pausedRef.current);
             return runtime;
@@ -223,6 +237,10 @@ const VisualizerTempera: React.FC<VisualizerSharedProps> = (props) => {
     useEffect(() => {
         runtimeRef.current?.setTuning(temperaTuning);
     }, [temperaTuning, runtimeRef]);
+
+    useEffect(() => {
+        runtimeRef.current?.setRenderScale(renderScale);
+    }, [renderScale, runtimeRef]);
 
     useEffect(() => {
         runtimeRef.current?.setSongMetadata(latestSongMetadataRef.current);

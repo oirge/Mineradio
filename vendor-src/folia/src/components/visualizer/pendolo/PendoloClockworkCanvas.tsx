@@ -1,3 +1,5 @@
+import type { LyricRenderScale } from '../../../types';
+import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
 import React, { useEffect, useMemo, useRef } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { colorWithAlpha } from '../colorMix';
@@ -25,6 +27,7 @@ export interface PendoloClockworkCanvasProps {
     enableLineGlow?: boolean;
     paused?: boolean;
     motionProfile: PendoloMotionProfile;
+    renderScale?: LyricRenderScale;
 }
 
 /**
@@ -234,6 +237,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
     enableLineGlow = false,
     paused = false,
     motionProfile,
+    renderScale = 1,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const phaseRef = useRef(0);
@@ -295,6 +299,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
         showCover,
         paused,
         motionProfile,
+        renderScale,
     });
 
     useEffect(() => {
@@ -313,8 +318,9 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             showCover,
             paused,
             motionProfile,
+            renderScale,
         };
-    }, [contentBox, centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, backgroundColor, showGearDecor, showCenterGradient, showCover, paused, motionProfile]);
+    }, [contentBox, centerX, centerY, baseRadius, lyricRingRadius, audioBass, primaryTextColor, accentTextColor, backgroundColor, showGearDecor, showCenterGradient, showCover, paused, motionProfile, renderScale]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -375,7 +381,7 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
                 animationFrameId = window.requestAnimationFrame(render);
                 return;
             }
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = resolveLyricPixelRatio(window.devicePixelRatio || 1, p.renderScale);
             const pixelWidth = Math.round(width * dpr);
             const pixelHeight = Math.round(height * dpr);
 

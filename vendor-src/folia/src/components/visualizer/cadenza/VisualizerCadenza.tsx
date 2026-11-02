@@ -1,3 +1,5 @@
+import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -1288,6 +1290,10 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         subtitleContentMode,
     } = props;
     const { t } = useTranslation();
+    // Keep the draw loop and apply density changes through a ref on its next frame.
+    const renderQuality = useLyricRenderQuality(cadenzaTuning.render);
+    const renderScaleRef = useRef(props.isPreviewMode ? 1 : renderQuality.scale);
+    renderScaleRef.current = props.isPreviewMode ? 1 : renderQuality.scale;
     const [viewport, setViewport] = useState({ width: 0, height: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
     const lineLayerRef = useRef<HTMLDivElement>(null);
@@ -1438,7 +1444,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             lastFrameTimeRef.current = now;
             const width = Math.max(Math.floor(viewport.width), 1);
             const height = Math.max(Math.floor(viewport.height), 1);
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = resolveLyricPixelRatio(window.devicePixelRatio || 1, renderScaleRef.current);
 
             if (textCanvas.width !== Math.floor(width * dpr) || textCanvas.height !== Math.floor(height * dpr)) {
                 textCanvas.width = Math.floor(width * dpr);

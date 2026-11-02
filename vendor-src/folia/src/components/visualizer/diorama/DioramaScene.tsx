@@ -4,6 +4,7 @@ import { type MotionValue } from 'framer-motion';
 import * as THREE from 'three';
 import { type AudioBands, type DioramaGeometryVisibility, type Line, type Theme } from '../../../types';
 import { buildLineGraphemeTimeline, splitLyricGraphemes, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
+import { resolveLyricTextDirection } from '../../../utils/lyrics/textDirection';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { prepareDioramaKeywordMatchers, resolveDioramaKeywordUnitColors } from './dioramaKeywordColor';
 import {
@@ -731,12 +732,14 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         const worldPerPx = LINE_FONT_SIZE / DIORAMA_RASTER_FONT_PX;
         const full = activeLine.fullText;
         const totalPx = measureDioramaText(full, fontSpec);
+        const rtl = resolveLyricTextDirection(full) === 'rtl';
         const units: PlacedUnitRaster[] = activeLineUnits.map((unit) => {
             const prefixPx = measureDioramaText(full.slice(0, unit.charStart), fontSpec);
             const raster = rasterDioramaUnit(full.slice(unit.charStart, unit.charEnd), fontSpec);
+            const startPx = prefixPx + raster.advancePx / 2;
             return {
                 raster,
-                centerX: (-totalPx / 2 + prefixPx + raster.advancePx / 2) * worldPerPx,
+                centerX: (rtl ? totalPx / 2 - startPx : -totalPx / 2 + startPx) * worldPerPx,
                 width: raster.canvasWidthPx * worldPerPx,
                 height: raster.canvasHeightPx * worldPerPx,
             };

@@ -1,3 +1,5 @@
+import { resolveLyricAntialias } from '../../../utils/lyricRenderQuality';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -50,10 +52,16 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         subtitleOverlayBackground,
         subtitleUpcomingLyricsBlur,
         background,
+        isPreviewMode = false,
         sonnetTuning = DEFAULT_SONNET_TUNING,
     } = props;
     const transparentBackground = background?.transparent ?? false;
     const { t } = useTranslation();
+    const renderQuality = useLyricRenderQuality(sonnetTuning.render);
+    const renderScale = isPreviewMode ? 1 : renderQuality.scale;
+    const antialias = resolveLyricAntialias(isPreviewMode ? 'auto' : renderQuality.antialias, true);
+    const renderScaleRef = useRef(renderScale);
+    renderScaleRef.current = renderScale;
     // Mod-driven per-frame multipliers (K3Panel etc.). Read once per render; the
     // runtime hot-swaps them via setModulation so the Pixi context is never rebuilt.
     // Keys are the Folium tunables declared in ./entry.tsx.
@@ -126,7 +134,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         label: 'Sonnet',
         // Only inputs that genuinely need a new WebGL context. The song is handed to the live
         // runtime instead - see SonnetPixiRuntime.swapSong.
-        rebuildKey: [currentTime, lyricsFontScale, sonnetTuning, staticMode, transparentBackground],
+        rebuildKey: [currentTime, lyricsFontScale, sonnetTuning, staticMode, transparentBackground, antialias],
         song: songContext,
         create: async (host, song, signal) => {
             const { SonnetPixiRuntime } = await import('./createSonnetPixiRuntime');
@@ -137,6 +145,8 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                 program: song.program,
                 theme: song.theme,
                 tuning: sonnetTuning,
+                renderScale: renderScaleRef.current,
+                antialias,
                 currentTime,
                 audioPower,
                 audioBands,
@@ -151,6 +161,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                 modulation,
             });
             runtime.setSongMetadata(latestSongMetadataRef.current);
+            runtime.setRenderScale(renderScaleRef.current);
             // The pause state may have changed while Pixi was importing or initializing.
             runtime.setPaused(pausedRef.current);
             return runtime;
@@ -163,6 +174,10 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
     useEffect(() => {
         runtimeRef.current?.setSongMetadata(latestSongMetadataRef.current);
     }, [songAlbum, songArtist, songTitle]);
+
+    useEffect(() => {
+        runtimeRef.current?.setRenderScale(renderScale);
+    }, [renderScale]);
 
     useEffect(() => {
         runtimeRef.current?.setPaused(paused);

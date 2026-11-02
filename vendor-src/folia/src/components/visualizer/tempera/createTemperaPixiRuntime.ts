@@ -1,5 +1,6 @@
+import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
 import type { MotionValue } from 'framer-motion';
-import type { TemperaTuning, Theme } from '../../../types';
+import type { LyricRenderScale, TemperaTuning, Theme } from '../../../types';
 import {
     destroyPixiContainerChildren,
     destroyPixiDisplayTree,
@@ -76,6 +77,13 @@ export interface TemperaRuntimeOptions {
     program: TemperaProgram;
     theme: Theme;
     tuning: TemperaTuning;
+    /**
+     * 分辨率倍数（#929，全局挡位叠上样式覆盖）：乘在 `textureResolution` 上再做纹理池吸附。
+     * 就地改，见 setRenderScale。
+     */
+    renderScale: LyricRenderScale;
+    /** 画布开不开 MSAA（#929）：「自动」时就是原来的 `!postProcessEnabled`。只在建上下文时定，变了由外壳重建。 */
+    antialias: boolean;
     currentTime: MotionValue<number>;
     lyricsFontScale: number;
     staticMode: boolean;
@@ -170,6 +178,9 @@ const requiresSceneRebuild = (previous: TemperaTuning, next: TemperaTuning) => (
     ))
 );
 
+const resolveTemperaRenderResolution = (width: number, height: number, tuning: TemperaTuning, scale: LyricRenderScale) =>
+    snapResolutionToTexturePool(width, height, resolveLyricPixelRatio(tuning.textureResolution, scale));
+
 export class TemperaPixiRuntime {
     private readonly sceneCache = new Map<number, TemperaSceneView>();
     /**
@@ -185,7 +196,8 @@ export class TemperaPixiRuntime {
     private lastWidth = 0;
     private lastHeight = 0;
     /**
-     * What the renderer is actually running at: `textureResolution` after the texture-pool snap.
+     * What the renderer is actually running at: `textureResolution` times the 分辨率 multiplier
+     * (#929), after the texture-pool snap.
      * It depends on the viewport as well as the setting, so it is recomputed on every resize and
      * every tuning change rather than read off the tuning - and the fixed-resolution filter
      * passes are derived from this, never from `tuning.textureResolution`.
@@ -226,12 +238,12 @@ export class TemperaPixiRuntime {
         const app = new pixi.Application();
         const width = Math.max(options.host.clientWidth, 320);
         const height = Math.max(options.host.clientHeight, 240);
-        const resolution = snapResolutionToTexturePool(width, height, options.tuning.textureResolution);
+        const resolution = resolveTemperaRenderResolution(width, height, options.tuning, options.renderScale);
         await app.init({
             width,
             height,
             backgroundAlpha: 0,
-            antialias: true,
+            antialias: options.antialias,
             autoDensity: true,
             resolution,
             autoStart: false,
@@ -284,7 +296,7 @@ export class TemperaPixiRuntime {
     private resolveRenderResolution(tuning: TemperaTuning) {
         const width = this.lastWidth || Math.max(this.options.host.clientWidth, 320);
         const height = this.lastHeight || Math.max(this.options.host.clientHeight, 240);
-        return snapResolutionToTexturePool(width, height, tuning.textureResolution);
+        return resolveTemperaRenderResolution(width, height, tuning, this.options.renderScale);
     }
 
     private resizeToHost() {
@@ -1029,6 +1041,15 @@ export class TemperaPixiRuntime {
                 this.drawOverlay(this.lastWidth, this.lastHeight);
             }
         }
+        if (this.options.paused) this.renderOnce();
+    }
+
+    /** Update density and the text/filter caches together, preserving the image pool. */
+    setRenderScale(scale: LyricRenderScale) {
+        if (this.destroyed || this.options.renderScale === scale) return;
+        this.options.renderScale = scale;
+        this.lastWidth = 0;
+        this.resizeToHost();
         if (this.options.paused) this.renderOnce();
     }
 

@@ -13,6 +13,7 @@ import {
     type Theme,
 } from '../types';
 import { normalizeLumiereTuning } from './lumiereTuning';
+import { normalizeLyricRenderOverride, normalizeLyricRenderQuality } from './lyricRenderQuality';
 
 // src/utils/appearanceCodec.ts
 // The shareable appearance config codec: theme + visual settings <-> the minified `folia-theme://`
@@ -64,6 +65,7 @@ const decompressClassic = (o: any): any => ({
 });
 
 const compressCadenza = (t: any): any => ({
+    r: t.render,
     cfs: t.fontScale,
     wr: t.widthRatio,
     ma: t.motionAmount,
@@ -71,6 +73,7 @@ const compressCadenza = (t: any): any => ({
     bi: t.beamIntensity,
 });
 const decompressCadenza = (o: any): any => ({
+    ...(o.r !== undefined ? { render: normalizeLyricRenderOverride(o.r) } : {}),
     fontScale: o.cfs !== undefined ? o.cfs : 1.12,
     widthRatio: o.wr !== undefined ? o.wr : 0.72,
     motionAmount: o.ma !== undefined ? o.ma : 1,
@@ -92,6 +95,7 @@ const decompressPartita = (o: any): any => ({
 });
 
 const compressFume = (t: any): any => ({
+    r: t.render,
     hps: t.hidePrintSymbols,
     dgb: t.disableGeometricBackground,
     boo: t.backgroundObjectOpacity,
@@ -102,6 +106,7 @@ const compressFume = (t: any): any => ({
     hs: t.heroScale,
 });
 const decompressFume = (o: any): any => ({
+    ...(o.r !== undefined ? { render: normalizeLyricRenderOverride(o.r) } : {}),
     hidePrintSymbols: o.hps !== undefined ? o.hps : false,
     disableGeometricBackground: o.dgb !== undefined ? o.dgb : true,
     backgroundObjectOpacity: o.boo !== undefined ? o.boo : 0.5,
@@ -146,6 +151,7 @@ const decompressTilt = (o: any): any => ({
 });
 
 const compressDiorama = (t: any): any => ({
+    r: t.render,
     cs: t.cameraSpeed,
     ma: t.motionAmount,
     ar: t.audioReactivity,
@@ -174,6 +180,7 @@ const compressDiorama = (t: any): any => ({
     kce: t.keywordColoringEnabled,
 });
 const decompressDiorama = (o: any): any => ({
+    ...(o.r !== undefined ? { render: normalizeLyricRenderOverride(o.r) } : {}),
     cameraSpeed: o.cs !== undefined ? o.cs : DEFAULT_DIORAMA_TUNING.cameraSpeed,
     motionAmount: o.ma !== undefined ? o.ma : DEFAULT_DIORAMA_TUNING.motionAmount,
     audioReactivity: o.ar !== undefined ? o.ar : DEFAULT_DIORAMA_TUNING.audioReactivity,
@@ -331,6 +338,7 @@ const decompressSoraBackground = (o: any): any => ({
 });
 
 const compressMonet = (t: any): any => ({
+    r: t.render,
     kce: t.keywordColoringEnabled,
     msd: t.showDescription,
     mav: t.showAudioVisualization,
@@ -342,6 +350,7 @@ const compressMonet = (t: any): any => ({
     mpdh: t.showPortraitDragHanger,
 });
 const decompressMonet = (o: any): any => ({
+    ...(o.r !== undefined ? { render: normalizeLyricRenderOverride(o.r) } : {}),
     keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_MONET_TUNING.keywordColoringEnabled,
     showDescription: o.msd !== undefined ? o.msd : DEFAULT_MONET_TUNING.showDescription,
     showAudioVisualization: o.mav !== undefined ? o.mav : DEFAULT_MONET_TUNING.showAudioVisualization,
@@ -354,12 +363,14 @@ const decompressMonet = (o: any): any => ({
 });
 
 const compressPendolo = (t: any): any => ({
+    r: t.render,
     sgd: t.showGearDecor,
     scg: t.showCenterGradient,
     sco: t.showCoverOnWatchFace,
     elg: t.enableLineGlow,
 });
 const decompressPendolo = (o: any): any => ({
+    ...(o.r !== undefined ? { render: normalizeLyricRenderOverride(o.r) } : {}),
     showGearDecor: o.sgd || DEFAULT_PENDOLO_TUNING.showGearDecor,
     showCenterGradient: o.scg !== undefined ? o.scg : DEFAULT_PENDOLO_TUNING.showCenterGradient,
     showCoverOnWatchFace: o.sco !== undefined ? o.sco : DEFAULT_PENDOLO_TUNING.showCoverOnWatchFace,
@@ -367,6 +378,7 @@ const decompressPendolo = (o: any): any => ({
 });
 
 const compressSonnet = (t: any): any => ({
+    r: t.render,
     ci: t.cameraIntensity,
     tm: t.typographyMotion,
     md: t.mgDensity,
@@ -389,6 +401,7 @@ const compressSonnet = (t: any): any => ({
     pplx: t.postProcessLensDispersion,
 });
 const decompressSonnet = (o: any): any => ({
+    ...(o.r !== undefined ? { render: normalizeLyricRenderOverride(o.r) } : {}),
     cameraIntensity: o.ci !== undefined ? o.ci : DEFAULT_SONNET_TUNING.cameraIntensity,
     typographyMotion: o.tm !== undefined ? o.tm : DEFAULT_SONNET_TUNING.typographyMotion,
     mgDensity: o.md !== undefined ? o.md : DEFAULT_SONNET_TUNING.mgDensity,
@@ -412,6 +425,7 @@ const decompressSonnet = (o: any): any => ({
 });
 
 const compressTempera = (t: any): any => ({
+    r: t.render,
     ci: t.cameraIntensity,
     gm: t.glyphMotion,
     wll: t.wholeLineLyrics,
@@ -435,6 +449,7 @@ const compressTempera = (t: any): any => ({
     ppld: t.postProcessLensDistortion,
 });
 const decompressTempera = (o: any): any => ({
+    ...(o.r !== undefined ? { render: normalizeLyricRenderOverride(o.r) } : {}),
     cameraIntensity: o.ci !== undefined ? o.ci : DEFAULT_TEMPERA_TUNING.cameraIntensity,
     glyphMotion: o.gm !== undefined ? o.gm : DEFAULT_TEMPERA_TUNING.glyphMotion,
     wholeLineLyrics: o.wll !== undefined ? o.wll : DEFAULT_TEMPERA_TUNING.wholeLineLyrics,
@@ -462,6 +477,7 @@ const decompressTempera = (o: any): any => ({
 
 // 绘光：短键只在短码里出现；解压后统一走 normalizeLumiereTuning 钳制和补默认值。
 const LUMIERE_SHORT_KEYS = {
+    render: 'r',
     lightIntensity: 'li',
     audioResponse: 'ar',
     fogDensity: 'fd',
@@ -503,6 +519,7 @@ export const compressConfig = (config: any): string => {
     }
     if (config.visualizerMode) minified.vm = config.visualizerMode;
     if (config.randomVisualizerModePerSong !== undefined) minified.rvms = config.randomVisualizerModePerSong;
+    if (config.lyricRenderQuality !== undefined) minified.lrq = normalizeLyricRenderQuality(config.lyricRenderQuality);
     if (config.visualizerBackgroundMode) minified.vbm = config.visualizerBackgroundMode;
     if (config.backgroundOpacity !== undefined) minified.bo = config.backgroundOpacity;
     if (config.useCoverColorBg !== undefined) minified.ccb = config.useCoverColorBg;
@@ -592,6 +609,7 @@ export const decompressConfig = (str: string): any => {
         || parsed.t !== undefined
         || parsed.vm !== undefined
         || parsed.rvms !== undefined
+        || parsed.lrq !== undefined
         || parsed.ccb !== undefined
         || parsed.dvgb !== undefined
         || parsed.dvv !== undefined
@@ -630,6 +648,7 @@ export const decompressConfig = (str: string): any => {
         }
         if (parsed.vm) decompressed.visualizerMode = parsed.vm;
         if (parsed.rvms !== undefined) decompressed.randomVisualizerModePerSong = parsed.rvms;
+        if (parsed.lrq !== undefined) decompressed.lyricRenderQuality = normalizeLyricRenderQuality(parsed.lrq);
         if (parsed.vbm) decompressed.visualizerBackgroundMode = parsed.vbm;
         if (parsed.bo !== undefined) decompressed.backgroundOpacity = parsed.bo;
         if (parsed.ccb !== undefined) decompressed.useCoverColorBg = parsed.ccb;
@@ -689,7 +708,7 @@ export const decompressConfig = (str: string): any => {
         return decompressed;
     } else {
         const validKeys = [
-            'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'visualizerBackgroundMode', 'backgroundOpacity',
+            'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'lyricRenderQuality', 'visualizerBackgroundMode', 'backgroundOpacity',
             'useCoverColorBg', 'disableVisualizerGeometricBackground', 'disableVisualizerVignette', 'staticMode',
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation', 'subtitleContentMode',
             'subtitleOverlayBackground', 'subtitleUpcomingLyricsBlur', 'subtitleOverlayOpacity',

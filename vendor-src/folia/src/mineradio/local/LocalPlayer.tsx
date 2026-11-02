@@ -36,6 +36,11 @@ export default function LocalPlayer() {
     const theme = visuals.daylight ? DAYLIGHT_THEME : DEFAULT_THEME;
     const track = player.state?.currentTrack;
     const isLyrics = visuals.view === 'lyrics';
+    const transparent = isLyrics && visuals.background.transparent === true;
+    useEffect(() => {
+        document.documentElement.classList.toggle('local-player-transparent', transparent);
+        return () => document.documentElement.classList.remove('local-player-transparent');
+    }, [transparent]);
     const openQueue = () => { setQueue(true); setLibraryOpen(true); setSettingsOpen(false); setFocus(false); };
     const run = (method: string, params?: Record<string, unknown>) => { void player.command(method, params).catch(() => {}); };
     const style = useMemo(() => ({
@@ -46,8 +51,8 @@ export default function LocalPlayer() {
         '--local-line': colorWithAlpha(theme.primaryColor, 0.13),
         '--local-raised': mixColors(theme.backgroundColor, theme.primaryColor, 0.07),
         '--text-primary': theme.primaryColor, '--text-secondary': theme.secondaryColor,
-        color: theme.primaryColor, backgroundColor: theme.backgroundColor,
-    }) as CSSProperties, [theme]);
+        color: theme.primaryColor, backgroundColor: transparent ? 'transparent' : theme.backgroundColor,
+    }) as CSSProperties, [theme, transparent]);
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             if (event.defaultPrevented) return;

@@ -1,0 +1,1 @@
+var e=/[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}\p{Script=Hanifi_Rohingya}\p{Script=Yezidi}]/u,t=/\p{L}/u,n=n=>{for(let r of n)if(t.test(r))return e.test(r)?`rtl`:`ltr`;return`ltr`};export{n as t};

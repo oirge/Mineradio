@@ -4,9 +4,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_DIORAMA_TUNING, type Line } from '../../../types';
 import { isInterludeLine } from '../../../utils/lyrics/parserCore';
+import { resolveLyricAntialias, resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
 import { useVisualizerRuntime } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { resolveSubtitleFontSizes } from '../subtitleFontSizes';
 import CameraRig from './CameraRig';
@@ -120,6 +122,11 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
         dioramaTuning,
     } = props;
     const { t } = useTranslation();
+    const renderQuality = useLyricRenderQuality(dioramaTuning?.render);
+    const renderScale = props.isPreviewMode ? 1 : renderQuality.scale;
+    const canvasDpr: number | [number, number] = renderScale === 1 ? [1, 2]
+        : resolveLyricPixelRatio(Math.min(2, Math.max(1, window.devicePixelRatio || 1)), renderScale);
+    const canvasAntialias = props.isPreviewMode ? true : resolveLyricAntialias(renderQuality.antialias, true);
 
     const { activeLine, recentCompletedLine, nextLines } = useVisualizerRuntime({
         currentTime,
@@ -402,9 +409,10 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
         >
             <div className="absolute inset-0 z-0">
                 <Canvas
+                    key={canvasAntialias ? 'antialias' : 'aliased'}
                     camera={{ position: [0, 0.6, 9], fov: 55 }}
-                    dpr={[1, 2]}
-                    gl={{ alpha: true, antialias: true }}
+                    dpr={canvasDpr}
+                    gl={{ alpha: true, antialias: canvasAntialias }}
                     style={{ background: 'transparent' }}
                 >
                     <CameraRig

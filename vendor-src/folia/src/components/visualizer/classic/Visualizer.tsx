@@ -1,3 +1,4 @@
+import { resolveLyricTextDirection } from '../../../utils/lyrics/textDirection';
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -216,7 +217,7 @@ const Word: React.FC<{
             style={{
                 fontSize,
                 fontWeight: resolveThemeFontWeight(theme, 700),
-                marginRight: config.marginRight,
+                marginInlineEnd: config.marginRight,
                 alignSelf: config.alignSelf,
                 lineHeight: 1.22,
             }}
@@ -392,6 +393,8 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         const baseSpread = isChaotic ? 60 : isCalm ? 0 : 20;
         const baseRotate = isChaotic ? 30 : isCalm ? 0 : 5;
 
+        // In an RTL line the next word sits to the LEFT, so its physical x offsets close the gap the other way.
+        const rtl = resolveLyricTextDirection(activeLine.fullText) === 'rtl';
         const wordConfigs: WordLayoutConfig[] = displayWords.map((w, i) => {
             const wordSeed = seed + i;
 
@@ -448,7 +451,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 const gap = 0.05 * pxFontSize;
                 const halfOverflow_i = w_i * (s_i - 1) / 2;
                 const halfOverflow_next = w_next * (s_next - 1) / 2;
-                const xOffsetDiff = xVal - x_next;
+                const xOffsetDiff = rtl ? x_next - xVal : xVal - x_next;
 
                 const calculatedMargin = (halfOverflow_i + halfOverflow_next + xOffsetDiff + gap) * spacingMultiplier;
                 const minMargin = (isChaotic ? 0.08 * pxFontSize : 0.12 * pxFontSize) * spacingMultiplier;
@@ -592,6 +595,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                             initial={activeLineContainerMotion.initial}
                             animate={activeLineContainerMotion.animate}
                             exit={activeLineContainerMotion.exit}
+                            dir={resolveLyricTextDirection(activeLine.fullText)}
                             className={`flex flex-wrap w-full max-w-6xl content-center ${lineConfig.justifyContent} ${lineConfig.alignItems}`}
                             style={{ perspective: `${lineConfig.perspective}px`, minHeight: '300px' }}
                         >
