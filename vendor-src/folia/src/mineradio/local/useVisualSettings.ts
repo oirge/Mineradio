@@ -14,7 +14,7 @@ import type { VisualizerTuningBundle, VisualizerTuningMode } from '../../compone
 import type { VisualizerBackgroundConfig } from '../../components/visualizer/backgrounds/definition';
 import { isBuiltinVisualizerMode, isBuiltinVisualizerBackgroundMode } from '../../types/visualizerModes';
 import { DEFAULT_LYRIC_RENDER_QUALITY, normalizeLyricRenderOverride, normalizeLyricRenderQuality } from '../../utils/lyricRenderQuality';
-import { captureVisualPreset, restoreVisualPresets, presetName, LOCAL_PRESET_LIMIT, type LocalVisualPreset } from './visualPresetData';
+import { captureVisualPreset, restoreVisualPresets, restorePlaylistPresets, presetName, LOCAL_PRESET_LIMIT, type LocalVisualPreset } from './visualPresetData';
 
 // src/mineradio/local/useVisualSettings.ts
 // Dedicated visual preferences for the embedded local player, without application/provider stores.
@@ -45,7 +45,10 @@ export interface VisualPreferences {
 }
 interface VisualSettings extends VisualPreferences {
     presets: LocalVisualPreset[];
+    playlistPresets: Record<string, string>;
     savePreset: (name: string, id?: string) => string | null;
+    importPreset: (preset: Pick<LocalVisualPreset, 'name' | 'settings'>) => string | null;
+    bindPlaylistPreset: (playlistId: string, presetId: string | null) => void;
     applyPreset: (id: string) => void;
     renamePreset: (id: string, name: string) => boolean;
     deletePreset: (id: string) => void;
@@ -100,6 +103,7 @@ export function normalizeVisualPreferences(saved: unknown): VisualPreferences {
 export const useVisualSettings = create<VisualSettings>()(persist((set, get) => ({
     ...defaults,
     presets: [],
+    playlistPresets: {},
     savePreset: (rawName, id) => {
         const state = get(), name = presetName(rawName);
         const existing = id ? state.presets.find(item => item.id === id) : null;
@@ -109,6 +113,26 @@ export const useVisualSettings = create<VisualSettings>()(persist((set, get) => 
         set({ presets: existing ? state.presets.map(item => item.id === id ? preset : item) : [...state.presets, preset] });
         return preset.id;
     },
+    importPreset: preset => {
+        const entries = get().presets;
+        if (entries.length >= LOCAL_PRESET_LIMIT) return null;
+        const base = presetName(preset.name);
+        if (!base) return null;
+        let name = base, n = 2;
+        while (entries.some(entry => entry.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+            const suffix = ` (${n++})`;
+            name = base.slice(0, 48 - suffix.length) + suffix;
+        }
+        const id = crypto.randomUUID();
+        set({ presets: [...entries, { id, name, settings: captureVisualPreset(normalizeVisualPreferences(preset.settings)) }] });
+        return id;
+    },
+    bindPlaylistPreset: (playlistId, presetId) => set(state => {
+        const bindings = { ...state.playlistPresets };
+        if (presetId && state.presets.some(preset => preset.id === presetId)) bindings[playlistId] = presetId;
+        else delete bindings[playlistId];
+        return { playlistPresets: restorePlaylistPresets(bindings, state.presets) };
+    }),
     applyPreset: id => {
         const preset = get().presets.find(item => item.id === id);
         if (preset) set(captureVisualPreset(normalizeVisualPreferences(preset.settings)));
@@ -120,7 +144,10 @@ export const useVisualSettings = create<VisualSettings>()(persist((set, get) => 
         set({ presets: entries.map(item => item.id === id ? { ...item, name } : item) });
         return true;
     },
-    deletePreset: id => set(state => ({ presets: state.presets.filter(item => item.id !== id) })),
+    deletePreset: id => set(state => {
+        const presets = state.presets.filter(item => item.id !== id);
+        return { presets, playlistPresets: restorePlaylistPresets(state.playlistPresets, presets) };
+    }),
     toggleRandomPool: (mode, checked) => set(state => {
         if (!isBuiltinVisualizerMode(mode) || state.randomPool.includes(mode) === checked) return state;
         const pool = checked ? [...state.randomPool, mode] : state.randomPool.filter(value => value !== mode);
@@ -136,8 +163,9 @@ export const useVisualSettings = create<VisualSettings>()(persist((set, get) => 
     name: 'mineradio-folia-local-visuals-v1',
     // Validate persisted routing fields so outdated/unavailable modes cannot load remote backgrounds.
     merge: (saved, current) => {
+        const presets = restoreVisualPresets((saved as { presets?: unknown } | null)?.presets, normalizeVisualPreferences);
         return { ...current, ...normalizeVisualPreferences(saved),
-            presets: restoreVisualPresets((saved as { presets?: unknown } | null)?.presets, normalizeVisualPreferences) };
+            presets, playlistPresets: restorePlaylistPresets((saved as { playlistPresets?: unknown } | null)?.playlistPresets, presets) };
     },
 }));
 

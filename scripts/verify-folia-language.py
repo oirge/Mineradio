@@ -1,5 +1,6 @@
 """Verify the built embedded Folia with the real Mineradio host and isolated preferences."""
 import argparse
+from ui_browser import launch_browser, capture_screenshot
 import json
 from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
@@ -38,7 +39,7 @@ def audit(frame, label):
 
 with sync_playwright() as p:
     print('Launching Chromium for Folia language audit', flush=True)
-    browser = p.chromium.launch(headless=True, channel='chromium', timeout=30000)
+    browser = launch_browser(p)
     page = browser.new_page(viewport={'width':1440,'height':960}, locale='zh-CN')
     page.set_default_timeout(30000)
     page.add_init_script("""localStorage.setItem('folia_app_language','zh-CN');
@@ -62,7 +63,7 @@ with sync_playwright() as p:
             expect(frame.get_by_test_id('local-player')).to_have_attribute('data-view',view)
             page.wait_for_timeout(500)
             audit(frame, view)
-            page.screenshot(path=str(output / f'folia-english-{view}.png'))
+            capture_screenshot(page, path=str(output / f'folia-english-{view}.png'))
         report['checks'].append('English startup overrides old Folia Chinese preference; three views audited')
         frame.get_by_test_id('local-view-lyrics').click()
         frame.get_by_test_id('local-open-library').click()
@@ -99,7 +100,7 @@ with sync_playwright() as p:
             audit(frame, f'background-{background}')
         frame.get_by_test_id('local-theme').select_option('light')
         audit(frame, 'daylight-settings')
-        page.screenshot(path=str(output / 'folia-english-settings.png'))
+        capture_screenshot(page, path=str(output / 'folia-english-settings.png'))
         report['checks'].append(f'{len(modes)} lyric effects and {len(backgrounds)} background settings audited')
 
         page.evaluate("""() => {
@@ -128,7 +129,7 @@ with sync_playwright() as p:
     except Exception as error:
         report.update(passed=False, failure=str(error))
         try:
-            page.screenshot(path=str(output / 'folia-failure.png'), timeout=5000)
+            capture_screenshot(page, path=str(output / 'folia-failure.png'), timeout=5000)
         except Exception as screenshot_error:
             report['screenshotFailure'] = str(screenshot_error)
         raise

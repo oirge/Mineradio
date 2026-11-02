@@ -1,5 +1,6 @@
 import LocalVisualOptions from './LocalVisualOptions';
 import LocalVisualPresets from './LocalVisualPresets';
+import LocalPlaylistPresets from './LocalPlaylistPresets';
 import LocalVisualPreview from './LocalVisualPreview';
 import LocalRenderQuality, { LocalStyleRenderQuality } from './LocalRenderQuality';
 import { settingsTokens } from '../../components/modal/settings/kit/kitTheme';
@@ -14,10 +15,12 @@ import type { VisualizerTuningMode } from '../../components/visualizer/tuningReg
 import { colorWithAlpha } from '../../components/visualizer/colorMix';
 import { useVisualSettings } from './useVisualSettings';
 import type { LocalVisualAssets } from './useLocalVisualAssets';
+import type { HostState } from '../client';
+import type { LocalCommand } from './useLibraryPage';
 
 // src/mineradio/local/VisualSettings.tsx
 // Visual-only controls reuse Folia's registry and tuning panels without its global Settings application.
-export default function VisualSettings({ theme, onClose, assets, onLanguage }: { theme: Theme; onClose: () => void; assets: LocalVisualAssets; onLanguage: (language: string) => void }) {
+export default function VisualSettings({ theme, onClose, assets, onLanguage, state, command }: { theme: Theme; onClose: () => void; assets: LocalVisualAssets; onLanguage: (language: string) => void; state: HostState | null; command: LocalCommand }) {
     const { t, i18n } = useTranslation('localPlayer');
     const { t: translate } = useTranslation();
     const settings = useVisualSettings();
@@ -55,6 +58,7 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage }: {
                 <option value="zh-CN">中文</option><option value="en">English</option>
             </select></label>
             <LocalVisualPresets />
+            <LocalPlaylistPresets state={state} command={command} />
             <label className="local-setting"><span>{t('lyricMode')}</span><select aria-label={t('lyricMode')} data-testid="local-visualizer-mode" value={settings.mode} onChange={(event) => settings.update({ mode: event.target.value as VisualizerMode })}>
                 {VISUALIZER_REGISTRY.filter((entry) => !entry.mode.startsWith('mod:')).map((entry) => <option key={entry.mode} value={entry.mode}>{getVisualizerModeLabel(entry.mode, label)}</option>)}
             </select></label>

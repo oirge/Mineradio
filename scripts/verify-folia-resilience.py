@@ -1,5 +1,6 @@
 """Exercise Folia runtime recovery, retry, and explicit diagnostic export in Chromium."""
 import argparse
+from ui_browser import launch_browser, capture_screenshot
 import json
 from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
@@ -14,7 +15,7 @@ report = {'checks': [], 'errors': []}
 
 with sync_playwright() as playwright:
     print('Launching Chromium for Folia recovery', flush=True)
-    browser = playwright.chromium.launch(headless=True, channel='chromium', timeout=30000)
+    browser = launch_browser(playwright)
     context = browser.new_context(accept_downloads=True, viewport={'width': 1440, 'height': 900})
     context.add_init_script("""
       localStorage.setItem('mineradio-ui-language-v1', 'en');
@@ -53,7 +54,7 @@ with sync_playwright() as playwright:
         assert errors and errors[-1]['message'] == 'verification visualizer failure', errors
         report['checks'].append('runtime errors are recorded locally and replaced by English recovery actions')
         print('PASS: runtime failure and recovery actions', flush=True)
-        page.screenshot(path=str(OUTPUT / 'folia-recovery.png'))
+        capture_screenshot(page, path=str(OUTPUT / 'folia-recovery.png'))
 
         with page.expect_download() as pending_download:
             recovery.get_by_role('button', name='Export diagnostics').click()
@@ -85,7 +86,7 @@ with sync_playwright() as playwright:
         report['passed'] = True
     except Exception as error:
         report.update(passed=False, failure=str(error))
-        page.screenshot(path=str(OUTPUT / 'folia-recovery-failure.png'))
+        capture_screenshot(page, path=str(OUTPUT / 'folia-recovery-failure.png'))
         raise
     finally:
         (OUTPUT / 'folia-resilience-report.json').write_text(

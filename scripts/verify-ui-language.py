@@ -1,5 +1,6 @@
 """Run UI-language regression checks against a local Mineradio server."""
 import argparse
+from ui_browser import launch_browser, capture_screenshot
 import json
 from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
@@ -44,7 +45,7 @@ def switch(page, language, click=False):
     page.wait_for_timeout(80)  # Flush translation observers and pending focus callbacks.
 
 def screenshot(page, name):
-    page.screenshot(path=str(args.output / f"{name}.png"))
+    capture_screenshot(page, path=str(args.output / f"{name}.png"))
 
 def check_status_layout(page):
     overlaps = page.evaluate("""() => {
@@ -64,7 +65,7 @@ def check_status_layout(page):
     assert not overlaps, f"Settings labels overlap values: {overlaps}"
 
 with sync_playwright() as playwright:
-    browser = playwright.chromium.launch(headless=True)
+    browser = launch_browser(playwright)
     page = browser.new_page(viewport={"width": 1440, "height": 960})
     page.on("pageerror", lambda error: report["errors"].append(str(error)))
     try:

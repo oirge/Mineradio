@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getFromCache, removeFromCache, saveToCache } from './visualAssetCache';
+import { getFromCache, removeFromCache, saveToCache, VISUAL_ASSETS_CHANGED } from './visualAssetCache';
 import { isSupportedVisualizerImageFile } from '../../services/visualizerImageAsset';
 
 // src/mineradio/local/useLocalVisualAssets.ts
@@ -16,11 +16,15 @@ function useImageAssets(key: string, multiple: boolean) {
         .filter(item => item?.blob instanceof Blob && typeof item.name === 'string');
     useEffect(() => {
         mounted.current = true;
-        const ticket = ++revision.current;
-        void getFromCache(key).then(value => {
-            if (mounted.current && ticket === revision.current) setStored(normalize(value));
-        }).catch(() => {}).finally(() => { if (mounted.current && ticket === revision.current) setLoading(false); });
-        return () => { mounted.current = false; revision.current++; };
+        const reload = () => {
+            const ticket = ++revision.current;
+            void serial.current.catch(() => {}).then(() => getFromCache(key)).then(value => {
+                if (mounted.current && ticket === revision.current) setStored(normalize(value));
+            }).catch(() => {}).finally(() => { if (mounted.current && ticket === revision.current) setLoading(false); });
+        };
+        reload();
+        window.addEventListener(VISUAL_ASSETS_CHANGED, reload);
+        return () => { mounted.current = false; revision.current++; window.removeEventListener(VISUAL_ASSETS_CHANGED, reload); };
     }, [key]);
     useEffect(() => {
         const leases = stored.map(item => ({ id: item.id, name: item.name, url: URL.createObjectURL(item.blob) }));
