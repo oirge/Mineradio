@@ -3,9 +3,18 @@
 - 授权：用户要求补齐列出的全部功能，并在全部改好后发布新版。基线为 `4c78972` / `v2.5.5`。
 - 内容：17 种 Folia 歌词效果（花火、雾笺、町景）；雾笺性能补丁；单／双／三行字幕与 Lattice 和声；自选随机池、切歌随机、不连续重复与手动重抽；歌词和背景实时预览；四种粒子预设；扩展播放器手势；WE 原生画面透明度、位置、缩放。
 - 来源：Folia 取材基线仍为 0.7.16，新增功能选择性移植自 0.7.25 稳定提交 `20c3ecd`；详细记录见 `MINERADIO-UPSTREAM.json`。保持 Mineradio 拥有唯一音频、曲库、播放队列和歌单。
-- 本地验证：Node 1577 项、1576 通过、0 失败、1 可选基准跳过；Folia 类型检查与 53 项定向单测通过。发布结果和最终资产核验在发布后补录。
+- 本地验证：Node 1577 项、1576 通过、0 失败、1 可选基准跳过；Folia 类型检查与 53 项定向单测通过。
 - 新功能浏览器验收：8 项全部通过，无未捕获页面错误；含 TTML 分轨、多行字幕、随机池、Lattice 和声、实时预览、刷新持久化、四种粒子和 WE 参数。中英文审计通过；Folia 错误恢复、诊断导出、重试与返回通过。预览需 `flex:none` 防止在设置面板中被压缩。
-- Windows 构建：本机 NSIS 安装器构建成功（122650531 B），隔离用户档 `sync-release-260` 启动 `dist/win-unpacked/Mineradio-oirge.exe`。本地打包使用已下载 Electron 分发目录；正式资产以后续 CI 构建为准。
+- Windows 构建：本机 NSIS 安装器构建成功（122650531 B），隔离用户档 `sync-release-260` 启动 `dist/win-unpacked/Mineradio-oirge.exe`，核实版本 2.6.0、两首 WAV/TTML 导入与播放、Folia 进入。桌面 Effects 按钮定位超时，不能把桌面实时预览记为通过；相同功能的浏览器专项验收已通过。本地打包使用已下载 Electron 分发目录；正式资产由 GitHub Actions 构建。
+- 完整浏览器回归边界：本机重跑在旧 headless shell 启动阶段停滞，脚本已切换至完整 Chromium；首次 PR Verify `41406106625` 的构建、类型和单测均通过，浏览器阶段把预览示例歌词「烟花在夜空中盛开」误判为未翻译界面文案。后续维护只将预览歌词和歌曲元数据区域排除，周围控件继续审计。用户随后明确「直接发布不用过多测试」，因此停止本机完整重跑，不将后续 Verify 作为发布前置，也不宣称完整浏览器 CI 全绿。
+- 提交与构建：功能提交 `11e4c6a`、浏览器运行方式修正 `86f944e` 经 PR #151 以 merge commit `87c8814b91d573f39255717b1a508c2b22ea0227` 合入 main（`2026-11-02T07:31:02Z`）。annotated tag `v2.6.0`（tag object `a26e49d90fcb7d35d73c9907b0bc2c397919cb98`）固定在该合并提交；Windows Build and Release `41406868259` 成功（`2026-11-02T07:31:40Z`–`07:33:47Z`）。
+- 正式发布：[v2.6.0](https://github.com/oirge/Mineradio/releases/tag/v2.6.0)（Release ID `431176408`）于北京时间 `2026-11-02 15:35:09` 公开并设为 Latest，`draft=false` / `prerelease=false`；公开 Latest API 已返回 `v2.6.0`。
+- 官方资产核验：四项文件完整回下载，大小与 SHA256 均匹配 GitHub API digest；SHA256 清单三项全部一致，安装器 SHA-512 与 `latest.yml` 的 sha512/size/path 均一致；公开 `releases/latest/download/latest.yml` 与已校验清单逐字节一致。下载使用本机代理 `127.0.0.1:7897`。未运行官方安装器覆盖现有安装。
+  - `Mineradio-oirge-2.6.0-Setup.exe`：122567493 B，SHA256 `fb3b9f4c542f6e128dc9e1a1ae0e3617743d326b0a7530130c72c6de6f87c5d0`。
+  - `Mineradio-oirge-2.6.0-Setup.exe.blockmap`：129681 B，SHA256 `2d8dbcee203e5ec3241d923c91b399d9dda6a5223c80727b2a6ef505ed72b580`。
+  - `latest.yml`：359 B，SHA256 `40fd40c735141fbb6897948ff238d5c2e6c78bd40af279ee5f277af920f7146e`。
+  - `Mineradio-oirge-2.6.0-SHA256SUMS.txt`：282 B，SHA256 `594178a9f9451ddaf8258e6020dee66e23f8a4700e964b73108ff3e3d7b166e8`。
+  - 安装器 SHA-512：`I8GrGGS7eEkUtpAocQfWu3NYF5I2xlu9gGhHkb0hG3lpkC4exd0Xau2R999easb5I0jvxAHMhwEv9KqGEaeW4w==`。
 - 验收边界：摄像头识别与 WE helper 参数通过模拟边界验证，不将其描述为摄像头真人识别或 Wallpaper Engine 实例实测。
 
 # 发布流程
