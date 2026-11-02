@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`touchpad`,size:24,node:[[`rect`,{width:`20`,height:`16`,x:`2`,y:`4`,rx:`2`,key:`18n3k1`}],[`path`,{d:`M2 14h20`,key:`myj16y`}],[`path`,{d:`M12 20v-6`,key:`1rm09r`}]]};r.node;var i=t(r);export{n,i as t};

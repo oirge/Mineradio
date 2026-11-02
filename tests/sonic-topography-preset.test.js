@@ -192,12 +192,12 @@ function activeRipples(terrain) {
 test('音域回响登记为第 8 个视觉预设，并在预设面板里排到前面', () => {
   const meta = readSourceBlock(app, 'var presetMeta = [', 'var lyricColorPresets');
   const names = meta.match(/name: '([^']+)'/g).map((s) => s.slice(7, -1));
-  assert.deepEqual(names, ['emily专辑封面', '滚筒', '星球', '虚空', '唱片', '星河', '安魂', '音域回响', '音域回响']);
+  assert.deepEqual(names, ['emily专辑封面', '滚筒', '星球', '虚空', '唱片', '星河', '安魂', '音域回响', '音域回响', '月蚀圣环', '雨幕霓虹', '折光蝶群', '深海绽放']);
   const icons = readSourceBlock(meta, 'var presetIcons = [', 'var presetDisplayOrder');
   assert.equal((icons.match(/<svg /g) || []).length, names.length, '每个预设都要有自己的图标');
   // 预设 7 是 Ajin 的 three.js 重写, 预设 8 才是 CmzYa 的 Wallpaper Engine 原作, 署名不能串。
   assert.match(meta, /nameHtml: '音域回响 <span class="pc-name-en">Sonic-Topography<\/span>', desc: '移植 Ajin'/);
-  assert.match(meta, /var presetDisplayOrder = \[0, 7, 8, 6, 5, 4, 2, 1, 3\]/);
+  assert.match(meta, /var presetDisplayOrder = \[0, 9, 10, 11, 12, 7, 8, 6, 5, 4, 2, 1, 3\]/);
   assert.match(app, /var SONIC_TOPOGRAPHY_PRESET_INDEX = 7;/);
 });
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, type MotionValue, useMotionValueEvent, useTransform } from 'framer-motion';
 import type { Line, LyricBackgroundVocal, SubtitleContentMode, Theme, Word } from '../../types';
 import { resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../utils/fontStacks';
@@ -15,6 +15,8 @@ import {
 
 // src/components/visualizer/VisualizerHarmonyOverlay.tsx
 // Renders TTML background vocals in one shared top safe-area without changing mode-specific main lyrics.
+
+export const HarmonyTopContext = createContext(76);
 
 interface VisualizerHarmonyOverlayProps {
     currentTime: MotionValue<number>;
@@ -201,7 +203,7 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     }, [currentTime, updateSnapshot]);
 
     useMotionValueEvent(currentTime, 'change', updateSnapshot);
-    const harmonyTopPx = 76;
+    const harmonyTopPx = useContext(HarmonyTopContext);
 
     return (
         <AnimatePresence>

@@ -1,5 +1,6 @@
 import React from 'react';
 import VisualizerSubtitleOverlay from '../../src/components/visualizer/VisualizerSubtitleOverlay';
+import { subtitleOverlayLayoutFromContentMode } from '../../src/utils/lyrics/subtitleOverlayLayout';
 import { resolveSubtitleFontSizes } from '../../src/components/visualizer/subtitleFontSizes';
 import { DEFAULT_THEME } from '../../src/services/baseThemes';
 import type { Line, SubtitleContentMode } from '../../src/types';
@@ -60,7 +61,7 @@ const SubtitleDualRowProbe: React.FC = () => {
                     nextLines={[]}
                     theme={DEFAULT_THEME}
                     {...resolveSubtitleFontSizes(1)}
-                    subtitleContentMode={mode}
+                    subtitleOverlayLayout={subtitleOverlayLayoutFromContentMode(mode)}
                 />
             </div>
         </div>

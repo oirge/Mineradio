@@ -58,3 +58,6 @@ export const playerBottomBarLiveOffset = motionValue(PLAYER_BOTTOM_BAR_BASE_OFFS
  */
 export const ponderPointerX = motionValue(0);
 export const ponderPointerY = motionValue(0);
+
+export const beatImpact = motionValue(0);
+export const downbeatImpact = motionValue(0);

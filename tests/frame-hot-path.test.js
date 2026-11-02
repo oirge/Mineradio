@@ -97,7 +97,7 @@ function testFrameTimestampForwarding() {
   assert.match(homeWaveSource, /var nowMs = frameNow == null \? performance\.now\(\) : frameNow;/);
   assert.doesNotMatch(homeWaveSource, /uniforms && uniforms\.uTime \? uniforms\.uTime\.value : performance\.now\(\) \/ 1000/);
   const freeCameraSource = readSourceBetween(source, 'function updateFreeCamera(dt, frameNow) {', '\nfunction flushPersistentVisualState');
-  const gestureSource = readSourceBetween(source, 'function tickGestureRotation(dt, frameNow) {', '\nfunction showGestureHUD');
+  const gestureSource = readSourceBetween(fs.readFileSync(path.join(__dirname, '..', 'public', 'gesture-controls.js'), 'utf8'), 'function tickGestureRotation(dt, frameNow) {', '\nfunction showGestureHUD');
   assert.match(freeCameraSource, /var now = frameNow == null \? performance\.now\(\) : frameNow;/);
   assert.match(gestureSource, /var now = frameNow == null \? performance\.now\(\) : frameNow;/);
   assert.doesNotMatch(freeCameraSource, /performance\.now\(\) - tw\.start/);

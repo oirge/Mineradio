@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`whistle`,size:24,node:[[`path`,{d:`M10 6v4`,key:`1sdd75`}],[`path`,{d:`M21 6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-5.675A7 7 0 1 1 9 6z`,key:`kuzxl1`}]]};r.node;var i=t(r);export{n,i as t};

@@ -1,5 +1,5 @@
 import { cubicBezier } from 'framer-motion';
-import { loadPixi } from '../../../visualizer/loadPixi';
+import { loadPixi } from '../../../visualizer/pixi/loadPixi';
 import { clearMonetMeasurementCaches, type MonetVisibleLineEntry } from '../../../visualizer/monet/monetLyricsModel';
 import { MONET_SCROLL_SPRING, MONET_SCALE_SPRING, resolveMonetTone } from '../../../visualizer/monet/monetLyricMotion';
 import { createLatticeRaster } from './latticeLyricRaster';

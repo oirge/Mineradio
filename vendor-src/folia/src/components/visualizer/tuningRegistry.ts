@@ -32,6 +32,9 @@ export interface VisualizerTuningMap {
     sonnet: SonnetTuning;
     tempera: TemperaTuning;
     lumiere: LumiereTuning;
+    hanabi: import('./hanabi/types').HanabiTuning;
+    nebbia: import('./nebbia/types').NebbiaTuning;
+    machi: import('./machi/types').MachiTuning;
 }
 
 export type VisualizerTuningMode = keyof VisualizerTuningMap;
@@ -70,7 +73,7 @@ export const applyVisualizerTuning = (
 ): VisualizerSharedProps => {
     const adapter = adaptersByMode.get(mode as VisualizerTuningMode);
     const tuning = bundle?.[mode as VisualizerTuningMode];
-    return adapter && tuning ? adapter.apply(props, tuning as never) : props;
+    return adapter?.apply && tuning ? adapter.apply(props, tuning as never) : props;
 };
 
 export const getVisualizerTuningModes = (): VisualizerTuningMode[] => [...adaptersByMode.keys()];

@@ -114,6 +114,7 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
         subtitleUpcomingLyricsBlur,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        subtitleOverlayLayout,
         subtitleContentMode,
         seed,
         dioramaTuning,
@@ -473,7 +474,7 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
                 </AnimatePresence>
             </div>
 
-            <VisualizerSubtitleOverlay
+            <VisualizerSubtitleOverlay subtitleOverlayLayout={subtitleOverlayLayout}
                 showText={showText}
                 activeLine={activeLine}
                 recentCompletedLine={recentCompletedLine}
@@ -488,7 +489,6 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
                 subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
-                subtitleContentMode={subtitleContentMode}
             />
         </VisualizerShell>
     );

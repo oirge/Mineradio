@@ -9,7 +9,7 @@ interface QuickControlChipProps {
     onClick: () => void;
     label: string;
     title: string;
-    isDaylight: boolean;
+    isDaylight?: boolean;
 }
 
 export const QuickControlChip: React.FC<QuickControlChipProps> = ({
@@ -33,7 +33,7 @@ interface QuickControlToggleProps {
     active: boolean;
     onToggle: () => void;
     label: string;
-    theme: Theme;
+    theme?: Theme;
     children: React.ReactNode;
 }
 
@@ -48,7 +48,7 @@ export const QuickControlToggle: React.FC<QuickControlToggleProps> = ({
         type="button"
         onClick={onToggle}
         className={`flex h-6 w-6 items-center justify-center rounded-md transition-all ${active ? '' : 'opacity-40 hover:opacity-100'}`}
-        style={active ? { color: theme.accentColor } : undefined}
+        style={active ? { color: theme?.accentColor ?? 'var(--local-accent)' } : undefined}
         title={label}
         aria-label={label}
         aria-pressed={active}
@@ -56,3 +56,5 @@ export const QuickControlToggle: React.FC<QuickControlToggleProps> = ({
         {children}
     </button>
 );
+
+export const cycleValue = <T,>(values: readonly T[], current: T): T => values[(values.indexOf(current) + 1) % values.length];

@@ -238,7 +238,7 @@ with sync_playwright() as p:
         child.get_by_test_id("local-open-settings").click()
         selector = child.get_by_test_id("local-visualizer-mode")
         modes = selector.locator("option").evaluate_all("options => options.map(option => option.value)")
-        expected_modes = {"classic", "partita", "monet", "cadenza", "cappella", "claddagh", "diorama", "fume", "lumiere", "pendolo", "sonnet", "still", "tempera", "tilt"}
+        expected_modes = {"classic", "partita", "monet", "cadenza", "cappella", "claddagh", "diorama", "fume", "lumiere", "pendolo", "sonnet", "still", "tempera", "tilt", "hanabi", "nebbia", "machi"}
         assert set(modes) == expected_modes, f"Missing or unrelated visualizer modes: {modes}"
         for mode in ["classic", "partita", "monet"] + [mode for mode in modes if mode not in ("classic", "partita", "monet")]:
             selector.select_option(mode)
@@ -285,7 +285,7 @@ with sync_playwright() as p:
         child.get_by_test_id("local-open-settings").click()
         page.screenshot(path=str(OUTPUT / "folia-local-player.png"))
         assert_single_audio()
-        checkpoint("all-14-folia-visualizers-local-backgrounds-and-themes")
+        checkpoint("all-17-folia-visualizers-local-backgrounds-and-themes")
 
         # A larger real local library exercises the original virtualized walls.
         page.locator("#file-input").set_input_files(FILES + WALL_FILES)
@@ -428,7 +428,7 @@ with sync_playwright() as p:
         expect(child.get_by_test_id("local-background-mode")).to_have_value("latent")
         expect(child.get_by_test_id("local-theme")).to_have_value("dark")
         expect(child.get_by_role("slider", name="歌词字号", exact=True)).to_have_value("1")
-        expect(child.locator(".local-toggle-setting input[type=checkbox]")).to_be_checked()
+        expect(child.locator(".local-toggle-setting input[type=checkbox]").first).to_be_checked()
         child.get_by_test_id("local-open-settings").click()
         child.get_by_test_id("local-play-mode").click()
         expect(child.get_by_test_id("local-play-mode")).to_have_attribute("aria-label", "单曲循环")

@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix='mineradio-ui-') as temporary:
                 time.sleep(.25)
             else:
                 raise TimeoutError('UI server did not become ready')
-            for script in ['verify-ui-language.py', 'verify-folia-language.py', 'verify-folia-resilience.py']:
+            for script in ['verify-ui-language.py', 'verify-folia-language.py', 'verify-folia-resilience.py', 'verify-upstream-visuals.py']:
                 subprocess.run([sys.executable, str(root / 'scripts' / script), '--url', url], cwd=root, check=True, timeout=300)
         finally:
             server.terminate()

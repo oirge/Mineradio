@@ -723,6 +723,10 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                         </div>
 
                         {visualizerEntry.renderSettingsPanel?.({
+                            onTuningChange: patch => ({ classic: onClassicTuningChange, partita: onPartitaTuningChange,
+                                fume: onFumeTuningChange, claddagh: onCladdaghTuningChange, cappella: onCappellaTuningChange,
+                                monet: onMonetTuningChange, pendolo: onPendoloTuningChange, sonnet: onSonnetTuningChange,
+                                tempera: onTemperaTuningChange, lumiere: onLumiereTuningChange } as Record<string, ((value: any) => void) | undefined>)[visualizerMode]?.(patch),
                             t,
                             isDaylight,
                             theme,

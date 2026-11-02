@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useRef, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Minimize2, Music2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { colorWithAlpha, mixColors } from '../../components/visualizer/colorMix';
@@ -13,6 +13,7 @@ import LocalErrorBoundary from './LocalErrorBoundary';
 import LocalStatusToast from './LocalStatusToast';
 import LocalHeader from './LocalHeader';
 import { useLocalVisualAssets } from './useLocalVisualAssets';
+import { useLocalVisualizerPrewarm } from './useLocalVisualizerPrewarm';
 import './local.css';
 
 // src/mineradio/local/LocalPlayer.tsx
@@ -20,6 +21,7 @@ import './local.css';
 export default function LocalPlayer() {
     const { t, i18n } = useTranslation('localPlayer');
     const player = useLocalPlayer();
+    useLocalVisualizerPrewarm(player.active);
     useEffect(() => {
         const language = player.state?.uiLanguage;
         if (language && language !== i18n.language) void i18n.changeLanguage(language);
@@ -57,6 +59,13 @@ export default function LocalPlayer() {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [player.command]);
+    const previousTrack = useRef<string | null>(null);
+    useEffect(() => {
+        const id = track?.id;
+        if (!id || id === previousTrack.current) return;
+        previousTrack.current = id;
+        if (useVisualSettings.getState().randomMode) useVisualSettings.getState().reroll();
+    }, [track?.id]);
     return <main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
             <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />

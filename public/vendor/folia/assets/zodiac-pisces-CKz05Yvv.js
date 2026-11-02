@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`zodiac-pisces`,size:24,node:[[`path`,{d:`M19 21a15 15 0 0 1 0-18`,key:`br2vug`}],[`path`,{d:`M20 12H4`,key:`1mtusc`}],[`path`,{d:`M5 3a15 15 0 0 1 0 18`,key:`1w7hae`}]]};r.node;var i=t(r);export{n,i as t};

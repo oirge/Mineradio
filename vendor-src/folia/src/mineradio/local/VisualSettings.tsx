@@ -1,3 +1,6 @@
+import LocalVisualOptions from './LocalVisualOptions';
+import LocalVisualPreview from './LocalVisualPreview';
+import { settingsTokens } from '../../components/modal/settings/kit/kitTheme';
 import { Suspense } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +24,7 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage }: {
     const mode = settings.mode as VisualizerTuningMode;
     const modeTitle = mode.charAt(0).toUpperCase() + mode.slice(1);
     const panelProps = {
+        tuning: settings.tunings[mode], onTuningChange: (patch: Record<string, unknown>) => settings.tune(mode, patch),
         t: label, isDaylight: settings.daylight, theme,
         controlCardBg: colorWithAlpha(theme.primaryColor, 0.035), rangeInputClass: 'local-setting-range',
         [`${mode}Tuning`]: settings.tunings[mode],
@@ -42,7 +46,7 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage }: {
         const current = settings.background as Record<string, any>;
         settings.update({ background: { ...current, [key]: { ...current[key], ...patch } } });
     };
-    return <aside className="local-settings local-glass" data-testid="local-visual-settings">
+    return <aside style={settingsTokens(settings.daylight, theme)} className="local-settings local-glass" data-testid="local-visual-settings">
         <div className="local-panel-title"><strong>{t('visuals')}</strong><div><button aria-label={t('reset')} title={t('reset')} onClick={settings.reset}><RotateCcw size={16} /></button><button aria-label={t('close')} onClick={onClose}><X size={18} /></button></div></div>
         <div className="local-settings-body">
             <label className="local-setting"><span>{t('interfaceLanguage')}</span><select aria-label={t('interfaceLanguage')} data-testid="local-ui-language" value={i18n.resolvedLanguage === 'en' ? 'en' : 'zh-CN'} onChange={event => onLanguage(event.target.value)}>
@@ -57,6 +61,8 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage }: {
             <label className="local-setting"><span>{t('theme')}</span><select aria-label={t('theme')} data-testid="local-theme" value={settings.daylight ? 'light' : 'dark'} onChange={(event) => settings.update({ daylight: event.target.value === 'light' })}><option value="dark">{t('dark')}</option><option value="light">{t('light')}</option></select></label>
             <label className="local-setting local-range-setting"><span>{t('lyricSize')}<output>{Math.round(settings.lyricsFontScale * 100)}%</output></span><input aria-label={t('lyricSize')} type="range" min="0.6" max="1.6" step="0.05" value={settings.lyricsFontScale} onChange={(event) => settings.update({ lyricsFontScale: Number(event.target.value) })} /></label>
             <label className="local-setting local-toggle-setting"><span>{t('translation')}</span><input type="checkbox" checked={settings.translation} onChange={(event) => settings.update({ translation: event.target.checked })} /></label>
+            <LocalVisualOptions label={label} />
+            <LocalVisualPreview theme={theme} assets={assets} />
             {modeEntry.renderSettingsPanel && <details className="local-tuning" data-testid="local-effect-tuning" key={settings.mode}><summary>{t('tuning')} · {getVisualizerModeLabel(settings.mode, label)}</summary><Suspense fallback={null}>{modeEntry.renderSettingsPanel(panelProps)}</Suspense></details>}
             {backgroundEntry.renderSettingsPanel && <details className="local-tuning" data-testid="local-background-tuning" key={backgroundEntry.mode}><summary>{t('background')} · {getVisualizerBackgroundModeLabel(backgroundEntry.mode, label)}</summary>
                 <Suspense fallback={null}>{backgroundEntry.renderSettingsPanel?.({

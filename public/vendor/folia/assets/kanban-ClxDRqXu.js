@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`kanban`,size:24,node:[[`path`,{d:`M5 3v14`,key:`9nsxs2`}],[`path`,{d:`M12 3v8`,key:`1h2ygw`}],[`path`,{d:`M19 3v18`,key:`1sk56x`}]]};r.node;var i=t(r);export{n,i as t};

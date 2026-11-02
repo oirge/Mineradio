@@ -30,6 +30,7 @@ if (document.fonts && document.fonts.load) {
 <link rel="stylesheet" href="wallpaper-engine.css">
 <link rel="stylesheet" href="folia-host.css">
 <script src="startup-plugin-theme.js"></script>
+<link rel="stylesheet" href="upstream-visual-controls.css">
 </head>
 <body class="local-only-mode empty-home-active">
 <div id="desktop-window-shell">
@@ -543,6 +544,34 @@ if (document.fonts && document.fonts.load) {
         <button data-cam="off" class="active">关闭</button>
         <button data-cam="gesture">手势触碰</button>
       </div>
+          <div class="gesture-settings-card" id="gesture-settings-card">
+            <div class="gesture-settings-head">
+              <div><strong>播放手势</strong><span>稳定保持才执行，降低误触</span></div>
+              <span class="gesture-live-mark">CAM</span>
+            </div>
+            <div class="fx-toggle-grid gesture-toggle-grid">
+              <div class="fx-toggle on" id="t-gesturePlayerActions" onclick="toggleGesturePlayerActions()">
+                <span>播放器动作</span><span class="dot"></span>
+              </div>
+              <div class="fx-toggle on" id="t-gestureHandOverlay" onclick="toggleGestureHandOverlay()">
+                <span>手部光迹</span><span class="dot"></span>
+              </div>
+            </div>
+            <div class="gesture-settings-subtitle">识别灵敏度</div>
+            <div class="fx-seg gesture-sensitivity-seg" id="gesture-sensitivity-seg">
+              <button data-gesture-sensitivity="steady" onclick="setGestureSensitivity('steady')">稳健</button>
+              <button data-gesture-sensitivity="balanced" class="active" onclick="setGestureSensitivity('balanced')">均衡</button>
+              <button data-gesture-sensitivity="quick" onclick="setGestureSensitivity('quick')">灵敏</button>
+            </div>
+            <div class="gesture-command-grid">
+              <div><b>✌</b><span>保持</span><strong>播放 / 暂停</strong></div>
+              <div><b>↔</b><span>快速滑动</span><strong>上一首 / 下一首</strong></div>
+              <div><b>☝</b><span>保持并上下</span><strong>音量</strong></div>
+              <div><b>👍</b><span>保持</span><strong>喜欢歌曲</strong></div>
+              <div><b>Ⅲ</b><span>三指保持</span><strong>歌词显隐</strong></div>
+              <div><b>◌</b><span>张掌 / 捏合 / 握拳</span><strong>粒子交互</strong></div>
+            </div>
+          </div>
     </div>
   </div>
 
@@ -877,7 +906,7 @@ if (document.fonts && document.fonts.load) {
   <div>手势：<b id="gesture-label">待命</b></div>
   <div id="gesture-confirm" class="gesture-confirm">将手放进摄像头视野</div>
   <div class="gesture-meter"><span id="gesture-fill"></span></div>
-  <div class="gesture-legend">手掌推开粒子 · 捏合旋转 · 握拳收束</div>
+  <div class="gesture-legend">张掌推开 · 捏合旋转 · 握拳收束 · 左右滑切歌 · V 手势播放 · 食指音量 · 拇指收藏 · 三指歌词</div>
 </div>
 <canvas id="hand-canvas"></canvas>
 
@@ -1104,6 +1133,7 @@ if (document.fonts && document.fonts.load) {
       <button class="fx-mini-btn ghost" type="button" onclick="refreshWallpaperEngineLibrary()">刷新识别</button>
       <button class="fx-mini-btn ghost" type="button" onclick="restoreHiddenWallpaperEngineItems()">恢复隐藏</button>
     </div>
+    <details class="wallpaper-engine-visual-controls"><summary>画面调整</summary><div><label><span>透明度</span><input aria-label="WE 透明度" id="wallpaper-engine-opacity" type="range" min="0.15" max="1" step="0.01" value="1" oninput="setWallpaperEngineVisualSetting('opacity',this.value)"><output></output></label><label><span>水平位置</span><input aria-label="WE 水平位置" id="wallpaper-engine-position-x" type="range" min="-50" max="50" step="1" value="0" oninput="setWallpaperEngineVisualSetting('positionX',this.value)"><output></output></label><label><span>垂直位置</span><input aria-label="WE 垂直位置" id="wallpaper-engine-position-y" type="range" min="-50" max="50" step="1" value="0" oninput="setWallpaperEngineVisualSetting('positionY',this.value)"><output></output></label><label><span>缩放</span><input aria-label="WE 缩放" id="wallpaper-engine-scale" type="range" min="1" max="1.6" step="0.01" value="1.08" oninput="setWallpaperEngineVisualSetting('scale',this.value)"><output></output></label><button type="button" onclick="resetWallpaperEngineVisualSettings()">重置画面</button></div></details>
     <div id="wallpaper-engine-library-status" class="wallpaper-engine-library-status">等待识别本机 Wallpaper Engine 库</div>
     <div id="wallpaper-engine-manual-roots" class="wallpaper-engine-manual-roots"></div>
     <div id="wallpaper-engine-grid" class="wallpaper-engine-grid" aria-live="polite"></div>
@@ -1356,6 +1386,8 @@ if (document.fonts && document.fonts.load) {
 <script src="sonic-topography-preset.js"></script>
 <script src="sonic-workshop-preset.js"></script>
 <script src="shelf-classic.js"></script>
+<script src="gesture-controls.js"></script>
+<script src="lyric-vocals.js"></script>
 <script src="app.js"></script>
 <script src="wallpaper-engine.js"></script>
 <script src="folia-host.js"></script>

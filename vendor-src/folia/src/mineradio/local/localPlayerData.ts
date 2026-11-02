@@ -18,7 +18,7 @@ export function localLyricLines(value: HostLyrics, duration: number): Line[] {
         const endTime = Math.max(startTime, finite(line.endTime, fallbackEnd), ...words.map(word => word.endTime));
         return {
             id: `${value.trackId}:${index}`, startTime, endTime,
-            fullText: line.text, translation: line.translation,
+            fullText: line.text, translation: line.translation, romanization: line.romanization, backgroundVocals: line.backgroundVocals,
             words: words.length ? words : [{ text: line.text, startTime, endTime }],
         };
     });

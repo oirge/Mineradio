@@ -1,0 +1,6 @@
+/* Curated particle presets and gesture controls. */
+.preset-card-premium{border-color:color-mix(in srgb,var(--preset-accent) 28%,transparent);background:linear-gradient(135deg,color-mix(in srgb,var(--preset-accent) 9%,transparent),color-mix(in srgb,var(--preset-accent-2) 4%,transparent))}
+.preset-card-premium .pc-icon{color:var(--preset-accent)}
+.preset-card-premium.active{box-shadow:inset 0 0 0 1px var(--preset-accent),0 0 22px color-mix(in srgb,var(--preset-accent) 14%,transparent)}
+.gesture-settings-card{margin-top:12px;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:12px}
+.gesture-settings-head{display:flex;justify-content:space-between;align-items:center}.gesture-settings-head span,.gesture-settings-subtitle{font-size:11px;opacity:.65}.gesture-settings-head strong{display:block;font-size:12px}.gesture-live-mark{letter-spacing:2px}.gesture-toggle-grid{margin:12px 0}.gesture-command-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.gesture-command-grid>div{display:flex;gap:6px;align-items:center;font-size:10px}.gesture-command-grid span{opacity:.6}.gesture-command-grid strong{font-weight:500}

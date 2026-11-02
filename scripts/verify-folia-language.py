@@ -35,15 +35,17 @@ def audit(frame, label):
     assert not residual, f'{label}: {residual}'
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
+    print('Launching Chromium for Folia language audit', flush=True)
+    browser = p.chromium.launch(headless=True, channel='chromium', timeout=30000)
     page = browser.new_page(viewport={'width':1440,'height':960}, locale='zh-CN')
+    page.set_default_timeout(30000)
     page.add_init_script("""localStorage.setItem('folia_app_language','zh-CN');
       localStorage.setItem('i18nextLng','zh-CN');
       if (!localStorage.getItem('mineradio-ui-language-v1')) localStorage.setItem('mineradio-ui-language-v1','en');""")
     page.on('pageerror', lambda e: report['errors'].append({'message':str(e), 'stack':e.stack, 'after':list(report['audits'])[-1:]}))
     try:
-        page.goto(args.url)
-        page.wait_for_load_state('networkidle')
+        page.goto(args.url, wait_until='domcontentloaded')
+        page.wait_for_function("typeof MineradioFoliaHost === 'object'")
         page.evaluate("MineradioFoliaHost.setInterface('folia')")
         page.locator('#folia-frame').wait_for()
         frame = page.frame(url=lambda url: '/vendor/folia/' in url)
@@ -112,8 +114,7 @@ with sync_playwright() as p:
         expect(frame.locator('.local-track-list')).to_contain_text('歌词')
         assert page.evaluate('localLibrarySongs[0].name') == '默认'
         report['checks'].append('Chinese song/artist metadata survives round-trip without translation')
-        page.reload()
-        page.wait_for_load_state('networkidle')
+        page.reload(wait_until='domcontentloaded')
         page.locator('#folia-frame').wait_for()
         frame = page.frame(url=lambda url: '/vendor/folia/' in url)
         expect(frame.get_by_test_id('local-view-lyrics')).to_have_text('Lyric player',timeout=30000)
@@ -124,7 +125,10 @@ with sync_playwright() as p:
         report['passed'] = True
     except Exception as error:
         report.update(passed=False, failure=str(error))
-        page.screenshot(path=str(output / 'folia-failure.png'))
+        try:
+            page.screenshot(path=str(output / 'folia-failure.png'), timeout=5000)
+        except Exception as screenshot_error:
+            report['screenshotFailure'] = str(screenshot_error)
         raise
     finally:
         (output / 'folia-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')

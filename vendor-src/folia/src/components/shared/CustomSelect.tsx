@@ -14,6 +14,9 @@ import {
 // Styled to match the rest of the application, handling light/dark mode and dynamic themes.
 
 interface CustomSelectProps {
+    compact?: boolean;
+    preferAbove?: boolean;
+    ariaLabelledBy?: string;
     value: string;
     onChange: (value: string) => void;
     options: CustomSelectOption[];
@@ -32,6 +35,9 @@ const DROPDOWN_MAX_HEIGHT = 240;
 const DROPDOWN_MIN_PREFERRED_HEIGHT = 160;
 
 export const CustomSelect: React.FC<CustomSelectProps> = ({
+    compact = false,
+    preferAbove = false,
+    ariaLabelledBy,
     value,
     onChange,
     options,
@@ -58,7 +64,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         const useViewportPlacement = Math.max(spaceAbove, spaceBelow) < DROPDOWN_MIN_PREFERRED_HEIGHT;
         const placement: CustomSelectMenuPosition['placement'] = useViewportPlacement
             ? 'viewport'
-            : spaceBelow < DROPDOWN_MIN_PREFERRED_HEIGHT && spaceAbove > spaceBelow
+            : (preferAbove && spaceAbove >= DROPDOWN_MIN_PREFERRED_HEIGHT) || (spaceBelow < DROPDOWN_MIN_PREFERRED_HEIGHT && spaceAbove > spaceBelow)
                 ? 'top'
                 : 'bottom';
         const availableHeight = placement === 'viewport'
@@ -88,7 +94,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                 ? { bottom: window.innerHeight - rect.top + DROPDOWN_GAP }
                 : { top: rect.bottom + DROPDOWN_GAP }),
         });
-    }, []);
+    }, [preferAbove]);
 
     // Toggle the dropdown menu visibility
     const handleToggle = () => {
@@ -119,7 +125,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, []);
+    }, [preferAbove]);
 
     useLayoutEffect(() => {
         if (!isOpen) {
@@ -148,10 +154,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                 type="button"
                 onClick={handleToggle}
                 disabled={disabled}
+                aria-labelledby={ariaLabelledBy}
                 aria-label={ariaLabel}
                 aria-haspopup="listbox"
                 aria-expanded={isOpen}
-                className="w-full flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
+                className={`w-full flex items-center justify-between rounded-xl border ${compact ? 'px-2 py-1 text-xs' : 'px-4 py-3 text-sm'} transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer`}
                 style={{
                     backgroundColor: 'var(--overlay-medium)',
                     borderColor: isOpen ? accentColor : 'var(--border-color)',

@@ -1,0 +1,1 @@
+var e=e=>null,t=e=>null,n=e=>!1,r=()=>!1,i=e=>0,a=()=>({key:null,time:0}),o=()=>[],s=()=>({beat:0,downbeat:0}),c=()=>1,l=()=>1;export{c as a,t as c,s as i,n as l,o as n,l as o,a as r,e as s,i as t,r as u};

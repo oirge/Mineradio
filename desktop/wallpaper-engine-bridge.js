@@ -819,6 +819,15 @@ function createWallpaperEngineBridge(options = {}) {
       try { noteWeDiagEvent(String(payload && payload.event || 'renderer'), payload); } catch (_) {}
     });
 
+    ipcMain.on('mineradio-wallpaper-engine-visual-settings', (event, payload = {}) => {
+      if (!isTrustedIpc(event) || typeof runtime.updateDwmVisualSettings !== 'function') return;
+      const sessionId = String(payload && payload.sessionId || '');
+      if (!/^[a-f0-9]{24}$/i.test(sessionId)) return;
+      const { opacity, positionX, positionY, scale } = payload;
+      if (![opacity, positionX, positionY, scale].every(value => typeof value === 'number' && Number.isFinite(value))) return;
+      runtime.updateDwmVisualSettings(sessionId, { opacity, positionX, positionY, scale });
+    });
+
     ipcMain.on('mineradio-wallpaper-engine-pointer-activity', (event, payload = {}) => {
       const win = mainWindow();
       if (!isTrustedIpc(event) || !win || !win.isVisible() || win.isMinimized() || hostVisibilitySuspended) return;

@@ -9,3 +9,6 @@
 *.min.js text eol=lf
 public/vendor/folia/LICENSE text eol=lf
 public/vendor/folia/THIRD-PARTY-LICENSES.txt text eol=lf whitespace=-blank-at-eof
+# Generated bundles contain upstream shader literals; preserve their whitespace and license originals.
+public/vendor/folia/assets/*.js -whitespace
+public/vendor/folia/licenses/** -whitespace
