@@ -6,7 +6,15 @@
 - 已有验证：Folia 类型检查通过，歌词／画质／设置短码定向 Vitest `113/113`；宿主与启动定向 Node `69` 项、`68` 通过、`0` 失败、`1` 可选基准跳过。修复短码丢失新字段、测试假 DOM 缺少 HTML 根节点和新增测试类型错误。
 - 构建与发布检查：`npm run build:folia`、`npm run check:folia` 通过；版本、公告、编码、打包白名单和安装身份定向 Node `30/30`；`server.js`、`public/app.js`、`public/folia-host.js` 语法与 `git diff --check` 通过。
 - 验证边界：用户于北京时间 `2026-11-02` 再次明确「尽快发布」「尽快发吧」「先上传到GitHub上」，因此停止追加浏览器回归，不将六项增量的浏览器验收或完整 CI 作为发布前置，也不宣称它们已通过。
-- 发布准备：先提交并上传源码；Windows 安装器正在构建，随后执行正式构建和四项官方资产核验。PR、tag 与发布结果只补录实际证据。
+- 提交与构建：[PR #153](https://github.com/oirge/Mineradio/pull/153) 于 `2026-11-02T09:59:17Z` 以 merge commit `53ffd3f8406dd0a3e8486c2d4a09d733bbabfcf4` 合入 main；annotated tag `v2.6.1`（tag object `ae274dcc5015cdcaf0bb7e780c111f24e90efd30`）固定在该提交。[Windows Build and Release `41425294355`](https://github.com/oirge/Mineradio/actions/runs/41425294355) 成功，四项官方资产完整上传。本地 NSIS 安装器 `122673872` B，与官方产物分别记录。
+- CI 实际结果：合并后 Verify `41425093158` 的构建、编码、Folia 类型与行为检查、JavaScript 语法与空白检查均通过；全量 Node `1581` 项、`1580` 通过、`0` 失败、`1` 可选基准跳过。浏览器中的主界面中英文、Folia 中英文和错误恢复检查通过；最后的 `verify-upstream-visuals.py` 在 TTML 分轨及单／双／三行字幕检查通过后触发 300 秒子进程超时，因此 Verify 总体为 failure，不能记为完整 CI 全绿。沿用用户要求，不追加完整浏览器回归。
+- 正式发布：[v2.6.1](https://github.com/oirge/Mineradio/releases/tag/v2.6.1)（Release ID `431303172`）于北京时间 `2026-11-02 18:51:59` 公开并设为 Latest，`draft=false` / `prerelease=false`；公开 Latest API 返回 `v2.6.1`。
+- 官方资产核验：四项文件已完整回下载，大小与本机 SHA256 均匹配 GitHub API digest；SHA256 清单三项全部一致，安装器本机 SHA-512 与 `latest.yml` 的 sha512/size/path 一致。公开 `releases/latest/download/latest.yml` 返回 `2.6.1`，与已校验文件逐字节一致。此次未运行官方安装器覆盖本机安装。
+  - `Mineradio-oirge-2.6.1-Setup.exe`：122608805 B，SHA256 `3df80d7a9515e68c36fe58339f1c498c19d67908cf51f9935e1d07a9fed85294`。
+  - `Mineradio-oirge-2.6.1-Setup.exe.blockmap`：129735 B，SHA256 `e59b67f415cee3788c30e3c2fbb9067b8e63948a07cba49f4263b2ca58aa1f2d`。
+  - `latest.yml`：359 B，SHA256 `9b825ecb3436a95b742fdc52b373428da372efe63e089a0695f11aa2ae4b3095`。
+  - `Mineradio-oirge-2.6.1-SHA256SUMS.txt`：282 B，SHA256 `b8d83a2678fa15d3dbced3cede7558fb2ef7ed3f9b04241634f891826ea23ed6`。
+  - 安装器 SHA-512：`tlc3Jupsmn2Z9TeINwZvJsgEJhb2f1jcDjvWP0ugcz6XYPc5rLwLH/stJhdmjFeBT6ok7r67xRBOnY0xGm+fiw==`。
 
 # v2.6.0 上游视觉功能同步
 

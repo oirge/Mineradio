@@ -1,4 +1,4 @@
-## 2026-11-02：v2.6.1 六项增量同步（发布准备）
+## 2026-11-02：v2.6.1 六项增量同步（已正式发布）
 
 - 用户要求将 v2.6.0 后列出的六项功能全部补齐，延续此前发布授权和「不用过多测试」偏好。本轮不重复发布 v2.6.0。
 - 实际仓库是 `oirge/Mineradio` 的 `feat/folia-render-quality-and-scenes`，基线 `47c63bb`；不要修改桌面外层旧副本或上游参考工作树。
@@ -6,6 +6,11 @@
 - 来源保留 0.7.16 原始基线和 0.7.25 稳定版 `featureSync`，新增开发提交 `f03e8ec` 的 `incrementalSync`。版本与公告为 2.6.1。
 - 嵌入产物已重建并校验，版本／公告／编码／打包身份定向 Node `30/30`，语法与空白检查通过。用户随后要求「尽快发布」「尽快发吧」「先上传到GitHub上」：停止追加浏览器回归，先提交上传源码，再完成 Windows 构建和正式发布资产核验；本轮新增功能的浏览器验收尚未完成，不宣称通过。
 - `verification` 中旧移植脚本非幂等，不要重跑；遗留 `.rej` 不进入提交。保留所有 `@note` 注释及唯一宿主音频、曲库、队列和已有玻璃质感。发布证据只补录实际结果。
+- 发布完成：PR #153 → merge commit `53ffd3f8406dd0a3e8486c2d4a09d733bbabfcf4`；annotated tag `v2.6.1`（tag object `ae274dcc5015cdcaf0bb7e780c111f24e90efd30`）；Windows Build and Release `41425294355` 成功。Release `431303172` 于北京时间 `2026-11-02 18:51:59` 公开并设 Latest。
+- 资产与自动更新：四项官方资产完整回下载，大小、SHA256 与 GitHub digest／清单一致，安装器 SHA-512 与 `latest.yml` 一致；公开 Latest API 与更新地址均已复核为 `2.6.1`。官方安装器 `122608805` B / SHA256 `3df80d7a9515e68c36fe58339f1c498c19d67908cf51f9935e1d07a9fed85294`。完整摘要见 RELEASE.md 顶部。
+- CI 边界：合并后 Verify `41425093158` 中全量 Node `1580` 通过、`0` 失败、`1` 可选基准跳过；Folia 类型／行为、主界面与 Folia 中英文、错误恢复均通过。最后的新视觉脚本 `verify-upstream-visuals.py` 在通过 TTML 分轨和三档字幕检查后超过 300 秒，Verify 总体 failure；未追加浏览器回归，不宣称完整 CI 全绿。
+- 工作日志：本次接续发布使用独立检出 `C:/Users/oirg/Desktop/Mineradio-main/.tmp-release-v2.6.1-records`、分支 `docs/record-v2.6.1-release`，仅补录发布事实。核验文件在 `%TEMP%/Mineradio-release-verify-v2.6.1-41425294355`，不提交二进制。
+- 未完成事项：完整视觉浏览器回归仍有超时；官方安装器未在本机运行安装，不能宣称安装后端到端验收通过。版本已正式发布，勿重复打 tag 或重建上传资产。
 
 ## 2026-11-02：v2.6.0 上游视觉功能同步（已正式发布）
 
