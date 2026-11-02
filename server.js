@@ -78,10 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '花火、町景与雾笺支持节拍联动，优先复用本地拍点缓存，无缓存时使用实时频谱估计。',
-  '新增鼓点与人声频段估计联动，暂停、跳转和切歌时清理旧数据。',
-  '优化随机样式池切换，保留最后一种样式，减少设置操作引起的视觉重绘。',
-  '新增命名视觉预设，支持保存、应用、覆盖、重命名和删除；包含歌词、背景、画质、随机池和节拍设置，恢复默认仍保留已保存预设。',
+  '整机备份补齐 Folia 界面、视觉设置、随机池、命名预设、歌单绑定与 Lattice 设置，兼容旧备份。',
+  '视觉预设支持 JSON 导入和导出，可选携带共享图片与 Tempera 图层素材。',
+  '同名导入自动另存，导入时保留当前效果；素材校验或写入失败会撤回新预设。',
+  '支持歌单绑定视觉预设，进入歌单时自动应用；保留同歌单内的手动调整，删除预设自动解除绑定。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

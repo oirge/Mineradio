@@ -199,6 +199,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['Folia 备份补全、预设互通与歌单绑定。', 'Complete Folia backups, portable presets and playlist preset bindings.'],
+  ['整机备份补齐 Folia 界面、视觉设置、随机池、命名预设、歌单绑定与 Lattice 设置，兼容旧备份。', 'Full backups now include the Folia interface, visual settings, random pool, named presets, playlist bindings and Lattice settings, while remaining compatible with older backups.'],
+  ['视觉预设支持 JSON 导入和导出，可选携带共享图片与 Tempera 图层素材。', 'Import and export visual presets as JSON, optionally including shared images and Tempera layer assets.'],
+  ['同名导入自动另存，导入时保留当前效果；素材校验或写入失败会撤回新预设。', 'Duplicate names are saved separately and importing preserves the current visuals; failed asset validation or storage rolls back the new preset.'],
+  ['支持歌单绑定视觉预设，进入歌单时自动应用；保留同歌单内的手动调整，删除预设自动解除绑定。', 'Bind visual presets to playlists and apply them on entry; keep manual changes within the same playlist and remove bindings when a preset is deleted.'],
   ['Folia 节拍联动、随机样式池优化与命名视觉预设。', 'Folia rhythm response, a smoother random style pool and named visual presets.'],
   ['花火、町景与雾笺支持节拍联动，优先复用本地拍点缓存，无缓存时使用实时频谱估计。', 'Hanabi, Machi and Nebbia respond to beats, using cached beat maps when available and live spectrum estimates otherwise.'],
   ['新增鼓点与人声频段估计联动，暂停、跳转和切歌时清理旧数据。', 'Add drum-onset and vocal-band responses, clearing stale data on pause, seek and track changes.'],
@@ -2001,7 +2006,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.2';
+var APP_VERSION = '2.6.3';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2054,12 +2059,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 节拍联动、随机样式池优化与命名视觉预设。',
+  hero: 'Folia 备份补全、预设互通与歌单绑定。',
   notes: [
-    '花火、町景与雾笺支持节拍联动，优先复用本地拍点缓存，无缓存时使用实时频谱估计。',
-    '新增鼓点与人声频段估计联动，暂停、跳转和切歌时清理旧数据。',
-    '优化随机样式池切换，保留最后一种样式，减少设置操作引起的视觉重绘。',
-    '新增命名视觉预设，支持保存、应用、覆盖、重命名和删除；包含歌词、背景、画质、随机池和节拍设置，恢复默认仍保留已保存预设。'
+    '整机备份补齐 Folia 界面、视觉设置、随机池、命名预设、歌单绑定与 Lattice 设置，兼容旧备份。',
+    '视觉预设支持 JSON 导入和导出，可选携带共享图片与 Tempera 图层素材。',
+    '同名导入自动另存，导入时保留当前效果；素材校验或写入失败会撤回新预设。',
+    '支持歌单绑定视觉预设，进入歌单时自动应用；保留同歌单内的手动调整，删除预设自动解除绑定。'
   ]
 };
 function readSavedVolume() {
