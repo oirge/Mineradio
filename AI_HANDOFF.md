@@ -1,9 +1,11 @@
-## 2026-11-02：v2.6.0 上游视觉功能同步
+## 2026-11-02：v2.6.0 上游视觉功能同步（已正式发布）
 
 用户已授权补齐全部七类功能并发布。工作分支 `feat/sync-upstream-visual-controls`，基线 `4c78972`。
 新增功能和来源见 CHANGELOG.md 与 RELEASE.md 顶部。Folia 仍为独立嵌入界面，共享主播放器音频。
-Node 1577 项中 1576 通过、1 可选基准跳过；Folia 类型检查和定向 53 项通过。浏览器验收与正式发布完成后继续补录。
+Node 1577 项中 1576 通过、1 可选基准跳过；Folia 类型检查和定向 53 项通过。新功能浏览器专项 8 项、Folia 恢复验收通过；Windows 本机构建、隔离启动、WAV/TTML 导入播放与进入 Folia 通过。摄像头真人识别和 Wallpaper Engine 实例未实测。
 新控件中英文已补齐。手势模块从 app.js 拆出；TTML 和声由 lyric-vocals.js 保留；WE 参数经 preload / bridge / runtime 传入 helper。
+用户最后明确「直接发布不用过多测试」，已停止完整浏览器重跑。首轮 PR CI 的文案审计误把预览示例歌词识别成界面中文；后续修正只排除预览内容区域，仍审计周围控件。完整 CI 未作为发布前置，不宣称全绿。
+PR #151 → merge commit `87c8814b91d573f39255717b1a508c2b22ea0227`；annotated tag `v2.6.0`（tag object `a26e49d90fcb7d35d73c9907b0bc2c397919cb98`）；Windows Build and Release `41406868259` 成功。Release `431176408` 于北京时间 `2026-11-02 15:35:09` 公开为 Latest，四项资产回下载核验通过。安装器 `122567493` B / SHA256 `fb3b9f4c542f6e128dc9e1a1ae0e3617743d326b0a7530130c72c6de6f87c5d0`，自动更新清单匹配。详见 RELEASE.md 顶部。
 
 # Mineradio AI Handoff
 

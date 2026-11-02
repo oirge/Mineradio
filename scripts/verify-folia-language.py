@@ -18,11 +18,13 @@ def audit(frame, label):
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
         const node = walker.currentNode, el = node.parentElement;
-        if (!el || el.closest('script,style,option[value="zh-CN"]')) continue;
+        // Preview lyrics and song metadata are content; the surrounding controls remain audited.
+        if (!el || el.closest('script,style,option[value="zh-CN"],.local-preview-stage')) continue;
         if (!el.getClientRects().length || getComputedStyle(el).visibility === 'hidden') continue;
         if (/\p{Script=Han}/u.test(node.nodeValue)) residual.push({text:node.nodeValue.trim(), tag:el.tagName});
       }
       for (const el of document.querySelectorAll('[title],[aria-label],[placeholder]')) {
+        if (el.closest('.local-preview-stage')) continue;
         if (!el.getClientRects().length) continue;
         for (const attr of ['title','aria-label','placeholder']) {
           const text = el.getAttribute(attr);
