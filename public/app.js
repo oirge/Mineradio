@@ -199,6 +199,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['Folia 节拍联动、随机样式池优化与命名视觉预设。', 'Folia rhythm response, a smoother random style pool and named visual presets.'],
+  ['花火、町景与雾笺支持节拍联动，优先复用本地拍点缓存，无缓存时使用实时频谱估计。', 'Hanabi, Machi and Nebbia respond to beats, using cached beat maps when available and live spectrum estimates otherwise.'],
+  ['新增鼓点与人声频段估计联动，暂停、跳转和切歌时清理旧数据。', 'Add drum-onset and vocal-band responses, clearing stale data on pause, seek and track changes.'],
+  ['优化随机样式池切换，保留最后一种样式，减少设置操作引起的视觉重绘。', 'Improve random style pool updates, keep at least one style selected and avoid unnecessary scene redraws.'],
+  ['新增命名视觉预设，支持保存、应用、覆盖、重命名和删除；包含歌词、背景、画质、随机池和节拍设置，恢复默认仍保留已保存预设。', 'Add named visual presets with save, apply, overwrite, rename and delete actions for lyrics, backgrounds, quality, the random pool and rhythm settings; resetting defaults keeps saved presets.'],
   ['Folia 全局画质、雾笺水族箱与町景切换优化。', 'Folia rendering quality, Nebbia aquarium and smoother Machi initialization.'],
   ['町景采用异步着色器编译与分阶段初始化，减少切换时的阻塞。', 'Machi uses asynchronous shader warmup and staged initialization to reduce switching stalls.'],
   ['新增全局画布分辨率和抗锯齿设置，支持歌词效果单独覆盖并保留旧参数。', 'Set global canvas resolution and antialiasing, with per-style overrides and migration of existing preferences.'],
@@ -1996,7 +2001,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.1';
+var APP_VERSION = '2.6.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2049,14 +2054,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 全局画质、雾笺水族箱与町景切换优化。',
+  hero: 'Folia 节拍联动、随机样式池优化与命名视觉预设。',
   notes: [
-    '町景采用异步着色器编译与分阶段初始化，减少切换时的阻塞。',
-    '新增全局画布分辨率和抗锯齿设置，支持歌词效果单独覆盖并保留旧参数。',
-    '修复雾笺缩放预览的画布尺寸与笔画粗细。',
-    '修复带空格的逐字歌词分词，支持阿拉伯语等从右向左排词。',
-    '雾笺新增梦海流萤水族箱，支持水母、气泡、雨窗与凝露调节。',
-    '新增透明播放页，町景不画天空；退出或加载失败时自动恢复宿主背景。'
+    '花火、町景与雾笺支持节拍联动，优先复用本地拍点缓存，无缓存时使用实时频谱估计。',
+    '新增鼓点与人声频段估计联动，暂停、跳转和切歌时清理旧数据。',
+    '优化随机样式池切换，保留最后一种样式，减少设置操作引起的视觉重绘。',
+    '新增命名视觉预设，支持保存、应用、覆盖、重命名和删除；包含歌词、背景、画质、随机池和节拍设置，恢复默认仍保留已保存预设。'
   ]
 };
 function readSavedVolume() {
