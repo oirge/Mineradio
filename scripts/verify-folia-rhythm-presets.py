@@ -25,7 +25,8 @@ for name in ['Beat-A', 'Beat-B']:
     files.extend([str(audio_file), str(lyric)])
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True, channel='chromium', args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader'])
+    # Match the original visual acceptance suite instead of inheriting the runner's virtual GPU.
+    browser = p.chromium.launch(headless=True, channel='chromium', args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'])
     page = browser.new_page(viewport={'width': 1440, 'height': 900}, locale='zh-CN')
     page.set_default_timeout(15000)
     page.add_init_script("""localStorage.setItem('mineradio-visual-guide-seen-v2', '1');

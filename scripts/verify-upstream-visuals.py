@@ -42,7 +42,8 @@ def set_range(locator, value):
 
 with sync_playwright() as p:
     print('Starting synchronized visual acceptance:', args.url, flush=True)
-    browser = p.chromium.launch(headless=True, channel='chromium', timeout=30000, args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader'])
+    # Keep WebGL acceptance on the same software backend locally and on Windows runners.
+    browser = p.chromium.launch(headless=True, channel='chromium', timeout=30000, args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'])
     page = browser.new_page(viewport={'width': 1440, 'height': 900}, locale='zh-CN')
     page.set_default_timeout(30000)
     if os.environ.get('MINERADIO_UI_DIAGNOSTICS'):
@@ -105,7 +106,8 @@ with sync_playwright() as p:
         child.get_by_test_id('local-reroll').click()
         expect(mode).to_have_value('classic')
         child.get_by_test_id('local-open-settings').click()
-        page.mouse.move(720, 880)
+        # The collapsed bar keeps its seek row visible; hovering it locks the real controls open.
+        child.get_by_test_id('local-seek').hover()
         child.get_by_test_id('local-next').click()
         expect(stage).to_have_attribute('data-mode', 'partita')
         page.evaluate('audio.pause(); audio.currentTime = 3')
