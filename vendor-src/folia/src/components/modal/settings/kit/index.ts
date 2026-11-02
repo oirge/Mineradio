@@ -8,3 +8,5 @@ export * from './Slider';
 export * from './Toggle';
 export * from './Tabs';
 export type { SettingsGroupDef } from '../schema';
+
+export * from './Select';

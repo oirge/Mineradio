@@ -62,7 +62,7 @@ function harness(count = 2500, favoriteCount = 0, realMetadata = false) {
     const mount = node('folia-interface'), status = node('folia-load-status'), shell = node('desktop-window-shell');
     const elements = new Map([mount, status, shell].map(element => [element.id, element]));
     let timerId = 0, requestId = 0;
-    const document = { hidden: false, body: node('body'), querySelectorAll: () => [], addEventListener() {},
+    const document = { hidden: false, body: node('body'), documentElement: node('html'), querySelectorAll: () => [], addEventListener() {},
         getElementById: id => elements.get(id), createElement: () => {
             const element = node('frame');
             element.contentWindow = { postMessage(message, origin) { messages.push({ ...structuredClone(message), origin }); } };

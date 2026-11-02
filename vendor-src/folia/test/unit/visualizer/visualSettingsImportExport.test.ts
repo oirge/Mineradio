@@ -322,6 +322,29 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.visualizerTunings?.sonnet).toEqual(sonnet);
     });
 
+    it.each([
+        'cadenzaTuning', 'fumeTuning', 'dioramaTuning', 'monetTuning',
+        'pendoloTuning', 'sonnetTuning', 'temperaTuning', 'lumiereTuning',
+    ])('keeps the render override in the %s short code', key => {
+        for (const render of [
+            { scale: 0.75, antialias: 'on' },
+            { scale: 'global', antialias: 'off' },
+            { scale: 2, antialias: 'global' },
+        ]) {
+            const decoded = decompressConfig(compressConfig({ [key]: { render } }));
+            expect(decoded[key].render).toEqual(render);
+        }
+    });
+
+    it('keeps standalone global quality in short codes and JSON', () => {
+        const quality = { scale: 1.5, antialias: 'off' };
+        expect(decompressConfig(compressConfig({ lyricRenderQuality: quality }))).toEqual({ lyricRenderQuality: quality });
+        expect(decompressConfig(JSON.stringify({ lyricRenderQuality: quality }))).toEqual({ lyricRenderQuality: quality });
+        expect(decompressConfig(JSON.stringify({ lrq: quality }))).toEqual({ lyricRenderQuality: quality });
+        expect(decompressConfig(compressConfig({ lyricRenderQuality: { scale: 99, antialias: 'on' } })))
+            .toEqual({ lyricRenderQuality: { scale: 1, antialias: 'on' } });
+    });
+
     it('migrates the removed Nomand random dithering option to 8x8', () => {
         const encoded = compressConfig({
             nomandBackgroundTuning: {

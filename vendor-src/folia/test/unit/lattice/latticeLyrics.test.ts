@@ -54,6 +54,32 @@ describe('Lattice card typography budget', () => {
 });
 
 describe('Lattice wrapping and long-line following', () => {
+    it('positions RTL words from the right without reversing their timed source order', () => {
+        const first = '\u05e9\u05dc\u05d5\u05dd', second = '\u05e2\u05d5\u05dc\u05dd';
+        const lyric = { ...line(`${first} ${second}`), words: [
+            { text: first, startTime: 0, endTime: 2 }, { text: second, startTime: 2, endTime: 4 }] };
+        const type = resolveLatticeTypography(input(), 600, 260, measure);
+        const layout = layoutLatticeLine(lyric, type, 600, measure, false);
+        const timed = layout.pieces.filter(piece => piece.token.timed);
+        expect(layout.rtl).toBe(true);
+        expect(layout.width).toBe(600);
+        expect(layout.pieces.map(piece => piece.text).join('')).toBe(lyric.fullText);
+        expect(timed.map(piece => piece.token.startTime)).toEqual([0, 2]);
+        expect(timed[0].x).toBeGreaterThan(timed[1].x);
+        expect(layout.pieces.every(piece => piece.rtl && piece.x >= 0 && piece.x + piece.width <= 600)).toBe(true);
+    });
+    it('aligns opposite-direction translations to the lyric edge while preserving their own direction', () => {
+        const hebrew = '\u05e9\u05dc\u05d5\u05dd';
+        const type = resolveLatticeTypography(input(), 600, 260, measure);
+        const rtlLayout = layoutLatticeLine({ ...line(hebrew), translation: 'translation' }, type, 600, measure, false);
+        const ltrSubtitle = rtlLayout.pieces.filter(piece => piece.translation);
+        expect(ltrSubtitle.every(piece => !piece.rtl)).toBe(true);
+        expect(Math.max(...ltrSubtitle.map(piece => piece.x + piece.width))).toBeCloseTo(600);
+        const ltrLayout = layoutLatticeLine({ ...line('hello'), translation: hebrew }, type, 600, measure, false);
+        const rtlSubtitle = ltrLayout.pieces.filter(piece => piece.translation);
+        expect(rtlSubtitle.every(piece => piece.rtl)).toBe(true);
+        expect(Math.min(...rtlSubtitle.map(piece => piece.x))).toBeCloseTo(0);
+    });
     it('retains repeated words, punctuation, spaces, CJK and emoji graphemes', () => {
         const lyric = { ...line('你好， go  go 👨‍👩‍👧‍👦！'), words: [
             { text: '你好', startTime: 0, endTime: 1 }, { text: 'go', startTime: 1, endTime: 2 },

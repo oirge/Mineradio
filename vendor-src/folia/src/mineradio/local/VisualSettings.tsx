@@ -1,5 +1,6 @@
 import LocalVisualOptions from './LocalVisualOptions';
 import LocalVisualPreview from './LocalVisualPreview';
+import LocalRenderQuality, { LocalStyleRenderQuality } from './LocalRenderQuality';
 import { settingsTokens } from '../../components/modal/settings/kit/kitTheme';
 import { Suspense } from 'react';
 import { RotateCcw, X } from 'lucide-react';
@@ -61,9 +62,11 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage }: {
             <label className="local-setting"><span>{t('theme')}</span><select aria-label={t('theme')} data-testid="local-theme" value={settings.daylight ? 'light' : 'dark'} onChange={(event) => settings.update({ daylight: event.target.value === 'light' })}><option value="dark">{t('dark')}</option><option value="light">{t('light')}</option></select></label>
             <label className="local-setting local-range-setting"><span>{t('lyricSize')}<output>{Math.round(settings.lyricsFontScale * 100)}%</output></span><input aria-label={t('lyricSize')} type="range" min="0.6" max="1.6" step="0.05" value={settings.lyricsFontScale} onChange={(event) => settings.update({ lyricsFontScale: Number(event.target.value) })} /></label>
             <label className="local-setting local-toggle-setting"><span>{t('translation')}</span><input type="checkbox" checked={settings.translation} onChange={(event) => settings.update({ translation: event.target.checked })} /></label>
+            <label className="local-setting local-toggle-setting"><span>{t('transparentPlayer')}</span><input data-testid="local-transparent-player" type="checkbox" checked={settings.background.transparent === true} onChange={event => settings.update({ background: { ...settings.background, transparent: event.target.checked } })} /></label>
+            <LocalRenderQuality />
             <LocalVisualOptions label={label} />
             <LocalVisualPreview theme={theme} assets={assets} />
-            {modeEntry.renderSettingsPanel && <details className="local-tuning" data-testid="local-effect-tuning" key={settings.mode}><summary>{t('tuning')} · {getVisualizerModeLabel(settings.mode, label)}</summary><Suspense fallback={null}>{modeEntry.renderSettingsPanel(panelProps)}</Suspense></details>}
+            {modeEntry.renderSettingsPanel && <details className="local-tuning" data-testid="local-effect-tuning" key={settings.mode}><summary>{t('tuning')} · {getVisualizerModeLabel(settings.mode, label)}</summary><LocalStyleRenderQuality /><Suspense fallback={null}>{modeEntry.renderSettingsPanel(panelProps)}</Suspense></details>}
             {backgroundEntry.renderSettingsPanel && <details className="local-tuning" data-testid="local-background-tuning" key={backgroundEntry.mode}><summary>{t('background')} · {getVisualizerBackgroundModeLabel(backgroundEntry.mode, label)}</summary>
                 <Suspense fallback={null}>{backgroundEntry.renderSettingsPanel?.({
                     t: label, theme, isDaylight: settings.daylight, config: { ...settings.background, customImage: assets.background.images[0] ?? null },

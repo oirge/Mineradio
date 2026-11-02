@@ -1,5 +1,6 @@
+import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
 import type { MotionValue } from 'framer-motion';
-import type { AudioBands, SonnetTuning, Theme } from '../../../types';
+import type { AudioBands, LyricRenderScale, SonnetTuning, Theme } from '../../../types';
 import type { SonnetProgram } from './types';
 import { findSonnetParagraphIndexAtTime } from './sonnetProgram';
 import { buildSonnetIconDataUrl, buildSonnetIconTextureKey, resolveSonnetIconNames } from './sonnetIcons';
@@ -87,6 +88,8 @@ export interface SonnetRuntimeOptions {
     program: SonnetProgram;
     theme: Theme;
     tuning: SonnetTuning;
+    renderScale: LyricRenderScale;
+    antialias: boolean;
     currentTime: MotionValue<number>;
     audioPower?: MotionValue<number>;
     audioBands?: AudioBands;
@@ -101,6 +104,9 @@ export interface SonnetRuntimeOptions {
     /** Mod-driven per-frame multipliers (e.g. `{ cameraScale: 1.4 }`). Defaults to 1 = no change. */
     modulation?: Record<string, number>;
 }
+
+const resolveSonnetRenderResolution = (width: number, height: number, tuning: SonnetTuning, scale: LyricRenderScale) =>
+    snapResolutionToTexturePool(width, height, resolveLyricPixelRatio(tuning.textureResolution, scale));
 
 export class SonnetPixiRuntime {
     private readonly sceneCache = new Map<number, SceneView>();
@@ -151,9 +157,9 @@ export class SonnetPixiRuntime {
             width,
             height,
             backgroundAlpha: 0,
-            antialias: true,
+            antialias: options.antialias,
             autoDensity: true,
-            resolution: snapResolutionToTexturePool(width, height, options.tuning.textureResolution),
+            resolution: resolveSonnetRenderResolution(width, height, options.tuning, options.renderScale),
             autoStart: false,
             sharedTicker: false,
             preference: 'webgl',
@@ -205,7 +211,7 @@ export class SonnetPixiRuntime {
         this.app.renderer.resize(
             width,
             height,
-            snapResolutionToTexturePool(width, height, this.options.tuning.textureResolution),
+            resolveSonnetRenderResolution(width, height, this.options.tuning, this.options.renderScale),
         );
         // Staged against the old viewport, so its layout no longer fits.
         if (this.songSwap?.staged) {
@@ -1015,6 +1021,16 @@ export class SonnetPixiRuntime {
     setModulation(modulation: Record<string, number>) {
         if (this.destroyed) return;
         this.options.modulation = modulation;
+        if (this.options.paused) this.renderOnce();
+    }
+
+    /** Resize the backing surface without creating another WebGL context. */
+    setRenderScale(scale: LyricRenderScale) {
+        if (this.destroyed || this.options.renderScale === scale) return;
+        this.options.renderScale = scale;
+        // Reuse the resize path, including staged-scene disposal and cached text refresh.
+        this.lastWidth = 0;
+        this.resizeToHost();
         if (this.options.paused) this.renderOnce();
     }
 

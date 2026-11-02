@@ -1,6 +1,15 @@
 # Folia 本地播放器构建与测试
 
-当前宿主为 Mineradio `2.6.0`；Folia 原始取材基线为 `0.7.16`，本版选择性移植 `0.7.25` 的三种歌词效果、雾笺性能补丁和字幕能力。Folia 的来源记录在 `vendor-src/folia/MINERADIO-UPSTREAM.json`，其中记录的上游 main commit 为 `d824c0b854e54d5411cb072092999823e9bd7071`，取材日期为 2026-10-10。这个记录表示取材基线，集成目录内另含本地适配修改。
+当前宿主为 Mineradio `2.6.1`；Folia 原始取材基线为 `0.7.16`，此前选择性移植 `0.7.25` 的三种歌词效果、雾笺性能补丁和字幕能力。本轮继续选择性移植开发提交 `f03e8ecad21af765976cd00c5802218cdb22c8e4` 的六项增量功能，不是整体升级。来源记录在 `vendor-src/folia/MINERADIO-UPSTREAM.json`：原始 `observedMainCommit`、稳定版 `featureSync` 和开发增量 `incrementalSync` 分别保留。
+
+## 2.6.1 增量功能
+
+- 町景分阶段初始化与异步着色器预热；切换或卸载时取消未完成初始化并释放资源。
+- 全局画布分辨率、抗锯齿与各 Canvas 效果覆盖；全部保存在既有 `mineradio-folia-local-visuals-v1`，随宿主存档备份和恢复，不引入第二份播放设置。
+- 雾笺按未缩放的布局尺寸创建画布，修正实时预览的尺寸和笔画比例。
+- 带空格的逐字词块保留原时序；镜台、流光、云阶、莫奈与 Lattice 按 RTL 方向排词。
+- 雾笺梦海流萤水族箱、雨窗和凝露参数；兼容旧分辨率和场景设置。
+- 透明播放页联动 iframe、HTML 根节点与宿主背景，町景省略天空；返回、非歌词视图或加载失败时恢复背景。
 
 ## 运行边界
 
@@ -18,7 +27,7 @@
 
 - **悬浮 Polaroid 唱片墙**：`LocalRecordWall` 复用上游 `PolaroidCard`、六边形坐标/视口与卡片帧样式计算，保留卡片正反面、翻转入场、中心放大/边缘衰减、拖动惯性和滚轮弹簧。点卡片居中，中心播放按钮或 Enter 播放；方向键移动焦点，`+` 通过宿主 `addToQueue` 入队。底部使用原 `FloatingPlayerControls` 悬停展开胶囊与 `SlideActionButton` 列表/滑动搜索按钮。歌单选择和本地搜索只查询宿主目录。
 - **Lattice 封面拼贴墙**：`LocalPosterWall` 直接使用上游 `PosterWall`、相机/重排逻辑、当前歌曲聚焦、歌词画布和原播放进度控件。收藏、切歌、队列等动作由本地适配控件发送给宿主。暗角、灯光、换歌自动聚焦及封面染色偏好独立存入 `mineradio-folia-local-lattice-v1`。
-- **歌词与背景**：保留 Classic、Partita、Tempera、Lumiere、Cadenza、Fume、Claddagh、Cappella、Tilt、Diorama、Monet、Pendolo、Sonnet、Still 共 17 种原 renderer（另含 Hanabi、Nebbia、Machi），以及 Common、Latent、Sora、Monet、Nomand 五种本地背景。15 个在上游提供设置面板的歌词模式直接使用其原面板；Cadenza 和 Still 的上游 entry 未提供独立设置面板。支持主题、字号、译文和各模式已有参数。
+- **歌词与背景**：保留 Classic、Partita、Tempera、Lumiere、Cadenza、Fume、Claddagh、Cappella、Tilt、Diorama、Monet、Pendolo、Sonnet、Still、Hanabi、Nebbia、Machi 共 17 种原 renderer，以及 Common、Latent、Sora、Monet、Nomand 五种本地背景。16 个在上游提供设置面板的歌词模式使用其原面板，Still 没有独立参数面板。支持主题、字号、译文和各模式已有参数。
 - **图像素材**：Cappella 自定义表情/头像、Monet 人像、背景图片通过本地图片选择与清除操作接入原 renderer；Tempera 图层图片沿用其原素材控件。素材使用独立 `mineradio-folia-visual-assets-v1` IndexedDB 缓存及可释放的图片 Blob URL，不进入歌曲数据库或新增音频源。
 
 两种墙共用 `wallCatalog.ts`，按每页最多 1000 条从 `listTracks` 读取当前本地集合，再由原视觉组件进行视口裁剪；`HostTrack` 映射保留宿主稳定 ID，时长仅在转换为上游展示结构时从秒转为毫秒。点击歌曲传递完整 `playlistId`，不把显示页重建成播放队列。

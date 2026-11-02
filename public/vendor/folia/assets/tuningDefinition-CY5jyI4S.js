@@ -1,1 +1,0 @@
-var e=(e,t,n,r)=>typeof e==`number`&&Number.isFinite(e)?Math.min(r,Math.max(n,e)):t,t=e=>({...e,read:t=>t?.[e.mode]??e.defaults});export{e as n,t};

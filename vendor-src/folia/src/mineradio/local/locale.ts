@@ -2,6 +2,7 @@
 // Local-player copy is kept separate from Folia's complete application navigation.
 export const LOCAL_UI_RESOURCES = {
     'zh-CN': {
+        transparentPlayer: '透明播放页',
         effectFailed: '当前效果暂时无法显示', playerFailed: 'Folia 界面暂时无法显示',
         recoveryHint: '可以重试或返回 Mineradio，播放和已保存的设置会保留。',
         retrySurface: '重试', exportDiagnostics: '导出诊断', catalogIncomplete: '部分歌曲尚未加载',
@@ -25,6 +26,7 @@ export const LOCAL_UI_RESOURCES = {
         connected: 'Folia · 本地播放', connecting: '正在连接本地播放器…', retry: '重新连接',
     },
     en: {
+        transparentPlayer: 'Transparent player',
         effectFailed: 'This effect could not be displayed', playerFailed: 'Folia could not be displayed',
         recoveryHint: 'Retry or return to Mineradio. Playback and saved settings are preserved.',
         retrySurface: 'Retry', exportDiagnostics: 'Export diagnostics', catalogIncomplete: 'Some tracks could not be loaded',

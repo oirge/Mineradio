@@ -199,6 +199,13 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['Folia 全局画质、雾笺水族箱与町景切换优化。', 'Folia rendering quality, Nebbia aquarium and smoother Machi initialization.'],
+  ['町景采用异步着色器编译与分阶段初始化，减少切换时的阻塞。', 'Machi uses asynchronous shader warmup and staged initialization to reduce switching stalls.'],
+  ['新增全局画布分辨率和抗锯齿设置，支持歌词效果单独覆盖并保留旧参数。', 'Set global canvas resolution and antialiasing, with per-style overrides and migration of existing preferences.'],
+  ['修复雾笺缩放预览的画布尺寸与笔画粗细。', 'Fix Nebbia canvas sizing and stroke width in scaled previews.'],
+  ['修复带空格的逐字歌词分词，支持阿拉伯语等从右向左排词。', 'Preserve whitespace in timed lyric segmentation and render Arabic and other RTL lyrics in the correct order.'],
+  ['雾笺新增梦海流萤水族箱，支持水母、气泡、雨窗与凝露调节。', 'Nebbia adds the Dream Sea Glow aquarium with jellyfish, bubbles, rain and dew controls.'],
+  ['新增透明播放页，町景不画天空；退出或加载失败时自动恢复宿主背景。', 'Add transparent playback without the Machi sky, restoring the host background on exit or loading failure.'],
   ['17 种 Folia 歌词效果、随机样式与实时预览。', '17 Folia lyric styles, random selection and live previews.'],
   ['Folia 新增花火、雾笺、町景，歌词效果扩展至 17 种，并带入雾笺性能优化。', 'Folia adds Hanabi, Nebbia and Machi for 17 lyric styles, including Nebbia performance improvements.'],
   ['支持底部单行、双行、三行字幕和 Lattice 和声字幕。', 'Choose one, two or three bottom subtitle rows, with harmony subtitles in Lattice.'],
@@ -1989,7 +1996,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.0';
+var APP_VERSION = '2.6.1';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2042,14 +2049,14 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '17 种 Folia 歌词效果、随机样式与实时预览。',
+  hero: 'Folia 全局画质、雾笺水族箱与町景切换优化。',
   notes: [
-    'Folia 新增花火、雾笺、町景，歌词效果扩展至 17 种，并带入雾笺性能优化。',
-    '支持底部单行、双行、三行字幕和 Lattice 和声字幕。',
-    '新增自选随机池、每首歌随机样式、不连续重复、手动重抽及歌词与背景实时预览。',
-    '新增月蚀圣环、雨幕霓虹、折光蝶群、深海绽放四个粒子预设。',
-    '扩展播放、收藏、歌词、音量、切歌手势，支持灵敏度、动作冷却和推理防重入。',
-    '支持 Wallpaper Engine 原生画面的透明度、位置和缩放调整。'
+    '町景采用异步着色器编译与分阶段初始化，减少切换时的阻塞。',
+    '新增全局画布分辨率和抗锯齿设置，支持歌词效果单独覆盖并保留旧参数。',
+    '修复雾笺缩放预览的画布尺寸与笔画粗细。',
+    '修复带空格的逐字歌词分词，支持阿拉伯语等从右向左排词。',
+    '雾笺新增梦海流萤水族箱，支持水母、气泡、雨窗与凝露调节。',
+    '新增透明播放页，町景不画天空；退出或加载失败时自动恢复宿主背景。'
   ]
 };
 function readSavedVolume() {

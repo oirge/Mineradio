@@ -39,6 +39,8 @@ function element(id, tagName = 'DIV') {
 function harness(options = {}) {
     const storage = new Map(), listeners = new Map(), timers = new Map(), messages = [], calls = [], dbFavorites = [], preloadReleases = [];
     if (options.savedMode) storage.set('mineradio-player-interface-v1', options.savedMode);
+    if (options.savedVisuals !== undefined) storage.set('mineradio-folia-local-visuals-v1',
+        typeof options.savedVisuals === 'string' ? options.savedVisuals : JSON.stringify({ state: options.savedVisuals }));
     const documentElement = element('html');
     if (options.preloadFolia) documentElement.classList.toggle('folia-mode-preload', true);
     const mount = element('folia-interface'), status = element('folia-load-status'), original = element('renderer'), titlebar = element('desktop-titlebar');
@@ -82,6 +84,7 @@ function harness(options = {}) {
             setItem: (key, value) => storage.set(key, value),
         },
         setPersistentLocalStorageItem: (key, value) => storage.set(key, value),
+        backupPersistentUiState() {},
         localLibrarySongs: tracks, localLibraryReady: true, playQueue: tracks.map(song => ({ ...song })), currentIdx: 0,
         audio: { src: 'blob:host-audio', currentTime: 37, duration: 200, playbackRate: 1, volume: 1, paused: false, ended: false, muted: false },
         targetVolume: 0.65, lastNonZeroVolume: 0.65, playMode: 'loop', lyricsLines: [],
@@ -269,6 +272,81 @@ test('local wall and visual preferences reach desktop backup only from host loca
         { 'mineradio-folia-local-visuals-v1': '{"state":{"enabled":false}}' },
         { 'mineradio-folia-local-lattice-v1': '{"state":{"enabled":false}}' },
     ]);
+});
+
+test('transparent playback starts after the handshake and restores on interface return', async () => {
+    const h = harness({ savedMode: 'folia', savedVisuals: { view: 'lyrics', background: { transparent: true } } });
+    const transparent = () => h.document.body.classList.contains('folia-player-transparent');
+    const audio = h.context.audio, queue = h.context.playQueue, frame = h.frame();
+    assert.equal(transparent(), false, 'loading must keep its readable background');
+    assert.equal(h.document.documentElement.classList.contains('folia-player-transparent'), false);
+    await h.request('getState');
+    assert.equal(transparent(), true);
+    assert.equal(h.document.documentElement.classList.contains('folia-player-transparent'), true);
+    h.context.MineradioFoliaHost.setInterface('mineradio');
+    assert.equal(transparent(), false);
+    assert.equal(h.document.documentElement.classList.contains('folia-player-transparent'), false);
+    h.context.MineradioFoliaHost.setInterface('folia');
+    assert.equal(transparent(), true);
+    assert.equal(h.frame(), frame);
+    assert.equal(h.context.audio, audio);
+    assert.equal(h.context.playQueue, queue);
+    assert.equal(audio.currentTime, 37);
+    assert.equal(audio.paused, false);
+});
+
+test('transparent playback follows persisted view changes, reset and malformed settings', async () => {
+    const h = harness();
+    await h.request('getState');
+    const onStorage = h.listeners.get('storage');
+    for (const [state, expected] of [
+        [{ view: 'lyrics', background: { transparent: true } }, true],
+        [{ view: 'records', background: { transparent: true } }, false],
+        [{ view: 'posters', background: { transparent: true } }, false],
+        [{ background: { transparent: true } }, true],
+        [{ view: 'lyrics', background: { transparent: 'true' } }, false],
+        [{ view: 'lyrics', background: { transparent: false } }, false],
+        [{ view: 'lyrics', background: { transparent: true } }, true],
+        [null, false],
+    ]) {
+        const value = JSON.stringify({ state });
+        h.storage.set('mineradio-folia-local-visuals-v1', value);
+        onStorage({ key: 'mineradio-folia-local-visuals-v1', newValue: value, storageArea: h.context.localStorage });
+        assert.equal(h.document.body.classList.contains('folia-player-transparent'), expected);
+        assert.equal(h.document.documentElement.classList.contains('folia-player-transparent'), expected);
+    }
+    for (const value of ['invalid JSON', '{}', 'null', null]) {
+        onStorage({ key: 'mineradio-folia-local-visuals-v1', newValue: value, storageArea: h.context.localStorage });
+        assert.equal(h.document.body.classList.contains('folia-player-transparent'), false);
+    }
+});
+
+test('inactive or unrelated storage events cannot make the host transparent', async () => {
+    const h = harness({ savedVisuals: { view: 'lyrics', background: { transparent: true } } });
+    const onStorage = h.listeners.get('storage');
+    await h.request('getState');
+    onStorage({ key: 'mineradio-folia-local-visuals-v1', newValue: '{"state":{}}', storageArea: {} });
+    onStorage({ key: 'unrelated', newValue: '{"state":{}}', storageArea: h.context.localStorage });
+    assert.equal(h.document.body.classList.contains('folia-player-transparent'), true);
+    h.context.MineradioFoliaHost.setInterface('mineradio');
+    onStorage({ key: 'mineradio-folia-local-visuals-v1',
+        newValue: '{"state":{"view":"lyrics","background":{"transparent":true}}}', storageArea: h.context.localStorage });
+    assert.equal(h.document.body.classList.contains('folia-player-transparent'), false);
+});
+
+test('transparent preference keeps timeout and retry surfaces opaque until recovery', async () => {
+    const h = harness({ savedVisuals: { view: 'lyrics', background: { transparent: true } } });
+    const oldFrame = h.frame();
+    h.runTimer(20000);
+    assert.equal(h.document.body.classList.contains('folia-player-transparent'), false);
+    assert.equal(h.status.classList.contains('failed'), true);
+    h.context.MineradioFoliaHost.setInterface('mineradio');
+    h.context.MineradioFoliaHost.setInterface('folia');
+    assert.notEqual(h.frame(), oldFrame);
+    assert.equal(h.document.body.classList.contains('folia-player-transparent'), false);
+    await h.request('getState');
+    assert.equal(h.document.body.classList.contains('folia-player-transparent'), true);
+    assert.equal(h.status.classList.contains('failed'), false);
 });
 
 test('Folia host projects paginated tracks without live audio or file objects', async () => {

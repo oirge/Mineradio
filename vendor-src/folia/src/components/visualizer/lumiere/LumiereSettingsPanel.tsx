@@ -8,8 +8,8 @@ import { TemperaRangeControl as RangeControl, TemperaSettingsSection as Settings
 // src/components/visualizer/lumiere/LumiereSettingsPanel.tsx
 // 绘光的参数面板：光、氛围、文字、主题、性能五组，滑块遵循 VisPlayground 的草稿 / 松手提交语义。
 
-type NumberKey = { [K in keyof LumiereTuning]: LumiereTuning[K] extends number ? K : never }[keyof LumiereTuning];
-type BooleanKey = { [K in keyof LumiereTuning]: LumiereTuning[K] extends boolean ? K : never }[keyof LumiereTuning];
+type NumberKey = { [K in keyof LumiereTuning]-?: LumiereTuning[K] extends number ? K : never }[keyof LumiereTuning];
+type BooleanKey = { [K in keyof LumiereTuning]-?: LumiereTuning[K] extends boolean ? K : never }[keyof LumiereTuning];
 
 interface SliderSpec { kind: 'slider'; key: NumberKey; labelKey: string; min: number; max: number; step?: number; integer?: boolean; }
 interface ToggleSpec { kind: 'toggle'; key: BooleanKey; labelKey: string; }

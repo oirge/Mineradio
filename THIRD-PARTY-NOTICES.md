@@ -8,6 +8,7 @@ Folia Web 界面来自 chthollyphile/folia-major，取材版本 0.7.16（2026-10
 项目地址：https://github.com/chthollyphile/folia-major 。
 记录的上游 main commit 为 `d824c0b854e54d5411cb072092999823e9bd7071`。
 本版另选择性移植 0.7.25 稳定提交 `20c3ecd09a518e9c8d2d53c331c54a548bf9eebf` 的三种新效果与字幕相关组件（2026-11-02），详见来源记录中的 `featureSync`。
+2.6.1 继续选择性移植该稳定版之后、截至开发提交 `f03e8ecad21af765976cd00c5802218cdb22c8e4` 的町景异步初始化、画质控制、雾笺扩展和歌词布局修复，详见 `incrementalSync`；不代表 Folia 整体版本升级。
 本地嵌入适配只挂载独立本地播放器，复用原版歌词、背景和视觉参数组件，将播放和曲库操作交给 Mineradio；不加载上游完整应用入口、在线功能、独立 Electron 程序及在线服务部署。
 修改后的 Folia 源码位于本项目源码检出的 `vendor-src/folia`，构建命令为 `npm run build:folia`。
 源码与桌面运行产物的边界、重建步骤见 `docs/FOLIA_INTEGRATION.md`；当前桌面打包配置只包含编译后的界面文件。

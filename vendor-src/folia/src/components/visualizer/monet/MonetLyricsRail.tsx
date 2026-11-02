@@ -4,6 +4,7 @@ import type { Theme, AudioBands, Line, SubtitleContentMode } from '../../../type
 import { resolveThemeFontWeight } from '../../../utils/fontStacks';
 import type { GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
+import { resolveLyricTextDirection } from '../../../utils/lyrics/textDirection';
 import { SECONDARY_TRACK_FONT_WEIGHT_FALLBACK, SECONDARY_TRACK_OPACITY } from '../../../utils/lyrics/subtitleTrackStyle';
 import { useFontsEpoch } from '../../../hooks/useFontsEpoch';
 import { colorWithAlpha, mixColors } from '../colorMix';
@@ -356,10 +357,10 @@ const getClippedTextMask = (
     return `linear-gradient(180deg, black 0px, black ${solidEndPx}px, transparent ${contentBottomPx}px)`;
 };
 
-/** Softens the right edge so a token wider than the column fades out instead of being sliced mid-glyph. */
-const getEdgeFadeMask = (isOverflowing: boolean, fadePx: number) => (
+/** Softens the line-end edge, which is the left edge for RTL lyrics. */
+export const getEdgeFadeMask = (isOverflowing: boolean, fadePx: number, rtl = false) => (
     isOverflowing
-        ? `linear-gradient(90deg, black 0%, black calc(100% - ${fadePx}px), transparent 100%)`
+        ? `linear-gradient(${rtl ? 270 : 90}deg, black 0%, black calc(100% - ${fadePx}px), transparent 100%)`
         : undefined
 );
 
@@ -395,7 +396,8 @@ const MonetTimedTokenSpan: React.FC<{
     chorusAccentColor?: string;
     audioPower?: MotionValue<number>;
     renderStaticPassed?: boolean;
-}> = ({ entry, currentTime, accentColor, fontPx, fontStack, fontsEpoch, wordColorMatchers, isChorus, chorusAccentColor, audioPower, renderStaticPassed = false }) => {
+    rtl: boolean;
+}> = ({ entry, currentTime, accentColor, fontPx, fontStack, fontsEpoch, wordColorMatchers, isChorus, chorusAccentColor, audioPower, renderStaticPassed = false, rtl }) => {
     const lineRenderEndTime = useMemo(() => getLineRenderEndTime(entry.line), [entry.line]);
     const tokens = useMemo(() => buildMonetDisplayTokens(entry.line), [entry.line]);
     const wordColorRanges = useMemo(
@@ -446,6 +448,7 @@ const MonetTimedTokenSpan: React.FC<{
                         fontsEpoch={fontsEpoch}
                         isChorus={isChorus}
                         audioPower={audioPower}
+                        rtl={rtl}
                     />
                 ) : (
                     <span key={token.key} style={{ color: entry.tone.baseColor }}>
@@ -473,6 +476,7 @@ const MonetWordSweep: React.FC<{
     fontsEpoch: number;
     isChorus?: boolean;
     audioPower?: MotionValue<number>;
+    rtl: boolean;
 }> = ({
     text,
     startTime,
@@ -488,8 +492,10 @@ const MonetWordSweep: React.FC<{
     fontsEpoch,
     isChorus,
     audioPower,
+    rtl,
 }) => {
         const isLineActive = lineStatus === 'active';
+        const sweepAngle = rtl ? '270deg' : '90deg';
         const canRenderGlow = lineStatus === 'active' || lineStatus === 'passed';
         const graphemeOffsets = useMemo(
             () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
@@ -518,12 +524,12 @@ const MonetWordSweep: React.FC<{
             const solidEnd = Math.max(sweepEnd - edgeSoftness, 0);
             const featherStart = Math.max(sweepEnd - edgeSoftness * 0.55, 0);
             const featherEnd = Math.max(sweepEnd, 0);
-            return `linear-gradient(90deg, rgba(0, 0, 0, 1) 0px, rgba(0, 0, 0, 1) ${solidEnd}px, rgba(0, 0, 0, 0.92) ${featherStart}px, rgba(0, 0, 0, 0) ${featherEnd}px, rgba(0, 0, 0, 0) 100%)`;
+            return `linear-gradient(${sweepAngle}, rgba(0, 0, 0, 1) 0px, rgba(0, 0, 0, 1) ${solidEnd}px, rgba(0, 0, 0, 0.92) ${featherStart}px, rgba(0, 0, 0, 0) ${featherEnd}px, rgba(0, 0, 0, 0) 100%)`;
         });
 
         const fillGradient = useTransform(wordProgress, progress => {
             const color = mixColors(baseColor, wordColor, Math.min(progress, 1));
-            return `linear-gradient(90deg, ${color} 0%, ${colorWithAlpha(color, 0.92)} 68%, ${colorWithAlpha(color, 0.72)} 100%)`;
+            return `linear-gradient(${sweepAngle}, ${color} 0%, ${colorWithAlpha(color, 0.92)} 68%, ${colorWithAlpha(color, 0.72)} 100%)`;
         });
 
         const resolvedBaseColor = useTransform(wordStatus, status =>
@@ -619,6 +625,7 @@ const MonetRailLine: React.FC<{
     // content instead of the pre-measured height, and it carries no truncation fade.
     // Context lines keep the fixed two-line box that keeps the rail compact.
     const isActiveLine = entry.status === 'active';
+    const rtl = useMemo(() => resolveLyricTextDirection(entry.line.fullText) === 'rtl', [entry.line.fullText]);
     const textMask = isActiveLine
         ? undefined
         : getClippedTextMask(
@@ -626,7 +633,7 @@ const MonetRailLine: React.FC<{
             vGlowBufferPx + entry.layout.textPaddingTopPx + entry.layout.textContentHeightPx,
             Math.max(lyricFontPx * 0.55, 12),
         );
-    const textEdgeMask = getEdgeFadeMask(entry.layout.isTextOverflowingWidth, Math.max(lyricFontPx * 0.9, 24));
+    const textEdgeMask = getEdgeFadeMask(entry.layout.isTextOverflowingWidth, Math.max(lyricFontPx * 0.9, 24), rtl);
     const textMaskStyle = composeLineMasks(textMask, textEdgeMask);
     const handleSeek = (event: React.MouseEvent | React.KeyboardEvent) => {
         if (!canSeek) {
@@ -677,7 +684,7 @@ const MonetRailLine: React.FC<{
                 left: `${glowBufferPx}px`,
                 right: `${glowBufferPx}px`,
                 height: entry.layout.visualHeightPx,
-                transformOrigin: 'left top',
+                transformOrigin: rtl ? 'right top' : 'left top',
                 zIndex: entry.tone.zIndex,
             }}
         >
@@ -697,6 +704,7 @@ const MonetRailLine: React.FC<{
                 />
             )}
             <div
+                dir={rtl ? 'rtl' : 'ltr'}
                 className="min-w-0 overflow-hidden pointer-events-none"
                 style={{
                     marginLeft: `-${glowBufferPx}px`,
@@ -734,6 +742,7 @@ const MonetRailLine: React.FC<{
                     chorusAccentColor={theme.accentColor}
                     audioPower={audioPower}
                     renderStaticPassed={renderStaticPassed}
+                    rtl={rtl}
                 />
             </div>
             {entry.layout.subtitleTracks.map((track, trackIndex) => {
@@ -743,6 +752,7 @@ const MonetRailLine: React.FC<{
                 return (
                     <motion.div
                         key={track.role}
+                        dir="auto"
                         data-subtitle-track={track.role}
                         className="min-w-0 overflow-hidden whitespace-pre-wrap break-words"
                         initial={{ opacity: 0, y: 8 }}
@@ -758,6 +768,7 @@ const MonetRailLine: React.FC<{
                             paddingBottom: track.paddingBottomPx,
                             boxSizing: 'border-box',
                             color: colorWithAlpha(theme.primaryColor, trackIndex > 0 ? 0.68 * SECONDARY_TRACK_OPACITY : 0.68),
+                            textAlign: rtl ? 'right' : 'left',
                             fontFamily: translationFontStack,
                             fontSize: track.fontPx,
                             fontWeight: track.fontWeight,

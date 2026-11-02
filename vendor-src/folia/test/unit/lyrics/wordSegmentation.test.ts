@@ -155,6 +155,31 @@ describe('getWordSegmentationKey', () => {
 });
 
 describe('cjkSemanticLayout with a saved segmentation', () => {
+    it('retains semantic grouping when timed CJK words carry whitespace', () => {
+        const words = [word('回', 0, 1), word('忆  ', 1, 2), word('拼', 2, 3), word('好', 3, 4)];
+        const units = buildPostLyricLayoutUnits(
+            { fullText: '回忆  拼好', words, wordSegments: ['回忆  ', '拼好'] },
+            { semantic: true, sticky: true },
+        );
+        expect(units.map(unit => unit.text)).toEqual(['回忆  ', '拼好']);
+        expect(units.every(unit => unit.isSemantic)).toBe(true);
+        expect(units.flatMap(unit => unit.words)).toEqual(words);
+        expect(buildDisplayWordsFromLayoutUnits(units)).toEqual(words);
+    });
+
+    it('preserves leading, internal and trailing whitespace words with their original timing', () => {
+        const words = [word(' ', 0, 0.5), word('世', 0.5, 1), word('  ', 1, 1.5), word('界', 1.5, 2),
+            word('再', 2, 3), word('见', 3, 4), word('\t', 4, 4.5)];
+        const units = buildPostLyricLayoutUnits(
+            { fullText: ' 世  界再见\t', words, wordSegments: [' 世  界', '再见\t'] },
+            { semantic: true, sticky: true },
+        );
+        expect(units.map(unit => unit.text)).toEqual([' 世  界', '再见\t']);
+        expect(units.flatMap(unit => unit.words)).toEqual(words);
+        expect(units[0]).toMatchObject({ startTime: 0, endTime: 2, isSemantic: true });
+        expect(units[1]).toMatchObject({ startTime: 2, endTime: 4.5, isSemantic: true });
+    });
+
     it('groups parser words along the saved boundaries', () => {
         const words = [word('我', 0, 1), word('想', 1, 2), word('要', 2, 3), word('说', 3, 4)];
         const units = buildPostLyricLayoutUnits(

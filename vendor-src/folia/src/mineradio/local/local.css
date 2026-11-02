@@ -1,5 +1,6 @@
 /* src/mineradio/local/local.css */
 /* Embedded Folia local player chrome. Renderer typography and animations remain upstream. */
+html.local-player-transparent,html.local-player-transparent body,html.local-player-transparent #root{background:transparent!important}
 .local-player{position:fixed;inset:0;overflow:hidden;font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--local-text);background:var(--local-bg);isolation:isolate}
 .local-player button:not(:where(.lattice-root *, .local-record-wall *)),.local-player input:not(:where(.lattice-root *, .local-record-wall *)),.local-player select:not(:where(.lattice-root *, .local-record-wall *)){font:inherit;color:inherit}
 .local-player button:not(:where(.lattice-root *, .local-record-wall *)){display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;min-height:34px;padding:7px 10px;background:transparent;cursor:pointer;transition:background .18s,opacity .18s,transform .18s}

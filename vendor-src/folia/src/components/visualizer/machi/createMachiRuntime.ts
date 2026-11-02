@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { MotionValue } from 'framer-motion';
-import type { AudioBands, Line, Theme } from '../../../types';
+import type { AudioBands, Line, LyricRenderQuality, Theme } from '../../../types';
 import { getDrumHits, type DrumHits } from '../../../mineradio/local/localAnalysisBoundary';
 import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import {
@@ -53,6 +53,7 @@ import { MachiPost, type MachiAtmosphereFrame } from './engine/fx/post';
 import { resolveMachiLens } from './engine/lens';
 import { resolveMachiRenderQuality, type MachiRenderQuality } from './engine/quality';
 import { MachiReflection } from './engine/fx/reflection';
+import { compileInto, reportBrokenPrograms, waitForPrograms, yieldToMain } from './engine/programWarmup';
 import { MachiWeather } from './engine/fx/weather';
 import { MachiColorBlend, MachiMaterials } from './engine/materials';
 import { resolveMachiPalette } from './engine/palette';
@@ -62,6 +63,7 @@ import { createMachiSnowUniforms, setMachiSnowRoofs } from './engine/snow';
 import { resolveMachiSceneId } from './machiTuning';
 import { MACHI_SCENES } from './scenes';
 import type { MachiScene, MachiSceneContent, MachiSceneContext } from './scenes/types';
+import { reportMachiDegrade, withdrawMachiDegrade } from './degradeStatus';
 import { reportMachiShownScene, withdrawMachiShownScene } from './shownScene';
 import type { MachiCameraView, MachiQuality, MachiSceneId, MachiTuning } from './types';
 
@@ -88,6 +90,8 @@ export interface MachiRuntimeOptions {
     song: MachiSongContext;
     theme: Theme;
     tuning: MachiTuning;
+    /** 歌词画布的全局分辨率与抗锯齿挡位（画质里选了跟随全局的两项用它）。 */
+    renderQuality: LyricRenderQuality;
     currentTime: MotionValue<number>;
     audioPower: MotionValue<number>;
     audioBands: AudioBands;
@@ -96,6 +100,8 @@ export interface MachiRuntimeOptions {
     showText: boolean;
     /** 样式架小图、主题乐园预览：低分辨率、不接拖拽。 */
     previewMode: boolean;
+    /** 透明模式：不画天空，天空像素透出底下的桌面（画布带 alpha；切换时外壳重建运行时）。 */
+    transparent: boolean;
     /** 自定义视角下拖动停稳了：新视角（相对默认构图）与它属于哪个场景，交给外面存进 tuning。 */
     onViewChange?: (view: MachiCameraView, scene: MachiSceneId) => void;
     /** 换上了一个场景（取景控制条按它调视角）。 */
@@ -140,6 +146,7 @@ const CLOCK_CHECK_MS = 30_000;
 const SCENE_FADE_OUT = 0.18;
 const SCENE_FADE_IN = 0.32;
 
+const WHITE = new THREE.Color(1, 1, 1);
 const lerpColor = (out: THREE.Color, a: THREE.Color, b: THREE.Color, t: number) => out.copy(a).lerp(b, t);
 /** 画质设置的指纹：设置面板每次给的是新对象，按内容比。 */
 const qualityKey = (quality: MachiQuality) => [quality.renderScale, quality.antialias, quality.shadows, quality.reflections, quality.glow, quality.adaptive].join('|');
@@ -192,8 +199,15 @@ export class MachiRuntime {
     private clockTimer = 0;
     /** 换场景的淡出淡入：画面亮度、阶段、淡出后要建的场景。 */
     private fade = 1;
-    private fadePhase: 'idle' | 'out' | 'in' = 'idle';
+    /** building：淡到黑以后建新场景、等它的着色器编好，这期间不出帧（画布停在黑场上）。 */
+    private fadePhase: 'idle' | 'out' | 'building' | 'in' = 'idle';
     private pendingScene: MachiSceneId | null = null;
+    /** 起步还没画第一帧：不出帧（create 等着色器编好后 start）。 */
+    private holding = true;
+    /** 黑场里建新场景的时候换了歌（场景没变）：建完补一次 swapSong。 */
+    private songChangedWhileBuilding = false;
+    /** 拆掉时中止：还在等着色器的起步、换场景都停下来。 */
+    private readonly lifetime = new AbortController();
     private readonly scratchColor = new THREE.Color();
     private readonly scratchColorB = new THREE.Color();
     private lightningTimes: number[] = [];
@@ -236,17 +250,36 @@ export class MachiRuntime {
     private song: MachiSongContext;
     private theme: Theme;
     private tuning: MachiTuning;
+    private globalQuality: LyricRenderQuality;
     private themeSignature: string;
     private pixelRatio: number;
     private wantsFrame = true;
     private readonly frameTimes: number[] = [];
     private lastFrameAt = 0;
     private lastCalls = 0;
+    private checkedProgramCount = 0;
     private lastTriangles = 0;
 
+    /**
+     * 建运行时：引擎、场景、着色器分几段做，中间让出主线程；着色器交给 GPU 在后台编，编好再画第一帧
+     * （programWarmup.ts）。换样式的过渡等第一帧（firstFrame.ts），等的这段时间页面上别的动画照常走。
+     */
     static async create(options: MachiRuntimeOptions) {
         throwIfAborted(options.signal);
-        return new MachiRuntime(options);
+        const runtime = new MachiRuntime(options);
+        try {
+            // 建渲染器、后处理是一段，建场景是另一段：中间先让一次。
+            await yieldToMain();
+            throwIfAborted(options.signal);
+            const loaded = await runtime.loadScene(resolveMachiSceneId(options.tuning, options.song.seed), options.signal);
+            throwIfAborted(options.signal);
+            if (!loaded) throw new DOMException('Aborted', 'AbortError');
+            runtime.start();
+        } catch (error) {
+            runtime.destroy();
+            throw error;
+        }
+        return runtime;
     }
 
     private constructor(private readonly options: MachiRuntimeOptions) {
@@ -256,12 +289,13 @@ export class MachiRuntime {
         this.song = options.song;
         this.theme = options.theme;
         this.tuning = options.tuning;
+        this.globalQuality = options.renderQuality;
         this.themeSignature = themeKey(options.theme);
         this.renderQuality = this.resolveQuality();
         this.pixelRatio = this.renderQuality.pixelRatio;
 
-        // 抗锯齿交给后处理（场景目标的 MSAA、最后的 FXAA / SMAA、超采样），画布本身不开。
-        this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'high-performance', stencil: false });
+        // 抗锯齿交给后处理（场景目标的 MSAA、最后的 FXAA / SMAA、超采样），画布本身不开。透明模式下画布带 alpha（预乘）。
+        this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: options.transparent, powerPreference: 'high-performance', stencil: false });
         this.renderer.setPixelRatio(this.pixelRatio);
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.NeutralToneMapping;
@@ -270,14 +304,16 @@ export class MachiRuntime {
         this.renderer.shadowMap.type = THREE.PCFShadowMap;
         this.renderer.shadowMap.autoUpdate = false;
         this.renderer.info.autoReset = false;
-        // 车从底座边缘“开出来”：车的材质带底座的裁切面。
-        this.renderer.localClippingEnabled = true;
+        // 着色器出错的检查：开发时用 three 自己的（逐个取日志，慢）；生产构建编好后只查链接状态（reportBrokenPrograms）。
+        this.renderer.debug.checkShaderErrors = import.meta.env.DEV;
         const canvas = this.renderer.domElement;
         canvas.style.position = 'absolute';
         canvas.style.inset = '0';
         canvas.style.width = '100%';
         canvas.style.height = '100%';
         canvas.style.display = 'block';
+        // 第一帧画好之前不露出来（起步分几段做，没画过的画布是一块黑）。
+        canvas.style.visibility = 'hidden';
         canvas.addEventListener('webglcontextlost', this.onContextLost);
         options.host.appendChild(canvas);
 
@@ -295,23 +331,26 @@ export class MachiRuntime {
         this.reflection = new MachiReflection(0.06, quality.reflectionScale || 0.3);
         this.ground.uniforms.uReflection.value = this.reflection.target.texture;
         this.ground.setReflections(quality.reflectionScale > 0);
-        this.post = new MachiPost(this.renderer, this.scene, this.camera.camera, quality);
-        this.scene.background = this.sky.texture;
+        this.post = new MachiPost(this.renderer, this.scene, this.camera.camera, quality, options.transparent);
+        this.scene.background = options.transparent ? null : this.sky.texture;
         this.camera.onCommit = view => this.options.onViewChange?.(view, this.stageId);
         this.camera.onWake = () => this.wake();
         this.camera.setMotion(options.tuning.motion, options.tuning.motionSpeed);
-        this.mountScene(sceneId);
-
-        if (!options.previewMode) this.camera.attach(canvas);
         this.resizeObserver = new ResizeObserver(this.onResize);
         this.resizeObserver.observe(options.host);
         this.resize(options.host.clientWidth, options.host.clientHeight);
-
         this.clock.paused = this.paused || this.staticMode;
+    }
+
+    /** 场景和着色器都好了：接上拖拽和时钟，画第一帧，开始循环。 */
+    private start() {
+        this.holding = false;
+        this.reportDegrade();
+        if (!this.options.previewMode) this.camera.attach(this.renderer.domElement);
         this.clockTimer = window.setInterval(this.onClockCheck, CLOCK_CHECK_MS);
-        // 第一帧在 create 里画好：着色器编译是起步最慢的一段，换样式的过渡等它（firstFrame.ts）。
-        this.renderer.compile(this.scene, this.camera.camera);
+        // 第一帧在 create 里画好：换样式的过渡等它（firstFrame.ts）。
         this.renderFrame(performance.now());
+        this.renderer.domElement.style.visibility = '';
         this.wake();
         if (import.meta.env.DEV) this.installDebugHook();
     }
@@ -328,8 +367,45 @@ export class MachiRuntime {
         };
     }
 
-    /** 建场景（或换场景：先拆旧的）：几何、灯、招牌进场景树，湿地面、天气、镜头取景、倒影平面跟着换。 */
+    /** 建场景（或换场景：先拆旧的）：几何、灯、招牌进场景树，湿地面、天气、镜头取景、倒影平面跟着换。同步做完（预览、调试钩子）。 */
     private mountScene(id: MachiSceneId) {
+        this.buildStage(id);
+        this.fillStage();
+    }
+
+    /**
+     * 起步和换场景：建场景、让出一次主线程、画招牌，再把这一帧要用的着色器交给 GPU 编、等它们编好。
+     * 中途运行时被拆了返回 false（不抛错）；signal 中止时抛 AbortError。
+     */
+    private async loadScene(id: MachiSceneId, signal: AbortSignal = this.lifetime.signal) {
+        this.buildStage(id);
+        await yieldToMain();
+        if (this.disposed) return false;
+        throwIfAborted(signal);
+        this.fillStage();
+        await yieldToMain();
+        if (this.disposed) return false;
+        throwIfAborted(signal);
+        this.compilePrograms();
+        await waitForPrograms(this.renderer, signal);
+        if (this.disposed) return false;
+        reportBrokenPrograms(this.renderer);
+        return true;
+    }
+
+    /**
+     * 把这一帧会用到的着色器都交给 GPU 去编（不等结果）：主场景画进后处理的 HDR 目标，倒影画进倒影目标（只有 REFLECT 图层，
+     * 不带灯），后处理各道 pass 按各自的目标。都要和真正画时同一个目标，不然编出的变体用不上（programWarmup.ts）。
+     */
+    private compilePrograms() {
+        const camera = this.camera.camera;
+        compileInto(this.renderer, this.post.sceneTarget, this.scene, camera, this.scene, object => object.layers.test(camera.layers));
+        if (this.renderQuality.reflectionScale > 0) this.reflection.compile(this.renderer, this.scene);
+        this.post.compile();
+    }
+
+    /** 拆旧场景、建新场景的几何、灯和天气（招牌在 fillStage 里画）。 */
+    private buildStage(id: MachiSceneId) {
         if (this.stage) {
             this.stage.dispose();
             this.weather.group.removeFromParent();
@@ -339,6 +415,8 @@ export class MachiRuntime {
         const palette = resolveMachiPalette(this.theme, this.song.seed, definition.resolveArt);
         this.blend.setTarget(palette, !this.stage || this.staticMode);
         this.stageId = id;
+        // 新场景按此刻的歌建：建好以前再换的歌由 switchScene 补上。
+        this.songChangedWhileBuilding = false;
         this.stageContext = {
             materials: new MachiMaterials(this.blend, this.snow, id),
             blend: this.blend,
@@ -365,9 +443,14 @@ export class MachiRuntime {
         this.atmosphere.wind.set(Math.sin(stage.weather.windYaw), Math.cos(stage.weather.windYaw)).multiplyScalar(0.06);
         this.reflection.planeY = stage.reflectionPlaneY;
         this.camera.setFraming(stage.framing, this.customView(id));
+    }
+
+    /** 新场景画上招牌（歌、主题、调色板、字体、图标），颜色同步一次，报出换上了哪个场景。 */
+    private fillStage() {
+        const id = this.stageId;
         reportMachiShownScene(this, id);
         this.options.onSceneShown?.(id);
-        stage.setContent(this.sceneContent(palette));
+        this.stage.setContent(this.sceneContent());
         this.boardTarget = null;
         this.environmentDirty = true;
         this.syncColors();
@@ -375,18 +458,51 @@ export class MachiRuntime {
         this.wantsFrame = true;
     }
 
-    /** 换场景：先淡出，在黑场里拆旧建新（重建那一下的卡顿藏在黑里），再淡入。预览和调试钩子直接换。 */
+    /**
+     * 换场景：先淡出，在黑场里拆旧建新、等新场景的着色器在后台编好（loadScene，期间不出帧），再淡入。
+     * 正在黑场里建的时候又要换：记下来，建完接着建。预览和调试钩子直接同步换。
+     */
     private requestScene(id: MachiSceneId, immediate = this.options.previewMode) {
-        if (immediate) {
+        if (immediate && this.fadePhase !== 'building') {
             this.pendingScene = null;
             this.fadePhase = 'idle';
             this.fade = 1;
             this.mountScene(id);
-            this.renderer.compile(this.scene, this.camera.camera);
+            this.compilePrograms();
             return;
         }
         this.pendingScene = id;
+        if (this.fadePhase === 'building') return;
         this.fadePhase = 'out';
+        this.wantsFrame = true;
+        this.wake();
+    }
+
+    /** 黑场里换场景：建完若又有要换的就接着建，最后淡入。 */
+    private async switchScene() {
+        try {
+            await yieldToMain();
+            while (this.pendingScene && !this.disposed) {
+                const id = this.pendingScene;
+                this.pendingScene = null;
+                if (!(await this.loadScene(id))) return;
+            }
+        } catch (error) {
+            if (this.disposed) return;
+            console.warn('[Machi] scene switch failed', error);
+            // 建坏了就停在这里：别留着一个永远没人建的场景，换歌会一直被它挡住。
+            this.pendingScene = null;
+        }
+        if (this.disposed) return;
+        // 黑场里又换了歌（场景没变）：新场景是按换歌之前的歌建的，补一次。
+        if (this.songChangedWhileBuilding) {
+            this.songChangedWhileBuilding = false;
+            const palette = resolveMachiPalette(this.theme, this.song.seed, MACHI_SCENES[this.stageId].resolveArt);
+            this.blend.setTarget(palette, this.staticMode);
+            this.stage.swapSong(this.song, this.sceneContent(palette));
+            this.boardTarget = null;
+        }
+        this.fadePhase = 'in';
         this.wantsFrame = true;
         this.wake();
     }
@@ -397,13 +513,13 @@ export class MachiRuntime {
         if (this.fadePhase === 'out') {
             this.fade = Math.max(0, this.fade - step / SCENE_FADE_OUT);
             if (this.fade === 0) {
-                const id = this.pendingScene;
-                this.pendingScene = null;
-                if (id) {
-                    this.mountScene(id);
-                    this.renderer.compile(this.scene, this.camera.camera);
+                if (this.pendingScene) {
+                    // 这一帧先按全黑画完，下一个任务里再拆旧建新（switchScene 先让一次）。
+                    this.fadePhase = 'building';
+                    void this.switchScene();
+                } else {
+                    this.fadePhase = 'in';
                 }
-                this.fadePhase = 'in';
             }
         } else if (this.fadePhase === 'in') {
             this.fade = Math.min(1, this.fade + step / SCENE_FADE_IN);
@@ -452,6 +568,7 @@ export class MachiRuntime {
             degrade,
             devicePixelRatio: window.devicePixelRatio || 1,
             previewMode: this.options.previewMode,
+            global: this.globalQuality,
         });
     }
 
@@ -467,6 +584,7 @@ export class MachiRuntime {
         this.post.setQuality(quality);
         this.resize(this.size.width, this.size.height);
         this.frameTimes.length = 0;
+        this.reportDegrade();
         this.wake();
     }
 
@@ -518,7 +636,7 @@ export class MachiRuntime {
     }
 
     private wake() {
-        if (this.disposed || this.raf) return;
+        if (this.disposed || this.raf || this.holding || this.fadePhase === 'building') return;
         this.clock.resync();
         this.raf = requestAnimationFrame(this.frame);
     }
@@ -530,7 +648,7 @@ export class MachiRuntime {
 
     private readonly frame = (now: number) => {
         this.raf = 0;
-        if (this.disposed) return;
+        if (this.disposed || this.holding || this.fadePhase === 'building') return;
         this.renderFrame(now);
         // 这一帧里可能已经有人 wake() 排过下一帧（镜头摆位、换场景都会叫醒）：再排一次就多出一条并行的渲染链，
         // 每个刷新周期画两遍，而且会越滚越多。
@@ -585,6 +703,12 @@ export class MachiRuntime {
             fade: this.fade,
         });
         this.adaptQuality(now);
+        // 画的时候才编出来的程序（改了画质之类）：数目变了就查一遍链接状态。
+        const programCount = this.renderer.info.programs?.length ?? 0;
+        if (programCount !== this.checkedProgramCount) {
+            this.checkedProgramCount = programCount;
+            reportBrokenPrograms(this.renderer);
+        }
         this.lastCalls = this.renderer.info.render.calls;
         this.lastTriangles = this.renderer.info.render.triangles;
         this.camera.rendered();
@@ -682,7 +806,7 @@ export class MachiRuntime {
         atmosphere.mistAmount = look.mist + 0.06 * Math.min(1, rain);
         // 云：夜里是天色里带一点月光，白天是偏白的云，阴天更灰。
         lerpColor(this.scratchColor, skyBottom, this.blend.get('moon'), 0.25).multiplyScalar(0.7);
-        this.scratchColorB.copy(skyBottom).lerp(new THREE.Color(1, 1, 1), 0.55 - 0.25 * look.overcast).multiplyScalar(0.55);
+        this.scratchColorB.copy(skyBottom).lerp(WHITE, 0.55 - 0.25 * look.overcast).multiplyScalar(0.55);
         atmosphere.cloudColor.copy(this.scratchColor).lerp(this.scratchColorB, environment.daylight);
         atmosphere.cloudAmount = look.clouds;
         atmosphere.stars = look.stars;
@@ -764,6 +888,8 @@ export class MachiRuntime {
         const sceneId = resolveMachiSceneId(this.tuning, song.seed);
         if (sceneId !== this.targetSceneId || (seedChanged && this.stage.rebuildsForSeed)) {
             this.requestScene(sceneId);
+        } else if (this.fadePhase === 'building') {
+            this.songChangedWhileBuilding = true;
         } else if (!this.pendingScene) {
             const palette = resolveMachiPalette(this.theme, song.seed, MACHI_SCENES[sceneId].resolveArt);
             this.blend.setTarget(palette, this.staticMode);
@@ -817,6 +943,22 @@ export class MachiRuntime {
         }
         this.wantsFrame = true;
         this.wake();
+    }
+
+    /** 全局挡位改了：画质里跟随全局的两项跟着变，自动降级从头算（和改了画质设置一样）；两项都没跟随全局时什么也不变。 */
+    setRenderQuality(renderQuality: LyricRenderQuality) {
+        const previous = this.globalQuality;
+        if (previous.scale === renderQuality.scale && previous.antialias === renderQuality.antialias) return;
+        this.globalQuality = renderQuality;
+        const { renderScale, antialias } = this.tuning.quality;
+        if (renderScale !== 'global' && antialias !== 'global') return;
+        this.degrade = 0;
+        this.applyQuality();
+    }
+
+    /** 报出自动降级压了几格（面板上看）；预览不降级，不报，免得盖住播放页那个。 */
+    private reportDegrade() {
+        if (!this.options.previewMode) reportMachiDegrade(this, this.renderQuality.degrade);
     }
 
     setPaused(paused: boolean) {
@@ -902,16 +1044,19 @@ export class MachiRuntime {
     destroy() {
         if (this.disposed) return;
         this.disposed = true;
+        this.lifetime.abort();
         this.stopLoop();
         window.clearTimeout(this.signRepaintTimer);
         window.clearInterval(this.clockTimer);
         this.resizeObserver.disconnect();
         this.camera.dispose();
         withdrawMachiShownScene(this);
+        withdrawMachiDegrade(this);
         const canvas = this.renderer.domElement;
         canvas.removeEventListener('webglcontextlost', this.onContextLost);
-        this.stage.dispose();
-        this.weather.dispose();
+        // 起步中途被拆时场景可能还没建。
+        this.stage?.dispose();
+        this.weather?.dispose();
         this.materials.dispose();
         this.skyLights.dispose();
         this.reflection.dispose();

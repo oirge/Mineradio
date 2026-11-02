@@ -1,3 +1,4 @@
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { Star, type LucideIcon } from 'lucide-react';
@@ -63,7 +64,12 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
         subtitleFontScale,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
+        isPreviewMode = false,
     } = props;
+
+    // 分辨率与抗锯齿（#929）：齿轮画布原来按 devicePixelRatio、WebGL 开 MSAA；预览的小图保持原样
+    const renderQuality = useLyricRenderQuality(pendoloTuning.render);
+    const clockworkRenderScale = isPreviewMode ? 1 : renderQuality.scale;
 
     const [viewportSize, setViewportSize] = useState({
         width: typeof window !== 'undefined' ? window.innerWidth : 1920,
@@ -453,6 +459,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                     enableLineGlow={pendoloTuning.enableLineGlow ?? false}
                     paused={props.paused}
                     motionProfile={motionProfile}
+                    renderScale={clockworkRenderScale}
                 />
                 {pendoloTuning.showGearDecor !== 'none' && (
                     <div

@@ -7,6 +7,7 @@ import { DEFAULT_MONET_TUNING } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
 import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import VisualizerShell from '../VisualizerShell';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveThemeFontStack, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
@@ -57,6 +58,8 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         seed,
     } = props;
     const { t } = useTranslation();
+    const renderQuality = useLyricRenderQuality(monetTuning.render);
+    const audioRenderScale = isPreviewMode ? 1 : renderQuality.scale;
     // Monet sets its subtitle rows inside the lyric animation itself, not in the shared bottom subtitle.
     // The resolved mode goes to the rail, which measures and renders the rows (romanization, translation,
     // or both stacked) from each line's own data, so the lines are passed through untouched.
@@ -530,6 +533,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                             mode={monetTuning.audioStyle}
                             staticMode={staticMode}
                             isPreviewMode={isPreviewMode}
+                            renderScale={audioRenderScale}
                         />
                     </div>
                 </motion.div>

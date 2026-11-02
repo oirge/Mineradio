@@ -6,6 +6,7 @@ import { buildDisplayWordsFromLayoutUnits, buildPostLyricLayoutUnits, type Lyric
 import { getWordSegmentationKey } from '../../../utils/lyrics/wordSegmentation';
 import { buildWordGraphemeTimings } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime, getLineRenderHints } from '../../../utils/lyrics/renderHints';
+import { resolveLyricTextDirection } from '../../../utils/lyrics/textDirection';
 import { shouldPreheatLine, useVisualizerRuntime, type VisualizerPreheatWindow } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
@@ -419,7 +420,7 @@ const PartitaWord: React.FC<{
                 fontSize,
                 fontWeight: resolveThemeFontWeight(theme, 700),
                 lineHeight: 1.22,
-                marginRight: '0.8rem',
+                marginInlineEnd: '0.8rem',
             }}
         >
             {/* Glow Layer */}
@@ -522,6 +523,7 @@ const PartitaChunk: React.FC<{
 
     return (
         <motion.div
+            dir={resolveLyricTextDirection(displayWords.map(w => w.text).join(' '))}
             className="inline-flex origin-center relative whitespace-nowrap items-center justify-center flex-row"
             style={{
                 marginBottom: config.marginBottom,

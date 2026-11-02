@@ -185,6 +185,8 @@ export interface VisualizerRegistryEntry {
     glyph?: React.ReactNode;
     command?: { title: string; description: string; keywords: string[] };
     background?: false | ((props: VisualizerSharedProps) => VisualizerBackgroundConfig | undefined);
+    showsBackground?: (tunings: VisualizerTuningBundle) => boolean;
+    beatEffectOnScreen?: (effectId: string, tunings: VisualizerTuningBundle, pageTransparent: boolean) => boolean;
     beatEffects?: readonly unknown[];
     prewarmWhenIdle?: boolean;
     prewarm?: () => void;

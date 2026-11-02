@@ -216,8 +216,9 @@ describe('buildPostLyricLayoutUnits', () => {
         });
         const displayWords = buildDisplayWordsFromLayoutUnits(units);
 
-        expect(units.map(unit => unit.text)).toEqual(['这', '是', ' ', 'It’s ', 'unbelievable']);
-        expect(units[3]).toMatchObject({
+        expect(units.map(unit => unit.text)).toEqual(['这', '是 ', 'It’s ', 'unbelievable']);
+        expect(units.flatMap(unit => unit.words)).toEqual(words);
+        expect(units[2]).toMatchObject({
             text: 'It’s ',
             isSemantic: false,
             isSticky: true,
