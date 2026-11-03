@@ -5,7 +5,16 @@
 - 已有原生证据：用户提出新约束前，独立 Electron 43.7.9 实例加载修改后的真实主进程，读到极简迷你窗口 exStyle `00000088`、桌面歌词 `080800A8`，两者均含 `WS_EX_TOOLWINDOW`；主窗口无此样式。没有完成任务栏鼠标预览、Alt+Tab、拖动及隐藏／重显／重载的人工验收，不把样式核验等同于这些交互均已通过。
 - 验证：桌面歌词恢复／几何／IPC／所有权及迷你播放器主进程门禁／恢复／菜单／封面拖动／视觉既有回归 `72/72`；编码、更新公告与打包白名单 `18/18`，主进程／前端／服务语法与空白检查通过。
 - 后台执行约束：隔离测试进程已关闭，用户正在运行的播放器和安装数据未改动。后续仅低优先级后台检查与 GitHub 云端构建，不再启动本机图形窗口、切换桌面或安装本次二进制。
-- 发布状态：准备 `v2.6.6`；待 PR 合并、云端打包、官方资产回下载与公开更新清单核验后补写真实结果。
+- 提交与构建：[PR #166](https://github.com/oirge/Mineradio/pull/166) 于 `2026-11-03T07:17:28Z` 合入 main，merge commit `9f3832ce882a9fb20d9853efabd08aded4ba08cd` 的文件树与已审查提交 `84ffa040` 一致。annotated tag `v2.6.6`（tag object `2cf4942a2ea515774e57e66c1ff24fb695bb0dc9`）固定在该合并提交；[Windows Build and Release `41595378190`](https://github.com/oirge/Mineradio/actions/runs/41595378190) 成功，完成 Folia 重建、版本校验、安装器打包和四项资产上传。
+- 云端验证：[Verify `41595338787`](https://github.com/oirge/Mineradio/actions/runs/41595338787)。Windows Verify 的编码、Folia 类型／行为、全量 Node、语法、播放设置和音频工具检查均通过；发布时完整中英文／恢复浏览器回归仍在执行，不宣称完整 CI 全绿。
+- 正式发布：[v2.6.6](https://github.com/oirge/Mineradio/releases/tag/v2.6.6)（Release ID `432380802`）于 `2026-11-03T07:24:08Z`（北京时间 `2026-11-03 15:24:08`）公开并设 Latest，`draft=false`／`prerelease=false`。四项官方文件完整回下载，大小、SHA256 与 GitHub digest／SHA256SUMS 一致；清单为 LF、无 BOM。安装器 SHA-512 与 `latest.yml` 两处摘要及 size/path/url 一致，公开 Latest API 与自动更新清单均为 `2.6.6`，公开清单与已校验文件逐字节一致。
+  - `Mineradio-oirge-2.6.6-Setup.exe`：122596994 B，SHA256 `8fe78b8f1598c488370f073dd6fa180de0ff91b62313f7220f97d23899debdda`。
+  - `Mineradio-oirge-2.6.6-Setup.exe.blockmap`：129575 B，SHA256 `b04941c218260ac5fb13989aa28eacd0f02e50cd3e6302477d33dcc798846308`。
+  - `latest.yml`：359 B，SHA256 `8bb5e53b22797ae5131bbf993d1b37a3a0d5e1d7e2d5d0e7f57ee5f3ea9a991d`。
+  - `Mineradio-oirge-2.6.6-SHA256SUMS.txt`：282 B，SHA256 `5f832cff6fc1e3b596254efe388fe911c656dda1aab6e802a07b8607fbe2f47b`。
+  - 安装器 SHA-512：`rmfTbkYQzIuA3mydtz6j0831MNlVV6CshKzSUHIBhDFsKZKOLW8kLcbzeyFee8KQONkw9uOzSWWyQYqHD26g+A==`。
+- 安装器只读版本元数据为 `2.6.6`／`Mineradio 二创`，未在本机安装或运行。首次直连下载较慢，停止的仅是本任务下载 CLI，随后通过既有代理重新下载完整安装器并核验；没有操作用户播放器。
+- 收尾记录分支 `docs/record-v2.6.6-release`；草稿／公开验证、API、版本及构建记录位于忽略目录 `verification/release-v2.6.6/`。不重打 tag，不替换公开资产。
 
 # v2.6.5 Folia 命令、快捷按钮、字幕与音效
 

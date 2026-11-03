@@ -4,7 +4,9 @@
 - `desktop/main.js` 两个辅助窗口构造增加 `type: 'toolbar'`，配合现有 `skipTaskbar`，覆盖标准／极简迷你播放器与桌面歌词。不要绑定主窗口 parent 或加任务栏轮询。
 - 既有定向行为回归 `72/72`；隔离 Electron 43.7.9 已验证原生工具窗口样式，未完成人工任务栏预览、Alt+Tab 与完整生命周期交互验收。
 - 用户明确「不要影响我使用电脑」；本轮隔离测试已关闭。后续只做低优先级后台检查和云端打包，禁止本机图形测试、抢占焦点、操作正在运行的播放器、安装或修改用户数据。
-- 准备 `v2.6.6`；待 PR、官方构建、四项资产回下载和公开清单验证后补写发布事实。故障知识见 `.context/pitfalls/mineradio-auxiliary-taskbar-previews.md`。
+- 发布完成：PR #166 → merge `9f3832ce882a9fb20d9853efabd08aded4ba08cd`；annotated tag `v2.6.6`（tag object `2cf4942a2ea515774e57e66c1ff24fb695bb0dc9`），Build and Release `41595378190` 成功，Release `432380802` 于北京时间 `2026-11-03 15:24:08` 公开并设 Latest。四项资产、安装器只读版本与公开自动更新清单均核验通过；未安装本次二进制。
+- 云端：Windows Verify 的编码、Folia 类型／行为、全量 Node、语法、播放设置和音频工具检查均通过；发布时完整中英文／恢复浏览器回归仍在执行，不宣称完整 CI 全绿。
+- 收尾分支 `docs/record-v2.6.6-release`，忽略证据 `verification/release-v2.6.6/`，完整事实见 RELEASE.md 顶部；故障知识见 `.context/pitfalls/mineradio-auxiliary-taskbar-previews.md`。
 
 ## 2026-11-03：v2.6.5 四项功能与发布
 

@@ -3,7 +3,8 @@
 - 用户原话：「不要影响我使用电脑」。修复、检查和发布需在后台进行；本机检查使用低优先级，不再启动可见测试窗口、切换前台或操作用户正在使用的播放器。GUI 验证移到云端或如实记录未测边界；不自行安装新版或修改安装数据。
 - 截图中的 Compact Mini Player 和 Desktop Lyrics 是辅助窗口。Electron 43.7.9 的 `skipTaskbar` 仅调用 `ITaskbarList::DeleteTab`；两个构造增加 `type: 'toolbar'`，让原生窗口带 `WS_EX_TOOLWINDOW`，保留当前聚焦和恢复行为。
 - 隔离 Electron 实例曾核实修复后两类窗口均有工具窗口样式，现已关闭；用户安装实例未操作。既有相关行为回归 `72/72`，不宣称完成人工任务栏预览、Alt+Tab 或全部窗口生命周期验收。
-- 本次准备下一补丁版 `v2.6.6`，以 `0a874b4` 为基线；发布结果后补。长期约束见 `.context/pitfalls/mineradio-auxiliary-taskbar-previews.md`。
+- 正式版 `v2.6.6` 以 `0a874b4` 为基线；PR #166 合入 `9f3832ce`，annotated tag object `2cf4942a`，Build and Release `41595378190` 成功。Release `432380802` 于北京时间 `2026-11-03 15:24:08` 公开并设 Latest，四项资产、安装器版本与公开自动更新清单核验通过；未安装本次二进制。
+- 云端：Windows Verify 的编码、Folia 类型／行为、全量 Node、语法、播放设置和音频工具检查均通过；发布时完整中英文／恢复浏览器回归仍在执行，不宣称完整 CI 全绿。完整事实见 RELEASE.md 顶部，长期约束见 `.context/pitfalls/mineradio-auxiliary-taskbar-previews.md`。
 
 ## 2026-11-03：v2.6.5 四项功能
 
