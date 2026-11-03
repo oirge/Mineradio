@@ -20,6 +20,7 @@ All times are **seconds**. Track IDs are opaque stable Mineradio IDs. Read resul
 - `Track`: `{id,title,artist,album,duration,cover,liked,filePath,format}`. `filePath` is only an already indexed local song path. `cover` is an image URL or empty string.
 - `Playlist`: `{id,name,count,cover,readOnly}`. Built-ins: `library` (all tracks), `special-liked` (favorites). User lists use opaque `local-playlist:*` IDs.
 - `State`: `{currentTrack,currentIndex,position,duration,playing,playbackRate,volume,muted,playMode,queueRevision,libraryRevision,lyricsRevision,interface}`. `volume` is 0–1; `playbackRate` drives local playhead interpolation without becoming a second playback clock. Native `playMode` is `loop` (ordered repeat all), `shuffle` (shuffled queue), or `single` (repeat one). `interface` is `folia` or `mineradio`.
+- Playback preferences in State: `sleepTimer:{mode,dueAt,fading}`, `replayGain:{enabled,mode,preampDb,clipGuard}`, `gapless:{enabled,crossfadeSeconds}`. `dueAt` is an absolute epoch time in milliseconds; the UI updates its remaining-minute label only while the shortcut panel is open. Settings are copied snapshots, and their discrete changes join the local state signature.
 - `Lyrics`: `{trackId,lines:[{time,endTime,text,translation,words:[{time,duration,text}]}]}`. Lines without genuine lyrics are omitted. Words may be empty.
 - `Analysis`: `{trackId,revision,source:'cache'|'live',until?,beats,drums,vocal}`. Beat events use Folia's original `BeatFxEvent` contract. Drums carry typed `times/strengths/kinds`; the optional 50 Hz vocal-band envelope carries `db/top/onsets/from`. These are estimates from the host's existing beat/band analysis, not separated stems. `until` limits partial-cache coverage; use live FFT outside it. No large arrays travel in State.
 - A page is `{items,total,offset,limit}`. `limit` defaults to 100 and is clamped to 1–1000.
@@ -29,6 +30,10 @@ All times are **seconds**. Track IDs are opaque stable Mineradio IDs. Read resul
 | Method | Params | Result |
 | --- | --- | --- |
 | `getState` | `{}` | State |
+| `setPlaybackRate` | `{rate}` (0.5–2) | State; applies the host setter to both existing decks and saves the preference |
+| `setSleepTimer` | `{mode:'off'|'track'|'15'|'30'|'60'}` | State; reuses the host timer and fade-to-pause behavior |
+| `setReplayGain` | `{enabled?,mode?:'track'|'album',preampDb?,clipGuard?}` | State; validates the whole edit, commits through host normalization, saves and recalculates current gain |
+| `setGapless` | `{enabled?,crossfadeSeconds?}` | State; validates and commits through the existing host normalization (0–10 s in 0.5 s steps) |
 | `listTracks` | `{offset?,limit?,query?,playlistId?}` | Track page; default playlist `library` |
 | `listPlaylists` | `{}` | Playlist[] |
 | `getQueue` | `{offset?,limit?,query?}` | Track page plus `currentIndex,revision` |

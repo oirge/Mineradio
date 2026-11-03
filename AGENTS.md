@@ -4,7 +4,8 @@
 
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
-- 当前源码续版：`v2.6.3`（Folia 整机备份、预设 JSON 导入／导出（可携带图片）、歌单绑定。功能 PR #158 → merge `1613ff7`；功能提交 `754aaab` 的完整 Windows Verify `41467393540` 成功，Folia `71＋108` 项行为测试、Node `1586` 通过／`0` 失败／`1` 可选跳过、六组浏览器验收全部通过。发布 PR #159 → merge `48732ef`；annotated tag `v2.6.3`（tag object `1bdaae87`）；Windows Build and Release `41471341266` 成功，Release `431628261` 于北京时间 `2026-11-02 23:30:36` 公开并设 Latest，四项官方资产完整回下载与公开更新清单校验通过。发布定向 `34/34`；重复 Verify `41470176879` 仍有町景点击与失败截图超时，不宣称间歇超时已彻底修复；官方安装器未在本机安装运行。完整结果见 RELEASE.md 顶部。）
+- 当前源码续版：`v2.6.4`（Folia 播放快捷设置、流光／云阶防止文字重叠与 Lattice 仅当前歌曲序号。用户授权三项完成后发布。当前发布准备与最终结果见 RELEASE.md 顶部。宿主音频、曲库和队列保持唯一，视觉开关默认关闭；不要整体拉入 Bravais、provider、云同步或上游完整应用。）
+- 上一续版：`v2.6.3`（Folia 整机备份、预设 JSON 导入／导出（可携带图片）、歌单绑定。功能 PR #158 → merge `1613ff7`；功能提交 `754aaab` 的完整 Windows Verify `41467393540` 成功，Folia `71＋108` 项行为测试、Node `1586` 通过／`0` 失败／`1` 可选跳过、六组浏览器验收全部通过。发布 PR #159 → merge `48732ef`；annotated tag `v2.6.3`（tag object `1bdaae87`）；Windows Build and Release `41471341266` 成功，Release `431628261` 于北京时间 `2026-11-02 23:30:36` 公开并设 Latest，四项官方资产完整回下载与公开更新清单校验通过。发布定向 `34/34`；重复 Verify `41470176879` 仍有町景点击与失败截图超时，不宣称间歇超时已彻底修复；官方安装器未在本机安装运行。完整结果见 RELEASE.md 顶部。）
 - 本版实现约束：视觉状态仍用 `mineradio-folia-local-visuals-v1`，绑定为 `playlistPresets`；备份需同时覆盖界面选择与 lattice 三键。预设交换不得写入播放／视图状态，Tempera 图片导入重映射 ID，图片事务失败须撤回新预设。验收共用 `scripts/ui_browser.py` 的 Chromium／SwiftShader 后端，截图冻结 CSS 动画但继续保留所有正常交互断言与原超时。
 
 - Git 仓库以远端 `https://github.com/oirge/Mineradio.git` 为准，本地检出路径随机器变化；不要沿用旧文档里的 `C:\Users\Administrator\Desktop\...` 或 `C:\Users\oirg\Desktop\mok\Mineradio-sync`。

@@ -5,6 +5,7 @@ import { persist } from 'zustand/middleware';
 // Keep the original wall settings contract in one desktop-backed local-player preference record.
 interface LatticePreferences {
     latticeVignette: boolean;
+    latticeBadgeCurrentOnly: boolean;
     autoFocusOnSongChange: boolean;
     latticeLightsOn: boolean;
     latticePosterTintEnabled: boolean;
@@ -13,6 +14,7 @@ interface LatticePreferences {
     latticePosterTintIntensity: number;
 }
 export interface LatticeSettingsState extends LatticePreferences {
+    handleToggleLatticeBadgeCurrentOnly: (enabled: boolean) => void;
     handleToggleLatticeVignette: (enabled: boolean) => void;
     handleToggleAutoFocusOnSongChange: (enabled: boolean) => void;
     handleToggleLatticeLights: (enabled: boolean) => void;
@@ -22,7 +24,7 @@ export interface LatticeSettingsState extends LatticePreferences {
     handleSetLatticePosterTintIntensity: (intensity: number) => void;
 }
 const defaults: LatticePreferences = {
-    latticeVignette: true, autoFocusOnSongChange: true, latticeLightsOn: true,
+    latticeBadgeCurrentOnly: false, latticeVignette: true, autoFocusOnSongChange: true, latticeLightsOn: true,
     latticePosterTintEnabled: true, latticePosterTintUseCustomColor: false,
     latticePosterTintColor: '#161419', latticePosterTintIntensity: 0.5,
 };
@@ -32,6 +34,7 @@ const normalizeIntensity = (value: unknown) => typeof value === 'number' && Numb
     ? Math.max(0, Math.min(1, value)) : defaults.latticePosterTintIntensity;
 export const useLatticeSettingsStore = create<LatticeSettingsState>()(persist(set => ({
     ...defaults,
+    handleToggleLatticeBadgeCurrentOnly: enabled => set({ latticeBadgeCurrentOnly: enabled }),
     handleToggleLatticeVignette: enabled => set({ latticeVignette: enabled }),
     handleToggleAutoFocusOnSongChange: enabled => set({ autoFocusOnSongChange: enabled }),
     handleToggleLatticeLights: enabled => set({ latticeLightsOn: enabled }),
@@ -44,6 +47,7 @@ export const useLatticeSettingsStore = create<LatticeSettingsState>()(persist(se
     merge: (saved, current) => {
         const value = saved && typeof saved === 'object' ? saved as Partial<LatticePreferences> : {};
         return { ...current,
+            latticeBadgeCurrentOnly: value.latticeBadgeCurrentOnly === true,
             latticeVignette: typeof value.latticeVignette === 'boolean' ? value.latticeVignette : defaults.latticeVignette,
             autoFocusOnSongChange: typeof value.autoFocusOnSongChange === 'boolean' ? value.autoFocusOnSongChange : defaults.autoFocusOnSongChange,
             latticeLightsOn: typeof value.latticeLightsOn === 'boolean' ? value.latticeLightsOn : defaults.latticeLightsOn,

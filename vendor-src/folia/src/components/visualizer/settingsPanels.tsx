@@ -33,6 +33,7 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     onClassicTuningChange,
 }) => {
     const resolvedClassicTuning: Required<ClassicTuning> = {
+        avoidOverlap: classicTuning.avoidOverlap === true,
         enableWordRotation: classicTuning.enableWordRotation ?? DEFAULT_CLASSIC_TUNING.enableWordRotation,
         breathingFloatMultiplier: clampClassicBreathingFloatMultiplier(
             classicTuning.breathingFloatMultiplier ?? DEFAULT_CLASSIC_TUNING.breathingFloatMultiplier,
@@ -73,6 +74,12 @@ export const ClassicSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 isDaylight={isDaylight}
                 theme={theme}
             />
+
+            { !resolvedClassicTuning.useLegacyLayout && <label className="flex items-center justify-between gap-4 text-sm" title={t('options.avoidOverlapHint')}>
+                <span>{t('options.avoidOverlap')}</span>
+                <input type="checkbox" checked={Boolean(resolvedClassicTuning.avoidOverlap)} data-testid="local-classic-avoid-overlap"
+                    onChange={event => onClassicTuningChange?.({ avoidOverlap: event.target.checked })} />
+            </label> }
 
             <PresetGroup
                 label={t('options.classicLegacyLayout') }
@@ -141,6 +148,7 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const rawMin = clampPartitaStagger(partitaTuning.staggerMin ?? DEFAULT_PARTITA_TUNING.staggerMin);
     const rawMax = clampPartitaStagger(partitaTuning.staggerMax ?? DEFAULT_PARTITA_TUNING.staggerMax);
     const resolvedPartitaTuning: PartitaTuning = {
+        avoidOverlap: partitaTuning.avoidOverlap === true,
         showGuideLines: partitaTuning.showGuideLines ?? DEFAULT_PARTITA_TUNING.showGuideLines,
         useSemanticLayout: partitaTuning.useSemanticLayout ?? DEFAULT_PARTITA_TUNING.useSemanticLayout,
         staggerMin: Math.min(rawMin, rawMax),
@@ -191,6 +199,12 @@ export const PartitaSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 isDaylight={isDaylight}
                 theme={theme}
             />
+
+            { <label className="flex items-center justify-between gap-4 text-sm" title={t('options.avoidOverlapHint')}>
+                <span>{t('options.avoidOverlap')}</span>
+                <input type="checkbox" checked={Boolean(resolvedPartitaTuning.avoidOverlap)} data-testid="local-partita-avoid-overlap"
+                    onChange={event => onPartitaTuningChange?.({ avoidOverlap: event.target.checked })} />
+            </label> }
 
             <PresetGroup
                 label={t('options.partitaSemanticLayout') }

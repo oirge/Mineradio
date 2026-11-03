@@ -199,11 +199,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
-  ['Folia 备份补全、预设互通与歌单绑定。', 'Complete Folia backups, portable presets and playlist preset bindings.'],
-  ['整机备份补齐 Folia 界面、视觉设置、随机池、命名预设、歌单绑定与 Lattice 设置，兼容旧备份。', 'Full backups now include the Folia interface, visual settings, random pool, named presets, playlist bindings and Lattice settings, while remaining compatible with older backups.'],
-  ['视觉预设支持 JSON 导入和导出，可选携带共享图片与 Tempera 图层素材。', 'Import and export visual presets as JSON, optionally including shared images and Tempera layer assets.'],
-  ['同名导入自动另存，导入时保留当前效果；素材校验或写入失败会撤回新预设。', 'Duplicate names are saved separately and importing preserves the current visuals; failed asset validation or storage rolls back the new preset.'],
-  ['支持歌单绑定视觉预设，进入歌单时自动应用；保留同歌单内的手动调整，删除预设自动解除绑定。', 'Bind visual presets to playlists and apply them on entry; keep manual changes within the same playlist and remove bindings when a preset is deleted.'],
+  ['Folia 播放快捷设置、歌词防重叠与拼贴墙序号。', 'Folia playback shortcuts, overlap prevention and wall number badges.'],
+  ['Folia 三种视图均可直接调整倍速、睡眠定时、音量均衡、无缝播放和交叉淡化，与主界面实时同步。', 'Adjust speed, sleep timer, ReplayGain, gapless playback and crossfade in all three Folia views, with live synchronization to the main interface.'],
+  ['流光与云阶新增防止文字重叠，按文字变换增加间距，空间不足时缩小当前句；默认关闭，可随预设保存和交换。', 'Classic and Partita can prevent text overlap by spacing transformed words and shrinking the current line when needed. Off by default, with preset saving and exchange.'],
+  ['Lattice 封面拼贴墙新增仅显示当前歌曲序号开关，默认关闭，设置随整机备份保存。', 'Lattice can show the number badge only on the current song. Off by default and included in full backups.'],
+  ['修复损坏的 Tempera 预设导入与恢复，减少效果切换和设置操作时的资源加载卡顿。', 'Fix malformed Tempera preset imports and recovery, and reduce resource-loading stalls while switching effects or editing settings.'],
   ['Folia 节拍联动、随机样式池优化与命名视觉预设。', 'Folia rhythm response, a smoother random style pool and named visual presets.'],
   ['花火、町景与雾笺支持节拍联动，优先复用本地拍点缓存，无缓存时使用实时频谱估计。', 'Hanabi, Machi and Nebbia respond to beats, using cached beat maps when available and live spectrum estimates otherwise.'],
   ['新增鼓点与人声频段估计联动，暂停、跳转和切歌时清理旧数据。', 'Add drum-onset and vocal-band responses, clearing stale data on pause, seek and track changes.'],
@@ -2006,7 +2006,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.3';
+var APP_VERSION = '2.6.4';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2059,12 +2059,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 备份补全、预设互通与歌单绑定。',
+  hero: 'Folia 播放快捷设置、歌词防重叠与拼贴墙序号。',
   notes: [
-    '整机备份补齐 Folia 界面、视觉设置、随机池、命名预设、歌单绑定与 Lattice 设置，兼容旧备份。',
-    '视觉预设支持 JSON 导入和导出，可选携带共享图片与 Tempera 图层素材。',
-    '同名导入自动另存，导入时保留当前效果；素材校验或写入失败会撤回新预设。',
-    '支持歌单绑定视觉预设，进入歌单时自动应用；保留同歌单内的手动调整，删除预设自动解除绑定。'
+    'Folia 三种视图均可直接调整倍速、睡眠定时、音量均衡、无缝播放和交叉淡化，与主界面实时同步。',
+    '流光与云阶新增防止文字重叠，按文字变换增加间距，空间不足时缩小当前句；默认关闭，可随预设保存和交换。',
+    'Lattice 封面拼贴墙新增仅显示当前歌曲序号开关，默认关闭，设置随整机备份保存。',
+    '修复损坏的 Tempera 预设导入与恢复，减少效果切换和设置操作时的资源加载卡顿。'
   ]
 };
 function readSavedVolume() {

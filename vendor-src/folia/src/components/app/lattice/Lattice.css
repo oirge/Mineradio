@@ -313,6 +313,11 @@
     background: rgb(var(--lattice-shade-rgb) / 78%);
 }
 
+/* Only numeric queue badges are hidden; entry kind labels remain visible. */
+.lattice-root.has-badge-current-only .lattice-poster-badge.is-index:not(.is-current) {
+    display: none;
+}
+
 .lattice-poster-copy {
     position: absolute;
     right: 17px;

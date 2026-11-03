@@ -10,6 +10,8 @@ export type LatticeTile = {
     id: string;
     /** Zero-based position in the play queue; the poster badge shows it as a 1-based number. */
     queueIndex: number;
+    /** Kind labels remain visible when only the current queue number is shown. */
+    label?: string;
     song: SongResult;
     title: string;
     artist: string;

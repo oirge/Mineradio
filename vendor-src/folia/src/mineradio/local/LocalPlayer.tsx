@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Minimize2, Music2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { colorWithAlpha, mixColors } from '../../components/visualizer/colorMix';
@@ -13,6 +13,7 @@ import LocalVisualStage from './LocalVisualStage';
 import LocalErrorBoundary from './LocalErrorBoundary';
 import LocalStatusToast from './LocalStatusToast';
 import LocalHeader from './LocalHeader';
+import LocalPlaybackSettings from './LocalPlaybackSettings';
 import { useLocalVisualAssets } from './useLocalVisualAssets';
 import { useLocalVisualizerPrewarm } from './useLocalVisualizerPrewarm';
 import './local.css';
@@ -32,6 +33,8 @@ export default function LocalPlayer() {
     const [libraryOpen, setLibraryOpen] = useState(false);
     const [queue, setQueue] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [playbackOpen, setPlaybackOpen] = useState(false);
+    const closePlayback = useCallback(() => setPlaybackOpen(false), []);
     // Leave the GPU to the selected effect and live preview while the user edits settings.
     useLocalVisualizerPrewarm(player.active && !settingsOpen);
     const [focus, setFocus] = useState(false);
@@ -43,7 +46,7 @@ export default function LocalPlayer() {
         document.documentElement.classList.toggle('local-player-transparent', transparent);
         return () => document.documentElement.classList.remove('local-player-transparent');
     }, [transparent]);
-    const openQueue = () => { setQueue(true); setLibraryOpen(true); setSettingsOpen(false); setFocus(false); };
+    const openQueue = () => { setQueue(true); setLibraryOpen(true); setSettingsOpen(false); setPlaybackOpen(false); setFocus(false); };
     const run = (method: string, params?: Record<string, unknown>) => { void player.command(method, params).catch(() => {}); };
     const style = useMemo(() => ({
         '--local-bg': theme.backgroundColor, '--local-text': theme.primaryColor,
@@ -61,7 +64,7 @@ export default function LocalPlayer() {
             const element = event.target as HTMLElement;
             if (element?.matches('input, textarea, select, button, [role="button"], [contenteditable="true"]')) return;
             if (event.code === 'Space') { event.preventDefault(); void player.command('togglePlay').catch(() => {}); }
-            if (event.key === 'Escape') { setLibraryOpen(false); setSettingsOpen(false); setFocus(false); }
+            if (event.key === 'Escape') { setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); setFocus(false); }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
@@ -71,20 +74,22 @@ export default function LocalPlayer() {
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
             <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
         </LocalErrorBoundary>
-        {!focus && <LocalHeader view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen}
-            onView={view => { visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); }}
-            onLibrary={() => { setLibraryOpen(!libraryOpen); setSettingsOpen(false); }}
-            onSettings={() => { setSettingsOpen(!settingsOpen); setLibraryOpen(false); }}
-            onFocus={() => { setFocus(true); setSettingsOpen(false); setLibraryOpen(false); }} />}
+        {!focus && <LocalHeader view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen} playbackOpen={playbackOpen}
+            onPlayback={() => { setPlaybackOpen(!playbackOpen); setLibraryOpen(false); setSettingsOpen(false); }}
+            onView={view => { visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); }}
+            onLibrary={() => { setLibraryOpen(!libraryOpen); setSettingsOpen(false); setPlaybackOpen(false); }}
+            onSettings={() => { setSettingsOpen(!settingsOpen); setPlaybackOpen(false); setLibraryOpen(false); }}
+            onFocus={() => { setFocus(true); setSettingsOpen(false); setPlaybackOpen(false); setLibraryOpen(false); }} />}
         {focus && <button className="local-exit-focus" aria-label={t('exitFocus')} title={t('exitFocus')} onClick={() => setFocus(false)}><Minimize2 size={18} /></button>}
         {isLyrics && !track && <div className="local-welcome"><Music2 size={38} /><h1>{player.state ? t('chooseSong') : t('connecting')}</h1><p>{t('emptyHint')}</p><div><button onClick={() => run('importFiles')}>{t('importFiles')}</button><button onClick={() => { setLibraryOpen(true); setFocus(false); }}>{t('library')}</button></div></div>}
         {isLyrics && track && !player.lines.length && <div className="local-no-lyrics"><Music2 size={28} /><h2>{track.title}</h2><p>{track.artist || t('unknownArtist')}</p><small>{t('noLyrics')}</small></div>}
         {!focus && <>
             {isLyrics && <div className="local-current-track" data-testid="local-current-track"><div className="local-current-cover">{track?.cover ? <img src={track.cover} alt="" /> : <Music2 size={24} />}</div><div><small>{t('nowPlaying')}</small><strong>{track?.title || t('chooseSong')}</strong><span>{track?.artist || ''}</span></div></div>}
             {isLyrics && <PlayerControls state={player.state} currentTime={player.currentTime} command={player.command}
-                onLibrary={() => { setQueue(false); setLibraryOpen(true); setSettingsOpen(false); }}
-                onQueue={() => { setQueue(true); setLibraryOpen(!libraryOpen || !queue); setSettingsOpen(false); }} />}
+                onLibrary={() => { setQueue(false); setLibraryOpen(true); setSettingsOpen(false); setPlaybackOpen(false); }}
+                onQueue={() => { setQueue(true); setLibraryOpen(!libraryOpen || !queue); setSettingsOpen(false); setPlaybackOpen(false); }} />}
             {libraryOpen && <LibraryPanel state={player.state} command={player.command} queue={queue} onTab={setQueue} onClose={() => setLibraryOpen(false)} />}
+            {playbackOpen && <LocalPlaybackSettings state={player.state} command={player.command} onClose={closePlayback} />}
             {settingsOpen && <VisualSettings assets={assets} theme={theme} state={player.state} command={player.command} onClose={() => setSettingsOpen(false)}
                 onLanguage={language => run('setUiLanguage', { language })} />}
         </>}

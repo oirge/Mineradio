@@ -77,6 +77,9 @@ export function normalizeLocalTuning(mode: string, value: unknown) {
         render: normalizeLyricRenderOverride((patch as { render?: unknown }).render) };
     const base = DEFAULT_LOCAL_TUNINGS[mode as VisualizerTuningMode];
     const merged = { ...base, ...patch };
+    if (mode === 'classic' || mode === 'partita') {
+        return { ...merged, avoidOverlap: (patch as { avoidOverlap?: unknown }).avoidOverlap === true };
+    }
     return base && 'render' in base ? { ...merged, render: normalizeLyricRenderOverride((patch as { render?: unknown }).render) } : merged;
 }
 export function restoredTunings(value: unknown): VisualizerTuningBundle {

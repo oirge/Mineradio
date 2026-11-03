@@ -1,3 +1,12 @@
+## 2026-11-03：v2.6.4 三项功能与发布
+
+- 用户明确要求「三项全做完之后发布新版」。已合并 PR #161，当前基线 `35dece3`，功能和版本在 `feat/folia-playback-overlap-badges`；后续完成完整 Windows Verify、合并、tag、Build and Release 与资产校验后公开。
+- 三项：Folia 三视图播放快捷面板（倍速／睡眠／ReplayGain／无缝与交叉淡化）；流光 classic 与云阶 partita 的 avoidOverlap；Lattice 仅当前歌曲序号。默认视觉布局保留，两个视觉开关默认关闭。保持唯一宿主音频与原音量百分比／滚轮。
+- 桥接新方法与状态见 docs/FOLIA_BRIDGE.md；快捷面板单独组件，原生控件即时反馈，最后回包释放本地覆盖，失败恢复宿主值。倒计时只在面板打开时每 30 秒更新，时间轴仍走原 MotionValue。
+- 上游防叠字需要的 GlowWord、timing、variants 与 Partita 布局从原大组件抽出，保留 @note；useOverlapFit 根据离散布局／尺寸／字体变化重新适配，没有逐帧 React 状态。开关进入本地归一化、预设 JSON、持久化和整机备份。
+- 当前序号通过独立 latticeBadge 显式判定，避免从 latticeModel 运行时导入拉入完整在线 provider 应用。构建边界守卫已实际拦截过这种依赖，现已修正。
+- 验证新增 scripts/verify-folia-playback-options.py，独立 `--suite playback`，CI 单独 5 分钟步骤；原六组浏览器预算、断言、普通点击和画质不变。上游几何单测加入 CI；本地新增浏览器六组已全部通过（含重载与宿主对象身份），页面异常 0；定向／发布结果见 RELEASE.md 顶部，最终交付后补录。
+
 ## 2026-11-03：预设校验、动态加载与文档修复
 
 - 用户已安装 2.6.3，要求以最新 `oirge/Mineradio` 为基础「全部修复」。基线为远端 main `90b73db63090c8190f08e0d7a50399e5e081ea77`，分支 `fix/preset-validation-and-machi-timeouts`。

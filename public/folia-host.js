@@ -130,6 +130,11 @@
       position: number(call('getPlaybackCurrentSeconds'), 0), duration: number(call('getPlaybackDurationSeconds'), 0),
       playing: !!(media && media.src && !media.paused && !media.ended), playbackRate: media ? number(media.playbackRate, 1) : 1, volume: volume,
       outputLatency: outputLatency(),
+      sleepTimer: { mode: global.sleepTimerState ? global.sleepTimerState.mode : 'off',
+        dueAt: global.sleepTimerState ? number(global.sleepTimerState.dueAt, 0) : 0,
+        fading: !!(global.sleepTimerState && global.sleepTimerState.fading) },
+      replayGain: Object.assign({ enabled: false, mode: 'track', preampDb: 0, clipGuard: true }, global.replayGainSettings),
+      gapless: Object.assign({ enabled: true, crossfadeSeconds: 0 }, global.gaplessSettings),
       muted: volume <= 0.0001 || !!(media && media.muted), playMode: global.playMode || 'loop',
       playbackPlaylistId: playbackPlaylistId, playbackPlaylistName: playbackPlaylistName,
       queueRevision: queueRevision, libraryRevision: libraryRevision, lyricsRevision: lyricsRevision,
@@ -790,6 +795,31 @@
       case 'setPlayMode':
         if (['loop', 'shuffle', 'single'].indexOf(params.mode) < 0) fail('INVALID_PLAY_MODE', '播放模式无效');
         call('setPlayMode', params.mode, { toast: false }); return getState();
+      case 'setPlaybackRate':
+        if (typeof params.rate !== 'number' || !Number.isFinite(params.rate) || params.rate < 0.5 || params.rate > 2) fail('INVALID_RATE', '播放速度无效');
+        call('setPlaybackRate', params.rate, { toast: false }); return getState();
+      case 'setSleepTimer':
+        if (['off', 'track', '15', '30', '60'].indexOf(params.mode) < 0) fail('INVALID_SLEEP_TIMER', '睡眠定时无效');
+        call('setSleepTimerMode', params.mode, { toast: false }); return getState();
+      case 'setReplayGain': {
+        if (!global.replayGainSettings) fail('HOST_NOT_READY', '播放设置未准备好');
+        if ((params.enabled !== undefined && typeof params.enabled !== 'boolean')
+          || (params.clipGuard !== undefined && typeof params.clipGuard !== 'boolean')
+          || (params.mode !== undefined && ['track', 'album'].indexOf(params.mode) < 0)
+          || (params.preampDb !== undefined && (typeof params.preampDb !== 'number' || !Number.isFinite(params.preampDb)))) fail('INVALID_REPLAY_GAIN', '音量均衡设置无效');
+        ['enabled', 'mode', 'preampDb', 'clipGuard'].forEach(function (key) {
+          if (params[key] !== undefined) global.replayGainSettings[key] = params[key];
+        });
+        call('commitReplayGainSettings'); return getState();
+      }
+      case 'setGapless': {
+        if (!global.gaplessSettings) fail('HOST_NOT_READY', '播放设置未准备好');
+        if ((params.enabled !== undefined && typeof params.enabled !== 'boolean')
+          || (params.crossfadeSeconds !== undefined && (typeof params.crossfadeSeconds !== 'number' || !Number.isFinite(params.crossfadeSeconds)))) fail('INVALID_GAPLESS', '无缝播放设置无效');
+        if (params.enabled !== undefined) global.gaplessSettings.enabled = params.enabled;
+        if (params.crossfadeSeconds !== undefined) global.gaplessSettings.crossfadeSeconds = params.crossfadeSeconds;
+        call('commitGaplessSettings'); return getState();
+      }
       case 'setQueue': {
         source = readTrackIds(params);
         var current = currentSong(), currentId = trackId(current), mediaLoaded = !!(global.audio && global.audio.src && current);
