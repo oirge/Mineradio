@@ -4,7 +4,8 @@
 
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
-- 当前源码续版：`v2.6.5`（Folia 命令面板、自定义快捷按钮、字幕快捷调节与宿主音效／输出设备，用户要求「全部更新」。PR #164 → merge `8f05caa2`；annotated tag `v2.6.5`（tag object `855d426c`）；Build and Release `41592105723` 成功，Release `432360249` 于北京时间 `2026-11-03 14:51:57` 公开并设 Latest，四项官方资产与公开自动更新清单完整核验通过。Windows Verify `41590576853` 的 Folia `93＋124`、Node `1592` 通过／0 失败／1 可选跳过、既有播放六组和新增工具七组通过；原语言检查在花火审计后点击设置 summary 超时，完整 CI 为 failure，不宣称全绿。未在本机安装官方二进制或做物理设备热插拔。基线 `ce3f06b`；保留原始 Folia 0.7.16、稳定 featureSync 0.7.25、唯一宿主音频与队列，只选择性接入 PR #1014。完整结果见 RELEASE.md 顶部。）
+- 当前源码续版：`v2.6.6`（修复迷你播放器与桌面歌词进入 Windows 任务栏预览；两个辅助窗口使用原生 toolbar 类型。基线 `0a874b4`，定向行为回归 `72/72` 与隔离 Electron 原生样式核验通过；任务栏人工交互未测完。用户明确「不要影响我使用电脑」，仅后台低优先级检查与云端构建，不再本机启动测试窗口。发布准备中，真实结果见 RELEASE.md 顶部。）
+- 上一续版：`v2.6.5`（Folia 命令面板、自定义快捷按钮、字幕快捷调节与宿主音效／输出设备，用户要求「全部更新」。PR #164 → merge `8f05caa2`；annotated tag `v2.6.5`（tag object `855d426c`）；Build and Release `41592105723` 成功，Release `432360249` 于北京时间 `2026-11-03 14:51:57` 公开并设 Latest，四项官方资产与公开自动更新清单完整核验通过。Windows Verify `41590576853` 的 Folia `93＋124`、Node `1592` 通过／0 失败／1 可选跳过、既有播放六组和新增工具七组通过；原语言检查在花火审计后点击设置 summary 超时，完整 CI 为 failure，不宣称全绿。未在本机安装官方二进制或做物理设备热插拔。基线 `ce3f06b`；保留原始 Folia 0.7.16、稳定 featureSync 0.7.25、唯一宿主音频与队列，只选择性接入 PR #1014。完整结果见 RELEASE.md 顶部。）
 - 上一续版：`v2.6.4`（Folia 播放快捷设置、流光／云阶防止文字重叠与 Lattice 仅当前歌曲序号，包含 PR #161 的预设校验与加载修复。PR #162 → merge `531dd412`；完整 Windows Verify `41574692244` 成功：Folia `89＋124` 项、Node `1588` 通过／0 失败／1 可选跳过，新增六组与原有六套浏览器验收全部通过。annotated tag `v2.6.4`（tag object `0b2a1888`）；Windows Build and Release `41576366140` 成功，Release `432269170` 于北京时间 `2026-11-03 12:13:20` 公开并设 Latest，四项官方资产与公开更新清单完整核验通过；官方安装器未在本机安装运行。完整结果见 RELEASE.md 顶部。宿主音频、曲库和队列保持唯一，两个视觉开关默认关闭；不要整体拉入 Bravais、provider、云同步或上游完整应用。）
 - 上一续版：`v2.6.3`（Folia 整机备份、预设 JSON 导入／导出（可携带图片）、歌单绑定。功能 PR #158 → merge `1613ff7`；功能提交 `754aaab` 的完整 Windows Verify `41467393540` 成功，Folia `71＋108` 项行为测试、Node `1586` 通过／`0` 失败／`1` 可选跳过、六组浏览器验收全部通过。发布 PR #159 → merge `48732ef`；annotated tag `v2.6.3`（tag object `1bdaae87`）；Windows Build and Release `41471341266` 成功，Release `431628261` 于北京时间 `2026-11-02 23:30:36` 公开并设 Latest，四项官方资产完整回下载与公开更新清单校验通过。发布定向 `34/34`；重复 Verify `41470176879` 仍有町景点击与失败截图超时，不宣称间歇超时已彻底修复；官方安装器未在本机安装运行。完整结果见 RELEASE.md 顶部。）
 - 本版实现约束：视觉状态仍用 `mineradio-folia-local-visuals-v1`，绑定为 `playlistPresets`；备份需同时覆盖界面选择与 lattice 三键。预设交换不得写入播放／视图状态，Tempera 图片导入重映射 ID，图片事务失败须撤回新预设。验收共用 `scripts/ui_browser.py` 的 Chromium／SwiftShader 后端，截图冻结 CSS 动画但继续保留所有正常交互断言与原超时。
@@ -127,6 +128,7 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 
 - 交流语言：中文。
 - 用户偏好：少废话，直接做，修完验证，能发布就一起发布。
+- 工作方式：用户明确「不要影响我使用电脑」。只做低优先级后台检查与云端构建；不要启动本机可见测试窗口、切换桌面、抢占焦点，或操作正在运行的播放器、安装新版及修改用户数据。GUI 验证移到云端或如实记录未测边界。
 - UI 优化边界：能不动 UI 就不动 UI。播放器性能优化默认不改布局、CSS、文案、视觉质感或交互入口；必要的 DOM/HTML 改动必须保持等价输出。
 - UI 审美：精致、暗色、高级、流畅，拒绝廉价渐变、过度透明、错位、闪烁和卡顿。
 - 视觉质量定义：质感、丝滑度、帧数稳定同时成立；性能优化不能牺牲既有质感。
@@ -154,6 +156,7 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 
 ## 当前仓库索引
 
+- 遇到 `辅助窗口任务栏预览`、`Desktop Lyrics 预览`、`Compact Mini Player 预览`、`WS_EX_TOOLWINDOW`、`skipTaskbar` 或 `type: toolbar` 时，必须优先读取 `.context/pitfalls/mineradio-auxiliary-taskbar-previews.md`。
 - 遇到 `桌面歌词轮询进程`、`PowerShell 孤儿进程`、`旧进程 exit 覆盖新进程`、`DesktopOverlayStateCache`、`桌面歌词 beatMap 保留` 或 `壁纸封面 data URL 保留` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `旧窗口 closed 覆盖新窗口`、`覆盖层 BrowserWindow 所有权`、`旧 renderer IPC 控制新窗口`、`桌面歌词透明度/位置失效`、`旧 poller stdout` 或 `覆盖层签名未释放` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。
 - 遇到 `localAssetCacheMemory`、`本地资产镜像`、`只写不读缓存` 或 `切换曲库旧歌词封面保留` 时，必须优先读取 `.context/architecture/mineradio-player-performance-seams.md`。

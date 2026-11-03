@@ -1,3 +1,11 @@
+## 2026-11-03：v2.6.6 辅助窗口任务栏预览修复
+
+- 正确检出为远端 `oirge/Mineradio`，基线 `0a874b4`，工作分支 `fix/auxiliary-taskbar-previews`。
+- `desktop/main.js` 两个辅助窗口构造增加 `type: 'toolbar'`，配合现有 `skipTaskbar`，覆盖标准／极简迷你播放器与桌面歌词。不要绑定主窗口 parent 或加任务栏轮询。
+- 既有定向行为回归 `72/72`；隔离 Electron 43.7.9 已验证原生工具窗口样式，未完成人工任务栏预览、Alt+Tab 与完整生命周期交互验收。
+- 用户明确「不要影响我使用电脑」；本轮隔离测试已关闭。后续只做低优先级后台检查和云端打包，禁止本机图形测试、抢占焦点、操作正在运行的播放器、安装或修改用户数据。
+- 准备 `v2.6.6`；待 PR、官方构建、四项资产回下载和公开清单验证后补写发布事实。故障知识见 `.context/pitfalls/mineradio-auxiliary-taskbar-previews.md`。
+
 ## 2026-11-03：v2.6.5 四项功能与发布
 
 - 用户要求「全部更新」，沿用完成后发布授权；正确检出以远端 `oirge/Mineradio` 为准，基线 `ce3f06b`，功能分支 `feat/folia-command-audio-tools`。PR #164 已合入 `8f05caa201f66396e0a93d8ac5771afc897215ce`；正式版 `v2.6.5` 已于北京时间 `2026-11-03 14:51:57` 公开并设 Latest，无待发布步骤。
