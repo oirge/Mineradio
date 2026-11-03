@@ -78,10 +78,7 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 新增命令面板，Ctrl+K 搜索本地歌曲、打开歌单和执行常用操作。',
-  '播放条支持右键或长按更换快捷按钮，收藏、加入歌单与打乱队列可直接执行，布局随整机备份保存。',
-  '新增字幕快捷面板，集中调整行数、翻译、罗马音、背景与显隐，设置随视觉预设保存。',
-  'Folia 可直接调整十段均衡器、音效预设、预增益、限幅与立体声扩展，并选择宿主输出设备。',
+  '修复迷你播放器和桌面歌词出现在 Windows 任务栏预览中的问题。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

@@ -200,6 +200,8 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['修复迷你播放器与桌面歌词的任务栏预览。', 'Fix taskbar previews for the mini player and desktop lyrics.'],
+  ['修复迷你播放器和桌面歌词出现在 Windows 任务栏预览中的问题。', 'Fix the mini player and desktop lyrics appearing in Windows taskbar previews.'],
   ['Folia 命令面板、自定义按钮、字幕调节与音效输出。', 'Folia commands, customizable buttons, subtitles and audio output.'],
   ['Folia 新增命令面板，Ctrl+K 搜索本地歌曲、打开歌单和执行常用操作。', 'Open the Folia command palette with Ctrl+K to search local songs, browse playlists and run common actions.'],
   ['播放条支持右键或长按更换快捷按钮，收藏、加入歌单与打乱队列可直接执行，布局随整机备份保存。', 'Right-click or hold playback buttons to customize favorites, playlist additions and queue shuffle. Layouts are included in full backups.'],
@@ -2012,7 +2014,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.5';
+var APP_VERSION = '2.6.6';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2065,12 +2067,9 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 命令面板、自定义按钮、字幕调节与音效输出。',
+  hero: '修复迷你播放器与桌面歌词的任务栏预览。',
   notes: [
-    'Folia 新增命令面板，Ctrl+K 搜索本地歌曲、打开歌单和执行常用操作。',
-    '播放条支持右键或长按更换快捷按钮，收藏、加入歌单与打乱队列可直接执行，布局随整机备份保存。',
-    '新增字幕快捷面板，集中调整行数、翻译、罗马音、背景与显隐，设置随视觉预设保存。',
-    'Folia 可直接调整十段均衡器、音效预设、预增益、限幅与立体声扩展，并选择宿主输出设备。'
+    '修复迷你播放器和桌面歌词出现在 Windows 任务栏预览中的问题。'
   ]
 };
 function readSavedVolume() {

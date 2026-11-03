@@ -3100,6 +3100,8 @@ function createDesktopLyricsWindow(payload = {}) {
     movable: true,
     focusable: false,
     skipTaskbar: true,
+    // WS_EX_TOOLWINDOW keeps this auxiliary window out of Shell previews after show/restore.
+    type: 'toolbar',
     show: false,
     title: 'Mineradio Desktop Lyrics',
     webPreferences: {
@@ -4187,6 +4189,8 @@ function createMiniPlayerWindow() {
     movable: true,
     focusable: true,
     skipTaskbar: true,
+    // Native tool-window style survives Shell re-enumeration; DeleteTab alone does not.
+    type: 'toolbar',
     show: false,
     autoHideMenuBar: true,
     title: 'Mineradio Mini Player',
