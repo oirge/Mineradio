@@ -154,6 +154,7 @@ function createVideoExportManager({
       // A separate surface avoids resizing, hiding, focusing or capturing the user's desktop.
       const win = new BrowserWindow({
         width: record.width, height: record.height, useContentSize: true,
+        enableLargerThanScreen: true,
         show: false, frame: false, focusable: false, skipTaskbar: true, type: 'toolbar',
         backgroundColor: '#09090b', autoHideMenuBar: true, title: 'Mineradio Video Export',
         webPreferences: {
@@ -162,6 +163,10 @@ function createVideoExportManager({
         },
       });
       record.window = win;
+      // Electron's constructor centers through the display work area and can shrink even an
+      // offscreen window. Lift the native size limit above, then restore the real render size
+      // after construction. No zoom or low-resolution bitmap upscaling is involved.
+      win.setContentSize(record.width, record.height, false);
       win.webContents.setFrameRate(FRAME_RATE);
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       const preventNavigation = navigation => navigation.preventDefault();

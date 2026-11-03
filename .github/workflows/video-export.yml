@@ -3,6 +3,7 @@ name: Verify video export
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - '.github/workflows/video-export.yml'
       - 'desktop/video-export*.js'
@@ -52,7 +53,10 @@ jobs:
           "MINERADIO_VERIFY_FFMPEG=$decoder" >> $env:GITHUB_ENV
       - name: Export and decode real landscape and portrait video
         timeout-minutes: 5
-        run: node node_modules/electron/cli.js scripts/verify-video-export-electron.js
+        run: |
+          node -e 'const fs=require("fs");new Function("exports","require","module","__filename","__dirname",fs.readFileSync("scripts/verify-video-export-electron.js","utf8"));'
+          if ($LASTEXITCODE -ne 0) { throw 'Electron CommonJS preflight failed' }
+          node node_modules/electron/cli.js scripts/verify-video-export-electron.js
       - name: Save media and acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4

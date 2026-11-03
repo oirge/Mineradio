@@ -31,6 +31,8 @@ async function harness(t, options = {}) {
       super();
       this.configuration = configuration;
       this.destroyed = false;
+      // Model the constructor's native Center() work-area clamp on a small Windows display.
+      this.contentSize = { width: Math.min(1024, configuration.width), height: Math.min(720, configuration.height) };
       this.webContents = Object.assign(new EventEmitter(), {
         isDestroyed: () => this.destroyed,
         setFrameRate: value => { this.frameRate = value; },
@@ -42,6 +44,10 @@ async function harness(t, options = {}) {
       h.windows.push(this);
     }
     isDestroyed() { return this.destroyed; }
+    setContentSize(width, height) {
+      this.contentSize = this.configuration.enableLargerThanScreen
+        ? { width, height } : { width: Math.min(1024, width), height: Math.min(720, height) };
+    }
     destroy() { this.destroyed = true; this.emit('closed'); }
     async loadURL(url) {
       this.url = url;
@@ -147,6 +153,15 @@ test('画面只有一个待确认帧，确认后继续30fps绘制且不会显示
   h.paint();
   assert.equal(h.frames().length, 2);
   assert.deepEqual([...h.frames()[0].value.bytes], [255, 216, 255]);
+});
+
+test('小屏幕不会钳制离屏画面的横向或纵向真实分辨率', async t => {
+  const h = await harness(t);
+  for (const [width, height] of [[1280, 720], [1920, 1080], [1080, 1920]]) {
+    const session = await h.begin({ width, height });
+    assert.deepEqual(h.windows.at(-1).contentSize, { width, height });
+    await h.invoke('cancel', { id: session.id });
+  }
 });
 
 test('初始和更新桥保留typed频谱数组，隐藏页不能获得主界面文件权限', async t => {
