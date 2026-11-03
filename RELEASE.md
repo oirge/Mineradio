@@ -1,6 +1,6 @@
 # v2.6.5 Folia 命令、快捷按钮、字幕与音效
 
-- 授权与基线：用户要求四项功能「全部更新」，沿用完成后发布的授权。以远端 main `ce3f06bce0e7a69ec3ae37ba102be6b00dc2a4b6` 为基线，准备下一补丁版 `2.6.5`；尚未公开发布，实际 CI、提交与资产核验结果完成后补录。
+- 授权与基线：用户要求四项功能「全部更新」，沿用完成后发布的授权。以远端 main `ce3f06bce0e7a69ec3ae37ba102be6b00dc2a4b6` 为基线，完成下一补丁版 `2.6.5`；已于北京时间 `2026-11-03 14:51:57` 正式公开并设 Latest。
 - 命令面板：`Ctrl+K`／`Cmd+K` 在 Folia 三视图及父标题栏打开本地歌曲、歌单和常用动作搜索；歌曲每页 20 首，输入防抖与请求代号隔离迟到结果，直接调用宿主曲库和播放命令。
 - 快捷按钮：播放条与唱片胶囊共享两个可配置槽位，右键、长按或 `Shift+F10` 更换；支持收藏、加入歌单、一次打乱队列和常用面板。一次打乱不改变循环模式、不重启歌曲；菜单参与自动隐藏的悬停和焦点判断，避免胶囊裁切或卸载。布局键 `mineradio-folia-local-controls-v1` 纳入整机备份和桌面存档。
 - 字幕：集中调整行数、翻译／罗马音、背景和显隐，兼容旧翻译开关，并纳入视觉预设、JSON 交换和重载恢复。
@@ -8,7 +8,16 @@
 - 来源与边界：保留原始 Folia 0.7.16 与稳定 featureSync 0.7.25，仅选择性接入上游 [PR #1014](https://github.com/chthollyphile/folia-major/pull/1014) 的本地交互；不整体同步上游应用，保留既有玻璃质感与所有 `@note`。
 - 本地验证：Folia `15` 个文件／`93` 项行为测试，Node 定向 `75/75`，全量 Node `1593` 项中 `1592` 通过、0 失败、1 可选基准跳过；最终类型检查与嵌入构建通过。真实 Chromium／SwiftShader 七组新增验收全部通过，包括跨文档快捷键与焦点恢复、EQ 与宿主双向同步、字幕／按钮持久化、真实备份、唱片胶囊菜单以及直接点歌。未进行物理输出设备切换／热插拔，官方安装器未在本机安装运行。
 - 首轮 Windows [Verify `41589877429`](https://github.com/oirge/Mineradio/actions/runs/41589877429) 被旧的内嵌 Heart 源码断言拦下；布局守卫已适配为两个可配置槽位后紧跟歌单按钮，保留单行布局约束，本地全量复验通过。
+- Windows 复验：[Verify `41590576853`](https://github.com/oirge/Mineradio/actions/runs/41590576853) 验证提交 `9a8d8da980be780ab73199edfe508c11d643680d`，构建、编码、Folia 类型及 `93＋124` 项行为测试、全量 Node `1592` 通过／0 失败／1 可选跳过、语法与空白检查通过；既有播放／显示六组和新增工具七组浏览器验收均通过，宿主中英文审计通过。原 Folia 语言审计在 `effect-hanabi` 后点击 `local-effect-tuning summary` 超过原定 `30000ms`，失败截图另超过原定 `5000ms`，页面错误列表为空；后续旧套件未执行完，完整 CI 结论为 failure，不宣称全绿。保留原断言、普通点击、超时与画质。
+- 提交与构建：[PR #164](https://github.com/oirge/Mineradio/pull/164) 于 `2026-11-03T06:46:48Z` 合入 main，merge commit `8f05caa201f66396e0a93d8ac5771afc897215ce` 的文件树与上述复验提交一致。annotated tag `v2.6.5`（tag object `855d426cd3b739f7b7698c06d4ce4b9ab43eb571`）固定在该提交；[Windows Build and Release `41592105723`](https://github.com/oirge/Mineradio/actions/runs/41592105723) 成功（`2026-11-03T06:47:23Z`–`06:50:29Z`），重建 Folia、校验版本并上传四项官方资产。
+- 正式发布：[v2.6.5](https://github.com/oirge/Mineradio/releases/tag/v2.6.5)（Release ID `432360249`）于 `2026-11-03T06:51:57Z` 公开并设 Latest，`draft=false`／`prerelease=false`。四项文件完整回下载，大小、SHA256 与 GitHub API digest 和 SHA256SUMS 一致；清单为 LF 且无 BOM。安装器流式 SHA-512 与 `latest.yml` 两处摘要、size/path/url 一致；公开 Latest API 和更新清单均为 `2.6.5`，公开清单与已校验文件逐字节一致。安装器只读版本元数据为 `2.6.5`／`Mineradio 二创`，未在本机安装运行。
+  - `Mineradio-oirge-2.6.5-Setup.exe`：122596789 B，SHA256 `6ecb7b017b113f69c1895c8e18f48c3c8d15d7afaa915c6e51c6c3694b73ae89`。
+  - `Mineradio-oirge-2.6.5-Setup.exe.blockmap`：129810 B，SHA256 `c9162a9b9bd0d30ea07d5075dbf6e723cca056fa12000a972eecae7e9259028f`。
+  - `latest.yml`：359 B，SHA256 `d1aa770a47df1aa853fe9f07458b9c9eb4871ec2bf28dbca5964fa156e41f889`。
+  - `Mineradio-oirge-2.6.5-SHA256SUMS.txt`：282 B，SHA256 `881c0df2e46a0c08e669f98d78f062137c8498d39a972ed8a299ff85325f35cb`。
+  - 安装器 SHA-512：`Ey/6ClQ2Y0tSJzwYWNADIwYSzmEu4Hmr3nCLtg4dvTbz1w7KMlI4bgzF2gRW/rtj/YdjOHKw4Fn+o0Aw7zmxeg==`。
 - 验收入口：`scripts/verify-browser-ui.py --suite tools`，Windows Verify 新增独立五分钟步骤；证据保存在忽略目录 `verification/` 和 `artifacts/ui-language/folia-command-tools/`。
+- 收尾记录分支 `docs/record-v2.6.5-release`；完整 Windows 日志、四项资产与草稿／公开核验结果位于忽略目录 `verification/release-v2.6.5/`，不提交二进制，不重打 tag 或替换已公开资产。
 
 # v2.6.4 Folia 播放快捷设置与歌词防重叠
 

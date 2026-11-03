@@ -1,10 +1,12 @@
-## 2026-11-03：v2.6.5 四项功能与发布准备
+## 2026-11-03：v2.6.5 四项功能与发布
 
-- 用户要求「全部更新」，沿用完成后发布授权；正确检出以远端 `oirge/Mineradio` 为准，基线 `ce3f06b`，分支 `feat/folia-command-audio-tools`。版本已准备为 `2.6.5`，尚未公开发布；CI、PR、tag 和资产结果完成后写入 RELEASE.md 顶部。
+- 用户要求「全部更新」，沿用完成后发布授权；正确检出以远端 `oirge/Mineradio` 为准，基线 `ce3f06b`，功能分支 `feat/folia-command-audio-tools`。PR #164 已合入 `8f05caa201f66396e0a93d8ac5771afc897215ce`；正式版 `v2.6.5` 已于北京时间 `2026-11-03 14:51:57` 公开并设 Latest，无待发布步骤。
 - 已完成：本地命令面板、共享可配置快捷按钮、字幕快捷面板、宿主十段 EQ／音效／输出设备。保留唯一宿主音频、AudioContext、曲库和队列；两个槽位默认循环模式／收藏，重复选择自动交换。
 - 字幕设置进入视觉预设与 JSON；槽位键 `mineradio-folia-local-controls-v1` 进入宿主持久化、桌面存档和整机备份白名单。桥接新增 `shuffleQueue`、`getAudioOptions`、`setAudioChain`、`setOutputDevice`，一次打乱不改模式或重启播放。
 - 菜单 portal 到播放器根，唱片胶囊菜单打开时保留展开；父标题栏与 iframe 共用快捷键、关闭和焦点恢复。跨 realm 用能力判断而非 `instanceof HTMLElement`，仅在焦点仍属当前 document 时恢复，避免抢回父标题栏焦点。
-- 本地 Folia `93` 项、Node 定向 `75/75`、最终类型检查、构建与七组真实浏览器验收通过。新入口 `--suite tools` 已进入 Windows CI，原有回归与预算不变。详细内容和验证边界见 RELEASE.md 顶部；未做物理音频设备热插拔或安装官方二进制。
+- 本地 Folia `93` 项、Node 定向 `75/75`、全量 Node `1592` 通过／0 失败／1 可选跳过、最终类型检查、构建与七组真实浏览器验收通过。Windows Verify `41590576853` 的 Folia `93＋124` 项、全量 Node、既有播放六组和新增工具七组均通过；原 Folia 语言脚本在花火审计之后点击设置 summary 超过原定 30000ms，失败截图另超过 5000ms，后续旧套件未执行完，完整 CI 为 failure。未放宽断言、普通点击、超时和画质。
+- annotated tag `v2.6.5`（tag object `855d426cd3b739f7b7698c06d4ce4b9ab43eb571`）固定在功能合并提交，Build and Release `41592105723` 成功；Release `432360249` 已正式公开。四项资产完整回下载、SHA256／SHA-512、安装器版本和公开更新清单核验通过，安装器 `122596789` B、SHA256 `6ecb7b017b113f69c1895c8e18f48c3c8d15d7afaa915c6e51c6c3694b73ae89`。
+- 收尾记录分支 `docs/record-v2.6.5-release`，核验资料位于忽略目录 `verification/release-v2.6.5/`。详细内容和验证边界见 RELEASE.md 顶部；未做物理音频设备切换／热插拔或安装官方二进制，保留用户已安装版本和数据。
 
 ## 2026-11-03：v2.6.4 三项功能与发布
 
