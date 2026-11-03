@@ -1,6 +1,7 @@
 import { captureVisualPreset, presetName, type LocalVisualPreset } from './visualPresetData';
 import { normalizeVisualPreferences, useVisualSettings } from './useVisualSettings';
 import { getFromCache, saveVisualAssetLibrary } from './visualAssetCache';
+import { TEMPERA_MAX_LAYER_IMAGES } from '../../types';
 
 // Portable single-preset files contain parameters and optional shared image categories.
 export const PRESET_FILE_LIMIT = 24 * 1024 * 1024;
@@ -18,6 +19,25 @@ interface PresetFile {
 }
 function invalid(): never { throw new Error('presetFileInvalid'); }
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+// Reject broken placement records before reserving a preset or writing any shared images.
+function validateTemperaLayers(settings: Record<string, unknown>) {
+    if (settings.tunings === undefined) return;
+    if (!isObject(settings.tunings)) invalid();
+    const tempera = settings.tunings.tempera;
+    if (tempera === undefined) return;
+    if (!isObject(tempera)) invalid();
+    const layers = tempera.layerImages;
+    if (layers === undefined) return;
+    if (!Array.isArray(layers) || layers.length > TEMPERA_MAX_LAYER_IMAGES) invalid();
+    const ids = new Set<string>();
+    for (const image of layers) {
+        if (!isObject(image) || typeof image.id !== 'string' || !image.id.trim() || image.id.length > 200
+            || ids.has(image.id) || (image.name !== undefined && (typeof image.name !== 'string' || image.name.length > 255))
+            || ['scale', 'opacity'].some(key => image[key] !== undefined
+                && (typeof image[key] !== 'number' || !Number.isFinite(image[key])))) invalid();
+        ids.add(image.id);
+    }
+}
 function mime(name: string, type: string) {
     return Object.values(IMAGE_TYPES).includes(type) ? type : IMAGE_TYPES[name.split('.').pop()?.toLowerCase() ?? ''];
 }
@@ -60,6 +80,7 @@ export function parseVisualPreset(text: string) {
     if (!isObject(raw) || raw.format !== 'mineradio-folia-preset' || raw.version !== 1 || !isObject(raw.preset)
         || !presetName(raw.preset.name) || !isObject(raw.preset.settings)
         || JSON.stringify(raw.preset.settings).length > 512 * 1024) invalid();
+    validateTemperaLayers(raw.preset.settings);
     const preset = { name: presetName(raw.preset.name), settings: captureVisualPreset(normalizeVisualPreferences(raw.preset.settings)) };
     const assets: Record<string, StoredImage | StoredImage[]> = {};
     const temperaIds = new Set(preset.settings.tunings.tempera?.layerImages?.map(image => image.id) ?? []);

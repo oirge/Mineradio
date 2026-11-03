@@ -57,14 +57,29 @@ it('rejects invalid file versions, excess size, arbitrary cache keys and damaged
 it('carries referenced Tempera layer images under fresh IDs without overwriting existing placements', async () => {
     const image = { id: 'layer-one', name: 'one.png', mimeType: 'image/png', blob: new Blob(['image'], { type: 'image/png' }) };
     await saveToCache('tempera_layer_image_layer-one', image);
-    state().tune('tempera', { layerImages: [{ id: 'layer-one', name: 'one.png', x: 0.4 }] });
+    state().tune('tempera', { layerImages: [{ id: 'layer-one', name: 'one.png', align: 'left', scale: 0.4, opacity: 0.8 }] });
     const text = await exportVisualPreset(saved(), true);
     const id = await importVisualPreset(text);
     const layer = state().presets.find(entry => entry.id === id)!.settings.tunings.tempera!.layerImages[0];
-    expect(layer).toMatchObject({ name: 'one.png', x: 0.4 }); expect(layer.id).not.toBe('layer-one');
+    expect(layer).toMatchObject({ name: 'one.png', align: 'left', scale: 0.4, opacity: 0.8 }); expect(layer.id).not.toBe('layer-one');
     const restored = await getFromCache<typeof image>('tempera_layer_image_' + layer.id);
     expect(await restored!.blob.text()).toBe('image');
     expect(await getFromCache('tempera_layer_image_layer-one')).toMatchObject({ id: 'layer-one' });
+});
+
+it.each([null, {}, 'invalid', [null], ['image'], [{ id: 4 }], [{ id: ' ' }],
+    [{ id: 'one', scale: 'large' }], [{ id: 'one', name: [] }], [{ id: 'one' }, { id: 'one' }],
+    Array.from({ length: 17 }, (_, index) => ({ id: String(index) })),
+])('rejects malformed Tempera layers without changing presets or shared images: %j', async layerImages => {
+    const text = await exportVisualPreset(saved(), false), raw = JSON.parse(text);
+    raw.preset.settings.tunings.tempera.layerImages = layerImages;
+    raw.assets = { monet_background_image: [{ name: 'new.png', mimeType: 'image/png', data: 'iVBORw==' }] };
+    await saveToCache('monet_background_image', 'original');
+    const before = JSON.stringify(state().presets);
+    await expect(importVisualPreset(JSON.stringify(raw))).rejects.toThrow('presetFileInvalid');
+    expect(JSON.stringify(state().presets)).toBe(before);
+    expect(await getFromCache('monet_background_image')).toBe('original');
+    expect(state().mode).toBe('classic');
 });
 
 it('does not alter images when the preset list is full and removes the reserved preset on failed image writes', async () => {

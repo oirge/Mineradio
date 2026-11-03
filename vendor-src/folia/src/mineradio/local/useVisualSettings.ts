@@ -4,6 +4,7 @@ import { DEFAULT_MACHI_TUNING } from '../../components/visualizer/machi/types';
 import { normalizeHanabiTuning } from '../../components/visualizer/hanabi/hanabiTuning';
 import { normalizeNebbiaTuning } from '../../components/visualizer/nebbia/tuning';
 import { normalizeMachiTuning } from '../../components/visualizer/machi/machiTuning';
+import { resolveStoredTemperaTuning } from '../../stores/visualizerSettingsPersistence';
 import { parseSubtitleOverlayLayout } from '../../utils/lyrics/subtitleOverlayLayout';
 import { randomLyricMode, normalizeRandomPool } from './randomLyricMode';
 import { create } from 'zustand';
@@ -72,6 +73,8 @@ export function normalizeLocalTuning(mode: string, value: unknown) {
     if (mode === 'hanabi') return normalizeHanabiTuning(patch);
     if (mode === 'nebbia') return normalizeNebbiaTuning(patch);
     if (mode === 'machi') return normalizeMachiTuning(patch);
+    if (mode === 'tempera') return { ...resolveStoredTemperaTuning(patch),
+        render: normalizeLyricRenderOverride((patch as { render?: unknown }).render) };
     const base = DEFAULT_LOCAL_TUNINGS[mode as VisualizerTuningMode];
     const merged = { ...base, ...patch };
     return base && 'render' in base ? { ...merged, render: normalizeLyricRenderOverride((patch as { render?: unknown }).render) } : merged;

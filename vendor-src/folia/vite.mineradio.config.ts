@@ -106,6 +106,14 @@ export default defineConfig({
         outDir: path.resolve(root, '../../public/vendor/folia'),
         emptyOutDir: true,
         sourcemap: false,
+        modulePreload: {
+            // Dynamic effects share the entry's icon graph. Preloading its entire closure makes
+            // Vite scan thousands of existing links for each dependency (quadratic main-thread work).
+            // Preload the requested JS chunk; native imports load its dependencies and Vite retains CSS.
+            resolveDependencies(filename, dependencies, context) {
+                return context.hostType === 'js' ? dependencies.filter(dependency => dependency === filename) : dependencies;
+            },
+        },
         rollupOptions: {
             input: { main: path.join(root, 'index.html') },
             output: {
