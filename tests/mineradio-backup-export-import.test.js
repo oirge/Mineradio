@@ -726,6 +726,7 @@ test('Folia 设置、命名预设、歌单绑定和 Lattice 设置随整机备�
     presets: [{ id: 'rain', name: '雨夜', settings: { mode: 'nebbia' } }], playlistPresets: { road: 'rain' } }, version: 0 });
   const saved = { 'mineradio-folia-local-visuals-v1': visuals,
     'mineradio-folia-local-lattice-v1': '{"state":{"latticeLightsOn":false},"version":0}',
+    'mineradio-folia-local-controls-v1': '{"state":{"slots":["audio","subtitles"]},"version":0}',
     'mineradio-player-interface-v1': 'folia' };
   const source = loadBackupModule({ localStorage: saved });
   const payload = await source.context.collectMineradioBackupPayload();
@@ -741,9 +742,9 @@ test('Folia 设置、命名预设、歌单绑定和 Lattice 设置随整机备�
 test('白名单与 app.js 里的持久化键常量一一对应', () => {
   const mod = loadBackupModule({});
   const list = plain(mod.context.MINERADIO_BACKUP_PLAYER_KEYS);
-  assert.equal(list.length, 24);
+  assert.equal(list.length, 25);
   assert.deepEqual(list.slice().sort(), Object.values(PLAYER_KEYS).concat([
-    'mineradio-player-interface-v1', 'mineradio-folia-local-visuals-v1', 'mineradio-folia-local-lattice-v1'
+    'mineradio-player-interface-v1', 'mineradio-folia-local-visuals-v1', 'mineradio-folia-local-lattice-v1', 'mineradio-folia-local-controls-v1'
   ]).sort());
   Object.keys(PLAYER_KEYS).forEach((name) => {
     assert.match(appSource, new RegExp('var ' + name + " = '" + PLAYER_KEYS[name] + "';"), name + ' 常量值漂了');

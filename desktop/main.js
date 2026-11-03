@@ -266,6 +266,7 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-player-interface-v1',
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
+  'mineradio-folia-local-controls-v1',
   'mineradio-upload-tip-seen',
   'mineradio-playback-rate-v1',
   'mineradio-sleep-timer-v1',

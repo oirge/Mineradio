@@ -1,3 +1,11 @@
+## 2026-11-03：v2.6.5 四项功能与发布准备
+
+- 用户要求「全部更新」，沿用完成后发布授权；正确检出以远端 `oirge/Mineradio` 为准，基线 `ce3f06b`，分支 `feat/folia-command-audio-tools`。版本已准备为 `2.6.5`，尚未公开发布；CI、PR、tag 和资产结果完成后写入 RELEASE.md 顶部。
+- 已完成：本地命令面板、共享可配置快捷按钮、字幕快捷面板、宿主十段 EQ／音效／输出设备。保留唯一宿主音频、AudioContext、曲库和队列；两个槽位默认循环模式／收藏，重复选择自动交换。
+- 字幕设置进入视觉预设与 JSON；槽位键 `mineradio-folia-local-controls-v1` 进入宿主持久化、桌面存档和整机备份白名单。桥接新增 `shuffleQueue`、`getAudioOptions`、`setAudioChain`、`setOutputDevice`，一次打乱不改模式或重启播放。
+- 菜单 portal 到播放器根，唱片胶囊菜单打开时保留展开；父标题栏与 iframe 共用快捷键、关闭和焦点恢复。跨 realm 用能力判断而非 `instanceof HTMLElement`，仅在焦点仍属当前 document 时恢复，避免抢回父标题栏焦点。
+- 本地 Folia `93` 项、Node 定向 `75/75`、最终类型检查、构建与七组真实浏览器验收通过。新入口 `--suite tools` 已进入 Windows CI，原有回归与预算不变。详细内容和验证边界见 RELEASE.md 顶部；未做物理音频设备热插拔或安装官方二进制。
+
 ## 2026-11-03：v2.6.4 三项功能与发布
 
 - 用户明确要求「三项全做完之后发布新版」。基于 PR #161 合入后的 `35dece3` 完成三项；PR #162 已合入 `531dd4128c85cbbfff2656cb2dfe7018bb803945`，正式版 `v2.6.4` 已于北京时间 `2026-11-03 12:13:20` 公开并设 Latest，无待发布步骤。

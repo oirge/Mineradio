@@ -59,11 +59,15 @@ export default function LocalPosterWall({ player, theme, isDaylight, onBack, onO
     }), [currentSong, track, player.state?.playing, player.state?.duration, player.currentTime]);
     const actions = useMemo(() => ({ state: player.state, command: player.command, onOpenQueue }), [player.state, player.command, onOpenQueue]);
     const harmony = useVisualSettings(state => state.harmony);
+    const subtitleContentMode = useVisualSettings(state => state.subtitleContentMode);
+    const subtitleHidden = useVisualSettings(state => state.subtitleHidden);
+    const subtitleBackground = useVisualSettings(state => state.subtitleBackground);
     const lyricSource = useMemo(() => ({ currentTime: player.currentTime, currentLineIndex: player.currentLineIndex,
         lines: player.lines, theme, paused: !player.state?.playing, showSubtitleTranslation: translation,
-        showHarmonySubtitle: harmony, harmonySubtitleBackground: true,
-        hideTranslationSubtitle: !translation, subtitleContentMode: translation ? 'translation' as const : 'none' as const,
-    }), [player.currentTime, player.currentLineIndex, player.lines, player.state?.playing, theme, translation, harmony]);
+        showHarmonySubtitle: harmony, harmonySubtitleBackground: subtitleBackground,
+        hideTranslationSubtitle: subtitleHidden, subtitleContentMode,
+    }), [player.currentTime, player.currentLineIndex, player.lines, player.state?.playing, theme, translation, harmony,
+        subtitleContentMode, subtitleHidden, subtitleBackground]);
     const style = {
         '--bg-color': theme.backgroundColor, '--text-primary': theme.primaryColor,
         '--text-secondary': theme.secondaryColor, '--text-accent': theme.accentColor,

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Maximize2, SlidersHorizontal } from 'lucide-react';
+import { AudioLines, Captions, Command, Maximize2, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { LocalTool } from './localCommandCatalog';
 
 // src/mineradio/local/LocalHeader.tsx
 // Keep the live player controls in the desktop titlebar, with an in-frame fullscreen fallback.
@@ -17,13 +18,15 @@ interface Props {
     libraryOpen: boolean;
     settingsOpen: boolean;
     playbackOpen: boolean;
+    tool: LocalTool | null;
+    onTool: (tool: LocalTool) => void;
     onPlayback: () => void;
     onView: (view: Props['view']) => void;
     onLibrary: () => void;
     onSettings: () => void;
     onFocus: () => void;
 }
-export default function LocalHeader({ view, libraryOpen, settingsOpen, playbackOpen, onPlayback, onView, onLibrary, onSettings, onFocus }: Props) {
+export default function LocalHeader({ view, libraryOpen, settingsOpen, playbackOpen, tool, onTool, onPlayback, onView, onLibrary, onSettings, onFocus }: Props) {
     const { t } = useTranslation('localPlayer');
     const [target, setTarget] = useState(titlebarTarget);
     useEffect(() => {
@@ -46,6 +49,10 @@ export default function LocalHeader({ view, libraryOpen, settingsOpen, playbackO
         <button type="button" aria-pressed={settingsOpen} data-testid="local-open-settings" onClick={onSettings}>{t('effects')}</button>
         <button type="button" aria-label={t('playbackSettings')} title={t('playbackSettings')} aria-expanded={playbackOpen}
             data-testid="local-open-playback" onClick={onPlayback}><SlidersHorizontal size={16} /></button>
+        {([{ id: 'commands', label: 'commands', icon: Command }, { id: 'subtitles', label: 'subtitleSettings', icon: Captions },
+            { id: 'audio', label: 'audioSettings', icon: AudioLines }] as const).map(item => <button key={item.id} type="button"
+            aria-label={t(item.label)} title={`${t(item.label)}${item.id === 'commands' ? ' · Ctrl+K' : ''}`} aria-expanded={tool === item.id}
+            data-testid={`local-open-${item.id}`} onClick={() => onTool(item.id)}><item.icon size={16} /></button>)}
         <button type="button" aria-label={t('focus')} title={t('focus')} onClick={onFocus}><Maximize2 size={16} /></button>
     </nav>;
     return target ? createPortal(navigation, target) : <header className="local-header">{navigation}</header>;

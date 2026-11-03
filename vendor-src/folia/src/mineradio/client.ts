@@ -28,6 +28,21 @@ export interface HostPage<T> {
     limit: number;
 }
 
+export interface HostAudioChain {
+    enabled: boolean; gains: number[]; preset: string; profileName: string;
+    preampDb: number; autoPreamp: boolean; limiterEnabled: boolean; limiterThresholdDb: number;
+    spatialEnabled: boolean; widthRatio: number;
+}
+export interface HostOutputDevice {
+    supported: boolean; deviceId: string; label: string; actualId: string;
+    status: 'idle' | 'deferred' | 'pending' | 'fallback' | 'error' | 'applied';
+    needsPermission: boolean; errorName: string;
+}
+export interface HostAudioOptions {
+    frequencies: number[]; presets: Array<{ id: string; label: string }>;
+    limits: { gain: [number, number]; preamp: [number, number]; threshold: [number, number]; width: [number, number] };
+    devices: Array<{ deviceId: string; label: string; fallbackIndex: number }>;
+}
 export interface HostState {
     uiLanguage?: 'en' | 'zh-CN';
     currentTrack: HostTrack | null;
@@ -39,6 +54,8 @@ export interface HostState {
     sleepTimer?: { mode: 'off' | 'track' | '15' | '30' | '60'; dueAt: number; fading: boolean };
     replayGain?: { enabled: boolean; mode: 'track' | 'album'; preampDb: number; clipGuard: boolean };
     gapless?: { enabled: boolean; crossfadeSeconds: number };
+    audioChain?: HostAudioChain;
+    outputDevice?: HostOutputDevice;
     outputLatency?: number;
     volume: number;
     muted: boolean;

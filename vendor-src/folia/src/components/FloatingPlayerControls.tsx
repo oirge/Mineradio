@@ -84,6 +84,9 @@ interface FloatingPlayerControlsProps {
     slotSecondary: PlayerControlSlotActionId;
     /** 槽位共用的播放上下文里，胶囊自己能提供的那几项在内部补齐。 */
     slotContext: SlotContextFromApp;
+    /** The embedded local player supplies its own host-backed shortcuts. */
+    renderControlSlot?: (index: 0 | 1, disabled: boolean, className: string) => React.ReactNode;
+    keepExpanded?: boolean;
     /** 提交定位结果；由 App 写回持久化设置。 */
     onCommitBottomBarOffset: (offsetPx: number) => void;
 }
@@ -117,6 +120,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     slotPrimary,
     slotSecondary,
     slotContext,
+    renderControlSlot,
+    keepExpanded = false,
     onCommitBottomBarOffset,
 }) => {
     const { t } = useTranslation();
@@ -150,7 +155,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
 
     const canAutoExpand = canTogglePlay && duration > 0;
     // 定位模式强制展开：用户要看到的是最终形态的胶囊，而不是一条细进度条。
-    const showExpanded = isPositioning || isHovered || (canAutoExpand && playerState !== PlayerState.PLAYING && currentView !== 'home');
+    const showExpanded = keepExpanded || isPositioning || isHovered || (canAutoExpand && playerState !== PlayerState.PLAYING && currentView !== 'home');
 
     // 上限依赖视口高度，窗口变矮时要跟着收，否则虚线框会画到屏幕外。
     useEffect(() => {
@@ -401,6 +406,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                                     slotPrimary={slotPrimary}
                                     slotSecondary={slotSecondary}
                                     slotContext={resolvedSlotContext}
+                                    renderControlSlot={renderControlSlot}
                                 />
                             ) : (
                                 <CollapsedView
@@ -473,6 +479,7 @@ interface ExpandedViewProps {
     slotPrimary: PlayerControlSlotActionId;
     slotSecondary: PlayerControlSlotActionId;
     slotContext: PlayerControlSlotContext;
+    renderControlSlot?: (index: 0 | 1, disabled: boolean, className: string) => React.ReactNode;
 }
 
 const ExpandedView: React.FC<ExpandedViewProps> = ({
@@ -494,6 +501,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
     slotPrimary,
     slotSecondary,
     slotContext,
+    renderControlSlot,
 }) => {
     return (
         <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-x-4 gap-y-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
@@ -546,23 +554,23 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                 data-ponder-slots
                 className="contents sm:col-start-3 sm:row-start-1 sm:row-span-2 sm:flex sm:items-center sm:gap-1"
             >
-                <PlayerControlSlotButton
+                {renderControlSlot ? renderControlSlot(0, controlsDisabled, 'col-start-1 row-start-2 justify-self-end sm:justify-self-auto') : <PlayerControlSlotButton
                     actionId={slotPrimary}
                     context={slotContext}
                     primaryColor={primaryColor}
                     isDaylight={isDaylight}
                     controlsDisabled={controlsDisabled}
                     className="col-start-1 row-start-2 justify-self-end sm:justify-self-auto"
-                />
+                />}
 
-                <PlayerControlSlotButton
+                {renderControlSlot ? renderControlSlot(1, controlsDisabled, 'col-start-3 row-start-2 justify-self-start sm:justify-self-auto') : <PlayerControlSlotButton
                     actionId={slotSecondary}
                     context={slotContext}
                     primaryColor={primaryColor}
                     isDaylight={isDaylight}
                     controlsDisabled={controlsDisabled}
                     className="col-start-3 row-start-2 justify-self-start sm:justify-self-auto"
-                />
+                />}
             </div>
 
             {/* Row 2: Current Time, Progress Bar, Duration */}

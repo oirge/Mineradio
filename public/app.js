@@ -162,6 +162,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   'mineradio-player-interface-v1',
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
+  'mineradio-folia-local-controls-v1',
   VOLUME_STORE_KEY,
   VOLUME_WHEEL_STEP_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
@@ -199,6 +200,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['Folia 命令面板、自定义按钮、字幕调节与音效输出。', 'Folia commands, customizable buttons, subtitles and audio output.'],
+  ['Folia 新增命令面板，Ctrl+K 搜索本地歌曲、打开歌单和执行常用操作。', 'Open the Folia command palette with Ctrl+K to search local songs, browse playlists and run common actions.'],
+  ['播放条支持右键或长按更换快捷按钮，收藏、加入歌单与打乱队列可直接执行，布局随整机备份保存。', 'Right-click or hold playback buttons to customize favorites, playlist additions and queue shuffle. Layouts are included in full backups.'],
+  ['新增字幕快捷面板，集中调整行数、翻译、罗马音、背景与显隐，设置随视觉预设保存。', 'A subtitle panel groups row layout, translation, romanization, background and visibility. Choices are saved with visual presets.'],
+  ['Folia 可直接调整十段均衡器、音效预设、预增益、限幅与立体声扩展，并选择宿主输出设备。', 'Adjust the host 10-band EQ, audio presets, preamp, limiter and stereo width, and select its output device directly in Folia.'],
   ['Folia 播放快捷设置、歌词防重叠与拼贴墙序号。', 'Folia playback shortcuts, overlap prevention and wall number badges.'],
   ['Folia 三种视图均可直接调整倍速、睡眠定时、音量均衡、无缝播放和交叉淡化，与主界面实时同步。', 'Adjust speed, sleep timer, ReplayGain, gapless playback and crossfade in all three Folia views, with live synchronization to the main interface.'],
   ['流光与云阶新增防止文字重叠，按文字变换增加间距，空间不足时缩小当前句；默认关闭，可随预设保存和交换。', 'Classic and Partita can prevent text overlap by spacing transformed words and shrinking the current line when needed. Off by default, with preset saving and exchange.'],
@@ -2006,7 +2012,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.4';
+var APP_VERSION = '2.6.5';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2059,12 +2065,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 播放快捷设置、歌词防重叠与拼贴墙序号。',
+  hero: 'Folia 命令面板、自定义按钮、字幕调节与音效输出。',
   notes: [
-    'Folia 三种视图均可直接调整倍速、睡眠定时、音量均衡、无缝播放和交叉淡化，与主界面实时同步。',
-    '流光与云阶新增防止文字重叠，按文字变换增加间距，空间不足时缩小当前句；默认关闭，可随预设保存和交换。',
-    'Lattice 封面拼贴墙新增仅显示当前歌曲序号开关，默认关闭，设置随整机备份保存。',
-    '修复损坏的 Tempera 预设导入与恢复，减少效果切换和设置操作时的资源加载卡顿。'
+    'Folia 新增命令面板，Ctrl+K 搜索本地歌曲、打开歌单和执行常用操作。',
+    '播放条支持右键或长按更换快捷按钮，收藏、加入歌单与打乱队列可直接执行，布局随整机备份保存。',
+    '新增字幕快捷面板，集中调整行数、翻译、罗马音、背景与显隐，设置随视觉预设保存。',
+    'Folia 可直接调整十段均衡器、音效预设、预增益、限幅与立体声扩展，并选择宿主输出设备。'
   ]
 };
 function readSavedVolume() {
@@ -46191,6 +46197,7 @@ var MINERADIO_BACKUP_PLAYER_KEYS = [
   'mineradio-player-interface-v1',
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
+  'mineradio-folia-local-controls-v1',
   VOLUME_STORE_KEY,
   PLAYBACK_RATE_STORE_KEY,
   LYRIC_LLM_TRANSLATE_STORE_KEY,

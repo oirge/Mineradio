@@ -1,0 +1,23 @@
+/* src/mineradio/local/localTools.css */
+.local-tool-panel{position:absolute;z-index:25;right:24px;top:78px;width:min(400px,calc(100vw - 48px));max-height:calc(100% - 108px);display:flex;flex-direction:column;overflow:hidden;color:var(--local-text)}
+.local-tool-panel.is-wide{width:min(580px,calc(100vw - 48px))}
+.local-tool-content{padding:18px;display:flex;flex-direction:column;gap:16px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;min-height:0}
+.local-tool-content fieldset{display:flex;flex-direction:column;gap:14px;border:0;padding:0;margin:0;min-width:0}
+.local-tool-content legend{font-size:13px;font-weight:600;margin-bottom:12px}
+.local-tool-content label,.local-tool-content select{font-size:12px}
+.local-tool-content select{max-width:60%;background:var(--local-raised);color:var(--local-text);border:1px solid var(--local-line);border-radius:8px;padding:7px}
+.local-tool-hint{font-size:11px;line-height:1.7;color:var(--local-muted);margin:0}
+.local-tool-content .local-playback-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:12px}
+.local-audio-presets{display:flex;flex-wrap:wrap;gap:5px}
+.local-audio-presets button{font-size:11px;border:1px solid var(--local-line);border-radius:8px;padding:6px 9px}
+.local-audio-presets button[aria-pressed=true]{color:var(--local-accent);background:var(--local-hover)}
+.local-eq-bands{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+.local-eq-bands label{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:0;font-size:10px;color:var(--local-muted)}
+.local-eq-bands input{writing-mode:vertical-lr;direction:rtl;appearance:auto;width:20px;height:110px;min-width:0;accent-color:var(--local-accent)}
+.local-eq-bands output{font-variant-numeric:tabular-nums;font-size:10px;color:var(--local-text)}
+.local-tool-divider{border:0;border-top:1px solid var(--local-line);width:100%;margin:0}
+.local-tool-error{font-size:12px;line-height:1.6;color:var(--local-text)}
+.local-tool-panel{z-index:80}
+.local-player .local-eq-bands input[type=range]{height:110px;cursor:ns-resize}
+@media(max-width:640px){.local-tool-panel{top:66px;right:12px;max-height:calc(100% - 90px);width:calc(100vw - 24px)}.local-tool-panel.is-wide{width:calc(100vw - 24px)}.local-tool-content{padding:14px}.local-eq-bands{gap:1px}}
+@media(prefers-reduced-motion:reduce){.local-tool-panel{animation:none}}

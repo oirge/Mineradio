@@ -46,6 +46,10 @@ All times are **seconds**. Track IDs are opaque stable Mineradio IDs. Read resul
 | `setVolume` | `{volume}` | State |
 | `setMuted` | `{muted}` | State; preserves previous audible volume |
 | `setPlayMode` | `{mode:'loop'|'shuffle'|'single'}` | State |
+| `shuffleQueue` | `{}` | State; one-shot shuffle through the host, preserving loaded media, position and playback mode |
+| `getAudioOptions` | `{}` | EQ frequencies, built-in presets and limits, plus a refreshed device list |
+| `setAudioChain` | `{enabled?,autoPreamp?,limiterEnabled?,spatialEnabled?,preampDb?,limiterThresholdDb?,widthRatio?,preset?,band?:{index,gain}}` | State; validates the complete edit before normalizing and committing through the host |
+| `setOutputDevice` | `{deviceId}` | State; checks host support and known/saved IDs, then uses the existing sink selector and fallback |
 | `setQueue` | `{trackIds,currentIndex?}` | State; edits queue without restarting current audio |
 | `addToQueue` | `{id}` | State; atomically append an indexed local track, deduplicating by its stable ID, without starting or restarting audio |
 | `toggleLike` | `{id}` | `{id,liked}` |
@@ -58,6 +62,10 @@ All times are **seconds**. Track IDs are opaque stable Mineradio IDs. Read resul
 | `switchInterface` | `{mode:'mineradio'|'folia'}` | State |
 
 ## Events and lifecycle
+
+State also exposes copied `audioChain` settings (including a derived preset ID) and `outputDevice` preference/runtime snapshots. `getAudioOptions` refreshes devices only on demand; it never creates audio output or requests microphone permission. Device errors, saved-but-deferred selections and temporary system-default fallback remain host-owned.
+
+The local command palette queries at most 20 tracks per page and ignores late results. The same isolated action registry drives both configurable playback buttons and commands; it does not import the upstream provider registry. The two distinct button choices live in `mineradio-folia-local-controls-v1`, included in the host persistence and full-backup whitelists. Subtitle row/content/background/visibility preferences join the existing visual key and preset export; playback controls remain outside visual presets.
 
 - `state`: light State every 200 ms while Folia is active; no entire library or queue.
 - `libraryChanged`: `{revision}` after library, favorites or playlists change. Refetch relevant catalog pages and playlists.

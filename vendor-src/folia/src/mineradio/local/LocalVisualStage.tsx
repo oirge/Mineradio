@@ -41,8 +41,8 @@ export default function LocalVisualStage({ player, theme, assets, focus, onOpenQ
             onTemperaTuningChange={patch => visuals.tune('tempera', patch)}
             onLumiereTuningChange={patch => visuals.tune('lumiere', patch)}
             lyricsFontScale={visuals.lyricsFontScale} visualizerTunings={visuals.tunings}
-            showText={player.lines.length > 0} showSubtitleTranslation={visuals.translation} hideTranslationSubtitle={!visuals.translation}
-            subtitleContentMode={visuals.translation ? 'translation' : 'none'} subtitleOverlayLayout={visuals.subtitleLayout}
+            showText={player.lines.length > 0} showSubtitleTranslation={visuals.translation} hideTranslationSubtitle={visuals.subtitleHidden}
+            subtitleContentMode={visuals.subtitleContentMode} subtitleOverlayLayout={visuals.subtitleLayout} subtitleOverlayBackground={visuals.subtitleBackground}
             showHarmonySubtitle={visuals.harmony} onVisualizerTuningChange={patch => visuals.tune(visuals.mode as never, patch as Record<string, unknown>)} isPlayerChromeHidden={focus}
             onLyricLineSeek={seconds => { void player.command('seek', { seconds }).catch(() => {}); }} />}
     </div>;

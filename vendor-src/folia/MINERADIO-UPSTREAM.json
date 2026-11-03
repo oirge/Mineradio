@@ -16,7 +16,7 @@
     "retrievedAt": "2026-11-03",
     "channel": "development",
     "baseCommit": "20c3ecd09a518e9c8d2d53c331c54a548bf9eebf",
-    "commit": "362ca16087c68af2c90045f56cf060b67626855a",
+    "commit": "52617a26736578cc9731cb4e49b96d3ccd93424c",
     "sourceCommits": [
       "3b4f01a701f62aaf08a17da77b3b7588279d24d2",
       "c56bf8eca8ff2aad76ac31f5e13249135f3d53d0",
@@ -26,8 +26,9 @@
       "f03e8ecad21af765976cd00c5802218cdb22c8e4",
       "b9f9d80ece6480170a8b9e9c5d051a4b8787176a",
       "fa927fd7b3909e2fbb5c16d06fb4e31b1866078a",
-      "f95effba485b07fce1ed0a79e987c803cffb9807"
+      "f95effba485b07fce1ed0a79e987c803cffb9807",
+      "52617a26736578cc9731cb4e49b96d3ccd93424c"
     ],
-    "scope": "Selective follow-up port: staged/asynchronous Machi program warmup, global lyric rendering quality and per-style overrides, Nebbia preview sizing, whitespace/RTL lyric layout, Nebbia aquarium/rain/dew and transparent player integration. Not a full upstream version upgrade. Selective follow-up: Classic/Partita overlap geometry and local Lattice current-song-only numeric badges. Shared GlowWord/timing/layout helpers extracted as required by the overlap implementation. No Bravais, account, cloud sync or provider application port."
+    "scope": "Selective follow-up port: staged/asynchronous Machi program warmup, global lyric rendering quality and per-style overrides, Nebbia preview sizing, whitespace/RTL lyric layout, Nebbia aquarium/rain/dew and transparent player integration. Not a full upstream version upgrade. Selective follow-up: Classic/Partita overlap geometry and local Lattice current-song-only numeric badges. Shared GlowWord/timing/layout helpers extracted as required by the overlap implementation. No Bravais, account, cloud sync or provider application port. Local command search, configurable playback slots and subtitle tools follow PR #1014 using an isolated local registry and the existing host bridge. Audio effects/output are exposed from Mineradio without adopting upstream audio services."
   }
 }
