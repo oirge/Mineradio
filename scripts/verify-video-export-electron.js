@@ -28,7 +28,15 @@ app.commandLine.appendSwitch('use-angle', 'swiftshader');
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 
 let host, manager, server, port, dialogCount = 0, nextSaveName = '';
-const failures = [], checks = [], exports = [], created = [];
+const failures = [], checks = [], mediaExports = [], created = [];
+const watchdog = setTimeout(() => {
+  const message = 'Video export acceptance exceeded its three-minute execution budget.';
+  failures.push(message);
+  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ checks, mediaExports, windows: created, failures }, null, 2));
+  process.stderr.write(message + '\n');
+  app.exit(1);
+}, 180000);
+watchdog.unref();
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
@@ -168,7 +176,7 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration) {
   assert.ok(deviation > 6 && highlights > 30, `nonblack visual detail required: deviation=${deviation}, highlights=${highlights}`);
   assert.ok(difference / a.length > 0.2, `animation/lyric content must advance: difference=${difference / a.length}`);
   const result = {file:path.basename(filePath),width,height,bytes:fs.statSync(filePath).size,duration,rms,mean,deviation,frameDifference:difference/a.length};
-  exports.push(result);
+  mediaExports.push(result);
   return result;
 }
 
@@ -294,11 +302,11 @@ async function run() {
 }
 
 app.whenReady().then(run).then(async()=> {
-  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports,windows:created,failures},null,2));
+  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures},null,2));
   await manager?.dispose(); host?.destroy(); await new Promise(resolve=>server.close(resolve)); app.exit(0);
 }).catch(async error=> {
   failures.push(error.stack || String(error));
-  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports,windows:created,failures},null,2));
+  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures},null,2));
   process.stderr.write(`${error.stack || error}\n`);
   try { await manager?.dispose(); } catch {} try { host?.destroy(); } catch {} try { server?.close(); } catch {}
   app.exit(1);

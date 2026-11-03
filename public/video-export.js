@@ -58,7 +58,8 @@
         try { if (s.id) await bridge.cancelVideoExport({ id: s.id }); } catch (_) {}
         // begin may still be waiting for the save dialog. Its continuation owns that late session.
         release(s);
-        return publish({ status: error ? 'error' : 'cancelled', error: error ? String(error.message || error) : '', fileName: '' });
+        var message = error ? String(error.message || error) : '';
+        return publish({ status: error ? 'error' : 'cancelled', error: message && host.uiText ? host.uiText(message) : message, fileName: '' });
       })();
       return s.discarding;
     }
@@ -234,7 +235,6 @@
         await media.play(); syncRecording(s);
         return snapshot();
       } catch (error) {
-        if (s.preparedPlayback && !s.recorder && s.wasPlaying && host.audio === s.audio) { try { await s.audio.play(); } catch (_) {} }
         if (!s.cancelled) await discard(s, error);
         return snapshot();
       }

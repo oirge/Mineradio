@@ -1,3 +1,11 @@
+## 2026-11-03：v2.6.7 歌词／可视化视频导出（验收中）
+
+- 基线 main 378a38d3，分支 feat/folia-video-export。功能提交 7a77275c；当前正在做云端 Electron 导出／独立解码与版本收尾。
+- 用户只选择视频导出，并明确默认切歌／跳转仍持续录制且画面跟随；另选保存已录片段。不要改成固定原曲独立后台音频，也不要默认切歌停止。策略独立键 mineradio-video-export-options-v1，须保留四层持久化／整机备份通路。
+- hidden renderer 只画 VisualizerRenderer；主 public/video-export.js 保有唯一音频旁路和 MediaRecorder。不要桌面捕获／重设主窗口／另起播放器。Folia 0.7.16 与既有 selective sync 版本不变。
+- 本机只低优先级后台检查，不开窗口、不安装、不改用户数据。云验收专用 .github/workflows/video-export.yml 和 scripts/verify-video-export-electron.js，仅允许 Windows GitHub Actions。
+- 详细功能、验证与发布状态以 RELEASE.md 顶部为准，验收未完成前不能记为已正式发布。
+
 ## 2026-11-03：v2.6.6 辅助窗口任务栏预览修复
 
 - 正确检出为远端 `oirge/Mineradio`，基线 `0a874b4`，工作分支 `fix/auxiliary-taskbar-previews`。

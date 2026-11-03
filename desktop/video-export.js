@@ -225,7 +225,7 @@ function createVideoExportManager({
   function update(_event, payload) {
     const record = requireCurrent(payload && payload.id);
     if (record.stage !== 'recording') return;
-    const budget = payload.lyrics !== undefined ? MAX_INITIAL_BYTES : 2 * 1024 * 1024;
+    const budget = payload.lyrics !== undefined || payload.analysis !== undefined ? MAX_INITIAL_BYTES : 2 * 1024 * 1024;
     if (Buffer.byteLength(JSON.stringify(payload)) > budget) throw new Error('VIDEO_EXPORT_UPDATE_TOO_LARGE');
     record.window.webContents.send('mineradio-video-export-update', payload);
   }

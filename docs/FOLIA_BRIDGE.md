@@ -1,3 +1,11 @@
+## Video export extension (v2.6.7)
+
+- getVideoExportState, startVideoExport({width,height,startMode:'from-start'|'current',transitionBehavior:'continue'|'save',visuals}), stopVideoExport and cancelVideoExport return {supported,status,progress,elapsed,transitionBehavior,fileName?,error?}. The videoExport event publishes job changes independently of the panel lifecycle.
+- The default continue policy records one file across track changes and seeks, replacing display-only track/lyrics/analysis data. save ends the recording before a transition. A completed queue with no next playback is saved automatically. Pausing audio pauses recording. startMode chooses the recording start; continue can then follow subsequent playback.
+- Supported sizes: 1280x720, 1920x1080, 720x1280, 1080x1920 at 30 fps. MP4 is preferred and WebM is the capability fallback. Recording is real time. Speaker volume/mute do not affect the exported audio; EQ, ReplayGain and playback speed do.
+- Desktop privileges remain in the trusted main frame. A separate hidden /vendor/folia/index.html?videoExport=<job-id> receives snapshots and a restricted display-only preload, paints original Folia effects, and never owns an audio element. Frame acknowledgements and bounded chunk writes avoid retaining the full video in memory.
+- mineradio-video-export-options-v1 persists only {transitionBehavior}. It participates in desktop UI state and machine backup, and does not change visual presets.
+
 # Mineradio ↔ Folia bridge v1
 
 The isolated Folia local player runs in the host-owned `/vendor/folia/index.html` iframe, using `src/mineradio/local-entry.tsx`, not the upstream App/bootstrap. Mineradio owns audio, library, playlists and persistence. No Folia audio element may play. Messages are accepted only from the exact iframe window and host origin.
