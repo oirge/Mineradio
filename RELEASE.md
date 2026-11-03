@@ -6,8 +6,17 @@
 - 拼贴墙序号：选择性移植上游 [PR #1006](https://github.com/chthollyphile/folia-major/pull/1006) 的最终方案，默认关闭。仅墙面根订阅开关，以显式数字标记和 CSS 隐藏非当前序号；类型标签保留，设置随 Lattice 记录和整机备份保存。
 - 上一轮修复：损坏 Tempera 预设写入前拒绝、存档恢复归一化；动态导入预加载从 1892 项降至最多 2 项；效果设置打开期间延后可选后台预热。对应 PR #161 完整 Windows Verify `41568780358` 已通过。
 - 来源：原始 Folia 0.7.16 与稳定 featureSync 0.7.25 保留；开发增量扩展至 `362ca16`，只接入本地播放器需要的实现和辅助模块，没有整体同步上游应用。
-- 本地验证：全量 Node `1589` 项中 `1588` 通过、0 失败、1 可选跳过；Folia 104 项定向行为测试通过，另有快捷开关旧回包／失败回退 1 项通过；类型检查、嵌入构建和发布元数据定向 14 项通过。真实 Chromium／SwiftShader 六组新增验收全部通过，页面异常 0；远端 Verify／Release 最终结果在完成后补录。
-- 发布状态：准备中。正式安装器尚未在本机安装运行；不替换 2.6.3 的 tag 或资产。
+- 本地验证：全量 Node `1589` 项中 `1588` 通过、0 失败、1 可选跳过；Folia 104 项定向行为测试通过，另有快捷开关旧回包／失败回退 1 项通过；类型检查、嵌入构建和发布元数据定向 14 项通过。真实 Chromium／SwiftShader 六组新增验收全部通过，页面异常 0。
+- 完整 Windows 验证：[Verify `41574692244`](https://github.com/oirge/Mineradio/actions/runs/41574692244) 于 `2026-11-03T04:07:33Z` 成功，验证提交 `e8cd3852ec494f1c21cf76a9bbb768e2c8f8ab25`。Folia 类型检查及 `89＋124` 项行为测试、Node `1589` 项（`1588` 通过、0 失败、1 可选跳过）、构建、编码、语法与空白检查通过；新增播放／显示六组及原有中英文、恢复、视觉、节拍预设、预设互通六套浏览器回归全部通过，保留普通点击、原断言、超时和画质。
+- 提交与构建：[PR #162](https://github.com/oirge/Mineradio/pull/162) 于 `2026-11-03T04:08:24Z` 合入 main，merge commit `531dd4128c85cbbfff2656cb2dfe7018bb803945` 的文件树与上述验证提交完全一致。annotated tag `v2.6.4`（tag object `0b2a18887ac620d1cab21c4a81f71c421f4b8619`）固定在该提交；[Windows Build and Release `41576366140`](https://github.com/oirge/Mineradio/actions/runs/41576366140) 成功（`2026-11-03T04:08:41Z`–`04:11:38Z`），重新构建 Folia 并上传四项官方资产。
+- 正式发布：[v2.6.4](https://github.com/oirge/Mineradio/releases/tag/v2.6.4)（Release ID `432269170`）于北京时间 `2026-11-03 12:13:20` 公开并设为 Latest，`draft=false` / `prerelease=false`；公开 Latest API 与自动更新清单均为 `2.6.4`。
+- 官方资产核验：四项文件完整回下载，大小和 SHA256 与 GitHub API digest、SHA256SUMS 一致；安装器流式 SHA-512 与 `latest.yml` 两处摘要、size/path/url 一致。公开 `releases/latest/download/latest.yml` 与已核验文件逐字节一致；安装器只读版本元数据为 `2.6.4`／`Mineradio 二创`，未在本机安装运行。未覆盖旧版本 tag 或资产。
+  - `Mineradio-oirge-2.6.4-Setup.exe`：122587457 B，SHA256 `9486cfb46687c75e2d121b5171606ab754fe5d9a28d5f683030024ca05905741`。
+  - `Mineradio-oirge-2.6.4-Setup.exe.blockmap`：129861 B，SHA256 `ae8e6ae029d720c6a4bff4fba35e7beda6be22a8038cc9395ef7661745d0be39`。
+  - `latest.yml`：359 B，SHA256 `8dff189b82bb7d184deca7a6d8befb03e14c5881919755cfe7a802a28bd1963c`。
+  - `Mineradio-oirge-2.6.4-SHA256SUMS.txt`：282 B，SHA256 `1385d8d03241eb94d97540efeee7ed9dbe9e91e3c61e6baab233e039f894c41a`。
+  - 安装器 SHA-512：`Klr9fvL/CJ00/yAktZNIS5JMH62ElMPdR+i3BG2DBOAaP2Bqg088QjevkcL7Rgb81Asm4CBz6ElMGeJuiitLKw==`。
+- 核验资料保存在忽略目录 `verification/release-v2.6.4/`，包括完整 Windows 日志、四项资产和草稿／公开校验记录；不提交二进制。
 
 # v2.6.3 Folia 备份与预设互通
 
