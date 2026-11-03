@@ -22,7 +22,6 @@ import './local.css';
 export default function LocalPlayer() {
     const { t, i18n } = useTranslation('localPlayer');
     const player = useLocalPlayer();
-    useLocalVisualizerPrewarm(player.active);
     useEffect(() => {
         const language = player.state?.uiLanguage;
         if (language && language !== i18n.language) void i18n.changeLanguage(language);
@@ -33,6 +32,8 @@ export default function LocalPlayer() {
     const [libraryOpen, setLibraryOpen] = useState(false);
     const [queue, setQueue] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    // Leave the GPU to the selected effect and live preview while the user edits settings.
+    useLocalVisualizerPrewarm(player.active && !settingsOpen);
     const [focus, setFocus] = useState(false);
     const theme = visuals.daylight ? DAYLIGHT_THEME : DEFAULT_THEME;
     const track = player.state?.currentTrack;

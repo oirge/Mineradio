@@ -87,6 +87,21 @@ describe('embedded visual preference migration', () => {
         expect(useVisualSettings.getState().lyricRenderQuality).toEqual({ scale: 1, antialias: 'on' });
         expect(restoredTunings(null).nebbia?.glass).toBe('rain');
     });
+
+    it('repairs damaged stored Tempera layers and keeps valid placement and render overrides', async () => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { mode: 'tempera', tunings: {
+            tempera: { layerImages: null, glyphMotion: 'invalid', colorMode: null },
+        } }, version: 0 }));
+        await useVisualSettings.persist.rehydrate();
+        expect(useVisualSettings.getState().tunings.tempera).toMatchObject({
+            layerImages: [], glyphMotion: 1, colorMode: 'duo',
+        });
+        const tuning = restoredTunings({ tempera: { render: { scale: 0.75, antialias: 'off' },
+            layerImages: [null, { id: 'art', align: 'left', scale: 20, opacity: -1 }],
+        } }).tempera!;
+        expect(tuning.render).toEqual({ scale: 0.75, antialias: 'off' });
+        expect(tuning.layerImages).toEqual([{ id: 'art', name: 'art', align: 'left', verticalAlign: 'bottom', scale: 2, opacity: 0 }]);
+    });
 });
 
 function QualityProbe() {

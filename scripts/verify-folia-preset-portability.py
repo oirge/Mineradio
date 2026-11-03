@@ -84,6 +84,27 @@ with sync_playwright() as p:
         bundled = json.loads(asset_file.read_text(encoding='utf-8'))
         assert base64.b64decode(bundled['assets']['monet_background_image'][0]['data']) == base64.b64decode(image_data)
         frame.get_by_test_id('local-background-mode').select_option('latent')
+        broken = json.loads(json.dumps(bundled))
+        broken['preset']['settings']['tunings']['tempera']['layerImages'] = None
+        broken_file = OUT / 'broken-tempera.json'
+        broken_file.write_text(json.dumps(broken), encoding='utf-8')
+        preferences_before = iframe.evaluate("localStorage.getItem('mineradio-folia-local-visuals-v1')")
+        presets.get_by_test_id('local-import-preset').set_input_files(str(broken_file))
+        expect(presets.get_by_role('status')).to_contain_text('预设文件无效')
+        expect(presets.get_by_label('选择预设', exact=True).locator('option')).to_have_count(2)
+        assert iframe.evaluate("localStorage.getItem('mineradio-folia-local-visuals-v1')") == preferences_before
+        image_id = iframe.evaluate("""() => new Promise((resolve, reject) => {
+          const open = indexedDB.open('mineradio-folia-visual-assets-v1', 1);
+          open.onsuccess = () => {
+            const db = open.result, tx = db.transaction('assets', 'readonly');
+            const request = tx.objectStore('assets').get('monet_background_image');
+            tx.oncomplete = () => {db.close(); resolve(request.result?.id)};
+            tx.onabort = () => {db.close(); reject(tx.error)};
+          }; open.onerror = () => reject(open.error);
+        })""")
+        assert image_id == 'fixture'
+        done('malformed Tempera layers are rejected without changing preferences, presets or shared images')
+
         presets.get_by_test_id('local-import-preset').set_input_files(str(asset_file))
         expect(presets.get_by_role('status')).to_have_text('预设已导入，选择「应用」后生效')
         expect(presets.get_by_label('选择预设', exact=True).locator('option').last).to_have_text('Rain (2)')

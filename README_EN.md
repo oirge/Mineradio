@@ -8,7 +8,7 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 
 ## Main Changes
 
-- Removed login, online music portal, update prompts, and unnecessary guides.
+- Local playback without online music accounts or provider services.
 - Support for importing local music folders.
 - Support for importing individual local music files.
 - Smart library categories in their own tab: artist / album / album artist / genre / decade, plus recently added, recently played, most played and never played.
@@ -22,9 +22,9 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Support for MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags, including timestamped LRC lyrics.
 - Support for automatic lyrics translation recognition and display.
 - Support for cover images in the same directory and embedded audio covers.
-- Removed local rhythm analysis.
+- Visual rhythm effects share the host audio engine, using cached beat maps when available and real-time spectrum estimates otherwise.
 - Mini player optimization with improved animations.
-- Folia local playback with lyric, floating Polaroid record wall and Lattice cover mosaic views, 14 lyric effects and 5 backgrounds, sharing Mineradio's library and audio engine.
+- Folia local playback with lyric, floating Polaroid record wall and Lattice cover mosaic views, 17 lyric effects and 5 backgrounds, sharing Mineradio's library and audio engine.
 
 ## Usage
 
@@ -49,12 +49,17 @@ Build artifacts are located in `dist/`.
 
 ## Features
 
-### Folia Local Playback (v2.4.0)
+### Folia Local Playback and Visual Presets
 
 - Switch between **Mineradio / Folia** in the title bar. Folia offers lyric playback, a floating Polaroid record wall, and a Lattice cover mosaic; music keeps playing as you change views.
-- 14 built-in lyric effects: Classic, Partita, Tempera, Lumiere, Cadenza, Fume, Claddagh, Cappella, Tilt, Diorama, Monet, Pendolo, Sonnet, and Still. Twelve have their original dedicated settings panels.
+- 17 built-in lyric effects: Classic, Partita, Tempera, Lumiere, Cadenza, Fume, Claddagh, Cappella, Tilt, Diorama, Monet, Pendolo, Sonnet, Still, Hanabi, Nebbia, and Machi.
 - Five local backgrounds: Common, Latent, Sora, Monet, and Nomand. Themes, typography, translations, image assets, and visual preferences can be saved.
 - Folia shares Mineradio's local library, favorites, playlists, queue, and audio engine.
+- Live previews, global resolution and antialiasing controls, per-effect quality overrides, random styles per song, and a configurable random pool.
+- In Folia's visual settings, save, apply, overwrite, rename, or delete named presets. Resetting defaults preserves saved presets.
+- Export `.mineradio-preset.json` files and import them on another computer, optionally including shared images and Tempera layer images. Duplicate names are saved separately; click Apply to activate an imported preset.
+- Images use a shared asset library. Importing a preset with images replaces the included shared image categories. Machine backups include Folia's interface, visual settings, presets, random pool, playlist bindings, and Lattice settings; preset files can also carry images.
+- Bind a visual preset to a playlist to apply it when entering that playlist. Manual adjustments within the same playlist are preserved; deleting a preset removes its bindings.
 - This integration includes Folia's local player and visuals, without its online music, accounts, or sync services. See the [integration and source notes](./docs/FOLIA_INTEGRATION.md).
 
 ### Audio Format Support

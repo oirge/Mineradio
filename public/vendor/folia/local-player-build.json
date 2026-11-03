@@ -681,6 +681,7 @@
     "src/stores/usePlayerBottomBarLayoutStore.ts",
     "src/stores/usePlayerChromeSettingsStore.ts",
     "src/stores/useStatusMessageStore.ts",
+    "src/stores/visualizerSettingsPersistence.ts",
     "src/types.ts",
     "src/types/playerControlSlots.ts",
     "src/types/visualizerModes.ts",
