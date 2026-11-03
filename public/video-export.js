@@ -7,7 +7,8 @@
   function formatFor(Recorder) {
     if (!Recorder || typeof Recorder.isTypeSupported !== 'function') return null;
     var formats = [
-      ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'mp4'],
+      // Level 4.0 covers every offered 1080p/30 preset; level 3.0 cannot encode even 720p/30.
+      ['video/mp4;codecs=avc1.42E028,mp4a.40.2', 'mp4'],
       ['video/mp4', 'mp4'], ['video/webm;codecs=vp8,opus', 'webm'], ['video/webm', 'webm']
     ];
     return formats.find(function (entry) { return Recorder.isTypeSupported(entry[0]); }) || null;

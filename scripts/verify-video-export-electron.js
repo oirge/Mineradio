@@ -11,7 +11,7 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
 
 const ROOT = path.resolve(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -29,10 +29,10 @@ app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 
 let host, manager, server, port, dialogCount = 0, nextSaveName = '';
 const failures = [], checks = [], mediaExports = [], created = [];
-const watchdog = setTimeout(() => {
+const watchdog = setTimeout(async () => {
   const message = 'Video export acceptance exceeded its three-minute execution budget.';
   failures.push(message);
-  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ checks, mediaExports, windows: created, failures }, null, 2));
+  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ checks, mediaExports, windows: created, failures, fixture:await fixtureSnapshot() }, null, 2));
   process.stderr.write(message + '\n');
   app.exit(1);
 }, 180000);
@@ -41,7 +41,7 @@ const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
 
-function waveFixture(seconds = 7, rate = 48000) {
+function waveFixture(seconds = 7, rate = 48000, frequency = 440) {
   const frames = seconds * rate, bytes = Buffer.alloc(44 + frames * 4);
   bytes.write('RIFF'); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8);
   bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(2, 22);
@@ -51,7 +51,7 @@ function waveFixture(seconds = 7, rate = 48000) {
   for (let i = 0; i < frames; i++) {
     // Changing amplitude also exercises the existing FFT-driven animation.
     const envelope = 0.55 + 0.4 * Math.sin(i / rate * Math.PI * 4);
-    const value = Math.round(8000 * envelope * (Math.sin(i / rate * Math.PI * 880) + 0.25 * Math.sin(i / rate * Math.PI * 1760)));
+    const value = Math.round(8000 * envelope * (Math.sin(i / rate * Math.PI * 2 * frequency) + 0.25 * Math.sin(i / rate * Math.PI * 4 * frequency)));
     bytes.writeInt16LE(value, 44 + i * 4); bytes.writeInt16LE(value, 46 + i * 4);
   }
   return bytes;
@@ -59,24 +59,62 @@ function waveFixture(seconds = 7, rate = 48000) {
 
 const HOST_HTML = String.raw`<!doctype html><html><head><meta charset="UTF-8"><title>Mineradio export CI</title></head><body>
 <audio id="fixture-audio" preload="auto" src="/fixture.wav"></audio>
+<audio id="fixture-next" preload="auto" src="/fixture-next.wav"></audio>
 <script src="/video-export.js"></script><script>
 window.fixtureEvents = []; window.fixtureFrames = 0; window.fixtureTrack = 'export-fixture'; window.fixtureNoLyrics = false;
-window.audio = document.getElementById('fixture-audio');
+window.fixtureDiagnostics = []; window.fixtureDraws = 0; window.fixtureRequests = 0;
+window.fixtureDiagnostic = function(kind,detail) {
+  fixtureDiagnostics.push({kind:kind,at:performance.now(),position:window.audio ? audio.currentTime : null,frames:fixtureFrames,draws:fixtureDraws,requests:fixtureRequests,detail:detail});
+  if (fixtureDiagnostics.length>500) fixtureDiagnostics.splice(0,fixtureDiagnostics.length-500);
+};
+window.fixtureFirst = document.getElementById('fixture-audio'); window.fixtureNext = document.getElementById('fixture-next');
+window.audio = window.fixtureFirst;
 window.audioCtx = null; window.audioChain = null; window.analyser = null;
 window.initAudio = function() {
   if (window.audioCtx) return;
   const ctx = window.audioCtx = new AudioContext();
-  const source = ctx.createMediaElementSource(window.audio);
   window.analyser = ctx.createAnalyser(); window.analyser.fftSize = 2048;
   window.audioChain = { output: ctx.createGain() };
   const listenerVolume = ctx.createGain(); listenerVolume.gain.value = 0;
-  source.connect(window.analyser); window.analyser.connect(window.audioChain.output);
+  window.fixtureSources = [fixtureFirst,fixtureNext].map(function(media) {
+    const source = ctx.createMediaElementSource(media); source.connect(window.analyser); return source;
+  });
+  window.analyser.connect(window.audioChain.output);
   window.audioChain.output.connect(listenerVolume); listenerVolume.connect(ctx.destination);
 };
 window.resumeAudioAnalysis = async function() { if (window.audioCtx) await window.audioCtx.resume(); };
 window.getPlaybackDurationSeconds = function() { return audio.duration; };
 window.syncBeatMapPlaybackCursor = window.schedulePlaybackProgressUi = window.savePlaybackSession = function() {};
 window.togglePlay = async function() { if (audio.paused) await audio.play(); else audio.pause(); };
+const nativeStart = MediaRecorder.prototype.start;
+MediaRecorder.prototype.start = function() {
+  const recorder = this;
+  fixtureDiagnostic('recorder-before-start',{mimeType:recorder.mimeType,videoBits:recorder.videoBitsPerSecond,audioBits:recorder.audioBitsPerSecond,
+    tracks:recorder.stream.getTracks().map(function(track){return {kind:track.kind,state:track.readyState,muted:track.muted,settings:track.getSettings()};})});
+  ['start','pause','resume','stop','error','dataavailable'].forEach(function(kind) {
+    recorder.addEventListener(kind,function(event) { fixtureDiagnostic('recorder-'+kind,{state:recorder.state,mimeType:recorder.mimeType,size:event.data && event.data.size,error:event.error && String(event.error)}); });
+  });
+  return nativeStart.apply(recorder,arguments);
+};
+const nativeDraw = CanvasRenderingContext2D.prototype.drawImage;
+CanvasRenderingContext2D.prototype.drawImage = function() {
+  const result = nativeDraw.apply(this,arguments); fixtureDraws++;
+  if (fixtureDraws<=4 || fixtureDraws%20===0) fixtureDiagnostic('canvas-draw',{width:this.canvas.width,height:this.canvas.height});
+  return result;
+};
+const nativeCapture = HTMLCanvasElement.prototype.captureStream;
+HTMLCanvasElement.prototype.captureStream = function() {
+  const stream = nativeCapture.apply(this,arguments);
+  stream.getVideoTracks().forEach(function(track) {
+    ['mute','unmute','ended'].forEach(function(kind) { track.addEventListener(kind,function(){fixtureDiagnostic('video-track-'+kind,{state:track.readyState,muted:track.muted,settings:track.getSettings()});}); });
+    if (typeof track.requestFrame==='function') {
+      const request = track.requestFrame.bind(track);
+      track.requestFrame = function() { fixtureRequests++; if (fixtureRequests<=4 || fixtureRequests%20===0) fixtureDiagnostic('canvas-request-frame',{state:track.readyState,muted:track.muted,settings:track.getSettings()}); return request(); };
+    }
+  });
+  fixtureDiagnostic('canvas-capture-stream',{rate:arguments[0],tracks:stream.getVideoTracks().map(function(track){return {state:track.readyState,muted:track.muted,settings:track.getSettings()};})});
+  return stream;
+};
 function state() {
   return { uiLanguage: 'en', currentTrack: {id:fixtureTrack,title:'Video export fixture',artist:'Mineradio CI',album:'Background export',duration:audio.duration,cover:'',liked:false,filePath:'',format:'wav'},
     currentIndex:0,position:audio.currentTime,duration:audio.duration,playing:!audio.paused && !audio.ended,playbackRate:audio.playbackRate,
@@ -93,14 +131,18 @@ function lyrics() {
 }
 function analysis() { return {trackId:fixtureTrack,revision:1,source:'live',beats:[],drums:null,vocal:null}; }
 window.fixture = window.MineradioVideoExport.create(window, {getState:state,getLyrics:lyrics,getAnalysis:analysis,
-  emit:function(event,value) { fixtureEvents.push({event:event,value:value}); }
+  emit:function(event,value) { fixtureEvents.push({event:event,value:value,at:performance.now(),position:audio.currentTime}); fixtureDiagnostic('export-state',value); }
 });
-window.desktopWindow.onVideoExportFrame(function() { fixtureFrames++; });
-audio.addEventListener('ended', function() { window.fixture.beforeTrackEnd(); });
-window.fixtureReady = new Promise(function(resolve,reject) {
-  if (audio.readyState >= 1) return resolve();
-  audio.addEventListener('loadedmetadata',resolve,{once:true}); audio.addEventListener('error',function(){reject(new Error('Fixture audio failed'));},{once:true});
-});
+window.desktopWindow.onVideoExportFrame(function(frame) { fixtureFrames++; if (fixtureFrames<=4 || fixtureFrames%20===0) fixtureDiagnostic('offscreen-frame',{id:frame.id,width:frame.width,height:frame.height,bytes:frame.bytes.byteLength}); });
+[fixtureFirst,fixtureNext].forEach(function(media) { media.addEventListener('ended', function() { if (window.audio === media) window.fixture.beforeTrackEnd(); }); });
+window.fixtureReady = Promise.all([fixtureFirst,fixtureNext].map(function(media) { return new Promise(function(resolve,reject) {
+  if (media.readyState >= 1) return resolve();
+  media.addEventListener('loadedmetadata',resolve,{once:true}); media.addEventListener('error',function(){reject(new Error('Fixture audio failed'));},{once:true});
+}); }));
+window.fixtureHandoff = async function(trackId) {
+  fixture.beforeTrackChange(); audio.pause(); window.audio = fixtureNext; fixtureTrack = trackId;
+  audio.currentTime = 0.5; window.fixtureSource = audio; await audio.play();
+};
 window.fixtureVisuals = function(mode) { return {mode:mode,view:'lyrics',background:{mode:'latent'},daylight:false,lyricsFontScale:1,
   translation:true,subtitleContentMode:'translation',subtitleBackground:true,subtitleHidden:false,subtitleLayout:'translation',harmony:true,rhythm:true}; };
 // The recorder must reuse an already existing player audio graph.
@@ -109,6 +151,56 @@ initAudio();
 
 function logCheck(message) { checks.push(message); process.stdout.write(`PASS: ${message}\n`); }
 function evaluate(source) { return host.webContents.executeJavaScript(source, true); }
+async function fixtureSnapshot() {
+  if (!host || host.isDestroyed()) return null;
+  try {
+    return await Promise.race([evaluate('({state:window.fixture && fixture.getState(),frames:window.fixtureFrames,draws:window.fixtureDraws,requests:window.fixtureRequests,events:window.fixtureEvents,diagnostics:window.fixtureDiagnostics,position:window.audio && audio.currentTime,ended:window.audio && audio.ended})'),
+      new Promise(resolve=>setTimeout(()=>resolve({unavailable:'renderer did not answer'}),1500))]);
+  } catch (error) { return {unavailable:String(error)}; }
+}
+
+async function diagnoseCanvasCodecs() {
+  const results = [];
+  for (const [name,mimeType,extension,captureRate] of [
+    ['mp4-level-3','video/mp4;codecs=avc1.42E01E,mp4a.40.2','mp4',0],
+    ['mp4-level-4','video/mp4;codecs=avc1.42E028,mp4a.40.2','mp4',0],
+    ['mp4-level-4-auto-30','video/mp4;codecs=avc1.42E028,mp4a.40.2','mp4',30],
+    ['webm-vp8','video/webm;codecs=vp8,opus','webm',0],
+  ]) {
+    const result = await evaluate(`(async function() {
+      const mimeType = ${JSON.stringify(mimeType)};
+      if (!MediaRecorder.isTypeSupported(mimeType)) return {supported:false,mimeType};
+      const canvas = document.createElement('canvas'); canvas.width=1280; canvas.height=720;
+      const context = canvas.getContext('2d'), stream = canvas.captureStream(${captureRate}), track = stream.getVideoTracks()[0];
+      const tap = audioCtx.createMediaStreamDestination(); audioChain.output.connect(tap);
+      tap.stream.getAudioTracks().forEach(function(audioTrack){stream.addTrack(audioTrack);});
+      let timer, recorder, stopped, chunks=[];
+      try {
+        audio.currentTime=0; await audioCtx.resume(); await audio.play();
+        recorder=new MediaRecorder(stream,{mimeType:mimeType,videoBitsPerSecond:8000000,audioBitsPerSecond:192000});
+        recorder.addEventListener('dataavailable',function(event){if(event.data.size)chunks.push(event.data);});
+        stopped=new Promise(function(resolve){recorder.addEventListener('stop',resolve,{once:true});});
+        recorder.start(250);
+        let frame=0;
+        const draw=function(){context.fillStyle=frame%2?'#214bc0':'#a03421';context.fillRect(0,0,1280,720);context.fillStyle='white';context.font='80px sans-serif';context.fillText('Canvas '+frame++,120,280);if(${captureRate}===0)track.requestFrame();};
+        draw(); timer=setInterval(draw,33); await new Promise(function(resolve){setTimeout(resolve,900);});
+        clearInterval(timer); recorder.stop(); await stopped;
+        const blob=new Blob(chunks,{type:mimeType}); return {supported:true,mimeType,actualMimeType:recorder.mimeType,bytes:await blob.arrayBuffer(),frames:frame,captureRate:${captureRate}};
+      } catch(error) { return {supported:true,mimeType,error:String(error)}; }
+      finally {clearInterval(timer);audio.pause();audioChain.output.disconnect(tap);stream.getTracks().forEach(function(item){item.stop();});canvas.width=1;canvas.height=1;}
+    })()`);
+    if (result.bytes) {
+      const target=path.join(OUT,`diagnostic-${name}.${extension}`);
+      fs.writeFileSync(target,Buffer.from(result.bytes)); delete result.bytes;
+      let metadata='';
+      try { execFileSync(ffmpeg,['-hide_banner','-i',target],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}); }
+      catch(error) { metadata=String(error.stderr); }
+      result.file=path.basename(target); result.videoStream=/Video:.*\b1280x720\b/.test(metadata); result.audioStream=/Audio:/.test(metadata); result.metadata=metadata;
+    }
+    results.push(result);
+    fs.writeFileSync(path.join(OUT,'diagnostic.json'),JSON.stringify(results,null,2));
+  }
+}
 async function until(source, label, timeout = 35000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -123,7 +215,7 @@ async function until(source, label, timeout = 35000) {
 
 async function start(name, width, height, mode = 'classic', startMode = 'current', noLyrics = false, transitionBehavior) {
   nextSaveName = name;
-  await evaluate(`audio.pause(); audio.currentTime = ${startMode === 'from-start' ? 2 : 0}; fixtureTrack = 'export-fixture'; fixtureNoLyrics = ${noLyrics};
+  await evaluate(`fixtureFirst.pause(); fixtureNext.pause(); window.audio = fixtureFirst; audio.currentTime = ${startMode === 'from-start' ? 2 : 0}; fixtureTrack = 'export-fixture'; fixtureNoLyrics = ${noLyrics};
     window.fixtureSource = audio; window.fixtureContext = audioCtx; window.fixtureOutput = audioChain && audioChain.output;`);
   const transition = transitionBehavior ? `,transitionBehavior:${JSON.stringify(transitionBehavior)}` : '';
   const result = await evaluate(`window.fixture.start({width:${width},height:${height},startMode:${JSON.stringify(startMode)},visuals:fixtureVisuals(${JSON.stringify(mode)})${transition}})`);
@@ -155,7 +247,26 @@ async function hiddenTrackBecomes(trackId) {
   throw new Error(`The hidden Folia surface did not follow track ${trackId}`);
 }
 
-function decodeOutput(filePath, width, height, minDuration, maxDuration) {
+function toneMagnitude(pcm, start, seconds, frequency) {
+  const first = Math.max(0, Math.floor(start * 8000));
+  const last = Math.min(pcm.length / 4, first + Math.floor(seconds * 8000));
+  let cosine = 0, sine = 0;
+  for (let sample = first; sample < last; sample++) {
+    const value = pcm.readFloatLE(sample * 4), phase = sample / 8000 * Math.PI * 2 * frequency;
+    cosine += value * Math.cos(phase); sine += value * Math.sin(phase);
+  }
+  return Math.hypot(cosine, sine) / Math.max(1, last - first);
+}
+
+function saveSampleFrame(rgb, fileName) {
+  const bgra=Buffer.alloc(160*90*4);
+  for(let source=0,target=0;source<rgb.length;source+=3,target+=4) {
+    bgra[target]=rgb[source+2];bgra[target+1]=rgb[source+1];bgra[target+2]=rgb[source];bgra[target+3]=255;
+  }
+  fs.writeFileSync(path.join(OUT,fileName),nativeImage.createFromBitmap(bgra,{width:160,height:90}).toPNG());
+}
+
+function decodeOutput(filePath, width, height, minDuration, maxDuration, toneChange) {
   const metadata = (() => { try { execFileSync(ffmpeg, ['-hide_banner', '-i', filePath], {encoding:'utf8',windowsHide:true}); return ''; }
     catch (error) { return String(error.stderr); } })();
   assert.match(metadata, new RegExp(`Video:.*\\b${width}x${height}\\b`));
@@ -170,22 +281,32 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration) {
   const a = frame(Math.min(0.8, duration / 4)), b = frame(Math.min(2.5, duration * 0.7));
   assert.equal(a.length, 160 * 90 * 3, 'first sampled video frame must decode');
   assert.equal(b.length, a.length, 'second sampled video frame must decode');
+  const stem=path.basename(filePath,path.extname(filePath));
+  saveSampleFrame(a,`${stem}-frame-a.png`);saveSampleFrame(b,`${stem}-frame-b.png`);
   let sum = 0, variance = 0, difference = 0, highlights = 0;
   for (let index = 0; index < a.length; index++) { sum += a[index]; variance += a[index] ** 2; difference += Math.abs(a[index] - b[index]); if (a[index] > 100) highlights++; }
   const mean = sum / a.length, deviation = Math.sqrt(variance / a.length - mean ** 2);
   assert.ok(deviation > 6 && highlights > 30, `nonblack visual detail required: deviation=${deviation}, highlights=${highlights}`);
   assert.ok(difference / a.length > 0.2, `animation/lyric content must advance: difference=${difference / a.length}`);
   const result = {file:path.basename(filePath),width,height,bytes:fs.statSync(filePath).size,duration,rms,mean,deviation,frameDifference:difference/a.length};
+  if (toneChange) {
+    const firstBefore = toneMagnitude(pcm,0.35,0.3,toneChange[0]), firstAfter = toneMagnitude(pcm,0.35,0.3,toneChange[1]);
+    const lastBefore = toneMagnitude(pcm,duration-0.45,0.3,toneChange[0]), lastAfter = toneMagnitude(pcm,duration-0.45,0.3,toneChange[1]);
+    assert.ok(firstBefore > firstAfter * 4 && firstBefore > 0.01,'the recording must begin with the first song tone');
+    assert.ok(lastAfter > lastBefore * 4 && lastAfter > 0.01,'the recording must contain the new song tone after the real audio owner changes');
+    result.toneChange = {frequencies:toneChange,firstBefore,firstAfter,lastBefore,lastAfter};
+  }
   mediaExports.push(result);
   return result;
 }
 
 async function run() {
-  const wav = waveFixture();
+  const wav = waveFixture(), nextWav = waveFixture(7,48000,660);
   server = http.createServer((request, response) => {
     const pathname = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname);
     if (pathname === '/' || pathname === '/index.html') { response.writeHead(200, {'content-type':'text/html; charset=utf-8'}); response.end(HOST_HTML); return; }
     if (pathname === '/fixture.wav') { response.writeHead(200, {'content-type':'audio/wav','content-length':wav.length}); response.end(wav); return; }
+    if (pathname === '/fixture-next.wav') { response.writeHead(200, {'content-type':'audio/wav','content-length':nextWav.length}); response.end(nextWav); return; }
     const target = path.resolve(PUBLIC, `.${pathname}`);
     if (!target.startsWith(PUBLIC + path.sep) || !fs.existsSync(target) || !fs.statSync(target).isFile()) { response.writeHead(404); response.end(); return; }
     response.writeHead(200, {'content-type':mime[path.extname(target)] || 'application/octet-stream'});
@@ -221,6 +342,7 @@ async function run() {
   await host.loadURL(`http://127.0.0.1:${port}/index.html`);
   await evaluate('window.fixtureReady');
   const originalBounds = host.getBounds();
+  await diagnoseCanvasCodecs();
 
   await start('landscape-full',1280,720,'classic','from-start');
   assert.ok(await evaluate('audio.currentTime < 1.2'), 'whole-song export must restart the song after preparing');
@@ -242,17 +364,18 @@ async function run() {
   await evaluate('audio.play()');
   await until("fixture.getState().status === 'recording' && audio.currentTime > 3.2", 'recording resumes');
   // The default policy keeps recording when the user changes songs or seeks.
-  await evaluate("fixture.beforeTrackChange(); fixtureTrack = 'changed-fixture'; audio.currentTime = 0.5");
-  await until("fixture.getState().status === 'recording' && audio.currentTime > 1.0",'default recording continues after track change and seek');
+  await evaluate("fixtureHandoff('changed-fixture')");
+  await until("fixture.getState().status === 'recording' && audio === fixtureNext && audio.currentTime > 1.35",'default recording continues after a real audio-deck handoff and seek');
+  assert.equal(await evaluate('fixtureFirst.paused && fixtureSources.length === 2'),true,'only the selected song should play through the existing graph');
   await hiddenTrackBecomes('changed-fixture');
   await evaluate('fixture.stop()');
   await until("fixture.getState().status === 'saved'", 'portrait final chunk save');
   const portrait = fs.readdirSync(OUT).find(file => /^portrait-segment\.(mp4|webm)$/.test(file));
   assert.ok(portrait);
-  decodeOutput(path.join(OUT,portrait),720,1280,3.1,5.5);
+  decodeOutput(path.join(OUT,portrait),720,1280,3.1,5.5,[440,660]);
   await playerIdentityPreserved();
   assert.equal(await evaluate('audio.paused'),false,'stopping export must not stop the music');
-  logCheck('portrait export: pause/resume, default continued recording across songs and seeks, updated Folia track and final media chunk');
+  logCheck('portrait export: pause/resume, continued recording through real 440Hz→660Hz song/deck handoff, updated Folia lyrics and final media chunk');
 
   await start('landscape-1080-no-lyrics',1920,1080,'fume','current',true);
   await until('audio.currentTime > 2.4', '1080p visualization-only recording');
@@ -265,11 +388,12 @@ async function run() {
   logCheck('1080p visualization without lyric data remains exportable');
 
   await start('save-transition',1280,720,'classic','current',false,'save');
-  await until('audio.currentTime > 1.2','save-on-transition policy records a segment');
-  await evaluate("fixture.beforeTrackChange(); fixtureTrack = 'save-policy-next'; audio.currentTime = 0.5");
+  await until('audio.currentTime > 1.6','save-on-transition policy records a segment');
+  await evaluate("fixtureHandoff('save-policy-next')");
   await until("fixture.getState().status === 'saved'",'explicit save policy finishes before the next song');
   const savedTransition = fs.readdirSync(OUT).find(file=>/^save-transition\.(mp4|webm)$/.test(file));
   assert.ok(savedTransition && fs.statSync(path.join(OUT,savedTransition)).size>2000);
+  decodeOutput(path.join(OUT,savedTransition),1280,720,1.3,2.5);
   await playerIdentityPreserved();
   logCheck('explicit save policy finishes the segment on track change');
 
@@ -302,11 +426,11 @@ async function run() {
 }
 
 app.whenReady().then(run).then(async()=> {
-  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures},null,2));
+  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures,fixture:await fixtureSnapshot()},null,2));
   await manager?.dispose(); host?.destroy(); await new Promise(resolve=>server.close(resolve)); app.exit(0);
 }).catch(async error=> {
   failures.push(error.stack || String(error));
-  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures},null,2));
+  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures,fixture:await fixtureSnapshot()},null,2));
   process.stderr.write(`${error.stack || error}\n`);
   try { await manager?.dispose(); } catch {} try { host?.destroy(); } catch {} try { server?.close(); } catch {}
   app.exit(1);
