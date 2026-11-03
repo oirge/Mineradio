@@ -5,6 +5,10 @@
   var MODE_KEY = 'mineradio-player-interface-v1';
   var VISUALS_KEY = 'mineradio-folia-local-visuals-v1';
   var audioSettings = global.MineradioFoliaAudioSettings && global.MineradioFoliaAudioSettings.create(global);
+  var videoExport = global.MineradioVideoExport && global.MineradioVideoExport.create(global, {
+    getState: getState, getLyrics: getLyrics, getLyricsSignature: lyricsSignature, getAnalysis: getAnalysis, emit: event
+  });
+  global.MineradioVideoExportSession = videoExport;
   var active = false, frame = null, ready = false, loadFailed = false;
   var tickTimer = 0, audioTimer = 0, loadTimer = 0;
   var libraryRevision = 1, queueRevision = 1, lyricsRevision = 1, favoritesRevision = 1;
@@ -710,6 +714,12 @@
   async function handle(method, params) {
     var song, index, source;
     switch (method) {
+      case 'getVideoExportState': return videoExport ? videoExport.getState() : { supported: false, status: 'idle', progress: 0, elapsed: 0 };
+      case 'startVideoExport':
+        if (!videoExport) fail('EXPORT_UNAVAILABLE', '当前环境不支持视频导出');
+        return videoExport.start(params);
+      case 'stopVideoExport': return videoExport ? videoExport.stop() : { supported: false, status: 'idle', progress: 0, elapsed: 0 };
+      case 'cancelVideoExport': return videoExport ? videoExport.cancel() : { supported: false, status: 'idle', progress: 0, elapsed: 0 };
       case 'getState': return getState();
       case 'getAnalysis': return getAnalysis();
       case 'setUiLanguage':
@@ -955,7 +965,7 @@
   global.addEventListener('message', onMessage);
   // Same-origin child preferences use the host's desktop backup, including across port changes.
   global.addEventListener('storage', function (change) {
-    if (![VISUALS_KEY, 'mineradio-folia-local-lattice-v1', 'mineradio-folia-local-controls-v1'].includes(change.key)
+    if (![VISUALS_KEY, 'mineradio-folia-local-lattice-v1', 'mineradio-folia-local-controls-v1', 'mineradio-video-export-options-v1'].includes(change.key)
       || change.storageArea !== global.localStorage) return;
     if (change.key === VISUALS_KEY) syncInterfaceTransparency(change.newValue);
     var patch = {}; patch[change.key] = change.newValue;

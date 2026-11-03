@@ -1,0 +1,1 @@
+import{WebGPURenderer as e}from"./lib-CF2KBEWl.js";export{e as WebGPURenderer};

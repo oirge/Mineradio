@@ -1,0 +1,62 @@
+name: Verify video export
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/video-export.yml'
+      - 'desktop/video-export*.js'
+      - 'desktop/preload.js'
+      - 'public/video-export.js'
+      - 'vendor-src/folia/src/mineradio/**'
+      - 'scripts/verify-video-export-electron.js'
+  pull_request:
+    paths:
+      - '.github/workflows/video-export.yml'
+      - 'desktop/video-export*.js'
+      - 'desktop/preload.js'
+      - 'public/video-export.js'
+      - 'vendor-src/folia/src/mineradio/**'
+      - 'scripts/verify-video-export-electron.js'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-electron:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vendor-src/folia/package-lock.json
+      - name: Install isolated test runtime
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node node_modules/electron/install.js
+          npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
+      - name: Build the production Folia export surface
+        run: npm run build:folia
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install an independent media decoder
+        run: |
+          python -m pip install imageio-ffmpeg==0.6.0
+          $decoder = python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"
+          "MINERADIO_VERIFY_FFMPEG=$decoder" >> $env:GITHUB_ENV
+      - name: Export and decode real landscape and portrait video
+        run: node node_modules/electron/cli.js scripts/verify-video-export-electron.js
+      - name: Save media and acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-export-evidence
+          path: artifacts/ui-language/video-export/
+          if-no-files-found: error
+          retention-days: 7

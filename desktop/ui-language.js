@@ -16,6 +16,7 @@ const ENGLISH = Object.freeze({
   'Mineradio 备份': 'Mineradio backup',
   '所有文件': 'All files',
   '导出 Mineradio 存档': 'Export Mineradio settings',
+  '导出歌词／可视化视频': 'Export lyrics / visualization video',
   '导入 Mineradio 存档': 'Import Mineradio settings',
   '导入 Mineradio 插件': 'Import Mineradio plugin',
   'Mineradio 插件': 'Mineradio plugin',

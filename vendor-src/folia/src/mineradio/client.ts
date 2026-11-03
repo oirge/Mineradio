@@ -157,7 +157,7 @@ export function requestHost<T = unknown>(method: string, params: Record<string, 
         const timer = setTimeout(() => {
             pending.delete(id);
             reject(new Error(`Mineradio 操作超时：${method}`));
-        }, 60_000);
+        }, method === 'startVideoExport' ? 10 * 60_000 : 60_000);
         pending.set(id, { resolve, reject, timer });
         try {
             window.parent.postMessage({ channel: CHANNEL, version: 1, type: 'request', id, method, params }, window.location.origin);

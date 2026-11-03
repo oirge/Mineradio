@@ -5,6 +5,7 @@ const PERSISTENT_UI_STATE_KEYS = [
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
   'mineradio-folia-local-controls-v1',
+  'mineradio-video-export-options-v1',
   'apex-player-volume',
   'mineradio-lyric-layout-v1',
   'mineradio-playback-quality-v1',
@@ -73,6 +74,24 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   exportBackupFile: (payload) => ipcRenderer.invoke('mineradio-export-backup-file', payload || {}),
   importBackupFile: () => ipcRenderer.invoke('mineradio-import-backup-file'),
   importPluginFile: () => ipcRenderer.invoke('mineradio-import-plugin-file'),
+  beginVideoExport: payload => ipcRenderer.invoke('mineradio-video-export-begin', payload || {}),
+  appendVideoExportChunk: payload => ipcRenderer.invoke('mineradio-video-export-append', payload || {}),
+  finishVideoExport: payload => ipcRenderer.invoke('mineradio-video-export-finish', payload || {}),
+  cancelVideoExport: payload => ipcRenderer.invoke('mineradio-video-export-cancel', payload || {}),
+  ackVideoExportFrame: id => ipcRenderer.send('mineradio-video-export-ack', String(id || '')),
+  updateVideoExport: payload => ipcRenderer.send('mineradio-video-export-update', payload || {}),
+  onVideoExportFrame: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('mineradio-video-export-frame', listener);
+    return () => ipcRenderer.removeListener('mineradio-video-export-frame', listener);
+  },
+  onVideoExportFailure: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('mineradio-video-export-failure', listener);
+    return () => ipcRenderer.removeListener('mineradio-video-export-failure', listener);
+  },
   backupUiState: (patch) => ipcRenderer.invoke('mineradio-ui-state-write', patch || {}),
   chooseLocalMusicFolder: () => ipcRenderer.invoke('mineradio-local-music-choose-folder'),
   scanLocalMusicFolder: (folderPath, options) => ipcRenderer.invoke('mineradio-local-music-scan-folder', folderPath, options || {}),

@@ -163,6 +163,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
   'mineradio-folia-local-controls-v1',
+  'mineradio-video-export-options-v1',
   VOLUME_STORE_KEY,
   VOLUME_WHEEL_STEP_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
@@ -26299,6 +26300,8 @@ function resolveCrossfadeSeconds(duration) {
  * @returns {void}
  */
 function maybeStartCrossfade() {
+  // Save-on-transition exports need an unmixed song boundary; continuous recording follows playback.
+  if (window.MineradioVideoExportSession && window.MineradioVideoExportSession.blocksCrossfade()) return;
   if (gaplessSettings.crossfadeSeconds <= 0) return;
   if (crossfadeState.active || crossfadeState.starting) return;
   if (audioDeckList.length < 2 || gaplessShufflePending()) return;
@@ -29045,6 +29048,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   schedulePlaybackProgressUi('audio-source', true);
   audio.onended = function(){
     if (token !== trackSwitchToken) return;
+    if (window.MineradioVideoExportSession) window.MineradioVideoExportSession.beforeTrackEnd();
     finalizeListenSession(true);
     clearSongResumePosition(song); // 整首听完就别留断点，否则重播会跳到中间
     // "播完本曲"睡眠定时优先于续播：到点就停，不接下一首。
@@ -29133,6 +29137,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
 }
 
 async function playQueueAt(idx, opts) {
+  if (window.MineradioVideoExportSession) window.MineradioVideoExportSession.beforeTrackChange();
   opts = opts || {};
   if (idx < 0 || idx >= playQueue.length) return;
   if (playMode === 'shuffle' && !shuffledPlayQueueArrays.has(playQueue)) {
@@ -46197,6 +46202,7 @@ var MINERADIO_BACKUP_PLAYER_KEYS = [
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
   'mineradio-folia-local-controls-v1',
+  'mineradio-video-export-options-v1',
   VOLUME_STORE_KEY,
   PLAYBACK_RATE_STORE_KEY,
   LYRIC_LLM_TRANSLATE_STORE_KEY,

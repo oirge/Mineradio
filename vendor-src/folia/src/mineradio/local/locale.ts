@@ -1,9 +1,11 @@
 import { LOCAL_TOOLS_RESOURCES } from './localToolsLocale';
+import { LOCAL_VIDEO_EXPORT_RESOURCES } from './localVideoExportLocale';
 
 // src/mineradio/local/locale.ts
 // Local-player copy is kept separate from Folia's complete application navigation.
 export const LOCAL_UI_RESOURCES = {
     'zh-CN': {
+        ...LOCAL_VIDEO_EXPORT_RESOURCES['zh-CN'],
         ...LOCAL_TOOLS_RESOURCES['zh-CN'],
         playbackSettings: '播放设置', playbackSpeed: '播放速度', preservePitch: '保持音高，立即生效。',
         sleepTimer: '睡眠定时', timerOff: '关闭', timerTrack: '播完本曲', timerMinutes: '{{count}} 分钟',
@@ -47,6 +49,7 @@ export const LOCAL_UI_RESOURCES = {
         connected: 'Folia · 本地播放', connecting: '正在连接本地播放器…', retry: '重新连接',
     },
     en: {
+        ...LOCAL_VIDEO_EXPORT_RESOURCES.en,
         ...LOCAL_TOOLS_RESOURCES.en,
         playbackSettings: 'Playback settings', playbackSpeed: 'Playback speed', preservePitch: 'Preserves pitch and takes effect immediately.',
         sleepTimer: 'Sleep timer', timerOff: 'Off', timerTrack: 'End of track', timerMinutes: '{{count}} min',

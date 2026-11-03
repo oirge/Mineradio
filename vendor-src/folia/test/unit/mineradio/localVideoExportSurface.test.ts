@@ -1,0 +1,74 @@
+// @vitest-environment jsdom
+import React, { act } from 'react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { mountVideoExportSurface } from '../../../src/mineradio/local/LocalVideoExportSurface';
+import { normalizeVisualPreferences } from '../../../src/mineradio/local/useVisualSettings';
+import type { VideoExportInitial, VideoExportUpdate } from '../../../src/mineradio/local/videoExportBridge';
+import type { HostState } from '../../../src/mineradio/client';
+
+const runtime = vi.hoisted(() => ({ latest: null as any, clear: vi.fn(), audio: vi.fn(), release: vi.fn(), unsubscribe: vi.fn() }));
+vi.mock('../../../src/components/visualizer/VisualizerRenderer', () => ({ default: (props: any) => {
+    runtime.latest = props;
+    React.useEffect(() => { props.onReady(); }, [props.onReady]);
+    return React.createElement('div', { 'data-effect': props.mode }, props.lines.map((line: any) => line.fullText).join('|'));
+} }));
+vi.mock('../../../src/mineradio/local/videoExportAssets', () => ({ loadVideoExportAssets: vi.fn(async () => ({ emoji: [], avatar: [], portrait: [], background: [], tempera: [], release: runtime.release })) }));
+vi.mock('../../../src/mineradio/local/localAnalysisBoundary', () => ({
+    applyLocalAnalysis: vi.fn(), applyLocalAnalysisAudio: runtime.audio, advanceLocalAnalysis: vi.fn(), clearLocalAnalysis: runtime.clear,
+}));
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+let mount: HTMLDivElement, listener: ((data: VideoExportUpdate) => void) | null;
+let ready: ReturnType<typeof vi.fn>, failed: ReturnType<typeof vi.fn>;
+let initial: VideoExportInitial;
+const frames = new Map<number, FrameRequestCallback>();
+beforeEach(() => {
+    runtime.latest = null; runtime.clear.mockClear(); runtime.audio.mockClear(); runtime.release.mockClear(); runtime.unsubscribe.mockClear();
+    listener = null; frames.clear(); let serial = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++serial, callback); return serial; });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { ready: Promise.resolve() } });
+    history.replaceState({}, '', '/vendor/folia/index.html?videoExport=job-a');
+    initial = { id: 'job-a', width: 1280, height: 720, visuals: normalizeVisualPreferences({ mode: 'classic' }),
+        state: { currentTrack: { id: 'song-a', title: 'First' }, position: 0, duration: 40, playing: false, playbackRate: 1 } as HostState,
+        lyrics: { trackId: 'song-a', lines: [{ time: 0, text: 'First lyric' }, { time: 10, text: 'Later line' }] },
+        analysis: { trackId: 'song-a', revision: 1, source: 'live', beats: [], drums: null, vocal: null } };
+    ready = vi.fn(async () => {}); failed = vi.fn();
+    Object.assign(window, { mineradioVideoExport: { getInitial: async () => initial, ready, failed,
+        onUpdate: (callback: typeof listener) => { listener = callback; return runtime.unsubscribe; } } });
+    mount = document.createElement('div'); document.body.append(mount);
+});
+afterEach(async () => {
+    await act(async () => window.dispatchEvent(new Event('pagehide')));
+    mount.remove(); delete (window as any).mineradioVideoExport; vi.unstubAllGlobals(); frames.clear(); localStorage.clear();
+});
+async function nextFrame() {
+    await act(async () => { const current = [...frames.values()]; frames.clear(); current.forEach(callback => callback(performance.now())); });
+}
+it('prepares a paused hidden surface, follows changed song/lyrics, and releases subscriptions without issuing playback commands', async () => {
+    await act(async () => mountVideoExportSurface(mount));
+    for (let count = 0; count < 5; count++) await nextFrame();
+    expect(ready).toHaveBeenCalledOnce(); expect(failed).not.toHaveBeenCalled();
+    expect(runtime.latest.paused).toBe(true); expect(runtime.latest.currentTime.get()).toBe(0);
+    expect(mount.querySelector('.local-video-export-surface')?.getAttribute('data-video-export-track')).toBe('song-a');
+    expect(mount.querySelector('button,nav,audio')).toBeNull();
+    const changed: HostState = { ...initial.state, currentTrack: { ...initial.state.currentTrack!, id: 'song-b', title: 'Second' }, playing: true, position: 22 };
+    await act(async () => listener?.({ id: initial.id, state: changed, lyrics: { trackId: 'song-b', lines: [{ time: 0, text: 'New opening' }, { time: 20, text: 'New verse' }] } }));
+    expect(mount.textContent).toContain('New verse'); expect(mount.textContent).not.toContain('First lyric');
+    expect(runtime.latest.songTitle).toBe('Second'); expect(runtime.latest.currentLineIndex).toBe(1); expect(runtime.latest.mode).toBe('classic');
+    await act(async () => listener?.({ id: initial.id, state: { ...changed, position: 1 }, lyrics: initial.lyrics }));
+    expect(runtime.latest.currentLineIndex).toBe(0); expect(mount.textContent).toContain('New opening');
+    await act(async () => listener?.({ id: 'old-job', state: initial.state }));
+    expect(runtime.latest.songTitle).toBe('Second');
+    await act(async () => window.dispatchEvent(new Event('pagehide')));
+    expect(runtime.unsubscribe).toHaveBeenCalledOnce(); expect(runtime.release).toHaveBeenCalledOnce();
+    expect(frames.size).toBe(0);
+});
+it('renders pure visualization for tracks with no lyrics and does not change saved visual preferences', async () => {
+    initial.lyrics = { trackId: 'song-a', lines: [] };
+    initial.visuals.view = 'posters';
+    const before = localStorage.getItem('mineradio-folia-local-visuals-v1');
+    await act(async () => mountVideoExportSurface(mount));
+    expect(runtime.latest.showText).toBe(false); expect(runtime.latest.lines).toEqual([]);
+    expect(runtime.latest.mode).toBe('classic'); expect(mount.querySelector('.local-video-export-surface')).not.toBeNull();
+    expect(localStorage.getItem('mineradio-folia-local-visuals-v1')).toBe(before);
+});

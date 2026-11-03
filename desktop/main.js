@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { createDesktopLyricsRecovery } = require('./desktop-lyrics-recovery');
+const { createVideoExportManager } = require('./video-export');
 const { MiniPlayerRecoverySession } = require('./mini-player-recovery-session');
 const { MiniPlayerStateCache, miniPlayerThemeSignature } = require('./mini-player-state-cache');
 const {
@@ -267,6 +268,7 @@ const DESKTOP_UI_STATE_KEYS = new Set([
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
   'mineradio-folia-local-controls-v1',
+  'mineradio-video-export-options-v1',
   'mineradio-upload-tip-seen',
   'mineradio-playback-rate-v1',
   'mineradio-sleep-timer-v1',
@@ -4472,6 +4474,15 @@ function closeOverlayWindows() {
   closeMiniPlayerWindow();
 }
 
+const videoExportManager = createVideoExportManager({
+  BrowserWindow, ipcMain, dialog,
+  getMainWindow: () => mainWindow,
+  getMainServerPort: () => mainServerPort,
+  trustedMainFrameHandler,
+  translate: desktopUiText,
+});
+videoExportManager.registerIpc();
+
 ipcMain.handle('desktop-window-minimize', trustedMainFrameHandler((event) => {
   getSenderWindow(event)?.minimize();
 }));
@@ -5879,6 +5890,7 @@ async function createWindow() {
     hideMiniPlayerWindow();
   });
   mainWindow.on('closed', () => {
+    void videoExportManager.dispose();
     resetMainWindowMoveState();
     if (mainWindowStateTimer) {
       clearTimeout(mainWindowStateTimer);
@@ -6011,8 +6023,14 @@ if (!gotSingleInstanceLock) {
     if (process.platform !== 'darwin') app.quit();
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     appQuitting = true;
+    const waitForVideoExport = videoExportManager.hasPendingWork();
+    const exportCleanup = videoExportManager.dispose();
+    if (waitForVideoExport) {
+      event.preventDefault();
+      void exportCleanup.finally(() => app.quit());
+    }
     unregisterMineradioGlobalHotkeys();
     stopGlobalMouseHotkeyHook();
     closeOverlayWindows();

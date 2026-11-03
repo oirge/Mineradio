@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AudioLines, Captions, Command, Maximize2, SlidersHorizontal } from 'lucide-react';
+import { AudioLines, Captions, Command, Film, Maximize2, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LocalTool } from './localCommandCatalog';
 
@@ -50,7 +50,7 @@ export default function LocalHeader({ view, libraryOpen, settingsOpen, playbackO
         <button type="button" aria-label={t('playbackSettings')} title={t('playbackSettings')} aria-expanded={playbackOpen}
             data-testid="local-open-playback" onClick={onPlayback}><SlidersHorizontal size={16} /></button>
         {([{ id: 'commands', label: 'commands', icon: Command }, { id: 'subtitles', label: 'subtitleSettings', icon: Captions },
-            { id: 'audio', label: 'audioSettings', icon: AudioLines }] as const).map(item => <button key={item.id} type="button"
+            { id: 'audio', label: 'audioSettings', icon: AudioLines }, { id: 'videoExport', label: 'videoExport', icon: Film }] as const).map(item => <button key={item.id} type="button"
             aria-label={t(item.label)} title={`${t(item.label)}${item.id === 'commands' ? ' · Ctrl+K' : ''}`} aria-expanded={tool === item.id}
             data-testid={`local-open-${item.id}`} onClick={() => onTool(item.id)}><item.icon size={16} /></button>)}
         <button type="button" aria-label={t('focus')} title={t('focus')} onClick={onFocus}><Maximize2 size={16} /></button>
