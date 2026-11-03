@@ -1,0 +1,11 @@
+/* src/mineradio/local/localPlaybackSettings.css */
+.local-playback-settings{position:absolute;z-index:21;right:24px;top:78px;max-height:calc(100% - 102px);width:min(380px,calc(100vw - 48px));display:flex;flex-direction:column;overflow:hidden}
+.local-playback-settings fieldset{border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:12px;min-width:0;font-size:12px}
+.local-playback-settings legend{font-size:13px;font-weight:600;padding:0;margin-bottom:12px}
+.local-playback-settings fieldset+fieldset{border-top:1px solid var(--local-line);padding-top:16px}
+.local-playback-settings p{color:var(--local-muted);font-size:11px;line-height:1.6;margin:0}
+.local-playback-choices{display:flex;flex-wrap:wrap;gap:4px}
+.local-player .local-playback-choices button{min-height:32px;padding:6px 9px;font-size:12px;border:1px solid var(--local-line)}
+.local-player .local-playback-choices button[aria-pressed=true]{color:var(--local-accent);background:var(--local-hover);border-color:var(--local-accent)}
+.local-playback-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer}
+@media(max-width:720px){.local-playback-settings{top:76px;right:12px;max-height:calc(100% - 96px);width:min(380px,calc(100vw - 24px))}}

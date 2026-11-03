@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Crosshair, Focus, ListMusic, Settings2, X } from 'lucide-react';
+import { Crosshair, Focus, Hash, ListMusic, Settings2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLatticeControlsStore } from '../../stores/useLatticeControlsStore';
-import { useLatticeSettingsStore } from '../../stores/useLatticeSettingsStore';
+import { useLatticeSettingsStore } from './useLocalLatticeSettingsStore';
 import { SlideActionButton } from '../../components/shared/SlideActionButton';
 import '../../components/app/lattice/LatticeFocusButton.css';
 
@@ -36,6 +36,10 @@ export default function LocalLatticeTools({ isDaylight, onOpenQueue }: { isDayli
             <button type="button" role="menuitemcheckbox" aria-checked={settings.autoFocusOnSongChange} className="lattice-tools-action"
                 onClick={() => settings.handleToggleAutoFocusOnSongChange(!settings.autoFocusOnSongChange)}><Focus /><span>{t('home.latticeAutoFocusOnSongChange')}</span>
                 <span className={`lattice-tools-toggle ${settings.autoFocusOnSongChange ? 'is-on' : ''}`} aria-hidden="true"><span /></span></button>
+            <button type="button" role="menuitemcheckbox" aria-checked={settings.latticeBadgeCurrentOnly} className="lattice-tools-action"
+                data-testid="local-lattice-current-badge" onClick={() => settings.handleToggleLatticeBadgeCurrentOnly(!settings.latticeBadgeCurrentOnly)}>
+                <Hash /><span>{t('home.latticeBadgeCurrentOnly')}</span>
+                <span className={`lattice-tools-toggle ${settings.latticeBadgeCurrentOnly ? 'is-on' : ''}`} aria-hidden="true"><span /></span></button>
             <button type="button" role="menuitem" className="lattice-tools-action" onClick={openQueue}><ListMusic /><span>{localText('queue')}</span></button>
             <div className="lattice-tools-help-section"><button type="button" role="menuitemcheckbox" aria-checked={settings.latticeLightsOn}
                 aria-label={t('home.latticeLights')} className="lattice-tools-lights-toggle" onClick={() => settings.handleToggleLatticeLights(!settings.latticeLightsOn)}>

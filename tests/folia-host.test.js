@@ -174,6 +174,54 @@ test('Folia analysis projects only the current cached track and keeps large arra
     assert.equal(next.result.vocal, null);
 });
 
+test('Folia playback settings use the real host setters, persistence and existing audio decks', async () => {
+    const h = harness(), audio = h.context.audio, queue = h.context.playQueue;
+    h.context.currentLocalSong.localReplayGain = { trackGainDb: -2 };
+    const second = { playbackRate: 1 };
+    Object.assign(h.context, {
+        audioDeckList: [{ el: audio }, { el: second }],
+        PLAYBACK_RATE_STORE_KEY: 'rate', SLEEP_TIMER_STORE_KEY: 'sleep', REPLAY_GAIN_STORE_KEY: 'gain', GAPLESS_STORE_KEY: 'gapless',
+        clampRange: (n, low, high) => Math.max(low, Math.min(high, n)),
+        applyReplayGainForCurrentSong: () => h.calls.push('apply-replaygain'),
+        gaplessEnabledForHandoff: () => h.context.gaplessSettings.enabled || h.context.gaplessSettings.crossfadeSeconds > 0,
+        releaseGaplessPrefetch: () => h.calls.push('release-prefetch'), updateGaplessControls() {},
+    });
+    vm.runInContext(block('var PLAYBACK_RATE_MIN', 'function toggleVolumePanel(e) {')
+        + block('var REPLAY_GAIN_PREAMP_MIN', 'function readSavedReplayGainSettings()')
+        + block('function updateReplayGainControls()', 'function initReplayGainControls()')
+        + block('var GAPLESS_CROSSFADE_MIN_SECONDS', 'var gaplessSettings')
+        + block('function normalizeGaplessSettings(raw)', 'function readSavedGaplessSettings()')
+        + block('function commitGaplessSettings()', 'function initGaplessControls()')
+        + '\nvar gaplessSettings = { enabled: true, crossfadeSeconds: 0 };', h.context);
+    let reply = await h.request('setPlaybackRate', { rate: 1.5 });
+    assert.equal(reply.ok, true); assert.equal(reply.result.playbackRate, 1.5);
+    assert.equal(second.playbackRate, 1.5); assert.deepEqual(JSON.parse(h.storage.get('rate')), { rate: 1.5 });
+    reply = await h.request('setSleepTimer', { mode: '30' });
+    assert.equal(reply.result.sleepTimer.mode, '30'); assert.ok(reply.result.sleepTimer.dueAt > Date.now());
+    assert.deepEqual(JSON.parse(h.storage.get('sleep')), { mode: '30' });
+    await h.request('setSleepTimer', { mode: 'off' });
+    assert.equal(h.context.sleepTimerState.dueAt, 0);
+    reply = await h.request('setReplayGain', { enabled: true, mode: 'album', preampDb: 99, clipGuard: false });
+    assert.equal(reply.ok, true); assert.equal(reply.result.replayGain.preampDb, 12);
+    assert.deepEqual(JSON.parse(h.storage.get('gain')), { enabled: true, mode: 'album', preampDb: 12, clipGuard: false });
+    assert.ok(h.calls.includes('apply-replaygain'));
+    reply = await h.request('setGapless', { enabled: false, crossfadeSeconds: 99 });
+    assert.equal(reply.ok, true); assert.equal(reply.result.gapless.crossfadeSeconds, 10);
+    assert.deepEqual(JSON.parse(h.storage.get('gapless')), { enabled: false, crossfadeSeconds: 10 });
+    // Invalid compound edits must fail before changing any valid field in the same request.
+    for (const [method, params] of [['setPlaybackRate', { rate: NaN }], ['setSleepTimer', { mode: '90' }],
+        ['setReplayGain', { enabled: false, preampDb: 'bad' }], ['setGapless', { enabled: true, crossfadeSeconds: Infinity }]]) {
+        assert.equal((await h.request(method, params)).ok, false);
+    }
+    assert.equal(h.context.replayGainSettings.enabled, true); assert.equal(h.context.gaplessSettings.enabled, false);
+    assert.equal(h.context.audio, audio); assert.equal(h.context.playQueue, queue); assert.equal(h.context.audio.paused, false);
+    // Host-side edits are projected too; the snapshot must not share mutable settings objects.
+    h.context.gaplessSettings.enabled = true;
+    const snapshot = (await h.request('getState')).result;
+    assert.equal(snapshot.gapless.enabled, true); snapshot.gapless.enabled = false;
+    assert.equal(h.context.gaplessSettings.enabled, true);
+});
+
 test('Folia analysis sends one snapshot per track or cache revision, not on every state/audio tick', async () => {
     const h = harness();
     h.context.beatMapCache = { 'local:a': { cameraBeats: [{ time: 1 }], analyzedAt: 1 } };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Maximize2 } from 'lucide-react';
+import { Maximize2, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // src/mineradio/local/LocalHeader.tsx
@@ -16,12 +16,14 @@ interface Props {
     view: 'lyrics' | 'records' | 'posters';
     libraryOpen: boolean;
     settingsOpen: boolean;
+    playbackOpen: boolean;
+    onPlayback: () => void;
     onView: (view: Props['view']) => void;
     onLibrary: () => void;
     onSettings: () => void;
     onFocus: () => void;
 }
-export default function LocalHeader({ view, libraryOpen, settingsOpen, onView, onLibrary, onSettings, onFocus }: Props) {
+export default function LocalHeader({ view, libraryOpen, settingsOpen, playbackOpen, onPlayback, onView, onLibrary, onSettings, onFocus }: Props) {
     const { t } = useTranslation('localPlayer');
     const [target, setTarget] = useState(titlebarTarget);
     useEffect(() => {
@@ -42,6 +44,8 @@ export default function LocalHeader({ view, libraryOpen, settingsOpen, onView, o
         </div>
         <button type="button" aria-pressed={libraryOpen} data-testid="local-open-library" onClick={onLibrary}>{t('library')}</button>
         <button type="button" aria-pressed={settingsOpen} data-testid="local-open-settings" onClick={onSettings}>{t('effects')}</button>
+        <button type="button" aria-label={t('playbackSettings')} title={t('playbackSettings')} aria-expanded={playbackOpen}
+            data-testid="local-open-playback" onClick={onPlayback}><SlidersHorizontal size={16} /></button>
         <button type="button" aria-label={t('focus')} title={t('focus')} onClick={onFocus}><Maximize2 size={16} /></button>
     </nav>;
     return target ? createPortal(navigation, target) : <header className="local-header">{navigation}</header>;

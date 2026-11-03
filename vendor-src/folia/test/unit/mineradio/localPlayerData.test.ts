@@ -7,6 +7,13 @@ import { applyLocalAudio, interpolatedLocalTime, localActiveLineIndex, localLyri
 const state = { position: 10, duration: 100, playing: true, playbackRate: 1 } as HostState;
 
 describe('isolated Mineradio local display projection', () => {
+    it('updates discrete playback settings without putting the clock into React state', () => {
+        const base = localStateSignature(state);
+        expect(localStateSignature({ ...state, position: 80 })).toBe(base);
+        expect(localStateSignature({ ...state, sleepTimer: { mode: '15', dueAt: 1234, fading: false } })).not.toBe(base);
+        expect(localStateSignature({ ...state, gapless: { enabled: false, crossfadeSeconds: 2 } })).not.toBe(base);
+        expect(localStateSignature({ ...state, replayGain: { enabled: true, mode: 'album', preampDb: 2, clipGuard: true } })).not.toBe(base);
+    });
     it('preserves repeated words, punctuation, translation, and absolute source timing', () => {
         const lines = localLyricLines({ trackId: 'local:1', lines: [{
             time: 2, endTime: 5, text: '再，再  来', translation: 'Again, again',

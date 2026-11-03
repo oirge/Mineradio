@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useRef, type KeyboardEvent, type MouseEvent, type MutableRefObject, type PointerEvent } from 'react';
 import type { ReflowTile } from './layout';
 import type { LatticeTile } from './latticeModel';
+import { latticeBadgeIsIndex } from './latticeBadge';
 import { useLatticeChromeDisclosure } from './useLatticeChromeDisclosure';
 import LatticePlaybackControls from './LatticePlaybackControls';
 import { useLatticeExpansionSettled } from './useLatticeExpansionSettled';
@@ -230,9 +231,9 @@ function LatticePoster({
             <span className="lattice-poster-shade" />
             <span className="lattice-poster-lights-out" />
             <span className="lattice-poster-tint" />
-            <span className={`lattice-poster-badge ${isCurrent ? 'is-current' : ''}`}>
+            <span className={`lattice-poster-badge ${latticeBadgeIsIndex(tile) ? 'is-index' : ''} ${isCurrent ? 'is-current' : ''}`}>
                 {isCurrent && <>{t('home.latticeBadgeNow')} · </>}
-                {String(tile.queueIndex + 1).padStart(2, '0')}
+                {tile.label ?? String(tile.queueIndex + 1).padStart(2, '0')}
             </span>
             {expanded && expansionSettled && isCurrent ? (
                 <Suspense fallback={<span className="lattice-poster-copy"><LatticeTitle title={tile.title} expanded={expanded} targetPosterWidth={rect.width} /><small>{tile.artist}</small></span>}>

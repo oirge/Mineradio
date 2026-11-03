@@ -36,6 +36,9 @@ export interface HostState {
     duration: number;
     playing: boolean;
     playbackRate?: number;
+    sleepTimer?: { mode: 'off' | 'track' | '15' | '30' | '60'; dueAt: number; fading: boolean };
+    replayGain?: { enabled: boolean; mode: 'track' | 'album'; preampDb: number; clipGuard: boolean };
+    gapless?: { enabled: boolean; crossfadeSeconds: number };
     outputLatency?: number;
     volume: number;
     muted: boolean;

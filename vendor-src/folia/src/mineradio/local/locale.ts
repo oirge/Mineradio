@@ -2,6 +2,13 @@
 // Local-player copy is kept separate from Folia's complete application navigation.
 export const LOCAL_UI_RESOURCES = {
     'zh-CN': {
+        playbackSettings: '播放设置', playbackSpeed: '播放速度', preservePitch: '保持音高，立即生效。',
+        sleepTimer: '睡眠定时', timerOff: '关闭', timerTrack: '播完本曲', timerMinutes: '{{count}} 分钟',
+        timerRemaining: '约剩 {{count}} 分钟，到点淡出暂停。', timerFading: '正在淡出暂停…', timerHint: '到点淡出暂停，不改变播放队列。',
+        replayGain: '音量均衡 · ReplayGain', replayGainEnabled: '启用音量均衡', replayGainTrack: '整轨', replayGainAlbum: '整专辑',
+        replayGainPreamp: '预增益', replayGainClipGuard: '防削波', replayGainHint: '使用文件中的 ReplayGain 标签；无标签时保留原始电平。',
+        trackTransition: '歌曲过渡', gaplessPlayback: '无缝播放', crossfade: '交叉淡入淡出',
+        crossfadeHint: '0 秒关闭交叉淡化；仅影响自动续播，手动切歌不受影响。',
         visualPresets: '视觉预设', presetChoose: '选择预设', presetName: '预设名称', presetNew: '新建预设',
         presetSaveNew: '保存为新预设', presetApply: '应用', presetOverwrite: '覆盖', presetRename: '重命名', presetDelete: '删除',
         presetSaved: '已保存', presetApplied: '已应用', presetRenamed: '已重命名', presetDeleted: '已删除',
@@ -37,6 +44,13 @@ export const LOCAL_UI_RESOURCES = {
         connected: 'Folia · 本地播放', connecting: '正在连接本地播放器…', retry: '重新连接',
     },
     en: {
+        playbackSettings: 'Playback settings', playbackSpeed: 'Playback speed', preservePitch: 'Preserves pitch and takes effect immediately.',
+        sleepTimer: 'Sleep timer', timerOff: 'Off', timerTrack: 'End of track', timerMinutes: '{{count}} min',
+        timerRemaining: 'About {{count}} min left, then fade out and pause.', timerFading: 'Fading out…', timerHint: 'Fades out and pauses without changing the queue.',
+        replayGain: 'Volume normalization · ReplayGain', replayGainEnabled: 'Enable ReplayGain', replayGainTrack: 'Track', replayGainAlbum: 'Album',
+        replayGainPreamp: 'Preamp', replayGainClipGuard: 'Prevent clipping', replayGainHint: 'Uses ReplayGain tags in the file; keeps original levels when tags are missing.',
+        trackTransition: 'Track transitions', gaplessPlayback: 'Gapless playback', crossfade: 'Crossfade',
+        crossfadeHint: '0 s turns crossfade off. Applies to automatic playback; manual track changes are unaffected.',
         visualPresets: 'Visual presets', presetChoose: 'Choose a preset', presetName: 'Preset name', presetNew: 'New preset',
         presetSaveNew: 'Save as new', presetApply: 'Apply', presetOverwrite: 'Overwrite', presetRename: 'Rename', presetDelete: 'Delete',
         presetSaved: 'Saved', presetApplied: 'Applied', presetRenamed: 'Renamed', presetDeleted: 'Deleted',

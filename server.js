@@ -78,10 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '整机备份补齐 Folia 界面、视觉设置、随机池、命名预设、歌单绑定与 Lattice 设置，兼容旧备份。',
-  '视觉预设支持 JSON 导入和导出，可选携带共享图片与 Tempera 图层素材。',
-  '同名导入自动另存，导入时保留当前效果；素材校验或写入失败会撤回新预设。',
-  '支持歌单绑定视觉预设，进入歌单时自动应用；保留同歌单内的手动调整，删除预设自动解除绑定。',
+  'Folia 三种视图均可直接调整倍速、睡眠定时、音量均衡、无缝播放和交叉淡化，与主界面实时同步。',
+  '流光与云阶新增防止文字重叠，按文字变换增加间距，空间不足时缩小当前句；默认关闭，可随预设保存和交换。',
+  'Lattice 封面拼贴墙新增仅显示当前歌曲序号开关，默认关闭，设置随整机备份保存。',
+  '修复损坏的 Tempera 预设导入与恢复，减少效果切换和设置操作时的资源加载卡顿。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

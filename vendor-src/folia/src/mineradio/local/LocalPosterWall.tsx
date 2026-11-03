@@ -7,7 +7,7 @@ import PosterWall from '../../components/app/lattice/PosterWall';
 import { LatticeTransportContext, type LatticeTransport } from '../../components/app/lattice/LatticeTransportContext';
 import LatticeLyricsProvider from '../../components/app/lattice/lyrics/LatticeLyricsProvider';
 import type { LatticeTile } from '../../components/app/lattice/latticeModel';
-import { useLatticeSettingsStore } from '../../stores/useLatticeSettingsStore';
+import { useLatticeSettingsStore } from './useLocalLatticeSettingsStore';
 import { useLatticeControlsStore } from '../../stores/useLatticeControlsStore';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
 import { useStableCallbacks } from '../../hooks/useStableCallbacks';
@@ -74,7 +74,7 @@ export default function LocalPosterWall({ player, theme, isDaylight, onBack, onO
         <LatticeTransportContext.Provider value={transport}>
             <LatticeLyricsProvider source={lyricSource} songKey={songKey} keywordColoringEnabled>
                 <section data-testid="local-poster-wall" aria-label={t('home.latticeLabel')} style={style}
-                    className={`lattice-root ${isDaylight ? 'is-daylight' : ''} ${settings.latticeVignette ? 'has-vignette' : ''} ${settings.latticeLightsOn ? '' : 'is-lights-out'} ${settings.latticePosterTintEnabled ? 'has-poster-tint' : ''} ${settings.latticePosterTintUseCustomColor ? 'uses-custom-poster-tint' : ''}`}>
+                    className={`lattice-root ${settings.latticeBadgeCurrentOnly ? 'has-badge-current-only' : ''} ${isDaylight ? 'is-daylight' : ''} ${settings.latticeVignette ? 'has-vignette' : ''} ${settings.latticeLightsOn ? '' : 'is-lights-out'} ${settings.latticePosterTintEnabled ? 'has-poster-tint' : ''} ${settings.latticePosterTintUseCustomColor ? 'uses-custom-poster-tint' : ''}`}>
                     {player.active && <PosterWall tiles={tiles} currentSong={currentSong} onPlay={wall.onPlay}
                         onTogglePlayback={wall.onTogglePlayback} onSeek={wall.onSeek} onOpenPlayer={wall.onOpenPlayer} onBack={onBack} />}
                     <button type="button" className="lattice-back" data-testid="local-poster-back" onClick={onBack}

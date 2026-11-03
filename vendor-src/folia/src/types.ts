@@ -407,6 +407,8 @@ export interface ClassicTuning {
   breathingFloatMultiplier: number;
   useLegacyLayout?: boolean;
   wordSpacing?: number;
+  /** Space the words by how far they are drawn when scaled, turned and offset, so none overlaps another. */
+  avoidOverlap?: boolean;
 }
 
 export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
@@ -414,6 +416,7 @@ export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
   breathingFloatMultiplier: 1,
   useLegacyLayout: false,
   wordSpacing: 0.7,
+  avoidOverlap: false,
 };
 
 export interface CadenzaTuning {
@@ -439,6 +442,8 @@ export interface PartitaTuning {
   useSemanticLayout: boolean;
   staggerMin: number;
   staggerMax: number;
+  /** Space the words and rows by how far they are drawn when scaled, so none overlaps another. */
+  avoidOverlap?: boolean;
 }
 
 export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
@@ -446,6 +451,7 @@ export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
   useSemanticLayout: true,
   staggerMin: 20,
   staggerMax: 100,
+  avoidOverlap: false,
 };
 
 export interface FumeTuning {
