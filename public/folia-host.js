@@ -4,6 +4,7 @@
   var CHANNEL = 'mineradio-folia', VERSION = 1;
   var MODE_KEY = 'mineradio-player-interface-v1';
   var VISUALS_KEY = 'mineradio-folia-local-visuals-v1';
+  var audioSettings = global.MineradioFoliaAudioSettings && global.MineradioFoliaAudioSettings.create(global);
   var active = false, frame = null, ready = false, loadFailed = false;
   var tickTimer = 0, audioTimer = 0, loadTimer = 0;
   var libraryRevision = 1, queueRevision = 1, lyricsRevision = 1, favoritesRevision = 1;
@@ -119,6 +120,7 @@
   function getState() {
     syncRevisions();
     var media = global.audio;
+    var audioPreferences = audioSettings ? audioSettings.snapshot() : {};
     var volume = clamp(number(global.targetVolume, media ? media.volume : 1), 0, 1);
     var playbackPlaylistId = typeof global.normalizeLocalPlaylistKind === 'function'
       ? global.normalizeLocalPlaylistKind(global.localLibraryPlaybackSelection) : 'library';
@@ -135,6 +137,7 @@
         fading: !!(global.sleepTimerState && global.sleepTimerState.fading) },
       replayGain: Object.assign({ enabled: false, mode: 'track', preampDb: 0, clipGuard: true }, global.replayGainSettings),
       gapless: Object.assign({ enabled: true, crossfadeSeconds: 0 }, global.gaplessSettings),
+      audioChain: audioPreferences.audioChain, outputDevice: audioPreferences.outputDevice,
       muted: volume <= 0.0001 || !!(media && media.muted), playMode: global.playMode || 'loop',
       playbackPlaylistId: playbackPlaylistId, playbackPlaylistName: playbackPlaylistName,
       queueRevision: queueRevision, libraryRevision: libraryRevision, lyricsRevision: lyricsRevision,
@@ -465,7 +468,7 @@
   // via a body class + an injected stylesheet, so React re-renders never fight it.
   var CHROME_HIDE_DELAY = 2500, BAR_HIDE_DELAY = 2500, TOP_BAND = 96, BOTTOM_BAND = 170;
   var chromeHideTimer = 0, barHideTimer = 0, topHideTimer = 0;
-  var chromeHoverLock = false, barLock = false, barDragging = false, barFocused = false, barZone = false, topLock = false, topZone = false, chromeZone = false;
+  var chromeHoverLock = false, barLock = false, barDragging = false, barFocused = false, barZone = false, topLock = false, topFocused = false, topZone = false, chromeZone = false;
   var chromeListening = false, frameActivityDoc = null;
   function setChromeHidden(h) { document.body.classList.toggle('folia-chrome-hidden', !!h); }
   function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h); }
@@ -493,8 +496,8 @@
   function setTopHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-topnav-hidden', !!h); }
   function scheduleTopHide() {
     if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
-    if (!active || topLock) return;
-    topHideTimer = global.setTimeout(function () { topHideTimer = 0; if (active && !topLock) setTopHidden(true); }, CHROME_HIDE_DELAY);
+    if (!active || topLock || topFocused) return;
+    topHideTimer = global.setTimeout(function () { topHideTimer = 0; if (active && !topLock && !topFocused) setTopHidden(true); }, CHROME_HIDE_DELAY);
   }
   function revealTop(persist) {
     setTopHidden(false);
@@ -520,7 +523,7 @@
     if (overTop || y <= TOP_BAND) { topZone = true; revealChrome(false); revealTop(false); }
     else if (topZone) { topZone = false; scheduleChromeHide(); scheduleTopHide(); }
     // bottom: Folia player bar
-    var overBar = !!closest('.local-controls');
+    var overBar = !!closest('.local-controls,.local-slot-menu');
     barLock = overBar;
     if (overBar || (h && y >= h - BOTTOM_BAND)) { barZone = true; revealBar(false); }
     else if (barZone) { barZone = false; scheduleBarHide(); }
@@ -529,15 +532,20 @@
     // Opening a panel from the top navigation must also bring the transport back into reach.
     if (e.target && e.target.closest && e.target.closest('.local-header button')) revealBar(false);
     if (e.pointerType === 'touch') { revealChrome(false); revealTop(false); revealBar(false); }
-    if (e.target && e.target.closest && e.target.closest('.local-controls')) { barDragging = e.target.tagName !== 'SELECT'; revealBar(true); }
+    if (e.target && e.target.closest && e.target.closest('.local-controls,.local-slot-menu')) { barDragging = e.target.tagName !== 'SELECT'; revealBar(true); }
   }
   function onFramePointerUp() { if (barDragging) { barDragging = false; scheduleBarHide(); } }
   function onFrameFocusIn(e) {
-    if (e.target && e.target.closest && e.target.closest('.local-controls')) { barFocused = true; revealBar(true); }
+    if (e.target && e.target.closest && e.target.closest('.local-header')) { topFocused = true; revealTop(true); }
+    if (e.target && e.target.closest && e.target.closest('.local-controls,.local-slot-menu')) { barFocused = true; revealBar(true); }
   }
   function onFrameFocusOut(e) {
+    if (topFocused) {
+      topFocused = !!(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.local-header'));
+      if (!topFocused) scheduleTopHide();
+    }
     if (!barFocused) return;
-    barFocused = !!(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.local-controls'));
+    barFocused = !!(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.local-controls,.local-slot-menu'));
     if (!barFocused) scheduleBarHide();
   }
   function injectBarStyle(doc) {
@@ -572,7 +580,7 @@
   function detachFrameActivity() {
     if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
     if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
-    barLock = barDragging = barFocused = barZone = topLock = topZone = false;
+    barLock = barDragging = barFocused = barZone = topLock = topFocused = topZone = false;
     if (!frameActivityDoc) return;
     try {
       setBarHidden(false); setTopHidden(false);
@@ -795,6 +803,17 @@
       case 'setPlayMode':
         if (['loop', 'shuffle', 'single'].indexOf(params.mode) < 0) fail('INVALID_PLAY_MODE', '播放模式无效');
         call('setPlayMode', params.mode, { toast: false }); return getState();
+      case 'shuffleQueue':
+        call('shufflePlayQueueOnce', { toast: false, reason: 'folia-shuffle' }); queueEdited(); return getState();
+      case 'getAudioOptions':
+        if (!audioSettings) fail('HOST_NOT_READY', '音频设置尚未准备好');
+        return audioSettings.options();
+      case 'setAudioChain':
+        if (!audioSettings) fail('HOST_NOT_READY', '音频设置尚未准备好');
+        audioSettings.update(params); return getState();
+      case 'setOutputDevice':
+        if (!audioSettings) fail('HOST_NOT_READY', '音频设置尚未准备好');
+        await audioSettings.selectOutput(params); return getState();
       case 'setPlaybackRate':
         if (typeof params.rate !== 'number' || !Number.isFinite(params.rate) || params.rate < 0.5 || params.rate > 2) fail('INVALID_RATE', '播放速度无效');
         call('setPlaybackRate', params.rate, { toast: false }); return getState();
@@ -936,7 +955,7 @@
   global.addEventListener('message', onMessage);
   // Same-origin child preferences use the host's desktop backup, including across port changes.
   global.addEventListener('storage', function (change) {
-    if (![VISUALS_KEY, 'mineradio-folia-local-lattice-v1'].includes(change.key)
+    if (![VISUALS_KEY, 'mineradio-folia-local-lattice-v1', 'mineradio-folia-local-controls-v1'].includes(change.key)
       || change.storageArea !== global.localStorage) return;
     if (change.key === VISUALS_KEY) syncInterfaceTransparency(change.newValue);
     var patch = {}; patch[change.key] = change.newValue;

@@ -78,10 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 三种视图均可直接调整倍速、睡眠定时、音量均衡、无缝播放和交叉淡化，与主界面实时同步。',
-  '流光与云阶新增防止文字重叠，按文字变换增加间距，空间不足时缩小当前句；默认关闭，可随预设保存和交换。',
-  'Lattice 封面拼贴墙新增仅显示当前歌曲序号开关，默认关闭，设置随整机备份保存。',
-  '修复损坏的 Tempera 预设导入与恢复，减少效果切换和设置操作时的资源加载卡顿。',
+  'Folia 新增命令面板，Ctrl+K 搜索本地歌曲、打开歌单和执行常用操作。',
+  '播放条支持右键或长按更换快捷按钮，收藏、加入歌单与打乱队列可直接执行，布局随整机备份保存。',
+  '新增字幕快捷面板，集中调整行数、翻译、罗马音、背景与显隐，设置随视觉预设保存。',
+  'Folia 可直接调整十段均衡器、音效预设、预增益、限幅与立体声扩展，并选择宿主输出设备。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

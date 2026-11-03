@@ -1,0 +1,25 @@
+/* src/mineradio/local/localControls.css */
+.local-control-slot{position:relative;display:inline-flex;flex-shrink:0}
+.local-control-slot>button[aria-disabled=true]{opacity:.35}
+.local-slot-menu{position:absolute;bottom:calc(100% + 12px);left:0;z-index:45;display:flex;flex-direction:column;gap:2px;width:230px;max-width:calc(100vw - 32px);max-height:min(410px,65vh);padding:8px;overflow:auto;overscroll-behavior:contain;background:var(--local-raised);color:var(--local-text);border:1px solid var(--local-line);border-radius:15px;box-shadow:0 18px 50px #0004;scrollbar-width:thin}
+.local-control-slot[data-slot="1"] .local-slot-menu{left:auto;right:0}
+.local-player .local-slot-menu>button{width:100%;min-height:34px;justify-content:flex-start;gap:10px;padding:8px;border-radius:8px;font-size:12px;color:var(--local-text);background:transparent}
+.local-player .local-slot-menu>button:hover,.local-player .local-slot-menu>button:focus-visible,.local-player .local-slot-menu>button[aria-checked=true]{background:var(--local-hover);color:var(--local-accent)}
+.local-slot-menu>strong{padding:7px 8px;font-size:11px;color:var(--local-muted)}
+.local-controls:has(.local-slot-menu){z-index:28}
+.local-command-input{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:1px solid var(--local-line);background:var(--local-raised);color:var(--local-text);font-size:13px;outline:none}
+.local-command-input:focus{border-color:var(--local-accent)}
+.local-command-results{display:flex;flex-direction:column;gap:4px;max-height:390px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.local-player .local-command-result{display:flex;justify-content:flex-start;text-align:left;width:100%;padding:10px;border-radius:10px;gap:12px;min-height:44px}
+.local-command-result[aria-selected=true]{background:var(--local-hover);color:var(--local-accent)}
+.local-command-result>svg{flex-shrink:0}
+.local-command-result>span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.local-command-result strong{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.local-command-result small{font-size:10px;color:var(--local-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.local-command-paging{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--local-muted);gap:8px}
+.local-floating-slot>button{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;color:var(--local-text)}
+.local-floating-slot>button:hover{background:var(--local-hover)}
+.local-slot-menu{z-index:90}
+@media(max-width:720px){.local-transport-side>.local-control-slot>button{width:30px;height:34px;min-height:34px;padding:0}}
+@media(max-width:400px){.local-transport-side>.local-control-slot>button{width:28px}}
+@media(max-width:540px){.local-header nav{flex-wrap:wrap;justify-content:center;max-width:100%;width:max-content}.local-header nav button{min-height:28px}.local-header .local-view-switch{border:0}}

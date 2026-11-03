@@ -59,8 +59,8 @@ test('wide fullscreen keeps measured alignment and windowed desktop keeps one Fo
   assert.match(css, /body\.folia-interface-active\.folia-chrome-hidden #folia-floating-switch/);
 });
 
-test('Folia playlist button follows the heart without adding another control row', () => {
-  assert.match(controls, /data-testid="local-like"[\s\S]*?<Heart[^]*?<\/button>\s*<PlaylistSwitcher state=\{state\} command=\{command\} onManage=\{onLibrary\} \/>/);
+test('Folia playlist button follows the configurable shortcuts without adding another control row', () => {
+  assert.match(controls, /<div className="local-transport-side">\s*<LocalControlSlot index=\{0\} \/>\s*<LocalControlSlot index=\{1\} \/>\s*<PlaylistSwitcher state=\{state\} command=\{command\} onManage=\{onLibrary\} \/>/);
   assert.ok(controls.indexOf('<PlaylistSwitcher') > controls.indexOf('<div className="local-transport">'));
   assert.doesNotMatch(localCss, /\.local-playlist-row|\.local-playlist-picker/);
   assert.match(localCss, /\.local-player \.local-playlist-trigger\{[^}]*width:82px;height:34px;min-height:34px/);

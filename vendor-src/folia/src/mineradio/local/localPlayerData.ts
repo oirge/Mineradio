@@ -83,7 +83,7 @@ export function localStateSignature(state: HostState): string {
         state.currentTrack, state.currentIndex, state.duration, state.playing, state.playbackRate,
         state.volume, state.muted, state.playMode, state.queueRevision, state.libraryRevision,
         state.lyricsRevision, state.interface, state.playbackPlaylistId, state.playbackPlaylistName, state.uiLanguage,
-        state.sleepTimer, state.replayGain, state.gapless,
+        state.sleepTimer, state.replayGain, state.gapless, state.audioChain, state.outputDevice,
     ]);
 }
 

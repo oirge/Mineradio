@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useMotionValueEvent, type MotionValue } from 'framer-motion';
-import { Heart, ListMusic, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import { ListMusic, Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { HostState } from '../client';
 import type { LocalCommand } from './useLibraryPage';
 import { formatTime } from './formatTime';
 import PlaylistSwitcher from './PlaylistSwitcher';
+import LocalControlSlot from './LocalControlSlot';
 
 // src/mineradio/local/PlayerControls.tsx
 // Transport shares the host's sole audio output; the continuous playhead stays outside React state.
@@ -70,9 +71,6 @@ export default function PlayerControls({ state, currentTime, command, onQueue, o
     };
     useMotionValueEvent(currentTime, 'change', syncTime);
     useEffect(() => { syncTime(currentTime.get()); }, [duration, currentTime]);
-    const mode = state?.playMode || 'loop';
-    const ModeIcon = mode === 'shuffle' ? Shuffle : mode === 'single' ? Repeat1 : Repeat;
-    const nextMode = mode === 'loop' ? 'shuffle' : mode === 'shuffle' ? 'single' : 'loop';
     return <footer className="local-controls" data-testid="local-controls">
         <div className="local-playhead">
             <span ref={elapsed}>00:00</span>
@@ -85,9 +83,8 @@ export default function PlayerControls({ state, currentTime, command, onQueue, o
         </div>
         <div className="local-transport">
             <div className="local-transport-side">
-                <button title={t(mode)} aria-label={t(mode)} data-testid="local-play-mode" onClick={() => run('setPlayMode', { mode: nextMode })}><ModeIcon size={19} /></button>
-                <button title={t(state?.currentTrack?.liked ? 'unlike' : 'like')} aria-label={t(state?.currentTrack?.liked ? 'unlike' : 'like')} className={state?.currentTrack?.liked ? 'is-liked' : ''} disabled={!state?.currentTrack} data-testid="local-like"
-                    onClick={() => run('toggleLike', { id: state?.currentTrack?.id })}><Heart size={19} fill={state?.currentTrack?.liked ? 'currentColor' : 'none'} /></button>
+                <LocalControlSlot index={0} />
+                <LocalControlSlot index={1} />
                 <PlaylistSwitcher state={state} command={command} onManage={onLibrary} />
             </div>
             <div className="local-transport-main">

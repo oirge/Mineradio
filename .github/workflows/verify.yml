@@ -18,6 +18,7 @@ on:
           - all
           - visuals
           - portability
+          - tools
       ui_diagnostics:
         description: Enable detailed Playwright action logs
         type: boolean
@@ -79,6 +80,9 @@ jobs:
       - name: Verify Folia playback and display options
         timeout-minutes: 5
         run: python scripts/verify-browser-ui.py --suite playback
+      - name: Verify Folia command and audio tools
+        timeout-minutes: 5
+        run: python scripts/verify-browser-ui.py --suite tools
       - name: Verify bilingual UI and Folia recovery
         timeout-minutes: 15
         env:

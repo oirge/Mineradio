@@ -149,6 +149,19 @@ function harness(options = {}) {
     return { context, tracks, document, mount, frame, status, original, titlebar, updateModal, video, fileInput, storage, messages, calls, dbFavorites, preloadReleases, timers, listeners, request, runTimer };
 }
 
+test('Folia one-shot shuffle keeps the loaded song, position and playback mode', async () => {
+    const h = harness(), media = h.context.audio, track = h.context.playQueue[h.context.currentIdx];
+    const revision = h.context.MineradioFoliaHost.getState().queueRevision;
+    const result = await h.request('shuffleQueue');
+    assert.equal(result.ok, true);
+    assert.equal(h.context.audio, media);
+    assert.equal(media.currentTime, 37);
+    assert.equal(h.context.playMode, 'loop');
+    assert.equal(h.context.playQueue[h.context.currentIdx], track);
+    assert.equal(h.context.playQueue.length, 3);
+    assert.ok(result.result.queueRevision > revision);
+});
+
 test('Folia analysis projects only the current cached track and keeps large arrays out of state', async () => {
     const h = harness();
     h.context.beatMapCache = { 'local:a': { cameraBeats: [

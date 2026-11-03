@@ -17,10 +17,11 @@ export function restorePlaylistPresets(raw: unknown, presets: LocalVisualPreset[
 
 export function captureVisualPreset(value: VisualPreferences): LocalVisualSnapshot {
     const { mode, background, daylight, lyricsFontScale, translation, tunings, lyricRenderQuality,
-        randomMode, randomPool, subtitleLayout, harmony, rhythm } = value;
+        randomMode, randomPool, subtitleLayout, subtitleHidden, subtitleBackground, subtitleContentMode, harmony, rhythm } = value;
     // Image leases belong to the shared asset cache, never to a saved parameter combination.
     return JSON.parse(JSON.stringify({ mode, background: { ...background, customImage: undefined, url: undefined },
-        daylight, lyricsFontScale, translation, tunings, lyricRenderQuality, randomMode, randomPool, subtitleLayout, harmony, rhythm }));
+        daylight, lyricsFontScale, translation, tunings, lyricRenderQuality, randomMode, randomPool, subtitleLayout,
+        subtitleHidden, subtitleBackground, subtitleContentMode, harmony, rhythm }));
 }
 
 export function restoreVisualPresets(raw: unknown, normalize: (value: unknown) => VisualPreferences): LocalVisualPreset[] {

@@ -51,6 +51,10 @@ Build artifacts are located in `dist/`.
 
 ### Folia Local Playback and Visual Presets
 
+- **Ctrl+K command palette**: page through local song searches, browse playlists and run playback/settings actions. Right-click or hold either playback shortcut to customize it.
+- **Subtitle shortcuts**: group row layout, per-row content, translation/romanization, background and visibility; saved with visual presets.
+- **Audio effects and output**: edit Mineradio's 10-band EQ, presets, preamp, limiter, stereo width and output device directly in Folia, with live synchronization.
+
 - Switch between **Mineradio / Folia** in the title bar. Folia offers lyric playback, a floating Polaroid record wall, and a Lattice cover mosaic; music keeps playing as you change views.
 - 17 built-in lyric effects: Classic, Partita, Tempera, Lumiere, Cadenza, Fume, Claddagh, Cappella, Tilt, Diorama, Monet, Pendolo, Sonnet, Still, Hanabi, Nebbia, and Machi.
 - Five local backgrounds: Common, Latent, Sora, Monet, and Nomand. Themes, typography, translations, image assets, and visual preferences can be saved.

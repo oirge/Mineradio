@@ -35,6 +35,9 @@ export interface VisualPreferences {
     randomMode: boolean;
     randomPool: presets.VisualizerMode[];
     subtitleLayout: presets.SubtitleOverlayLayout;
+    subtitleHidden: boolean;
+    subtitleBackground: boolean;
+    subtitleContentMode: presets.SubtitleContentMode;
     harmony: boolean;
     view: 'lyrics' | 'records' | 'posters';
     mode: presets.VisualizerMode;
@@ -63,6 +66,7 @@ const defaults: VisualPreferences = {
     rhythm: true,
     lyricRenderQuality: DEFAULT_LYRIC_RENDER_QUALITY,
     randomMode: false, randomPool: normalizeRandomPool(null), subtitleLayout: 'translation', harmony: true,
+    subtitleHidden: false, subtitleBackground: true, subtitleContentMode: 'translation',
     view: 'lyrics',
     mode: 'classic', background: { mode: 'latent' }, daylight: false,
     lyricsFontScale: 1, translation: true, tunings: DEFAULT_LOCAL_TUNINGS,
@@ -92,6 +96,8 @@ export function restoredTunings(value: unknown): VisualizerTuningBundle {
 export function normalizeVisualPreferences(saved: unknown): VisualPreferences {
     const value = saved && typeof saved === 'object' ? saved as Partial<VisualPreferences> : {};
     const background = value.background && typeof value.background === 'object' ? value.background : defaults.background;
+    const subtitleContentMode = ['translation', 'romanization', 'both', 'none'].includes(value.subtitleContentMode ?? '')
+        ? value.subtitleContentMode! : value.translation === false ? 'none' : 'translation';
     return {
         rhythm: value.rhythm !== false,
         lyricRenderQuality: normalizeLyricRenderQuality(value.lyricRenderQuality),
@@ -100,7 +106,9 @@ export function normalizeVisualPreferences(saved: unknown): VisualPreferences {
         background: { ...background, mode: isBuiltinVisualizerBackgroundMode(background.mode) && background.mode !== 'url' ? background.mode : 'latent', url: undefined, customImage: undefined, transparent: background.transparent === true },
         daylight: value.daylight === true,
         lyricsFontScale: Number.isFinite(value.lyricsFontScale) ? Math.min(1.6, Math.max(0.6, value.lyricsFontScale!)) : 1,
-        translation: value.translation !== false,
+        translation: subtitleContentMode !== 'none',
+        subtitleContentMode, subtitleBackground: value.subtitleBackground !== false,
+        subtitleHidden: value.subtitleHidden === true || (value.subtitleHidden === undefined && value.translation === false),
         randomMode: value.randomMode === true, randomPool: normalizeRandomPool(value.randomPool),
         subtitleLayout: parseSubtitleOverlayLayout(value.subtitleLayout) ?? 'translation', harmony: value.harmony !== false,
         tunings: restoredTunings(value.tunings),
@@ -159,7 +167,16 @@ export const useVisualSettings = create<VisualSettings>()(persist((set, get) => 
         const pool = checked ? [...state.randomPool, mode] : state.randomPool.filter(value => value !== mode);
         return pool.length ? { randomPool: pool } : state;
     }),
-    update: (patch) => set(patch.lyricRenderQuality ? { ...patch, lyricRenderQuality: normalizeLyricRenderQuality(patch.lyricRenderQuality) } : patch),
+    update: patch => set(state => {
+        const next = { ...patch };
+        if (patch.subtitleContentMode !== undefined) next.translation = patch.subtitleContentMode !== 'none';
+        else if (patch.translation !== undefined) {
+            next.subtitleContentMode = patch.translation ? (state.subtitleContentMode === 'none' ? 'translation' : state.subtitleContentMode) : 'none';
+            next.subtitleHidden = !patch.translation;
+        }
+        if (patch.lyricRenderQuality) next.lyricRenderQuality = normalizeLyricRenderQuality(patch.lyricRenderQuality);
+        return next;
+    }),
     reroll: () => set(state => ({ mode: randomLyricMode(state.randomPool, state.mode) })),
     tune: (mode, patch) => set((state) => ({ tunings: {
         ...state.tunings, [mode]: normalizeLocalTuning(mode, { ...state.tunings[mode], ...patch }),
@@ -178,6 +195,6 @@ export const useVisualSettings = create<VisualSettings>()(persist((set, get) => 
 // Pool edits and named-preset bookkeeping must not rebuild the GPU stage or its preview.
 export function useVisualSceneSettings() {
     return useVisualSettings(useShallow(({ view, mode, background, daylight, lyricsFontScale, translation,
-        harmony, tunings, subtitleLayout, update, tune }) => ({ view, mode, background, daylight,
-        lyricsFontScale, translation, harmony, tunings, subtitleLayout, update, tune })));
+        harmony, tunings, subtitleLayout, subtitleHidden, subtitleBackground, subtitleContentMode, update, tune }) => ({ view, mode, background, daylight,
+        lyricsFontScale, translation, harmony, tunings, subtitleLayout, subtitleHidden, subtitleBackground, subtitleContentMode, update, tune })));
 }

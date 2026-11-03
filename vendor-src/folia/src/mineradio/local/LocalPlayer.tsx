@@ -14,6 +14,9 @@ import LocalErrorBoundary from './LocalErrorBoundary';
 import LocalStatusToast from './LocalStatusToast';
 import LocalHeader from './LocalHeader';
 import LocalPlaybackSettings from './LocalPlaybackSettings';
+import LocalToolDialogs from './LocalToolDialogs';
+import { LocalActionsContext } from './LocalActionsContext';
+import { useLocalActions } from './useLocalActions';
 import { useLocalVisualAssets } from './useLocalVisualAssets';
 import { useLocalVisualizerPrewarm } from './useLocalVisualizerPrewarm';
 import './local.css';
@@ -47,6 +50,14 @@ export default function LocalPlayer() {
         return () => document.documentElement.classList.remove('local-player-transparent');
     }, [transparent]);
     const openQueue = () => { setQueue(true); setLibraryOpen(true); setSettingsOpen(false); setPlaybackOpen(false); setFocus(false); };
+    const tools = useLocalActions({ state: player.state, command: player.command, active: player.active,
+        beforeTool: () => { setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); setFocus(false); },
+        library: queue => { setQueue(queue); setLibraryOpen(true); setSettingsOpen(false); setPlaybackOpen(false); setFocus(false); },
+        playback: () => { setPlaybackOpen(true); setLibraryOpen(false); setSettingsOpen(false); setFocus(false); },
+        visuals: () => { setSettingsOpen(true); setLibraryOpen(false); setPlaybackOpen(false); setFocus(false); },
+        focus: () => { setFocus(true); setSettingsOpen(false); setLibraryOpen(false); setPlaybackOpen(false); },
+        view: view => { visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); },
+    });
     const run = (method: string, params?: Record<string, unknown>) => { void player.command(method, params).catch(() => {}); };
     const style = useMemo(() => ({
         '--local-bg': theme.backgroundColor, '--local-text': theme.primaryColor,
@@ -70,16 +81,17 @@ export default function LocalPlayer() {
         return () => window.removeEventListener('keydown', onKey);
     }, [player.command]);
     usePlaylistVisualPreset(track?.id, player.state?.playbackPlaylistId);
-    return <main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
+    return <LocalActionsContext.Provider value={tools.context}><main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
             <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
         </LocalErrorBoundary>
         {!focus && <LocalHeader view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen} playbackOpen={playbackOpen}
-            onPlayback={() => { setPlaybackOpen(!playbackOpen); setLibraryOpen(false); setSettingsOpen(false); }}
-            onView={view => { visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); }}
-            onLibrary={() => { setLibraryOpen(!libraryOpen); setSettingsOpen(false); setPlaybackOpen(false); }}
-            onSettings={() => { setSettingsOpen(!settingsOpen); setPlaybackOpen(false); setLibraryOpen(false); }}
-            onFocus={() => { setFocus(true); setSettingsOpen(false); setPlaybackOpen(false); setLibraryOpen(false); }} />}
+            tool={tools.tool} onTool={tools.open}
+            onPlayback={() => { tools.close(); setPlaybackOpen(!playbackOpen); setLibraryOpen(false); setSettingsOpen(false); }}
+            onView={view => { tools.close(); visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); }}
+            onLibrary={() => { tools.close(); setLibraryOpen(!libraryOpen); setSettingsOpen(false); setPlaybackOpen(false); }}
+            onSettings={() => { tools.close(); setSettingsOpen(!settingsOpen); setPlaybackOpen(false); setLibraryOpen(false); }}
+            onFocus={() => { tools.close(); setFocus(true); setSettingsOpen(false); setPlaybackOpen(false); setLibraryOpen(false); }} />}
         {focus && <button className="local-exit-focus" aria-label={t('exitFocus')} title={t('exitFocus')} onClick={() => setFocus(false)}><Minimize2 size={18} /></button>}
         {isLyrics && !track && <div className="local-welcome"><Music2 size={38} /><h1>{player.state ? t('chooseSong') : t('connecting')}</h1><p>{t('emptyHint')}</p><div><button onClick={() => run('importFiles')}>{t('importFiles')}</button><button onClick={() => { setLibraryOpen(true); setFocus(false); }}>{t('library')}</button></div></div>}
         {isLyrics && track && !player.lines.length && <div className="local-no-lyrics"><Music2 size={28} /><h2>{track.title}</h2><p>{track.artist || t('unknownArtist')}</p><small>{t('noLyrics')}</small></div>}
@@ -93,7 +105,9 @@ export default function LocalPlayer() {
             {settingsOpen && <VisualSettings assets={assets} theme={theme} state={player.state} command={player.command} onClose={() => setSettingsOpen(false)}
                 onLanguage={language => run('setUiLanguage', { language })} />}
         </>}
+        <LocalToolDialogs tool={tools.tool} state={player.state} command={player.command} onClose={tools.close}
+            onLibrary={() => tools.context.run('library')} />
         <LocalStatusToast />
         {player.error && <div className="local-error" role="alert" data-testid="local-error"><span>{player.error}</span><button aria-label={t('close')} onClick={player.clearError}><X size={16} /></button></div>}
-    </main>;
+    </main></LocalActionsContext.Provider>;
 }
