@@ -288,6 +288,22 @@ test('视频源仅绑定可信主frame，隐藏画面不显示或抢焦点', asy
   assert.equal(win.configuration.webPreferences.sandbox, true);
 });
 
+test('导出桥只接收四档帧率，旧请求默认 30，非法值不创建窗口或文件', async t => {
+  const h = await harness(t);
+  for (const frameRate of [null, '60', 0, -1, 29.97, 75, 121, Infinity, NaN, {}, []]) {
+    await assert.rejects(h.begin({ frameRate }), /VIDEO_EXPORT_OPTIONS_INVALID/);
+  }
+  assert.equal(h.windows.length, 0);
+  assert.deepEqual(await fs.promises.readdir(h.directory), []);
+  for (const frameRate of [undefined, 30, 60, 90, 120]) {
+    const session = await h.begin({ frameRate });
+    const initial = h.handlers.get('mineradio-video-export-initial')(h.hiddenEvent());
+    assert.equal(initial.frameRate, frameRate ?? 30);
+    assert.equal(h.windows.at(-1).configuration.webPreferences.offscreen, undefined);
+    await h.invoke('cancel', { id: session.id });
+  }
+});
+
 test('小屏幕不会钳制离屏画面的横向或纵向真实分辨率', async t => {
   const h = await harness(t);
   for (const [width, height] of [[1280, 720], [1920, 1080], [1080, 1920]]) {

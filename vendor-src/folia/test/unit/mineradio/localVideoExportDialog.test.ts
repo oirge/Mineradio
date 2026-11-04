@@ -26,26 +26,32 @@ it('starts with continue recording, sends the selected portrait/start/transition
     await act(async () => root.render(React.createElement(LocalVideoExport, { state: song, command, onClose: vi.fn() })));
     const transition = control<HTMLSelectElement>('local-video-transition');
     expect(transition.value).toBe('continue');
+    const frameRate = control<HTMLSelectElement>('local-video-frame-rate');
+    expect(frameRate.value).toBe('30');
+    expect(Array.from(frameRate.options, option => option.value)).toEqual(['30', '60', '90', '120']);
     await act(async () => {
         const size = control<HTMLSelectElement>('local-video-resolution'); size.value = '3'; size.dispatchEvent(new Event('change', { bubbles: true }));
         const start = control<HTMLSelectElement>('local-video-start-mode'); start.value = 'current'; start.dispatchEvent(new Event('change', { bubbles: true }));
         transition.value = 'save'; transition.dispatchEvent(new Event('change', { bubbles: true }));
+        frameRate.value = '120'; frameRate.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await act(async () => { control<HTMLButtonElement>('local-video-start').click(); control<HTMLButtonElement>('local-video-start').click(); });
     expect(command).toHaveBeenCalledTimes(2);
-    expect(command).toHaveBeenLastCalledWith('startVideoExport', expect.objectContaining({ width: 1080, height: 1920, startMode: 'current', transitionBehavior: 'save', visuals: expect.objectContaining({ view: 'lyrics' }) }));
+    expect(command).toHaveBeenLastCalledWith('startVideoExport', expect.objectContaining({ width: 1080, height: 1920, frameRate: 120, startMode: 'current', transitionBehavior: 'save', visuals: expect.objectContaining({ view: 'lyrics' }) }));
     await act(async () => resolveStart({ ...idle, status: 'recording', transitionBehavior: 'save' }));
     expect(control<HTMLButtonElement>('local-video-stop').disabled).toBe(false);
     expect(control<HTMLSelectElement>('local-video-transition').disabled || control<HTMLSelectElement>('local-video-transition').closest('fieldset')!.disabled).toBe(true);
+    expect(frameRate.closest('fieldset')!.disabled).toBe(true);
 });
 it('keeps newer host progress when a stale initial response arrives and detaches without cancelling the recording', async () => {
     let resolveState!: (state: LocalVideoExportState) => void;
     const command = vi.fn(() => new Promise<LocalVideoExportState>(resolve => { resolveState = resolve; }));
     await act(async () => root.render(React.createElement(LocalVideoExport, { state: song, command, onClose: vi.fn() })));
-    await act(async () => host.listener?.({ ...idle, status: 'paused', elapsed: 25, progress: .25, transitionBehavior: 'save' }));
+    await act(async () => host.listener?.({ ...idle, status: 'paused', elapsed: 25, progress: .25, transitionBehavior: 'save', frameRate: 90 }));
     await act(async () => resolveState(idle));
     expect(control('local-video-status').getAttribute('data-status')).toBe('paused');
     expect(control<HTMLSelectElement>('local-video-transition').value).toBe('save');
+    expect(control<HTMLSelectElement>('local-video-frame-rate').value).toBe('90');
     expect(control('local-video-transition-hint').textContent).toBe('videoTransitionHint_save');
     await act(async () => root.render(null));
     expect(host.unsubscribe).toHaveBeenCalled();
@@ -74,13 +80,15 @@ it('can cancel during preparation without a late start response reviving the job
     await act(async () => resolveStart({ ...idle, status: 'recording' }));
     expect(control('local-video-status').getAttribute('data-status')).toBe('cancelled');
 });
-it('remembers the selected transition behavior after the dialog is closed and reopened', async () => {
+it('remembers the selected frame rate and transition behavior after the dialog is closed and reopened', async () => {
     const command = vi.fn(async () => idle);
     const render = () => root.render(React.createElement(LocalVideoExport, { state: song, command, onClose: vi.fn() }));
     await act(async () => render());
     await act(async () => { const select = control<HTMLSelectElement>('local-video-transition'); select.value = 'save'; select.dispatchEvent(new Event('change', { bubbles: true })); });
-    expect(localStorage.getItem(VIDEO_EXPORT_OPTIONS_KEY)).toBe('{"transitionBehavior":"save"}');
+    await act(async () => { const select = control<HTMLSelectElement>('local-video-frame-rate'); select.value = '60'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(JSON.parse(localStorage.getItem(VIDEO_EXPORT_OPTIONS_KEY)!)).toEqual({ transitionBehavior: 'save', frameRate: 60 });
     await act(async () => root.render(null)); await act(async () => render());
     expect(control<HTMLSelectElement>('local-video-transition').value).toBe('save');
+    expect(control<HTMLSelectElement>('local-video-frame-rate').value).toBe('60');
     expect(control('local-video-transition-hint').textContent).toBe('videoTransitionHint_save');
 });

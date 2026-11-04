@@ -28,7 +28,7 @@ beforeEach(() => {
     vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
     Object.defineProperty(document, 'fonts', { configurable: true, value: { ready: Promise.resolve() } });
     history.replaceState({}, '', '/vendor/folia/index.html?videoExport=job-a');
-    initial = { id: 'job-a', width: 1280, height: 720, visuals: normalizeVisualPreferences({ mode: 'classic' }),
+    initial = { id: 'job-a', width: 1280, height: 720, frameRate: 120, visuals: normalizeVisualPreferences({ mode: 'classic' }),
         state: { currentTrack: { id: 'song-a', title: 'First' }, position: 0, duration: 40, playing: false, playbackRate: 1 } as HostState,
         lyrics: { trackId: 'song-a', lines: [{ time: 0, text: 'First lyric' }, { time: 10, text: 'Later line' }] },
         analysis: { trackId: 'song-a', revision: 1, source: 'live', beats: [], drums: null, vocal: null } };
@@ -50,6 +50,7 @@ it('prepares a paused hidden surface, follows changed song/lyrics, and releases 
     expect(ready).toHaveBeenCalledOnce(); expect(failed).not.toHaveBeenCalled();
     expect(runtime.latest.paused).toBe(true); expect(runtime.latest.currentTime.get()).toBe(0);
     expect(mount.querySelector('.local-video-export-surface')?.getAttribute('data-video-export-track')).toBe('song-a');
+    expect(mount.querySelector('.local-video-export-surface')?.getAttribute('data-video-export-frame-rate')).toBe('120');
     expect(mount.querySelector('button,nav,audio')).toBeNull();
     const changed: HostState = { ...initial.state, currentTrack: { ...initial.state.currentTrack!, id: 'song-b', title: 'Second' }, playing: true, position: 22 };
     await act(async () => listener?.({ id: initial.id, state: changed, lyrics: { trackId: 'song-b', lines: [{ time: 0, text: 'New opening' }, { time: 20, text: 'New verse' }] } }));

@@ -92,7 +92,7 @@ function Surface({ initial, assets, signal }: { initial: VideoExportInitial; ass
     const track = state.currentTrack;
     const tuning = visuals.tunings[visuals.mode as keyof typeof visuals.tunings] as { render?: Parameters<typeof resolveLyricRenderQuality>[1] } | undefined;
     const quality = resolveLyricRenderQuality(visuals.lyricRenderQuality, tuning?.render);
-    return <div ref={stage} className="local-video-export-surface" data-video-export-mode={visuals.mode} data-video-export-track={track?.id ?? ''} style={{ color: theme.primaryColor, background: theme.backgroundColor }}>
+    return <div ref={stage} className="local-video-export-surface" data-video-export-mode={visuals.mode} data-video-export-frame-rate={initial.frameRate} data-video-export-track={track?.id ?? ''} style={{ color: theme.primaryColor, background: theme.backgroundColor }}>
         <LyricRenderQualityPinContext.Provider value={quality}>
             <VisualizerRenderer mode={visuals.mode} theme={theme} isDaylight={visuals.daylight} onReady={ready}
                 currentTime={currentTime} currentLineIndex={lineIndex} lines={lines} audioPower={power} audioBands={bands} paused={!state.playing}

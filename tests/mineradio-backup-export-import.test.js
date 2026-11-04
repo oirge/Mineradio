@@ -727,7 +727,7 @@ test('Folia 设置、命名预设、歌单绑定和 Lattice 设置随整机备�
   const saved = { 'mineradio-folia-local-visuals-v1': visuals,
     'mineradio-folia-local-lattice-v1': '{"state":{"latticeLightsOn":false},"version":0}',
     'mineradio-folia-local-controls-v1': '{"state":{"slots":["audio","subtitles"]},"version":0}',
-    'mineradio-video-export-options-v1': '{"transitionBehavior":"save"}',
+    'mineradio-video-export-options-v1': '{"transitionBehavior":"save","frameRate":120}',
     'mineradio-player-interface-v1': 'folia' };
   const source = loadBackupModule({ localStorage: saved });
   const payload = await source.context.collectMineradioBackupPayload();

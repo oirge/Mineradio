@@ -28,7 +28,7 @@ app.commandLine.appendSwitch('use-angle', 'swiftshader');
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 
 let host, manager, server, port, permissionBridge, dialogCount = 0, nextSaveName = '';
-const failures = [], checks = [], mediaExports = [], created = [], surfaceSnapshots = [], permissionDecisions = [];
+const failures = [], checks = [], mediaExports = [], created = [], surfaceSnapshots = [], permissionDecisions = [], frameRateChecks = [];
 const watchdog = setTimeout(async () => {
   const message = 'Video export acceptance exceeded its three-minute execution budget.';
   failures.push(message);
@@ -208,22 +208,33 @@ async function until(source, label, timeout = 35000) {
   throw new Error(`Timed out: ${label}; state=${JSON.stringify(await evaluate('window.fixture.getState()'))}`);
 }
 
-async function start(name, width, height, mode = 'classic', startMode = 'current', noLyrics = false, transitionBehavior) {
+async function start(name, width, height, mode = 'classic', startMode = 'current', noLyrics = false, transitionBehavior, frameRate) {
   nextSaveName = name;
   await evaluate(`fixtureFirst.pause(); fixtureNext.pause(); window.audio = fixtureFirst; audio.src=${JSON.stringify(name === 'landscape-full' ? '/fixture.wav' : '/fixture-long.wav')}; audio.load();`);
   await until('audio.readyState>=3','fixture song load');
   await evaluate(`audio.currentTime = ${startMode === 'from-start' ? 2 : 0}; fixtureTrack = 'export-fixture'; fixtureNoLyrics = ${noLyrics};
     window.fixtureSource = audio; window.fixtureContext = audioCtx; window.fixtureOutput = audioChain && audioChain.output; window.fixtureLastFrame=null;`);
   const transition = transitionBehavior ? `,transitionBehavior:${JSON.stringify(transitionBehavior)}` : '';
+  const frameRateOption = frameRate === undefined ? '' : `,frameRate:${JSON.stringify(frameRate)}`;
   // Read the playhead in the same renderer task that starts capture. Evidence
   // snapshots can be slow on SwiftShader and must not change this timing check.
-  const result = await evaluate(`(async function(){const result=await window.fixture.start({width:${width},height:${height},startMode:${JSON.stringify(startMode)},visuals:fixtureVisuals(${JSON.stringify(mode)})${transition}});return {...result,playheadAtStart:audio.currentTime};})()`);
+  const result = await evaluate(`(async function(){const result=await window.fixture.start({width:${width},height:${height},startMode:${JSON.stringify(startMode)},visuals:fixtureVisuals(${JSON.stringify(mode)})${transition}${frameRateOption}});return {...result,playheadAtStart:audio.currentTime};})()`);
   assert.notEqual(result?.status, 'error', JSON.stringify(result));
   await until("fixture.getState().status === 'recording'", `${name} recording`);
   const surface = BrowserWindow.getAllWindows().find(win=>new URL(win.webContents.getURL() || 'about:blank').searchParams.has('videoExport'));
   assert.ok(surface,'the production offscreen Folia surface must exist');
   assert.deepEqual(await surface.webContents.executeJavaScript('({width:innerWidth,height:innerHeight})'),{width,height},
     'offscreen layout must match the requested aspect ratio and resolution');
+  const targetFrameRate = frameRate ?? 30;
+  assert.equal(result.frameRate, targetFrameRate, 'host state must retain the selected FPS');
+  const capture = await evaluate('fixtureCaptureInfo');
+  assert.equal(capture.constraints.video.mandatory.maxFrameRate, targetFrameRate, 'native tab capture must request the selected FPS');
+  assert.ok(capture.settings.frameRate > 0 && capture.settings.frameRate <= targetFrameRate + 0.01,
+    'the native track must report a valid frame rate within the selected cap');
+  assert.equal(await surface.webContents.executeJavaScript("Number(document.querySelector('.local-video-export-surface').dataset.videoExportFrameRate)"),
+    targetFrameRate, 'the hidden production surface must receive the selected FPS');
+  frameRateChecks.push({ name, targetFrameRate, capture });
+  fs.writeFileSync(path.join(OUT, 'frame-rate-checks.json'), JSON.stringify(frameRateChecks, null, 2));
   assert.equal(await evaluate('audio === fixtureSource && (!fixtureContext || audioCtx === fixtureContext) && (!fixtureOutput || audioChain.output === fixtureOutput)'), true,
     'export must keep the existing media element and audio graph');
   return result;
@@ -487,7 +498,7 @@ async function run() {
   await playerIdentityPreserved();
   logCheck('whole-song landscape export: real Folia lyrics, moving frames, audio and automatic save');
 
-  await start('portrait-segment',720,1280,'fume');
+  await start('portrait-segment',720,1280,'fume','current',false,undefined,60);
   await until('audio.currentTime > 1.1', 'portrait first segment');
   await evaluate('audio.pause()');
   await until("fixture.getState().status === 'paused'", 'recording follows host pause');
@@ -511,7 +522,7 @@ async function run() {
   await playerIdentityPreserved();
   logCheck('portrait export: pause/resume, continued recording through real 440Hz→660Hz song/deck handoff, updated Folia lyrics and final media chunk');
 
-  await start('landscape-1080-no-lyrics',1920,1080,'fume','current',true);
+  await start('landscape-1080-no-lyrics',1920,1080,'fume','current',true,undefined,90);
   await until('audio.currentTime > 5', '1080p visualization-only recording');
   await stopWhilePreservingPlayback('1080p');
   const hd = fs.readdirSync(OUT).find(file => /^landscape-1080-no-lyrics\.(mp4|webm)$/.test(file));
@@ -520,7 +531,7 @@ async function run() {
   await playerIdentityPreserved();
   logCheck('1080p visualization without lyric data remains exportable');
 
-  await start('save-transition',1280,720,'classic','current',false,'save');
+  await start('save-transition',1280,720,'classic','current',false,'save',120);
   await until('audio.currentTime > 1.6','save-on-transition policy records a segment');
   await evaluate("fixtureHandoff('save-policy-next')");
   await until("fixture.getState().status === 'saved'",'explicit save policy finishes before the next song');
@@ -529,6 +540,8 @@ async function run() {
   await decodeRecordedSegment(path.join(OUT,savedTransition),1280,720,1.3);
   await playerIdentityPreserved();
   logCheck('explicit save policy finishes the segment on track change');
+  assert.deepEqual([...new Set(frameRateChecks.map(check=>check.targetFrameRate))].sort((a,b)=>a-b),[30,60,90,120]);
+  logCheck('all four FPS targets reach production native capture and export decodable audio/video (software GPU does not certify sustained target FPS)');
 
   const beforeCancel = fs.readdirSync(OUT).sort();
   await start('cancel-preserve',1280,720);

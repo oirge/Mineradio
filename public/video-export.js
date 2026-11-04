@@ -2,6 +2,7 @@
 (function (global) {
   'use strict';
   var PRESETS = ['1280x720', '1920x1080', '720x1280', '1080x1920'];
+  var FRAME_RATES = [30, 60, 90, 120];
   var MAX_PENDING_BYTES = 32 * 1024 * 1024;
   var MAX_CHUNK_BYTES = 8 * 1024 * 1024;
   function formatFor(Recorder) {
@@ -14,7 +15,7 @@
   function create(host, services) {
     var bridge = host.desktopWindow, current = null;
     var supported = !!(bridge && bridge.beginVideoExport && host.MediaStream && host.navigator && host.navigator.mediaDevices && host.navigator.mediaDevices.getUserMedia && formatFor(host.MediaRecorder));
-    var state = { supported: supported, status: 'idle', progress: 0, elapsed: 0, transitionBehavior: 'continue' };
+    var state = { supported: supported, status: 'idle', progress: 0, elapsed: 0, transitionBehavior: 'continue', frameRate: 30 };
     function publish(patch) {
       state = Object.assign({}, state, patch);
       services.emit('videoExport', Object.assign({}, state));
@@ -150,7 +151,7 @@
           s.progressAt = now;
           publish({ elapsed: s.elapsed, progress: Math.max(0, Math.min(1, (visualState.position - s.startPosition) / Math.max(0.01, s.base.duration - s.startPosition))) });
         }
-        s.timer = host.setTimeout(function () { update(s); }, 33);
+        s.timer = host.setTimeout(function () { update(s); }, Math.max(0, 1000 / s.frameRate - (Date.now() - now)));
       } catch (error) { fail(s, error); }
     }
     async function waitForFrame(s) {
@@ -166,6 +167,8 @@
       if (current) throw new Error('A video export is already running.');
       if (!supported) throw new Error('Video export requires the Mineradio desktop app.');
       if (PRESETS.indexOf(params.width + 'x' + params.height) < 0 || ['from-start', 'current'].indexOf(params.startMode) < 0) throw new Error('Invalid video export preset.');
+      var frameRate = params.frameRate === undefined ? 30 : params.frameRate;
+      if (FRAME_RATES.indexOf(frameRate) < 0) throw new Error('Invalid video export frame rate.');
       var transitionBehavior = params.transitionBehavior === undefined ? 'continue' : params.transitionBehavior;
       if (['continue', 'save'].indexOf(transitionBehavior) < 0) throw new Error('Invalid recording transition behavior.');
       var initial = services.getState(), media = host.audio;
@@ -173,14 +176,14 @@
       if (host.crossfadeState && (host.crossfadeState.active || host.crossfadeState.starting)) throw new Error('Wait for the song transition to finish before exporting.');
       var format = formatFor(host.MediaRecorder);
       var s = { id: '', audio: media, trackId: initial.currentTrack.id, width: params.width, height: params.height,
-        transitionBehavior: transitionBehavior, lyricSignature: null, lyricsAt: 0,
+        transitionBehavior: transitionBehavior, frameRate: frameRate, lyricSignature: null, lyricsAt: 0,
         listeners: [], writes: Promise.resolve(), sequence: 0, pendingBytes: 0, elapsed: 0,
         stateAt: 0, analysisAt: 0, progressAt: 0, startPosition: params.startMode === 'from-start' ? 0 : initial.position };
       current = s;
-      publish({ status: 'preparing', progress: 0, elapsed: 0, error: '', fileName: '', transitionBehavior: transitionBehavior });
+      publish({ status: 'preparing', progress: 0, elapsed: 0, error: '', fileName: '', transitionBehavior: transitionBehavior, frameRate: frameRate });
       try {
         s.unsubscribeFailure = bridge.onVideoExportFailure(function (failure) { if (failure.id === s.id) fail(s, new Error(failure.error)); });
-        var result = await bridge.beginVideoExport({ width: s.width, height: s.height, extension: format[1],
+        var result = await bridge.beginVideoExport({ width: s.width, height: s.height, frameRate: s.frameRate, extension: format[1],
           fileName: initial.currentTrack.title + '-' + s.width + 'x' + s.height + '.' + format[1], visuals: params.visuals,
           state: Object.assign({}, initial, { playing: false, position: s.startPosition }), lyrics: services.getLyrics(), analysis: services.getAnalysis() });
         if (result.cancelled) { if (!s.cancelled) await discard(s); return snapshot(); }
@@ -192,7 +195,7 @@
         var capture = host.navigator.mediaDevices.getUserMedia({ audio: false, video: { mandatory: {
           chromeMediaSource: 'tab', chromeMediaSourceId: result.sourceId,
           minWidth: s.width, maxWidth: s.width, minHeight: s.height, maxHeight: s.height,
-          minFrameRate: 1, maxFrameRate: 30
+          minFrameRate: 1, maxFrameRate: s.frameRate
         } } }).then(function (stream) {
           if (s.cancelled || current !== s) { stream.getTracks().forEach(function (track) { track.stop(); }); return null; }
           return stream;
@@ -231,7 +234,7 @@
         }
         if (s.cancelled) return snapshot();
         s.recorder = new host.MediaRecorder(s.stream, { mimeType: format[0], audioBitsPerSecond: 320000,
-          videoBitsPerSecond: s.width * s.height > 1000000 ? 14000000 : 8000000 });
+          videoBitsPerSecond: (s.width * s.height > 1000000 ? 14000000 : 8000000) * s.frameRate / 30 });
         s.recorder.ondataavailable = function (event) { queueChunk(s, event.data); };
         s.recorder.onerror = function (event) { fail(s, event.error || new Error('Video encoding failed.')); };
         s.stopped = new Promise(function (resolve) { s.recorder.onstop = resolve; });
