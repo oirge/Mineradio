@@ -4,7 +4,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const FRAME_RATE = 30;
 const MAX_CHUNK_BYTES = 8 * 1024 * 1024;
 const MAX_PENDING_BYTES = 32 * 1024 * 1024;
 const MAX_PENDING_CHUNKS = 8;
@@ -53,7 +52,6 @@ function createVideoExportManager({
     const win = record.window;
     record.window = null;
     if (win && !win.isDestroyed()) {
-      try { win.webContents.stopPainting(); } catch {}
       win.destroy();
     }
   }
@@ -156,15 +154,14 @@ function createVideoExportManager({
         backgroundColor: '#09090b', autoHideMenuBar: true, title: 'Mineradio Video Export',
         webPreferences: {
           preload: preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true,
-          backgroundThrottling: false, offscreen: true,
+          backgroundThrottling: false,
         },
       });
       record.window = win;
       // Electron's constructor centers through the display work area and can shrink even an
-      // offscreen window. Lift the native size limit above, then restore the real render size
+      // hidden window. Lift the native size limit above, then restore the real render size
       // after construction. No zoom or low-resolution bitmap upscaling is involved.
       win.setContentSize(record.width, record.height, false);
-      win.webContents.setFrameRate(FRAME_RATE);
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       const preventNavigation = navigation => navigation.preventDefault();
       win.webContents.on('will-navigate', preventNavigation);
@@ -319,4 +316,4 @@ function createVideoExportManager({
   return { registerIpc, dispose, hasPendingWork: () => !!active || cleanups.size > 0 };
 }
 
-module.exports = { createVideoExportManager, FRAME_RATE, MAX_CHUNK_BYTES, MAX_PENDING_BYTES, MAX_PENDING_CHUNKS };
+module.exports = { createVideoExportManager, MAX_CHUNK_BYTES, MAX_PENDING_BYTES, MAX_PENDING_CHUNKS };

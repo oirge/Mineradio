@@ -137,9 +137,8 @@ test('视频源仅绑定可信主frame，隐藏画面不显示或抢焦点', asy
   assert.equal(win.configuration.focusable, false);
   assert.equal(win.configuration.skipTaskbar, true);
   assert.equal(win.configuration.type, 'toolbar');
-  assert.equal(win.configuration.webPreferences.offscreen, true);
+  assert.notEqual(win.configuration.webPreferences.offscreen, true);
   assert.equal(win.configuration.webPreferences.sandbox, true);
-  assert.equal(win.frameRate, 30);
 });
 
 test('小屏幕不会钳制离屏画面的横向或纵向真实分辨率', async t => {

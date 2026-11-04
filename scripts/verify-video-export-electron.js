@@ -147,7 +147,7 @@ initAudio();
 function logCheck(message) { checks.push(message); process.stdout.write(`PASS: ${message}\n`); }
 function evaluate(source) { return host.webContents.executeJavaScript(source, true); }
 async function snapshotSurfaces(label, pixelSample = false) {
-  for (const surface of BrowserWindow.getAllWindows().filter(win=>win.webContents.isOffscreen())) {
+  for (const surface of BrowserWindow.getAllWindows().filter(win=>new URL(win.webContents.getURL() || 'about:blank').searchParams.has('videoExport'))) {
     try {
       const result = await Promise.race([surface.webContents.executeJavaScript(`(function() {
         const bounds = function(node) { const r=node.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; };
@@ -220,7 +220,7 @@ async function start(name, width, height, mode = 'classic', startMode = 'current
   const result = await evaluate(`(async function(){const result=await window.fixture.start({width:${width},height:${height},startMode:${JSON.stringify(startMode)},visuals:fixtureVisuals(${JSON.stringify(mode)})${transition}});return {...result,playheadAtStart:audio.currentTime};})()`);
   assert.notEqual(result?.status, 'error', JSON.stringify(result));
   await until("fixture.getState().status === 'recording'", `${name} recording`);
-  const surface = BrowserWindow.getAllWindows().find(win=>win.webContents.isOffscreen());
+  const surface = BrowserWindow.getAllWindows().find(win=>new URL(win.webContents.getURL() || 'about:blank').searchParams.has('videoExport'));
   assert.ok(surface,'the production offscreen Folia surface must exist');
   assert.deepEqual(await surface.webContents.executeJavaScript('({width:innerWidth,height:innerHeight})'),{width,height},
     'offscreen layout must match the requested aspect ratio and resolution');
@@ -256,7 +256,7 @@ async function stopWhilePreservingPlayback(label) {
 async function hiddenTrackBecomes(trackId) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
-    const surface = BrowserWindow.getAllWindows().find(win=>win.webContents.isOffscreen());
+    const surface = BrowserWindow.getAllWindows().find(win=>new URL(win.webContents.getURL() || 'about:blank').searchParams.has('videoExport'));
     assert.ok(surface,'recording must retain the hidden Folia surface');
     const matches = await surface.webContents.executeJavaScript(`document.querySelector('.local-video-export-surface')?.dataset.videoExportTrack === ${JSON.stringify(trackId)} && document.body.textContent.includes('新歌曲歌词')`);
     if (matches) return;
@@ -403,13 +403,15 @@ async function run() {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
   app.on('browser-window-created', (_event, win) => {
-    const record = {id:win.id,shown:false,offscreen:win.webContents.isOffscreen()}; created.push(record);
+    const record = {id:win.id,shown:false,exportSurface:false}; created.push(record);
     win.on('show', () => { record.shown = true; });
     win.webContents.on('console-message', (_event, level, message) => {
       if (level >= 2) fs.appendFileSync(path.join(OUT, 'renderer.log'), `${win.id}: ${message}\n`);
     });
     win.webContents.on('render-process-gone', (_event, details) => { failures.push(`renderer ${win.id}: ${details.reason}`); });
-    if(record.offscreen)win.webContents.on('dom-ready',()=> {
+    win.webContents.on('dom-ready',()=> {
+      if(!new URL(win.webContents.getURL() || 'about:blank').searchParams.has('videoExport'))return;
+      record.exportSurface=true;
       void win.webContents.executeJavaScript(`(function(){
         const info=window.__videoExportRafDiagnostic={count:0,startedAt:performance.now(),lastAt:0,maxGap:0};
         const tick=function(at){info.count++;if(info.lastAt)info.maxGap=Math.max(info.maxGap,at-info.lastAt);info.lastAt=at;requestAnimationFrame(tick);};
@@ -521,7 +523,7 @@ async function run() {
   rogue.destroy();
   assert.deepEqual(host.getBounds(),originalBounds,'export must never resize the main player');
   assert.equal(created.some(window=>window.shown),false,'export must never show a window or take focus');
-  assert.ok(created.filter(window=>window.offscreen).length>=4,'real offscreen windows must have been used');
+  assert.ok(created.filter(window=>window.exportSurface).length>=4,'real offscreen windows must have been used');
   assert.deepEqual(failures,[]);
   logCheck('sender authorization, hidden-window cleanup and unchanged player bounds');
 }
