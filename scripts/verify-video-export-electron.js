@@ -366,7 +366,7 @@ function inspectVideoTimeline(filePath, audioDuration) {
     audioMinusVideoEnd:videoEnd===null?null:audioDuration-videoEnd,framesPerSecond:counts,frames};
 }
 
-function decodeOutput(filePath, width, height, minDuration, maxDuration, toneChange) {
+function decodeOutput(filePath, width, height, minDuration, maxDuration, toneChange, mainLyrics = false) {
   const metadata = (() => { try { execFileSync(ffmpeg, ['-hide_banner', '-i', filePath], {encoding:'utf8',windowsHide:true}); return ''; }
     catch (error) { return String(error.stderr); } })();
   assert.match(metadata, new RegExp(`Video:.*\\b${width}x${height}\\b`));
@@ -390,6 +390,19 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   for (let index = 0; index < a.length; index++) { sum += a[index]; variance += a[index] ** 2; difference += Math.abs(a[index] - b[index]); if (a[index] > 100) highlights++; }
   const mean = sum / a.length, deviation = Math.sqrt(variance / a.length - mean ** 2);
   Object.assign(result,{mean,deviation,frameDifference:difference/a.length});saveDecode();
+  if (mainLyrics) {
+    // The fixture uses #f4f4f5 main lyrics. Exclude the bottom subtitle so animated
+    // background pixels or translation text cannot stand in for the main words.
+    const rgb=execFileSync(ffmpeg,['-v','error','-ss','1.2','-i',filePath,'-an','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{maxBuffer:16*1024*1024,windowsHide:true});
+    assert.equal(rgb.length,width*height*3,'main lyric sample must decode at native resolution');
+    let white=0;
+    for(let offset=0;offset<width*Math.floor(height*0.8)*3;offset+=3) {
+      const low=Math.min(rgb[offset],rgb[offset+1],rgb[offset+2]),high=Math.max(rgb[offset],rgb[offset+1],rgb[offset+2]);
+      if(low>=200&&high-low<30)white++;
+    }
+    result.mainLyricPixels=white;saveDecode();
+    assert.ok(white>=100,`main lyrics must be visible in the encoded frame, found ${white} near-white pixels`);
+  }
   assert.ok(deviation > 6 && highlights > 30, `nonblack visual detail required: deviation=${deviation}, highlights=${highlights}`);
   assert.ok(difference / a.length > 0.2, `animation/lyric content must advance: difference=${difference / a.length}`);
   if (toneChange) {
@@ -402,6 +415,34 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   saveDecode();
   mediaExports.push(result);
   return result;
+}
+
+// Failure evidence only: compare the production paint stream with a separate page snapshot,
+// then isolate stacking/transform layers without changing any accepted recording.
+async function diagnoseLyricComposition() {
+  await evaluate('fixture.cancel()');
+  await start('diagnostic-lyric-composition',1280,720,'classic');
+  await until('audio.currentTime>=1.2','composition diagnostic playhead');
+  await evaluate('audio.pause()');
+  await new Promise(resolve=>setTimeout(resolve,350));
+  const surface=BrowserWindow.getAllWindows().find(win=>win.webContents.isOffscreen());
+  assert.ok(surface);
+  const save=async label=> {
+    await new Promise(resolve=>setTimeout(resolve,400));
+    const source=await evaluate('fixtureLastFrame');
+    if(source?.bytes)fs.writeFileSync(path.join(OUT,`composition-${label}-paint.jpg`),Buffer.from(source.bytes));
+    const image=await surface.webContents.capturePage();
+    fs.writeFileSync(path.join(OUT,`composition-${label}-page.png`),image.toPNG());
+  };
+  await save('original');
+  await surface.webContents.executeJavaScript(`document.querySelector('.local-video-export-surface').style.isolation='auto'`);
+  await save('without-isolation');
+  await surface.webContents.executeJavaScript(`(function(){const style=document.createElement('style');style.id='composition-flat';style.textContent='.local-video-export-surface *{transform:none!important;filter:none!important;perspective:none!important;will-change:auto!important}';document.head.append(style);})()`);
+  await save('flat');
+  await surface.webContents.executeJavaScript(`(function(){document.getElementById('composition-flat').remove();const stage=document.querySelector('.local-video-export-surface');stage.style.isolation='isolate';const background=stage.querySelector('.absolute.inset-0.z-0.overflow-hidden');if(background)background.style.display='none';const control=document.createElement('div');control.textContent='COMPOSITION CONTROL';control.style.cssText='position:fixed;top:20px;left:20px;z-index:99999;color:white;font:48px Arial';stage.append(control);})()`);
+  await save('without-background');
+  await snapshotSurfaces('composition-final');
+  await evaluate('fixture.cancel()');
 }
 
 async function run() {
@@ -468,7 +509,7 @@ async function run() {
   await until("fixture.getState().status === 'saved'", 'whole-song automatic completion', 45000);
   const landscape = fs.readdirSync(OUT).find(file => /^landscape-full\.(mp4|webm)$/.test(file));
   assert.ok(landscape, 'full-song file must exist');
-  decodeOutput(path.join(OUT,landscape),1280,720,6,8.5);
+  decodeOutput(path.join(OUT,landscape),1280,720,6,8.5,undefined,true);
   assert.ok(await evaluate('fixtureFrames > 20'), 'offscreen frames must reach the real recorder');
   await playerIdentityPreserved();
   logCheck('whole-song landscape export: real Folia lyrics, moving frames, audio and automatic save');
@@ -551,6 +592,7 @@ app.whenReady().then(run).then(async()=> {
   await snapshotSurfaces('failure');
   fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures,surfaces:surfaceSnapshots,fixture:await fixtureSnapshot()},null,2));
   process.stderr.write(`${error.stack || error}\n`);
+  try { if(host&&!host.isDestroyed())await diagnoseLyricComposition(); } catch(diagnosticError) { fs.writeFileSync(path.join(OUT,'composition-error.txt'),String(diagnosticError)); }
   try { if(host&&!host.isDestroyed())await diagnoseCanvasCodecs(); } catch(diagnosticError) { fs.writeFileSync(path.join(OUT,'diagnostic-error.txt'),String(diagnosticError)); }
   try { await manager?.dispose(); } catch {} try { host?.destroy(); } catch {} try { server?.close(); } catch {}
   app.exit(1);
