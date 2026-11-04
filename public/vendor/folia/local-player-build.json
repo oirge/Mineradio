@@ -696,6 +696,8 @@
     "src/mineradio/local/useVisualSettings.ts",
     "src/mineradio/local/videoExportAssets.ts",
     "src/mineradio/local/videoExportBridge.ts",
+    "src/mineradio/local/videoExportCfr.ts",
+    "src/mineradio/local/videoExportOpus.ts",
     "src/mineradio/local/videoExportSurface.css",
     "src/mineradio/local/videoExportTimeline.ts",
     "src/mineradio/local/visualAssetCache.ts",
@@ -756,7 +758,7 @@
   ],
   "thirdPartyLicenses": {
     "fileName": "THIRD-PARTY-LICENSES.txt",
-    "sha256": "e435af060f9e80755dd1689883cec552f3c5039426fb3ba85d8c3fe31516b9ce",
+    "sha256": "3277c3b955147618fb9d48f102bc918dd14830e4114f1671dbc1d8bce3a165de",
     "packages": [
       {
         "name": "@chenglou/pretext",
@@ -983,6 +985,18 @@
           {
             "path": "LICENSE",
             "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
+          }
+        ]
+      },
+      {
+        "name": "mediabunny",
+        "version": "1.65.1",
+        "directory": "node_modules/mediabunny",
+        "license": "MPL-2.0",
+        "files": [
+          {
+            "path": "LICENSE",
+            "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
           }
         ]
       },

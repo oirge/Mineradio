@@ -85,6 +85,12 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     ipcRenderer.on('mineradio-video-export-failure', listener);
     return () => ipcRenderer.removeListener('mineradio-video-export-failure', listener);
   },
+  onVideoExportEncodingProgress: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('mineradio-video-export-encoding-progress', listener);
+    return () => ipcRenderer.removeListener('mineradio-video-export-encoding-progress', listener);
+  },
   backupUiState: (patch) => ipcRenderer.invoke('mineradio-ui-state-write', patch || {}),
   chooseLocalMusicFolder: () => ipcRenderer.invoke('mineradio-local-music-choose-folder'),
   scanLocalMusicFolder: (folderPath, options) => ipcRenderer.invoke('mineradio-local-music-scan-folder', folderPath, options || {}),

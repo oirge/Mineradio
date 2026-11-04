@@ -31,7 +31,7 @@ export default function LocalVideoExport({ state, command, onClose }: {
     }, [command, t]);
     const busy = isLocalVideoExportBusy(job);
     const run = async (method: string, params?: Record<string, unknown>) => {
-        if (runningRequest.current && !(method === 'cancelVideoExport' && runningRequest.current === 'startVideoExport')) return;
+        if (runningRequest.current && !(method === 'cancelVideoExport' && (runningRequest.current === 'startVideoExport' || job.status === 'saving'))) return;
         runningRequest.current = method;
         const operationTicket = ++operation.current;
         setPending(true); setError('');
@@ -66,7 +66,8 @@ export default function LocalVideoExport({ state, command, onClose }: {
         <div className="local-video-status" role="status" aria-live="polite" data-testid="local-video-status" data-status={job.status}>
             <strong>{t(!loaded ? 'loading' : `videoStatus_${job.status}`)}</strong>
             {(busy || job.status === 'saved') && <span>{videoElapsedLabel(job.elapsed)} · {Math.round(Math.max(0, Math.min(1, job.progress || 0)) * 100)}%</span>}
-            {busy && <progress aria-label={t('videoExportProgress')} max={1} value={Math.max(0, Math.min(1, job.progress || 0))} />}
+            {job.status === 'saving' && <span>{t('videoEncodingProgress', { progress: Math.round((job.encodingProgress || 0) * 100) })}</span>}
+            {busy && <progress aria-label={t('videoExportProgress')} max={1} value={Math.max(0, Math.min(1, (job.status === 'saving' ? job.encodingProgress : job.progress) || 0))} />}
             {job.status === 'saved' && job.fileName && <small data-i18n-skip>{job.fileName}</small>}
         </div>
         {(error || job.status === 'error') && <p role="alert" className="local-tool-error" data-testid="local-video-error">{error || job.error || t('videoExportFailed')}</p>}
@@ -75,7 +76,7 @@ export default function LocalVideoExport({ state, command, onClose }: {
         <div className="local-video-actions">
             {busy ? <>
                 <button type="button" data-testid="local-video-stop" disabled={pending || !['recording', 'paused'].includes(job.status)} onClick={() => { void run('stopVideoExport'); }}>{t('videoExportStop')}</button>
-                <button type="button" data-testid="local-video-cancel" disabled={(pending && runningRequest.current !== 'startVideoExport') || job.status === 'saving'} onClick={() => { void run('cancelVideoExport'); }}>{t('videoExportCancel')}</button>
+                <button type="button" data-testid="local-video-cancel" disabled={pending && runningRequest.current !== 'startVideoExport' && job.status !== 'saving'} onClick={() => { void run('cancelVideoExport'); }}>{t('videoExportCancel')}</button>
             </> : <button type="button" data-testid="local-video-start" disabled={!loaded || pending || !job.supported || !state?.currentTrack}
                 onClick={() => { void run('startVideoExport', localVideoExportParams(LOCAL_VIDEO_PRESETS[preset], startMode, useVisualSettings.getState(), transitionBehavior, frameRate)); }}>{t('videoExportStart')}</button>}
         </div>

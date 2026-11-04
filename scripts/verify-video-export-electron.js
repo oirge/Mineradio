@@ -30,13 +30,13 @@ app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 let host, manager, server, port, permissionBridge, dialogCount = 0, nextSaveName = '';
 const failures = [], checks = [], mediaExports = [], created = [], surfaceSnapshots = [], permissionDecisions = [], frameRateChecks = [];
 const watchdog = setTimeout(async () => {
-  const message = 'Video export acceptance exceeded its three-minute execution budget.';
+  const message = 'Video export acceptance exceeded its eight-minute execution budget.';
   failures.push(message);
   await snapshotSurfaces('watchdog');
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ checks, mediaExports, windows: created, failures, permissions:permissionDecisions, surfaces:surfaceSnapshots, fixture:await fixtureSnapshot() }, null, 2));
   process.stderr.write(message + '\n');
   app.exit(1);
-}, 180000);
+}, 480000);
 watchdog.unref();
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.svg': 'image/svg+xml',
@@ -256,7 +256,7 @@ async function stopWhilePreservingPlayback(label) {
   assert.equal(immediate.before.ended,false,`${label}: stop must be exercised before the fixture ends`);
   assert.equal(immediate.after.paused,false,`${label}: stopping capture must leave music playing immediately`);
   assert.equal(immediate.after.ended,false,`${label}: stopping capture must not end the music`);
-  await until("fixture.getState().status === 'saved'",`${label} final chunk save`);
+  await until("fixture.getState().status === 'saved'",`${label} final chunk save`,120000);
   const final=await evaluate('({paused:audio.paused,ended:audio.ended,position:audio.currentTime,events:fixtureTransportEvents.slice(fixtureStopEventAt).filter(event=>event.mediaId===fixtureSource.id)})');
   assert.deepEqual(final.events.filter(event=>event.kind==='pause'&&!event.ended),[],`${label}: saving must never pause the selected song`);
   assert.ok(!final.paused||final.ended,`${label}: only natural completion may stop the selected song while saving`);
@@ -297,6 +297,22 @@ function saveSampleFrame(rgb, fileName) {
   fs.writeFileSync(path.join(OUT,fileName),nativeImage.createFromBitmap(bgra,{width:160,height:90}).toPNG());
 }
 
+function inspectAudioTimeline(filePath) {
+  const decoded=spawnSync(ffmpeg,['-hide_banner','-nostats','-v','info','-copyts','-i',filePath,'-vn','-af','ashowinfo','-f','null','-'],
+    {encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024});
+  assert.equal(decoded.status,0,`full audio timeline decode failed: ${decoded.stderr}`);
+  const frames=[];
+  for(const line of String(decoded.stderr).split(/\r?\n/)) {
+    if(!/\[Parsed_ashowinfo_/.test(line))continue;
+    const pts=/\bpts_time:\s*([-\d.e+]+)/.exec(line),rate=/\brate:\s*(\d+)/.exec(line),samples=/\bnb_samples:\s*(\d+)/.exec(line);
+    if(pts&&rate&&samples)frames.push({pts:Number(pts[1]),duration:Number(samples[1])/Number(rate[1])});
+  }
+  const last=frames.at(-1),audioEnd=last?last.pts+last.duration:null;
+  assert.ok(audioEnd>0&&Number.isFinite(audioEnd),'decoded audio must expose a finite presentation timeline');
+  return {frameCount:frames.length,firstPts:frames[0].pts,lastPts:last.pts,audioEnd,
+    decodedDuration:frames.reduce((duration,frame)=>duration+frame.duration,0)};
+}
+
 function inspectVideoTimeline(filePath, audioDuration) {
   const decoded=spawnSync(ffmpeg,['-hide_banner','-nostats','-v','info','-i',filePath,'-an','-vf','showinfo','-fps_mode','passthrough','-f','null','-'],
     {encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024});
@@ -329,12 +345,27 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   for (let offset = 0; offset + 4 <= pcm.length; offset += 4) square += pcm.readFloatLE(offset) ** 2;
   const duration = pcm.length / 4 / 8000, rms = Math.sqrt(square / (pcm.length / 4));
   const stem=path.basename(filePath,path.extname(filePath));
-  const result = {file:path.basename(filePath),width,height,bytes:fs.statSync(filePath).size,duration,rms,videoTimeline:inspectVideoTimeline(filePath,duration)};
+  // Raw PCM contains decoded samples, not timestamp gaps or the first audio PTS.
+  // CFR must cover the original audio presentation timeline to preserve sync.
+  const audioTimeline=inspectAudioTimeline(filePath);
+  const result = {file:path.basename(filePath),width,height,bytes:fs.statSync(filePath).size,duration,rms,audioTimeline,
+    videoTimeline:inspectVideoTimeline(filePath,audioTimeline.audioEnd)};
   const saveDecode=()=>fs.writeFileSync(path.join(OUT,`${stem}-decode.json`),JSON.stringify(result,null,2));
   saveDecode();
+  const targetFrameRate = frameRateChecks.find(check => check.name === stem)?.targetFrameRate;
+  assert.ok(targetFrameRate, 'each file must be checked against its selected frame rate');
+  const timeline = result.videoTimeline;
+  const maximumTimestampError = Math.max(...timeline.frames.map((frame,index) => Math.abs(frame.pts - index / targetFrameRate)));
+  result.constantFrameRate = {targetFrameRate,maximumTimestampError,decodedFrameCount:timeline.frameCount,
+    expectedFrameCount:audioTimeline.audioEnd*targetFrameRate,measuredFrameRate:(timeline.frameCount-1)/(timeline.lastPts-timeline.firstPts)};
+  saveDecode();
+  assert.ok(Math.abs(timeline.frameCount-audioTimeline.audioEnd*targetFrameRate)<=2,`CFR must encode ${targetFrameRate} frames per presentation second: ${JSON.stringify(result.constantFrameRate)}`);
+  assert.ok(maximumTimestampError<=0.0011,`every decoded frame must lie on n/FPS (within WebM's 1ms precision): ${maximumTimestampError}`);
+  assert.match(metadata, new RegExp(`\\b${targetFrameRate}(?:\\.0+)? fps\\b`), 'the file must declare its matching nominal frame rate');
   assert.ok(duration >= minDuration && duration <= maxDuration, `decoded audio duration ${duration} outside ${minDuration}–${maxDuration}`);
   assert.ok(rms > 0.025 && rms < 0.5, `export music RMS ${rms} must remain audible with the listening volume at zero`);
-  assert.ok(Math.abs(result.videoTimeline.audioMinusVideoEnd)<1.25,`video must continue until the audio ends: delta=${result.videoTimeline.audioMinusVideoEnd}`);
+  assert.ok(Math.abs(result.videoTimeline.audioMinusVideoEnd)<=1/targetFrameRate+0.0011,
+    `CFR video must end within one frame of the audio presentation timeline: delta=${result.videoTimeline.audioMinusVideoEnd}`);
   const frame = seconds => execFileSync(ffmpeg, ['-v','error','-ss',String(seconds),'-i',filePath,'-an','-vf','scale=160:90','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'], {maxBuffer:1024*1024,windowsHide:true});
   const a = frame(Math.min(0.8, duration / 4)), b = frame(Math.min(2.5, duration * 0.7));
   assert.equal(a.length, 160 * 90 * 3, 'first sampled video frame must decode');
@@ -490,7 +521,7 @@ async function run() {
   assert.ok(landscapeStart.playheadAtStart < 1.2, 'whole-song export must restart the song after preparing');
   await until('audio.currentTime>=1.2','landscape first active lyric');
   await until('audio.currentTime>=2.8','landscape second active lyric');
-  await until("fixture.getState().status === 'saved'", 'whole-song automatic completion', 45000);
+  await until("fixture.getState().status === 'saved'", 'whole-song automatic completion', 120000);
   const landscape = fs.readdirSync(OUT).find(file => /^landscape-full\.(mp4|webm)$/.test(file));
   assert.ok(landscape, 'full-song file must exist');
   decodeOutput(path.join(OUT,landscape),1280,720,6,8.5,undefined,true);

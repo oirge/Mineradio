@@ -162,6 +162,8 @@ GitHub CLI / `gh auth` / Release 上传或 Electron 打包下载需要代理时�
 
 ## 当前仓库索引
 
+- 遇到 `视频导出固定帧率`、`23.976`、`CFR`、`VFR`、`30／60／90／120 成片帧率`、`finalizeVideoFrameRate`、`videoExportCfr`、`mediabunny`、`DefaultDuration`、`WebM 16／17ms`、`CFR 临时文件所有权`、`tempOwned`、`sourceOwned`、`sealing` 或 `视频保存 committing 取消边界` 时，必须优先读取 `.context/pitfalls/mineradio-video-export-cfr.md`。
+
 - 遇到 `视频导出 Permission denied`、`allowsCapturePermission`、`isVideoExportCaptureAllowed`、`tab 捕获权限` 或 `导出共用 session 权限` 时，必须优先读取 `.context/pitfalls/mineradio-video-export-permissions.md`。
 
 - 遇到 `辅助窗口任务栏预览`、`Desktop Lyrics 预览`、`Compact Mini Player 预览`、`WS_EX_TOOLWINDOW`、`skipTaskbar` 或 `type: toolbar` 时，必须优先读取 `.context/pitfalls/mineradio-auxiliary-taskbar-previews.md`。

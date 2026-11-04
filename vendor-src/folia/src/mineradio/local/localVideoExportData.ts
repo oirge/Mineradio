@@ -10,6 +10,7 @@ export interface LocalVideoExportState {
     elapsed: number;
     transitionBehavior?: 'continue' | 'save';
     frameRate?: VideoExportFrameRate;
+    encodingProgress?: number;
     fileName?: string;
     error?: string;
 }

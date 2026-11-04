@@ -122,6 +122,16 @@ export async function mountVideoExportSurface(mount: HTMLElement) {
         controller.abort(); root.unmount(); assets?.release();
         window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onRejection);
     };
+    let finalizing = false;
+    const stopFinalize = bridge.onFinalize(job => {
+        if (finalizing || job.id !== new URLSearchParams(location.search).get('videoExport')) return;
+        finalizing = true;
+        // Release the live visualization/GPU before decoding and encoding the saved frames.
+        dispose();
+        void import('./videoExportCfr').then(module => module.finalizeVideoFrameRate(job, bridge))
+            .catch(error => bridge.failed(failureMessage(error)));
+    });
+    window.addEventListener('pagehide', stopFinalize, { once: true });
     window.addEventListener('pagehide', dispose, { once: true });
     try {
         const initial = await bridge.getInitial();

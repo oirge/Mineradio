@@ -9,10 +9,16 @@ export interface VideoExportInitial {
     state: HostState; lyrics: HostLyrics; analysis: HostAnalysis;
 }
 export interface VideoExportUpdate { id: string; state: HostState; audio?: HostAudio; analysis?: HostAnalysis; lyrics?: HostLyrics }
+export interface VideoExportFinalize { id: string; size: number; width: number; height: number; frameRate: VideoExportFrameRate }
 export interface VideoExportBridge {
     getInitial: () => Promise<VideoExportInitial>;
     onUpdate: (callback: (value: VideoExportUpdate) => void) => () => void;
     ready: () => Promise<void>;
+    onFinalize: (callback: (value: VideoExportFinalize) => void) => () => void;
+    readRecording: (value: { id: string; position: number; length: number }) => Promise<Uint8Array>;
+    writeFinalized: (value: { id: string; position: number; sequence: number; bytes: Uint8Array }) => Promise<void>;
+    finalized: (id: string) => Promise<void>;
+    encodingProgress: (id: string, progress: number) => void;
     failed: (message: string) => void;
 }
 export const videoExportBridge = () => (window as Window & { mineradioVideoExport?: VideoExportBridge }).mineradioVideoExport;

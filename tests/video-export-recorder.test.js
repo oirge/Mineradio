@@ -47,8 +47,8 @@ function harness(options = {}) {
     onVideoExportFailure(callback) { failureListener = callback; return () => { failureListener = null; }; },
     updateVideoExport(payload) { calls.push(['update', payload]); },
     async appendVideoExportChunk(payload) { calls.push(['append', payload.sequence, payload.bytes.byteLength > 100 ? payload.bytes.byteLength : Buffer.from(payload.bytes).toString()]); if (options.append) await options.append(payload); },
-    async finishVideoExport(payload) { calls.push(['finish', payload.id]); return { fileName: 'song.webm' }; },
-    async cancelVideoExport(payload) { calls.push(['cancel', payload.id]); },
+    async finishVideoExport(payload) { calls.push(['finish', payload.id]); return options.finish ? options.finish(payload) : { fileName: 'song.webm' }; },
+    async cancelVideoExport(payload) { calls.push(['cancel', payload.id]); return options.cancel ? options.cancel(payload) : { cancelled: true }; },
   };
   const host = {
     desktopWindow: bridge, MediaRecorder: Recorder, MediaStream: Stream, Blob,
@@ -307,4 +307,60 @@ test('a rejected capture leaves playback untouched and releases the prepared sur
   assert.equal(h.media.currentTime, 12);
   assert.ok(!h.calls.includes('pause-owner'));
   assert.ok(h.calls.some(value => Array.isArray(value) && value[0] === 'cancel'));
+});
+
+test('cancel during an atomic save waits for the saved result and never reports cancelled', async () => {
+  let finishSave, entered;
+  const saving = new Promise(resolve => { entered = resolve; });
+  const h = harness({
+    finish: () => { entered(); return new Promise(resolve => { finishSave = resolve; }); },
+    cancel: async () => ({ cancelled: false, fileName: 'song.webm' }),
+  });
+  await h.controller.start(params);
+  const stopped = h.controller.stop();
+  await saving;
+  const cancelled = h.controller.cancel();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.controller.getState().status, 'saving');
+  finishSave({ fileName: 'song.webm' });
+  assert.equal((await stopped).status, 'saved');
+  assert.equal((await cancelled).status, 'saved');
+  assert.ok(!h.status.some(state => state.status === 'cancelled'));
+  assert.equal(h.connections.size, 0);
+  assert.equal(h.media.paused, false);
+});
+
+test('a failed atomic save still reports the error when cancellation is too late', async () => {
+  let failSave, entered;
+  const saving = new Promise(resolve => { entered = resolve; });
+  const h = harness({
+    finish: () => { entered(); return new Promise((_resolve, reject) => { failSave = reject; }); },
+    cancel: async () => ({ cancelled: false }),
+  });
+  await h.controller.start(params);
+  const stopped = h.controller.stop();
+  await saving;
+  const cancelled = h.controller.cancel();
+  await new Promise(resolve => setImmediate(resolve));
+  failSave(new Error('rename denied'));
+  assert.equal((await stopped).status, 'error');
+  assert.equal((await cancelled).status, 'error');
+  assert.match(h.controller.getState().error, /rename denied/);
+  assert.ok(!h.status.some(state => state.status === 'cancelled'));
+});
+
+test('cancel during CFR encoding reports cancelled despite the rejected pending save', async () => {
+  let failSave, entered;
+  const saving = new Promise(resolve => { entered = resolve; });
+  const h = harness({
+    finish: () => { entered(); return new Promise((_resolve, reject) => { failSave = reject; }); },
+    cancel: async () => { failSave?.(new Error('VIDEO_EXPORT_CANCELLED')); return { cancelled: true }; },
+  });
+  await h.controller.start(params);
+  const stopped = h.controller.stop();
+  await saving;
+  assert.equal((await h.controller.cancel()).status, 'cancelled');
+  assert.equal((await stopped).status, 'cancelled');
+  assert.ok(!h.status.some(state => state.status === 'error'));
+  assert.equal(h.connections.size, 0);
 });

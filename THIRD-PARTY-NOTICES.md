@@ -24,6 +24,13 @@ Folia 的 GNU Affero General Public License v3 全文随源码和界面产物分
 该目录记录不可变上游提交、来源及内容校验值，构建时不联网下载或为其他版本猜测许可。
 当前精确版本补件包括 `@pixi/colord@2.9.6` 与 `@react-three/fiber@9.8.1`，均保留各自上游原始 MIT 版权与完整许可文本。
 
+## 固定帧率视频封装 —— Mediabunny（MPL-2.0）
+
+视频导出使用 `mediabunny@1.65.1` 解封装录制文件、调用浏览器内置编码器生成固定帧率画面并保留原始 Opus 音频。
+项目与对应源码：https://github.com/Vanilagy/mediabunny/tree/v1.65.1 。该依赖源码未修改。
+原始 MPL-2.0 全文、版权及 NOTICE 随实际编译模块保留在 `public/vendor/folia/THIRD-PARTY-LICENSES.txt`；
+包版本和完整性记录于 `vendor-src/folia/package-lock.json`。没有随安装包加入 FFmpeg 可执行程序。
+
 ## desktop/audio/ape-decoder.js —— FFmpeg（LGPL-2.1-or-later）
 
 Monkey's Audio (APE) 解复用与解码实现是 FFmpeg 以下文件的逐行 JavaScript 移植：
