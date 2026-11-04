@@ -62,7 +62,7 @@ const HOST_HTML = String.raw`<!doctype html><html><head><meta charset="UTF-8"><t
 <audio id="fixture-audio" preload="auto" src="/fixture.wav"></audio>
 <audio id="fixture-next" preload="auto" src="/fixture-next.wav"></audio>
 <script src="/video-export.js"></script><script>
-window.fixtureEvents = []; window.fixtureFrames = 0; window.fixtureTrack = 'export-fixture'; window.fixtureNoLyrics = false;
+window.fixtureEvents = []; window.fixtureTransportEvents = []; window.fixtureFrames = 0; window.fixtureTrack = 'export-fixture'; window.fixtureNoLyrics = false;
 window.fixtureDiagnostics = []; window.fixtureDraws = 0; window.fixtureRequests = 0;
 window.fixtureDiagnostic = function(kind,detail) {
   fixtureDiagnostics.push({kind:kind,at:performance.now(),position:window.audio ? audio.currentTime : null,frames:fixtureFrames,draws:fixtureDraws,requests:fixtureRequests,detail:detail});
@@ -135,7 +135,12 @@ window.fixture = window.MineradioVideoExport.create(window, {getState:state,getL
   emit:function(event,value) { fixtureEvents.push({event:event,value:value,at:performance.now(),position:audio.currentTime}); fixtureDiagnostic('export-state',value); }
 });
 window.desktopWindow.onVideoExportFrame(function(frame) { fixtureFrames++; if (fixtureFrames<=4 || fixtureFrames%20===0) fixtureDiagnostic('offscreen-frame',{id:frame.id,width:frame.width,height:frame.height,bytes:frame.bytes.byteLength}); });
-[fixtureFirst,fixtureNext].forEach(function(media) { media.addEventListener('ended', function() { if (window.audio === media) window.fixture.beforeTrackEnd(); }); });
+[fixtureFirst,fixtureNext].forEach(function(media) {
+  ['play','playing','pause','ended','seeking','seeked'].forEach(function(kind) {
+    media.addEventListener(kind,function(){fixtureTransportEvents.push({kind:kind,mediaId:media.id,at:performance.now(),position:media.currentTime,paused:media.paused,ended:media.ended,selected:window.audio===media});});
+  });
+  media.addEventListener('ended', function() { if (window.audio === media) window.fixture.beforeTrackEnd(); });
+});
 window.fixtureReady = Promise.all([fixtureFirst,fixtureNext].map(function(media) { return new Promise(function(resolve,reject) {
   if (media.readyState >= 1) return resolve();
   media.addEventListener('loadedmetadata',resolve,{once:true}); media.addEventListener('error',function(){reject(new Error('Fixture audio failed'));},{once:true});
@@ -165,8 +170,25 @@ async function snapshotSurfaces(label) {
         };
         const stage=document.querySelector('.local-video-export-surface');
         const words=Array.from(document.querySelectorAll('span,p,h1,h2,h3')).filter(function(node){return !node.querySelector('span,p,h1,h2,h3') && /Listening|morning|Follow|light|music|carry|Changed|song|lyric|聆听|追随|新歌曲/.test(node.textContent||'');}).slice(0,60);
+        let visualizer={unavailable:'React visualizer props were not found'},fumePixels=null;
+        if(stage) {
+          try {
+            const key=Object.keys(stage).find(function(name){return name.startsWith('__reactProps$');});
+            const props=key&&stage[key]?.children?.props?.children?.props;
+            if(props?.currentTime?.get)visualizer={position:props.currentTime.get(),currentLineIndex:props.currentLineIndex,paused:props.paused,
+              lines:props.lines?.length,activeLine:props.lines?.[props.currentLineIndex]?.fullText||null,mode:props.mode};
+          }catch(error){visualizer={unavailable:String(error)};}
+          if(stage.dataset.videoExportMode==='fume') {
+            const canvas=stage.querySelector('canvas.absolute.inset-0.h-full.w-full');
+            if(canvas)try {
+              const context=canvas.getContext('2d'),pixels=context?.getImageData(0,0,canvas.width,canvas.height).data;
+              if(pixels){let alphaNonzero=0,alphaOpaque=0;for(let i=3;i<pixels.length;i+=4){if(pixels[i])alphaNonzero++;if(pixels[i]===255)alphaOpaque++;}
+                fumePixels={width:canvas.width,height:canvas.height,pixels:pixels.length/4,alphaNonzero,alphaOpaque};}
+            }catch(error){fumePixels={unavailable:String(error)};}
+          }
+        }
         return {url:location.href,at:performance.now(),viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},visibility:document.visibilityState,hidden:document.hidden,
-          raf:window.__videoExportRafDiagnostic||null,stage:stage?summary(stage):null,text:(document.body.textContent||'').slice(0,2000),
+          raf:window.__videoExportRafDiagnostic||null,updates:window.__videoExportUpdateDiagnostic||null,visualizer,fumePixels,stage:stage?summary(stage):null,text:(document.body.textContent||'').slice(0,2000),
           canvases:Array.from(document.querySelectorAll('canvas')).map(function(canvas){return {...summary(canvas),width:canvas.width,height:canvas.height};}),words:words.map(summary)};
       })()`,true), new Promise(resolve=>setTimeout(()=>resolve({unavailable:'surface did not answer'}),1500))]);
       surfaceSnapshots.push({label,windowId:surface.id,...result});
@@ -177,7 +199,7 @@ async function snapshotSurfaces(label) {
 async function fixtureSnapshot() {
   if (!host || host.isDestroyed()) return null;
   try {
-    return await Promise.race([evaluate('({state:window.fixture && fixture.getState(),frames:window.fixtureFrames,draws:window.fixtureDraws,requests:window.fixtureRequests,events:window.fixtureEvents,diagnostics:window.fixtureDiagnostics,position:window.audio && audio.currentTime,ended:window.audio && audio.ended})'),
+    return await Promise.race([evaluate('({state:window.fixture && fixture.getState(),frames:window.fixtureFrames,draws:window.fixtureDraws,requests:window.fixtureRequests,events:window.fixtureEvents,transport:window.fixtureTransportEvents,diagnostics:window.fixtureDiagnostics,position:window.audio && audio.currentTime,ended:window.audio && audio.ended})'),
       new Promise(resolve=>setTimeout(()=>resolve({unavailable:'renderer did not answer'}),1500))]);
   } catch (error) { return {unavailable:String(error)}; }
 }
@@ -257,6 +279,25 @@ async function start(name, width, height, mode = 'classic', startMode = 'current
 async function playerIdentityPreserved() {
   assert.equal(await evaluate('audio === fixtureSource && audioCtx === fixtureContext && audioChain.output === fixtureOutput'),true,
     'finishing the export must preserve the existing media element and audio graph');
+}
+
+async function stopWhilePreservingPlayback(label) {
+  const immediate=await evaluate(`(function(){
+    window.fixtureStopEventAt=fixtureTransportEvents.length;
+    const before={paused:audio.paused,ended:audio.ended,position:audio.currentTime};
+    fixture.stop();
+    return {before:before,after:{paused:audio.paused,ended:audio.ended,position:audio.currentTime}};
+  })()`);
+  assert.equal(immediate.before.paused,false,`${label}: the fixture must be playing before stop`);
+  assert.equal(immediate.before.ended,false,`${label}: stop must be exercised before the fixture ends`);
+  assert.equal(immediate.after.paused,false,`${label}: stopping capture must leave music playing immediately`);
+  assert.equal(immediate.after.ended,false,`${label}: stopping capture must not end the music`);
+  await until("fixture.getState().status === 'saved'",`${label} final chunk save`);
+  const final=await evaluate('({paused:audio.paused,ended:audio.ended,position:audio.currentTime,events:fixtureTransportEvents.slice(fixtureStopEventAt).filter(event=>event.mediaId===fixtureSource.id)})');
+  assert.deepEqual(final.events.filter(event=>event.kind==='pause'&&!event.ended),[],`${label}: saving must never pause the selected song`);
+  assert.ok(!final.paused||final.ended,`${label}: only natural completion may stop the selected song while saving`);
+  assert.ok(final.position>=immediate.before.position,`${label}: saving must preserve playback progress`);
+  checks.push(`${label}: transport preserved immediately and throughout saving (${final.ended?'fixture naturally ended':'still playing'})`);
 }
 
 async function hiddenTrackBecomes(trackId) {
@@ -375,6 +416,11 @@ async function run() {
         const info=window.__videoExportRafDiagnostic={count:0,startedAt:performance.now(),lastAt:0,maxGap:0};
         const tick=function(at){info.count++;if(info.lastAt)info.maxGap=Math.max(info.maxGap,at-info.lastAt);info.lastAt=at;requestAnimationFrame(tick);};
         requestAnimationFrame(tick);
+        const updates=window.__videoExportUpdateDiagnostic={count:0,last:null,samples:[]};
+        window.mineradioVideoExport?.onUpdate(function(value){
+          updates.count++;updates.last={at:performance.now(),position:value.state?.position,playing:value.state?.playing,trackId:value.state?.currentTrack?.id};
+          if(updates.count<=4||updates.count%30===0){updates.samples.push(updates.last);if(updates.samples.length>12)updates.samples.shift();}
+        });
       })()`,true).catch(()=>{});
     });
   });
@@ -401,6 +447,10 @@ async function run() {
 
   await start('landscape-full',1280,720,'classic','from-start');
   assert.ok(await evaluate('audio.currentTime < 1.2'), 'whole-song export must restart the song after preparing');
+  await until('audio.currentTime>=1.2','landscape first active lyric');
+  await snapshotSurfaces('landscape-playing-1.2');
+  await until('audio.currentTime>=2.8','landscape second active lyric');
+  await snapshotSurfaces('landscape-playing-2.8');
   await until("fixture.getState().status === 'saved'", 'whole-song automatic completion', 45000);
   const landscape = fs.readdirSync(OUT).find(file => /^landscape-full\.(mp4|webm)$/.test(file));
   assert.ok(landscape, 'full-song file must exist');
@@ -411,6 +461,7 @@ async function run() {
 
   await start('portrait-segment',720,1280,'fume');
   await until('audio.currentTime > 1.1', 'portrait first segment');
+  await snapshotSurfaces('portrait-before-pause');
   await evaluate('audio.pause()');
   await until("fixture.getState().status === 'paused'", 'recording follows host pause');
   const pausedAt = await evaluate('audio.currentTime');
@@ -424,19 +475,16 @@ async function run() {
   assert.equal(await evaluate('fixtureFirst.paused && fixtureSources.length === 2'),true,'only the selected song should play through the existing graph');
   await hiddenTrackBecomes('changed-fixture');
   await snapshotSurfaces('portrait-after-real-track-handoff');
-  await evaluate('fixture.stop()');
-  await until("fixture.getState().status === 'saved'", 'portrait final chunk save');
+  await stopWhilePreservingPlayback('portrait');
   const portrait = fs.readdirSync(OUT).find(file => /^portrait-segment\.(mp4|webm)$/.test(file));
   assert.ok(portrait);
   decodeOutput(path.join(OUT,portrait),720,1280,3.1,5.5,[440,660]);
   await playerIdentityPreserved();
-  assert.equal(await evaluate('audio.paused'),false,'stopping export must not stop the music');
   logCheck('portrait export: pause/resume, continued recording through real 440Hz→660Hz song/deck handoff, updated Folia lyrics and final media chunk');
 
   await start('landscape-1080-no-lyrics',1920,1080,'fume','current',true);
   await until('audio.currentTime > 2.4', '1080p visualization-only recording');
-  await evaluate('fixture.stop()');
-  await until("fixture.getState().status === 'saved'", '1080p save');
+  await stopWhilePreservingPlayback('1080p');
   const hd = fs.readdirSync(OUT).find(file => /^landscape-1080-no-lyrics\.(mp4|webm)$/.test(file));
   assert.ok(hd);
   decodeOutput(path.join(OUT,hd),1920,1080,1.8,4);
