@@ -1,4 +1,4 @@
-/* Record only Mineradio's offscreen Folia scene and its existing WebAudio output. */
+/* Record only Mineradio's hidden Folia scene and its existing WebAudio output. */
 (function (global) {
   'use strict';
   var PRESETS = ['1280x720', '1920x1080', '720x1280', '1080x1920'];
@@ -48,7 +48,7 @@
       if (s.discarding) return s.discarding;
       s.cancelled = true;
       disconnectAudio(s);
-      if (s.preparedPlayback && !s.recorder && s.wasPlaying && host.audio === s.audio) {
+      if (s.preparedPlayback && !s.started && s.wasPlaying && host.audio === s.audio) {
         // Cancelling preparation must not leave the user's previously playing song paused.
         try { Promise.resolve(s.audio.play()).catch(function () {}); } catch (_) {}
       }
@@ -63,7 +63,7 @@
       return s.discarding;
     }
     function fail(s, error) {
-      // A late bitmap/encoder callback from a released job must not overwrite a newer job.
+      // A late capture/encoder callback from a released job must not overwrite a newer job.
       if (current !== s || s.cancelled) return;
       void discard(s, error).catch(function () {});
     }
@@ -82,7 +82,7 @@
       s.writes.catch(function (error) { fail(s, error); });
     }
     function syncRecording(s) {
-      if (!s.recorder || s.finishing || s.cancelled || s.recorder.state === 'inactive') return;
+      if (!s.recorder || !s.started || s.finishing || s.cancelled || s.recorder.state === 'inactive') return;
       var paused = s.audio.paused || s.audio.seeking || s.audio.readyState < 3;
       accrue(s);
       if (paused && s.recorder.state === 'recording') s.recorder.pause();
@@ -236,9 +236,22 @@
           videoBitsPerSecond: s.width * s.height > 1000000 ? 14000000 : 8000000 });
         s.recorder.ondataavailable = function (event) { queueChunk(s, event.data); };
         s.recorder.onerror = function (event) { fail(s, event.error || new Error('Video encoding failed.')); };
+        s.recorder.onstart = function () {
+          if (current !== s || s.cancelled || s.finishing) return;
+          s.started = true;
+          s.recorder.pause();
+        };
         s.stopped = new Promise(function (resolve) { s.recorder.onstop = resolve; });
         bindMedia(s, media);
-        s.recorder.start(1000); s.recorder.pause();
+        // Encoder initialization is asynchronous, especially at 1080p. Keep the
+        // song at its chosen position until the encoder has actually started.
+        s.recorder.start(1000);
+        var encoderReadyUntil = Date.now() + 15000;
+        while (!s.started && !s.cancelled) {
+          if (Date.now() >= encoderReadyUntil) throw new Error('Video export could not start its encoder.');
+          await new Promise(function (resolve) { host.setTimeout(resolve, 25); });
+        }
+        if (s.cancelled || current !== s) return snapshot();
         publish({ status: 'paused', fileName: result.fileName });
         await media.play(); syncRecording(s);
         return snapshot();

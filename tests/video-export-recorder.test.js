@@ -29,7 +29,12 @@ function harness(options = {}) {
   class Recorder {
     static isTypeSupported(type) { return type === 'video/webm;codecs=vp8,opus'; }
     constructor(stream) { this.stream = stream; this.state = 'inactive'; recorder = this; }
-    start() { this.state = 'recording'; calls.push('record-start'); }
+    start() {
+      this.state = 'recording'; calls.push('record-start');
+      const ready = () => { calls.push('encoder-ready'); this.onstart(); };
+      if (options.startEncoder) options.startEncoder(ready);
+      else queueMicrotask(ready);
+    }
     pause() { this.state = 'paused'; calls.push('record-pause'); }
     resume() { this.state = 'recording'; calls.push('record-resume'); }
     stop() {
@@ -63,6 +68,39 @@ function harness(options = {}) {
   return { controller, host, media, calls, status, connections, makeStream: () => new Stream(), get recorder() { return recorder; }, fail: error => failureListener({ id: 'job', error }) };
 }
 const params = { width: 1280, height: 720, startMode: 'current', visuals: { mode: 'classic' } };
+
+test('playback waits for asynchronous encoder startup without pausing the initializing recorder', async t => {
+  let ready;
+  const h = harness({ startEncoder: callback => { ready = callback; } });
+  t.after(() => h.controller.cancel());
+  const starting = h.controller.start(params);
+  await new Promise(resolve => setTimeout(resolve, 70));
+  assert.equal(typeof ready, 'function');
+  assert.equal(h.media.paused, true);
+  assert.equal(h.media.currentTime, 12);
+  assert.equal(h.controller.getState().status, 'preparing');
+  assert.equal(h.recorder.state, 'recording');
+  assert.ok(!h.calls.includes('record-pause'));
+  assert.ok(!h.calls.includes('play-owner'));
+  ready();
+  assert.equal((await starting).status, 'recording');
+  assert.ok(h.calls.indexOf('encoder-ready') < h.calls.indexOf('play-owner'));
+  await h.controller.stop();
+});
+
+test('cancelling encoder startup resumes the original song and ignores the late start event', async () => {
+  let ready;
+  const h = harness({ startEncoder: callback => { ready = callback; } });
+  const starting = h.controller.start(params);
+  await new Promise(resolve => setTimeout(resolve, 40));
+  await h.controller.cancel();
+  ready();
+  await starting;
+  assert.equal(h.media.paused, false);
+  assert.equal(h.controller.getState().status, 'cancelled');
+  assert.equal(h.recorder.state, 'inactive');
+  assert.equal(h.connections.size, 0);
+});
 
 test('save dialog cancellation preserves the current audio, position and speaker graph', async () => {
   const h = harness({ begin: async () => ({ cancelled: true }) });
