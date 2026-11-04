@@ -22,7 +22,7 @@ async function harness(t, options = {}) {
     send(channel, value) { this.sent.push({ channel, value }); },
   });
   const h = {
-    directory, owner, windows: [], handlers: new Map(), listeners: new Map(), time: 100,
+    directory, owner, windows: [], handlers: new Map(), listeners: new Map(),
     output: path.join(directory, '测试视频.webm'), autoReady: options.autoReady !== false,
   };
   h.event = { sender: owner, senderFrame: { url: 'http://127.0.0.1:3210/', parent: null } };
@@ -67,7 +67,6 @@ async function harness(t, options = {}) {
     },
     readyTimeoutMs: options.readyTimeoutMs || 20_000,
     fileSystem: options.fileSystem || fs,
-    now: () => h.time,
   });
   h.manager.registerIpc();
   h.invoke = (channel, payload, event = h.event) => h.handlers.get('mineradio-video-export-' + channel)(event, payload);
@@ -146,10 +145,11 @@ test('画面只有一个待确认帧，确认后继续30fps绘制且不会显示
   assert.equal(win.configuration.webPreferences.sandbox, true);
   assert.equal(win.frameRate, 30);
   h.paint();
-  h.time += 100;
   h.paint();
   assert.equal(h.frames().length, 1);
   h.send('ack', session.id);
+  // The renderer can acknowledge inside the same 33 ms budget. Electron owns the rate;
+  // rejecting its next paint here would leave a static scene with no pending redraw.
   h.paint();
   assert.equal(h.frames().length, 2);
   assert.deepEqual([...h.frames()[0].value.bytes], [255, 216, 255]);

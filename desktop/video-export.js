@@ -18,7 +18,7 @@ function createVideoExportManager({
   trustedMainFrameHandler, translate = value => value,
   preloadPath = path.join(__dirname, 'video-export-preload.js'),
   readyTimeoutMs = READY_TIMEOUT_MS,
-  fileSystem = fs, now = () => performance.now(),
+  fileSystem = fs,
 }) {
   let active = null;
   let disposed = false;
@@ -117,7 +117,7 @@ function createVideoExportManager({
     const record = {
       id: crypto.randomUUID(), owner: event.sender, window: null, discarded: false,
       writes: Promise.resolve(), nextSequence: 0, pendingBytes: 0, pendingChunks: 0,
-      bytes: 0, stage: 'choosing', waitingAck: false, lastFrameAt: 0,
+      bytes: 0, stage: 'choosing', waitingAck: false,
       width: options.width, height: options.height, initial: options.initial,
     };
     active = record;
@@ -184,13 +184,12 @@ function createVideoExportManager({
       });
       win.webContents.on('paint', (_event, _dirty, image) => {
         if (active !== record || record.discarded || record.stage !== 'recording' || record.waitingAck) return;
-        const at = now();
-        if (at - record.lastFrameAt < 1000 / FRAME_RATE) return;
         try {
           const size = image.getSize();
           if (!size.width || !size.height || image.isEmpty()) return;
           const bytes = image.toJPEG(92);
-          record.lastFrameAt = at;
+          // Electron already limits paint to FRAME_RATE. A second timestamp gate can drop
+          // the sole invalidated frame and strand the acknowledgement-driven paint loop.
           record.waitingAck = true;
           record.ackTimer = setTimeout(() => fail(record, new Error('VIDEO_EXPORT_FRAME_TIMEOUT')), FRAME_ACK_TIMEOUT_MS);
           record.ackTimer.unref?.();
