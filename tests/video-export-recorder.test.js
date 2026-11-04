@@ -57,7 +57,7 @@ function harness(options = {}) {
     audio: media, audioChain: { output },
     audioCtx: { sampleRate: 48000, createMediaStreamDestination() { return { stream: { getAudioTracks: () => [{ kind: 'audio', stop() { calls.push('stop-tap'); } }] } }; } },
     initAudio() { calls.push('init-existing-audio'); }, resumeAudioAnalysis: async () => {},
-    setTimeout, clearTimeout, addEventListener() {},
+    setTimeout(callback, delay) { return setTimeout(callback, delay === 1500 ? (options.drainDelay ?? 0) : delay); }, clearTimeout, addEventListener() {},
   };
   vm.runInNewContext(source, { window: host, Blob, Uint8Array, console, Date, Promise });
   controller = host.MineradioVideoExport.create(host, {
@@ -116,16 +116,18 @@ test('save dialog cancellation preserves the current audio, position and speaker
 
 test('final encoded chunk reaches disk before finish, with only the recording tap disconnected', async () => {
   let allowWrite;
+  let signalWrite;
   const writeGate = new Promise(resolve => { allowWrite = resolve; });
-  const h = harness({ append: () => writeGate });
+  const writing = new Promise(resolve => { signalWrite = resolve; });
+  const h = harness({ append: () => { signalWrite(); return writeGate; } });
   const owner = h.host.audio;
   await h.controller.start(params);
   assert.equal(h.controller.getState().status, 'recording');
   assert.equal(h.connections.size, 1);
   const saving = h.controller.stop();
-  assert.equal(h.recorder.state, 'inactive', 'stop is synchronous before a new track can sound');
+  assert.equal(h.recorder.state, 'paused', 'new samples stop synchronously before another track can sound');
   assert.equal(h.connections.size, 0);
-  await new Promise(resolve => setImmediate(resolve));
+  await writing;
   assert.deepEqual(h.calls.find(item => Array.isArray(item) && item[0] === 'append'), ['append', 0, 'final-encoded-chunk']);
   assert.ok(!h.calls.some(item => Array.isArray(item) && item[0] === 'finish'));
   allowWrite();
@@ -135,7 +137,22 @@ test('final encoded chunk reaches disk before finish, with only the recording ta
   assert.equal(h.calls.at(-1), 'stop-tap');
 });
 
-test('save behavior follows pause/resume and stops synchronously before track handoff', async () => {
+test('stopping drains already encoded frames while capture is paused and the speaker keeps playing', async () => {
+  const h = harness({ drainDelay: 40 });
+  await h.controller.start(params);
+  const saving = h.controller.stop();
+  assert.equal(h.recorder.state, 'paused');
+  assert.equal(h.connections.size, 0);
+  assert.equal(h.media.paused, false);
+  h.recorder.ondataavailable({ data: new Blob(['queued-video-frame']) });
+  assert.equal((await saving).status, 'saved');
+  const chunks = h.calls.filter(item => Array.isArray(item) && item[0] === 'append');
+  assert.deepEqual(chunks.map(item => item[2]), ['queued-video-frame', 'final-encoded-chunk']);
+  assert.equal(h.media.paused, false);
+  assert.equal(h.recorder.state, 'inactive');
+});
+
+test('save behavior follows pause/resume and pauses capture synchronously before track handoff', async () => {
   const h = harness();
   await h.controller.start({ ...params, transitionBehavior: 'save' });
   h.media.pause();
@@ -144,7 +161,7 @@ test('save behavior follows pause/resume and stops synchronously before track ha
   await h.media.play();
   assert.equal(h.recorder.state, 'recording');
   h.controller.beforeTrackChange();
-  assert.equal(h.recorder.state, 'inactive');
+  assert.equal(h.recorder.state, 'paused');
   assert.equal(h.controller.isCapturing(), false);
   await h.controller.stop();
 });
@@ -179,7 +196,7 @@ test('save behavior saves on seeking while continuous behavior is the default', 
   await h.controller.start({ ...params, transitionBehavior: 'save' });
   assert.equal(h.controller.blocksCrossfade(), true);
   h.media.seeking = true; h.media.fire('seeking');
-  assert.equal(h.recorder.state, 'inactive');
+  assert.equal(h.recorder.state, 'paused');
   assert.equal((await h.controller.stop()).status, 'saved');
 });
 

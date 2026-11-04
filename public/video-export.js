@@ -253,15 +253,20 @@
       if (!s) return Promise.resolve(snapshot());
       if (s.finishing) return s.finishing;
       if (!s.recorder) return discard(s);
-      // Stop synchronously before the host can start the next deck, then await its final data event.
+      // Stop accepting media synchronously before the host starts the next deck.
+      // Chromium destroys its video encoder on stop without flushing queued frames;
+      // pause first and give those frames a bounded drain before taking the final blob.
       accrue(s);
       s.recordingSince = 0;
       disconnectAudio(s);
       if (s.timer) host.clearTimeout(s.timer);
       publish({ status: 'saving', elapsed: s.elapsed });
-      if (s.recorder.state !== 'inactive') s.recorder.stop();
+      if (s.recorder.state === 'recording') s.recorder.pause();
       s.finishing = (async function () {
         try {
+          await new Promise(function (resolve) { host.setTimeout(resolve, 1500); });
+          if (s.cancelled || current !== s) return snapshot();
+          if (s.recorder.state !== 'inactive') s.recorder.stop();
           await s.stopped; await s.writes;
           if (s.cancelled) return snapshot();
           var result = await bridge.finishVideoExport({ id: s.id, duration: s.elapsed });
