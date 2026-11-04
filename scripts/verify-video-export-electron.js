@@ -111,7 +111,7 @@ function state() {
 }
 function lyrics() {
   if (fixtureNoLyrics) return {trackId:fixtureTrack,lines:[]};
-  if (fixtureTrack !== 'export-fixture') return {trackId:fixtureTrack,lines:[{time:0,endTime:30,text:'Changed song lyric',translation:'新歌曲歌词',words:[{time:0,duration:30,text:'Changed song lyric'}]}]};
+  if (fixtureTrack !== 'export-fixture') return {trackId:fixtureTrack,lines:[{time:0,endTime:30,text:'Changed song lyric',translation:'新歌曲歌词',words:[{time:0,duration:1.5,text:'Changed song lyric'}]}]};
   return { trackId: fixtureTrack, lines: [
     {time:0,endTime:2,text:'Listening to the morning',translation:'聆听清晨',words:[{time:0,duration:1,text:'Listening '},{time:1,duration:1,text:'to the morning'}]},
     {time:2,endTime:4,text:'Follow the light',translation:'追随光芒',words:[{time:2,duration:1,text:'Follow '},{time:3,duration:1,text:'the light'}]},
@@ -255,11 +255,13 @@ async function stopWhilePreservingPlayback(label) {
 
 async function hiddenTrackBecomes(trackId) {
   const deadline = Date.now() + 10000;
+  let stable = 0;
   while (Date.now() < deadline) {
     const surface = BrowserWindow.getAllWindows().find(win=>new URL(win.webContents.getURL() || 'about:blank').searchParams.has('videoExport'));
     assert.ok(surface,'recording must retain the hidden Folia surface');
-    const matches = await surface.webContents.executeJavaScript(`document.querySelector('.local-video-export-surface')?.dataset.videoExportTrack === ${JSON.stringify(trackId)} && document.body.textContent.includes('新歌曲歌词')`);
-    if (matches) return;
+    const matches = await surface.webContents.executeJavaScript(`document.querySelector('.local-video-export-surface')?.dataset.videoExportTrack === ${JSON.stringify(trackId)} && document.body.textContent.includes('新歌曲歌词') && !document.querySelector('svg.lucide-hourglass')`);
+    stable = matches ? stable + 1 : 0;
+    if (stable >= 3) return;
     await new Promise(resolve=>setTimeout(resolve,100));
   }
   throw new Error(`The hidden Folia surface did not follow track ${trackId}`);
