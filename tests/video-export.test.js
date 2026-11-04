@@ -37,9 +37,8 @@ async function harness(t, options = {}) {
         isDestroyed: () => this.destroyed,
         setFrameRate: value => { this.frameRate = value; },
         setWindowOpenHandler: callback => { this.openHandler = callback; },
-        beginFrameSubscription: (onlyDirty, callback) => { this.onlyDirty = onlyDirty; this.capture = callback; },
-        endFrameSubscription: () => { this.unsubscribed = true; },
         stopPainting: () => { this.stopped = true; },
+        getMediaSourceId: requestingOwner => { this.captureOwner = requestingOwner; return options.sourceId === undefined ? 'owner-bound-source' : options.sourceId; },
         send: (channel, value) => { this.lastMessage = { channel, value }; },
       });
       h.windows.push(this);
@@ -78,13 +77,7 @@ async function harness(t, options = {}) {
     lyrics: [{ startTime: 0, words: '歌词' }], analysis: { frequency: new Float32Array([0.2, 0.5]) }, ...patch,
   });
   h.chunk = (id, sequence, value) => h.invoke('append', { id, sequence, bytes: Uint8Array.from(value) });
-  h.frames = () => owner.sent.filter(item => item.channel.endsWith('-frame'));
   h.failures = () => owner.sent.filter(item => item.channel.endsWith('-failure'));
-  h.image = { getSize: () => ({ width: 1280, height: 720 }), isEmpty: () => false, toJPEG: () => Buffer.from([255, 216, 255]) };
-  h.paint = async () => {
-    h.windows.at(-1).capture(h.image);
-    await Promise.resolve();
-  };
   t.after(async () => {
     await h.manager.dispose();
     await fs.promises.rm(directory, { recursive: true, force: true });
@@ -128,17 +121,18 @@ test('取消清理临时内容并保留原文件，可开始下一次导出', as
   assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(h.output)]);
   const next = await h.begin();
   assert.notEqual(next.id, first.id);
-  h.send('ack', first.id);
   h.send('update', { id: first.id, state: {} });
   await h.chunk(next.id, 0, [9]);
   await h.invoke('finish', { id: next.id });
   assert.deepEqual([...await fs.promises.readFile(h.output)], [9]);
 });
 
-test('画面只有一个待确认帧，确认后继续30fps绘制且不会显示窗口', async t => {
+test('视频源仅绑定可信主frame，隐藏画面不显示或抢焦点', async t => {
   const h = await harness(t);
   const session = await h.begin();
   const win = h.windows[0];
+  assert.equal(session.sourceId, 'owner-bound-source');
+  assert.equal(win.captureOwner, h.owner);
   assert.equal(win.configuration.show, false);
   assert.equal(win.configuration.focusable, false);
   assert.equal(win.configuration.skipTaskbar, true);
@@ -146,17 +140,6 @@ test('画面只有一个待确认帧，确认后继续30fps绘制且不会显示
   assert.equal(win.configuration.webPreferences.offscreen, true);
   assert.equal(win.configuration.webPreferences.sandbox, true);
   assert.equal(win.frameRate, 30);
-  assert.equal(win.onlyDirty, false, 'capture includes every composited layer');
-  win.webContents.emit('paint', {}, {}, { ...h.image, toJPEG: () => Buffer.from([0]) });
-  assert.equal(h.frames().length, 0, 'stale OSR paint bitmaps are not recorded');
-  await h.paint();
-  await h.paint();
-  assert.equal(h.frames().length, 1);
-  h.send('ack', session.id);
-  // Fresh complete compositor frames can proceed after the previous ACK.
-  await h.paint();
-  assert.equal(h.frames().length, 2);
-  assert.deepEqual([...h.frames()[0].value.bytes], [255, 216, 255]);
 });
 
 test('小屏幕不会钳制离屏画面的横向或纵向真实分辨率', async t => {
@@ -168,39 +151,13 @@ test('小屏幕不会钳制离屏画面的横向或纵向真实分辨率', async
   }
 });
 
-test('帧确认不立即重发缓存，原生新帧和取消会撤销待重绘任务', async t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const h = await harness(t);
-  const session = await h.begin();
-  const win = h.windows[0];
-  await h.paint(); h.send('ack', session.id);
-  assert.equal(h.frames().length, 1);
-  t.mock.timers.tick(33);
-  assert.equal(h.frames().length, 1);
-  await h.paint();
-  t.mock.timers.tick(1);
-  assert.equal(h.frames().length, 2, 'fresh compositor frame cancels the cached repeat');
-  h.send('ack', session.id);
-  t.mock.timers.tick(34);
-  assert.equal(h.frames().length, 3, 'static scenes receive one paced repeat');
-  await h.paint(); h.send('ack', session.id);
-  await h.invoke('cancel', { id: session.id });
-  t.mock.timers.tick(1000);
-  assert.equal(h.frames().length, 3, 'released windows cannot be redrawn by a late timer');
-  assert.equal(win.unsubscribed, true);
-});
-
-test('取消后迟到的合成帧不会回写或污染下一次导出', async t => {
-  const h = await harness(t);
-  const first = await h.begin();
-  const staleCapture = h.windows[0].capture;
-  await h.invoke('cancel', { id: first.id });
-  await h.begin();
-  staleCapture(h.image);
-  assert.equal(h.frames().length, 0);
-  assert.equal(h.failures().length, 0);
-  await h.paint();
-  assert.equal(h.frames().length, 1);
+test('无法生成原生视频源时关闭隐藏页并保留已有文件', async t => {
+  const h = await harness(t, { sourceId: '' });
+  await fs.promises.writeFile(h.output, 'existing');
+  await assert.rejects(h.begin(), /VIDEO_EXPORT_SOURCE_UNAVAILABLE/);
+  assert.equal(h.windows[0].destroyed, true);
+  assert.equal(await fs.promises.readFile(h.output, 'utf8'), 'existing');
+  assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(h.output)]);
 });
 
 test('初始和更新桥保留typed频谱数组，隐藏页不能获得主界面文件权限', async t => {
@@ -234,7 +191,6 @@ test('拒绝子frame、错误token和外部导航，全部host写操作需可信
     assert.equal(prevented, true);
   }
   assert.deepEqual(win.openHandler({ url: 'https://example.com' }), { action: 'deny' });
-  h.send('ack', session.id, {});
   h.send('update', { id: session.id, state: {} }, {});
   assert.equal(h.failures().length, 0);
 });

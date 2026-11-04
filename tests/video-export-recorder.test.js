@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../public/video-export.js')
 
 function harness(options = {}) {
   const calls = [], status = [], listeners = new Map(), connections = new Set();
-  let frameListener, failureListener, controller, recorder;
+  let failureListener, controller, recorder;
   const media = {
     src: 'blob:original-song', currentTime: 12, duration: 60, paused: false, ended: false, readyState: 4,
     pause() { calls.push('pause-owner'); this.paused = true; this.fire('pause'); },
@@ -19,9 +19,10 @@ function harness(options = {}) {
     fire(name) { for (const callback of listeners.get(name) || []) callback(); },
   };
   class Stream {
-    constructor() { this.tracks = [{ kind: 'video', requestFrame() {}, stop() { calls.push('stop-video'); } }]; }
+    constructor() { this.tracks = [{ kind: 'video', readyState: 'live', muted: false, stop() { this.readyState = 'ended'; calls.push('stop-video'); } }]; }
     getTracks() { return this.tracks; }
     getVideoTracks() { return this.tracks.filter(track => track.kind === 'video'); }
+    getAudioTracks() { return this.tracks.filter(track => track.kind === 'audio'); }
     addTrack(track) { this.tracks.push(track); }
   }
   const output = { connect(node) { connections.add(node); }, disconnect(node) { assert.ok(node, 'never disconnect the speaker chain'); connections.delete(node); calls.push('disconnect-tap'); } };
@@ -37,17 +38,16 @@ function harness(options = {}) {
     }
   }
   const bridge = {
-    async beginVideoExport(payload) { calls.push(['begin', payload]); return options.begin ? options.begin(payload) : { id: 'job', fileName: 'song.webm' }; },
-    onVideoExportFrame(callback) { frameListener = callback; return () => { frameListener = null; }; },
+    async beginVideoExport(payload) { calls.push(['begin', payload]); return options.begin ? options.begin(payload) : { id: 'job', fileName: 'song.webm', sourceId: 'owner-bound-source' }; },
     onVideoExportFailure(callback) { failureListener = callback; return () => { failureListener = null; }; },
-    ackVideoExportFrame(id) { calls.push(['ack', id]); },
-    updateVideoExport(payload) { calls.push(['update', payload]); frameListener?.({ id: 'job', bytes: new Uint8Array([1, 2]), width: 1280, height: 720 }); },
+    updateVideoExport(payload) { calls.push(['update', payload]); },
     async appendVideoExportChunk(payload) { calls.push(['append', payload.sequence, payload.bytes.byteLength > 100 ? payload.bytes.byteLength : Buffer.from(payload.bytes).toString()]); if (options.append) await options.append(payload); },
     async finishVideoExport(payload) { calls.push(['finish', payload.id]); return { fileName: 'song.webm' }; },
     async cancelVideoExport(payload) { calls.push(['cancel', payload.id]); },
   };
   const host = {
-    desktopWindow: bridge, MediaRecorder: Recorder, MediaStream: Stream, Blob, createImageBitmap: async () => ({ close() { calls.push('close-bitmap'); } }),
+    desktopWindow: bridge, MediaRecorder: Recorder, MediaStream: Stream, Blob,
+    navigator: { mediaDevices: { getUserMedia: async constraints => { calls.push(['capture', constraints]); return options.capture ? options.capture() : new Stream(); } } },
     document: { createElement(tag) { assert.equal(tag, 'canvas'); return { width: 0, height: 0, getContext: () => ({ drawImage() {} }), captureStream: () => new Stream(), remove() {} }; } },
     audio: media, audioChain: { output },
     audioCtx: { sampleRate: 48000, createMediaStreamDestination() { return { stream: { getAudioTracks: () => [{ kind: 'audio', stop() { calls.push('stop-tap'); } }] } }; } },
@@ -60,7 +60,7 @@ function harness(options = {}) {
     getLyrics: () => ({ trackId: host.trackId || 'track', lines: [] }), getAnalysis: () => ({ trackId: host.trackId || 'track', revision: 1 }),
     emit: (name, value) => status.push({ name, ...value }),
   });
-  return { controller, host, media, calls, status, connections, get recorder() { return recorder; }, fail: error => failureListener({ id: 'job', error }) };
+  return { controller, host, media, calls, status, connections, makeStream: () => new Stream(), get recorder() { return recorder; }, fail: error => failureListener({ id: 'job', error }) };
 }
 const params = { width: 1280, height: 720, startMode: 'current', visuals: { mode: 'classic' } };
 
@@ -178,26 +178,42 @@ test('cancel during the pending dialog cleans up a late successful desktop sessi
   assert.equal(h.controller.isCapturing(), false);
 });
 
-test('a late bitmap failure from a saved job cannot overwrite the next recording', async t => {
-  const h = harness();
+test('a late video stream after cancellation is stopped without changing the next recording', async t => {
+  let resolveCapture;
+  const pending = new Promise(resolve => { resolveCapture = resolve; });
+  const h = harness({ capture: () => pending });
   t.after(() => h.controller.cancel());
-  await h.controller.start(params);
-  const createBitmap = h.host.createImageBitmap;
-  let rejectBitmap, markDecoding;
-  const decoding = new Promise(resolve => { markDecoding = resolve; });
-  h.host.createImageBitmap = () => {
-    markDecoding();
-    return new Promise((_resolve, reject) => { rejectBitmap = reject; });
-  };
-  await decoding;
-  assert.equal((await h.controller.stop()).status, 'saved');
-  h.host.createImageBitmap = createBitmap;
-  await h.controller.start(params);
-  const before = h.controller.getState();
-  rejectBitmap(new Error('old bitmap decode failed'));
+  const starting = h.controller.start(params);
   await new Promise(resolve => setImmediate(resolve));
+  await h.controller.cancel();
+  h.host.navigator.mediaDevices.getUserMedia = async () => h.makeStream();
+  await h.controller.start(params);
+  const stale = h.makeStream();
+  resolveCapture(stale);
+  await starting;
+  assert.equal(stale.getVideoTracks()[0].readyState, 'ended');
   assert.equal(h.controller.getState().status, 'recording');
-  assert.equal(h.controller.getState().fileName, before.fileName);
   assert.equal(h.controller.getState().error, '');
-  assert.equal(h.controller.isCapturing(), true);
+});
+
+test('native capture is video only and uses the hidden owner-bound tab token', async () => {
+  const h = harness();
+  await h.controller.start(params);
+  const constraints = h.calls.find(value => Array.isArray(value) && value[0] === 'capture')[1];
+  assert.equal(constraints.audio, false);
+  assert.equal(constraints.video.mandatory.chromeMediaSource, 'tab');
+  assert.equal(constraints.video.mandatory.chromeMediaSourceId, 'owner-bound-source');
+  assert.equal(constraints.video.mandatory.maxWidth, 1280);
+  assert.equal(constraints.video.mandatory.maxHeight, 720);
+  await h.controller.stop();
+});
+
+test('a rejected capture leaves playback untouched and releases the prepared surface', async () => {
+  const h = harness({ capture: async () => { throw new Error('capture failed'); } });
+  const result = await h.controller.start(params);
+  assert.equal(result.status, 'error');
+  assert.equal(h.media.paused, false);
+  assert.equal(h.media.currentTime, 12);
+  assert.ok(!h.calls.includes('pause-owner'));
+  assert.ok(h.calls.some(value => Array.isArray(value) && value[0] === 'cancel'));
 });

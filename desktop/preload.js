@@ -78,14 +78,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   appendVideoExportChunk: payload => ipcRenderer.invoke('mineradio-video-export-append', payload || {}),
   finishVideoExport: payload => ipcRenderer.invoke('mineradio-video-export-finish', payload || {}),
   cancelVideoExport: payload => ipcRenderer.invoke('mineradio-video-export-cancel', payload || {}),
-  ackVideoExportFrame: id => ipcRenderer.send('mineradio-video-export-ack', String(id || '')),
   updateVideoExport: payload => ipcRenderer.send('mineradio-video-export-update', payload || {}),
-  onVideoExportFrame: callback => {
-    if (typeof callback !== 'function') return () => {};
-    const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('mineradio-video-export-frame', listener);
-    return () => ipcRenderer.removeListener('mineradio-video-export-frame', listener);
-  },
   onVideoExportFailure: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload);

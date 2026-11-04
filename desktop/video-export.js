@@ -9,7 +9,6 @@ const MAX_CHUNK_BYTES = 8 * 1024 * 1024;
 const MAX_PENDING_BYTES = 32 * 1024 * 1024;
 const MAX_PENDING_CHUNKS = 8;
 const READY_TIMEOUT_MS = 50_000;
-const FRAME_ACK_TIMEOUT_MS = 15_000;
 const MAX_INITIAL_BYTES = 32 * 1024 * 1024;
 
 /** The hidden renderer paints only; the main renderer retains the sole audio owner. */
@@ -45,13 +44,7 @@ function createVideoExportManager({
 
   function stopSurface(record) {
     clearTimeout(record.readyTimer);
-    clearTimeout(record.ackTimer);
-    clearTimeout(record.nextFrameTimer);
     record.readyTimer = null;
-    record.ackTimer = null;
-    record.nextFrameTimer = null;
-    record.latestFrame = null;
-    record.presentFrame = null;
     if (record.ownerListener) {
       record.owner.removeListener('destroyed', record.ownerListener);
       record.owner.removeListener('render-process-gone', record.ownerListener);
@@ -60,7 +53,6 @@ function createVideoExportManager({
     const win = record.window;
     record.window = null;
     if (win && !win.isDestroyed()) {
-      try { win.webContents.endFrameSubscription(); } catch {}
       try { win.webContents.stopPainting(); } catch {}
       win.destroy();
     }
@@ -122,7 +114,7 @@ function createVideoExportManager({
     const record = {
       id: crypto.randomUUID(), owner: event.sender, window: null, discarded: false,
       writes: Promise.resolve(), nextSequence: 0, pendingBytes: 0, pendingChunks: 0,
-      bytes: 0, stage: 'choosing', waitingAck: false,
+      bytes: 0, stage: 'choosing',
       width: options.width, height: options.height, initial: options.initial,
     };
     active = record;
@@ -187,24 +179,6 @@ function createVideoExportManager({
       win.on('closed', () => {
         if (record.window === win) fail(record, new Error('VIDEO_EXPORT_WINDOW_CLOSED'));
       });
-      record.presentFrame = () => {
-        if (active !== record || record.discarded || record.stage !== 'recording' || record.waitingAck) return;
-        const frame = record.latestFrame;
-        if (!frame) return;
-        clearTimeout(record.nextFrameTimer);
-        record.nextFrameTimer = null;
-        record.waitingAck = true;
-        record.ackTimer = setTimeout(() => fail(record, new Error('VIDEO_EXPORT_FRAME_TIMEOUT')), FRAME_ACK_TIMEOUT_MS);
-        record.ackTimer.unref?.();
-        try {
-          const size = frame.image.getSize();
-          if (!size.width || !size.height || frame.image.isEmpty()) throw new Error('VIDEO_EXPORT_FRAME_EMPTY');
-          if (!frame.bytes) frame.bytes = frame.image.toJPEG(92);
-          send(record, 'mineradio-video-export-frame', { id: record.id, bytes: frame.bytes, width: size.width, height: size.height });
-        } catch (error) {
-          if (active === record && record.stage === 'recording') fail(record, error);
-        }
-      };
       const ready = new Promise((resolve, reject) => {
         record.resolveReady = resolve;
         record.rejectReady = reject;
@@ -218,37 +192,16 @@ function createVideoExportManager({
       await Promise.all([loaded, ready]);
       requireCurrent(record.id);
       record.stage = 'recording';
-      // Subscribe to complete compositor frames. The OSR paint bitmap can omit
-      // compositor-only lyric layers; per-frame capturePage() stalls GPU readback.
-      win.webContents.beginFrameSubscription(false, image => {
-        if (active !== record || record.discarded || record.stage !== 'recording' || record.window !== win) return;
-        record.latestFrame = { image, bytes: null };
-        record.presentFrame();
-      });
-      return { id: record.id, fileName: record.fileName, width: record.width, height: record.height };
+      // Chromium captures this display-only WebContents directly. The opaque token
+      // is bound to the trusted owner frame and expires after ten seconds.
+      const sourceId = win.webContents.getMediaSourceId(record.owner);
+      if (!sourceId) throw new Error('VIDEO_EXPORT_SOURCE_UNAVAILABLE');
+      return { id: record.id, fileName: record.fileName, width: record.width, height: record.height, sourceId };
     } catch (error) {
       fail(record, error);
       await discard(record);
       throw error;
     }
-  }
-
-  function acknowledge(_event, id) {
-    const record = requireCurrent(id);
-    record.waitingAck = false;
-    clearTimeout(record.ackTimer);
-    record.ackTimer = null;
-    clearTimeout(record.nextFrameTimer);
-    // Static scenes still need a frame after the encoder starts. Replay the latest
-    // complete frame at a bounded rate; a fresh compositor frame cancels this repeat.
-    record.nextFrameTimer = setTimeout(() => {
-      record.nextFrameTimer = null;
-      if (active === record && !record.discarded && record.stage === 'recording'
-        && !record.waitingAck && record.window && !record.window.isDestroyed()) {
-        record.presentFrame?.();
-      }
-    }, Math.ceil(1000 / FRAME_RATE));
-    record.nextFrameTimer.unref?.();
   }
 
   function update(_event, payload) {
@@ -329,11 +282,11 @@ function createVideoExportManager({
     for (const [channel, handler] of [
       ['begin', begin], ['append', append], ['finish', finish], ['cancel', cancel],
     ]) ipcMain.handle('mineradio-video-export-' + channel, trustedMainFrameHandler(handler));
-    for (const [channel, handler] of [['ack', acknowledge], ['update', update]]) {
+    for (const [channel, handler] of [['update', update]]) {
       const guarded = trustedMainFrameHandler(handler);
       ipcMain.on('mineradio-video-export-' + channel, (event, payload) => {
         try { guarded(event, payload); } catch (error) {
-          const id = channel === 'ack' ? payload : payload && payload.id;
+          const id = payload && payload.id;
           if (active && active.id === id) fail(active, error);
         }
       });

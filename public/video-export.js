@@ -15,7 +15,7 @@
   }
   function create(host, services) {
     var bridge = host.desktopWindow, current = null;
-    var supported = !!(bridge && bridge.beginVideoExport && host.MediaStream && host.createImageBitmap && formatFor(host.MediaRecorder));
+    var supported = !!(bridge && bridge.beginVideoExport && host.MediaStream && host.navigator && host.navigator.mediaDevices && host.navigator.mediaDevices.getUserMedia && formatFor(host.MediaRecorder));
     var state = { supported: supported, status: 'idle', progress: 0, elapsed: 0, transitionBehavior: 'continue' };
     function publish(patch) {
       state = Object.assign({}, state, patch);
@@ -40,10 +40,8 @@
       s.listeners = [];
       disconnectAudio(s);
       if (s.stream) s.stream.getTracks().forEach(function (track) { track.stop(); });
-      if (s.canvas) { s.canvas.width = 1; s.canvas.height = 1; s.canvas.remove(); }
-      if (s.unsubscribeFrame) s.unsubscribeFrame();
       if (s.unsubscribeFailure) s.unsubscribeFailure();
-      s.canvas = s.stream = s.context = null;
+      s.stream = null;
       if (current === s) current = null;
     }
     async function discard(s, error) {
@@ -68,20 +66,6 @@
       // A late bitmap/encoder callback from a released job must not overwrite a newer job.
       if (current !== s || s.cancelled) return;
       void discard(s, error).catch(function () {});
-    }
-    function acceptFrame(s, frame) {
-      var ack = function () { bridge.ackVideoExportFrame(frame.id); };
-      if (current !== s || s.cancelled || s.finishing || frame.id !== s.id || s.decoding) { ack(); return; }
-      s.decoding = true;
-      host.createImageBitmap(new host.Blob([frame.bytes], { type: 'image/jpeg' })).then(function (bitmap) {
-        try {
-          if (current !== s || s.cancelled || s.finishing || !s.context) return;
-          s.context.drawImage(bitmap, 0, 0, s.width, s.height);
-          s.lastFrameAt = Date.now();
-          s.frames++;
-          if (s.videoTrack && s.videoTrack.requestFrame) s.videoTrack.requestFrame();
-        } finally { bitmap.close(); }
-      }).catch(function (error) { fail(s, error); }).finally(function () { s.decoding = false; ack(); });
     }
     function queueChunk(s, blob) {
       if (!blob || !blob.size || s.cancelled) return;
@@ -163,7 +147,7 @@
         bridge.updateVideoExport(payload);
         // The queue may hand off asynchronously after ended. Leave room for its next owner to start.
         if (s.recorder && s.endingAt && s.audio.ended && now - s.endingAt > 1500) { void stop(); return; }
-        if (s.recorder && now - s.lastFrameAt > 15000) throw new Error('Video export stopped receiving visual frames.');
+        if (s.videoTrack && s.videoTrack.readyState === 'ended') throw new Error('Video export stopped receiving visual frames.');
         if (s.recorder && now - s.progressAt >= 250) {
           s.progressAt = now;
           publish({ elapsed: s.elapsed, progress: Math.max(0, Math.min(1, (visualState.position - s.startPosition) / Math.max(0.01, s.base.duration - s.startPosition))) });
@@ -172,12 +156,13 @@
       } catch (error) { fail(s, error); }
     }
     async function waitForFrame(s) {
-      var until = Date.now() + 15000, initial = s.frames;
-      while (s.frames === initial && !s.cancelled) {
+      var until = Date.now() + 15000;
+      while (s.videoTrack.muted && !s.cancelled) {
         if (Date.now() >= until) throw new Error('Video export could not render its first frame.');
         await new Promise(function (resolve) { host.setTimeout(resolve, 25); });
       }
       if (s.cancelled) throw new Error('Video export cancelled.');
+      if (s.videoTrack.readyState !== 'live') throw new Error('Video export stopped receiving visual frames.');
     }
     async function start(params) {
       if (current) throw new Error('A video export is already running.');
@@ -191,17 +176,11 @@
       var format = formatFor(host.MediaRecorder);
       var s = { id: '', audio: media, trackId: initial.currentTrack.id, width: params.width, height: params.height,
         transitionBehavior: transitionBehavior, lyricSignature: null, lyricsAt: 0,
-        listeners: [], writes: Promise.resolve(), sequence: 0, pendingBytes: 0, frames: 0, elapsed: 0,
-        lastFrameAt: Date.now(), stateAt: 0, analysisAt: 0, progressAt: 0, startPosition: params.startMode === 'from-start' ? 0 : initial.position };
+        listeners: [], writes: Promise.resolve(), sequence: 0, pendingBytes: 0, elapsed: 0,
+        stateAt: 0, analysisAt: 0, progressAt: 0, startPosition: params.startMode === 'from-start' ? 0 : initial.position };
       current = s;
       publish({ status: 'preparing', progress: 0, elapsed: 0, error: '', fileName: '', transitionBehavior: transitionBehavior });
       try {
-        s.canvas = host.document.createElement('canvas'); s.canvas.width = s.width; s.canvas.height = s.height;
-        // Frames arrive as decoded JPEG bitmaps. CPU raster keeps canvas capture independent
-        // of Windows' shared GPU readback path, which can stop delivering bitmap-backed frames.
-        s.context = s.canvas.getContext('2d', { alpha: false, willReadFrequently: true });
-        if (!s.context) throw new Error('Video export could not create its canvas.');
-        s.unsubscribeFrame = bridge.onVideoExportFrame(function (frame) { acceptFrame(s, frame); });
         s.unsubscribeFailure = bridge.onVideoExportFailure(function (failure) { if (failure.id === s.id) fail(s, new Error(failure.error)); });
         var result = await bridge.beginVideoExport({ width: s.width, height: s.height, extension: format[1],
           fileName: initial.currentTrack.title + '-' + s.width + 'x' + s.height + '.' + format[1], visuals: params.visuals,
@@ -209,6 +188,29 @@
         if (result.cancelled) { if (!s.cancelled) await discard(s); return snapshot(); }
         s.id = result.id;
         if (s.cancelled || current !== s) { await bridge.cancelVideoExport({ id: s.id }); return snapshot(); }
+        // Capture only the hidden Folia document via an owner-bound tab token.
+        // The native video track goes straight to the encoder without JPEG copies.
+        var captureTimer;
+        var capture = host.navigator.mediaDevices.getUserMedia({ audio: false, video: { mandatory: {
+          chromeMediaSource: 'tab', chromeMediaSourceId: result.sourceId,
+          minWidth: s.width, maxWidth: s.width, minHeight: s.height, maxHeight: s.height,
+          minFrameRate: 1, maxFrameRate: 30
+        } } }).then(function (stream) {
+          if (s.cancelled || current !== s) { stream.getTracks().forEach(function (track) { track.stop(); }); return null; }
+          return stream;
+        });
+        try {
+          s.stream = await Promise.race([capture, new Promise(function (_resolve, reject) {
+            captureTimer = host.setTimeout(function () { reject(new Error('Video export could not prepare its video stream.')); }, 15000);
+          })]);
+        } finally { host.clearTimeout(captureTimer); }
+        if (!s.stream || s.cancelled || current !== s) {
+          if (s.stream) s.stream.getTracks().forEach(function (track) { track.stop(); });
+          s.stream = null;
+          return snapshot();
+        }
+        s.videoTrack = s.stream.getVideoTracks()[0];
+        if (!s.videoTrack || s.stream.getAudioTracks().length) throw new Error('Video export received an invalid video stream.');
         var check = services.getState();
         if (!check.currentTrack || check.currentTrack.id !== s.trackId || host.audio !== media) throw new Error('The song changed while preparing the export. Please try again.');
         // A dismissed save dialog has no transport side effects. Only now prepare the shared owner.
@@ -221,7 +223,6 @@
         if (typeof host.syncBeatMapPlaybackCursor === 'function') host.syncBeatMapPlaybackCursor(s.startPosition);
         s.base = services.getState(); s.stateAt = Date.now();
         s.output = host.audioChain.output; s.tap = host.audioCtx.createMediaStreamDestination(); s.output.connect(s.tap);
-        s.stream = s.canvas.captureStream(0); s.videoTrack = s.stream.getVideoTracks()[0];
         s.tap.stream.getAudioTracks().forEach(function (track) { s.stream.addTrack(track); });
         update(s);
         await waitForFrame(s);

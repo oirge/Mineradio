@@ -97,24 +97,30 @@ MediaRecorder.prototype.start = function() {
   });
   return nativeStart.apply(recorder,arguments);
 };
-const nativeDraw = CanvasRenderingContext2D.prototype.drawImage;
-CanvasRenderingContext2D.prototype.drawImage = function() {
-  const result = nativeDraw.apply(this,arguments); fixtureDraws++;
-  if (fixtureDraws<=4 || fixtureDraws%20===0) fixtureDiagnostic('canvas-draw',{width:this.canvas.width,height:this.canvas.height});
-  return result;
-};
-const nativeCapture = HTMLCanvasElement.prototype.captureStream;
-HTMLCanvasElement.prototype.captureStream = function() {
-  const stream = nativeCapture.apply(this,arguments);
-  stream.getVideoTracks().forEach(function(track) {
-    ['mute','unmute','ended'].forEach(function(kind) { track.addEventListener(kind,function(){fixtureDiagnostic('video-track-'+kind,{state:track.readyState,muted:track.muted,settings:track.getSettings()});}); });
-    if (typeof track.requestFrame==='function') {
-      const request = track.requestFrame.bind(track);
-      track.requestFrame = function() { fixtureRequests++; if (fixtureRequests<=4 || fixtureRequests%20===0) fixtureDiagnostic('canvas-request-frame',{state:track.readyState,muted:track.muted,settings:track.getSettings()}); return request(); };
-    }
-  });
-  fixtureDiagnostic('canvas-capture-stream',{rate:arguments[0],tracks:stream.getVideoTracks().map(function(track){return {state:track.readyState,muted:track.muted,settings:track.getSettings()};})});
+// Observe the actual native track without changing the production recorder.
+const nativeGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+navigator.mediaDevices.getUserMedia = async function(constraints) {
+  const stream = await nativeGetUserMedia(constraints);
+  const video = document.createElement('video'); video.muted = true; video.playsInline = true;
+  video.style.cssText = 'width:160px;height:90px'; video.srcObject = stream; document.body.append(video);
+  window.fixtureCaptureVideo = video;
+  window.fixtureCaptureInfo = {constraints:constraints,settings:stream.getVideoTracks()[0].getSettings()};
+  const frame = function(now,metadata) {
+    fixtureFrames++;
+    window.fixtureCaptureInfo.lastFrame = {at:now,mediaTime:metadata.mediaTime,presentedFrames:metadata.presentedFrames};
+    if(stream.active)video.requestVideoFrameCallback(frame);
+  };
+  video.requestVideoFrameCallback(frame);
+  stream.getVideoTracks()[0].addEventListener('ended',function(){video.pause();video.srcObject=null;video.remove();});
+  await video.play();
   return stream;
+};
+window.fixtureCaptureSnapshot = function() {
+  const video=window.fixtureCaptureVideo;
+  if(!video||!video.videoWidth||!video.srcObject?.active)return null;
+  const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0);
+  return {url:canvas.toDataURL('image/jpeg',0.9),width:canvas.width,height:canvas.height,at:performance.now(),position:audio.currentTime};
 };
 function state() {
   return { uiLanguage: 'en', currentTrack: {id:fixtureTrack,title:'Video export fixture',artist:'Mineradio CI',album:'Background export',duration:audio.duration,cover:'',liked:false,filePath:'',format:'wav'},
@@ -133,10 +139,6 @@ function lyrics() {
 function analysis() { return {trackId:fixtureTrack,revision:1,source:'live',beats:[],drums:null,vocal:null}; }
 window.fixture = window.MineradioVideoExport.create(window, {getState:state,getLyrics:lyrics,getAnalysis:analysis,
   emit:function(event,value) { fixtureEvents.push({event:event,value:value,at:performance.now(),position:audio.currentTime}); fixtureDiagnostic('export-state',value); }
-});
-window.desktopWindow.onVideoExportFrame(function(frame) {
-  fixtureFrames++;window.fixtureLastFrame={id:frame.id,bytes:frame.bytes,width:frame.width,height:frame.height,at:performance.now(),position:audio.currentTime};
-  if (fixtureFrames<=4 || fixtureFrames%20===0) fixtureDiagnostic('offscreen-frame',{id:frame.id,width:frame.width,height:frame.height,bytes:frame.bytes.byteLength});
 });
 [fixtureFirst,fixtureNext].forEach(function(media) {
   ['play','playing','pause','ended','seeking','seeked'].forEach(function(kind) {
@@ -201,10 +203,10 @@ async function snapshotSurfaces(label, pixelSample = false) {
       })()`,true), new Promise(resolve=>setTimeout(()=>resolve({unavailable:'surface did not answer'}),pixelSample?12000:1500))]);
       surfaceSnapshots.push({label,windowId:surface.id,...result});
       if(/^(landscape|portrait)/.test(label)) {
-        const source=await evaluate('window.fixtureLastFrame||null');
-        if(source?.bytes) {
+        const source=await evaluate('window.fixtureCaptureSnapshot()');
+        if(source?.url) {
           const file=`${label.replace(/[^a-z0-9-]/gi,'-')}-source.jpg`;
-          fs.writeFileSync(path.join(OUT,file),Buffer.from(source.bytes));
+          fs.writeFileSync(path.join(OUT,file),Buffer.from(source.url.split(',')[1],'base64'));
           surfaceSnapshots.at(-1).sourceFrame={file,id:source.id,width:source.width,height:source.height,at:source.at,position:source.position};
         }
       }
@@ -215,53 +217,11 @@ async function snapshotSurfaces(label, pixelSample = false) {
 async function fixtureSnapshot() {
   if (!host || host.isDestroyed()) return null;
   try {
-    return await Promise.race([evaluate('({state:window.fixture && fixture.getState(),frames:window.fixtureFrames,draws:window.fixtureDraws,requests:window.fixtureRequests,events:window.fixtureEvents,transport:window.fixtureTransportEvents,diagnostics:window.fixtureDiagnostics,position:window.audio && audio.currentTime,ended:window.audio && audio.ended})'),
+    return await Promise.race([evaluate('({state:window.fixture && fixture.getState(),frames:window.fixtureFrames,draws:window.fixtureDraws,requests:window.fixtureRequests,events:window.fixtureEvents,transport:window.fixtureTransportEvents,capture:window.fixtureCaptureInfo,diagnostics:window.fixtureDiagnostics,position:window.audio && audio.currentTime,ended:window.audio && audio.ended})'),
       new Promise(resolve=>setTimeout(()=>resolve({unavailable:'renderer did not answer'}),1500))]);
   } catch (error) { return {unavailable:String(error)}; }
 }
 
-async function diagnoseCanvasCodecs() {
-  const results = [];
-  for (const [name,mimeType,extension,captureRate] of [
-    ['mp4-level-3','video/mp4;codecs=avc1.42E01E,mp4a.40.2','mp4',0],
-    ['mp4-level-4','video/mp4;codecs=avc1.42E028,mp4a.40.2','mp4',0],
-    ['mp4-level-4-auto-30','video/mp4;codecs=avc1.42E028,mp4a.40.2','mp4',30],
-    ['webm-vp8','video/webm;codecs=vp8,opus','webm',0],
-  ]) {
-    const result = await evaluate(`(async function() {
-      const mimeType = ${JSON.stringify(mimeType)};
-      if (!MediaRecorder.isTypeSupported(mimeType)) return {supported:false,mimeType};
-      const canvas = document.createElement('canvas'); canvas.width=1280; canvas.height=720;
-      const context = canvas.getContext('2d'), stream = canvas.captureStream(${captureRate}), track = stream.getVideoTracks()[0];
-      const tap = audioCtx.createMediaStreamDestination(); audioChain.output.connect(tap);
-      tap.stream.getAudioTracks().forEach(function(audioTrack){stream.addTrack(audioTrack);});
-      let timer, recorder, stopped, chunks=[];
-      try {
-        audio.currentTime=0; await audioCtx.resume(); await audio.play();
-        recorder=new MediaRecorder(stream,{mimeType:mimeType,videoBitsPerSecond:8000000,audioBitsPerSecond:192000});
-        recorder.addEventListener('dataavailable',function(event){if(event.data.size)chunks.push(event.data);});
-        stopped=new Promise(function(resolve){recorder.addEventListener('stop',resolve,{once:true});});
-        recorder.start(250);
-        let frame=0;
-        const draw=function(){context.fillStyle=frame%2?'#214bc0':'#a03421';context.fillRect(0,0,1280,720);context.fillStyle='white';context.font='80px sans-serif';context.fillText('Canvas '+frame++,120,280);if(${captureRate}===0)track.requestFrame();};
-        draw(); timer=setInterval(draw,33); await new Promise(function(resolve){setTimeout(resolve,900);});
-        clearInterval(timer); recorder.stop(); await stopped;
-        const blob=new Blob(chunks,{type:mimeType}); return {supported:true,mimeType,actualMimeType:recorder.mimeType,bytes:await blob.arrayBuffer(),frames:frame,captureRate:${captureRate}};
-      } catch(error) { return {supported:true,mimeType,error:String(error)}; }
-      finally {clearInterval(timer);audio.pause();audioChain.output.disconnect(tap);stream.getTracks().forEach(function(item){item.stop();});canvas.width=1;canvas.height=1;}
-    })()`);
-    if (result.bytes) {
-      const target=path.join(OUT,`diagnostic-${name}.${extension}`);
-      fs.writeFileSync(target,Buffer.from(result.bytes)); delete result.bytes;
-      let metadata='';
-      try { execFileSync(ffmpeg,['-hide_banner','-i',target],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}); }
-      catch(error) { metadata=String(error.stderr); }
-      result.file=path.basename(target); result.videoStream=/Video:.*\b1280x720\b/.test(metadata); result.audioStream=/Audio:/.test(metadata); result.metadata=metadata;
-    }
-    results.push(result);
-    fs.writeFileSync(path.join(OUT,'diagnostic.json'),JSON.stringify(results,null,2));
-  }
-}
 async function until(source, label, timeout = 35000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -444,34 +404,6 @@ async function decodeRecordedSegment(filePath, width, height, minimum, toneChang
   fs.writeFileSync(path.join(OUT, `${path.basename(filePath,path.extname(filePath))}-decode.json`), JSON.stringify(result,null,2));
 }
 
-// Failure evidence only: compare the production paint stream with a separate page snapshot,
-// then isolate stacking/transform layers without changing any accepted recording.
-async function diagnoseLyricComposition() {
-  await evaluate('fixture.cancel()');
-  await start('diagnostic-lyric-composition',1280,720,'classic');
-  await until('audio.currentTime>=1.2','composition diagnostic playhead');
-  await evaluate('audio.pause()');
-  await new Promise(resolve=>setTimeout(resolve,350));
-  const surface=BrowserWindow.getAllWindows().find(win=>win.webContents.isOffscreen());
-  assert.ok(surface);
-  const save=async label=> {
-    await new Promise(resolve=>setTimeout(resolve,400));
-    const source=await evaluate('fixtureLastFrame');
-    if(source?.bytes)fs.writeFileSync(path.join(OUT,`composition-${label}-paint.jpg`),Buffer.from(source.bytes));
-    const image=await surface.webContents.capturePage();
-    fs.writeFileSync(path.join(OUT,`composition-${label}-page.png`),image.toPNG());
-  };
-  await save('original');
-  await surface.webContents.executeJavaScript(`document.querySelector('.local-video-export-surface').style.isolation='auto'`);
-  await save('without-isolation');
-  await surface.webContents.executeJavaScript(`(function(){const style=document.createElement('style');style.id='composition-flat';style.textContent='.local-video-export-surface *{transform:none!important;filter:none!important;perspective:none!important;will-change:auto!important}';document.head.append(style);})()`);
-  await save('flat');
-  await surface.webContents.executeJavaScript(`(function(){document.getElementById('composition-flat').remove();const stage=document.querySelector('.local-video-export-surface');stage.style.isolation='isolate';const background=stage.querySelector('.absolute.inset-0.z-0.overflow-hidden');if(background)background.style.display='none';const control=document.createElement('div');control.textContent='COMPOSITION CONTROL';control.style.cssText='position:fixed;top:20px;left:20px;z-index:99999;color:white;font:48px Arial';stage.append(control);})()`);
-  await save('without-background');
-  await snapshotSurfaces('composition-final');
-  await evaluate('fixture.cancel()');
-}
-
 async function run() {
   const wav = waveFixture(), nextWav = waveFixture(7,48000,660);
   server = http.createServer((request, response) => {
@@ -619,8 +551,6 @@ app.whenReady().then(run).then(async()=> {
   await snapshotSurfaces('failure');
   fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures,surfaces:surfaceSnapshots,fixture:await fixtureSnapshot()},null,2));
   process.stderr.write(`${error.stack || error}\n`);
-  try { if(host&&!host.isDestroyed())await diagnoseLyricComposition(); } catch(diagnosticError) { fs.writeFileSync(path.join(OUT,'composition-error.txt'),String(diagnosticError)); }
-  try { if(host&&!host.isDestroyed())await diagnoseCanvasCodecs(); } catch(diagnosticError) { fs.writeFileSync(path.join(OUT,'diagnostic-error.txt'),String(diagnosticError)); }
   try { await manager?.dispose(); } catch {} try { host?.destroy(); } catch {} try { server?.close(); } catch {}
   app.exit(1);
 });
