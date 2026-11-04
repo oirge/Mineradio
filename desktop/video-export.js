@@ -46,8 +46,10 @@ function createVideoExportManager({
   function stopSurface(record) {
     clearTimeout(record.readyTimer);
     clearTimeout(record.ackTimer);
+    clearTimeout(record.nextFrameTimer);
     record.readyTimer = null;
     record.ackTimer = null;
+    record.nextFrameTimer = null;
     if (record.ownerListener) {
       record.owner.removeListener('destroyed', record.ownerListener);
       record.owner.removeListener('render-process-gone', record.ownerListener);
@@ -187,9 +189,10 @@ function createVideoExportManager({
         try {
           const size = image.getSize();
           if (!size.width || !size.height || image.isEmpty()) return;
+          clearTimeout(record.nextFrameTimer);
+          record.nextFrameTimer = null;
           const bytes = image.toJPEG(92);
-          // Electron already limits paint to FRAME_RATE. A second timestamp gate can drop
-          // the sole invalidated frame and strand the acknowledgement-driven paint loop.
+          // Keep only one JPEG in flight; native compositor paints already have a frame cap.
           record.waitingAck = true;
           record.ackTimer = setTimeout(() => fail(record, new Error('VIDEO_EXPORT_FRAME_TIMEOUT')), FRAME_ACK_TIMEOUT_MS);
           record.ackTimer.unref?.();
@@ -223,7 +226,18 @@ function createVideoExportManager({
     record.waitingAck = false;
     clearTimeout(record.ackTimer);
     record.ackTimer = null;
-    if (record.window && !record.window.isDestroyed()) record.window.webContents.invalidate();
+    clearTimeout(record.nextFrameTimer);
+    // invalidate() re-emits Electron's cached backing bitmap immediately; it does not
+    // obey setFrameRate(). Give the compositor time to deliver a fresh paint first,
+    // and request a paced repeat only when an otherwise static scene stays unchanged.
+    record.nextFrameTimer = setTimeout(() => {
+      record.nextFrameTimer = null;
+      if (active === record && !record.discarded && record.stage === 'recording'
+        && !record.waitingAck && record.window && !record.window.isDestroyed()) {
+        record.window.webContents.invalidate();
+      }
+    }, Math.ceil(1000 / FRAME_RATE));
+    record.nextFrameTimer.unref?.();
   }
 
   function update(_event, payload) {

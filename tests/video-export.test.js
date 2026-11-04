@@ -164,6 +164,28 @@ test('小屏幕不会钳制离屏画面的横向或纵向真实分辨率', async
   }
 });
 
+test('帧确认不立即重发缓存，原生新帧和取消会撤销待重绘任务', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = await harness(t);
+  const session = await h.begin();
+  const win = h.windows[0];
+  const initial = win.invalidations;
+  h.paint(); h.send('ack', session.id);
+  assert.equal(win.invalidations, initial);
+  t.mock.timers.tick(33);
+  assert.equal(win.invalidations, initial);
+  h.paint();
+  t.mock.timers.tick(1);
+  assert.equal(win.invalidations, initial, 'fresh compositor paint cancels the cached repeat');
+  h.send('ack', session.id);
+  t.mock.timers.tick(34);
+  assert.equal(win.invalidations, initial + 1, 'static scenes receive one paced repeat');
+  h.paint(); h.send('ack', session.id);
+  await h.invoke('cancel', { id: session.id });
+  t.mock.timers.tick(1000);
+  assert.equal(win.invalidations, initial + 1, 'released windows cannot be redrawn by a late timer');
+});
+
 test('初始和更新桥保留typed频谱数组，隐藏页不能获得主界面文件权限', async t => {
   const h = await harness(t);
   const session = await h.begin();
