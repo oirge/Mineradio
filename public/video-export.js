@@ -48,7 +48,7 @@
       if (s.discarding) return s.discarding;
       s.cancelled = true;
       disconnectAudio(s);
-      if (s.preparedPlayback && !s.started && s.wasPlaying && host.audio === s.audio) {
+      if (s.preparedPlayback && !s.playbackReleased && s.wasPlaying && host.audio === s.audio) {
         // Cancelling preparation must not leave the user's previously playing song paused.
         try { Promise.resolve(s.audio.play()).catch(function () {}); } catch (_) {}
       }
@@ -253,6 +253,7 @@
         }
         if (s.cancelled || current !== s) return snapshot();
         publish({ status: 'paused', fileName: result.fileName });
+        s.playbackReleased = true;
         await media.play(); syncRecording(s);
         return snapshot();
       } catch (error) {

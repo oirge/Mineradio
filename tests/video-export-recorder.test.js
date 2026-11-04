@@ -88,18 +88,21 @@ test('playback waits for asynchronous encoder startup without pausing the initia
   await h.controller.stop();
 });
 
-test('cancelling encoder startup resumes the original song and ignores the late start event', async () => {
+test('cancelling encoder startup resumes the original song and ignores the late start event', async t => {
+  for (const initialized of [false, true]) await t.test(initialized ? 'ready before playback' : 'still initializing', async () => {
   let ready;
   const h = harness({ startEncoder: callback => { ready = callback; } });
   const starting = h.controller.start(params);
   await new Promise(resolve => setTimeout(resolve, 40));
+  if (initialized) ready();
   await h.controller.cancel();
-  ready();
+  if (!initialized) ready();
   await starting;
   assert.equal(h.media.paused, false);
   assert.equal(h.controller.getState().status, 'cancelled');
   assert.equal(h.recorder.state, 'inactive');
   assert.equal(h.connections.size, 0);
+  });
 });
 
 test('save dialog cancellation preserves the current audio, position and speaker graph', async () => {
