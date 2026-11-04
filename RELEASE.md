@@ -5,9 +5,18 @@
 - 实现：独立 show:false/focusable:false 的隐藏 Folia 画面，经绑定可信宿主的短时 tab token 生成原生视频轨道，直接送编码器；仅渲染原效果与素材快照，不录制用户桌面，不改变主窗口尺寸／焦点。主播放器保有唯一 AudioContext／音频／队列；从 audioChain.output 分接录音，包含 EQ／ReplayGain，独立于扬声器音量。使用内置 WebM／Opus 编码，保留开头音频。实时录制，不是加速离线渲染。
 - 生命周期：原生视频轨道与有界分块串行写临时文件，完成才替换目标；取消／错误／退出清理。save 策略在切歌／跳转前同步断开录音并暂停采集，留 1.5 秒写出已进入编码器的帧，再停止并保存末块；不会录入下一首歌的声音。continue 策略保留同一个文件并跟随播放。关闭面板不结束录制。WebM 文件头最多检查 64 KiB，支持头部跨编码块；保存前就地回填时长，不缓存整段视频。未变更 Folia 上游版本或导入其完整远程／播放应用。
 - 实际媒体验收：[Windows Electron `41768335461`](https://github.com/oirge/Mineradio/actions/runs/41768335461) 在提交 `1abd8e7bd1fad0f7f574dc7bc0f119525b5881dc` 全部成功。实际导出并独立解码横屏整首、雾笺竖屏暂停／恢复／440→660Hz 真实切歌、1920×1080 无歌词片段、切歌保存片段；检查声音、尺寸、时长、动画、主歌词、音画尾部、停止／保存中音乐不中断、取消保留旧文件、IPC 权限、隐藏窗口清理及主窗口尺寸不变。前序 `0929c68b` 的成片已人工抽取完整横屏歌词与切歌后雾笺新歌词尾帧；最终收尾修正通过同一严格解码门禁。
-- 回归：本地录制／后端／分块文件头与收尾回归 `42/42`。完整 [Verify `41765944559`](https://github.com/oirge/Mineradio/actions/runs/41765944559) 在 `0929c68b` 成功，Folia `108＋124` 项、Node `1625` 通过／0 失败／1 可选跳过，以及全部浏览器回归通过。最终代码的 [Verify `41768335717`](https://github.com/oirge/Mineradio/actions/runs/41768335717) 已通过编码、Folia 类型／行为、全量 Node 和语法检查，完整浏览器回归仍在执行；不把执行中写成全绿。
+- 回归：本地录制／后端／分块文件头与收尾回归 `42/42`。完整 [Verify `41765944559`](https://github.com/oirge/Mineradio/actions/runs/41765944559) 在 `0929c68b` 成功，Folia `108＋124` 项、Node `1625` 通过／0 失败／1 可选跳过，以及全部浏览器回归通过。最终代码的 [Verify `41768335717`](https://github.com/oirge/Mineradio/actions/runs/41768335717) 编码、Folia 类型及 `108＋124` 项行为、Node `1635` 项中 `1634` 通过／0 失败／1 可选跳过及语法检查通过；旧播放设置 `local-open-playback` 普通点击超过原定 `15000ms`（iframe 拦截指针后元素移出视口），后续旧浏览器套件未全部执行，完整 CI 结论为 failure，不宣称全绿。保留原断言、普通点击、超时与画质。
 - 已修复的验收问题：Electron offscreen／stopPainting 会提前停帧；逐帧 GPU 读回会阻塞歌词合成；Windows AAC 可能丢开头，等待封装 start 又会录入静音片头；立即 stop 会丢弃仍在编码的尾帧。因此使用隐藏普通窗口的原生轨道、WebM／Opus、同步暂停采集后有界收尾。未降低效果画质、分辨率或原验收阈值。
-- 边界与发布状态：目标 30 fps，实际依赖硬件与所选效果；云端软件 GPU 的复杂背景帧率较低，不宣称稳定 30 fps。未覆盖全部 17 种效果的原生导出或物理 GPU／输出设备组合。验收仅在 Windows 云端，本机只做低优先级后台检查，未启动图形窗口、未安装或操作用户播放器与数据。版本待构建、资产核验及公开，完成后补录。
+- 边界：目标 30 fps，实际依赖硬件与所选效果；云端软件 GPU 的复杂背景帧率较低，不宣称稳定 30 fps。未覆盖全部 17 种效果的原生导出或物理 GPU／输出设备组合。验收仅在 Windows 云端，本机只做低优先级后台检查，未启动图形窗口、未安装或操作用户播放器与数据。
+- 提交与构建：[PR #168](https://github.com/oirge/Mineradio/pull/168) 于 `2026-11-04T03:43:38Z` 合入 main，merge commit `388c924492f46c16b006da8153ec7b1320607df7` 的文件树与已审查的 `fc701235` 完全一致；后者相对最终媒体验收提交只修改六个文档。annotated tag `v2.6.7`（tag object `0571e879c9ab73cd282e44459829906acbda0a6c`）固定在该合并提交。[Windows Build and Release `41768935756`](https://github.com/oirge/Mineradio/actions/runs/41768935756) 成功（`2026-11-04T03:44:15Z`–`03:46:59Z`），完成 Folia 重建、版本校验、安装器打包和四项资产上传。
+- 正式发布：[v2.6.7](https://github.com/oirge/Mineradio/releases/tag/v2.6.7)（Release ID `433489269`）于 `2026-11-04T03:48:43Z`（北京时间 `2026-11-04 11:48:43`）公开并设 Latest，`draft=false`／`prerelease=false`。四项官方文件完整回下载，大小、SHA256 与 GitHub digest／SHA256SUMS 一致；清单为 LF、无 BOM。安装器 SHA-512 与 `latest.yml` 两处摘要及 size/path/url 一致，公开 Latest API 与自动更新清单均为 `2.6.7`，公开清单与已校验文件逐字节一致。
+  - `Mineradio-oirge-2.6.7-Setup.exe`：122567657 B，SHA256 `513fe3498ab4330e20e81cb1e9492b243896d1a4c4f01ab776313b62229ab25f`。
+  - `Mineradio-oirge-2.6.7-Setup.exe.blockmap`：130004 B，SHA256 `d8c588e9e9f939293c23ed85f380ef9029758c1b1f06ca99760a10ded634cee9`。
+  - `latest.yml`：359 B，SHA256 `167a08d1a229b4de8ea156678c5f410a2bcb3e1e10728dbbd534ae2680e6e058`。
+  - `Mineradio-oirge-2.6.7-SHA256SUMS.txt`：282 B，SHA256 `b79d5895b4c406a34a4fa61d8b567f49b5b66a56c0a44aeb2669afe3a2ff5483`。
+  - 安装器 SHA-512：`Bxcqyc4veg0K/nfbIhJ2HAsdTym4M+n6biJj+yPhoVA2y0yrCK9IzS810F7qePWdwaJk7ldw85I4tQK4Gfgo/w==`。
+- 安装器只读版本元数据为 `2.6.7`／`Mineradio 二创`，未在本机安装或运行。安装包为 `122567657` B（约 122.57 MB／116.89 MiB），比 2.6.6 的 `122596994` B 小 `29337` B；没有新增 FFmpeg 或生产依赖。此为完整安装器大小，录制期间另有渲染／编码的内存和 GPU 开销，不等同于安装包大小。
+- 收尾记录分支 `docs/record-v2.6.7-release`；草稿／公开验证、API、版本、四项资产和构建记录位于忽略目录 `verification/release-v2.6.7/`，实际媒体验收在 `verification/video-export/final/`。不重打 tag，不替换公开资产。
 
 # v2.6.6 辅助窗口任务栏预览修复
 
