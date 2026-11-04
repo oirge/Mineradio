@@ -97,30 +97,12 @@ MediaRecorder.prototype.start = function() {
   });
   return nativeStart.apply(recorder,arguments);
 };
-// Observe the actual native track without changing the production recorder.
+// Record capture constraints without adding a second video consumer or readback.
 const nativeGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
 navigator.mediaDevices.getUserMedia = async function(constraints) {
   const stream = await nativeGetUserMedia(constraints);
-  const video = document.createElement('video'); video.muted = true; video.playsInline = true;
-  video.style.cssText = 'width:160px;height:90px'; video.srcObject = stream; document.body.append(video);
-  window.fixtureCaptureVideo = video;
   window.fixtureCaptureInfo = {constraints:constraints,settings:stream.getVideoTracks()[0].getSettings()};
-  const frame = function(now,metadata) {
-    fixtureFrames++;
-    window.fixtureCaptureInfo.lastFrame = {at:now,mediaTime:metadata.mediaTime,presentedFrames:metadata.presentedFrames};
-    if(stream.active)video.requestVideoFrameCallback(frame);
-  };
-  video.requestVideoFrameCallback(frame);
-  stream.getVideoTracks()[0].addEventListener('ended',function(){video.pause();video.srcObject=null;video.remove();});
-  await video.play();
   return stream;
-};
-window.fixtureCaptureSnapshot = function() {
-  const video=window.fixtureCaptureVideo;
-  if(!video||!video.videoWidth||!video.srcObject?.active)return null;
-  const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
-  canvas.getContext('2d').drawImage(video,0,0);
-  return {url:canvas.toDataURL('image/jpeg',0.9),width:canvas.width,height:canvas.height,at:performance.now(),position:audio.currentTime};
 };
 function state() {
   return { uiLanguage: 'en', currentTrack: {id:fixtureTrack,title:'Video export fixture',artist:'Mineradio CI',album:'Background export',duration:audio.duration,cover:'',liked:false,filePath:'',format:'wav'},
@@ -129,7 +111,7 @@ function state() {
 }
 function lyrics() {
   if (fixtureNoLyrics) return {trackId:fixtureTrack,lines:[]};
-  if (fixtureTrack !== 'export-fixture') return {trackId:fixtureTrack,lines:[{time:0,endTime:7,text:'Changed song lyric',translation:'新歌曲歌词',words:[{time:0,duration:7,text:'Changed song lyric'}]}]};
+  if (fixtureTrack !== 'export-fixture') return {trackId:fixtureTrack,lines:[{time:0,endTime:30,text:'Changed song lyric',translation:'新歌曲歌词',words:[{time:0,duration:30,text:'Changed song lyric'}]}]};
   return { trackId: fixtureTrack, lines: [
     {time:0,endTime:2,text:'Listening to the morning',translation:'聆听清晨',words:[{time:0,duration:1,text:'Listening '},{time:1,duration:1,text:'to the morning'}]},
     {time:2,endTime:4,text:'Follow the light',translation:'追随光芒',words:[{time:2,duration:1,text:'Follow '},{time:3,duration:1,text:'the light'}]},
@@ -202,14 +184,6 @@ async function snapshotSurfaces(label, pixelSample = false) {
           canvases:Array.from(document.querySelectorAll('canvas')).map(function(canvas){return {...summary(canvas),width:canvas.width,height:canvas.height};}),words:words.map(summary)};
       })()`,true), new Promise(resolve=>setTimeout(()=>resolve({unavailable:'surface did not answer'}),pixelSample?12000:1500))]);
       surfaceSnapshots.push({label,windowId:surface.id,...result});
-      if(/^(landscape|portrait)/.test(label)) {
-        const source=await evaluate('window.fixtureCaptureSnapshot()');
-        if(source?.url) {
-          const file=`${label.replace(/[^a-z0-9-]/gi,'-')}-source.jpg`;
-          fs.writeFileSync(path.join(OUT,file),Buffer.from(source.url.split(',')[1],'base64'));
-          surfaceSnapshots.at(-1).sourceFrame={file,id:source.id,width:source.width,height:source.height,at:source.at,position:source.position};
-        }
-      }
     } catch(error) { surfaceSnapshots.push({label,windowId:surface.id,unavailable:String(error)}); }
   }
   fs.writeFileSync(path.join(OUT,'surface-diagnostics.json'),JSON.stringify(surfaceSnapshots,null,2));
@@ -236,7 +210,9 @@ async function until(source, label, timeout = 35000) {
 
 async function start(name, width, height, mode = 'classic', startMode = 'current', noLyrics = false, transitionBehavior) {
   nextSaveName = name;
-  await evaluate(`fixtureFirst.pause(); fixtureNext.pause(); window.audio = fixtureFirst; audio.currentTime = ${startMode === 'from-start' ? 2 : 0}; fixtureTrack = 'export-fixture'; fixtureNoLyrics = ${noLyrics};
+  await evaluate(`fixtureFirst.pause(); fixtureNext.pause(); window.audio = fixtureFirst; audio.src=${JSON.stringify(name === 'landscape-full' ? '/fixture.wav' : '/fixture-long.wav')}; audio.load();`);
+  await until('audio.readyState>=3','fixture song load');
+  await evaluate(`audio.currentTime = ${startMode === 'from-start' ? 2 : 0}; fixtureTrack = 'export-fixture'; fixtureNoLyrics = ${noLyrics};
     window.fixtureSource = audio; window.fixtureContext = audioCtx; window.fixtureOutput = audioChain && audioChain.output; window.fixtureLastFrame=null;`);
   const transition = transitionBehavior ? `,transitionBehavior:${JSON.stringify(transitionBehavior)}` : '';
   // Read the playhead in the same renderer task that starts capture. Evidence
@@ -250,7 +226,6 @@ async function start(name, width, height, mode = 'classic', startMode = 'current
     'offscreen layout must match the requested aspect ratio and resolution');
   assert.equal(await evaluate('audio === fixtureSource && (!fixtureContext || audioCtx === fixtureContext) && (!fixtureOutput || audioChain.output === fixtureOutput)'), true,
     'export must keep the existing media element and audio graph');
-  await snapshotSurfaces(`${name}-recording-start`);
   return result;
 }
 
@@ -412,11 +387,12 @@ async function decodeRecordedSegment(filePath, width, height, minimum, toneChang
 }
 
 async function run() {
-  const wav = waveFixture(), nextWav = waveFixture(7,48000,660);
+  const wav = waveFixture(), longWav = waveFixture(30), nextWav = waveFixture(30,48000,660);
   server = http.createServer((request, response) => {
     const pathname = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname);
     if (pathname === '/' || pathname === '/index.html') { response.writeHead(200, {'content-type':'text/html; charset=utf-8'}); response.end(HOST_HTML); return; }
     if (pathname === '/fixture.wav') { response.writeHead(200, {'content-type':'audio/wav','content-length':wav.length}); response.end(wav); return; }
+    if (pathname === '/fixture-long.wav') { response.writeHead(200, {'content-type':'audio/wav','content-length':longWav.length}); response.end(longWav); return; }
     if (pathname === '/fixture-next.wav') { response.writeHead(200, {'content-type':'audio/wav','content-length':nextWav.length}); response.end(nextWav); return; }
     const target = path.resolve(PUBLIC, `.${pathname}`);
     if (!target.startsWith(PUBLIC + path.sep) || !fs.existsSync(target) || !fs.statSync(target).isFile()) { response.writeHead(404); response.end(); return; }
@@ -469,14 +445,12 @@ async function run() {
   const landscapeStart = await start('landscape-full',1280,720,'classic','from-start');
   assert.ok(landscapeStart.playheadAtStart < 1.2, 'whole-song export must restart the song after preparing');
   await until('audio.currentTime>=1.2','landscape first active lyric');
-  await snapshotSurfaces('landscape-playing-1.2');
   await until('audio.currentTime>=2.8','landscape second active lyric');
-  await snapshotSurfaces('landscape-playing-2.8');
   await until("fixture.getState().status === 'saved'", 'whole-song automatic completion', 45000);
   const landscape = fs.readdirSync(OUT).find(file => /^landscape-full\.(mp4|webm)$/.test(file));
   assert.ok(landscape, 'full-song file must exist');
   decodeOutput(path.join(OUT,landscape),1280,720,6,8.5,undefined,true);
-  assert.ok(await evaluate('fixtureFrames > 20'), 'offscreen frames must reach the real recorder');
+  assert.ok(mediaExports.at(-1).videoTimeline.frameCount > 20, 'native visual frames must reach the real recorder');
   await playerIdentityPreserved();
   logCheck('whole-song landscape export: real Folia lyrics, moving frames, audio and automatic save');
 
@@ -496,6 +470,7 @@ async function run() {
   assert.equal(await evaluate('fixtureFirst.paused && fixtureSources.length === 2'),true,'only the selected song should play through the existing graph');
   await hiddenTrackBecomes('changed-fixture');
   await snapshotSurfaces('portrait-after-real-track-handoff');
+  await until('audio.currentTime>2.8','new song visual frames before stopping');
   await stopWhilePreservingPlayback('portrait');
   const portrait = fs.readdirSync(OUT).find(file => /^portrait-segment\.(mp4|webm)$/.test(file));
   assert.ok(portrait);

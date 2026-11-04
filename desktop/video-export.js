@@ -196,6 +196,9 @@ function createVideoExportManager({
       // is bound to the trusted owner frame and expires after ten seconds.
       const sourceId = win.webContents.getMediaSourceId(record.owner);
       if (!sourceId) throw new Error('VIDEO_EXPORT_SOURCE_UNAVAILABLE');
+      // The native tab capturer owns frame delivery. Disable the unused OSR bitmap
+      // consumer so it does not also copy every composited GPU frame back to the CPU.
+      win.webContents.stopPainting();
       return { id: record.id, fileName: record.fileName, width: record.width, height: record.height, sourceId };
     } catch (error) {
       fail(record, error);
