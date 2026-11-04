@@ -448,18 +448,19 @@ async function run() {
   // permissive session hid a production Permission denied regression in 2.6.7.
   const {createWallpaperEngineBridge} = require('../desktop/wallpaper-engine-bridge');
   permissionBridge = createWallpaperEngineBridge({getMainWindow:()=>host,getMainServerPort:()=>port,
+    isVideoExportCaptureAllowed:(...args)=>manager.allowsCapturePermission(...args),
     userDataPath:PROFILE,nativeTempPath:path.join(PROFILE,'native')});
   const ses = host.webContents.session;
   const setCheck = ses.setPermissionCheckHandler.bind(ses);
   const setRequest = ses.setPermissionRequestHandler.bind(ses);
   ses.setPermissionCheckHandler = handler => setCheck((contents,permission,origin,details)=> {
     const allowed = handler(contents,permission,origin,details);
-    permissionDecisions.push({phase:'check',permission,origin,details,allowed});
+    permissionDecisions.push({phase:'check',contentsId:contents?.id,url:contents?.getURL(),permission,origin,details,allowed});
     return allowed;
   });
   ses.setPermissionRequestHandler = handler => setRequest((contents,permission,callback,details)=> {
     handler(contents,permission,allowed=> {
-      permissionDecisions.push({phase:'request',permission,details,allowed}); callback(allowed);
+      permissionDecisions.push({phase:'request',contentsId:contents?.id,url:contents?.getURL(),permission,details,allowed}); callback(allowed);
     },details);
   });
   permissionBridge.configureSessionPermissions();
@@ -470,6 +471,11 @@ async function run() {
   const originalBounds = host.getBounds();
 
   const landscapeStart = await start('landscape-full',1280,720,'classic','from-start');
+  assert.ok(permissionDecisions.some(decision=>decision.phase==='request' && decision.allowed
+    && decision.permission==='media' && decision.details.mediaTypes?.length===0
+    && decision.details.isMainFrame && decision.url.includes('videoExport=')),
+  'the real production policy must authorize the current hidden tab capture');
+  logCheck('production session policy authorizes only the active export tab capture');
   assert.ok(landscapeStart.playheadAtStart < 1.2, 'whole-song export must restart the song after preparing');
   await until('audio.currentTime>=1.2','landscape first active lyric');
   await until('audio.currentTime>=2.8','landscape second active lyric');

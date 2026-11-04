@@ -1,3 +1,10 @@
+## 2026-11-04：v2.6.8 视频导出 Permission denied 修复中
+
+- 用户安装 2.6.7 后报告导出失败 Permission denied；基线远端 main `4820cbb2`，分支 `fix/video-export-permissions`。沿用修复后发布授权，仍禁止本机 GUI、安装和操作用户播放器与数据；本地命令 BelowNormal。
+- 正式版默认 session 的 WE 权限处理器拒绝没有 WE grant 的视频导出；原独立验收没安装该处理器。仅加入真实配置的复现提交 `1ef5e2a2cc417202383899b6c483cd6d2ab1cf58` 在 Windows `41770428840` 得到相同 Permission denied。Electron 43 把 tab 捕获归属到被采集的隐藏窗口，mediaTypes 是空数组；不要误当摄像头权限全局放行。
+- 导出管理器提供受限授权，正式 main 和云端验收都接到同一个 WE 处理器；仅当前 owner／surface 的主 frame、精确 URL、同源与 10 秒有效期内允许，首块编码数据／取消／保存后撤销。摄像头、麦克风、其他窗口／子 frame、桌面选择仍拒绝。具体约束见 `.context/pitfalls/mineradio-video-export-permissions.md`。
+- 本地相关 `52/52`；下一步完成正式权限下的云端实际导出／独立解码、合并、tag v2.6.8、Windows 打包及四资产校验，再公开。版本与中英文公告已更新；不得记成已发布。
+
 ## 2026-11-04：v2.6.7 歌词／可视化视频导出（已正式发布）
 
 - 基线 main 378a38d3，功能分支 feat/folia-video-export，最终录制修正 1abd8e7b，后续 fc701235 只改文档。PR #168 已合入 388c924492f46c16b006da8153ec7b1320607df7；annotated tag v2.6.7（tag object 0571e879c9ab73cd282e44459829906acbda0a6c）固定在该合并提交。Windows Build and Release 41768935756 成功；Release 433489269 于北京时间 2026-11-04 11:48:43 公开并设 Latest，已完成发布。

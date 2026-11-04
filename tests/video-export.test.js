@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { createVideoExportManager, MAX_CHUNK_BYTES, MAX_PENDING_CHUNKS } = require('../desktop/video-export');
 
@@ -26,6 +27,9 @@ async function harness(t, options = {}) {
     output: path.join(directory, '测试视频.webm'), autoReady: options.autoReady !== false,
   };
   h.event = { sender: owner, senderFrame: { url: 'http://127.0.0.1:3210/', parent: null } };
+  owner.mainFrame = h.event.senderFrame;
+  owner.getURL = () => owner.mainFrame.url;
+  h.mainWindow = { webContents: owner, isDestroyed: () => false };
   class Window extends EventEmitter {
     constructor(configuration) {
       super();
@@ -60,7 +64,7 @@ async function harness(t, options = {}) {
     BrowserWindow: Window,
     ipcMain: { handle: (key, fn) => h.handlers.set(key, fn), on: (key, fn) => h.listeners.set(key, fn) },
     dialog: { showSaveDialog: async () => options.choice ? options.choice() : { canceled: false, filePath: h.output } },
-    getMainWindow: () => ({ webContents: owner }), getMainServerPort: () => 3210,
+    getMainWindow: () => h.mainWindow, getMainServerPort: () => 3210,
     trustedMainFrameHandler: handler => (event, ...args) => {
       if (event !== h.event) return { ok: false, error: 'IPC_FORBIDDEN' };
       return handler(event, ...args);
@@ -84,6 +88,105 @@ async function harness(t, options = {}) {
   });
   return h;
 }
+
+function productionPermissions(h, connectExport = true) {
+  const ses = {};
+  ses.setPermissionCheckHandler = callback => { ses.check = callback; };
+  ses.setPermissionRequestHandler = callback => { ses.request = callback; };
+  ses.setDisplayMediaRequestHandler = callback => { ses.display = callback; };
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../desktop/wallpaper-engine-bridge.js'), 'utf8'), {
+    module, URL, process, setTimeout, clearTimeout,
+    require(name) {
+      if (name === 'electron') return { session: { defaultSession: ses } };
+      if (name === './wallpaper-engine-library') return { WallpaperEngineLibrary: class {} };
+      if (name === './wallpaper-engine-runtime') return { WallpaperEngineRuntime: class {} };
+      return require(name);
+    },
+  });
+  module.exports.createWallpaperEngineBridge({
+    getMainWindow: () => h.mainWindow, getMainServerPort: () => 3210,
+    isVideoExportCaptureAllowed: connectExport ? (...args) => h.manager.allowsCapturePermission(...args) : undefined,
+  }).configureSessionPermissions();
+  return {
+    check(permission, details = {}, owner = h.owner, origin = 'http://127.0.0.1:3210/') {
+      return ses.check(owner, permission, origin, { isMainFrame: true, requestingUrl: h.event.senderFrame.url, ...details });
+    },
+    request(permission, details = {}, owner = h.owner) {
+      let result;
+      ses.request(owner, permission, value => { result = value; }, {
+        isMainFrame: true, requestingUrl: 'http://127.0.0.1:3210/', ...details,
+      });
+      return result;
+    },
+    display: request => new Promise(resolve => ses.display(request, resolve)),
+  };
+}
+
+test('正式版权限处理器仅在导出准备时放行宿主的 tab 视频采集', async t => {
+  const h = await harness(t), policy = productionPermissions(h);
+  assert.equal(policy.request('media', { mediaTypes: [] }), false);
+  const session = await h.begin();
+  assert.equal(productionPermissions(h, false).request('media', { mediaTypes: [] }), false,
+    'the unconnected production policy reproduces Permission denied');
+  assert.equal(policy.request('media', { mediaTypes: [] }), true, 'Electron 43 tab capture');
+  const surface = h.windows[0];
+  assert.equal(policy.request('media', { mediaTypes: [], requestingUrl: surface.url }, surface.webContents), true,
+    'Electron can attribute the request to the captured surface');
+  assert.equal(policy.check('display-capture'), true);
+  assert.equal(policy.request('display-capture', { mediaTypes: ['video'] }), true);
+  await h.chunk(session.id, 0, [1, 2]);
+  assert.equal(policy.request('media', { mediaTypes: [] }), false, 'first encoded chunk revokes the grant');
+  assert.equal(policy.check('display-capture'), false);
+});
+
+test('导出授权不放行摄像头、麦克风、其他页面、子 frame 或桌面选择', async t => {
+  const h = await harness(t), policy = productionPermissions(h);
+  await h.begin();
+  assert.equal(policy.request('media', { mediaTypes: [] }), true);
+  for (const mediaTypes of [undefined, ['audio'], ['video'], ['audio', 'video'], ['unknown']]) {
+    assert.equal(policy.request('media', { mediaTypes }), false);
+  }
+  assert.equal(policy.request('display-capture', { mediaTypes: ['audio', 'video'] }), false);
+  assert.equal(policy.check('media', { mediaType: 'video' }), false);
+  assert.equal(policy.request('media', { mediaTypes: [], isMainFrame: false }), false);
+  assert.equal(policy.request('media', { mediaTypes: [], requestingUrl: 'http://127.0.0.1:3210/vendor/folia/index.html' }), false);
+  assert.equal(policy.request('media', { mediaTypes: [], requestingUrl: 'https://example.com/' }), false);
+  assert.equal(policy.check('display-capture', {}, h.owner, 'http://127.0.0.1:3211/'), false);
+  assert.equal(policy.request('media', { mediaTypes: [] }, {}), false);
+  const surface = h.windows[0];
+  assert.equal(policy.request('media', { mediaTypes: [] }, surface.webContents), false, 'mismatched surface URL');
+  assert.equal(policy.request('media', { mediaTypes: ['video'], requestingUrl: surface.url }, surface.webContents), false);
+  assert.equal(policy.request('media', { mediaTypes: [], requestingUrl: surface.url }, { ...surface.webContents }), false);
+  const frame = h.owner.mainFrame;
+  h.owner.mainFrame = { ...frame };
+  assert.equal(policy.request('media', { mediaTypes: [] }), false, 'replaced main frame');
+  h.owner.mainFrame = frame;
+  frame.url = 'http://127.0.0.1:3210/other.html';
+  assert.equal(policy.request('media', { mediaTypes: [] }), false, 'navigated main document');
+  frame.url = 'http://127.0.0.1:3210/';
+  const desktop = await policy.display({ frame, securityOrigin: frame.url, videoRequested: true, audioRequested: false });
+  assert.deepEqual(Object.keys(desktop), [], 'getDisplayMedia must not gain a desktop source');
+});
+
+test('导出采集授权十秒到期，取消或保存后立即失效', async t => {
+  const h = await harness(t), policy = productionPermissions(h);
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  let session = await h.begin();
+  assert.equal(policy.request('media', { mediaTypes: [] }), true);
+  now += 10_000;
+  assert.equal(policy.request('media', { mediaTypes: [] }), false);
+  await h.invoke('cancel', { id: session.id });
+  session = await h.begin();
+  assert.equal(policy.request('media', { mediaTypes: [] }), true);
+  await h.invoke('cancel', { id: session.id });
+  assert.equal(policy.request('media', { mediaTypes: [] }), false);
+  session = await h.begin();
+  await h.chunk(session.id, 0, [1]);
+  await h.invoke('finish', { id: session.id });
+  assert.equal(policy.request('media', { mediaTypes: [] }), false);
+});
 
 test('导出分块顺序落盘，提交前保留旧目标，最后块写完才保存', async t => {
   const gate = deferred();

@@ -21,6 +21,8 @@ function createWallpaperEngineBridge(options = {}) {
   const userDataPath = String(options.userDataPath || '');
   const nativeTempPath = String(options.nativeTempPath || path.join(userDataPath || process.cwd(), 'native'));
   const desktopCapturer = options.desktopCapturer || null;
+  const isVideoExportCaptureAllowed = typeof options.isVideoExportCaptureAllowed === 'function'
+    ? options.isVideoExportCaptureAllowed : () => false;
 
   const library = new WallpaperEngineLibrary({ userDataPath });
   const runtime = new WallpaperEngineRuntime({ library, desktopCapturer, nativeTempPath });
@@ -983,18 +985,22 @@ function createWallpaperEngineBridge(options = {}) {
     const previousCheck = ses.setPermissionCheckHandler ? null : null;
     ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
       const origin = requestingOrigin || (details && details.requestingUrl) || (webContents && webContents.getURL && webContents.getURL()) || '';
-      if (permission === 'display-capture') return isTrustedDisplayCapturePermission(webContents, origin);
-      if (permission === 'media') return isTrustedPreparationMediaPermission(webContents, origin);
+      if (permission === 'display-capture') return isTrustedDisplayCapturePermission(webContents, origin)
+        || isVideoExportCaptureAllowed(webContents, permission, origin, details);
+      if (permission === 'media') return isTrustedPreparationMediaPermission(webContents, origin)
+        || isVideoExportCaptureAllowed(webContents, permission, origin, details);
       return ALLOWED_PERMS.has(permission) && isLocalAppUrl(origin);
     });
     ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
       const origin = (details && (details.requestingUrl || details.securityOrigin)) || (webContents && webContents.getURL && webContents.getURL()) || '';
       if (permission === 'display-capture') {
-        callback(isTrustedDisplayCapturePermission(webContents, origin));
+        callback(isTrustedDisplayCapturePermission(webContents, origin)
+          || isVideoExportCaptureAllowed(webContents, permission, origin, details));
         return;
       }
       if (permission === 'media') {
-        callback(isTrustedPreparationMediaPermission(webContents, origin));
+        callback(isTrustedPreparationMediaPermission(webContents, origin)
+          || isVideoExportCaptureAllowed(webContents, permission, origin, details));
         return;
       }
       callback(ALLOWED_PERMS.has(permission) && isLocalAppUrl(origin));
