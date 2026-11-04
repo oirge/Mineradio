@@ -78,7 +78,7 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和 30 帧。',
+  '新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和目标 30 帧／秒。',
   '切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。',
   '支持从头或当前位置录制、暂停、进度、停止保存和取消；导出画面不包含桌面。',
 ];

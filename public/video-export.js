@@ -256,7 +256,7 @@
       s.recordingSince = 0;
       disconnectAudio(s);
       if (s.timer) host.clearTimeout(s.timer);
-      publish({ status: 'saving' });
+      publish({ status: 'saving', elapsed: s.elapsed });
       if (s.recorder.state !== 'inactive') s.recorder.stop();
       s.finishing = (async function () {
         try {

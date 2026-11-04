@@ -277,7 +277,9 @@ async function start(name, width, height, mode = 'classic', startMode = 'current
   await evaluate(`fixtureFirst.pause(); fixtureNext.pause(); window.audio = fixtureFirst; audio.currentTime = ${startMode === 'from-start' ? 2 : 0}; fixtureTrack = 'export-fixture'; fixtureNoLyrics = ${noLyrics};
     window.fixtureSource = audio; window.fixtureContext = audioCtx; window.fixtureOutput = audioChain && audioChain.output; window.fixtureLastFrame=null;`);
   const transition = transitionBehavior ? `,transitionBehavior:${JSON.stringify(transitionBehavior)}` : '';
-  const result = await evaluate(`window.fixture.start({width:${width},height:${height},startMode:${JSON.stringify(startMode)},visuals:fixtureVisuals(${JSON.stringify(mode)})${transition}})`);
+  // Read the playhead in the same renderer task that starts capture. Evidence
+  // snapshots can be slow on SwiftShader and must not change this timing check.
+  const result = await evaluate(`(async function(){const result=await window.fixture.start({width:${width},height:${height},startMode:${JSON.stringify(startMode)},visuals:fixtureVisuals(${JSON.stringify(mode)})${transition}});return {...result,playheadAtStart:audio.currentTime};})()`);
   assert.notEqual(result?.status, 'error', JSON.stringify(result));
   await until("fixture.getState().status === 'recording'", `${name} recording`);
   const surface = BrowserWindow.getAllWindows().find(win=>win.webContents.isOffscreen());
@@ -417,6 +419,14 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   return result;
 }
 
+async function decodeRecordedSegment(filePath, width, height, minimum, toneChange) {
+  const elapsed = await evaluate('fixture.getState().elapsed');
+  assert.ok(elapsed >= minimum, `recording clock ${elapsed} must include the exercised segment`);
+  const result = decodeOutput(filePath, width, height, elapsed - 0.5, elapsed + 0.5, toneChange);
+  result.recordingElapsed = elapsed;
+  fs.writeFileSync(path.join(OUT, `${path.basename(filePath,path.extname(filePath))}-decode.json`), JSON.stringify(result,null,2));
+}
+
 // Failure evidence only: compare the production paint stream with a separate page snapshot,
 // then isolate stacking/transform layers without changing any accepted recording.
 async function diagnoseLyricComposition() {
@@ -500,8 +510,8 @@ async function run() {
   await evaluate('window.fixtureReady');
   const originalBounds = host.getBounds();
 
-  await start('landscape-full',1280,720,'classic','from-start');
-  assert.ok(await evaluate('audio.currentTime < 1.2'), 'whole-song export must restart the song after preparing');
+  const landscapeStart = await start('landscape-full',1280,720,'classic','from-start');
+  assert.ok(landscapeStart.playheadAtStart < 1.2, 'whole-song export must restart the song after preparing');
   await until('audio.currentTime>=1.2','landscape first active lyric');
   await snapshotSurfaces('landscape-playing-1.2');
   await until('audio.currentTime>=2.8','landscape second active lyric');
@@ -533,7 +543,7 @@ async function run() {
   await stopWhilePreservingPlayback('portrait');
   const portrait = fs.readdirSync(OUT).find(file => /^portrait-segment\.(mp4|webm)$/.test(file));
   assert.ok(portrait);
-  decodeOutput(path.join(OUT,portrait),720,1280,3.1,5.5,[440,660]);
+  await decodeRecordedSegment(path.join(OUT,portrait),720,1280,3.1,[440,660]);
   await playerIdentityPreserved();
   logCheck('portrait export: pause/resume, continued recording through real 440Hz→660Hz song/deck handoff, updated Folia lyrics and final media chunk');
 
@@ -542,7 +552,7 @@ async function run() {
   await stopWhilePreservingPlayback('1080p');
   const hd = fs.readdirSync(OUT).find(file => /^landscape-1080-no-lyrics\.(mp4|webm)$/.test(file));
   assert.ok(hd);
-  decodeOutput(path.join(OUT,hd),1920,1080,1.8,4);
+  await decodeRecordedSegment(path.join(OUT,hd),1920,1080,1.8);
   await playerIdentityPreserved();
   logCheck('1080p visualization without lyric data remains exportable');
 
@@ -552,7 +562,7 @@ async function run() {
   await until("fixture.getState().status === 'saved'",'explicit save policy finishes before the next song');
   const savedTransition = fs.readdirSync(OUT).find(file=>/^save-transition\.(mp4|webm)$/.test(file));
   assert.ok(savedTransition && fs.statSync(path.join(OUT,savedTransition)).size>2000);
-  decodeOutput(path.join(OUT,savedTransition),1280,720,1.3,2.5);
+  await decodeRecordedSegment(path.join(OUT,savedTransition),1280,720,1.3);
   await playerIdentityPreserved();
   logCheck('explicit save policy finishes the segment on track change');
 

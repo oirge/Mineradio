@@ -202,7 +202,7 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
   ['将歌词动画、背景与歌曲导出为视频。', 'Export lyric animation, background and song audio as a video.'],
-  ['新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和 30 帧。', 'Export lyrics and visualizations in landscape or portrait, at 720p or 1080p and 30 fps.'],
+  ['新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和目标 30 帧／秒。', 'Export lyrics and visualizations in landscape or portrait, at 720p or 1080p with a target of 30 fps.'],
   ['切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。', 'Continue recording across track changes and seeks by default, or choose to save the recorded segment. Your choice is remembered.'],
   ['支持从头或当前位置录制、暂停、进度、停止保存和取消；导出画面不包含桌面。', 'Record from the beginning or current position, with pause, progress, stop and save, and cancel. Your desktop is excluded.'],
   ['视频写入速度过慢，请选择其他保存位置。', 'Video export disk is too slow. Please choose another location.'],
@@ -2088,7 +2088,7 @@ var updatePreviewState = {
   lastProgressSignature: '',
   hero: '将歌词动画、背景与歌曲导出为视频。',
   notes: [
-    '新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和 30 帧。',
+    '新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和目标 30 帧／秒。',
     '切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。',
     '支持从头或当前位置录制、暂停、进度、停止保存和取消；导出画面不包含桌面。'
   ]
