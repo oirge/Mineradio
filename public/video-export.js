@@ -6,12 +6,9 @@
   var MAX_CHUNK_BYTES = 8 * 1024 * 1024;
   function formatFor(Recorder) {
     if (!Recorder || typeof Recorder.isTypeSupported !== 'function') return null;
-    var formats = [
-      ['video/webm;codecs=vp8,opus', 'webm'], ['video/webm', 'webm'],
-      // Level 4.0 covers every offered 1080p/30 preset; level 3.0 cannot encode even 720p/30.
-      ['video/mp4;codecs=avc1.42E028,mp4a.40.2', 'mp4'],
-      ['video/mp4', 'mp4']
-    ];
+    // The built-in Opus path records from the first audio block. Windows AAC
+    // initialization can drop the beginning or add seconds of silent preroll.
+    var formats = [['video/webm;codecs=vp8,opus', 'webm'], ['video/webm', 'webm']];
     return formats.find(function (entry) { return Recorder.isTypeSupported(entry[0]); }) || null;
   }
   function create(host, services) {
@@ -83,7 +80,7 @@
       s.writes.catch(function (error) { fail(s, error); });
     }
     function syncRecording(s) {
-      if (!s.recorder || !s.started || s.finishing || s.cancelled || s.recorder.state === 'inactive') return;
+      if (!s.recorder || s.finishing || s.cancelled || s.recorder.state === 'inactive') return;
       var paused = s.audio.paused || s.audio.seeking || s.audio.readyState < 3;
       accrue(s);
       if (paused && s.recorder.state === 'recording') s.recorder.pause();
@@ -237,22 +234,11 @@
           videoBitsPerSecond: s.width * s.height > 1000000 ? 14000000 : 8000000 });
         s.recorder.ondataavailable = function (event) { queueChunk(s, event.data); };
         s.recorder.onerror = function (event) { fail(s, event.error || new Error('Video encoding failed.')); };
-        s.recorder.onstart = function () {
-          if (current !== s || s.cancelled || s.finishing) return;
-          s.started = true;
-          s.recorder.pause();
-        };
         s.stopped = new Promise(function (resolve) { s.recorder.onstop = resolve; });
         bindMedia(s, media);
-        // Encoder initialization is asynchronous, especially at 1080p. Keep the
-        // song at its chosen position until the encoder has actually started.
-        s.recorder.start(1000);
-        var encoderReadyUntil = Date.now() + 15000;
-        while (!s.started && !s.cancelled) {
-          if (Date.now() >= encoderReadyUntil) throw new Error('Video export could not start its encoder.');
-          await new Promise(function (resolve) { host.setTimeout(resolve, 25); });
-        }
-        if (s.cancelled || current !== s) return snapshot();
+        // The start event waits for the first muxed bytes, which may follow a
+        // slow GPU frame. Waiting for it here would record a silent introduction.
+        s.recorder.start(1000); s.recorder.pause();
         publish({ status: 'paused', fileName: result.fileName });
         s.playbackReleased = true;
         await media.play(); syncRecording(s);

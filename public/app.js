@@ -216,7 +216,6 @@ var UI_LANGUAGE_PAIRS = [
   ['请先选择一首可以播放的歌曲。', 'Choose a playable song before exporting.'],
   ['请等待歌曲过渡完成后再导出。', 'Wait for the song transition to finish before exporting.'],
   ['视频导出未能准备好画面，请重试。', 'Video export could not prepare its video stream.'],
-  ['视频导出未能启动编码器，请重试。', 'Video export could not start its encoder.'],
   ['视频导出收到的画面无效，请重试。', 'Video export received an invalid video stream.'],
   ['准备期间歌曲已切换，请重新开始导出。', 'The song changed while preparing the export. Please try again.'],
   ['歌曲音频未能准备好，请重新开始导出。', 'The song could not prepare audio for export.'],

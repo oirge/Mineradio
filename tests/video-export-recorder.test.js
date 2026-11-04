@@ -31,7 +31,7 @@ function harness(options = {}) {
     constructor(stream) { this.stream = stream; this.state = 'inactive'; recorder = this; }
     start() {
       this.state = 'recording'; calls.push('record-start');
-      const ready = () => { calls.push('encoder-ready'); this.onstart(); };
+      const ready = () => { calls.push('encoder-ready'); this.onstart?.(); };
       if (options.startEncoder) options.startEncoder(ready);
       else queueMicrotask(ready);
     }
@@ -69,26 +69,25 @@ function harness(options = {}) {
 }
 const params = { width: 1280, height: 720, startMode: 'current', visuals: { mode: 'classic' } };
 
-test('playback waits for asynchronous encoder startup without pausing the initializing recorder', async t => {
+test('recording does not wait for delayed muxed output before playing the song', async t => {
   let ready;
   const h = harness({ startEncoder: callback => { ready = callback; } });
   t.after(() => h.controller.cancel());
-  const starting = h.controller.start(params);
-  await new Promise(resolve => setTimeout(resolve, 70));
+  await h.controller.start(params);
   assert.equal(typeof ready, 'function');
-  assert.equal(h.media.paused, true);
+  assert.equal(h.media.paused, false);
   assert.equal(h.media.currentTime, 12);
-  assert.equal(h.controller.getState().status, 'preparing');
+  assert.equal(h.controller.getState().status, 'recording');
   assert.equal(h.recorder.state, 'recording');
-  assert.ok(!h.calls.includes('record-pause'));
-  assert.ok(!h.calls.includes('play-owner'));
+  assert.ok(h.calls.includes('record-pause'));
+  assert.ok(h.calls.includes('play-owner'));
   ready();
-  assert.equal((await starting).status, 'recording');
-  assert.ok(h.calls.indexOf('encoder-ready') < h.calls.indexOf('play-owner'));
+  assert.equal(h.controller.getState().status, 'recording');
+  assert.ok(h.calls.indexOf('encoder-ready') > h.calls.indexOf('play-owner'));
   await h.controller.stop();
 });
 
-test('cancelling encoder startup resumes the original song and ignores the late start event', async t => {
+test('cancelling before or after the first muxed output leaves the song playing', async t => {
   for (const initialized of [false, true]) await t.test(initialized ? 'ready before playback' : 'still initializing', async () => {
   let ready;
   const h = harness({ startEncoder: callback => { ready = callback; } });
