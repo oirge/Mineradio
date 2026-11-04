@@ -128,6 +128,7 @@ fs.mkdirSync(wallpaperEngineNativeTempPath, { recursive: true });
 const wallpaperEngineBridge = createWallpaperEngineBridge({
   getMainWindow: () => mainWindow,
   getMainServerPort: () => mainServerPort,
+  isVideoExportCaptureAllowed: (...args) => videoExportManager.allowsCapturePermission(...args),
   isAppQuitting: () => appQuitting,
   isWindowFullscreen: () => windowFullscreenActive,
   isHtmlFullscreen: () => htmlFullscreenActive,

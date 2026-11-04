@@ -32,6 +32,40 @@ function createVideoExportManager({
     return active;
   }
 
+  function allowsCapturePermission(webContents, permission, origin, details = {}) {
+    const record = active;
+    try {
+      if (!record || record.discarded || record.stage !== 'recording'
+        || !(record.capturePermissionUntil > Date.now()) || !record.window || record.window.isDestroyed()
+        || !webContents || webContents.isDestroyed() || details.isMainFrame !== true
+        || record.owner.isDestroyed() || getMainWindow()?.webContents !== record.owner
+        || record.owner.mainFrame !== record.ownerFrame || record.ownerFrame.parent
+        || record.ownerFrame.url !== record.ownerUrl) return false;
+      // Chromium may attribute tab-capture permission to the captured surface
+      // rather than the consuming owner. Both identities must match this job.
+      const isOwner = webContents === record.owner;
+      if (!isOwner && webContents !== record.window.webContents) return false;
+      const frame = isOwner ? record.ownerFrame : record.captureFrame;
+      const requestingUrl = isOwner ? record.ownerUrl : record.url;
+      if (!frame || webContents.mainFrame !== frame || frame.parent || frame.url !== requestingUrl) return false;
+      // Electron 43 reports tab capture as media with an empty mediaTypes list.
+      // Camera and microphone requests carry video/audio and must stay denied.
+      if (permission === 'media') {
+        if (!Array.isArray(details.mediaTypes) || details.mediaTypes.length !== 0) return false;
+      } else if (permission === 'display-capture') {
+        if (details.mediaTypes !== undefined && (!Array.isArray(details.mediaTypes)
+          || details.mediaTypes.some(type => type !== 'video'))) return false;
+      } else return false;
+      const ownerUrl = new URL(record.ownerUrl);
+      if (ownerUrl.protocol !== 'http:' || ownerUrl.hostname !== '127.0.0.1'
+        || Number(ownerUrl.port) !== Number(getMainServerPort())
+        || !['/', '/index.html'].includes(ownerUrl.pathname)
+        || new URL(origin).origin !== ownerUrl.origin
+        || (details.requestingUrl && details.requestingUrl !== requestingUrl)) return false;
+      return true;
+    } catch { return false; }
+  }
+
   function ownsHiddenFrame(event, record = active) {
     try {
       return !!record && !record.discarded && record.window && !record.window.isDestroyed()
@@ -111,7 +145,8 @@ function createVideoExportManager({
     if (active) throw new Error('VIDEO_EXPORT_BUSY');
     const options = readOptions(payload);
     const record = {
-      id: crypto.randomUUID(), owner: event.sender, window: null, discarded: false,
+      id: crypto.randomUUID(), owner: event.sender, ownerFrame: event.senderFrame,
+      ownerUrl: event.senderFrame.url, window: null, discarded: false,
       writes: Promise.resolve(), nextSequence: 0, pendingBytes: 0, pendingChunks: 0,
       bytes: 0, stage: 'choosing',
       width: options.width, height: options.height, initial: options.initial,
@@ -194,6 +229,8 @@ function createVideoExportManager({
       // is bound to the trusted owner frame and expires after ten seconds.
       const sourceId = win.webContents.getMediaSourceId(record.owner);
       if (!sourceId) throw new Error('VIDEO_EXPORT_SOURCE_UNAVAILABLE');
+      record.captureFrame = win.webContents.mainFrame;
+      record.capturePermissionUntil = Date.now() + 10_000;
       return { id: record.id, fileName: record.fileName, width: record.width, height: record.height, sourceId };
     } catch (error) {
       fail(record, error);
@@ -233,6 +270,8 @@ function createVideoExportManager({
     if (!length || length > MAX_CHUNK_BYTES || payload.sequence !== record.nextSequence) {
       throw new Error('VIDEO_EXPORT_CHUNK_INVALID');
     }
+    // Encoded output proves the stream is established; no more permission grant is needed.
+    record.capturePermissionUntil = 0;
     if (record.pendingChunks >= MAX_PENDING_CHUNKS || record.pendingBytes + length > MAX_PENDING_BYTES) {
       fail(record, new Error('VIDEO_EXPORT_WRITE_BACKPRESSURE'));
       throw new Error('VIDEO_EXPORT_WRITE_BACKPRESSURE');
@@ -335,7 +374,7 @@ function createVideoExportManager({
     await Promise.all([...cleanups]);
   }
 
-  return { registerIpc, dispose, hasPendingWork: () => !!active || cleanups.size > 0 };
+  return { registerIpc, dispose, allowsCapturePermission, hasPendingWork: () => !!active || cleanups.size > 0 };
 }
 
 module.exports = { createVideoExportManager, MAX_CHUNK_BYTES, MAX_PENDING_BYTES, MAX_PENDING_CHUNKS };

@@ -201,10 +201,10 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
-  ['将歌词动画、背景与歌曲导出为视频。', 'Export lyric animation, background and song audio as a video.'],
-  ['新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和目标 30 帧／秒。', 'Export lyrics and visualizations in landscape or portrait, at 720p or 1080p with a target of 30 fps.'],
+  ['修复视频导出权限错误。', 'Fix video export permission errors.'],
+  ['修复歌词／可视化视频导出时提示 Permission denied、无法开始录制的问题。', 'Fix Permission denied preventing lyrics and visualization video recording from starting.'],
   ['切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。', 'Continue recording across track changes and seeks by default, or choose to save the recorded segment. Your choice is remembered.'],
-  ['支持从头或当前位置录制、暂停、进度、停止保存和取消；导出画面不包含桌面。', 'Record from the beginning or current position, with pause, progress, stop and save, and cancel. Your desktop is excluded.'],
+  ['支持 WebM、横屏／竖屏与 720p／1080p，导出画面不包含桌面。', 'Export WebM in landscape or portrait at 720p or 1080p, without capturing your desktop.'],
   ['视频写入速度过慢，请选择其他保存位置。', 'Video export disk is too slow. Please choose another location.'],
   ['视频导出未能继续收到画面。', 'Video export stopped receiving visual frames.'],
   ['视频导出未能渲染首帧。', 'Video export could not render its first frame.'],
@@ -2034,7 +2034,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.7';
+var APP_VERSION = '2.6.8';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2087,11 +2087,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '将歌词动画、背景与歌曲导出为视频。',
+  hero: '修复视频导出权限错误。',
   notes: [
-    '新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和目标 30 帧／秒。',
+    '修复歌词／可视化视频导出时提示 Permission denied、无法开始录制的问题。',
     '切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。',
-    '支持从头或当前位置录制、暂停、进度、停止保存和取消；导出画面不包含桌面。'
+    '支持 WebM、横屏／竖屏与 720p／1080p，导出画面不包含桌面。'
   ]
 };
 function readSavedVolume() {

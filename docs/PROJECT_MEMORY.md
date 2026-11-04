@@ -1,3 +1,9 @@
+## 2026-11-04：视频导出共用 session 权限
+
+- 用户安装 2.6.7 后报告「导出失败 / Permission denied」。原云端真实媒体测试没有安装正式 WE session 权限处理器，因 Electron 默认允许而漏掉拒绝；加入真实配置后 `41770428840` 在 `1ef5e2a` 复现同一错误。
+- Electron 43 tab 采集的 `media` 请求使用空 `mediaTypes`，归属到被采集隐藏窗口。正式 main 与云端验收必须使用同一处理器／导出管理器授权，保持真实 owner 和当前 surface 的主 frame／URL／来源绑定、10 秒期限、首编码块后撤销；不可放开摄像头或麦克风，不可通过全局允许或关闭安全开关修复。
+- 保留默认切歌／跳转持续跟随、另选保存片段、WebM 和唯一宿主音频；补丁版为 2.6.8，发布与最终验证状态以 RELEASE.md 顶部为准。故障知识见 `.context/pitfalls/mineradio-video-export-permissions.md`。
+
 ## 2026-11-04：v2.6.7 视频导出已发布
 
 - PR #168 合入 `388c924492f46c16b006da8153ec7b1320607df7`；annotated tag `v2.6.7`（tag object `0571e879c9ab73cd282e44459829906acbda0a6c`），Windows Build and Release `41768935756` 成功。Release `433489269` 于北京时间 `2026-11-04 11:48:43` 公开并设 Latest，四项官方资产回下载、SHA256／SHA-512、只读安装器版本和公开更新清单全部核验通过，未安装或操作本机播放器与用户数据。
