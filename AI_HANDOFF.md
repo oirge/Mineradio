@@ -1,9 +1,13 @@
-## 2026-11-04：v2.6.9 视频导出四档帧率（待云端验收及发布）
+## 2026-11-04：v2.6.9 视频导出四档帧率已发布
 
-- 用户要求 30／60／90／120 帧，默认 30；以远端 main 49ac3cf6 为基线，feat/video-export-frame-rates。帧率与切歌策略合并保存在既有 options-v1 键，旧存档默认 30，整机备份保留两项。
-- 原生 tab 采集 maxFrameRate、宿主更新间隔、编码码率均跟随选择。导出页面不安装主界面的 RAF cap，不开启 offscreen、stopPainting 或逐帧读回；保留唯一音频与 2.6.8 正式 session 授权。
-- 本地定向 Node 76/76，Folia 16/16 与类型检查通过。云端实际媒体脚本的四份既有成片分别用 30／60／90／120 验证，保存 frame-rate-checks.json。受显示刷新率、硬件与效果限制，不宣称复杂效果持续达到目标帧率。
-- 仅低优先级后台命令与云端验收，未本机启动 GUI、安装或操作用户数据；沿用完成后发布授权。最终 CI、构建和正式发布结果见 RELEASE.md 顶部，完成后补录。
+- 用户要求 30／60／90／120 帧，默认 30；基线 main 49ac3cf6，功能提交 7803e0f2。帧率与切歌策略合并保存在既有 options-v1 键，旧存档默认 30，整机备份保留两项，录制中重开面板显示宿主当前值。
+- 原生 tab maxFrameRate、宿主更新间隔和视频码率均跟随选择。导出页不安装交互播放器 RAF cap；不启用 offscreen、stopPainting 或逐帧读回。保留唯一宿主音频、切歌 continue 默认／save 可选及 2.6.8 的受限捕获授权。
+- 本地 Node 76/76、Folia 16/16、类型、构建／产物和发布门禁 19/19 通过。完整 Windows Verify 41781085478 成功：Folia 109＋124、Node 1644 通过／0 失败／1 可选跳过、全部浏览器套件通过。
+- 实际媒体 41781085534 成功，四份成片分别用 30／60／90／120，native settings 与目标一致，全部独立媒体解码门禁通过。工件 13299815161，证据在 verification/video-export-frame-rates/cloud/，包括 frame-rate-checks.json 与 artifact API。
+- 不宣称软件 GPU 持续达到目标帧率。合并重复媒体 41781546562 在 1080p 雾笺尾差 1.706 秒超过原 1.25 秒门禁；重复 Verify 41781546604 在既有播放设置点击移出视口后超时。未改断言、超时或画质，不宣称所有运行全绿。
+- PR #172 已合入 1f06dce9ad0d8d333ba63acdca109cff7b907562，合并文件树与成功验收提交一致。annotated tag v2.6.9（tag object 799746fb8f13163813c9f013d155a423acca213a）；Windows Build and Release 41781563416 成功。
+- Release 433559984 于北京时间 2026-11-04 14:22:36 公开并设 Latest，四项资产、SHA256／SHA-512、只读安装器版本与公开自动更新清单全部核验通过。安装器 122567073 B，比 2.6.8 小 17 B，无新增生产依赖或 FFmpeg；未安装新版、开本机 GUI 或操作用户播放器与数据。
+- 收尾分支 docs/record-v2.6.9-release，发布证据在 verification/release-v2.6.9/。完整摘要与边界见 RELEASE.md 顶部。不重打旧 tag 或替换公开资产。
 
 ## 2026-11-04：v2.6.8 视频导出 Permission denied 已修复并发布
 
