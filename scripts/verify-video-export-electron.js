@@ -27,13 +27,13 @@ app.commandLine.appendSwitch('use-gl', 'angle');
 app.commandLine.appendSwitch('use-angle', 'swiftshader');
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 
-let host, manager, server, port, dialogCount = 0, nextSaveName = '';
-const failures = [], checks = [], mediaExports = [], created = [], surfaceSnapshots = [];
+let host, manager, server, port, permissionBridge, dialogCount = 0, nextSaveName = '';
+const failures = [], checks = [], mediaExports = [], created = [], surfaceSnapshots = [], permissionDecisions = [];
 const watchdog = setTimeout(async () => {
   const message = 'Video export acceptance exceeded its three-minute execution budget.';
   failures.push(message);
   await snapshotSurfaces('watchdog');
-  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ checks, mediaExports, windows: created, failures, surfaces:surfaceSnapshots, fixture:await fixtureSnapshot() }, null, 2));
+  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ checks, mediaExports, windows: created, failures, permissions:permissionDecisions, surfaces:surfaceSnapshots, fixture:await fixtureSnapshot() }, null, 2));
   process.stderr.write(message + '\n');
   app.exit(1);
 }, 180000);
@@ -444,6 +444,27 @@ async function run() {
     },translate:(_chinese, english)=>english || _chinese,
   });
   manager.registerIpc();
+  // Install the application's real shared-session policy. Electron's default
+  // permissive session hid a production Permission denied regression in 2.6.7.
+  const {createWallpaperEngineBridge} = require('../desktop/wallpaper-engine-bridge');
+  permissionBridge = createWallpaperEngineBridge({getMainWindow:()=>host,getMainServerPort:()=>port,
+    userDataPath:PROFILE,nativeTempPath:path.join(PROFILE,'native')});
+  const ses = host.webContents.session;
+  const setCheck = ses.setPermissionCheckHandler.bind(ses);
+  const setRequest = ses.setPermissionRequestHandler.bind(ses);
+  ses.setPermissionCheckHandler = handler => setCheck((contents,permission,origin,details)=> {
+    const allowed = handler(contents,permission,origin,details);
+    permissionDecisions.push({phase:'check',permission,origin,details,allowed});
+    return allowed;
+  });
+  ses.setPermissionRequestHandler = handler => setRequest((contents,permission,callback,details)=> {
+    handler(contents,permission,allowed=> {
+      permissionDecisions.push({phase:'request',permission,details,allowed}); callback(allowed);
+    },details);
+  });
+  permissionBridge.configureSessionPermissions();
+  ses.setPermissionCheckHandler = setCheck;
+  ses.setPermissionRequestHandler = setRequest;
   await host.loadURL(`http://127.0.0.1:${port}/index.html`);
   await evaluate('window.fixtureReady');
   const originalBounds = host.getBounds();
@@ -532,13 +553,14 @@ async function run() {
 }
 
 app.whenReady().then(run).then(async()=> {
-  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures,surfaces:surfaceSnapshots,fixture:await fixtureSnapshot()},null,2));
-  await manager?.dispose(); host?.destroy(); await new Promise(resolve=>server.close(resolve)); app.exit(0);
+  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures,permissions:permissionDecisions,surfaces:surfaceSnapshots,fixture:await fixtureSnapshot()},null,2));
+  await manager?.dispose(); await permissionBridge?.dispose(); host?.destroy(); await new Promise(resolve=>server.close(resolve)); app.exit(0);
 }).catch(async error=> {
   failures.push(error.stack || String(error));
   await snapshotSurfaces('failure');
-  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures,surfaces:surfaceSnapshots,fixture:await fixtureSnapshot()},null,2));
+  fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify({checks,exports:mediaExports,windows:created,failures,permissions:permissionDecisions,surfaces:surfaceSnapshots,fixture:await fixtureSnapshot()},null,2));
+  process.stderr.write(`Permission decisions: ${JSON.stringify(permissionDecisions)}\n`);
   process.stderr.write(`${error.stack || error}\n`);
-  try { await manager?.dispose(); } catch {} try { host?.destroy(); } catch {} try { server?.close(); } catch {}
+  try { await manager?.dispose(); } catch {} try { await permissionBridge?.dispose(); } catch {} try { host?.destroy(); } catch {} try { server?.close(); } catch {}
   app.exit(1);
 });
