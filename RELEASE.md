@@ -1,3 +1,18 @@
+# v2.6.10 视频导出固定帧率
+
+- 30／60／90／120 fps 导出均生成对应 CFR 成片；采集间隙重复前帧，修正 Opus 尾包真实时长，保留音频 bytes／PTS。新增 mediabunny 1.65.1，保持 WebM、唯一宿主音频、continue 默认和受限 tab 捕获授权。
+- [PR #174](https://github.com/oirge/Mineradio/pull/174) → merge `9b8d268baa193cd19d79c79579036f158837f264`，annotated tag `v2.6.10`（tag object `981fe81fa21a6a7f634244afc31f56aa4f68740d`）；[Windows Build and Release 41794385510](https://github.com/oirge/Mineradio/actions/runs/41794385510) 成功。
+- [v2.6.10](https://github.com/oirge/Mineradio/releases/tag/v2.6.10)（Release `433638334`）于北京时间 `2026-11-04 15:52:12` 公开，四资产、SHA256／SHA-512、只读安装器版本和公开 Latest／更新清单核验通过；安装器 `122637011` B。
+  - `Mineradio-oirge-2.6.10-Setup.exe`：122637011 B，SHA256 `04e825a37d95a65cbcfc69f60b6eb1cf9a4cc730201d9a39cbde9a791e4bfe89`。
+  - `Mineradio-oirge-2.6.10-Setup.exe.blockmap`：129707 B，SHA256 `0fb88829d32e6a97947110011d61bc5591d8737c4ca3f0bee5f49e88bb219ce9`。
+  - `latest.yml`：362 B，SHA256 `1d5ac50ed1a7916017d1b96e7d01bed7ea822c670ad2b04877c2f20af77b65d6`。
+  - `Mineradio-oirge-2.6.10-SHA256SUMS.txt`：284 B，SHA256 `ba3874f3d7e6bcc5fbbfeacfa83329a2c412164c067f721df484c4f25050a754`。
+  - 安装器 SHA-512：`7OyJrvileO/QFlSXdljXeg2D0H7mspf5qkHZQ5WMDDRuoQ3bVyykJOhOQpnQVpbfe2UdqPGORHTXOyzphCjbHQ==`。
+- 最终实际媒体 [41793626131](https://github.com/oirge/Mineradio/actions/runs/41793626131) 在 `37d3da1634afd5005c68f00676373d286c7a00da` 成功，artifact `13304257757` 已核验。四档实际成片均通过帧数、n/FPS 格点、声明帧率及音画尾差门禁；最大逐帧格点误差 0.444 ms，尾差均小于 1/FPS＋1.1 ms。早期 `41792179357` 在 `ea73448546ee11fec89e9a822a78d5410abb335f` 的成功报告也保留。
+- 最终完整 Verify 41793626143 状态为 in_progress，尚无完整成功结论，不宣称完整 CI 全绿。
+- 早期 Verify 41792179392 的全量 Node 1656 通过／0 失败／1 可选跳过，Folia 130＋124 通过；旧 preset-portability summary 普通点击 15000 ms 超时，不能记为全绿。
+- 仅低优先级后台与云端工作；未发送邮件、启动本机 GUI、安装新版或操作用户播放器与数据。发布证据位于 `verification/release-v2.6.10/`，专项约束见 `.context/pitfalls/mineradio-video-export-cfr.md`。
+
 # v2.6.9 视频导出帧率选择
 
 - 用户要求「帧数增加选择30/60/90/120」，以远端 main `49ac3cf6` 为基线，功能分支 `feat/video-export-frame-rates`；沿用完成后发布授权。仅低优先级后台检查和云端实际媒体测试，本机未启动 GUI、安装或操作用户播放器与数据。
