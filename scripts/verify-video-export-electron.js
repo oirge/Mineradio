@@ -320,6 +320,7 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   saveDecode();
   assert.ok(duration >= minDuration && duration <= maxDuration, `decoded audio duration ${duration} outside ${minDuration}–${maxDuration}`);
   assert.ok(rms > 0.025 && rms < 0.5, `export music RMS ${rms} must remain audible with the listening volume at zero`);
+  assert.ok(Math.abs(result.videoTimeline.audioMinusVideoEnd)<1.25,`video must continue until the audio ends: delta=${result.videoTimeline.audioMinusVideoEnd}`);
   const frame = seconds => execFileSync(ffmpeg, ['-v','error','-ss',String(seconds),'-i',filePath,'-an','-vf','scale=160:90','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'], {maxBuffer:1024*1024,windowsHide:true});
   const a = frame(Math.min(0.8, duration / 4)), b = frame(Math.min(2.5, duration * 0.7));
   assert.equal(a.length, 160 * 90 * 3, 'first sampled video frame must decode');
@@ -479,7 +480,7 @@ async function run() {
   logCheck('portrait export: pause/resume, continued recording through real 440Hz→660Hz song/deck handoff, updated Folia lyrics and final media chunk');
 
   await start('landscape-1080-no-lyrics',1920,1080,'fume','current',true);
-  await until('audio.currentTime > 2.4', '1080p visualization-only recording');
+  await until('audio.currentTime > 5', '1080p visualization-only recording');
   await stopWhilePreservingPlayback('1080p');
   const hd = fs.readdirSync(OUT).find(file => /^landscape-1080-no-lyrics\.(mp4|webm)$/.test(file));
   assert.ok(hd);
