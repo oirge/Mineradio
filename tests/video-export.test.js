@@ -43,7 +43,17 @@ async function harness(t, options = {}) {
         setWindowOpenHandler: callback => { this.openHandler = callback; },
         stopPainting: () => { this.stopped = true; },
         getMediaSourceId: requestingOwner => { this.captureOwner = requestingOwner; return options.sourceId === undefined ? 'owner-bound-source' : options.sourceId; },
-        send: (channel, value) => { this.lastMessage = { channel, value }; },
+        send: (channel, value) => {
+          this.lastMessage = { channel, value };
+          if (channel === 'mineradio-video-export-finalize') {
+            h.finalizing = value;
+            if (options.autoFinalize !== false) queueMicrotask(async () => {
+              const bytes = await h.handlers.get('mineradio-video-export-read-recording')(h.hiddenEvent(this), { id: value.id, position: 0, length: value.size });
+              await h.handlers.get('mineradio-video-export-write-finalized')(h.hiddenEvent(this), { id: value.id, position: 0, sequence: 0, bytes });
+              await h.handlers.get('mineradio-video-export-finalized')(h.hiddenEvent(this), { id: value.id });
+            });
+          }
+        },
       });
       h.windows.push(this);
     }
@@ -479,4 +489,183 @@ test('尺寸和格式非法时先拒绝，不打开保存对话框', async t => 
     await assert.rejects(h.begin(values), /VIDEO_EXPORT_OPTIONS_INVALID/);
   }
   assert.equal(dialogs, 0);
+});
+
+async function waitForFinalizer(h) {
+  const deadline = Date.now() + 2000;
+  while (!h.finalizing && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.ok(h.finalizing, 'the hidden surface must receive the CFR job');
+  return h.finalizing;
+}
+
+test('固定帧率封装只允许当前隐藏主frame读取本次录制和有界写入', async t => {
+  const h = await harness(t, { autoFinalize: false });
+  const job = await h.begin({ frameRate: 60 });
+  const read = h.handlers.get('mineradio-video-export-read-recording');
+  const write = h.handlers.get('mineradio-video-export-write-finalized');
+  const done = h.handlers.get('mineradio-video-export-finalized');
+  await assert.rejects(read(h.hiddenEvent(), { id: job.id, position: 0, length: 1 }), /NOT_ENCODING/);
+  await h.chunk(job.id, 0, [1, 2, 3, 4]);
+  const finishing = h.invoke('finish', { id: job.id });
+  const initial = await waitForFinalizer(h);
+  assert.equal(initial.frameRate, 60); assert.equal(initial.size, 4);
+  assert.equal(h.windows[0].destroyed, false);
+  const input = { id: job.id, position: 0, length: 4 };
+  await assert.rejects(read(h.event, input), /IPC_FORBIDDEN/);
+  await assert.rejects(read({ ...h.hiddenEvent(), senderFrame: { ...h.hiddenEvent().senderFrame, parent: {} } }, input), /IPC_FORBIDDEN/);
+  await assert.rejects(read(h.hiddenEvent(), { ...input, length: 5 }), /READ_INVALID/);
+  await assert.rejects(read(h.hiddenEvent(), { ...input, position: -1 }), /READ_INVALID/);
+  assert.deepEqual([...await read(h.hiddenEvent(), input)], [1, 2, 3, 4]);
+  await assert.rejects(write(h.hiddenEvent(), { id: job.id, position: 1, sequence: 0, bytes: new Uint8Array([9]) }), /CHUNK_INVALID/);
+  await write(h.hiddenEvent(), { id: job.id, position: 0, sequence: 0, bytes: new Uint8Array([8, 8, 8, 8]) });
+  // Seek-back metadata is bounded to already written bytes.
+  await write(h.hiddenEvent(), { id: job.id, position: 1, sequence: 1, bytes: new Uint8Array([9]) });
+  await done(h.hiddenEvent(), { id: job.id }); await finishing;
+  assert.deepEqual([...await fs.promises.readFile(h.output)], [8, 9, 8, 8]);
+  assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(h.output)]);
+  await assert.rejects(read(h.hiddenEvent(), input), /IPC_FORBIDDEN/);
+});
+
+test('取消固定帧率编码保留原文件并清理两份临时文件，不复活旧任务', async t => {
+  const h = await harness(t, { autoFinalize: false });
+  await fs.promises.writeFile(h.output, 'previous');
+  const job = await h.begin(); await h.chunk(job.id, 0, [1, 2, 3]);
+  const finishing = h.invoke('finish', { id: job.id });
+  const rejected = assert.rejects(finishing, /VIDEO_EXPORT_CANCELLED/);
+  await waitForFinalizer(h);
+  assert.equal(await fs.promises.readFile(h.output, 'utf8'), 'previous');
+  await h.invoke('cancel', { id: job.id }); await rejected;
+  assert.equal(await fs.promises.readFile(h.output, 'utf8'), 'previous');
+  assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(h.output)]);
+  const next = await h.begin();
+  await assert.rejects(h.handlers.get('mineradio-video-export-write-finalized')(h.hiddenEvent(),
+    { id: job.id, sequence: 0, position: 0, bytes: new Uint8Array([7]) }), /SESSION_INVALID/);
+  await h.invoke('cancel', { id: next.id });
+});
+
+test('编码renderer错误拒绝保存且释放输入句柄、输出句柄和窗口', async t => {
+  const h = await harness(t, { autoFinalize: false });
+  const job = await h.begin(); await h.chunk(job.id, 0, [1, 2, 3]);
+  const finishing = h.invoke('finish', { id: job.id });
+  const rejected = assert.rejects(finishing);
+  await waitForFinalizer(h);
+  h.send('renderer-failed', 'CFR_ENCODER_FAILED', h.hiddenEvent());
+  await rejected;
+  assert.equal(h.failures()[0].value.error, 'CFR_ENCODER_FAILED');
+  assert.equal(h.windows[0].destroyed, true);
+  assert.deepEqual(await fs.promises.readdir(h.directory), []);
+});
+
+test('原录制临时文件wx碰撞不删除未获所有权的文件', async t => {
+  let collision;
+  const fileSystem = { ...fs, promises: { ...fs.promises,
+    async open(file, flags) {
+      if (flags === 'wx') {
+        collision = file;
+        await fs.promises.writeFile(file, 'unowned');
+      }
+      return fs.promises.open(file, flags);
+    },
+  } };
+  const h = await harness(t, { fileSystem });
+  await assert.rejects(h.begin(), { code: 'EEXIST' });
+  assert.equal(await fs.promises.readFile(collision, 'utf8'), 'unowned');
+  assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(collision)]);
+});
+
+test('CFR临时文件wx碰撞只清理本任务拥有的原录制', async t => {
+  const h = await harness(t, { autoFinalize: false });
+  const job = await h.begin(); await h.chunk(job.id, 0, [1, 2, 3]);
+  const collision = path.join(h.directory, `.mineradio-video-${job.id}.cfr.part`);
+  await fs.promises.writeFile(collision, 'unowned');
+  await assert.rejects(h.invoke('finish', { id: job.id }), { code: 'EEXIST' });
+  assert.equal(await fs.promises.readFile(collision, 'utf8'), 'unowned');
+  assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(collision)]);
+});
+
+test('取消等待CFR打开句柄时仍登记并清理迟到的已创建文件', async t => {
+  const opened = deferred(), release = deferred();
+  const fileSystem = { ...fs, promises: { ...fs.promises,
+    async open(file, flags) {
+      const handle = await fs.promises.open(file, flags);
+      if (file.endsWith('.cfr.part')) { opened.resolve(); await release.promise; }
+      return handle;
+    },
+  } };
+  const h = await harness(t, { fileSystem, autoFinalize: false });
+  const job = await h.begin(); await h.chunk(job.id, 0, [1, 2, 3]);
+  const finishing = h.invoke('finish', { id: job.id });
+  const rejected = assert.rejects(finishing, /SESSION_INVALID|CANCELLED/);
+  await opened.promise;
+  const cancelling = h.invoke('cancel', { id: job.id });
+  release.resolve();
+  await Promise.all([cancelling, rejected]);
+  assert.deepEqual(await fs.promises.readdir(h.directory), []);
+});
+
+test('CFR完成确认关闭读写入口并等待已经接受的写入', async t => {
+  const writing = deferred(), release = deferred();
+  const fileSystem = { ...fs, promises: { ...fs.promises,
+    async open(file, flags) {
+      const handle = await fs.promises.open(file, flags);
+      if (file.endsWith('.cfr.part')) {
+        const write = handle.write.bind(handle);
+        handle.write = async (...args) => { writing.resolve(); await release.promise; return write(...args); };
+      }
+      return handle;
+    },
+  } };
+  const h = await harness(t, { fileSystem, autoFinalize: false });
+  const job = await h.begin(); await h.chunk(job.id, 0, [1, 2, 3]);
+  const finishing = h.invoke('finish', { id: job.id });
+  await waitForFinalizer(h);
+  const accepted = h.handlers.get('mineradio-video-export-write-finalized')(h.hiddenEvent(),
+    { id: job.id, position: 0, sequence: 0, bytes: new Uint8Array([8, 9]) });
+  await writing.promise;
+  await h.handlers.get('mineradio-video-export-finalized')(h.hiddenEvent(), { id: job.id });
+  await assert.rejects(h.handlers.get('mineradio-video-export-write-finalized')(h.hiddenEvent(),
+    { id: job.id, position: 0, sequence: 1, bytes: new Uint8Array([7]) }), /NOT_ENCODING/);
+  await assert.rejects(h.handlers.get('mineradio-video-export-read-recording')(h.hiddenEvent(),
+    { id: job.id, position: 0, length: 1 }), /NOT_ENCODING/);
+  release.resolve();
+  await Promise.all([accepted, finishing]);
+  assert.deepEqual([...await fs.promises.readFile(h.output)], [8, 9]);
+});
+
+test('原子rename开始后取消拒绝回滚且保存继续结算', async t => {
+  const renaming = deferred(), release = deferred();
+  const fileSystem = { ...fs, promises: { ...fs.promises,
+    async rename(...args) { renaming.resolve(); await release.promise; return fs.promises.rename(...args); },
+  } };
+  const h = await harness(t, { fileSystem });
+  const job = await h.begin(); await h.chunk(job.id, 0, [1, 2, 3]);
+  const finishing = h.invoke('finish', { id: job.id });
+  await renaming.promise;
+  assert.deepEqual(await h.invoke('cancel', { id: job.id }), { cancelled: false, committing: true });
+  const disposing = h.manager.dispose();
+  release.resolve();
+  const result = await finishing; await disposing;
+  assert.equal(result.fileName, h.output);
+  assert.deepEqual([...await fs.promises.readFile(h.output)], [1, 2, 3]);
+});
+
+test('rename成功后慢速原录制清理不把已保存结果报成取消', async t => {
+  const unlinking = deferred(), release = deferred();
+  const fileSystem = { ...fs, promises: { ...fs.promises,
+    async unlink(file) {
+      if (file.endsWith('.part') && !file.endsWith('.cfr.part')) { unlinking.resolve(); await release.promise; }
+      return fs.promises.unlink(file);
+    },
+  } };
+  const h = await harness(t, { fileSystem });
+  await fs.promises.writeFile(h.output, 'previous');
+  const job = await h.begin(); await h.chunk(job.id, 0, [1, 2, 3]);
+  const finishing = h.invoke('finish', { id: job.id });
+  await unlinking.promise;
+  assert.deepEqual(await h.invoke('cancel', { id: job.id }), { cancelled: false, fileName: h.output });
+  assert.equal(h.manager.hasPendingWork(), true, 'source cleanup remains owned until deletion settles');
+  release.resolve(); await finishing;
+  assert.equal(h.manager.hasPendingWork(), false);
+  assert.deepEqual([...await fs.promises.readFile(h.output)], [1, 2, 3]);
+  assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(h.output)]);
 });

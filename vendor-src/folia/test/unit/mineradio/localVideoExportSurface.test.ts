@@ -33,7 +33,7 @@ beforeEach(() => {
         lyrics: { trackId: 'song-a', lines: [{ time: 0, text: 'First lyric' }, { time: 10, text: 'Later line' }] },
         analysis: { trackId: 'song-a', revision: 1, source: 'live', beats: [], drums: null, vocal: null } };
     ready = vi.fn(async () => {}); failed = vi.fn();
-    Object.assign(window, { mineradioVideoExport: { getInitial: async () => initial, ready, failed,
+    Object.assign(window, { mineradioVideoExport: { getInitial: async () => initial, ready, failed, onFinalize: () => () => {},
         onUpdate: (callback: typeof listener) => { listener = callback; return runtime.unsubscribe; } } });
     mount = document.createElement('div'); document.body.append(mount);
 });

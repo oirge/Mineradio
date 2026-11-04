@@ -30,13 +30,13 @@ app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 let host, manager, server, port, permissionBridge, dialogCount = 0, nextSaveName = '';
 const failures = [], checks = [], mediaExports = [], created = [], surfaceSnapshots = [], permissionDecisions = [], frameRateChecks = [];
 const watchdog = setTimeout(async () => {
-  const message = 'Video export acceptance exceeded its three-minute execution budget.';
+  const message = 'Video export acceptance exceeded its eight-minute execution budget.';
   failures.push(message);
   await snapshotSurfaces('watchdog');
   fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ checks, mediaExports, windows: created, failures, permissions:permissionDecisions, surfaces:surfaceSnapshots, fixture:await fixtureSnapshot() }, null, 2));
   process.stderr.write(message + '\n');
   app.exit(1);
-}, 180000);
+}, 480000);
 watchdog.unref();
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.svg': 'image/svg+xml',
@@ -256,7 +256,7 @@ async function stopWhilePreservingPlayback(label) {
   assert.equal(immediate.before.ended,false,`${label}: stop must be exercised before the fixture ends`);
   assert.equal(immediate.after.paused,false,`${label}: stopping capture must leave music playing immediately`);
   assert.equal(immediate.after.ended,false,`${label}: stopping capture must not end the music`);
-  await until("fixture.getState().status === 'saved'",`${label} final chunk save`);
+  await until("fixture.getState().status === 'saved'",`${label} final chunk save`,120000);
   const final=await evaluate('({paused:audio.paused,ended:audio.ended,position:audio.currentTime,events:fixtureTransportEvents.slice(fixtureStopEventAt).filter(event=>event.mediaId===fixtureSource.id)})');
   assert.deepEqual(final.events.filter(event=>event.kind==='pause'&&!event.ended),[],`${label}: saving must never pause the selected song`);
   assert.ok(!final.paused||final.ended,`${label}: only natural completion may stop the selected song while saving`);
@@ -332,6 +332,16 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   const result = {file:path.basename(filePath),width,height,bytes:fs.statSync(filePath).size,duration,rms,videoTimeline:inspectVideoTimeline(filePath,duration)};
   const saveDecode=()=>fs.writeFileSync(path.join(OUT,`${stem}-decode.json`),JSON.stringify(result,null,2));
   saveDecode();
+  const targetFrameRate = frameRateChecks.find(check => check.name === stem)?.targetFrameRate;
+  assert.ok(targetFrameRate, 'each file must be checked against its selected frame rate');
+  const timeline = result.videoTimeline;
+  const maximumTimestampError = Math.max(...timeline.frames.map((frame,index) => Math.abs(frame.pts - index / targetFrameRate)));
+  result.constantFrameRate = {targetFrameRate,maximumTimestampError,decodedFrameCount:timeline.frameCount,
+    expectedFrameCount:duration*targetFrameRate,measuredFrameRate:(timeline.frameCount-1)/(timeline.lastPts-timeline.firstPts)};
+  saveDecode();
+  assert.ok(Math.abs(timeline.frameCount-duration*targetFrameRate)<=2,`CFR must encode ${targetFrameRate} frames per audio second: ${JSON.stringify(result.constantFrameRate)}`);
+  assert.ok(maximumTimestampError<=0.0011,`every decoded frame must lie on n/FPS (within WebM's 1ms precision): ${maximumTimestampError}`);
+  assert.match(metadata, new RegExp(`\\b${targetFrameRate}(?:\\.0+)? fps\\b`), 'the file must declare its matching nominal frame rate');
   assert.ok(duration >= minDuration && duration <= maxDuration, `decoded audio duration ${duration} outside ${minDuration}–${maxDuration}`);
   assert.ok(rms > 0.025 && rms < 0.5, `export music RMS ${rms} must remain audible with the listening volume at zero`);
   assert.ok(Math.abs(result.videoTimeline.audioMinusVideoEnd)<1.25,`video must continue until the audio ends: delta=${result.videoTimeline.audioMinusVideoEnd}`);
@@ -490,7 +500,7 @@ async function run() {
   assert.ok(landscapeStart.playheadAtStart < 1.2, 'whole-song export must restart the song after preparing');
   await until('audio.currentTime>=1.2','landscape first active lyric');
   await until('audio.currentTime>=2.8','landscape second active lyric');
-  await until("fixture.getState().status === 'saved'", 'whole-song automatic completion', 45000);
+  await until("fixture.getState().status === 'saved'", 'whole-song automatic completion', 120000);
   const landscape = fs.readdirSync(OUT).find(file => /^landscape-full\.(mp4|webm)$/.test(file));
   assert.ok(landscape, 'full-song file must exist');
   decodeOutput(path.join(OUT,landscape),1280,720,6,8.5,undefined,true);

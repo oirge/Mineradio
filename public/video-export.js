@@ -40,11 +40,20 @@
       disconnectAudio(s);
       if (s.stream) s.stream.getTracks().forEach(function (track) { track.stop(); });
       if (s.unsubscribeFailure) s.unsubscribeFailure();
+      if (s.unsubscribeEncoding) s.unsubscribeEncoding();
       s.stream = null;
       if (current === s) current = null;
     }
     async function discard(s, error) {
       if (s.discarding) return s.discarding;
+      // Once the desktop begins the atomic rename, cancellation must await its
+      // save result instead of reporting a cancellation after replacing the file.
+      if (s.finishing && !error) {
+        if (!s.cancelDecision) s.cancelDecision = bridge.cancelVideoExport({ id: s.id }).catch(function () { return { cancelled: true }; });
+        var decision = await s.cancelDecision;
+        if (decision && decision.cancelled === false) return s.finishing;
+        if (s.discarding) return s.discarding;
+      }
       s.cancelled = true;
       disconnectAudio(s);
       if (s.preparedPlayback && !s.playbackReleased && s.wasPlaying && host.audio === s.audio) {
@@ -53,7 +62,7 @@
       }
       if (s.recorder && s.recorder.state !== 'inactive') { try { s.recorder.stop(); } catch (_) {} }
       s.discarding = (async function () {
-        try { if (s.id) await bridge.cancelVideoExport({ id: s.id }); } catch (_) {}
+        try { if (s.id && !s.cancelDecision) await bridge.cancelVideoExport({ id: s.id }); } catch (_) {}
         // begin may still be waiting for the save dialog. Its continuation owns that late session.
         release(s);
         var message = error ? String(error.message || error) : '';
@@ -63,7 +72,7 @@
     }
     function fail(s, error) {
       // A late capture/encoder callback from a released job must not overwrite a newer job.
-      if (current !== s || s.cancelled) return;
+      if (current !== s || s.cancelled || s.cancelDecision) return;
       void discard(s, error).catch(function () {});
     }
     function queueChunk(s, blob) {
@@ -180,9 +189,12 @@
         listeners: [], writes: Promise.resolve(), sequence: 0, pendingBytes: 0, elapsed: 0,
         stateAt: 0, analysisAt: 0, progressAt: 0, startPosition: params.startMode === 'from-start' ? 0 : initial.position };
       current = s;
-      publish({ status: 'preparing', progress: 0, elapsed: 0, error: '', fileName: '', transitionBehavior: transitionBehavior, frameRate: frameRate });
+      publish({ status: 'preparing', progress: 0, encodingProgress: 0, elapsed: 0, error: '', fileName: '', transitionBehavior: transitionBehavior, frameRate: frameRate });
       try {
         s.unsubscribeFailure = bridge.onVideoExportFailure(function (failure) { if (failure.id === s.id) fail(s, new Error(failure.error)); });
+        if (bridge.onVideoExportEncodingProgress) s.unsubscribeEncoding = bridge.onVideoExportEncodingProgress(function (value) {
+          if (current === s && !s.cancelled && value.id === s.id && state.status === 'saving') publish({ encodingProgress: value.progress });
+        });
         var result = await bridge.beginVideoExport({ width: s.width, height: s.height, frameRate: s.frameRate, extension: format[1],
           fileName: initial.currentTrack.title + '-' + s.width + 'x' + s.height + '.' + format[1], visuals: params.visuals,
           state: Object.assign({}, initial, { playing: false, position: s.startPosition }), lyrics: services.getLyrics(), analysis: services.getAnalysis() });
@@ -275,7 +287,13 @@
           var result = await bridge.finishVideoExport({ id: s.id, duration: s.elapsed });
           if (s.cancelled || current !== s) return snapshot();
           release(s); return publish({ status: 'saved', fileName: result.fileName, error: '' });
-        } catch (error) { return discard(s, error); }
+        } catch (error) {
+          if (s.cancelDecision) {
+            var decision = await s.cancelDecision;
+            if (!decision || decision.cancelled !== false) return discard(s);
+          }
+          return discard(s, error);
+        }
       })();
       return s.finishing;
     }

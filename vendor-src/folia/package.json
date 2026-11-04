@@ -217,6 +217,7 @@
     "file-type": "^21.3.4",
     "koffi": "^3.3.1",
     "kugoumusicapi": "https://github.com/MakcRe/KuGouMusicApi/archive/refs/tags/v1.6.0.tar.gz",
+    "mediabunny": "1.65.1",
     "music-metadata": "^11.16.1",
     "onnxruntime-node": "^1.30.0",
     "ws": "^8.21.3"

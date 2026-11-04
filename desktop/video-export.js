@@ -20,6 +20,7 @@ function createVideoExportManager({
   fileSystem = fs,
 }) {
   let active = null;
+  let lastCommitted = null;
   let disposed = false;
   const cleanups = new Set();
 
@@ -93,11 +94,14 @@ function createVideoExportManager({
 
   /** Only this job's random sibling temporary file is removed on cancellation. */
   function discard(record) {
+    if (record.stage === 'committing') return record.commit.then(() => {}, () => discard(record));
     if (record.cleanup) return record.cleanup;
     record.discarded = true;
     if (active === record) active = null;
     if (record.rejectReady) record.rejectReady(new Error('VIDEO_EXPORT_CANCELLED'));
     record.rejectReady = null;
+    record.rejectFinalized?.(new Error('VIDEO_EXPORT_CANCELLED'));
+    record.rejectFinalized = null;
     stopSurface(record);
     record.cleanup = (async () => {
       if (record.opening) await record.opening.catch(() => {});
@@ -107,7 +111,12 @@ function createVideoExportManager({
         record.handle = null;
         await handle.close().catch(() => {});
       }
-      if (record.tempPath) await fileSystem.promises.unlink(record.tempPath).catch(() => {});
+      if (record.inputHandle) {
+        await record.inputHandle.close().catch(() => {});
+        record.inputHandle = null;
+      }
+      if (record.tempPath && record.tempOwned) await fileSystem.promises.unlink(record.tempPath).catch(() => {});
+      if (record.sourcePath && record.sourceOwned) await fileSystem.promises.unlink(record.sourcePath).catch(() => {});
     })();
     cleanups.add(record.cleanup);
     void record.cleanup.finally(() => cleanups.delete(record.cleanup));
@@ -174,6 +183,7 @@ function createVideoExportManager({
       record.tempPath = path.join(path.dirname(record.fileName), `.mineradio-video-${record.id}.part`);
       record.opening = fileSystem.promises.open(record.tempPath, 'wx').then(handle => {
         record.handle = handle;
+        record.tempOwned = true;
         return handle;
       });
       await record.opening;
@@ -303,7 +313,6 @@ function createVideoExportManager({
     const record = requireCurrent(payload && payload.id);
     if (record.stage !== 'recording') throw new Error('VIDEO_EXPORT_NOT_RECORDING');
     record.stage = 'finalizing';
-    stopSurface(record);
     try {
       await record.writes;
       requireCurrent(record.id);
@@ -320,11 +329,30 @@ function createVideoExportManager({
       await record.handle.close();
       record.handle = null;
       requireCurrent(record.id);
-      await fileSystem.promises.rename(record.tempPath, record.fileName);
-      record.tempPath = null;
-      record.committed = true;
-      if (active === record) active = null;
-      return { fileName: record.fileName };
+      if (record.initial.extension === 'webm') await finalizeFrameRate(record);
+      requireCurrent(record.id);
+      stopSurface(record);
+      // rename is the atomic commit boundary: cancellation cannot roll it back.
+      record.stage = 'committing';
+      record.commit = (async () => {
+        try { await fileSystem.promises.rename(record.tempPath, record.fileName); }
+        catch (error) { record.stage = 'commit-failed'; throw error; }
+        record.tempPath = null;
+        record.tempOwned = false;
+        record.committed = true;
+        lastCommitted = { id: record.id, fileName: record.fileName };
+        if (active === record) active = null;
+        if (record.sourcePath) {
+          record.cleanup = fileSystem.promises.unlink(record.sourcePath).catch(() => {}).then(() => {
+            record.sourcePath = null; record.sourceOwned = false;
+          });
+          cleanups.add(record.cleanup);
+          void record.cleanup.finally(() => cleanups.delete(record.cleanup));
+          await record.cleanup;
+        }
+        return { fileName: record.fileName };
+      })();
+      return await record.commit;
     } catch (error) {
       fail(record, error);
       await discard(record);
@@ -332,8 +360,84 @@ function createVideoExportManager({
     }
   }
 
+  async function finalizeFrameRate(record) {
+    record.sourcePath = record.tempPath;
+    record.sourceOwned = record.tempOwned;
+    record.sourceBytes = record.bytes;
+    record.tempPath = path.join(path.dirname(record.fileName), `.mineradio-video-${record.id}.cfr.part`);
+    record.tempOwned = false;
+    record.finalizedBytes = 0;
+    record.finalizedSequence = 0;
+    record.opening = (async () => {
+      record.inputHandle = await fileSystem.promises.open(record.sourcePath, 'r');
+      record.handle = await fileSystem.promises.open(record.tempPath, 'wx');
+      record.tempOwned = true;
+    })();
+    await record.opening;
+    requireCurrent(record.id);
+    record.stage = 'encoding';
+    const finalized = new Promise((resolve, reject) => {
+      record.resolveFinalized = resolve; record.rejectFinalized = reject;
+    });
+    finalized.catch(() => {});
+    record.window.webContents.send('mineradio-video-export-finalize', {
+      id: record.id, size: record.sourceBytes, frameRate: record.initial.frameRate,
+      width: record.width, height: record.height,
+    });
+    await finalized;
+    await record.writes;
+    requireCurrent(record.id);
+    if (!record.finalizedBytes) throw new Error('VIDEO_EXPORT_EMPTY');
+    await record.handle.sync();
+    await record.handle.close(); record.handle = null;
+    await record.inputHandle.close(); record.inputHandle = null;
+  }
+
+  function requireEncoding(event, payload) {
+    if (!ownsHiddenFrame(event)) throw new Error('IPC_FORBIDDEN');
+    const record = requireCurrent(payload?.id);
+    if (record.stage !== 'encoding') throw new Error('VIDEO_EXPORT_NOT_ENCODING');
+    return record;
+  }
+
+  async function readRecording(event, payload) {
+    const record = requireEncoding(event, payload);
+    const { position, length } = payload;
+    if (!Number.isSafeInteger(position) || position < 0 || !Number.isSafeInteger(length)
+      || length < 1 || length > MAX_CHUNK_BYTES || position + length > record.sourceBytes) throw new Error('VIDEO_EXPORT_READ_INVALID');
+    const bytes = Buffer.alloc(length);
+    const result = await record.inputHandle.read(bytes, 0, length, position);
+    if (result.bytesRead !== length) throw new Error('VIDEO_EXPORT_READ_INCOMPLETE');
+    return bytes;
+  }
+
+  async function writeFinalized(event, payload) {
+    const record = requireEncoding(event, payload);
+    const { bytes, position, sequence } = payload;
+    if (!(bytes instanceof ArrayBuffer) && !ArrayBuffer.isView(bytes)) throw new Error('VIDEO_EXPORT_CHUNK_INVALID');
+    const length = bytes.byteLength;
+    if (!length || length > MAX_CHUNK_BYTES || sequence !== record.finalizedSequence
+      || !Number.isSafeInteger(position) || position < 0 || position > record.finalizedBytes) throw new Error('VIDEO_EXPORT_CHUNK_INVALID');
+    if (record.pendingChunks >= MAX_PENDING_CHUNKS || record.pendingBytes + length > MAX_PENDING_BYTES) throw new Error('VIDEO_EXPORT_WRITE_BACKPRESSURE');
+    record.finalizedSequence++; record.pendingChunks++; record.pendingBytes += length;
+    const buffer = bytes instanceof ArrayBuffer ? Buffer.from(bytes) : Buffer.from(bytes.buffer, bytes.byteOffset, length);
+    const write = record.writes.then(async () => {
+      requireCurrent(record.id);
+      for (let offset = 0; offset < length;) {
+        const { bytesWritten } = await record.handle.write(buffer, offset, length - offset, position + offset);
+        if (!bytesWritten) throw new Error('VIDEO_EXPORT_WRITE_INCOMPLETE');
+        offset += bytesWritten;
+      }
+      record.finalizedBytes = Math.max(record.finalizedBytes, position + length);
+    });
+    record.writes = write;
+    try { await write; } finally { record.pendingChunks--; record.pendingBytes -= length; }
+  }
+
   async function cancel(_event, payload) {
+    if (lastCommitted?.id === payload?.id) return { cancelled: false, fileName: lastCommitted.fileName };
     if (!active || active.id !== (payload && payload.id)) return { cancelled: true };
+    if (active.stage === 'committing') return { cancelled: false, committing: true };
     await discard(active);
     return { cancelled: true };
   }
@@ -364,6 +468,20 @@ function createVideoExportManager({
       record.resolveReady?.();
       record.resolveReady = null;
       return { ok: true };
+    });
+    ipcMain.handle('mineradio-video-export-read-recording', readRecording);
+    ipcMain.handle('mineradio-video-export-write-finalized', writeFinalized);
+    ipcMain.handle('mineradio-video-export-finalized', (event, payload) => {
+      const record = requireEncoding(event, payload);
+      // All accepted writes drain below; no new read or write may race handle closure.
+      record.stage = 'sealing';
+      record.resolveFinalized?.(); record.resolveFinalized = null; record.rejectFinalized = null;
+      return { ok: true };
+    });
+    ipcMain.on('mineradio-video-export-encoding-progress', (event, payload) => {
+      if (!ownsHiddenFrame(event) || active.stage !== 'encoding' || payload?.id !== active.id
+        || !Number.isFinite(payload.progress) || payload.progress < 0 || payload.progress > 1) return;
+      send(active, 'mineradio-video-export-encoding-progress', payload);
     });
     ipcMain.on('mineradio-video-export-renderer-failed', (event, message) => {
       if (ownsHiddenFrame(event)) fail(active, new Error(String(message || 'VIDEO_EXPORT_RENDER_FAILED').slice(0, 1000)));
