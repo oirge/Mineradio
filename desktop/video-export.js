@@ -435,7 +435,7 @@ function createVideoExportManager({
   }
 
   async function cancel(_event, payload) {
-    if (lastCommitted?.id === payload?.id) return { cancelled: false, fileName: lastCommitted.fileName };
+    if (lastCommitted && lastCommitted.id === payload?.id) return { cancelled: false, fileName: lastCommitted.fileName };
     if (!active || active.id !== (payload && payload.id)) return { cancelled: true };
     if (active.stage === 'committing') return { cancelled: false, committing: true };
     await discard(active);

@@ -498,6 +498,14 @@ async function waitForFinalizer(h) {
   return h.finalizing;
 }
 
+test('没有录制或提交时取消空任务仍是幂等操作', async t => {
+  const h = await harness(t);
+  assert.deepEqual(await h.invoke('cancel'), { cancelled: true });
+  assert.deepEqual(await h.invoke('cancel', {}), { cancelled: true });
+  assert.equal(h.windows.length, 0);
+  assert.deepEqual(await fs.promises.readdir(h.directory), []);
+});
+
 test('固定帧率封装只允许当前隐藏主frame读取本次录制和有界写入', async t => {
   const h = await harness(t, { autoFinalize: false });
   const job = await h.begin({ frameRate: 60 });
