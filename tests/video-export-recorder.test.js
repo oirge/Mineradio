@@ -88,19 +88,19 @@ test('recording does not wait for delayed muxed output before playing the song',
 });
 
 test('cancelling before or after the first muxed output leaves the song playing', async t => {
-  for (const initialized of [false, true]) await t.test(initialized ? 'ready before playback' : 'still initializing', async () => {
-  let ready;
-  const h = harness({ startEncoder: callback => { ready = callback; } });
-  const starting = h.controller.start(params);
-  await new Promise(resolve => setTimeout(resolve, 40));
-  if (initialized) ready();
-  await h.controller.cancel();
-  if (!initialized) ready();
-  await starting;
-  assert.equal(h.media.paused, false);
-  assert.equal(h.controller.getState().status, 'cancelled');
-  assert.equal(h.recorder.state, 'inactive');
-  assert.equal(h.connections.size, 0);
+  for (const initialized of [false, true]) await t.test(initialized ? 'first muxed output received' : 'first muxed output pending', async () => {
+    let ready;
+    const h = harness({ startEncoder: callback => { ready = callback; } });
+    const starting = h.controller.start(params);
+    await new Promise(resolve => setTimeout(resolve, 40));
+    if (initialized) ready();
+    await h.controller.cancel();
+    if (!initialized) ready();
+    await starting;
+    assert.equal(h.media.paused, false);
+    assert.equal(h.controller.getState().status, 'cancelled');
+    assert.equal(h.recorder.state, 'inactive');
+    assert.equal(h.connections.size, 0);
   });
 });
 

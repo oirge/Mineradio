@@ -1,7 +1,7 @@
 'use strict';
 
-// Reserve a Duration in Chromium's streaming WebM header. Only the first chunk
-// is inspected; finalization patches eight bytes without loading the video.
+// Reserve a Duration in Chromium's streaming WebM header. At most 64 KiB of the
+// prefix is inspected; finalization patches eight bytes without loading the video.
 function element(bytes, offset, limit = bytes.length) {
   function vint(at, maximum, keepMarker) {
     if (at >= limit || !bytes[at]) return null;
@@ -22,15 +22,21 @@ function element(bytes, offset, limit = bytes.length) {
 
 function reserveWebmDuration(bytes) {
   const limit = Math.min(bytes.length, 64 * 1024);
+  const magic = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+  const incomplete = { bytes, needsMore: bytes.length < 64 * 1024 };
+  if (!bytes.subarray(0, Math.min(limit, 4)).equals(magic.subarray(0, Math.min(limit, 4)))) return { bytes };
   const ebml = element(bytes, 0, limit);
-  if (ebml?.id !== 0x1a45dfa3 || ebml.end > limit) return { bytes };
+  if (!ebml || ebml.end > limit) return incomplete;
+  if (ebml.id !== 0x1a45dfa3) return { bytes };
   const segment = element(bytes, ebml.end, limit);
-  if (segment?.id !== 0x18538067 || !segment.size.unknown) return { bytes };
+  if (!segment) return incomplete;
+  if (segment.id !== 0x18538067 || !segment.size.unknown) return { bytes };
   for (let offset = segment.start; offset < limit;) {
     const entry = element(bytes, offset, limit);
-    if (!entry || entry.end > limit || entry.size.unknown || entry.end <= offset) break;
+    if (!entry || entry.end > limit) return incomplete;
+    if (entry.size.unknown || entry.end <= offset) return { bytes };
     // A pre-existing seek table would need its positions rewritten after insertion.
-    if (entry.id === 0x114d9b74 || entry.id === 0x1f43b675) break;
+    if (entry.id === 0x114d9b74 || entry.id === 0x1f43b675) return { bytes };
     if (entry.id === 0x1549a966) {
       let scale = 1_000_000;
       for (let childAt = entry.start; childAt < entry.end;) {
@@ -57,7 +63,7 @@ function reserveWebmDuration(bytes) {
     }
     offset = entry.end;
   }
-  return { bytes };
+  return incomplete;
 }
 
 module.exports = { reserveWebmDuration };

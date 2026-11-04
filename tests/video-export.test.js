@@ -140,6 +140,21 @@ test('无效 WebM 时长不能覆盖已有文件，错误后仍清理临时内�
   assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(h.output)]);
 });
 
+test('WebM 文件头分散在多个编码块时仍写入完整时长', async t => {
+  for (const split of [1, 3, 20, 36, WEBM_HEADER.length - 1]) await t.test(`header split at ${split}`, async t => {
+    const h = await harness(t);
+    const session = await h.begin();
+    await h.chunk(session.id, 0, WEBM_HEADER.subarray(0, split));
+    await h.chunk(session.id, 1, WEBM_HEADER.subarray(split));
+    await h.invoke('finish', { id: session.id, duration: 1.5 });
+    const output = await fs.promises.readFile(h.output);
+    const slot = output.indexOf(Buffer.from([0x44, 0x89, 0x88]));
+    assert.ok(slot > 0);
+    assert.equal(output.readDoubleBE(slot + 3), 1500);
+    assert.equal(output.length, WEBM_HEADER.length + 11);
+  });
+});
+
 test('取消清理临时内容并保留原文件，可开始下一次导出', async t => {
   const h = await harness(t);
   await fs.promises.writeFile(h.output, 'old');

@@ -210,6 +210,20 @@ function createVideoExportManager({
     record.window.webContents.send('mineradio-video-export-update', payload);
   }
 
+  async function writeEncodedChunk(record, buffer, final = false) {
+    if (!record.bytes && record.headerPrefix) buffer = Buffer.concat([record.headerPrefix, buffer]);
+    const chunk = record.bytes ? { bytes: buffer } : reserveWebmDuration(buffer);
+    if (chunk.needsMore) {
+      if (final) throw new Error('VIDEO_EXPORT_HEADER_INCOMPLETE');
+      record.headerPrefix = buffer;
+      return;
+    }
+    record.headerPrefix = null;
+    if (chunk.durationOffset !== undefined) record.webmDuration = { durationOffset: chunk.durationOffset, scale: chunk.scale };
+    await record.handle.writeFile(chunk.bytes);
+    record.bytes += chunk.bytes.length;
+  }
+
   async function append(_event, payload) {
     const record = requireCurrent(payload && payload.id);
     if (record.stage !== 'recording') throw new Error('VIDEO_EXPORT_NOT_RECORDING');
@@ -229,10 +243,7 @@ function createVideoExportManager({
     record.pendingBytes += length;
     const write = record.writes.then(async () => {
       if (record.discarded) throw new Error('VIDEO_EXPORT_CANCELLED');
-      const chunk = record.bytes ? { bytes: buffer } : reserveWebmDuration(buffer);
-      if (chunk.durationOffset !== undefined) record.webmDuration = { durationOffset: chunk.durationOffset, scale: chunk.scale };
-      await record.handle.writeFile(chunk.bytes);
-      record.bytes += chunk.bytes.length;
+      await writeEncodedChunk(record, buffer);
     });
     record.writes = write;
     try {
@@ -255,6 +266,7 @@ function createVideoExportManager({
     try {
       await record.writes;
       requireCurrent(record.id);
+      if (record.headerPrefix) await writeEncodedChunk(record, Buffer.alloc(0), true);
       if (!record.bytes) throw new Error('VIDEO_EXPORT_EMPTY');
       if (record.webmDuration) {
         const ticks = payload.duration * 1e9 / record.webmDuration.scale;
