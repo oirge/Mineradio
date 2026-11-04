@@ -50,6 +50,8 @@ function createVideoExportManager({
     record.readyTimer = null;
     record.ackTimer = null;
     record.nextFrameTimer = null;
+    record.latestFrame = null;
+    record.presentFrame = null;
     if (record.ownerListener) {
       record.owner.removeListener('destroyed', record.ownerListener);
       record.owner.removeListener('render-process-gone', record.ownerListener);
@@ -58,6 +60,7 @@ function createVideoExportManager({
     const win = record.window;
     record.window = null;
     if (win && !win.isDestroyed()) {
+      try { win.webContents.endFrameSubscription(); } catch {}
       try { win.webContents.stopPainting(); } catch {}
       win.destroy();
     }
@@ -184,26 +187,24 @@ function createVideoExportManager({
       win.on('closed', () => {
         if (record.window === win) fail(record, new Error('VIDEO_EXPORT_WINDOW_CLOSED'));
       });
-      win.webContents.on('paint', async () => {
+      record.presentFrame = () => {
         if (active !== record || record.discarded || record.stage !== 'recording' || record.waitingAck) return;
+        const frame = record.latestFrame;
+        if (!frame) return;
         clearTimeout(record.nextFrameTimer);
         record.nextFrameTimer = null;
         record.waitingAck = true;
         record.ackTimer = setTimeout(() => fail(record, new Error('VIDEO_EXPORT_FRAME_TIMEOUT')), FRAME_ACK_TIMEOUT_MS);
         record.ackTimer.unref?.();
         try {
-          // The paint event can carry a stale bitmap for compositor-only opacity and
-          // transforms. Copy the complete current page surface, including those layers.
-          const image = await win.webContents.capturePage();
-          if (active !== record || record.discarded || record.stage !== 'recording' || record.window !== win) return;
-          const size = image.getSize();
-          if (!size.width || !size.height || image.isEmpty()) throw new Error('VIDEO_EXPORT_FRAME_EMPTY');
-          const bytes = image.toJPEG(92);
-          send(record, 'mineradio-video-export-frame', { id: record.id, bytes, width: size.width, height: size.height });
+          const size = frame.image.getSize();
+          if (!size.width || !size.height || frame.image.isEmpty()) throw new Error('VIDEO_EXPORT_FRAME_EMPTY');
+          if (!frame.bytes) frame.bytes = frame.image.toJPEG(92);
+          send(record, 'mineradio-video-export-frame', { id: record.id, bytes: frame.bytes, width: size.width, height: size.height });
         } catch (error) {
           if (active === record && record.stage === 'recording') fail(record, error);
         }
-      });
+      };
       const ready = new Promise((resolve, reject) => {
         record.resolveReady = resolve;
         record.rejectReady = reject;
@@ -217,7 +218,13 @@ function createVideoExportManager({
       await Promise.all([loaded, ready]);
       requireCurrent(record.id);
       record.stage = 'recording';
-      win.webContents.invalidate();
+      // Subscribe to complete compositor frames. The OSR paint bitmap can omit
+      // compositor-only lyric layers; per-frame capturePage() stalls GPU readback.
+      win.webContents.beginFrameSubscription(false, image => {
+        if (active !== record || record.discarded || record.stage !== 'recording' || record.window !== win) return;
+        record.latestFrame = { image, bytes: null };
+        record.presentFrame();
+      });
       return { id: record.id, fileName: record.fileName, width: record.width, height: record.height };
     } catch (error) {
       fail(record, error);
@@ -232,14 +239,13 @@ function createVideoExportManager({
     clearTimeout(record.ackTimer);
     record.ackTimer = null;
     clearTimeout(record.nextFrameTimer);
-    // invalidate() re-emits Electron's cached backing bitmap immediately; it does not
-    // obey setFrameRate(). Give the compositor time to deliver a fresh paint first,
-    // and request a paced repeat only when an otherwise static scene stays unchanged.
+    // Static scenes still need a frame after the encoder starts. Replay the latest
+    // complete frame at a bounded rate; a fresh compositor frame cancels this repeat.
     record.nextFrameTimer = setTimeout(() => {
       record.nextFrameTimer = null;
       if (active === record && !record.discarded && record.stage === 'recording'
         && !record.waitingAck && record.window && !record.window.isDestroyed()) {
-        record.window.webContents.invalidate();
+        record.presentFrame?.();
       }
     }, Math.ceil(1000 / FRAME_RATE));
     record.nextFrameTimer.unref?.();
