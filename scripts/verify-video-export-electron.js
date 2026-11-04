@@ -152,7 +152,9 @@ window.fixtureHandoff = async function(trackId) {
   fixture.beforeTrackChange(); audio.pause(); window.audio = fixtureNext; fixtureTrack = trackId;
   audio.currentTime = 0.5; window.fixtureSource = audio; await audio.play();
 };
-window.fixtureVisuals = function(mode) { return {mode:mode,view:'lyrics',background:{mode:'latent'},daylight:false,lyricsFontScale:1,
+// Isolate DOM lyric capture from the CPU-only runner's expensive fluid shader.
+// The Fume and no-lyric cases retain that shader to cover composed backgrounds.
+window.fixtureVisuals = function(mode) { return {mode:mode,view:'lyrics',background:mode==='classic'?{mode:'common',common:{disableGeometricBackground:true}}:{mode:'latent'},daylight:false,lyricsFontScale:1,
   translation:true,subtitleContentMode:'translation',subtitleBackground:true,subtitleHidden:false,subtitleLayout:'translation',harmony:true,rhythm:true}; };
 // The recorder must reuse an already existing player audio graph.
 initAudio();
