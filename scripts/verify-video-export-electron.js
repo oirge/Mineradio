@@ -134,7 +134,10 @@ function analysis() { return {trackId:fixtureTrack,revision:1,source:'live',beat
 window.fixture = window.MineradioVideoExport.create(window, {getState:state,getLyrics:lyrics,getAnalysis:analysis,
   emit:function(event,value) { fixtureEvents.push({event:event,value:value,at:performance.now(),position:audio.currentTime}); fixtureDiagnostic('export-state',value); }
 });
-window.desktopWindow.onVideoExportFrame(function(frame) { fixtureFrames++; if (fixtureFrames<=4 || fixtureFrames%20===0) fixtureDiagnostic('offscreen-frame',{id:frame.id,width:frame.width,height:frame.height,bytes:frame.bytes.byteLength}); });
+window.desktopWindow.onVideoExportFrame(function(frame) {
+  fixtureFrames++;window.fixtureLastFrame={id:frame.id,bytes:frame.bytes,width:frame.width,height:frame.height,at:performance.now(),position:audio.currentTime};
+  if (fixtureFrames<=4 || fixtureFrames%20===0) fixtureDiagnostic('offscreen-frame',{id:frame.id,width:frame.width,height:frame.height,bytes:frame.bytes.byteLength});
+});
 [fixtureFirst,fixtureNext].forEach(function(media) {
   ['play','playing','pause','ended','seeking','seeked'].forEach(function(kind) {
     media.addEventListener(kind,function(){fixtureTransportEvents.push({kind:kind,mediaId:media.id,at:performance.now(),position:media.currentTime,paused:media.paused,ended:media.ended,selected:window.audio===media});});
@@ -157,7 +160,7 @@ initAudio();
 
 function logCheck(message) { checks.push(message); process.stdout.write(`PASS: ${message}\n`); }
 function evaluate(source) { return host.webContents.executeJavaScript(source, true); }
-async function snapshotSurfaces(label) {
+async function snapshotSurfaces(label, pixelSample = false) {
   for (const surface of BrowserWindow.getAllWindows().filter(win=>win.webContents.isOffscreen())) {
     try {
       const result = await Promise.race([surface.webContents.executeJavaScript(`(function() {
@@ -165,8 +168,9 @@ async function snapshotSurfaces(label) {
         const summary = function(node) {
           const css=getComputedStyle(node);
           return {tag:node.tagName,className:typeof node.className==='string'?node.className:'',text:(node.textContent||'').trim().slice(0,160),bounds:bounds(node),
-            style:{display:css.display,visibility:css.visibility,opacity:css.opacity,transform:css.transform,position:css.position,zIndex:css.zIndex},
-            parents:Array.from((function*(p){for(let i=0;p&&i<3;p=p.parentElement,i++)yield p;})(node.parentElement)).map(function(parent){const s=getComputedStyle(parent);return {tag:parent.tagName,className:typeof parent.className==='string'?parent.className:'',bounds:bounds(parent),opacity:s.opacity,display:s.display,visibility:s.visibility};})};
+            style:{display:css.display,visibility:css.visibility,opacity:css.opacity,transform:css.transform,position:css.position,zIndex:css.zIndex,
+              color:css.color,font:css.font,filter:css.filter,mixBlendMode:css.mixBlendMode,clipPath:css.clipPath,textFill:css.webkitTextFillColor},
+            parents:Array.from((function*(p){for(let i=0;p&&i<3;p=p.parentElement,i++)yield p;})(node.parentElement)).map(function(parent){const s=getComputedStyle(parent);return {tag:parent.tagName,className:typeof parent.className==='string'?parent.className:'',bounds:bounds(parent),opacity:s.opacity,display:s.display,visibility:s.visibility,filter:s.filter,zIndex:s.zIndex};})};
         };
         const stage=document.querySelector('.local-video-export-surface');
         const words=Array.from(document.querySelectorAll('span,p,h1,h2,h3')).filter(function(node){return !node.querySelector('span,p,h1,h2,h3') && /Listening|morning|Follow|light|music|carry|Changed|song|lyric|聆听|追随|新歌曲/.test(node.textContent||'');}).slice(0,60);
@@ -178,7 +182,9 @@ async function snapshotSurfaces(label) {
             if(props?.currentTime?.get)visualizer={position:props.currentTime.get(),currentLineIndex:props.currentLineIndex,paused:props.paused,
               lines:props.lines?.length,activeLine:props.lines?.[props.currentLineIndex]?.fullText||null,mode:props.mode};
           }catch(error){visualizer={unavailable:String(error)};}
-          if(stage.dataset.videoExportMode==='fume') {
+          // Readback can flush a large GPU canvas. Only sample while playback/recording is
+          // explicitly paused, so this diagnostic cannot lengthen a recorded segment.
+          if(${pixelSample}&&stage.dataset.videoExportMode==='fume') {
             const canvas=stage.querySelector('canvas.absolute.inset-0.h-full.w-full');
             if(canvas)try {
               const context=canvas.getContext('2d'),pixels=context?.getImageData(0,0,canvas.width,canvas.height).data;
@@ -190,8 +196,16 @@ async function snapshotSurfaces(label) {
         return {url:location.href,at:performance.now(),viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},visibility:document.visibilityState,hidden:document.hidden,
           raf:window.__videoExportRafDiagnostic||null,updates:window.__videoExportUpdateDiagnostic||null,visualizer,fumePixels,stage:stage?summary(stage):null,text:(document.body.textContent||'').slice(0,2000),
           canvases:Array.from(document.querySelectorAll('canvas')).map(function(canvas){return {...summary(canvas),width:canvas.width,height:canvas.height};}),words:words.map(summary)};
-      })()`,true), new Promise(resolve=>setTimeout(()=>resolve({unavailable:'surface did not answer'}),1500))]);
+      })()`,true), new Promise(resolve=>setTimeout(()=>resolve({unavailable:'surface did not answer'}),pixelSample?12000:1500))]);
       surfaceSnapshots.push({label,windowId:surface.id,...result});
+      if(/^(landscape|portrait)/.test(label)) {
+        const source=await evaluate('window.fixtureLastFrame||null');
+        if(source?.bytes) {
+          const file=`${label.replace(/[^a-z0-9-]/gi,'-')}-source.jpg`;
+          fs.writeFileSync(path.join(OUT,file),Buffer.from(source.bytes));
+          surfaceSnapshots.at(-1).sourceFrame={file,id:source.id,width:source.width,height:source.height,at:source.at,position:source.position};
+        }
+      }
     } catch(error) { surfaceSnapshots.push({label,windowId:surface.id,unavailable:String(error)}); }
   }
   fs.writeFileSync(path.join(OUT,'surface-diagnostics.json'),JSON.stringify(surfaceSnapshots,null,2));
@@ -261,7 +275,7 @@ async function until(source, label, timeout = 35000) {
 async function start(name, width, height, mode = 'classic', startMode = 'current', noLyrics = false, transitionBehavior) {
   nextSaveName = name;
   await evaluate(`fixtureFirst.pause(); fixtureNext.pause(); window.audio = fixtureFirst; audio.currentTime = ${startMode === 'from-start' ? 2 : 0}; fixtureTrack = 'export-fixture'; fixtureNoLyrics = ${noLyrics};
-    window.fixtureSource = audio; window.fixtureContext = audioCtx; window.fixtureOutput = audioChain && audioChain.output;`);
+    window.fixtureSource = audio; window.fixtureContext = audioCtx; window.fixtureOutput = audioChain && audioChain.output; window.fixtureLastFrame=null;`);
   const transition = transitionBehavior ? `,transitionBehavior:${JSON.stringify(transitionBehavior)}` : '';
   const result = await evaluate(`window.fixture.start({width:${width},height:${height},startMode:${JSON.stringify(startMode)},visuals:fixtureVisuals(${JSON.stringify(mode)})${transition}})`);
   assert.notEqual(result?.status, 'error', JSON.stringify(result));
@@ -461,9 +475,9 @@ async function run() {
 
   await start('portrait-segment',720,1280,'fume');
   await until('audio.currentTime > 1.1', 'portrait first segment');
-  await snapshotSurfaces('portrait-before-pause');
   await evaluate('audio.pause()');
   await until("fixture.getState().status === 'paused'", 'recording follows host pause');
+  await snapshotSurfaces('portrait-paused',true);
   const pausedAt = await evaluate('audio.currentTime');
   await new Promise(resolve => setTimeout(resolve, 700));
   assert.ok(Math.abs(await evaluate('audio.currentTime') - pausedAt) < 0.05);
