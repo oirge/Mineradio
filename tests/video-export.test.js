@@ -39,6 +39,7 @@ async function harness(t, options = {}) {
         setWindowOpenHandler: callback => { this.openHandler = callback; },
         invalidate: () => { this.invalidations = (this.invalidations || 0) + 1; },
         stopPainting: () => { this.stopped = true; },
+        capturePage: async () => options.capture ? options.capture() : h.image,
         send: (channel, value) => { this.lastMessage = { channel, value }; },
       });
       h.windows.push(this);
@@ -79,9 +80,10 @@ async function harness(t, options = {}) {
   h.chunk = (id, sequence, value) => h.invoke('append', { id, sequence, bytes: Uint8Array.from(value) });
   h.frames = () => owner.sent.filter(item => item.channel.endsWith('-frame'));
   h.failures = () => owner.sent.filter(item => item.channel.endsWith('-failure'));
-  h.paint = () => {
-    const image = { getSize: () => ({ width: 1280, height: 720 }), isEmpty: () => false, toJPEG: () => Buffer.from([255, 216, 255]) };
-    h.windows.at(-1).webContents.emit('paint', {}, {}, image);
+  h.image = { getSize: () => ({ width: 1280, height: 720 }), isEmpty: () => false, toJPEG: () => Buffer.from([255, 216, 255]) };
+  h.paint = async () => {
+    h.windows.at(-1).webContents.emit('paint', {}, {}, { ...h.image, toJPEG: () => Buffer.from([0]) });
+    await Promise.resolve();
   };
   t.after(async () => {
     await h.manager.dispose();
@@ -144,13 +146,13 @@ test('画面只有一个待确认帧，确认后继续30fps绘制且不会显示
   assert.equal(win.configuration.webPreferences.offscreen, true);
   assert.equal(win.configuration.webPreferences.sandbox, true);
   assert.equal(win.frameRate, 30);
-  h.paint();
-  h.paint();
+  await h.paint();
+  await h.paint();
   assert.equal(h.frames().length, 1);
   h.send('ack', session.id);
   // The renderer can acknowledge inside the same 33 ms budget. Electron owns the rate;
   // rejecting its next paint here would leave a static scene with no pending redraw.
-  h.paint();
+  await h.paint();
   assert.equal(h.frames().length, 2);
   assert.deepEqual([...h.frames()[0].value.bytes], [255, 216, 255]);
 });
@@ -170,20 +172,33 @@ test('帧确认不立即重发缓存，原生新帧和取消会撤销待重绘�
   const session = await h.begin();
   const win = h.windows[0];
   const initial = win.invalidations;
-  h.paint(); h.send('ack', session.id);
+  await h.paint(); h.send('ack', session.id);
   assert.equal(win.invalidations, initial);
   t.mock.timers.tick(33);
   assert.equal(win.invalidations, initial);
-  h.paint();
+  await h.paint();
   t.mock.timers.tick(1);
   assert.equal(win.invalidations, initial, 'fresh compositor paint cancels the cached repeat');
   h.send('ack', session.id);
   t.mock.timers.tick(34);
   assert.equal(win.invalidations, initial + 1, 'static scenes receive one paced repeat');
-  h.paint(); h.send('ack', session.id);
+  await h.paint(); h.send('ack', session.id);
   await h.invoke('cancel', { id: session.id });
   t.mock.timers.tick(1000);
   assert.equal(win.invalidations, initial + 1, 'released windows cannot be redrawn by a late timer');
+});
+
+test('取消时仍在等待的页面采集不会回写帧或污染下一次导出', async t => {
+  const pending = deferred();
+  const h = await harness(t, { capture: () => pending.promise });
+  const first = await h.begin();
+  await h.paint();
+  await h.invoke('cancel', { id: first.id });
+  await h.begin();
+  pending.resolve(h.image);
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(h.frames().length, 0);
+  assert.equal(h.failures().length, 0);
 });
 
 test('初始和更新桥保留typed频谱数组，隐藏页不能获得主界面文件权限', async t => {

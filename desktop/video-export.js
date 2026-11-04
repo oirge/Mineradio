@@ -184,20 +184,25 @@ function createVideoExportManager({
       win.on('closed', () => {
         if (record.window === win) fail(record, new Error('VIDEO_EXPORT_WINDOW_CLOSED'));
       });
-      win.webContents.on('paint', (_event, _dirty, image) => {
+      win.webContents.on('paint', async () => {
         if (active !== record || record.discarded || record.stage !== 'recording' || record.waitingAck) return;
+        clearTimeout(record.nextFrameTimer);
+        record.nextFrameTimer = null;
+        record.waitingAck = true;
+        record.ackTimer = setTimeout(() => fail(record, new Error('VIDEO_EXPORT_FRAME_TIMEOUT')), FRAME_ACK_TIMEOUT_MS);
+        record.ackTimer.unref?.();
         try {
+          // The paint event can carry a stale bitmap for compositor-only opacity and
+          // transforms. Copy the complete current page surface, including those layers.
+          const image = await win.webContents.capturePage();
+          if (active !== record || record.discarded || record.stage !== 'recording' || record.window !== win) return;
           const size = image.getSize();
-          if (!size.width || !size.height || image.isEmpty()) return;
-          clearTimeout(record.nextFrameTimer);
-          record.nextFrameTimer = null;
+          if (!size.width || !size.height || image.isEmpty()) throw new Error('VIDEO_EXPORT_FRAME_EMPTY');
           const bytes = image.toJPEG(92);
-          // Keep only one JPEG in flight; native compositor paints already have a frame cap.
-          record.waitingAck = true;
-          record.ackTimer = setTimeout(() => fail(record, new Error('VIDEO_EXPORT_FRAME_TIMEOUT')), FRAME_ACK_TIMEOUT_MS);
-          record.ackTimer.unref?.();
           send(record, 'mineradio-video-export-frame', { id: record.id, bytes, width: size.width, height: size.height });
-        } catch (error) { fail(record, error); }
+        } catch (error) {
+          if (active === record && record.stage === 'recording') fail(record, error);
+        }
       });
       const ready = new Promise((resolve, reject) => {
         record.resolveReady = resolve;
