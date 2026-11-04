@@ -1,3 +1,10 @@
+## 2026-11-04：v2.6.9 视频导出四档帧率（待云端验收及发布）
+
+- 用户要求 30／60／90／120 帧，默认 30；以远端 main 49ac3cf6 为基线，feat/video-export-frame-rates。帧率与切歌策略合并保存在既有 options-v1 键，旧存档默认 30，整机备份保留两项。
+- 原生 tab 采集 maxFrameRate、宿主更新间隔、编码码率均跟随选择。导出页面不安装主界面的 RAF cap，不开启 offscreen、stopPainting 或逐帧读回；保留唯一音频与 2.6.8 正式 session 授权。
+- 本地定向 Node 76/76，Folia 16/16 与类型检查通过。云端实际媒体脚本的四份既有成片分别用 30／60／90／120 验证，保存 frame-rate-checks.json。受显示刷新率、硬件与效果限制，不宣称复杂效果持续达到目标帧率。
+- 仅低优先级后台命令与云端验收，未本机启动 GUI、安装或操作用户数据；沿用完成后发布授权。最终 CI、构建和正式发布结果见 RELEASE.md 顶部，完成后补录。
+
 ## 2026-11-04：v2.6.8 视频导出 Permission denied 已修复并发布
 
 - 用户安装 2.6.7 后报告导出失败 Permission denied；基线远端 main `4820cbb2`，分支 `fix/video-export-permissions`。沿用修复后发布授权，仍禁止本机 GUI、安装和操作用户播放器与数据；本地命令 BelowNormal。

@@ -126,15 +126,17 @@ function createVideoExportManager({
   function readOptions(payload) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('VIDEO_EXPORT_OPTIONS_INVALID');
     const { width, height, extension } = payload;
+    const frameRate = payload.frameRate === undefined ? 30 : payload.frameRate;
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 240 || height < 240
       || width > 3840 || height > 3840 || width % 2 || height % 2
-      || width * height > 8_294_400 || !['mp4', 'webm'].includes(extension)) {
+      || width * height > 8_294_400 || !['mp4', 'webm'].includes(extension) || ![30, 60, 90, 120].includes(frameRate)) {
       throw new Error('VIDEO_EXPORT_OPTIONS_INVALID');
     }
     const text = JSON.stringify(payload);
     if (Buffer.byteLength(text) > MAX_INITIAL_BYTES) throw new Error('VIDEO_EXPORT_OPTIONS_TOO_LARGE');
     // Preserve the bridge's typed frequency/waveform arrays.
     const initial = structuredClone(payload);
+    initial.frameRate = frameRate;
     const rawName = String(payload.fileName || 'Mineradio').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '-').slice(0, 180);
     const defaultName = rawName.replace(/\.(?:mp4|webm)$/i, '') + '.' + extension;
     return { width, height, extension, defaultName, initial };

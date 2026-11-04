@@ -28,7 +28,7 @@ function harness(options = {}) {
   const output = { connect(node) { connections.add(node); }, disconnect(node) { assert.ok(node, 'never disconnect the speaker chain'); connections.delete(node); calls.push('disconnect-tap'); } };
   class Recorder {
     static isTypeSupported(type) { return type === 'video/webm;codecs=vp8,opus'; }
-    constructor(stream) { this.stream = stream; this.state = 'inactive'; recorder = this; }
+    constructor(stream, settings) { this.stream = stream; this.settings = settings; this.state = 'inactive'; recorder = this; }
     start() {
       this.state = 'recording'; calls.push('record-start');
       const ready = () => { calls.push('encoder-ready'); this.onstart?.(); };
@@ -57,7 +57,7 @@ function harness(options = {}) {
     audio: media, audioChain: { output },
     audioCtx: { sampleRate: 48000, createMediaStreamDestination() { return { stream: { getAudioTracks: () => [{ kind: 'audio', stop() { calls.push('stop-tap'); } }] } }; } },
     initAudio() { calls.push('init-existing-audio'); }, resumeAudioAnalysis: async () => {},
-    setTimeout(callback, delay) { return setTimeout(callback, delay === 1500 ? (options.drainDelay ?? 0) : delay); }, clearTimeout, addEventListener() {},
+    setTimeout(callback, delay) { calls.push(['timer', delay]); return setTimeout(callback, delay === 1500 ? (options.drainDelay ?? 0) : delay); }, clearTimeout, addEventListener() {},
   };
   vm.runInNewContext(source, { window: host, Blob, Uint8Array, console, Date, Promise });
   controller = host.MineradioVideoExport.create(host, {
@@ -262,7 +262,41 @@ test('native capture is video only and uses the hidden owner-bound tab token', a
   assert.equal(constraints.video.mandatory.chromeMediaSourceId, 'owner-bound-source');
   assert.equal(constraints.video.mandatory.maxWidth, 1280);
   assert.equal(constraints.video.mandatory.maxHeight, 720);
+  assert.equal(constraints.video.mandatory.maxFrameRate, 30);
+  assert.equal(h.controller.getState().frameRate, 30);
   await h.controller.stop();
+});
+
+test('all four FPS choices reach native capture, hidden surface, host updates and encoder bitrate', async t => {
+  for (const frameRate of [30, 60, 90, 120]) await t.test(String(frameRate), async t => {
+    const h = harness();
+    t.after(() => h.controller.cancel());
+    const hd = frameRate >= 90;
+    await h.controller.start({ ...params, frameRate, ...(hd ? { width: 1920, height: 1080 } : {}) });
+    assert.equal(h.controller.getState().frameRate, frameRate);
+    assert.equal(h.calls.find(value => Array.isArray(value) && value[0] === 'begin')[1].frameRate, frameRate);
+    const capture = h.calls.find(value => Array.isArray(value) && value[0] === 'capture')[1];
+    assert.equal(capture.video.mandatory.minFrameRate, 1);
+    assert.equal(capture.video.mandatory.maxFrameRate, frameRate);
+    assert.equal(h.recorder.settings.videoBitsPerSecond, (hd ? 14000000 : 8000000) * frameRate / 30);
+    assert.equal(h.recorder.settings.audioBitsPerSecond, 320000);
+    assert.ok(h.calls.some(value => Array.isArray(value) && value[0] === 'timer' && value[1] >= 0 && value[1] <= 1000 / frameRate));
+    assert.equal(h.connections.size, 1);
+    await h.controller.stop();
+    assert.equal(h.controller.getState().frameRate, frameRate);
+    assert.equal(h.media.paused, false);
+  });
+});
+
+test('invalid FPS is rejected before opening a dialog or touching playback', async () => {
+  const h = harness();
+  for (const frameRate of [null, '60', 0, -1, 29.97, 75, 121, Infinity, NaN, {}, []]) {
+    await assert.rejects(h.controller.start({ ...params, frameRate }), /Invalid video export frame rate/);
+  }
+  assert.equal(h.controller.getState().status, 'idle');
+  assert.equal(h.media.currentTime, 12);
+  assert.equal(h.media.paused, false);
+  assert.deepEqual(h.calls, []);
 });
 
 test('a rejected capture leaves playback untouched and releases the prepared surface', async () => {

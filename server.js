@@ -78,9 +78,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复歌词／可视化视频导出时提示 Permission denied、无法开始录制的问题。',
+  '歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。',
+  '帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。',
   '切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。',
-  '支持 WebM、横屏／竖屏与 720p／1080p，导出画面不包含桌面。',
+  '高帧率会增加录制开销和视频体积，实际帧率取决于电脑、屏幕刷新率与效果。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

@@ -1,1 +1,0 @@
-import{WebGPURenderer as e}from"./lib-Bojdxj55.js";export{e as WebGPURenderer};

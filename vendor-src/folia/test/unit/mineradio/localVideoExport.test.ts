@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { normalizeVisualPreferences } from '../../../src/mineradio/local/useVisualSettings';
-import { isLocalVideoExportBusy, LOCAL_VIDEO_PRESETS, localVideoExportParams, readVideoExportTransition, saveVideoExportTransition, VIDEO_EXPORT_OPTIONS_KEY, videoElapsedLabel, type LocalVideoExportState } from '../../../src/mineradio/local/localVideoExportData';
+import { isLocalVideoExportBusy, LOCAL_VIDEO_PRESETS, LOCAL_VIDEO_FRAME_RATES, localVideoExportParams, readVideoExportTransition, saveVideoExportTransition, readVideoExportFrameRate, saveVideoExportFrameRate, VIDEO_EXPORT_OPTIONS_KEY, videoElapsedLabel, type LocalVideoExportState } from '../../../src/mineradio/local/localVideoExportData';
 import { executeLocalAction, localCommandMatches, LOCAL_ACTIONS, type LocalActionServices } from '../../../src/mineradio/local/localCommandCatalog';
 import { LOCAL_VIDEO_EXPORT_RESOURCES } from '../../../src/mineradio/local/localVideoExportLocale';
 import { createVideoExportTimeline } from '../../../src/mineradio/local/videoExportTimeline';
@@ -14,6 +14,8 @@ describe('local video export contract', () => {
         const request = localVideoExportParams(LOCAL_VIDEO_PRESETS[3], 'current', visuals);
         expect(request).toMatchObject({ width: 1080, height: 1920, startMode: 'current', visuals: { view: 'lyrics', mode: 'classic', rhythm: false, subtitleContentMode: 'both' } });
         expect(request.transitionBehavior).toBe('continue');
+        expect(request.frameRate).toBe(30);
+        for (const frameRate of LOCAL_VIDEO_FRAME_RATES) expect(localVideoExportParams(LOCAL_VIDEO_PRESETS[0], 'current', visuals, 'continue', frameRate).frameRate).toBe(frameRate);
         expect(localVideoExportParams(LOCAL_VIDEO_PRESETS[0], 'from-start', visuals, 'save').transitionBehavior).toBe('save');
         expect(request.visuals).not.toHaveProperty('update'); expect(request.visuals).not.toHaveProperty('presets');
         visuals.tunings.classic!.avoidOverlap = true;
@@ -66,13 +68,36 @@ describe('local video export contract', () => {
         expect(timeline.lines[0].endTime).toBe(20); expect(timeline.at(3)).toBe(0);
     });
     it('restores only a bounded valid transition setting and writes no job or playback data', () => {
-        const setItem = vi.fn(); saveVideoExportTransition('save', { setItem });
-        expect(setItem).toHaveBeenCalledWith(VIDEO_EXPORT_OPTIONS_KEY, '{"transitionBehavior":"save"}');
+        const setItem = vi.fn(); saveVideoExportTransition('save', { setItem, getItem: () => null });
+        expect(setItem).toHaveBeenCalledWith(VIDEO_EXPORT_OPTIONS_KEY, '{"transitionBehavior":"save","frameRate":30}');
         expect(readVideoExportTransition({ getItem: () => '{"transitionBehavior":"save"}' })).toBe('save');
         for (const raw of [null, '', '{bad', '[]', 'null', '{"transitionBehavior":"invalid"}', ' '.repeat(300)]) {
             expect(readVideoExportTransition({ getItem: () => raw })).toBe('continue');
         }
         expect(readVideoExportTransition({ getItem: () => { throw new Error('blocked'); } })).toBe('continue');
-        expect(() => saveVideoExportTransition('continue', { setItem: () => { throw new Error('blocked'); } })).not.toThrow();
+        expect(() => saveVideoExportTransition('continue', { getItem: () => null, setItem: () => { throw new Error('blocked'); } })).not.toThrow();
+    });
+    it('remembers all four frame rates without overwriting the transition policy or accepting corrupt saved values', () => {
+        expect(LOCAL_VIDEO_FRAME_RATES).toEqual([30, 60, 90, 120]);
+        let raw: string | null = '{"transitionBehavior":"save"}';
+        const storage = { getItem: () => raw, setItem: (_key: string, value: string) => { raw = value; } };
+        expect(readVideoExportFrameRate(storage)).toBe(30);
+        for (const frameRate of LOCAL_VIDEO_FRAME_RATES) {
+            saveVideoExportFrameRate(frameRate, storage);
+            expect(readVideoExportFrameRate(storage)).toBe(frameRate);
+            expect(readVideoExportTransition(storage)).toBe('save');
+        }
+        saveVideoExportTransition('continue', storage);
+        expect(JSON.parse(raw!)).toEqual({ transitionBehavior: 'continue', frameRate: 120 });
+        for (const frameRate of [null, '60', 59.94, 0, 75, 121, {}, []]) {
+            raw = JSON.stringify({ frameRate, transitionBehavior: 'save' });
+            expect(readVideoExportFrameRate(storage)).toBe(30);
+            expect(readVideoExportTransition(storage)).toBe('save');
+        }
+        for (const value of [null, '{bad', '[]', 'null', ' '.repeat(300)]) {
+            raw = value; expect(readVideoExportFrameRate(storage)).toBe(30);
+        }
+        expect(readVideoExportFrameRate({ getItem: () => { throw new Error('blocked'); } })).toBe(30);
+        expect(() => saveVideoExportFrameRate(60, { getItem: () => null, setItem: () => { throw new Error('blocked'); } })).not.toThrow();
     });
 });

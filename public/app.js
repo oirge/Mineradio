@@ -201,6 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['视频导出支持四档帧率。', 'Video export supports four frame rate options.'],
+  ['歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。', 'Lyrics and visualization video export now offers 30, 60, 90 and 120 fps, with 30 fps as the default.'],
+  ['帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。', 'Your frame rate choice is remembered, included in backups and used for capture and encoding.'],
+  ['高帧率会增加录制开销和视频体积，实际帧率取决于电脑、屏幕刷新率与效果。', 'Higher frame rates increase recording workload and video file size. Actual frame rate depends on your computer, display refresh rate and effect.'],
+  ['视频导出帧率无效。', 'Invalid video export frame rate.'],
   ['修复视频导出权限错误。', 'Fix video export permission errors.'],
   ['修复歌词／可视化视频导出时提示 Permission denied、无法开始录制的问题。', 'Fix Permission denied preventing lyrics and visualization video recording from starting.'],
   ['切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。', 'Continue recording across track changes and seeks by default, or choose to save the recorded segment. Your choice is remembered.'],
@@ -2034,7 +2039,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.8';
+var APP_VERSION = '2.6.9';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2087,11 +2092,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '修复视频导出权限错误。',
+  hero: '视频导出支持四档帧率。',
   notes: [
-    '修复歌词／可视化视频导出时提示 Permission denied、无法开始录制的问题。',
+    '歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。',
+    '帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。',
     '切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。',
-    '支持 WebM、横屏／竖屏与 720p／1080p，导出画面不包含桌面。'
+    '高帧率会增加录制开销和视频体积，实际帧率取决于电脑、屏幕刷新率与效果。'
   ]
 };
 function readSavedVolume() {

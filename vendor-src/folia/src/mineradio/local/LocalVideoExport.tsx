@@ -4,7 +4,7 @@ import type { HostState } from '../client';
 import { subscribeHost } from '../client';
 import type { LocalCommand } from './useLibraryPage';
 import { useVisualSettings } from './useVisualSettings';
-import { isLocalVideoExportBusy, LOCAL_VIDEO_PRESETS, localVideoExportParams, readVideoExportTransition, saveVideoExportTransition, videoElapsedLabel, type LocalVideoExportState } from './localVideoExportData';
+import { isLocalVideoExportBusy, LOCAL_VIDEO_PRESETS, LOCAL_VIDEO_FRAME_RATES, localVideoExportParams, readVideoExportTransition, saveVideoExportTransition, readVideoExportFrameRate, saveVideoExportFrameRate, videoElapsedLabel, type LocalVideoExportState, type VideoExportFrameRate } from './localVideoExportData';
 import LocalToolPanel from './LocalToolPanel';
 import './localVideoExport.css';
 
@@ -18,6 +18,7 @@ export default function LocalVideoExport({ state, command, onClose }: {
     const [loaded, setLoaded] = useState(false), [pending, setPending] = useState(false), [error, setError] = useState('');
     const [preset, setPreset] = useState(0), [startMode, setStartMode] = useState<'from-start' | 'current'>('from-start');
     const [transitionBehavior, setTransitionBehavior] = useState<'continue' | 'save'>(() => readVideoExportTransition());
+    const [frameRate, setFrameRate] = useState<VideoExportFrameRate>(() => readVideoExportFrameRate());
     const mounted = useRef(false), revision = useRef(0), runningRequest = useRef(''), operation = useRef(0);
     useEffect(() => {
         mounted.current = true;
@@ -51,7 +52,11 @@ export default function LocalVideoExport({ state, command, onClose }: {
             <label className="local-setting"><span>{t('videoStartMode')}</span><select data-testid="local-video-start-mode" value={startMode} onChange={event => setStartMode(event.target.value as typeof startMode)}>
                 <option value="from-start">{t('videoFromStart')}</option><option value="current">{t('videoFromCurrent')}</option>
             </select></label>
-            <small className="local-tool-hint">{t('videoFrameRate')}</small>
+            <label className="local-setting"><span>{t('videoFrameRate')}</span><select data-testid="local-video-frame-rate" value={busy ? job.frameRate ?? frameRate : frameRate}
+                onChange={event => { const value = Number(event.target.value) as VideoExportFrameRate; setFrameRate(value); saveVideoExportFrameRate(value); }}>
+                {LOCAL_VIDEO_FRAME_RATES.map(value => <option key={value} value={value}>{t('videoFrameRateOption', { frameRate: value })}</option>)}
+            </select></label>
+            <small className="local-tool-hint">{t('videoIncludesAudio')}</small>
             <label className="local-setting"><span>{t('videoTransition')}</span><select data-testid="local-video-transition" value={busy ? job.transitionBehavior ?? transitionBehavior : transitionBehavior}
                 onChange={event => { const value = event.target.value === 'save' ? 'save' : 'continue'; setTransitionBehavior(value); saveVideoExportTransition(value); }}>
                 <option value="continue">{t('videoTransitionContinue')}</option><option value="save">{t('videoTransitionSave')}</option>
@@ -72,7 +77,7 @@ export default function LocalVideoExport({ state, command, onClose }: {
                 <button type="button" data-testid="local-video-stop" disabled={pending || !['recording', 'paused'].includes(job.status)} onClick={() => { void run('stopVideoExport'); }}>{t('videoExportStop')}</button>
                 <button type="button" data-testid="local-video-cancel" disabled={(pending && runningRequest.current !== 'startVideoExport') || job.status === 'saving'} onClick={() => { void run('cancelVideoExport'); }}>{t('videoExportCancel')}</button>
             </> : <button type="button" data-testid="local-video-start" disabled={!loaded || pending || !job.supported || !state?.currentTrack}
-                onClick={() => { void run('startVideoExport', localVideoExportParams(LOCAL_VIDEO_PRESETS[preset], startMode, useVisualSettings.getState(), transitionBehavior)); }}>{t('videoExportStart')}</button>}
+                onClick={() => { void run('startVideoExport', localVideoExportParams(LOCAL_VIDEO_PRESETS[preset], startMode, useVisualSettings.getState(), transitionBehavior, frameRate)); }}>{t('videoExportStart')}</button>}
         </div>
         <p className="local-tool-hint">{t('videoExportBackground')}</p>
     </LocalToolPanel>;
