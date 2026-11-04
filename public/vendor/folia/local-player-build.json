@@ -697,6 +697,7 @@
     "src/mineradio/local/videoExportAssets.ts",
     "src/mineradio/local/videoExportBridge.ts",
     "src/mineradio/local/videoExportCfr.ts",
+    "src/mineradio/local/videoExportOpus.ts",
     "src/mineradio/local/videoExportSurface.css",
     "src/mineradio/local/videoExportTimeline.ts",
     "src/mineradio/local/visualAssetCache.ts",

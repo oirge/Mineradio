@@ -1,6 +1,7 @@
 import { CustomSource, EncodedAudioPacketSource, EncodedPacketSink, Input, Output, Quality,
     StreamTarget, VideoSampleSink, VideoSampleSource, WEBM, WebMOutputFormat } from 'mediabunny';
 import type { VideoExportBridge, VideoExportFinalize } from './videoExportBridge';
+import { opusPacketDuration } from './videoExportOpus';
 
 // Recorded tab frames are variable-rate. Encode an actual frame at n / FPS,
 // holding the preceding picture across a capture gap. This is CFR resampling,
@@ -40,12 +41,17 @@ export async function finalizeVideoFrameRate(job: VideoExportFinalize, bridge: V
     output.addVideoTrack(video, { frameRate: job.frameRate });
     output.addAudioTrack(audio);
     const videoSamples = new VideoSampleSink(videoTrack).samples();
-    const audioPackets = new EncodedPacketSink(audioTrack).packets();
+    const audioSink = new EncodedPacketSink(audioTrack);
+    const audioPackets = audioSink.packets();
     let current: Awaited<ReturnType<typeof videoSamples.next>> | undefined;
     let next: Awaited<ReturnType<typeof videoSamples.next>> | undefined;
     let complete = false;
     try {
-        const duration = await audioTrack.computeDuration();
+        // MediaRecorder's final SimpleBlock can have container duration zero.
+        // Its Opus TOC supplies the actual tail; keep the original presentation
+        // timestamps, including the initial offset, to preserve picture sync.
+        const lastAudioPacket = await audioSink.getPacket(Infinity);
+        const duration = lastAudioPacket ? lastAudioPacket.timestamp + opusPacketDuration(lastAudioPacket.data) : 0;
         if (!(duration > 0) || !Number.isFinite(duration)) throw new Error('The recording has no finite audio duration.');
         const audioConfig = await audioTrack.getDecoderConfig();
         if (!audioConfig) throw new Error('The original audio configuration is missing.');
@@ -65,7 +71,7 @@ export async function finalizeVideoFrameRate(job: VideoExportFinalize, bridge: V
             try { await video.add(sample); } finally { sample.close(); }
             // Interleave tracks so the muxer never buffers an entire song.
             while (!packet.done && packet.value.timestamp <= (index + 1) / job.frameRate) {
-                await audio.add(packet.value, audioStarted ? undefined : { decoderConfig: audioConfig });
+                await audio.add(packet.value.clone({ duration: opusPacketDuration(packet.value.data) }), audioStarted ? undefined : { decoderConfig: audioConfig });
                 audioStarted = true; packet = await audioPackets.next();
             }
             if (performance.now() - lastProgressAt >= 250) {
@@ -75,7 +81,7 @@ export async function finalizeVideoFrameRate(job: VideoExportFinalize, bridge: V
         }
         video.close();
         while (!packet.done) {
-            await audio.add(packet.value, audioStarted ? undefined : { decoderConfig: audioConfig });
+            await audio.add(packet.value.clone({ duration: opusPacketDuration(packet.value.data) }), audioStarted ? undefined : { decoderConfig: audioConfig });
             audioStarted = true; packet = await audioPackets.next();
         }
         audio.close();

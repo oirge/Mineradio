@@ -1,1 +1,0 @@
-import{WebGPURenderer as e}from"./lib-BiSnHEDX.js";export{e as WebGPURenderer};
