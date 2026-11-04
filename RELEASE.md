@@ -9,7 +9,7 @@
   - `Mineradio-oirge-2.6.10-SHA256SUMS.txt`：284 B，SHA256 `ba3874f3d7e6bcc5fbbfeacfa83329a2c412164c067f721df484c4f25050a754`。
   - 安装器 SHA-512：`7OyJrvileO/QFlSXdljXeg2D0H7mspf5qkHZQ5WMDDRuoQ3bVyykJOhOQpnQVpbfe2UdqPGORHTXOyzphCjbHQ==`。
 - 最终实际媒体 [41793626131](https://github.com/oirge/Mineradio/actions/runs/41793626131) 在 `37d3da1634afd5005c68f00676373d286c7a00da` 成功，artifact `13304257757` 已核验。四档实际成片均通过帧数、n/FPS 格点、声明帧率及音画尾差门禁；最大逐帧格点误差 0.444 ms，尾差均小于 1/FPS＋1.1 ms。早期 `41792179357` 在 `ea73448546ee11fec89e9a822a78d5410abb335f` 的成功报告也保留。
-- 最终完整 Verify 41793626143 状态为 in_progress，尚无完整成功结论，不宣称完整 CI 全绿。
+- 最终完整 [Verify 41793626143](https://github.com/oirge/Mineradio/actions/runs/41793626143) 在 `37d3da1634afd5005c68f00676373d286c7a00da` 成功：Folia 130＋124、Node 1657 通过／0 失败／1 可选跳过，以及全部播放、工具、中英文／恢复浏览器回归通过；保留早期点击超时记录。
 - 早期 Verify 41792179392 的全量 Node 1656 通过／0 失败／1 可选跳过，Folia 130＋124 通过；旧 preset-portability summary 普通点击 15000 ms 超时，不能记为全绿。
 - 仅低优先级后台与云端工作；未发送邮件、启动本机 GUI、安装新版或操作用户播放器与数据。发布证据位于 `verification/release-v2.6.10/`，专项约束见 `.context/pitfalls/mineradio-video-export-cfr.md`。
 
