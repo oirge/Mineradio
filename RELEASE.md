@@ -1,11 +1,22 @@
-# v2.6.9 视频导出帧率选择（待发布）
+# v2.6.9 视频导出帧率选择
 
-- 用户要求「帧数增加选择30/60/90/120」，以远端 main `49ac3cf6` 为基线，分支 `feat/video-export-frame-rates`；沿用完成后发布授权。仅低优先级后台检查和云端实际媒体测试，本机不启动 GUI、安装或操作用户播放器与数据。
+- 用户要求「帧数增加选择30/60/90/120」，以远端 main `49ac3cf6` 为基线，功能分支 `feat/video-export-frame-rates`；沿用完成后发布授权。仅低优先级后台检查和云端实际媒体测试，本机未启动 GUI、安装或操作用户播放器与数据。
 - 功能：Folia 导出面板提供 30／60／90／120 fps，默认 30；保存于既有 `mineradio-video-export-options-v1`，合并保存帧率与切歌策略，兼容旧值并纳入已有整机备份通路。录制中重开面板显示宿主当前帧率，且不能中途更改。
-- 采集／编码：移除原生 tab 捕获固定 30 的上限，按所选目标请求；宿主画面数据更新间隔按目标计算，720p／1080p 的编码码率分别从 8／14 Mbps 按帧率比例增长。音频仍来自唯一宿主旁路，内置 WebM／VP8／Opus；未加生产依赖或 FFmpeg。
-- 保留正式 session 受限捕获授权、隐藏普通窗口、切歌默认 continue／可选 save、暂停同步及取消／收尾行为；不启用 offscreen 或改主界面 RAF 限制。
-- 本地验证：Folia 类型检查和导出行为 `16/16`，Node 导出／权限／备份 `76/76`，语法与空白检查通过。云端脚本对既有四个实际成片分别请求 30／60／90／120，保存轨道 settings 与选择参数，并保留全部原有媒体解码断言。
-- 边界：目标帧率受硬件、屏幕刷新率和效果限制；软件 GPU 的云端验收只能证明参数贯通与成片可解码，不能证明复杂效果持续达到 90／120 fps。云端验收及发布结果完成后补录。
+- 采集／编码：移除原生 tab 捕获固定 30 的上限，按所选目标请求；宿主画面数据更新间隔按目标计算，720p／1080p 的编码码率分别从 8／14 Mbps 按帧率比例增长。音频仍来自唯一宿主旁路，内置 WebM／VP8／Opus；无新增生产依赖或 FFmpeg。
+- 保留正式 session 受限捕获授权、隐藏普通窗口、切歌默认 continue／可选 save、暂停同步及取消／收尾行为；不启用 offscreen 或改主界面 RAF 限制，保留所有源代码 `@note`。
+- 本地验证：Folia 类型及导出行为 `16/16`，Node 导出／权限／备份 `76/76`，版本／公告／编码／打包白名单 `19/19`，Folia 构建与产物检查、语法及空白检查通过。
+- 云端完整验证：[Verify `41781085478`](https://github.com/oirge/Mineradio/actions/runs/41781085478) 在功能提交 `7803e0f2be66ffbe0b001cde05e340a084c68d8f` 成功，Folia `109＋124` 项、Node `1644` 通过／`0` 失败／`1` 可选跳过，以及播放、工具、中英文和恢复等全部浏览器套件通过。
+- 实际媒体：[Windows Electron `41781085534`](https://github.com/oirge/Mineradio/actions/runs/41781085534) 在相同功能提交成功。四份实际成片分别请求 30／60／90／120，原生轨道 settings 分别确认相同目标；独立解码、音频、歌词、尺寸、暂停、真切歌、save／取消与窗口清理全部通过。工件 `13299815161`（`2026-11-04T05:47:14Z`）；本地 `verification/video-export-frame-rates/cloud/` 保存成片、report、frame-rate-checks 与 API。
+- 验证边界：实际帧率受电脑、屏幕刷新率与效果限制；软件 GPU 的 native settings 只证明目标配置，不代表复杂效果持续达到 90／120 fps。合并后的重复媒体 `41781546562` 在 1080p 雾笺音画尾差 `1.706s` 超过原 `1.25s` 门禁失败；重复 Verify `41781546604` 在既有播放设置按钮普通点击移出视口后超时失败。保留断言、超时和画质，不宣称所有运行全绿或尾帧间歇问题已修复。合并文件树与成功验收提交逐字节一致。
+- 提交与构建：[PR #172](https://github.com/oirge/Mineradio/pull/172) 于 `2026-11-04T05:48:56Z` 合入 main，merge commit `1f06dce9ad0d8d333ba63acdca109cff7b907562`；annotated tag `v2.6.9`（tag object `799746fb8f13163813c9f013d155a423acca213a`）固定该提交。[Windows Build and Release `41781563416`](https://github.com/oirge/Mineradio/actions/runs/41781563416) 成功，Folia 重建、版本校验、安装器打包和四资产上传完成。
+- 正式发布：[v2.6.9](https://github.com/oirge/Mineradio/releases/tag/v2.6.9)（Release ID `433559984`）于北京时间 `2026-11-04 14:22:36` 公开并设 Latest，`draft=false`／`prerelease=false`。四项官方资产完整回下载，大小、SHA256 与 GitHub digest／SHA256SUMS 一致；安装器 SHA-512 与 `latest.yml` 一致。只读安装器版本为 `2.6.9`／`Mineradio 二创`；公开 Latest API 和更新清单都为 `2.6.9`，公开清单与已校验文件逐字节一致。未执行安装器。
+  - `latest.yml`：359 B，SHA256 `dc09a941eeaf982d1cf35041ebb63407a25e1f51ce822333aaf4d3b0f26af790`。
+  - `Mineradio-oirge-2.6.9-Setup.exe`：122567073 B，SHA256 `812653e3d35d242f40fd527c75ac8fea853928922dcc27fd41789553a4f7b1fc`。
+  - `Mineradio-oirge-2.6.9-Setup.exe.blockmap`：129675 B，SHA256 `00efbca828fa14419341ceec85ef4e28464707824f69e6d5a3a650ba782e4b61`。
+  - `Mineradio-oirge-2.6.9-SHA256SUMS.txt`：282 B，SHA256 `299e6f3323e09e551d34a1d070c031ed5f276982a01611b9d962924dfad73792`。
+  - 安装器 SHA-512：`5ffgbPEA9H6SVpRAfkr0E1d0cNEQIolQE5AKTu96LuUzoosnx5SGmzkZeTBiGgjCWfIcXfntyG5E/nuh0EPKHw==`。
+
+- 安装器 `122567073` B（约 122.57 MB），比 2.6.8 小 17 B。草稿／公开验证、API、资产与构建记录位于忽略目录 `verification/release-v2.6.9/`；未替换既有 tag 或公开资产。收尾分支 `docs/record-v2.6.9-release`。
 
 # v2.6.8 视频导出权限修复
 

@@ -2,7 +2,7 @@
 
 ## Project Identity
 
-- 当前源码续版：`v2.6.9`（开发中：视频导出 30／60／90／120 fps 可选，默认 30，设置与备份兼容；原生采集、宿主更新和码率均跟随选择。Node 定向 76/76、Folia 16/16 与类型通过，云端及正式发布待补录。保留 2.6.8 捕获授权、唯一音频、隐藏普通窗口和切歌 continue 默认；不能使用 offscreen／stopPainting。实际帧率受硬件、显示刷新率与效果限制。仅本机低优先级后台检查，禁止本机 GUI、安装及操作用户播放器与数据。）
+- 当前源码续版：`v2.6.9`（视频导出新增 30／60／90／120 fps 选择，默认 30，设置与切歌策略合并保存并纳入备份；原生采集、更新间隔和码率跟随选择。PR #172 → merge `1f06dce9`，annotated tag object `799746fb`，Windows Build and Release `41781563416` 成功；Release `433559984` 于北京时间 `2026-11-04 14:22:36` 公开并设 Latest。四资产、版本和公开更新清单全部核验通过，安装器 `122567073` B，比 2.6.8 小 17 B，无新增运行依赖。功能提交 `7803e0f2` 的完整 Verify `41781085478` 与实际媒体 `41781085534` 成功；Folia 109＋124、Node 1644 通过／0 失败／1 可选跳过，四档轨道 settings 确认。合并重复媒体有 1080p 尾差 1.706 秒、重复 Verify 有既有播放设置点击超时，不宣称所有运行全绿或稳定 90／120 fps。保留受限捕获授权、唯一音频、隐藏普通窗口与 continue 默认；不能使用 offscreen／stopPainting。仅低优先级后台操作，未开本机 GUI、安装或操作用户数据。完整事实见 RELEASE.md 顶部。）
 
 - 上一续版：`v2.6.8`（2.6.7 导出 Permission denied 修复。PR #170 → merge `802fbd55`，annotated tag object `3901cae7`，Windows Build and Release `41772216206` 成功，Release `433508708` 于北京时间 `2026-11-04 12:21:10` 公开并设 Latest；四资产、只读版本及公开更新清单全部核验通过。安装器 `122567090` B。正式共用 session 下授权仅限当前 owner／surface、主 frame、精确 URL 与 10 秒，首编码块后撤销；保持唯一音频、WebM 和切歌默认 continue／可选 save。云端 `41770428840` 复现相同报错，修后 `41771113928` attempt 2 全部实际媒体／独立解码通过；本地相关 `52/52`、发布门禁 `19/19`。首次与合并重复媒体检查仍有软件 GPU 竖屏尾帧偏差，发布时普通 Verify 仍运行，不宣称所有 CI 全绿或稳定 30 fps。根因与边界见 RELEASE.md 顶部及 `.context/pitfalls/mineradio-video-export-permissions.md`。只做低优先级后台操作，未开本机 GUI、安装或操作用户数据。）
 
