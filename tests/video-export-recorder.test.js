@@ -177,3 +177,27 @@ test('cancel during the pending dialog cleans up a late successful desktop sessi
   assert.ok(!h.calls.includes('pause-owner'));
   assert.equal(h.controller.isCapturing(), false);
 });
+
+test('a late bitmap failure from a saved job cannot overwrite the next recording', async t => {
+  const h = harness();
+  t.after(() => h.controller.cancel());
+  await h.controller.start(params);
+  const createBitmap = h.host.createImageBitmap;
+  let rejectBitmap, markDecoding;
+  const decoding = new Promise(resolve => { markDecoding = resolve; });
+  h.host.createImageBitmap = () => {
+    markDecoding();
+    return new Promise((_resolve, reject) => { rejectBitmap = reject; });
+  };
+  await decoding;
+  assert.equal((await h.controller.stop()).status, 'saved');
+  h.host.createImageBitmap = createBitmap;
+  await h.controller.start(params);
+  const before = h.controller.getState();
+  rejectBitmap(new Error('old bitmap decode failed'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.controller.getState().status, 'recording');
+  assert.equal(h.controller.getState().fileName, before.fileName);
+  assert.equal(h.controller.getState().error, '');
+  assert.equal(h.controller.isCapturing(), true);
+});

@@ -64,7 +64,11 @@
       })();
       return s.discarding;
     }
-    function fail(s, error) { void discard(s, error).catch(function () {}); }
+    function fail(s, error) {
+      // A late bitmap/encoder callback from a released job must not overwrite a newer job.
+      if (current !== s || s.cancelled) return;
+      void discard(s, error).catch(function () {});
+    }
     function acceptFrame(s, frame) {
       var ack = function () { bridge.ackVideoExportFrame(frame.id); };
       if (current !== s || s.cancelled || s.finishing || frame.id !== s.id || s.decoding) { ack(); return; }
