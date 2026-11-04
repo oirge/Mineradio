@@ -1,12 +1,14 @@
-## 2026-11-04：v2.6.7 歌词／可视化视频导出（已验收，待发布）
+## 2026-11-04：v2.6.7 歌词／可视化视频导出（已正式发布）
 
-- 基线 main 378a38d3，分支 feat/folia-video-export，PR #168；最终录制修正 1abd8e7b。Windows Electron 41768335461 全部成功，下一步合并、打 tag、云端构建、核验四资产并按既有授权公开 2.6.7。
+- 基线 main 378a38d3，功能分支 feat/folia-video-export，最终录制修正 1abd8e7b，后续 fc701235 只改文档。PR #168 已合入 388c924492f46c16b006da8153ec7b1320607df7；annotated tag v2.6.7（tag object 0571e879c9ab73cd282e44459829906acbda0a6c）固定在该合并提交。Windows Build and Release 41768935756 成功；Release 433489269 于北京时间 2026-11-04 11:48:43 公开并设 Latest，已完成发布。
 - 用户只选择视频导出，并明确默认切歌／跳转仍持续录制且画面跟随；另选保存已录片段。不要改成固定原曲独立后台音频，也不要默认切歌停止。策略独立键 mineradio-video-export-options-v1，须保留四层持久化／整机备份通路。
 - hidden renderer 只画 VisualizerRenderer；原生 video track 使用可信宿主绑定的短时 tab token，直接送 MediaRecorder，不经 JPEG／Canvas；不要开启 Electron offscreen 或调用 stopPainting（云端证实会提前停帧）。主 public/video-export.js 保有唯一音频旁路和 MediaRecorder。不要桌面捕获／重设主窗口／另起播放器。Folia 0.7.16 与既有 selective sync 版本不变。
 - 格式使用内置 WebM／Opus。Windows MP4／AAC 曾丢开头音频；等待 MediaRecorder start 事件又会录入静音片头（该事件须等合成帧与封装数据）。不要恢复 MP4 优先或在播放前等待该事件。Fume 首次准备必须等文章 canvas 挂载，切歌需跟随其布局重建。
 - stop 须先同步暂停采集／断开录音旁路，留 1.5 秒输出已排队编码帧，再 stop／等待末块。立即 stop 会丢尾帧。WebM 时长处理见 desktop/video-export-webm.js：最多 64 KiB 前缀，原生头可能跨块甚至第一块只有 1 字节；回填 8 字节时长后才原子提交，不能缓存完整视频。
 - 本机只低优先级后台检查，不开窗口、不安装、不改用户数据。云验收专用 .github/workflows/video-export.yml 和 scripts/verify-video-export-electron.js，仅允许 Windows GitHub Actions。
-- 本地录制定向 42/42；0929c68b 的完整 Verify 41765944559 成功，最终 1abd8e7b 的 Verify 41768335717 基础门禁通过、完整浏览器仍在执行。详细事实与未测边界见 RELEASE.md 顶部。未公开前不能记为已正式发布。
+- 本地录制定向 42/42，最终 Windows 实际媒体／独立解码 41768335461 全部成功；0929c68b 的完整 Verify 41765944559 成功。最终 1abd8e7b 的 Verify 41768335717 编码、Folia 108＋124、Node 1634 通过／0 失败／1 可选跳过及语法检查通过；旧播放设置 local-open-playback 普通点击 15000ms 超时（iframe 拦截后元素移出视口），后续旧浏览器套件未全部执行，完整 CI 为 failure，不宣称全绿。
+- 四项官方资产完整回下载，大小／SHA256 与 GitHub digest 和 SHA256SUMS 一致；安装器 SHA-512、只读版本 2.6.7／Mineradio 二创、公开 Latest API 与 latest.yml 均核验通过。安装器 122567657 B，比 2.6.6 小 29337 B；没有新增 FFmpeg 或生产依赖。录制期间仍有额外内存／GPU 开销，目标 30 fps 不等于所有效果稳定 30 fps。
+- 收尾分支 docs/record-v2.6.7-release，忽略证据 verification/release-v2.6.7/ 与 verification/video-export/final/。完整资产摘要和验证边界见 RELEASE.md 顶部；不重打 tag、不替换已公开资产，不安装本次二进制。
 
 ## 2026-11-03：v2.6.6 辅助窗口任务栏预览修复
 
