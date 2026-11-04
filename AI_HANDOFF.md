@@ -1,9 +1,12 @@
-## 2026-11-04：v2.6.8 视频导出 Permission denied 修复中
+## 2026-11-04：v2.6.8 视频导出 Permission denied 已修复并发布
 
 - 用户安装 2.6.7 后报告导出失败 Permission denied；基线远端 main `4820cbb2`，分支 `fix/video-export-permissions`。沿用修复后发布授权，仍禁止本机 GUI、安装和操作用户播放器与数据；本地命令 BelowNormal。
 - 正式版默认 session 的 WE 权限处理器拒绝没有 WE grant 的视频导出；原独立验收没安装该处理器。仅加入真实配置的复现提交 `1ef5e2a2cc417202383899b6c483cd6d2ab1cf58` 在 Windows `41770428840` 得到相同 Permission denied。Electron 43 把 tab 捕获归属到被采集的隐藏窗口，mediaTypes 是空数组；不要误当摄像头权限全局放行。
 - 导出管理器提供受限授权，正式 main 和云端验收都接到同一个 WE 处理器；仅当前 owner／surface 的主 frame、精确 URL、同源与 10 秒有效期内允许，首块编码数据／取消／保存后撤销。摄像头、麦克风、其他窗口／子 frame、桌面选择仍拒绝。具体约束见 `.context/pitfalls/mineradio-video-export-permissions.md`。
-- 本地相关 `52/52`；下一步完成正式权限下的云端实际导出／独立解码、合并、tag v2.6.8、Windows 打包及四资产校验，再公开。版本与中英文公告已更新；不得记成已发布。
+- 正式权限下的 Windows 实际导出／独立解码 `41771113928` attempt 2 在 `2216ec5408d11a0025198f232eb4bc66964767d5` 全部通过；包含整首横屏、雾笺竖屏真切歌／暂停、新歌词、1080p 无歌词、save／取消与窗口清理。本地相关 `52/52`、版本／公告／打包白名单／编码 `19/19`，语法与空白检查通过。
+- 媒体边界：attempt 1 的竖屏尾部音画差 1.361 秒，触发原 1.25 秒门禁；同一提交不改代码、断言、超时或画质重试后全部通过。合并重复媒体 `41772204398` 同样通过权限及横屏，但竖屏尾差 1.446 秒失败，不能宣称所有媒体 CI 全绿或复杂软件 GPU 稳定 30 fps。发布时普通 Verify `41771113923`／`41772204417` 仍运行，Folia／Node／语法等基础步骤已通过，不把执行中视作全绿。
+- PR #170 于 `2026-11-04T04:16:28Z` 合入 `802fbd55b321c3d2535374921aab654c676227c0`，文件树与上述验证提交一致；annotated tag v2.6.8（tag object `3901cae726411336b683e891ae21347d1aba03d7`）固定该提交，Windows Build and Release `41772216206` 成功。Release `433508708` 于北京时间 `2026-11-04 12:21:10` 公开并设 Latest，四资产回下载、SHA256／SHA-512、只读安装器版本和公开更新清单全部通过，未安装新版或操作用户播放器／数据。
+- 安装器 `122567090` B，比 2.6.7 小 `567` B，无新增 FFmpeg 或生产依赖。收尾分支 `docs/record-v2.6.8-release`；资产与核验资料在 `verification/release-v2.6.8/`，成功媒体证据在 `verification/video-export-permissions/final-attempt2/`（artifact `13294723075`）。同名工件下载可能取到 attempt 1；必须用创建时间／正确 artifact ID 区分。完整资产摘要见 RELEASE.md 顶部；不重打 tag、不替换公开资产。
 
 ## 2026-11-04：v2.6.7 歌词／可视化视频导出（已正式发布）
 

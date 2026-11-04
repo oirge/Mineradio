@@ -18,4 +18,8 @@
 
 `tests/video-export.test.js` 通过完整共用处理器调用管理器，覆盖空 grant 拒绝、当前 owner／surface 允许、摄像头／麦克风／子 frame／其他 URL 与窗口拒绝、10 秒过期与首块／取消／完成撤销。实际媒体脚本必须安装正式权限处理器，再导出并独立解码；不可回退为无权限处理器的默认 session。云端工作流同时跟踪 main 和 WE 权限处理器的改动。本机仍禁止 GUI、安装或操作用户播放器与数据。
 
+修复提交 `2216ec5408d11a0025198f232eb4bc66964767d5` 的 Windows `41771113928` attempt 2 全部通过实际媒体／独立解码；attempt 1 与合并后的 `41772204398` 均已通过权限及横屏，但软件 GPU 竖屏末帧差 `1.361s`／`1.446s` 超过原 `1.25s` 门禁，不宣称所有媒体 CI 全绿或稳定 30 fps。通过重试未改代码／断言／画质／超时。
+
+重试会生成同名 artifact，`gh run download --name video-export-evidence` 曾取到 attempt 1。按创建时间选择正确 ID，不能按 ID 数值大小或第一个同名结果判断。成功 artifact 为 `13294723075`，创建于 `2026-11-04T04:12:14Z`；本地 `verification/video-export-permissions/final-attempt2/` 保留 ZIP、API 和 report。正式发布为 v2.6.8，PR #170 合入 `802fbd55`，构建 `41772216206`，Release `433508708` 于北京时间 `2026-11-04 12:21:10` 公开，四资产与公开更新清单核验通过。完整事实见 RELEASE.md 顶部。
+
 参考：Electron 43.7.9 的 [媒体请求实现](https://github.com/electron/electron/blob/v43.7.9/shell/browser/web_contents_permission_helper.cc) 与 [权限归属实现](https://github.com/electron/electron/blob/v43.7.9/shell/browser/electron_permission_manager.cc)。
