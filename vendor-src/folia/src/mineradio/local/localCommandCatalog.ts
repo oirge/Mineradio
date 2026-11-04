@@ -1,4 +1,4 @@
-import { AudioLines, Captions, Command, Disc3, FolderOpen, Heart, Images, Library, ListMusic, Maximize2, Music2, Pause, Play, Plus, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { AudioLines, Captions, Command, Disc3, Film, FolderOpen, Heart, Images, Library, ListMusic, Maximize2, Music2, Pause, Play, Plus, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { normalizeSearchText, splitWords } from '../../components/command-palette/search/normalize';
 import type { HostState } from '../client';
 import type { LocalCommand } from './useLibraryPage';
@@ -18,6 +18,7 @@ export const LOCAL_ACTIONS = [
     { id: 'playback', label: 'playbackSettings', icon: SlidersHorizontal, keywords: 'speed sleep gapless crossfade 倍速 睡眠 定时 淡化 音量 beisu shuimian bs sm', track: false, slot: true },
     { id: 'audio', label: 'audioSettings', icon: AudioLines, keywords: 'eq equalizer device output audio 音效 均衡器 输出设备 yinxiao junhengqi shuchu yx jhq', track: false, slot: true },
     { id: 'subtitles', label: 'subtitleSettings', icon: Captions, keywords: 'subtitle captions translation romanization 字幕 翻译 罗马音 zimu fanyi fy zm', track: false, slot: true },
+    { id: 'videoExport', label: 'videoExport', icon: Film, keywords: 'video export record mp4 webm 视频 导出 录制 歌词 shipin daochu luzhi sp dc', track: false, slot: true },
     { id: 'visuals', label: 'effects', icon: Sparkles, keywords: 'effects visuals styles lyric background 歌词 样式 背景 效果 geci yangshi xiaoguo', track: false, slot: true },
     { id: 'commands', label: 'commands', icon: Command, keywords: 'command palette 命令 搜索 mingling sousuo ml', track: false, slot: true },
     { id: 'lyrics', label: 'lyricsView', icon: Music2, keywords: 'lyrics view 歌词界面 gecijiemian', track: false, slot: false },
@@ -28,7 +29,7 @@ export const LOCAL_ACTIONS = [
     { id: 'importFolder', label: 'importFolder', icon: FolderOpen, keywords: 'import folder 导入文件夹 daoruwenjianjia', track: false, slot: false },
 ] as const;
 export type LocalActionId = typeof LOCAL_ACTIONS[number]['id'];
-export type LocalTool = 'commands' | 'audio' | 'subtitles' | 'addPlaylist';
+export type LocalTool = 'commands' | 'audio' | 'subtitles' | 'addPlaylist' | 'videoExport';
 export const SLOT_ACTIONS = LOCAL_ACTIONS.filter(action => action.slot);
 export function localActionView(id: LocalActionId, state: HostState | null) {
     const action = LOCAL_ACTIONS.find(item => item.id === id)!;
@@ -62,6 +63,6 @@ export function executeLocalAction(id: LocalActionId, services: LocalActionServi
     else if (id === 'visuals') services.visuals();
     else if (id === 'focus') services.focus();
     else if (id === 'lyrics' || id === 'records' || id === 'posters') services.view(id);
-    else if (id === 'commands' || id === 'audio' || id === 'subtitles' || id === 'addPlaylist') services.tool(id);
+    else if (id === 'commands' || id === 'audio' || id === 'subtitles' || id === 'addPlaylist' || id === 'videoExport') services.tool(id);
     else run(id);
 }

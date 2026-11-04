@@ -51,6 +51,7 @@ Build artifacts are located in `dist/`.
 
 ### Folia Local Playback and Visual Presets
 
+- **Lyrics / visualization video export**: use the title-bar video button to record a 30 fps landscape or portrait video, at 720p or 1080p, with song audio. Recording continues across track changes and seeks by default, or you can save the recorded segment on a transition. Choose the starting point, stop and save, or cancel. Background recording excludes your desktop.
 - **Ctrl+K command palette**: page through local song searches, browse playlists and run playback/settings actions. Right-click or hold either playback shortcut to customize it.
 - **Subtitle shortcuts**: group row layout, per-row content, translation/romanization, background and visibility; saved with visual presets.
 - **Audio effects and output**: edit Mineradio's 10-band EQ, presets, preamp, limiter, stereo width and output device directly in Folia, with live synchronization.

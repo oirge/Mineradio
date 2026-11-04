@@ -1,3 +1,10 @@
+## 2026-11-03：视频导出与切歌／跳转设置
+
+- 用户只做歌词／可视化视频导出；新增要求默认切歌／跳转不打断录制。经明确问答，其含义是「持续录制，内容跟随切歌／跳转」，另可选择「保存已录片段」。不要把默认行为改成停止，或另起原歌曲的第二套音频播放。
+- 独立设置键 mineradio-video-export-options-v1 只存 transitionBehavior（continue／save），非法默认 continue。需纳入 public/app.js 的宿主持久化与整机备份、desktop main／preload 白名单和 folia-host storage 备份通道。
+- 导出使用隐藏普通窗口的原生视频轨道、素材与效果快照，目标 30 fps 横竖 720p／1080p；短时 tab token 只绑定可信宿主，不录制桌面。不要开启 Electron offscreen 或 stopPainting（会提前停帧），不要每帧 JPEG／Canvas 拷贝。使用内置 WebM／Opus，避免 Windows AAC 启动丢音；播放前不能等待 MediaRecorder start（会录入静音片头）。MediaRecorder 只从宿主 audioChain.output 旁路取音，原 AudioContext、音频与队列仍唯一。录音不受监听音量影响；跟随实际播放速度／音效。关闭面板继续录制，取消删临时文件，保存等待末块写完。
+- 本机禁止 GUI，原播放器／安装／数据保持原样。真实窗口和媒体解码验收移到 Windows 云端。当前版本收尾中，结果见 RELEASE.md 顶部。
+
 ## 2026-11-03：后台工作偏好与辅助窗口任务栏预览
 
 - 用户原话：「不要影响我使用电脑」。修复、检查和发布需在后台进行；本机检查使用低优先级，不再启动可见测试窗口、切换前台或操作用户正在使用的播放器。GUI 验证移到云端或如实记录未测边界；不自行安装新版或修改安装数据。

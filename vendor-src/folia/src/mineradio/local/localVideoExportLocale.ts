@@ -1,0 +1,31 @@
+// src/mineradio/local/localVideoExportLocale.ts
+export const LOCAL_VIDEO_EXPORT_RESOURCES = {
+    'zh-CN': {
+        videoExport: '歌词／可视化视频导出', videoResolution: '视频尺寸', videoLandscape: '横屏', videoPortrait: '竖屏',
+        videoStartMode: '录制起点', videoFromStart: '从头开始', videoFromCurrent: '当前位置', videoFrameRate: '目标 30 帧／秒 · 含歌曲音频',
+        videoExportHint: '实时录制当前歌词效果和背景。从头开始会重新播放当前歌曲，当前位置会继续播放。暂停时同步暂停录制；播放停止且无续播时自动保存，也可手动停止。',
+        videoTransition: '切歌／跳转时', videoTransitionContinue: '继续录制', videoTransitionSave: '保存已录片段',
+        videoTransitionHint_continue: '切歌或跳转时继续录制，画面跟随歌曲与歌词更新；可随时停止并保存。',
+        videoTransitionHint_save: '切歌或跳转时立即结束录制，并保存此前录下的片段。',
+        videoExportBackground: '导出时可继续使用电脑，录制画面不包含桌面或鼠标；关闭此面板后仍会继续录制。无歌词的歌曲也可导出可视化。实际帧率取决于电脑性能和所选效果。',
+        videoExportStart: '选择保存位置并开始', videoExportStop: '停止并保存', videoExportCancel: '取消录制',
+        videoExportUnavailable: '视频导出需要使用 Mineradio 桌面版。', videoExportFailed: '视频导出失败，请重试。',
+        videoStatus_idle: '准备就绪', videoStatus_preparing: '正在准备…', videoStatus_recording: '正在录制', videoStatus_paused: '录制已暂停（继续播放即可恢复）',
+        videoStatus_saving: '正在保存…', videoStatus_saved: '视频已保存', videoStatus_cancelled: '录制已取消', videoStatus_error: '导出失败',
+        videoExportProgress: '录制进度',
+    },
+    en: {
+        videoExport: 'Lyrics / visualization video export', videoResolution: 'Video size', videoLandscape: 'Landscape', videoPortrait: 'Portrait',
+        videoStartMode: 'Recording start', videoFromStart: 'From beginning', videoFromCurrent: 'Current position', videoFrameRate: 'Target 30 fps · Includes song audio',
+        videoExportHint: 'Records the current lyric style and background in real time. From beginning restarts this song; Current position continues playback. Pausing playback pauses recording. Saves automatically when playback ends with no next song. You can also stop manually.',
+        videoTransition: 'On track change / seek', videoTransitionContinue: 'Continue recording', videoTransitionSave: 'Save recorded segment',
+        videoTransitionHint_continue: 'Recording continues when changing tracks or seeking. The video follows the song and lyrics. Stop and save whenever you are ready.',
+        videoTransitionHint_save: 'Changing tracks or seeking ends recording and saves the segment recorded so far.',
+        videoExportBackground: 'You can keep using your computer. The desktop and cursor are excluded. Recording continues after closing this panel. Songs without lyrics can also export a visualization. Actual frame rate depends on your computer and the selected effect.',
+        videoExportStart: 'Choose location and start', videoExportStop: 'Stop and save', videoExportCancel: 'Cancel recording',
+        videoExportUnavailable: 'Video export requires the Mineradio desktop app.', videoExportFailed: 'Video export failed. Please retry.',
+        videoStatus_idle: 'Ready', videoStatus_preparing: 'Preparing…', videoStatus_recording: 'Recording', videoStatus_paused: 'Recording paused (resume playback to continue)',
+        videoStatus_saving: 'Saving…', videoStatus_saved: 'Video saved', videoStatus_cancelled: 'Recording cancelled', videoStatus_error: 'Export failed',
+        videoExportProgress: 'Recording progress',
+    },
+};

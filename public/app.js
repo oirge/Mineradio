@@ -163,6 +163,7 @@ var PERSISTENT_UI_STATE_KEYS = [
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
   'mineradio-folia-local-controls-v1',
+  'mineradio-video-export-options-v1',
   VOLUME_STORE_KEY,
   VOLUME_WHEEL_STEP_STORE_KEY,
   LYRIC_LAYOUT_STORE_KEY,
@@ -200,6 +201,25 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['将歌词动画、背景与歌曲导出为视频。', 'Export lyric animation, background and song audio as a video.'],
+  ['新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和目标 30 帧／秒。', 'Export lyrics and visualizations in landscape or portrait, at 720p or 1080p with a target of 30 fps.'],
+  ['切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。', 'Continue recording across track changes and seeks by default, or choose to save the recorded segment. Your choice is remembered.'],
+  ['支持从头或当前位置录制、暂停、进度、停止保存和取消；导出画面不包含桌面。', 'Record from the beginning or current position, with pause, progress, stop and save, and cancel. Your desktop is excluded.'],
+  ['视频写入速度过慢，请选择其他保存位置。', 'Video export disk is too slow. Please choose another location.'],
+  ['视频导出未能继续收到画面。', 'Video export stopped receiving visual frames.'],
+  ['视频导出未能渲染首帧。', 'Video export could not render its first frame.'],
+  ['视频录制已取消。', 'Video export cancelled.'],
+  ['已有一个视频导出正在进行。', 'A video export is already running.'],
+  ['视频导出需要使用 Mineradio 桌面版。', 'Video export requires the Mineradio desktop app.'],
+  ['视频尺寸或起点无效。', 'Invalid video export preset.'],
+  ['切歌／跳转录制设置无效。', 'Invalid recording transition behavior.'],
+  ['请先选择一首可以播放的歌曲。', 'Choose a playable song before exporting.'],
+  ['请等待歌曲过渡完成后再导出。', 'Wait for the song transition to finish before exporting.'],
+  ['视频导出未能准备好画面，请重试。', 'Video export could not prepare its video stream.'],
+  ['视频导出收到的画面无效，请重试。', 'Video export received an invalid video stream.'],
+  ['准备期间歌曲已切换，请重新开始导出。', 'The song changed while preparing the export. Please try again.'],
+  ['歌曲音频未能准备好，请重新开始导出。', 'The song could not prepare audio for export.'],
+  ['视频编码失败。', 'Video encoding failed.'],
   ['修复迷你播放器与桌面歌词的任务栏预览。', 'Fix taskbar previews for the mini player and desktop lyrics.'],
   ['修复迷你播放器和桌面歌词出现在 Windows 任务栏预览中的问题。', 'Fix the mini player and desktop lyrics appearing in Windows taskbar previews.'],
   ['Folia 命令面板、自定义按钮、字幕调节与音效输出。', 'Folia commands, customizable buttons, subtitles and audio output.'],
@@ -2014,7 +2034,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.6.6';
+var APP_VERSION = '2.6.7';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2067,9 +2087,11 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '修复迷你播放器与桌面歌词的任务栏预览。',
+  hero: '将歌词动画、背景与歌曲导出为视频。',
   notes: [
-    '修复迷你播放器和桌面歌词出现在 Windows 任务栏预览中的问题。'
+    '新增歌词／可视化视频导出，支持横屏／竖屏、720p／1080p 和目标 30 帧／秒。',
+    '切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。',
+    '支持从头或当前位置录制、暂停、进度、停止保存和取消；导出画面不包含桌面。'
   ]
 };
 function readSavedVolume() {
@@ -26299,6 +26321,8 @@ function resolveCrossfadeSeconds(duration) {
  * @returns {void}
  */
 function maybeStartCrossfade() {
+  // Save-on-transition exports need an unmixed song boundary; continuous recording follows playback.
+  if (window.MineradioVideoExportSession && window.MineradioVideoExportSession.blocksCrossfade()) return;
   if (gaplessSettings.crossfadeSeconds <= 0) return;
   if (crossfadeState.active || crossfadeState.starting) return;
   if (audioDeckList.length < 2 || gaplessShufflePending()) return;
@@ -29056,6 +29080,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
       stopPlaybackAfterCurrentTrack();
       return;
     }
+    if (window.MineradioVideoExportSession) window.MineradioVideoExportSession.beforeTrackEnd();
     if (playMode === 'single') setTimeout(function(){ playQueueAt(currentIdx, { autoRepeat: true }); }, 0);
     // autoAdvance 只由自然播完这条路径带上，手动点下一首不会带，所以只有自动续播才允许无缝接管。
     else setTimeout(function(){ nextTrack({ autoAdvance: true }); }, 0);
@@ -29135,6 +29160,7 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
 async function playQueueAt(idx, opts) {
   opts = opts || {};
   if (idx < 0 || idx >= playQueue.length) return;
+  if (window.MineradioVideoExportSession) window.MineradioVideoExportSession.beforeTrackChange();
   if (playMode === 'shuffle' && !shuffledPlayQueueArrays.has(playQueue)) {
     currentIdx = idx;
     shufflePlayQueueOnce({ toast: false, reason: 'shuffle-new-queue' });
@@ -46197,6 +46223,7 @@ var MINERADIO_BACKUP_PLAYER_KEYS = [
   'mineradio-folia-local-visuals-v1',
   'mineradio-folia-local-lattice-v1',
   'mineradio-folia-local-controls-v1',
+  'mineradio-video-export-options-v1',
   VOLUME_STORE_KEY,
   PLAYBACK_RATE_STORE_KEY,
   LYRIC_LLM_TRANSLATE_STORE_KEY,

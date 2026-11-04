@@ -1,0 +1,4 @@
+/* src/mineradio/local/videoExportSurface.css */
+html,body,#root{width:100%;height:100%;margin:0;overflow:hidden}
+.local-video-export-surface{position:fixed;inset:0;overflow:hidden;isolation:isolate;pointer-events:none;font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif}
+.local-video-export-surface,.local-video-export-surface *{cursor:none!important}

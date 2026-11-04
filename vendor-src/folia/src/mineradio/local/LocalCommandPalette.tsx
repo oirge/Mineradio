@@ -12,7 +12,7 @@ import './localControls.css';
 // src/mineradio/local/LocalCommandPalette.tsx
 // Search local songs, playlist pages and the isolated player's command registry with one keyboard flow.
 interface Result { id: string; kind: 'action' | 'track' | 'playlist'; title: string; detail: string; icon: LucideIcon; run: () => void }
-const LANDING = ['playback', 'audio', 'subtitles', 'visuals', 'library', 'queue', 'addPlaylist', 'like'];
+const LANDING = ['playback', 'audio', 'subtitles', 'videoExport', 'visuals', 'library', 'queue', 'addPlaylist', 'like'];
 export default function LocalCommandPalette({ state, command, onClose }: { state: HostState | null; command: LocalCommand; onClose: () => void }) {
     const { t } = useTranslation('localPlayer');
     const context = useContext(LocalActionsContext);
