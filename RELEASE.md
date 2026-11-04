@@ -3,8 +3,17 @@
 - 用户反馈：2.6.7 歌词／可视化视频导出显示「导出失败 / Permission denied」。只修复该故障，沿用完成后发布及本机后台低优先级工作授权，不启动本机 GUI 或安装新版。
 - 根因与复现：正式版 `wallpaperEngineBridge.configureSessionPermissions()` 安装默认拒绝的共用处理器，只放行已有 WE 授权；原视频验收没有安装该处理器。加入正式权限配置后的 Windows [复现 `41770428840`](https://github.com/oirge/Mineradio/actions/runs/41770428840) 在提交 `1ef5e2a2cc417202383899b6c483cd6d2ab1cf58` 得到相同 `Permission denied`。Electron 43 将 tab 捕获请求报告为 `media`、`mediaTypes: []`，并把请求归属到被采集的隐藏导出窗口；普通摄像头／麦克风检查仍为拒绝。
 - 修复：共用权限处理器委托给导出管理器，校验当前会话、唯一宿主、宿主与隐藏画面的真实主 frame、精确 URL、请求来源和 10 秒有效期。只允许旧版空 mediaTypes 的 tab 捕获或新版纯视频 display-capture；拒绝摄像头、麦克风、其他窗口／子 frame／URL，首块编码数据后撤销授权，取消／完成／崩溃同样失效。仍使用绑定宿主的短时原生 tab token，不提供桌面捕获源。
-- 验证：本地视频导出与 WE 生命周期／窗口 hook `52/52` 通过，补充正式权限处理器集成、非授权调用与授权撤销回归；Windows 正式权限配置下的实际导出／解码复验待完成。保留 WebM、唯一音频、切歌／跳转默认 continue 和可选 save；不扩大功能或追加无关 GUI 回归。
-- 发布状态：版本元数据与中英文公告为 `2.6.8`，待云端媒体验收、合并、Windows 构建及四项资产核验后公开，不覆盖 `2.6.7` 的 tag 或资产。
+- 验证：本地视频导出与 WE 生命周期／窗口 hook `52/52`，版本／公告／打包白名单／文档编码 `19/19`，相关语法与空白检查通过。正式权限配置下的 Windows [实际导出／独立解码 `41771113928` attempt 2](https://github.com/oirge/Mineradio/actions/runs/41771113928/attempts/2) 在 `2216ec5408d11a0025198f232eb4bc66964767d5` 全部成功：横屏整首、雾笺竖屏暂停／恢复／440→660Hz 真切歌与新歌词、1920×1080 无歌词、save 片段、取消保留原文件、IPC 与隐藏窗口清理；只放行当前导出窗口的空 mediaTypes tab 请求。保留 WebM、唯一音频、切歌／跳转默认 continue 和可选 save。
+- CI 实际边界：上述媒体 attempt 1 已通过合法 tab 授权与横屏，竖屏尾部音画差 `1.361s`，超过原 `1.25s` 门禁；同一提交不改代码、断言、超时或画质，attempt 2 全部通过，竖屏尾差 `0.610s`、1080p 尾差 `0.824s`。合并后重复 [媒体 `41772204398`](https://github.com/oirge/Mineradio/actions/runs/41772204398) 通过权限及横屏，竖屏尾差 `1.446s` 再次触发该门禁，总体为 failure；软件 GPU 复杂效果帧率与尾部采样存在波动，不能宣称所有媒体 CI 全绿或稳定 30 fps。发布时普通 [Verify `41771113923`](https://github.com/oirge/Mineradio/actions/runs/41771113923) 与合并 [Verify `41772204417`](https://github.com/oirge/Mineradio/actions/runs/41772204417) 的编码、Folia、全量 Node 与语法步骤已通过，完整浏览器仍执行中，不宣称它们全绿。未在本机启动 GUI 或做真实 GPU／设备组合验收。
+- 提交与构建：[PR #170](https://github.com/oirge/Mineradio/pull/170) 于 `2026-11-04T04:16:28Z` 合入 `802fbd55b321c3d2535374921aab654c676227c0`，文件树与上述功能验证提交一致。annotated tag `v2.6.8`（tag object `3901cae726411336b683e891ae21347d1aba03d7`）固定该合并提交；[Windows Build and Release `41772216206`](https://github.com/oirge/Mineradio/actions/runs/41772216206) 成功，完成 Folia 重建、版本校验与四项资产上传。
+- 正式发布：[v2.6.8](https://github.com/oirge/Mineradio/releases/tag/v2.6.8)（Release ID `433508708`）于 `2026-11-04T04:21:10Z`（北京时间 `2026-11-04 12:21:10`）公开并设 Latest，`draft=false`／`prerelease=false`。四项官方文件完整回下载，大小、SHA256 与 GitHub digest／SHA256SUMS 一致；清单 LF、无 BOM。安装器 SHA-512 与 `latest.yml` 两处摘要及 size/path/url 一致，公开 Latest API 为 `v2.6.8`，公开更新清单与已校验文件逐字节一致。
+  - `Mineradio-oirge-2.6.8-Setup.exe`：122567090 B，SHA256 `adf9d3fee4a1af0ac393e45851927338475b012402e34aa3a6e68c7adbb4cec3`。
+  - `Mineradio-oirge-2.6.8-Setup.exe.blockmap`：129671 B，SHA256 `f17a184ee67414287dd27022f05d36db8c9cca175bd25fa37af1b6f2b2e0cc7e`。
+  - `latest.yml`：359 B，SHA256 `36d775b292057dcf69ac33fb1d3d56c47891b6ad0891eeb53779be642fa4769b`。
+  - `Mineradio-oirge-2.6.8-SHA256SUMS.txt`：282 B，SHA256 `59bd1dcef99eb26b749248d841ca78a6ab7e82a95038ff6433cc50d68b958bad`。
+  - 安装器 SHA-512：`GbGMoJ4QcnGmO6gLN45vVEBDDWAM+bUTS97br5f1S821G20Cqys8LFspHcRjUh8tv0PvdXLLfxxZB7JofNWCDg==`。
+- 安装器只读版本 `2.6.8`／`Mineradio 二创`，未在本机安装或运行；完整安装包约 `122.57 MB`，比 2.6.7 小 `567` B，无新增 FFmpeg 或生产依赖。用户播放器、安装与数据未操作。
+- 收尾分支 `docs/record-v2.6.8-release`，完整资产、API、草稿／公开验证在忽略目录 `verification/release-v2.6.8/`；成功媒体证据在 `verification/video-export-permissions/final-attempt2/`，artifact `13294723075`（`2026-11-04T04:12:14Z`）。同名 artifact 的按名称下载曾取到 attempt 1，已保留并标注，不能把它当最终成功证据。旧 tag／资产未替换。
 
 # v2.6.7 歌词／可视化视频导出
 

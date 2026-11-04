@@ -2,9 +2,9 @@
 
 ## Project Identity
 
-- 当前修复：`v2.6.8`（2.6.7 导出 Permission denied，分支 `fix/video-export-permissions`；仅补正式共用 session 下的导出授权，保持唯一音频、WebM 和切歌默认 continue／可选 save。云端复现 `41770428840` 得到相同错误；本地相关 `52/52`，待正式权限下的云端媒体复验及发布。根因、授权限制和结果见 RELEASE.md 顶部及 `.context/pitfalls/mineradio-video-export-permissions.md`。仍只做低优先级后台操作，不开本机 GUI、不安装或操作用户数据。）
+- 当前源码续版：`v2.6.8`（2.6.7 导出 Permission denied 修复。PR #170 → merge `802fbd55`，annotated tag object `3901cae7`，Windows Build and Release `41772216206` 成功，Release `433508708` 于北京时间 `2026-11-04 12:21:10` 公开并设 Latest；四资产、只读版本及公开更新清单全部核验通过。安装器 `122567090` B。正式共用 session 下授权仅限当前 owner／surface、主 frame、精确 URL 与 10 秒，首编码块后撤销；保持唯一音频、WebM 和切歌默认 continue／可选 save。云端 `41770428840` 复现相同报错，修后 `41771113928` attempt 2 全部实际媒体／独立解码通过；本地相关 `52/52`、发布门禁 `19/19`。首次与合并重复媒体检查仍有软件 GPU 竖屏尾帧偏差，发布时普通 Verify 仍运行，不宣称所有 CI 全绿或稳定 30 fps。根因与边界见 RELEASE.md 顶部及 `.context/pitfalls/mineradio-video-export-permissions.md`。只做低优先级后台操作，未开本机 GUI、安装或操作用户数据。）
 
-- 当前源码续版：`v2.6.7`（歌词／可视化视频导出，已于北京时间 `2026-11-04 11:48:43` 公开并设 Latest。PR #168 → merge `388c9244`，annotated tag object `0571e879`，Windows Build and Release `41768935756` 成功，Release `433489269`；四项资产、只读安装器版本和公开更新清单全部核验通过。安装器 `122567657` B，比 2.6.6 小 `29337` B，无新增生产依赖或 FFmpeg。只做该功能；切歌／跳转默认 continue 且画面跟随，另选 save 保存片段，设置纳入整机备份。独立隐藏普通窗口的原生视频轨道＋唯一宿主音频旁路，WebM／Opus、目标 30 fps 横竖 720p／1080p；不要开启 offscreen 或 stopPainting。本地定向 `42/42`，Windows 云端实际媒体／解码 `41768335461` 成功；最终常规 Verify `41768335717` 在旧播放设置普通点击超时，未全绿。只做低优先级后台检查，未在本机开窗口、安装或操作用户播放器与数据。完整事实见 RELEASE.md 顶部。）
+- 上一续版：`v2.6.7`（歌词／可视化视频导出，已于北京时间 `2026-11-04 11:48:43` 公开并设 Latest。PR #168 → merge `388c9244`，annotated tag object `0571e879`，Windows Build and Release `41768935756` 成功，Release `433489269`；四项资产、只读安装器版本和公开更新清单全部核验通过。安装器 `122567657` B，比 2.6.6 小 `29337` B，无新增生产依赖或 FFmpeg。只做该功能；切歌／跳转默认 continue 且画面跟随，另选 save 保存片段，设置纳入整机备份。独立隐藏普通窗口的原生视频轨道＋唯一宿主音频旁路，WebM／Opus、目标 30 fps 横竖 720p／1080p；不要开启 offscreen 或 stopPainting。本地定向 `42/42`，Windows 云端实际媒体／解码 `41768335461` 成功；最终常规 Verify `41768335717` 在旧播放设置普通点击超时，未全绿。只做低优先级后台检查，未在本机开窗口、安装或操作用户播放器与数据。完整事实见 RELEASE.md 顶部。）
 
 Mineradio 是 Windows Electron 桌面音乐播放器，核心体验包括搜索、播放、歌单、歌词、3D 歌单架、粒子视觉预设、DIY 视觉控制台和 GitHub 自动更新。
 
