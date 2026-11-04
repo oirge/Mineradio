@@ -197,7 +197,9 @@
       publish({ status: 'preparing', progress: 0, elapsed: 0, error: '', fileName: '', transitionBehavior: transitionBehavior });
       try {
         s.canvas = host.document.createElement('canvas'); s.canvas.width = s.width; s.canvas.height = s.height;
-        s.context = s.canvas.getContext('2d', { alpha: false });
+        // Frames arrive as decoded JPEG bitmaps. CPU raster keeps canvas capture independent
+        // of Windows' shared GPU readback path, which can stop delivering bitmap-backed frames.
+        s.context = s.canvas.getContext('2d', { alpha: false, willReadFrequently: true });
         if (!s.context) throw new Error('Video export could not create its canvas.');
         s.unsubscribeFrame = bridge.onVideoExportFrame(function (frame) { acceptFrame(s, frame); });
         s.unsubscribeFailure = bridge.onVideoExportFailure(function (failure) { if (failure.id === s.id) fail(s, new Error(failure.error)); });
