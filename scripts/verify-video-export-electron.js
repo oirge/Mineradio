@@ -312,6 +312,7 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
     catch (error) { return String(error.stderr); } })();
   assert.match(metadata, new RegExp(`Video:.*\\b${width}x${height}\\b`));
   assert.match(metadata, /Audio:/, 'encoded video must contain an audio stream');
+  assert.match(metadata, /Duration: \d{2}:\d{2}:\d{2}\.\d+/, 'the saved video must expose a finite duration to media players');
   const pcm = execFileSync(ffmpeg, ['-v','error','-i',filePath,'-vn','-ac','1','-ar','8000','-f','f32le','pipe:1'], {maxBuffer:16*1024*1024,windowsHide:true});
   let square = 0;
   for (let offset = 0; offset + 4 <= pcm.length; offset += 4) square += pcm.readFloatLE(offset) ** 2;

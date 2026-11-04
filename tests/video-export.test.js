@@ -111,6 +111,35 @@ test('导出分块顺序落盘，提交前保留旧目标，最后块写完才�
   assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(h.output)]);
 });
 
+// A real Chromium EBML/Segment/Info header, with the live stream's unknown size.
+const WEBM_HEADER = Buffer.from('1a45dfa39f4286810142f7810142f2810442f381084282847765626d42878104428581021853806701ffffffffffffff1549a966992ad7b1830f42404d80864368726f6d655741864368726f6d65', 'hex');
+
+test('真实 WebM 头预留时长并在保存前回填，后续媒体块原样保留', async t => {
+  const h = await harness(t);
+  const session = await h.begin();
+  const media = Buffer.from('encoded-media-payload');
+  await h.chunk(session.id, 0, WEBM_HEADER);
+  await h.chunk(session.id, 1, media);
+  await h.invoke('finish', { id: session.id, duration: 6.25 });
+  const output = await fs.promises.readFile(h.output);
+  const slot = output.indexOf(Buffer.from([0x44, 0x89, 0x88]));
+  assert.ok(slot > 0);
+  assert.equal(output.readDoubleBE(slot + 3), 6250);
+  assert.equal(output[WEBM_HEADER.indexOf(Buffer.from([0x15, 0x49, 0xa9, 0x66])) + 4], 0xa4);
+  assert.deepEqual(output.subarray(WEBM_HEADER.length + 11), media);
+  assert.equal(output.length, WEBM_HEADER.length + 11 + media.length);
+});
+
+test('无效 WebM 时长不能覆盖已有文件，错误后仍清理临时内容', async t => {
+  const h = await harness(t);
+  await fs.promises.writeFile(h.output, 'old-video');
+  const session = await h.begin();
+  await h.chunk(session.id, 0, WEBM_HEADER);
+  await assert.rejects(h.invoke('finish', { id: session.id, duration: Infinity }), /DURATION_INVALID/);
+  assert.equal(await fs.promises.readFile(h.output, 'utf8'), 'old-video');
+  assert.deepEqual(await fs.promises.readdir(h.directory), [path.basename(h.output)]);
+});
+
 test('取消清理临时内容并保留原文件，可开始下一次导出', async t => {
   const h = await harness(t);
   await fs.promises.writeFile(h.output, 'old');

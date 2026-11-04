@@ -264,7 +264,7 @@
         try {
           await s.stopped; await s.writes;
           if (s.cancelled) return snapshot();
-          var result = await bridge.finishVideoExport({ id: s.id });
+          var result = await bridge.finishVideoExport({ id: s.id, duration: s.elapsed });
           if (s.cancelled || current !== s) return snapshot();
           release(s); return publish({ status: 'saved', fileName: result.fileName, error: '' });
         } catch (error) { return discard(s, error); }

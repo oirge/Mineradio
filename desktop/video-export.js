@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { reserveWebmDuration } = require('./video-export-webm');
 
 const MAX_CHUNK_BYTES = 8 * 1024 * 1024;
 const MAX_PENDING_BYTES = 32 * 1024 * 1024;
@@ -228,8 +229,10 @@ function createVideoExportManager({
     record.pendingBytes += length;
     const write = record.writes.then(async () => {
       if (record.discarded) throw new Error('VIDEO_EXPORT_CANCELLED');
-      await record.handle.writeFile(buffer);
-      record.bytes += length;
+      const chunk = record.bytes ? { bytes: buffer } : reserveWebmDuration(buffer);
+      if (chunk.durationOffset !== undefined) record.webmDuration = { durationOffset: chunk.durationOffset, scale: chunk.scale };
+      await record.handle.writeFile(chunk.bytes);
+      record.bytes += chunk.bytes.length;
     });
     record.writes = write;
     try {
@@ -253,6 +256,13 @@ function createVideoExportManager({
       await record.writes;
       requireCurrent(record.id);
       if (!record.bytes) throw new Error('VIDEO_EXPORT_EMPTY');
+      if (record.webmDuration) {
+        const ticks = payload.duration * 1e9 / record.webmDuration.scale;
+        if (!Number.isFinite(payload.duration) || payload.duration <= 0 || !Number.isFinite(ticks)) throw new Error('VIDEO_EXPORT_DURATION_INVALID');
+        const duration = Buffer.alloc(8);
+        duration.writeDoubleBE(ticks);
+        await record.handle.write(duration, 0, duration.length, record.webmDuration.durationOffset);
+      }
       await record.handle.sync();
       await record.handle.close();
       record.handle = null;
