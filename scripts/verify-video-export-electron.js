@@ -355,20 +355,27 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   const mean = sum / a.length, deviation = Math.sqrt(variance / a.length - mean ** 2);
   // Inspect every encoded frame after the first sample. A slow GPU shader can
   // produce nearly equal frames at two fixed seek points while advancing later.
-  const allFrames=execFileSync(ffmpeg,['-v','error','-i',filePath,'-an','-vf','scale=160:90','-fps_mode','passthrough','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{maxBuffer:32*1024*1024,windowsHide:true});
+  const allFrames=execFileSync(ffmpeg,['-v','error','-i',filePath,'-an','-vf','scale=160:90','-fps_mode','passthrough','-enc_time_base','1:30000','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{maxBuffer:32*1024*1024,windowsHide:true});
   assert.equal(allFrames.length,result.videoTimeline.frameCount*a.length,'every encoded frame must decode');
   let maximumDifference=difference/a.length, changedAt=null;
+  let detailFrame={pts:null,mean,deviation,highlights},motionFrame=null;
   for(let index=0;index<result.videoTimeline.frameCount;index++) {
     const pts=result.videoTimeline.frames[index].pts;
     if(pts<Math.min(0.8,duration/4))continue;
     const candidate=allFrames.subarray(index*a.length,(index+1)*a.length);
-    let delta=0;for(let pixel=0;pixel<a.length;pixel++)delta+=Math.abs(a[pixel]-candidate[pixel]);
+    let delta=0,total=0,square=0,bright=0;
+    for(let pixel=0;pixel<a.length;pixel++) {
+      delta+=Math.abs(a[pixel]-candidate[pixel]);total+=candidate[pixel];square+=candidate[pixel]**2;
+      if(candidate[pixel]>100)bright++;
+    }
+    const candidateMean=total/a.length,candidateDeviation=Math.sqrt(square/a.length-candidateMean**2);
+    if(candidateDeviation>detailFrame.deviation)detailFrame={pts,mean:candidateMean,deviation:candidateDeviation,highlights:bright};
     if(delta/a.length>maximumDifference) {
-      maximumDifference=delta/a.length;changedAt=pts;
-      saveSampleFrame(candidate,`${stem}-frame-c.png`);
+      maximumDifference=delta/a.length;changedAt=pts;motionFrame=candidate;
     }
   }
-  Object.assign(result,{mean,deviation,frameDifference:maximumDifference,sampledFrameDifference:difference/a.length,changedAt});saveDecode();
+  if(motionFrame)saveSampleFrame(motionFrame,`${stem}-frame-c.png`);
+  Object.assign(result,{mean,deviation,detailFrame,frameDifference:maximumDifference,sampledFrameDifference:difference/a.length,changedAt});saveDecode();
   if (mainLyrics) {
     // The fixture uses #f4f4f5 main lyrics. Exclude the bottom subtitle so animated
     // background pixels or translation text cannot stand in for the main words.
@@ -382,7 +389,7 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
     result.mainLyricPixels=white;saveDecode();
     assert.ok(white>=100,`main lyrics must be visible in the encoded frame, found ${white} near-white pixels`);
   }
-  assert.ok(deviation > 6 && highlights > 30, `nonblack visual detail required: deviation=${deviation}, highlights=${highlights}`);
+  assert.ok(detailFrame.deviation > 6 && detailFrame.highlights > 30, `nonblack visual detail required after the entry animation: ${JSON.stringify(detailFrame)}`);
   assert.ok(maximumDifference > 0.2, `animation/lyric content must advance: maximum difference=${maximumDifference}`);
   if (toneChange) {
     const firstBefore = toneMagnitude(pcm,0.35,0.3,toneChange[0]), firstAfter = toneMagnitude(pcm,0.35,0.3,toneChange[1]);
