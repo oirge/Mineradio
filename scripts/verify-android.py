@@ -120,7 +120,7 @@ with sync_playwright() as p:
     folia.get_by_test_id('local-mobile-nav').wait_for()
     folia.get_by_test_id('local-open-library').click()
     folia.get_by_test_id('local-track-row').first.wait_for()
-    assert page.evaluate('document.getElementById("folia-frame").contentWindow.MineradioFoliaMobileBack()')
+    adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     folia.get_by_test_id('local-library').wait_for(state='hidden')
     folia.get_by_test_id('local-toggle-play').click()
     page.wait_for_function('audio.paused')

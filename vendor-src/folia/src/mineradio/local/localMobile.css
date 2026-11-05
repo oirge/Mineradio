@@ -55,6 +55,10 @@
 .local-mobile .local-current-track strong { font-size: 13px; }
 .local-mobile .local-current-track span { font-size: 11px; }
 .local-mobile .local-visualizer { top: var(--local-mobile-top); bottom: calc(var(--local-mobile-nav) + var(--local-mobile-controls) + 66px); }
+.local-mobile .local-visualizer[data-mode=classic] [data-overlap-fit-line] {
+    position: relative; scale: var(--local-mobile-lyric-scale, 1);
+    translate: var(--local-mobile-lyric-x, 0px) var(--local-mobile-lyric-y, 0px);
+}
 .local-mobile .local-player .local-welcome, .local-mobile .local-player .local-no-lyrics { top: calc(var(--local-mobile-top) + (100% - var(--local-mobile-top) - var(--local-mobile-nav) - var(--local-mobile-controls) - 66px) / 2); max-width: 88%; width: 88%; gap: 12px; }
 .local-mobile .local-welcome h1, .local-mobile .local-no-lyrics h2 { font-size: clamp(19px,5vw,30px); overflow-wrap: anywhere; }
 .local-mobile .local-welcome>div { margin-top: 0; gap: 8px; }

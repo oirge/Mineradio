@@ -90,7 +90,7 @@ export default function LocalPlayer() {
     usePlaylistVisualPreset(track?.id, player.state?.playbackPlaylistId);
     return <LocalActionsContext.Provider value={tools.context}><main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view} data-panel={libraryOpen || settingsOpen || playbackOpen || tools.tool ? 'open' : 'closed'}>
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
-            <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+            <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} mobile={mobile} onOpenQueue={openQueue} />
         </LocalErrorBoundary>
         {!focus && <LocalHeader mobile={mobile} view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen} playbackOpen={playbackOpen}
             tool={tools.tool} onTool={tools.open}

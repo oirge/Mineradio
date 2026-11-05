@@ -24,6 +24,22 @@ def verify_folia_mobile(page, checks, out):
         assert box['x'] >= -1 and box['y'] >= -1 and box['x'] + box['width'] <= size['width'] + 1 and box['y'] + box['height'] <= size['height'] + 1, (box, size)
         return box
 
+    def lyrics_inside_stage():
+        page.wait_for_function('''() => {
+            const doc = document.getElementById('folia-frame').contentDocument;
+            const stage = doc.querySelector('[data-testid=local-visualizer]');
+            const line = stage?.querySelector('[data-overlap-fit-line="0"]');
+            const words = line && [...line.querySelectorAll('.inline-block.whitespace-nowrap')];
+            if (!words?.length) return false;
+            const area = stage.getBoundingClientRect();
+            return words.every(word => {
+                const box = word.getBoundingClientRect();
+                return Number(doc.defaultView.getComputedStyle(word).opacity) > .9
+                    && box.left >= area.left - 1 && box.right <= area.right + 1
+                    && box.top >= area.top - 1 && box.bottom <= area.bottom + 1;
+            });
+        }''')
+
     def touch_seek(fraction):
         slider = folia.get_by_test_id('local-seek')
         box = slider.bounding_box()
@@ -98,6 +114,7 @@ def verify_folia_mobile(page, checks, out):
             window.__mobileLyricVisibleAt ||= performance.now();
             return performance.now() - window.__mobileLyricVisibleAt > 500;
         }''')
+        lyrics_inside_stage()
     finally:
         diagnostic = page.evaluate('''() => {
             const doc = document.getElementById('folia-frame').contentDocument;
@@ -134,6 +151,8 @@ def verify_folia_mobile(page, checks, out):
             folia.get_by_test_id('local-view-' + view).tap()
             expect(folia.get_by_test_id(surface)).to_be_visible(timeout=30000)
             inside(folia.get_by_test_id(surface))
+            if view == 'lyrics':
+                lyrics_inside_stage()
             inside(folia.get_by_test_id('local-mobile-nav'))
             inside(folia.get_by_test_id('local-controls'))
             for testid in ['local-toggle-play', 'local-next', 'local-previous']:

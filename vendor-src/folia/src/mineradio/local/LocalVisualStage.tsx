@@ -1,9 +1,10 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useRef } from 'react';
 import VisualizerRenderer from '../../components/visualizer/VisualizerRenderer';
 import type { Theme } from '../../types';
 import type { LocalPlayer } from './playerTypes';
 import type { LocalVisualAssets } from './useLocalVisualAssets';
 import { useVisualSceneSettings } from './useVisualSettings';
+import { useLocalMobileLyricFit } from './useLocalMobileLyricFit';
 
 // src/mineradio/local/LocalVisualStage.tsx
 // Each surface owns its visual runtime; transport remains in Mineradio throughout switches.
@@ -14,10 +15,14 @@ interface Props {
     theme: Theme;
     assets: LocalVisualAssets;
     focus: boolean;
+    mobile: boolean;
     onOpenQueue: () => void;
 }
-export default function LocalVisualStage({ player, theme, assets, focus, onOpenQueue }: Props) {
+export default function LocalVisualStage({ player, theme, assets, focus, mobile, onOpenQueue }: Props) {
     const visuals = useVisualSceneSettings();
+    const stage = useRef<HTMLDivElement>(null);
+    useLocalMobileLyricFit(stage, mobile && visuals.view === 'lyrics' && visuals.mode === 'classic',
+        player.lines[player.currentLineIndex]?.startTime, visuals.lyricsFontScale, theme);
     const track = player.state?.currentTrack;
     const lyrics = () => visuals.update({ view: 'lyrics' });
     const wallProps = { player, theme, isDaylight: visuals.daylight, onBack: lyrics, onOpenQueue, onOpenLyrics: lyrics };
@@ -25,7 +30,7 @@ export default function LocalVisualStage({ player, theme, assets, focus, onOpenQ
         {player.active && (visuals.view === 'records' ? <LocalRecordWall {...wallProps} />
             : <LocalPosterWall {...wallProps} translation={visuals.translation} />)}
     </Suspense>;
-    return <div className="local-visualizer" data-testid="local-visualizer" data-mode={visuals.mode}>
+    return <div ref={stage} className="local-visualizer" data-testid="local-visualizer" data-mode={visuals.mode}>
         {/* Replace the mode's Suspense boundary so old GPU resources are destroyed during a lazy switch. */}
         {player.active && <VisualizerRenderer key={visuals.mode} mode={visuals.mode} theme={theme} isDaylight={visuals.daylight}
             currentTime={player.currentTime} currentLineIndex={player.currentLineIndex} lines={player.lines}
