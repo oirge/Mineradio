@@ -88,6 +88,11 @@ def verify_folia_mobile(page, checks, out):
         page.wait_for_function('audio.currentTime > 5 && audio.currentTime < 10')
         expect(folia.get_by_test_id('local-player')).to_have_attribute('data-active', 'true')
         expect(folia.get_by_test_id('local-visualizer')).to_contain_text(re.compile('Mobile music test|Local lyrics continue|Touch playback works'), timeout=30000)
+        page.wait_for_function('''() => {
+            const doc = document.getElementById('folia-frame').contentDocument;
+            const line = doc.querySelector('[data-overlap-fit-line="0"]');
+            return line && Number(doc.defaultView.getComputedStyle(line).opacity) > .9;
+        }''')
     finally:
         diagnostic = page.evaluate('''() => {
             const doc = document.getElementById('folia-frame').contentDocument;
