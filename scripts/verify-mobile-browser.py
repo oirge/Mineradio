@@ -72,6 +72,8 @@ with sync_playwright() as p:
     within_viewport('.modal-mask.show .modal')
     modal.locator('input').first.fill('手机测试歌单')
     modal.get_by_role('button', name='创建', exact=True).tap()
+    expect(modal.locator('#collect-list')).to_contain_text('手机测试歌单')
+    modal.get_by_role('button', name='关闭', exact=True).tap()
     expect(modal).to_have_count(0)
     checks.append('touch library remains open and creates a playlist')
 
@@ -80,6 +82,7 @@ with sync_playwright() as p:
     page.wait_for_function('localLibrarySongs.length === 2 && audio && !audio.paused', timeout=30000)
     page.wait_for_function('document.body.classList.contains("mobile-has-track")')
     navigate('player')
+    page.screenshot(path=str(OUT / 'player.png'))
     within_viewport('#bottom-bar')
     for selector in ['#play-btn', '#next-btn', '#prev-btn', '#heart-btn', '#mobile-player-more']:
         box = within_viewport(selector)
