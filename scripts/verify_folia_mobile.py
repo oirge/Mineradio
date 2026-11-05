@@ -91,7 +91,12 @@ def verify_folia_mobile(page, checks, out):
         page.wait_for_function('''() => {
             const doc = document.getElementById('folia-frame').contentDocument;
             const line = doc.querySelector('[data-overlap-fit-line="0"]');
-            return line && Number(doc.defaultView.getComputedStyle(line).opacity) > .9;
+            const word = line?.querySelector('.inline-block');
+            const visible = line && word && Number(doc.defaultView.getComputedStyle(line).opacity) > .9
+                && Number(doc.defaultView.getComputedStyle(word).opacity) > .9;
+            if (!visible) { window.__mobileLyricVisibleAt = 0; return false; }
+            window.__mobileLyricVisibleAt ||= performance.now();
+            return performance.now() - window.__mobileLyricVisibleAt > 500;
         }''')
     finally:
         diagnostic = page.evaluate('''() => {

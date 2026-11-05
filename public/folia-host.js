@@ -600,7 +600,7 @@
   }
   function chromeHoverTargets() {
     return Array.prototype.slice.call(document.querySelectorAll(
-      '.desktop-drag-region,.desktop-window-controls,#top-right,#folia-floating-switch,#folia-floating-import,#fullscreen-diy-zone'));
+      '.desktop-drag-region,.desktop-window-controls,#folia-titlebar-controls,#top-right,#folia-floating-switch,#folia-floating-import,#fullscreen-diy-zone'));
   }
   function startChromeAutoHide() {
     var fresh = !chromeListening;

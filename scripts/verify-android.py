@@ -82,15 +82,21 @@ with sync_playwright() as p:
     try:
         page.wait_for_selector('#mobile-nav')
     finally:
-        diagnostic = page.evaluate('''() => ({url: location.href, ready: document.readyState, title: document.title,
+        try:
+            diagnostic = page.evaluate('''() => ({url: location.href, ready: document.readyState, title: document.title,
             bodyClass: document.body?.className, width: innerWidth, height: innerHeight,
             capacitor: typeof Capacitor, native: window.Capacitor?.isNativePlatform?.(),
             mobile: window.MineradioMobile, nav: document.getElementById('mobile-nav')?.outerHTML,
             scripts: [...document.scripts].map(script => script.src), text: document.body?.innerText.slice(0, 1600)})''')
+        except Exception as error:
+            diagnostic = {'diagnosticError': str(error)}
         diagnostic['errors'] = errors
         (OUT / 'android-startup-state.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
         print('Android startup:', json.dumps(diagnostic, ensure_ascii=False), flush=True)
-        (OUT / 'android-startup.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
+        try:
+            (OUT / 'android-startup.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
+        except Exception as error:
+            print('Android screenshot unavailable:', error, flush=True)
     page.screenshot(path=str(OUT / 'android-home.png'))
     assert page.evaluate('Capacitor.isNativePlatform() && MineradioMobile.active')
     page.locator('.home-local-action').filter(has_text='本地文件').click()

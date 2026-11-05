@@ -104,8 +104,15 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: python scripts/verify-android.py
+      - name: Save cloud emulator diagnostics
+        if: always()
+        run: |
+          mkdir -p output/playwright/mobile
+          free -h > output/playwright/mobile/runner-memory.txt
+          df -h > output/playwright/mobile/runner-disk.txt
+          sudo dmesg -T | tail -n 100 > output/playwright/mobile/runner-kernel.txt
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4
