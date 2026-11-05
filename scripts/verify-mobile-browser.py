@@ -88,6 +88,17 @@ with sync_playwright() as p:
     for selector in ['#play-btn', '#next-btn', '#prev-btn', '#heart-btn', '#mobile-player-more']:
         box = within_viewport(selector)
         assert box['width'] >= 44 and box['height'] >= 44, (selector, box)
+    page.wait_for_function('stageLyrics && stageLyrics.current && stageLyrics.lockFitScale < .8', timeout=30000)
+    page.wait_for_timeout(600)
+    page.screenshot(path=str(OUT / 'player-lyrics-fit.png'))
+    assert page.evaluate('lyricCameraLockFit(1, 0, 0, 4.85) < .8')
+    page.wait_for_function('''() => {
+        const mesh = stageLyrics.current, data = mesh && mesh.userData.lyric;
+        if (!data) return false;
+        mesh.updateWorldMatrix(true, false);
+        const points = [-1,1].flatMap(x => [-1,1].map(y => new THREE.Vector3(x * data.textWorldW / 2, y * data.textWorldH / 2, 0).applyMatrix4(mesh.matrixWorld).project(camera)));
+        return points.every(point => Math.abs(point.x) < .98 && Math.abs(point.y) < .95);
+    }''')
     page.locator('#play-btn').tap()
     page.wait_for_function('audio.paused')
     position = page.locator('#progress-bar').bounding_box()

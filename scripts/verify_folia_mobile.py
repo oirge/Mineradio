@@ -1,4 +1,5 @@
 """Cloud touch checks for the embedded Folia surface and shared host playback."""
+import re
 from playwright.sync_api import expect
 
 
@@ -63,6 +64,7 @@ def verify_folia_mobile(page, checks, out):
     page.screenshot(path=str(out / 'folia-settings-light.png'))
     folia.get_by_test_id('local-theme').select_option('dark')
     folia.get_by_test_id('local-visual-settings').get_by_role('button', name='关闭', exact=True).tap()
+    expect(folia.get_by_test_id('local-visualizer')).to_contain_text(re.compile('Mobile music test|Local lyrics continue|Touch playback works'), timeout=30000)
     folia.get_by_test_id('local-open-playback').tap()
     inside(folia.get_by_test_id('local-playback-settings'))
     folia.get_by_test_id('local-rate-1.25').tap()

@@ -7541,20 +7541,26 @@ function getStageLyricLockBounds() {
 }
 function lyricCameraLockFit(layoutScale, layoutX, layoutY, distance) {
   if (!camera || !camera.isPerspectiveCamera) return 1;
+  var mobileStage = window.MineradioMobile && window.MineradioMobile.active;
   layoutScale = Math.max(0.1, layoutScale || 1);
   var fov = (camera.fov || 45) * Math.PI / 180;
   var dist = Math.max(1.4, distance || 4.85);
+  if (mobileStage) dist = Math.max(1.4, dist - 1.65);
   var visibleH = 2 * Math.tan(fov * 0.5) * dist;
   var visibleW = visibleH * (camera.aspect || (innerWidth / Math.max(1, innerHeight)) || 1.78);
   var bounds = getStageLyricLockBounds();
   var skullSafe = !!(fx && fx.preset === SKULL_PRESET_INDEX);
   var safeW = Math.max(visibleW * (skullSafe ? 0.36 : 0.42), visibleW * (skullSafe ? 0.70 : 0.84) - Math.abs(layoutX || 0) * (skullSafe ? 1.36 : 1.22));
   var safeH = Math.max(visibleH * (skullSafe ? 0.16 : 0.18), visibleH * (skullSafe ? 0.34 : 0.44) - Math.abs(layoutY || 0) * (skullSafe ? 0.98 : 0.82));
+  if (mobileStage) {
+    safeW = visibleW * .88;
+    safeH = visibleH * (window.MineradioMobile.lyricStageHeight || .5);
+  }
   var scaledW = Math.max(0.01, bounds.w * layoutScale);
   var scaledH = Math.max(0.01, bounds.h * layoutScale);
   var viewportFit = Math.min(1, safeW / scaledW, safeH / scaledH);
   var lockScaleCap = Math.min(1, (skullSafe ? 0.94 : LYRIC_CAMERA_LOCK_MAX_SCALE) / layoutScale);
-  return clampRange(Math.min(viewportFit, lockScaleCap), skullSafe ? 0.36 : 0.42, 1);
+  return clampRange(Math.min(viewportFit, lockScaleCap), mobileStage ? .04 : (skullSafe ? 0.36 : 0.42), 1);
 }
 // 兼容旧变量名以便其它代码不破坏
 var lyricsParticles = null;
@@ -12563,8 +12569,14 @@ function updateStageLyrics3D(dt, frameShelfState) {
     }
   }
   var lockBaseDistance = wallpaperShelfLyrics ? 5.58 : 4.85;
+  var mobileStage = window.MineradioMobile && window.MineradioMobile.active;
+  if (mobileStage && camera) {
+    // Phone lyrics face the camera and fit the visible space between touch controls.
+    layoutX = 0; layoutZ = 0; layoutTiltX = 0; layoutTiltY = 0;
+    layoutY = (window.MineradioMobile.lyricStageCenterY || 0) * 2 * Math.tan((camera.fov || 45) * Math.PI / 360) * (lockBaseDistance - 1.5);
+  }
   var lockDistance = lockBaseDistance + layoutZ;
-  var cameraLockedLyrics = (fx.lyricCameraLock || wallpaperLyricLock) && camera;
+  var cameraLockedLyrics = (fx.lyricCameraLock || wallpaperLyricLock || mobileStage) && camera;
   var skullLyricEdgeGuard = !!(fx && fx.preset === SKULL_PRESET_INDEX && (orbit.centerLocked || orbit.recentering));
   var lockFit = (cameraLockedLyrics || skullLyricEdgeGuard || skullMouthLyrics) ? lyricCameraLockFit(layoutScale, layoutX, layoutY, skullMouthLyrics ? Math.max(2.2, 4.4 + layoutZ) : lockDistance) : 1;
   if (skullMouthLyrics) lockFit = Math.min(lockFit, 1.12);

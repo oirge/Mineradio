@@ -48,6 +48,7 @@
 .local-mobile .local-player .local-playlist-trigger { width: 44px; flex-basis: 44px; padding: 0; }
 .local-mobile .local-playlist-label, .local-mobile .local-playlist-caret { display: none; }
 .local-mobile .local-slot-menu { position: fixed; left: 12px !important; right: 12px !important; bottom: calc(var(--local-mobile-nav) + var(--local-mobile-controls) + 12px); width: auto; max-width: none; max-height: calc(100dvh - var(--local-mobile-top) - var(--local-mobile-nav) - var(--local-mobile-controls) - 24px); }
+.local-mobile .local-slot-menu button { min-height: 44px; padding: 10px; text-align: left; background: transparent; color: var(--local-text); border: 0; }
 .local-mobile .local-player .local-current-track { left: 14px; right: 14px; bottom: calc(var(--local-mobile-nav) + var(--local-mobile-controls) + 18px); max-width: none; height: 42px; gap: 10px; }
 .local-mobile .local-current-cover { width: 42px; height: 42px; border-radius: 10px; }
 .local-mobile .local-current-track small { display: none; }

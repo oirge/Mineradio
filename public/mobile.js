@@ -33,6 +33,10 @@
     body.classList.toggle('mobile-keyboard-open', keyboard);
     root.style.setProperty('--mobile-viewport-height', (viewport ? viewport.height : window.innerHeight) + 'px');
     root.style.setProperty('--mobile-viewport-top', (viewport ? viewport.offsetTop : 0) + 'px');
+    var top = document.getElementById('search-area').getBoundingClientRect().bottom + 16;
+    var bottom = hasTrack() && bar.getClientRects().length ? bar.getBoundingClientRect().top - 16 : nav.getBoundingClientRect().top - 16;
+    api.lyricStageHeight = Math.max(.15, (bottom - top) / Math.max(1, height));
+    api.lyricStageCenterY = (height / 2 - (top + bottom) / 2) / Math.max(1, height);
   }
 
   function closePanel(panel, key) {
@@ -108,7 +112,7 @@
 
   function applyLayout() {
     var desktop = window.desktopWindow && window.desktopWindow.isDesktop;
-    var enabled = (compact.matches || (window.Capacitor && window.Capacitor.isNativePlatform())) && !desktop;
+    var enabled = !!(compact.matches || (window.Capacitor && window.Capacitor.isNativePlatform())) && !desktop;
     if (enabled === api.active) { updateViewport(); return; }
     api.active = enabled;
     body.classList.toggle('mobile-layout', enabled);
