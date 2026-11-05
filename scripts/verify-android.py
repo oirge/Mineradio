@@ -188,8 +188,29 @@ with sync_playwright() as p:
     }'''), 'Native range reads must honor integer start/end offsets'
     page.wait_for_function('lyricsLines.some(line => !line.fallback && line.text.includes("手机内嵌歌词"))', timeout=30000)
     page.wait_for_function('stageLyrics && stageLyrics.current && stageLyrics.current.userData.lyric', timeout=30000)
+    try:
+        page.wait_for_function('''() => {
+            let mesh = stageLyrics.current;
+            if (!mesh?.visible) {
+                mesh = stageLyrics.rows.find(row => row.kind === 'context' && row.lineIdx === stageLyrics.currentIdx
+                    && row.state !== 'out' && row.alpha > .75)?.mesh;
+            }
+            if (!mesh?.visible || !stageLyrics.group?.visible) return false;
+            const data = mesh.userData.row || mesh.userData.lyric;
+            const material = data?.textMat;
+            const opacity = material?.uniforms?.uOpacity?.value ?? material?.opacity ?? 0;
+            const style = getComputedStyle(document.getElementById('canvas-container'));
+            return opacity > .75 && Number(style.opacity) > .9 && style.visibility !== 'hidden';
+        }''', timeout=30000)
+    finally:
+        diagnostic = page.evaluate('''() => ({ text: stageLyrics.currentText, index: stageLyrics.currentIdx,
+            displayMode: fx.lyricDisplayMode, groupVisible: stageLyrics.group?.visible,
+            rows: stageLyrics.rows.map(row => ({index: row.lineIdx, kind: row.kind, alpha: row.alpha,
+                state: row.state, visible: row.mesh.visible})),
+            canvasOpacity: getComputedStyle(document.getElementById('canvas-container')).opacity })''')
+        (OUT / 'android-main-lyrics.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
+        page.screenshot(path=str(OUT / 'android-player.png'))
     completed('native integer byte ranges and real embedded ID3 lyrics reach the main lyric stage')
-    page.screenshot(path=str(OUT / 'android-player.png'))
     assert 'PlaybackService' in adb('shell', 'dumpsys', 'activity', 'services', APP)
     assert 'Mineradio' in adb('shell', 'dumpsys', 'media_session')
     completed('foreground playback service and media notification')
