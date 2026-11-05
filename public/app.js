@@ -5459,7 +5459,7 @@ var particlePointerLocalHit = new THREE.Vector3();
 var particlePointerQuat = new THREE.Quaternion();
 var particlePointerFrame = { dirty:false, ndcX:0, ndcY:0 };
 var CLICK_THRESHOLD = 6;  // 像素, 拖动 > 6px 视为 drag
-var UI_HIT_SELECTOR = '#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#lyric-translate-chip,#drop-overlay';
+var UI_HIT_SELECTOR = '#mobile-nav,#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#lyric-translate-chip,#drop-overlay';
 var pointerUiHitCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
 function isPointerOverUi(e) {
@@ -33188,7 +33188,7 @@ function fileListToArray(files) {
   return list;
 }
 function desktopLocalMusicApi() {
-  return window.desktopWindow && window.desktopWindow.isDesktop ? window.desktopWindow : null;
+  return window.desktopWindow && window.desktopWindow.isDesktop ? window.desktopWindow : (window.MineradioNativeLibraryApi || null);
 }
 function localFullPath(file) {
   return String((file && (file.fullPath || file.filePath || file.path || file.localFilePathAbsolute)) || '');
@@ -41833,7 +41833,7 @@ function toggleFxPanel(force) {
   if (!el) return;
   // 视觉控制台开合前先把借走的歌单架分组还回去，避免控制台里缺这一组。
   if (typeof closeShelfQuickPanel === 'function' && shelfQuickPanelOpen) closeShelfQuickPanel();
-  if (!diyPlayerMode && force !== false) {
+  if (!diyPlayerMode && force !== false && !(window.MineradioMobile && window.MineradioMobile.active)) {
     showToast('开启 DIY 玩家模式后可打开视觉控制台');
     return;
   }
@@ -44467,7 +44467,11 @@ var peekTimers = { search:null, fx:null, pl:null };
 function setPeek(el, on, key) {
   if (!el) return;
   if (immersiveMode && on && (key === 'search' || key === 'fx')) return;
-  if (on && !diyPlayerMode && key === 'fx') return;
+  if (on && !diyPlayerMode && key === 'fx' && !(window.MineradioMobile && window.MineradioMobile.active)) return;
+  // Touch pages close through navigation, rather than synthetic mouseleave events.
+  if (window.MineradioMobile && window.MineradioMobile.active && !on &&
+      ((key === 'fx' && document.body.getAttribute('data-mobile-view') === 'settings') ||
+       (key === 'pl' && document.body.getAttribute('data-mobile-view') === 'library'))) return;
   if (!on && key === 'search' && emptyHomeActive && !immersiveMode) return;
   if (!on && key === 'pl' && playlistPanelPinned) return;
   if (on && key === 'fx') document.body.classList.remove('fullscreen-diy-peek');

@@ -50,3 +50,10 @@ tmp/
 *.png.tmp
 verification/
 screenshots/
+
+# Android generated assets and private signing files
+mobile/android/
+mobile/www/
+*.jks
+*.keystore
+*.p12

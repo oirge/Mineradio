@@ -1,0 +1,102 @@
+"""Cloud Android emulator: install, SAF import, native service and cold restore."""
+import json
+import re
+import subprocess
+import time
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from playwright.sync_api import sync_playwright
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / 'output/playwright/mobile'
+OUT.mkdir(parents=True, exist_ok=True)
+APP = 'com.mineradio.oirge.mobile'
+
+def adb(*args):
+    return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace').strip()
+
+def start():
+    adb('shell', 'am', 'start', '-n', APP + '/.MainActivity')
+    for _ in range(40):
+        pid = adb('shell', 'pidof', APP)
+        if pid:
+            adb('forward', 'tcp:9222', 'localabstract:webview_devtools_remote_' + pid.split()[0])
+            try:
+                targets = json.load(urllib.request.urlopen('http://127.0.0.1:9222/json', timeout=2))
+                if any('localhost' in item.get('url', '') for item in targets): return
+            except Exception: pass
+        time.sleep(1)
+    raise AssertionError('Android WebView did not load')
+
+def tap_document(name):
+    for _ in range(25):
+        adb('shell', 'uiautomator', 'dump', '/sdcard/window.xml')
+        tree = ET.fromstring(adb('shell', 'cat', '/sdcard/window.xml'))
+        for node in tree.iter('node'):
+            if node.get('text') == name or node.get('content-desc') == name:
+                bounds = [int(v) for v in re.findall(r'\d+', node.get('bounds', ''))]
+                adb('shell', 'input', 'tap', str((bounds[0]+bounds[2])//2), str((bounds[1]+bounds[3])//2))
+                return
+        # The picker normally opens Recents. Open Downloads if the document is elsewhere.
+        for node in tree.iter('node'):
+            if node.get('text') in ['Downloads', '下载']:
+                bounds = [int(v) for v in re.findall(r'\d+', node.get('bounds', ''))]
+                adb('shell', 'input', 'tap', str((bounds[0]+bounds[2])//2), str((bounds[1]+bounds[3])//2))
+                break
+        time.sleep(1)
+    (OUT / 'android-picker.xml').write_text(adb('shell', 'cat', '/sdcard/window.xml'))
+    raise AssertionError('Could not select test audio in the Android document picker')
+
+subprocess.check_call(['adb', 'install', '-r', str(ROOT / 'mobile/android/app/build/outputs/apk/debug/app-debug.apk')])
+adb('push', str(OUT / 'Mobile-Blue.wav'), '/sdcard/Download/Mobile-Blue.wav')
+adb('shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file:///sdcard/Download/Mobile-Blue.wav')
+start()
+checks = []
+errors = []
+with sync_playwright() as p:
+    browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222')
+    page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    page.wait_for_selector('#mobile-nav')
+    page.screenshot(path=str(OUT / 'android-home.png'))
+    assert page.evaluate('Capacitor.isNativePlatform() && MineradioMobile.active')
+    page.locator('.home-local-action').filter(has_text='本地文件').click()
+    tap_document('Mobile-Blue.wav')
+    page.wait_for_function('localLibrarySongs.length === 1 && audio && !audio.paused', timeout=45000)
+    page.wait_for_function('audio.currentTime > 1', timeout=20000)
+    assert page.evaluate('audio.src.includes("_capacitor_content_")'), page.evaluate('audio.src')
+    checks.append('native SAF import and streamed WAV playback')
+    page.screenshot(path=str(OUT / 'android-player.png'))
+    assert 'PlaybackService' in adb('shell', 'dumpsys', 'activity', 'services', APP)
+    assert 'Mineradio' in adb('shell', 'dumpsys', 'media_session')
+    checks.append('foreground playback service and media notification')
+    page.locator('#mobile-nav [data-mobile-view=settings]').click()
+    page.locator('[aria-label="关闭设置"]').click()
+    page.locator('#play-btn').click()
+    page.wait_for_function('audio.paused')
+    page.locator('#play-btn').click()
+    page.wait_for_function('!audio.paused')
+    start_position = page.evaluate('audio.currentTime')
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    time.sleep(5)
+    start()
+    page.wait_for_function('(before) => audio && !audio.paused && audio.currentTime > before + 2', arg=start_position, timeout=20000)
+    checks.append('background playback progresses after Home')
+    adb('shell', 'am', 'force-stop', APP)
+    time.sleep(1)
+    start()
+    # Force stop closes the CDP target; reconnect to the relaunched WebView.
+    browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222')
+    page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
+    page.wait_for_function('localLibrarySongs.length === 1', timeout=30000)
+    page.locator('#mobile-nav [data-mobile-view=player]').click()
+    page.locator('#play-btn').click()
+    page.wait_for_function('audio && !audio.paused && audio.currentTime > 0.5', timeout=30000)
+    checks.append('cold restart restores persisted URI grants and music library')
+    page.screenshot(path=str(OUT / 'android-restored.png'))
+
+(OUT / 'android-logcat.txt').write_text(adb('logcat', '-d', '-t', '1500'), encoding='utf-8')
+(OUT / 'android-results.json').write_text(json.dumps({'checks': checks, 'errors': errors}, ensure_ascii=False, indent=2), encoding='utf-8')
+assert not errors, errors
+print(json.dumps(checks))

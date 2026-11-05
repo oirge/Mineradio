@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "Mineradio 本地音乐",
+  "short_name": "Mineradio",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101216",
+  "theme_color": "#101216",
+  "icons": [
+    { "src": "mobile-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

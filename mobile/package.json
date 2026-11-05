@@ -1,0 +1,15 @@
+{
+  "name": "mineradio-android",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "prepare:android": "node prepare-android.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  }
+}

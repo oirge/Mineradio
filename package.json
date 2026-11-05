@@ -14,7 +14,9 @@
     "prebuild:win": "npm run build:folia",
     "build:win": "electron-builder --win --publish never",
     "prebuild:win:dir": "npm run build:folia",
-    "build:win:dir": "electron-builder --win dir --publish never"
+    "build:win:dir": "electron-builder --win dir --publish never",
+    "start:mobile": "node scripts/start-mobile.js",
+    "android:prepare": "npm --prefix mobile run prepare:android"
   },
   "build": {
     "appId": "com.mineradio.desktop.oirge",

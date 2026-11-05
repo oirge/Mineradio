@@ -1,0 +1,15 @@
+{
+  "appId": "com.mineradio.oirge.mobile",
+  "appName": "Mineradio",
+  "webDir": "www",
+  "loggingBehavior": "debug",
+  "server": { "androidScheme": "https" },
+  "android": {
+    "backgroundColor": "#101216",
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "plugins": {
+    "SystemBars": { "style": "LIGHT", "insetsHandling": "css" }
+  }
+}
