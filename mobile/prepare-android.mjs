@@ -10,6 +10,14 @@ const android = path.join(root, 'android');
 const cap = path.join(root, 'node_modules/@capacitor/cli/bin/capacitor');
 fs.mkdirSync(web, { recursive: true });
 fs.cpSync(path.join(source, 'public'), web, { recursive: true });
+// The injected native bridge needs Capacitor Core's JavaScript plugin proxies.
+const coreRuntime = path.join(root, 'node_modules/@capacitor/core/dist/capacitor.js');
+fs.copyFileSync(coreRuntime, path.join(web, 'vendor/capacitor-core.js'));
+const webIndex = path.join(web, 'index.html');
+const nativeScript = '<script src="mobile-native.js"></script>';
+const webHtml = fs.readFileSync(webIndex, 'utf8');
+if (webHtml.split(nativeScript).length !== 2) throw new Error('Android native script must occur exactly once');
+fs.writeFileSync(webIndex, webHtml.replace(nativeScript, '<script src="vendor/capacitor-core.js"></script>\n' + nativeScript));
 for (const name of ['LICENSE', 'THIRD-PARTY-NOTICES.md', 'NOTICE.md']) {
   fs.copyFileSync(path.join(source, name), path.join(web, name));
 }

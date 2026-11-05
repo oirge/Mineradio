@@ -108,6 +108,9 @@ with sync_playwright() as p:
             print('Android screenshot unavailable:', error, flush=True)
     page.screenshot(path=str(OUT / 'android-home.png'))
     assert page.evaluate('Capacitor.isNativePlatform() && MineradioMobile.active')
+    assert not errors, errors
+    assert page.evaluate('typeof Capacitor.registerPlugin === "function" && typeof MineradioNativeImport === "function"')
+    completed('Capacitor Core and native library plugin initialize without page errors')
     page.locator('.home-local-action').filter(has_text='本地文件').click()
     tap_document('Mobile-Blue.wav')
     page.wait_for_function('localLibrarySongs.length === 1 && audio && !audio.paused', timeout=45000)
