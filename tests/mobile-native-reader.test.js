@@ -92,6 +92,9 @@ function cacheContext() {
   };
   vm.runInNewContext(functionSource('localLibraryFileSignatureFromFile')
     + functionSource('localLibraryFileSignatureFromSong')
+    + functionSource('localLibraryRecordFileSignature')
+    + functionSource('localLibraryRecordMatchesSong')
+    + functionSource('applyLocalLibraryIndexToSong')
     + functionSource('applyLocalAssetCacheToSong'), context);
   return context;
 }
@@ -123,4 +126,20 @@ test('Android cache hydration ignores stale lyric records even with fresh metada
   context.applyLocalAssetCacheToSong(song, metadata, { lyricRecord: lyrics });
   assert.equal(song.localLyricLoaded, true);
   assert.equal(song.localLyricText, lyrics.localLyricText);
+});
+
+test('Android upgrades reject stale negative library indexes even with the same song key', () => {
+  const context = cacheContext();
+  const file = { fullPath: 'content://music/indexed', size: 4000, lastModified: 7, nativeReaderVersion: 1 };
+  const song = { localKey: 'stable-key', localFile: file };
+  const index = { key: song.localKey, fileSignature: 'content://music/indexed|4000|7', lyricStatus: 'none', coverStatus: 'none' };
+  assert.equal(context.localLibraryRecordMatchesSong(index, song), false);
+  assert.equal(context.applyLocalLibraryIndexToSong(song, index), false);
+  assert.equal(song.localLyricLoaded, undefined);
+  assert.equal(song.localCoverLoaded, undefined);
+  assert.equal(song.localKey, 'stable-key');
+  index.fileSignature = context.localLibraryFileSignatureFromSong(song);
+  assert.equal(context.localLibraryRecordMatchesSong(index, song), true);
+  assert.equal(context.applyLocalLibraryIndexToSong(song, index), true);
+  assert.equal(song.localLyricLoaded, true);
 });

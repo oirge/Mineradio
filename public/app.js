@@ -37486,6 +37486,9 @@ function createLocalLibraryIndexLookup(index) {
 }
 function localLibraryRecordMatchesSong(record, song) {
   if (!record || !song) return false;
+  // A stable song key must not restore tag results from an older Android reader.
+  if (song.localFile && song.localFile.nativeReaderVersion &&
+      localLibraryRecordFileSignature(record) !== localLibraryFileSignatureFromSong(song)) return false;
   if (record.key && song.localKey && record.key === song.localKey) return true;
   var recordSig = localLibraryRecordFileSignature(record);
   var songSig = localLibraryFileSignatureFromSong(song);
