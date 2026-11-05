@@ -38,6 +38,34 @@ def save_logs():
 
 atexit.register(save_logs)
 
+launcher_dialogs = []
+
+def dismiss_launcher_anr(tree):
+    # The cloud Pixel image can show its launcher's ANR above DocumentsUI.
+    # Match only that exact system dialog; Mineradio failures must remain visible.
+    if not any(node.get('resource-id') == 'android:id/alertTitle'
+               and node.get('package') == 'android'
+               and node.get('text') == "Pixel Launcher isn't responding"
+               for node in tree.iter('node')):
+        return False
+    evidence = 'android-launcher-anr-' + str(len(launcher_dialogs) + 1)
+    (OUT / (evidence + '.xml')).write_text(ET.tostring(tree, encoding='unicode'), encoding='utf-8')
+    try:
+        (OUT / (evidence + '.png')).write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        print('Launcher dialog screenshot unavailable:', str(error), flush=True)
+    if len(launcher_dialogs) >= 2:
+        raise AssertionError('Pixel Launcher ANR recurred more than twice; see saved system dialog evidence')
+    for node in tree.iter('node'):
+        if node.get('resource-id') == 'android:id/aerr_close' and node.get('package') == 'android':
+            bounds = [int(v) for v in re.findall(r'\d+', node.get('bounds', ''))]
+            assert len(bounds) == 4, 'Pixel Launcher Close app button has no bounds'
+            adb('shell', 'input', 'tap', str((bounds[0]+bounds[2])//2), str((bounds[1]+bounds[3])//2))
+            launcher_dialogs.append(evidence)
+            print('Closed unrelated Pixel Launcher ANR; evidence:', evidence, flush=True)
+            return True
+    raise AssertionError('Pixel Launcher ANR has no Close app button; see ' + evidence)
+
 def start():
     print(adb('shell', 'am', 'start', '-n', APP + '/.MainActivity'), flush=True)
     for _ in range(40):
@@ -62,6 +90,9 @@ def tap_document(name):
             tree = ET.fromstring(adb('shell', 'cat', '/sdcard/window.xml'))
         except (ValueError, ET.ParseError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
             print('Waiting for Android document picker:', str(error), flush=True)
+            time.sleep(1)
+            continue
+        if dismiss_launcher_anr(tree):
             time.sleep(1)
             continue
         for node in tree.iter('node'):
@@ -98,7 +129,7 @@ errors = []
 
 def completed(check):
     checks.append(check)
-    (OUT / 'android-results.json').write_text(json.dumps({'checks': checks, 'errors': errors}, ensure_ascii=False, indent=2), encoding='utf-8')
+    (OUT / 'android-results.json').write_text(json.dumps({'checks': checks, 'errors': errors, 'systemDialogs': launcher_dialogs}, ensure_ascii=False, indent=2), encoding='utf-8')
     print('PASS:', check, flush=True)
 
 with sync_playwright() as p:
@@ -196,7 +227,11 @@ for attempt in range(20):
             time.sleep(1)
             continue
         layout = adb('shell', 'cat', '/sdcard/release-window.xml')
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        tree = ET.fromstring(layout)
+    except (ET.ParseError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        time.sleep(1)
+        continue
+    if dismiss_launcher_anr(tree):
         time.sleep(1)
         continue
     if '本地文件' in layout: break
@@ -208,6 +243,6 @@ else:
 completed('exact signed release installs and opens its offline import UI')
 
 save_logs()
-(OUT / 'android-results.json').write_text(json.dumps({'checks': checks, 'errors': errors}, ensure_ascii=False, indent=2), encoding='utf-8')
+(OUT / 'android-results.json').write_text(json.dumps({'checks': checks, 'errors': errors, 'systemDialogs': launcher_dialogs}, ensure_ascii=False, indent=2), encoding='utf-8')
 assert not errors, errors
 print(json.dumps(checks))
