@@ -35,6 +35,7 @@ jobs:
       - name: Install cloud build tools
         run: |
           npm install --prefix mobile --ignore-scripts --no-audit --no-fund
+          npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
           python -m pip install playwright pynacl
           python -m playwright install --with-deps chromium
       - name: Check source and desktop regressions
@@ -45,6 +46,8 @@ jobs:
           node --check server.js
           git diff --check
           node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
+      - name: Rebuild embedded Folia for Android
+        run: node scripts/build-folia.js
       - name: Verify mobile browser interactions
         run: |
           PORT=3077 HOST=127.0.0.1 node server.js > /tmp/mineradio-server.log 2>&1 &
@@ -109,3 +112,24 @@ jobs:
           path: output/playwright/mobile/
           if-no-files-found: ignore
           retention-days: 14
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: mineradio-android-apk
+          path: release
+      - name: Publish verified Android preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view android-v1.0.0 > /dev/null 2>&1; then
+            gh release upload android-v1.0.0 release/Mineradio-Android-1.0.0.apk release/SHA256SUMS.txt --clobber
+          else
+            gh release create android-v1.0.0 release/Mineradio-Android-1.0.0.apk release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --latest=false --title 'Mineradio Android 1.0.0 预览版' --notes-file docs/ANDROID-RELEASE.md
+          fi

@@ -475,7 +475,7 @@
   var chromeHoverLock = false, barLock = false, barDragging = false, barFocused = false, barZone = false, topLock = false, topFocused = false, topZone = false, chromeZone = false;
   var chromeListening = false, frameActivityDoc = null;
   function setChromeHidden(h) { document.body.classList.toggle('folia-chrome-hidden', !!h); }
-  function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h); }
+  function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h && !document.body.classList.contains('mobile-layout')); }
   function scheduleChromeHide() {
     if (chromeHideTimer) { global.clearTimeout(chromeHideTimer); chromeHideTimer = 0; }
     if (!isImmersive() || chromeHoverLock) return;
@@ -488,7 +488,7 @@
   }
   function scheduleBarHide() {
     if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
-    if (!active || barLock || barDragging || barFocused) return;
+    if (!active || barLock || barDragging || barFocused || document.body.classList.contains('mobile-layout')) return;
     barHideTimer = global.setTimeout(function () { barHideTimer = 0; if (active && !barLock && !barDragging && !barFocused) setBarHidden(true); }, BAR_HIDE_DELAY);
   }
   function revealBar(persist) {
@@ -497,10 +497,10 @@
     else scheduleBarHide();
   }
   // Fullscreen Folia renders its top nav (.local-header) inside the iframe; auto-hide it too.
-  function setTopHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-topnav-hidden', !!h); }
+  function setTopHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-topnav-hidden', !!h && !document.body.classList.contains('mobile-layout')); }
   function scheduleTopHide() {
     if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
-    if (!active || topLock || topFocused) return;
+    if (!active || topLock || topFocused || document.body.classList.contains('mobile-layout')) return;
     topHideTimer = global.setTimeout(function () { topHideTimer = 0; if (active && !topLock && !topFocused) setTopHidden(true); }, CHROME_HIDE_DELAY);
   }
   function revealTop(persist) {

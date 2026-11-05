@@ -66,7 +66,7 @@ export default function LocalRecordWall({ player, theme, isDaylight, onBack, onO
             </select>
             <label><Search size={16} /><input autoFocus aria-label={t('search')} placeholder={t('search')} value={catalog.query} onChange={event => catalog.setQuery(event.target.value)} /></label>
         </div>}
-        <LocalRecordTransport player={player} theme={theme} isDaylight={isDaylight} onOpenQueue={onOpenQueue} onOpenLyrics={onOpenLyrics} />
+        <div className="local-record-desktop-transport"><LocalRecordTransport player={player} theme={theme} isDaylight={isDaylight} onOpenQueue={onOpenQueue} onOpenLyrics={onOpenLyrics} /></div>
         <div className="local-record-list-button group"><SlideActionButton icon={List} title={t('queue')} onActivate={onOpenQueue}
             slideIcon={Search} slideTitle={t('search')} onSlide={() => setShowCatalog(true)} isDaylight={isDaylight} accentColor={theme.accentColor} /></div>
     </section>;

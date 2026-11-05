@@ -151,6 +151,19 @@
   searchClose.addEventListener('click', function () { openView(hasTrack() ? 'player' : 'home'); });
   document.getElementById('upload-actions').appendChild(searchClose);
 
+  var foliaSwitch = document.createElement('button');
+  foliaSwitch.id = 'mobile-folia-switch';
+  foliaSwitch.type = 'button';
+  foliaSwitch.className = 'icon-btn';
+  foliaSwitch.textContent = 'F';
+  foliaSwitch.setAttribute('aria-label', '切换到 Folia 界面');
+  foliaSwitch.title = 'Folia';
+  foliaSwitch.addEventListener('click', function () {
+    search.blur();
+    if (window.MineradioFoliaHost) window.MineradioFoliaHost.setInterface('folia');
+  });
+  document.getElementById('upload-actions').appendChild(foliaSwitch);
+
   nav.addEventListener('click', function (event) {
     var button = event.target.closest('[data-mobile-view]');
     if (button) openView(button.getAttribute('data-mobile-view'));

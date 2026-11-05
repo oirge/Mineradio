@@ -96,6 +96,12 @@
     else if (event.action === 'seek' && audio) audio.currentTime = event.position;
   });
   plugin.addListener('back', function () {
+    if (document.body.classList.contains('folia-interface-active')) {
+      var folia = document.getElementById('folia-frame');
+      try { if (folia && folia.contentWindow.MineradioFoliaMobileBack && folia.contentWindow.MineradioFoliaMobileBack()) return; } catch (_) {}
+      plugin.minimize();
+      return;
+    }
     var modal = document.querySelector('.modal-mask.show');
     if (modal) {
       var close = modal.querySelector('.modal-close, .close-btn, button[onclick*="close"]');

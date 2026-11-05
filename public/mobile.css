@@ -1,6 +1,6 @@
 /* Scoped to phone/tablet browsers. Electron keeps its desktop layout. */
 #mobile-nav, #mobile-player-more, .mobile-panel-close, .mobile-home-intro,
-#mobile-search-close { display: none; }
+#mobile-search-close, #mobile-folia-switch { display: none; }
 
 body.mobile-layout {
   --mobile-safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
@@ -48,6 +48,7 @@ body.mobile-layout #search-input::placeholder { color: rgba(232,238,245,.62); }
 body.mobile-layout #search-mode-tabs, body.mobile-layout #local-sync-badge { display: none !important; }
 html body.mobile-layout #upload-actions { position: static; display: flex !important; opacity: 1; visibility: visible; transform: none; pointer-events: auto; gap: 0; margin: 0; }
 body.mobile-layout #upload-btn, body.mobile-layout #mobile-search-close { width: 48px; height: 48px; border-radius: 16px; }
+body.mobile-layout #mobile-folia-switch { display: inline-flex; width: 44px; height: 48px; border-radius: 14px; font: 600 20px Georgia,serif; color: var(--fc-accent); }
 body.mobile-layout #folder-import-btn, body.mobile-layout #clear-cover-btn { display: none !important; }
 body.mobile-layout[data-mobile-view=search] #upload-btn { display: none; }
 body.mobile-layout[data-mobile-view=search] #mobile-search-close { display: inline-flex; font-size: 26px; }
@@ -222,10 +223,9 @@ body.mobile-layout .modal-mask { box-sizing: border-box; padding: calc(16px + va
 body.mobile-layout .modal { box-sizing: border-box; width: 100%; max-width: 560px; max-height: calc(100dvh - 32px - var(--mobile-safe-top) - var(--mobile-safe-bottom)); padding: 24px 20px; overflow-y: auto; }
 body.mobile-layout .modal-btn { min-height: 44px; }
 body.mobile-layout #toast { top: calc(68px + var(--mobile-safe-top)); max-width: calc(100vw - 40px); white-space: normal; z-index: 60; }
-body.mobile-layout #folia-floating-switch { top: calc(var(--mobile-safe-top) + 18px); right: calc(var(--mobile-safe-right) + 20px); min-height: 40px; }
-body.mobile-layout:not(.folia-interface-active) #folia-floating-switch { display: none; }
+body.mobile-layout #folia-floating-switch, body.mobile-layout #folia-floating-import { display: none !important; }
 body.mobile-layout.folia-interface-active #mobile-nav { display: none; }
-body.mobile-layout.folia-interface-active #folia-interface { top: var(--mobile-safe-top); bottom: var(--mobile-safe-bottom); }
+body.mobile-layout.folia-interface-active #folia-interface { top: calc(var(--mobile-viewport-top, 0px) + var(--mobile-safe-top)); bottom: auto; left: var(--mobile-safe-left); right: var(--mobile-safe-right); height: calc(var(--mobile-viewport-height, 100dvh) - var(--mobile-safe-top) - var(--mobile-safe-bottom)); }
 body.mobile-layout.mobile-keyboard-open #mobile-nav,
 html body.mobile-layout.mobile-keyboard-open #bottom-bar { display: none !important; }
 body.mobile-layout.mobile-keyboard-open #search-results { top: calc(var(--mobile-header-height) + var(--mobile-viewport-top)); bottom: auto; height: calc(var(--mobile-viewport-height) - var(--mobile-header-height) - 12px); }

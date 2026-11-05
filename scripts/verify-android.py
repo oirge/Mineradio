@@ -17,9 +17,10 @@ def adb(*args):
     return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace').strip()
 
 def start():
-    adb('shell', 'am', 'start', '-n', APP + '/.MainActivity')
+    print(adb('shell', 'am', 'start', '-n', APP + '/.MainActivity'), flush=True)
     for _ in range(40):
-        pid = adb('shell', 'pidof', APP)
+        try: pid = adb('shell', 'pidof', APP)
+        except subprocess.CalledProcessError: pid = ''
         if pid:
             adb('forward', 'tcp:9222', 'localabstract:webview_devtools_remote_' + pid.split()[0])
             try:
@@ -27,7 +28,8 @@ def start():
                 if any('localhost' in item.get('url', '') for item in targets): return
             except Exception: pass
         time.sleep(1)
-    raise AssertionError('Android WebView did not load')
+    (OUT / 'android-startup-logcat.txt').write_text(adb('logcat', '-d', '-t', '1500'), encoding='utf-8')
+    raise AssertionError('Android WebView did not load; see android-startup-logcat.txt')
 
 def tap_document(name):
     for _ in range(25):
@@ -77,12 +79,27 @@ with sync_playwright() as p:
     page.wait_for_function('audio.paused')
     page.locator('#play-btn').click()
     page.wait_for_function('!audio.paused')
+    page.locator('#mobile-folia-switch').click()
+    folia = page.frame_locator('#folia-frame')
+    folia.get_by_test_id('local-mobile-nav').wait_for()
+    folia.get_by_test_id('local-open-library').click()
+    folia.get_by_test_id('local-track-row').first.wait_for()
+    assert page.evaluate('document.getElementById("folia-frame").contentWindow.MineradioFoliaMobileBack()')
+    folia.get_by_test_id('local-library').wait_for(state='hidden')
+    folia.get_by_test_id('local-toggle-play').click()
+    page.wait_for_function('audio.paused')
+    folia.get_by_test_id('local-toggle-play').click()
+    page.wait_for_function('!audio.paused')
+    page.screenshot(path=str(OUT / 'android-folia.png'))
+    checks.append('Folia touch library, playback and Android back handling')
     start_position = page.evaluate('audio.currentTime')
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     time.sleep(5)
     start()
     page.wait_for_function('(before) => audio && !audio.paused && audio.currentTime > before + 2', arg=start_position, timeout=20000)
     checks.append('background playback progresses after Home')
+    folia.get_by_test_id('local-mobile-return').click()
+    page.wait_for_function('!document.body.classList.contains("folia-interface-active")')
     adb('shell', 'am', 'force-stop', APP)
     time.sleep(1)
     start()
