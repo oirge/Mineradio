@@ -166,6 +166,15 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Start Mesa software graphics for the cloud emulator
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri mesa-utils
+          Xvfb :99 -screen 0 1280x1024x24 > /tmp/mineradio-xvfb.log 2>&1 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
+          echo "GALLIUM_DRIVER=llvmpipe" >> "$GITHUB_ENV"
+          DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe glxinfo -B
       - name: Verify Android installation and native import
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -178,7 +187,7 @@ jobs:
           cores: 2
           disable-animations: true
           emulator-options: >-
-            -no-window -gpu swiftshader -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
+            -no-window -gpu host -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
             > /tmp/mineradio-emulator.log 2>&1
           script: python scripts/verify-android.py
       - name: Save cloud emulator diagnostics
@@ -195,6 +204,9 @@ jobs:
           fi
           if [ -f /tmp/mineradio-emulator.log ]; then
             cp /tmp/mineradio-emulator.log output/playwright/mobile/emulator.log
+          fi
+          if [ -f /tmp/mineradio-xvfb.log ]; then
+            cp /tmp/mineradio-xvfb.log output/playwright/mobile/xvfb.log
           fi
       - name: Upload verification evidence
         if: always()
