@@ -68,7 +68,7 @@ def verify_folia_mobile(page, checks, out):
     folia.get_by_test_id('local-rate-1.25').tap()
     page.wait_for_function('audio.playbackRate === 1.25')
     folia.get_by_test_id('local-rate-1').tap()
-    folia.get_by_test_id('local-playback-settings').get_by_role('button', name='关闭', exact=True).tap()
+    folia.get_by_test_id('local-playback-settings').locator('.local-panel-title').get_by_role('button', name='关闭', exact=True).tap()
     folia.get_by_test_id('local-mobile-more-toggle').tap()
     folia.get_by_test_id('local-open-audio').tap()
     inside(folia.get_by_role('dialog'))
