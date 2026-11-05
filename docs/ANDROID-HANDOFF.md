@@ -8,7 +8,7 @@
 - 最新功能及验收代码：`f0f82abbfcb66b210016f34a68247551455d9f21`。本记录所在提交只保存进度，提交信息包含 `[skip ci]`。
 - [Android 1.0.0](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.0) 已发布。
 - **1.0.1 尚未发布，全部原生验收尚未完成。** 不要将 APK 编译通过或已有歌词截图写成最终验收通过。
-- [最新 Android 工作流 42005717035](https://github.com/oirge/Mineradio/actions/runs/42005717035) 构建已成功，浏览器和原生验收开始后，按用户暂停要求请求停止。需要继续该任务后才能完成验收、发布和安装包核验。
+- [最新 Android 工作流 42005717035](https://github.com/oirge/Mineradio/actions/runs/42005717035) 构建已成功，浏览器和原生验收开始后，按用户暂停要求取消，现为 `cancelled`。需要继续该任务后才能完成验收、发布和安装包核验。
 - 不自动安排明天的任务或发送通知；等待用户继续。
 
 ## 用户问题
@@ -51,6 +51,7 @@
 - 原生应全部通过 **9 项**，还需完成 Folia 可见性、返回键、后台播放、强制停止后的授权／曲库及内嵌歌词恢复、精确签名发行包安装启动。
 - 最新工作流构建产物：APK artifact `13403529422`、debug 验收包 `13404861707`、Folia 静态资源 `13404737173`。这些是尚未验收完成的构建产物。
 - 最新视频导出 [42005725101](https://github.com/oirge/Mineradio/actions/runs/42005725101) 已成功。
+- 保存进度时，最新 push [Verify 42005716821](https://github.com/oirge/Mineradio/actions/runs/42005716821) 已在 `Verify Folia playback and display options` 失败，尚未排查；最新 PR Verify `42005725114` 已取消。明天需读取该失败日志，不要将最新完整桌面回归写成通过。
 
 ## 明天继续
 
