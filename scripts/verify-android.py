@@ -209,7 +209,14 @@ with sync_playwright() as p:
         expect(folia.get_by_test_id('local-visualizer')).to_contain_text('手机内嵌歌词', timeout=45000)
         page.wait_for_function('''() => {
             const doc = document.getElementById('folia-frame').contentDocument;
-            const line = doc.querySelector('[data-overlap-fit-line="0"]');
+            // Slow cloud rendering may advance past the first sentence before Folia opens.
+            const position = MineradioFoliaHost.getState().position;
+            let current = null;
+            for (const candidate of lyricsLines) {
+                if (!candidate.fallback && candidate.t <= position) current = candidate;
+            }
+            if (!current) return false;
+            const line = doc.querySelector(`[data-overlap-fit-line="${current.t}"]`);
             const word = line?.querySelector('.inline-block');
             if (!line || !word) return false;
             const rect = line.getBoundingClientRect(), stage = doc.querySelector('[data-testid=local-visualizer]').getBoundingClientRect();
@@ -222,6 +229,10 @@ with sync_playwright() as p:
         completed('Folia renders native embedded lyrics with visible fitted animated text')
     finally:
         diagnostic = page.evaluate('''() => ({ lyrics: lyricsLines, state: MineradioFoliaHost.getState(),
+            fittedLines: [...document.getElementById('folia-frame').contentDocument.querySelectorAll('[data-overlap-fit-line]')].map(line => ({
+                key: line.getAttribute('data-overlap-fit-line'), opacity: getComputedStyle(line).opacity,
+                wordOpacity: line.querySelector('.inline-block') && getComputedStyle(line.querySelector('.inline-block')).opacity,
+                bounds: line.getBoundingClientRect().toJSON() })),
             renderer: document.getElementById('folia-frame').contentDocument.querySelector('[data-testid=local-visualizer]')?.innerHTML.slice(0, 4000) })''')
         (OUT / 'android-embedded-lyrics.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
         page.screenshot(path=str(OUT / 'android-embedded-folia.png'))
