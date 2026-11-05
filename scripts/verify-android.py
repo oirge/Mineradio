@@ -55,8 +55,15 @@ def start():
 
 def tap_document(name):
     for _ in range(25):
-        adb('shell', 'uiautomator', 'dump', '/sdcard/window.xml')
-        tree = ET.fromstring(adb('shell', 'cat', '/sdcard/window.xml'))
+        try:
+            dump = adb('shell', 'uiautomator', 'dump', '/sdcard/window.xml')
+            if 'UI hierchary dumped to:' not in dump and 'UI hierarchy dumped to:' not in dump:
+                raise ValueError('The document picker accessibility tree is not ready')
+            tree = ET.fromstring(adb('shell', 'cat', '/sdcard/window.xml'))
+        except (ValueError, ET.ParseError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            print('Waiting for Android document picker:', str(error), flush=True)
+            time.sleep(1)
+            continue
         for node in tree.iter('node'):
             if node.get('text') == name or node.get('content-desc') == name:
                 bounds = [int(v) for v in re.findall(r'\d+', node.get('bounds', ''))]
@@ -69,7 +76,10 @@ def tap_document(name):
                 adb('shell', 'input', 'tap', str((bounds[0]+bounds[2])//2), str((bounds[1]+bounds[3])//2))
                 break
         time.sleep(1)
-    (OUT / 'android-picker.xml').write_text(adb('shell', 'cat', '/sdcard/window.xml'))
+    try:
+        (OUT / 'android-picker.xml').write_text(adb('shell', 'cat', '/sdcard/window.xml'))
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        pass
     raise AssertionError('Could not select test audio in the Android document picker')
 
 subprocess.check_call(['adb', 'install', '-r', str(ROOT / 'mobile/android/app/build/outputs/apk/debug/app-debug.apk')])
@@ -168,8 +178,15 @@ subprocess.check_call(['adb', 'install', str(ROOT / 'release/Mineradio-Android-1
 launch = adb('shell', 'am', 'start', '-W', '-n', APP + '/.MainActivity')
 assert 'Status: ok' in launch, launch
 for attempt in range(20):
-    adb('shell', 'uiautomator', 'dump', '/sdcard/release-window.xml')
-    layout = adb('shell', 'cat', '/sdcard/release-window.xml')
+    try:
+        dump = adb('shell', 'uiautomator', 'dump', '/sdcard/release-window.xml')
+        if 'UI hierchary dumped to:' not in dump and 'UI hierarchy dumped to:' not in dump:
+            time.sleep(1)
+            continue
+        layout = adb('shell', 'cat', '/sdcard/release-window.xml')
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        time.sleep(1)
+        continue
     if '本地文件' in layout: break
     time.sleep(1)
 else:
