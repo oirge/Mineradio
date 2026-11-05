@@ -154,10 +154,10 @@ def verify_folia_mobile(page, checks, out):
     expect(folia.get_by_role('dialog')).to_have_count(0)
     checks.append('Folia library search, playlist creation, visual themes, playback settings and audio tools')
 
-    # Pause the real source while testing layouts so the fixture cannot end mid-assertion.
+    # Touch seeking is checked above; freeze a known lyric for the geometry sweep.
     folia.get_by_test_id('local-toggle-play').tap()
     page.wait_for_function('audio.paused')
-    touch_seek(7 / page.evaluate('audio.duration'))
+    page.evaluate('audio.currentTime = 7')
     page.wait_for_function('audio.currentTime > 5 && audio.currentTime < 10')
     for width, height in [(320, 568), (360, 800), (430, 932), (768, 1024), (844, 390), (1024, 600)]:
         page.set_viewport_size({'width': width, 'height': height})

@@ -136,7 +136,7 @@ jobs:
 
   verify-android:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
@@ -177,7 +177,9 @@ jobs:
           ram-size: 4096M
           cores: 2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-options: >-
+            -no-window -gpu swiftshader -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
+            > /tmp/mineradio-emulator.log 2>&1
           script: python scripts/verify-android.py
       - name: Save cloud emulator diagnostics
         if: always()
@@ -190,6 +192,9 @@ jobs:
           timeout 15s coredumpctl info --no-pager > output/playwright/mobile/runner-coredumps.txt 2>&1 || true
           if [ -d /tmp/android-runner ]; then
             cp -a /tmp/android-runner output/playwright/mobile/emulator-crashes
+          fi
+          if [ -f /tmp/mineradio-emulator.log ]; then
+            cp /tmp/mineradio-emulator.log output/playwright/mobile/emulator.log
           fi
       - name: Upload verification evidence
         if: always()
