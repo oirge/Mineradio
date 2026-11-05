@@ -47331,7 +47331,7 @@ function startLocalUserStateHydration() {
         customLyricMapHydrated = true;
         if (typeof updateCustomLyricControls === 'function') updateCustomLyricControls();
         var song = typeof currentLyricSong === 'function' ? currentLyricSong() : null;
-        if (song && typeof applyCustomLyricState === 'function') applyCustomLyricState(song, false);
+        if (song && typeof applyCustomLyricState === 'function') applyCustomLyricState(song, true);
       }
     },
     {

@@ -174,6 +174,8 @@ with sync_playwright() as p:
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.wait_for_load_state('domcontentloaded', timeout=60000)
     page.wait_for_function('typeof localLibrarySongs !== "undefined" && localLibrarySongs.length === 1', timeout=30000)
+    page.wait_for_function('customLyricMapHydrated && customLyricPrefsHydrated', timeout=30000)
+    assert not page.locator('#custom-lyric-modal').is_visible(), 'Cold restore must not open the custom lyrics editor'
     page.locator('#mobile-nav [data-mobile-view=player]').click()
     page.locator('#play-btn').click()
     page.wait_for_function('audio && !audio.paused && audio.currentTime > 0.5', timeout=30000)
