@@ -17,9 +17,15 @@ APP = 'com.mineradio.oirge.mobile'
 def adb(*args):
     return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace', timeout=30).strip()
 
+log_file = (OUT / 'android-logcat.txt').open('w', encoding='utf-8')
+log_process = subprocess.Popen(['adb', 'logcat', '-v', 'brief'], stdout=log_file, stderr=subprocess.STDOUT)
+
 def save_logs():
-    try: (OUT / 'android-logcat.txt').write_text(adb('logcat', '-d', '-t', '1500'), encoding='utf-8')
-    except Exception: pass
+    if log_process.poll() is None:
+        log_process.terminate()
+        try: log_process.wait(timeout=5)
+        except subprocess.TimeoutExpired: log_process.kill()
+    log_file.close()
 
 atexit.register(save_logs)
 
@@ -73,7 +79,18 @@ with sync_playwright() as p:
     browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222', no_defaults=True)
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
     page.on('pageerror', lambda error: errors.append(str(error)))
-    page.wait_for_selector('#mobile-nav')
+    try:
+        page.wait_for_selector('#mobile-nav')
+    finally:
+        diagnostic = page.evaluate('''() => ({url: location.href, ready: document.readyState, title: document.title,
+            bodyClass: document.body?.className, width: innerWidth, height: innerHeight,
+            capacitor: typeof Capacitor, native: window.Capacitor?.isNativePlatform?.(),
+            mobile: window.MineradioMobile, nav: document.getElementById('mobile-nav')?.outerHTML,
+            scripts: [...document.scripts].map(script => script.src), text: document.body?.innerText.slice(0, 1600)})''')
+        diagnostic['errors'] = errors
+        (OUT / 'android-startup-state.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
+        print('Android startup:', json.dumps(diagnostic, ensure_ascii=False), flush=True)
+        (OUT / 'android-startup.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
     page.screenshot(path=str(OUT / 'android-home.png'))
     assert page.evaluate('Capacitor.isNativePlatform() && MineradioMobile.active')
     page.locator('.home-local-action').filter(has_text='本地文件').click()
@@ -143,7 +160,7 @@ else:
 (OUT / 'android-release.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p']))
 completed('exact signed release installs and opens its offline import UI')
 
-(OUT / 'android-logcat.txt').write_text(adb('logcat', '-d', '-t', '1500'), encoding='utf-8')
+save_logs()
 (OUT / 'android-results.json').write_text(json.dumps({'checks': checks, 'errors': errors}, ensure_ascii=False, indent=2), encoding='utf-8')
 assert not errors, errors
 print(json.dumps(checks))
