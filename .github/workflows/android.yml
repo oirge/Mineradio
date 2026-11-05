@@ -38,8 +38,7 @@ jobs:
         run: |
           npm install --prefix mobile --ignore-scripts --no-audit --no-fund
           npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
-          python -m pip install playwright pynacl
-          python -m playwright install --with-deps chromium
+          python -m pip install pynacl
       - name: Check source and desktop regressions
         run: |
           node --check public/mobile.js
@@ -50,10 +49,13 @@ jobs:
           node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
       - name: Rebuild embedded Folia for Android
         run: node scripts/build-folia.js
-      - name: Verify mobile browser interactions
-        run: |
-          PORT=3077 HOST=127.0.0.1 node server.js > /tmp/mineradio-server.log 2>&1 &
-          python scripts/verify-mobile-browser.py
+      - name: Upload embedded Folia for browser acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-android-static
+          path: public/vendor/folia/
+          if-no-files-found: error
+          retention-days: 14
       - name: Prepare persistent APK signing
         env:
           SAVED_KEYSTORE: ${{ secrets.MOBILE_KEYSTORE_BASE64 }}
@@ -95,11 +97,34 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mineradio-android-test
-          path: |
-            mobile/android/app/build/outputs/apk/debug/app-debug.apk
-            output/playwright/mobile/Mobile-Blue.wav
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+  verify-browser:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: folia-android-static
+          path: public/vendor/folia/
+      - name: Install browser acceptance driver
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Verify mobile browser interactions
+        run: |
+          PORT=3077 HOST=127.0.0.1 node server.js > /tmp/mineradio-server.log 2>&1 &
+          python scripts/verify-mobile-browser.py
       - name: Upload browser verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -135,7 +160,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: mineradio-android-test
-          path: .
+          path: mobile/android/app/build/outputs/apk/debug/
       - name: Enable cloud emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -169,7 +194,7 @@ jobs:
           retention-days: 14
 
   publish:
-    needs: [build, verify-android]
+    needs: [build, verify-browser, verify-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write

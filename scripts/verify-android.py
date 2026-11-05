@@ -1,5 +1,8 @@
 """Cloud Android emulator: install, SAF import, native service and cold restore."""
 import json
+import math
+import struct
+import wave
 import atexit
 import re
 import subprocess
@@ -13,6 +16,12 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'output/playwright/mobile'
 OUT.mkdir(parents=True, exist_ok=True)
 APP = 'com.mineradio.oirge.mobile'
+
+# The native job owns its fixture so it can run independently of browser rendering.
+with wave.open(str(OUT / 'Mobile-Blue.wav'), 'wb') as stream:
+    stream.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
+    second = b''.join(struct.pack('<h', int(3000 * math.sin(2 * math.pi * 220 * i / 8000))) for i in range(8000))
+    stream.writeframes(second * 300)
 
 def adb(*args):
     return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace', timeout=30).strip()

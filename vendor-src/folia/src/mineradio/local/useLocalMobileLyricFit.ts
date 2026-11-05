@@ -10,6 +10,7 @@ export function useLocalMobileLyricFit(stage: RefObject<HTMLDivElement | null>, 
         if (!enabled || !area || lineKey === undefined) return;
         let frame = 0;
         let fitted: HTMLElement | null = null;
+        const measured = new WeakSet<HTMLElement>();
         const clear = () => {
             for (const name of ['scale', 'x', 'y']) fitted?.style.removeProperty(`--local-mobile-lyric-${name}`);
         };
@@ -20,12 +21,14 @@ export function useLocalMobileLyricFit(stage: RefObject<HTMLDivElement | null>, 
             const words = line?.querySelectorAll<HTMLElement>('.inline-block.whitespace-nowrap');
             if (!line || !words?.length || !line.offsetWidth) return;
             fitted = line;
+            if (!measured.has(line)) { measured.add(line); resize.observe(line); }
             const chaotic = theme.animationIntensity === 'chaotic';
             const offset = theme.animationIntensity === 'calm' ? 0 : chaotic ? 60 : 20;
             const rotation = theme.animationIntensity === 'calm' ? 0 : chaotic ? 30 : 5;
             const scale = chaotic ? 1.4 : 1.3;
             let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
             words.forEach(word => {
+                if (!measured.has(word)) { measured.add(word); resize.observe(word); }
                 const size = parseFloat(getComputedStyle(word).fontSize);
                 const pose = { scale, rotate: rotation, passedRotate: 22.5 };
                 const reach = getGlowWordReach(word.offsetWidth, size, pose);

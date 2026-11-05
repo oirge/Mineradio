@@ -25,7 +25,7 @@ def verify_folia_mobile(page, checks, out):
         return box
 
     def lyrics_inside_stage():
-        page.wait_for_function('''() => {
+        condition = '''() => {
             const doc = document.getElementById('folia-frame').contentDocument;
             const stage = doc.querySelector('[data-testid=local-visualizer]');
             const line = stage?.querySelector('[data-overlap-fit-line="0"]');
@@ -38,7 +38,19 @@ def verify_folia_mobile(page, checks, out):
                     && box.left >= area.left - 1 && box.right <= area.right + 1
                     && box.top >= area.top - 1 && box.bottom <= area.bottom + 1;
             });
-        }''')
+        }'''
+        try:
+            page.wait_for_function(condition)
+        except Exception:
+            print('Folia mobile bounds:', page.evaluate('''() => {
+                const doc = document.getElementById('folia-frame').contentDocument;
+                const stage = doc.querySelector('[data-testid=local-visualizer]');
+                return { width: innerWidth, height: innerHeight, stage: stage?.getBoundingClientRect().toJSON(),
+                    words: [...(stage?.querySelectorAll('.inline-block.whitespace-nowrap') || [])].map(word => ({
+                        text: word.textContent, box: word.getBoundingClientRect().toJSON(), opacity: doc.defaultView.getComputedStyle(word).opacity })) };
+            }'''), flush=True)
+            page.screenshot(path=str(out / 'folia-bounds-error.png'))
+            raise
 
     def touch_seek(fraction):
         slider = folia.get_by_test_id('local-seek')
