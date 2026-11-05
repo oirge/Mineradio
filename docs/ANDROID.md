@@ -4,8 +4,9 @@ Android 版本基于现有本地音乐播放器，采用 Capacitor 8，安装后
 
 ## 安装
 
-从 [Android 预览版 Release](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.0) 下载 `Mineradio-Android-1.0.0.apk`，在手机打开并允许浏览器安装此来源的应用。
+从 [Android 预览版 Release](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.1) 下载 `Mineradio-Android-1.0.1.apk`，在手机打开并允许浏览器安装此来源的应用。
 
+- 1.0.1 修复内嵌歌词识别及 Folia 无歌词显示的问题，沿用原有签名并提升安装版本号；旧版识别失败缓存会重新扫描。
 - 支持 Android 7.0 及以上，音频格式以系统 WebView 的解码能力为准。
 - 在首页选择「本地文件」可多选音乐、歌词和封面；「导入文件夹」授权一个音乐目录。
 - 导入采用 Android 系统文件选择器，应用保存访问授权，重启后恢复曲库。原始音乐从系统文档提供器流式播放。

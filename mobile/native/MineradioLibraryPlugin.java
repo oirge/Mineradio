@@ -153,8 +153,9 @@ public class MineradioLibraryPlugin extends Plugin {
             try {
                 // Only URIs selected through SAF are readable through this bridge.
                 if (!fileMap().containsKey(value)) { call.reject("未授权的音乐文件"); return; }
-                long start = Math.max(0, call.getLong("start", 0L));
-                long end = call.getLong("end", 0L);
+                // JSON offsets normally arrive as Integer; PluginCall.getLong accepts only Long.
+                long start = Math.max(0, call.getData().optLong("start", 0L));
+                long end = call.getData().optLong("end", 0L);
                 int length = (int) Math.min(8 * 1024 * 1024, end > start ? end - start : 8 * 1024 * 1024);
                 ByteArrayOutputStream bytes = new ByteArrayOutputStream(Math.min(length, 65536));
                 try (InputStream input = getContext().getContentResolver().openInputStream(Uri.parse(value))) {

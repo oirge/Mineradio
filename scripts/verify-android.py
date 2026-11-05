@@ -10,18 +10,34 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'output/playwright/mobile'
 OUT.mkdir(parents=True, exist_ok=True)
 APP = 'com.mineradio.oirge.mobile'
+LYRIC_TEXT = '[00:00.00]手机内嵌歌词 Native line one\n[01:00.00]手机内嵌歌词 Native line two\n[04:59.00]手机内嵌歌词 Native final line\n'
 
 # The native job owns its fixture so it can run independently of browser rendering.
 with wave.open(str(OUT / 'Mobile-Blue.wav'), 'wb') as stream:
     stream.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
     second = b''.join(struct.pack('<h', int(3000 * math.sin(2 * math.pi * 220 * i / 8000))) for i in range(8000))
     stream.writeframes(second * 300)
+
+def syncsafe(value):
+    return bytes((value >> shift) & 0x7f for shift in (21, 14, 7, 0))
+
+# Store real ID3v2.4 USLT lyrics after the WAV audio payload. This requires
+# nonzero native byte offsets and cannot pass by reading the start of the file.
+lyric_body = b'\x03eng\x00' + LYRIC_TEXT.encode('utf-8')
+lyric_frame = b'USLT' + syncsafe(len(lyric_body)) + b'\x00\x00' + lyric_body
+lyric_tag = b'ID3\x04\x00\x00' + syncsafe(len(lyric_frame)) + lyric_frame
+with (OUT / 'Mobile-Blue.wav').open('r+b') as stream:
+    stream.seek(0, 2)
+    stream.write(b'id3 ' + struct.pack('<I', len(lyric_tag)) + lyric_tag + (b'\x00' if len(lyric_tag) % 2 else b''))
+    riff_end = stream.tell()
+    stream.seek(4)
+    stream.write(struct.pack('<I', riff_end - 8))
 
 def adb(*args):
     return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace', timeout=30).strip()
@@ -165,6 +181,14 @@ with sync_playwright() as p:
     page.wait_for_function('audio.currentTime > 1', timeout=20000)
     assert page.evaluate('audio.src.includes("_capacitor_content_")'), page.evaluate('audio.src')
     completed('native SAF import and streamed WAV playback')
+    assert page.evaluate('''async () => {
+        const file = localLibrarySongs[0].localFile;
+        const result = await MineradioNativeLibraryApi.readLocalFileRange(file.fullPath, 8, 12);
+        return result.byteLength === 4 && new TextDecoder().decode(base64ChunksToBytes(result.base64Chunks, result.byteLength)) === 'WAVE';
+    }'''), 'Native range reads must honor integer start/end offsets'
+    page.wait_for_function('lyricsLines.some(line => !line.fallback && line.text.includes("手机内嵌歌词"))', timeout=30000)
+    page.wait_for_function('stageLyrics && stageLyrics.current && stageLyrics.current.userData.lyric', timeout=30000)
+    completed('native integer byte ranges and real embedded ID3 lyrics reach the main lyric stage')
     page.screenshot(path=str(OUT / 'android-player.png'))
     assert 'PlaybackService' in adb('shell', 'dumpsys', 'activity', 'services', APP)
     assert 'Mineradio' in adb('shell', 'dumpsys', 'media_session')
@@ -178,6 +202,29 @@ with sync_playwright() as p:
     page.locator('#mobile-folia-switch').click()
     folia = page.frame_locator('#folia-frame')
     folia.get_by_test_id('local-mobile-nav').wait_for()
+    folia.get_by_test_id('local-open-settings').click()
+    folia.get_by_test_id('local-visualizer-mode').select_option('classic')
+    folia.get_by_test_id('local-visual-settings').get_by_role('button', name='关闭', exact=True).click()
+    try:
+        expect(folia.get_by_test_id('local-visualizer')).to_contain_text('手机内嵌歌词', timeout=45000)
+        page.wait_for_function('''() => {
+            const doc = document.getElementById('folia-frame').contentDocument;
+            const line = doc.querySelector('[data-overlap-fit-line="0"]');
+            const word = line?.querySelector('.inline-block');
+            if (!line || !word) return false;
+            const rect = line.getBoundingClientRect(), stage = doc.querySelector('[data-testid=local-visualizer]').getBoundingClientRect();
+            return Number(doc.defaultView.getComputedStyle(line).opacity) > .9
+                && Number(doc.defaultView.getComputedStyle(word).opacity) > .9
+                && rect.width > 0 && rect.height > 0
+                && rect.left >= stage.left - 1 && rect.right <= stage.right + 1
+                && rect.top >= stage.top - 1 && rect.bottom <= stage.bottom + 1;
+        }''', timeout=30000)
+        completed('Folia renders native embedded lyrics with visible fitted animated text')
+    finally:
+        diagnostic = page.evaluate('''() => ({ lyrics: lyricsLines, state: MineradioFoliaHost.getState(),
+            renderer: document.getElementById('folia-frame').contentDocument.querySelector('[data-testid=local-visualizer]')?.innerHTML.slice(0, 4000) })''')
+        (OUT / 'android-embedded-lyrics.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
+        page.screenshot(path=str(OUT / 'android-embedded-folia.png'))
     folia.get_by_test_id('local-open-library').click()
     folia.get_by_test_id('local-track-row').first.wait_for()
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
@@ -210,13 +257,14 @@ with sync_playwright() as p:
     page.locator('#mobile-nav [data-mobile-view=player]').click()
     page.locator('#play-btn').click()
     page.wait_for_function('audio && !audio.paused && audio.currentTime > 0.5', timeout=30000)
+    page.wait_for_function('lyricsLines.some(line => !line.fallback && line.text.includes("手机内嵌歌词"))', timeout=30000)
     completed('cold restart restores persisted URI grants and music library')
     page.screenshot(path=str(OUT / 'android-restored.png'))
 
 # The release has debugging disabled; install the exact signed download and inspect its real UI.
 adb('shell', 'am', 'force-stop', APP)
 adb('uninstall', APP)
-subprocess.check_call(['adb', 'install', str(ROOT / 'release/Mineradio-Android-1.0.0.apk')])
+subprocess.check_call(['adb', 'install', str(ROOT / 'release/Mineradio-Android-1.0.1.apk')])
 launch = adb('shell', 'am', 'start', '-W', '-n', APP + '/.MainActivity')
 assert 'Status: ok' in launch, launch
 layout = ''

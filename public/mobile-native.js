@@ -8,15 +8,46 @@
   var lastState = '';
   var playbackTimer = 0;
 
+  var NATIVE_READER_VERSION = 1;
+  var NATIVE_READ_CHUNK_BYTES = 1024 * 1024;
+  var NATIVE_READ_MAX_BYTES = 64 * 1024 * 1024;
+
+  // Keep each bridge message small while honoring the parser's complete byte range.
+  async function readNativeFileRange(uri, start, end) {
+    start = Math.max(0, Math.floor(Number(start) || 0));
+    end = Math.max(0, Math.floor(Number(end) || 0));
+    if (end && end <= start) return { ok: true, base64Chunks: [], byteLength: 0 };
+    if (end && end - start > NATIVE_READ_MAX_BYTES) throw new Error('NATIVE_FILE_RANGE_TOO_LARGE');
+    var chunks = [];
+    var length = 0;
+    while (!end || start + length < end) {
+      var remaining = NATIVE_READ_MAX_BYTES - length;
+      var amount = Math.min(NATIVE_READ_CHUNK_BYTES, end ? end - start - length : remaining || 1);
+      var offset = start + length;
+      var result = await plugin.readRange({ uri: uri, start: offset, end: offset + amount });
+      if (!result || !result.ok) throw new Error('NATIVE_FILE_RANGE_FAILED');
+      var size = Number(result.byteLength);
+      if (!Number.isInteger(size) || size < 0 || size > amount || !Array.isArray(result.base64Chunks)) {
+        throw new Error('NATIVE_FILE_RANGE_INVALID');
+      }
+      if (length + size > NATIVE_READ_MAX_BYTES) throw new Error('NATIVE_FILE_RANGE_TOO_LARGE');
+      for (var i = 0; i < result.base64Chunks.length; i++) chunks.push(result.base64Chunks[i]);
+      length += size;
+      if (size < amount) break;
+    }
+    return { ok: true, base64Chunks: chunks, byteLength: length };
+  }
+
   window.MineradioNativeLibraryApi = {
+    readerVersion: NATIVE_READER_VERSION,
     readLocalFileRange: function (uri, start, end) {
-      return plugin.readRange({ uri: uri, start: start || 0, end: end || 0 });
+      return readNativeFileRange(uri, start, end);
     }
   };
 
   async function loadLibrary(result, autoPlay) {
     var files = (result.files || []).map(function (entry) {
-      return Object.assign({}, entry, { url: cap.convertFileSrc(entry.fullPath) });
+      return Object.assign({}, entry, { url: cap.convertFileSrc(entry.fullPath), nativeReaderVersion: NATIVE_READER_VERSION });
     });
     if (files.length) {
       await handleLocalFolderFiles(files, { autoPlay: !!autoPlay, restored: !autoPlay });

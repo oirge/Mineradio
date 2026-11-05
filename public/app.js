@@ -9733,6 +9733,10 @@ function canUseCachedLocalMetadata(song, record) {
  */
 function applyLocalAssetCacheToSong(song, record, opts) {
   if (!song || !record || record.id !== song.localKey) return false;
+  var nativeReader = song.localFile && song.localFile.nativeReaderVersion;
+  // Re-read native tags after an Android reader update, including cached "no lyrics" results.
+  var nativeSignature = nativeReader ? localLibraryFileSignatureFromSong(song) : '';
+  if (nativeReader && record.localLibraryFileSignature !== nativeSignature) return false;
   opts = opts || {};
   var includeLyrics = opts.includeLyrics !== false;
   var includeCover = opts.includeCover !== false;
@@ -9765,7 +9769,7 @@ function applyLocalAssetCacheToSong(song, record, opts) {
     song.localReplayGain = record.localReplayGain;
   }
   var lyricFileSig = localAssetFileSignature(song.localLyricFile);
-  var canUseLyricCache = lyricRecord && (song.localLyricFile
+  var canUseLyricCache = lyricRecord && (!nativeReader || lyricRecord.localLibraryFileSignature === nativeSignature) && (song.localLyricFile
     ? (lyricRecord.localLyricFileSignature && lyricRecord.localLyricFileSignature === lyricFileSig)
     : lyricRecord.localLyricSource !== 'file');
   if (includeLyrics && lyricRecord && canUseLyricCache && (lyricRecord.localLyricText || lyricRecord.localLyricLoaded)) {
@@ -33248,13 +33252,15 @@ function localLibraryPathKeyFromSong(song) {
   return normalizeLocalLibraryPathKey(song.localFilePathAbsolute || song.localPath || song.name || '');
 }
 function localLibraryFileSignatureFromFile(file) {
-  return localLibraryPathKeyFromFile(file) + '|' + localFileSize(file) + '|' + localFileLastModified(file);
+  return localLibraryPathKeyFromFile(file) + '|' + localFileSize(file) + '|' + localFileLastModified(file)
+    + (file && file.nativeReaderVersion ? '|native-reader:' + file.nativeReaderVersion : '');
 }
 function localLibraryFileSignatureFromSong(song) {
   if (!song) return '';
   return localLibraryPathKeyFromSong(song) + '|' +
     (Number(song.localFileSize || (song.localFile && localFileSize(song.localFile)) || 0) || 0) + '|' +
-    (Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0);
+    (Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0)
+    + (song.localFile && song.localFile.nativeReaderVersion ? '|native-reader:' + song.localFile.nativeReaderVersion : '');
 }
 function localPathDir(file) {
   var p = localFilePath(file);
