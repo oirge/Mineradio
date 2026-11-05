@@ -171,7 +171,9 @@ with sync_playwright() as p:
     # Force stop closes the CDP target; reconnect to the relaunched WebView.
     browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222', no_defaults=True)
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
-    page.wait_for_function('localLibrarySongs.length === 1', timeout=30000)
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    page.wait_for_load_state('domcontentloaded', timeout=60000)
+    page.wait_for_function('typeof localLibrarySongs !== "undefined" && localLibrarySongs.length === 1', timeout=30000)
     page.locator('#mobile-nav [data-mobile-view=player]').click()
     page.locator('#play-btn').click()
     page.wait_for_function('audio && !audio.paused && audio.currentTime > 0.5', timeout=30000)
