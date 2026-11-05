@@ -1,5 +1,6 @@
 """Cloud Android emulator: install, SAF import, native service and cold restore."""
 import json
+import atexit
 import re
 import subprocess
 import time
@@ -15,6 +16,12 @@ APP = 'com.mineradio.oirge.mobile'
 
 def adb(*args):
     return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace').strip()
+
+def save_logs():
+    try: (OUT / 'android-logcat.txt').write_text(adb('logcat', '-d', '-t', '1500'), encoding='utf-8')
+    except Exception: pass
+
+atexit.register(save_logs)
 
 def start():
     print(adb('shell', 'am', 'start', '-n', APP + '/.MainActivity'), flush=True)
@@ -57,7 +64,7 @@ start()
 checks = []
 errors = []
 with sync_playwright() as p:
-    browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222')
+    browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222', no_defaults=True)
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.wait_for_selector('#mobile-nav')
@@ -104,7 +111,7 @@ with sync_playwright() as p:
     time.sleep(1)
     start()
     # Force stop closes the CDP target; reconnect to the relaunched WebView.
-    browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222')
+    browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222', no_defaults=True)
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
     page.wait_for_function('localLibrarySongs.length === 1', timeout=30000)
     page.locator('#mobile-nav [data-mobile-view=player]').click()

@@ -1,4 +1,5 @@
 """Cloud touch checks for the embedded Folia surface and shared host playback."""
+import json
 import re
 from playwright.sync_api import expect
 
@@ -14,7 +15,6 @@ def verify_folia_mobile(page, checks, out):
     expect(folia.get_by_test_id('local-mobile-nav')).to_be_visible(timeout=30000)
     assert page.evaluate('audio.src') == source
     assert page.evaluate('audio.currentTime') >= position - .5
-    page.screenshot(path=str(out / 'folia-lyrics.png'))
 
     def inside(locator):
         box = locator.bounding_box()
@@ -64,7 +64,28 @@ def verify_folia_mobile(page, checks, out):
     page.screenshot(path=str(out / 'folia-settings-light.png'))
     folia.get_by_test_id('local-theme').select_option('dark')
     folia.get_by_test_id('local-visual-settings').get_by_role('button', name='关闭', exact=True).tap()
-    expect(folia.get_by_test_id('local-visualizer')).to_contain_text(re.compile('Mobile music test|Local lyrics continue|Touch playback works'), timeout=30000)
+    # Track switches restore bookmarks. Seek into a known lyric before checking the renderer.
+    folia.get_by_test_id('local-toggle-play').tap()
+    page.wait_for_function('audio.paused')
+    seek = folia.get_by_test_id('local-seek').bounding_box()
+    page.touchscreen.tap(seek['x'] + seek['width'] * .08, seek['y'] + seek['height'] / 2)
+    page.wait_for_function('audio.currentTime > 5 && audio.currentTime < 10')
+    try:
+        expect(folia.get_by_test_id('local-player')).to_have_attribute('data-active', 'true')
+        expect(folia.get_by_test_id('local-visualizer')).to_contain_text(re.compile('Mobile music test|Local lyrics continue|Touch playback works'), timeout=30000)
+    finally:
+        diagnostic = page.evaluate('''() => {
+            const doc = document.getElementById('folia-frame').contentDocument;
+            return { state: MineradioFoliaHost.getState(), lyrics: lyricsLines,
+                frameHidden: doc.hidden, player: doc.querySelector('[data-testid=local-player]')?.outerHTML.slice(0, 1800),
+                renderer: doc.querySelector('[data-testid=local-visualizer]')?.innerHTML.slice(0, 2400),
+                errors: [...doc.querySelectorAll('[role=alert]')].map(node => node.textContent) };
+        }''')
+        (out / 'folia-lyrics-state.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
+        print('Folia lyric state:', json.dumps(diagnostic, ensure_ascii=False), flush=True)
+        page.screenshot(path=str(out / 'folia-lyrics.png'))
+    folia.get_by_test_id('local-toggle-play').tap()
+    page.wait_for_function('!audio.paused')
     folia.get_by_test_id('local-open-playback').tap()
     inside(folia.get_by_test_id('local-playback-settings'))
     folia.get_by_test_id('local-rate-1.25').tap()
