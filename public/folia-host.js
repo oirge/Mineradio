@@ -488,7 +488,8 @@
   }
   function scheduleBarHide() {
     if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
-    if (!active || barLock || barDragging || barFocused || document.body.classList.contains('mobile-layout')) return;
+    if (document.body.classList.contains('mobile-layout')) return;
+    if (!active || barLock || barDragging || barFocused) return;
     barHideTimer = global.setTimeout(function () { barHideTimer = 0; if (active && !barLock && !barDragging && !barFocused) setBarHidden(true); }, BAR_HIDE_DELAY);
   }
   function revealBar(persist) {
@@ -500,7 +501,8 @@
   function setTopHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-topnav-hidden', !!h && !document.body.classList.contains('mobile-layout')); }
   function scheduleTopHide() {
     if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
-    if (!active || topLock || topFocused || document.body.classList.contains('mobile-layout')) return;
+    if (document.body.classList.contains('mobile-layout')) return;
+    if (!active || topLock || topFocused) return;
     topHideTimer = global.setTimeout(function () { topHideTimer = 0; if (active && !topLock && !topFocused) setTopHidden(true); }, CHROME_HIDE_DELAY);
   }
   function revealTop(persist) {
