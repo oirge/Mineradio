@@ -23,13 +23,28 @@ def verify_folia_mobile(page, checks, out):
         assert box['x'] >= -1 and box['y'] >= -1 and box['x'] + box['width'] <= size['width'] + 1 and box['y'] + box['height'] <= size['height'] + 1, (box, size)
         return box
 
+    def touch_seek(fraction):
+        slider = folia.get_by_test_id('local-seek')
+        box = slider.bounding_box()
+        current = slider.evaluate('(input) => Number(input.value) / Number(input.max)')
+        start = box['x'] + 8 + (box['width'] - 16) * current
+        target = box['x'] + 8 + (box['width'] - 16) * fraction
+        y = box['y'] + box['height'] / 2
+        session = page.context.new_cdp_session(page)
+        try:
+            session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': start, 'y': y}]})
+            for step in range(1, 7):
+                session.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': start + (target - start) * step / 6, 'y': y}]})
+            session.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        finally:
+            session.detach()
+
     for testid in ['local-toggle-play', 'local-next', 'local-previous', 'local-mobile-return']:
         box = inside(folia.get_by_test_id(testid))
         assert box['width'] >= 44 and box['height'] >= 44, (testid, box)
     folia.get_by_test_id('local-toggle-play').tap()
     page.wait_for_function('audio.paused')
-    seek = folia.get_by_test_id('local-seek').bounding_box()
-    page.touchscreen.tap(seek['x'] + seek['width'] * .4, seek['y'] + seek['height'] / 2)
+    touch_seek(.4)
     page.wait_for_function('audio.currentTime > 30 && audio.currentTime < 43')
     folia.get_by_test_id('local-toggle-play').tap()
     page.wait_for_function('!audio.paused')
@@ -67,10 +82,9 @@ def verify_folia_mobile(page, checks, out):
     # Track switches restore bookmarks. Seek into a known lyric before checking the renderer.
     folia.get_by_test_id('local-toggle-play').tap()
     page.wait_for_function('audio.paused')
-    seek = folia.get_by_test_id('local-seek').bounding_box()
-    page.touchscreen.tap(seek['x'] + seek['width'] * .08, seek['y'] + seek['height'] / 2)
-    page.wait_for_function('audio.currentTime > 5 && audio.currentTime < 10')
     try:
+        touch_seek(.08)
+        page.wait_for_function('audio.currentTime > 5 && audio.currentTime < 10')
         expect(folia.get_by_test_id('local-player')).to_have_attribute('data-active', 'true')
         expect(folia.get_by_test_id('local-visualizer')).to_contain_text(re.compile('Mobile music test|Local lyrics continue|Touch playback works'), timeout=30000)
     finally:
