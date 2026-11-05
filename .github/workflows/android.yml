@@ -174,7 +174,13 @@ jobs:
           echo "DISPLAY=:99" >> "$GITHUB_ENV"
           echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
           echo "GALLIUM_DRIVER=llvmpipe" >> "$GITHUB_ENV"
-          DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe glxinfo -B
+          for attempt in $(seq 1 20); do
+            if DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe glxinfo -B; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
       - name: Verify Android installation and native import
         uses: reactivecircus/android-emulator-runner@v2
         with:
