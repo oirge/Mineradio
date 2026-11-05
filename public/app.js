@@ -202,6 +202,7 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
   ['首页', 'Home'],
+  ['搜索', 'Search'],
   ['正在播放', 'Now playing'],
   ['设置', 'Settings'],
   ['手机导航', 'Mobile navigation'],

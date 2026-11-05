@@ -15,7 +15,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 APP = 'com.mineradio.oirge.mobile'
 
 def adb(*args):
-    return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace').strip()
+    return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace', timeout=30).strip()
 
 def save_logs():
     try: (OUT / 'android-logcat.txt').write_text(adb('logcat', '-d', '-t', '1500'), encoding='utf-8')
@@ -63,6 +63,12 @@ adb('shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_
 start()
 checks = []
 errors = []
+
+def completed(check):
+    checks.append(check)
+    (OUT / 'android-results.json').write_text(json.dumps({'checks': checks, 'errors': errors}, ensure_ascii=False, indent=2), encoding='utf-8')
+    print('PASS:', check, flush=True)
+
 with sync_playwright() as p:
     browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222', no_defaults=True)
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
@@ -75,11 +81,11 @@ with sync_playwright() as p:
     page.wait_for_function('localLibrarySongs.length === 1 && audio && !audio.paused', timeout=45000)
     page.wait_for_function('audio.currentTime > 1', timeout=20000)
     assert page.evaluate('audio.src.includes("_capacitor_content_")'), page.evaluate('audio.src')
-    checks.append('native SAF import and streamed WAV playback')
+    completed('native SAF import and streamed WAV playback')
     page.screenshot(path=str(OUT / 'android-player.png'))
     assert 'PlaybackService' in adb('shell', 'dumpsys', 'activity', 'services', APP)
     assert 'Mineradio' in adb('shell', 'dumpsys', 'media_session')
-    checks.append('foreground playback service and media notification')
+    completed('foreground playback service and media notification')
     page.locator('#mobile-nav [data-mobile-view=settings]').click()
     page.locator('[aria-label="关闭设置"]').click()
     page.locator('#play-btn').click()
@@ -98,13 +104,13 @@ with sync_playwright() as p:
     folia.get_by_test_id('local-toggle-play').click()
     page.wait_for_function('!audio.paused')
     page.screenshot(path=str(OUT / 'android-folia.png'))
-    checks.append('Folia touch library, playback and Android back handling')
+    completed('Folia touch library, playback and Android back handling')
     start_position = page.evaluate('audio.currentTime')
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     time.sleep(5)
     start()
     page.wait_for_function('(before) => audio && !audio.paused && audio.currentTime > before + 2', arg=start_position, timeout=20000)
-    checks.append('background playback progresses after Home')
+    completed('background playback progresses after Home')
     folia.get_by_test_id('local-mobile-return').click()
     page.wait_for_function('!document.body.classList.contains("folia-interface-active")')
     adb('shell', 'am', 'force-stop', APP)
@@ -117,8 +123,25 @@ with sync_playwright() as p:
     page.locator('#mobile-nav [data-mobile-view=player]').click()
     page.locator('#play-btn').click()
     page.wait_for_function('audio && !audio.paused && audio.currentTime > 0.5', timeout=30000)
-    checks.append('cold restart restores persisted URI grants and music library')
+    completed('cold restart restores persisted URI grants and music library')
     page.screenshot(path=str(OUT / 'android-restored.png'))
+
+# The release has debugging disabled; install the exact signed download and inspect its real UI.
+adb('shell', 'am', 'force-stop', APP)
+adb('uninstall', APP)
+subprocess.check_call(['adb', 'install', str(ROOT / 'release/Mineradio-Android-1.0.0.apk')])
+launch = adb('shell', 'am', 'start', '-W', '-n', APP + '/.MainActivity')
+assert 'Status: ok' in launch, launch
+for attempt in range(20):
+    adb('shell', 'uiautomator', 'dump', '/sdcard/release-window.xml')
+    layout = adb('shell', 'cat', '/sdcard/release-window.xml')
+    if '本地文件' in layout: break
+    time.sleep(1)
+else:
+    (OUT / 'android-release-window.xml').write_text(layout, encoding='utf-8')
+    raise AssertionError('The signed release did not show the offline import UI')
+(OUT / 'android-release.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p']))
+completed('exact signed release installs and opens its offline import UI')
 
 (OUT / 'android-logcat.txt').write_text(adb('logcat', '-d', '-t', '1500'), encoding='utf-8')
 (OUT / 'android-results.json').write_text(json.dumps({'checks': checks, 'errors': errors}, ensure_ascii=False, indent=2), encoding='utf-8')
