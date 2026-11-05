@@ -174,8 +174,10 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
+          ram-size: 4096M
+          cores: 2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: python scripts/verify-android.py
       - name: Save cloud emulator diagnostics
         if: always()
@@ -183,7 +185,12 @@ jobs:
           mkdir -p output/playwright/mobile
           free -h | tee output/playwright/mobile/runner-memory.txt
           df -h | tee output/playwright/mobile/runner-disk.txt
-          sudo dmesg -T | tail -n 50 | tee output/playwright/mobile/runner-kernel.txt
+          sudo dmesg -T | tail -n 120 | tee output/playwright/mobile/runner-kernel.txt
+          ps -eo pid,ppid,stat,%cpu,%mem,rss,args > output/playwright/mobile/runner-processes.txt
+          timeout 15s coredumpctl info --no-pager > output/playwright/mobile/runner-coredumps.txt 2>&1 || true
+          if [ -d /tmp/android-runner ]; then
+            cp -a /tmp/android-runner output/playwright/mobile/emulator-crashes
+          fi
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4

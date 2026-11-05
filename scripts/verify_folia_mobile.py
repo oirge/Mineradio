@@ -157,6 +157,8 @@ def verify_folia_mobile(page, checks, out):
     # Pause the real source while testing layouts so the fixture cannot end mid-assertion.
     folia.get_by_test_id('local-toggle-play').tap()
     page.wait_for_function('audio.paused')
+    touch_seek(7 / page.evaluate('audio.duration'))
+    page.wait_for_function('audio.currentTime > 5 && audio.currentTime < 10')
     for width, height in [(320, 568), (360, 800), (430, 932), (768, 1024), (844, 390), (1024, 600)]:
         page.set_viewport_size({'width': width, 'height': height})
         for view, surface in [('lyrics', 'local-visualizer'), ('records', 'local-record-wall'), ('posters', 'local-poster-wall')]:
