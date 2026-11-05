@@ -7,6 +7,7 @@ from playwright.sync_api import expect
 def verify_folia_mobile(page, checks, out):
     page.set_viewport_size({'width': 390, 'height': 844})
     page.evaluate('MineradioMobile.openView("player")')
+    page.locator('#play-btn').tap()
     page.wait_for_function('audio && !audio.paused')
     source = page.evaluate('audio.src')
     position = page.evaluate('audio.currentTime')
@@ -45,7 +46,7 @@ def verify_folia_mobile(page, checks, out):
     folia.get_by_test_id('local-toggle-play').tap()
     page.wait_for_function('audio.paused')
     touch_seek(.4)
-    page.wait_for_function('audio.currentTime > 30 && audio.currentTime < 43')
+    page.wait_for_function('audio.currentTime > audio.duration * .37 && audio.currentTime < audio.duration * .43')
     folia.get_by_test_id('local-toggle-play').tap()
     page.wait_for_function('!audio.paused')
     original = page.evaluate('currentIdx')
@@ -83,7 +84,7 @@ def verify_folia_mobile(page, checks, out):
     folia.get_by_test_id('local-toggle-play').tap()
     page.wait_for_function('audio.paused')
     try:
-        touch_seek(.08)
+        touch_seek(7 / page.evaluate('audio.duration'))
         page.wait_for_function('audio.currentTime > 5 && audio.currentTime < 10')
         expect(folia.get_by_test_id('local-player')).to_have_attribute('data-active', 'true')
         expect(folia.get_by_test_id('local-visualizer')).to_contain_text(re.compile('Mobile music test|Local lyrics continue|Touch playback works'), timeout=30000)

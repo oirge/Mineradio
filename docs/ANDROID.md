@@ -20,7 +20,7 @@ Android 版本基于现有本地音乐播放器，采用 Capacitor 8，安装后
 
 流程包含桌面回归、Folia 本地嵌入版重新构建、两套手机界面横竖屏交互、APK 签名校验以及 Android 模拟器的安装、系统文件导入、播放和重启恢复。全部通过后自动发布 Android 预览版。
 
-安装包保存在 `mineradio-android-apk` 构建产物。首次构建在云端生成签名密钥，并使用仓库公钥加密为 `android-signing-sealed.json`；需要把该密文写入同名仓库 Secrets，后续构建自动复用同一签名以支持覆盖安装。原始密钥和密码不得提交到仓库。
+安装包保存在 `mineradio-android-apk` 构建产物。签名密钥已在云端生成，并保存到仓库 Secrets `MOBILE_KEYSTORE_BASE64`、`MOBILE_KEYSTORE_PASSWORD`，后续构建自动复用同一签名以支持覆盖安装。首次生成时以仓库公钥加密保存的 `android-signing-sealed.json` 用于安全转存；原始密钥和密码不得提交到仓库或写入日志。
 
 可重现的构建入口为：
 

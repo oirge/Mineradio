@@ -20,7 +20,7 @@ for index, name in enumerate(['Mobile-Blue', 'Mobile-Amber']):
         track.setsampwidth(2)
         track.setframerate(8000)
         second = b''.join(struct.pack('<h', int(180 * math.sin(2 * math.pi * (220 + index * 110) * n / 8000))) for n in range(8000))
-        track.writeframes(second * 90)
+        track.writeframes(second * 300)
     lyric = target.with_suffix('.lrc')
     lyric.write_text('[00:00.00]Mobile music test\n[00:10.00]Local lyrics continue\n[00:30.00]Touch playback works\n', encoding='utf-8')
     FILES.extend([str(target), str(lyric)])
@@ -103,7 +103,7 @@ with sync_playwright() as p:
     page.wait_for_function('audio.paused')
     position = page.locator('#progress-bar').bounding_box()
     page.touchscreen.tap(position['x'] + position['width'] * .45, position['y'] + position['height'] / 2)
-    page.wait_for_function('audio.currentTime > 35 && audio.currentTime < 48')
+    page.wait_for_function('audio.currentTime > audio.duration * .42 && audio.currentTime < audio.duration * .48')
     page.locator('#play-btn').tap()
     page.wait_for_function('!audio.paused')
     original = page.evaluate('currentIdx')
@@ -124,6 +124,8 @@ with sync_playwright() as p:
     page.locator('#mobile-search-close').tap()
     checks.append('local search and dismiss')
 
+    # Geometry checks must not let the finite fixture end while Chromium renders screenshots.
+    page.evaluate('audio.pause(); audio.currentTime = 7')
     for width, height in [(320, 568), (360, 800), (430, 932), (768, 1024), (844, 390), (1024, 600)]:
         page.set_viewport_size({'width': width, 'height': height})
         page.wait_for_timeout(300)

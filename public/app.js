@@ -201,6 +201,18 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['首页', 'Home'],
+  ['正在播放', 'Now playing'],
+  ['设置', 'Settings'],
+  ['手机导航', 'Mobile navigation'],
+  ['歌单和音乐库', 'Playlists and library'],
+  ['关闭设置', 'Close settings'],
+  ['关闭歌单', 'Close playlists'],
+  ['结束搜索', 'Dismiss search'],
+  ['切换到 Folia 界面', 'Switch to Folia'],
+  ['让音乐随身。', 'Take your music with you.'],
+  ['导入手机中的音乐，开始聆听。', 'Import music from your phone to start listening.'],
+  ['更多播放选项', 'More playback options'],
   ['视频导出支持四档帧率。', 'Video export supports four frame rate options.'],
   ['歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。', 'Lyrics and visualization video export now offers 30, 60, 90 and 120 fps, with 30 fps as the default.'],
   ['帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。', 'Your frame rate choice is remembered, included in backups and used for capture and encoding.'],
@@ -1220,6 +1232,7 @@ var uiLanguageAttributeObserver = null;
 var uiLanguageApplying = false;
 var uiLanguageSources = new WeakMap();
 var UI_LANGUAGE_SCOPE_IDS = [
+  'mobile-nav',
   'fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal', 'custom-lyric-modal',
   'desktop-titlebar', 'fullscreen-diy-zone', 'search-area', 'empty-home', 'top-right', 'playlist-panel', 'trial-banner', 'gesture-hud', 'bottom-bar',
   'drop-overlay', 'free-camera-hint', 'ai-depth-chip', 'beat-chip', 'lyric-translate-chip', 'cover-crop-modal', 'collect-modal',
