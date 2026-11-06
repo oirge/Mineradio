@@ -60,6 +60,9 @@ def native_state(label):
     output = adb('shell', 'dumpsys', 'activity', 'service', APP + '/.PlaybackService')
     match = re.search(r'MINERADIO_PLAYBACK (\{[^\n]+\})', output)
     value = json.loads(match.group(1)) if match else {}
+    if not match:
+        with (OUT / 'android-native-missing-state.txt').open('a', encoding='utf-8') as diagnostic:
+            diagnostic.write(label + '\n' + output + '\n')
     background_states.append({'phase': label, 'state': value})
     (OUT / 'android-background.json').write_text(json.dumps(background_states, ensure_ascii=False, indent=2), encoding='utf-8')
     return value
@@ -443,20 +446,30 @@ with sync_playwright() as p:
     tap_document('Background-Green.wav')
     page.wait_for_function('localLibrarySongs.length === 2 && playQueue.length === 2 && audio && !audio.paused', timeout=45000)
     page.wait_for_function('isFinite(audio.duration) && audio.duration > 800', timeout=30000)
-    before_crossfade = native_state('crossfade-before')
+    before_crossfade = wait_native('crossfade-before', lambda state: state.get('playing')
+        and state.get('audioSessionId', 0) > 0 and isinstance(state.get('index'), int))
     page.evaluate('''() => {
         setGaplessCrossfadeSeconds(3, {toast: false});
         audio.currentTime = audio.duration - 5;
     }''')
     near_crossfade = wait_native('crossfade-near-end', lambda state: state.get('playing') and not state.get('preparing')
         and state.get('duration', 0) > 800 and state.get('position', 0) > state['duration'] - 6)
-    overlapping = wait_native('crossfade-overlap', lambda state: state.get('crossfadeActive') is True
-        and state.get('overlapFrames', 0) > before_crossfade.get('overlapFrames', 0) + 4800)
+    # ADB can return after the three-second overlap has finished. The engine
+    # retains a bounded witness captured while both decoded streams were mixed
+    # and their successfully submitted overlap reached the real playback head.
+    overlapping = wait_native('crossfade-overlap', lambda state: state.get('crossfadeWitness', {}).get('active') is True
+        and state['crossfadeWitness'].get('count', 0) > before_crossfade.get('crossfadeCount', 0)
+        and state['crossfadeWitness'].get('overlapFrames', 0) > 4800
+        and state['crossfadeWitness'].get('playbackHeadFrames', -1) >= state['crossfadeWitness'].get('submittedFrames', 1))
+    witness = overlapping['crossfadeWitness']
+    assert witness['audioSessionId'] == near_crossfade['audioSessionId'] and witness['sinkCreations'] == 1, witness
     crossed = wait_native('crossfade-complete', lambda state: state.get('playing') and not state.get('crossfadeActive')
         and state.get('index') == (before_crossfade['index'] + 1) % 2
         and state.get('crossfadeCount', 0) > before_crossfade.get('crossfadeCount', 0)
         and state.get('overlapFrames', 0) > before_crossfade.get('overlapFrames', 0) + 48000)
     same_sink(near_crossfade, crossed, same_track=False)
+    assert crossed['trackGeneration'] == witness['trackGeneration'] and crossed['crossfadeCount'] == witness['count'], witness
+    assert crossed['playbackHeadFrames'] >= witness['submittedFrames'], 'The completed crossfade must retain the consumed overlap proof'
     page.wait_for_function('(uri) => audio && !audio.paused && playQueue[currentIdx]?.localFile?.fullPath === uri', arg=crossed['uri'], timeout=30000)
     page.evaluate('setGaplessCrossfadeSeconds(0, {toast: false})')
     completed('native crossfade mixes decoded tracks in the same AudioTrack sink')

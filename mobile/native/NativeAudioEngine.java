@@ -11,6 +11,7 @@ import android.os.Process;
 import com.getcapacitor.JSObject;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.util.concurrent.locks.ReentrantLock;
 
 /** One service-owned PCM mixer and AudioTrack for every visible and hidden playback state. */
 final class NativeAudioEngine {
@@ -19,7 +20,7 @@ final class NativeAudioEngine {
     private final Context context;
     private final Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final Object mutex = new Object();
+    private final ReentrantLock mutex = new ReentrantLock(true);
     private final NativeAudioDsp dsp = new NativeAudioDsp();
     private final NativeUiSound ui = new NativeUiSound();
     private boolean uiDraining;
@@ -36,6 +37,10 @@ final class NativeAudioEngine {
     private String mode = "loop", error = "", upcomingError = "";
     private long submittedFrames, outputFrames, originFrames, trackGeneration, sinkCreations, completions;
     private long lastRawHead, headWrapOffset, crossfadeCount, overlapFrames;
+    private long crossfadeWrittenOverlap, crossfadeProofOverlap, crossfadeProofHead;
+    private long witnessGeneration = -1, witnessCount, witnessOverlap, witnessSubmitted, witnessHead;
+    private long witnessOutput, witnessAt, witnessSinkCreations;
+    private int witnessIndex, witnessSession, witnessRetiringFrames;
     private float master = 1, gainStart = 1, gainTarget = 1;
     private long gainAt, gainDuration;
     private float replayLinear = 1;
@@ -55,7 +60,8 @@ final class NativeAudioEngine {
         dsp.configure(effects);
     }
     void start(JSONObject state) {
-        synchronized (mutex) {
+        mutex.lock();
+        try {
             JSONArray incoming = state.optJSONArray("queue");
             if (incoming == null || incoming.length() == 0) throw new IllegalArgumentException("EMPTY_NATIVE_QUEUE");
             queue = incoming;
@@ -64,11 +70,12 @@ final class NativeAudioEngine {
             gain((float) state.optDouble("initialGain", state.optDouble("volume", 1)), 0);
             wanted = state.optBoolean("resumePlaying", state.optBoolean("playing", false));
             load(state.optDouble("position", 0), true, false);
-        }
+        } finally { mutex.unlock(); }
         notifyChanged();
     }
     void configure(JSONObject state) {
-        synchronized (mutex) {
+        mutex.lock();
+        try {
             JSONObject incoming = state.optJSONObject("audioEffects");
             if (incoming == null) incoming = state.optJSONObject("effects");
             if (incoming != null) effects = incoming;
@@ -92,10 +99,11 @@ final class NativeAudioEngine {
                 }
             }
             configureTrackGain();
-        }
+        } finally { mutex.unlock(); }
     }
     void updateQueue(JSONArray value) {
-        synchronized (mutex) {
+        mutex.lock();
+        try {
             String uri = item(index).optString("uri");
             int at = value.optJSONObject(index) != null && uri.equals(value.optJSONObject(index).optString("uri")) ? index : -1;
             for (int i = 0; at < 0 && i < value.length(); i++) {
@@ -103,13 +111,15 @@ final class NativeAudioEngine {
                 if (song != null && uri.equals(song.optString("uri"))) { at = i; break; }
             }
             if (at < 0) return;
+            if (at != index) resetCrossfadeWitness();
             queue = value; index = at; configureTrackGain();
             release(upcoming); upcoming = null; nextIndex = -1; upcomingUnavailable = false; upcomingFailures = 0;
-        }
+        } finally { mutex.unlock(); }
     }
     private void load(double seconds, boolean flush, boolean fade) {
         release(active); release(upcoming); release(retiring);
         upcoming = retiring = null; nextIndex = -1; retiringFrames = 0;
+        resetCrossfadeWitness();
         draining = upcomingUnavailable = false; upcomingFailures = 0; upcomingError = "";
         startPosition = Math.max(0, seconds); duration = item(index).optDouble("duration", 0);
         if (flush && sink != null) {
@@ -123,37 +133,51 @@ final class NativeAudioEngine {
     }
     void play() { play(null); }
     void play(Float initialGain) {
-        synchronized (mutex) {
+        mutex.lock();
+        try {
             if (initialGain != null) gain(initialGain, 0);
             wanted = true;
             if (active == null || (active.ended() && head() >= submittedFrames)) load(0, true, true);
-        }
+        } finally { mutex.unlock(); }
     }
-    void pause() { synchronized (mutex) { wanted = false; if (sink != null) sink.pause(); } notifyChanged(); }
-    void seek(double seconds) { synchronized (mutex) { load(Math.max(0, Math.min(seconds, Math.max(0, duration - .001))), true, false); } notifyChanged(); }
+    void pause() {
+        mutex.lock();
+        try { wanted = false; if (sink != null) sink.pause(); }
+        finally { mutex.unlock(); }
+        notifyChanged();
+    }
+    void seek(double seconds) {
+        mutex.lock();
+        try { load(Math.max(0, Math.min(seconds, Math.max(0, duration - .001))), true, false); }
+        finally { mutex.unlock(); }
+        notifyChanged();
+    }
     void advance(int delta) {
-        synchronized (mutex) {
+        mutex.lock();
+        try {
             if (queue.length() == 0) return;
             index = Math.floorMod(index + delta, queue.length()); wanted = true; load(0, true, true); configureTrackGain();
-        }
+        } finally { mutex.unlock(); }
         notifyChanged();
     }
     void uiSound(int direction, boolean row, float userVolume) {
-        synchronized (mutex) {
+        mutex.lock();
+        try {
             if (!wanted && active != null) {
                 // A click-only write must not resume the music retained in the paused sink.
                 double frozen = position(); load(frozen, true, false);
             }
             ui.start(direction, row, userVolume); uiDraining = false;
-        }
+        } finally { mutex.unlock(); }
     }
     void gain(float value, long milliseconds) {
-        synchronized (mutex) {
+        mutex.lock();
+        try {
             long now = System.nanoTime(); master = gain(now);
             gainStart = master; gainTarget = Math.max(0, Math.min(1, value));
             gainAt = now; gainDuration = Math.max(0, milliseconds) * 1000000L;
             if (gainDuration == 0) master = gainTarget;
-        }
+        } finally { mutex.unlock(); }
     }
     private float gain(long now) {
         if (gainDuration <= 0) return gainTarget;
@@ -166,6 +190,31 @@ final class NativeAudioEngine {
         if (raw < lastRawHead && lastRawHead - raw > 0x7fffffffL) headWrapOffset += 0x100000000L;
         lastRawHead = raw;
         return Math.min(submittedFrames, headWrapOffset + raw);
+    }
+    private void resetCrossfadeWitness() {
+        crossfadeWrittenOverlap = crossfadeProofOverlap = crossfadeProofHead = 0;
+        witnessGeneration = -1;
+    }
+    /** Lock-held primitive bookkeeping; JSON is assembled only when a caller requests a snapshot. */
+    private void recordCrossfadeWrite(int acceptedOverlap) {
+        if (acceptedOverlap <= 0) return;
+        crossfadeWrittenOverlap += acceptedOverlap;
+        if (crossfadeProofOverlap == 0 && crossfadeWrittenOverlap > 4800) {
+            // Freeze the same count and sink boundary. Later accepted samples may still
+            // be queued, so they cannot increase the number proven to have played.
+            crossfadeProofOverlap = crossfadeWrittenOverlap;
+            crossfadeProofHead = submittedFrames;
+        }
+        if (witnessGeneration >= 0 || crossfadeProofOverlap == 0 || retiring == null
+            || retiringFrames <= 0 || !wanted || !started || closed
+            || sink.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) return;
+        long played = head();
+        if (played < crossfadeProofHead) return;
+        witnessGeneration = trackGeneration; witnessCount = crossfadeCount;
+        witnessOverlap = crossfadeProofOverlap; witnessSubmitted = crossfadeProofHead;
+        witnessHead = played; witnessOutput = outputFrames; witnessAt = System.currentTimeMillis();
+        witnessIndex = index; witnessSession = sink.getAudioSessionId(); witnessSinkCreations = sinkCreations;
+        witnessRetiringFrames = retiringFrames;
     }
     private double position() { return startPosition + Math.max(0, head() - originFrames) / (double) RATE; }
     private void ensureSink() {
@@ -198,6 +247,7 @@ final class NativeAudioEngine {
     private void transition(boolean fading) {
         if (upcoming == null || !upcoming.ready()) return;
         if (fading) {
+            resetCrossfadeWitness();
             retiring = active; retiringFrames = crossfadeFrames = Math.max(1, (int) (Math.min(crossfadeSeconds, (duration - .35) / 2) * RATE));
             crossfadeCount++; trackFadeFrames = trackFadeTotal = 0;
         }
@@ -216,7 +266,8 @@ final class NativeAudioEngine {
         try {
             while (!closed) {
                 int frames = 0;
-                synchronized (mutex) {
+                mutex.lock();
+                try {
                     if (wanted && active != null) {
                         if (started && sink != null && sink.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) sink.play();
                         if (draining) {
@@ -258,9 +309,11 @@ final class NativeAudioEngine {
                                 }
                             }
                             if (frames > 0) {
+                                int blockOverlap = 0;
                                 if (retiring != null) {
                                     int oldFrames = retiring.read(other, 0, frames);
-                                    overlapFrames += Math.min(oldFrames, Math.min(frames, Math.max(0, retiringFrames)));
+                                    blockOverlap = Math.min(oldFrames, Math.min(frames, Math.max(0, retiringFrames)));
+                                    overlapFrames += blockOverlap;
                                     for (int f = 0; f < frames; f++) {
                                         double t = Math.min(1, Math.max(0, 1 - retiringFrames / (double) crossfadeFrames));
                                         float in = (float) Math.sin(t * Math.PI / 2), out = (float) Math.cos(t * Math.PI / 2);
@@ -289,11 +342,15 @@ final class NativeAudioEngine {
                                     if (written <= 0 || (written & 1) != 0) {
                                         error = "AUDIO_TRACK_WRITE_" + written; wanted = false; sink.pause(); notifyChanged(); break;
                                     }
+                                    int writeStart = offset / 2;
+                                    int acceptedOverlap = Math.max(0, Math.min(blockOverlap, writeStart + written / 2)
+                                        - Math.min(blockOverlap, writeStart));
                                     submittedFrames += written / 2; outputFrames += written / 2; offset += written;
                                     if (!started && (sink.getPlayState() == AudioTrack.PLAYSTATE_PLAYING
                                         || submittedFrames - head() >= primeFrames || active.ended())) {
                                         sink.play(); started = true; notifyChanged();
                                     }
+                                    recordCrossfadeWrite(acceptedOverlap);
                                 }
                             }
                         }
@@ -309,17 +366,26 @@ final class NativeAudioEngine {
                     } else if (!wanted && uiDraining && head() >= submittedFrames) {
                         sink.pause(); uiDraining = false; notifyChanged();
                     }
-                }
+                } finally { mutex.unlock(); }
                 // AudioTrack's blocking write already paces productive output. Sleeping
                 // after every 512 frames repeatedly drains the reserve under CPU load.
                 if (frames == 0) try { Thread.sleep(5); } catch (InterruptedException ignored) {}
             }
-        } catch (Exception problem) { synchronized (mutex) { error = problem.toString(); wanted = false; preparing = false; } notifyChanged(); }
-        finally { synchronized (mutex) { release(active); release(upcoming); release(retiring); if (sink != null) { sink.release(); sink = null; } } }
+        } catch (Exception problem) {
+            mutex.lock();
+            try { error = problem.toString(); wanted = false; preparing = false; }
+            finally { mutex.unlock(); }
+            notifyChanged();
+        } finally {
+            mutex.lock();
+            try { release(active); release(upcoming); release(retiring); if (sink != null) { sink.release(); sink = null; } }
+            finally { mutex.unlock(); }
+        }
     }
     JSObject snapshot(boolean includeQueue) {
         JSObject value;
-        synchronized (mutex) {
+        mutex.lock();
+        try {
             JSONObject song = item(index);
             value = new JSObject().put("nativeActive", active != null).put("backend", "native").put("engine", "pcm")
                 .put("playing", wanted && started && !preparing).put("resumePlaying", wanted).put("preparing", wanted && (preparing || !started))
@@ -334,10 +400,21 @@ final class NativeAudioEngine {
                 .put("crossfadeActive", retiring != null).put("crossfadeCount", crossfadeCount).put("overlapFrames", overlapFrames)
                 .put("gapless", new JSObject().put("enabled", gaplessEnabled).put("crossfadeSeconds", crossfadeSeconds))
                 .put("effects", dsp.diagnostics()).put("audioEffects", effects);
+            if (witnessGeneration == trackGeneration) value.put("crossfadeWitness", new JSObject()
+                .put("active", true).put("count", witnessCount).put("trackGeneration", witnessGeneration)
+                .put("audioSessionId", witnessSession).put("sinkCreations", witnessSinkCreations)
+                .put("index", witnessIndex).put("retiringFrames", witnessRetiringFrames)
+                .put("overlapFrames", witnessOverlap).put("submittedFrames", witnessSubmitted)
+                .put("playbackHeadFrames", witnessHead).put("outputFrames", witnessOutput).put("snapshotAt", witnessAt));
             if (includeQueue) value.put("queue", queue);
-        }
+        } finally { mutex.unlock(); }
         if (includeQueue) value.put("analysis", dsp.analysis());
         return value;
     }
-    void close() { closed = true; worker.interrupt(); synchronized (mutex) { if (sink != null) sink.pause(); release(active); release(upcoming); release(retiring); } }
+    void close() {
+        closed = true; worker.interrupt();
+        mutex.lock();
+        try { if (sink != null) sink.pause(); release(active); release(upcoming); release(retiring); resetCrossfadeWitness(); }
+        finally { mutex.unlock(); }
+    }
 }
