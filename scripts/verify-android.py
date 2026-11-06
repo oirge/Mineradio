@@ -338,18 +338,19 @@ with sync_playwright() as p:
     after = adb('shell', 'dumpsys', 'activity', 'activities')
     (OUT / 'android-tasks-after-remove.txt').write_text(after, encoding='utf-8')
     assert not re.search(r'Task\{[^\n]*#' + task.group(1) + r'\b[^\n]*' + re.escape(APP), after), 'Mineradio task must actually be removed'
-    advanced = wait_native('auto-next-without-webview', lambda state: state.get('playing') and state.get('index') == (expected_index + 1) % 2 and state.get('position', 0) > 1)
+    advanced = wait_native('auto-next-without-webview', lambda state: state.get('playing') and state.get('index') == (expected_index + 1) % 2 and 1 < state.get('position', 0) < 10)
     completed('removing the recent task keeps native playback alive and automatically advances its queue')
 
     adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_PAUSE')
     paused = wait_native('media-pause', lambda state: state.get('nativeActive') and not state.get('playing') and not state.get('preparing'))
+    assert paused['index'] == advanced['index'] and 1 < paused['position'] < 15, 'Automatic advance must play the next track from its beginning'
     time.sleep(2)
     assert abs(native_state('media-pause-hold').get('position', 0) - paused['position']) < .5
     adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_PLAY')
-    wait_native('media-play', lambda state: state.get('playing') and state.get('position', 0) > paused['position'] + 1)
+    wait_native('media-play', lambda state: state.get('playing') and state.get('index') == paused['index'] and state.get('position', 0) > paused['position'] + 1)
     previous_index = paused['index']
     adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_NEXT')
-    resumed = wait_native('media-next', lambda state: state.get('playing') and state.get('index') != previous_index)
+    resumed = wait_native('media-next', lambda state: state.get('playing') and state.get('index') != previous_index and 1 < state.get('position', 0) < 10)
     start()
     browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222', no_defaults=True)
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)

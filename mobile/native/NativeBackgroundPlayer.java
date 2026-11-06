@@ -164,8 +164,11 @@ final class NativeBackgroundPlayer {
     }
     void advance(int delta, boolean manual) {
         if (!owned || queue.length() == 0) return;
+        // snapshot() reads the current MediaPlayer. Detach the old track before saving
+        // the new index, or its end position becomes the new track's initial seek.
+        releasePlayer();
         if (manual || !"single".equals(mode)) index = (index + delta + queue.length()) % queue.length();
-        position = 0; failures = 0; wanted = true; focusPaused = false; save(false); prepare();
+        position = 0; duration = 0; failures = 0; wanted = true; focusPaused = false; save(false); prepare();
     }
     void seek(long milliseconds) {
         position = Math.max(0, Math.min(milliseconds, Math.max(0, duration - 1)));
