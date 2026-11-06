@@ -487,9 +487,16 @@ with sync_playwright() as p:
     same_sink(before_remove, native, require_progress=False)
     expected_index = native['index']
     assert native['position'] > native['duration'] - 25, 'Removing the Activity must keep the near-end native playback position'
-    after = adb('shell', 'dumpsys', 'activity', 'activities')
-    (OUT / 'android-tasks-after-remove.txt').write_text(after, encoding='utf-8')
-    assert not re.search(r'Task\{[^\n]*#' + task.group(1) + r'\b[^\n]*' + re.escape(APP), after), 'Mineradio task must actually be removed'
+    removed_task = r'Task\{[^\n]*#' + task.group(1) + r'\b[^\n]*' + re.escape(APP)
+    removal_deadline = time.monotonic() + 15
+    while True:
+        after = adb('shell', 'dumpsys', 'activity', 'activities')
+        (OUT / 'android-tasks-after-remove.txt').write_text(after, encoding='utf-8')
+        if not re.search(removed_task, after): break
+        assert time.monotonic() < removal_deadline, 'Mineradio task must actually be removed'
+        # removeTask schedules Activity stop/destroy; finishing=true is only an
+        # intermediate state. Verify the real task disappearance before advance.
+        time.sleep(.25)
     advanced = wait_native('auto-next-without-webview', lambda state: state.get('playing') and state.get('index') == (expected_index + 1) % 2 and 1 < state.get('position', 0) < 10)
     same_sink(before_remove, advanced, same_track=False)
     completed('removing the recent task keeps native playback alive and automatically advances its queue')
