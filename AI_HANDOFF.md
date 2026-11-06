@@ -1,3 +1,13 @@
+## 2026-11-06：Android 1.0.1 内嵌歌词修复已发布并核验
+
+- [Android 1.0.1 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.1/Mineradio-Android-1.0.1.apk) 已发布，Release `436020179`，tag `android-v1.0.1` 指向 `6cf8a91a8d063a46fd7f8f96a2571ddaa77e295f`；版本 `1.0.1 / 10001`，沿用 1.0.0 证书，可覆盖安装。
+- 工作日志：修复原生 JSON 整数偏移读取，增加 1 MiB 分块及旧资产／歌词／索引负缓存失效，歌曲 key 保持。发行 Android run `42147297303` 全部成功；Node 1667 通过／0 失败／1 可选跳过，手机浏览器 10 项、Android 原生 9 项；完整 Windows Verify `42147367912` 成功。
+- 补充系统屏幕复核 `42149065288` 成功，普通舞台和冷启动后均实际显示内嵌歌词，Folia 也正常。此前 CDP 网页截图漏掉 WebGL 画面，并非实际屏幕没有歌词；现保存 ADB 系统截图。`7be0c8bf` 仅增加工作流／验收脚本，应用代码与发行版相同，补充 run 的发布步骤已跳过，资产未替换。
+- 完整回下载 APK 14,432,708 B，SHA256 `cecccd73db75a7f9a93dcd4de08075fb4af39cd28e3632d82d6aed7933561fb6`，与清单／GitHub digest 一致；manifest、v2 签名、同证书及公开下载 HEAD 均通过。桌面 Latest 仍为 v2.6.10。
+- 未完成事项：此次需求无剩余必做项；PR #178 保持打开，后续合并与扩展品牌设备覆盖另行处理。不要根据下方历史暂停记录重复发布 1.0.1。
+- 完整记录与截图：[docs/ANDROID-HANDOFF.md](docs/ANDROID-HANDOFF.md)；结构化核验：[docs/android-evidence/1.0.1-verification.json](docs/android-evidence/1.0.1-verification.json)。本机 `output/cloud/published-1.0.1-verification.json`、`native-1.0.1-accepted`、`native-1.0.1-physical` 保存全部证据。
+- 云端优先，不启动本机 GUI／浏览器／模拟器／构建，不操作用户播放器／数据，不发邮件，不创建子代理。
+
 ## 2026-11-05：Android 1.0.1 歌词修复进度已保存，用户明天继续
 
 - 用户要求先把进度上传 GitHub，明天再继续；已请求停止未完成的云端任务，等待用户续接。
