@@ -137,8 +137,8 @@
   function node() { return {connect: function (next) { return next; }, disconnect: function () {}, gain: new Param(1), frequency: new Param(0), Q: new Param(1), threshold: new Param(0), ratio: new Param(1), knee: new Param(0), attack: new Param(.003), release: new Param(.25)}; }
   function analyser(beat) {
     var result = node(); result.fftSize = 2048; result.frequencyBinCount = 1024;
-    result.getByteFrequencyData = function (target) { target.fill(0); var data = state.analysis && state.analysis[beat ? 'beatFrequency' : 'frequency']; if (data) target.set(data.slice(0, target.length)); };
-    result.getByteTimeDomainData = function (target) { target.fill(128); var data = state.analysis && state.analysis.timeDomain; if (data) target.set(data.slice(0, target.length)); };
+    result.getByteFrequencyData = function (target) { target.fill(0); var data = state.analysis && state.analysis[beat ? 'beatFrequency' : 'frequency']; if (data) for (var i = 0; i < Math.min(data.length, target.length); i++) target[i] = data[i]; };
+    result.getByteTimeDomainData = function (target) { target.fill(128); var data = state.analysis && state.analysis.timeDomain; if (data) for (var i = 0; i < Math.min(data.length, target.length); i++) target[i] = data[i]; };
     return result;
   }
   var context = {sampleRate: 48000, destination: node(), createGain: node, createBiquadFilter: node, createDynamicsCompressor: node,

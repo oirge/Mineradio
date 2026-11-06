@@ -376,24 +376,45 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   const mean = sum / a.length, deviation = Math.sqrt(variance / a.length - mean ** 2);
   // Inspect every encoded frame after the first sample. A slow GPU shader can
   // produce nearly equal frames at two fixed seek points while advancing later.
-  const allFrames=execFileSync(ffmpeg,['-v','error','-i',filePath,'-an','-vf','scale=160:90','-fps_mode','passthrough','-enc_time_base','1:30000','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{maxBuffer:32*1024*1024,windowsHide:true});
-  assert.equal(allFrames.length,result.videoTimeline.frameCount*a.length,'every encoded frame must decode');
   let maximumDifference=difference/a.length, changedAt=null;
   let detailFrame={pts:null,mean,deviation,highlights},motionFrame=null;
-  for(let index=0;index<result.videoTimeline.frameCount;index++) {
-    const pts=result.videoTimeline.frames[index].pts;
-    if(pts<Math.min(0.8,duration/4))continue;
-    const candidate=allFrames.subarray(index*a.length,(index+1)*a.length);
-    let delta=0,total=0,square=0,bright=0;
-    for(let pixel=0;pixel<a.length;pixel++) {
-      delta+=Math.abs(a[pixel]-candidate[pixel]);total+=candidate[pixel];square+=candidate[pixel]**2;
-      if(candidate[pixel]>100)bright++;
+  // At 60/120fps the decoded stream can exceed child_process's capture limit.
+  // Decode every frame to a private temporary file, then reuse one frame buffer.
+  const frameDirectory=fs.mkdtempSync(path.join(os.tmpdir(),'mineradio-export-frames-'));
+  const rawFramePath=path.join(frameDirectory,'frames.rgb');
+  let frameDescriptor;
+  try {
+    execFileSync(ffmpeg,['-nostdin','-v','error','-i',filePath,'-an','-vf','scale=160:90','-fps_mode','passthrough','-enc_time_base','1:30000','-pix_fmt','rgb24','-f','rawvideo',rawFramePath],
+      {maxBuffer:1024*1024,windowsHide:true,stdio:['ignore','ignore','pipe']});
+    const rawFrameBytes=fs.statSync(rawFramePath).size;
+    assert.equal(rawFrameBytes,result.videoTimeline.frameCount*a.length,'every encoded frame must decode');
+    frameDescriptor=fs.openSync(rawFramePath,'r');
+    const candidate=Buffer.allocUnsafe(a.length);
+    for(let index=0;index<result.videoTimeline.frameCount;index++) {
+      let read=0;
+      while(read<candidate.length) {
+        const count=fs.readSync(frameDescriptor,candidate,read,candidate.length-read,index*candidate.length+read);
+        assert.ok(count>0,`decoded frame ${index} must be complete`);
+        read+=count;
+      }
+      const pts=result.videoTimeline.frames[index].pts;
+      if(pts<Math.min(0.8,duration/4))continue;
+      let delta=0,total=0,square=0,bright=0;
+      for(let pixel=0;pixel<a.length;pixel++) {
+        delta+=Math.abs(a[pixel]-candidate[pixel]);total+=candidate[pixel];square+=candidate[pixel]**2;
+        if(candidate[pixel]>100)bright++;
+      }
+      const candidateMean=total/a.length,candidateDeviation=Math.sqrt(square/a.length-candidateMean**2);
+      if(candidateDeviation>detailFrame.deviation)detailFrame={pts,mean:candidateMean,deviation:candidateDeviation,highlights:bright};
+      if(delta/a.length>maximumDifference) {
+        maximumDifference=delta/a.length;changedAt=pts;motionFrame=Buffer.from(candidate);
+      }
     }
-    const candidateMean=total/a.length,candidateDeviation=Math.sqrt(square/a.length-candidateMean**2);
-    if(candidateDeviation>detailFrame.deviation)detailFrame={pts,mean:candidateMean,deviation:candidateDeviation,highlights:bright};
-    if(delta/a.length>maximumDifference) {
-      maximumDifference=delta/a.length;changedAt=pts;motionFrame=candidate;
-    }
+    result.frameScan={frames:result.videoTimeline.frameCount,bytes:rawFrameBytes,bufferBytes:candidate.length};
+  } finally {
+    if(frameDescriptor!==undefined)fs.closeSync(frameDescriptor);
+    fs.rmSync(rawFramePath,{force:true});
+    fs.rmdirSync(frameDirectory);
   }
   if(motionFrame)saveSampleFrame(motionFrame,`${stem}-frame-c.png`);
   Object.assign(result,{mean,deviation,detailFrame,frameDifference:maximumDifference,sampledFrameDifference:difference/a.length,changedAt});saveDecode();

@@ -97,8 +97,8 @@ final class NativeAudioEngine {
     void updateQueue(JSONArray value) {
         synchronized (mutex) {
             String uri = item(index).optString("uri");
-            int at = -1;
-            for (int i = 0; i < value.length(); i++) {
+            int at = value.optJSONObject(index) != null && uri.equals(value.optJSONObject(index).optString("uri")) ? index : -1;
+            for (int i = 0; at < 0 && i < value.length(); i++) {
                 JSONObject song = value.optJSONObject(i);
                 if (song != null && uri.equals(song.optString("uri"))) { at = i; break; }
             }

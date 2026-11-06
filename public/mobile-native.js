@@ -167,6 +167,7 @@
   async function syncNativeState(state) {
     if (!audioReady) initAudio();
     var nativeUri = state.uri;
+    playMode = state.playMode || playMode;
     var restoredTrack = false;
     var completedTrack = Number(state.completions) > lastNativeCompletions;
     if (trackUri(currentLocalSong) !== nativeUri || !audio || !audio.src ||
@@ -177,7 +178,9 @@
       var restored = state.queue.map(function (entry) { return existing.get(entry.uri); });
       if (restored.some(function (song) { return !song; })) throw new Error('NATIVE_RESTORE_TRACK_MISSING');
       if (currentLocalSong && Number(state.completions) > 0) finalizeListenSession(true);
-      playQueue = restored; markQueueContentChanged();
+      playQueue = restored;
+      if (playMode === 'shuffle') shuffledPlayQueueArrays.add(playQueue);
+      markQueueContentChanged();
       var changedTrack = trackUri(currentLocalSong) !== nativeUri;
       await playQueueAt(Math.max(0, Math.min(playQueue.length - 1, Number(state.index) || 0)), {resumeAt: state.position, startPaused: true});
       if (changedTrack && state.playing && currentLocalSong) beginListenSession(currentLocalSong, null);

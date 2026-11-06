@@ -543,7 +543,7 @@ with sync_playwright() as p:
 # The release has debugging disabled; install the exact signed download and inspect its real UI.
 adb('shell', 'am', 'force-stop', APP)
 adb('uninstall', APP)
-subprocess.check_call(['adb', 'install', str(ROOT / ('release/Mineradio-Android-' + ANDROID_VERSION + '.apk')))])
+subprocess.check_call(['adb', 'install', str(ROOT / ('release/Mineradio-Android-' + ANDROID_VERSION + '.apk'))])
 launch = adb('shell', 'am', 'start', '-W', '-n', APP + '/.MainActivity')
 assert 'Status: ok' in launch, launch
 layout = ''

@@ -52,6 +52,7 @@ jobs:
           node --check public/mobile-native-audio.js
           node --check public/app.js
           node --check server.js
+          python -m py_compile scripts/verify-android.py scripts/verify-mobile-browser.py
           git diff --check
           node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
       - name: Rebuild embedded Folia for Android
