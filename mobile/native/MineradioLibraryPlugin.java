@@ -213,10 +213,37 @@ public class MineradioLibraryPlugin extends Plugin {
             call.resolve(service == null ? new JSObject().put("nativeActive", false) : service.state());
         });
     }
-    @PluginMethod public void takeForeground(PluginCall call) {
+    @PluginMethod public void configurePlayback(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             PlaybackService service = PlaybackService.current();
-            call.resolve(service == null ? NativeBackgroundPlayer.stored(getContext()) : service.takeForeground());
+            if (service != null) service.configureNative(call.getData());
+            call.resolve();
+        });
+    }
+    @PluginMethod public void commandPlayback(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            PlaybackService service = PlaybackService.current();
+            if (service == null) { call.reject("播放服务尚未启动"); return; }
+            service.commandNative(call.getString("action", ""), (long) (call.getData().optDouble("position", 0) * 1000));
+            if ("play".equals(call.getString("action")) && call.getData().has("initialGain"))
+                service.gainNative((float) call.getData().optDouble("initialGain", 1), 0);
+            call.resolve();
+        });
+    }
+    @PluginMethod public void masterGain(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            PlaybackService service = PlaybackService.current();
+            if (service != null) service.gainNative((float) call.getData().optDouble("target", 1), call.getData().optLong("durationMs", 0));
+            call.resolve();
+        });
+    }
+    @PluginMethod public void verifyAudioDsp(PluginCall call) {
+        if ((getContext().getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) {
+            call.reject("Audio diagnostics require a debug build"); return;
+        }
+        bridge.execute(() -> {
+            try { call.resolve(new JSObject(NativeAudioDsp.selfTest().toString())); }
+            catch (Exception problem) { call.reject("Native DSP verification failed", problem); }
         });
     }
     @PluginMethod public void startBackground(PluginCall call) {

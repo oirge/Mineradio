@@ -127,109 +127,105 @@
       sleepDue: typeof sleepTimerState !== 'undefined' ? sleepTimerState.dueAt : 0
     };
   }
-  function syncPlayback() {
-    if (playbackController && playbackController.ownsAudio()) return;
-    var state = capturePlayback();
-    if (!state) return;
-    if (sentQueueRevision !== nativeQueueRevision) {
-      sentQueueRevision = nativeQueueRevision;
-      plugin.cachePlaybackQueue({ queue: playbackQueue().tracks }).catch(function (error) {
-        sentQueueRevision = -1; console.warn('[AndroidQueue]', error);
-      });
+  function captureNativeMedia(media) {
+    var queue = playbackQueue();
+    var uri = media ? String(media.src).split('/_capacitor_content_/').pop() : trackUri(playQueue[currentIdx]);
+    var index = queue.tracks.findIndex(function (entry) { return entry.uri === uri; });
+    if (index < 0) index = queue.indices[currentIdx];
+    for (var i = 0; i < playQueue.length; i++) {
+      var at = queue.indices[i];
+      if (at >= 0) queue.tracks[at].replayGain = resolveReplayGain(playQueue[i].localReplayGain, replayGainSettings).linear;
     }
-    var signature = JSON.stringify([state.playing, state.uri, state.title, state.artist, Math.floor(state.position / 5), state.rate, state.volume, state.playMode, state.sleepMode, state.sleepDue, state.stopAfterTrack]);
-    if (signature !== lastState) {
-      lastState = signature;
-      plugin.updatePlayback(state).catch(function (error) { console.warn('[AndroidPlayback]', error); });
+    var settings = nativeSettings();
+    return Object.assign(settings, {queue: queue.tracks, index: index, uri: uri,
+      position: media ? media._position : 0, duration: queue.tracks[index] && queue.tracks[index].duration || 0,
+      initialGain: gainNode ? gainNode.gain.value : targetVolume,
+      resumePlaying: true, transferAt: Date.now()});
+  }
+  function nativeSettings() {
+    return {effects: Object.assign({}, resolveAudioChainState(audioChainSettings), {replayGain: replayGainActive.linear}),
+      rate: playbackRateSetting,
+      volume: targetVolume, playMode: playMode, gapless: gaplessSettings,
+      sleepMode: sleepTimerState.mode, sleepDue: sleepTimerState.dueAt, stopAfterTrack: stopAfterCurrentTrack};
+  }
+  async function configureNative() {
+    if (!playbackController || playbackController.synchronizing()) return;
+    var state = playbackController.state();
+    if (!state.nativeActive) return;
+    var queue = captureNativeMedia(audio).queue;
+    var settings = nativeSettings();
+    var signature = JSON.stringify([queue, settings]);
+    if (signature === lastState) return;
+    lastState = signature;
+    await plugin.cachePlaybackQueue({queue: queue});
+    await plugin.configurePlayback(settings);
+    if (sleepTimerState.timer) { clearTimeout(sleepTimerState.timer); sleepTimerState.timer = null; }
+    await playbackController.refresh();
+  }
+  async function syncNativeState(state) {
+    if (!audioReady) initAudio();
+    var nativeUri = state.uri;
+    if (trackUri(currentLocalSong) !== nativeUri || !audio || !audio.src) {
+      var existing = new Map();
+      [playQueue, localLibrarySongs].forEach(function (songs) { songs.forEach(function (song) { existing.set(trackUri(song), song); }); });
+      var restored = state.queue.map(function (entry) { return existing.get(entry.uri); });
+      if (restored.some(function (song) { return !song; })) throw new Error('NATIVE_RESTORE_TRACK_MISSING');
+      if (currentLocalSong && Number(state.completions) > 0) finalizeListenSession(true);
+      playQueue = restored; markQueueContentChanged();
+      var changedTrack = trackUri(currentLocalSong) !== nativeUri;
+      await playQueueAt(Math.max(0, Math.min(playQueue.length - 1, Number(state.index) || 0)), {resumeAt: state.position, startPaused: true});
+      if (changedTrack && state.playing && currentLocalSong) beginListenSession(currentLocalSong, null);
     }
+    playbackRateSetting = Number(state.rate) || 1;
+    if (gainNode && Number.isFinite(state.masterLevel)) gainNode.gain.value = state.masterLevel;
+    sleepTimerState.mode = state.sleepMode || 'off'; sleepTimerState.dueAt = Number(state.sleepDue) || 0;
+    stopAfterCurrentTrack = !!state.stopAfterTrack;
+    if (sleepTimerState.timer) { clearTimeout(sleepTimerState.timer); sleepTimerState.timer = null; }
+    playing = !!state.playing; setPlayIcon(playing);
   }
-  function schedulePlayback() {
-    if (playbackTimer) clearTimeout(playbackTimer);
-    syncPlayback();
-    playbackTimer = setTimeout(schedulePlayback, 5000);
-  }
-  function bindAudio() {
-    if (typeof audioCtx !== 'undefined' && audioCtx && !audioCtx._mineradioNativeResume) {
-      var context = audioCtx, resume = context.resume.bind(context);
-      context._mineradioNativeResume = resume;
-      context.resume = function () {
-        return playbackController && playbackController.ownsAudio() ? Promise.resolve() : resume();
-      };
-    }
-    (typeof audioDeckList !== 'undefined' ? audioDeckList : []).forEach(function (deck) {
-      var element = deck.el;
-      if (!element || element._mineradioNativeBound) return;
-      element._mineradioNativeBound = true;
-      ['play', 'pause', 'ended', 'loadedmetadata', 'seeked'].forEach(function (name) {
-        element.addEventListener(name, function () {
-          syncPlayback();
-          if (name === 'play' && document.hidden && playbackController) playbackController.setBackground(true).catch(function (error) { console.warn('[AndroidBackground]', error); });
-        });
-      });
-    });
-  }
-  var originalInitAudio = initAudio;
-  initAudio = function () {
-    var result = originalInitAudio.apply(this, arguments);
-    bindAudio();
-    return result;
-  };
-  bindAudio();
-  async function pauseWebForNative() {
-    trackSwitchToken++;
-    pauseCurrentAudioForTrackSwitch();
-    if (typeof clearSleepTimerCountdown === 'function') clearSleepTimerCountdown();
-    (typeof audioDeckList !== 'undefined' ? audioDeckList : []).forEach(function (deck) { if (deck.el) deck.el.pause(); });
-    if (typeof audioCtx !== 'undefined' && audioCtx && audioCtx.state !== 'closed') await audioCtx.suspend();
-  }
-  async function restoreWebFromNative(state) {
-    if (!state || !state.queue || !state.queue.length) return;
-    var existing = new Map();
-    [playQueue, localLibrarySongs].forEach(function (songs) {
-      for (var i = 0; i < songs.length; i++) { var uri = trackUri(songs[i]); if (uri && !existing.has(uri)) existing.set(uri, songs[i]); }
-    });
-    var restored = state.queue.map(function (entry) { return existing.get(entry.uri); });
-    if (restored.some(function (song) { return !song; })) throw new Error('NATIVE_RESTORE_TRACK_MISSING');
-    var same = playQueue.length === restored.length;
-    for (var j = 0; same && j < restored.length; j++) same = trackUri(playQueue[j]) === trackUri(restored[j]);
-    if (!same) { playQueue = restored; markQueueContentChanged(); }
-    if (typeof stopAfterCurrentTrack !== 'undefined') stopAfterCurrentTrack = !!state.stopAfterTrack;
-    var expired = Number(state.sleepDue) > 0 && Number(state.sleepDue) <= Date.now();
-    if (typeof sleepTimerState !== 'undefined') {
-      if (sleepTimerState.timer) clearTimeout(sleepTimerState.timer);
-      sleepTimerState.timer = null; sleepTimerState.fading = false;
-      sleepTimerState.mode = expired ? 'off' : state.sleepMode || 'off'; sleepTimerState.dueAt = expired ? 0 : Number(state.sleepDue) || 0;
-      if (sleepTimerState.dueAt > Date.now()) sleepTimerState.timer = setTimeout(fireSleepTimer, sleepTimerState.dueAt - Date.now());
-      setPersistentLocalStorageItem(SLEEP_TIMER_STORE_KEY, JSON.stringify({ mode: sleepTimerState.mode }));
-      updateSleepTimerControls();
-    }
-    var wanted = !expired && (state.resumePlaying == null ? !!state.playing : !!state.resumePlaying);
-    await playQueueAt(Math.max(0, Math.min(playQueue.length - 1, Number(state.index) || 0)), {
-      resumeAt: Math.max(0, Number(state.position) || 0), startPaused: !wanted
-    });
-    lastState = ''; syncPlayback();
-  }
-  playbackController = window.createMineradioNativePlayback({
-    capture: function () {
-      var state = capturePlayback();
-      return state && Object.assign({}, state, { queue: playbackQueue().tracks, transferAt: Date.now(), resumePlaying: state.playing });
-    },
-    pauseWeb: pauseWebForNative, restoreWeb: restoreWebFromNative,
-    startNative: function (state) { return plugin.startBackground(state); },
-    getNative: function () { return plugin.getPlaybackState(); },
-    takeNative: function () { return plugin.takeForeground(); },
-    report: function (error) { console.warn('[AndroidBackground]', error); }
-  });
+  playbackController = window.createMineradioNativeAudio({root: window, plugin: plugin,
+    capture: captureNativeMedia, configure: configureNative, onState: syncNativeState,
+    report: function (error) { console.warn('[AndroidAudio]', error); }});
+  window.MineradioNativeAudio = playbackController;
   window.MineradioNativePlayback = playbackController;
-  document.addEventListener('visibilitychange', function () { playbackController.setBackground(document.hidden).catch(function (error) { console.warn('[AndroidBackground]', error); }); });
-  plugin.addListener('appState', function (event) { playbackController.setBackground(!event.active).catch(function (error) { console.warn('[AndroidBackground]', error); }); });
-  plugin.addListener('mediaControl', function (event) {
-    if (event.action === 'next') nextTrack();
-    else if (event.action === 'previous') prevTrack();
-    else if (event.action === 'pause' && audio && !audio.paused) togglePlay();
-    else if (event.action === 'play' && audio && audio.paused) togglePlay();
-    else if (event.action === 'toggle') togglePlay();
-    else if (event.action === 'seek' && audio) audio.currentTime = event.position;
+  window.Audio = playbackController.Media;
+  initAudio = function () {
+    if (audioReady) return;
+    audioCtx = playbackController.context;
+    analyser = playbackController.analyser(false); beatAnalyser = playbackController.analyser(true);
+    gainNode = playbackController.node(); gainNode.gain = playbackController.outputParam(targetVolume);
+    replayGainNode = playbackController.node();
+    ensureAudioDeckPool();
+    audioChain = createAudioEffectChain(audioCtx);
+    applyAudioChainToNodes(true); applyVolumeToAudio();
+    audioReady = true;
+  };
+  // Native queue decoding handles these transitions even with the Activity destroyed.
+  maybeStartGaplessPrefetch = function () {};
+  maybeStartCrossfade = function () {};
+  adoptGaplessDeckForSong = function () { return false; };
+  [ 'commitAudioChainSettings', 'commitReplayGainSettings', 'commitGaplessSettings',
+    'applyReplayGainForCurrentSong', 'applyPlaybackRateToDecks', 'applyVolumeToAudio',
+    'updateSleepTimerControls', 'markQueueContentChanged' ].forEach(function (name) {
+    var original = window[name];
+    if (typeof original !== 'function') return;
+    window[name] = function () {
+      var result = original.apply(this, arguments);
+      if (!playbackController.synchronizing()) Promise.resolve().then(configureNative).catch(function (error) { console.warn('[AndroidSettings]', error); });
+      return result;
+    };
+  });
+  async function pollNative() {
+    try { if (!document.hidden) await playbackController.refresh(); }
+    catch (error) { console.warn('[AndroidState]', error); }
+    playbackTimer = setTimeout(pollNative, document.hidden ? 1000 : 50);
+  }
+  // Visibility affects UI polling only; no pause, load, seek or decoder ownership changes.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) playbackController.refresh().catch(function (error) { console.warn('[AndroidState]', error); });
+  });
+  plugin.addListener('appState', function (event) {
+    if (event.active) playbackController.refresh().catch(function (error) { console.warn('[AndroidState]', error); });
   });
   plugin.addListener('back', function () {
     if (document.body.classList.contains('folia-interface-active')) {
@@ -248,8 +244,5 @@
     if (mobile && document.body.dataset.mobileView !== 'player') mobile.openView('player');
     else plugin.minimize();
   });
-  plugin.list().then(function (result) { return loadLibrary(result, false); }).catch(function (error) {
-    console.warn('[AndroidLibraryRestore]', error);
-  }).finally(function () { return playbackController.initialize(); });
-  schedulePlayback();
+  playbackController.ready = plugin.list().then(function (result) { return loadLibrary(result, false); }).then(function () { return playbackController.refresh(); }).catch(function (error) { console.warn('[AndroidInit]', error); }).finally(function () { pollNative(); });
 })();

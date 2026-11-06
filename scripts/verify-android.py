@@ -17,12 +17,17 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'output/playwright/mobile'
 OUT.mkdir(parents=True, exist_ok=True)
 APP = 'com.mineradio.oirge.mobile'
+ANDROID_VERSION = json.loads((ROOT / 'mobile/package.json').read_text(encoding='utf-8'))['version']
 LYRIC_TEXT = '[00:00.00]手机内嵌歌词 Native line one\n[01:00.00]手机内嵌歌词 Native line two\n[14:59.00]手机内嵌歌词 Native final line\n'
 
 # The native job owns its fixture so it can run independently of browser rendering.
 with wave.open(str(OUT / 'Mobile-Blue.wav'), 'wb') as stream:
-    stream.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
-    second = b''.join(struct.pack('<h', int(3000 * math.sin(2 * math.pi * 220 * i / 8000))) for i in range(8000))
+    # Different tones in L/R make the native stereo matrix observable. The
+    # 8kHz fixture also exercises real decoder resampling to the 48kHz sink.
+    stream.setparams((2, 2, 8000, 0, 'NONE', 'not compressed'))
+    second = b''.join(struct.pack('<hh',
+        int(3000 * math.sin(2 * math.pi * 220 * i / 8000)),
+        int(3000 * math.sin(2 * math.pi * 440 * i / 8000))) for i in range(8000))
     stream.writeframes(second * 900)
 
 def syncsafe(value):
@@ -32,7 +37,12 @@ def syncsafe(value):
 # nonzero native byte offsets and cannot pass by reading the start of the file.
 lyric_body = b'\x03eng\x00' + LYRIC_TEXT.encode('utf-8')
 lyric_frame = b'USLT' + syncsafe(len(lyric_body)) + b'\x00\x00' + lyric_body
-lyric_tag = b'ID3\x04\x00\x00' + syncsafe(len(lyric_frame)) + lyric_frame
+gain_body = b'\x03REPLAYGAIN_TRACK_GAIN\x00-6.0206 dB'
+gain_frame = b'TXXX' + syncsafe(len(gain_body)) + b'\x00\x00' + gain_body
+peak_body = b'\x03REPLAYGAIN_TRACK_PEAK\x000.09156'
+peak_frame = b'TXXX' + syncsafe(len(peak_body)) + b'\x00\x00' + peak_body
+tag_frames = lyric_frame + gain_frame + peak_frame
+lyric_tag = b'ID3\x04\x00\x00' + syncsafe(len(tag_frames)) + tag_frames
 with (OUT / 'Mobile-Blue.wav').open('r+b') as stream:
     stream.seek(0, 2)
     stream.write(b'id3 ' + struct.pack('<I', len(lyric_tag)) + lyric_tag + (b'\x00' if len(lyric_tag) % 2 else b''))
@@ -62,6 +72,23 @@ def wait_native(label, predicate, timeout=35):
         if predicate(value): return value
         time.sleep(.75)
     raise AssertionError(label + ': ' + json.dumps(value, ensure_ascii=False))
+
+def same_sink(before, after, require_progress=True, same_track=True):
+    assert after.get('backend') == 'native' and after.get('engine') == 'pcm', after
+    assert before['audioSessionId'] > 0 and after['audioSessionId'] == before['audioSessionId'], 'Lifecycle must retain the same AudioTrack session'
+    assert after['sinkCreations'] == before['sinkCreations'], 'Lifecycle must not recreate the audio output'
+    assert after['outputFrames'] >= before['outputFrames'] and after['playbackHeadFrames'] >= before['playbackHeadFrames'], 'The sink frame counters must not reset when the UI changes'
+    if same_track:
+        assert after['trackGeneration'] == before['trackGeneration'], 'Lifecycle must not reload or seek the current track'
+    if require_progress:
+        assert after['outputFrames'] > before['outputFrames'] and after['playbackHeadFrames'] > before['playbackHeadFrames'], 'The real AudioTrack output and playback head must advance'
+    assert after['underruns'] == before['underruns'], 'No new AudioTrack underrun is allowed during a lifecycle transition'
+
+def pcm_ratio(state):
+    effects = state.get('effects', {})
+    assert effects.get('inputRms', 0) > .015, 'Effect proof requires real nonzero decoded PCM'
+    assert effects.get('processedFrames', 0) > 4800 and effects.get('invalidSamples', -1) == 0, effects
+    return effects['outputRms'] / effects['inputRms']
 
 log_file = (OUT / 'android-logcat.txt').open('w', encoding='utf-8')
 log_process = subprocess.Popen(['adb', 'logcat', '-v', 'brief'], stdout=log_file, stderr=subprocess.STDOUT)
@@ -246,6 +273,82 @@ with sync_playwright() as p:
     assert 'PlaybackService' in adb('shell', 'dumpsys', 'activity', 'services', APP)
     assert 'Mineradio' in adb('shell', 'dumpsys', 'media_session')
     completed('foreground playback service and media notification')
+    assert page.evaluate('MineradioNativePlayback.mode === "single-native" && audio._mineradioNative && !(audio instanceof HTMLAudioElement)'), 'Android foreground playback must use the native proxy rather than an Activity audio element'
+    native = wait_native('foreground-single-engine', lambda state: state.get('playing') and state.get('engine') == 'pcm' and state.get('audioSessionId', 0) > 0)
+    assert native['sinkCreations'] == 1, 'A single persistent AudioTrack sink must own music playback'
+    dsp_primitives = page.evaluate('''async () => await Capacitor.registerPlugin('MineradioLibrary').verifyAudioDsp()''')
+    (OUT / 'android-native-dsp.json').write_text(json.dumps(dsp_primitives, ensure_ascii=False, indent=2), encoding='utf-8')
+    primitive_checks = {check['name']: check for check in dsp_primitives.get('checks', [])}
+    for primitive in ['neutralFloatBits', 'stereoWidthZero', 'eq250Hz', 'replayGainHalf',
+                      'linkedLimiterFinite', 'boundedAnalysisLengths', 'settingsRampReturnsNeutral', 'smoothLimiterBypass']:
+        assert primitive_checks.get(primitive, {}).get('passed') is True, (primitive, dsp_primitives)
+    assert dsp_primitives.get('passed') is True and dsp_primitives.get('sampleRate') == 48000 and dsp_primitives.get('fftSize') == 2048, dsp_primitives
+    assert page.evaluate('''async () => {
+        await ensureLocalReplayGainForSong(currentLocalSong);
+        return Math.abs(currentLocalSong.localReplayGain?.trackGain + 6.0206) < .01;
+    }'''), 'ReplayGain validation must use the fixture real embedded gain tag'
+    saved_audio = page.evaluate('''() => ({chain: audioChainSettings, replay: replayGainSettings,
+        volume: targetVolume, rate: playbackRateSetting})''')
+    page.evaluate('''() => {
+        audioChainSettings = normalizeAudioChainSettings({enabled: false}); commitAudioChainSettings();
+        replayGainSettings = normalizeReplayGainSettings({enabled: false}); commitReplayGainSettings();
+        setVolume(1, true); setPlaybackRate(1, {toast: false});
+    }''')
+    neutral = wait_native('native-dsp-neutral', lambda state: state.get('effects', {}).get('width') == 1
+        and abs(state.get('effects', {}).get('replayGain', 0) - 1) < .002
+        and .99 < pcm_ratio(state) < 1.01)
+    assert neutral['effects']['inputSideRms'] > .015, 'Stereo fixture must carry a measurable side signal'
+    page.evaluate('''() => {
+        audioChainSettings = normalizeAudioChainSettings({enabled: true, autoPreamp: false,
+            limiterEnabled: false, spatialEnabled: true, widthRatio: 0}); commitAudioChainSettings();
+    }''')
+    mono = wait_native('native-dsp-mono-width', lambda state: state.get('effects', {}).get('width', 1) < .001
+        and state.get('effects', {}).get('inputSideRms', 0) > .015
+        and state.get('effects', {}).get('outputSideRms', 1) < .00001)
+    assert .4 < pcm_ratio(mono) < .9, 'Width zero must combine the real stereo PCM into mono'
+    page.evaluate('''() => {
+        audioChainSettings = normalizeAudioChainSettings({enabled: true, autoPreamp: false,
+            limiterEnabled: false, gains: [0,0,0,-12,0,0,0,0,0,0]}); commitAudioChainSettings();
+    }''')
+    equalized = wait_native('native-dsp-eq', lambda state: len(state.get('effects', {}).get('gains', [])) == 10
+        and abs(state['effects']['gains'][3] + 12) < .01 and .1 < pcm_ratio(state) < .85)
+    page.evaluate('''() => {
+        audioChainSettings = normalizeAudioChainSettings({enabled: false}); commitAudioChainSettings();
+        replayGainSettings = normalizeReplayGainSettings({enabled: true, mode: 'track', preampDb: 0, clipGuard: true});
+        commitReplayGainSettings();
+    }''')
+    balanced = wait_native('native-dsp-replaygain', lambda state: abs(state.get('effects', {}).get('replayGain', 1) - .5) < .005
+        and .47 < pcm_ratio(state) < .53)
+    page.evaluate('''() => {
+        replayGainSettings = normalizeReplayGainSettings({enabled: false}); commitReplayGainSettings();
+        audioChainSettings = normalizeAudioChainSettings({enabled: true, autoPreamp: false,
+            preampDb: 12, limiterEnabled: true, limiterThresholdDb: -12}); commitAudioChainSettings();
+    }''')
+    limited = wait_native('native-dsp-limiter', lambda state: state.get('effects', {}).get('ratio') == 20
+        and abs(state.get('effects', {}).get('thresholdDb', 0) + 12) < .01
+        and state.get('effects', {}).get('outputPeak', 1) < .3
+        and 1 < pcm_ratio(state) < 3.7)
+    assert limited['effects']['outputPeak'] < limited['effects']['inputPeak'] * limited['effects']['preampLinear'] * .9, 'The limiter must modify actual over-threshold samples'
+    analysed = page.evaluate('''async () => {
+        const state = await Capacitor.registerPlugin('MineradioLibrary').getPlaybackState();
+        return state.analysis;
+    }''')
+    assert analysed['sampleFrames'] > 2048 and len(analysed['frequency']) == 1024 and len(analysed['timeDomain']) == 2048, analysed
+    assert max(analysed['frequency']) > 10 and any(value != 128 for value in analysed['timeDomain']), 'Folia and the main stage must receive real native spectrum and waveform samples'
+    page.evaluate('''(saved) => {
+        audioChainSettings = normalizeAudioChainSettings(saved.chain); commitAudioChainSettings();
+        replayGainSettings = normalizeReplayGainSettings(saved.replay); commitReplayGainSettings();
+        setVolume(saved.volume, true); setPlaybackRate(1.5, {toast: false});
+    }''', saved_audio)
+    sped_up = wait_native('native-speed-start', lambda state: state.get('playing') and abs(state.get('rate', 0) - 1.5) < .01)
+    speed_started = time.monotonic()
+    time.sleep(2)
+    sped_after = native_state('native-speed-end')
+    elapsed = time.monotonic() - speed_started
+    assert 1.25 < (sped_after['position'] - sped_up['position']) / elapsed < 1.75, 'Native playback speed must advance the real media clock at 1.5x'
+    same_sink(sped_up, sped_after)
+    page.evaluate('(rate) => setPlaybackRate(rate, {toast: false})', saved_audio['rate'])
+    completed('single native PCM engine applies stereo width, ten-band EQ, embedded ReplayGain, limiting, real analysis and playback speed')
     page.locator('#mobile-nav [data-mobile-view=settings]').click()
     page.locator('[aria-label="关闭设置"]').click()
     page.locator('#play-btn').click()
@@ -300,9 +403,11 @@ with sync_playwright() as p:
     page.screenshot(path=str(OUT / 'android-folia.png'))
     completed('Folia touch library, playback and Android back handling')
     start_position = page.evaluate('audio.currentTime')
+    foreground = wait_native('before-home', lambda state: state.get('playing') and state.get('engine') == 'pcm')
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     native = wait_native('home', lambda state: state.get('nativeActive') and state.get('playing') and state.get('audioSessionId', 0) > 0)
-    assert page.evaluate('audio.paused && audioCtx.state === "suspended"'), 'WebAudio must stop before native background output starts'
+    same_sink(foreground, native, require_progress=False)
+    assert page.evaluate('audio._mineradioNative && MineradioNativePlayback.mode === "single-native"'), 'The foreground UI must remain a proxy for the same native engine'
     adb('shell', 'input', 'keyevent', 'KEYCODE_SLEEP')
     power = adb('shell', 'dumpsys', 'power')
     (OUT / 'android-screen-off-power.txt').write_text(power, encoding='utf-8')
@@ -310,12 +415,23 @@ with sync_playwright() as p:
     sleep_position = native['position']
     time.sleep(20)
     native = wait_native('screen-off', lambda state: state.get('playing') and state.get('position', 0) > sleep_position + 15)
+    same_sink(foreground, native)
     adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
     adb('shell', 'wm', 'dismiss-keyguard')
     start()
     page.wait_for_function('(before) => audio && !audio.paused && audio.currentTime > before + 2', arg=start_position, timeout=20000)
-    page.wait_for_function('audioCtx.state === "running" && !MineradioNativePlayback.ownsAudio()', timeout=20000)
-    completed('native background playback survives Home and screen off, then hands position back without duplicate output')
+    page.wait_for_function('audioCtx.state === "running" && MineradioNativePlayback.mode === "single-native" && audio._mineradioNative', timeout=20000)
+    resumed_foreground = native_state('foreground-return')
+    same_sink(foreground, resumed_foreground)
+    for transition in range(3):
+        before = native_state('rapid-before-' + str(transition))
+        adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+        time.sleep(.5)
+        start()
+        page.wait_for_function('audio && !audio.paused && audio._mineradioNative', timeout=20000)
+        after = native_state('rapid-return-' + str(transition))
+        same_sink(before, after)
+    completed('Home, screen off and repeated UI returns keep one AudioTrack session without reloads or new underruns')
     folia.get_by_test_id('local-mobile-return').click()
     page.wait_for_function('!document.body.classList.contains("folia-interface-active")')
 
@@ -324,8 +440,27 @@ with sync_playwright() as p:
     tap_document('Background-Green.wav')
     page.wait_for_function('localLibrarySongs.length === 2 && playQueue.length === 2 && audio && !audio.paused', timeout=45000)
     page.wait_for_function('isFinite(audio.duration) && audio.duration > 800', timeout=30000)
+    before_crossfade = native_state('crossfade-before')
+    page.evaluate('''() => {
+        setGaplessCrossfadeSeconds(3, {toast: false});
+        audio.currentTime = audio.duration - 5;
+    }''')
+    near_crossfade = wait_native('crossfade-near-end', lambda state: state.get('playing') and not state.get('preparing')
+        and state.get('duration', 0) > 800 and state.get('position', 0) > state['duration'] - 6)
+    overlapping = wait_native('crossfade-overlap', lambda state: state.get('crossfadeActive') is True
+        and state.get('overlapFrames', 0) > before_crossfade.get('overlapFrames', 0) + 4800)
+    crossed = wait_native('crossfade-complete', lambda state: state.get('playing') and not state.get('crossfadeActive')
+        and state.get('index') == (before_crossfade['index'] + 1) % 2
+        and state.get('crossfadeCount', 0) > before_crossfade.get('crossfadeCount', 0)
+        and state.get('overlapFrames', 0) > before_crossfade.get('overlapFrames', 0) + 48000)
+    same_sink(near_crossfade, crossed, same_track=False)
+    page.wait_for_function('(uri) => audio && !audio.paused && playQueue[currentIdx]?.localFile?.fullPath === uri', arg=crossed['uri'], timeout=30000)
+    page.evaluate('setGaplessCrossfadeSeconds(0, {toast: false})')
+    completed('native crossfade mixes decoded tracks in the same AudioTrack sink')
     page.evaluate('audio.currentTime = audio.duration - 20')
     page.wait_for_function('audio.currentTime > audio.duration - 22')
+    before_remove = wait_native('before-task-removed', lambda state: state.get('playing') and not state.get('preparing')
+        and state.get('position', 0) > state.get('duration', 0) - 22 and state.get('duration', 0) > 800)
     tasks = adb('shell', 'dumpsys', 'activity', 'activities')
     (OUT / 'android-tasks-before-remove.txt').write_text(tasks, encoding='utf-8')
     task = re.search(r'Task\{[^\n]*#(\d+)[^\n]*' + re.escape(APP), tasks)
@@ -333,12 +468,14 @@ with sync_playwright() as p:
     # Android 15 am stack remove delegates to removeTask, the Recents dismissal operation.
     adb('shell', 'am', 'stack', 'remove', task.group(1))
     native = wait_native('task-removed', lambda state: state.get('nativeActive') and state.get('playing'))
+    same_sink(before_remove, native, require_progress=False)
     expected_index = native['index']
-    assert native['position'] > native['duration'] - 25, 'Native output must inherit the near-end position before automatic advance'
+    assert native['position'] > native['duration'] - 25, 'Removing the Activity must keep the near-end native playback position'
     after = adb('shell', 'dumpsys', 'activity', 'activities')
     (OUT / 'android-tasks-after-remove.txt').write_text(after, encoding='utf-8')
     assert not re.search(r'Task\{[^\n]*#' + task.group(1) + r'\b[^\n]*' + re.escape(APP), after), 'Mineradio task must actually be removed'
     advanced = wait_native('auto-next-without-webview', lambda state: state.get('playing') and state.get('index') == (expected_index + 1) % 2 and 1 < state.get('position', 0) < 10)
+    same_sink(before_remove, advanced, same_track=False)
     completed('removing the recent task keeps native playback alive and automatically advances its queue')
 
     adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_PAUSE')
@@ -356,7 +493,8 @@ with sync_playwright() as p:
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.wait_for_load_state('domcontentloaded', timeout=60000)
-    page.wait_for_function('(state) => typeof audio !== "undefined" && audio && !audio.paused && !MineradioNativePlayback.ownsAudio() && playQueue[currentIdx].localFile.fullPath === state.uri && audio.currentTime >= state.position - 1', arg=resumed, timeout=45000)
+    page.wait_for_function('(state) => typeof audio !== "undefined" && audio && !audio.paused && audio._mineradioNative && MineradioNativePlayback.mode === "single-native" && playQueue[currentIdx].localFile.fullPath === state.uri && audio.currentTime >= state.position - 1', arg=resumed, timeout=45000)
+    same_sink(resumed, native_state('playing-ui-recreated'))
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     wait_native('second-home', lambda state: state.get('nativeActive') and state.get('playing'))
     adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_PAUSE')
@@ -369,14 +507,16 @@ with sync_playwright() as p:
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.wait_for_load_state('domcontentloaded', timeout=60000)
-    page.wait_for_function('typeof audio !== "undefined" && audio && audio.src && audio.paused && !MineradioNativePlayback.ownsAudio()', timeout=45000)
+    page.wait_for_function('typeof audio !== "undefined" && audio && audio.src && audio.paused && audio._mineradioNative && MineradioNativePlayback.mode === "single-native"', timeout=45000)
     page.wait_for_function('(uri) => playQueue[currentIdx] && playQueue[currentIdx].localFile.fullPath === uri', arg=paused['uri'], timeout=30000)
     page.wait_for_function('(position) => audio.paused && Math.abs(audio.currentTime - position) < 2', arg=paused['position'], timeout=30000)
+    same_sink(paused, native_state('paused-ui-return'), require_progress=False)
     page.locator('#mobile-nav [data-mobile-view=player]').click()
     page.locator('#play-btn').click()
     page.wait_for_function('audio && !audio.paused && audioCtx.state === "running"', timeout=30000)
     completed('media controls work without an Activity and playing or paused playback restores to the correct song and position')
 
+    page.evaluate('setAutoPlaybackMode("off", {silent: true, startNow: false})')
     adb('shell', 'am', 'force-stop', APP)
     time.sleep(1)
     start()
@@ -387,10 +527,14 @@ with sync_playwright() as p:
     page.wait_for_load_state('domcontentloaded', timeout=60000)
     page.wait_for_function('typeof localLibrarySongs !== "undefined" && localLibrarySongs.length === 2', timeout=30000)
     page.wait_for_function('customLyricMapHydrated && customLyricPrefsHydrated', timeout=30000)
+    page.evaluate('async () => await MineradioNativePlayback.ready')
+    assert page.evaluate('autoPlaybackMode === "off" && (!audio || audio.paused)'), 'Cold restore with automatic playback disabled must wait for an explicit play command'
     assert not page.locator('#custom-lyric-modal').is_visible(), 'Cold restore must not open the custom lyrics editor'
     page.locator('#mobile-nav [data-mobile-view=player]').click()
     page.locator('#play-btn').click()
     page.wait_for_function('audio && !audio.paused && audio.currentTime > 0.5', timeout=30000)
+    cold_native = wait_native('cold-native-play', lambda state: state.get('playing') and state.get('engine') == 'pcm' and state.get('audioSessionId', 0) > 0)
+    assert cold_native['sinkCreations'] == 1, 'Cold manual playback must create one native sink'
     page.wait_for_function('lyricsLines.some(line => !line.fallback && line.text.includes("手机内嵌歌词"))', timeout=30000)
     completed('cold restart restores persisted URI grants and music library')
     page.screenshot(path=str(OUT / 'android-restored.png'))
@@ -399,7 +543,7 @@ with sync_playwright() as p:
 # The release has debugging disabled; install the exact signed download and inspect its real UI.
 adb('shell', 'am', 'force-stop', APP)
 adb('uninstall', APP)
-subprocess.check_call(['adb', 'install', str(ROOT / 'release/Mineradio-Android-1.0.2.apk')])
+subprocess.check_call(['adb', 'install', str(ROOT / ('release/Mineradio-Android-' + ANDROID_VERSION + '.apk')))])
 launch = adb('shell', 'am', 'start', '-W', '-n', APP + '/.MainActivity')
 assert 'Status: ok' in launch, launch
 layout = ''

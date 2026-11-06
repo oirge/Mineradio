@@ -43,12 +43,14 @@ public class PlaybackService extends Service {
     static PlaybackService current() { return instance; }
     static void cacheQueue(Context context, JSONArray queue) {
         webQueue = queue;
+        if (instance != null && instance.nativePlayer.ownsAudio()) instance.nativePlayer.updateQueue(queue);
         context.getSharedPreferences("mineradio-playback", 0).edit().putString("webQueue", queue.toString()).apply();
     }
     static void cacheWeb(Context context, JSONObject state) {
         try { webState = new JSONObject(state.toString()).put("nativeActive", false).put("backend", "web"); }
         catch (Exception ignored) { return; }
         webUpdatedAt = SystemClock.elapsedRealtime();
+        if (instance != null && instance.nativePlayer.ownsAudio()) instance.nativePlayer.configure(state);
         context.getSharedPreferences("mineradio-playback", 0).edit().putString("webState", webState.toString()).apply();
     }
     private static JSONObject webSnapshot(Context context) {
@@ -62,12 +64,7 @@ public class PlaybackService extends Service {
             return state;
         } catch (Exception ignored) { return new JSONObject(); }
     }
-    static void hostDestroyed(Context context) {
-        PlaybackService service = instance;
-        if (service == null || service.nativePlayer.ownsAudio() || !webState.optBoolean("playing", false)) return;
-        JSONObject state = webSnapshot(context);
-        if (state.optJSONArray("queue") != null && state.optJSONArray("queue").length() > 0) service.startNative(state);
-    }
+    static void hostDestroyed(Context context) { /* The audio engine belongs to this service. */ }
 
     @Override public void onCreate() {
         super.onCreate(); running = true; instance = this;
@@ -103,14 +100,13 @@ public class PlaybackService extends Service {
         if (webLock.isHeld()) webLock.release();
         nativePlayer.start(state);
     }
-    JSObject takeForeground() {
-        if (!nativePlayer.ownsAudio()) return new JSObject().put("nativeActive", false);
-        taking = true;
-        JSObject value = nativePlayer.take();
-        value.put("playing", value.optBoolean("resumePlaying", false));
-        cacheWeb(this, value); taking = false; publish();
-        return value;
+    void configureNative(JSONObject value) { if (nativePlayer.ownsAudio()) nativePlayer.configure(value); }
+    void commandNative(String action, long position) {
+        if ("seek".equals(action)) nativePlayer.seek(position);
+        else route(action);
     }
+    void gainNative(float target, long duration) { nativePlayer.gain(target, duration); }
+
     private void route(String action) {
         if ("stop".equals(action)) {
             if (nativePlayer.ownsAudio()) nativePlayer.pause();
@@ -122,16 +118,6 @@ public class PlaybackService extends Service {
             else if ("pause".equals(action)) nativePlayer.pause();
             else if ("next".equals(action)) nativePlayer.advance(1, true);
             else if ("previous".equals(action)) nativePlayer.advance(-1, true);
-        } else if (!MineradioLibraryPlugin.hasHost()) {
-            JSObject saved = NativeBackgroundPlayer.stored(this);
-            JSONObject value = saved.optBoolean("nativeActive", false) ? saved : webSnapshot(this);
-            if (value.optJSONArray("queue") != null && value.optJSONArray("queue").length() > 0) {
-                try { value.put("resumePlaying", !"pause".equals(action)).put("transferAt", System.currentTimeMillis()); }
-                catch (Exception ignored) {}
-                startNative(value);
-                if ("next".equals(action)) nativePlayer.advance(1, true);
-                else if ("previous".equals(action)) nativePlayer.advance(-1, true);
-            } else stopSelf();
         } else MineradioLibraryPlugin.control(action);
     }
     private PendingIntent action(String name, int request) {
