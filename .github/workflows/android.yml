@@ -4,6 +4,11 @@ on:
   push:
     branches: [codex/android-mobile]
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish after acceptance succeeds
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -224,6 +229,7 @@ jobs:
           retention-days: 14
 
   publish:
+    if: github.event_name != 'workflow_dispatch' || inputs.publish_release
     needs: [build, verify-browser, verify-android]
     runs-on: ubuntu-latest
     permissions:

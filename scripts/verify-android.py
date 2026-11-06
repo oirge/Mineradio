@@ -205,11 +205,20 @@ with sync_playwright() as p:
     finally:
         diagnostic = page.evaluate('''() => ({ text: stageLyrics.currentText, index: stageLyrics.currentIdx,
             displayMode: fx.lyricDisplayMode, groupVisible: stageLyrics.group?.visible,
+            bodyClass: document.body.className,
+            meshVisible: stageLyrics.current?.visible,
+            materialOpacity: stageLyrics.current?.userData.lyric?.textMat?.uniforms?.uOpacity?.value,
+            meshWorld: stageLyrics.current?.getWorldPosition(new THREE.Vector3()).toArray(),
+            meshScreen: stageLyrics.current?.getWorldPosition(new THREE.Vector3()).project(camera).toArray(),
+            cameraPosition: camera.position.toArray(), cameraFov: camera.fov,
+            rendererInfo: typeof renderer !== 'undefined' ? renderer.info.render : null,
             rows: stageLyrics.rows.map(row => ({index: row.lineIdx, kind: row.kind, alpha: row.alpha,
                 state: row.state, visible: row.mesh.visible})),
             canvasOpacity: getComputedStyle(document.getElementById('canvas-container')).opacity })''')
         (OUT / 'android-main-lyrics.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
         page.screenshot(path=str(OUT / 'android-player.png'))
+        # Android's physical composition can differ from CDP's WebView capture for WebGL.
+        (OUT / 'android-player-screen.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
     completed('native integer byte ranges and real embedded ID3 lyrics reach the main lyric stage')
     assert 'PlaybackService' in adb('shell', 'dumpsys', 'activity', 'services', APP)
     assert 'Mineradio' in adb('shell', 'dumpsys', 'media_session')
@@ -292,6 +301,7 @@ with sync_playwright() as p:
     page.wait_for_function('lyricsLines.some(line => !line.fallback && line.text.includes("手机内嵌歌词"))', timeout=30000)
     completed('cold restart restores persisted URI grants and music library')
     page.screenshot(path=str(OUT / 'android-restored.png'))
+    (OUT / 'android-restored-screen.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
 
 # The release has debugging disabled; install the exact signed download and inspect its real UI.
 adb('shell', 'am', 'force-stop', APP)
