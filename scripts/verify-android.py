@@ -341,10 +341,12 @@ with sync_playwright() as p:
         setVolume(saved.volume, true); setPlaybackRate(1.5, {toast: false});
     }''', saved_audio)
     sped_up = wait_native('native-speed-start', lambda state: state.get('playing') and abs(state.get('rate', 0) - 1.5) < .01)
-    speed_started = time.monotonic()
     time.sleep(2)
     sped_after = native_state('native-speed-end')
-    elapsed = time.monotonic() - speed_started
+    elapsed = (sped_after['snapshotAt'] - sped_up['snapshotAt']) / 1000
+    assert elapsed > 1, 'Playback speed proof requires distinct native snapshots spanning at least one second'
+    print('Native speed:', json.dumps({'elapsed': elapsed, 'positionDelta': sped_after['position'] - sped_up['position'],
+        'ratio': (sped_after['position'] - sped_up['position']) / elapsed}), flush=True)
     assert 1.25 < (sped_after['position'] - sped_up['position']) / elapsed < 1.75, 'Native playback speed must advance the real media clock at 1.5x'
     same_sink(sped_up, sped_after)
     page.evaluate('(rate) => setPlaybackRate(rate, {toast: false})', saved_audio['rate'])

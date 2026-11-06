@@ -199,7 +199,12 @@ public class PlaybackService extends Service {
         if (!nativePlayer.ownsAudio()) hostDestroyed(this);
         if (!nativePlayer.ownsAudio() && !webState.optBoolean("playing", false)) stopSelf();
     }
-    @Override protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) { writer.println("MINERADIO_PLAYBACK " + diagnostic); }
+    @Override protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
+        // Notification publication is throttled. Diagnostics need the current media
+        // position and the timestamp from the same snapshot, including while locked.
+        String value = nativePlayer != null && nativePlayer.ownsAudio() ? nativePlayer.snapshot(false).toString() : diagnostic;
+        writer.println("MINERADIO_PLAYBACK " + value);
+    }
     @Override public void onDestroy() {
         instance = null; running = false;
         nativePlayer.close();
