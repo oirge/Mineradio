@@ -18,7 +18,7 @@ async function until(predicate) {
 }
 
 function fixture(options = {}) {
-  const uri = 'content://fixture/one';
+  const uri = options.uri || 'content://fixture/one';
   const source = value => 'https://localhost/_capacitor_content_/' + value.replace(/^content:\/\//, '');
   const calls = [], errors = [], observed = [];
   const root = {Event, EventTarget, setTimeout(callback) { return setTimeout(callback, 0); }, audio: null};
@@ -37,7 +37,7 @@ function fixture(options = {}) {
     async startBackground(request) {
       calls.push(['start', structuredClone(request)]);
       if (options.start) return options.start(item, request);
-      item.native = {...item.native, ...request, nativeActive: true, playing: true, preparing: false};
+      item.native = {...item.native, ...request, uri: request.queue[request.index].uri, nativeActive: true, playing: true, preparing: false};
       return snapshot();
     },
     async commandPlayback(request) {
@@ -58,7 +58,7 @@ function fixture(options = {}) {
         position: media.currentTime, duration: 240, rate: media.playbackRate,
         resumePlaying: true, volume: .8, effects: {enabled: false}};
     },
-    async configure() { calls.push(['configure']); return snapshot(); },
+    async configure() { calls.push(['configure']); return options.configure ? options.configure(item, snapshot) : snapshot(); },
     async onState(value) {
       observed.push(structuredClone(value));
       if (options.onState) await options.onState(item, value);
@@ -146,12 +146,13 @@ test('resuming the same native track uses its play command and never opens anoth
 });
 
 test('Android converted SAF addresses preserve the provider URI through start, refresh, seek and resume', async () => {
-  const item = fixture();
   const uri = 'content://com.android.providers.downloads.documents/document/msf%3A1000000016';
+  const item = fixture({uri});
   item.media.src = item.source(uri);
   assert.equal(item.media.src, 'https://localhost/_capacitor_content_/com.android.providers.downloads.documents/document/msf%3A1000000016');
   await item.media.play();
   assert.equal(item.commands()[0][1].uri, uri);
+  assert.equal(item.commands()[0][1].queue[item.commands()[0][1].index].uri, uri);
   assert.equal(item.media.paused, false);
   item.native.position = 18;
   await item.facade.refresh();
@@ -167,6 +168,49 @@ test('Android converted SAF addresses preserve the provider URI through start, r
     {action: 'seek', position: 32}, {action: 'pause'}, {action: 'play'},
   ]);
   assert.equal(item.media.paused, false);
+});
+
+test('an old poll cannot overwrite a UI setting while its native configuration is in flight', async () => {
+  const late = deferred(), configured = deferred();
+  let delayNext = false;
+  const item = fixture({
+    getState: (current, snapshot) => delayNext ? (delayNext = false, late.promise) : snapshot(),
+    configure: async current => { await configured.promise; current.native.rate = 1; },
+    onState: (current, state) => { current.root.settingRate = state.rate; },
+  });
+  item.native.nativeActive = true; item.native.playing = true; item.native.rate = 1.5;
+  await item.facade.initialize();
+  const stale = {...structuredClone(item.native), snapshotAt: Date.now()};
+  delayNext = true;
+  const oldRefresh = item.facade.refresh();
+  item.root.settingRate = 1;
+  const applying = item.facade.configure();
+  await until(() => item.commands().some(call => call[0] === 'configure'));
+  late.resolve(stale);
+  await oldRefresh;
+  assert.equal(item.root.settingRate, 1);
+  assert.equal(item.observed.length, 1);
+  configured.resolve();
+  await applying;
+  await item.facade.refresh();
+  assert.equal(item.root.settingRate, 1);
+  assert.equal(item.media.playbackRate, 1);
+});
+
+test('native UI configurations are serialized with playback commands', async () => {
+  const configured = deferred();
+  const item = fixture({configure: () => configured.promise});
+  item.native.nativeActive = true; item.native.playing = true;
+  await item.facade.initialize();
+  const applying = item.facade.configure();
+  item.media.pause();
+  await until(() => item.commands().length > 0);
+  assert.deepEqual(item.commands(), [['configure']]);
+  configured.resolve();
+  await applying;
+  await until(() => !item.facade.busy());
+  assert.deepEqual(item.commands(), [['configure'], ['command', {action: 'pause'}]]);
+  assert.equal(item.native.playing, false);
 });
 
 test('direct and scheme-retaining content addresses refer to the same native media', async () => {

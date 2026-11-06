@@ -150,7 +150,8 @@
     resume: function () { return Promise.resolve(); }, suspend: function () { return Promise.resolve(); }};
   Object.defineProperties(context, {currentTime: {get: function () { return (Date.now() - origin) / 1000; }}, state: {get: function () { return state.playing ? 'running' : 'suspended'; }}});
   return {Media: NativeMedia, context: context, analyser: analyser, node: node, outputParam: function (value) { return new Param(value, true); },
-    uriOf: uriOf, refresh: refresh, state: function () { return state; }, synchronizing: function () { return syncing; }, busy: function () { return !!pending; },
+    uriOf: uriOf, configure: function () { return enqueue(function () { return dependencies.configure(); }); },
+    refresh: refresh, state: function () { return state; }, synchronizing: function () { return syncing; }, busy: function () { return !!pending; },
     synchronize: async function (operation) { syncing = true; try { return await operation(); } finally { syncing = false; } },
     mode: 'single-native', phase: function () { return 'native'; }, ownsAudio: function () { return false; }, setBackground: function () { return refresh(); },
     events: function () { return []; }, initialize: function () { return refresh(); }, get revision() { return revision; }};

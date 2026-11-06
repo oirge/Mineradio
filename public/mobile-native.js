@@ -233,12 +233,12 @@
     if (typeof original !== 'function') return;
     window[name] = function () {
       var result = original.apply(this, arguments);
-      if (!playbackController.synchronizing()) Promise.resolve().then(configureNative).catch(function (error) { console.warn('[AndroidSettings]', error); });
+      if (!playbackController.synchronizing()) playbackController.configure().catch(function (error) { console.warn('[AndroidSettings]', error); });
       return result;
     };
   });
   async function pollNative() {
-    try { if (!document.hidden) { await playbackController.refresh(); await configureNative(); } }
+    try { if (!document.hidden) { await playbackController.refresh(); await playbackController.configure(); } }
     catch (error) { console.warn('[AndroidState]', error); }
     playbackTimer = setTimeout(pollNative, document.hidden ? 1000 : 50);
   }

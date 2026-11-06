@@ -348,6 +348,7 @@ with sync_playwright() as p:
     assert 1.25 < (sped_after['position'] - sped_up['position']) / elapsed < 1.75, 'Native playback speed must advance the real media clock at 1.5x'
     same_sink(sped_up, sped_after)
     page.evaluate('(rate) => setPlaybackRate(rate, {toast: false})', saved_audio['rate'])
+    wait_native('native-speed-restored', lambda state: state.get('playing') and abs(state.get('rate', 0) - saved_audio['rate']) < .01)
     completed('single native PCM engine applies stereo width, ten-band EQ, embedded ReplayGain, limiting, real analysis and playback speed')
     page.locator('#mobile-nav [data-mobile-view=settings]').click()
     page.locator('[aria-label="关闭设置"]').click()

@@ -240,7 +240,13 @@ final class NativeAudioEngine {
                             checkUpcoming(); prefetch(decodedPosition, false);
                             double cross = Math.max(0, Math.min(crossfadeSeconds, (duration - .35) / 2));
                             if (retiring == null && !stopAfterTrack && nextIndex != index && cross > 0 && duration - decodedPosition <= cross) transition(true);
-                            frames = active.read(mixed, 0, BLOCK);
+                            // Fill the stopped sink before its first play. Never issue a
+                            // blocking write beyond its capacity while the head is stopped.
+                            int capacity = sink.getBufferSizeInFrames();
+                            int primeFrames = Math.max(1, capacity * 3 / 4);
+                            int blockFrames = started ? BLOCK : Math.min(BLOCK, Math.max(0,
+                                primeFrames - (int) (submittedFrames - head())));
+                            frames = active.read(mixed, 0, blockFrames);
                             if (frames == 0 && active.ended()) {
                                 if (stopAfterTrack || upcomingUnavailable) {
                                     draining = true;
@@ -248,7 +254,7 @@ final class NativeAudioEngine {
                                 } else {
                                     prefetch(duration, true); checkUpcoming();
                                     if (upcomingUnavailable) { draining = true; error = upcomingError; }
-                                    else { transition(false); frames = active.read(mixed, 0, BLOCK); }
+                                    else { transition(false); frames = active.read(mixed, 0, blockFrames); }
                                 }
                             }
                             if (frames > 0) {
@@ -284,8 +290,10 @@ final class NativeAudioEngine {
                                         error = "AUDIO_TRACK_WRITE_" + written; wanted = false; sink.pause(); notifyChanged(); break;
                                     }
                                     submittedFrames += written / 2; outputFrames += written / 2; offset += written;
-                                    if (sink.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) sink.play();
-                                    if (!started) { started = true; notifyChanged(); }
+                                    if (!started && (sink.getPlayState() == AudioTrack.PLAYSTATE_PLAYING
+                                        || submittedFrames - head() >= primeFrames || active.ended())) {
+                                        sink.play(); started = true; notifyChanged();
+                                    }
                                 }
                             }
                         }
@@ -302,7 +310,9 @@ final class NativeAudioEngine {
                         sink.pause(); uiDraining = false; notifyChanged();
                     }
                 }
-                try { Thread.sleep(frames == 0 ? 5 : 1); } catch (InterruptedException ignored) {}
+                // AudioTrack's blocking write already paces productive output. Sleeping
+                // after every 512 frames repeatedly drains the reserve under CPU load.
+                if (frames == 0) try { Thread.sleep(5); } catch (InterruptedException ignored) {}
             }
         } catch (Exception problem) { synchronized (mutex) { error = problem.toString(); wanted = false; preparing = false; } notifyChanged(); }
         finally { synchronized (mutex) { release(active); release(upcoming); release(retiring); if (sink != null) { sink.release(); sink = null; } } }
@@ -312,13 +322,14 @@ final class NativeAudioEngine {
         synchronized (mutex) {
             JSONObject song = item(index);
             value = new JSObject().put("nativeActive", active != null).put("backend", "native").put("engine", "pcm")
-                .put("playing", wanted && started && !preparing).put("resumePlaying", wanted).put("preparing", wanted && preparing)
+                .put("playing", wanted && started && !preparing).put("resumePlaying", wanted).put("preparing", wanted && (preparing || !started))
                 .put("index", index).put("uri", song.optString("uri")).put("title", song.optString("title")).put("artist", song.optString("artist"))
                 .put("position", Math.min(duration > 0 ? duration : Double.MAX_VALUE, position())).put("duration", duration).put("rate", rate)
                 .put("masterLevel", master).put("volume", gainTarget).put("playMode", mode).put("stopAfterTrack", stopAfterTrack)
                 .put("snapshotAt", System.currentTimeMillis()).put("error", error)
                 .put("audioSessionId", sink == null ? 0 : sink.getAudioSessionId()).put("outputFrames", outputFrames)
                 .put("playbackHeadFrames", head()).put("underruns", sink == null ? 0 : sink.getUnderrunCount())
+                .put("sinkBufferFrames", sink == null ? 0 : sink.getBufferSizeInFrames())
                 .put("sinkCreations", sinkCreations).put("trackGeneration", trackGeneration).put("completions", completions)
                 .put("crossfadeActive", retiring != null).put("crossfadeCount", crossfadeCount).put("overlapFrames", overlapFrames)
                 .put("gapless", new JSObject().put("enabled", gaplessEnabled).put("crossfadeSeconds", crossfadeSeconds))
