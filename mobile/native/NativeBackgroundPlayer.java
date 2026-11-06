@@ -29,7 +29,8 @@ final class NativeBackgroundPlayer {
     private AudioFocusRequest focusRequest;
     private JSONArray queue = new JSONArray();
     private int index, failures;
-    private boolean owned, prepared, wanted, focusPaused, ducked;
+    private boolean owned, prepared, wanted, focusPaused, ducked, seekingStart;
+    private Runnable prepareTimeout;
     private long position, duration, sleepDue, savedAt, transferAt;
     private float rate = 1, volume = 1;
     private String mode = "loop", sleepMode = "off", error = "";
@@ -94,11 +95,13 @@ final class NativeBackgroundPlayer {
         next.setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK);
         next.setOnPreparedListener(media -> {
             if (!owned || player != media) return;
+            if (prepareTimeout != null) { handler.removeCallbacks(prepareTimeout); prepareTimeout = null; }
             prepared = true; duration = media.getDuration();
             long seek = Math.min(position, Math.max(0, duration - 1));
             if (seek > 0) {
+                seekingStart = true;
                 media.setOnSeekCompleteListener(value -> {
-                    if (owned && player == value) { value.setOnSeekCompleteListener(null); begin(); }
+                    if (owned && player == value) { seekingStart = false; value.setOnSeekCompleteListener(null); begin(); }
                 });
                 if (Build.VERSION.SDK_INT >= 26) media.seekTo(seek, MediaPlayer.SEEK_CLOSEST);
                 else media.seekTo((int) seek);
@@ -116,10 +119,11 @@ final class NativeBackgroundPlayer {
             return true;
         });
         try { next.setDataSource(context, Uri.parse(text("uri"))); next.prepareAsync(); }
-        catch (Exception problem) { failed(problem.getClass().getSimpleName()); }
-        handler.postDelayed(() -> {
+        catch (Exception problem) { failed(problem.getClass().getSimpleName()); return; }
+        prepareTimeout = () -> {
             if (owned && player == next && !prepared) failed("PREPARE_TIMEOUT");
-        }, 20000);
+        };
+        handler.postDelayed(prepareTimeout, 20000);
         listener.changed();
     }
 
@@ -211,9 +215,9 @@ final class NativeBackgroundPlayer {
         boolean audible = false;
         try { audible = prepared && player != null && player.isPlaying(); } catch (Exception ignored) {}
         JSObject value = new JSObject().put("nativeActive", owned).put("backend", owned ? "native" : "web")
-            .put("playing", audible).put("preparing", owned && !prepared && player != null)
+            .put("playing", audible).put("preparing", owned && (!prepared || seekingStart) && player != null)
             .put("waitingForFocus", focusPaused && wanted)
-            .put("resumePlaying", wanted && !focusPaused && (!prepared || audible))
+            .put("resumePlaying", wanted && !focusPaused && (!prepared || seekingStart || audible))
             .put("index", index).put("uri", text("uri")).put("title", text("title")).put("artist", text("artist"))
             .put("position", position / 1000.0).put("duration", duration / 1000.0).put("rate", rate).put("volume", volume)
             .put("playMode", mode).put("sleepMode", sleepMode).put("sleepDue", sleepDue).put("stopAfterTrack", stopAfterTrack)
@@ -243,7 +247,8 @@ final class NativeBackgroundPlayer {
         return state;
     }
     private void releasePlayer() {
-        prepared = false;
+        if (prepareTimeout != null) { handler.removeCallbacks(prepareTimeout); prepareTimeout = null; }
+        prepared = false; seekingStart = false;
         MediaPlayer previous = player; player = null;
         if (previous != null) { previous.setOnErrorListener(null); previous.setOnCompletionListener(null); previous.release(); }
     }
