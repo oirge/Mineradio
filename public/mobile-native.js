@@ -7,7 +7,7 @@
   var busy = false;
   var lastState = '';
   var playbackTimer = 0;
-  var playbackController;
+  var playbackController, lastNativeCompletions = 0;
   var nativeQueueRevision = 0, cachedQueueRevision = -1, sentQueueRevision = -1, cachedQueueSource = null, cachedQueue = null;
   var originalQueueChanged = markQueueContentChanged;
   markQueueContentChanged = function () {
@@ -157,15 +157,21 @@
     var signature = JSON.stringify([queue, settings]);
     if (signature === lastState) return;
     lastState = signature;
-    await plugin.cachePlaybackQueue({queue: queue});
-    await plugin.configurePlayback(settings);
+    try {
+      await plugin.cachePlaybackQueue({queue: queue});
+      await plugin.configurePlayback(settings);
+    } catch (error) { lastState = ''; throw error; }
     if (sleepTimerState.timer) { clearTimeout(sleepTimerState.timer); sleepTimerState.timer = null; }
     await playbackController.refresh();
   }
   async function syncNativeState(state) {
     if (!audioReady) initAudio();
     var nativeUri = state.uri;
-    if (trackUri(currentLocalSong) !== nativeUri || !audio || !audio.src) {
+    var restoredTrack = false;
+    var completedTrack = Number(state.completions) > lastNativeCompletions;
+    if (trackUri(currentLocalSong) !== nativeUri || !audio || !audio.src ||
+        completedTrack && Number(state.index) !== currentIdx) {
+      restoredTrack = true;
       var existing = new Map();
       [playQueue, localLibrarySongs].forEach(function (songs) { songs.forEach(function (song) { existing.set(trackUri(song), song); }); });
       var restored = state.queue.map(function (entry) { return existing.get(entry.uri); });
@@ -181,6 +187,12 @@
     sleepTimerState.mode = state.sleepMode || 'off'; sleepTimerState.dueAt = Number(state.sleepDue) || 0;
     stopAfterCurrentTrack = !!state.stopAfterTrack;
     if (sleepTimerState.timer) { clearTimeout(sleepTimerState.timer); sleepTimerState.timer = null; }
+    if (completedTrack && !restoredTrack && trackUri(currentLocalSong) === nativeUri && Number(state.index) === currentIdx && currentLocalSong) {
+      finalizeListenSession(true);
+      if (state.playing) beginListenSession(currentLocalSong, null);
+    }
+    lastNativeCompletions = Number(state.completions) || 0;
+    updatePlaybackRateControls(); updateSleepTimerControls();
     playing = !!state.playing; setPlayIcon(playing);
   }
   playbackController = window.createMineradioNativeAudio({root: window, plugin: plugin,
@@ -189,6 +201,13 @@
   window.MineradioNativeAudio = playbackController;
   window.MineradioNativePlayback = playbackController;
   window.Audio = playbackController.Media;
+  playShelfSelectTick = function (direction, variant) {
+    var now = performance.now(), gap = variant === 'row' ? 36 : 42;
+    if (now - lastShelfSelectSfxAt < gap) return;
+    lastShelfSelectSfxAt = now;
+    plugin.uiSound({direction: direction < 0 ? -1 : 1, row: variant === 'row', volume: targetVolume})
+      .catch(function (error) { console.warn('[AndroidUiSound]', error); });
+  };
   initAudio = function () {
     if (audioReady) return;
     audioCtx = playbackController.context;
@@ -216,7 +235,7 @@
     };
   });
   async function pollNative() {
-    try { if (!document.hidden) await playbackController.refresh(); }
+    try { if (!document.hidden) { await playbackController.refresh(); await configureNative(); } }
     catch (error) { console.warn('[AndroidState]', error); }
     playbackTimer = setTimeout(pollNative, document.hidden ? 1000 : 50);
   }

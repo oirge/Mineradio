@@ -21,6 +21,8 @@ final class NativeAudioEngine {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Object mutex = new Object();
     private final NativeAudioDsp dsp = new NativeAudioDsp();
+    private final NativeUiSound ui = new NativeUiSound();
+    private boolean uiDraining;
     private final Thread worker;
     private volatile boolean closed;
     private AudioTrack sink;
@@ -59,6 +61,7 @@ final class NativeAudioEngine {
             queue = incoming;
             index = Math.max(0, Math.min(queue.length() - 1, state.optInt("index", 0)));
             configure(state);
+            gain((float) state.optDouble("initialGain", state.optDouble("volume", 1)), 0);
             wanted = state.optBoolean("resumePlaying", state.optBoolean("playing", false));
             load(state.optDouble("position", 0), true, false);
         }
@@ -118,8 +121,10 @@ final class NativeAudioEngine {
         preparing = true; started = false; error = ""; trackGeneration++;
         trackFadeFrames = trackFadeTotal = fade ? (int) (.460 * RATE) : 0;
     }
-    void play() {
+    void play() { play(null); }
+    void play(Float initialGain) {
         synchronized (mutex) {
+            if (initialGain != null) gain(initialGain, 0);
             wanted = true;
             if (active == null || (active.ended() && head() >= submittedFrames)) load(0, true, true);
         }
@@ -132,6 +137,15 @@ final class NativeAudioEngine {
             index = Math.floorMod(index + delta, queue.length()); wanted = true; load(0, true, true); configureTrackGain();
         }
         notifyChanged();
+    }
+    void uiSound(int direction, boolean row, float userVolume) {
+        synchronized (mutex) {
+            if (!wanted && active != null) {
+                // A click-only write must not resume the music retained in the paused sink.
+                double frozen = position(); load(frozen, true, false);
+            }
+            ui.start(direction, row, userVolume); uiDraining = false;
+        }
     }
     void gain(float value, long milliseconds) {
         synchronized (mutex) {
@@ -259,6 +273,8 @@ final class NativeAudioEngine {
                                     output[f * 2] = Math.max(-1, Math.min(1, mixed[f * 2] * master * fade));
                                     output[f * 2 + 1] = Math.max(-1, Math.min(1, mixed[f * 2 + 1] * master * fade));
                                 }
+                                ui.mix(output, frames);
+                                for (int n = 0; n < frames * 2; n++) output[n] = Math.max(-1, Math.min(1, output[n]));
                                 // Writes and stream counters share the lifecycle lock. A pause or
                                 // seek cannot flush a block and then have its old writer refill it.
                                 int offset = 0;
@@ -274,16 +290,28 @@ final class NativeAudioEngine {
                             }
                         }
                     }
+                    if (!wanted && ui.active()) {
+                        ensureSink(); frames = BLOCK;
+                        java.util.Arrays.fill(output, 0); ui.mix(output, frames);
+                        // No decoder frames are consumed; the song remains at its frozen position.
+                        sink.play();
+                        int written = sink.write(output, 0, frames * 2, AudioTrack.WRITE_BLOCKING);
+                        if (written > 0) { submittedFrames += written / 2; outputFrames += written / 2; originFrames = submittedFrames; }
+                        uiDraining = !ui.active();
+                    } else if (!wanted && uiDraining && head() >= submittedFrames) {
+                        sink.pause(); uiDraining = false; notifyChanged();
+                    }
                 }
-                if (frames == 0) try { Thread.sleep(5); } catch (InterruptedException ignored) {}
+                try { Thread.sleep(frames == 0 ? 5 : 1); } catch (InterruptedException ignored) {}
             }
         } catch (Exception problem) { synchronized (mutex) { error = problem.toString(); wanted = false; preparing = false; } notifyChanged(); }
         finally { synchronized (mutex) { release(active); release(upcoming); release(retiring); if (sink != null) { sink.release(); sink = null; } } }
     }
     JSObject snapshot(boolean includeQueue) {
+        JSObject value;
         synchronized (mutex) {
             JSONObject song = item(index);
-            JSObject value = new JSObject().put("nativeActive", active != null).put("backend", "native").put("engine", "pcm")
+            value = new JSObject().put("nativeActive", active != null).put("backend", "native").put("engine", "pcm")
                 .put("playing", wanted && started && !preparing).put("resumePlaying", wanted).put("preparing", wanted && preparing)
                 .put("index", index).put("uri", song.optString("uri")).put("title", song.optString("title")).put("artist", song.optString("artist"))
                 .put("position", Math.min(duration > 0 ? duration : Double.MAX_VALUE, position())).put("duration", duration).put("rate", rate)
@@ -295,9 +323,10 @@ final class NativeAudioEngine {
                 .put("crossfadeActive", retiring != null).put("crossfadeCount", crossfadeCount).put("overlapFrames", overlapFrames)
                 .put("gapless", new JSObject().put("enabled", gaplessEnabled).put("crossfadeSeconds", crossfadeSeconds))
                 .put("effects", dsp.diagnostics()).put("audioEffects", effects);
-            if (includeQueue) value.put("queue", queue).put("analysis", dsp.analysis());
-            return value;
+            if (includeQueue) value.put("queue", queue);
         }
+        if (includeQueue) value.put("analysis", dsp.analysis());
+        return value;
     }
     void close() { closed = true; worker.interrupt(); synchronized (mutex) { if (sink != null) sink.pause(); release(active); release(upcoming); release(retiring); } }
 }

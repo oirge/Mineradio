@@ -224,9 +224,9 @@ public class MineradioLibraryPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             PlaybackService service = PlaybackService.current();
             if (service == null) { call.reject("播放服务尚未启动"); return; }
-            service.commandNative(call.getString("action", ""), (long) (call.getData().optDouble("position", 0) * 1000));
             if ("play".equals(call.getString("action")) && call.getData().has("initialGain"))
-                service.gainNative((float) call.getData().optDouble("initialGain", 1), 0);
+                service.playNative((float) call.getData().optDouble("initialGain", 1));
+            else service.commandNative(call.getString("action", ""), (long) (call.getData().optDouble("position", 0) * 1000));
             call.resolve();
         });
     }
@@ -234,6 +234,13 @@ public class MineradioLibraryPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             PlaybackService service = PlaybackService.current();
             if (service != null) service.gainNative((float) call.getData().optDouble("target", 1), call.getData().optLong("durationMs", 0));
+            call.resolve();
+        });
+    }
+    @PluginMethod public void uiSound(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            PlaybackService service = PlaybackService.current();
+            if (service != null) service.uiSound(call.getInt("direction", 1), call.getBoolean("row", false), (float) call.getData().optDouble("volume", 1));
             call.resolve();
         });
     }

@@ -65,10 +65,14 @@ final class NativeBackgroundPlayer {
     void start(JSONObject state) {
         listener.beforePlay();
         boolean wants = state.optBoolean("resumePlaying", state.optBoolean("playing", false));
+        if (state.optLong("sleepDue", 0) > 0 && state.optLong("sleepDue") <= System.currentTimeMillis()) {
+            wants = false;
+            try { state.put("resumePlaying", false).put("sleepDue", 0).put("sleepMode", "off"); } catch (Exception ignored) {}
+        }
         if (wants && !requestFocus()) throw new IllegalStateException("AUDIO_FOCUS_DENIED");
         owned = true; focusPaused = false; updateSleep(state);
         volume = (float) state.optDouble("volume", volume);
-        engine.start(state); engine.gain((float) state.optDouble("initialGain", volume), 0); lock(wants); save(true);
+        engine.start(state); lock(wants); save(true);
         handler.removeCallbacks(tick); handler.postDelayed(tick, 1000);
     }
     private void updateSleep(JSONObject state) {
@@ -80,11 +84,15 @@ final class NativeBackgroundPlayer {
         engine.configure(state); save(false); listener.changed();
     }
     void updateQueue(JSONArray queue) { engine.updateQueue(queue); save(true); }
+    void uiSound(int direction, boolean row, float level) { engine.uiSound(direction, row, level); }
     void gain(float target, long durationMs) { engine.gain(target, durationMs); }
-    void play() {
+    void play() { play(null); }
+    void play(Float initialGain) {
         if (!owned) return;
         listener.beforePlay(); if (!requestFocus()) return;
-        focusPaused = false; engine.gain(volume, 80); engine.play(); lock(true); save(false); listener.changed();
+        focusPaused = false;
+        if (initialGain == null) engine.gain(volume, 80);
+        engine.play(initialGain); lock(true); save(false); listener.changed();
     }
     void pause() { focusPaused = false; engine.pause(); lock(false); abandonFocus(); save(false); listener.changed(); }
     void advance(int delta, boolean manual) {
@@ -121,7 +129,7 @@ final class NativeBackgroundPlayer {
     }
     JSObject snapshot(boolean includeQueue) {
         return engine.snapshot(includeQueue).put("nativeActive", owned).put("sleepMode", sleepMode)
-            .put("sleepDue", sleepDue).put("waitingForFocus", focusPaused);
+            .put("sleepDue", sleepDue).put("waitingForFocus", focusPaused).put("volume", volume);
     }
     private void save(boolean includeQueue) {
         savedAt = System.currentTimeMillis();

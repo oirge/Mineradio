@@ -193,6 +193,7 @@ final class NativePcmDecoder implements AutoCloseable {
     }
 
     private void finishDecoded() throws InterruptedException {
+        if (sourceFrame == 0) { error = "EMPTY_PCM_STREAM"; decodedEnd = ready = true; return; }
         flushResampler(); flushChunk();
         synchronized (lock) {
             int tail = Math.min(bufferedFrames, reservedTailFrames);

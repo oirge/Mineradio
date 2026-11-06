@@ -101,10 +101,12 @@ public class PlaybackService extends Service {
         nativePlayer.start(state);
     }
     void configureNative(JSONObject value) { if (nativePlayer.ownsAudio()) nativePlayer.configure(value); }
+    void playNative(Float initialGain) { nativePlayer.play(initialGain); }
     void commandNative(String action, long position) {
         if ("seek".equals(action)) nativePlayer.seek(position);
         else route(action);
     }
+    void uiSound(int direction, boolean row, float volume) { nativePlayer.uiSound(direction, row, volume); }
     void gainNative(float target, long duration) { nativePlayer.gain(target, duration); }
 
     private void route(String action) {
@@ -118,6 +120,14 @@ public class PlaybackService extends Service {
             else if ("pause".equals(action)) nativePlayer.pause();
             else if ("next".equals(action)) nativePlayer.advance(1, true);
             else if ("previous".equals(action)) nativePlayer.advance(-1, true);
+        } else if (!MineradioLibraryPlugin.hasHost() && ("play".equals(action) || "next".equals(action) || "previous".equals(action))) {
+            JSObject stored = NativeBackgroundPlayer.stored(this);
+            JSONArray queue = stored.optJSONArray("queue");
+            if (queue != null && queue.length() > 0) {
+                stored.put("resumePlaying", true); startNative(stored);
+                if ("next".equals(action)) nativePlayer.advance(1, true);
+                else if ("previous".equals(action)) nativePlayer.advance(-1, true);
+            }
         } else MineradioLibraryPlugin.control(action);
     }
     private PendingIntent action(String name, int request) {
