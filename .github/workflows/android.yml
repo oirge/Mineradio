@@ -48,6 +48,7 @@ jobs:
         run: |
           node --check public/mobile.js
           node --check public/mobile-native.js
+          node --check public/mobile-playback.js
           node --check public/app.js
           node --check server.js
           git diff --check
@@ -88,9 +89,9 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --console=plain assembleRelease assembleDebug
           cd ../..
-          cp mobile/android/app/build/outputs/apk/release/app-release.apk release/Mineradio-Android-1.0.1.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs release/Mineradio-Android-1.0.1.apk
-          sha256sum release/Mineradio-Android-1.0.1.apk > release/SHA256SUMS.txt
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk release/Mineradio-Android-1.0.2.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs release/Mineradio-Android-1.0.2.apk
+          sha256sum release/Mineradio-Android-1.0.2.apk > release/SHA256SUMS.txt
       - name: Upload APK and signing bootstrap
         uses: actions/upload-artifact@v4
         with:
@@ -244,8 +245,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view android-v1.0.1 > /dev/null 2>&1; then
-            gh release upload android-v1.0.1 release/Mineradio-Android-1.0.1.apk release/SHA256SUMS.txt --clobber
+          if gh release view android-v1.0.2 > /dev/null 2>&1; then
+            gh release upload android-v1.0.2 release/Mineradio-Android-1.0.2.apk release/SHA256SUMS.txt --clobber
           else
-            gh release create android-v1.0.1 release/Mineradio-Android-1.0.1.apk release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --latest=false --title 'Mineradio Android 1.0.1 预览版' --notes-file docs/ANDROID-RELEASE.md
+            gh release create android-v1.0.2 release/Mineradio-Android-1.0.2.apk release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --latest=false --title 'Mineradio Android 1.0.2 预览版' --notes-file docs/ANDROID-RELEASE.md
           fi

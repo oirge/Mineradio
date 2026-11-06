@@ -2,6 +2,7 @@
 import json
 import math
 import struct
+import shutil
 import wave
 import atexit
 import re
@@ -16,13 +17,13 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'output/playwright/mobile'
 OUT.mkdir(parents=True, exist_ok=True)
 APP = 'com.mineradio.oirge.mobile'
-LYRIC_TEXT = '[00:00.00]手机内嵌歌词 Native line one\n[01:00.00]手机内嵌歌词 Native line two\n[04:59.00]手机内嵌歌词 Native final line\n'
+LYRIC_TEXT = '[00:00.00]手机内嵌歌词 Native line one\n[01:00.00]手机内嵌歌词 Native line two\n[14:59.00]手机内嵌歌词 Native final line\n'
 
 # The native job owns its fixture so it can run independently of browser rendering.
 with wave.open(str(OUT / 'Mobile-Blue.wav'), 'wb') as stream:
     stream.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
     second = b''.join(struct.pack('<h', int(3000 * math.sin(2 * math.pi * 220 * i / 8000))) for i in range(8000))
-    stream.writeframes(second * 300)
+    stream.writeframes(second * 900)
 
 def syncsafe(value):
     return bytes((value >> shift) & 0x7f for shift in (21, 14, 7, 0))
@@ -38,9 +39,29 @@ with (OUT / 'Mobile-Blue.wav').open('r+b') as stream:
     riff_end = stream.tell()
     stream.seek(4)
     stream.write(struct.pack('<I', riff_end - 8))
+shutil.copyfile(OUT / 'Mobile-Blue.wav', OUT / 'Background-Green.wav')
 
 def adb(*args):
     return subprocess.check_output(['adb', *args], text=True, encoding='utf-8', errors='replace', timeout=30).strip()
+
+background_states = []
+
+def native_state(label):
+    output = adb('shell', 'dumpsys', 'activity', 'service', APP + '/.PlaybackService')
+    match = re.search(r'MINERADIO_PLAYBACK (\{[^\n]+\})', output)
+    value = json.loads(match.group(1)) if match else {}
+    background_states.append({'phase': label, 'state': value})
+    (OUT / 'android-background.json').write_text(json.dumps(background_states, ensure_ascii=False, indent=2), encoding='utf-8')
+    return value
+
+def wait_native(label, predicate, timeout=35):
+    deadline = time.monotonic() + timeout
+    value = {}
+    while time.monotonic() < deadline:
+        value = native_state(label)
+        if predicate(value): return value
+        time.sleep(.75)
+    raise AssertionError(label + ': ' + json.dumps(value, ensure_ascii=False))
 
 log_file = (OUT / 'android-logcat.txt').open('w', encoding='utf-8')
 log_process = subprocess.Popen(['adb', 'logcat', '-v', 'brief'], stdout=log_file, stderr=subprocess.STDOUT)
@@ -138,7 +159,9 @@ def tap_document(name):
 
 subprocess.check_call(['adb', 'install', '-r', str(ROOT / 'mobile/android/app/build/outputs/apk/debug/app-debug.apk')])
 adb('push', str(OUT / 'Mobile-Blue.wav'), '/sdcard/Download/Mobile-Blue.wav')
+adb('push', str(OUT / 'Background-Green.wav'), '/sdcard/Download/Background-Green.wav')
 adb('shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file:///sdcard/Download/Mobile-Blue.wav')
+adb('shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file:///sdcard/Download/Background-Green.wav')
 start()
 checks = []
 errors = []
@@ -278,12 +301,73 @@ with sync_playwright() as p:
     completed('Folia touch library, playback and Android back handling')
     start_position = page.evaluate('audio.currentTime')
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
-    time.sleep(5)
+    native = wait_native('home', lambda state: state.get('nativeActive') and state.get('playing') and state.get('audioSessionId', 0) > 0)
+    assert page.evaluate('audio.paused && audioCtx.state === "suspended"'), 'WebAudio must stop before native background output starts'
+    adb('shell', 'input', 'keyevent', 'KEYCODE_SLEEP')
+    power = adb('shell', 'dumpsys', 'power')
+    (OUT / 'android-screen-off-power.txt').write_text(power, encoding='utf-8')
+    assert re.search(r'mWakefulness=(Asleep|Dozing)', power), 'The emulator display must really be asleep'
+    sleep_position = native['position']
+    time.sleep(20)
+    native = wait_native('screen-off', lambda state: state.get('playing') and state.get('position', 0) > sleep_position + 15)
+    adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
+    adb('shell', 'wm', 'dismiss-keyguard')
     start()
     page.wait_for_function('(before) => audio && !audio.paused && audio.currentTime > before + 2', arg=start_position, timeout=20000)
-    completed('background playback progresses after Home')
+    page.wait_for_function('audioCtx.state === "running" && !MineradioNativePlayback.ownsAudio()', timeout=20000)
+    completed('native background playback survives Home and screen off, then hands position back without duplicate output')
     folia.get_by_test_id('local-mobile-return').click()
     page.wait_for_function('!document.body.classList.contains("folia-interface-active")')
+
+    # Import a second real SAF file so an absent WebView cannot be responsible for queue advance.
+    page.locator('#upload-btn').click()
+    tap_document('Background-Green.wav')
+    page.wait_for_function('localLibrarySongs.length === 2 && playQueue.length === 2 && audio && !audio.paused', timeout=45000)
+    page.wait_for_function('isFinite(audio.duration) && audio.duration > 800', timeout=30000)
+    page.evaluate('audio.currentTime = audio.duration - 20')
+    page.wait_for_function('audio.currentTime > audio.duration - 22')
+    tasks = adb('shell', 'dumpsys', 'activity', 'activities')
+    (OUT / 'android-tasks-before-remove.txt').write_text(tasks, encoding='utf-8')
+    task = re.search(r'Task\{[^\n]*#(\d+)[^\n]*' + re.escape(APP), tasks)
+    assert task, 'Could not identify Mineradio task for removal'
+    # Android 15 am stack remove delegates to removeTask, the Recents dismissal operation.
+    adb('shell', 'am', 'stack', 'remove', task.group(1))
+    native = wait_native('task-removed', lambda state: state.get('nativeActive') and state.get('playing'))
+    expected_index = native['index']
+    assert native['position'] > native['duration'] - 25, 'Native output must inherit the near-end position before automatic advance'
+    after = adb('shell', 'dumpsys', 'activity', 'activities')
+    (OUT / 'android-tasks-after-remove.txt').write_text(after, encoding='utf-8')
+    assert not re.search(r'Task\{[^\n]*#' + task.group(1) + r'\b[^\n]*' + re.escape(APP), after), 'Mineradio task must actually be removed'
+    advanced = wait_native('auto-next-without-webview', lambda state: state.get('playing') and state.get('index') == (expected_index + 1) % 2 and state.get('position', 0) > 1)
+    completed('removing the recent task keeps native playback alive and automatically advances its queue')
+
+    adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_PAUSE')
+    paused = wait_native('media-pause', lambda state: state.get('nativeActive') and not state.get('playing') and not state.get('preparing'))
+    time.sleep(2)
+    assert abs(native_state('media-pause-hold').get('position', 0) - paused['position']) < .5
+    adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_PLAY')
+    wait_native('media-play', lambda state: state.get('playing') and state.get('position', 0) > paused['position'] + 1)
+    previous_index = paused['index']
+    adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_NEXT')
+    wait_native('media-next', lambda state: state.get('playing') and state.get('index') != previous_index)
+    adb('shell', 'input', 'keyevent', 'KEYCODE_MEDIA_PAUSE')
+    paused = wait_native('paused-before-ui', lambda state: state.get('nativeActive') and not state.get('playing') and not state.get('preparing'))
+    adb('shell', 'cmd', 'statusbar', 'expand-notifications')
+    (OUT / 'android-background-notification.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
+    adb('shell', 'cmd', 'statusbar', 'collapse')
+    start()
+    browser = p.chromium.connect_over_cdp('http://127.0.0.1:9222', no_defaults=True)
+    page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    page.wait_for_load_state('domcontentloaded', timeout=60000)
+    page.wait_for_function('typeof audio !== "undefined" && audio && audio.src && audio.paused && !MineradioNativePlayback.ownsAudio()', timeout=45000)
+    page.wait_for_function('(uri) => playQueue[currentIdx] && playQueue[currentIdx].localFile.fullPath === uri', arg=paused['uri'], timeout=30000)
+    page.wait_for_function('(position) => audio.paused && Math.abs(audio.currentTime - position) < 2', arg=paused['position'], timeout=30000)
+    page.locator('#mobile-nav [data-mobile-view=player]').click()
+    page.locator('#play-btn').click()
+    page.wait_for_function('audio && !audio.paused && audioCtx.state === "running"', timeout=30000)
+    completed('media controls work without an Activity and paused playback restores to the correct song and position')
+
     adb('shell', 'am', 'force-stop', APP)
     time.sleep(1)
     start()
@@ -292,7 +376,7 @@ with sync_playwright() as p:
     page = next(page for context in browser.contexts for page in context.pages if 'localhost' in page.url)
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.wait_for_load_state('domcontentloaded', timeout=60000)
-    page.wait_for_function('typeof localLibrarySongs !== "undefined" && localLibrarySongs.length === 1', timeout=30000)
+    page.wait_for_function('typeof localLibrarySongs !== "undefined" && localLibrarySongs.length === 2', timeout=30000)
     page.wait_for_function('customLyricMapHydrated && customLyricPrefsHydrated', timeout=30000)
     assert not page.locator('#custom-lyric-modal').is_visible(), 'Cold restore must not open the custom lyrics editor'
     page.locator('#mobile-nav [data-mobile-view=player]').click()
@@ -306,7 +390,7 @@ with sync_playwright() as p:
 # The release has debugging disabled; install the exact signed download and inspect its real UI.
 adb('shell', 'am', 'force-stop', APP)
 adb('uninstall', APP)
-subprocess.check_call(['adb', 'install', str(ROOT / 'release/Mineradio-Android-1.0.1.apk')])
+subprocess.check_call(['adb', 'install', str(ROOT / 'release/Mineradio-Android-1.0.2.apk')])
 launch = adb('shell', 'am', 'start', '-W', '-n', APP + '/.MainActivity')
 assert 'Status: ok' in launch, launch
 layout = ''

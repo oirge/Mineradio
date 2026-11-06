@@ -31,14 +31,15 @@ const manifestPath = path.join(android, 'app/src/main/AndroidManifest.xml');
 let manifest = fs.readFileSync(manifestPath, 'utf8');
 if (!manifest.includes('android:name=".PlaybackService"')) {
 manifest = manifest.replace('<application', '<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n<uses-permission android:name="android.permission.WAKE_LOCK"/>\n<application');
-manifest = manifest.replace('</application>', '<service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" android:stopWithTask="true"/>\n</application>');
+manifest = manifest.replace('</application>', '<service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" android:stopWithTask="false"/>\n</application>');
 manifest = manifest.replace('android:allowBackup="true"', 'android:allowBackup="false"');
 }
+manifest = manifest.replace('android:stopWithTask="true"', 'android:stopWithTask="false"');
 fs.writeFileSync(manifestPath, manifest);
 
 const gradlePath = path.join(android, 'app/build.gradle');
 let gradle = fs.readFileSync(gradlePath, 'utf8');
-gradle = gradle.replace(/versionCode \d+/, 'versionCode 10001').replace(/versionName "[^"]+"/, 'versionName "1.0.1"');
+gradle = gradle.replace(/versionCode \d+/, 'versionCode 10002').replace(/versionName "[^"]+"/, 'versionName "1.0.2"');
 if (!gradle.includes('MOBILE_KEYSTORE_PATH')) {
 gradle = gradle.replace('buildTypes {', `signingConfigs {
         release {

@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.util.Base64;
@@ -28,10 +30,15 @@ import java.lang.ref.WeakReference;
 public class MineradioLibraryPlugin extends Plugin {
     private static WeakReference<MineradioLibraryPlugin> current = new WeakReference<>(null);
     private static final int LIMIT = 10000;
+    private boolean destroyed;
     @Override public void load() { current = new WeakReference<>(this); }
+    public static boolean hasHost() { MineradioLibraryPlugin plugin = current.get(); return plugin != null && !plugin.destroyed; }
+    @Override protected void handleOnPause() { notifyListeners("appState", new JSObject().put("active", false)); }
+    @Override protected void handleOnResume() { notifyListeners("appState", new JSObject().put("active", true)); }
+    @Override protected void handleOnDestroy() { destroyed = true; if (current.get() == this) current.clear(); }
     public static void control(String action) {
         MineradioLibraryPlugin plugin = current.get();
-        if (plugin != null) plugin.getActivity().runOnUiThread(() -> {
+        if (plugin != null && !plugin.destroyed) plugin.getActivity().runOnUiThread(() -> {
             plugin.notifyListeners(action.equals("back") ? "back" : "mediaControl", new JSObject().put("action", action));
         });
     }
@@ -178,17 +185,62 @@ public class MineradioLibraryPlugin extends Plugin {
         });
     }
     @PluginMethod public void updatePlayback(PluginCall call) {
-        Intent intent = new Intent(getContext(), PlaybackService.class)
-            .putExtra("playing", call.getBoolean("playing", false))
-            .putExtra("title", call.getString("title", "Mineradio"))
-            .putExtra("artist", call.getString("artist", ""))
-            .putExtra("position", call.getDouble("position", 0.0))
-            .putExtra("duration", call.getDouble("duration", 0.0));
+        PlaybackService.cacheWeb(getContext(), call.getData());
+        Intent intent = new Intent(getContext(), PlaybackService.class).setAction("web");
         try {
             if (call.getBoolean("playing", false) && Build.VERSION.SDK_INT >= 26) getContext().startForegroundService(intent);
             else if (PlaybackService.running) getContext().startService(intent);
             call.resolve();
         } catch (Exception error) { call.reject("通知栏控制暂不可用", error); }
+    }
+    private JSONArray authorizedQueue(PluginCall call) throws Exception {
+        JSONArray queue = call.getData().optJSONArray("queue");
+        if (queue == null || queue.length() > LIMIT) throw new IllegalArgumentException("INVALID_NATIVE_QUEUE");
+        LinkedHashMap<String, JSONObject> authorized = fileMap();
+        for (int i = 0; i < queue.length(); i++) {
+            JSONObject track = queue.getJSONObject(i);
+            if (!authorized.containsKey(track.optString("uri", ""))) throw new SecurityException("UNAUTHORIZED_NATIVE_TRACK");
+        }
+        return queue;
+    }
+    @PluginMethod public void cachePlaybackQueue(PluginCall call) {
+        try { PlaybackService.cacheQueue(getContext(), authorizedQueue(call)); call.resolve(); }
+        catch (Exception problem) { call.reject("后台队列包含未授权文件", problem); }
+    }
+    @PluginMethod public void getPlaybackState(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            PlaybackService service = PlaybackService.current();
+            call.resolve(service == null ? new JSObject().put("nativeActive", false) : service.state());
+        });
+    }
+    @PluginMethod public void takeForeground(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            PlaybackService service = PlaybackService.current();
+            call.resolve(service == null ? NativeBackgroundPlayer.stored(getContext()) : service.takeForeground());
+        });
+    }
+    @PluginMethod public void startBackground(PluginCall call) {
+        try {
+            JSONArray queue = authorizedQueue(call);
+            if (queue.length() == 0) { call.reject("后台队列为空"); return; }
+            Intent intent = new Intent(getContext(), PlaybackService.class).setAction("bootstrap");
+            if (Build.VERSION.SDK_INT >= 26) getContext().startForegroundService(intent);
+            else getContext().startService(intent);
+            Handler main = new Handler(Looper.getMainLooper());
+            main.post(new Runnable() {
+                int attempts;
+                @Override public void run() {
+                    PlaybackService service = PlaybackService.current();
+                    if (service == null) {
+                        if (++attempts < 100) main.postDelayed(this, 50);
+                        else call.reject("后台播放服务未能启动");
+                        return;
+                    }
+                    try { service.startNative(call.getData()); call.resolve(service.state()); }
+                    catch (Exception problem) { call.reject("后台播放启动失败", problem); }
+                }
+            });
+        } catch (Exception problem) { call.reject("后台播放不可用", problem); }
     }
     @PluginMethod public void minimize(PluginCall call) {
         getActivity().runOnUiThread(() -> getActivity().moveTaskToBack(true)); call.resolve();

@@ -29174,6 +29174,14 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   }
 
   markPlayPhase('audio-start');
+  if (opts.startPaused) {
+    playing = false;
+    setPlayIcon(false);
+    hideLoading();
+    forcePlaybackControlsInteractive();
+    safeRenderQueuePanel('native-paused-restore');
+    return;
+  }
   // 接管 deck 时禁掉主增益淡入：preparePlaybackFadeIn 会把 gainNode 直接拉到 0，
   // 那是两个 deck 共用的主音量，交叉会被它一把掐死，纯无缝接续也会重新长出 460 ms 的空档。
   // 接管路径的电平交给 deckGain 处理（交叉走等功率曲线，无缝走 12 ms 斜坡）。
@@ -29291,6 +29299,10 @@ async function attemptAudioPlay(opts) {
   var playElement = audio;
   function ownsAttempt() { return playToken === trackSwitchToken && playElement === audio; }
   try {
+      if (typeof window !== 'undefined' && window.MineradioNativePlayback) {
+        await window.MineradioNativePlayback.ready;
+        if (!ownsAttempt() || window.MineradioNativePlayback.ownsAudio()) return false;
+      }
       if (!audio) return false;
       if (!audioReady) initAudio();
       // 起播前收掉任何仍在响的非活动 deck（交叉进行中除外，那是有意的双 deck 对交叉）。

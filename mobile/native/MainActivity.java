@@ -15,4 +15,9 @@ public class MainActivity extends BridgeActivity {
             @Override public void handleOnBackPressed() { MineradioLibraryPlugin.control("back"); }
         });
     }
+    @Override public void onDestroy() {
+        boolean removed = isFinishing() && !isChangingConfigurations();
+        super.onDestroy();
+        if (removed) PlaybackService.hostDestroyed(getApplicationContext());
+    }
 }
