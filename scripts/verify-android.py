@@ -285,7 +285,7 @@ with sync_playwright() as p:
     assert dsp_primitives.get('passed') is True and dsp_primitives.get('sampleRate') == 48000 and dsp_primitives.get('fftSize') == 2048, dsp_primitives
     assert page.evaluate('''async () => {
         await ensureLocalReplayGainForSong(currentLocalSong);
-        return Math.abs(currentLocalSong.localReplayGain?.trackGain + 6.0206) < .01;
+        return Math.abs(currentLocalSong.localReplayGain?.trackGainDb + 6.0206) < .01;
     }'''), 'ReplayGain validation must use the fixture real embedded gain tag'
     saved_audio = page.evaluate('''() => ({chain: audioChainSettings, replay: replayGainSettings,
         volume: targetVolume, rate: playbackRateSetting})''')

@@ -11,7 +11,7 @@
   function enqueue(operation) {
     pending++; revision++;
     var next = chain.catch(report).then(operation);
-    chain = next.then(function () { pending--; }, function () { pending--; });
+    chain = next.then(function () { pending--; }, function (error) { pending--; report(error); });
     return next;
   }
   function uriOf(url) {
@@ -99,6 +99,9 @@
     media._reload = false; media._paused = !value.playing; media.readyState = value.preparing ? 1 : 4;
     if (media._duration !== oldDuration && media._duration > 0) emit(media, 'loadedmetadata');
     if (!starting && wasPaused !== media._paused) emit(media, media._paused ? 'pause' : 'playing');
+    if (value.error && media._lastError !== value.error) {
+      media._lastError = value.error; media.error = {code: 3, message: value.error}; emit(media, 'error');
+    } else if (!value.error) { media._lastError = ''; media.error = null; }
     emit(media, 'timeupdate');
   }
   async function refresh() {
