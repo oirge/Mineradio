@@ -114,7 +114,7 @@
     queue.tracks[index].title = song.name || song.title || '';
     queue.tracks[index].artist = song.artist || '';
     return {
-      playing: !!(song && audio && !audio.paused),
+      playing: !!(song && audio && !audio.paused && !(typeof sleepTimerState !== 'undefined' && sleepTimerState.fading)),
       title: song && (song.name || song.title) || 'Mineradio',
       artist: song && song.artist || '',
       position: audio && isFinite(audio.currentTime) ? audio.currentTime : 0,
@@ -178,6 +178,7 @@
   async function pauseWebForNative() {
     trackSwitchToken++;
     pauseCurrentAudioForTrackSwitch();
+    if (typeof clearSleepTimerCountdown === 'function') clearSleepTimerCountdown();
     (typeof audioDeckList !== 'undefined' ? audioDeckList : []).forEach(function (deck) { if (deck.el) deck.el.pause(); });
     if (typeof audioCtx !== 'undefined' && audioCtx && audioCtx.state !== 'closed') await audioCtx.suspend();
   }
@@ -193,13 +194,16 @@
     for (var j = 0; same && j < restored.length; j++) same = trackUri(playQueue[j]) === trackUri(restored[j]);
     if (!same) { playQueue = restored; markQueueContentChanged(); }
     if (typeof stopAfterCurrentTrack !== 'undefined') stopAfterCurrentTrack = !!state.stopAfterTrack;
+    var expired = Number(state.sleepDue) > 0 && Number(state.sleepDue) <= Date.now();
     if (typeof sleepTimerState !== 'undefined') {
       if (sleepTimerState.timer) clearTimeout(sleepTimerState.timer);
-      sleepTimerState.timer = null; sleepTimerState.mode = state.sleepMode || 'off'; sleepTimerState.dueAt = Number(state.sleepDue) || 0;
+      sleepTimerState.timer = null; sleepTimerState.fading = false;
+      sleepTimerState.mode = expired ? 'off' : state.sleepMode || 'off'; sleepTimerState.dueAt = expired ? 0 : Number(state.sleepDue) || 0;
       if (sleepTimerState.dueAt > Date.now()) sleepTimerState.timer = setTimeout(fireSleepTimer, sleepTimerState.dueAt - Date.now());
+      setPersistentLocalStorageItem(SLEEP_TIMER_STORE_KEY, JSON.stringify({ mode: sleepTimerState.mode }));
       updateSleepTimerControls();
     }
-    var wanted = state.resumePlaying == null ? !!state.playing : !!state.resumePlaying;
+    var wanted = !expired && (state.resumePlaying == null ? !!state.playing : !!state.resumePlaying);
     await playQueueAt(Math.max(0, Math.min(playQueue.length - 1, Number(state.index) || 0)), {
       resumeAt: Math.max(0, Number(state.position) || 0), startPaused: !wanted
     });

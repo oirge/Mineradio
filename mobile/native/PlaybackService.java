@@ -78,6 +78,7 @@ public class PlaybackService extends Service {
             @Override public void changed() { if (!taking) publish(); }
         });
         session = new MediaSession(this, "Mineradio");
+        session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
         session.setCallback(new MediaSession.Callback() {
             @Override public void onPlay() { route("play"); }
             @Override public void onPause() { route("pause"); }
