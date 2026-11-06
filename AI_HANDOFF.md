@@ -1,3 +1,14 @@
+## 2026-11-06：Android 1.0.2 后台音乐已发布并核验
+
+- 用户要求「让能后台播放音乐」，现已完成。新增独立原生 MediaPlayer 后台队列，支持切换应用、锁屏和移除最近任务后续播；媒体键控制及前台歌曲／进度／暂停恢复已验证，保留内嵌歌词与 Folia 修复。
+- [Android 1.0.2 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.2/Mineradio-Android-1.0.2.apk) 已公开，Release `436096715`，tag `android-v1.0.2` → `a79e7681fe3083111bd07f892881cb07d17554b6`，版本 `1.0.2 / 10002`，沿用原证书，可覆盖安装。旧版资产保留，桌面 Latest 仍为 v2.6.10。
+- [Android 42160875686](https://github.com/oirge/Mineradio/actions/runs/42160875686) 全部成功：Node 1676／0失败／1可选跳过，手机浏览器10项、原生11项，errors=[]、systemDialogs=[]。完整 Windows Verify `42160882111`／`42160875643`、视频导出 `42160882023` 均成功。
+- 完整回下载 APK 14,445,214 B，SHA256 `dc189cf5e0d96eb6df766283cbda439e3445d6de93157b4cce21acf6dfef580f`，与清单／GitHub digest／实际云端验收包相同；manifest、v2签名、同证书和公开 HEAD200 均已核对。
+- 锁屏原生进度97.584→118.365秒；任务移除后自然续播下一首1.894秒；暂停2.286秒保持、继续到4.315秒，切歌1.920秒。a79e修复旧播放器的曲尾位置污染下一首初始进度，验收保留严格起点和递增断言。
+- 完整记录：[docs/ANDROID-HANDOFF.md](docs/ANDROID-HANDOFF.md)，结构化证据：[docs/android-evidence/1.0.2-verification.json](docs/android-evidence/1.0.2-verification.json)。本机核验脚本固定最终发行 SHA／run，不能改成后续文档提交。
+- 未完成事项：本次需求无剩余必做项，PR #178 保持打开。后台 WebAudio 音效／ReplayGain／交叉淡入淡出、品牌省电策略覆盖及通知面板视觉补验属后续扩展；已有通知截图实际捕获桌面，未据此宣称视觉通过。
+- 云端优先，不在本机启动 GUI／浏览器／模拟器／构建或测试，不操作用户播放器数据，不发邮件，不创建子代理；不要重发或覆盖 1.0.0／1.0.1／1.0.2 资产。
+
 ## 2026-11-06：Android 1.0.1 内嵌歌词修复已发布并核验
 
 - [Android 1.0.1 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.1/Mineradio-Android-1.0.1.apk) 已发布，Release `436020179`，tag `android-v1.0.1` 指向 `6cf8a91a8d063a46fd7f8f96a2571ddaa77e295f`；版本 `1.0.1 / 10001`，沿用 1.0.0 证书，可覆盖安装。
