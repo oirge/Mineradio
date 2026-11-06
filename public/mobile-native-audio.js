@@ -16,8 +16,11 @@
   }
   function uriOf(url) {
     var marker = '/_capacitor_content_/';
-    var at = String(url).indexOf(marker);
-    return at < 0 ? String(url) : String(url).slice(at + marker.length);
+    var value = String(url), at = value.indexOf(marker);
+    if (at < 0) return value;
+    // Android convertFileSrc replaces the content scheme; preserve encoded document IDs.
+    var uri = value.slice(at + marker.length);
+    return uri.indexOf('content://') === 0 ? uri : 'content://' + uri;
   }
   function emit(media, name) {
     media.dispatchEvent(new root.Event(name));
@@ -72,6 +75,7 @@
     var media = this;
     return enqueue(async function () {
       var requested = dependencies.capture(media), loadVersion = media._loadVersion, playVersion = media._playVersion;
+      requested.uri = uriOf(requested.uri);
       if (state.nativeActive && state.uri === requested.uri && !media._reload) {
         var command = {action: 'play'};
         if (requested.initialGain != null) command.initialGain = requested.initialGain;
@@ -146,7 +150,7 @@
     resume: function () { return Promise.resolve(); }, suspend: function () { return Promise.resolve(); }};
   Object.defineProperties(context, {currentTime: {get: function () { return (Date.now() - origin) / 1000; }}, state: {get: function () { return state.playing ? 'running' : 'suspended'; }}});
   return {Media: NativeMedia, context: context, analyser: analyser, node: node, outputParam: function (value) { return new Param(value, true); },
-    refresh: refresh, state: function () { return state; }, synchronizing: function () { return syncing; }, busy: function () { return !!pending; },
+    uriOf: uriOf, refresh: refresh, state: function () { return state; }, synchronizing: function () { return syncing; }, busy: function () { return !!pending; },
     synchronize: async function (operation) { syncing = true; try { return await operation(); } finally { syncing = false; } },
     mode: 'single-native', phase: function () { return 'native'; }, ownsAudio: function () { return false; }, setBackground: function () { return refresh(); },
     events: function () { return []; }, initialize: function () { return refresh(); }, get revision() { return revision; }};

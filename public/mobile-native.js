@@ -129,7 +129,7 @@
   }
   function captureNativeMedia(media) {
     var queue = playbackQueue();
-    var uri = media ? String(media.src).split('/_capacitor_content_/').pop() : trackUri(playQueue[currentIdx]);
+    var uri = media ? playbackController.uriOf(media.src) : trackUri(playQueue[currentIdx]);
     var index = queue.tracks.findIndex(function (entry) { return entry.uri === uri; });
     if (index < 0) index = queue.indices[currentIdx];
     for (var i = 0; i < playQueue.length; i++) {

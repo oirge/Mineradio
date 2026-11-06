@@ -19,7 +19,7 @@ async function until(predicate) {
 
 function fixture(options = {}) {
   const uri = 'content://fixture/one';
-  const source = value => 'https://localhost/_capacitor_content_/' + value;
+  const source = value => 'https://localhost/_capacitor_content_/' + value.replace(/^content:\/\//, '');
   const calls = [], errors = [], observed = [];
   const root = {Event, EventTarget, setTimeout(callback) { return setTimeout(callback, 0); }, audio: null};
   const item = {
@@ -54,7 +54,7 @@ function fixture(options = {}) {
     root, plugin,
     capture(media) {
       return {queue: [{uri}, {uri: 'content://fixture/two'}], index: media.src.endsWith('/two') ? 1 : 0,
-        uri: media.src.slice(media.src.indexOf('/_capacitor_content_/') + '/_capacitor_content_/'.length),
+        uri: item.facade.uriOf(media.src),
         position: media.currentTime, duration: 240, rate: media.playbackRate,
         resumePlaying: true, volume: .8, effects: {enabled: false}};
     },
@@ -143,6 +143,43 @@ test('resuming the same native track uses its play command and never opens anoth
   await item.media.play();
   assert.deepEqual(item.commands(), [['command', {action: 'play'}]]);
   assert.equal(item.media.paused, false);
+});
+
+test('Android converted SAF addresses preserve the provider URI through start, refresh, seek and resume', async () => {
+  const item = fixture();
+  const uri = 'content://com.android.providers.downloads.documents/document/msf%3A1000000016';
+  item.media.src = item.source(uri);
+  assert.equal(item.media.src, 'https://localhost/_capacitor_content_/com.android.providers.downloads.documents/document/msf%3A1000000016');
+  await item.media.play();
+  assert.equal(item.commands()[0][1].uri, uri);
+  assert.equal(item.media.paused, false);
+  item.native.position = 18;
+  await item.facade.refresh();
+  assert.ok(item.media.currentTime >= 18 && item.media.currentTime < 19);
+  item.media.currentTime = 32;
+  await until(() => !item.facade.busy());
+  assert.equal(item.native.position, 32);
+  item.media.pause();
+  await until(() => !item.facade.busy());
+  await item.media.play();
+  assert.equal(item.commands().filter(call => call[0] === 'start').length, 1);
+  assert.deepEqual(item.commands().filter(call => call[0] === 'command').map(call => call[1]), [
+    {action: 'seek', position: 32}, {action: 'pause'}, {action: 'play'},
+  ]);
+  assert.equal(item.media.paused, false);
+});
+
+test('direct and scheme-retaining content addresses refer to the same native media', async () => {
+  const item = fixture();
+  item.media.src = 'https://localhost/_capacitor_content_/content://fixture/one';
+  item.native.nativeActive = true; item.native.playing = true;
+  await item.facade.refresh();
+  assert.equal(item.media.paused, false);
+  item.media.src = 'content://fixture/one';
+  await item.facade.refresh();
+  assert.equal(item.media.paused, false);
+  await item.media.play();
+  assert.deepEqual(item.commands(), [['command', {action: 'play'}]]);
 });
 
 test('pausing an idle facade cannot stop the active native track', async () => {

@@ -3,6 +3,16 @@ name: Android APK
 on:
   push:
     branches: [codex/android-mobile]
+    paths:
+      - 'public/**'
+      - 'mobile/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'server.js'
+      - 'package*.json'
+      - 'build/icon.png'
+      - 'docs/ANDROID-RELEASE.md'
+      - '.github/workflows/android.yml'
   workflow_dispatch:
     inputs:
       publish_release:
