@@ -1,3 +1,35 @@
+# Android 1.0.4 Folia 手机自动隐藏已发布
+
+更新：2026-11-07。Folia 手机界面原先一直显示控制层，现在闲置约 2.5 秒后同时隐藏顶部导航、歌曲信息、播放控件和底部导航，歌词、悬浮唱片或封面舞台铺满界面。首次轻触只唤回控件，不触发下面的播放、跳转或切歌；可见控件正常响应下一次操作。进度和音量长拖期间保持可见，pointerup／pointercancel 后重新计时；曲库、设置、更多及歌单菜单打开时保持可见，关闭后恢复计时。 原生音频沿用 1.0.3 的单一 PCM 引擎和 AudioTrack；本次隐藏与唤回只控制 Folia 界面，播放、既有音效和后台连续性继续走原链路。 Android 云端发行、公开 APK 完整回下载及最终版本与签名核验已完成；以下 1.0.3 和更早记录完整保留。
+
+## 下载与源码
+
+- [Android 1.0.4 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.4/Mineradio-Android-1.0.4.apk)，14,469,958 字节；[Release](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.4)，Release ID `437338499`。
+- 发布时间 `2026-11-07T04:43:39Z`（北京时间 2026-11-07 12:43:39）。tag `android-v1.0.4` → `79a57813a75a0184b98d9b7195c78efc002e5b6a`；versionName `1.0.4`、versionCode `10004`、应用 ID `com.mineradio.oirge.mobile`。
+- APK SHA256：`296d7094f1a639df0e8b3e300a33a7b144203aad5a9eeada21b5ef3a09d70647`。完整回下载、本地重算、SHA256SUMS、GitHub digest 和同一 run 的签名 release 构建产物一致；公开下载、manifest、v2 签名与原证书均已核验。
+- 证书 SHA256：`ee1586586ac8d13b17dda8020eda86712d62bac7b96e3f3b5e8643151faff0a6`，支持覆盖旧版更新。旧版资产保留，桌面 Latest 仍为 `v2.6.10`。
+- 分支 `codex/android-mobile`，[PR #178](https://github.com/oirge/Mineradio/pull/178)；发行 tag 固定上述提交，后续文档提交不重打 tag 或替换已发布资产。
+
+## 实现与云端验收
+
+- Folia 手机界面原先一直显示控制层，现在闲置约 2.5 秒后同时隐藏顶部导航、歌曲信息、播放控件和底部导航，歌词、悬浮唱片或封面舞台铺满界面。首次轻触只唤回控件，不触发下面的播放、跳转或切歌；可见控件正常响应下一次操作。进度和音量长拖期间保持可见，pointerup／pointercancel 后重新计时；曲库、设置、更多及歌单菜单打开时保持可见，关闭后恢复计时。
+- 原生音频沿用 1.0.3 的单一 PCM 引擎和 AudioTrack；本次隐藏与唤回只控制 Folia 界面，播放、既有音效和后台连续性继续走原链路。
+- [Android 发行验收 42338308259](https://github.com/oirge/Mineradio/actions/runs/42338308259)：build、browser、native、publish 成功；最终 attempt `2`。Node 1692 项通过，手机浏览器 11 项、Android 原生 14 项和 DSP 原语 8 项通过。
+- 证据工件：build `13560124176`、native `13561226414`、browser `13560099996`，均由公开安装包验收脚本核实来自固定发行 SHA／run。
+- 浏览器真实触摸覆盖闲置隐藏、唤回不穿透、进度与音量长拖、up／cancel 后重新隐藏、曲库／设置／更多与歌单菜单保护，以及手机横竖屏和返回桌面布局。
+- Android WebView 的真实触摸及 DOM 状态记录覆盖隐藏与唤回；隐藏前、隐藏后、唤回后的原生进度为 `141.054` → `143.729` → `152.070` 秒；保持 AudioTrack session `129`、sinkCreations `1`、同曲目 generation 和欠载计数 `0`，输出帧与播放头持续推进。隐藏舞台为 `412.19 × 842.286`，覆盖 `412 × 842` 的手机视口。 系统截图存在上述视觉不一致，不能声称其已肉眼证明隐藏。
+- 原生回归继续覆盖既有 PCM 音效、内嵌歌词、锁屏、移除任务、媒体控制、快速返回、界面重建和冷恢复；本次没有修改原生引擎。
+- [Verify video export 42338312860](https://github.com/oirge/Mineradio/actions/runs/42338312860)：成功；该独立检查全部成功。
+- [Verify 42338312829](https://github.com/oirge/Mineradio/actions/runs/42338312829)：失败；Windows PR attempt 1：verify-ui-language.py 第74行等待 setUiLanguage 函数与 fx-panel-tabs 初始化超过30000ms；checks=[]、audits={}、errors=[]，语言检查尚未开始。此前 Folia 播放/显示选项与命令/音频工具检查已完成。精确日志：windows-pr-1.0.4-79a57813-attempt1.log。。
+- [Verify 42338308217](https://github.com/oirge/Mineradio/actions/runs/42338308217)：成功；该独立检查全部成功。
+- 独立 CI 仍有未成功记录，Android 发行门禁成功不代表全部 CI 成功。
+
+## 完整证据与边界
+
+- [完整发行核验](android-evidence/1.0.4-verification.json)、[原生 14 项报告](android-evidence/1.0.4-native.json)、[完整原生状态序列](android-evidence/1.0.4-background.json)、[手机浏览器 11 项报告](android-evidence/1.0.4-browser.json)、[DSP 8 项原语报告](android-evidence/1.0.4-dsp.json)、[完整 Folia 隐藏与唤回状态](android-evidence/1.0.4-chrome.json)。六份文件保留完整原始 JSON，包含三阶段 UI、四组控件的样式／边界及原生状态。
+- 功能、Folia 交互和连续播放取证使用同一发行提交的 debug APK；签名 release APK 在同一云端 run 另验安装及离线导入首页启动，未在 release 包上重复整套播放取证。云端模拟器使用 `-noaudio`，依据真实 PCM、AudioTrack 播放头和欠载计数，未做扬声器听感验收。最终浏览器隐藏／恢复截图正确；但本次原生系统隐藏截图仍显示四组控件，与对应 DOM 的 opacity 0、visibility hidden 及满视口舞台记录不一致，系统图不能作为 Android 画面已成功隐藏的视觉证明，渲染或截图原因尚未确认。此前软件 GPU 也出现过色块、条纹与合成异常；实际手机显示效果仍未验收。Android 7.0 及以上，平台解码器、品牌省电策略与实际用户覆盖安装数据组合仍需更多设备覆盖；系统「强行停止」会结束播放。桌面在线翻译与视频导出尚未接入 Android，桌面 Latest 独立。
+- 本机未启动 GUI／浏览器／模拟器／构建或测试，未安装本次 APK 或操作用户播放器与数据，未发邮件。
+
 # Android 1.0.3 单一音频引擎已发布
 
 更新：2026-11-07。用户要求修复进出界面的播放停顿、统一一套原生引擎并保留全部既有音效，现已完成实现、Android 云端发行验收、发布和完整安装包回下载核验。以下旧版记录按历史保留；双引擎及后台音效限制仅描述旧版本。
