@@ -5,7 +5,7 @@
   var CONTROLS = '.local-mobile-header,.local-mobile-nav,.local-controls,.local-current-track';
   var MENUS = '.local-mobile-more,.local-slot-menu,.local-playlist-menu,[role="dialog"]';
   var STAGES = '.local-player[data-panel="closed"] .local-visualizer,.local-player[data-panel="closed"] .local-record-wall,.local-player[data-panel="closed"] .lattice-root,.local-welcome,.local-no-lyrics';
-  var MOTION = 440, EASING = 'cubic-bezier(.22,1,.36,1)';
+  var MOTION = 560, EASING = 'cubic-bezier(.4,0,.2,1)';
 
   function create(doc, enabled) {
     var view = doc.defaultView, timer = 0, pointers = new Set();
@@ -15,9 +15,9 @@
     if (!style) {
       style = doc.createElement('style');
       style.id = 'mineradio-mobile-chrome-style';
-      style.textContent = '.local-mobile .local-mobile-header,.local-mobile .local-mobile-nav,.local-mobile .local-controls,.local-mobile .local-current-track{transition:opacity .42s ' + EASING + ',transform .42s ' + EASING + ',visibility 0s!important}'
-        + '.local-mobile body.' + HIDDEN + ' .local-mobile-header{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(-8px)!important;transition-delay:0s,0s,.42s!important}'
-        + '.local-mobile body.' + HIDDEN + ' .local-mobile-nav,.local-mobile body.' + HIDDEN + ' .local-controls,.local-mobile body.' + HIDDEN + ' .local-current-track{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(8px)!important;transition-delay:0s,0s,.42s!important}'
+      style.textContent = '.local-mobile .local-mobile-header,.local-mobile .local-mobile-nav,.local-mobile .local-controls,.local-mobile .local-current-track{transition:opacity .52s ' + EASING + ',transform .52s ' + EASING + ',visibility 0s!important}'
+        + '.local-mobile body.' + HIDDEN + ' .local-mobile-header{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(-8px)!important;transition-delay:0s,0s,.52s!important}'
+        + '.local-mobile body.' + HIDDEN + ' .local-mobile-nav,.local-mobile body.' + HIDDEN + ' .local-controls,.local-mobile body.' + HIDDEN + ' .local-current-track{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(8px)!important;transition-delay:0s,0s,.52s!important}'
         + '.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-visualizer,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-record-wall,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .lattice-root{inset:0!important;height:auto!important}'
         + '.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-welcome,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-no-lyrics{top:50%!important}'
         + '@media(prefers-reduced-motion:reduce){.local-mobile .local-mobile-header,.local-mobile .local-mobile-nav,.local-mobile .local-controls,.local-mobile .local-current-track{transition:none!important}}';

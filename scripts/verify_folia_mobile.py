@@ -363,7 +363,7 @@ def verify_folia_mobile(page, checks, out):
         return page.evaluate('''({label, captureBaseline}) => {
             const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
             const previous = view.__mineradioChromeAnimationTrace;
-            if (previous) view.clearInterval(previous.timer);
+            if (previous) { view.clearInterval(previous.timer); previous.stopObserving?.(); }
             const selectors = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'];
             let baseline = null;
             if (captureBaseline) {
@@ -392,17 +392,41 @@ def verify_folia_mobile(page, checks, out):
                     frameBounds: frameBox.toJSON(), savedVolume: Number(volume.value),
                     audio: {source: audio.src, index: currentIdx, paused: audio.paused, position: audio.currentTime}};
             }
-            const trace = view.__mineradioChromeAnimationTrace = {label, active: true, samples: []};
+            const trace = view.__mineradioChromeAnimationTrace = {label, active: true, samples: [], rafTicks: [], lifecycleEvents: []};
             trace.read = () => {
                 const stage = doc.querySelector('[data-testid=local-visualizer]'), box = stage?.getBoundingClientRect();
-                return {at: view.performance.now(), hidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                return {at: view.performance.now(), timelineTime: doc.timeline.currentTime,
+                    hidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
                     stage: box && {x: box.x, y: box.y, width: box.width, height: box.height,
                         centerX: box.x + box.width / 2, centerY: box.y + box.height / 2},
+                    animations: stage ? stage.getAnimations().filter(animation => animation.id === 'mineradio-mobile-chrome-stage')
+                        .map(animation => ({id: animation.id, currentTime: animation.currentTime, startTime: animation.startTime,
+                            pending: animation.pending, playState: animation.playState})) : [],
                     surfaces: selectors.map(selector => {
                         const element = doc.querySelector(selector), style = element && view.getComputedStyle(element);
                         return {selector, display: style?.display, visibility: style?.visibility,
                             opacity: style ? Number(style.opacity) : null};
                     })};
+            };
+            const onLifecycle = event => {
+                if (!trace.active || (event.type === 'blur' && event.target !== view)) return;
+                trace.lifecycleEvents.push({type: event.type, at: view.performance.now(), timelineTime: doc.timeline.currentTime,
+                    isTrusted: event.isTrusted, hidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                    documentHidden: doc.hidden, visibilityState: doc.visibilityState,
+                    width: view.innerWidth, height: view.innerHeight});
+            };
+            const listeners = [[view, 'blur'], [view, 'resize'], [doc, 'visibilitychange']];
+            listeners.forEach(([target, name]) => target.addEventListener(name, onLifecycle, true));
+            const tick = timestamp => {
+                if (!trace.active) return;
+                if (trace.rafTicks.length < 2000) trace.rafTicks.push({timestamp, at: view.performance.now(),
+                    timelineTime: doc.timeline.currentTime});
+                trace.raf = view.requestAnimationFrame(tick);
+            };
+            trace.raf = view.requestAnimationFrame(tick);
+            trace.stopObserving = () => {
+                view.cancelAnimationFrame(trace.raf);
+                listeners.forEach(([target, name]) => target.removeEventListener(name, onLifecycle, true));
             };
             const sample = () => { if (trace.samples.length < 2000) trace.samples.push(trace.read()); };
             sample();
@@ -415,9 +439,11 @@ def verify_folia_mobile(page, checks, out):
             const view = document.getElementById('folia-frame').contentWindow, trace = view.__mineradioChromeAnimationTrace;
             if (!trace?.active) return null;
             view.clearInterval(trace.timer);
+            trace.stopObserving();
             trace.samples.push(trace.read());
             trace.active = false;
-            return {label: trace.label, samples: trace.samples, events: view.__mineradioMobileTapTrace.events.slice()};
+            return {label: trace.label, samples: trace.samples, rafTicks: trace.rafTicks,
+                lifecycleEvents: trace.lifecycleEvents, events: view.__mineradioMobileTapTrace.events.slice()};
         }''')
 
     def wait_for_stage_rest():
@@ -450,7 +476,7 @@ def verify_folia_mobile(page, checks, out):
                 f"{trace['label']}: {selector} jumped without a visible intermediate opacity"
 
     def try_animation_reversal(visible_geometry, visible_center, hidden_center, frame_box, traces):
-        # Prebuild the driver, then make one real gesture. Input latency can miss a 440ms animation.
+        # Prebuild the driver, then make one real gesture. Input latency can miss the animation.
         session = page.context.new_cdp_session(page)
         assert frame_box, 'Folia frame must be available for the real reversal touch'
         point = {'x': frame_box['x'] + frame_box['width'] / 2, 'y': frame_box['y'] + frame_box['height'] / 2}
