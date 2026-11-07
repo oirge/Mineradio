@@ -28,11 +28,15 @@ def verify_folia_mobile(page, checks, out):
             try:
                 page.wait_for_function('''() => {
                     const doc = document.getElementById('folia-frame').contentDocument;
-                    const nav = doc.querySelector('.local-mobile-nav');
-                    return !doc.body.classList.contains('mineradio-mobile-chrome-hidden') && nav
-                        && doc.defaultView.getComputedStyle(nav).visibility !== 'hidden'
-                        && Number(doc.defaultView.getComputedStyle(nav).opacity) > .9;
-                }''', timeout=2000)
+                    const selectors = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'];
+                    return !doc.body.classList.contains('mineradio-mobile-chrome-hidden') && selectors.every(selector => {
+                        const element = doc.querySelector(selector);
+                        if (!element) return false;
+                        const style = doc.defaultView.getComputedStyle(element);
+                        // Open panels and short landscape layouts intentionally omit some surfaces.
+                        return style.display === 'none' || (style.visibility === 'visible' && Number(style.opacity) > .99);
+                    });
+                }''', timeout=2000, polling=50)
                 expect(folia.get_by_test_id('local-mobile-nav')).to_be_visible()
                 return
             except PlaywrightTimeoutError:
@@ -49,6 +53,7 @@ def verify_folia_mobile(page, checks, out):
                 if (!element) return null;
                 const style = element.ownerDocument.defaultView.getComputedStyle(element);
                 return {tag: element.tagName, testid: element.getAttribute('data-testid'),
+                    disabled: element.matches(':disabled'), ariaDisabled: element.getAttribute('aria-disabled'),
                     classes: element.getAttribute('class'), bounds: element.getBoundingClientRect().toJSON(),
                     style: {display: style.display, visibility: style.visibility, opacity: Number(style.opacity),
                         pointerEvents: style.pointerEvents, position: style.position, zIndex: style.zIndex,
@@ -64,16 +69,22 @@ def verify_folia_mobile(page, checks, out):
             }
             const hidden = doc.body.classList.contains('mineradio-mobile-chrome-hidden');
             const surfaces = [...doc.querySelectorAll('.local-mobile-header,.local-mobile-nav,.local-controls,.local-current-track')].map(describe);
-            const pointerBlocked = describe(target)?.style.pointerEvents === 'none' ||
-                [describe(target), ...ancestors].filter(Boolean).some(element =>
+            const targetState = describe(target);
+            const visible = !!(targetState && targetState.bounds.width > 0 && targetState.bounds.height > 0 &&
+                [targetState, ...ancestors].filter(Boolean).every(element =>
+                    element.style.display !== 'none' && element.style.visibility === 'visible' && element.style.opacity > 0));
+            const disabled = !!(targetState?.disabled || [targetState, ...ancestors].filter(Boolean).some(element =>
+                element.ariaDisabled?.trim().toLowerCase() === 'true'));
+            const pointerBlocked = targetState?.style.pointerEvents === 'none' ||
+                [targetState, ...ancestors].filter(Boolean).some(element =>
                     element.style.display === 'none' || element.style.visibility === 'hidden');
             const fading = surfaces.some(element => element.style.display !== 'none' && element.style.opacity < .99);
             const hitTarget = !!(target && frameHit && (target === frameHit || target.contains(frameHit)) && hostHit === frame);
             return {at: performance.now(), testid, hidden, bodyClass: doc.body.className,
                 rootClass: doc.documentElement.className, hostBodyClass: document.body.className,
                 viewport: {width: doc.documentElement.clientWidth, height: doc.documentElement.clientHeight},
-                frameBounds: frameBounds.toJSON(), target: describe(target), ancestors, surfaces,
-                point, frameHit: describe(frameHit), hostHit: describe(hostHit), hitTarget, pointerBlocked, fading,
+                frameBounds: frameBounds.toJSON(), target: targetState, ancestors, surfaces,
+                point, frameHit: describe(frameHit), hostHit: describe(hostHit), hitTarget, visible, disabled, pointerBlocked, fading,
                 stage: describe(doc.querySelector('[data-testid=local-visualizer]')),
                 panel: doc.querySelector('[data-testid=local-player]')?.getAttribute('data-panel')};
         }''', testid)
@@ -106,19 +117,30 @@ def verify_folia_mobile(page, checks, out):
                 raise
             before = record(f'before-{attempt + 1}')
             save()
+            if before.get('fading'):
+                try:
+                    wake_controls()
+                except Exception as error:
+                    record(f'settle-failed-{attempt + 1}', error)
+                    save()
+                    raise
+                before = record(f'settled-before-{attempt + 1}')
+                save()
             if before.get('hidden'):
                 save()
                 if attempt < 2: continue
                 raise AssertionError(f'{testid}: mobile chrome expired again before touch; see {evidence.name}')
             # An opaque, available control covered by another element is a real
             # hit-testing failure, not evidence for retrying an idle transition.
-            if before.get('diagnosticError') or not before.get('target') or before.get('pointerBlocked') \
-                    or (not before.get('fading') and not before.get('hitTarget')):
+            if before.get('diagnosticError') or not before.get('target') or not before.get('visible') or before.get('disabled') \
+                    or before.get('pointerBlocked') or before.get('fading') or not before.get('hitTarget'):
                 save()
                 raise AssertionError(f'{testid}: visible control is unavailable or intercepted; see {evidence.name}')
             try:
-                # Do not let Playwright wait past the 2.5s idle deadline with no touch.
-                folia.get_by_test_id(testid).tap(timeout=1200)
+                # The probe checks availability and actual browser hit testing before a real touch.
+                # Avoid waiting for animation frames while the phone's idle deadline continues.
+                point, frame_bounds = before['point'], before['frameBounds']
+                page.touchscreen.tap(frame_bounds['left'] + point['x'], frame_bounds['top'] + point['y'])
                 record(f'completed-{attempt + 1}')
                 save()
                 return
