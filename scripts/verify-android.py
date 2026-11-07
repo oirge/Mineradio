@@ -367,6 +367,10 @@ with sync_playwright() as p:
     def folia_controls_hidden():
         return page.evaluate('document.getElementById("folia-frame").contentDocument.body.classList.contains("mineradio-mobile-chrome-hidden")')
 
+    def clear_folia_touch_events():
+        page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
+            .__mineradioMobileTapTrace.events.length = 0; }''')
+
     def tap_folia_stage():
         # ADB uses display pixels, while the WebView and iframe report CSS pixels.
         # Read the real WebView bounds so status/navigation bars are not guessed.
@@ -424,6 +428,7 @@ with sync_playwright() as p:
                 bodyHidden: !!doc?.body?.classList.contains('mineradio-mobile-chrome-hidden'),
                 documentHidden: doc?.hidden, readyState: doc?.readyState,
                 bodyClass: doc?.body?.className, viewport: {width: innerWidth, height: innerHeight},
+                events: doc?.defaultView?.__mineradioMobileTapTrace?.events.slice() || [],
                 frameBounds: frame?.getBoundingClientRect().toJSON(),
                 playerPanel: doc?.querySelector('[data-testid=local-player]')?.getAttribute('data-panel')};
             const targets = doc ? doc.querySelectorAll(selector) : [], element = targets[0];
@@ -472,8 +477,18 @@ with sync_playwright() as p:
         def capture_after(record):
             try: record['bodyHiddenAfter'] = folia_controls_hidden()
             except Exception as diagnostic_error: record['bodyHiddenAfterError'] = str(diagnostic_error)
-            try: record['after'] = folia_target_state(selector)
+            try:
+                record['after'] = folia_target_state(selector)
+                record['events'] = record['after']['events']
             except Exception as diagnostic_error: record['afterError'] = str(diagnostic_error)
+
+        def pointer_downs(record):
+            return [event for event in record.get('events', []) if event.get('type') == 'pointerdown']
+
+        def wake_only(record):
+            downs = pointer_downs(record)
+            return record.get('touchEventsCleared') is True and len(downs) == 1 \
+                and downs[0].get('isTrusted') is True and downs[0].get('bodyHidden') is True
 
         for attempt in range(3):
             record = {'attempt': attempt + 1}
@@ -500,7 +515,7 @@ with sync_playwright() as p:
                     record['after'] = before
                     record['reason'] = 'idle expired before the action'
                     if attempt < 2:
-                        save('retry-idle-expiry')
+                        save('retry-idle-expiry-before-touch')
                         continue
                     raise AssertionError('Folia controls expired before all three bounded action attempts')
                 assert not before['missingTarget'] and before['targetCount'] == 1, 'Folia target is missing or ambiguous: ' + json.dumps(before, ensure_ascii=False)
@@ -512,6 +527,8 @@ with sync_playwright() as p:
                     assert 0 < point['x'] < before['viewport']['width'] and 0 < point['y'] < before['viewport']['height'], point
                     session = page.context.new_cdp_session(page)
                     try:
+                        clear_folia_touch_events()
+                        record['touchEventsCleared'] = True
                         record['input'] = {'method': 'CDP Input.dispatchTouchEvent', 'point': point}
                         session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': point['x'], 'y': point['y']}]})
                         record['touchStartSent'] = True
@@ -532,16 +549,22 @@ with sync_playwright() as p:
                         handle.dispose()
                 record['result'] = 'action completed'
                 capture_after(record)
+                if method == 'click':
+                    if wake_only(record):
+                        record['result'] = 'trusted touch only woke idle chrome'
+                        if attempt == 2:
+                            raise AssertionError('Three trusted touches only woke idle Folia chrome')
+                        save('retry-trusted-wake-only')
+                        continue
+                    downs = pointer_downs(record)
+                    assert len(downs) == 1 and downs[0].get('isTrusted') is True, 'Folia real touch lacked one trusted pointerdown: ' + json.dumps(record.get('events', []), ensure_ascii=False)
                 save('passed')
                 return
             except PlaywrightTimeoutError as error:
                 record['error'] = str(error)
                 capture_after(record)
-                blocked_before = before is not None and not before['bodyHidden'] and before['visible'] and (
-                    not before['receivesPointer'] or before['disabled']
-                    or not before['localHitIsTarget'] or not before['mainHitIsFrame'])
-                if record.get('bodyHiddenAfter') is True and not blocked_before and attempt < 2:
-                    save('retry-idle-expiry')
+                if method == 'click' and wake_only(record) and attempt < 2:
+                    save('retry-trusted-wake-only')
                     continue
                 save('failed')
                 raise
@@ -565,6 +588,21 @@ with sync_playwright() as p:
         }''')
 
     folia.get_by_test_id('local-mobile-nav').wait_for(state='attached')
+    page.evaluate('''() => {
+        const doc = document.getElementById('folia-frame').contentDocument, view = doc.defaultView;
+        if (view.__mineradioMobileTapTrace) return;
+        const trace = view.__mineradioMobileTapTrace = {events: []};
+        const capture = event => {
+            const target = event.target, control = target?.closest?.('[data-testid]');
+            trace.events.push({type: event.type, at: view.performance.now(), hostAt: performance.now(),
+                bodyHidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                pointerType: event.pointerType || null, isTrusted: event.isTrusted,
+                target: {tag: target?.tagName || null, testid: target?.getAttribute?.('data-testid') || null,
+                    classes: target?.getAttribute?.('class') || null, controlTestid: control?.getAttribute('data-testid') || null}});
+        };
+        // Window capture precedes the document's wake-only handler. Observe without altering events.
+        for (const type of ['pointerdown', 'pointerup', 'click']) view.addEventListener(type, capture, true);
+    }''')
     folia_action('[data-testid="local-open-settings"]', 'open-settings')
     folia_action('[data-testid="local-visualizer-mode"]', 'visualizer-mode', method='select_option', value='classic')
     folia_action('[data-testid="local-visual-settings"] .local-panel-title button[aria-label="关闭"]', 'close-settings')
