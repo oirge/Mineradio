@@ -1,0 +1,74 @@
+{
+  "passed": true,
+  "release": "https://github.com/oirge/Mineradio/releases/tag/android-v1.0.1",
+  "releaseId": 436020179,
+  "publishedAt": "2026-11-06T02:09:37Z",
+  "commit": "6cf8a91a8d063a46fd7f8f96a2571ddaa77e295f",
+  "assets": {
+    "Mineradio-Android-1.0.1.apk": {
+      "size": 14432708,
+      "sha256": "cecccd73db75a7f9a93dcd4de08075fb4af39cd28e3632d82d6aed7933561fb6",
+      "url": "https://github.com/oirge/Mineradio/releases/download/android-v1.0.1/Mineradio-Android-1.0.1.apk"
+    },
+    "SHA256SUMS.txt": {
+      "size": 102,
+      "sha256": "3cdb3673ba827e5c25fea7cdcc6ca002a982d6313f0ddc886665c4e04ba46ec4",
+      "url": "https://github.com/oirge/Mineradio/releases/download/android-v1.0.1/SHA256SUMS.txt"
+    }
+  },
+  "manifest": {
+    "versionCode": 10001,
+    "versionName": "1.0.1",
+    "compileSdkVersion": 36,
+    "compileSdkVersionCodename": "16",
+    "package": "com.mineradio.oirge.mobile",
+    "platformBuildVersionCode": 36,
+    "platformBuildVersionName": 16
+  },
+  "certificateSha256": "ee1586586ac8d13b17dda8020eda86712d62bac7b96e3f3b5e8643151faff0a6",
+  "signatureV2": true,
+  "nodePassed": 1667,
+  "nativeChecks": [
+    "Capacitor Core and native library plugin initialize without page errors",
+    "native SAF import and streamed WAV playback",
+    "native integer byte ranges and real embedded ID3 lyrics reach the main lyric stage",
+    "foreground playback service and media notification",
+    "Folia renders native embedded lyrics with visible fitted animated text",
+    "Folia touch library, playback and Android back handling",
+    "background playback progresses after Home",
+    "cold restart restores persisted URI grants and music library",
+    "exact signed release installs and opens its offline import UI"
+  ],
+  "browserChecks": [
+    "settings open and close in simple mode",
+    "touch library remains open and creates a playlist",
+    "real WAV import, pause, seek, resume, next, previous and options",
+    "local search and dismiss",
+    "320, 360, 430, 768 portrait and 844, 1024 landscape",
+    "Folia switch preserves host audio; touch pause, seek and track navigation",
+    "Folia library search, playlist creation, visual themes, playback settings and audio tools",
+    "Folia lyrics, floating records and poster wall at all six phone/tablet sizes",
+    "Folia returns to Mineradio without restarting playback",
+    "large browser returns to desktop layout"
+  ],
+  "systemDialogs": [
+    "android-launcher-anr-1"
+  ],
+  "desktopLatest": "v2.6.10",
+  "physicalReview": {
+    "passed": true,
+    "run": 42149065288,
+    "commit": "7be0c8bf91c45fcdb1b42692c2912b0277f911ee",
+    "artifact": 13472510510,
+    "mainScreen": "android-player-screen.png",
+    "coldRestoreScreen": "android-restored-screen.png",
+    "review": "Both system screenshots visibly show the embedded lyrics; CDP captures omit the WebGL stage.",
+    "applicationSourceMatchesRelease": true,
+    "publishSkipped": true
+  },
+  "desktopVerify": {
+    "passed": true,
+    "run": 42147367912,
+    "commit": "6cf8a91a8d063a46fd7f8f96a2571ddaa77e295f"
+  }
+}

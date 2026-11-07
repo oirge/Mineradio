@@ -1,0 +1,267 @@
+name: Android APK
+
+on:
+  push:
+    branches: [codex/android-mobile]
+    paths:
+      - 'public/**'
+      - 'mobile/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'server.js'
+      - 'package*.json'
+      - 'build/icon.png'
+      - 'docs/ANDROID-RELEASE.md'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish after acceptance succeeds
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: vendor-src/folia/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install cloud build tools
+        run: |
+          npm install --prefix mobile --ignore-scripts --no-audit --no-fund
+          npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
+          python -m pip install pynacl
+      - name: Check source and desktop regressions
+        run: |
+          node --check public/mobile.js
+          node --check public/mobile-native.js
+          node --check public/mobile-playback.js
+          node --check public/mobile-native-audio.js
+          node --check public/folia-mobile-chrome.js
+          node --check public/app.js
+          node --check server.js
+          python -m py_compile scripts/verify-android.py scripts/verify-mobile-browser.py
+          git diff --check
+          node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
+      - name: Rebuild embedded Folia for Android
+        run: node scripts/build-folia.js
+      - name: Upload embedded Folia for browser acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-android-static
+          path: public/vendor/folia/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Prepare persistent APK signing
+        env:
+          SAVED_KEYSTORE: ${{ secrets.MOBILE_KEYSTORE_BASE64 }}
+          SAVED_PASSWORD: ${{ secrets.MOBILE_KEYSTORE_PASSWORD }}
+          MOBILE_SIGNING_PUBLIC_KEY: ${{ vars.MOBILE_SIGNING_PUBLIC_KEY }}
+          MOBILE_SIGNING_KEY_ID: ${{ vars.MOBILE_SIGNING_KEY_ID }}
+        run: |
+          mkdir -p release
+          export MOBILE_KEYSTORE_PATH="$RUNNER_TEMP/mineradio-release.p12"
+          if [ -n "$SAVED_KEYSTORE" ]; then
+            printf '%s' "$SAVED_KEYSTORE" | base64 --decode > "$MOBILE_KEYSTORE_PATH"
+            export MOBILE_KEYSTORE_PASSWORD="$SAVED_PASSWORD"
+          else
+            export MOBILE_KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
+            keytool -genkeypair -keystore "$MOBILE_KEYSTORE_PATH" -storetype PKCS12 -storepass "$MOBILE_KEYSTORE_PASSWORD" -keypass "$MOBILE_KEYSTORE_PASSWORD" -alias mineradio -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=Mineradio Android, OU=Mobile, O=Mineradio"
+            python mobile/seal-signing.py
+          fi
+          echo "::add-mask::$MOBILE_KEYSTORE_PASSWORD"
+          echo "MOBILE_KEYSTORE_PATH=$MOBILE_KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "MOBILE_KEYSTORE_PASSWORD=$MOBILE_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+      - name: Build signed Android package
+        run: |
+          npm --prefix mobile run prepare:android
+          cd mobile/android
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain assembleRelease assembleDebug
+          cd ../..
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk release/Mineradio-Android-1.0.5.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs release/Mineradio-Android-1.0.5.apk
+          sha256sum release/Mineradio-Android-1.0.5.apk > release/SHA256SUMS.txt
+      - name: Upload APK and signing bootstrap
+        uses: actions/upload-artifact@v4
+        with:
+          name: mineradio-android-apk
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload Android acceptance inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mineradio-android-test
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  verify-browser:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: folia-android-static
+          path: public/vendor/folia/
+      - name: Install browser acceptance driver
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          sudo apt-get install -y xvfb xauth
+      - name: Verify mobile browser interactions
+        run: |
+          PORT=3077 HOST=127.0.0.1 node server.js > /tmp/mineradio-server.log 2>&1 &
+          xvfb-run -a -s '-screen 0 1600x1280x24' python scripts/verify-mobile-browser.py
+      - name: Upload browser verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-browser-verification
+          path: output/playwright/mobile/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  verify-android:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android acceptance driver
+        run: python -m pip install playwright
+      - uses: actions/download-artifact@v4
+        with:
+          name: mineradio-android-apk
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: mineradio-android-test
+          path: mobile/android/app/build/outputs/apk/debug/
+      - name: Enable cloud emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Start Mesa software graphics for the cloud emulator
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri mesa-utils
+          Xvfb :99 -screen 0 1280x1024x24 > /tmp/mineradio-xvfb.log 2>&1 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
+          echo "GALLIUM_DRIVER=llvmpipe" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 20); do
+            if DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe glxinfo -B; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - name: Verify Android installation and native import
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          emulator-build: '14472402'
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-options: >-
+            -no-window -gpu host -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
+            > /tmp/mineradio-emulator.log 2>&1
+          script: python scripts/verify-android.py
+      - name: Save cloud emulator diagnostics
+        if: always()
+        run: |
+          mkdir -p output/playwright/mobile
+          free -h | tee output/playwright/mobile/runner-memory.txt
+          df -h | tee output/playwright/mobile/runner-disk.txt
+          sudo dmesg -T | tail -n 120 | tee output/playwright/mobile/runner-kernel.txt
+          ps -eo pid,ppid,stat,%cpu,%mem,rss,args > output/playwright/mobile/runner-processes.txt
+          timeout 15s coredumpctl info --no-pager > output/playwright/mobile/runner-coredumps.txt 2>&1 || true
+          if [ -d /tmp/android-runner ]; then
+            cp -a /tmp/android-runner output/playwright/mobile/emulator-crashes
+          fi
+          if [ -f /tmp/mineradio-emulator.log ]; then
+            cp /tmp/mineradio-emulator.log output/playwright/mobile/emulator.log
+          fi
+          if [ -f /tmp/mineradio-xvfb.log ]; then
+            cp /tmp/mineradio-xvfb.log output/playwright/mobile/xvfb.log
+          fi
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-verification
+          path: output/playwright/mobile/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    if: github.event_name != 'workflow_dispatch' || inputs.publish_release
+    needs: [build, verify-browser, verify-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: mineradio-android-apk
+          path: release
+      - name: Publish verified Android preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view android-v1.0.5 > /dev/null 2>&1; then
+            echo "Release android-v1.0.5 already exists; refusing to replace accepted assets"
+            exit 1
+          else
+            gh release create android-v1.0.5 release/Mineradio-Android-1.0.5.apk release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --latest=false --title 'Mineradio Android 1.0.5 预览版' --notes-file docs/ANDROID-RELEASE.md
+          fi

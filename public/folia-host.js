@@ -473,9 +473,9 @@
   var CHROME_HIDE_DELAY = 2500, BAR_HIDE_DELAY = 2500, TOP_BAND = 96, BOTTOM_BAND = 170;
   var chromeHideTimer = 0, barHideTimer = 0, topHideTimer = 0;
   var chromeHoverLock = false, barLock = false, barDragging = false, barFocused = false, barZone = false, topLock = false, topFocused = false, topZone = false, chromeZone = false;
-  var chromeListening = false, frameActivityDoc = null;
+  var chromeListening = false, frameActivityDoc = null, mobileFrameChrome = null;
   function setChromeHidden(h) { document.body.classList.toggle('folia-chrome-hidden', !!h); }
-  function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h); }
+  function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h && !document.body.classList.contains('mobile-layout')); }
   function scheduleChromeHide() {
     if (chromeHideTimer) { global.clearTimeout(chromeHideTimer); chromeHideTimer = 0; }
     if (!isImmersive() || chromeHoverLock) return;
@@ -488,6 +488,7 @@
   }
   function scheduleBarHide() {
     if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
+    if (document.body.classList.contains('mobile-layout')) return;
     if (!active || barLock || barDragging || barFocused) return;
     barHideTimer = global.setTimeout(function () { barHideTimer = 0; if (active && !barLock && !barDragging && !barFocused) setBarHidden(true); }, BAR_HIDE_DELAY);
   }
@@ -497,9 +498,10 @@
     else scheduleBarHide();
   }
   // Fullscreen Folia renders its top nav (.local-header) inside the iframe; auto-hide it too.
-  function setTopHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-topnav-hidden', !!h); }
+  function setTopHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-topnav-hidden', !!h && !document.body.classList.contains('mobile-layout')); }
   function scheduleTopHide() {
     if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
+    if (document.body.classList.contains('mobile-layout')) return;
     if (!active || topLock || topFocused) return;
     topHideTimer = global.setTimeout(function () { topHideTimer = 0; if (active && !topLock && !topFocused) setTopHidden(true); }, CHROME_HIDE_DELAY);
   }
@@ -574,6 +576,9 @@
     detachFrameActivity();
     frameActivityDoc = doc;
     injectBarStyle(doc);
+    if (global.MineradioFoliaMobileChrome) mobileFrameChrome = global.MineradioFoliaMobileChrome.create(doc, function () {
+      return active && document.body.classList.contains('mobile-layout');
+    });
     doc.addEventListener('pointermove', onFramePointerMove, true);
     doc.addEventListener('pointerdown', onFramePointerDown, true);
     doc.addEventListener('pointerup', onFramePointerUp, true);
@@ -582,6 +587,7 @@
     if (active) { scheduleBarHide(); scheduleTopHide(); }
   }
   function detachFrameActivity() {
+    if (mobileFrameChrome) { mobileFrameChrome.destroy(); mobileFrameChrome = null; }
     if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
     if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
     barLock = barDragging = barFocused = barZone = topLock = topFocused = topZone = false;
@@ -598,7 +604,7 @@
   }
   function chromeHoverTargets() {
     return Array.prototype.slice.call(document.querySelectorAll(
-      '.desktop-drag-region,.desktop-window-controls,#top-right,#folia-floating-switch,#folia-floating-import,#fullscreen-diy-zone'));
+      '.desktop-drag-region,.desktop-window-controls,#folia-titlebar-controls,#top-right,#folia-floating-switch,#folia-floating-import,#fullscreen-diy-zone'));
   }
   function startChromeAutoHide() {
     var fresh = !chromeListening;

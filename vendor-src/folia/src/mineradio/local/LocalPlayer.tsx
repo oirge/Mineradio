@@ -19,7 +19,9 @@ import { LocalActionsContext } from './LocalActionsContext';
 import { useLocalActions } from './useLocalActions';
 import { useLocalVisualAssets } from './useLocalVisualAssets';
 import { useLocalVisualizerPrewarm } from './useLocalVisualizerPrewarm';
+import { useLocalMobileLayout } from './useLocalMobileLayout';
 import './local.css';
+import './localMobile.css';
 
 // src/mineradio/local/LocalPlayer.tsx
 // Embedded local-player composition: upstream effects, host transport, and a bounded local catalog.
@@ -58,6 +60,11 @@ export default function LocalPlayer() {
         focus: () => { setFocus(true); setSettingsOpen(false); setLibraryOpen(false); setPlaybackOpen(false); },
         view: view => { visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); },
     });
+    const mobile = useLocalMobileLayout(() => {
+        if (!libraryOpen && !settingsOpen && !playbackOpen && !focus && !tools.tool) return false;
+        tools.close(); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); setFocus(false);
+        return true;
+    });
     const run = (method: string, params?: Record<string, unknown>) => { void player.command(method, params).catch(() => {}); };
     const style = useMemo(() => ({
         '--local-bg': theme.backgroundColor, '--local-text': theme.primaryColor,
@@ -81,11 +88,11 @@ export default function LocalPlayer() {
         return () => window.removeEventListener('keydown', onKey);
     }, [player.command]);
     usePlaylistVisualPreset(track?.id, player.state?.playbackPlaylistId);
-    return <LocalActionsContext.Provider value={tools.context}><main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
+    return <LocalActionsContext.Provider value={tools.context}><main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view} data-panel={libraryOpen || settingsOpen || playbackOpen || tools.tool ? 'open' : 'closed'}>
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
-            <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+            <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} mobile={mobile} onOpenQueue={openQueue} />
         </LocalErrorBoundary>
-        {!focus && <LocalHeader view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen} playbackOpen={playbackOpen}
+        {!focus && <LocalHeader mobile={mobile} view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen} playbackOpen={playbackOpen}
             tool={tools.tool} onTool={tools.open}
             onPlayback={() => { tools.close(); setPlaybackOpen(!playbackOpen); setLibraryOpen(false); setSettingsOpen(false); }}
             onView={view => { tools.close(); visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); }}
@@ -96,8 +103,8 @@ export default function LocalPlayer() {
         {isLyrics && !track && <div className="local-welcome"><Music2 size={38} /><h1>{player.state ? t('chooseSong') : t('connecting')}</h1><p>{t('emptyHint')}</p><div><button onClick={() => run('importFiles')}>{t('importFiles')}</button><button onClick={() => { setLibraryOpen(true); setFocus(false); }}>{t('library')}</button></div></div>}
         {isLyrics && track && !player.lines.length && <div className="local-no-lyrics"><Music2 size={28} /><h2>{track.title}</h2><p>{track.artist || t('unknownArtist')}</p><small>{t('noLyrics')}</small></div>}
         {!focus && <>
-            {isLyrics && <div className="local-current-track" data-testid="local-current-track"><div className="local-current-cover">{track?.cover ? <img src={track.cover} alt="" /> : <Music2 size={24} />}</div><div><small>{t('nowPlaying')}</small><strong>{track?.title || t('chooseSong')}</strong><span>{track?.artist || ''}</span></div></div>}
-            {isLyrics && <PlayerControls state={player.state} currentTime={player.currentTime} command={player.command}
+            {(isLyrics || mobile) && <div className="local-current-track" data-testid="local-current-track"><div className="local-current-cover">{track?.cover ? <img src={track.cover} alt="" /> : <Music2 size={24} />}</div><div><small>{t('nowPlaying')}</small><strong>{track?.title || t('chooseSong')}</strong><span>{track?.artist || ''}</span></div></div>}
+            {(isLyrics || mobile) && <PlayerControls state={player.state} currentTime={player.currentTime} command={player.command}
                 onLibrary={() => { setQueue(false); setLibraryOpen(true); setSettingsOpen(false); setPlaybackOpen(false); }}
                 onQueue={() => { setQueue(true); setLibraryOpen(!libraryOpen || !queue); setSettingsOpen(false); setPlaybackOpen(false); }} />}
             {libraryOpen && <LibraryPanel state={player.state} command={player.command} queue={queue} onTab={setQueue} onClose={() => setLibraryOpen(false)} />}

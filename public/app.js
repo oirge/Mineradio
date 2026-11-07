@@ -201,6 +201,19 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['首页', 'Home'],
+  ['搜索', 'Search'],
+  ['正在播放', 'Now playing'],
+  ['设置', 'Settings'],
+  ['手机导航', 'Mobile navigation'],
+  ['歌单和音乐库', 'Playlists and library'],
+  ['关闭设置', 'Close settings'],
+  ['关闭歌单', 'Close playlists'],
+  ['结束搜索', 'Dismiss search'],
+  ['切换到 Folia 界面', 'Switch to Folia'],
+  ['让音乐随身。', 'Take your music with you.'],
+  ['导入手机中的音乐，开始聆听。', 'Import music from your phone to start listening.'],
+  ['更多播放选项', 'More playback options'],
   ['视频导出支持四档帧率。', 'Video export supports four frame rate options.'],
   ['歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。', 'Lyrics and visualization video export now offers 30, 60, 90 and 120 fps, with 30 fps as the default.'],
   ['帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。', 'Your frame rate choice is remembered, included in backups and used for capture and encoding.'],
@@ -1220,6 +1233,7 @@ var uiLanguageAttributeObserver = null;
 var uiLanguageApplying = false;
 var uiLanguageSources = new WeakMap();
 var UI_LANGUAGE_SCOPE_IDS = [
+  'mobile-nav',
   'fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal', 'custom-lyric-modal',
   'desktop-titlebar', 'fullscreen-diy-zone', 'search-area', 'empty-home', 'top-right', 'playlist-panel', 'trial-banner', 'gesture-hud', 'bottom-bar',
   'drop-overlay', 'free-camera-hint', 'ai-depth-chip', 'beat-chip', 'lyric-translate-chip', 'cover-crop-modal', 'collect-modal',
@@ -3460,7 +3474,9 @@ function getRenderLoadTier() {
   if (cssPixels >= 3200000 || renderPixels >= 3600000) return 1;
   return 0;
 }
+markAppPerf('webgl-start');
 var renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' });
+markAppPerf('webgl-ready');
 renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(getRenderPixelRatio());
 renderer.setSize(innerWidth, innerHeight);
@@ -5459,7 +5475,7 @@ var particlePointerLocalHit = new THREE.Vector3();
 var particlePointerQuat = new THREE.Quaternion();
 var particlePointerFrame = { dirty:false, ndcX:0, ndcY:0 };
 var CLICK_THRESHOLD = 6;  // 像素, 拖动 > 6px 视为 drag
-var UI_HIT_SELECTOR = '#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#lyric-translate-chip,#drop-overlay';
+var UI_HIT_SELECTOR = '#mobile-nav,#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#lyric-translate-chip,#drop-overlay';
 var pointerUiHitCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
 function isPointerOverUi(e) {
@@ -7541,20 +7557,26 @@ function getStageLyricLockBounds() {
 }
 function lyricCameraLockFit(layoutScale, layoutX, layoutY, distance) {
   if (!camera || !camera.isPerspectiveCamera) return 1;
+  var mobileStage = window.MineradioMobile && window.MineradioMobile.active;
   layoutScale = Math.max(0.1, layoutScale || 1);
   var fov = (camera.fov || 45) * Math.PI / 180;
   var dist = Math.max(1.4, distance || 4.85);
+  if (mobileStage) dist = Math.max(1.4, dist - 1.65);
   var visibleH = 2 * Math.tan(fov * 0.5) * dist;
   var visibleW = visibleH * (camera.aspect || (innerWidth / Math.max(1, innerHeight)) || 1.78);
   var bounds = getStageLyricLockBounds();
   var skullSafe = !!(fx && fx.preset === SKULL_PRESET_INDEX);
   var safeW = Math.max(visibleW * (skullSafe ? 0.36 : 0.42), visibleW * (skullSafe ? 0.70 : 0.84) - Math.abs(layoutX || 0) * (skullSafe ? 1.36 : 1.22));
   var safeH = Math.max(visibleH * (skullSafe ? 0.16 : 0.18), visibleH * (skullSafe ? 0.34 : 0.44) - Math.abs(layoutY || 0) * (skullSafe ? 0.98 : 0.82));
+  if (mobileStage) {
+    safeW = visibleW * .88;
+    safeH = visibleH * (window.MineradioMobile.lyricStageHeight || .5);
+  }
   var scaledW = Math.max(0.01, bounds.w * layoutScale);
   var scaledH = Math.max(0.01, bounds.h * layoutScale);
   var viewportFit = Math.min(1, safeW / scaledW, safeH / scaledH);
   var lockScaleCap = Math.min(1, (skullSafe ? 0.94 : LYRIC_CAMERA_LOCK_MAX_SCALE) / layoutScale);
-  return clampRange(Math.min(viewportFit, lockScaleCap), skullSafe ? 0.36 : 0.42, 1);
+  return clampRange(Math.min(viewportFit, lockScaleCap), mobileStage ? .04 : (skullSafe ? 0.36 : 0.42), 1);
 }
 // 兼容旧变量名以便其它代码不破坏
 var lyricsParticles = null;
@@ -9711,6 +9733,10 @@ function canUseCachedLocalMetadata(song, record) {
  */
 function applyLocalAssetCacheToSong(song, record, opts) {
   if (!song || !record || record.id !== song.localKey) return false;
+  var nativeReader = song.localFile && song.localFile.nativeReaderVersion;
+  // Re-read native tags after an Android reader update, including cached "no lyrics" results.
+  var nativeSignature = nativeReader ? localLibraryFileSignatureFromSong(song) : '';
+  if (nativeReader && record.localLibraryFileSignature !== nativeSignature) return false;
   opts = opts || {};
   var includeLyrics = opts.includeLyrics !== false;
   var includeCover = opts.includeCover !== false;
@@ -9743,7 +9769,7 @@ function applyLocalAssetCacheToSong(song, record, opts) {
     song.localReplayGain = record.localReplayGain;
   }
   var lyricFileSig = localAssetFileSignature(song.localLyricFile);
-  var canUseLyricCache = lyricRecord && (song.localLyricFile
+  var canUseLyricCache = lyricRecord && (!nativeReader || lyricRecord.localLibraryFileSignature === nativeSignature) && (song.localLyricFile
     ? (lyricRecord.localLyricFileSignature && lyricRecord.localLyricFileSignature === lyricFileSig)
     : lyricRecord.localLyricSource !== 'file');
   if (includeLyrics && lyricRecord && canUseLyricCache && (lyricRecord.localLyricText || lyricRecord.localLyricLoaded)) {
@@ -12563,8 +12589,14 @@ function updateStageLyrics3D(dt, frameShelfState) {
     }
   }
   var lockBaseDistance = wallpaperShelfLyrics ? 5.58 : 4.85;
+  var mobileStage = window.MineradioMobile && window.MineradioMobile.active;
+  if (mobileStage && camera) {
+    // Phone lyrics face the camera and fit the visible space between touch controls.
+    layoutX = 0; layoutZ = 0; layoutTiltX = 0; layoutTiltY = 0;
+    layoutY = (window.MineradioMobile.lyricStageCenterY || 0) * 2 * Math.tan((camera.fov || 45) * Math.PI / 360) * (lockBaseDistance - 1.5);
+  }
   var lockDistance = lockBaseDistance + layoutZ;
-  var cameraLockedLyrics = (fx.lyricCameraLock || wallpaperLyricLock) && camera;
+  var cameraLockedLyrics = (fx.lyricCameraLock || wallpaperLyricLock || mobileStage) && camera;
   var skullLyricEdgeGuard = !!(fx && fx.preset === SKULL_PRESET_INDEX && (orbit.centerLocked || orbit.recentering));
   var lockFit = (cameraLockedLyrics || skullLyricEdgeGuard || skullMouthLyrics) ? lyricCameraLockFit(layoutScale, layoutX, layoutY, skullMouthLyrics ? Math.max(2.2, 4.4 + layoutZ) : lockDistance) : 1;
   if (skullMouthLyrics) lockFit = Math.min(lockFit, 1.12);
@@ -29142,6 +29174,14 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   }
 
   markPlayPhase('audio-start');
+  if (opts.startPaused) {
+    playing = false;
+    setPlayIcon(false);
+    hideLoading();
+    forcePlaybackControlsInteractive();
+    safeRenderQueuePanel('native-paused-restore');
+    return;
+  }
   // 接管 deck 时禁掉主增益淡入：preparePlaybackFadeIn 会把 gainNode 直接拉到 0，
   // 那是两个 deck 共用的主音量，交叉会被它一把掐死，纯无缝接续也会重新长出 460 ms 的空档。
   // 接管路径的电平交给 deckGain 处理（交叉走等功率曲线，无缝走 12 ms 斜坡）。
@@ -29259,6 +29299,10 @@ async function attemptAudioPlay(opts) {
   var playElement = audio;
   function ownsAttempt() { return playToken === trackSwitchToken && playElement === audio; }
   try {
+      if (typeof window !== 'undefined' && window.MineradioNativePlayback) {
+        await window.MineradioNativePlayback.ready;
+        if (!ownsAttempt() || window.MineradioNativePlayback.ownsAudio()) return false;
+      }
       if (!audio) return false;
       if (!audioReady) initAudio();
       // 起播前收掉任何仍在响的非活动 deck（交叉进行中除外，那是有意的双 deck 对交叉）。
@@ -33188,7 +33232,7 @@ function fileListToArray(files) {
   return list;
 }
 function desktopLocalMusicApi() {
-  return window.desktopWindow && window.desktopWindow.isDesktop ? window.desktopWindow : null;
+  return window.desktopWindow && window.desktopWindow.isDesktop ? window.desktopWindow : (window.MineradioNativeLibraryApi || null);
 }
 function localFullPath(file) {
   return String((file && (file.fullPath || file.filePath || file.path || file.localFilePathAbsolute)) || '');
@@ -33220,13 +33264,15 @@ function localLibraryPathKeyFromSong(song) {
   return normalizeLocalLibraryPathKey(song.localFilePathAbsolute || song.localPath || song.name || '');
 }
 function localLibraryFileSignatureFromFile(file) {
-  return localLibraryPathKeyFromFile(file) + '|' + localFileSize(file) + '|' + localFileLastModified(file);
+  return localLibraryPathKeyFromFile(file) + '|' + localFileSize(file) + '|' + localFileLastModified(file)
+    + (file && file.nativeReaderVersion ? '|native-reader:' + file.nativeReaderVersion : '');
 }
 function localLibraryFileSignatureFromSong(song) {
   if (!song) return '';
   return localLibraryPathKeyFromSong(song) + '|' +
     (Number(song.localFileSize || (song.localFile && localFileSize(song.localFile)) || 0) || 0) + '|' +
-    (Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0);
+    (Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0)
+    + (song.localFile && song.localFile.nativeReaderVersion ? '|native-reader:' + song.localFile.nativeReaderVersion : '');
 }
 function localPathDir(file) {
   var p = localFilePath(file);
@@ -37452,6 +37498,9 @@ function createLocalLibraryIndexLookup(index) {
 }
 function localLibraryRecordMatchesSong(record, song) {
   if (!record || !song) return false;
+  // A stable song key must not restore tag results from an older Android reader.
+  if (song.localFile && song.localFile.nativeReaderVersion &&
+      localLibraryRecordFileSignature(record) !== localLibraryFileSignatureFromSong(song)) return false;
   if (record.key && song.localKey && record.key === song.localKey) return true;
   var recordSig = localLibraryRecordFileSignature(record);
   var songSig = localLibraryFileSignatureFromSong(song);
@@ -41833,7 +41882,7 @@ function toggleFxPanel(force) {
   if (!el) return;
   // 视觉控制台开合前先把借走的歌单架分组还回去，避免控制台里缺这一组。
   if (typeof closeShelfQuickPanel === 'function' && shelfQuickPanelOpen) closeShelfQuickPanel();
-  if (!diyPlayerMode && force !== false) {
+  if (!diyPlayerMode && force !== false && !(window.MineradioMobile && window.MineradioMobile.active)) {
     showToast('开启 DIY 玩家模式后可打开视觉控制台');
     return;
   }
@@ -44467,7 +44516,11 @@ var peekTimers = { search:null, fx:null, pl:null };
 function setPeek(el, on, key) {
   if (!el) return;
   if (immersiveMode && on && (key === 'search' || key === 'fx')) return;
-  if (on && !diyPlayerMode && key === 'fx') return;
+  if (on && !diyPlayerMode && key === 'fx' && !(window.MineradioMobile && window.MineradioMobile.active)) return;
+  // Touch pages close through navigation, rather than synthetic mouseleave events.
+  if (window.MineradioMobile && window.MineradioMobile.active && !on &&
+      ((key === 'fx' && document.body.getAttribute('data-mobile-view') === 'settings') ||
+       (key === 'pl' && document.body.getAttribute('data-mobile-view') === 'library'))) return;
   if (!on && key === 'search' && emptyHomeActive && !immersiveMode) return;
   if (!on && key === 'pl' && playlistPanelPinned) return;
   if (on && key === 'fx') document.body.classList.remove('fullscreen-diy-peek');
@@ -47299,7 +47352,7 @@ function startLocalUserStateHydration() {
         customLyricMapHydrated = true;
         if (typeof updateCustomLyricControls === 'function') updateCustomLyricControls();
         var song = typeof currentLyricSong === 'function' ? currentLyricSong() : null;
-        if (song && typeof applyCustomLyricState === 'function') applyCustomLyricState(song, false);
+        if (song && typeof applyCustomLyricState === 'function') applyCustomLyricState(song, true);
       }
     },
     {

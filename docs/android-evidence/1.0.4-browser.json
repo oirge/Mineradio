@@ -1,0 +1,16 @@
+{
+  "checks": [
+    "settings open and close in simple mode",
+    "touch library remains open and creates a playlist",
+    "real WAV import, pause, seek, resume, next, previous and options",
+    "local search and dismiss",
+    "320, 360, 430, 768 portrait and 844, 1024 landscape",
+    "Folia switch preserves host audio; touch pause, seek and track navigation",
+    "Folia mobile chrome hides on idle, wakes without tap-through, holds during touch sliders and stays available for menus and settings",
+    "Folia library search, playlist creation, visual themes, playback settings and audio tools",
+    "Folia lyrics, floating records and poster wall at all six phone/tablet sizes",
+    "Folia returns to Mineradio without restarting playback",
+    "large browser returns to desktop layout"
+  ],
+  "errors": []
+}

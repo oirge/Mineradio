@@ -87,7 +87,17 @@ with sync_playwright() as p:
             expect(panel).to_have_count(0)
         # Both normal and desktop titlebar portals retain the same entry point.
         page.evaluate("document.body.classList.add('desktop-shell')")
-        page.get_by_test_id('local-open-playback').click()
+        # The desktop titlebar hides while idle; reaching the top edge reveals it.
+        page.mouse.move(20, 3)
+        expect(page.locator('body')).not_to_have_class(re.compile(r'folia-chrome-hidden'))
+        desktop_playback = page.get_by_test_id('local-open-playback')
+        expect(desktop_playback).to_be_in_viewport()
+        button_box = desktop_playback.bounding_box()
+        page.mouse.move(button_box['x'] + button_box['width'] / 2, 3)
+        page.mouse.move(button_box['x'] + button_box['width'] / 2, button_box['y'] + button_box['height'] / 2)
+        page.wait_for_timeout(2700)
+        expect(page.locator('body')).not_to_have_class(re.compile(r'folia-chrome-hidden'))
+        desktop_playback.click()
         expect(panel).to_be_visible()
         panel.get_by_role('button', name='Close', exact=True).click()
         page.evaluate("document.body.classList.remove('desktop-shell'); setUiLanguage('zh-CN')")
