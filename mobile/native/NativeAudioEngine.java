@@ -224,7 +224,10 @@ final class NativeAudioEngine {
             .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
                 .setEncoding(AudioFormat.ENCODING_PCM_FLOAT).build())
-            .setBufferSizeInBytes(Math.max(minimum, RATE * 2 * 4 / 5)).setTransferMode(AudioTrack.MODE_STREAM).build();
+            // Local music can reserve half a second of PCM to absorb scheduler
+            // stalls during lock-screen/UI transitions. Pause and seek still
+            // stop/flush this same sink immediately, one 512-frame write at a time.
+            .setBufferSizeInBytes(Math.max(minimum, RATE * 2 * 4 / 2)).setTransferMode(AudioTrack.MODE_STREAM).build();
         if (sink.getState() != AudioTrack.STATE_INITIALIZED) throw new IllegalStateException("AUDIO_TRACK_INIT_FAILED");
         sinkCreations++;
         if (rate != 1) sink.setPlaybackParams(new PlaybackParams().setSpeed((float) rate).setPitch(1));
@@ -396,6 +399,8 @@ final class NativeAudioEngine {
                 .put("audioSessionId", sink == null ? 0 : sink.getAudioSessionId()).put("outputFrames", outputFrames)
                 .put("playbackHeadFrames", head()).put("underruns", sink == null ? 0 : sink.getUnderrunCount())
                 .put("sinkBufferFrames", sink == null ? 0 : sink.getBufferSizeInFrames())
+                .put("queuedFrames", Math.max(0, submittedFrames - head()))
+                .put("decoderBufferedFrames", active == null ? 0 : active.bufferedFrames())
                 .put("sinkCreations", sinkCreations).put("trackGeneration", trackGeneration).put("completions", completions)
                 .put("crossfadeActive", retiring != null).put("crossfadeCount", crossfadeCount).put("overlapFrames", overlapFrames)
                 .put("gapless", new JSObject().put("enabled", gaplessEnabled).put("crossfadeSeconds", crossfadeSeconds))

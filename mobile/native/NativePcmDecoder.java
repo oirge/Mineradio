@@ -72,6 +72,7 @@ final class NativePcmDecoder implements AutoCloseable {
     }
 
     boolean ready() { return ready; }
+    int bufferedFrames() { synchronized (lock) { return Math.max(0, bufferedFrames - (decodedEnd ? 0 : reservedTailFrames)); } }
     boolean ended() { synchronized (lock) { return (decodedEnd || cancelled) && bufferedFrames == 0; } }
     String error() { return error; }
     double durationSeconds() { return duration; }
