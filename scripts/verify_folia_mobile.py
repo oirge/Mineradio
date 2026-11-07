@@ -20,11 +20,14 @@ def verify_folia_mobile(page, checks, out):
         const trace = view.__mineradioMobileTapTrace = {events: []};
         const capture = event => {
             const target = event.target, control = target?.closest?.('[data-testid]');
-            trace.events.push({type: event.type, at: view.performance.now(), hostAt: performance.now(),
+            const evidence = {type: event.type, at: view.performance.now(), hostAt: performance.now(),
                 bodyHidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
                 pointerType: event.pointerType || null, isTrusted: event.isTrusted,
                 target: {tag: target?.tagName || null, testid: target?.getAttribute?.('data-testid') || null,
-                    classes: target?.getAttribute?.('class') || null, controlTestid: control?.getAttribute('data-testid') || null}});
+                    classes: target?.getAttribute?.('class') || null, controlTestid: control?.getAttribute('data-testid') || null}};
+            const animation = view.__mineradioChromeAnimationTrace;
+            if (event.type === 'pointerdown' && animation?.active) evidence.animation = animation.read();
+            trace.events.push(evidence);
         };
         // Window capture precedes the document's wake-only handler. Observe without altering events.
         for (const type of ['pointerdown', 'pointerup', 'click']) view.addEventListener(type, capture, true);
@@ -267,6 +270,142 @@ def verify_folia_mobile(page, checks, out):
             });
         }''')
 
+    def start_animation_trace(label, capture_baseline=False):
+        return page.evaluate('''({label, captureBaseline}) => {
+            const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+            const previous = view.__mineradioChromeAnimationTrace;
+            if (previous) view.clearInterval(previous.timer);
+            const selectors = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'];
+            let baseline = null;
+            if (captureBaseline) {
+                const stage = doc.querySelector('[data-testid=local-visualizer]'), box = stage?.getBoundingClientRect();
+                const frameBox = frame.getBoundingClientRect(), volume = doc.querySelector('[data-testid=local-volume]');
+                const hidden = doc.body.classList.contains('mineradio-mobile-chrome-hidden');
+                const surfaces = selectors.map(selector => {
+                    const element = doc.querySelector(selector), style = element && view.getComputedStyle(element);
+                    return {selector, display: style?.display, visibility: style?.visibility,
+                        opacity: style ? Number(style.opacity) : null};
+                });
+                const point = box && {x: box.left + box.width / 2, y: box.top + box.height / 2};
+                const frameHit = point && doc.elementFromPoint(point.x, point.y);
+                const hostHit = point && document.elementFromPoint(frameBox.left + point.x, frameBox.top + point.y);
+                const hostBox = box && {x: frameBox.left + box.left, y: frameBox.top + box.top,
+                    width: box.width, height: box.height};
+                const inside = hostBox && hostBox.width > 0 && hostBox.height > 0 && hostBox.x >= -1 && hostBox.y >= -1
+                    && hostBox.x + hostBox.width <= innerWidth + 1 && hostBox.y + hostBox.height <= innerHeight + 1;
+                const hit = !!(stage && frameHit && (frameHit === stage || stage.contains(frameHit)) && hostHit === frame);
+                if (hidden || !inside || !hit || !volume || !surfaces.every(surface => surface.display !== 'none'
+                    && surface.visibility === 'visible' && surface.opacity > .9)) {
+                    throw new Error('Invalid visible chrome animation baseline: ' + JSON.stringify({hidden, inside, hit, hostBox, surfaces}));
+                }
+                baseline = {visibleGeometry: box.toJSON(), visibleStage: hostBox,
+                    fullGeometry: {x: 0, y: 0, width: doc.documentElement.clientWidth, height: doc.documentElement.clientHeight},
+                    frameBounds: frameBox.toJSON(), savedVolume: Number(volume.value),
+                    audio: {source: audio.src, index: currentIdx, paused: audio.paused, position: audio.currentTime}};
+            }
+            const trace = view.__mineradioChromeAnimationTrace = {label, active: true, samples: []};
+            trace.read = () => {
+                const stage = doc.querySelector('[data-testid=local-visualizer]'), box = stage?.getBoundingClientRect();
+                return {at: view.performance.now(), hidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                    stage: box && {x: box.x, y: box.y, width: box.width, height: box.height,
+                        centerX: box.x + box.width / 2, centerY: box.y + box.height / 2},
+                    surfaces: selectors.map(selector => {
+                        const element = doc.querySelector(selector), style = element && view.getComputedStyle(element);
+                        return {selector, display: style?.display, visibility: style?.visibility,
+                            opacity: style ? Number(style.opacity) : null};
+                    })};
+            };
+            const sample = () => { if (trace.samples.length < 2000) trace.samples.push(trace.read()); };
+            sample();
+            trace.timer = view.setInterval(sample, 16);
+            return baseline;
+        }''', {'label': label, 'captureBaseline': capture_baseline})
+
+    def stop_animation_trace():
+        return page.evaluate('''() => {
+            const view = document.getElementById('folia-frame').contentWindow, trace = view.__mineradioChromeAnimationTrace;
+            if (!trace?.active) return null;
+            view.clearInterval(trace.timer);
+            trace.samples.push(trace.read());
+            trace.active = false;
+            return {label: trace.label, samples: trace.samples, events: view.__mineradioMobileTapTrace.events.slice()};
+        }''')
+
+    def wait_for_stage_rest():
+        # Wait for the actual outer-stage motion, without changing the animation or its duration.
+        page.wait_for_function('''() => {
+            const stage = document.getElementById('folia-frame').contentDocument.querySelector('[data-testid=local-visualizer]');
+            return stage && stage.getAnimations().every(animation => animation.id !== 'mineradio-mobile-chrome-stage'
+                || animation.playState !== 'running');
+        }''', timeout=2000, polling=16)
+
+    def wait_for_stage_geometry(expected, hidden):
+        page.wait_for_function('''({expected, hidden}) => {
+            const doc = document.getElementById('folia-frame').contentDocument;
+            const stage = doc.querySelector('[data-testid=local-visualizer]'), box = stage?.getBoundingClientRect();
+            if (!box || doc.body.classList.contains('mineradio-mobile-chrome-hidden') !== hidden) return false;
+            return ['x', 'y', 'width', 'height'].every(key => Math.abs(box[key] - expected[key]) < 1)
+                && stage.getAnimations().every(animation => animation.id !== 'mineradio-mobile-chrome-stage'
+                    || animation.playState !== 'running');
+        }''', arg={'expected': expected, 'hidden': hidden}, timeout=2000, polling=16)
+
+    def assert_animation_progress(trace, first_center, last_center, hidden):
+        samples = [sample for sample in trace['samples'] if sample['hidden'] is hidden]
+        low, high = sorted([first_center, last_center])
+        assert any(sample['stage'] and low + 1 < sample['stage']['centerY'] < high - 1 for sample in samples), \
+            f"{trace['label']}: stage position jumped without an observed intermediate center"
+        for selector in ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track']:
+            assert any(surface['selector'] == selector and surface['visibility'] == 'visible'
+                and surface['opacity'] is not None and .02 < surface['opacity'] < .98
+                for sample in samples for surface in sample['surfaces']), \
+                f"{trace['label']}: {selector} jumped without a visible intermediate opacity"
+
+    def try_animation_reversal(visible_geometry, visible_center, hidden_center, frame_box, traces):
+        # Prebuild the driver, then make one real gesture. Input latency can miss a 440ms animation.
+        session = page.context.new_cdp_session(page)
+        assert frame_box, 'Folia frame must be available for the real reversal touch'
+        point = {'x': frame_box['x'] + frame_box['width'] / 2, 'y': frame_box['y'] + frame_box['height'] / 2}
+        start_animation_trace('hide-reversed-by-touch')
+        trigger_observed = True
+        try:
+            try:
+                page.wait_for_function('''({first, last}) => {
+                    const trace = document.getElementById('folia-frame').contentWindow.__mineradioChromeAnimationTrace;
+                    const sample = trace.samples.at(-1);
+                    const progress = sample?.stage && (sample.stage.centerY - first) / (last - first);
+                    return sample?.hidden && progress > .15 && progress < .85;
+                }''', arg={'first': visible_center, 'last': hidden_center}, timeout=5000, polling=16)
+            except PlaywrightTimeoutError:
+                trigger_observed = False
+                # No claim of interruption when the driver did not observe its input window.
+                wait_for_idle_chrome()
+            clear_touch_events()
+            session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [point]})
+            session.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+            wait_for_stage_geometry(visible_geometry, False)
+            trace = stop_animation_trace()
+            traces.append(trace)
+            downs = [event for event in trace['events'] if event['type'] == 'pointerdown']
+            assert len(downs) == 1 and downs[0]['isTrusted'] and downs[0]['bodyHidden'], \
+                'The reversal gesture must be one real touch while chrome is idle-hidden'
+            event = downs[0]
+            center = (event.get('animation', {}).get('stage') or {}).get('centerY')
+            progress = (center - visible_center) / (hidden_center - visible_center) if center is not None else None
+            verified = progress is not None and .15 < progress < .85
+            trace['interruption'] = {'triggerObserved': trigger_observed, 'verified': verified,
+                'progressAtTrustedPointerdown': progress,
+                'reason': 'trusted touch arrived during motion' if verified else 'trusted touch arrived outside the middle of the animation'}
+            if verified:
+                samples = [sample for sample in trace['samples'] if not sample['hidden'] and sample['at'] >= event['at'] and sample['stage']]
+                low, high = sorted([visible_center, center])
+                assert any(low + 1 < sample['stage']['centerY'] < high - 1 for sample in samples), \
+                    'The interrupted stage must animate from its current center back to the visible center'
+                assert all(low - 1 <= sample['stage']['centerY'] <= high + 1 for sample in samples), \
+                    'The reversed stage must not jump beyond its current and restored centers'
+            return trace
+        finally:
+            session.detach()
+
     for testid in ['local-toggle-play', 'local-next', 'local-previous', 'local-mobile-return']:
         wake_controls()
         box = inside(folia.get_by_test_id(testid))
@@ -341,20 +480,46 @@ def verify_folia_mobile(page, checks, out):
 
     # Exercise real touch lifetime and CSS hit testing while the known lyric is paused.
     wake_controls()
-    visible_stage = inside(folia.get_by_test_id('local-visualizer'))
-    saved_volume = folia.get_by_test_id('local-volume').evaluate('(input) => Number(input.value)')
-    before_idle = page.evaluate('({source: audio.src, index: currentIdx, paused: audio.paused, position: audio.currentTime})')
-    wait_for_idle_chrome()
-    hidden_stage = inside(folia.get_by_test_id('local-visualizer'))
-    assert hidden_stage['height'] > visible_stage['height'] + 100, (visible_stage, hidden_stage)
-    page.screenshot(path=str(out / 'folia-controls-hidden.png'))
-    wake_controls()
-    assert page.evaluate('audio.src') == before_idle['source']
-    assert page.evaluate('currentIdx') == before_idle['index']
-    assert page.evaluate('audio.paused') is before_idle['paused']
-    assert abs(page.evaluate('audio.currentTime') - before_idle['position']) < .5, 'The wake tap must not seek through newly revealed controls'
-    expect(folia.get_by_test_id('local-controls')).to_be_visible()
-    page.screenshot(path=str(out / 'folia-controls-restored.png'))
+    wait_for_stage_rest()
+    animation_traces = []
+    try:
+        baseline = start_animation_trace('idle-hide', capture_baseline=True)
+        visible_stage, visible_geometry = baseline['visibleStage'], baseline['visibleGeometry']
+        full_geometry, saved_volume, before_idle = baseline['fullGeometry'], baseline['savedVolume'], baseline['audio']
+        wait_for_idle_chrome()
+        wait_for_stage_geometry(full_geometry, True)
+        hidden_stage = inside(folia.get_by_test_id('local-visualizer'))
+        assert hidden_stage['height'] > visible_stage['height'] + 100, (visible_stage, hidden_stage)
+        visible_center = visible_geometry['y'] + visible_geometry['height'] / 2
+        hidden_center = full_geometry['y'] + full_geometry['height'] / 2
+        hidden_trace = stop_animation_trace()
+        animation_traces.append(hidden_trace)
+        assert_animation_progress(hidden_trace, visible_center, hidden_center, True)
+        assert all(surface['opacity'] <= .01 and surface['visibility'] == 'hidden'
+            for surface in hidden_trace['samples'][-1]['surfaces']), 'All four idle surfaces must finish fully hidden'
+        page.screenshot(path=str(out / 'folia-controls-hidden.png'))
+        start_animation_trace('touch-wake')
+        wake_controls()
+        wait_for_stage_geometry(visible_geometry, False)
+        restored_trace = stop_animation_trace()
+        animation_traces.append(restored_trace)
+        assert_animation_progress(restored_trace, hidden_center, visible_center, False)
+        assert page.evaluate('audio.src') == before_idle['source']
+        assert page.evaluate('currentIdx') == before_idle['index']
+        assert page.evaluate('audio.paused') is before_idle['paused']
+        assert abs(page.evaluate('audio.currentTime') - before_idle['position']) < .5, 'The wake tap must not seek through newly revealed controls'
+        expect(folia.get_by_test_id('local-controls')).to_be_visible()
+        page.screenshot(path=str(out / 'folia-controls-restored.png'))
+        try_animation_reversal(visible_geometry, visible_center, hidden_center, baseline['frameBounds'], animation_traces)
+        assert page.evaluate('audio.src') == before_idle['source']
+        assert page.evaluate('currentIdx') == before_idle['index']
+        assert page.evaluate('audio.paused') is before_idle['paused']
+        assert abs(page.evaluate('audio.currentTime') - before_idle['position']) < .5, 'The reversal touch must only restore chrome'
+    finally:
+        unfinished = stop_animation_trace()
+        if unfinished:
+            animation_traces.append(unfinished)
+        (out / 'folia-chrome-animation.json').write_text(json.dumps(animation_traces, ensure_ascii=False, indent=2), encoding='utf-8')
     touch_slider('local-seek', 7 / page.evaluate('audio.duration'), hold=True)
     wait_for_idle_chrome()
     touch_slider('local-volume', saved_volume, hold=True, cancel=True)

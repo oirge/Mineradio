@@ -597,6 +597,15 @@ with sync_playwright() as p:
                 })};
         }''')
 
+    def wait_folia_stage_settled():
+        page.wait_for_function('''() => {
+            const doc = document.getElementById('folia-frame').contentDocument;
+            return [...doc.querySelectorAll('.local-visualizer,.local-record-wall,.lattice-root')]
+                .every(stage => !stage.getAnimations().some(animation =>
+                    animation.id === 'mineradio-mobile-chrome-stage'
+                    && animation.playState !== 'finished' && animation.playState !== 'idle'));
+        }''', timeout=2000, polling=50)
+
     folia.get_by_test_id('local-mobile-nav').wait_for(state='attached')
     page.evaluate('''() => {
         const doc = document.getElementById('folia-frame').contentDocument, view = doc.defaultView;
@@ -659,6 +668,7 @@ with sync_playwright() as p:
     completed('Folia touch library, playback and Android back handling')
 
     wake_folia_controls()
+    wait_folia_stage_settled()
     chrome_ui_before = folia_chrome_ui()
     chrome_before = wait_native('folia-chrome-before', lambda state: state.get('playing') and not state.get('preparing'))
     page.wait_for_function('''() => {
@@ -678,7 +688,10 @@ with sync_playwright() as p:
     chrome_hidden = wait_native('folia-chrome-hidden', lambda state: state.get('playing'))
     same_sink(chrome_before, chrome_hidden)
     wake_folia_controls()
+    wait_folia_stage_settled()
     chrome_ui_restored = folia_chrome_ui()
+    assert all(abs(chrome_ui_restored['stage'][key] - chrome_ui_before['stage'][key]) <= 1
+        for key in ['left', 'top', 'right', 'bottom', 'width', 'height']), 'Wake motion must restore the original visual viewport without leftover offsets'
     (OUT / 'android-folia-controls-restored.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
     chrome_restored = wait_native('folia-chrome-restored', lambda state: state.get('playing'))
     same_sink(chrome_before, chrome_restored)
