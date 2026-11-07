@@ -1,3 +1,16 @@
+## 2026-11-07：Android 1.0.3 单一原生播放引擎已发布并核验
+
+- 用户要求修复切后台／回界面的卡顿，只用一套引擎且同时保留全部既有音效。音乐始终由前台媒体服务中的同一套 PCM 引擎和 AudioTrack 输出；切后台、锁屏、移除最近任务及重新打开界面只同步状态。原生链路保留 10 段 EQ、自动／手动预增益、限幅、立体声宽度、ReplayGain 及防削波、保持音高的倍速、无缝接续和交叉淡入淡出。歌单选择提示音混入同一输出，Mineradio 与 Folia 共享真实 PCM 频谱、时域分析、播放状态和内嵌歌词。
+- [Android 1.0.3 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.3/Mineradio-Android-1.0.3.apk) 已公开，Release `437247750`，tag `android-v1.0.3` → `8b82e28029a22e46c530fa9a7a61987adf7c169a`，版本 `1.0.3 / 10003`，发布时间北京时间 `2026-11-07 09:45:43`。沿用原证书，可覆盖安装；旧版资产保留，桌面 Latest 仍为 `v2.6.10`。
+- [Android 42324115244](https://github.com/oirge/Mineradio/actions/runs/42324115244) 的发行门禁成功：Node 1692 项通过，手机浏览器 10 项、原生 13 项、DSP 原语 8 项通过。
+- [Verify video export 42324128075](https://github.com/oirge/Mineradio/actions/runs/42324128075)：成功；该独立检查全部成功。
+- [Verify 42324124181](https://github.com/oirge/Mineradio/actions/runs/42324124181)：成功；该独立检查全部成功。
+- [Verify 42324115217](https://github.com/oirge/Mineradio/actions/runs/42324115217)：成功；该独立检查全部成功。
+- 完整回下载 APK 14,467,916 B，SHA256 `f8897c987530956399fa2838ac5deaec6978a9154b7eacd245a74168b02c8ff2`，与清单／GitHub digest／同一 run 的签名 release 构建产物一致；manifest、v2 签名、原证书及公开下载状态均已核对。同一 AudioTrack session、一次 sink 创建、无新增欠载、实际混音／倍速及前后台重建由完整状态序列验证。
+- 完整记录：[docs/ANDROID-HANDOFF.md](docs/ANDROID-HANDOFF.md)；证据：[docs/android-evidence/1.0.3-verification.json](docs/android-evidence/1.0.3-verification.json)。核验报告固定发行 SHA／run，不能改成后续文档提交。
+- Android 7.0 及以上，格式支持取决于 Android 平台解码器；品牌省电策略与实际用户覆盖安装数据组合仍需更多设备覆盖。系统「强行停止」会结束播放。原生限幅保留全部控制参数，但不保证与 WebAudio 逐样本一致；交叉期间 ReplayGain 沿用既有公共增益语义，未实现独立每曲增益包络。功能取证使用同提交 debug 包，签名 release 包另行完成安装与离线导入首页启动核验。云端模拟器使用 `-noaudio`，结论来自实际 PCM、AudioTrack 播放头和欠载计数，未做扬声器听感验收。部分软件 GPU 截图存在色块、条纹与内容合成异常，交互检查通过不代表全部视觉渲染已验收。桌面在线翻译与视频导出尚未接入 Android，桌面 Latest 独立。
+- 云端优先，未启动本机 GUI／浏览器／模拟器／构建或测试，未安装 APK、操作用户播放器／数据或发邮件。以下旧版记录完整保留，不要据历史待办重复发布。
+
 ## 2026-11-06：Android 1.0.2 后台音乐已发布并核验
 
 - 用户要求「让能后台播放音乐」，现已完成。新增独立原生 MediaPlayer 后台队列，支持切换应用、锁屏和移除最近任务后续播；媒体键控制及前台歌曲／进度／暂停恢复已验证，保留内嵌歌词与 Folia 修复。

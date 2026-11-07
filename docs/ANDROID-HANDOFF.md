@@ -1,3 +1,35 @@
+# Android 1.0.3 单一音频引擎已发布
+
+更新：2026-11-07。用户要求修复进出界面的播放停顿、统一一套原生引擎并保留全部既有音效，现已完成实现、Android 云端发行验收、发布和完整安装包回下载核验。以下旧版记录按历史保留；双引擎及后台音效限制仅描述旧版本。
+
+## 下载与源码
+
+- [Android 1.0.3 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.3/Mineradio-Android-1.0.3.apk)，14,467,916 字节；[Release](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.3)，Release ID `437247750`。
+- 发布时间 `2026-11-07T01:45:43Z`（北京时间 2026-11-07 09:45:43）。
+- tag `android-v1.0.3` 指向 `8b82e28029a22e46c530fa9a7a61987adf7c169a`；versionName `1.0.3`、versionCode `10003`、应用 ID `com.mineradio.oirge.mobile`。
+- APK SHA256：`f8897c987530956399fa2838ac5deaec6978a9154b7eacd245a74168b02c8ff2`。完整回下载、本地重算、SHA256SUMS、GitHub digest 与同一 run 的签名 release 构建产物一致，版本、v2 签名、原证书和公开下载均已核验。
+- 签名证书 SHA256：`ee1586586ac8d13b17dda8020eda86712d62bac7b96e3f3b5e8643151faff0a6`，支持覆盖旧版更新。旧版资产保留，桌面 Latest 仍为 `v2.6.10`。
+- 分支 `codex/android-mobile`，[PR #178](https://github.com/oirge/Mineradio/pull/178)；发行 tag 与后续文档提交区分，不重打 tag 或替换已发布资产。
+
+## 实现与验收
+
+- 音乐始终由前台媒体服务中的同一套 PCM 引擎和 AudioTrack 输出；切后台、锁屏、移除最近任务及重新打开界面只同步状态。原生链路保留 10 段 EQ、自动／手动预增益、限幅、立体声宽度、ReplayGain 及防削波、保持音高的倍速、无缝接续和交叉淡入淡出。歌单选择提示音混入同一输出，Mineradio 与 Folia 共享真实 PCM 频谱、时域分析、播放状态和内嵌歌词。
+- [Android 发行验收 42324115244](https://github.com/oirge/Mineradio/actions/runs/42324115244)：build、browser、native、publish 成功；Node 1692 项通过，手机浏览器 10 项、Android 原生 13 项及 DSP 原语 8 项通过。
+- 最终 Android attempt `2` 成功；同 SHA 的 attempt 1 在首次首页截图时 CDP target 关闭，未开始播放取证。保留该次失败，不将历史全部运行写成成功。证据工件：build `13554856354`、native `13554719126`、browser `13554083082`，均来自同一发行 SHA／run。
+- 锁屏后实际进度由 `105.648` 秒推进至 `126.955` 秒，返回界面为 `129.244` 秒；同一 AudioTrack session `145`，sinkCreations 为 `1`，这些阶段欠载计数保持 `0`，三次快速返回同样通过连续性门禁。
+- 倍速实测 `1.51036x`；交叉淡入淡出累计 `143664` 混音帧，交叉计数 `1`；活动证据包含 `5120` 已写入并由播放头消费的混音帧，同 session／sink／generation 校验通过。
+- 移除真实最近任务后独立续播、自然下一首、媒体键暂停／继续／切歌、播放与暂停时重建界面、关闭自动播放后的冷恢复、真实 SAF 文件导入和内嵌歌词均有完整原生状态与检查报告。
+- [Verify video export 42324128075](https://github.com/oirge/Mineradio/actions/runs/42324128075)：成功；该独立检查全部成功。
+- [Verify 42324124181](https://github.com/oirge/Mineradio/actions/runs/42324124181)：成功；该独立检查全部成功。
+- [Verify 42324115217](https://github.com/oirge/Mineradio/actions/runs/42324115217)：成功；该独立检查全部成功。
+- 独立 CI 结果以上述最终运行记录为准。
+
+## 证据与边界
+
+- [完整发行核验](android-evidence/1.0.3-verification.json)、[原生 13 项报告](android-evidence/1.0.3-native.json)、[完整原生状态序列](android-evidence/1.0.3-background.json)、[手机浏览器 10 项报告](android-evidence/1.0.3-browser.json)、[DSP 8 项原语报告](android-evidence/1.0.3-dsp.json)。这些文件保留完整原始 JSON。
+- Android 7.0 及以上，格式支持取决于 Android 平台解码器；品牌省电策略与实际用户覆盖安装数据组合仍需更多设备覆盖。系统「强行停止」会结束播放。原生限幅保留全部控制参数，但不保证与 WebAudio 逐样本一致；交叉期间 ReplayGain 沿用既有公共增益语义，未实现独立每曲增益包络。功能取证使用同提交 debug 包，签名 release 包另行完成安装与离线导入首页启动核验。云端模拟器使用 `-noaudio`，结论来自实际 PCM、AudioTrack 播放头和欠载计数，未做扬声器听感验收。部分软件 GPU 截图存在色块、条纹与内容合成异常，交互检查通过不代表全部视觉渲染已验收。桌面在线翻译与视频导出尚未接入 Android，桌面 Latest 独立。
+- 本机未启动 GUI／浏览器／模拟器／构建或测试，未安装本次 APK 或操作用户播放器与数据，未发邮件。
+
 # Android 1.0.2 后台播放已发布
 
 更新：2026-11-06。用户要求「让能后台播放音乐」，现已完成实现、云端验收、发布和完整安装包回下载核验。下方 1.0.1 记录作为历史保留。
