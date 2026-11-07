@@ -397,8 +397,8 @@ with sync_playwright() as p:
         y = bounds[1] + point['y'] * (bounds[3] - bounds[1]) / point['height']
         adb('shell', 'input', 'tap', str(round(x)), str(round(y)))
 
-    def wake_folia_controls():
-        for attempt in range(3):
+    def wake_folia_controls(attempts=3):
+        for attempt in range(attempts):
             if folia_controls_hidden(): tap_folia_stage()
             try:
                 page.wait_for_function('''() => {
@@ -413,7 +413,94 @@ with sync_playwright() as p:
                 return
             except PlaywrightTimeoutError:
                 # Expiry between the first read and fade check needs the same real wake gesture.
-                if attempt == 2 or not folia_controls_hidden(): raise
+                if attempt == attempts - 1 or not folia_controls_hidden(): raise
+
+    def folia_target_state(locator):
+        return locator.evaluate('''element => {
+            const doc = element.ownerDocument, view = doc.defaultView, frame = view.frameElement;
+            const describe = node => node ? {tag: node.tagName, id: node.id,
+                testid: node.getAttribute('data-testid'), className: node.getAttribute('class')} : null;
+            const styleOf = node => {
+                const style = view.getComputedStyle(node);
+                return {display: style.display, visibility: style.visibility,
+                    opacity: Number(style.opacity), pointerEvents: style.pointerEvents,
+                    zIndex: style.zIndex, transform: style.transform};
+            };
+            const bounds = element.getBoundingClientRect(), x = bounds.left + bounds.width / 2, y = bounds.top + bounds.height / 2;
+            const ancestors = [];
+            for (let node = element; node; node = node.parentElement) ancestors.push({...describe(node), ...styleOf(node)});
+            const localHit = doc.elementFromPoint(x, y), frameBounds = frame && frame.getBoundingClientRect();
+            const mainHit = frame && frame.ownerDocument.elementFromPoint(frameBounds.left + x, frameBounds.top + y);
+            const stage = doc.querySelector('[data-testid=local-visualizer]');
+            return {bodyHidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                documentHidden: doc.hidden, connected: element.isConnected,
+                disabled: element.disabled === true || element.getAttribute('aria-disabled') === 'true',
+                target: {...describe(element), ...styleOf(element), bounds: bounds.toJSON()}, ancestors,
+                visible: bounds.width > 0 && bounds.height > 0 && ancestors.every(node => node.display !== 'none'
+                    && node.visibility !== 'hidden' && node.visibility !== 'collapse' && node.opacity > .01),
+                receivesPointer: styleOf(element).pointerEvents !== 'none',
+                localHit: describe(localHit), localHitIsTarget: !!(localHit && (localHit === element || element.contains(localHit))),
+                mainHit: describe(mainHit), mainHitIsFrame: !!frame && mainHit === frame,
+                frameBounds: frameBounds?.toJSON(), stageBounds: stage?.getBoundingClientRect().toJSON(),
+                playerPanel: doc.querySelector('[data-testid=local-player]')?.getAttribute('data-panel')};
+        }''', timeout=1200)
+
+    def folia_action(locator, label, method='click', **params):
+        # A short action cannot spend 30 seconds waiting through repeated idle
+        # hides. Retry only proven expiry, never a visible blocked/disabled target.
+        records = []
+        destination = OUT / ('android-folia-tap-' + label + '.json')
+
+        def save(result):
+            destination.write_text(json.dumps({'target': label, 'method': method,
+                'result': result, 'attempts': records}, ensure_ascii=False, indent=2), encoding='utf-8')
+
+        def capture_after(record):
+            try: record['bodyHiddenAfter'] = folia_controls_hidden()
+            except Exception as diagnostic_error: record['bodyHiddenAfterError'] = str(diagnostic_error)
+            try: record['after'] = folia_target_state(locator)
+            except Exception as diagnostic_error: record['afterError'] = str(diagnostic_error)
+
+        for attempt in range(3):
+            record = {'attempt': attempt + 1}
+            records.append(record)
+            save('pending')
+            before = None
+            try:
+                wake_folia_controls(attempts=1)
+                before = folia_target_state(locator)
+                record['before'] = before
+                if before['bodyHidden']:
+                    record['after'] = before
+                    record['reason'] = 'idle expired before the action'
+                    if attempt < 2:
+                        save('retry-idle-expiry')
+                        continue
+                    raise AssertionError('Folia controls expired before all three bounded action attempts')
+                if before['visible']:
+                    assert before['receivesPointer'] and not before['disabled'], 'Visible Folia control is disabled or does not receive pointers: ' + json.dumps(before, ensure_ascii=False)
+                    assert before['localHitIsTarget'] and before['mainHitIsFrame'], 'Visible Folia control is covered by another element: ' + json.dumps(before, ensure_ascii=False)
+                getattr(locator, method)(timeout=1200, **params)
+                record['result'] = 'action completed'
+                capture_after(record)
+                save('passed')
+                return
+            except PlaywrightTimeoutError as error:
+                record['error'] = str(error)
+                capture_after(record)
+                blocked_before = before is not None and not before['bodyHidden'] and before['visible'] and (
+                    not before['receivesPointer'] or before['disabled']
+                    or not before['localHitIsTarget'] or not before['mainHitIsFrame'])
+                if record.get('bodyHiddenAfter') is True and not blocked_before and attempt < 2:
+                    save('retry-idle-expiry')
+                    continue
+                save('failed')
+                raise
+            except Exception as error:
+                record['error'] = str(error)
+                capture_after(record)
+                save('failed')
+                raise
 
     def folia_chrome_ui():
         return page.evaluate('''() => {
@@ -429,10 +516,9 @@ with sync_playwright() as p:
         }''')
 
     folia.get_by_test_id('local-mobile-nav').wait_for(state='attached')
-    wake_folia_controls()
-    folia.get_by_test_id('local-open-settings').click()
-    folia.get_by_test_id('local-visualizer-mode').select_option('classic')
-    folia.get_by_test_id('local-visual-settings').get_by_role('button', name='关闭', exact=True).click()
+    folia_action(folia.get_by_test_id('local-open-settings'), 'open-settings')
+    folia_action(folia.get_by_test_id('local-visualizer-mode'), 'visualizer-mode', method='select_option', value='classic')
+    folia_action(folia.get_by_test_id('local-visual-settings').get_by_role('button', name='关闭', exact=True), 'close-settings')
     try:
         expect(folia.get_by_test_id('local-visualizer')).to_contain_text('手机内嵌歌词', timeout=45000)
         page.wait_for_function('''() => {
@@ -464,16 +550,13 @@ with sync_playwright() as p:
             renderer: document.getElementById('folia-frame').contentDocument.querySelector('[data-testid=local-visualizer]')?.innerHTML.slice(0, 4000) })''')
         (OUT / 'android-embedded-lyrics.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
         page.screenshot(path=str(OUT / 'android-embedded-folia.png'))
-    wake_folia_controls()
-    folia.get_by_test_id('local-open-library').click()
+    folia_action(folia.get_by_test_id('local-open-library'), 'open-library')
     folia.get_by_test_id('local-track-row').first.wait_for()
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     folia.get_by_test_id('local-library').wait_for(state='hidden')
-    wake_folia_controls()
-    folia.get_by_test_id('local-toggle-play').click()
+    folia_action(folia.get_by_test_id('local-toggle-play'), 'pause')
     page.wait_for_function('audio.paused')
-    wake_folia_controls()
-    folia.get_by_test_id('local-toggle-play').click()
+    folia_action(folia.get_by_test_id('local-toggle-play'), 'resume')
     page.wait_for_function('!audio.paused')
     page.screenshot(path=str(OUT / 'android-folia.png'))
     completed('Folia touch library, playback and Android back handling')
@@ -541,8 +624,7 @@ with sync_playwright() as p:
         after = native_state('rapid-return-' + str(transition))
         same_sink(before, after)
     completed('Home, screen off and repeated UI returns keep one AudioTrack session without reloads or new underruns')
-    wake_folia_controls()
-    folia.get_by_test_id('local-mobile-return').click()
+    folia_action(folia.get_by_test_id('local-mobile-return'), 'return-mineradio')
     page.wait_for_function('!document.body.classList.contains("folia-interface-active")')
 
     # Import a second real SAF file so an absent WebView cannot be responsible for queue advance.

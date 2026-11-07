@@ -41,9 +41,94 @@ def verify_folia_mobile(page, checks, out):
                     .classList.contains('mineradio-mobile-chrome-hidden')'''):
                     raise
 
+    def control_probe(testid):
+        return page.evaluate('''(testid) => {
+            const frame = document.getElementById('folia-frame'), doc = frame.contentDocument;
+            const target = doc.querySelector(`[data-testid="${testid}"]`);
+            const describe = element => {
+                if (!element) return null;
+                const style = element.ownerDocument.defaultView.getComputedStyle(element);
+                return {tag: element.tagName, testid: element.getAttribute('data-testid'),
+                    classes: element.getAttribute('class'), bounds: element.getBoundingClientRect().toJSON(),
+                    style: {display: style.display, visibility: style.visibility, opacity: Number(style.opacity),
+                        pointerEvents: style.pointerEvents, position: style.position, zIndex: style.zIndex,
+                        transform: style.transform, transition: style.transition, top: style.top, bottom: style.bottom}};
+            };
+            const bounds = target?.getBoundingClientRect(), frameBounds = frame.getBoundingClientRect();
+            const point = bounds && {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2};
+            const frameHit = point && doc.elementFromPoint(point.x, point.y);
+            const hostHit = point && document.elementFromPoint(frameBounds.left + point.x, frameBounds.top + point.y);
+            const ancestors = [];
+            for (let element = target?.parentElement; element && ancestors.length < 8; element = element.parentElement) {
+                ancestors.push(describe(element));
+            }
+            const hidden = doc.body.classList.contains('mineradio-mobile-chrome-hidden');
+            const surfaces = [...doc.querySelectorAll('.local-mobile-header,.local-mobile-nav,.local-controls,.local-current-track')].map(describe);
+            const pointerBlocked = describe(target)?.style.pointerEvents === 'none' ||
+                [describe(target), ...ancestors].filter(Boolean).some(element =>
+                    element.style.display === 'none' || element.style.visibility === 'hidden');
+            const fading = surfaces.some(element => element.style.display !== 'none' && element.style.opacity < .99);
+            const hitTarget = !!(target && frameHit && (target === frameHit || target.contains(frameHit)) && hostHit === frame);
+            return {at: performance.now(), testid, hidden, bodyClass: doc.body.className,
+                rootClass: doc.documentElement.className, hostBodyClass: document.body.className,
+                viewport: {width: doc.documentElement.clientWidth, height: doc.documentElement.clientHeight},
+                frameBounds: frameBounds.toJSON(), target: describe(target), ancestors, surfaces,
+                point, frameHit: describe(frameHit), hostHit: describe(hostHit), hitTarget, pointerBlocked, fading,
+                stage: describe(doc.querySelector('[data-testid=local-visualizer]')),
+                panel: doc.querySelector('[data-testid=local-player]')?.getAttribute('data-panel')};
+        }''', testid)
+
+    tap_number = 0
+
     def tap_control(testid):
-        wake_controls()
-        folia.get_by_test_id(testid).tap()
+        nonlocal tap_number
+        tap_number += 1
+        evidence = out / f'folia-tap-{tap_number:02}-{testid}.json'
+        trace = []
+
+        def record(phase, error=None):
+            try:
+                snapshot = control_probe(testid)
+            except Exception as diagnostic_error:
+                snapshot = {'diagnosticError': str(diagnostic_error)}
+            trace.append({'phase': phase, 'state': snapshot, 'error': str(error) if error else None})
+            return snapshot
+
+        def save():
+            evidence.write_text(json.dumps({'testid': testid, 'attempts': trace}, ensure_ascii=False, indent=2), encoding='utf-8')
+
+        for attempt in range(3):
+            try:
+                wake_controls()
+            except Exception as error:
+                record(f'wake-failed-{attempt + 1}', error)
+                save()
+                raise
+            before = record(f'before-{attempt + 1}')
+            save()
+            if before.get('hidden'):
+                save()
+                if attempt < 2: continue
+                raise AssertionError(f'{testid}: mobile chrome expired again before touch; see {evidence.name}')
+            # An opaque, available control covered by another element is a real
+            # hit-testing failure, not evidence for retrying an idle transition.
+            if before.get('diagnosticError') or not before.get('target') or before.get('pointerBlocked') \
+                    or (not before.get('fading') and not before.get('hitTarget')):
+                save()
+                raise AssertionError(f'{testid}: visible control is unavailable or intercepted; see {evidence.name}')
+            try:
+                # Do not let Playwright wait past the 2.5s idle deadline with no touch.
+                folia.get_by_test_id(testid).tap(timeout=1200)
+                record(f'completed-{attempt + 1}')
+                save()
+                return
+            except PlaywrightTimeoutError as error:
+                after = record(f'timeout-{attempt + 1}', error)
+                save()
+                if attempt == 2 or not after.get('hidden'):
+                    raise
+                # A fresh real stage touch is allowed only after confirmed idle hiding.
+        raise AssertionError(f'{testid}: touch did not complete; see {evidence.name}')
 
     wake_controls()
     assert page.evaluate('audio.src') == source
