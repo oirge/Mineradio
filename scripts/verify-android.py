@@ -372,10 +372,6 @@ with sync_playwright() as p:
     def folia_controls_hidden():
         return page.evaluate('document.getElementById("folia-frame").contentDocument.body.classList.contains("mineradio-mobile-chrome-hidden")')
 
-    def clear_folia_touch_events():
-        return page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
-            .__mineradioMobileTapTrace.events.length = 0; return performance.now(); }''')
-
     def tap_folia_stage():
         # ADB uses display pixels, while the WebView and iframe report CSS pixels.
         # Read the real WebView bounds so status/navigation bars are not guessed.
@@ -406,7 +402,19 @@ with sync_playwright() as p:
         y = bounds[1] + point['y'] * (bounds[3] - bounds[1]) / point['height']
         adb('shell', 'input', 'tap', str(round(x)), str(round(y)))
 
-    def wake_folia_controls(attempts=3):
+    def wake_folia_controls(attempts=3, fresh=False):
+        if fresh:
+            protected = page.evaluate('''() => {
+                const doc = document.getElementById('folia-frame').contentDocument;
+                return !!doc.querySelector('.local-player[data-panel="open"],.local-mobile-more,.local-slot-menu,.local-playlist-menu,[role="dialog"]');
+            }''')
+            if not protected:
+                # A visible surface can be near the end of its idle budget after
+                # slow diagnostic reads. Wait for its real idle hide, then use
+                # a genuine wake gesture instead of racing that stale window.
+                page.wait_for_function('''() => document.getElementById('folia-frame')
+                    .contentDocument.body.classList.contains('mineradio-mobile-chrome-hidden')''',
+                    timeout=5000, polling=50)
         for attempt in range(attempts):
             if folia_controls_hidden(): tap_folia_stage()
             try:
@@ -424,12 +432,17 @@ with sync_playwright() as p:
                 # Expiry between the first read and fade check needs the same real wake gesture.
                 if attempt == attempts - 1 or not folia_controls_hidden(): raise
 
-    def folia_target_state(selector):
+    def folia_target_state(selector, prepare_touch=False):
         # Runtime.evaluate reads the existing DOM synchronously. Locator's
         # attachment polling can wait on RAF without ever exposing the target.
-        return page.evaluate('''selector => {
+        return page.evaluate('''({selector, prepareTouch}) => {
             const frame = document.getElementById('folia-frame'), doc = frame?.contentDocument;
+            const trace = doc?.defaultView?.__mineradioMobileTapTrace;
+            const eventsBeforePreparation = prepareTouch ? trace?.events.slice() || [] : [];
+            if (prepareTouch && trace) trace.events.length = 0;
             const common = {selector, hostAt: performance.now(), framePresent: !!frame, documentPresent: !!doc,
+                touchEventsPrepared: !!(prepareTouch && trace), preparedHostAt: prepareTouch && trace ? performance.now() : null,
+                eventsBeforePreparation,
                 bodyHidden: !!doc?.body?.classList.contains('mineradio-mobile-chrome-hidden'),
                 documentHidden: doc?.hidden, readyState: doc?.readyState,
                 bodyClass: doc?.body?.className, viewport: {width: innerWidth, height: innerHeight},
@@ -467,7 +480,7 @@ with sync_playwright() as p:
                 mainHit: describe(mainHit), mainHitIsFrame: !!frame && mainHit === frame,
                 mainPoint: frameBounds && {x: frameBounds.left + x, y: frameBounds.top + y},
                 stageBounds: stage?.getBoundingClientRect().toJSON()};
-        }''', selector)
+        }''', {'selector': selector, 'prepareTouch': prepare_touch})
 
     def folia_action(selector, label, method='click', **params):
         # A short action cannot spend 30 seconds waiting through repeated idle
@@ -502,7 +515,8 @@ with sync_playwright() as p:
             save('pending')
             before = None
             try:
-                wake_folia_controls(attempts=1)
+                record['freshWakeRequested'] = method == 'click'
+                wake_folia_controls(attempts=1, fresh=method == 'click')
                 record['driverWakeCompletedAtMs'] = time.perf_counter() * 1000
                 # Wait only for a just-opened panel/target to exist and become
                 # visible, using synchronous probes rather than RAF locators.
@@ -510,7 +524,7 @@ with sync_playwright() as p:
                 deadline = time.monotonic() + 1.2
                 record['probes'] = []
                 while True:
-                    before = folia_target_state(selector)
+                    before = folia_target_state(selector, prepare_touch=method == 'click')
                     record['probes'].append({key: before.get(key) for key in
                         ['missingTarget', 'targetCount', 'bodyHidden', 'visible', 'disabled',
                          'receivesPointer', 'localHitIsTarget', 'mainHitIsFrame']})
@@ -533,7 +547,8 @@ with sync_playwright() as p:
                 if method == 'click':
                     point = before['mainPoint']
                     assert 0 < point['x'] < before['viewport']['width'] and 0 < point['y'] < before['viewport']['height'], point
-                    prepared_host_at = clear_folia_touch_events()
+                    assert before['touchEventsPrepared'], 'Real input requires a prepared read-only event trace'
+                    prepared_host_at = before['preparedHostAt']
                     record['touchEventsCleared'] = True
                     record['input'] = {'method': 'CDP Input.dispatchTouchEvent', 'point': point,
                         'sessionReused': True, 'preparedHostAt': prepared_host_at,

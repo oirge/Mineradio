@@ -1,6 +1,7 @@
 """Cloud touch checks for the embedded Folia surface and shared host playback."""
 import json
 import re
+import time
 from playwright.sync_api import expect, TimeoutError as PlaywrightTimeoutError
 
 
@@ -37,36 +38,124 @@ def verify_folia_mobile(page, checks, out):
         page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
             .__mineradioMobileTapTrace.events.length = 0; }''')
 
+    def wake_probe(clear_for_touch=False):
+        started = time.monotonic()
+        state = page.evaluate('''clearForTouch => {
+            const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+            const describe = element => {
+                if (!element) return null;
+                const style = view.getComputedStyle(element);
+                return {tag: element.tagName, classes: element.getAttribute('class'), testid: element.getAttribute('data-testid'),
+                    bounds: element.getBoundingClientRect().toJSON(), display: style.display, opacity: Number(style.opacity),
+                    visibility: style.visibility, pointerEvents: style.pointerEvents, transform: style.transform, transition: style.transition};
+            };
+            const selectors = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'];
+            const surfaces = selectors.map(selector => ({selector, ...describe(doc.querySelector(selector))}));
+            const player = doc.querySelector('[data-testid=local-player]'), playerState = describe(player);
+            const stage = doc.querySelector('[data-testid=local-visualizer],[data-testid=local-record-wall],.lattice-root');
+            const navs = doc.querySelectorAll('[data-testid=local-mobile-nav]'), nav = describe(navs[0]);
+            const frameBounds = frame.getBoundingClientRect().toJSON(), box = playerState?.bounds;
+            const point = box && {x: box.left + box.width / 2, y: box.top + box.height / 2};
+            const hostPoint = point && {x: frameBounds.left + point.x, y: frameBounds.top + point.y};
+            const frameHit = point && doc.elementFromPoint(point.x, point.y);
+            const hostHit = hostPoint && document.elementFromPoint(hostPoint.x, hostPoint.y);
+            const hidden = doc.body.classList.contains('mineradio-mobile-chrome-hidden');
+            const hit = !!(box && box.width > 0 && box.height > 0 && player && frameHit && player.contains(frameHit)
+                && hostHit === frame);
+            const ready = !hidden && surfaces.every(surface => surface.display === 'none'
+                || (surface.visibility === 'visible' && surface.opacity > .9))
+                && navs.length === 1 && nav && nav.display !== 'none' && nav.visibility === 'visible'
+                && nav.bounds.width > 0 && nav.bounds.height > 0;
+            const events = view.__mineradioMobileTapTrace.events.slice();
+            const clearedForTouch = !!(clearForTouch && hidden && hit);
+            if (clearedForTouch) view.__mineradioMobileTapTrace.events.length = 0;
+            return {hostAt: performance.now(), frameAt: view.performance.now(), hidden, ready, hit, clearedForTouch,
+                bodyClass: doc.body.className, rootClass: doc.documentElement.className, hostBodyClass: document.body.className,
+                player: playerState, view: player?.getAttribute('data-view'), panel: player?.getAttribute('data-panel'),
+                surfaces, stage: describe(stage), frameBounds, point, hostPoint,
+                frameHit: describe(frameHit), hostHit: hostHit && {tag: hostHit.tagName, id: hostHit.id}, events,
+                readyState: doc.readyState, visibilityState: doc.visibilityState, documentHidden: doc.hidden,
+                hostReadyState: document.readyState, hostVisibilityState: document.visibilityState,
+                animations: doc.getAnimations().filter(animation => animation.id === 'mineradio-mobile-chrome-stage').map(animation => ({
+                    id: animation.id, state: animation.playState, currentTime: animation.currentTime, startTime: animation.startTime,
+                    pending: animation.pending, target: animation.effect?.target?.getAttribute?.('data-testid') || animation.effect?.target?.className || null})),
+                errors: [...doc.querySelectorAll('[role=alert]')].map(element => element.textContent)};
+        }''', clear_for_touch)
+        state['probeDurationMs'] = (time.monotonic() - started) * 1000
+        return state
+
+    wake_number = 0
+
     def wake_controls():
+        nonlocal wake_number
+        wake_number += 1
+        evidence = out / ('folia-wake.json' if wake_number == 1 else f'folia-wake-{wake_number:02}.json')
+        trace = []
+
+        def record(phase, attempt, state=None, error=None, duration=None):
+            if state is None:
+                try:
+                    state = wake_probe()
+                except Exception as diagnostic_error:
+                    state = {'diagnosticError': str(diagnostic_error)}
+            trace.append({'phase': phase, 'attempt': attempt + 1, 'state': state,
+                'error': str(error) if error else None, 'durationMs': duration})
+            evidence.write_text(json.dumps({'call': wake_number, 'attempts': trace}, ensure_ascii=False, indent=2), encoding='utf-8')
+            return state
+
         # A person first touches the stage when idle chrome has disappeared.
-        # Do not tap through visible controls while adapting older interaction checks.
         for attempt in range(3):
-            hidden = page.evaluate('''() => document.getElementById('folia-frame').contentDocument.body
-                .classList.contains('mineradio-mobile-chrome-hidden')''')
-            if hidden:
-                box = folia.get_by_test_id('local-player').bounding_box()
-                assert box and box['width'] > 0 and box['height'] > 0, box
-                clear_touch_events()
-                page.touchscreen.tap(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+            try:
+                before = wake_probe(clear_for_touch=True)
+            except Exception as error:
+                record('probe-failed', attempt, error=error)
+                raise
+            record('before', attempt, before)
+            if before['ready']:
+                # The same synchronous sample already proves readiness; no touch or later wait occurred.
+                record('after-ready-without-touch', attempt, before)
+                return
+            if before['hidden']:
+                if not before['hit']:
+                    error = AssertionError(f'Idle Folia stage is not a real touch target; see {evidence.name}')
+                    record('blocked-before-touch', attempt, before, error)
+                    raise error
+                started = time.monotonic()
+                try:
+                    page.touchscreen.tap(before['hostPoint']['x'], before['hostPoint']['y'])
+                except Exception as error:
+                    record('touch-failed', attempt, error=error, duration=(time.monotonic() - started) * 1000)
+                    raise
+                trace.append({'phase': 'touch-returned', 'attempt': attempt + 1,
+                    'durationMs': (time.monotonic() - started) * 1000})
+            started = time.monotonic()
             try:
                 page.wait_for_function('''() => {
                     const doc = document.getElementById('folia-frame').contentDocument;
                     const selectors = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'];
+                    const navs = doc.querySelectorAll('[data-testid=local-mobile-nav]'), nav = navs[0], box = nav?.getBoundingClientRect();
                     return !doc.body.classList.contains('mineradio-mobile-chrome-hidden') && selectors.every(selector => {
                         const element = doc.querySelector(selector);
                         if (!element) return false;
                         const style = doc.defaultView.getComputedStyle(element);
-                        // Open panels and short landscape layouts intentionally omit some surfaces.
                         return style.display === 'none' || (style.visibility === 'visible' && Number(style.opacity) > .9);
-                    });
+                    }) && navs.length === 1 && box && box.width > 0 && box.height > 0
+                        && doc.defaultView.getComputedStyle(nav).visibility === 'visible';
                 }''', timeout=2000, polling=50)
-                expect(folia.get_by_test_id('local-mobile-nav')).to_be_visible()
-                return
-            except PlaywrightTimeoutError:
-                # Idle may expire between the first read and the fade check.
-                if attempt == 2 or not page.evaluate('''() => document.getElementById('folia-frame').contentDocument.body
-                    .classList.contains('mineradio-mobile-chrome-hidden')'''):
+            except PlaywrightTimeoutError as error:
+                after = record('timeout', attempt, error=error, duration=(time.monotonic() - started) * 1000)
+                if attempt == 2 or not after.get('hidden'):
                     raise
+                continue
+            except Exception as error:
+                record('readiness-failed', attempt, error=error, duration=(time.monotonic() - started) * 1000)
+                raise
+            after = record('after', attempt, duration=(time.monotonic() - started) * 1000)
+            if after.get('ready'):
+                return
+            if attempt < 2 and after.get('hidden'):
+                continue
+            raise AssertionError(f'Folia chrome was unavailable after readiness; see {evidence.name}')
 
     def control_probe(testid):
         return page.evaluate('''(testid) => {
