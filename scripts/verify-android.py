@@ -363,13 +363,18 @@ with sync_playwright() as p:
     page.wait_for_function('!audio.paused')
     page.locator('#mobile-folia-switch').click()
     folia = page.frame_locator('#folia-frame')
+    # Attach before any wake/probe so session setup cannot spend the idle budget.
+    folia_input_session_setup = {'driverStartedAtMs': time.perf_counter() * 1000}
+    folia_input_session = page.context.new_cdp_session(page)
+    folia_input_session_setup['driverReadyAtMs'] = time.perf_counter() * 1000
+    folia_input_session_setup['durationMs'] = folia_input_session_setup['driverReadyAtMs'] - folia_input_session_setup['driverStartedAtMs']
 
     def folia_controls_hidden():
         return page.evaluate('document.getElementById("folia-frame").contentDocument.body.classList.contains("mineradio-mobile-chrome-hidden")')
 
     def clear_folia_touch_events():
-        page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
-            .__mineradioMobileTapTrace.events.length = 0; }''')
+        return page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
+            .__mineradioMobileTapTrace.events.length = 0; return performance.now(); }''')
 
     def tap_folia_stage():
         # ADB uses display pixels, while the WebView and iframe report CSS pixels.
@@ -424,7 +429,7 @@ with sync_playwright() as p:
         # attachment polling can wait on RAF without ever exposing the target.
         return page.evaluate('''selector => {
             const frame = document.getElementById('folia-frame'), doc = frame?.contentDocument;
-            const common = {selector, framePresent: !!frame, documentPresent: !!doc,
+            const common = {selector, hostAt: performance.now(), framePresent: !!frame, documentPresent: !!doc,
                 bodyHidden: !!doc?.body?.classList.contains('mineradio-mobile-chrome-hidden'),
                 documentHidden: doc?.hidden, readyState: doc?.readyState,
                 bodyClass: doc?.body?.className, viewport: {width: innerWidth, height: innerHeight},
@@ -491,12 +496,14 @@ with sync_playwright() as p:
                 and downs[0].get('isTrusted') is True and downs[0].get('bodyHidden') is True
 
         for attempt in range(3):
-            record = {'attempt': attempt + 1}
+            record = {'attempt': attempt + 1, 'sessionSetup': folia_input_session_setup,
+                'driverAttemptStartedAtMs': time.perf_counter() * 1000}
             records.append(record)
             save('pending')
             before = None
             try:
                 wake_folia_controls(attempts=1)
+                record['driverWakeCompletedAtMs'] = time.perf_counter() * 1000
                 # Wait only for a just-opened panel/target to exist and become
                 # visible, using synchronous probes rather than RAF locators.
                 # A visible covered or disabled target is never retried here.
@@ -511,6 +518,7 @@ with sync_playwright() as p:
                         break
                     time.sleep(.05)
                 record['before'] = before
+                record['driverProbeReadyAtMs'] = time.perf_counter() * 1000
                 if before['bodyHidden']:
                     record['after'] = before
                     record['reason'] = 'idle expired before the action'
@@ -525,17 +533,19 @@ with sync_playwright() as p:
                 if method == 'click':
                     point = before['mainPoint']
                     assert 0 < point['x'] < before['viewport']['width'] and 0 < point['y'] < before['viewport']['height'], point
-                    session = page.context.new_cdp_session(page)
-                    try:
-                        clear_folia_touch_events()
-                        record['touchEventsCleared'] = True
-                        record['input'] = {'method': 'CDP Input.dispatchTouchEvent', 'point': point}
-                        session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': point['x'], 'y': point['y']}]})
-                        record['touchStartSent'] = True
-                        session.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
-                        record['touchEndSent'] = True
-                    finally:
-                        session.detach()
+                    prepared_host_at = clear_folia_touch_events()
+                    record['touchEventsCleared'] = True
+                    record['input'] = {'method': 'CDP Input.dispatchTouchEvent', 'point': point,
+                        'sessionReused': True, 'preparedHostAt': prepared_host_at,
+                        'driverPreparedAtMs': time.perf_counter() * 1000}
+                    record['input']['driverTouchStartRequestedAtMs'] = time.perf_counter() * 1000
+                    folia_input_session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': point['x'], 'y': point['y']}]})
+                    record['input']['driverTouchStartCompletedAtMs'] = time.perf_counter() * 1000
+                    record['touchStartSent'] = True
+                    record['input']['driverTouchEndRequestedAtMs'] = time.perf_counter() * 1000
+                    folia_input_session.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+                    record['input']['driverTouchEndCompletedAtMs'] = time.perf_counter() * 1000
+                    record['touchEndSent'] = True
                 else:
                     assert method == 'select_option', method
                     handle = page.evaluate_handle('''selector => document.getElementById('folia-frame')
@@ -712,6 +722,7 @@ with sync_playwright() as p:
         same_sink(before, after)
     completed('Home, screen off and repeated UI returns keep one AudioTrack session without reloads or new underruns')
     folia_action('[data-testid="local-mobile-return"]', 'return-mineradio')
+    folia_input_session.detach()
     page.wait_for_function('!document.body.classList.contains("folia-interface-active")')
 
     # Import a second real SAF file so an absent WebView cannot be responsible for queue advance.
