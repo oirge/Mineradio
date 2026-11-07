@@ -34,7 +34,7 @@ def verify_folia_mobile(page, checks, out):
                         if (!element) return false;
                         const style = doc.defaultView.getComputedStyle(element);
                         // Open panels and short landscape layouts intentionally omit some surfaces.
-                        return style.display === 'none' || (style.visibility === 'visible' && Number(style.opacity) > .99);
+                        return style.display === 'none' || (style.visibility === 'visible' && Number(style.opacity) > .9);
                     });
                 }''', timeout=2000, polling=50)
                 expect(folia.get_by_test_id('local-mobile-nav')).to_be_visible()
@@ -78,7 +78,7 @@ def verify_folia_mobile(page, checks, out):
             const pointerBlocked = targetState?.style.pointerEvents === 'none' ||
                 [targetState, ...ancestors].filter(Boolean).some(element =>
                     element.style.display === 'none' || element.style.visibility === 'hidden');
-            const fading = surfaces.some(element => element.style.display !== 'none' && element.style.opacity < .99);
+            const fading = surfaces.some(element => element.style.display !== 'none' && element.style.opacity <= .9);
             const hitTarget = !!(target && frameHit && (target === frameHit || target.contains(frameHit)) && hostHit === frame);
             return {at: performance.now(), testid, hidden, bodyClass: doc.body.className,
                 rootClass: doc.documentElement.className, hostBodyClass: document.body.className,

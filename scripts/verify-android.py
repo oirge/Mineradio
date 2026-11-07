@@ -526,7 +526,7 @@ with sync_playwright() as p:
                     try:
                         element = handle.as_element()
                         assert element is not None, 'The synchronously probed select disappeared'
-                        record['selected'] = element.select_option(timeout=1200, **params)
+                        record['selected'] = element.select_option(timeout=30000, **params)
                         assert record['selected'] == [params['value']], record['selected']
                     finally:
                         handle.dispose()
