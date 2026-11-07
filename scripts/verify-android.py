@@ -569,7 +569,7 @@ with sync_playwright() as p:
         if (!doc.body.classList.contains('mineradio-mobile-chrome-hidden')) return false;
         const hidden = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'].every(selector => {
             const element = doc.querySelector(selector), style = element && doc.defaultView.getComputedStyle(element);
-            return style && Number(style.opacity) < .01 && style.pointerEvents === 'none';
+            return style && Number(style.opacity) < .01 && style.visibility === 'hidden' && style.pointerEvents === 'none';
         });
         const area = doc.querySelector('[data-testid=local-visualizer]').getBoundingClientRect();
         return hidden && area.top <= 1 && area.left <= 1
