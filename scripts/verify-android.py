@@ -11,7 +11,7 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from playwright.sync_api import sync_playwright, expect
+from playwright.sync_api import sync_playwright, expect, TimeoutError as PlaywrightTimeoutError
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'output/playwright/mobile'
@@ -363,7 +363,73 @@ with sync_playwright() as p:
     page.wait_for_function('!audio.paused')
     page.locator('#mobile-folia-switch').click()
     folia = page.frame_locator('#folia-frame')
-    folia.get_by_test_id('local-mobile-nav').wait_for()
+
+    def folia_controls_hidden():
+        return page.evaluate('document.getElementById("folia-frame").contentDocument.body.classList.contains("mineradio-mobile-chrome-hidden")')
+
+    def tap_folia_stage():
+        # ADB uses display pixels, while the WebView and iframe report CSS pixels.
+        # Read the real WebView bounds so status/navigation bars are not guessed.
+        webview = None
+        for attempt in range(8):
+            try:
+                adb('shell', 'uiautomator', 'dump', '/sdcard/folia-window.xml')
+                tree = ET.fromstring(adb('shell', 'cat', '/sdcard/folia-window.xml'))
+                webview = next((node for node in tree.iter('node')
+                    if node.get('package') == APP and node.get('class') == 'android.webkit.WebView'), None)
+                if webview is not None: break
+            except (ET.ParseError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                pass
+            time.sleep(.25)
+        assert webview is not None, 'Cannot locate the real Android WebView for the Folia wake touch'
+        bounds = [int(value) for value in re.findall(r'\d+', webview.get('bounds', ''))]
+        assert len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1], bounds
+        point = page.evaluate('''() => {
+            const frame = document.getElementById('folia-frame'), doc = frame.contentDocument;
+            const viewport = frame.getBoundingClientRect();
+            const stage = doc.querySelector('[data-testid=local-visualizer]') || doc.querySelector('[data-testid=local-player]');
+            const area = stage.getBoundingClientRect();
+            return {x: viewport.left + area.left + area.width / 2,
+                y: viewport.top + area.top + area.height * .4, width: innerWidth, height: innerHeight};
+        }''')
+        assert 0 < point['x'] < point['width'] and 0 < point['y'] < point['height'], point
+        x = bounds[0] + point['x'] * (bounds[2] - bounds[0]) / point['width']
+        y = bounds[1] + point['y'] * (bounds[3] - bounds[1]) / point['height']
+        adb('shell', 'input', 'tap', str(round(x)), str(round(y)))
+
+    def wake_folia_controls():
+        for attempt in range(3):
+            if folia_controls_hidden(): tap_folia_stage()
+            try:
+                page.wait_for_function('''() => {
+                    const doc = document.getElementById('folia-frame').contentDocument;
+                    return !doc.body.classList.contains('mineradio-mobile-chrome-hidden')
+                        && ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'].every(selector => {
+                            const element = doc.querySelector(selector);
+                            return element && doc.defaultView.getComputedStyle(element).visibility !== 'hidden'
+                                && Number(doc.defaultView.getComputedStyle(element).opacity) > .9;
+                        });
+                }''', timeout=2000)
+                return
+            except PlaywrightTimeoutError:
+                # Expiry between the first read and fade check needs the same real wake gesture.
+                if attempt == 2 or not folia_controls_hidden(): raise
+
+    def folia_chrome_ui():
+        return page.evaluate('''() => {
+            const doc = document.getElementById('folia-frame').contentDocument;
+            return {hidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                width: doc.documentElement.clientWidth, height: doc.documentElement.clientHeight,
+                stage: doc.querySelector('[data-testid=local-visualizer]').getBoundingClientRect().toJSON(),
+                controls: ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'].map(selector => {
+                    const element = doc.querySelector(selector), style = doc.defaultView.getComputedStyle(element);
+                    return {selector, opacity: Number(style.opacity), visibility: style.visibility,
+                        pointerEvents: style.pointerEvents, bounds: element.getBoundingClientRect().toJSON()};
+                })};
+        }''')
+
+    folia.get_by_test_id('local-mobile-nav').wait_for(state='attached')
+    wake_folia_controls()
     folia.get_by_test_id('local-open-settings').click()
     folia.get_by_test_id('local-visualizer-mode').select_option('classic')
     folia.get_by_test_id('local-visual-settings').get_by_role('button', name='关闭', exact=True).click()
@@ -398,16 +464,53 @@ with sync_playwright() as p:
             renderer: document.getElementById('folia-frame').contentDocument.querySelector('[data-testid=local-visualizer]')?.innerHTML.slice(0, 4000) })''')
         (OUT / 'android-embedded-lyrics.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
         page.screenshot(path=str(OUT / 'android-embedded-folia.png'))
+    wake_folia_controls()
     folia.get_by_test_id('local-open-library').click()
     folia.get_by_test_id('local-track-row').first.wait_for()
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     folia.get_by_test_id('local-library').wait_for(state='hidden')
+    wake_folia_controls()
     folia.get_by_test_id('local-toggle-play').click()
     page.wait_for_function('audio.paused')
+    wake_folia_controls()
     folia.get_by_test_id('local-toggle-play').click()
     page.wait_for_function('!audio.paused')
     page.screenshot(path=str(OUT / 'android-folia.png'))
     completed('Folia touch library, playback and Android back handling')
+
+    wake_folia_controls()
+    chrome_ui_before = folia_chrome_ui()
+    chrome_before = wait_native('folia-chrome-before', lambda state: state.get('playing') and not state.get('preparing'))
+    page.wait_for_function('''() => {
+        const doc = document.getElementById('folia-frame').contentDocument;
+        if (!doc.body.classList.contains('mineradio-mobile-chrome-hidden')) return false;
+        const hidden = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'].every(selector => {
+            const element = doc.querySelector(selector), style = element && doc.defaultView.getComputedStyle(element);
+            return style && Number(style.opacity) < .01 && style.pointerEvents === 'none';
+        });
+        const area = doc.querySelector('[data-testid=local-visualizer]').getBoundingClientRect();
+        return hidden && area.top <= 1 && area.left <= 1
+            && area.right >= doc.documentElement.clientWidth - 1
+            && area.bottom >= doc.documentElement.clientHeight - 1;
+    }''', timeout=10000)
+    chrome_ui_hidden = folia_chrome_ui()
+    (OUT / 'android-folia-controls-hidden.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
+    chrome_hidden = wait_native('folia-chrome-hidden', lambda state: state.get('playing'))
+    same_sink(chrome_before, chrome_hidden)
+    wake_folia_controls()
+    chrome_ui_restored = folia_chrome_ui()
+    (OUT / 'android-folia-controls-restored.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
+    chrome_restored = wait_native('folia-chrome-restored', lambda state: state.get('playing'))
+    same_sink(chrome_before, chrome_restored)
+    assert chrome_restored['uri'] == chrome_before['uri'] and chrome_restored['index'] == chrome_before['index'], 'The wake touch must not pause, seek, or switch the playing song'
+    assert page.evaluate('audio && !audio.paused && audio._mineradioNative'), 'The wake touch must leave the foreground proxy playing'
+    (OUT / 'android-folia-chrome.json').write_text(json.dumps([
+        {'phase': 'before', 'ui': chrome_ui_before, 'state': chrome_before},
+        {'phase': 'hidden', 'ui': chrome_ui_hidden, 'state': chrome_hidden},
+        {'phase': 'restored', 'ui': chrome_ui_restored, 'state': chrome_restored},
+    ], ensure_ascii=False, indent=2), encoding='utf-8')
+    completed('Folia mobile controls hide on idle and wake by touch without interrupting the same native AudioTrack')
+
     start_position = page.evaluate('audio.currentTime')
     foreground = wait_native('before-home', lambda state: state.get('playing') and state.get('engine') == 'pcm')
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
@@ -438,6 +541,7 @@ with sync_playwright() as p:
         after = native_state('rapid-return-' + str(transition))
         same_sink(before, after)
     completed('Home, screen off and repeated UI returns keep one AudioTrack session without reloads or new underruns')
+    wake_folia_controls()
     folia.get_by_test_id('local-mobile-return').click()
     page.wait_for_function('!document.body.classList.contains("folia-interface-active")')
 

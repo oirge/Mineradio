@@ -473,7 +473,7 @@
   var CHROME_HIDE_DELAY = 2500, BAR_HIDE_DELAY = 2500, TOP_BAND = 96, BOTTOM_BAND = 170;
   var chromeHideTimer = 0, barHideTimer = 0, topHideTimer = 0;
   var chromeHoverLock = false, barLock = false, barDragging = false, barFocused = false, barZone = false, topLock = false, topFocused = false, topZone = false, chromeZone = false;
-  var chromeListening = false, frameActivityDoc = null;
+  var chromeListening = false, frameActivityDoc = null, mobileFrameChrome = null;
   function setChromeHidden(h) { document.body.classList.toggle('folia-chrome-hidden', !!h); }
   function setBarHidden(h) { if (frameActivityDoc && frameActivityDoc.body) frameActivityDoc.body.classList.toggle('mineradio-bar-hidden', !!h && !document.body.classList.contains('mobile-layout')); }
   function scheduleChromeHide() {
@@ -576,6 +576,9 @@
     detachFrameActivity();
     frameActivityDoc = doc;
     injectBarStyle(doc);
+    if (global.MineradioFoliaMobileChrome) mobileFrameChrome = global.MineradioFoliaMobileChrome.create(doc, function () {
+      return active && document.body.classList.contains('mobile-layout');
+    });
     doc.addEventListener('pointermove', onFramePointerMove, true);
     doc.addEventListener('pointerdown', onFramePointerDown, true);
     doc.addEventListener('pointerup', onFramePointerUp, true);
@@ -584,6 +587,7 @@
     if (active) { scheduleBarHide(); scheduleTopHide(); }
   }
   function detachFrameActivity() {
+    if (mobileFrameChrome) { mobileFrameChrome.destroy(); mobileFrameChrome = null; }
     if (barHideTimer) { global.clearTimeout(barHideTimer); barHideTimer = 0; }
     if (topHideTimer) { global.clearTimeout(topHideTimer); topHideTimer = 0; }
     barLock = barDragging = barFocused = barZone = topLock = topFocused = topZone = false;

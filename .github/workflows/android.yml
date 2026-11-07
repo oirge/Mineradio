@@ -60,6 +60,7 @@ jobs:
           node --check public/mobile-native.js
           node --check public/mobile-playback.js
           node --check public/mobile-native-audio.js
+          node --check public/folia-mobile-chrome.js
           node --check public/app.js
           node --check server.js
           python -m py_compile scripts/verify-android.py scripts/verify-mobile-browser.py
@@ -101,9 +102,9 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --console=plain assembleRelease assembleDebug
           cd ../..
-          cp mobile/android/app/build/outputs/apk/release/app-release.apk release/Mineradio-Android-1.0.3.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs release/Mineradio-Android-1.0.3.apk
-          sha256sum release/Mineradio-Android-1.0.3.apk > release/SHA256SUMS.txt
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk release/Mineradio-Android-1.0.4.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs release/Mineradio-Android-1.0.4.apk
+          sha256sum release/Mineradio-Android-1.0.4.apk > release/SHA256SUMS.txt
       - name: Upload APK and signing bootstrap
         uses: actions/upload-artifact@v4
         with:
@@ -257,9 +258,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view android-v1.0.3 > /dev/null 2>&1; then
-            echo "Release android-v1.0.3 already exists; refusing to replace accepted assets"
+          if gh release view android-v1.0.4 > /dev/null 2>&1; then
+            echo "Release android-v1.0.4 already exists; refusing to replace accepted assets"
             exit 1
           else
-            gh release create android-v1.0.3 release/Mineradio-Android-1.0.3.apk release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --latest=false --title 'Mineradio Android 1.0.3 预览版' --notes-file docs/ANDROID-RELEASE.md
+            gh release create android-v1.0.4 release/Mineradio-Android-1.0.4.apk release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --latest=false --title 'Mineradio Android 1.0.4 预览版' --notes-file docs/ANDROID-RELEASE.md
           fi

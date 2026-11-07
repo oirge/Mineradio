@@ -1,6 +1,6 @@
 {
   "name": "mineradio-android",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "scripts": {
     "prepare:android": "node prepare-android.mjs"
