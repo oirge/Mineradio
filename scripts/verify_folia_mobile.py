@@ -1,5 +1,4 @@
 """Cloud touch checks for the embedded Folia surface and shared host playback."""
-import base64
 import json
 import re
 import time
@@ -34,7 +33,6 @@ def verify_folia_mobile(page, checks, out):
         // Window capture precedes the document's wake-only handler. Observe without altering events.
         for (const type of ['pointerdown', 'pointerup', 'click']) view.addEventListener(type, capture, true);
     }''')
-    paint_session = page.context.new_cdp_session(page)
 
     def clear_touch_events():
         page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
@@ -133,7 +131,6 @@ def verify_folia_mobile(page, checks, out):
             started = time.monotonic()
             deadline = started + 2.0
             last = None
-            frame_requested = False
             while time.monotonic() < deadline:
                 try:
                     last = wake_probe()
@@ -149,33 +146,6 @@ def verify_folia_mobile(page, checks, out):
                     if time.monotonic() <= deadline:
                         return
                     break
-                if not frame_requested and any(animation.get('pending') for animation in last.get('animations', [])) \
-                        and time.monotonic() < deadline:
-                    frame_requested = True
-                    record('frame-request', attempt, last, elapsed=(time.monotonic() - started) * 1000)
-                    if time.monotonic() >= deadline:
-                        record('frame-not-sent-deadline', attempt, last, elapsed=(time.monotonic() - started) * 1000)
-                        break
-                    frame_started = time.monotonic()
-                    frame_file = f'folia-wake-frame-{wake_number:02}-{attempt + 1}.png'
-                    try:
-                        # Read one normal composited frame; do not disable, seek or step animations.
-                        result = paint_session.send('Page.captureScreenshot', {
-                            'format': 'png', 'fromSurface': True, 'captureBeyondViewport': False})
-                        capture_duration = (time.monotonic() - frame_started) * 1000
-                        frame_bytes = base64.b64decode(result['data'], validate=True)
-                        assert frame_bytes, 'The normal composited frame must contain PNG data'
-                        (out / frame_file).write_bytes(frame_bytes)
-                    except Exception as error:
-                        record('frame-failed', attempt, {'frameFile': frame_file}, error=error,
-                            duration=(time.monotonic() - frame_started) * 1000,
-                            elapsed=(time.monotonic() - started) * 1000)
-                        raise
-                    record('frame-returned', attempt, {'frameFile': frame_file, 'pngBytes': len(frame_bytes),
-                        'captureDurationMs': capture_duration}, duration=(time.monotonic() - frame_started) * 1000,
-                        elapsed=(time.monotonic() - started) * 1000)
-                    # The next original poll records the post-capture WA state within the same deadline.
-                    continue
                 remaining = deadline - time.monotonic()
                 if remaining > 0:
                     time.sleep(min(.05, remaining))
@@ -712,4 +682,3 @@ def verify_folia_mobile(page, checks, out):
     assert page.evaluate('audio.src') == source
     page.wait_for_function('!audio.paused')
     checks.append('Folia returns to Mineradio without restarting playback')
-    paint_session.detach()

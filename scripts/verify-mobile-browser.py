@@ -35,7 +35,7 @@ for attempt in range(30):
 checks = []
 errors = []
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True, args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
+    browser = p.chromium.launch(headless=False, args=['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
     context = browser.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, device_scale_factor=1)
     page = context.new_page()
     page.on('pageerror', lambda error: errors.append(str(error)))

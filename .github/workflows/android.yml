@@ -140,10 +140,11 @@ jobs:
         run: |
           python -m pip install playwright
           python -m playwright install --with-deps chromium
+          sudo apt-get install -y xvfb xauth
       - name: Verify mobile browser interactions
         run: |
           PORT=3077 HOST=127.0.0.1 node server.js > /tmp/mineradio-server.log 2>&1 &
-          python scripts/verify-mobile-browser.py
+          xvfb-run -a -s '-screen 0 1600x1280x24' python scripts/verify-mobile-browser.py
       - name: Upload browser verification evidence
         if: always()
         uses: actions/upload-artifact@v4
