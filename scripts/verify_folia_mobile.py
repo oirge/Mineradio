@@ -14,6 +14,25 @@ def verify_folia_mobile(page, checks, out):
     page.locator('#mobile-folia-switch').tap()
     folia = page.frame_locator('#folia-frame')
     folia.get_by_test_id('local-mobile-nav').wait_for(state='attached', timeout=30000)
+    page.evaluate('''() => {
+        const doc = document.getElementById('folia-frame').contentDocument, view = doc.defaultView;
+        if (view.__mineradioMobileTapTrace) return;
+        const trace = view.__mineradioMobileTapTrace = {events: []};
+        const capture = event => {
+            const target = event.target, control = target?.closest?.('[data-testid]');
+            trace.events.push({type: event.type, at: view.performance.now(), hostAt: performance.now(),
+                bodyHidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                pointerType: event.pointerType || null, isTrusted: event.isTrusted,
+                target: {tag: target?.tagName || null, testid: target?.getAttribute?.('data-testid') || null,
+                    classes: target?.getAttribute?.('class') || null, controlTestid: control?.getAttribute('data-testid') || null}});
+        };
+        // Window capture precedes the document's wake-only handler. Observe without altering events.
+        for (const type of ['pointerdown', 'pointerup', 'click']) view.addEventListener(type, capture, true);
+    }''')
+
+    def clear_touch_events():
+        page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
+            .__mineradioMobileTapTrace.events.length = 0; }''')
 
     def wake_controls():
         # A person first touches the stage when idle chrome has disappeared.
@@ -24,6 +43,7 @@ def verify_folia_mobile(page, checks, out):
             if hidden:
                 box = folia.get_by_test_id('local-player').bounding_box()
                 assert box and box['width'] > 0 and box['height'] > 0, box
+                clear_touch_events()
                 page.touchscreen.tap(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
             try:
                 page.wait_for_function('''() => {
@@ -81,6 +101,7 @@ def verify_folia_mobile(page, checks, out):
             const fading = surfaces.some(element => element.style.display !== 'none' && element.style.opacity <= .9);
             const hitTarget = !!(target && frameHit && (target === frameHit || target.contains(frameHit)) && hostHit === frame);
             return {at: performance.now(), testid, hidden, bodyClass: doc.body.className,
+                events: doc.defaultView.__mineradioMobileTapTrace.events.slice(),
                 rootClass: doc.documentElement.className, hostBodyClass: document.body.className,
                 viewport: {width: doc.documentElement.clientWidth, height: doc.documentElement.clientHeight},
                 frameBounds: frameBounds.toJSON(), target: targetState, ancestors, surfaces,
@@ -107,6 +128,13 @@ def verify_folia_mobile(page, checks, out):
 
         def save():
             evidence.write_text(json.dumps({'testid': testid, 'attempts': trace}, ensure_ascii=False, indent=2), encoding='utf-8')
+
+        def pointer_downs(snapshot):
+            return [event for event in snapshot.get('events', []) if event.get('type') == 'pointerdown']
+
+        def wake_only(snapshot):
+            downs = pointer_downs(snapshot)
+            return len(downs) == 1 and downs[0].get('isTrusted') is True and downs[0].get('bodyHidden') is True
 
         for attempt in range(3):
             try:
@@ -140,14 +168,24 @@ def verify_folia_mobile(page, checks, out):
                 # The probe checks availability and actual browser hit testing before a real touch.
                 # Avoid waiting for animation frames while the phone's idle deadline continues.
                 point, frame_bounds = before['point'], before['frameBounds']
+                clear_touch_events()
                 page.touchscreen.tap(frame_bounds['left'] + point['x'], frame_bounds['top'] + point['y'])
-                record(f'completed-{attempt + 1}')
+                after = record(f'completed-{attempt + 1}')
                 save()
+                if wake_only(after):
+                    if attempt == 2:
+                        raise AssertionError(f'{testid}: three trusted touches only woke idle chrome; see {evidence.name}')
+                    continue
+                downs = pointer_downs(after)
+                if len(downs) != 1 or downs[0].get('isTrusted') is not True:
+                    raise AssertionError(f'{testid}: real touch lacked one trusted pointerdown; see {evidence.name}')
                 return
             except PlaywrightTimeoutError as error:
                 after = record(f'timeout-{attempt + 1}', error)
                 save()
-                if attempt == 2 or not after.get('hidden'):
+                if any(event.get('bodyHidden') is not True for event in pointer_downs(after)):
+                    raise
+                if attempt == 2 or not (after.get('hidden') or wake_only(after)):
                     raise
                 # A fresh real stage touch is allowed only after confirmed idle hiding.
         raise AssertionError(f'{testid}: touch did not complete; see {evidence.name}')
