@@ -92,14 +92,14 @@ def verify_folia_mobile(page, checks, out):
         evidence = out / ('folia-wake.json' if wake_number == 1 else f'folia-wake-{wake_number:02}.json')
         trace = []
 
-        def record(phase, attempt, state=None, error=None, duration=None):
+        def record(phase, attempt, state=None, error=None, duration=None, elapsed=None):
             if state is None:
                 try:
                     state = wake_probe()
                 except Exception as diagnostic_error:
                     state = {'diagnosticError': str(diagnostic_error)}
             trace.append({'phase': phase, 'attempt': attempt + 1, 'state': state,
-                'error': str(error) if error else None, 'durationMs': duration})
+                'error': str(error) if error else None, 'durationMs': duration, 'elapsedMs': elapsed})
             evidence.write_text(json.dumps({'call': wake_number, 'attempts': trace}, ensure_ascii=False, indent=2), encoding='utf-8')
             return state
 
@@ -129,33 +129,33 @@ def verify_folia_mobile(page, checks, out):
                 trace.append({'phase': 'touch-returned', 'attempt': attempt + 1,
                     'durationMs': (time.monotonic() - started) * 1000})
             started = time.monotonic()
-            try:
-                page.wait_for_function('''() => {
-                    const doc = document.getElementById('folia-frame').contentDocument;
-                    const selectors = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'];
-                    const navs = doc.querySelectorAll('[data-testid=local-mobile-nav]'), nav = navs[0], box = nav?.getBoundingClientRect();
-                    return !doc.body.classList.contains('mineradio-mobile-chrome-hidden') && selectors.every(selector => {
-                        const element = doc.querySelector(selector);
-                        if (!element) return false;
-                        const style = doc.defaultView.getComputedStyle(element);
-                        return style.display === 'none' || (style.visibility === 'visible' && Number(style.opacity) > .9);
-                    }) && navs.length === 1 && box && box.width > 0 && box.height > 0
-                        && doc.defaultView.getComputedStyle(nav).visibility === 'visible';
-                }''', timeout=2000, polling=50)
-            except PlaywrightTimeoutError as error:
-                after = record('timeout', attempt, error=error, duration=(time.monotonic() - started) * 1000)
-                if attempt == 2 or not after.get('hidden'):
+            deadline = started + 2.0
+            last = None
+            while time.monotonic() < deadline:
+                try:
+                    last = wake_probe()
+                except Exception as error:
+                    elapsed = (time.monotonic() - started) * 1000
+                    record('poll-failed', attempt, {'diagnosticError': str(error)}, error=error, elapsed=elapsed)
                     raise
-                continue
-            except Exception as error:
-                record('readiness-failed', attempt, error=error, duration=(time.monotonic() - started) * 1000)
-                raise
-            after = record('after', attempt, duration=(time.monotonic() - started) * 1000)
-            if after.get('ready'):
-                return
-            if attempt < 2 and after.get('hidden'):
-                continue
-            raise AssertionError(f'Folia chrome was unavailable after readiness; see {evidence.name}')
+                elapsed = (time.monotonic() - started) * 1000
+                record('poll', attempt, last, duration=last['probeDurationMs'], elapsed=elapsed)
+                if elapsed <= 2000 and last['ready']:
+                    record('after', attempt, last, duration=(time.monotonic() - started) * 1000, elapsed=elapsed)
+                    # A late probe or late return never turns the original 2s timeout into success.
+                    if time.monotonic() <= deadline:
+                        return
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    time.sleep(min(.05, remaining))
+            elapsed = (time.monotonic() - started) * 1000
+            error = PlaywrightTimeoutError(f'Folia chrome readiness did not return within 2000ms '
+                f'(elapsed {elapsed:.3f}ms); see {evidence.name}')
+            last = last if last is not None else {'diagnosticError': 'Readiness deadline elapsed before the first poll'}
+            record('timeout', attempt, last, error=error, duration=elapsed, elapsed=elapsed)
+            if attempt == 2 or not last.get('hidden'):
+                raise error
 
     def control_probe(testid):
         return page.evaluate('''(testid) => {
