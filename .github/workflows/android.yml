@@ -226,24 +226,7 @@ jobs:
             -no-window -memory 4096 -gpu host -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
             > /tmp/mineradio-emulator.log 2>&1
           script: |
-            python - <<'PY'
-            import json, subprocess
-            from collections import Counter
-            from pathlib import Path
-            records = []
-            for pid in subprocess.check_output(['pgrep', '-f', 'qemu-system-x86_64'], text=True).split():
-                process = Path('/proc') / pid
-                try:
-                    environment = process.joinpath('environ').read_bytes().split(b'\0')
-                    value = next((entry.split(b'=', 1)[1].decode() for entry in environment if entry.startswith(b'LP_NUM_THREADS=')), None)
-                    threads = Counter(task.joinpath('comm').read_text().strip() for task in process.joinpath('task').iterdir())
-                    records.append({'pid': int(pid), 'lpNumThreads': value, 'threadNames': dict(threads)})
-                except (OSError, StopIteration) as error:
-                    records.append({'pid': int(pid), 'diagnosticError': str(error)})
-            target = Path('output/playwright/mobile/cloud-emulator-graphics.json')
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(json.dumps(records, indent=2) + '\n', encoding='utf-8')
-            PY
+            python scripts/capture_cloud_graphics.py
             python scripts/verify-android.py
       - name: Save cloud emulator diagnostics
         if: always()

@@ -40,7 +40,7 @@ Folia 已有闲置隐藏是独立契约：约 2500ms 无操作后隐藏，控制
 | 菜单与工具 | `PlaylistSwitcher.tsx`、`PlaylistSwitcherMenu.tsx`、`LocalControlSlot.tsx`、`LocalLatticeTools.tsx`、`LocalAudioSettings.tsx`、`LocalAddToPlaylist.tsx` |
 | 加载、空态、错误及封面 | `LocalMotionStatus.tsx`、`LocalPlayerStates.tsx`、`LocalStatusToast.tsx`、`LocalArtwork.tsx`、`localMobileMotion.css`、`localMobile.css` |
 | 可复用交互组件 | `SlideActionButton.tsx`、`ThemedDialog.tsx`、`CustomSelect.tsx`、`CustomSelectMenu.tsx`、`overlayEntranceMotion.ts` |
-| 云端门禁与布局约束 | `scripts/verify_mobile_motion.py`、`verify_folia_mobile.py`、`verify-mobile-browser.py`、`verify-android.py`、`tests/folia-controls-layout.test.js`、`.github/workflows/android.yml` |
+| 云端门禁与布局约束 | `scripts/verify_mobile_motion.py`、`verify_folia_mobile.py`、`verify-mobile-browser.py`、`verify-android.py`、`capture_cloud_graphics.py`、`tests/folia-controls-layout.test.js`、`.github/workflows/android.yml` |
 
 ## 连续性与性能约束
 
