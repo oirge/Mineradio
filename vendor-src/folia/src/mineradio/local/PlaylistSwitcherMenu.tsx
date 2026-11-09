@@ -3,6 +3,10 @@ import { Check, Heart, Library, ListMusic, Settings2, X } from 'lucide-react';
 import { List, useListRef, type RowComponentProps } from 'react-window';
 import { useTranslation } from 'react-i18next';
 import type { HostPlaylist } from '../client';
+import { motion, useIsPresent } from 'framer-motion';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionProps } from '../../utils/mobileMotion';
+import LocalArtwork from './LocalArtwork';
 
 // src/mineradio/local/PlaylistSwitcherMenu.tsx
 // Playlist summaries share one row for small menus and bounded virtualized catalogs.
@@ -20,7 +24,7 @@ function PlaylistOption({ playlist, currentId, disabled, label, onSelect }: Omit
     return <button type="button" role="menuitemradio" aria-checked={playlist.id === currentId}
         className={`local-playlist-option${liked ? ' is-liked-playlist' : ''}`} data-playlist-id={playlist.id}
         disabled={disabled || playlist.count <= 0} onClick={() => onSelect(playlist.id)}>
-        <span className="local-playlist-cover">{playlist.cover ? <img src={playlist.cover} alt="" loading="lazy" decoding="async" />
+        <span className="local-playlist-cover">{playlist.cover ? <LocalArtwork src={playlist.cover} alt="" loading="lazy" decoding="async" />
             : <Icon size={18} fill={liked ? 'currentColor' : 'none'} aria-hidden="true" />}</span>
         <span className="local-playlist-info"><strong title={label(playlist.id, playlist.name)}>{label(playlist.id, playlist.name)}</strong>
             <small>{t('tracks', { count: playlist.count })}</small></span>
@@ -32,11 +36,14 @@ function PlaylistRow({ index, style, playlists, ...props }: RowComponentProps<Ro
 }
 export default function PlaylistSwitcherMenu({ menuRef, id, playlists, currentId, disabled, label, onSelect, onClose, onManage }: Props) {
     const { t } = useTranslation('localPlayer');
+    const { mobile, reducedMotion } = useMobileMotion();
+    const present = useIsPresent();
     const list = useListRef(null);
     const pendingFocus = useRef<number | null>(null);
     const virtualized = playlists.length >= 24;
-    const rowProps = useMemo(() => ({ playlists, currentId, disabled, label, onSelect }), [playlists, currentId, disabled, label, onSelect]);
+    const rowProps = useMemo(() => ({ playlists, currentId, disabled: disabled || !present, label, onSelect }), [playlists, currentId, disabled, present, label, onSelect]);
     const focusPending = () => {
+        if (!present) return;
         const playlist = pendingFocus.current === null ? undefined : playlists[pendingFocus.current];
         if (!playlist) return;
         const button = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[data-playlist-id]') || [])
@@ -49,11 +56,18 @@ export default function PlaylistSwitcherMenu({ menuRef, id, playlists, currentId
         focusPending();
     };
     useLayoutEffect(() => {
+        if (!present) return;
         const selected = playlists.findIndex(playlist => playlist.id === currentId && playlist.count > 0);
         const first = selected >= 0 ? selected : playlists.findIndex(playlist => playlist.count > 0);
         if (first >= 0) focusRow(first);
         else menuRef.current?.querySelector<HTMLButtonElement>('.local-playlist-close')?.focus();
-    }, []);
+    }, [present]);
+    // Keep the transport's menu boundary alive until the visual exit actually finishes.
+    useLayoutEffect(() => {
+        const controls = menuRef.current?.closest('.local-controls');
+        controls?.classList.add('local-playlist-open');
+        return () => controls?.classList.remove('local-playlist-open');
+    }, [menuRef]);
     const navigate = (event: KeyboardEvent<HTMLDivElement>) => {
         if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
@@ -66,7 +80,10 @@ export default function PlaylistSwitcherMenu({ menuRef, id, playlists, currentId
             if (!disabled && playlists[index].count > 0) { focusRow(index); return; }
         }
     };
-    return <div ref={menuRef} id={id} className="local-playlist-menu" role="dialog" aria-label={t('collection')}
+    return <motion.div ref={menuRef} id={id} {...(mobile ? mobileMotionProps('menu', reducedMotion) : {})}
+        inert={!present} aria-hidden={!present || undefined}
+        data-mobile-motion-presence={mobile ? (present ? 'present' : 'exiting') : undefined}
+        className="local-playlist-menu" role="dialog" aria-label={t('collection')}
         data-testid="local-playlist-menu" data-wheel-scroll-region onKeyDown={navigate}>
         <div className="local-playlist-head"><strong>{t('collection')}</strong><span>{playlists.filter(playlist => !playlist.readOnly).length}</span>
             <button type="button" className="local-playlist-close" aria-label={t('close')} title={t('close')} onClick={onClose}><X size={16} /></button></div>
@@ -82,5 +99,5 @@ export default function PlaylistSwitcherMenu({ menuRef, id, playlists, currentId
                 : playlists.map(playlist => <PlaylistOption key={playlist.id} playlist={playlist} {...rowProps} />)}
         </div>
         {onManage && <div className="local-playlist-footer"><button type="button" onClick={onManage}><Settings2 size={15} />{t('managePlaylists')}</button></div>}
-    </div>;
+    </motion.div>;
 }

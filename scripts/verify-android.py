@@ -12,6 +12,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect, TimeoutError as PlaywrightTimeoutError
+from verify_mobile_motion import FOLIA_CHROME_READINESS, verify_mobile_motion
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'output/playwright/mobile'
@@ -402,12 +403,17 @@ with sync_playwright() as p:
         y = bounds[1] + point['y'] * (bounds[3] - bounds[1]) / point['height']
         adb('shell', 'input', 'tap', str(round(x)), str(round(y)))
 
+    folia_wake_readiness = []
+
     def wake_folia_controls(attempts=3, fresh=False):
+        wake_call = {'call': len(folia_wake_readiness) + 1, 'fresh': fresh, 'attempts': []}
+        folia_wake_readiness.append(wake_call)
         if fresh:
             protected = page.evaluate('''() => {
                 const doc = document.getElementById('folia-frame').contentDocument;
                 return !!doc.querySelector('.local-player[data-panel="open"],.local-mobile-more,.local-slot-menu,.local-playlist-menu,[role="dialog"]');
             }''')
+            wake_call['protectedPanelOrMenu'] = protected
             if not protected:
                 # A visible surface can be near the end of its idle budget after
                 # slow diagnostic reads. Wait for its real idle hide, then use
@@ -417,20 +423,40 @@ with sync_playwright() as p:
                     timeout=5000, polling=50)
         for attempt in range(attempts):
             if folia_controls_hidden(): tap_folia_stage()
+            record = {'attempt': attempt + 1}
+            wake_call['attempts'].append(record)
+            page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
+                .__mineradioAndroidWakeReadiness = {samples: []}; }''')
+            gate_started = time.monotonic()
             try:
                 page.wait_for_function('''() => {
-                    const doc = document.getElementById('folia-frame').contentDocument;
-                    return !doc.body.classList.contains('mineradio-mobile-chrome-hidden')
-                        && ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'].every(selector => {
-                            const element = doc.querySelector(selector);
-                            return element && doc.defaultView.getComputedStyle(element).visibility !== 'hidden'
-                                && Number(doc.defaultView.getComputedStyle(element).opacity) > .9;
-                        });
+                    const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+                    ''' + FOLIA_CHROME_READINESS + '''
+                    const state = chromeReadiness(), evidence = view.__mineradioAndroidWakeReadiness;
+                    evidence.latest = state;
+                    if (evidence.samples.length < 96) evidence.samples.push(state);
+                    return state.ready;
                 }''', timeout=2000, polling=50)
+                record['ready'] = True
                 return
-            except PlaywrightTimeoutError:
+            except PlaywrightTimeoutError as error:
+                record['ready'] = False
+                record['error'] = str(error)
                 # Expiry between the first read and fade check needs the same real wake gesture.
                 if attempt == attempts - 1 or not folia_controls_hidden(): raise
+            finally:
+                record['gateDurationMs'] = (time.monotonic() - gate_started) * 1000
+                try:
+                    record['evidence'] = page.evaluate('''() => {
+                        const view = document.getElementById('folia-frame').contentWindow;
+                        const evidence = view.__mineradioAndroidWakeReadiness;
+                        delete view.__mineradioAndroidWakeReadiness;
+                        return evidence;
+                    }''')
+                except Exception as diagnostic_error:
+                    record['diagnosticError'] = str(diagnostic_error)
+                (OUT / 'android-folia-wake-readiness.json').write_text(json.dumps(folia_wake_readiness,
+                    ensure_ascii=False, indent=2), encoding='utf-8')
 
     def folia_target_state(selector, prepare_touch=False):
         # Runtime.evaluate reads the existing DOM synchronously. Locator's
@@ -718,6 +744,14 @@ with sync_playwright() as p:
         {'phase': 'restored', 'ui': chrome_ui_restored, 'state': chrome_restored},
     ], ensure_ascii=False, indent=2), encoding='utf-8')
     completed('Folia mobile controls hide on idle and wake by touch without interrupting the same native AudioTrack')
+
+    motion_before = wait_native('ui-motion-before', lambda state: state.get('playing') and not state.get('preparing'))
+    verify_mobile_motion(page, checks, OUT, native=True, back=lambda: adb('shell', 'input', 'keyevent', 'KEYCODE_BACK'))
+    motion_after = wait_native('ui-motion-after', lambda state: state.get('playing') and not state.get('preparing'))
+    same_sink(motion_before, motion_after)
+    assert motion_after['uri'] == motion_before['uri'] and motion_after['index'] == motion_before['index'], \
+        'Page motion, rapid returns and Reduce Motion must not switch the native playing song'
+    completed('Android UI motion and dynamic Reduce Motion retain the same native sink without new underruns')
 
     start_position = page.evaluate('audio.currentTime')
     foreground = wait_native('before-home', lambda state: state.get('playing') and state.get('engine') == 'pcm')

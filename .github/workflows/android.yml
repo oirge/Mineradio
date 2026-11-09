@@ -5,6 +5,7 @@ on:
     branches: [codex/android-mobile]
     paths:
       - 'public/**'
+      - 'vendor-src/folia/**'
       - 'mobile/**'
       - 'scripts/**'
       - 'tests/**'
@@ -57,14 +58,20 @@ jobs:
       - name: Check source and desktop regressions
         run: |
           node --check public/mobile.js
+          node --check public/mobile-motion-tokens.js
+          node --check public/mobile-motion.js
+          node --check public/mobile-view-motion.js
           node --check public/mobile-native.js
           node --check public/mobile-playback.js
           node --check public/mobile-native-audio.js
           node --check public/folia-mobile-chrome.js
+          node --check public/folia-host.js
           node --check public/app.js
           node --check server.js
-          python -m py_compile scripts/verify-android.py scripts/verify-mobile-browser.py
+          python -m py_compile scripts/verify-android.py scripts/verify-mobile-browser.py scripts/verify_folia_mobile.py scripts/verify_mobile_motion.py
           git diff --check
+          npm run typecheck --prefix vendor-src/folia
+          npm test --prefix vendor-src/folia -- test/unit/mineradio
           node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
       - name: Rebuild embedded Folia for Android
         run: node scripts/build-folia.js
@@ -102,9 +109,9 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --console=plain assembleRelease assembleDebug
           cd ../..
-          cp mobile/android/app/build/outputs/apk/release/app-release.apk release/Mineradio-Android-1.0.5.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs release/Mineradio-Android-1.0.5.apk
-          sha256sum release/Mineradio-Android-1.0.5.apk > release/SHA256SUMS.txt
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk release/Mineradio-Android-1.0.6.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs release/Mineradio-Android-1.0.6.apk
+          sha256sum release/Mineradio-Android-1.0.6.apk > release/SHA256SUMS.txt
       - name: Upload APK and signing bootstrap
         uses: actions/upload-artifact@v4
         with:
@@ -211,7 +218,7 @@ jobs:
           profile: pixel_6
           ram-size: 4096M
           cores: 2
-          disable-animations: true
+          disable-animations: false
           emulator-options: >-
             -no-window -gpu host -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
             > /tmp/mineradio-emulator.log 2>&1
@@ -259,9 +266,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view android-v1.0.5 > /dev/null 2>&1; then
-            echo "Release android-v1.0.5 already exists; refusing to replace accepted assets"
+          if gh release view android-v1.0.6 > /dev/null 2>&1; then
+            echo "Release android-v1.0.6 already exists; refusing to replace accepted assets"
             exit 1
           else
-            gh release create android-v1.0.5 release/Mineradio-Android-1.0.5.apk release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --latest=false --title 'Mineradio Android 1.0.5 预览版' --notes-file docs/ANDROID-RELEASE.md
+            gh release create android-v1.0.6 release/Mineradio-Android-1.0.6.apk release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --latest=false --title 'Mineradio Android 1.0.6 交互动效升级' --notes-file docs/ANDROID-RELEASE.md
           fi

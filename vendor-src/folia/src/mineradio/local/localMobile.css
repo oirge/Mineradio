@@ -71,7 +71,14 @@
     width: auto; max-height: none; border-radius: 18px; background: var(--local-bg); z-index: 85;
 }
 .local-mobile .local-player[data-panel=open]>.local-controls,
-.local-mobile .local-player[data-panel=open]>.local-current-track { display: none; }
+.local-mobile .local-player[data-panel=open]>.local-current-track,
+.local-mobile .local-player:has(> :is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence])>.local-controls,
+.local-mobile .local-player:has(> :is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence])>.local-current-track {
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity var(--mobile-motion-component,200ms) var(--mobile-motion-ease,ease-out),
+        transform var(--mobile-motion-component,200ms) var(--mobile-motion-ease,ease-out),
+        visibility 0s var(--mobile-motion-component,200ms) !important;
+}
 .local-mobile .local-panel-title { padding: 6px 10px; min-height: 52px; gap: 6px; }
 .local-mobile .local-player .local-panel-title button { min-width: 44px; }
 .local-mobile .local-library-toolbar { padding: 10px; gap: 8px; }

@@ -3,6 +3,7 @@ import json
 import re
 import time
 from playwright.sync_api import expect, TimeoutError as PlaywrightTimeoutError
+from verify_mobile_motion import FOLIA_CHROME_READINESS
 
 
 def verify_folia_mobile(page, checks, out):
@@ -42,6 +43,7 @@ def verify_folia_mobile(page, checks, out):
         started = time.monotonic()
         state = page.evaluate('''clearForTouch => {
             const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+            ''' + FOLIA_CHROME_READINESS + '''
             const describe = element => {
                 if (!element) return null;
                 const style = view.getComputedStyle(element);
@@ -50,7 +52,7 @@ def verify_folia_mobile(page, checks, out):
                     visibility: style.visibility, pointerEvents: style.pointerEvents, transform: style.transform, transition: style.transition};
             };
             const selectors = ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track'];
-            const surfaces = selectors.map(selector => ({selector, ...describe(doc.querySelector(selector))}));
+            const chrome = chromeReadiness(), surfaces = chrome.surfaces;
             const player = doc.querySelector('[data-testid=local-player]'), playerState = describe(player);
             const stage = doc.querySelector('[data-testid=local-visualizer],[data-testid=local-record-wall],.lattice-root');
             const navs = doc.querySelectorAll('[data-testid=local-mobile-nav]'), nav = describe(navs[0]);
@@ -62,8 +64,7 @@ def verify_folia_mobile(page, checks, out):
             const hidden = doc.body.classList.contains('mineradio-mobile-chrome-hidden');
             const hit = !!(box && box.width > 0 && box.height > 0 && player && frameHit && player.contains(frameHit)
                 && hostHit === frame);
-            const ready = !hidden && surfaces.every(surface => surface.display === 'none'
-                || (surface.visibility === 'visible' && surface.opacity > .9))
+            const ready = chrome.ready
                 && navs.length === 1 && nav && nav.display !== 'none' && nav.visibility === 'visible'
                 && nav.bounds.width > 0 && nav.bounds.height > 0;
             const events = view.__mineradioMobileTapTrace.events.slice();
@@ -72,6 +73,7 @@ def verify_folia_mobile(page, checks, out):
             return {hostAt: performance.now(), frameAt: view.performance.now(), hidden, ready, hit, clearedForTouch,
                 bodyClass: doc.body.className, rootClass: doc.documentElement.className, hostBodyClass: document.body.className,
                 player: playerState, view: player?.getAttribute('data-view'), panel: player?.getAttribute('data-panel'),
+                panelPresence: chrome.panelPresence,
                 surfaces, stage: describe(stage), frameBounds, point, hostPoint,
                 frameHit: describe(frameHit), hostHit: hostHit && {tag: hostHit.tagName, id: hostHit.id}, events,
                 readyState: doc.readyState, visibilityState: doc.visibilityState, documentHidden: doc.hidden,

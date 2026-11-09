@@ -16,6 +16,10 @@
   var unfocusedHeight = 0;
   var viewportWidth = 0;
   var api = window.MineradioMobile = { active: false };
+  var motion = window.MineradioMobileMotion;
+  var moreExpanded = false;
+  var historyIndex = Number(history.state && history.state.mineradioMobileIndex) || 0;
+  var entryDirection = Number(history.state && history.state.mineradioMobileDirection) || 1;
 
   function hasTrack() {
     return typeof currentIdx === 'number' && currentIdx >= 0 &&
@@ -61,6 +65,7 @@
     options = options || {};
     if (!api.active || !/^(home|search|player|library|settings)$/.test(next)) return;
     var previous = view;
+    var transition = motion && motion.captureView(previous, next, options.direction || options.reverse);
     changingView = true;
     markView(next);
     closePanel(playlist, 'pl');
@@ -87,11 +92,16 @@
       }
     }
     if (options.history !== false && previous !== next) {
-      var state = Object.assign({}, history.state, { mineradioMobileView: next });
+      historyIndex++;
+      entryDirection = transition ? transition.direction : 1;
+      var state = Object.assign({}, history.state, {
+        mineradioMobileView: next, mineradioMobileIndex: historyIndex, mineradioMobileDirection: entryDirection
+      });
       history.pushState(state, '');
     }
     changingView = false;
     refresh();
+    if (motion) motion.finishView(transition);
   }
   api.openView = openView;
 
@@ -100,8 +110,12 @@
     if (!api.active) return;
     body.classList.toggle('mobile-has-track', hasTrack());
     if (!changingView) {
-      if (settings.matches('.show, .peek') && view !== 'settings') markView('settings');
-      else if (playlist.matches('.show, .peek') && view !== 'library' && !settings.matches('.show, .peek')) markView('library');
+      var next = settings.matches('.show, .peek') ? 'settings' : playlist.matches('.show, .peek') ? 'library' : view;
+      if (next !== view) {
+        var transition = motion && motion.captureView(view, next);
+        markView(next);
+        if (motion) motion.finishView(transition);
+      }
     }
     updateViewport();
   }
@@ -121,8 +135,16 @@
       markView(typeof emptyHomeActive !== 'undefined' && emptyHomeActive ? 'home' : 'player');
       closePanel(playlist, 'pl');
       closePanel(settings, 'fx');
+      history.replaceState(Object.assign({}, history.state, {
+        mineradioMobileView: view, mineradioMobileIndex: historyIndex, mineradioMobileDirection: entryDirection
+      }), '');
       refresh();
+      if (motion) motion.enhanceFolds();
     } else {
+      if (motion) motion.finishAll();
+      moreExpanded = false;
+      var modes = bar.querySelector('.control-cluster.modes');
+      if (modes) { modes.inert = false; modes.removeAttribute('aria-hidden'); modes.removeAttribute('data-mobile-motion-more'); }
       closePanel(playlist, 'pl');
       closePanel(settings, 'fx');
       body.classList.remove('mobile-has-track', 'mobile-controls-expanded', 'mobile-keyboard-open');
@@ -172,10 +194,43 @@
     var button = event.target.closest('[data-mobile-view]');
     if (button) openView(button.getAttribute('data-mobile-view'));
   });
-  more.addEventListener('click', function () {
-    if (!api.active) return;
-    var expanded = body.classList.toggle('mobile-controls-expanded');
+  // A single measured row may change height; the rest of the controls retain their geometry.
+  function setMoreExpanded(expanded) {
+    var modes = bar.querySelector('.control-cluster.modes');
+    moreExpanded = expanded;
     more.setAttribute('aria-expanded', String(expanded));
+    if (!modes) return;
+    var from = motion && motion.isAnimating(modes) ? motion.visual(modes, ['opacity', 'translate', 'height', 'marginTop']) : null;
+    if (motion) motion.cancel(modes, false);
+    body.classList.add('mobile-controls-expanded');
+    modes.setAttribute('data-mobile-motion-more', expanded ? 'entering' : 'leaving');
+    modes.inert = !expanded;
+    if (expanded) modes.removeAttribute('aria-hidden');
+    else {
+      modes.setAttribute('aria-hidden', 'true');
+      if (modes.contains(document.activeElement)) more.focus({ preventScroll: true });
+    }
+    var height = Math.max(44, modes.getBoundingClientRect().height);
+    function finish() {
+      modes.removeAttribute('data-mobile-motion-more');
+      if (moreExpanded === expanded) body.classList.toggle('mobile-controls-expanded', expanded);
+      scheduleRefresh();
+    }
+    if (!motion) { finish(); return; }
+    motion.animate(modes, {
+      opacity: expanded ? 1 : 0, translate: expanded ? '0px 0px' : '0px 8px',
+      height: (expanded ? height : 0) + 'px', marginTop: expanded ? '0px' : '-4px'
+    }, 'component', {
+      from: from || {
+        opacity: expanded ? 0 : 1, translate: expanded ? '0px 8px' : '0px 0px',
+        height: (expanded ? 0 : height) + 'px', marginTop: expanded ? '-4px' : '0px'
+      },
+      cleanup: function () { modes.removeAttribute('data-mobile-motion-more'); },
+      complete: finish
+    });
+  }
+  more.addEventListener('click', function () {
+    if (api.active) setMoreExpanded(!moreExpanded);
   });
 
   // Capture these existing entry points so their touch behavior matches the tabs.
@@ -198,7 +253,16 @@
     }
   });
   window.addEventListener('popstate', function (event) {
-    if (api.active) openView(event.state && event.state.mineradioMobileView || (hasTrack() ? 'player' : 'home'), { history: false, focus: false });
+    if (!api.active) return;
+    var state = event.state || {};
+    var nextIndex = Number(state.mineradioMobileIndex) || 0;
+    var nextDirection = Number(state.mineradioMobileDirection) || 1;
+    var direction = nextIndex < historyIndex ? -entryDirection : nextDirection;
+    historyIndex = nextIndex;
+    entryDirection = nextDirection;
+    openView(state.mineradioMobileView || (hasTrack() ? 'player' : 'home'), {
+      history: false, focus: false, direction: direction
+    });
   });
   window.addEventListener('resize', applyLayout, { passive: true });
   if (compact.addEventListener) compact.addEventListener('change', applyLayout);

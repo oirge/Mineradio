@@ -13335,10 +13335,12 @@ function setControlCoverSrc(src) {
   if (!src) {
     cover.style.backgroundImage = '';
     cover.classList.add('cover-empty');
+    if (window.MineradioMobileMotion) window.MineradioMobileMotion.revealArtwork(cover, '');
     return;
   }
   cover.style.backgroundImage = 'url("' + String(src).replace(/"/g, '\\"') + '")';
   cover.classList.remove('cover-empty');
+  if (window.MineradioMobileMotion) window.MineradioMobileMotion.revealArtwork(cover, src);
 }
 
 var controlTrackInfoUiState = { title: null, artist: null, lastTitle: null, lastArtist: null };
@@ -16857,7 +16859,12 @@ function drawCoverCropPreview() {
 
 function pulseCoverCropStage() {
   var stage = document.getElementById('cover-crop-stage');
-  if (!stage || !window.gsap) return;
+  if (!stage) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.feedback(stage);
+    return;
+  }
+  if (!window.gsap) return;
   window.gsap.fromTo(stage, { scale: 0.985 }, { scale: 1, duration: 0.72, ease: 'expo.out', overwrite: true });
 }
 
@@ -29472,12 +29479,16 @@ function clearQueue() {
  */
 function removeFromQueue(idx) {
   if (idx < 0 || idx >= playQueue.length) return;
+  var motionRemoval = window.MineradioMobileMotion && window.MineradioMobileMotion.captureQueueRemoval(idx);
   playQueue.splice(idx, 1);
   markQueueContentChanged();
   if (currentIdx >= 0 && currentIdx > idx) currentIdx -= 1;
   if (currentIdx >= playQueue.length) currentIdx = playQueue.length - 1;
   savePlaybackSession(true);
-  safeRenderQueuePanel('remove-queue-item');
+  // A visible row transition must measure the updated list, not a deferred render.
+  var queueRendered = safeRenderQueuePanel('remove-queue-item', motionRemoval
+    ? { immediate: true, animate: false, deferWhenHidden: false } : undefined);
+  if (queueRendered && window.MineradioMobileMotion) window.MineradioMobileMotion.finishQueueRemoval(motionRemoval);
   safeShelfRebuild('remove-queue-item');
   updateCustomCoverButton();
   updateCustomLyricControls();
@@ -29513,6 +29524,10 @@ function updatePlayModeButton(animate) {
   updatePlayModeButtonRow();
   updateStopAfterCurrentButton();
   if (!animate || !btn) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.feedback(icon || btn);
+    return;
+  }
   if (window.gsap) {
     window.gsap.killTweensOf(btn);
     if (icon) window.gsap.killTweensOf(icon);
@@ -30268,7 +30283,7 @@ function bindPlayerControlAnimations() {
     var isPlay = btn.id === 'play-btn';
     var iconTarget = btn.querySelector('svg,.lyrics-word-icon,#quality-btn-label');
     function canAnimate() {
-      return !btn.disabled && !btn.classList.contains('busy');
+      return !(window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) && !btn.disabled && !btn.classList.contains('busy');
     }
     function hoverIn(e) {
       if (!canAnimate() || (e && e.pointerType === 'touch')) return;
@@ -30276,6 +30291,7 @@ function bindPlayerControlAnimations() {
       if (iconTarget) window.gsap.to(iconTarget, { scale: isPlay ? 1.08 : 1.10, duration: 0.22, ease: 'power2.out', overwrite: 'auto' });
     }
     function hoverOut() {
+      if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) return;
       window.gsap.to(btn, { y: 0, scale: 1, rotate: 0, duration: 0.26, ease: 'power2.out', overwrite: 'auto' });
       if (iconTarget) window.gsap.to(iconTarget, { scale: 1, rotate: 0, duration: 0.22, ease: 'power2.out', overwrite: 'auto' });
     }
@@ -30291,6 +30307,10 @@ function bindPlayerControlAnimations() {
       if (iconTarget) window.gsap.to(iconTarget, { scale: hovered ? 1.06 : 1, duration: 0.22, ease: 'back.out(1.8)', overwrite: 'auto' });
     }
     function clickPulse() {
+      if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+        if (!btn.disabled && !btn.classList.contains('busy') && btn.id !== 'play-mode-btn') window.MineradioMobileMotion.feedback(iconTarget);
+        return;
+      }
       if (!canAnimate() || btn.id === 'play-mode-btn') return;
       var pulseSize = isPlay ? 18 : 10;
       var pulseColor = isPlay ? 'rgba(255,63,85,.34)' : 'rgba(255,255,255,.22)';
@@ -31306,6 +31326,10 @@ function updateLyricsHighlight() { /* v8: 由 tickLyricsParticles 接管 */ }
 //  播放列表面板
 // ============================================================
 function animateListItems(container, selector, opts) {
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.enterList(container, selector, opts);
+    return;
+  }
   if (!container || !window.gsap) return;
   opts = opts || {};
   if (typeof listAnimationLimit === 'function') {
@@ -31340,6 +31364,10 @@ function smoothScrollToItem(scroller, item, opts) {
   opts = opts || {};
   var target = item.offsetTop - Math.max(0, (scroller.clientHeight - item.offsetHeight) * (opts.align == null ? 0.42 : opts.align));
   target = Math.max(0, Math.min(target, Math.max(0, scroller.scrollHeight - scroller.clientHeight)));
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile() && window.MineradioMobileMotion.reducedMotion) {
+    scroller.scrollTop = target;
+    return;
+  }
   if (window.gsap) {
     if (typeof scroller.__syncSmoothWheelTarget === 'function') scroller.__syncSmoothWheelTarget(target);
     window.gsap.killTweensOf(scroller);
@@ -31363,6 +31391,7 @@ function bindSmoothWheelScroll(scroller) {
     targetTop = isFinite(top) ? top : scroller.scrollTop;
   };
   scroller.addEventListener('wheel', function(e){
+    if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) return;
     if (!window.gsap || e.ctrlKey) return;
     var max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     if (max <= 0 || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
@@ -31499,6 +31528,7 @@ function applyPlaylistPaneToolbarMode(tab) {
 function switchPlaylistTab(tab) {
   tab = normalizePlaylistPanelTab(tab);
   var previousTab = queueViewTab;
+  if (previousTab !== tab && window.MineradioMobileMotion) window.MineradioMobileMotion.nextListScope();
   queueViewTab = tab;
   /* 两个 tab 共用一份选中状态，切 tab 就得把选中项摆到对应那一层，否则会串页。 */
   if (tab === 'library' && !isLocalLibraryCategoryKind(localLibraryPlaylistSelection)) {
@@ -40621,7 +40651,12 @@ function updateFxInputs() {
   syncFxUniforms();
 }
 function animateFxResetButton(btn) {
-  if (!btn || !window.gsap) return;
+  if (!btn) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.feedback(btn);
+    return;
+  }
+  if (!window.gsap) return;
   window.gsap.fromTo(btn, { rotate: -120, scale: 0.88 }, { rotate: 0, scale: 1, duration: 0.48, ease: 'expo.out', overwrite: true });
   window.gsap.fromTo(btn, { boxShadow: '0 0 0 0 rgba(244,210,138,.38)' }, { boxShadow: '0 0 0 8px rgba(244,210,138,0)', duration: 0.55, ease: 'sine.out', overwrite: true });
 }
@@ -40670,6 +40705,7 @@ function ensureFxSliderResetButton(id, key) {
 }
 var fxPanelTab = 'presets';
 function setFxPanelTab(tab) {
+  var previousTab = fxPanelTab;
   var allowed = { presets:1, appearance:1, lyrics:1, motion:1, mini:1, advanced:1 };
   fxPanelTab = allowed[tab] ? tab : 'presets';
   var panel = document.getElementById('fx-panel');
@@ -40679,6 +40715,9 @@ function setFxPanelTab(tab) {
   });
   document.querySelectorAll('#fx-panel .fx-tab-page').forEach(function(page){
     page.classList.toggle('active', page.getAttribute('data-fx-page') === fxPanelTab);
+    if (previousTab !== fxPanelTab && page.classList.contains('active') && window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+      window.MineradioMobileMotion.animate(page, { opacity: 1, translate: '0px 0px' }, 'component', { from: { opacity: 0, translate: '0px 8px' } });
+    }
   });
   repositionFxFloatingPanels();
 }
@@ -42382,6 +42421,13 @@ function setUpdatePreviewVisible(visible) {
   }
   entry.classList.toggle('available', updatePreviewState.visible);
   stopUpdateIconBreathing(true);
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    if (window.gsap) {
+      window.gsap.killTweensOf(entry);
+      window.gsap.set(entry, { autoAlpha: updatePreviewState.visible ? 1 : 0, clearProps: 'transform,boxShadow,filter' });
+    }
+    return;
+  }
   if (!updatePreviewState.visible) {
     if (window.gsap) {
       window.gsap.killTweensOf(entry);
@@ -42482,7 +42528,7 @@ function applyLatestUpdateInfo(data) {
 }
 
 function canRunUpdateIconBreathing() {
-  return !!(updatePreviewState.visible &&
+  return !!(!(window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) && updatePreviewState.visible &&
     updatePreviewState.updateAvailable &&
     !updatePreviewState.checking &&
     !document.hidden &&
@@ -42745,7 +42791,9 @@ function openUpdatePanel() {
   initUpdateRouteControls();
   renderUpdatePreviewPanel();
   var activeEntry = document.body.classList.contains('folia-interface-active') ? foliaEntry : entry;
-  if (activeEntry && window.gsap) {
+  if (activeEntry && window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.feedback(activeEntry);
+  } else if (activeEntry && window.gsap) {
     window.gsap.fromTo(activeEntry, { scale: 0.93 }, { scale: 1, duration: 0.42, ease: 'back.out(1.7)', overwrite: 'auto' });
   }
   if (updatePreviewState.status !== 'downloading' && updatePreviewState.status !== 'opening') checkLatestUpdate({ force: true, announce: true });
@@ -42766,7 +42814,6 @@ function closeUpdatePanel() {
 }
 
 function animateUpdatePanelContents() {
-  if (!window.gsap) return;
   var modal = document.querySelector('#update-modal .update-modal');
   if (!modal) return;
   var parts = [];
@@ -42780,6 +42827,17 @@ function animateUpdatePanelContents() {
   var items = [];
   for (var i = 0; i < itemNodes.length; i++) items.push(itemNodes[i]);
   var actions = modal.querySelector('.update-actions');
+  var motion = window.MineradioMobileMotion;
+  if (motion && motion.isMobile()) {
+    parts.concat(items, actions ? [actions] : []).slice(0, motion.tokens.listLimit).forEach(function (node, index) {
+      if (window.gsap) { window.gsap.killTweensOf(node); window.gsap.set(node, { clearProps: 'opacity,visibility,transform,filter' }); }
+      motion.animate(node, { opacity: 1, translate: '0px 0px' }, 'component', {
+        from: { opacity: 0, translate: '0px 8px' }, delay: index * motion.tokens.stagger
+      });
+    });
+    return;
+  }
+  if (!window.gsap) return;
   window.gsap.fromTo(parts,
     { autoAlpha: 0, x: -7, filter: 'blur(5px)' },
     { autoAlpha: 1, x: 0, filter: 'blur(0px)', duration: 0.50, ease: 'power3.out', stagger: 0.045, delay: 0.10, overwrite: true }
@@ -43165,7 +43223,14 @@ function startUpdatePreviewDownload() {
 function pulseUpdateReady() {
   var entry = document.getElementById('update-entry');
   var btn = document.getElementById('update-primary-btn');
-  if (!window.gsap || document.hidden || isDeepBackgroundMode()) return;
+  if (document.hidden || isDeepBackgroundMode()) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    if (btn && btn.getClientRects().length && window.getComputedStyle(btn).visibility !== 'hidden') {
+      window.MineradioMobileMotion.feedback(btn);
+    }
+    return;
+  }
+  if (!window.gsap) return;
   if (entry) {
     window.gsap.fromTo(entry,
       { scale: 0.96, filter: 'drop-shadow(0 0 0 rgba(244,210,138,0))' },
@@ -43185,6 +43250,10 @@ function pulseUpdateReady() {
 // ============================================================
 function openGsapModal(mask) {
   if (!mask) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.openModal(mask);
+    return;
+  }
   var panel = mask.querySelector('.modal');
   mask.classList.add('show');
   if (window.gsap) {
@@ -43208,6 +43277,10 @@ function openGsapModal(mask) {
   }
 }
 function closeGsapModal(mask, afterClose) {
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.closeModal(mask, afterClose);
+    return;
+  }
   if (!mask || !mask.classList.contains('show')) {
     if (afterClose) afterClose();
     return;

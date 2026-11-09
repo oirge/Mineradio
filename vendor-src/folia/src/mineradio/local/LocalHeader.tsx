@@ -16,6 +16,7 @@ function titlebarTarget(): HTMLElement | null {
 }
 export interface LocalHeaderProps {
     mobile: boolean;
+    mobileFocus?: boolean;
     view: 'lyrics' | 'records' | 'posters';
     libraryOpen: boolean;
     settingsOpen: boolean;

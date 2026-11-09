@@ -2,6 +2,9 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { localDocuments } from './localDocuments';
+import { motion, useIsPresent } from 'framer-motion';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionProps } from '../../utils/mobileMotion';
 import './localTools.css';
 
 // src/mineradio/local/LocalToolPanel.tsx
@@ -10,10 +13,13 @@ export default function LocalToolPanel({ id, title, onClose, children, initialFo
     id: string; title: string; onClose: () => void; children: ReactNode; initialFocus?: string; wide?: boolean;
 }) {
     const { t } = useTranslation('localPlayer');
+    const { mobile, reducedMotion } = useMobileMotion();
+    const present = useIsPresent();
     const panel = useRef<HTMLElement>(null);
     const close = useRef(onClose);
     close.current = onClose;
     useEffect(() => {
+        if (!present) return;
         const documents = localDocuments();
         const focusedDocuments = documents.filter(doc => doc.hasFocus());
         const previous = (focusedDocuments.length ? focusedDocuments : documents).map(doc => doc.activeElement).find(node => node && typeof (node as HTMLElement).focus === 'function'
@@ -21,6 +27,7 @@ export default function LocalToolPanel({ id, title, onClose, children, initialFo
         const node = panel.current!;
         (initialFocus ? node.querySelector<HTMLElement>(initialFocus) : node.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true });
         const key = (event: KeyboardEvent) => {
+            if (mobile && documents.some(doc => doc.querySelector('[data-testid="local-mobile-more"][data-mobile-motion-presence="present"]'))) return;
             if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); }
             if (event.key !== 'Tab') return;
             const controls = Array.from(node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]'))
@@ -39,11 +46,14 @@ export default function LocalToolPanel({ id, title, onClose, children, initialFo
             documents.forEach(doc => { doc.removeEventListener('keydown', key, true); doc.removeEventListener('pointerdown', outside); });
             if (document.hasFocus() && previous?.isConnected && (node.contains(document.activeElement) || document.activeElement === document.body)) previous.focus({ preventScroll: true });
         };
-    }, [initialFocus, id]);
-    return <aside ref={panel} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`}
+    }, [initialFocus, id, mobile, present]);
+    return <motion.aside ref={panel} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`}
+        {...(mobile ? mobileMotionProps('sheet', reducedMotion) : {})}
+        inert={!present} aria-hidden={!present || undefined}
+        data-mobile-motion-presence={mobile ? (present ? 'present' : 'exiting') : undefined}
         className={`local-tool-panel local-glass ${wide ? 'is-wide' : ''}`} data-testid={id}>
         <div className="local-panel-title"><strong id={`${id}-title`}>{title}</strong>
             <button type="button" aria-label={t('close')} onClick={onClose}><X size={17} /></button></div>
         <div className="local-tool-content">{children}</div>
-    </aside>;
+    </motion.aside>;
 }

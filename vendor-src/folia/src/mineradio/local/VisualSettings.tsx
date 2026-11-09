@@ -17,11 +17,16 @@ import { useVisualSettings } from './useVisualSettings';
 import type { LocalVisualAssets } from './useLocalVisualAssets';
 import type { HostState } from '../client';
 import type { LocalCommand } from './useLibraryPage';
+import { motion, useIsPresent } from 'framer-motion';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionProps } from '../../utils/mobileMotion';
 
 // src/mineradio/local/VisualSettings.tsx
 // Visual-only controls reuse Folia's registry and tuning panels without its global Settings application.
 export default function VisualSettings({ theme, onClose, assets, onLanguage, state, command }: { theme: Theme; onClose: () => void; assets: LocalVisualAssets; onLanguage: (language: string) => void; state: HostState | null; command: LocalCommand }) {
     const { t, i18n } = useTranslation('localPlayer');
+    const { mobile, reducedMotion } = useMobileMotion();
+    const present = useIsPresent();
     const { t: translate } = useTranslation();
     const settings = useVisualSettings();
     const label = (key: string) => String(translate(key));
@@ -51,7 +56,11 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage, sta
         const current = settings.background as Record<string, any>;
         settings.update({ background: { ...current, [key]: { ...current[key], ...patch } } });
     };
-    return <aside style={settingsTokens(settings.daylight, theme)} className="local-settings local-glass" data-testid="local-visual-settings">
+    return <motion.aside style={settingsTokens(settings.daylight, theme)}
+        {...(mobile ? mobileMotionProps('sheet', reducedMotion) : {})}
+        inert={!present} aria-hidden={!present || undefined}
+        data-mobile-motion-presence={mobile ? (present ? 'present' : 'exiting') : undefined}
+        className="local-settings local-glass" data-testid="local-visual-settings">
         <div className="local-panel-title"><strong>{t('visuals')}</strong><div><button aria-label={t('reset')} title={t('reset')} onClick={settings.reset}><RotateCcw size={16} /></button><button aria-label={t('close')} onClick={onClose}><X size={18} /></button></div></div>
         <div className="local-settings-body">
             <label className="local-setting"><span>{t('interfaceLanguage')}</span><select aria-label={t('interfaceLanguage')} data-testid="local-ui-language" value={i18n.resolvedLanguage === 'en' ? 'en' : 'zh-CN'} onChange={event => onLanguage(event.target.value)}>
@@ -95,5 +104,5 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage, sta
                 })}</Suspense>
             </details>}
         </div>
-    </aside>;
+    </motion.aside>;
 }

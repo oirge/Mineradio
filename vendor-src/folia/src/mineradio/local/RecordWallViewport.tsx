@@ -7,6 +7,8 @@ import { PolaroidCard, type GridItem } from '../../library/suites/grid/shared/Po
 import { computeHexCardFrame } from '../../library/suites/grid/shared/hexCardTransform';
 import { recordWallLayout } from './recordWallLayout';
 import { useRecordWallMotion } from './useRecordWallMotion';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionTokens, mobileMotionTransition } from '../../utils/mobileMotion';
 
 // src/mineradio/local/RecordWallViewport.tsx
 // The original Polaroid material and entrance animation, virtualized by Folia's hex-grid runtime.
@@ -15,11 +17,21 @@ function RecordWallViewport({ items, theme, isDaylight, onPlay, onAddQueue }: {
     onPlay: (id: string) => void; onAddQueue: (id: string) => void;
 }) {
     const { t } = useTranslation();
+    const { mobile, reducedMotion } = useMobileMotion();
     const container = useRef<HTMLDivElement>(null);
     const entered = useRef(new Set<string | number>());
+    const phoneEntrance = useRef<Set<string | number> | null>(null);
     const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
     const layout = useMemo(() => recordWallLayout(size.width, size.height), [size]);
     const wall = useRecordWallMotion(items.length, container, layout);
+    if (mobile && phoneEntrance.current === null && wall.renderedIndexes.length) {
+        // Only the first bounded phone window enters; panning cannot replay or grow this record.
+        phoneEntrance.current = new Set<string | number>();
+        for (const index of wall.renderedIndexes.slice(0, mobileMotionTokens.listLimit)) {
+            const id = items[index]?.id;
+            if (id !== undefined) phoneEntrance.current.add(id);
+        }
+    }
     useEffect(() => {
         const element = container.current;
         if (!element) return;
@@ -65,11 +77,11 @@ function RecordWallViewport({ items, theme, isDaylight, onPlay, onAddQueue }: {
             onDragStart={wall.onDragStart} onDragEnd={wall.onDragEnd}
             style={{ x: wall.x, y: wall.y, touchAction: 'none', background: 'rgba(0,0,0,0)' }}
             className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing">
-            {wall.renderedIndexes.map(index => {
+            {wall.renderedIndexes.map((index, renderedIndex) => {
                 const item = items[index], coord = wall.coords[index];
                 if (!item || !coord) return null;
                 const frame = computeHexCardFrame(coord, wall.x.get(), wall.y.get(), layout);
-                const animateEntrance = !entered.current.has(item.id);
+                const animateEntrance = !entered.current.has(item.id) && (!mobile || !reducedMotion && Boolean(phoneEntrance.current?.has(item.id)));
                 return <div key={item.id} ref={node => { wall.bindCard(index, node); }}
                     data-record-id={item.id} data-focused={index === wall.focusedIndex}
                     className="absolute select-none pointer-events-auto folia-grid-card-frame"
@@ -78,11 +90,13 @@ function RecordWallViewport({ items, theme, isDaylight, onPlay, onAddQueue }: {
                         '--queue-opacity': frame.queueOpacity, '--queue-pe': frame.queuePointerEvents,
                         '--play-opacity': frame.playOpacity, '--play-scale': frame.playScale, '--play-pe': frame.playPointerEvents,
                     } as CSSProperties}>
-                    <motion.div initial={animateEntrance ? { opacity: 0, scale: 0.98, rotateY: -90 } : false}
+                    <motion.div initial={animateEntrance ? { opacity: 0, scale: mobile ? mobileMotionTokens.scale : 0.98, rotateY: mobile ? 0 : -90 } : false}
                         animate={{ opacity: 1, scale: 1, rotateY: 0, x: 0, y: 0 }}
-                        transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-                        onAnimationComplete={() => entered.current.add(item.id)}
-                        style={{ position: 'relative', transformStyle: 'preserve-3d', transformOrigin: 'center center', willChange: 'transform, opacity' }}>
+                        transition={mobile ? { ...mobileMotionTransition('component', reducedMotion),
+                            delay: animateEntrance && !reducedMotion ? Math.min(renderedIndex * mobileMotionTokens.stagger, mobileMotionTokens.maxStagger) / 1000 : 0 }
+                            : { duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                        onAnimationComplete={() => { if (!mobile || phoneEntrance.current?.has(item.id)) entered.current.add(item.id); }}
+                        style={{ position: 'relative', transformStyle: 'preserve-3d', transformOrigin: 'center center', willChange: mobile ? undefined : 'transform, opacity' }}>
                         <div style={{ backfaceVisibility: 'hidden' }}>
                             <PolaroidCard item={item} theme={theme} isDaylight={isDaylight} mode="tracks" t={t}
                                 cardWidth={layout.cardWidth} cardHeight={layout.cardHeight}

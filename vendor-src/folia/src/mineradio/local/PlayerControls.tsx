@@ -25,8 +25,8 @@ function volumeWheelStep(): number {
     }
 }
 
-interface Props { state: HostState | null; currentTime: MotionValue<number>; command: LocalCommand; onQueue: () => void; onLibrary: () => void; }
-export default function PlayerControls({ state, currentTime, command, onQueue, onLibrary }: Props) {
+interface Props { state: HostState | null; currentTime: MotionValue<number>; command: LocalCommand; onQueue: () => void; onLibrary: () => void; mobileFocus?: boolean; }
+export default function PlayerControls({ state, currentTime, command, onQueue, onLibrary, mobileFocus = false }: Props) {
     const { t } = useTranslation('localPlayer');
     const progress = useRef<HTMLInputElement>(null);
     const elapsed = useRef<HTMLSpanElement>(null);
@@ -71,7 +71,7 @@ export default function PlayerControls({ state, currentTime, command, onQueue, o
     };
     useMotionValueEvent(currentTime, 'change', syncTime);
     useEffect(() => { syncTime(currentTime.get()); }, [duration, currentTime]);
-    return <footer className="local-controls" data-testid="local-controls">
+    return <footer className="local-controls" data-testid="local-controls" data-mobile-focus={String(mobileFocus)} inert={mobileFocus} aria-hidden={mobileFocus || undefined}>
         <div className="local-playhead">
             <span ref={elapsed}>00:00</span>
             <input ref={progress} data-testid="local-seek" aria-label={t('seek')} type="range" min="0" max={duration || 1} step="0.05" defaultValue="0" disabled={!duration}
@@ -83,9 +83,9 @@ export default function PlayerControls({ state, currentTime, command, onQueue, o
         </div>
         <div className="local-transport">
             <div className="local-transport-side">
-                <LocalControlSlot index={0} />
-                <LocalControlSlot index={1} />
-                <PlaylistSwitcher state={state} command={command} onManage={onLibrary} />
+                <LocalControlSlot index={0} disabled={mobileFocus} />
+                <LocalControlSlot index={1} disabled={mobileFocus} />
+                <PlaylistSwitcher state={state} command={command} onManage={onLibrary} mobileFocus={mobileFocus} />
             </div>
             <div className="local-transport-main">
                 <button aria-label={t('previous')} title={t('previous')} data-testid="local-previous" onClick={() => run('previous')}><SkipBack size={22} fill="currentColor" /></button>

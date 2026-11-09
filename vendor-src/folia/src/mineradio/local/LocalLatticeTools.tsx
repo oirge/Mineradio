@@ -1,14 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import { Crosshair, Focus, Hash, ListMusic, Settings2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLatticeControlsStore } from '../../stores/useLatticeControlsStore';
 import { useLatticeSettingsStore } from './useLocalLatticeSettingsStore';
 import { SlideActionButton } from '../../components/shared/SlideActionButton';
 import '../../components/app/lattice/LatticeFocusButton.css';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionProps } from '../../utils/mobileMotion';
 
 // src/mineradio/local/LocalLatticeTools.tsx
 // The upstream wall utility panel, with its queue action connected directly to the local catalog.
+function ToolsMenu({ children }: { children: ReactNode }) {
+    const { t } = useTranslation();
+    const { mobile, reducedMotion } = useMobileMotion();
+    const present = useIsPresent();
+    return <motion.div role="menu" aria-label={t('home.latticeTools')}
+        {...(mobile ? mobileMotionProps('menu', reducedMotion) : {
+            initial: { opacity: 0, scale: 0.9, originX: 1, originY: 1 },
+            animate: { opacity: 1, scale: 1 }, exit: { opacity: 0, scale: 0.9 },
+            transition: { duration: 0.2, ease: 'easeOut' as const },
+        })}
+        style={{ transformOrigin: '100% 100%' }} inert={!present} aria-hidden={!present || undefined}
+        data-mobile-motion-presence={mobile ? (present ? 'present' : 'exiting') : undefined}
+        className="lattice-tools-panel">{children}</motion.div>;
+}
 export default function LocalLatticeTools({ isDaylight, onOpenQueue }: { isDaylight: boolean; onOpenQueue: () => void }) {
     const { t } = useTranslation();
     const { t: localText } = useTranslation('localPlayer');
@@ -21,16 +37,19 @@ export default function LocalLatticeTools({ isDaylight, onOpenQueue }: { isDayli
         const close = (event: PointerEvent) => {
             if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setIsOpen(false);
         };
-        const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setIsOpen(false); };
+        const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setIsOpen(false); } };
+        const back = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); setIsOpen(false); };
         document.addEventListener('pointerdown', close);
         document.addEventListener('keydown', escape);
-        return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', escape); };
+        window.addEventListener('mineradio-mobile-back', back, true);
+        return () => {
+            document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', escape);
+            window.removeEventListener('mineradio-mobile-back', back, true);
+        };
     }, [isOpen]);
     const openQueue = () => { setIsOpen(false); onOpenQueue(); };
     return <motion.div ref={rootRef} style={{ bottom: 24 }} className={`lattice-tools group ${isDaylight ? 'is-daylight' : ''}`}>
-        <AnimatePresence initial={false}>{isOpen && <motion.div role="menu" aria-label={t('home.latticeTools')}
-            initial={{ opacity: 0, scale: 0.9, originX: 1, originY: 1 }} animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="lattice-tools-panel">
+        <AnimatePresence initial={false}>{isOpen && <ToolsMenu key="tools">
             <button type="button" role="menuitem" className="lattice-tools-action" disabled={!focusCurrentSong}
                 onClick={() => { focusCurrentSong?.(); setIsOpen(false); }}><Crosshair /><span>{t('home.latticeFocusCurrent')}</span></button>
             <button type="button" role="menuitemcheckbox" aria-checked={settings.autoFocusOnSongChange} className="lattice-tools-action"
@@ -46,7 +65,7 @@ export default function LocalLatticeTools({ isDaylight, onOpenQueue }: { isDayli
                 <span className={settings.latticeLightsOn ? 'is-active' : ''}>{t('home.latticeLightsOn')}</span>
                 <span className={!settings.latticeLightsOn ? 'is-active' : ''}>{t('home.latticeLightsOff')}</span>
             </button></div>
-        </motion.div>}</AnimatePresence>
+        </ToolsMenu>}</AnimatePresence>
         <SlideActionButton icon={isOpen ? X : Settings2} title={t('home.latticeTools')} onActivate={() => setIsOpen(value => !value)}
             slideIcon={ListMusic} slideTitle={localText('queue')} onSlide={openQueue} isDaylight={isDaylight} accentColor="var(--text-accent)" />
     </motion.div>;

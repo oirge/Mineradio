@@ -1,0 +1,77 @@
+/* src/mineradio/local/localMobileMotion.css */
+/* Mobile feedback shares the host tokens; desktop and lyric renderer motion keep their own styles. */
+.local-mobile .local-glass[data-mobile-motion-presence],
+.local-mobile .local-playlist-menu[data-mobile-motion-presence] { animation: none; }
+.local-mobile [data-mobile-motion-presence=exiting],
+.local-mobile [data-mobile-motion-presence=exiting] * { pointer-events: none; }
+.local-mobile .local-player button:not(:where(.lattice-root *, .local-record-wall *)) {
+    transition: background-color var(--mobile-motion-component,200ms) var(--mobile-motion-ease,ease-out),
+        color var(--mobile-motion-micro,150ms) var(--mobile-motion-ease,ease-out),
+        opacity var(--mobile-motion-micro,150ms) var(--mobile-motion-ease,ease-out),
+        scale var(--mobile-motion-micro,150ms) var(--mobile-motion-ease,ease-out);
+}
+.local-mobile .local-player button:not(:where(.lattice-root *, .local-record-wall *)):active:not(:disabled) { transform: none; scale: .97; }
+.local-mobile .local-player button:disabled { scale: 1; }
+.local-mobile .local-mobile-nav button > svg { transition: scale var(--mobile-motion-micro,150ms) var(--mobile-motion-ease,ease-out); }
+.local-mobile .local-mobile-nav button[aria-pressed=true] > svg,
+.local-mobile .local-mobile-nav button[aria-expanded=true] > svg { scale: 1.04; }
+.local-mobile .local-player input:is([type=checkbox],[type=radio]) { transition: opacity var(--mobile-motion-micro,150ms), scale var(--mobile-motion-micro,150ms); }
+.local-mobile .local-player input:is([type=checkbox],[type=radio]):checked,
+.local-mobile .local-player .is-liked > svg,
+.local-mobile .local-playlist-check > svg,
+.local-mobile [role=listbox] [aria-selected=true] > svg { animation: local-mobile-choice var(--mobile-motion-micro,150ms) var(--mobile-motion-ease,ease-out); }
+.local-mobile .lattice-tools button { transition: background-color var(--mobile-motion-component,200ms), color var(--mobile-motion-micro,150ms), scale var(--mobile-motion-micro,150ms); }
+.local-mobile .lattice-tools button:active:not(:disabled) { scale: .97; }
+.local-mobile .lattice-tools-toggle,
+.local-mobile .lattice-tools-toggle > span { transition-duration: var(--mobile-motion-component,200ms); transition-timing-function: var(--mobile-motion-ease,ease-out); }
+.local-mobile .local-player button[aria-busy=true] { opacity: .65; }
+.local-mobile .local-player[data-mobile-focus=true] .local-mobile-header {
+    opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
+    transform: translateY(-8px) !important; transition-delay: 0s,0s,.52s !important;
+}
+.local-mobile .local-player[data-mobile-focus=true] .local-mobile-nav,
+.local-mobile .local-player[data-mobile-focus=true]>.local-controls,
+.local-mobile .local-player[data-mobile-focus=true]>.local-current-track {
+    opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
+    transform: translateY(8px) !important; transition-delay: 0s,0s,.52s !important;
+}
+.local-mobile .local-player[data-mobile-focus=true] [data-testid=local-navigation] * { pointer-events: none; }
+.local-mobile .local-tool-error,
+.local-mobile .local-tool-hint[role=status] { animation: local-mobile-content var(--mobile-motion-component,200ms) var(--mobile-motion-ease,ease-out); }
+.local-mobile .local-player[data-panel=open]>.local-controls *,
+.local-mobile .local-player[data-panel=open]>.local-current-track *,
+.local-mobile .local-player:has(> :is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence])>.local-controls *,
+.local-mobile .local-player:has(> :is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence])>.local-current-track * { pointer-events: none; }
+@keyframes local-mobile-choice { from { scale: .9; } to { scale: 1; } }
+@keyframes local-mobile-content { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+@supports (interpolate-size: allow-keywords) {
+    .local-mobile .local-tuning { interpolate-size: allow-keywords; }
+    .local-mobile .local-tuning::details-content {
+        block-size: 0; opacity: 0; overflow: clip;
+        transition: block-size var(--mobile-motion-component,200ms) var(--mobile-motion-ease,ease-out),
+            opacity var(--mobile-motion-component,200ms) var(--mobile-motion-ease,ease-out),
+            content-visibility var(--mobile-motion-component,200ms) allow-discrete;
+    }
+    .local-mobile .local-tuning[open]::details-content { block-size: auto; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .local-mobile .local-player button,
+    .local-mobile .local-player button > svg,
+    .local-mobile .local-player input:is([type=checkbox],[type=radio]),
+    .local-mobile .local-playlist-check > svg,
+    .local-mobile [role=listbox] [aria-selected=true] > svg,
+    .local-mobile .local-tool-error,
+    .local-mobile .local-tool-hint[role=status],
+    .local-mobile .local-tuning::details-content { animation: none; transition: none; }
+    .local-mobile .local-player button:active:not(:disabled),
+    .local-mobile .local-mobile-nav button[aria-pressed=true] > svg,
+    .local-mobile .local-mobile-nav button[aria-expanded=true] > svg { scale: 1; }
+    .local-mobile .local-player[data-mobile-focus=true] .local-mobile-header,
+    .local-mobile .local-player[data-mobile-focus=true] .local-mobile-nav,
+    .local-mobile .local-player[data-mobile-focus=true]>.local-controls,
+    .local-mobile .local-player[data-mobile-focus=true]>.local-current-track { transition-delay: 0s !important; }
+    .local-mobile .local-player[data-panel=open]>.local-controls,
+    .local-mobile .local-player[data-panel=open]>.local-current-track,
+    .local-mobile .local-player:has(> :is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence])>.local-controls,
+    .local-mobile .local-player:has(> :is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence])>.local-current-track { transition: none !important; }
+}

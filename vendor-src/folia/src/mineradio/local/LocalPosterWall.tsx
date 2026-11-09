@@ -1,5 +1,6 @@
 import { useVisualSettings } from './useVisualSettings';
-import { useMemo, useRef, type CSSProperties } from 'react';
+import { useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import { AnimatePresence, motion, useIsPresent } from 'framer-motion';
 import { ChevronLeft, Music2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PlayerState, type Theme } from '../../types';
@@ -16,6 +17,10 @@ import { buildPosterWallTiles, type PosterWallTiles } from './wallViewData';
 import { LocalLatticeActionsContext } from './LocalLatticeExtraControls';
 import LocalLatticeTools from './LocalLatticeTools';
 import LocalCatalogRetry from './LocalCatalogRetry';
+import LocalArtwork from './LocalArtwork';
+import LocalMotionStatus from './LocalMotionStatus';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionProps } from '../../utils/mobileMotion';
 import type { LocalPlayer } from './playerTypes';
 import '../../components/app/lattice/Lattice.css';
 import './localPosterWall.css';
@@ -30,6 +35,17 @@ interface Props {
     onOpenQueue: () => void;
     onOpenLyrics: () => void;
     translation?: boolean;
+}
+function NowPlayingCard({ children, style, label, onFocus }: {
+    children: ReactNode; style: CSSProperties; label: string; onFocus: () => void;
+}) {
+    const { mobile, reducedMotion } = useMobileMotion();
+    const present = useIsPresent();
+    return <motion.button type="button" className="local-poster-now-playing" data-testid="local-poster-now-playing" style={style}
+        {...(mobile ? mobileMotionProps('component', reducedMotion) : { initial: false as const })}
+        inert={!present || undefined} aria-hidden={!present || undefined} onClick={onFocus} aria-label={label}>
+        {children}
+    </motion.button>;
 }
 
 export default function LocalPosterWall({ player, theme, isDaylight, onBack, onOpenQueue, onOpenLyrics, translation = true }: Props) {
@@ -84,15 +100,18 @@ export default function LocalPosterWall({ player, theme, isDaylight, onBack, onO
                     <button type="button" className="lattice-back" data-testid="local-poster-back" onClick={onBack}
                         aria-label={t('home.latticeBack')} title={t('home.latticeBack')}><ChevronLeft size={20} /></button>
                     <LocalLatticeTools isDaylight={isDaylight} onOpenQueue={onOpenQueue} />
-                    {!tiles.length && <div className="lattice-empty"><strong>{catalog.loading ? localText('loading') : t('home.latticeEmptyTitle')}</strong>
-                        <span>{catalog.error || t('home.latticeEmptyText')}</span></div>}
+                    <AnimatePresence initial={false}>{!tiles.length && <LocalMotionStatus key={catalog.loading ? 'poster-loading' : 'poster-empty'}
+                        className="lattice-empty" center="none" role="status">
+                        <strong>{catalog.loading ? localText('loading') : t('home.latticeEmptyTitle')}</strong>
+                        <span>{catalog.error || t('home.latticeEmptyText')}</span>
+                    </LocalMotionStatus>}</AnimatePresence>
                 </section>
                 <LocalCatalogRetry error={catalog.error} retry={catalog.refresh} />
-                {track && <button type="button" className="local-poster-now-playing" data-testid="local-poster-now-playing" style={style}
-                    onClick={() => focusCurrentSong?.()} aria-label={t('home.latticeFocusCurrent')}>
-                    {track.cover ? <img src={track.cover} alt="" /> : <Music2 size={25} />}
+                <AnimatePresence initial={false}>{track && <NowPlayingCard key="now-playing" style={style}
+                    onFocus={() => focusCurrentSong?.()} label={t('home.latticeFocusCurrent')}>
+                    {track.cover ? <LocalArtwork src={track.cover} alt="" /> : <Music2 size={25} />}
                     <span><small>{localText('nowPlaying')}</small><strong>{track.title}</strong><em>{track.artist}</em></span>
-                </button>}
+                </NowPlayingCard>}</AnimatePresence>
             </LatticeLyricsProvider>
         </LatticeTransportContext.Provider>
     </LocalLatticeActionsContext.Provider>;

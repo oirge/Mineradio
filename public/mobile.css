@@ -119,9 +119,9 @@ html body.mobile-layout #fx-panel {
 }
 html body.mobile-layout #fx-panel { display: block !important; }
 html body.mobile-layout:not([data-mobile-view=library]) #playlist-panel,
-html body.mobile-layout:not([data-mobile-view=settings]) #fx-panel { visibility: hidden; pointer-events: none; opacity: 0 !important; }
+html body.mobile-layout:not([data-mobile-view=settings]) #fx-panel { visibility: hidden; pointer-events: none; opacity: 0; }
 html body.mobile-layout[data-mobile-view=library] #playlist-panel,
-html body.mobile-layout[data-mobile-view=settings] #fx-panel { visibility: visible; pointer-events: auto; opacity: 1 !important; }
+html body.mobile-layout[data-mobile-view=settings] #fx-panel { visibility: visible; pointer-events: auto; opacity: 1; }
 body.mobile-layout #fx-panel .fx-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 body.mobile-layout .fx-head-main { flex: 1; min-width: 120px; }
 body.mobile-layout .fx-head .fx-title { white-space: nowrap; font-size: 16px; }

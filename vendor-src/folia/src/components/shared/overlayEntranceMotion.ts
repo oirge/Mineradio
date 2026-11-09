@@ -1,3 +1,5 @@
+import { mobileMotionProps, mobileMotionTransition } from '../../utils/mobileMotion';
+
 // src/components/shared/overlayEntranceMotion.ts
 // 全屏覆盖层的进出场：底衬淡入淡出，内容从略低、略小的位置托上来。
 //
@@ -40,8 +42,17 @@ export const overlayPanelCalmMotion = {
 };
 
 /** 按当前微动效设置挑一组内容层动画。 */
-export const overlayPanelMotionFor = (calm: boolean) => (
-    calm
+export const overlayPanelMotionFor = (calm: boolean, mobile = false) => (
+    mobile ? mobileMotionProps('dialog', calm) : calm
         ? { ...overlayPanelCalmMotion, transition: OVERLAY_CALM_TRANSITION }
         : { ...overlayPanelMotion, transition: OVERLAY_TRANSITION }
+);
+
+/** Embedded phone dialogs share the host rhythm; existing desktop callers keep their transition. */
+export const overlayBackdropMotionFor = (calm: boolean, mobile = false) => (
+    mobile ? {
+        ...overlayBackdropMotion,
+        initial: { opacity: calm ? 1 : 0 },
+        transition: mobileMotionTransition('dialog', calm),
+    } : overlayBackdropMotion
 );

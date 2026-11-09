@@ -8,6 +8,7 @@ import wave
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 from verify_folia_mobile import verify_folia_mobile
+from verify_mobile_motion import verify_mobile_motion, verify_motion_list
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'output/playwright/mobile'
@@ -143,6 +144,8 @@ with sync_playwright() as p:
     checks.append('320, 360, 430, 768 portrait and 844, 1024 landscape')
 
     verify_folia_mobile(page, checks, OUT)
+    verify_mobile_motion(page, checks, OUT)
+    verify_motion_list(browser, checks, OUT)
 
     page.set_viewport_size({'width': 1280, 'height': 800})
     expect(page.locator('#mobile-nav')).to_be_hidden()

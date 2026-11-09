@@ -16,7 +16,7 @@ export default function LocalAddToPlaylist({ state, command, onClose, onLibrary 
     const editable = playlists.filter(playlist => !playlist.readOnly);
     return <LocalToolPanel id="local-add-playlist" title={t('addToPlaylist')} onClose={onClose}>
         <strong data-i18n-skip>{state?.currentTrack?.title || t('chooseSong')}</strong>
-        {loading ? <p className="local-tool-hint">{t('loading')}</p> : editable.length ? <select aria-label={t('addToPlaylist')} value=""
+        {loading ? <p className="local-tool-hint" role="status">{t('loading')}</p> : editable.length ? <select aria-label={t('addToPlaylist')} value=""
             disabled={busy || !state?.currentTrack} onChange={event => {
                 const track = state?.currentTrack, playlistId = event.target.value;
                 if (!track || !playlistId || busy) return;

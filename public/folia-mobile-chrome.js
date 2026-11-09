@@ -3,14 +3,14 @@
   'use strict';
   var HIDDEN = 'mineradio-mobile-chrome-hidden', DELAY = 2500;
   var CONTROLS = '.local-mobile-header,.local-mobile-nav,.local-controls,.local-current-track';
-  var MENUS = '.local-mobile-more,.local-slot-menu,.local-playlist-menu,[role="dialog"]';
+  var MENUS = '.local-mobile-more,.local-slot-menu,.local-playlist-menu,[role="dialog"],[data-mobile-motion-presence]';
   var STAGES = '.local-player[data-panel="closed"] .local-visualizer,.local-player[data-panel="closed"] .local-record-wall,.local-player[data-panel="closed"] .lattice-root,.local-welcome,.local-no-lyrics';
   var MOTION = 560, EASING = 'cubic-bezier(.4,0,.2,1)';
 
   function create(doc, enabled) {
     var view = doc.defaultView, timer = 0, pointers = new Set();
     var keyboard = false, focused = false, wakeClick = false, panel = false;
-    var stageMotion = new Map(), reducedMotion = view.matchMedia('(prefers-reduced-motion:reduce)');
+    var stageMotion = new Map(), focusPrevious = [], reducedMotion = view.matchMedia('(prefers-reduced-motion:reduce)');
     var style = doc.getElementById('mineradio-mobile-chrome-style');
     if (!style) {
       style = doc.createElement('style');
@@ -38,6 +38,10 @@
       // partially completed transition, so a quick wake reverses continuously.
       cancelStageMotion();
       doc.body.classList.toggle(HIDDEN, value);
+      animateStages(previous, value);
+    }
+    // Idle and manual focus share the same stage owner and centre-only transition.
+    function animateStages(previous, expanding) {
       previous.forEach(function (entry) {
         var node = entry.node;
         if (!node.isConnected || !node.animate) return;
@@ -46,7 +50,7 @@
         var saved = [], restored = false;
         // Keep the full background while controls fade back in. Restoring the
         // smaller viewport immediately would leave an empty strip above it.
-        if (!value && entry.rect.height > next.height + 1
+        if (!expanding && entry.rect.height > next.height + 1
             && node.matches('.local-visualizer,.local-record-wall,.lattice-root')) {
           ['top', 'right', 'bottom', 'left', 'height'].forEach(function (name) {
             saved.push({ name: name, value: node.style.getPropertyValue(name), priority: node.style.getPropertyPriority(name) });
@@ -84,8 +88,22 @@
         };
       });
     }
+    function focusBefore() {
+      focusPrevious = enabled() && !doc.hidden && !reducedMotion.matches
+        ? Array.from(doc.querySelectorAll(STAGES.replace(/\[data-panel="closed"\]/g, ''))).map(function (node) {
+          return { node: node, rect: node.getBoundingClientRect() };
+        }) : [];
+      cancelStageMotion();
+      clearTimer();
+    }
+    function focusAfter(event) {
+      var previous = focusPrevious;
+      focusPrevious = [];
+      if (enabled() && !doc.hidden && !reducedMotion.matches) animateStages(previous, !!(event.detail && event.detail.focus));
+      schedule();
+    }
     function clearTimer() { if (timer) { view.clearTimeout(timer); timer = 0; } }
-    function protectedSurface() { return !!doc.querySelector('.local-player[data-panel="open"],' + MENUS); }
+    function protectedSurface() { return !!doc.querySelector('.local-player[data-panel="open"],.local-player[data-mobile-focus="true"],' + MENUS); }
     function schedule() {
       clearTimer();
       if (!enabled() || doc.hidden || pointers.size || focused || protectedSurface()) return;
@@ -131,7 +149,7 @@
       focused = keyboard && !!(event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest(CONTROLS));
       schedule();
     }
-    function reset() { cancelStageMotion(); pointers.clear(); focused = wakeClick = false; hidden(false, true); schedule(); }
+    function reset() { focusPrevious = []; cancelStageMotion(); pointers.clear(); focused = wakeClick = false; hidden(false, true); schedule(); }
     function relevantNode(node) {
       return node.nodeType === 1 && (node.matches('.local-player,' + MENUS) || node.querySelector(MENUS));
     }
@@ -144,17 +162,20 @@
       var next = protectedSurface();
       if (next !== panel) { panel = next; reveal(); }
     });
-    observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-panel'] });
+    observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-panel', 'data-mobile-focus'] });
     var handlers = { pointerdown: down, pointerup: up, pointercancel: up, click: click,
-      pointermove: move, keydown: key, focusin: focusIn, focusout: focusOut, visibilitychange: reset };
+      pointermove: move, keydown: key, focusin: focusIn, focusout: focusOut, visibilitychange: reset,
+      'mineradio-mobile-focus-before': focusBefore, 'mineradio-mobile-focus-after': focusAfter };
     Object.keys(handlers).forEach(function (name) { doc.addEventListener(name, handlers[name], true); });
     view.addEventListener('blur', reset);
     view.addEventListener('resize', reset);
+    reducedMotion.addEventListener('change', reset);
     reveal();
     return { destroy: function () {
-      clearTimer(); observer.disconnect(); cancelStageMotion(); hidden(false, true); pointers.clear();
+      clearTimer(); observer.disconnect(); focusPrevious = []; cancelStageMotion(); hidden(false, true); pointers.clear();
       Object.keys(handlers).forEach(function (name) { doc.removeEventListener(name, handlers[name], true); });
       view.removeEventListener('blur', reset); view.removeEventListener('resize', reset);
+      reducedMotion.removeEventListener('change', reset);
     } };
   }
   global.MineradioFoliaMobileChrome = { create: create };

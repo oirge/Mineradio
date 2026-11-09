@@ -643,6 +643,7 @@
     var next = mode === 'folia';
     if (next) ensureFrame();
     if (active === next) { syncInterfaceTransparency(); return getState(); }
+    if (global.MineradioMobileMotion) global.MineradioMobileMotion.finishAll();
     active = next;
     document.body.classList.toggle('folia-interface-active', active);
     syncInterfaceTransparency();
@@ -658,6 +659,12 @@
     event('visibility', { active: active }); stopTimers();
     if (!active) trackPageIndexes = new WeakMap();
     if (active) { tick(); audioTick(); if (frame) frame.focus(); }
+    if (global.MineradioMobileMotion && global.MineradioMobileMotion.isMobile()) {
+      var entering = active ? mount : document.getElementById('empty-home');
+      if (active || document.body.getAttribute('data-mobile-view') === 'home') {
+        global.MineradioMobileMotion.animate(entering, { opacity: 1 }, 'page', { from: { opacity: 0.92 } });
+      }
+    }
     return getState();
   }
   function stopTimers() {
