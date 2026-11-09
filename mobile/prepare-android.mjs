@@ -24,6 +24,15 @@ for (const name of ['LICENSE', 'THIRD-PARTY-NOTICES.md', 'NOTICE.md']) {
 if (!fs.existsSync(android)) execFileSync(process.execPath, [cap, 'add', 'android'], { cwd: root, stdio: 'inherit' });
 execFileSync(process.execPath, [cap, 'sync', 'android'], { cwd: root, stdio: 'inherit' });
 
+// Capacitor generates this file; allow a slow distribution download without
+// changing Gradle's version, source URL or distribution validation.
+const wrapperPropertiesPath = path.join(android, 'gradle/wrapper/gradle-wrapper.properties');
+let wrapperProperties = fs.readFileSync(wrapperPropertiesPath, 'utf8');
+wrapperProperties = /^networkTimeout=.*$/m.test(wrapperProperties)
+  ? wrapperProperties.replace(/^networkTimeout=.*$/m, 'networkTimeout=60000')
+  : wrapperProperties.replace(/\s*$/, '\nnetworkTimeout=60000\n');
+fs.writeFileSync(wrapperPropertiesPath, wrapperProperties);
+
 const java = path.join(android, 'app/src/main/java/com/mineradio/oirge/mobile');
 fs.mkdirSync(java, { recursive: true });
 fs.cpSync(path.join(root, 'native'), java, { recursive: true });

@@ -107,6 +107,23 @@ jobs:
           npm --prefix mobile run prepare:android
           cd mobile/android
           chmod +x gradlew
+          # Retry only Gradle's distribution bootstrap, never compilation or
+          # acceptance. --version does not configure or build the app.
+          gradle_distribution_ready=0
+          for gradle_download_attempt in 1 2 3; do
+            echo "Preparing Gradle distribution (attempt $gradle_download_attempt of 3)"
+            if ./gradlew --no-daemon --console=plain --version; then
+              gradle_distribution_ready=1
+              break
+            fi
+            if [ "$gradle_download_attempt" -lt 3 ]; then
+              sleep 5
+            fi
+          done
+          if [ "$gradle_distribution_ready" -ne 1 ]; then
+            echo "Gradle distribution preparation failed after 3 attempts"
+            exit 1
+          fi
           ./gradlew --no-daemon --console=plain assembleRelease assembleDebug
           cd ../..
           cp mobile/android/app/build/outputs/apk/release/app-release.apk release/Mineradio-Android-1.0.6.apk
