@@ -27,7 +27,14 @@ html body.mobile-layout :is(#empty-home,#search-results,#playlist-panel,#fx-pane
 }
 html body.mobile-layout [data-mobile-motion-leaving] * { pointer-events: none !important; }
 body.mobile-layout .modal { will-change: auto; }
-html body.mobile-layout .control-cluster.modes[data-mobile-motion-more] { min-height: 0; overflow: hidden; }
+html body.mobile-layout #controls[data-mobile-motion-more] {
+  min-height: 0;
+  grid-auto-rows: max-content;
+  align-content: start;
+  overflow: clip;
+}
+html body.mobile-layout .control-cluster.modes[data-mobile-motion-more="entering"] { opacity: 1; translate: 0 0; }
+html body.mobile-layout .control-cluster.modes[data-mobile-motion-more="leaving"] { opacity: 0; translate: 0 8px; }
 html body.mobile-layout .control-cluster.modes[data-mobile-motion-more="leaving"],
 html body.mobile-layout .control-cluster.modes[data-mobile-motion-more="leaving"] * { pointer-events: none !important; }
 body.mobile-layout [data-mobile-motion-modal="closing"].modal-mask { display: flex; visibility: visible; opacity: 1; }

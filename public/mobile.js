@@ -194,40 +194,53 @@
     var button = event.target.closest('[data-mobile-view]');
     if (button) openView(button.getAttribute('data-mobile-view'));
   });
-  // A single measured row may change height; the rest of the controls retain their geometry.
+  // Only the small grid changes height; every control row retains its natural touch geometry.
   function setMoreExpanded(expanded) {
     var modes = bar.querySelector('.control-cluster.modes');
     moreExpanded = expanded;
     more.setAttribute('aria-expanded', String(expanded));
     if (!modes) return;
-    var from = motion && motion.isAnimating(modes) ? motion.visual(modes, ['opacity', 'translate', 'height', 'marginTop']) : null;
-    if (motion) motion.cancel(modes, false);
-    body.classList.add('mobile-controls-expanded');
-    modes.setAttribute('data-mobile-motion-more', expanded ? 'entering' : 'leaving');
-    modes.inert = !expanded;
-    if (expanded) modes.removeAttribute('aria-hidden');
+    var controls = modes.parentElement;
+    // Capture both drawn values before releasing the paired transition on a reversal.
+    var from = motion && motion.isAnimating(modes) ? motion.visual(modes, ['opacity', 'translate']) : null;
+    var heightFrom = motion && motion.isAnimating(controls) ? motion.visual(controls, ['height']) :
+      { height: controls.getBoundingClientRect().height + 'px' };
+    if (motion) { motion.cancel(controls, false); motion.cancel(modes, false); }
+    if (expanded) { modes.inert = false; modes.removeAttribute('aria-hidden'); }
     else {
       modes.setAttribute('aria-hidden', 'true');
       if (modes.contains(document.activeElement)) more.focus({ preventScroll: true });
+      modes.inert = true;
     }
-    var height = Math.max(44, modes.getBoundingClientRect().height);
-    function finish() {
+    // Measure the destination with the original CSS, then keep the live row until exit completes.
+    // These synchronous class changes cannot paint the temporary collapsed measurement.
+    body.classList.toggle('mobile-controls-expanded', expanded);
+    var height = controls.getBoundingClientRect().height;
+    body.classList.add('mobile-controls-expanded');
+    var phase = expanded ? 'entering' : 'leaving';
+    controls.setAttribute('data-mobile-motion-more', phase);
+    modes.setAttribute('data-mobile-motion-more', phase);
+    function cleanup() {
+      if (motion) motion.cancel(modes, false);
+      controls.removeAttribute('data-mobile-motion-more');
       modes.removeAttribute('data-mobile-motion-more');
-      if (moreExpanded === expanded) body.classList.toggle('mobile-controls-expanded', expanded);
+    }
+    function finish() {
+      if (moreExpanded !== expanded) return;
+      cleanup();
+      body.classList.toggle('mobile-controls-expanded', expanded);
       scheduleRefresh();
     }
     if (!motion) { finish(); return; }
-    motion.animate(modes, {
-      opacity: expanded ? 1 : 0, translate: expanded ? '0px 0px' : '0px 8px',
-      height: (expanded ? height : 0) + 'px', marginTop: expanded ? '0px' : '-4px'
-    }, 'component', {
-      from: from || {
-        opacity: expanded ? 0 : 1, translate: expanded ? '0px 8px' : '0px 0px',
-        height: (expanded ? 0 : height) + 'px', marginTop: expanded ? '-4px' : '0px'
-      },
-      cleanup: function () { modes.removeAttribute('data-mobile-motion-more'); },
-      complete: finish
+    // The outer owner commits state and clears both effects on finish, cancellation or reduced motion.
+    var transition = motion.animate(controls, { height: height + 'px' }, 'component', {
+      from: heightFrom, cleanup: cleanup, complete: finish
     });
+    if (transition) {
+      motion.animate(modes, { opacity: expanded ? 1 : 0, translate: expanded ? '0px 0px' : '0px 8px' }, 'component', {
+        from: from || { opacity: expanded ? 0 : 1, translate: expanded ? '0px 8px' : '0px 0px' }
+      });
+    }
   }
   more.addEventListener('click', function () {
     if (api.active) setMoreExpanded(!moreExpanded);
