@@ -95,7 +95,7 @@ def verify_folia_mobile(page, checks, out):
         evidence = out / ('folia-wake.json' if wake_number == 1 else f'folia-wake-{wake_number:02}.json')
         trace = []
 
-        def record(phase, attempt, state=None, error=None, duration=None, elapsed=None):
+        def record(phase, attempt, state=None, error=None, duration=None, elapsed=None, persist=True):
             if state is None:
                 try:
                     state = wake_probe()
@@ -103,8 +103,9 @@ def verify_folia_mobile(page, checks, out):
                     state = {'diagnosticError': str(diagnostic_error)}
             trace.append({'phase': phase, 'attempt': attempt + 1, 'state': state,
                 'error': str(error) if error else None, 'durationMs': duration, 'elapsedMs': elapsed})
-            evidence.write_text(json.dumps({'call': wake_number, 'requireFullChrome': full_chrome,
-                'attempts': trace}, ensure_ascii=False, indent=2), encoding='utf-8')
+            if persist:
+                evidence.write_text(json.dumps({'call': wake_number, 'requireFullChrome': full_chrome,
+                    'attempts': trace}, ensure_ascii=False, indent=2), encoding='utf-8')
             return state
 
         # A person first touches the stage when idle chrome has disappeared.
@@ -143,7 +144,9 @@ def verify_folia_mobile(page, checks, out):
                     record('poll-failed', attempt, {'diagnosticError': str(error)}, error=error, elapsed=elapsed)
                     raise
                 elapsed = (time.monotonic() - started) * 1000
-                record('poll', attempt, last, duration=last['probeDurationMs'], elapsed=elapsed)
+                # Keep every sample; serialize the complete trace at success or
+                # failure instead of rewriting it inside the readiness window.
+                record('poll', attempt, last, duration=last['probeDurationMs'], elapsed=elapsed, persist=False)
                 if elapsed <= 2000 and last['fullyReady' if full_chrome else 'ready']:
                     record('after', attempt, last, duration=(time.monotonic() - started) * 1000, elapsed=elapsed)
                     # A late probe or late return never turns the original 2s timeout into success.

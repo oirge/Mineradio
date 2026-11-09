@@ -369,25 +369,70 @@ class TouchDriver:
         return target
 
     def wake(self):
-        hidden = self.page.evaluate("""() => document.getElementById('folia-frame').contentDocument.body
-            .classList.contains('mineradio-mobile-chrome-hidden')""")
-        evidence = {'hiddenBefore': hidden, 'touchSent': hidden, 'polls': [], 'ready': False}
+        readiness = """() => {
+            const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+            """ + FOLIA_CHROME_READINESS + """
+            return chromeReadiness();
+        }"""
+        probe_started = time.monotonic()
+        initial = self.page.evaluate(readiness)
+        evidence = {'hiddenBefore': initial['hidden'], 'initialState': initial,
+            'initialProbeDurationMs': (time.monotonic() - probe_started) * 1000,
+            'touchSent': False, 'polls': [], 'ready': False}
         self.wake_checks.append(evidence)
-        if hidden:
-            self.touch('[data-testid="local-player"]', frame=True)
+        if initial['ready']:
+            if evidence['initialProbeDurationMs'] > 2000:
+                evidence['failedWindowDurationMs'] = evidence['initialProbeDurationMs']
+                raise AssertionError('The additional motion audit did not observe ready Folia chrome within 2000ms')
+            evidence['ready'] = True
+            return
+
+        def send_wake():
+            evidence['touchSent'] = True
+            evidence['touchMethodStartedAtDriverMs'] = time.monotonic() * 1000
+            evidence['touchTarget'] = self.touch('[data-testid="local-player"]', frame=True)
+            evidence['touchMethodCompletedAtDriverMs'] = time.monotonic() * 1000
+
+        if initial['hidden']:
+            send_wake()
         started = time.monotonic()
         deadline = started + 2
+        evidence['windowStartedAtDriverMs'] = started * 1000
+        evidence['deadlineAtDriverMs'] = deadline * 1000
         while time.monotonic() < deadline:
-            state = self.page.evaluate("""() => {
-                const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
-                """ + FOLIA_CHROME_READINESS + """
-                return chromeReadiness();
-            }""")
+            state = self.page.evaluate(readiness)
             evidence['polls'].append({'elapsedMs': (time.monotonic() - started) * 1000, 'state': state})
             if state['ready'] and time.monotonic() <= deadline:
                 evidence['ready'] = True
                 return
+            # Idle may expire after a visible initial probe. Wake once within
+            # the existing window; delayed input never starts a new deadline.
+            if state['hidden'] and not evidence['touchSent'] and time.monotonic() < deadline:
+                point_started = time.monotonic()
+                target = self.point('[data-testid="local-player"]', frame=True)
+                point_returned = time.monotonic()
+                point_check = {'startedAtDriverMs': point_started * 1000,
+                    'returnedAtDriverMs': point_returned * 1000,
+                    'durationMs': (point_returned - point_started) * 1000,
+                    'target': target, 'returnedWithinDeadline': point_returned < deadline}
+                evidence.setdefault('fallbackPointChecks', []).append(point_check)
+                if target and point_returned < deadline:
+                    dispatch_started = time.monotonic()
+                    point_check['dispatchCheckedAtDriverMs'] = dispatch_started * 1000
+                    point_check['dispatchWithinDeadline'] = dispatch_started < deadline
+                    if dispatch_started < deadline:
+                        evidence['touchSent'] = True
+                        evidence['touchTarget'] = target
+                        evidence['touchMethodStartedAtDriverMs'] = dispatch_started * 1000
+                        try:
+                            self.session.send('Input.dispatchTouchEvent', {
+                                'type': 'touchStart', 'touchPoints': [target['point']]})
+                        finally:
+                            self.session.send('Input.dispatchTouchEvent', {
+                                'type': 'touchEnd', 'touchPoints': []})
+                            evidence['touchMethodCompletedAtDriverMs'] = time.monotonic() * 1000
             time.sleep(min(.03, max(0, deadline - time.monotonic())))
+        evidence['failedWindowDurationMs'] = (time.monotonic() - started) * 1000
         raise AssertionError('The additional motion audit did not observe ready Folia chrome within 2000ms')
 
     def swipe(self, selector, frame=False):
