@@ -18,6 +18,7 @@
   var api = window.MineradioMobile = { active: false };
   var motion = window.MineradioMobileMotion;
   var moreExpanded = false;
+  var moreTouchPointer = null;
   var historyIndex = Number(history.state && history.state.mineradioMobileIndex) || 0;
   var entryDirection = Number(history.state && history.state.mineradioMobileDirection) || 1;
 
@@ -141,6 +142,7 @@
       refresh();
       if (motion) motion.enhanceFolds();
     } else {
+      releaseMoreTouchPointer();
       if (motion) motion.finishAll();
       moreExpanded = false;
       var modes = bar.querySelector('.control-cluster.modes');
@@ -242,6 +244,36 @@
       });
     }
   }
+  // Keep the native click on this button while the surrounding rows move under a touch.
+  function releaseMoreTouchPointer() {
+    var pointerId = moreTouchPointer;
+    moreTouchPointer = null;
+    if (pointerId === null || !more.hasPointerCapture || !more.releasePointerCapture) return;
+    try {
+      if (more.hasPointerCapture(pointerId)) more.releasePointerCapture(pointerId);
+    } catch (error) {}
+  }
+  function clearMoreTouchPointer(event) {
+    if (event.pointerId === moreTouchPointer &&
+        (event.type === 'pointercancel' || event.target === more || !more.isConnected)) {
+      moreTouchPointer = null;
+    }
+  }
+  more.addEventListener('pointerdown', function (event) {
+    if (!api.active || event.pointerType !== 'touch' || !event.isPrimary || !more.setPointerCapture) return;
+    try {
+      more.setPointerCapture(event.pointerId);
+      moreTouchPointer = event.pointerId;
+    } catch (error) {}
+  }, { passive: true });
+  // Pointerup releases capture implicitly; its following trusted click still belongs to More.
+  document.addEventListener('pointercancel', clearMoreTouchPointer, true);
+  document.addEventListener('lostpointercapture', clearMoreTouchPointer, true);
+  window.addEventListener('blur', releaseMoreTouchPointer);
+  window.addEventListener('pagehide', releaseMoreTouchPointer);
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) releaseMoreTouchPointer();
+  });
   more.addEventListener('click', function () {
     if (api.active) setMoreExpanded(!moreExpanded);
   });

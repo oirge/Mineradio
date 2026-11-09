@@ -14,7 +14,7 @@
   function create(doc, enabled) {
     var view = doc.defaultView, timer = 0, pointers = new Set();
     var keyboard = false, focused = false, wakeClick = false, panel = false, focusPending = false;
-    var transportOccluded = false, transportMotion = new Map();
+    var transportOccluded = false, transportMotion = new Map(), chromeRecovery = new Map();
     var tokens = view.MineradioMotionTokens || global.MineradioMotionTokens;
     var stageMotion = new Map(), focusPrevious = [], reducedMotion = view.matchMedia('(prefers-reduced-motion:reduce)');
     var style = doc.getElementById('mineradio-mobile-chrome-style');
@@ -33,8 +33,34 @@
       doc.head.appendChild(style);
     }
     function cancelStageMotion() {
-      stageMotion.forEach(function (record) { record.animation.cancel(); record.restore(); });
+      var records = Array.from(stageMotion.values());
       stageMotion.clear();
+      records.forEach(function (record) {
+        record.animation.onfinish = record.animation.oncancel = null;
+        record.animation.cancel(); record.restore();
+      });
+    }
+    // Observe the existing CSS transitions without changing their clocks.
+    // A wake must leave a full idle interval after the controls become usable.
+    function rememberChromeRecovery() {
+      chromeRecovery.clear();
+      if (!enabled() || doc.hidden || reducedMotion.matches || doc.body.classList.contains(HIDDEN)
+          || doc.querySelector('.local-player[data-mobile-focus="true"]')) return;
+      doc.querySelectorAll(CONTROLS).forEach(function (node) {
+        if (!node.getAnimations) return;
+        node.getAnimations().forEach(function (animation) {
+          if (!/^(opacity|transform)$/.test(animation.transitionProperty)
+              || animation.playState === 'finished' || animation.playState === 'idle') return;
+          var record = {};
+          chromeRecovery.set(animation, record);
+          function settled() {
+            if (chromeRecovery.get(animation) !== record) return;
+            chromeRecovery.delete(animation);
+            schedule();
+          }
+          animation.finished.then(settled, settled);
+        });
+      });
     }
     function cancelTransportMotion() {
       var animations = Array.from(transportMotion.values());
@@ -90,11 +116,13 @@
       }) : [];
       // Measure the current visual position before cancelling, including a
       // partially completed transition, so a quick wake reverses continuously.
+      chromeRecovery.clear();
       cancelStageMotion();
       cancelTransportMotion();
       doc.body.classList.remove(PANEL_MOTION);
       doc.body.classList.toggle(HIDDEN, value);
       animateStages(previous, value);
+      if (!value && !instant) rememberChromeRecovery();
     }
     // Idle and manual focus share the same stage owner and centre-only transition.
     function animateStages(previous, expanding) {
@@ -139,13 +167,23 @@
         animation.onfinish = function () {
           if (stageMotion.get(node) !== record) return;
           stageMotion.delete(node);
+          animation.onfinish = animation.oncancel = null;
           animation.cancel();
           restore();
+          schedule();
+        };
+        animation.oncancel = function () {
+          if (stageMotion.get(node) !== record) return;
+          stageMotion.delete(node);
+          animation.onfinish = animation.oncancel = null;
+          restore();
+          schedule();
         };
       });
     }
     function focusBefore() {
       focusPending = true;
+      chromeRecovery.clear();
       doc.body.classList.remove(PANEL_MOTION);
       doc.body.classList.remove(RESTORING);
       if (transportMotion.size) {
@@ -169,16 +207,19 @@
         cancelTransportMotion();
       } else if (transportMotion.size) doc.body.classList.add(RESTORING);
       if (enabled() && !doc.hidden && !reducedMotion.matches) animateStages(previous, !!(event.detail && event.detail.focus));
+      rememberChromeRecovery();
       schedule();
     }
     function clearTimer() { if (timer) { view.clearTimeout(timer); timer = 0; } }
     function protectedSurface() { return !!doc.querySelector('.local-player[data-panel="open"],.local-player[data-mobile-focus="true"],' + MENUS); }
     function schedule() {
       clearTimer();
-      if (!enabled() || doc.hidden || pointers.size || focused || focusPending || transportMotion.size || protectedSurface()) return;
+      if (!enabled() || doc.hidden || doc.body.classList.contains(HIDDEN) || pointers.size || focused
+          || focusPending || transportMotion.size || stageMotion.size || chromeRecovery.size || protectedSurface()) return;
       timer = view.setTimeout(function () {
         timer = 0;
-        if (enabled() && !doc.hidden && !pointers.size && !focused && !focusPending && !transportMotion.size && !protectedSurface()) hidden(true);
+        if (enabled() && !doc.hidden && !pointers.size && !focused && !focusPending
+            && !transportMotion.size && !stageMotion.size && !chromeRecovery.size && !protectedSurface()) hidden(true);
       }, DELAY);
     }
     function reveal() { hidden(false); schedule(); }
@@ -223,13 +264,15 @@
         && !reducedMotion.matches && !doc.body.classList.contains(HIDDEN)
         && !doc.querySelector('.local-player[data-mobile-focus="true"]');
       if (!preserveRecovery) focusPending = false;
+      chromeRecovery.clear();
       focusPrevious = []; cancelStageMotion();
       if (!preserveRecovery) { cancelTransportMotion(); doc.body.classList.remove(PANEL_MOTION); }
-      pointers.clear(); focused = wakeClick = false; hidden(false, true); rememberPanelMotion(); schedule();
+      pointers.clear(); focused = wakeClick = false; hidden(false, true); rememberPanelMotion(); rememberChromeRecovery(); schedule();
     }
     function rememberPanelMotion() {
       var next = !!doc.querySelector('.local-player[data-panel="open"],' + PANELS);
       if (next) {
+        chromeRecovery.clear();
         var hadRecovery = transportMotion.size > 0;
         cancelTransportMotion();
         if (hadRecovery) {
@@ -270,7 +313,7 @@
     reducedMotion.addEventListener('change', reset);
     reveal();
     return { destroy: function () {
-      clearTimer(); observer.disconnect(); focusPending = false; focusPrevious = []; cancelStageMotion(); cancelTransportMotion(); doc.body.classList.remove(PANEL_MOTION); hidden(false, true); pointers.clear();
+      clearTimer(); observer.disconnect(); focusPending = false; focusPrevious = []; chromeRecovery.clear(); cancelStageMotion(); cancelTransportMotion(); doc.body.classList.remove(PANEL_MOTION); hidden(false, true); pointers.clear();
       Object.keys(handlers).forEach(function (name) { doc.removeEventListener(name, handlers[name], true); });
       view.removeEventListener('blur', reset); view.removeEventListener('resize', reset);
       reducedMotion.removeEventListener('change', reset);
