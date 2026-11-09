@@ -67,7 +67,7 @@ def verify_folia_mobile(page, checks, out):
             const ready = chrome.ready
                 && navs.length === 1 && nav && nav.display !== 'none' && nav.visibility === 'visible'
                 && nav.bounds.width > 0 && nav.bounds.height > 0;
-            const fullyReady = ready && surfaces.every(surface => surface.visibleReady);
+            const fullyReady = ready && surfaces.every(surface => surface.visibleReady || surface.responsiveHiddenReady);
             const events = view.__mineradioMobileTapTrace.events.slice();
             const clearedForTouch = !!(clearForTouch && hidden && hit);
             if (clearedForTouch) view.__mineradioMobileTapTrace.events.length = 0;
@@ -234,7 +234,8 @@ def verify_folia_mobile(page, checks, out):
 
         for attempt in range(3):
             try:
-                # This legacy touch probe requires all four surfaces opaque.
+                # This touch probe requires every displayed surface opaque,
+                # retaining the existing compact-landscape metadata omission.
                 # Wait for a closing aside and transport restoration within the
                 # same 2s gate, rather than accepting panel-occluded readiness.
                 wake_controls(full_chrome=True)

@@ -22,12 +22,14 @@ FOLIA_CHROME_READINESS = r"""
         const focus = player?.getAttribute('data-mobile-focus') === 'true'
             || !!player?.classList.contains('local-player-focus');
         const frameBounds = frame.getBoundingClientRect();
+        const compactLandscape = view.matchMedia('(max-height:500px) and (orientation:landscape)').matches;
         const selectors = ['.local-mobile-header','.local-mobile-nav','.local-controls','.local-current-track'];
         const surfaces = selectors.map(selector => {
             const element = doc.querySelector(selector);
+            const expectedResponsiveHidden = compactLandscape && selector === '.local-current-track';
             const expectedOccluded = panelPresence.length > 0
                 && (selector === '.local-controls' || selector === '.local-current-track');
-            if (!element) return {selector, expectedOccluded, missing: true, ready: false};
+            if (!element) return {selector, expectedOccluded, expectedResponsiveHidden, missing: true, ready: false};
             const style = view.getComputedStyle(element), bounds = element.getBoundingClientRect();
             const point = {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2};
             const hit = bounds.width > 0 && bounds.height > 0 ? doc.elementFromPoint(point.x, point.y) : null;
@@ -43,17 +45,23 @@ FOLIA_CHROME_READINESS = r"""
             const occludedReady = expectedOccluded && style.display !== 'none'
                 && bounds.width > 0 && bounds.height > 0 && Number(style.opacity) <= .01 && style.visibility === 'hidden'
                 && style.pointerEvents === 'none' && !frameHitTarget;
-            const ready = expectedOccluded ? occludedReady : visibleReady;
+            // The existing compact landscape layout deliberately omits metadata.
+            // No other surface or viewport may bypass visibility and hit testing.
+            const responsiveHiddenReady = expectedResponsiveHidden && style.display === 'none'
+                && bounds.width === 0 && bounds.height === 0 && !frameHitTarget && !hitTarget;
+            const ready = expectedResponsiveHidden ? responsiveHiddenReady : expectedOccluded ? occludedReady : visibleReady;
             return {selector, tag: element.tagName, classes: element.getAttribute('class'),
                 testid: element.getAttribute('data-testid'), bounds: bounds.toJSON(),
                 display: style.display, opacity: Number(style.opacity), visibility: style.visibility,
                 pointerEvents: style.pointerEvents, transform: style.transform, transition: style.transition,
-                expectedOccluded, occludedReady, visibleReady, ready, point, hostPoint, frameHitTarget, hitTarget,
+                expectedOccluded, expectedResponsiveHidden, occludedReady, responsiveHiddenReady,
+                visibleReady, ready, point, hostPoint, frameHitTarget, hitTarget,
                 frameHit: hit && {tag: hit.tagName, testid: hit.getAttribute('data-testid'), classes: hit.getAttribute('class')},
                 hostHit: hostHit && {tag: hostHit.tagName, id: hostHit.id}};
         });
         const hidden = doc.body.classList.contains('mineradio-mobile-chrome-hidden');
-        return {at: view.performance.now(), hostAt: performance.now(), hidden, focus, panelOpen, panelPresence, surfaces,
+        return {at: view.performance.now(), hostAt: performance.now(), hidden, focus, panelOpen,
+            panelPresence, compactLandscape, surfaces,
             ready: !hidden && !focus && doc.querySelectorAll('[data-testid="local-mobile-nav"]').length === 1
                 && surfaces.every(surface => surface.ready)};
     };

@@ -3,7 +3,9 @@
   'use strict';
   var HIDDEN = 'mineradio-mobile-chrome-hidden', DELAY = 2500;
   var PANEL_MOTION = 'mineradio-mobile-transport-panel';
+  var RESTORING = 'mineradio-mobile-transport-restoring';
   var PANELS = '.local-player>:is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence]';
+  var TRANSPORT = '.local-player>.local-controls,.local-player>.local-current-track';
   var CONTROLS = '.local-mobile-header,.local-mobile-nav,.local-controls,.local-current-track';
   var MENUS = '.local-mobile-more,.local-slot-menu,.local-playlist-menu,[role="dialog"],[data-mobile-motion-presence]';
   var STAGES = '.local-player[data-panel="closed"] .local-visualizer,.local-player[data-panel="closed"] .local-record-wall,.local-player[data-panel="closed"] .lattice-root,.local-welcome,.local-no-lyrics';
@@ -11,7 +13,9 @@
 
   function create(doc, enabled) {
     var view = doc.defaultView, timer = 0, pointers = new Set();
-    var keyboard = false, focused = false, wakeClick = false, panel = false;
+    var keyboard = false, focused = false, wakeClick = false, panel = false, focusPending = false;
+    var transportOccluded = false, transportMotion = new Map();
+    var tokens = view.MineradioMotionTokens || global.MineradioMotionTokens;
     var stageMotion = new Map(), focusPrevious = [], reducedMotion = view.matchMedia('(prefers-reduced-motion:reduce)');
     var style = doc.getElementById('mineradio-mobile-chrome-style');
     if (!style) {
@@ -20,6 +24,7 @@
       style.textContent = '.local-mobile .local-mobile-header,.local-mobile .local-mobile-nav,.local-mobile .local-controls,.local-mobile .local-current-track{transition:opacity .52s ' + EASING + ',transform .52s ' + EASING + ',visibility 0s!important}'
         + '.local-mobile .local-controls,.local-mobile .local-current-track{transition:opacity var(--mineradio-mobile-transport-duration,.52s) var(--mineradio-mobile-transport-ease,' + EASING + '),transform .52s ' + EASING + ',visibility 0s!important}'
         + '.local-mobile body.' + PANEL_MOTION + '{--mineradio-mobile-transport-duration:var(--mobile-motion-component,200ms);--mineradio-mobile-transport-ease:var(--mobile-motion-ease,ease-out)}'
+        + '.local-mobile body.' + RESTORING + ' .local-controls,.local-mobile body.' + RESTORING + ' .local-current-track{transition:transform .52s ' + EASING + ',visibility 0s!important}'
         + '.local-mobile body.' + HIDDEN + ' .local-mobile-header{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(-8px)!important;transition-delay:0s,0s,.52s!important}'
         + '.local-mobile body.' + HIDDEN + ' .local-mobile-nav,.local-mobile body.' + HIDDEN + ' .local-controls,.local-mobile body.' + HIDDEN + ' .local-current-track{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(8px)!important;transition-delay:0s,0s,.52s!important}'
         + '.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-visualizer,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-record-wall,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .lattice-root{inset:0!important;height:auto!important}'
@@ -31,6 +36,51 @@
       stageMotion.forEach(function (record) { record.animation.cancel(); record.restore(); });
       stageMotion.clear();
     }
+    function cancelTransportMotion() {
+      var animations = Array.from(transportMotion.values());
+      transportMotion.clear();
+      animations.forEach(function (animation) {
+        animation.onfinish = animation.oncancel = null;
+        animation.cancel();
+      });
+      doc.body.classList.remove(RESTORING);
+    }
+    // Start one bounded restoration after the actual aside has unmounted.
+    // The full idle interval begins on completion, including delayed frames.
+    function restoreTransport() {
+      cancelTransportMotion();
+      if (!enabled() || doc.hidden || reducedMotion.matches || doc.body.classList.contains(HIDDEN)
+          || doc.querySelector('.local-player[data-mobile-focus="true"]')) return;
+      var targets = Array.from(doc.querySelectorAll(TRANSPORT)).map(function (node) {
+        var style = view.getComputedStyle(node);
+        return { node: node, opacity: Number(style.opacity), display: style.display };
+      }).filter(function (entry) { return entry.node.animate && entry.display !== 'none'; });
+      if (!targets.length) return;
+      doc.body.classList.add(RESTORING);
+      targets.forEach(function (entry) {
+        entry.node.getAnimations().forEach(function (animation) {
+          if (animation.transitionProperty === 'opacity') animation.cancel();
+        });
+        var animation = entry.node.animate([{ opacity: entry.opacity }, { opacity: 1 }],
+          { duration: tokens.component, easing: 'cubic-bezier(' + tokens.ease.join(',') + ')' });
+        animation.id = 'mineradio-mobile-transport-restore';
+        transportMotion.set(entry.node, animation);
+        animation.onfinish = function () {
+          if (transportMotion.get(entry.node) !== animation) return;
+          transportMotion.delete(entry.node);
+          animation.onfinish = animation.oncancel = null;
+          animation.cancel();
+          if (!transportMotion.size) { doc.body.classList.remove(RESTORING); schedule(); }
+        };
+        animation.oncancel = function () {
+          if (transportMotion.get(entry.node) !== animation) return;
+          // A cancelled batch has not completed restoration. Invalidate its
+          // remaining callbacks; the next interaction resumes normal idle timing.
+          clearTimer();
+          cancelTransportMotion();
+        };
+      });
+    }
     function hidden(value, instant) {
       value = !!value;
       if (doc.body.classList.contains(HIDDEN) === value) return;
@@ -41,6 +91,7 @@
       // Measure the current visual position before cancelling, including a
       // partially completed transition, so a quick wake reverses continuously.
       cancelStageMotion();
+      cancelTransportMotion();
       doc.body.classList.remove(PANEL_MOTION);
       doc.body.classList.toggle(HIDDEN, value);
       animateStages(previous, value);
@@ -94,17 +145,29 @@
       });
     }
     function focusBefore() {
+      focusPending = true;
+      doc.body.classList.remove(PANEL_MOTION);
+      doc.body.classList.remove(RESTORING);
+      if (transportMotion.size) {
+        doc.querySelectorAll(TRANSPORT).forEach(function (node) { view.getComputedStyle(node).opacity; });
+      }
       focusPrevious = enabled() && !doc.hidden && !reducedMotion.matches
         ? Array.from(doc.querySelectorAll(STAGES.replace(/\[data-panel="closed"\]/g, ''))).map(function (node) {
           return { node: node, rect: node.getBoundingClientRect() };
         }) : [];
       cancelStageMotion();
-      doc.body.classList.remove(PANEL_MOTION);
       clearTimer();
     }
     function focusAfter(event) {
+      focusPending = false;
       var previous = focusPrevious;
       focusPrevious = [];
+      if (doc.querySelector('.local-player[data-mobile-focus="true"]')) {
+        // Commit the existing focus transition before releasing a partial
+        // restoration, so its current opacity remains the transition's start.
+        doc.querySelectorAll(TRANSPORT).forEach(function (node) { view.getComputedStyle(node).opacity; });
+        cancelTransportMotion();
+      } else if (transportMotion.size) doc.body.classList.add(RESTORING);
       if (enabled() && !doc.hidden && !reducedMotion.matches) animateStages(previous, !!(event.detail && event.detail.focus));
       schedule();
     }
@@ -112,10 +175,10 @@
     function protectedSurface() { return !!doc.querySelector('.local-player[data-panel="open"],.local-player[data-mobile-focus="true"],' + MENUS); }
     function schedule() {
       clearTimer();
-      if (!enabled() || doc.hidden || pointers.size || focused || protectedSurface()) return;
+      if (!enabled() || doc.hidden || pointers.size || focused || focusPending || transportMotion.size || protectedSurface()) return;
       timer = view.setTimeout(function () {
         timer = 0;
-        if (enabled() && !doc.hidden && !pointers.size && !focused && !protectedSurface()) hidden(true);
+        if (enabled() && !doc.hidden && !pointers.size && !focused && !focusPending && !transportMotion.size && !protectedSurface()) hidden(true);
       }, DELAY);
     }
     function reveal() { hidden(false); schedule(); }
@@ -155,12 +218,33 @@
       focused = keyboard && !!(event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest(CONTROLS));
       schedule();
     }
-    function reset() { focusPrevious = []; cancelStageMotion(); doc.body.classList.remove(PANEL_MOTION); pointers.clear(); focused = wakeClick = false; hidden(false, true); rememberPanelMotion(); schedule(); }
+    function reset(event) {
+      var preserveRecovery = event && event.type === 'resize' && enabled() && !doc.hidden
+        && !reducedMotion.matches && !doc.body.classList.contains(HIDDEN)
+        && !doc.querySelector('.local-player[data-mobile-focus="true"]');
+      if (!preserveRecovery) focusPending = false;
+      focusPrevious = []; cancelStageMotion();
+      if (!preserveRecovery) { cancelTransportMotion(); doc.body.classList.remove(PANEL_MOTION); }
+      pointers.clear(); focused = wakeClick = false; hidden(false, true); rememberPanelMotion(); schedule();
+    }
     function rememberPanelMotion() {
-      if (!enabled() || doc.body.classList.contains(HIDDEN) || doc.querySelector('.local-player[data-mobile-focus="true"]')) return;
-      // Retain the panel's component timing through unmount and restoration.
-      // The next real idle/focus transition resets it; a timer would race slow frames.
-      if (doc.querySelector('.local-player[data-panel="open"],' + PANELS)) doc.body.classList.add(PANEL_MOTION);
+      var next = !!doc.querySelector('.local-player[data-panel="open"],' + PANELS);
+      if (next) {
+        var hadRecovery = transportMotion.size > 0;
+        cancelTransportMotion();
+        if (hadRecovery) {
+          doc.querySelectorAll(TRANSPORT).forEach(function (node) {
+            view.getComputedStyle(node).opacity;
+            node.getAnimations().forEach(function (animation) {
+              if (animation.transitionProperty === 'opacity') animation.cancel();
+            });
+          });
+        }
+        if (enabled() && !doc.body.classList.contains(HIDDEN) && !doc.querySelector('.local-player[data-mobile-focus="true"]')) {
+          doc.body.classList.add(PANEL_MOTION);
+        }
+      } else if (transportOccluded) restoreTransport();
+      transportOccluded = next;
     }
     function relevantNode(node) {
       return node.nodeType === 1 && (node.matches('.local-player,' + MENUS) || node.querySelector(MENUS));
@@ -186,7 +270,7 @@
     reducedMotion.addEventListener('change', reset);
     reveal();
     return { destroy: function () {
-      clearTimer(); observer.disconnect(); focusPrevious = []; cancelStageMotion(); doc.body.classList.remove(PANEL_MOTION); hidden(false, true); pointers.clear();
+      clearTimer(); observer.disconnect(); focusPending = false; focusPrevious = []; cancelStageMotion(); cancelTransportMotion(); doc.body.classList.remove(PANEL_MOTION); hidden(false, true); pointers.clear();
       Object.keys(handlers).forEach(function (name) { doc.removeEventListener(name, handlers[name], true); });
       view.removeEventListener('blur', reset); view.removeEventListener('resize', reset);
       reducedMotion.removeEventListener('change', reset);
