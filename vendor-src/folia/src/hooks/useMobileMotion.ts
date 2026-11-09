@@ -10,24 +10,35 @@ let observer: MutationObserver | undefined;
 let parentObserver: MutationObserver | undefined;
 
 function readReduced() {
-    return typeof window !== 'undefined' && (reducedMedia ??= window.matchMedia('(prefers-reduced-motion: reduce)')).matches;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+    return (reducedMedia ??= window.matchMedia('(prefers-reduced-motion: reduce)')).matches;
 }
 function readMobile() {
     if (typeof window === 'undefined') return false;
     try {
         if (window.parent !== window) return window.parent.document.body.classList.contains('mobile-layout');
     } catch { /* A standalone preview can have a different origin. */ }
-    return (compactMedia ??= window.matchMedia(compact)).matches;
+    return typeof window.matchMedia === 'function' && (compactMedia ??= window.matchMedia(compact)).matches;
 }
 function notify() { listeners.forEach(listener => listener()); }
+function observeMedia(media: MediaQueryList | undefined, observe: boolean) {
+    if (!media) return;
+    if (typeof media.addEventListener === 'function') {
+        if (observe) media.addEventListener('change', notify);
+        else media.removeEventListener('change', notify);
+    } else {
+        if (observe) media.addListener(notify);
+        else media.removeListener(notify);
+    }
+}
 
 function subscribe(listener: () => void) {
     listeners.add(listener);
     if (listeners.size === 1) {
         readReduced(); readMobile();
-        compactMedia ??= window.matchMedia(compact);
-        reducedMedia?.addEventListener('change', notify);
-        compactMedia.addEventListener('change', notify);
+        if (typeof window.matchMedia === 'function') compactMedia ??= window.matchMedia(compact);
+        observeMedia(reducedMedia, true);
+        observeMedia(compactMedia, true);
         observer = new MutationObserver(notify);
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
         try {
@@ -40,8 +51,8 @@ function subscribe(listener: () => void) {
     return () => {
         listeners.delete(listener);
         if (listeners.size) return;
-        reducedMedia?.removeEventListener('change', notify);
-        compactMedia?.removeEventListener('change', notify);
+        observeMedia(reducedMedia, false);
+        observeMedia(compactMedia, false);
         observer?.disconnect(); parentObserver?.disconnect();
         observer = parentObserver = undefined;
     };

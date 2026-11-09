@@ -137,13 +137,13 @@
     });
   }
   function feedback(node) {
-    if (!enabled() || !node) return;
+    if (!enabled() || !node || node.closest('[inert]')) return;
     animate(node, { scale: '1' }, 'micro', { from: { scale: '0.97' } });
   }
   // Each real image load gets at most one fade. Only a small visible window is animated.
   function revealArtwork(node, source) {
     if (!node || !source) { if (node) { artworkScopes.delete(node); release(node, false); } return; }
-    if (!enabled() || doc.body.classList.contains('folia-interface-active') || activeArtwork >= tokens.listLimit ||
+    if (!enabled() || node.closest('[inert]') || doc.body.classList.contains('folia-interface-active') || activeArtwork >= tokens.listLimit ||
         artworkScopes.get(node) === source) return;
     var rect = node.getBoundingClientRect();
     if (!rect.height || rect.bottom <= 0 || rect.top >= global.innerHeight) return;
