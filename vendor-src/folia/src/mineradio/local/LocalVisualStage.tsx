@@ -30,13 +30,8 @@ export default function LocalVisualStage({ player, theme, assets, focus, mobile,
     const { t } = useTranslation('localPlayer');
     const visuals = useVisualSceneSettings();
     const stage = useRef<HTMLDivElement>(null);
-    const route = useRef({ view: visuals.view, direction: 1 });
-    if (route.current.view !== visuals.view) {
-        const order = { lyrics: 0, records: 1, posters: 2 };
-        route.current = { view: visuals.view, direction: order[visuals.view] > order[route.current.view] ? 1 : -1 };
-    }
     const surfaceKey = visuals.view === 'lyrics' ? `lyrics:${visuals.mode}` : visuals.view;
-    const viewMotion = useLocalViewMotion(surfaceKey, player.active, route.current.direction);
+    const viewMotion = useLocalViewMotion(surfaceKey, player.active);
     useLocalMobileLyricFit(stage, mobile && visuals.view === 'lyrics' && visuals.mode === 'classic',
         player.lines[player.currentLineIndex]?.startTime, visuals.lyricsFontScale, theme);
     const track = player.state?.currentTrack;

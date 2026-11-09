@@ -4,7 +4,7 @@ import { mobileMotionTokens } from '../../utils/mobileMotion';
 
 // src/mineradio/local/useLocalViewMotion.ts
 // One lightweight surface fades after its lazy renderer commits; old GPU runtimes never wait for an exit.
-export function useLocalViewMotion(key: string, active: boolean, direction: number) {
+export function useLocalViewMotion(key: string, active: boolean) {
     const { mobile, reducedMotion } = useMobileMotion();
     const surface = useRef<HTMLDivElement>(null);
     const animation = useRef<Animation | null>(null);
@@ -25,12 +25,12 @@ export function useLocalViewMotion(key: string, active: boolean, direction: numb
         animation.current = null;
         const enabled = mobile && !reducedMotion && active;
         element.style.opacity = enabled && !ready ? '0' : '1';
-        element.style.translate = enabled && !ready ? `${direction * mobileMotionTokens.distance}px 0` : 'none';
         if (ready && animatedTicket.current !== ticket && enabled && typeof element.animate === 'function') {
             animatedTicket.current = ticket;
+            // Peer visual modes fill the viewport; fade without shifting its edges.
             const record = element.animate([
-                { opacity: 0, translate: `${direction * mobileMotionTokens.distance}px 0` },
-                { opacity: 1, translate: '0px 0px' },
+                { opacity: 0 },
+                { opacity: 1 },
             ], {
                 duration: mobileMotionTokens.page,
                 easing: `cubic-bezier(${mobileMotionTokens.pageEase.join(',')})`,
@@ -47,9 +47,8 @@ export function useLocalViewMotion(key: string, active: boolean, direction: numb
             animation.current?.cancel();
             animation.current = null;
             element.style.opacity = '1';
-            element.style.translate = 'none';
         };
-    }, [ticket, ready, active, mobile, reducedMotion, direction]);
+    }, [ticket, ready, active, mobile, reducedMotion]);
 
     return { surface, onReady, loading: mobile && active && !ready, reducedMotion };
 }

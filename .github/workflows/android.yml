@@ -216,11 +216,11 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
-          ram-size: 4096M
+          ram-size: '4096'
           cores: 2
           disable-animations: false
           emulator-options: >-
-            -no-window -gpu host -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
+            -no-window -memory 4096 -gpu host -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
             > /tmp/mineradio-emulator.log 2>&1
           script: python scripts/verify-android.py
       - name: Save cloud emulator diagnostics
