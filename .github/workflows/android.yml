@@ -201,6 +201,9 @@ jobs:
           echo "DISPLAY=:99" >> "$GITHUB_ENV"
           echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
           echo "GALLIUM_DRIVER=llvmpipe" >> "$GITHUB_ENV"
+          # Bound Mesa's worker pools on the shared four-core runner; rendering
+          # precision, resolution and the normal animation clock stay unchanged.
+          echo "LP_NUM_THREADS=2" >> "$GITHUB_ENV"
           for attempt in $(seq 1 20); do
             if DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe glxinfo -B; then
               exit 0
@@ -222,7 +225,26 @@ jobs:
           emulator-options: >-
             -no-window -memory 4096 -gpu host -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -camera-back none -verbose
             > /tmp/mineradio-emulator.log 2>&1
-          script: python scripts/verify-android.py
+          script: |
+            python - <<'PY'
+            import json, subprocess
+            from collections import Counter
+            from pathlib import Path
+            records = []
+            for pid in subprocess.check_output(['pgrep', '-f', 'qemu-system-x86_64'], text=True).split():
+                process = Path('/proc') / pid
+                try:
+                    environment = process.joinpath('environ').read_bytes().split(b'\0')
+                    value = next((entry.split(b'=', 1)[1].decode() for entry in environment if entry.startswith(b'LP_NUM_THREADS=')), None)
+                    threads = Counter(task.joinpath('comm').read_text().strip() for task in process.joinpath('task').iterdir())
+                    records.append({'pid': int(pid), 'lpNumThreads': value, 'threadNames': dict(threads)})
+                except (OSError, StopIteration) as error:
+                    records.append({'pid': int(pid), 'diagnosticError': str(error)})
+            target = Path('output/playwright/mobile/cloud-emulator-graphics.json')
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(records, indent=2) + '\n', encoding='utf-8')
+            PY
+            python scripts/verify-android.py
       - name: Save cloud emulator diagnostics
         if: always()
         run: |
@@ -231,6 +253,8 @@ jobs:
           df -h | tee output/playwright/mobile/runner-disk.txt
           sudo dmesg -T | tail -n 120 | tee output/playwright/mobile/runner-kernel.txt
           ps -eo pid,ppid,stat,%cpu,%mem,rss,args > output/playwright/mobile/runner-processes.txt
+          ps -eLo pid,ppid,tid,stat,%cpu,comm > output/playwright/mobile/runner-threads.txt
+          printf 'LP_NUM_THREADS=%s\n' "$LP_NUM_THREADS" > output/playwright/mobile/runner-graphics-threads.txt
           timeout 15s coredumpctl info --no-pager > output/playwright/mobile/runner-coredumps.txt 2>&1 || true
           if [ -d /tmp/android-runner ]; then
             cp -a /tmp/android-runner output/playwright/mobile/emulator-crashes

@@ -2,6 +2,8 @@
 (function (global) {
   'use strict';
   var HIDDEN = 'mineradio-mobile-chrome-hidden', DELAY = 2500;
+  var PANEL_MOTION = 'mineradio-mobile-transport-panel';
+  var PANELS = '.local-player>:is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence]';
   var CONTROLS = '.local-mobile-header,.local-mobile-nav,.local-controls,.local-current-track';
   var MENUS = '.local-mobile-more,.local-slot-menu,.local-playlist-menu,[role="dialog"],[data-mobile-motion-presence]';
   var STAGES = '.local-player[data-panel="closed"] .local-visualizer,.local-player[data-panel="closed"] .local-record-wall,.local-player[data-panel="closed"] .lattice-root,.local-welcome,.local-no-lyrics';
@@ -16,6 +18,8 @@
       style = doc.createElement('style');
       style.id = 'mineradio-mobile-chrome-style';
       style.textContent = '.local-mobile .local-mobile-header,.local-mobile .local-mobile-nav,.local-mobile .local-controls,.local-mobile .local-current-track{transition:opacity .52s ' + EASING + ',transform .52s ' + EASING + ',visibility 0s!important}'
+        + '.local-mobile .local-controls,.local-mobile .local-current-track{transition:opacity var(--mineradio-mobile-transport-duration,.52s) var(--mineradio-mobile-transport-ease,' + EASING + '),transform .52s ' + EASING + ',visibility 0s!important}'
+        + '.local-mobile body.' + PANEL_MOTION + '{--mineradio-mobile-transport-duration:var(--mobile-motion-component,200ms);--mineradio-mobile-transport-ease:var(--mobile-motion-ease,ease-out)}'
         + '.local-mobile body.' + HIDDEN + ' .local-mobile-header{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(-8px)!important;transition-delay:0s,0s,.52s!important}'
         + '.local-mobile body.' + HIDDEN + ' .local-mobile-nav,.local-mobile body.' + HIDDEN + ' .local-controls,.local-mobile body.' + HIDDEN + ' .local-current-track{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(8px)!important;transition-delay:0s,0s,.52s!important}'
         + '.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-visualizer,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-record-wall,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .lattice-root{inset:0!important;height:auto!important}'
@@ -37,6 +41,7 @@
       // Measure the current visual position before cancelling, including a
       // partially completed transition, so a quick wake reverses continuously.
       cancelStageMotion();
+      doc.body.classList.remove(PANEL_MOTION);
       doc.body.classList.toggle(HIDDEN, value);
       animateStages(previous, value);
     }
@@ -94,6 +99,7 @@
           return { node: node, rect: node.getBoundingClientRect() };
         }) : [];
       cancelStageMotion();
+      doc.body.classList.remove(PANEL_MOTION);
       clearTimer();
     }
     function focusAfter(event) {
@@ -149,16 +155,24 @@
       focused = keyboard && !!(event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest(CONTROLS));
       schedule();
     }
-    function reset() { focusPrevious = []; cancelStageMotion(); pointers.clear(); focused = wakeClick = false; hidden(false, true); schedule(); }
+    function reset() { focusPrevious = []; cancelStageMotion(); doc.body.classList.remove(PANEL_MOTION); pointers.clear(); focused = wakeClick = false; hidden(false, true); rememberPanelMotion(); schedule(); }
+    function rememberPanelMotion() {
+      if (!enabled() || doc.body.classList.contains(HIDDEN) || doc.querySelector('.local-player[data-mobile-focus="true"]')) return;
+      // Retain the panel's component timing through unmount and restoration.
+      // The next real idle/focus transition resets it; a timer would race slow frames.
+      if (doc.querySelector('.local-player[data-panel="open"],' + PANELS)) doc.body.classList.add(PANEL_MOTION);
+    }
     function relevantNode(node) {
       return node.nodeType === 1 && (node.matches('.local-player,' + MENUS) || node.querySelector(MENUS));
     }
     panel = protectedSurface();
+    rememberPanelMotion();
     // Only panel/menu changes reset inactivity; lyric and analyser updates leave the timer alone.
     var observer = new view.MutationObserver(function (records) {
       if (!records.some(function (record) {
         return record.type === 'attributes' || Array.from(record.addedNodes).some(relevantNode) || Array.from(record.removedNodes).some(relevantNode);
       })) return;
+      rememberPanelMotion();
       var next = protectedSurface();
       if (next !== panel) { panel = next; reveal(); }
     });
@@ -172,7 +186,7 @@
     reducedMotion.addEventListener('change', reset);
     reveal();
     return { destroy: function () {
-      clearTimer(); observer.disconnect(); focusPrevious = []; cancelStageMotion(); hidden(false, true); pointers.clear();
+      clearTimer(); observer.disconnect(); focusPrevious = []; cancelStageMotion(); doc.body.classList.remove(PANEL_MOTION); hidden(false, true); pointers.clear();
       Object.keys(handlers).forEach(function (name) { doc.removeEventListener(name, handlers[name], true); });
       view.removeEventListener('blur', reset); view.removeEventListener('resize', reset);
       reducedMotion.removeEventListener('change', reset);

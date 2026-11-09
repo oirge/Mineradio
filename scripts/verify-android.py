@@ -404,8 +404,26 @@ with sync_playwright() as p:
         adb('shell', 'input', 'tap', str(round(x)), str(round(y)))
 
     folia_wake_readiness = []
+    deferred_wake_readiness = []
 
-    def wake_folia_controls(attempts=3, fresh=False):
+    def save_wake_readiness(record):
+        try:
+            record['evidence'] = page.evaluate('''() => {
+                const view = document.getElementById('folia-frame').contentWindow;
+                const evidence = view.__mineradioAndroidWakeReadiness;
+                delete view.__mineradioAndroidWakeReadiness;
+                return evidence;
+            }''')
+        except Exception as diagnostic_error:
+            record['diagnosticError'] = str(diagnostic_error)
+        (OUT / 'android-folia-wake-readiness.json').write_text(json.dumps(folia_wake_readiness,
+            ensure_ascii=False, indent=2), encoding='utf-8')
+
+    def flush_wake_readiness():
+        while deferred_wake_readiness:
+            save_wake_readiness(deferred_wake_readiness.pop(0))
+
+    def wake_folia_controls(attempts=3, fresh=False, selector=None, prepare_touch=False):
         wake_call = {'call': len(folia_wake_readiness) + 1, 'fresh': fresh, 'attempts': []}
         folia_wake_readiness.append(wake_call)
         if fresh:
@@ -422,46 +440,62 @@ with sync_playwright() as p:
                     .contentDocument.body.classList.contains('mineradio-mobile-chrome-hidden')''',
                     timeout=5000, polling=50)
         for attempt in range(attempts):
+            # Prepare diagnostics before the real gesture, without spending the
+            # newly revealed controls' 2500ms inactivity window on another RPC.
+            page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
+                .__mineradioAndroidWakeReadiness = {samples: []}; }''')
             if folia_controls_hidden(): tap_folia_stage()
             record = {'attempt': attempt + 1}
             wake_call['attempts'].append(record)
-            page.evaluate('''() => { document.getElementById('folia-frame').contentWindow
-                .__mineradioAndroidWakeReadiness = {samples: []}; }''')
             gate_started = time.monotonic()
             try:
-                page.wait_for_function('''() => {
+                result = page.evaluate('''async ({selector, prepareTouch}) => {
                     const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
                     ''' + FOLIA_CHROME_READINESS + '''
-                    const state = chromeReadiness(), evidence = view.__mineradioAndroidWakeReadiness;
-                    evidence.latest = state;
-                    if (evidence.samples.length < 96) evidence.samples.push(state);
-                    return state.ready;
-                }''', timeout=2000, polling=50)
+                    const targetState = ''' + folia_target_state_source + ''';
+                    const evidence = view.__mineradioAndroidWakeReadiness;
+                    const deadline = view.performance.now() + 2000;
+                    while (view.performance.now() <= deadline) {
+                        const state = chromeReadiness();
+                        evidence.latest = state;
+                        if (evidence.samples.length < 96) evidence.samples.push(state);
+                        if (state.ready) {
+                            const before = selector ? targetState({selector, prepareTouch}) : null;
+                            evidence.latestTarget = before;
+                            // An available but covered/disabled target returns
+                            // immediately for the original assertions to reject.
+                            if (!before || before.bodyHidden || before.visible) return {ready: true, before};
+                        }
+                        const remaining = deadline - view.performance.now();
+                        if (remaining <= 0) break;
+                        await new Promise(resolve => view.setTimeout(resolve, Math.min(50, remaining)));
+                    }
+                    return {ready: false};
+                }''', {'selector': selector, 'prepareTouch': prepare_touch})
+                gate_duration = (time.monotonic() - gate_started) * 1000
+                record['gateDurationMs'] = gate_duration
+                if not result['ready'] or gate_duration > 2000:
+                    raise PlaywrightTimeoutError(f'Folia chrome and target readiness did not return within 2000ms '
+                        f'(elapsed {gate_duration:.3f}ms)')
                 record['ready'] = True
-                return
+                record['atomicTargetProbe'] = selector is not None
+                return result['before']
             except PlaywrightTimeoutError as error:
+                record.setdefault('gateDurationMs', (time.monotonic() - gate_started) * 1000)
                 record['ready'] = False
                 record['error'] = str(error)
                 # Expiry between the first read and fade check needs the same real wake gesture.
                 if attempt == attempts - 1 or not folia_controls_hidden(): raise
             finally:
-                record['gateDurationMs'] = (time.monotonic() - gate_started) * 1000
-                try:
-                    record['evidence'] = page.evaluate('''() => {
-                        const view = document.getElementById('folia-frame').contentWindow;
-                        const evidence = view.__mineradioAndroidWakeReadiness;
-                        delete view.__mineradioAndroidWakeReadiness;
-                        return evidence;
-                    }''')
-                except Exception as diagnostic_error:
-                    record['diagnosticError'] = str(diagnostic_error)
-                (OUT / 'android-folia-wake-readiness.json').write_text(json.dumps(folia_wake_readiness,
-                    ensure_ascii=False, indent=2), encoding='utf-8')
+                record.setdefault('gateDurationMs', (time.monotonic() - gate_started) * 1000)
+                if selector is not None and record.get('ready'):
+                    deferred_wake_readiness.append(record)
+                else:
+                    save_wake_readiness(record)
 
-    def folia_target_state(selector, prepare_touch=False):
-        # Runtime.evaluate reads the existing DOM synchronously. Locator's
-        # attachment polling can wait on RAF without ever exposing the target.
-        return page.evaluate('''({selector, prepareTouch}) => {
+    # Reuse the same synchronous geometry, ancestor and hit-test probe inside
+    # the final readiness sample and after input; do not alter availability.
+    folia_target_state_source = '''({selector, prepareTouch}) => {
             const frame = document.getElementById('folia-frame'), doc = frame?.contentDocument;
             const trace = doc?.defaultView?.__mineradioMobileTapTrace;
             const eventsBeforePreparation = prepareTouch ? trace?.events.slice() || [] : [];
@@ -506,7 +540,10 @@ with sync_playwright() as p:
                 mainHit: describe(mainHit), mainHitIsFrame: !!frame && mainHit === frame,
                 mainPoint: frameBounds && {x: frameBounds.left + x, y: frameBounds.top + y},
                 stageBounds: stage?.getBoundingClientRect().toJSON()};
-        }''', {'selector': selector, 'prepareTouch': prepare_touch})
+        }'''
+
+    def folia_target_state(selector, prepare_touch=False):
+        return page.evaluate(folia_target_state_source, {'selector': selector, 'prepareTouch': prepare_touch})
 
     def folia_action(selector, label, method='click', **params):
         # A short action cannot spend 30 seconds waiting through repeated idle
@@ -519,10 +556,9 @@ with sync_playwright() as p:
                 'result': result, 'attempts': records}, ensure_ascii=False, indent=2), encoding='utf-8')
 
         def capture_after(record):
-            try: record['bodyHiddenAfter'] = folia_controls_hidden()
-            except Exception as diagnostic_error: record['bodyHiddenAfterError'] = str(diagnostic_error)
             try:
                 record['after'] = folia_target_state(selector)
+                record['bodyHiddenAfter'] = record['after']['bodyHidden']
                 record['events'] = record['after']['events']
             except Exception as diagnostic_error: record['afterError'] = str(diagnostic_error)
 
@@ -542,21 +578,12 @@ with sync_playwright() as p:
             before = None
             try:
                 record['freshWakeRequested'] = method == 'click'
-                wake_folia_controls(attempts=1, fresh=method == 'click')
+                before = wake_folia_controls(attempts=1, fresh=method == 'click',
+                    selector=selector, prepare_touch=method == 'click')
                 record['driverWakeCompletedAtMs'] = time.perf_counter() * 1000
-                # Wait only for a just-opened panel/target to exist and become
-                # visible, using synchronous probes rather than RAF locators.
-                # A visible covered or disabled target is never retried here.
-                deadline = time.monotonic() + 1.2
-                record['probes'] = []
-                while True:
-                    before = folia_target_state(selector, prepare_touch=method == 'click')
-                    record['probes'].append({key: before.get(key) for key in
-                        ['missingTarget', 'targetCount', 'bodyHidden', 'visible', 'disabled',
-                         'receivesPointer', 'localHitIsTarget', 'mainHitIsFrame']})
-                    if before['bodyHidden'] or before['visible'] or time.monotonic() >= deadline:
-                        break
-                    time.sleep(.05)
+                record['probes'] = [{key: before.get(key) for key in
+                    ['missingTarget', 'targetCount', 'bodyHidden', 'visible', 'disabled',
+                     'receivesPointer', 'localHitIsTarget', 'mainHitIsFrame']}]
                 record['before'] = before
                 record['driverProbeReadyAtMs'] = time.perf_counter() * 1000
                 if before['bodyHidden']:
@@ -624,6 +651,10 @@ with sync_playwright() as p:
                 capture_after(record)
                 save('failed')
                 raise
+            finally:
+                # Successful input and every retry boundary save the full trace.
+                # Diagnostic RPCs never run between the ready sample and touch.
+                flush_wake_readiness()
 
     def folia_chrome_ui():
         return page.evaluate('''() => {
