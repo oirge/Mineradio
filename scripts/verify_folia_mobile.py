@@ -67,10 +67,11 @@ def verify_folia_mobile(page, checks, out):
             const ready = chrome.ready
                 && navs.length === 1 && nav && nav.display !== 'none' && nav.visibility === 'visible'
                 && nav.bounds.width > 0 && nav.bounds.height > 0;
+            const fullyReady = ready && surfaces.every(surface => surface.visibleReady);
             const events = view.__mineradioMobileTapTrace.events.slice();
             const clearedForTouch = !!(clearForTouch && hidden && hit);
             if (clearedForTouch) view.__mineradioMobileTapTrace.events.length = 0;
-            return {hostAt: performance.now(), frameAt: view.performance.now(), hidden, ready, hit, clearedForTouch,
+            return {hostAt: performance.now(), frameAt: view.performance.now(), hidden, ready, fullyReady, hit, clearedForTouch,
                 bodyClass: doc.body.className, rootClass: doc.documentElement.className, hostBodyClass: document.body.className,
                 player: playerState, view: player?.getAttribute('data-view'), panel: player?.getAttribute('data-panel'),
                 panelPresence: chrome.panelPresence,
@@ -88,7 +89,7 @@ def verify_folia_mobile(page, checks, out):
 
     wake_number = 0
 
-    def wake_controls():
+    def wake_controls(full_chrome=False):
         nonlocal wake_number
         wake_number += 1
         evidence = out / ('folia-wake.json' if wake_number == 1 else f'folia-wake-{wake_number:02}.json')
@@ -102,7 +103,8 @@ def verify_folia_mobile(page, checks, out):
                     state = {'diagnosticError': str(diagnostic_error)}
             trace.append({'phase': phase, 'attempt': attempt + 1, 'state': state,
                 'error': str(error) if error else None, 'durationMs': duration, 'elapsedMs': elapsed})
-            evidence.write_text(json.dumps({'call': wake_number, 'attempts': trace}, ensure_ascii=False, indent=2), encoding='utf-8')
+            evidence.write_text(json.dumps({'call': wake_number, 'requireFullChrome': full_chrome,
+                'attempts': trace}, ensure_ascii=False, indent=2), encoding='utf-8')
             return state
 
         # A person first touches the stage when idle chrome has disappeared.
@@ -113,7 +115,7 @@ def verify_folia_mobile(page, checks, out):
                 record('probe-failed', attempt, error=error)
                 raise
             record('before', attempt, before)
-            if before['ready']:
+            if before['fullyReady' if full_chrome else 'ready']:
                 # The same synchronous sample already proves readiness; no touch or later wait occurred.
                 record('after-ready-without-touch', attempt, before)
                 return
@@ -142,7 +144,7 @@ def verify_folia_mobile(page, checks, out):
                     raise
                 elapsed = (time.monotonic() - started) * 1000
                 record('poll', attempt, last, duration=last['probeDurationMs'], elapsed=elapsed)
-                if elapsed <= 2000 and last['ready']:
+                if elapsed <= 2000 and last['fullyReady' if full_chrome else 'ready']:
                     record('after', attempt, last, duration=(time.monotonic() - started) * 1000, elapsed=elapsed)
                     # A late probe or late return never turns the original 2s timeout into success.
                     if time.monotonic() <= deadline:
@@ -232,7 +234,10 @@ def verify_folia_mobile(page, checks, out):
 
         for attempt in range(3):
             try:
-                wake_controls()
+                # This legacy touch probe requires all four surfaces opaque.
+                # Wait for a closing aside and transport restoration within the
+                # same 2s gate, rather than accepting panel-occluded readiness.
+                wake_controls(full_chrome=True)
             except Exception as error:
                 record(f'wake-failed-{attempt + 1}', error)
                 save()
@@ -241,7 +246,7 @@ def verify_folia_mobile(page, checks, out):
             save()
             if before.get('fading'):
                 try:
-                    wake_controls()
+                    wake_controls(full_chrome=True)
                 except Exception as error:
                     record(f'settle-failed-{attempt + 1}', error)
                     save()
