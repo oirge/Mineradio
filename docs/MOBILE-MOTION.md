@@ -40,7 +40,7 @@ Folia 已有闲置隐藏是独立契约：约 2500ms 无操作后隐藏，控制
 | 菜单与工具 | `PlaylistSwitcher.tsx`、`PlaylistSwitcherMenu.tsx`、`LocalControlSlot.tsx`、`LocalLatticeTools.tsx`、`LocalAudioSettings.tsx`、`LocalAddToPlaylist.tsx` |
 | 加载、空态、错误及封面 | `LocalMotionStatus.tsx`、`LocalPlayerStates.tsx`、`LocalStatusToast.tsx`、`LocalArtwork.tsx`、`localMobileMotion.css`、`localMobile.css` |
 | 可复用交互组件 | `SlideActionButton.tsx`、`ThemedDialog.tsx`、`CustomSelect.tsx`、`CustomSelectMenu.tsx`、`overlayEntranceMotion.ts` |
-| 云端门禁 | `scripts/verify_mobile_motion.py`、`verify_folia_mobile.py`、`verify-mobile-browser.py`、`verify-android.py`、`.github/workflows/android.yml` |
+| 云端门禁与布局约束 | `scripts/verify_mobile_motion.py`、`verify_folia_mobile.py`、`verify-mobile-browser.py`、`verify-android.py`、`tests/folia-controls-layout.test.js`、`.github/workflows/android.yml` |
 
 ## 连续性与性能约束
 
@@ -51,7 +51,7 @@ Folia 已有闲置隐藏是独立契约：约 2500ms 无操作后隐藏，控制
 - 优先使用 opacity、transform 与独立 translate / scale。仅固定范围的展开组件使用尺寸过渡；没有逐帧 React 时间状态，也不逐帧调整 WebGL 画布尺寸。
 - 退出层立即 inert、aria-hidden 并停止点击；菜单、弹窗及面板在退出完成后释放 DOM、事件、RAF 和 WA 句柄。重复开关取消前一批动画，避免动画队列和监听累积。
 - 手动沉浸保留导航、歌曲信息和播放控件的同一 DOM 实例；控件沿用 520ms 淡出，舞台与闲置隐藏共用同一中心平移所有者。沉浸立即关闭更多、歌单和快捷槽菜单，释放长按计时器；返回时只恢复一层浮层。
-- 减少动态效果与页面隐藏时结束 UI 过渡。焦点仅在没有被新浮层或用户操作接管时恢复。拖动、长按及 Android 返回仍使用原业务语义。
+- 减少动态效果与页面隐藏时结束 UI 过渡。缺少媒体查询 API 的环境安全降级；旧 MediaQueryList 监听同样清理。焦点仅在没有被新浮层或用户操作接管时恢复。拖动、长按及 Android 返回仍使用原业务语义。
 - 最终布局、玻璃质感、主题、接口及 Java 原生音频实现保持原有行为；装饰性持续动画在手机端不再空转。
 
 ## 验收状态与待验证项

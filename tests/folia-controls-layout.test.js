@@ -12,6 +12,7 @@ const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 const localCss = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/local.css'), 'utf8');
 const controls = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/PlayerControls.tsx'), 'utf8');
 const switcher = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/PlaylistSwitcher.tsx'), 'utf8');
+const switcherMenu = fs.readFileSync(path.join(root, 'vendor-src/folia/src/mineradio/local/PlaylistSwitcherMenu.tsx'), 'utf8');
 const host = fs.readFileSync(path.join(root, 'public/folia-host.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 
@@ -60,8 +61,13 @@ test('wide fullscreen keeps measured alignment and windowed desktop keeps one Fo
 });
 
 test('Folia playlist button follows the configurable shortcuts without adding another control row', () => {
-  assert.match(controls, /<div className="local-transport-side">\s*<LocalControlSlot index=\{0\} \/>\s*<LocalControlSlot index=\{1\} \/>\s*<PlaylistSwitcher state=\{state\} command=\{command\} onManage=\{onLibrary\} \/>/);
+  assert.match(controls, /<div className="local-transport">\s*<div className="local-transport-side">\s*<LocalControlSlot index=\{0\} disabled=\{mobileFocus\} \/>\s*<LocalControlSlot index=\{1\} disabled=\{mobileFocus\} \/>\s*<PlaylistSwitcher state=\{state\} command=\{command\} onManage=\{onLibrary\} mobileFocus=\{mobileFocus\} \/>\s*<\/div>\s*<div className="local-transport-main">/,
+    'Both shortcuts and the playlist trigger must remain consecutive children of the same transport side');
   assert.ok(controls.indexOf('<PlaylistSwitcher') > controls.indexOf('<div className="local-transport">'));
+  assert.equal((controls.match(/<PlaylistSwitcher\b/g) || []).length, 1);
+  assert.equal((controls.match(/className="local-transport"/g) || []).length, 1);
+  assert.match(controls, /<footer className="local-controls" data-testid="local-controls" data-mobile-focus=\{String\(mobileFocus\)\} inert=\{mobileFocus\} aria-hidden=\{mobileFocus \|\| undefined\}>/,
+    'Hidden mobile controls must be inert as well as visually hidden');
   assert.doesNotMatch(localCss, /\.local-playlist-row|\.local-playlist-picker/);
   assert.match(localCss, /\.local-player \.local-playlist-trigger\{[^}]*width:82px;height:34px;min-height:34px/);
   assert.match(localCss, /\.local-current-track\{left:21px;bottom:133px/);
@@ -70,7 +76,21 @@ test('Folia playlist button follows the configurable shortcuts without adding an
 
 test('Folia playlist popup escapes transport clipping but stays inside its focus boundary', () => {
   assert.match(switcher, /closest<HTMLElement>\('\.local-controls'\)/);
-  assert.match(switcher, /createPortal\(<PlaylistSwitcherMenu[\s\S]*?\/>, controls\)/);
+  assert.match(switcher, /\{controls && createPortal\(<AnimatePresence mode="sync">\{open && !mobileFocus && <PlaylistSwitcherMenu key=\{menuId\} menuRef=\{menu\} id=\{menuId\}[\s\S]*?\/>\}<\/AnimatePresence>, controls\)\}/,
+    'The controls portal must keep AnimatePresence mounted while only its menu child is conditional');
+  assert.match(switcher, /disabled=\{!state \|\| busy \|\| !catalog\.playlists\.length \|\| mobileFocus\}/);
+  assert.match(switcher, /useEffect\(\(\) => \{ if \(mobileFocus\) setOpen\(false\); \}, \[mobileFocus\]\)/);
+  assert.match(switcherMenu, /const present = useIsPresent\(\)/);
+  assert.match(switcherMenu, /inert=\{!present\} aria-hidden=\{!present \|\| undefined\}/,
+    'The exiting menu must stop receiving pointer and keyboard interactions');
+  assert.match(switcherMenu, /data-mobile-motion-presence=\{mobile \? \(present \? 'present' : 'exiting'\) : undefined\}/);
+  assert.match(switcherMenu, /rowProps = useMemo\(\(\) => \(\{ playlists, currentId, disabled: disabled \|\| !present, label, onSelect \}\)/);
+  assert.match(switcherMenu, /const focusPending = \(\) => \{\s*if \(!present\) return;/,
+    'Late virtualized row callbacks must not refocus an exiting menu');
+  assert.match(switcherMenu, /useLayoutEffect\(\(\) => \{\s*if \(!present\) return;[\s\S]*?\}, \[present\]\)/,
+    'Entry focus must run only while the menu is present');
+  assert.match(switcherMenu, /useLayoutEffect\(\(\) => \{\s*const controls = menuRef\.current\?\.closest\('\.local-controls'\);\s*controls\?\.classList\.add\('local-playlist-open'\);\s*return \(\) => controls\?\.classList\.remove\('local-playlist-open'\);\s*\}, \[menuRef\]\)/,
+    'The transport boundary must stay open throughout exit and clear only when the menu unmounts');
   assert.match(localCss, /\.local-playlist-menu\{position:absolute;bottom:calc\(100% \+ 10px\)/);
   assert.match(localCss, /\.local-controls\.local-playlist-open\{z-index:20\}/);
   assert.match(host, /\.local-transport\{[^']*overflow:hidden;max-height:80px/);

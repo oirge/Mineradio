@@ -29479,7 +29479,8 @@ function clearQueue() {
  */
 function removeFromQueue(idx) {
   if (idx < 0 || idx >= playQueue.length) return;
-  var motionRemoval = window.MineradioMobileMotion && window.MineradioMobileMotion.captureQueueRemoval(idx);
+  var mobileMotion = typeof window !== 'undefined' && window.MineradioMobileMotion;
+  var motionRemoval = mobileMotion && mobileMotion.captureQueueRemoval(idx);
   playQueue.splice(idx, 1);
   markQueueContentChanged();
   if (currentIdx >= 0 && currentIdx > idx) currentIdx -= 1;
@@ -29488,7 +29489,7 @@ function removeFromQueue(idx) {
   // A visible row transition must measure the updated list, not a deferred render.
   var queueRendered = safeRenderQueuePanel('remove-queue-item', motionRemoval
     ? { immediate: true, animate: false, deferWhenHidden: false } : undefined);
-  if (queueRendered && window.MineradioMobileMotion) window.MineradioMobileMotion.finishQueueRemoval(motionRemoval);
+  if (queueRendered && mobileMotion) mobileMotion.finishQueueRemoval(motionRemoval);
   safeShelfRebuild('remove-queue-item');
   updateCustomCoverButton();
   updateCustomLyricControls();
@@ -31528,7 +31529,7 @@ function applyPlaylistPaneToolbarMode(tab) {
 function switchPlaylistTab(tab) {
   tab = normalizePlaylistPanelTab(tab);
   var previousTab = queueViewTab;
-  if (previousTab !== tab && window.MineradioMobileMotion) window.MineradioMobileMotion.nextListScope();
+  if (previousTab !== tab && typeof window !== 'undefined' && window.MineradioMobileMotion) window.MineradioMobileMotion.nextListScope();
   queueViewTab = tab;
   /* 两个 tab 共用一份选中状态，切 tab 就得把选中项摆到对应那一层，否则会串页。 */
   if (tab === 'library' && !isLocalLibraryCategoryKind(localLibraryPlaylistSelection)) {
