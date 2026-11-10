@@ -10,7 +10,7 @@
         opacity var(--mobile-motion-micro,150ms) var(--mobile-motion-ease,ease-out),
         scale var(--mobile-motion-micro,150ms) var(--mobile-motion-ease,ease-out);
 }
-.local-mobile .local-player button:not(:where(.lattice-root *, .local-record-wall *)):active:not(:disabled) { transform: none; scale: .97; }
+.local-mobile .local-player button:not(:where(.lattice-root *, .local-record-wall *)):is(:active,[data-mobile-pressed=true]):not(:disabled) { transform: none; scale: .97; }
 .local-mobile .local-player button:disabled { scale: 1; }
 .local-mobile .local-mobile-nav button > svg { transition: scale var(--mobile-motion-micro,150ms) var(--mobile-motion-ease,ease-out); }
 .local-mobile .local-mobile-nav button[aria-pressed=true] > svg,
@@ -63,7 +63,7 @@
     .local-mobile .local-tool-error,
     .local-mobile .local-tool-hint[role=status],
     .local-mobile .local-tuning::details-content { animation: none; transition: none; }
-    .local-mobile .local-player button:active:not(:disabled),
+    .local-mobile .local-player button:is(:active,[data-mobile-pressed=true]):not(:disabled),
     .local-mobile .local-mobile-nav button[aria-pressed=true] > svg,
     .local-mobile .local-mobile-nav button[aria-expanded=true] > svg { scale: 1; }
     .local-mobile .local-player[data-mobile-focus=true] .local-mobile-header,
