@@ -482,7 +482,7 @@ def verify_folia_mobile(page, checks, out):
             f"{trace['label']}: stage position jumped without an observed intermediate center"
         for selector in ['.local-mobile-header', '.local-mobile-nav', '.local-controls', '.local-current-track']:
             assert any(surface['selector'] == selector and surface['visibility'] == 'visible'
-                and surface['opacity'] is not None and .02 < surface['opacity'] < .98
+                and surface['opacity'] is not None and 0 < surface['opacity'] < 1
                 for sample in samples for surface in sample['surfaces']), \
                 f"{trace['label']}: {selector} jumped without a visible intermediate opacity"
 

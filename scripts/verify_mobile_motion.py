@@ -1008,9 +1008,6 @@ def verify_folia_focus(audit, driver):
     watched = list(dict.fromkeys(roots + chrome + [command, exit_button, more,
         '[data-testid="local-visualizer"]', '[data-testid="local-record-wall"]', '[data-testid="local-poster-wall"]']))
     audit.selectors = watched
-    driver.wake()
-    audit.wait(lambda state: not state['focus'] and state['panel'] == 'closed' and settled(state)
-        and all(visible(state, selector) for selector in chrome), 'Focus audit did not begin with visible normal chrome')
     with audit.observe('folia-focus-ui-enter-exit', watched) as trace:
         before = audit.snapshot()
         stage = {'lyrics': '[data-testid="local-visualizer"]', 'records': '[data-testid="local-record-wall"]',
@@ -1018,6 +1015,10 @@ def verify_folia_focus(audit, driver):
         assert len(surface(before, stage)) == 1, 'The focus audit is missing its live visual stage'
         driver.touch('[data-testid="local-mobile-more-toggle"]', frame=True)
         audit.wait(lambda state: visible(state, more) and settled(state), 'The focus command menu did not enter')
+        # The real open menu protects the normal chrome from idle expiry while
+        # these read-only checks run on a slow cloud renderer.
+        audit.wait(lambda state: not state['focus'] and state['panel'] == 'closed' and settled(state)
+            and all(visible(state, selector) for selector in chrome), 'Focus audit did not begin with visible normal chrome')
         driver.touch('[data-testid="local-open-commands"]', frame=True)
         audit.wait(lambda state: visible(state, command) and not surface(state, more) and settled(state),
             'The command UI did not become ready for the focus action')
