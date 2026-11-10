@@ -709,6 +709,8 @@ def verify_folia_mobile(page, checks, out):
         tap_control('local-open-library')
         inside(folia.get_by_test_id('local-library'))
         folia.get_by_test_id('local-library').get_by_role('button', name='关闭', exact=True).tap()
+        # Finish panel exit and chrome recovery before changing test dimensions.
+        wake_controls(full_chrome=True)
     checks.append('Folia lyrics, floating records and poster wall at all six phone/tablet sizes')
     tap_control('local-view-lyrics')
     tap_control('local-toggle-play')

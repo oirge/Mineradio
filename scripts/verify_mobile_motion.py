@@ -353,11 +353,58 @@ class TouchDriver:
     def touch(self, selector, frame=False, hold=0, cancel=False):
         deadline = time.monotonic() + 4
         target = None
+        check = {'selector': selector, 'frame': frame,
+            'windowStartedAtDriverMs': (deadline - 4) * 1000,
+            'deadlineAtDriverMs': deadline * 1000,
+            'pointProbes': [], 'chromeProbes': [], 'wakeAttempted': False}
+        if self.wake_checks:
+            self.wake_checks[-1].setdefault('touchPreparations', []).append(check)
         while time.monotonic() < deadline:
+            point_started = time.monotonic()
             target = self.point(selector, frame)
+            point_returned = time.monotonic()
+            check['pointProbes'].append({'startedAtDriverMs': point_started * 1000,
+                'returnedAtDriverMs': point_returned * 1000,
+                'durationMs': (point_returned - point_started) * 1000, 'target': target})
             if target:
                 break
+            if (frame and selector != '[data-testid="local-player"]'
+                    and not check['wakeAttempted'] and time.monotonic() < deadline):
+                probe_started = time.monotonic()
+                chrome_hidden = self.page.evaluate("""() => {
+                    const frame = document.getElementById('folia-frame');
+                    return frame?.contentDocument?.body?.classList.contains('mineradio-mobile-chrome-hidden') === true;
+                }""")
+                probe_returned = time.monotonic()
+                check['chromeProbes'].append({'startedAtDriverMs': probe_started * 1000,
+                    'returnedAtDriverMs': probe_returned * 1000,
+                    'durationMs': (probe_returned - probe_started) * 1000,
+                    'hidden': chrome_hidden, 'returnedWithinDeadline': probe_returned < deadline})
+                if chrome_hidden and probe_returned < deadline:
+                    wake_started = time.monotonic()
+                    preparation = {'startedAtDriverMs': wake_started * 1000,
+                        'startedWithinDeadline': wake_started < deadline}
+                    check['wakePreparation'] = preparation
+                    if wake_started < deadline:
+                        check['wakeAttempted'] = True
+                        try:
+                            self.wake()
+                        finally:
+                            wake_returned = time.monotonic()
+                            preparation['returnedAtDriverMs'] = wake_returned * 1000
+                            preparation['durationMs'] = (wake_returned - wake_started) * 1000
+                            preparation['returnedWithinDeadline'] = wake_returned < deadline
             time.sleep(.03)
+        lookup_returned = time.monotonic()
+        check['targetLookupCompletedAtDriverMs'] = lookup_returned * 1000
+        check['targetLookupDurationMs'] = (lookup_returned - (deadline - 4)) * 1000
+        input_checked = time.monotonic()
+        check['inputDeadlineCheckedAtDriverMs'] = input_checked * 1000
+        check['inputWithinDeadline'] = input_checked < deadline
+        if input_checked >= deadline:
+            check['lateTargetRejected'] = bool(target)
+            target = None
+        check['targetFound'] = bool(target)
         assert target, f'No visible, enabled, real touch target for {selector}'
         self.session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [target['point']]})
         try:
