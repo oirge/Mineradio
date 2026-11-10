@@ -913,6 +913,17 @@ def verify_host_more(audit, driver):
         observed = False
         for attempt in range(3):
             driver.touch('#mobile-player-more')
+            # Back-to-back input can arrive before WAAPI has drawn its first
+            # frame. Wait for real progress before testing a mid-flight reversal;
+            # a naturally completed close still reopens and uses the next attempt.
+            audit.page.wait_for_function(r"""selector => {
+                const row = document.querySelector(selector);
+                if (row?.getAttribute('data-mobile-motion-more') !== 'leaving') return true;
+                return row.getAnimations().some(animation =>
+                    animation.id === 'mineradio-mobile-component'
+                    && animation.playState === 'running'
+                    && typeof animation.currentTime === 'number' && animation.currentTime > 0);
+            }""", arg=selector, polling='raf', timeout=2000)
             driver.touch('#mobile-player-more')
             # Inspect the captured click before its handler changed state.
             # A completed close is never reported as an interrupted animation.
