@@ -2,12 +2,17 @@
 
 Android 7.0+，沿用原签名，可覆盖安装旧版。
 
-- 两套手机界面统一页面、弹窗、底部面板与菜单的进入和退出动画；快速返回、重复开关从当前显示位置衔接。
-- 按钮、收藏、重置和滑动操作提供轻微反馈；加载、空状态、错误提示与真实封面平滑出现。
-- 曲库翻页与刷新保持单一列表，最多 8 个可见行同时过渡，保留原有分页与滚动位置。
-- 响应系统“减少动态效果”，退出层立即停止交互并清理动画、焦点和监听。
-- 保留 Folia 约 2.5 秒自动隐藏、首次触摸只唤回、拖动及菜单保护，以及单一原生 PCM 引擎和前后台连续播放。
+- 共享 150ms 微交互、200ms 组件、280ms 页面、240ms 弹窗和 280ms 底部面板参数；返回与进入方向一致，重复开关从当前画面连续反向。
+- 两套界面的导航、弹窗、遮罩、菜单和手动沉浸补齐进退动画；退出层立即 inert / aria-hidden，菜单和工具分层返回，焦点与监听按生命周期释放。
+- 按钮、收藏、滑动与重置使用轻微反馈，真实加载的封面、空态和错误提示平滑出现。
+- 96 个真实 WAV 的曲库验收保留单一 60 行分页，所有样本无额外退出行、最多 8 个可见行根节点动画；翻页、搜索和刷新保持列表 DOM 与滚动位置。
+- 响应系统减少动态效果，保留 2.5 秒闲置隐藏、首次触摸只唤回和拖动/菜单保护；手动沉浸与闲置隐藏共用 560ms 舞台平移。
+- 沿用唯一原生 PCM 引擎与 AudioTrack、业务接口、主题和布局，无新增运行依赖。
 
-源码覆盖和动效参数见 [动效优化报告](https://github.com/oirge/Mineradio/blob/codex/android-mobile/docs/MOBILE-MOTION.md)，发行与云端验收证据见 [Android 记录](https://github.com/oirge/Mineradio/blob/codex/android-mobile/docs/ANDROID-HANDOFF.md)。
+[云端发行门禁](https://github.com/oirge/Mineradio/actions/runs/42763312810)成功：Node 1692、浏览器 13、原生 15、DSP 8 项通过。公开 APK 已完整回下载并核对版本、原证书、v2 签名、校验清单、GitHub digest 和同 run 签名构建包。
 
-云端模拟器用于验证交互、布局和 AudioTrack 连续性；实际手机帧率、高刷新率和品牌省电策略仍需设备验证。Android 预览版与桌面 Latest 独立发布。
+浏览器截图：隐藏图中顶部导航、歌曲信息、播放控件和底部导航均已消失，歌词舞台铺满视口；恢复图四组控件正常显示，舞台回到原布局。Android 系统截图：系统隐藏原图仍显示顶部导航、歌曲信息、播放控件及底部导航，与同轮DOM隐藏和满舞台记录不一致；恢复原图四组控件正常显示。原因未确认，系统截图不能证明Android实际画面已成功隐藏，实际手机显示效果仍未验收。
+
+完整轨迹的 rAF 回调最大间隔为 3649.9ms。云端软件 GPU 的结果不等同实际手机帧率，本轮未验收稳定 60FPS、物理手机、高刷新率或低性能设备。 交互验收未覆盖项：宿主“更多”的中途反向未被三次真实触摸覆盖，最终展开与清理已验证。 完整交互、Folia 和连续播放取证使用同一发行提交的 debug APK；签名 release APK 在同一云端 run 另验安装及离线导入首页启动。云端模拟器使用 -noaudio，依据实际 PCM、AudioTrack 播放头和欠载计数，未做扬声器听感验收。1.0.5 系统隐藏截图与 DOM 不一致的历史记录保留。Android 预览版与桌面 Latest 独立。
+
+完整结果见 [动效优化报告](https://github.com/oirge/Mineradio/blob/codex/android-mobile/docs/MOBILE-MOTION.md) 与 [发行验收记录](https://github.com/oirge/Mineradio/blob/codex/android-mobile/docs/ANDROID-HANDOFF.md)。

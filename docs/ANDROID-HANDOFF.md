@@ -1,3 +1,40 @@
+# Android 1.0.6 全局交互动效升级已发布
+
+更新：2026-11-10。两套手机界面的页面、浮层、控件、列表和加载状态接入统一动效；发布及完整 APK 核验已完成。以下历史完整保留。
+
+## 下载与源码
+
+- [Android 1.0.6 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.6/Mineradio-Android-1.0.6.apk)，14,492,011 字节；[Release](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.6)，Release ID `439994798`。
+- 发布时间北京时间 2026-11-10 13:52:23，tag `android-v1.0.6` → `6dffcd781389d0081d353c0a298ec78624422bb5`，versionName `1.0.6` / versionCode `10006`。
+- SHA256 `d991643b8e5cad08aa9423589551fc59f2c867916d2a0cb0378060c123e5c168`；完整公开回下载、GitHub digest、校验清单和同 run 签名构建包一致。原证书 `ee1586586ac8d13b17dda8020eda86712d62bac7b96e3f3b5e8643151faff0a6`，v2 签名经同 run apksigner 核验，支持覆盖安装。
+- 发行 SHA 和 tag 固定，后续文档提交不重打 tag 或替换资产；桌面 Latest 为 `v2.6.10`。
+
+## 实现与验收
+
+- 共享 150ms 微交互、200ms 组件、280ms 页面、240ms 弹窗和 280ms 底部面板参数；返回与进入方向一致，重复开关从当前画面连续反向。
+- 两套界面的导航、弹窗、遮罩、菜单和手动沉浸补齐进退动画；退出层立即 inert / aria-hidden，菜单和工具分层返回，焦点与监听按生命周期释放。
+- 按钮、收藏、滑动与重置使用轻微反馈，真实加载的封面、空态和错误提示平滑出现。
+- 96 个真实 WAV 的曲库验收保留单一 60 行分页，所有样本无额外退出行、最多 8 个可见行根节点动画；翻页、搜索和刷新保持列表 DOM 与滚动位置。
+- 响应系统减少动态效果，保留 2.5 秒闲置隐藏、首次触摸只唤回和拖动/菜单保护；手动沉浸与闲置隐藏共用 560ms 舞台平移。
+- 沿用唯一原生 PCM 引擎与 AudioTrack、业务接口、主题和布局，无新增运行依赖。
+
+- [Android 云端发行门禁 42763312810](https://github.com/oirge/Mineradio/actions/runs/42763312810)成功，attempt 1：Node 1692 项、浏览器 13 项、原生 15 项、DSP 8 项通过。
+- 追加全局动效检查：浏览器 13 项、Android 5 项、真实长列表 4 项。保存完整动画、原始触摸、反向、分层返回、同实例沉浸、列表身份和祖先有效可见性。
+- 工件 build `13738463066`、native `13739790028`、browser `13738319998` 均核实来自固定发行 SHA/run。
+- 隐藏前、隐藏后和恢复的进度为 133.710 → 137.291 → 147.945 秒；保持 AudioTrack session 145、sinkCreations 1、同曲目 generation 和欠载计数 0。 全套 UI 动效期间进度 148.761 → 249.990 秒，原生 sink 与歌曲不变，未新增欠载。
+- 浏览器截图：隐藏图中顶部导航、歌曲信息、播放控件和底部导航均已消失，歌词舞台铺满视口；恢复图四组控件正常显示，舞台回到原布局。Android 系统截图：系统隐藏原图仍显示顶部导航、歌曲信息、播放控件及底部导航，与同轮DOM隐藏和满舞台记录不一致；恢复原图四组控件正常显示。原因未确认，系统截图不能证明Android实际画面已成功隐藏，实际手机显示效果仍未验收。
+- 完整轨迹的 rAF 回调最大间隔为 3649.9ms。云端软件 GPU 的结果不等同实际手机帧率，本轮未验收稳定 60FPS、物理手机、高刷新率或低性能设备。 交互验收未覆盖项：宿主“更多”的中途反向未被三次真实触摸覆盖，最终展开与清理已验证。
+
+
+## 完整证据与边界
+
+[完整发行核验](android-evidence/1.0.6-verification.json)、[原生报告](android-evidence/1.0.6-native.json)、[完整音频状态](android-evidence/1.0.6-background.json)、[浏览器报告](android-evidence/1.0.6-browser.json)、[DSP 原语](android-evidence/1.0.6-dsp.json)、[隐藏与恢复](android-evidence/1.0.6-chrome.json)、[原始闲置动画](android-evidence/1.0.6-animation.json)、[浏览器全局动效](android-evidence/1.0.6-motion-browser.json)、[Android 全局动效](android-evidence/1.0.6-motion-android.json)、[真实长列表](android-evidence/1.0.6-motion-list.json)、[严格唤回状态](android-evidence/1.0.6-wake-readiness.json)。完整原始 JSON 保留，未截断样本或替换失败历史。
+
+完整交互、Folia 和连续播放取证使用同一发行提交的 debug APK；签名 release APK 在同一云端 run 另验安装及离线导入首页启动。云端模拟器使用 -noaudio，依据实际 PCM、AudioTrack 播放头和欠载计数，未做扬声器听感验收。1.0.5 系统隐藏截图与 DOM 不一致的历史记录保留。Android 预览版与桌面 Latest 独立。
+
+本机未启动浏览器、GUI、模拟器、构建或应用测试，未安装 APK、操作用户播放器/数据或发邮件。
+
+
 # Android 1.0.5 Folia 手机柔和隐藏动画已发布
 
 更新：2026-11-07。Folia 手机界面沿用 1.0.4 的闲置自动隐藏，1.0.5 将隐藏与唤回改为柔和过渡，减少突然消失和画面跳变。控制区以 520ms 淡入淡出并轻移 8px，舞台中心以 560ms 平移衔接；使用 cubic-bezier(.4,0,.2,1) 缓起缓收，不拉伸文字，也不逐帧重分配舞台尺寸。唤回时背景保持满尺寸，舞台移动完成后再恢复显示状态的尺寸。resize／destroy 清理动画状态，减少动态效果偏好下跳过动画。闲置约 2.5 秒后隐藏顶部导航、歌曲信息、播放控件和底部导航，歌词、悬浮唱片或封面舞台铺满界面。首次轻触只唤回控件，不触发下面的播放、跳转或切歌；可见控件正常响应下一次操作。进度和音量长拖期间保持可见，pointerup／pointercancel 后重新计时；曲库、设置、更多及歌单菜单打开时保持可见，关闭后恢复计时。 原生音频沿用 1.0.3 的单一 PCM 引擎和 AudioTrack；本次隐藏与唤回只控制 Folia 界面，播放、既有音效和后台连续性继续走原链路。 Android 云端发行、公开 APK 完整回下载及最终版本与签名核验已完成；以下 1.0.4 和更早记录完整保留。

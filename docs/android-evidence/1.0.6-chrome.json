@@ -1,0 +1,557 @@
+[
+  {
+    "phase": "before",
+    "ui": {
+      "hidden": false,
+      "width": 412,
+      "height": 842,
+      "stage": {
+        "x": 0,
+        "y": 60,
+        "width": 412.19049072265625,
+        "height": 508.2857360839844,
+        "top": 60,
+        "right": 412.19049072265625,
+        "bottom": 568.2857360839844,
+        "left": 0
+      },
+      "controls": [
+        {
+          "selector": ".local-mobile-header",
+          "opacity": 1,
+          "visibility": "visible",
+          "pointerEvents": "auto",
+          "bounds": {
+            "x": 8,
+            "y": 6,
+            "width": 396.19049072265625,
+            "height": 48,
+            "top": 6,
+            "right": 404.19049072265625,
+            "bottom": 54,
+            "left": 8
+          }
+        },
+        {
+          "selector": ".local-mobile-nav",
+          "opacity": 1,
+          "visibility": "visible",
+          "pointerEvents": "auto",
+          "bounds": {
+            "x": 0,
+            "y": 778.2857055664062,
+            "width": 412.19049072265625,
+            "height": 64,
+            "top": 778.2857055664062,
+            "right": 412.19049072265625,
+            "bottom": 842.2857055664062,
+            "left": 0
+          }
+        },
+        {
+          "selector": ".local-controls",
+          "opacity": 1,
+          "visibility": "visible",
+          "pointerEvents": "auto",
+          "bounds": {
+            "x": 8,
+            "y": 628.2857055664062,
+            "width": 396.19049072265625,
+            "height": 144,
+            "top": 628.2857055664062,
+            "right": 404.19049072265625,
+            "bottom": 772.2857055664062,
+            "left": 8
+          }
+        },
+        {
+          "selector": ".local-current-track",
+          "opacity": 1,
+          "visibility": "visible",
+          "pointerEvents": "none",
+          "bounds": {
+            "x": 14,
+            "y": 574.2857055664062,
+            "width": 384.19049072265625,
+            "height": 42,
+            "top": 574.2857055664062,
+            "right": 398.19049072265625,
+            "bottom": 616.2857055664062,
+            "left": 14
+          }
+        }
+      ]
+    },
+    "state": {
+      "nativeActive": true,
+      "backend": "native",
+      "engine": "pcm",
+      "playing": true,
+      "resumePlaying": true,
+      "preparing": false,
+      "index": 0,
+      "uri": "content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2FMobile-Blue.wav",
+      "title": "Mobile-Blue",
+      "artist": "",
+      "position": 133.71008333333333,
+      "duration": 900,
+      "rate": 1,
+      "masterLevel": 1,
+      "volume": 1,
+      "playMode": "loop",
+      "stopAfterTrack": false,
+      "snapshotAt": 1794289615510,
+      "error": "",
+      "audioSessionId": 145,
+      "outputFrames": 6429264,
+      "playbackHeadFrames": 6418084,
+      "underruns": 0,
+      "sinkBufferFrames": 24000,
+      "queuedFrames": 11180,
+      "decoderBufferedFrames": 95664,
+      "sinkCreations": 1,
+      "trackGeneration": 1,
+      "completions": 0,
+      "crossfadeActive": false,
+      "crossfadeCount": 0,
+      "overlapFrames": 0,
+      "gapless": {
+        "enabled": true,
+        "crossfadeSeconds": 0
+      },
+      "effects": {
+        "sampleRate": 48000,
+        "processedFrames": 6429264,
+        "inputRms": 0.06586864847210949,
+        "outputRms": 0.06586864847210949,
+        "inputSideRms": 0.04707560866738512,
+        "outputSideRms": 0.04707560866738512,
+        "inputPeak": 0.09155179560184479,
+        "outputPeak": 0.09155179560184479,
+        "reductionDb": 0,
+        "gains": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "preampLinear": 1,
+        "replayGain": 1,
+        "master": 1,
+        "width": 1,
+        "thresholdDb": 0,
+        "ratio": 1,
+        "invalidSamples": 0,
+        "clippedSamples": 0
+      },
+      "audioEffects": {
+        "enabled": false,
+        "preset": "normal",
+        "gains": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "preampDb": 0,
+        "autoPreampDb": 0,
+        "totalPreampDb": 0,
+        "preampLinear": 1,
+        "limiter": {
+          "enabled": false,
+          "thresholdDb": 0,
+          "ratio": 1
+        },
+        "width": 1,
+        "maxBoostDb": 0,
+        "replayGain": 1,
+        "master": 1
+      },
+      "sleepMode": "off",
+      "sleepDue": 0,
+      "waitingForFocus": false
+    }
+  },
+  {
+    "phase": "hidden",
+    "ui": {
+      "hidden": true,
+      "width": 412,
+      "height": 842,
+      "stage": {
+        "x": 0,
+        "y": 0,
+        "width": 412.19049072265625,
+        "height": 842.2857055664062,
+        "top": 0,
+        "right": 412.19049072265625,
+        "bottom": 842.2857055664062,
+        "left": 0
+      },
+      "controls": [
+        {
+          "selector": ".local-mobile-header",
+          "opacity": 0,
+          "visibility": "hidden",
+          "pointerEvents": "none",
+          "bounds": {
+            "x": 8,
+            "y": -2,
+            "width": 396.19049072265625,
+            "height": 48,
+            "top": -2,
+            "right": 404.19049072265625,
+            "bottom": 46,
+            "left": 8
+          }
+        },
+        {
+          "selector": ".local-mobile-nav",
+          "opacity": 0,
+          "visibility": "hidden",
+          "pointerEvents": "none",
+          "bounds": {
+            "x": 0,
+            "y": 786.2857055664062,
+            "width": 412.19049072265625,
+            "height": 64,
+            "top": 786.2857055664062,
+            "right": 412.19049072265625,
+            "bottom": 850.2857055664062,
+            "left": 0
+          }
+        },
+        {
+          "selector": ".local-controls",
+          "opacity": 0,
+          "visibility": "hidden",
+          "pointerEvents": "none",
+          "bounds": {
+            "x": 8,
+            "y": 636.2857055664062,
+            "width": 396.19049072265625,
+            "height": 144,
+            "top": 636.2857055664062,
+            "right": 404.19049072265625,
+            "bottom": 780.2857055664062,
+            "left": 8
+          }
+        },
+        {
+          "selector": ".local-current-track",
+          "opacity": 0,
+          "visibility": "hidden",
+          "pointerEvents": "none",
+          "bounds": {
+            "x": 14,
+            "y": 582.2857055664062,
+            "width": 384.19049072265625,
+            "height": 42,
+            "top": 582.2857055664062,
+            "right": 398.19049072265625,
+            "bottom": 624.2857055664062,
+            "left": 14
+          }
+        }
+      ]
+    },
+    "state": {
+      "nativeActive": true,
+      "backend": "native",
+      "engine": "pcm",
+      "playing": true,
+      "resumePlaying": true,
+      "preparing": false,
+      "index": 0,
+      "uri": "content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2FMobile-Blue.wav",
+      "title": "Mobile-Blue",
+      "artist": "",
+      "position": 137.29141666666666,
+      "duration": 900,
+      "rate": 1,
+      "masterLevel": 1,
+      "volume": 1,
+      "playMode": "loop",
+      "stopAfterTrack": false,
+      "snapshotAt": 1794289619088,
+      "error": "",
+      "audioSessionId": 145,
+      "outputFrames": 6601296,
+      "playbackHeadFrames": 6589988,
+      "underruns": 0,
+      "sinkBufferFrames": 24000,
+      "queuedFrames": 11308,
+      "decoderBufferedFrames": 95664,
+      "sinkCreations": 1,
+      "trackGeneration": 1,
+      "completions": 0,
+      "crossfadeActive": false,
+      "crossfadeCount": 0,
+      "overlapFrames": 0,
+      "gapless": {
+        "enabled": true,
+        "crossfadeSeconds": 0
+      },
+      "effects": {
+        "sampleRate": 48000,
+        "processedFrames": 6601296,
+        "inputRms": 0.06607937903668962,
+        "outputRms": 0.06607937903668962,
+        "inputSideRms": 0.04651632925475163,
+        "outputSideRms": 0.04651632925475163,
+        "inputPeak": 0.09155299514532089,
+        "outputPeak": 0.09155299514532089,
+        "reductionDb": 0,
+        "gains": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "preampLinear": 1,
+        "replayGain": 1,
+        "master": 1,
+        "width": 1,
+        "thresholdDb": 0,
+        "ratio": 1,
+        "invalidSamples": 0,
+        "clippedSamples": 0
+      },
+      "audioEffects": {
+        "enabled": false,
+        "preset": "normal",
+        "gains": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "preampDb": 0,
+        "autoPreampDb": 0,
+        "totalPreampDb": 0,
+        "preampLinear": 1,
+        "limiter": {
+          "enabled": false,
+          "thresholdDb": 0,
+          "ratio": 1
+        },
+        "width": 1,
+        "maxBoostDb": 0,
+        "replayGain": 1,
+        "master": 1
+      },
+      "sleepMode": "off",
+      "sleepDue": 0,
+      "waitingForFocus": false
+    }
+  },
+  {
+    "phase": "restored",
+    "ui": {
+      "hidden": false,
+      "width": 412,
+      "height": 842,
+      "stage": {
+        "x": 0,
+        "y": 60,
+        "width": 412.19049072265625,
+        "height": 508.2857360839844,
+        "top": 60,
+        "right": 412.19049072265625,
+        "bottom": 568.2857360839844,
+        "left": 0
+      },
+      "controls": [
+        {
+          "selector": ".local-mobile-header",
+          "opacity": 1,
+          "visibility": "visible",
+          "pointerEvents": "auto",
+          "bounds": {
+            "x": 8,
+            "y": 6,
+            "width": 396.19049072265625,
+            "height": 48,
+            "top": 6,
+            "right": 404.19049072265625,
+            "bottom": 54,
+            "left": 8
+          }
+        },
+        {
+          "selector": ".local-mobile-nav",
+          "opacity": 1,
+          "visibility": "visible",
+          "pointerEvents": "auto",
+          "bounds": {
+            "x": 0,
+            "y": 778.2857055664062,
+            "width": 412.19049072265625,
+            "height": 64,
+            "top": 778.2857055664062,
+            "right": 412.19049072265625,
+            "bottom": 842.2857055664062,
+            "left": 0
+          }
+        },
+        {
+          "selector": ".local-controls",
+          "opacity": 1,
+          "visibility": "visible",
+          "pointerEvents": "auto",
+          "bounds": {
+            "x": 8,
+            "y": 628.2857055664062,
+            "width": 396.19049072265625,
+            "height": 144,
+            "top": 628.2857055664062,
+            "right": 404.19049072265625,
+            "bottom": 772.2857055664062,
+            "left": 8
+          }
+        },
+        {
+          "selector": ".local-current-track",
+          "opacity": 1,
+          "visibility": "visible",
+          "pointerEvents": "none",
+          "bounds": {
+            "x": 14,
+            "y": 574.2857055664062,
+            "width": 384.19049072265625,
+            "height": 42,
+            "top": 574.2857055664062,
+            "right": 398.19049072265625,
+            "bottom": 616.2857055664062,
+            "left": 14
+          }
+        }
+      ]
+    },
+    "state": {
+      "nativeActive": true,
+      "backend": "native",
+      "engine": "pcm",
+      "playing": true,
+      "resumePlaying": true,
+      "preparing": false,
+      "index": 0,
+      "uri": "content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2FMobile-Blue.wav",
+      "title": "Mobile-Blue",
+      "artist": "",
+      "position": 147.94475,
+      "duration": 900,
+      "rate": 1,
+      "masterLevel": 1,
+      "volume": 1,
+      "playMode": "loop",
+      "stopAfterTrack": false,
+      "snapshotAt": 1794289629821,
+      "error": "",
+      "audioSessionId": 145,
+      "outputFrames": 7112784,
+      "playbackHeadFrames": 7101348,
+      "underruns": 0,
+      "sinkBufferFrames": 24000,
+      "queuedFrames": 11436,
+      "decoderBufferedFrames": 95152,
+      "sinkCreations": 1,
+      "trackGeneration": 1,
+      "completions": 0,
+      "crossfadeActive": false,
+      "crossfadeCount": 0,
+      "overlapFrames": 0,
+      "gapless": {
+        "enabled": true,
+        "crossfadeSeconds": 0
+      },
+      "effects": {
+        "sampleRate": 48000,
+        "processedFrames": 7112784,
+        "inputRms": 0.06401196913314586,
+        "outputRms": 0.06401196913314586,
+        "inputSideRms": 0.04279961355436953,
+        "outputSideRms": 0.04279961355436953,
+        "inputPeak": 0.09155299514532089,
+        "outputPeak": 0.09155299514532089,
+        "reductionDb": 0,
+        "gains": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "preampLinear": 1,
+        "replayGain": 1,
+        "master": 1,
+        "width": 1,
+        "thresholdDb": 0,
+        "ratio": 1,
+        "invalidSamples": 0,
+        "clippedSamples": 0
+      },
+      "audioEffects": {
+        "enabled": false,
+        "preset": "normal",
+        "gains": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "preampDb": 0,
+        "autoPreampDb": 0,
+        "totalPreampDb": 0,
+        "preampLinear": 1,
+        "limiter": {
+          "enabled": false,
+          "thresholdDb": 0,
+          "ratio": 1
+        },
+        "width": 1,
+        "maxBoostDb": 0,
+        "replayGain": 1,
+        "master": 1
+      },
+      "sleepMode": "off",
+      "sleepDue": 0,
+      "waitingForFocus": false
+    }
+  }
+]
