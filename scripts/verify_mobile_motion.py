@@ -68,13 +68,19 @@ FOLIA_CHROME_READINESS = r"""
 """
 
 
-# Observe UI transitions only. The playing visualizer and lyric timelines are not
-# UI lifecycle animations and deliberately continue during these checks.
+# Observe UI transitions only. Playback progress, the playing visualizer and
+# lyric timelines deliberately continue during these checks.
 UI_ANIMATIONS = r"""
-    const uiAnimations = () => doc.getAnimations().filter(animation => {
+    const playbackProgressTransition = animation =>
+        animation.effect?.target?.matches?.('#bottom-bar #progress-fill')
+            && animation.transitionProperty === 'width';
+    const uiAnimations = (animations = doc.getAnimations()) => animations.filter(animation => {
         const target = animation.effect?.target;
         const end = animation.effect?.getComputedTiming?.().endTime;
         if (!target?.matches || !Number.isFinite(end)) return false;
+        // The progress fill follows the audio clock; only its width transition
+        // is outside UI lifecycle readiness. Its other animations still count.
+        if (playbackProgressTransition(animation)) return false;
         return animation.id === 'mineradio-mobile-chrome-stage'
             || target.matches('.local-visualizer,.local-record-wall,.lattice-root,[data-mobile-motion-view]')
             || !!target.closest('#mobile-nav,#playlist-panel,#fx-panel,#search-results,#empty-home,#bottom-bar,#collect-modal,#toast,'
@@ -107,13 +113,15 @@ SNAPSHOT = r"""
         const keyframes = animation.id === 'mineradio-mobile-chrome-stage'
             || target.matches('#bottom-bar .control-cluster.modes') ? animation.effect.getKeyframes() : null;
         return {id: animation.id, state: animation.playState, pending: animation.pending,
+            transitionProperty: animation.transitionProperty ?? null,
+            animationName: animation.animationName ?? null,
             currentTime: animation.currentTime, duration: timing.duration, delay: timing.delay,
             properties: keyframes ? [...new Set(keyframes.flatMap(frame => Object.keys(frame)
                 .filter(key => !['offset','computedOffset','easing','composite'].includes(key))))] : undefined,
             keyframes: keyframes ? keyframes.map(frame => ({opacity: frame.opacity, translate: frame.translate,
                 scale: frame.scale, height: frame.height, marginTop: frame.marginTop})) : undefined,
             target: {nodeId: view.__mineradioMotionAudit?.identify?.(target) ?? null,
-                tag: target.tagName, testid: target.getAttribute('data-testid'), classes: target.className,
+                tag: target.tagName, id: target.id, testid: target.getAttribute('data-testid'), classes: target.className,
                 queueIndex: target.hasAttribute('data-queue-index') ? Number(target.getAttribute('data-queue-index')) : null,
                 queueTitle: target.matches('.queue-item') ? target.querySelector('.qi-name')?.textContent : null},
             row: !!target.closest('[data-testid="local-track-row"]'),
@@ -139,7 +147,9 @@ SNAPSHOT = r"""
         const api = view.MineradioMobileMotion;
         const diagnostic = typeof api?.diagnostics === 'function' ? api.diagnostics() : api?.diagnostics ?? api;
         const active = diagnostic?.activeAnimations;
-        const animations = uiAnimations();
+        const documentAnimations = doc.getAnimations();
+        const animations = uiAnimations(documentAnimations);
+        const playbackAnimations = documentAnimations.filter(playbackProgressTransition);
         const activeAnimations = animations.filter(animation => animation.playState === 'running' || animation.pending);
         const rowAnimations = animations.filter(animation =>
             animation.effect.target.closest('[data-testid="local-track-row"]'));
@@ -171,7 +181,9 @@ SNAPSHOT = r"""
             surfaces: selectors.flatMap(selector => [...doc.querySelectorAll(selector)].slice(0, 4)
                 .map(element => ({selector, ...describe(element)}))),
             animations: animations.slice(0, 32).map(describeAnimation),
-            documentAnimationCount: doc.getAnimations().length, uiAnimationCount: animations.length,
+            playbackProgressAnimations: playbackAnimations.slice(0, 4).map(describeAnimation),
+            playbackProgressAnimationCount: playbackAnimations.length,
+            documentAnimationCount: documentAnimations.length, uiAnimationCount: animations.length,
             activeUiAnimationCount: activeAnimations.length, rowDescendantAnimationCount: rowAnimations.length,
             rowImageAnimationCount: rowAnimations.filter(animation => animation.effect.target.tagName === 'IMG').length,
             rowAnimationCount: animatedRows.length,
@@ -354,11 +366,12 @@ class TouchDriver:
         finally:
             self.session.detach()
 
-    def point(self, selector, frame=False, input_token=None):
-        return self.page.evaluate(r"""({selector, frame, inputToken}) => {
+    def point(self, selector, frame=False, input_token=None, wake_token=None):
+        return self.page.evaluate(r"""({selector, frame, inputToken, wakeToken}) => {
             const iframe = frame ? document.getElementById('folia-frame') : null;
             const doc = iframe ? iframe.contentDocument : document, view = doc.defaultView;
-            const candidates = [...doc.querySelectorAll(selector)];
+            const findTarget = (query, token) => {
+            const candidates = [...doc.querySelectorAll(query)];
             for (const element of candidates) {
                 const rect = element.getBoundingClientRect(), style = view.getComputedStyle(element);
                 if (element.matches(':disabled') || element.closest('[inert],[aria-disabled="true"]')
@@ -379,9 +392,9 @@ class TouchDriver:
                     point.x += box.left; point.y += box.top;
                     if (document.elementFromPoint(point.x, point.y) !== iframe) continue;
                 }
-                if (inputToken !== null) {
+                if (token !== null) {
                     view.__mineradioTouchProbe?.dispose();
-                    const probe = {token: inputToken, events: []};
+                    const probe = {token, events: []};
                     const input = event => {
                         if (probe.events.length >= 8) return;
                         probe.events.push({event, state: {
@@ -400,36 +413,73 @@ class TouchDriver:
                         }});
                     };
                     const names = ['pointerdown', 'pointerup', 'pointercancel', 'click'];
-                    names.forEach(name => view.addEventListener(name, input, true));
                     probe.dispose = () => {
-                        names.forEach(name => view.removeEventListener(name, input, true));
-                        probe.events.length = 0;
+                        try {
+                            names.forEach(name => view.removeEventListener(name, input, true));
+                        } finally {
+                            probe.events.length = 0;
+                        }
                     };
-                    view.__mineradioTouchProbe = probe;
+                    try {
+                        names.forEach(name => view.addEventListener(name, input, true));
+                        view.__mineradioTouchProbe = probe;
+                    } catch (error) {
+                        probe.dispose();
+                        throw error;
+                    }
                 }
                 return {point, bounds: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
                     tag: element.tagName, testid: element.getAttribute('data-testid'), id: element.id,
-                    at: view.performance.now(), hostAt: performance.now(), inputToken};
+                    at: view.performance.now(), hostAt: performance.now(), inputToken: token};
             }
             return null;
-        }""", {'selector': selector, 'frame': frame, 'inputToken': input_token})
+            };
+            const target = findTarget(selector, inputToken);
+            if (target) return target;
+            if (wakeToken !== null && iframe && selector !== '[data-testid="local-player"]'
+                && doc.body.classList.contains('mineradio-mobile-chrome-hidden')) {
+                const frame = iframe;
+                """ + FOLIA_CHROME_READINESS + r"""
+                const state = chromeReadiness();
+                if (state.hidden) {
+                    const stage = findTarget('[data-testid="local-player"]', wakeToken);
+                    return {preparedWake: {token: wakeToken, target: stage, state}};
+                }
+            }
+            return null;
+        }""", {'selector': selector, 'frame': frame,
+            'inputToken': input_token, 'wakeToken': wake_token})
 
-    def collect_input(self, token, frame):
-        return self.page.evaluate("""({token, frame}) => {
-            const doc = frame ? document.getElementById('folia-frame')?.contentDocument : document;
+    def collect_input(self, token, frame, read_readiness=False):
+        return self.page.evaluate("""({token, frame: inFrame, readReadiness}) => {
+            const frame = inFrame ? document.getElementById('folia-frame') : null;
+            const doc = inFrame ? frame?.contentDocument : document;
             const view = doc?.defaultView, probe = view?.__mineradioTouchProbe;
-            if (!probe || probe.token !== token) return {token, probeMissing: true, events: []};
-            // Event references are retained only until dispatch finishes, so
-            // defaultPrevented includes the document's first-tap wake handler.
-            const result = {token, events: probe.events.map(({event, state}) =>
-                ({...state, defaultPrevented: event.defaultPrevented}))};
-            probe.dispose();
-            delete view.__mineradioTouchProbe;
-            return result;
-        }""", {'token': token, 'frame': frame})
+            try {
+                // Event references remain until dispatch finishes, including
+                // the final defaultPrevented value from the wake handler.
+                const result = !probe || probe.token !== token
+                    ? {token, probeMissing: true, events: []}
+                    : {token, events: probe.events.map(({event, state}) =>
+                        ({...state, defaultPrevented: event.defaultPrevented}))};
+                if (readReadiness) {
+                    """ + FOLIA_CHROME_READINESS + """
+                    result.chromeReadiness = chromeReadiness();
+                }
+                return result;
+            } finally {
+                if (probe?.token === token) {
+                    try {
+                        probe.dispose();
+                    } finally {
+                        if (view.__mineradioTouchProbe === probe) delete view.__mineradioTouchProbe;
+                    }
+                }
+            }
+        }""", {'token': token, 'frame': frame, 'readReadiness': read_readiness})
 
-    def touch(self, selector, frame=False, hold=0, cancel=False):
-        deadline = time.monotonic() + 4
+    def touch(self, selector, frame=False, hold=0, cancel=False, prepared_stage=None):
+        deadline = prepared_stage['outerDeadline'] if prepared_stage is not None else time.monotonic() + 4
         check = {'selector': selector, 'frame': frame,
             'windowStartedAtDriverMs': (deadline - 4) * 1000,
             'deadlineAtDriverMs': deadline * 1000,
@@ -437,48 +487,71 @@ class TouchDriver:
         self.touch_checks.append(check)
         if self.wake_checks:
             self.wake_checks[-1].setdefault('touchPreparations', []).append(check)
+        if prepared_stage is not None:
+            prepared_stage['touchCheck'] = check
+            check['preparedStagePointReused'] = True
         while True:
-            self.input_serial += 1
-            token = self.input_serial
-            target = None
-            while time.monotonic() < deadline:
-                point_started = time.monotonic()
-                target = self.point(selector, frame, input_token=token)
-                point_returned = time.monotonic()
-                check['pointProbes'].append({'startedAtDriverMs': point_started * 1000,
-                    'returnedAtDriverMs': point_returned * 1000,
-                    'durationMs': (point_returned - point_started) * 1000, 'target': target})
-                if target:
-                    break
-                if (frame and selector != '[data-testid="local-player"]'
-                        and not check['wakeAttempted'] and time.monotonic() < deadline):
-                    probe_started = time.monotonic()
-                    chrome_state = self.page.evaluate("""() => {
-                        const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
-                        """ + FOLIA_CHROME_READINESS + """
-                        return chromeReadiness();
-                    }""")
-                    probe_returned = time.monotonic()
-                    check['chromeProbes'].append({'startedAtDriverMs': probe_started * 1000,
-                        'returnedAtDriverMs': probe_returned * 1000,
-                        'durationMs': (probe_returned - probe_started) * 1000,
-                        'hidden': chrome_state['hidden'], 'state': chrome_state,
-                        'returnedWithinDeadline': probe_returned < deadline})
-                    if chrome_state['hidden'] and probe_returned < deadline:
+            if prepared_stage is not None:
+                token = prepared_stage['token']
+                target = prepared_stage['target']
+                check['pointProbes'].append(prepared_stage['pointProbe'])
+            else:
+                self.input_serial += 1
+                token = self.input_serial
+                target = None
+                while time.monotonic() < deadline:
+                    wake_token = None
+                    if (frame and selector != '[data-testid="local-player"]'
+                            and not check['wakeAttempted']):
+                        self.input_serial += 1
+                        wake_token = self.input_serial
+                    point_started = time.monotonic()
+                    result = self.point(selector, frame, input_token=token, wake_token=wake_token)
+                    point_returned = time.monotonic()
+                    prepared_wake = result.get('preparedWake') if result else None
+                    target = None if prepared_wake is not None else result
+                    point_probe = {'startedAtDriverMs': point_started * 1000,
+                        'returnedAtDriverMs': point_returned * 1000,
+                        'durationMs': (point_returned - point_started) * 1000, 'target': target}
+                    check['pointProbes'].append(point_probe)
+                    if target:
+                        break
+                    if prepared_wake is not None:
+                        chrome_state = prepared_wake['state']
+                        chrome_probe = {'startedAtDriverMs': point_started * 1000,
+                            'returnedAtDriverMs': point_returned * 1000,
+                            'durationMs': (point_returned - point_started) * 1000,
+                            'hidden': chrome_state['hidden'], 'state': chrome_state,
+                            'returnedWithinDeadline': point_returned < deadline,
+                            'coalescedWithPoint': True}
+                        check['chromeProbes'].append(chrome_probe)
+                        prepared_wake['pointProbe'] = {**point_probe, 'target': prepared_wake['target'],
+                            'coalescedWithRequestedPoint': True}
+                        prepared_wake['outerDeadline'] = deadline
                         wake_started = time.monotonic()
                         preparation = {'startedAtDriverMs': wake_started * 1000,
-                            'startedWithinDeadline': wake_started < deadline}
+                            'startedWithinDeadline': wake_started < deadline,
+                            'stageTarget': prepared_wake['target'], 'stageToken': prepared_wake['token']}
                         check['wakePreparation'] = preparation
-                        if wake_started < deadline:
-                            check['wakeAttempted'] = True
+                        try:
+                            if prepared_wake['target'] and point_returned < deadline and wake_started < deadline:
+                                check['wakeAttempted'] = True
+                                self.wake(initial_probe=chrome_probe,
+                                    prepared_wake=prepared_wake, outer_deadline=deadline)
+                        finally:
                             try:
-                                self.wake(initial_probe=check['chromeProbes'][-1])
+                                if prepared_wake['target'] and not prepared_wake.get('inputCollected'):
+                                    self.collect_input(prepared_wake['token'], frame)
                             finally:
                                 wake_returned = time.monotonic()
                                 preparation['returnedAtDriverMs'] = wake_returned * 1000
                                 preparation['durationMs'] = (wake_returned - wake_started) * 1000
                                 preparation['returnedWithinDeadline'] = wake_returned < deadline
-                time.sleep(min(.03, max(0, deadline - time.monotonic())))
+                        # The button must be located and captured again after the
+                        # stage gesture, within the original caller's deadline.
+                        self.input_serial += 1
+                        token = self.input_serial
+                    time.sleep(min(.03, max(0, deadline - time.monotonic())))
             lookup_returned = time.monotonic()
             check['targetLookupCompletedAtDriverMs'] = lookup_returned * 1000
             check['targetLookupDurationMs'] = (lookup_returned - (deadline - 4)) * 1000
@@ -513,9 +586,14 @@ class TouchDriver:
                     dispatch['completedAtDriverMs'] = completed * 1000
             finally:
                 collect_started = time.monotonic()
-                gesture = self.collect_input(token, frame)
+                gesture = self.collect_input(token, frame, read_readiness=prepared_stage is not None)
+                collect_returned = time.monotonic()
                 dispatch['actualInput'] = gesture
-                dispatch['collectDurationMs'] = (time.monotonic() - collect_started) * 1000
+                dispatch['collectDurationMs'] = (collect_returned - collect_started) * 1000
+                dispatch['collectReturnedAtDriverMs'] = collect_returned * 1000
+                if prepared_stage is not None:
+                    prepared_stage['inputCollected'] = True
+                    prepared_stage['dispatch'] = dispatch
             downs = [event for event in gesture['events'] if event['type'] == 'pointerdown']
             assert len(downs) == 1 and downs[0]['isTrusted'] and downs[0]['pointerType'] == 'touch', \
                 f'The touch for {selector} did not produce one trusted physical pointerdown'
@@ -558,7 +636,58 @@ class TouchDriver:
                     f'The touch for {selector} did not produce a trusted click on the real button'
             return target
 
-    def wake(self, initial_probe=None):
+    def _wake_prepared(self, initial_probe, prepared_wake, outer_deadline):
+        initial = initial_probe['state']
+        evidence = {'hiddenBefore': initial['hidden'], 'initialState': initial,
+            'initialProbeDurationMs': initial_probe['durationMs'], 'initialProbeReused': True,
+            'preparedStagePointReused': True, 'touchSent': False, 'polls': [], 'ready': False}
+        self.wake_checks.append(evidence)
+        assert initial['hidden'] and prepared_wake['target'], \
+            'The coalesced wake requires hidden chrome and a real prepared stage target'
+        prepared_wake['outerDeadline'] = outer_deadline
+        evidence['touchSent'] = True
+        evidence['touchMethodStartedAtDriverMs'] = time.monotonic() * 1000
+        evidence['touchTarget'] = self.touch('[data-testid="local-player"]',
+            frame=True, prepared_stage=prepared_wake)
+        evidence['touchMethodCompletedAtDriverMs'] = time.monotonic() * 1000
+        dispatch = prepared_wake['dispatch']
+        completed = dispatch['completedAtDriverMs'] / 1000
+        returned = dispatch['collectReturnedAtDriverMs'] / 1000
+        deadline = min(outer_deadline, completed + 2)
+        evidence['windowStartedAtDriverMs'] = completed * 1000
+        evidence['deadlineAtDriverMs'] = deadline * 1000
+        evidence['outerDeadlineAtDriverMs'] = outer_deadline * 1000
+        evidence['originalReadinessLimitMs'] = 2000
+        evidence['touchEndCompletedAtDriverMs'] = completed * 1000
+        evidence['collectReturnedAtDriverMs'] = returned * 1000
+        state = dispatch['actualInput']['chromeReadiness']
+        evidence['polls'].append({'elapsedMs': (returned - completed) * 1000, 'state': state,
+            'returnedWithinDeadline': returned <= deadline, 'coalescedWithInputCollection': True})
+        if state['ready'] and returned <= deadline:
+            evidence['ready'] = True
+            return
+        readiness = """() => {
+            const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+            """ + FOLIA_CHROME_READINESS + """
+            return chromeReadiness();
+        }"""
+        # Collection time belongs to the touchEnd readiness window. If this
+        # fresh sample is not ready, only poll within that same bounded window.
+        while time.monotonic() < deadline:
+            state = self.page.evaluate(readiness)
+            returned = time.monotonic()
+            evidence['polls'].append({'elapsedMs': (returned - completed) * 1000, 'state': state,
+                'returnedWithinDeadline': returned <= deadline})
+            if state['ready'] and returned <= deadline:
+                evidence['ready'] = True
+                return
+            time.sleep(min(.03, max(0, deadline - time.monotonic())))
+        evidence['failedWindowDurationMs'] = (time.monotonic() - completed) * 1000
+        raise AssertionError('The additional motion audit did not observe ready Folia chrome within 2000ms')
+
+    def wake(self, initial_probe=None, prepared_wake=None, outer_deadline=None):
+        if prepared_wake is not None:
+            return self._wake_prepared(initial_probe, prepared_wake, outer_deadline)
         readiness = """() => {
             const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
             """ + FOLIA_CHROME_READINESS + """
