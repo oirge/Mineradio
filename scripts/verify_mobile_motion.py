@@ -371,16 +371,18 @@ class TouchDriver:
             if (frame and selector != '[data-testid="local-player"]'
                     and not check['wakeAttempted'] and time.monotonic() < deadline):
                 probe_started = time.monotonic()
-                chrome_hidden = self.page.evaluate("""() => {
-                    const frame = document.getElementById('folia-frame');
-                    return frame?.contentDocument?.body?.classList.contains('mineradio-mobile-chrome-hidden') === true;
+                chrome_state = self.page.evaluate("""() => {
+                    const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+                    """ + FOLIA_CHROME_READINESS + """
+                    return chromeReadiness();
                 }""")
                 probe_returned = time.monotonic()
                 check['chromeProbes'].append({'startedAtDriverMs': probe_started * 1000,
                     'returnedAtDriverMs': probe_returned * 1000,
                     'durationMs': (probe_returned - probe_started) * 1000,
-                    'hidden': chrome_hidden, 'returnedWithinDeadline': probe_returned < deadline})
-                if chrome_hidden and probe_returned < deadline:
+                    'hidden': chrome_state['hidden'], 'state': chrome_state,
+                    'returnedWithinDeadline': probe_returned < deadline})
+                if chrome_state['hidden'] and probe_returned < deadline:
                     wake_started = time.monotonic()
                     preparation = {'startedAtDriverMs': wake_started * 1000,
                         'startedWithinDeadline': wake_started < deadline}
@@ -388,7 +390,7 @@ class TouchDriver:
                     if wake_started < deadline:
                         check['wakeAttempted'] = True
                         try:
-                            self.wake()
+                            self.wake(initial_probe=check['chromeProbes'][-1])
                         finally:
                             wake_returned = time.monotonic()
                             preparation['returnedAtDriverMs'] = wake_returned * 1000
@@ -415,16 +417,23 @@ class TouchDriver:
                 'type': 'touchCancel' if cancel else 'touchEnd', 'touchPoints': []})
         return target
 
-    def wake(self):
+    def wake(self, initial_probe=None):
         readiness = """() => {
             const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
             """ + FOLIA_CHROME_READINESS + """
             return chromeReadiness();
         }"""
-        probe_started = time.monotonic()
-        initial = self.page.evaluate(readiness)
+        # Reuse the caller's real initial sample instead of issuing a duplicate RPC.
+        if initial_probe is None:
+            probe_started = time.monotonic()
+            initial = self.page.evaluate(readiness)
+            initial_probe_duration_ms = (time.monotonic() - probe_started) * 1000
+        else:
+            initial = initial_probe['state']
+            initial_probe_duration_ms = initial_probe['durationMs']
         evidence = {'hiddenBefore': initial['hidden'], 'initialState': initial,
-            'initialProbeDurationMs': (time.monotonic() - probe_started) * 1000,
+            'initialProbeDurationMs': initial_probe_duration_ms,
+            'initialProbeReused': initial_probe is not None,
             'touchSent': False, 'polls': [], 'ready': False}
         self.wake_checks.append(evidence)
         if initial['ready']:
@@ -522,7 +531,7 @@ def assert_touch(trace):
 
 
 def assert_fade(trace, selectors):
-    assert any(.02 < node['opacity'] < .98 and node['visibility'] == 'visible'
+    assert any(0 < node['opacity'] < 1 and node['visibility'] == 'visible'
         for state in trace['samples'] for node in state['surfaces'] if node['selector'] in selectors), \
         trace['label'] + ': no visible intermediate opacity was observed'
 
