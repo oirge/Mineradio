@@ -52,6 +52,19 @@
     animation.onfinish = function () { if (records.get(node) === record) release(node, true); };
     return animation;
   }
+  function hold(node) {
+    var record = records.get(node);
+    if (!record || record.animation.playState !== 'running') return null;
+    record.animation.pause();
+    var resumed = false;
+    return function () {
+      if (resumed) return;
+      resumed = true;
+      if (records.get(node) !== record) return;
+      if (!enabled() || !node.isConnected) { release(node, true); return; }
+      if (record.animation.playState === 'paused') record.animation.play();
+    };
+  }
   function finishAll() { Array.from(records.keys()).forEach(function (node) { release(node, true); }); }
   function cancelWithin(container, except) {
     Array.from(records.keys()).forEach(function (node) {
@@ -190,7 +203,7 @@
   global.addEventListener('resize', finishAll, { passive: true });
   preferencesChanged();
   Object.assign(api, {
-    isMobile: isMobile, animate: animate, visual: visual, cancel: release, finishAll: finishAll,
+    isMobile: isMobile, animate: animate, visual: visual, cancel: release, hold: hold, finishAll: finishAll,
     isAnimating: function (node) { return records.has(node); },
     openModal: openModal, closeModal: closeModal, enterList: enterList, feedback: feedback, revealArtwork: revealArtwork,
     nextListScope: function () { epoch++; },

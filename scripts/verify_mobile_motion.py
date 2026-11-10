@@ -237,20 +237,32 @@ class MotionAudit:
             const view = doc.defaultView;
             view.__mineradioMotionAudit?.dispose?.();
             """ + UI_ANIMATIONS + SNAPSHOT + r"""
-            const trace = {label, frame, samples: [], events: [], rafTicks: [], active: true};
+            const trace = {label, frame, samples: [], events: [], rafTicks: [], sampleDurationsMs: [], active: true};
             const nodeIds = new WeakMap();
             let nextNodeId = 1;
             trace.identify = element => {
                 if (!nodeIds.has(element)) nodeIds.set(element, nextNodeId++);
                 return nodeIds.get(element);
             };
-            const sample = () => { if (trace.active && trace.samples.length < 384) trace.samples.push(read()); };
+            const sample = () => {
+                if (!trace.active || trace.samples.length >= 384) return;
+                const started = view.performance.now();
+                trace.samples.push(read());
+                trace.sampleDurationsMs.push(view.performance.now() - started);
+            };
             const input = event => {
                 if (!trace.active || trace.events.length >= 128) return;
                 const target = event.target?.closest?.('[data-testid],button,input');
                 trace.events.push({type: event.type, at: view.performance.now(), isTrusted: event.isTrusted,
                     pointerType: event.pointerType ?? null, testid: target?.getAttribute('data-testid') ?? null,
                     id: target?.id ?? null, key: event.key ?? null,
+                    pointerId: event.pointerId ?? null,
+                    clientPoint: {x: event.clientX ?? null, y: event.clientY ?? null},
+                    nativeTarget: {tag: event.target?.tagName ?? null, id: event.target?.id ?? null,
+                        testid: event.target?.getAttribute?.('data-testid') ?? null,
+                        classes: event.target?.getAttribute?.('class') ?? null},
+                    targetHasPointerCapture: !!(event.pointerId !== undefined && target?.hasPointerCapture?.(event.pointerId)),
+                    defaultPreventedAtCapture: event.defaultPrevented,
                     resultKey: target?.getAttribute('data-result-key') ?? null,
                     chromeHidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
                     focus: doc.querySelector('[data-testid="local-player"]')?.getAttribute('data-mobile-focus') === 'true',
@@ -262,16 +274,22 @@ class MotionAudit:
             };
             const names = ['pointerdown', 'pointerup', 'pointercancel', 'click', 'keydown', 'mineradio-mobile-back'];
             names.forEach(name => view.addEventListener(name, input, true));
+            let lastSampleAt = null;
             const tick = timestamp => {
                 if (!trace.active) return;
                 if (trace.rafTicks.length < 512) trace.rafTicks.push(timestamp);
                 trace.raf = view.requestAnimationFrame(tick);
+                // Read each drawn frame at most once, with the original 16ms
+                // floor on high-refresh displays. Timer polls repeated the same
+                // animation frame up to fourteen times on the cloud renderer.
+                if (lastSampleAt === null || timestamp - lastSampleAt >= 16) {
+                    lastSampleAt = timestamp;
+                    sample();
+                }
             };
             trace.raf = view.requestAnimationFrame(tick);
-            trace.timer = view.setInterval(sample, 16);
             trace.dispose = () => {
                 trace.active = false;
-                view.clearInterval(trace.timer);
                 view.cancelAnimationFrame(trace.raf);
                 names.forEach(name => view.removeEventListener(name, input, true));
             };
@@ -286,11 +304,15 @@ class MotionAudit:
                 const doc = frame ? document.getElementById('folia-frame').contentDocument : document;
                 const trace = doc.defaultView.__mineradioMotionAudit;
                 if (!trace) return null;
+                const started = doc.defaultView.performance.now();
                 trace.samples.push(trace.read());
+                trace.sampleDurationsMs.push(doc.defaultView.performance.now() - started);
                 trace.dispose();
                 const gaps = trace.rafTicks.slice(1).map((tick, index) => tick - trace.rafTicks[index]);
                 const result = {label: trace.label, frame: trace.frame, samples: trace.samples, events: trace.events,
                     rafTicks: trace.rafTicks, rafMaxGapMs: gaps.length ? Math.max(...gaps) : null,
+                    sampleMethod: 'raf-with-sync-boundaries', sampleIntervalFloorMs: 16,
+                    sampleDurationsMs: trace.sampleDurationsMs,
                     observerDisposed: !trace.active};
                 delete doc.defaultView.__mineradioMotionAudit;
                 return result;
@@ -313,14 +335,27 @@ class TouchDriver:
         self.page = page
         self.session = page.context.new_cdp_session(page)
         self.wake_checks = []
+        self.touch_checks = []
+        self.input_serial = 0
         if report is not None:
             report['wakeChecks'] = self.wake_checks
+            report['touchChecks'] = self.touch_checks
 
     def close(self):
-        self.session.detach()
+        try:
+            if not self.page.is_closed():
+                self.page.evaluate("""() => {
+                    const frame = document.getElementById('folia-frame');
+                    for (const view of [window, frame?.contentDocument?.defaultView]) {
+                        view?.__mineradioTouchProbe?.dispose();
+                        if (view) delete view.__mineradioTouchProbe;
+                    }
+                }""")
+        finally:
+            self.session.detach()
 
-    def point(self, selector, frame=False):
-        return self.page.evaluate(r"""({selector, frame}) => {
+    def point(self, selector, frame=False, input_token=None):
+        return self.page.evaluate(r"""({selector, frame, inputToken}) => {
             const iframe = frame ? document.getElementById('folia-frame') : null;
             const doc = iframe ? iframe.contentDocument : document, view = doc.defaultView;
             const candidates = [...doc.querySelectorAll(selector)];
@@ -344,78 +379,184 @@ class TouchDriver:
                     point.x += box.left; point.y += box.top;
                     if (document.elementFromPoint(point.x, point.y) !== iframe) continue;
                 }
+                if (inputToken !== null) {
+                    view.__mineradioTouchProbe?.dispose();
+                    const probe = {token: inputToken, events: []};
+                    const input = event => {
+                        if (probe.events.length >= 8) return;
+                        probe.events.push({event, state: {
+                            type: event.type, at: view.performance.now(), hostAt: performance.now(),
+                            isTrusted: event.isTrusted, pointerType: event.pointerType ?? null,
+                            pointerId: event.pointerId ?? null,
+                            point: {x: event.clientX ?? null, y: event.clientY ?? null},
+                            expectedTarget: event.target === element || element.contains(event.target),
+                            nativeTarget: {tag: event.target?.tagName ?? null, id: event.target?.id ?? null,
+                                testid: event.target?.getAttribute?.('data-testid') ?? null,
+                                classes: event.target?.getAttribute?.('class') ?? null},
+                            hidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                            mobileFoliaEnabled: !!(iframe && window.MineradioMobile?.active
+                                && document.body.classList.contains('mobile-layout')
+                                && document.body.classList.contains('folia-interface-active'))
+                        }});
+                    };
+                    const names = ['pointerdown', 'pointerup', 'pointercancel', 'click'];
+                    names.forEach(name => view.addEventListener(name, input, true));
+                    probe.dispose = () => {
+                        names.forEach(name => view.removeEventListener(name, input, true));
+                        probe.events.length = 0;
+                    };
+                    view.__mineradioTouchProbe = probe;
+                }
                 return {point, bounds: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
-                    tag: element.tagName, testid: element.getAttribute('data-testid'), id: element.id};
+                    tag: element.tagName, testid: element.getAttribute('data-testid'), id: element.id,
+                    at: view.performance.now(), hostAt: performance.now(), inputToken};
             }
             return null;
-        }""", {'selector': selector, 'frame': frame})
+        }""", {'selector': selector, 'frame': frame, 'inputToken': input_token})
+
+    def collect_input(self, token, frame):
+        return self.page.evaluate("""({token, frame}) => {
+            const doc = frame ? document.getElementById('folia-frame')?.contentDocument : document;
+            const view = doc?.defaultView, probe = view?.__mineradioTouchProbe;
+            if (!probe || probe.token !== token) return {token, probeMissing: true, events: []};
+            // Event references are retained only until dispatch finishes, so
+            // defaultPrevented includes the document's first-tap wake handler.
+            const result = {token, events: probe.events.map(({event, state}) =>
+                ({...state, defaultPrevented: event.defaultPrevented}))};
+            probe.dispose();
+            delete view.__mineradioTouchProbe;
+            return result;
+        }""", {'token': token, 'frame': frame})
 
     def touch(self, selector, frame=False, hold=0, cancel=False):
         deadline = time.monotonic() + 4
-        target = None
         check = {'selector': selector, 'frame': frame,
             'windowStartedAtDriverMs': (deadline - 4) * 1000,
             'deadlineAtDriverMs': deadline * 1000,
-            'pointProbes': [], 'chromeProbes': [], 'wakeAttempted': False}
+            'pointProbes': [], 'chromeProbes': [], 'dispatches': [], 'wakeAttempted': False}
+        self.touch_checks.append(check)
         if self.wake_checks:
             self.wake_checks[-1].setdefault('touchPreparations', []).append(check)
-        while time.monotonic() < deadline:
-            point_started = time.monotonic()
-            target = self.point(selector, frame)
-            point_returned = time.monotonic()
-            check['pointProbes'].append({'startedAtDriverMs': point_started * 1000,
-                'returnedAtDriverMs': point_returned * 1000,
-                'durationMs': (point_returned - point_started) * 1000, 'target': target})
-            if target:
-                break
-            if (frame and selector != '[data-testid="local-player"]'
-                    and not check['wakeAttempted'] and time.monotonic() < deadline):
-                probe_started = time.monotonic()
-                chrome_state = self.page.evaluate("""() => {
-                    const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
-                    """ + FOLIA_CHROME_READINESS + """
-                    return chromeReadiness();
-                }""")
-                probe_returned = time.monotonic()
-                check['chromeProbes'].append({'startedAtDriverMs': probe_started * 1000,
-                    'returnedAtDriverMs': probe_returned * 1000,
-                    'durationMs': (probe_returned - probe_started) * 1000,
-                    'hidden': chrome_state['hidden'], 'state': chrome_state,
-                    'returnedWithinDeadline': probe_returned < deadline})
-                if chrome_state['hidden'] and probe_returned < deadline:
-                    wake_started = time.monotonic()
-                    preparation = {'startedAtDriverMs': wake_started * 1000,
-                        'startedWithinDeadline': wake_started < deadline}
-                    check['wakePreparation'] = preparation
-                    if wake_started < deadline:
-                        check['wakeAttempted'] = True
-                        try:
-                            self.wake(initial_probe=check['chromeProbes'][-1])
-                        finally:
-                            wake_returned = time.monotonic()
-                            preparation['returnedAtDriverMs'] = wake_returned * 1000
-                            preparation['durationMs'] = (wake_returned - wake_started) * 1000
-                            preparation['returnedWithinDeadline'] = wake_returned < deadline
-            time.sleep(.03)
-        lookup_returned = time.monotonic()
-        check['targetLookupCompletedAtDriverMs'] = lookup_returned * 1000
-        check['targetLookupDurationMs'] = (lookup_returned - (deadline - 4)) * 1000
-        input_checked = time.monotonic()
-        check['inputDeadlineCheckedAtDriverMs'] = input_checked * 1000
-        check['inputWithinDeadline'] = input_checked < deadline
-        if input_checked >= deadline:
-            check['lateTargetRejected'] = bool(target)
+        while True:
+            self.input_serial += 1
+            token = self.input_serial
             target = None
-        check['targetFound'] = bool(target)
-        assert target, f'No visible, enabled, real touch target for {selector}'
-        self.session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [target['point']]})
-        try:
-            if hold:
-                self.page.wait_for_timeout(hold)
-        finally:
-            self.session.send('Input.dispatchTouchEvent', {
-                'type': 'touchCancel' if cancel else 'touchEnd', 'touchPoints': []})
-        return target
+            while time.monotonic() < deadline:
+                point_started = time.monotonic()
+                target = self.point(selector, frame, input_token=token)
+                point_returned = time.monotonic()
+                check['pointProbes'].append({'startedAtDriverMs': point_started * 1000,
+                    'returnedAtDriverMs': point_returned * 1000,
+                    'durationMs': (point_returned - point_started) * 1000, 'target': target})
+                if target:
+                    break
+                if (frame and selector != '[data-testid="local-player"]'
+                        and not check['wakeAttempted'] and time.monotonic() < deadline):
+                    probe_started = time.monotonic()
+                    chrome_state = self.page.evaluate("""() => {
+                        const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+                        """ + FOLIA_CHROME_READINESS + """
+                        return chromeReadiness();
+                    }""")
+                    probe_returned = time.monotonic()
+                    check['chromeProbes'].append({'startedAtDriverMs': probe_started * 1000,
+                        'returnedAtDriverMs': probe_returned * 1000,
+                        'durationMs': (probe_returned - probe_started) * 1000,
+                        'hidden': chrome_state['hidden'], 'state': chrome_state,
+                        'returnedWithinDeadline': probe_returned < deadline})
+                    if chrome_state['hidden'] and probe_returned < deadline:
+                        wake_started = time.monotonic()
+                        preparation = {'startedAtDriverMs': wake_started * 1000,
+                            'startedWithinDeadline': wake_started < deadline}
+                        check['wakePreparation'] = preparation
+                        if wake_started < deadline:
+                            check['wakeAttempted'] = True
+                            try:
+                                self.wake(initial_probe=check['chromeProbes'][-1])
+                            finally:
+                                wake_returned = time.monotonic()
+                                preparation['returnedAtDriverMs'] = wake_returned * 1000
+                                preparation['durationMs'] = (wake_returned - wake_started) * 1000
+                                preparation['returnedWithinDeadline'] = wake_returned < deadline
+                time.sleep(min(.03, max(0, deadline - time.monotonic())))
+            lookup_returned = time.monotonic()
+            check['targetLookupCompletedAtDriverMs'] = lookup_returned * 1000
+            check['targetLookupDurationMs'] = (lookup_returned - (deadline - 4)) * 1000
+            input_checked = time.monotonic()
+            check['inputDeadlineCheckedAtDriverMs'] = input_checked * 1000
+            check['inputWithinDeadline'] = input_checked < deadline
+            if input_checked >= deadline:
+                check['lateTargetRejected'] = bool(target)
+                if target:
+                    self.collect_input(token, frame)
+                target = None
+            check['targetFound'] = bool(target)
+            assert target, f'No visible, enabled, real touch target for {selector}'
+            dispatch = {'token': token, 'target': target,
+                'startedAtDriverMs': time.monotonic() * 1000}
+            check['dispatches'].append(dispatch)
+            try:
+                try:
+                    start = time.monotonic()
+                    dispatch['dispatchWithinDeadline'] = start < deadline
+                    assert start < deadline, f'The touch dispatch for {selector} missed its original target deadline'
+                    self.session.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [target['point']]})
+                    dispatch['touchStartDurationMs'] = (time.monotonic() - start) * 1000
+                    if hold:
+                        self.page.wait_for_timeout(hold)
+                finally:
+                    end = time.monotonic()
+                    self.session.send('Input.dispatchTouchEvent', {
+                        'type': 'touchCancel' if cancel else 'touchEnd', 'touchPoints': []})
+                    completed = time.monotonic()
+                    dispatch['touchEndDurationMs'] = (completed - end) * 1000
+                    dispatch['completedAtDriverMs'] = completed * 1000
+            finally:
+                collect_started = time.monotonic()
+                gesture = self.collect_input(token, frame)
+                dispatch['actualInput'] = gesture
+                dispatch['collectDurationMs'] = (time.monotonic() - collect_started) * 1000
+            downs = [event for event in gesture['events'] if event['type'] == 'pointerdown']
+            assert len(downs) == 1 and downs[0]['isTrusted'] and downs[0]['pointerType'] == 'touch', \
+                f'The touch for {selector} did not produce one trusted physical pointerdown'
+            down = downs[0]
+            consumed_wake = (frame and selector != '[data-testid="local-player"]'
+                and target['tag'] == 'BUTTON' and not hold and not cancel
+                and down['mobileFoliaEnabled'] and down['hidden'] and down['defaultPrevented'])
+            dispatch['consumedWake'] = consumed_wake
+            if check['wakeAttempted']:
+                assert not down['hidden'], f'The prepared touch for {selector} reached hidden chrome again'
+            if consumed_wake:
+                assert not check['wakeAttempted'], f'The touch for {selector} was consumed by idle wake twice'
+                check['wakeAttempted'] = True
+                # The actual first tap has already woken chrome. Only poll; a
+                # further stage tap would consume another gesture and hide a race.
+                recovery_deadline = min(deadline, completed + 2)
+                recovery = {'windowStartedAtDriverMs': completed * 1000,
+                    'deadlineAtDriverMs': recovery_deadline * 1000,
+                    'originalReadinessLimitMs': 2000, 'polls': [], 'ready': False}
+                check['consumedWakeRecovery'] = recovery
+                while time.monotonic() < recovery_deadline:
+                    state = self.page.evaluate("""() => {
+                        const frame = document.getElementById('folia-frame'), doc = frame.contentDocument, view = doc.defaultView;
+                        """ + FOLIA_CHROME_READINESS + """
+                        return chromeReadiness();
+                    }""")
+                    returned = time.monotonic()
+                    recovery['polls'].append({'elapsedMs': (returned - completed) * 1000, 'state': state,
+                        'returnedWithinDeadline': returned <= recovery_deadline})
+                    if state['ready'] and returned <= recovery_deadline:
+                        recovery['ready'] = True
+                        break
+                    time.sleep(min(.03, max(0, recovery_deadline - time.monotonic())))
+                assert recovery['ready'], f'The consumed wake for {selector} did not restore chrome within its original deadlines'
+                continue
+            assert down['expectedTarget'], f'The physical pointerdown for {selector} missed the probed target'
+            if target['tag'] == 'BUTTON' and not hold and not cancel:
+                clicks = [event for event in gesture['events'] if event['type'] == 'click']
+                assert len(clicks) == 1 and clicks[0]['isTrusted'] and clicks[0]['expectedTarget'], \
+                    f'The touch for {selector} did not produce a trusted click on the real button'
+            return target
 
     def wake(self, initial_probe=None):
         readiness = """() => {

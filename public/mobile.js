@@ -19,6 +19,7 @@
   var motion = window.MineradioMobileMotion;
   var moreExpanded = false;
   var moreTouchPointer = null;
+  var moreTouchMotion = null;
   var historyIndex = Number(history.state && history.state.mineradioMobileIndex) || 0;
   var entryDirection = Number(history.state && history.state.mineradioMobileDirection) || 1;
 
@@ -245,7 +246,23 @@
     }
   }
   // Keep the native click on this button while the surrounding rows move under a touch.
+  function releaseMoreTouchMotion() {
+    var held = moreTouchMotion;
+    moreTouchMotion = null;
+    if (!held) return;
+    if (held.frame) cancelAnimationFrame(held.frame);
+    held.resumes.forEach(function (resume) { resume(); });
+  }
+  function holdMoreTouchMotion(event) {
+    if (!motion || !motion.hold) return;
+    var modes = bar.querySelector('.control-cluster.modes');
+    var controls = modes && modes.parentElement;
+    if (!controls || !controls.hasAttribute('data-mobile-motion-more')) return;
+    var resumes = [motion.hold(controls), motion.hold(modes)].filter(Boolean);
+    if (resumes.length) moreTouchMotion = { pointerId: event.pointerId, ended: false, resumes: resumes, frame: 0 };
+  }
   function releaseMoreTouchPointer() {
+    releaseMoreTouchMotion();
     var pointerId = moreTouchPointer;
     moreTouchPointer = null;
     if (pointerId === null || !more.hasPointerCapture || !more.releasePointerCapture) return;
@@ -257,24 +274,43 @@
     if (event.pointerId === moreTouchPointer &&
         (event.type === 'pointercancel' || event.target === more || !more.isConnected)) {
       moreTouchPointer = null;
+      if (event.type === 'pointercancel' || !moreTouchMotion || !moreTouchMotion.ended) releaseMoreTouchMotion();
     }
   }
+  function finishMoreTouch(event) {
+    var held = moreTouchMotion;
+    if (!held || event.pointerId !== held.pointerId) return;
+    held.ended = true;
+    // Keep the button under the finger through the following native click.
+    // If the tap produces no click, the next frame resumes the same owner.
+    held.frame = requestAnimationFrame(function () {
+      if (moreTouchMotion === held) releaseMoreTouchMotion();
+    });
+  }
   more.addEventListener('pointerdown', function (event) {
-    if (!api.active || event.pointerType !== 'touch' || !event.isPrimary || !more.setPointerCapture) return;
+    if (!api.active || !event.isTrusted || event.pointerType !== 'touch' || !event.isPrimary || !more.setPointerCapture) return;
+    releaseMoreTouchPointer();
     try {
       more.setPointerCapture(event.pointerId);
       moreTouchPointer = event.pointerId;
+      holdMoreTouchMotion(event);
     } catch (error) {}
   }, { passive: true });
   // Pointerup releases capture implicitly; its following trusted click still belongs to More.
+  document.addEventListener('pointerup', finishMoreTouch, true);
   document.addEventListener('pointercancel', clearMoreTouchPointer, true);
   document.addEventListener('lostpointercapture', clearMoreTouchPointer, true);
+  window.addEventListener('click', function (event) {
+    var held = moreTouchMotion;
+    if (held && held.ended && event.isTrusted && (event.target === more || more.contains(event.target))) releaseMoreTouchMotion();
+  }, true);
   window.addEventListener('blur', releaseMoreTouchPointer);
   window.addEventListener('pagehide', releaseMoreTouchPointer);
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) releaseMoreTouchPointer();
   });
   more.addEventListener('click', function () {
+    if (moreTouchMotion && moreTouchMotion.ended) releaseMoreTouchMotion();
     if (api.active) setMoreExpanded(!moreExpanded);
   });
 
