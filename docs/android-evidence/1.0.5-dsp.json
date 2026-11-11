@@ -1,0 +1,51 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "neutralFloatBits",
+      "passed": true,
+      "samples": 8192
+    },
+    {
+      "name": "stereoWidthZero",
+      "passed": true,
+      "inputSideRms": 0.19996365523061926,
+      "outputSideRms": 0
+    },
+    {
+      "name": "eq250Hz",
+      "passed": true,
+      "measuredRatio": 1.9952623090052481,
+      "expectedRatio": 1.9952623149688795
+    },
+    {
+      "name": "replayGainHalf",
+      "passed": true,
+      "measuredRatio": 0.5
+    },
+    {
+      "name": "linkedLimiterFinite",
+      "passed": true,
+      "measuredRatio": 0.2886269528312251,
+      "reductionDb": 10.793865184643835
+    },
+    {
+      "name": "smoothLimiterBypass",
+      "passed": true,
+      "boundaryStep": 0
+    },
+    {
+      "name": "boundedAnalysisLengths",
+      "passed": true,
+      "maxSpectrum": 190,
+      "sampleFrames": 48000
+    },
+    {
+      "name": "settingsRampReturnsNeutral",
+      "passed": true,
+      "rampFrames": 3840
+    }
+  ],
+  "sampleRate": 48000,
+  "fftSize": 2048
+}

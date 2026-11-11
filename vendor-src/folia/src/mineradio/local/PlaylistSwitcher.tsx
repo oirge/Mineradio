@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'framer-motion';
 import { ChevronUp, Heart, ListMusic } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { HostState } from '../client';
@@ -9,8 +10,8 @@ import PlaylistSwitcherMenu from './PlaylistSwitcherMenu';
 
 // src/mineradio/local/PlaylistSwitcher.tsx
 // Keep the popup inside the controls' hover/focus boundary, outside the folding transport.
-interface Props { state: HostState | null; command: LocalCommand; onManage?: () => void; }
-export default function PlaylistSwitcher({ state, command, onManage }: Props) {
+interface Props { state: HostState | null; command: LocalCommand; onManage?: () => void; mobileFocus?: boolean; }
+export default function PlaylistSwitcher({ state, command, onManage, mobileFocus = false }: Props) {
     const { t } = useTranslation('localPlayer');
     const catalog = usePlaybackPlaylists(state, command);
     const [open, setOpen] = useState(false);
@@ -27,6 +28,7 @@ export default function PlaylistSwitcher({ state, command, onManage }: Props) {
     const busy = catalog.loading || catalog.pendingId !== null;
     const close = () => { setOpen(false); trigger.current?.focus(); };
     const controls = trigger.current?.closest<HTMLElement>('.local-controls');
+    useEffect(() => { if (mobileFocus) setOpen(false); }, [mobileFocus]);
 
     useLayoutEffect(() => {
         if (!open || !menu.current || !controls || !trigger.current) return;
@@ -40,12 +42,11 @@ export default function PlaylistSwitcher({ state, command, onManage }: Props) {
             menu.current.style.maxHeight = `${Math.max(100, bar.top - 24)}px`;
         };
         position();
-        controls.classList.add('local-playlist-open');
         window.addEventListener('resize', position);
-        return () => { controls.classList.remove('local-playlist-open'); window.removeEventListener('resize', position); };
+        return () => window.removeEventListener('resize', position);
     }, [open, controls]);
     useEffect(() => {
-        if (!open) return;
+        if (!open || mobileFocus) return;
         const outside = (event: Event) => {
             if (event.target instanceof Node && !trigger.current?.contains(event.target) && !menu.current?.contains(event.target)) setOpen(false);
         };
@@ -56,32 +57,35 @@ export default function PlaylistSwitcher({ state, command, onManage }: Props) {
             setOpen(false);
             trigger.current?.focus();
         };
+        const back = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); close(); };
         document.addEventListener('pointerdown', outside);
         document.addEventListener('focusin', outside);
         document.addEventListener('keydown', escape);
+        window.addEventListener('mineradio-mobile-back', back, true);
         return () => {
             document.removeEventListener('pointerdown', outside);
             document.removeEventListener('focusin', outside);
             document.removeEventListener('keydown', escape);
+            window.removeEventListener('mineradio-mobile-back', back, true);
         };
-    }, [open]);
+    }, [open, mobileFocus]);
 
     return <>
         <button ref={trigger} type="button" className={`local-playlist-trigger${displayedId === 'special-liked' ? ' is-liked' : displayedId !== 'library' ? ' is-custom' : ''}`}
             title={`${t('collection')}: ${currentName}`} aria-label={`${t('collection')}: ${currentName}`}
             aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined}
             data-testid="local-playlist-switcher" data-playlist-id={displayedId}
-            disabled={!state || busy || !catalog.playlists.length} aria-busy={busy}
+            disabled={!state || busy || !catalog.playlists.length || mobileFocus} aria-busy={busy}
             onClick={() => setOpen(value => !value)}
             onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); } }}>
             {displayedId === 'special-liked' ? <Heart size={17} fill="currentColor" aria-hidden="true" /> : <ListMusic size={18} aria-hidden="true" />}
             <span className="local-playlist-label">{shortName}</span>
             <ChevronUp className="local-playlist-caret" size={12} aria-hidden="true" />
         </button>
-        {open && controls && createPortal(<PlaylistSwitcherMenu menuRef={menu} id={menuId} playlists={currentListed ? catalog.playlists
+        {controls && createPortal(<AnimatePresence mode="sync">{open && !mobileFocus && <PlaylistSwitcherMenu key={menuId} menuRef={menu} id={menuId} playlists={currentListed ? catalog.playlists
             : [{ id: catalog.currentId, name: currentName, count: 0, cover: '', readOnly: true }, ...catalog.playlists]}
             currentId={catalog.currentId} label={name} disabled={busy}
             onSelect={id => { close(); void catalog.switchPlaylist(id); }} onClose={close}
-            onManage={onManage ? () => { setOpen(false); onManage(); } : undefined} />, controls)}
+            onManage={onManage ? () => { setOpen(false); onManage(); } : undefined} />}</AnimatePresence>, controls)}
     </>;
 }

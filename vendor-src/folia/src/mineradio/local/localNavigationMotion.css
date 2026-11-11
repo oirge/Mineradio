@@ -1,0 +1,31 @@
+/* src/mineradio/local/localNavigationMotion.css */
+/* Motion layers preserve the original panel and stage geometry. */
+.local-view-surface { position: absolute; inset: 0; z-index: 0; }
+.local-library-content { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.local-library-content-layer { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+.local-library-content-layer > .local-track-list { position: relative; }
+.local-library-content-layer[data-mobile-motion-presence=exiting] { pointer-events: none; }
+.local-mobile .local-view-loading {
+    position: absolute; z-index: 3; left: 50%; top: calc(var(--local-mobile-top) + (100% - var(--local-mobile-top) - var(--local-mobile-nav) - var(--local-mobile-controls) - 66px) / 2);
+    translate: -50% -50%; display: flex; align-items: center; gap: 10px; color: var(--local-muted); font-size: 12px; pointer-events: none;
+}
+.local-mobile .local-player-focus .local-view-loading { top: 50%; }
+.local-view-loader-spin { animation: local-view-loader-spin 1s linear infinite; }
+.local-mobile .local-library-content .local-track-list { scrollbar-gutter: stable; }
+.local-mobile .local-artwork { opacity: 0; transition: opacity var(--mobile-motion-component, 200ms) var(--mobile-motion-ease, ease-out); }
+.local-mobile .local-artwork[data-local-artwork=ready] { opacity: 1; }
+.local-mobile .local-track-skeleton { pointer-events: none; opacity: .65; }
+.local-mobile .local-track-skeleton .local-track-cover { background: var(--local-hover); }
+.local-mobile .local-track-skeleton .local-track-text > span { display: block; height: 10px; border-radius: 4px; background: var(--local-hover); width: 66%; }
+.local-mobile .local-track-skeleton .local-track-text > span:last-child { height: 8px; width: 44%; }
+.local-mobile .local-track-skeleton .local-track-duration { width: 28px; height: 8px; border-radius: 4px; background: var(--local-hover); }
+.local-mobile .local-track-loading-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.local-mobile .local-track-pending { position: absolute; top: 9px; right: 14px; display: flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 10px; color: var(--local-muted); background: var(--local-raised); font-size: 11px; pointer-events: none; }
+.local-mobile .local-record-title svg { transition: rotate var(--mobile-motion-micro, 150ms) var(--mobile-motion-ease, ease-out); }
+.local-mobile .local-record-title[aria-expanded=true] svg { rotate: 180deg; }
+@keyframes local-view-loader-spin { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) {
+    .local-view-loader-spin { animation: none; }
+    .local-mobile .local-artwork { transition: none; }
+    .local-mobile .local-record-title svg { transition: none; }
+}

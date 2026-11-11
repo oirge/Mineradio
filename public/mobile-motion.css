@@ -1,0 +1,92 @@
+/* Mobile UI motion leaves the original geometry, glass, and visualizer design intact. */
+body.mobile-layout :where(button, [role="button"]) {
+  transition: scale var(--mobile-motion-micro,150ms) var(--mobile-motion-ease),
+    color var(--mobile-motion-micro,150ms) ease,
+    background-color var(--mobile-motion-component,200ms) ease,
+    border-color var(--mobile-motion-component,200ms) ease;
+  will-change: auto;
+}
+body.mobile-layout :where(button, [role="button"]):not(:disabled):active { scale: .97; }
+body.mobile-layout :where(.queue-item,.pl-card,.home-card,.mini-queue-item) { will-change: auto; }
+body.mobile-layout :where(.queue-item,.pl-card,.home-card):active { scale: .99; }
+body.mobile-layout .home-card,
+body.mobile-layout .home-visual { animation: none; }
+
+html body.mobile-layout :is(#empty-home,#search-results,#playlist-panel,#fx-panel) {
+  animation: none;
+  transition: none;
+  will-change: auto;
+}
+html body.mobile-layout #playlist-panel,
+html body.mobile-layout #fx-panel { transform: none !important; }
+html body.mobile-layout :is(#empty-home,#search-results,#playlist-panel,#fx-panel)[data-mobile-motion-leaving] {
+  display: block !important;
+  opacity: 1;
+  visibility: visible !important;
+  pointer-events: none !important;
+}
+html body.mobile-layout [data-mobile-motion-leaving] * { pointer-events: none !important; }
+body.mobile-layout .modal { will-change: auto; }
+html body.mobile-layout #controls[data-mobile-motion-more] {
+  min-height: 0;
+  grid-auto-rows: max-content;
+  align-content: start;
+  overflow: clip;
+}
+html body.mobile-layout .control-cluster.modes[data-mobile-motion-more="entering"] { opacity: 1; translate: 0 0; }
+html body.mobile-layout .control-cluster.modes[data-mobile-motion-more="leaving"] { opacity: 0; translate: 0 8px; }
+html body.mobile-layout .control-cluster.modes[data-mobile-motion-more="leaving"],
+html body.mobile-layout .control-cluster.modes[data-mobile-motion-more="leaving"] * { pointer-events: none !important; }
+body.mobile-layout [data-mobile-motion-modal="closing"].modal-mask { display: flex; visibility: visible; opacity: 1; }
+body.mobile-layout [data-mobile-motion-modal="closing"],
+body.mobile-layout [data-mobile-motion-modal="closing"] * { pointer-events: none !important; }
+
+body.mobile-layout .volume-popover {
+  transform: none;
+  translate: 0 8px;
+  transition: opacity var(--mobile-motion-menu) var(--mobile-motion-ease),
+    translate var(--mobile-motion-menu) var(--mobile-motion-ease);
+}
+body.mobile-layout .volume-control:is(.open,:hover,:focus-within) .volume-popover { transform: none; translate: 0 0; }
+body.mobile-layout #toast {
+  transition: opacity var(--mobile-motion-status) var(--mobile-motion-ease),
+    transform var(--mobile-motion-status) var(--mobile-motion-ease);
+}
+body.mobile-layout #mobile-nav button {
+  transition: color var(--mobile-motion-component) ease,
+    background-color var(--mobile-motion-component) ease,
+    scale var(--mobile-motion-micro) var(--mobile-motion-ease);
+}
+body.mobile-layout #mobile-nav button svg { transition: translate var(--mobile-motion-component) var(--mobile-motion-ease); }
+body.mobile-layout #mobile-nav button[aria-current="page"] svg { translate: 0 -1px; }
+html body.mobile-layout .ctrl-btn:is(:hover,:active) { transform: none; }
+html body.mobile-layout .fx-reset-one:hover { transform: none; }
+body.mobile-layout input[type="checkbox"] { accent-color: var(--fc-accent); transition: scale var(--mobile-motion-micro) var(--mobile-motion-ease); }
+body.mobile-layout input[type="checkbox"]:active { scale: .94; }
+body.mobile-layout .fx-fold-body[data-mobile-motion-fold] {
+  display: grid;
+  grid-template-rows: 0fr;
+  padding: 0 12px;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows var(--mobile-motion-component) var(--mobile-motion-ease),
+    opacity var(--mobile-motion-component) var(--mobile-motion-ease),
+    visibility 0s var(--mobile-motion-component);
+}
+body.mobile-layout .fx-fold.open > .fx-fold-body[data-mobile-motion-fold] { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s; }
+body.mobile-layout .mobile-fold-clip { min-height: 0; overflow: hidden; }
+body.mobile-layout .mobile-fold-content { padding-bottom: 12px; }
+body.mobile-layout .fx-fold-head .arrow { transition: transform var(--mobile-motion-component) var(--mobile-motion-ease); }
+body.mobile-layout .mini-queue-skeleton { animation: mobile-skeleton-breathe 1.2s ease-in-out infinite alternate; }
+@keyframes mobile-skeleton-breathe { from { opacity: .55; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  body.mobile-layout :where(button,[role="button"],input[type="checkbox"]),
+  body.mobile-layout #mobile-nav button svg,
+  body.mobile-layout .volume-popover,
+  body.mobile-layout #toast,
+  body.mobile-layout .fx-fold-head .arrow,
+  body.mobile-layout .fx-fold-body[data-mobile-motion-fold] { transition: none !important; }
+  body.mobile-layout :where(button,[role="button"],input[type="checkbox"],.queue-item,.pl-card,.home-card):active { scale: 1; }
+  body.mobile-layout .mini-queue-skeleton { animation: none; }
+}

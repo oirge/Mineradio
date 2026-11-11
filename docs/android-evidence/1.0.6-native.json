@@ -1,0 +1,21 @@
+{
+  "checks": [
+    "Capacitor Core and native library plugin initialize without page errors",
+    "native SAF import and streamed WAV playback",
+    "native integer byte ranges and real embedded ID3 lyrics reach the main lyric stage",
+    "foreground playback service and media notification",
+    "single native PCM engine applies stereo width, ten-band EQ, embedded ReplayGain, limiting, real analysis and playback speed",
+    "Folia renders native embedded lyrics with visible fitted animated text",
+    "Folia touch library, playback and Android back handling",
+    "Folia mobile controls hide on idle and wake by touch without interrupting the same native AudioTrack",
+    "Android UI motion and dynamic Reduce Motion retain the same native sink without new underruns",
+    "Home, screen off and repeated UI returns keep one AudioTrack session without reloads or new underruns",
+    "native crossfade mixes decoded tracks in the same AudioTrack sink",
+    "removing the recent task keeps native playback alive and automatically advances its queue",
+    "media controls work without an Activity and playing or paused playback restores to the correct song and position",
+    "cold restart restores persisted URI grants and music library",
+    "exact signed release installs and opens its offline import UI"
+  ],
+  "errors": [],
+  "systemDialogs": []
+}

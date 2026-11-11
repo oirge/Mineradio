@@ -57,7 +57,7 @@ export default function LocalAudioSettings({ state, command, onClose }: {
     const actual = options?.devices.find(device => device.deviceId === output?.actualId);
     return <LocalToolPanel id="local-audio-settings" title={t('audioSettings')} onClose={onClose} wide>
         {failed && <div className="local-tool-error" role="alert">{t('audioLoadFailed')}</div>}
-        <fieldset disabled={!chain || !options}>
+        <fieldset disabled={!chain || !options} aria-busy={loading}>
             <legend>{t('audioEqualizer')}</legend>
             {toggle('enabled', 'audioEnabled')}
             <div className="local-audio-presets">{options?.presets.map(preset => <button type="button" key={preset.id}
@@ -91,7 +91,7 @@ export default function LocalAudioSettings({ state, command, onClose }: {
             {output?.supported && output.status !== 'pending' && <> {t('outputActual', { name: actual ? deviceName(actual) : t('outputDefault') })}</>}
             {output?.needsPermission && <> {t('outputPermission')}</>}
         </p>
-        <button type="button" disabled={loading} data-testid="local-output-refresh" onClick={() => setRefresh(value => value + 1)}>{t(loading ? 'loading' : 'outputRefresh')}</button>
+        <button type="button" disabled={loading} aria-busy={loading} data-testid="local-output-refresh" onClick={() => setRefresh(value => value + 1)}>{t(loading ? 'loading' : 'outputRefresh')}</button>
         <p className="local-tool-hint">{t('audioHostHint')}</p>
     </LocalToolPanel>;
 }

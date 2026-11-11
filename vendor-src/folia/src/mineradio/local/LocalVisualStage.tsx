@@ -1,33 +1,53 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import VisualizerRenderer from '../../components/visualizer/VisualizerRenderer';
 import type { Theme } from '../../types';
 import type { LocalPlayer } from './playerTypes';
 import type { LocalVisualAssets } from './useLocalVisualAssets';
 import { useVisualSceneSettings } from './useVisualSettings';
+import { useLocalMobileLyricFit } from './useLocalMobileLyricFit';
+import { useLocalViewMotion } from './useLocalViewMotion';
+import './localNavigationMotion.css';
 
 // src/mineradio/local/LocalVisualStage.tsx
 // Each surface owns its visual runtime; transport remains in Mineradio throughout switches.
 const LocalRecordWall = lazy(() => import('./LocalRecordWall'));
 const LocalPosterWall = lazy(() => import('./LocalPosterWall'));
+function WallReady({ onReady }: { onReady: () => void }) {
+    useEffect(onReady, [onReady]);
+    return null;
+}
 interface Props {
     player: LocalPlayer;
     theme: Theme;
     assets: LocalVisualAssets;
     focus: boolean;
+    mobile: boolean;
     onOpenQueue: () => void;
 }
-export default function LocalVisualStage({ player, theme, assets, focus, onOpenQueue }: Props) {
+export default function LocalVisualStage({ player, theme, assets, focus, mobile, onOpenQueue }: Props) {
+    const { t } = useTranslation('localPlayer');
     const visuals = useVisualSceneSettings();
+    const stage = useRef<HTMLDivElement>(null);
+    const surfaceKey = visuals.view === 'lyrics' ? `lyrics:${visuals.mode}` : visuals.view;
+    const viewMotion = useLocalViewMotion(surfaceKey, player.active);
+    useLocalMobileLyricFit(stage, mobile && visuals.view === 'lyrics' && visuals.mode === 'classic',
+        player.lines[player.currentLineIndex]?.startTime, visuals.lyricsFontScale, theme);
     const track = player.state?.currentTrack;
     const lyrics = () => visuals.update({ view: 'lyrics' });
     const wallProps = { player, theme, isDaylight: visuals.daylight, onBack: lyrics, onOpenQueue, onOpenLyrics: lyrics };
-    if (visuals.view !== 'lyrics') return <Suspense key={visuals.view} fallback={null}>
-        {player.active && (visuals.view === 'records' ? <LocalRecordWall {...wallProps} />
-            : <LocalPosterWall {...wallProps} translation={visuals.translation} />)}
-    </Suspense>;
-    return <div className="local-visualizer" data-testid="local-visualizer" data-mode={visuals.mode}>
+    return <>
+        <div ref={viewMotion.surface} className="local-view-surface" data-testid="local-view-surface" data-view={visuals.view} data-mobile-motion-view={visuals.view}
+            data-mobile-motion-loading={viewMotion.loading || undefined}>
+        {visuals.view !== 'lyrics' ? <Suspense key={visuals.view} fallback={null}>
+            {player.active && <>{visuals.view === 'records' ? <LocalRecordWall {...wallProps} />
+                : <LocalPosterWall {...wallProps} translation={visuals.translation} />}
+                <WallReady onReady={viewMotion.onReady} /></>}
+        </Suspense> : <div className="local-visualizer" data-testid="local-visualizer" data-mode={visuals.mode}>
+        <div ref={stage} className="local-visualizer-content" data-testid="local-visualizer-content">
         {/* Replace the mode's Suspense boundary so old GPU resources are destroyed during a lazy switch. */}
-        {player.active && <VisualizerRenderer key={visuals.mode} mode={visuals.mode} theme={theme} isDaylight={visuals.daylight}
+        {player.active && <VisualizerRenderer key={visuals.mode} mode={visuals.mode} onReady={viewMotion.onReady} theme={theme} isDaylight={visuals.daylight}
             currentTime={player.currentTime} currentLineIndex={player.currentLineIndex} lines={player.lines}
             audioPower={player.audioPower} audioBands={player.audioBands} paused={!player.state?.playing}
             seed={track?.id || 'mineradio-local'} coverUrl={track?.cover} songTitle={track?.title} songArtist={track?.artist} songAlbum={track?.album}
@@ -45,5 +65,10 @@ export default function LocalVisualStage({ player, theme, assets, focus, onOpenQ
             subtitleContentMode={visuals.subtitleContentMode} subtitleOverlayLayout={visuals.subtitleLayout} subtitleOverlayBackground={visuals.subtitleBackground}
             showHarmonySubtitle={visuals.harmony} onVisualizerTuningChange={patch => visuals.tune(visuals.mode as never, patch as Record<string, unknown>)} isPlayerChromeHidden={focus}
             onLyricLineSeek={seconds => { void player.command('seek', { seconds }).catch(() => {}); }} />}
-    </div>;
+        </div></div>}
+        </div>
+        {viewMotion.loading && <div className="local-view-loading" role="status" aria-busy="true" data-testid="local-view-loading">
+            <Loader2 size={22} className={viewMotion.reducedMotion ? undefined : 'local-view-loader-spin'} /><span>{t('loading')}</span>
+        </div>}
+    </>;
 }

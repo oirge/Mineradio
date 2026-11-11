@@ -31,6 +31,7 @@ export function useLibraryPage(state: HostState | null, command: LocalCommand, q
     const [query, setQuery] = useState('');
     const [offset, setOffset] = useState(0);
     const [page, setPage] = useState(EMPTY_PAGE);
+    const [pageScope, setPageScope] = useState('');
     const [playlists, setPlaylists] = useState<HostPlaylist[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshKey, setRefreshKey] = useState(0);
@@ -102,12 +103,15 @@ export function useLibraryPage(state: HostState | null, command: LocalCommand, q
                     reading = false;
                     if (offset > 0 && offset >= result.total) { setOffset(0); return; }
                     setPage(next);
+                    setPageScope(scope);
                     scheduleSearchRecheck();
                 }).catch(() => {
                     if (!cancelled) {
                         recentUpdates = undefined;
                         reading = false;
-                        setPage(EMPTY_PAGE);
+                        // A same-scope retry keeps its rows and scroll position; another collection must not expose them.
+                        setPage(previous => pageScope === scope ? previous : EMPTY_PAGE);
+                        setPageScope(scope);
                         scheduleSearchRecheck();
                     }
                 })
@@ -121,7 +125,8 @@ export function useLibraryPage(state: HostState | null, command: LocalCommand, q
             if (searchTimer !== undefined) window.clearTimeout(searchTimer);
         };
     }, [command, collection, query, offset, queue, revision, refreshKey, onTracksChanged, refresh, scope]);
-    return { collection, query, offset, page, playlists, loading, refresh, setOffset,
+    return { collection, query, offset, scope, displayScope: pageScope, page, playlists,
+        stale: pageScope !== scope, loading: loading || pageScope !== scope, refresh, setOffset,
         chooseCollection: (id: string) => { setCollection(id); setOffset(0); },
         search: (text: string) => { setQuery(text); setOffset(0); },
     };

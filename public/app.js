@@ -201,6 +201,19 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['首页', 'Home'],
+  ['搜索', 'Search'],
+  ['正在播放', 'Now playing'],
+  ['设置', 'Settings'],
+  ['手机导航', 'Mobile navigation'],
+  ['歌单和音乐库', 'Playlists and library'],
+  ['关闭设置', 'Close settings'],
+  ['关闭歌单', 'Close playlists'],
+  ['结束搜索', 'Dismiss search'],
+  ['切换到 Folia 界面', 'Switch to Folia'],
+  ['让音乐随身。', 'Take your music with you.'],
+  ['导入手机中的音乐，开始聆听。', 'Import music from your phone to start listening.'],
+  ['更多播放选项', 'More playback options'],
   ['视频导出支持四档帧率。', 'Video export supports four frame rate options.'],
   ['歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。', 'Lyrics and visualization video export now offers 30, 60, 90 and 120 fps, with 30 fps as the default.'],
   ['帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。', 'Your frame rate choice is remembered, included in backups and used for capture and encoding.'],
@@ -1220,6 +1233,7 @@ var uiLanguageAttributeObserver = null;
 var uiLanguageApplying = false;
 var uiLanguageSources = new WeakMap();
 var UI_LANGUAGE_SCOPE_IDS = [
+  'mobile-nav',
   'fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal', 'custom-lyric-modal',
   'desktop-titlebar', 'fullscreen-diy-zone', 'search-area', 'empty-home', 'top-right', 'playlist-panel', 'trial-banner', 'gesture-hud', 'bottom-bar',
   'drop-overlay', 'free-camera-hint', 'ai-depth-chip', 'beat-chip', 'lyric-translate-chip', 'cover-crop-modal', 'collect-modal',
@@ -3460,7 +3474,9 @@ function getRenderLoadTier() {
   if (cssPixels >= 3200000 || renderPixels >= 3600000) return 1;
   return 0;
 }
+markAppPerf('webgl-start');
 var renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' });
+markAppPerf('webgl-ready');
 renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(getRenderPixelRatio());
 renderer.setSize(innerWidth, innerHeight);
@@ -5459,7 +5475,7 @@ var particlePointerLocalHit = new THREE.Vector3();
 var particlePointerQuat = new THREE.Quaternion();
 var particlePointerFrame = { dirty:false, ndcX:0, ndcY:0 };
 var CLICK_THRESHOLD = 6;  // 像素, 拖动 > 6px 视为 drag
-var UI_HIT_SELECTOR = '#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#lyric-translate-chip,#drop-overlay';
+var UI_HIT_SELECTOR = '#mobile-nav,#search-area,#top-right,#fullscreen-diy-zone,#fx-panel,#fx-fab,#fx-fab-hide-btn,#playlist-panel,#bottom-bar,#thumb-wrap,#empty-home,#visual-guide,#trial-banner,#source-fallback-notice,.modal-mask,#toast,#ai-depth-chip,#beat-chip,#lyric-translate-chip,#drop-overlay';
 var pointerUiHitCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
 function isPointerOverUi(e) {
@@ -7541,20 +7557,26 @@ function getStageLyricLockBounds() {
 }
 function lyricCameraLockFit(layoutScale, layoutX, layoutY, distance) {
   if (!camera || !camera.isPerspectiveCamera) return 1;
+  var mobileStage = window.MineradioMobile && window.MineradioMobile.active;
   layoutScale = Math.max(0.1, layoutScale || 1);
   var fov = (camera.fov || 45) * Math.PI / 180;
   var dist = Math.max(1.4, distance || 4.85);
+  if (mobileStage) dist = Math.max(1.4, dist - 1.65);
   var visibleH = 2 * Math.tan(fov * 0.5) * dist;
   var visibleW = visibleH * (camera.aspect || (innerWidth / Math.max(1, innerHeight)) || 1.78);
   var bounds = getStageLyricLockBounds();
   var skullSafe = !!(fx && fx.preset === SKULL_PRESET_INDEX);
   var safeW = Math.max(visibleW * (skullSafe ? 0.36 : 0.42), visibleW * (skullSafe ? 0.70 : 0.84) - Math.abs(layoutX || 0) * (skullSafe ? 1.36 : 1.22));
   var safeH = Math.max(visibleH * (skullSafe ? 0.16 : 0.18), visibleH * (skullSafe ? 0.34 : 0.44) - Math.abs(layoutY || 0) * (skullSafe ? 0.98 : 0.82));
+  if (mobileStage) {
+    safeW = visibleW * .88;
+    safeH = visibleH * (window.MineradioMobile.lyricStageHeight || .5);
+  }
   var scaledW = Math.max(0.01, bounds.w * layoutScale);
   var scaledH = Math.max(0.01, bounds.h * layoutScale);
   var viewportFit = Math.min(1, safeW / scaledW, safeH / scaledH);
   var lockScaleCap = Math.min(1, (skullSafe ? 0.94 : LYRIC_CAMERA_LOCK_MAX_SCALE) / layoutScale);
-  return clampRange(Math.min(viewportFit, lockScaleCap), skullSafe ? 0.36 : 0.42, 1);
+  return clampRange(Math.min(viewportFit, lockScaleCap), mobileStage ? .04 : (skullSafe ? 0.36 : 0.42), 1);
 }
 // 兼容旧变量名以便其它代码不破坏
 var lyricsParticles = null;
@@ -9711,6 +9733,10 @@ function canUseCachedLocalMetadata(song, record) {
  */
 function applyLocalAssetCacheToSong(song, record, opts) {
   if (!song || !record || record.id !== song.localKey) return false;
+  var nativeReader = song.localFile && song.localFile.nativeReaderVersion;
+  // Re-read native tags after an Android reader update, including cached "no lyrics" results.
+  var nativeSignature = nativeReader ? localLibraryFileSignatureFromSong(song) : '';
+  if (nativeReader && record.localLibraryFileSignature !== nativeSignature) return false;
   opts = opts || {};
   var includeLyrics = opts.includeLyrics !== false;
   var includeCover = opts.includeCover !== false;
@@ -9743,7 +9769,7 @@ function applyLocalAssetCacheToSong(song, record, opts) {
     song.localReplayGain = record.localReplayGain;
   }
   var lyricFileSig = localAssetFileSignature(song.localLyricFile);
-  var canUseLyricCache = lyricRecord && (song.localLyricFile
+  var canUseLyricCache = lyricRecord && (!nativeReader || lyricRecord.localLibraryFileSignature === nativeSignature) && (song.localLyricFile
     ? (lyricRecord.localLyricFileSignature && lyricRecord.localLyricFileSignature === lyricFileSig)
     : lyricRecord.localLyricSource !== 'file');
   if (includeLyrics && lyricRecord && canUseLyricCache && (lyricRecord.localLyricText || lyricRecord.localLyricLoaded)) {
@@ -12563,8 +12589,14 @@ function updateStageLyrics3D(dt, frameShelfState) {
     }
   }
   var lockBaseDistance = wallpaperShelfLyrics ? 5.58 : 4.85;
+  var mobileStage = window.MineradioMobile && window.MineradioMobile.active;
+  if (mobileStage && camera) {
+    // Phone lyrics face the camera and fit the visible space between touch controls.
+    layoutX = 0; layoutZ = 0; layoutTiltX = 0; layoutTiltY = 0;
+    layoutY = (window.MineradioMobile.lyricStageCenterY || 0) * 2 * Math.tan((camera.fov || 45) * Math.PI / 360) * (lockBaseDistance - 1.5);
+  }
   var lockDistance = lockBaseDistance + layoutZ;
-  var cameraLockedLyrics = (fx.lyricCameraLock || wallpaperLyricLock) && camera;
+  var cameraLockedLyrics = (fx.lyricCameraLock || wallpaperLyricLock || mobileStage) && camera;
   var skullLyricEdgeGuard = !!(fx && fx.preset === SKULL_PRESET_INDEX && (orbit.centerLocked || orbit.recentering));
   var lockFit = (cameraLockedLyrics || skullLyricEdgeGuard || skullMouthLyrics) ? lyricCameraLockFit(layoutScale, layoutX, layoutY, skullMouthLyrics ? Math.max(2.2, 4.4 + layoutZ) : lockDistance) : 1;
   if (skullMouthLyrics) lockFit = Math.min(lockFit, 1.12);
@@ -13303,10 +13335,12 @@ function setControlCoverSrc(src) {
   if (!src) {
     cover.style.backgroundImage = '';
     cover.classList.add('cover-empty');
+    if (window.MineradioMobileMotion) window.MineradioMobileMotion.revealArtwork(cover, '');
     return;
   }
   cover.style.backgroundImage = 'url("' + String(src).replace(/"/g, '\\"') + '")';
   cover.classList.remove('cover-empty');
+  if (window.MineradioMobileMotion) window.MineradioMobileMotion.revealArtwork(cover, src);
 }
 
 var controlTrackInfoUiState = { title: null, artist: null, lastTitle: null, lastArtist: null };
@@ -16825,7 +16859,12 @@ function drawCoverCropPreview() {
 
 function pulseCoverCropStage() {
   var stage = document.getElementById('cover-crop-stage');
-  if (!stage || !window.gsap) return;
+  if (!stage) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.feedback(stage);
+    return;
+  }
+  if (!window.gsap) return;
   window.gsap.fromTo(stage, { scale: 0.985 }, { scale: 1, duration: 0.72, ease: 'expo.out', overwrite: true });
 }
 
@@ -29142,6 +29181,14 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   }
 
   markPlayPhase('audio-start');
+  if (opts.startPaused) {
+    playing = false;
+    setPlayIcon(false);
+    hideLoading();
+    forcePlaybackControlsInteractive();
+    safeRenderQueuePanel('native-paused-restore');
+    return;
+  }
   // 接管 deck 时禁掉主增益淡入：preparePlaybackFadeIn 会把 gainNode 直接拉到 0，
   // 那是两个 deck 共用的主音量，交叉会被它一把掐死，纯无缝接续也会重新长出 460 ms 的空档。
   // 接管路径的电平交给 deckGain 处理（交叉走等功率曲线，无缝走 12 ms 斜坡）。
@@ -29259,6 +29306,10 @@ async function attemptAudioPlay(opts) {
   var playElement = audio;
   function ownsAttempt() { return playToken === trackSwitchToken && playElement === audio; }
   try {
+      if (typeof window !== 'undefined' && window.MineradioNativePlayback) {
+        await window.MineradioNativePlayback.ready;
+        if (!ownsAttempt() || window.MineradioNativePlayback.ownsAudio()) return false;
+      }
       if (!audio) return false;
       if (!audioReady) initAudio();
       // 起播前收掉任何仍在响的非活动 deck（交叉进行中除外，那是有意的双 deck 对交叉）。
@@ -29428,12 +29479,17 @@ function clearQueue() {
  */
 function removeFromQueue(idx) {
   if (idx < 0 || idx >= playQueue.length) return;
+  var mobileMotion = typeof window !== 'undefined' && window.MineradioMobileMotion;
+  var motionRemoval = mobileMotion && mobileMotion.captureQueueRemoval(idx);
   playQueue.splice(idx, 1);
   markQueueContentChanged();
   if (currentIdx >= 0 && currentIdx > idx) currentIdx -= 1;
   if (currentIdx >= playQueue.length) currentIdx = playQueue.length - 1;
   savePlaybackSession(true);
-  safeRenderQueuePanel('remove-queue-item');
+  // A visible row transition must measure the updated list, not a deferred render.
+  var queueRendered = safeRenderQueuePanel('remove-queue-item', motionRemoval
+    ? { immediate: true, animate: false, deferWhenHidden: false } : undefined);
+  if (queueRendered && mobileMotion) mobileMotion.finishQueueRemoval(motionRemoval);
   safeShelfRebuild('remove-queue-item');
   updateCustomCoverButton();
   updateCustomLyricControls();
@@ -29469,6 +29525,10 @@ function updatePlayModeButton(animate) {
   updatePlayModeButtonRow();
   updateStopAfterCurrentButton();
   if (!animate || !btn) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.feedback(icon || btn);
+    return;
+  }
   if (window.gsap) {
     window.gsap.killTweensOf(btn);
     if (icon) window.gsap.killTweensOf(icon);
@@ -30224,7 +30284,7 @@ function bindPlayerControlAnimations() {
     var isPlay = btn.id === 'play-btn';
     var iconTarget = btn.querySelector('svg,.lyrics-word-icon,#quality-btn-label');
     function canAnimate() {
-      return !btn.disabled && !btn.classList.contains('busy');
+      return !(window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) && !btn.disabled && !btn.classList.contains('busy');
     }
     function hoverIn(e) {
       if (!canAnimate() || (e && e.pointerType === 'touch')) return;
@@ -30232,6 +30292,7 @@ function bindPlayerControlAnimations() {
       if (iconTarget) window.gsap.to(iconTarget, { scale: isPlay ? 1.08 : 1.10, duration: 0.22, ease: 'power2.out', overwrite: 'auto' });
     }
     function hoverOut() {
+      if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) return;
       window.gsap.to(btn, { y: 0, scale: 1, rotate: 0, duration: 0.26, ease: 'power2.out', overwrite: 'auto' });
       if (iconTarget) window.gsap.to(iconTarget, { scale: 1, rotate: 0, duration: 0.22, ease: 'power2.out', overwrite: 'auto' });
     }
@@ -30247,6 +30308,10 @@ function bindPlayerControlAnimations() {
       if (iconTarget) window.gsap.to(iconTarget, { scale: hovered ? 1.06 : 1, duration: 0.22, ease: 'back.out(1.8)', overwrite: 'auto' });
     }
     function clickPulse() {
+      if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+        if (!btn.disabled && !btn.classList.contains('busy') && btn.id !== 'play-mode-btn') window.MineradioMobileMotion.feedback(iconTarget);
+        return;
+      }
       if (!canAnimate() || btn.id === 'play-mode-btn') return;
       var pulseSize = isPlay ? 18 : 10;
       var pulseColor = isPlay ? 'rgba(255,63,85,.34)' : 'rgba(255,255,255,.22)';
@@ -31262,6 +31327,10 @@ function updateLyricsHighlight() { /* v8: 由 tickLyricsParticles 接管 */ }
 //  播放列表面板
 // ============================================================
 function animateListItems(container, selector, opts) {
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.enterList(container, selector, opts);
+    return;
+  }
   if (!container || !window.gsap) return;
   opts = opts || {};
   if (typeof listAnimationLimit === 'function') {
@@ -31296,6 +31365,10 @@ function smoothScrollToItem(scroller, item, opts) {
   opts = opts || {};
   var target = item.offsetTop - Math.max(0, (scroller.clientHeight - item.offsetHeight) * (opts.align == null ? 0.42 : opts.align));
   target = Math.max(0, Math.min(target, Math.max(0, scroller.scrollHeight - scroller.clientHeight)));
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile() && window.MineradioMobileMotion.reducedMotion) {
+    scroller.scrollTop = target;
+    return;
+  }
   if (window.gsap) {
     if (typeof scroller.__syncSmoothWheelTarget === 'function') scroller.__syncSmoothWheelTarget(target);
     window.gsap.killTweensOf(scroller);
@@ -31319,6 +31392,7 @@ function bindSmoothWheelScroll(scroller) {
     targetTop = isFinite(top) ? top : scroller.scrollTop;
   };
   scroller.addEventListener('wheel', function(e){
+    if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) return;
     if (!window.gsap || e.ctrlKey) return;
     var max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     if (max <= 0 || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
@@ -31455,6 +31529,7 @@ function applyPlaylistPaneToolbarMode(tab) {
 function switchPlaylistTab(tab) {
   tab = normalizePlaylistPanelTab(tab);
   var previousTab = queueViewTab;
+  if (previousTab !== tab && typeof window !== 'undefined' && window.MineradioMobileMotion) window.MineradioMobileMotion.nextListScope();
   queueViewTab = tab;
   /* 两个 tab 共用一份选中状态，切 tab 就得把选中项摆到对应那一层，否则会串页。 */
   if (tab === 'library' && !isLocalLibraryCategoryKind(localLibraryPlaylistSelection)) {
@@ -33188,7 +33263,7 @@ function fileListToArray(files) {
   return list;
 }
 function desktopLocalMusicApi() {
-  return window.desktopWindow && window.desktopWindow.isDesktop ? window.desktopWindow : null;
+  return window.desktopWindow && window.desktopWindow.isDesktop ? window.desktopWindow : (window.MineradioNativeLibraryApi || null);
 }
 function localFullPath(file) {
   return String((file && (file.fullPath || file.filePath || file.path || file.localFilePathAbsolute)) || '');
@@ -33220,13 +33295,15 @@ function localLibraryPathKeyFromSong(song) {
   return normalizeLocalLibraryPathKey(song.localFilePathAbsolute || song.localPath || song.name || '');
 }
 function localLibraryFileSignatureFromFile(file) {
-  return localLibraryPathKeyFromFile(file) + '|' + localFileSize(file) + '|' + localFileLastModified(file);
+  return localLibraryPathKeyFromFile(file) + '|' + localFileSize(file) + '|' + localFileLastModified(file)
+    + (file && file.nativeReaderVersion ? '|native-reader:' + file.nativeReaderVersion : '');
 }
 function localLibraryFileSignatureFromSong(song) {
   if (!song) return '';
   return localLibraryPathKeyFromSong(song) + '|' +
     (Number(song.localFileSize || (song.localFile && localFileSize(song.localFile)) || 0) || 0) + '|' +
-    (Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0);
+    (Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0)
+    + (song.localFile && song.localFile.nativeReaderVersion ? '|native-reader:' + song.localFile.nativeReaderVersion : '');
 }
 function localPathDir(file) {
   var p = localFilePath(file);
@@ -37452,6 +37529,9 @@ function createLocalLibraryIndexLookup(index) {
 }
 function localLibraryRecordMatchesSong(record, song) {
   if (!record || !song) return false;
+  // A stable song key must not restore tag results from an older Android reader.
+  if (song.localFile && song.localFile.nativeReaderVersion &&
+      localLibraryRecordFileSignature(record) !== localLibraryFileSignatureFromSong(song)) return false;
   if (record.key && song.localKey && record.key === song.localKey) return true;
   var recordSig = localLibraryRecordFileSignature(record);
   var songSig = localLibraryFileSignatureFromSong(song);
@@ -40572,7 +40652,12 @@ function updateFxInputs() {
   syncFxUniforms();
 }
 function animateFxResetButton(btn) {
-  if (!btn || !window.gsap) return;
+  if (!btn) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.feedback(btn);
+    return;
+  }
+  if (!window.gsap) return;
   window.gsap.fromTo(btn, { rotate: -120, scale: 0.88 }, { rotate: 0, scale: 1, duration: 0.48, ease: 'expo.out', overwrite: true });
   window.gsap.fromTo(btn, { boxShadow: '0 0 0 0 rgba(244,210,138,.38)' }, { boxShadow: '0 0 0 8px rgba(244,210,138,0)', duration: 0.55, ease: 'sine.out', overwrite: true });
 }
@@ -40621,6 +40706,7 @@ function ensureFxSliderResetButton(id, key) {
 }
 var fxPanelTab = 'presets';
 function setFxPanelTab(tab) {
+  var previousTab = fxPanelTab;
   var allowed = { presets:1, appearance:1, lyrics:1, motion:1, mini:1, advanced:1 };
   fxPanelTab = allowed[tab] ? tab : 'presets';
   var panel = document.getElementById('fx-panel');
@@ -40630,6 +40716,9 @@ function setFxPanelTab(tab) {
   });
   document.querySelectorAll('#fx-panel .fx-tab-page').forEach(function(page){
     page.classList.toggle('active', page.getAttribute('data-fx-page') === fxPanelTab);
+    if (previousTab !== fxPanelTab && page.classList.contains('active') && window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+      window.MineradioMobileMotion.animate(page, { opacity: 1, translate: '0px 0px' }, 'component', { from: { opacity: 0, translate: '0px 8px' } });
+    }
   });
   repositionFxFloatingPanels();
 }
@@ -41833,7 +41922,7 @@ function toggleFxPanel(force) {
   if (!el) return;
   // 视觉控制台开合前先把借走的歌单架分组还回去，避免控制台里缺这一组。
   if (typeof closeShelfQuickPanel === 'function' && shelfQuickPanelOpen) closeShelfQuickPanel();
-  if (!diyPlayerMode && force !== false) {
+  if (!diyPlayerMode && force !== false && !(window.MineradioMobile && window.MineradioMobile.active)) {
     showToast('开启 DIY 玩家模式后可打开视觉控制台');
     return;
   }
@@ -42333,6 +42422,13 @@ function setUpdatePreviewVisible(visible) {
   }
   entry.classList.toggle('available', updatePreviewState.visible);
   stopUpdateIconBreathing(true);
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    if (window.gsap) {
+      window.gsap.killTweensOf(entry);
+      window.gsap.set(entry, { autoAlpha: updatePreviewState.visible ? 1 : 0, clearProps: 'transform,boxShadow,filter' });
+    }
+    return;
+  }
   if (!updatePreviewState.visible) {
     if (window.gsap) {
       window.gsap.killTweensOf(entry);
@@ -42433,7 +42529,7 @@ function applyLatestUpdateInfo(data) {
 }
 
 function canRunUpdateIconBreathing() {
-  return !!(updatePreviewState.visible &&
+  return !!(!(window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) && updatePreviewState.visible &&
     updatePreviewState.updateAvailable &&
     !updatePreviewState.checking &&
     !document.hidden &&
@@ -42696,7 +42792,9 @@ function openUpdatePanel() {
   initUpdateRouteControls();
   renderUpdatePreviewPanel();
   var activeEntry = document.body.classList.contains('folia-interface-active') ? foliaEntry : entry;
-  if (activeEntry && window.gsap) {
+  if (activeEntry && window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.feedback(activeEntry);
+  } else if (activeEntry && window.gsap) {
     window.gsap.fromTo(activeEntry, { scale: 0.93 }, { scale: 1, duration: 0.42, ease: 'back.out(1.7)', overwrite: 'auto' });
   }
   if (updatePreviewState.status !== 'downloading' && updatePreviewState.status !== 'opening') checkLatestUpdate({ force: true, announce: true });
@@ -42717,7 +42815,6 @@ function closeUpdatePanel() {
 }
 
 function animateUpdatePanelContents() {
-  if (!window.gsap) return;
   var modal = document.querySelector('#update-modal .update-modal');
   if (!modal) return;
   var parts = [];
@@ -42731,6 +42828,17 @@ function animateUpdatePanelContents() {
   var items = [];
   for (var i = 0; i < itemNodes.length; i++) items.push(itemNodes[i]);
   var actions = modal.querySelector('.update-actions');
+  var motion = window.MineradioMobileMotion;
+  if (motion && motion.isMobile()) {
+    parts.concat(items, actions ? [actions] : []).slice(0, motion.tokens.listLimit).forEach(function (node, index) {
+      if (window.gsap) { window.gsap.killTweensOf(node); window.gsap.set(node, { clearProps: 'opacity,visibility,transform,filter' }); }
+      motion.animate(node, { opacity: 1, translate: '0px 0px' }, 'component', {
+        from: { opacity: 0, translate: '0px 8px' }, delay: index * motion.tokens.stagger
+      });
+    });
+    return;
+  }
+  if (!window.gsap) return;
   window.gsap.fromTo(parts,
     { autoAlpha: 0, x: -7, filter: 'blur(5px)' },
     { autoAlpha: 1, x: 0, filter: 'blur(0px)', duration: 0.50, ease: 'power3.out', stagger: 0.045, delay: 0.10, overwrite: true }
@@ -43116,7 +43224,14 @@ function startUpdatePreviewDownload() {
 function pulseUpdateReady() {
   var entry = document.getElementById('update-entry');
   var btn = document.getElementById('update-primary-btn');
-  if (!window.gsap || document.hidden || isDeepBackgroundMode()) return;
+  if (document.hidden || isDeepBackgroundMode()) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    if (btn && btn.getClientRects().length && window.getComputedStyle(btn).visibility !== 'hidden') {
+      window.MineradioMobileMotion.feedback(btn);
+    }
+    return;
+  }
+  if (!window.gsap) return;
   if (entry) {
     window.gsap.fromTo(entry,
       { scale: 0.96, filter: 'drop-shadow(0 0 0 rgba(244,210,138,0))' },
@@ -43136,6 +43251,10 @@ function pulseUpdateReady() {
 // ============================================================
 function openGsapModal(mask) {
   if (!mask) return;
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.openModal(mask);
+    return;
+  }
   var panel = mask.querySelector('.modal');
   mask.classList.add('show');
   if (window.gsap) {
@@ -43159,6 +43278,10 @@ function openGsapModal(mask) {
   }
 }
 function closeGsapModal(mask, afterClose) {
+  if (window.MineradioMobileMotion && window.MineradioMobileMotion.isMobile()) {
+    window.MineradioMobileMotion.closeModal(mask, afterClose);
+    return;
+  }
   if (!mask || !mask.classList.contains('show')) {
     if (afterClose) afterClose();
     return;
@@ -44467,7 +44590,11 @@ var peekTimers = { search:null, fx:null, pl:null };
 function setPeek(el, on, key) {
   if (!el) return;
   if (immersiveMode && on && (key === 'search' || key === 'fx')) return;
-  if (on && !diyPlayerMode && key === 'fx') return;
+  if (on && !diyPlayerMode && key === 'fx' && !(window.MineradioMobile && window.MineradioMobile.active)) return;
+  // Touch pages close through navigation, rather than synthetic mouseleave events.
+  if (window.MineradioMobile && window.MineradioMobile.active && !on &&
+      ((key === 'fx' && document.body.getAttribute('data-mobile-view') === 'settings') ||
+       (key === 'pl' && document.body.getAttribute('data-mobile-view') === 'library'))) return;
   if (!on && key === 'search' && emptyHomeActive && !immersiveMode) return;
   if (!on && key === 'pl' && playlistPanelPinned) return;
   if (on && key === 'fx') document.body.classList.remove('fullscreen-diy-peek');
@@ -47299,7 +47426,7 @@ function startLocalUserStateHydration() {
         customLyricMapHydrated = true;
         if (typeof updateCustomLyricControls === 'function') updateCustomLyricControls();
         var song = typeof currentLyricSong === 'function' ? currentLyricSong() : null;
-        if (song && typeof applyCustomLyricState === 'function') applyCustomLyricState(song, false);
+        if (song && typeof applyCustomLyricState === 'function') applyCustomLyricState(song, true);
       }
     },
     {

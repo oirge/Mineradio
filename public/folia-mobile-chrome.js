@@ -1,0 +1,339 @@
+/* Phone Folia chrome follows the desktop idle delay without touch hover/focus locks. */
+(function (global) {
+  'use strict';
+  var HIDDEN = 'mineradio-mobile-chrome-hidden', DELAY = 2500;
+  var PANEL_MOTION = 'mineradio-mobile-transport-panel';
+  var RESTORING = 'mineradio-mobile-transport-restoring';
+  var PANELS = '.local-player>:is(.local-library,.local-settings,.local-playback-settings,.local-tool-panel)[data-mobile-motion-presence]';
+  var TRANSPORT = '.local-player>.local-controls,.local-player>.local-current-track';
+  var CONTROLS = '.local-mobile-header,.local-mobile-nav,.local-controls,.local-current-track';
+  var MENUS = '.local-mobile-more,.local-slot-menu,.local-playlist-menu,[role="dialog"],[data-mobile-motion-presence]';
+  var STAGES = '.local-player[data-panel="closed"] .local-visualizer,.local-player[data-panel="closed"] .local-record-wall,.local-player[data-panel="closed"] .lattice-root,.local-welcome,.local-no-lyrics';
+  var MOTION = 560, EASING = 'cubic-bezier(.4,0,.2,1)';
+
+  function create(doc, enabled) {
+    var view = doc.defaultView, timer = 0, pointers = new Set();
+    var keyboard = false, focused = false, wakeClick = false, panel = false, focusPending = false;
+    var transportOccluded = false, transportMotion = new Map(), chromeRecovery = new Map();
+    var tokens = view.MineradioMotionTokens || global.MineradioMotionTokens;
+    var stageMotion = new Map(), focusPrevious = [], reducedMotion = view.matchMedia('(prefers-reduced-motion:reduce)');
+    var style = doc.getElementById('mineradio-mobile-chrome-style');
+    if (!style) {
+      style = doc.createElement('style');
+      style.id = 'mineradio-mobile-chrome-style';
+      style.textContent = '.local-mobile .local-mobile-header,.local-mobile .local-mobile-nav,.local-mobile .local-controls,.local-mobile .local-current-track{transition:opacity .52s ' + EASING + ',transform .52s ' + EASING + ',visibility 0s!important}'
+        + '.local-mobile .local-controls,.local-mobile .local-current-track{transition:opacity var(--mineradio-mobile-transport-duration,.52s) var(--mineradio-mobile-transport-ease,' + EASING + '),transform .52s ' + EASING + ',visibility 0s!important}'
+        + '.local-mobile body.' + PANEL_MOTION + '{--mineradio-mobile-transport-duration:var(--mobile-motion-component,200ms);--mineradio-mobile-transport-ease:var(--mobile-motion-ease,ease-out)}'
+        + '.local-mobile body.' + RESTORING + ' .local-controls,.local-mobile body.' + RESTORING + ' .local-current-track{transition:transform .52s ' + EASING + ',visibility 0s!important}'
+        + '.local-mobile body.' + HIDDEN + ' .local-mobile-header{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(-8px)!important;transition-delay:0s,0s,.52s!important}'
+        + '.local-mobile body.' + HIDDEN + ' .local-mobile-nav,.local-mobile body.' + HIDDEN + ' .local-controls,.local-mobile body.' + HIDDEN + ' .local-current-track{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transform:translateY(8px)!important;transition-delay:0s,0s,.52s!important}'
+        + '.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-visualizer,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-record-wall,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .lattice-root{inset:0!important;height:auto!important}'
+        + '.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-welcome,.local-mobile body.' + HIDDEN + ' .local-player[data-panel="closed"] .local-no-lyrics{top:50%!important}'
+        + '@media(prefers-reduced-motion:reduce){.local-mobile .local-mobile-header,.local-mobile .local-mobile-nav,.local-mobile .local-controls,.local-mobile .local-current-track{transition:none!important}}';
+      doc.head.appendChild(style);
+    }
+    function cancelStageMotion() {
+      var records = Array.from(stageMotion.values());
+      stageMotion.clear();
+      records.forEach(function (record) {
+        record.animation.onfinish = record.animation.oncancel = null;
+        record.animation.cancel(); record.restore();
+      });
+    }
+    // Observe the existing CSS transitions without changing their clocks.
+    // A wake must leave a full idle interval after the controls become usable.
+    function rememberChromeRecovery() {
+      chromeRecovery.clear();
+      if (!enabled() || doc.hidden || reducedMotion.matches || doc.body.classList.contains(HIDDEN)
+          || doc.querySelector('.local-player[data-mobile-focus="true"]')) return;
+      doc.querySelectorAll(CONTROLS).forEach(function (node) {
+        if (!node.getAnimations) return;
+        node.getAnimations().forEach(function (animation) {
+          if (!/^(opacity|transform)$/.test(animation.transitionProperty)
+              || animation.playState === 'finished' || animation.playState === 'idle') return;
+          var record = {};
+          chromeRecovery.set(animation, record);
+          function settled() {
+            if (chromeRecovery.get(animation) !== record) return;
+            chromeRecovery.delete(animation);
+            schedule();
+          }
+          animation.finished.then(settled, settled);
+        });
+      });
+    }
+    function cancelTransportMotion() {
+      var animations = Array.from(transportMotion.values());
+      transportMotion.clear();
+      animations.forEach(function (animation) {
+        animation.onfinish = animation.oncancel = null;
+        animation.cancel();
+      });
+      doc.body.classList.remove(RESTORING);
+    }
+    // Start one bounded restoration after the actual aside has unmounted.
+    // The full idle interval begins on completion, including delayed frames.
+    function restoreTransport() {
+      cancelTransportMotion();
+      if (!enabled() || doc.hidden || reducedMotion.matches || doc.body.classList.contains(HIDDEN)
+          || doc.querySelector('.local-player[data-mobile-focus="true"]')) return;
+      var targets = Array.from(doc.querySelectorAll(TRANSPORT)).map(function (node) {
+        var style = view.getComputedStyle(node);
+        return { node: node, opacity: Number(style.opacity), display: style.display };
+      }).filter(function (entry) { return entry.node.animate && entry.display !== 'none'; });
+      if (!targets.length) return;
+      doc.body.classList.add(RESTORING);
+      targets.forEach(function (entry) {
+        entry.node.getAnimations().forEach(function (animation) {
+          if (animation.transitionProperty === 'opacity') animation.cancel();
+        });
+        var animation = entry.node.animate([{ opacity: entry.opacity }, { opacity: 1 }],
+          { duration: tokens.component, easing: 'cubic-bezier(' + tokens.ease.join(',') + ')' });
+        animation.id = 'mineradio-mobile-transport-restore';
+        transportMotion.set(entry.node, animation);
+        animation.onfinish = function () {
+          if (transportMotion.get(entry.node) !== animation) return;
+          transportMotion.delete(entry.node);
+          animation.onfinish = animation.oncancel = null;
+          animation.cancel();
+          if (!transportMotion.size) { doc.body.classList.remove(RESTORING); schedule(); }
+        };
+        animation.oncancel = function () {
+          if (transportMotion.get(entry.node) !== animation) return;
+          // A cancelled batch has not completed restoration. Invalidate its
+          // remaining callbacks; the next interaction resumes normal idle timing.
+          clearTimer();
+          cancelTransportMotion();
+        };
+      });
+    }
+    function hidden(value, instant) {
+      value = !!value;
+      if (doc.body.classList.contains(HIDDEN) === value) return;
+      var animate = !instant && enabled() && !doc.hidden && !reducedMotion.matches;
+      var previous = animate ? Array.from(doc.querySelectorAll(STAGES)).map(measureStage) : [];
+      // Measure the current visual position before cancelling, including a
+      // partially completed transition, so a quick wake reverses continuously.
+      chromeRecovery.clear();
+      cancelStageMotion();
+      cancelTransportMotion();
+      doc.body.classList.remove(PANEL_MOTION);
+      doc.body.classList.toggle(HIDDEN, value);
+      animateStages(previous, value);
+      if (!value && !instant) rememberChromeRecovery();
+    }
+    // Measure the drawn viewport, including a partially animated clip, before reversal.
+    function measureStage(node) {
+      var box = node.getBoundingClientRect();
+      var stable = node.matches('.local-visualizer') && !!node.querySelector(':scope > .local-visualizer-content');
+      var clip = stable && view.getComputedStyle(node).clipPath.match(/^inset\(([^)]+)\)$/);
+      var values = clip ? clip[1].split(/\s+/).map(parseFloat) : [0];
+      var top = values[0], right = values[1] ?? top, bottom = values[2] ?? top, left = values[3] ?? right;
+      return { node: node, stable: stable, rect: {
+        left: box.left + left, top: box.top + top,
+        width: box.width - left - right, height: box.height - top - bottom
+      } };
+    }
+    // Idle and manual focus share one compositor transition. The lyric renderer stays the same size.
+    function animateStages(previous, expanding) {
+      previous.forEach(function (entry) {
+        var node = entry.node;
+        if (!node.isConnected || !node.animate) return;
+        var next = node.getBoundingClientRect();
+        if (!next.width || !next.height || !entry.rect.width || !entry.rect.height) return;
+        var saved = [], restored = false;
+        // Keep the full background while controls fade back in. Restoring the
+        // smaller viewport immediately would leave an empty strip above it.
+        if (!entry.stable && !expanding && entry.rect.height > next.height + 1
+            && node.matches('.local-visualizer,.local-record-wall,.lattice-root')) {
+          ['top', 'right', 'bottom', 'left', 'height'].forEach(function (name) {
+            saved.push({ name: name, value: node.style.getPropertyValue(name), priority: node.style.getPropertyPriority(name) });
+            node.style.setProperty(name, name === 'height' ? 'auto' : '0px', 'important');
+          });
+        }
+        function restore() {
+          if (restored) return;
+          restored = true;
+          saved.forEach(function (item) {
+            if (item.value) node.style.setProperty(item.name, item.value, item.priority);
+            else node.style.removeProperty(item.name);
+          });
+        }
+        var layout = saved.length ? node.getBoundingClientRect() : next;
+        var x = entry.rect.left + entry.rect.width / 2 - layout.left - layout.width / 2;
+        var y = entry.rect.top + entry.rect.height / 2 - layout.top - layout.height / 2;
+        var endX = next.left + next.width / 2 - layout.left - layout.width / 2;
+        var endY = next.top + next.height / 2 - layout.top - layout.height / 2;
+        if (!saved.length && Math.abs(x) < .5 && Math.abs(y) < .5
+            && (!entry.stable || Math.abs(entry.rect.height - next.height) < .5)) return;
+        var first = { translate: x + 'px ' + y + 'px' }, last = { translate: endX + 'px ' + endY + 'px' };
+        if (entry.stable) {
+          // A fixed full-height backdrop covers both viewports. Animate the actual
+          // clipping edges as well as the centre, without resizing or scaling it.
+          var top = entry.rect.top - layout.top - y;
+          var right = layout.left + layout.width + x - entry.rect.left - entry.rect.width;
+          var bottom = layout.top + layout.height + y - entry.rect.top - entry.rect.height;
+          var left = entry.rect.left - layout.left - x;
+          first.clipPath = 'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
+          last.clipPath = 'inset(0px 0px 0px 0px)';
+        }
+        var animation = node.animate([first, last],
+          { duration: MOTION, easing: EASING });
+        animation.id = 'mineradio-mobile-chrome-stage';
+        var record = { animation: animation, restore: restore };
+        stageMotion.set(node, record);
+        animation.onfinish = function () {
+          if (stageMotion.get(node) !== record) return;
+          stageMotion.delete(node);
+          animation.onfinish = animation.oncancel = null;
+          animation.cancel();
+          restore();
+          schedule();
+        };
+        animation.oncancel = function () {
+          if (stageMotion.get(node) !== record) return;
+          stageMotion.delete(node);
+          animation.onfinish = animation.oncancel = null;
+          restore();
+          schedule();
+        };
+      });
+    }
+    function focusBefore() {
+      focusPending = true;
+      chromeRecovery.clear();
+      doc.body.classList.remove(PANEL_MOTION);
+      doc.body.classList.remove(RESTORING);
+      if (transportMotion.size) {
+        doc.querySelectorAll(TRANSPORT).forEach(function (node) { view.getComputedStyle(node).opacity; });
+      }
+      focusPrevious = enabled() && !doc.hidden && !reducedMotion.matches
+        ? Array.from(doc.querySelectorAll(STAGES.replace(/\[data-panel="closed"\]/g, ''))).map(measureStage) : [];
+      cancelStageMotion();
+      clearTimer();
+    }
+    function focusAfter(event) {
+      focusPending = false;
+      var previous = focusPrevious;
+      focusPrevious = [];
+      if (doc.querySelector('.local-player[data-mobile-focus="true"]')) {
+        // Commit the existing focus transition before releasing a partial
+        // restoration, so its current opacity remains the transition's start.
+        doc.querySelectorAll(TRANSPORT).forEach(function (node) { view.getComputedStyle(node).opacity; });
+        cancelTransportMotion();
+      } else if (transportMotion.size) doc.body.classList.add(RESTORING);
+      if (enabled() && !doc.hidden && !reducedMotion.matches) animateStages(previous, !!(event.detail && event.detail.focus));
+      rememberChromeRecovery();
+      schedule();
+    }
+    function clearTimer() { if (timer) { view.clearTimeout(timer); timer = 0; } }
+    function protectedSurface() { return !!doc.querySelector('.local-player[data-panel="open"],.local-player[data-mobile-focus="true"],' + MENUS); }
+    function schedule() {
+      clearTimer();
+      if (!enabled() || doc.hidden || doc.body.classList.contains(HIDDEN) || pointers.size || focused
+          || focusPending || transportMotion.size || stageMotion.size || chromeRecovery.size || protectedSurface()) return;
+      timer = view.setTimeout(function () {
+        timer = 0;
+        if (enabled() && !doc.hidden && !pointers.size && !focused && !focusPending
+            && !transportMotion.size && !stageMotion.size && !chromeRecovery.size && !protectedSurface()) hidden(true);
+      }, DELAY);
+    }
+    function reveal() { hidden(false); schedule(); }
+    function consume(event) { event.preventDefault(); event.stopImmediatePropagation(); }
+    function down(event) {
+      if (!enabled()) return;
+      var wasHidden = doc.body.classList.contains(HIDDEN);
+      keyboard = focused = false;
+      pointers.add(event.pointerId);
+      wakeClick = wasHidden;
+      reveal();
+      // The first tap only wakes chrome; it must not activate a newly revealed button.
+      if (wasHidden) consume(event);
+    }
+    function up(event) {
+      if (!enabled()) return;
+      pointers.delete(event.pointerId);
+      if (event.type === 'pointercancel') wakeClick = false;
+      else if (wakeClick) consume(event);
+      schedule();
+    }
+    function click(event) { if (enabled() && wakeClick) { wakeClick = false; consume(event); } }
+    function move(event) { if (enabled() && event.pointerType === 'mouse') reveal(); }
+    function key() {
+      if (!enabled()) return;
+      keyboard = true;
+      focused = !!(doc.activeElement && doc.activeElement.closest && doc.activeElement.closest(CONTROLS));
+      reveal();
+    }
+    function focusIn(event) {
+      if (!enabled()) return;
+      focused = keyboard && !!event.target.closest(CONTROLS);
+      reveal();
+    }
+    function focusOut(event) {
+      if (!enabled()) return;
+      focused = keyboard && !!(event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest(CONTROLS));
+      schedule();
+    }
+    function reset(event) {
+      var preserveRecovery = event && event.type === 'resize' && enabled() && !doc.hidden
+        && !reducedMotion.matches && !doc.body.classList.contains(HIDDEN)
+        && !doc.querySelector('.local-player[data-mobile-focus="true"]');
+      if (!preserveRecovery) focusPending = false;
+      chromeRecovery.clear();
+      focusPrevious = []; cancelStageMotion();
+      if (!preserveRecovery) { cancelTransportMotion(); doc.body.classList.remove(PANEL_MOTION); }
+      pointers.clear(); focused = wakeClick = false; hidden(false, true); rememberPanelMotion(); rememberChromeRecovery(); schedule();
+    }
+    function rememberPanelMotion() {
+      var next = !!doc.querySelector('.local-player[data-panel="open"],' + PANELS);
+      if (next) {
+        chromeRecovery.clear();
+        var hadRecovery = transportMotion.size > 0;
+        cancelTransportMotion();
+        if (hadRecovery) {
+          doc.querySelectorAll(TRANSPORT).forEach(function (node) {
+            view.getComputedStyle(node).opacity;
+            node.getAnimations().forEach(function (animation) {
+              if (animation.transitionProperty === 'opacity') animation.cancel();
+            });
+          });
+        }
+        if (enabled() && !doc.body.classList.contains(HIDDEN) && !doc.querySelector('.local-player[data-mobile-focus="true"]')) {
+          doc.body.classList.add(PANEL_MOTION);
+        }
+      } else if (transportOccluded) restoreTransport();
+      transportOccluded = next;
+    }
+    function relevantNode(node) {
+      return node.nodeType === 1 && (node.matches('.local-player,' + MENUS) || node.querySelector(MENUS));
+    }
+    panel = protectedSurface();
+    rememberPanelMotion();
+    // Only panel/menu changes reset inactivity; lyric and analyser updates leave the timer alone.
+    var observer = new view.MutationObserver(function (records) {
+      if (!records.some(function (record) {
+        return record.type === 'attributes' || Array.from(record.addedNodes).some(relevantNode) || Array.from(record.removedNodes).some(relevantNode);
+      })) return;
+      rememberPanelMotion();
+      var next = protectedSurface();
+      if (next !== panel) { panel = next; reveal(); }
+    });
+    observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-panel', 'data-mobile-focus'] });
+    var handlers = { pointerdown: down, pointerup: up, pointercancel: up, click: click,
+      pointermove: move, keydown: key, focusin: focusIn, focusout: focusOut, visibilitychange: reset,
+      'mineradio-mobile-focus-before': focusBefore, 'mineradio-mobile-focus-after': focusAfter };
+    Object.keys(handlers).forEach(function (name) { doc.addEventListener(name, handlers[name], true); });
+    view.addEventListener('blur', reset);
+    view.addEventListener('resize', reset);
+    reducedMotion.addEventListener('change', reset);
+    reveal();
+    return { destroy: function () {
+      clearTimer(); observer.disconnect(); focusPending = false; focusPrevious = []; chromeRecovery.clear(); cancelStageMotion(); cancelTransportMotion(); doc.body.classList.remove(PANEL_MOTION); hidden(false, true); pointers.clear();
+      Object.keys(handlers).forEach(function (name) { doc.removeEventListener(name, handlers[name], true); });
+      view.removeEventListener('blur', reset); view.removeEventListener('resize', reset);
+      reducedMotion.removeEventListener('change', reset);
+    } };
+  }
+  global.MineradioFoliaMobileChrome = { create: create };
+})(window);

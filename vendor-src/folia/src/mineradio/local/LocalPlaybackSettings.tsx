@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import type { HostState } from '../client';
 import type { LocalCommand } from './useLibraryPage';
 import './localPlaybackSettings.css';
+import { motion, useIsPresent } from 'framer-motion';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionProps } from '../../utils/mobileMotion';
 
 // src/mineradio/local/LocalPlaybackSettings.tsx
 // Playback preferences stay in the host; this panel only projects and edits its snapshot.
@@ -11,6 +14,8 @@ export default function LocalPlaybackSettings({ state, command, onClose }: {
     state: HostState | null; command: LocalCommand; onClose: () => void;
 }) {
     const { t } = useTranslation('localPlayer');
+    const { mobile, reducedMotion } = useMobileMotion();
+    const present = useIsPresent();
     const panel = useRef<HTMLElement>(null);
     const closeButton = useRef<HTMLButtonElement>(null);
     const [now, setNow] = useState(Date.now);
@@ -38,6 +43,7 @@ export default function LocalPlaybackSettings({ state, command, onClose }: {
         });
     };
     useEffect(() => {
+        if (!present) return;
         closeButton.current?.focus();
         const outside = (event: PointerEvent) => {
             const target = event.target as Element | null;
@@ -56,7 +62,7 @@ export default function LocalPlaybackSettings({ state, command, onClose }: {
                 for (const doc of documents) doc.querySelector<HTMLButtonElement>('[data-testid="local-open-playback"]')?.focus();
             }
         };
-    }, [onClose]);
+    }, [onClose, present]);
     useEffect(() => {
         setNow(Date.now());
         if (!sleep?.dueAt) return;
@@ -64,7 +70,11 @@ export default function LocalPlaybackSettings({ state, command, onClose }: {
         return () => clearInterval(timer);
     }, [sleep?.dueAt]);
     const minutes = Math.max(0, Math.ceil(((sleep?.dueAt ?? 0) - now) / 60_000));
-    return <aside ref={panel} role="dialog" aria-labelledby="local-playback-title" className="local-playback-settings local-glass" data-testid="local-playback-settings">
+    return <motion.aside ref={panel} role="dialog" aria-labelledby="local-playback-title"
+        {...(mobile ? mobileMotionProps('sheet', reducedMotion) : {})}
+        inert={!present} aria-hidden={!present || undefined}
+        data-mobile-motion-presence={mobile ? (present ? 'present' : 'exiting') : undefined}
+        className="local-playback-settings local-glass" data-testid="local-playback-settings">
         <div className="local-panel-title"><strong id="local-playback-title">{t('playbackSettings')}</strong>
             <button ref={closeButton} type="button" aria-label={t('close')} onClick={onClose}><X size={17} /></button></div>
         <div className="local-settings-body">
@@ -101,5 +111,5 @@ export default function LocalPlaybackSettings({ state, command, onClose }: {
                 <p>{t('crossfadeHint')}</p>
             </fieldset>
         </div>
-    </aside>;
+    </motion.aside>;
 }

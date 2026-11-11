@@ -1,0 +1,247 @@
+/* Scoped to phone/tablet browsers. Electron keeps its desktop layout. */
+#mobile-nav, #mobile-player-more, .mobile-panel-close, .mobile-home-intro,
+#mobile-search-close, #mobile-folia-switch { display: none; }
+
+body.mobile-layout {
+  --mobile-safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --mobile-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+  --mobile-safe-left: max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px));
+  --mobile-safe-right: max(env(safe-area-inset-right, 0px), var(--safe-area-inset-right, 0px));
+  --mobile-nav-height: calc(64px + var(--mobile-safe-bottom));
+  --mobile-header-height: calc(76px + var(--mobile-safe-top));
+  --mobile-player-space: 0px;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+body.mobile-layout.mobile-has-track { --mobile-player-space: 152px; }
+body.mobile-layout.mobile-has-track.mobile-controls-expanded { --mobile-player-space: 204px; }
+body.mobile-layout input:not([type=range]):not([type=color]),
+body.mobile-layout textarea, body.mobile-layout select { font-size: 16px; }
+body.mobile-layout button { touch-action: manipulation; }
+body.mobile-layout button:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: 2px; }
+body.mobile-layout #desktop-titlebar, body.mobile-layout #fullscreen-diy-zone,
+body.mobile-layout #top-right, body.mobile-layout #fx-fab,
+body.mobile-layout #fx-fab-hide-btn, body.mobile-layout #bottom-handle,
+body.mobile-layout #playlist-pin-btn, body.mobile-layout #upload-tip { display: none !important; }
+
+/* Persistent search and import controls. */
+html body.mobile-layout #search-area {
+  top: calc(12px + var(--mobile-safe-top));
+  left: calc(12px + var(--mobile-safe-left));
+  right: calc(12px + var(--mobile-safe-right));
+  width: auto;
+  max-width: none;
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+  gap: 8px;
+  z-index: 24;
+}
+body.mobile-layout #search-stack { flex: 1; width: 0; min-width: 0; }
+body.mobile-layout #search-box { width: 100%; min-width: 0; height: 48px; padding: 0 14px; border-radius: 16px; box-sizing: border-box; }
+body.mobile-layout #search-input { width: 100%; min-width: 0; font-size: 16px; }
+body.mobile-layout #search-input { color: #f3f5f8; }
+body.mobile-layout #search-input::placeholder { color: rgba(232,238,245,.62); }
+body.mobile-layout #search-mode-tabs, body.mobile-layout #local-sync-badge { display: none !important; }
+html body.mobile-layout #upload-actions { position: static; display: flex !important; opacity: 1; visibility: visible; transform: none; pointer-events: auto; gap: 0; margin: 0; }
+body.mobile-layout #upload-btn, body.mobile-layout #mobile-search-close { width: 48px; height: 48px; border-radius: 16px; }
+body.mobile-layout #mobile-folia-switch { display: inline-flex; width: 44px; height: 48px; border-radius: 14px; font: 600 20px Georgia,serif; color: var(--fc-accent); }
+body.mobile-layout #folder-import-btn, body.mobile-layout #clear-cover-btn { display: none !important; }
+body.mobile-layout[data-mobile-view=search] #upload-btn { display: none; }
+body.mobile-layout[data-mobile-view=search] #mobile-search-close { display: inline-flex; font-size: 26px; }
+body.mobile-layout #search-results {
+  position: fixed;
+  top: var(--mobile-header-height);
+  left: calc(12px + var(--mobile-safe-left));
+  right: calc(12px + var(--mobile-safe-right));
+  bottom: calc(var(--mobile-nav-height) + var(--mobile-player-space) + 12px);
+  max-height: none;
+  margin: 0;
+  border-radius: 20px;
+  background: var(--th-panel-bg, rgba(16,18,24,.96));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+body.mobile-layout:not([data-mobile-view=search]) #search-results { display: none !important; }
+body.mobile-layout .result-item { min-height: 64px; padding: 10px 12px; }
+body.mobile-layout .search-result { min-height: 64px; padding: 10px 12px; }
+body.mobile-layout .search-result .add-btn { min-width: 44px; min-height: 44px; }
+
+/* Home reuses the native import actions and cards. */
+html body.mobile-layout #empty-home {
+  top: var(--mobile-header-height);
+  bottom: calc(var(--mobile-nav-height) + var(--mobile-player-space) + 12px);
+  left: calc(12px + var(--mobile-safe-left));
+  right: calc(12px + var(--mobile-safe-right));
+  width: auto;
+  transform: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+html body.mobile-layout:not([data-mobile-view=home]) #empty-home { display: none !important; }
+html.local-only-mode body.mobile-layout #empty-home .empty-home-shell { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; height: auto; min-height: 0; overflow: visible; padding: 0 0 12px; gap: 14px; }
+body.mobile-layout .home-hero { flex: 0 0 auto; min-height: 0; padding: 24px 20px; border-radius: 24px; }
+body.mobile-layout .mobile-home-intro { display: block; margin: 4px 0 30px; }
+body.mobile-layout .mobile-home-intro > span { font: 600 10px var(--font-sans); letter-spacing: .16em; color: var(--fc-accent); }
+body.mobile-layout .mobile-home-intro h1 { margin: 18px 0 10px; font: 700 34px/1.2 var(--font-sans); letter-spacing: -.04em; color: #f4f5f7; }
+body.mobile-layout .mobile-home-intro p { margin: 0; font-size: 13px; line-height: 1.8; color: rgba(232,238,245,.65); }
+body.mobile-layout .home-local-import-inner { height: auto; min-height: 0; padding: 0; }
+body.mobile-layout .home-local-actions { grid-template-columns: 1fr; gap: 10px; width: 100%; }
+body.mobile-layout .home-local-action { height: 54px; }
+body.mobile-layout .home-grid, body.mobile-layout .home-tile-row { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+body.mobile-layout .home-card { min-height: 144px; padding: 16px; }
+body.mobile-layout .home-card-art { width: 54px; height: 54px; }
+body.mobile-layout .home-card-title, body.mobile-layout .home-card-sub { max-width: 100%; }
+
+/* Panels become scrollable pages between the header and player. */
+html body.mobile-layout #playlist-panel,
+html body.mobile-layout #fx-panel {
+  box-sizing: border-box;
+  top: var(--mobile-header-height);
+  bottom: calc(var(--mobile-nav-height) + var(--mobile-player-space) + 12px);
+  left: calc(12px + var(--mobile-safe-left));
+  right: calc(12px + var(--mobile-safe-right));
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  padding: 16px;
+  border-radius: 22px;
+  transform: none !important;
+  animation: none;
+  transition: opacity .18s ease;
+  z-index: 20;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+html body.mobile-layout #fx-panel { display: block !important; }
+html body.mobile-layout:not([data-mobile-view=library]) #playlist-panel,
+html body.mobile-layout:not([data-mobile-view=settings]) #fx-panel { visibility: hidden; pointer-events: none; opacity: 0; }
+html body.mobile-layout[data-mobile-view=library] #playlist-panel,
+html body.mobile-layout[data-mobile-view=settings] #fx-panel { visibility: visible; pointer-events: auto; opacity: 1; }
+body.mobile-layout #fx-panel .fx-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+body.mobile-layout .fx-head-main { flex: 1; min-width: 120px; }
+body.mobile-layout .fx-head .fx-title { white-space: nowrap; font-size: 16px; }
+body.mobile-layout .fx-head-actions { order: 3; width: 100%; margin: 0; flex-wrap: wrap; }
+body.mobile-layout #fx-panel .fx-head .fx-sub,
+body.mobile-layout .queue-head .fx-sub { display: none; }
+body.mobile-layout .mobile-panel-close { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.04); color: inherit; font-size: 26px; }
+body.mobile-layout .queue-head { align-items: center; }
+body.mobile-layout .queue-head-act { gap: 4px; }
+body.mobile-layout .panel-tabs { gap: 6px; }
+body.mobile-layout .panel-tab { flex: 1; min-height: 44px; padding: 0 8px; }
+body.mobile-layout .fx-mini-btn, body.mobile-layout .queue-mode-btn { min-height: 44px; }
+body.mobile-layout .queue-mode-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+body.mobile-layout .queue-item { min-height: 66px; flex-wrap: wrap; }
+body.mobile-layout .queue-item .qi-drag { display: none; }
+body.mobile-layout .queue-item .qi-act { width: 100%; justify-content: flex-end; opacity: 1; }
+body.mobile-layout .qi-act button, body.mobile-layout .song-action-btn { width: 44px; height: 44px; }
+body.mobile-layout .pl-card { min-height: 72px; flex-wrap: wrap; }
+body.mobile-layout .pl-card-actions { margin-left: auto; }
+body.mobile-layout .queue-next-up-row { min-height: 48px; }
+body.mobile-layout .fx-panel-tabs { display: flex; overflow-x: auto; top: -16px; margin-left: -16px; margin-right: -16px; padding: 8px 12px; }
+body.mobile-layout .fx-panel-tabs button { flex: 0 0 auto; min-height: 44px; min-width: 62px; }
+body.mobile-layout [data-fx-tab=mini], body.mobile-layout #fx-mini-player-settings,
+body.mobile-layout #fx-desktoplyrics-fold, body.mobile-layout .wallpaper-engine-row { display: none !important; }
+body.mobile-layout .fx-slider { grid-template-columns: 94px minmax(0,1fr) 40px 28px; min-height: 44px; gap: 6px; }
+body.mobile-layout .fx-slider input[type=range] { min-width: 0; height: 32px; }
+body.mobile-layout .fx-seg { flex-wrap: wrap; }
+body.mobile-layout .fx-seg button { min-height: 44px; }
+
+/* Compact transport: metadata, seek and primary controls stay within the screen. */
+html body.mobile-layout #bottom-bar {
+  display: flex;
+  box-sizing: border-box;
+  bottom: calc(var(--mobile-nav-height) + 8px);
+  left: calc(12px + var(--mobile-safe-left));
+  right: calc(12px + var(--mobile-safe-right));
+  width: auto;
+  padding: 8px 12px 10px;
+  gap: 3px;
+  border-radius: 24px;
+  transform: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  z-index: 25;
+  background: var(--th-bar-bg, rgba(18,22,27,.94));
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  box-shadow: var(--th-bar-shadow, inset 0 1px 0 rgba(255,255,255,.12),0 12px 40px rgba(0,0,0,.28));
+}
+html body.mobile-layout:not(.mobile-has-track) #bottom-bar { display: none !important; }
+html body.mobile-layout #controls { display: grid; grid-template-columns: minmax(0,1fr); gap: 4px; }
+body.mobile-layout #progress-bar { height: 14px; background: transparent; margin: 0; flex-shrink: 0; touch-action: none; }
+body.mobile-layout #progress-bar::before { content: ''; position: absolute; top: 5px; left: 0; right: 0; height: 3px; border-radius: 4px; background: rgba(255,255,255,.14); }
+body.mobile-layout #progress-fill { position: absolute; top: 5px; height: 3px; border-radius: 4px; }
+body.mobile-layout #progress-thumb { opacity: 1; top: 6.5px; }
+html body.mobile-layout .control-cluster { grid-column: 1 !important; height: auto; min-height: 44px; width: 100%; gap: 4px; }
+body.mobile-layout .control-cluster.actions { order: 0; justify-content: flex-start; }
+body.mobile-layout .control-track { display: flex; max-width: none; flex: 1; min-width: 0; gap: 10px; }
+body.mobile-layout .control-cover { display: block; width: 40px; height: 40px; flex: 0 0 40px; border-radius: 12px; }
+body.mobile-layout .control-meta { min-width: 0; max-width: 100%; }
+body.mobile-layout .control-title { font-size: 13px; line-height: 1.6; }
+body.mobile-layout .control-artist { font-size: 11px; }
+html body.mobile-layout .ctrl-btn { width: 44px; height: 44px; flex: 0 0 44px; }
+body.mobile-layout #mobile-player-more { display: inline-flex; }
+body.mobile-layout .control-cluster.transport { order: 1; justify-content: space-evenly; justify-self: stretch; }
+html body.mobile-layout #play-btn { width: 50px; height: 50px; flex-basis: 50px; }
+body.mobile-layout #quality-control, body.mobile-layout .playlist-source-control,
+body.mobile-layout #time-display, body.mobile-layout #controls-hide-btn,
+body.mobile-layout #desktop-lyrics-btn, body.mobile-layout .fullscreen-toggle-btn,
+body.mobile-layout #immersive-btn { display: none !important; }
+html body.mobile-layout .control-cluster.modes { display: none; order: 2; justify-content: space-evenly; }
+html body.mobile-layout.mobile-controls-expanded .control-cluster.modes { display: flex; }
+html body.mobile-layout.mobile-controls-expanded .lyrics-toggle-btn,
+html body.mobile-layout.mobile-controls-expanded #volume-control { display: flex !important; }
+body.mobile-layout .volume-popover { left: auto; right: 0; bottom: 48px; transform: none; max-width: calc(100vw - 48px); }
+
+/* Navigation is outside the desktop shell so overlays cannot inherit its transforms. */
+body.mobile-layout #mobile-nav {
+  display: flex;
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--mobile-nav-height);
+  padding: 5px max(8px,var(--mobile-safe-right)) calc(5px + var(--mobile-safe-bottom)) max(8px,var(--mobile-safe-left));
+  gap: 4px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  background: rgba(13,16,21,.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+body.mobile-layout #mobile-nav button { display: flex; flex: 1; min-width: 0; min-height: 44px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 14px; background: transparent; color: rgba(225,233,243,.5); font: 500 10px var(--font-sans); cursor: pointer; }
+body.mobile-layout #mobile-nav button[aria-current=page] { color: var(--fc-accent); background: rgba(var(--fc-accent-rgb),.08); }
+body.mobile-layout #mobile-nav svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+body.mobile-layout .modal-mask { box-sizing: border-box; padding: calc(16px + var(--mobile-safe-top)) calc(12px + var(--mobile-safe-right)) calc(16px + var(--mobile-safe-bottom)) calc(12px + var(--mobile-safe-left)); overflow-y: auto; overscroll-behavior: contain; }
+body.mobile-layout .modal { box-sizing: border-box; width: 100%; max-width: 560px; max-height: calc(100dvh - 32px - var(--mobile-safe-top) - var(--mobile-safe-bottom)); padding: 24px 20px; overflow-y: auto; }
+body.mobile-layout .modal-btn { min-height: 44px; }
+body.mobile-layout #toast { top: calc(68px + var(--mobile-safe-top)); max-width: calc(100vw - 40px); white-space: normal; z-index: 60; }
+body.mobile-layout #folia-floating-switch, body.mobile-layout #folia-floating-import { display: none !important; }
+body.mobile-layout.folia-interface-active #mobile-nav { display: none; }
+body.mobile-layout.folia-interface-active #folia-interface { top: calc(var(--mobile-viewport-top, 0px) + var(--mobile-safe-top)); bottom: auto; left: var(--mobile-safe-left); right: var(--mobile-safe-right); height: calc(var(--mobile-viewport-height, 100dvh) - var(--mobile-safe-top) - var(--mobile-safe-bottom)); }
+body.mobile-layout.mobile-keyboard-open #mobile-nav,
+html body.mobile-layout.mobile-keyboard-open #bottom-bar { display: none !important; }
+body.mobile-layout.mobile-keyboard-open #search-results { top: calc(var(--mobile-header-height) + var(--mobile-viewport-top)); bottom: auto; height: calc(var(--mobile-viewport-height) - var(--mobile-header-height) - 12px); }
+
+@media (orientation: landscape) and (max-height: 600px) {
+  body.mobile-layout { --mobile-header-height: calc(66px + var(--mobile-safe-top)); --mobile-nav-height: calc(54px + var(--mobile-safe-bottom)); }
+  body.mobile-layout.mobile-has-track { --mobile-player-space: 100px; }
+  body.mobile-layout #controls { grid-template-columns: minmax(0,1fr) minmax(250px,1fr) !important; }
+  html body.mobile-layout .control-cluster.actions { grid-column: 1 !important; }
+  html body.mobile-layout .control-cluster.transport { grid-column: 2 !important; order: 0; }
+  html body.mobile-layout .control-cluster.modes { grid-column: 1 / -1 !important; }
+  body.mobile-layout.mobile-has-track.mobile-controls-expanded { --mobile-player-space: 148px; }
+  body.mobile-layout .mobile-home-intro { margin-bottom: 18px; }
+  body.mobile-layout .home-hero { padding: 18px 20px; }
+  body.mobile-layout #mobile-nav button { flex-direction: row; gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.mobile-layout #playlist-panel, body.mobile-layout #fx-panel { transition: none; }
+}

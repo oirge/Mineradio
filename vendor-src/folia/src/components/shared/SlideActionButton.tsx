@@ -1,6 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionTokens } from '../../utils/mobileMotion';
 
 // src/components/shared/SlideActionButton.tsx
 // The player-style round action button with a second action on a leftward slide: tap the button for
@@ -40,6 +42,8 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
     accentColor,
     disabled = false,
 }) => {
+    const { mobile, reducedMotion } = useMobileMotion();
+    const calm = mobile && reducedMotion;
     const [showGuideLine, setShowGuideLine] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const gestureRef = useRef<{ startX: number; startY: number; triggered: boolean } | null>(null);
@@ -47,6 +51,24 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
     const buttonRef = useRef<HTMLButtonElement>(null);
     const trackEndIconRef = useRef<HTMLDivElement>(null);
     const trackFillRef = useRef<HTMLDivElement>(null);
+    const animations = useRef<Animation[]>([]);
+    const stopAnimations = () => {
+        animations.current.forEach(animation => animation.cancel());
+        animations.current = [];
+    };
+    const feedbackAnimation = (element: HTMLElement | null, frames: Keyframe[]) => {
+        if (!element || calm) return;
+        const animation = element.animate(frames, {
+            duration: mobile ? mobileMotionTokens.component : 250,
+            easing: mobile ? `cubic-bezier(${mobileMotionTokens.ease.join(',')})` : 'cubic-bezier(0.16, 1, 0.3, 1)',
+        });
+        animations.current.push(animation);
+        const release = () => { animations.current = animations.current.filter(active => active !== animation); };
+        animation.addEventListener('finish', release, { once: true });
+        animation.addEventListener('cancel', release, { once: true });
+    };
+    useEffect(() => () => { stopAnimations(); gestureRef.current = null; }, []);
+    useEffect(() => { if (calm) stopAnimations(); }, [calm]);
     const supportsHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     const motionClass = showGuideLine || isDragging
         ? 'translate-x-0 opacity-100'
@@ -58,14 +80,16 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
         const icon = trackEndIconRef.current;
         if (!icon) return;
         icon.style.opacity = String(0.35 + progress * 0.65);
-        icon.style.transform = `scale(${1 + progress * 0.15}) rotate(${progress * 45}deg)`;
+        icon.style.transform = calm ? '' : `scale(${1 + progress * (mobile ? 0.04 : 0.15)}) rotate(${progress * (mobile ? 18 : 45)}deg)`;
         icon.style.color = progress >= 1 ? accentColor : '';
     };
 
     const resetDestinationFeedback = () => {
         const icon = trackEndIconRef.current;
         if (!icon) return;
-        icon.style.transition = 'opacity 150ms ease-out, transform 150ms ease-out, color 150ms ease-out';
+        icon.style.transition = calm ? 'none' : mobile
+            ? `opacity ${mobileMotionTokens.micro}ms ease-out, transform ${mobileMotionTokens.micro}ms ease-out, color ${mobileMotionTokens.micro}ms ease-out`
+            : 'opacity 150ms ease-out, transform 150ms ease-out, color 150ms ease-out';
         icon.style.opacity = '0.35';
         icon.style.transform = 'scale(1) rotate(0deg)';
         icon.style.color = '';
@@ -78,11 +102,11 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
         const progress = Math.min(1, Math.abs(dragX) / TRIGGER_DISTANCE);
         button.style.transition = 'none';
         button.style.transform = `translateX(${dragX}px)`;
-        button.style.filter = `brightness(${1 + progress * 0.18})`;
+        button.style.filter = calm ? '' : `brightness(${1 + progress * (mobile ? 0.08 : 0.18)})`;
         const primaryIcon = button.querySelector('svg');
         if (primaryIcon) {
-            primaryIcon.style.transform = `rotate(${progress * -180}deg)`;
-            primaryIcon.style.scale = String(1 - progress * 0.1);
+            primaryIcon.style.transform = calm ? '' : `rotate(${progress * (mobile ? -18 : -180)}deg)`;
+            primaryIcon.style.scale = String(calm ? 1 : 1 - progress * (mobile ? 0.04 : 0.1));
         }
         if (progress >= 1) {
             button.style.backgroundColor = accentColor;
@@ -96,7 +120,10 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
         const fill = trackFillRef.current;
         if (fill) {
             fill.style.transition = 'none';
-            fill.style.width = `${48 + Math.abs(dragX)}px`;
+            if (mobile) {
+                fill.style.width = '96px';
+                fill.style.transform = `scaleX(${(48 + Math.abs(dragX)) / 96})`;
+            } else fill.style.width = `${48 + Math.abs(dragX)}px`;
             fill.style.backgroundColor = progress >= 1 ? accentColor : '';
             fill.style.opacity = progress >= 1 ? '0.35' : '';
         }
@@ -112,21 +139,33 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
         const fill = trackFillRef.current;
         const destination = trackEndIconRef.current;
         if (mode === 'trigger') {
-            button.animate([
+            stopAnimations();
+            feedbackAnimation(button, mobile ? [
+                { transform: `translateX(${dragX}px) scale(1)`, opacity: 1 },
+                { transform: `translateX(${dragX - mobileMotionTokens.distance}px) scale(${mobileMotionTokens.scale})`, opacity: 0 },
+            ] : [
                 { transform: `translateX(${dragX}px) scale(1)`, opacity: '1', filter: 'brightness(1.18)' },
                 { transform: 'translateX(-80px) scale(0.8)', opacity: '0' },
-            ], { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
-            destination?.animate([
+            ]);
+            feedbackAnimation(destination, mobile ? [
+                { transform: 'scale(1.04) rotate(18deg)', opacity: 1 },
+                { transform: 'translateX(-8px) scale(1) rotate(18deg)', opacity: 0 },
+            ] : [
                 { transform: 'scale(1.15) rotate(45deg)', opacity: '1' },
                 { transform: 'translateX(-40px) scale(0.9) rotate(45deg)', opacity: '0' },
-            ], { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
-            fill?.animate([
+            ]);
+            feedbackAnimation(fill, mobile ? [
+                { transform: `scaleX(${(48 + Math.abs(dragX)) / 96})`, opacity: 0.35 },
+                { transform: 'scaleX(1)', opacity: 0 },
+            ] : [
                 { width: `${48 + Math.abs(dragX)}px`, opacity: '0.35' },
                 { width: '96px', opacity: '0' },
-            ], { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+            ]);
         }
         resetDestinationFeedback();
-        button.style.transition = mode === 'release' ? 'transform 160ms ease-out, filter 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out, color 160ms ease-out' : '';
+        button.style.transition = calm ? 'none' : mode === 'release' ? mobile
+            ? `transform ${mobileMotionTokens.component}ms cubic-bezier(${mobileMotionTokens.ease.join(',')}), opacity ${mobileMotionTokens.component}ms ease-out, background-color ${mobileMotionTokens.micro}ms ease-out, color ${mobileMotionTokens.micro}ms ease-out`
+            : 'transform 160ms ease-out, filter 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out, color 160ms ease-out' : '';
         button.style.transform = '';
         button.style.filter = '';
         button.style.boxShadow = '';
@@ -140,7 +179,8 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
         }
         if (fill) {
             fill.style.transition = '';
-            fill.style.width = '48px';
+            fill.style.width = mobile ? '96px' : '48px';
+            fill.style.transform = mobile ? 'scaleX(.5)' : '';
             fill.style.backgroundColor = '';
             fill.style.opacity = '';
         }
@@ -150,30 +190,40 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
         gestureRef.current = null;
         resetDragFeedback();
     };
+    useEffect(() => {
+        const blur = () => { stopAnimations(); clearGesture(); suppressClickRef.current = false; setShowGuideLine(false); };
+        window.addEventListener('blur', blur);
+        return () => window.removeEventListener('blur', blur);
+    }, [mobile, calm]);
+    useEffect(() => { if (disabled && gestureRef.current) { stopAnimations(); clearGesture(); } }, [disabled]);
 
     return (
-        <div className={`relative w-12 h-12 transition-all duration-300 transform ${motionClass}`}>
+        <div
+            className={`relative w-12 h-12 transform ${mobile ? '' : 'transition-all duration-300'} ${motionClass}`}
+            style={mobile ? { transition: calm ? 'none' : `transform ${mobileMotionTokens.component}ms cubic-bezier(${mobileMotionTokens.ease.join(',')}), opacity ${mobileMotionTokens.component}ms ease-out` } : undefined}
+        >
             <div
-                style={{ width: '96px', transition: 'opacity 200ms ease-out' }}
+                style={{ width: '96px', transition: calm ? 'none' : `opacity ${mobile ? mobileMotionTokens.component : 200}ms ease-out` }}
                 className={`absolute right-0 top-0 h-12 rounded-full border pointer-events-none z-0 ${showGuideLine || isDragging ? 'opacity-100' : 'opacity-0'} ${isDaylight ? 'border-black/10 bg-black/5' : 'border-white/10 bg-white/5'}`}
             >
                 <motion.div
                     className="absolute left-3.5 top-[17px] w-3.5 h-3.5 pointer-events-none flex items-center justify-center"
-                    animate={showGuideLine ? { x: [0, -4, 0], opacity: [0.45, 0.85, 0.45] } : { x: 0, opacity: 0.45 }}
-                    transition={showGuideLine ? { duration: 1.5, repeat: Infinity, ease: 'easeInOut' } : undefined}
+                    animate={showGuideLine && !calm ? { x: [0, -4, 0], opacity: [0.45, 0.85, 0.45] } : { x: 0, opacity: 0.45 }}
+                    transition={showGuideLine && !calm ? { duration: 1.5, repeat: Infinity, ease: 'easeInOut' } : { duration: calm ? 0 : undefined }}
                 >
                     <div ref={trackEndIconRef} style={{ color: isDaylight ? '#000000' : '#ffffff' }} className="w-full h-full flex items-center justify-center" title={slideTitle}>
                         <SlideIcon size={14} />
                     </div>
                 </motion.div>
-                <div ref={trackFillRef} style={{ width: '48px' }} className={`absolute right-0 top-0 bottom-0 rounded-full pointer-events-none ${isDaylight ? 'bg-black/10' : 'bg-white/10'}`} />
+                <div ref={trackFillRef} style={{ width: mobile ? '96px' : '48px', transform: mobile ? 'scaleX(.5)' : undefined, transformOrigin: '100% 50%' }} className={`absolute right-0 top-0 bottom-0 rounded-full pointer-events-none ${isDaylight ? 'bg-black/10' : 'bg-white/10'}`} />
             </div>
             <button
                 ref={buttonRef}
                 type="button"
                 disabled={disabled}
                 onPointerDown={(event) => {
-                    if (disabled) return;
+                    if (disabled || event.button !== 0) return;
+                    stopAnimations();
                     gestureRef.current = { startX: event.clientX, startY: event.clientY, triggered: false };
                     suppressClickRef.current = false;
                     setShowGuideLine(false);
@@ -197,6 +247,7 @@ export const SlideActionButton: React.FC<SlideActionButtonProps> = ({
                 }}
                 onPointerUp={clearGesture}
                 onPointerCancel={clearGesture}
+                onLostPointerCapture={clearGesture}
                 onMouseEnter={() => { if (supportsHover) setShowGuideLine(true); }}
                 onMouseLeave={() => { if (supportsHover) setShowGuideLine(false); }}
                 onClick={(event) => {

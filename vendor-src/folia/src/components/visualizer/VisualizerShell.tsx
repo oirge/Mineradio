@@ -125,6 +125,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     return (
         <div
             ref={ref}
+            data-visualizer-shell=""
             className={`w-full h-full flex flex-col items-center justify-center overflow-hidden relative ${fontClassName} transition-colors duration-1000 ${className}`.trim()}
             style={{
                 backgroundColor: 'transparent',
@@ -183,6 +184,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
             )}
 
             {renderBackground && (
+                <div className="absolute inset-0" data-visualizer-background="">
                 <VisualizerBackgroundRenderer
                     config={sharedProps?.background}
                     theme={theme}
@@ -194,6 +196,7 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
                     staticMode={resolvedStaticMode || resolvedBackgroundStaticMode}
                     paused={resolvedPaused}
                 />
+                </div>
             )}
 
             {/* The built-in video layer follows the same rule as stage layers and stays out of the OBS

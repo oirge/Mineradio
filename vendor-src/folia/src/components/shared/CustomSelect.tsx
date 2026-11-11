@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { Theme } from '../../types';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
 import {
     CustomSelectMenu,
     type CustomSelectMenuPosition,
@@ -48,10 +49,18 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     isDaylight = false,
     theme,
 }) => {
+    const { mobile } = useMobileMotion();
     const [isOpen, setIsOpen] = useState(false);
     const [dropdownPosition, setDropdownPosition] = useState<CustomSelectMenuPosition | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+    const closeMenu = useCallback((restoreFocus = false) => {
+        if (restoreFocus && triggerRef.current?.isConnected && !triggerRef.current.disabled) {
+            triggerRef.current.focus({ preventScroll: true });
+        }
+        setIsOpen(false);
+    }, []);
 
     // Positions the portaled menu against the trigger and flips it when viewport space is limited.
     const updateDropdownPosition = useCallback(() => {
@@ -78,7 +87,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             Math.min(rect.left, window.innerWidth - width - DROPDOWN_VIEWPORT_GUTTER),
         );
 
-        setDropdownPosition({
+        const nextPosition: CustomSelectMenuPosition = {
             left,
             width,
             maxHeight: Math.max(
@@ -93,7 +102,12 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                 : placement === 'top'
                 ? { bottom: window.innerHeight - rect.top + DROPDOWN_GAP }
                 : { top: rect.bottom + DROPDOWN_GAP }),
-        });
+        };
+        setDropdownPosition(previous => previous
+            && previous.left === nextPosition.left && previous.width === nextPosition.width
+            && previous.maxHeight === nextPosition.maxHeight && previous.top === nextPosition.top
+            && previous.bottom === nextPosition.bottom && previous.placement === nextPosition.placement
+            ? previous : nextPosition);
     }, [preferAbove]);
 
     // Toggle the dropdown menu visibility
@@ -110,6 +124,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
     // Close the dropdown when clicking outside of the container
     useEffect(() => {
+        if (!isOpen) return;
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Node;
             if (
@@ -120,12 +135,22 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                 setIsOpen(false);
             }
         };
+        const back = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); closeMenu(true); };
+        const escape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); closeMenu(true); }
+        };
 
         document.addEventListener('mousedown', handleClickOutside);
+        if (mobile) {
+            window.addEventListener('keydown', escape, true);
+            window.addEventListener('mineradio-mobile-back', back, true);
+        }
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('keydown', escape, true);
+            window.removeEventListener('mineradio-mobile-back', back, true);
         };
-    }, [preferAbove]);
+    }, [isOpen, mobile, closeMenu]);
 
     useLayoutEffect(() => {
         if (!isOpen) {
@@ -134,11 +159,19 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         }
 
         updateDropdownPosition();
-        window.addEventListener('resize', updateDropdownPosition);
-        window.addEventListener('scroll', updateDropdownPosition, true);
+        let frame = 0;
+        const queuePosition = (event: Event) => {
+            // Scrolling the options does not move the trigger or resize the portaled menu.
+            if (event.type === 'scroll' && event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+            if (frame) return;
+            frame = window.requestAnimationFrame(() => { frame = 0; updateDropdownPosition(); });
+        };
+        window.addEventListener('resize', queuePosition);
+        window.addEventListener('scroll', queuePosition, true);
         return () => {
-            window.removeEventListener('resize', updateDropdownPosition);
-            window.removeEventListener('scroll', updateDropdownPosition, true);
+            window.removeEventListener('resize', queuePosition);
+            window.removeEventListener('scroll', queuePosition, true);
+            if (frame) window.cancelAnimationFrame(frame);
         };
     }, [isOpen, updateDropdownPosition]);
 
@@ -151,6 +184,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     return (
         <div ref={containerRef} className="relative w-full">
             <button
+                ref={triggerRef}
                 type="button"
                 onClick={handleToggle}
                 disabled={disabled}
@@ -191,7 +225,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                             borderColor={borderColor}
                             onSelect={(nextValue) => {
                                 onChange(nextValue);
-                                setIsOpen(false);
+                                closeMenu(mobile);
                             }}
                         />
                     )}

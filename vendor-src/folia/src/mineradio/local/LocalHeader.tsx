@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AudioLines, Captions, Command, Film, Maximize2, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LocalTool } from './localCommandCatalog';
+import LocalMobileNavigation from './LocalMobileNavigation';
 
 // src/mineradio/local/LocalHeader.tsx
 // Keep the live player controls in the desktop titlebar, with an in-frame fullscreen fallback.
@@ -13,7 +14,9 @@ function titlebarTarget(): HTMLElement | null {
             && !host.fullscreenElement ? host.getElementById('folia-titlebar-controls') : null;
     } catch { return null; }
 }
-interface Props {
+export interface LocalHeaderProps {
+    mobile: boolean;
+    mobileFocus?: boolean;
     view: 'lyrics' | 'records' | 'posters';
     libraryOpen: boolean;
     settingsOpen: boolean;
@@ -21,12 +24,13 @@ interface Props {
     tool: LocalTool | null;
     onTool: (tool: LocalTool) => void;
     onPlayback: () => void;
-    onView: (view: Props['view']) => void;
+    onView: (view: LocalHeaderProps['view']) => void;
     onLibrary: () => void;
     onSettings: () => void;
     onFocus: () => void;
 }
-export default function LocalHeader({ view, libraryOpen, settingsOpen, playbackOpen, tool, onTool, onPlayback, onView, onLibrary, onSettings, onFocus }: Props) {
+export default function LocalHeader(props: LocalHeaderProps) {
+    const { mobile, view, libraryOpen, settingsOpen, playbackOpen, tool, onTool, onPlayback, onView, onLibrary, onSettings, onFocus } = props;
     const { t } = useTranslation('localPlayer');
     const [target, setTarget] = useState(titlebarTarget);
     useEffect(() => {
@@ -40,6 +44,7 @@ export default function LocalHeader({ view, libraryOpen, settingsOpen, playbackO
             return () => { observer.disconnect(); host.removeEventListener('fullscreenchange', refresh); };
         } catch { return; }
     }, []);
+    if (mobile) return <LocalMobileNavigation {...props} />;
     const navigation = <nav aria-label={t('playbackView')} data-testid="local-navigation">
         <div className="local-view-switch" role="group" aria-label={t('playbackView')}>
             {(['lyrics', 'records', 'posters'] as const).map(value => <button type="button" key={value}

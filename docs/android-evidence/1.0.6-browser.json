@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "settings open and close in simple mode",
+    "touch library remains open and creates a playlist",
+    "real WAV import, pause, seek, resume, next, previous and options",
+    "local search and dismiss",
+    "320, 360, 430, 768 portrait and 844, 1024 landscape",
+    "Folia switch preserves host audio; touch pause, seek and track navigation",
+    "Folia mobile chrome hides on idle, wakes without tap-through, holds during touch sliders and stays available for menus and settings",
+    "Folia library search, playlist creation, visual themes, playback settings and audio tools",
+    "Folia lyrics, floating records and poster wall at all six phone/tablet sizes",
+    "Folia returns to Mineradio without restarting playback",
+    "mobile motion: Host navigation enters naturally and repeated changes settle without stale pages; Host dialog and mask have visible entry and reverse exit with the page usable afterwards; Player More enters, repeatedly reopens and clears height/presence state with fixed control sizes; mid-flight reversal not exercised; Visible queue deletion updates the DOM before animating the correct following row, then releases its protected ghost; Folia library enters and returns with bounded presence and restored interaction; Rapid Folia panel changes finish with no stale presence or blocked bottom navigation; Manual focus keeps navigation, metadata and transport instances, then restores the same viewport and usable controls; One Escape or Android back closes only More above an audio tool; the next return releases the retained tool; Trusted press and cancellation show feedback without executing the action; All three Folia views transition while bottom navigation keeps its geometry; The mobile More sheet enters and exits continuously; Dynamic Reduce Motion settles Folia UI transitions and releases presence; Host media preference changes and finite animation tasks are cleaned up",
+    "mobile motion long list: 96 real WAVs, bounded entries, real scrolling and stable refresh",
+    "large browser returns to desktop layout"
+  ],
+  "errors": []
+}

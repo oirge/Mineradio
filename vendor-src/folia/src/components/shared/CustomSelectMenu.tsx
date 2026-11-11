@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useIsPresent } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { List, type RowComponentProps } from 'react-window';
+import { useMobileMotion } from '../../hooks/useMobileMotion';
+import { mobileMotionProps, mobileMotionTokens } from '../../utils/mobileMotion';
 
 // CustomSelectMenu.tsx
 // Renders the viewport-anchored option menu used by CustomSelect.
@@ -147,7 +149,11 @@ export const CustomSelectMenu: React.FC<CustomSelectMenuProps> = ({
     borderColor,
     onSelect,
 }) => {
+    const { mobile, reducedMotion } = useMobileMotion();
+    const present = useIsPresent();
     const isVirtualized = options.length >= VIRTUALIZE_THRESHOLD;
+    const phoneMotion = mobileMotionProps('menu', reducedMotion);
+    const offset = reducedMotion ? 0 : mobileMotionTokens.distance * (position.placement === 'top' ? 1 : -1);
 
     const rowProps = useMemo(() => ({
         options,
@@ -169,18 +175,18 @@ export const CustomSelectMenu: React.FC<CustomSelectMenuProps> = ({
     return (
         <motion.div
             ref={menuRef}
-            initial={{
-                opacity: 0,
-                y: position.placement === 'top' ? 8 : -8,
-                scale: 0.96,
-            }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{
-                opacity: 0,
-                y: position.placement === 'top' ? 8 : -8,
-                scale: 0.96,
-            }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            {...(mobile ? {
+                ...phoneMotion,
+                initial: { ...phoneMotion.initial, y: offset },
+                exit: { ...phoneMotion.exit, y: offset },
+            } : {
+                initial: { opacity: 0, y: position.placement === 'top' ? 8 : -8, scale: 0.96 },
+                animate: { opacity: 1, y: 0, scale: 1 },
+                exit: { opacity: 0, y: position.placement === 'top' ? 8 : -8, scale: 0.96 },
+                transition: { duration: 0.15, ease: 'easeOut' as const },
+            })}
+            inert={!present} aria-hidden={!present || undefined}
+            data-mobile-motion-presence={mobile ? (present ? 'present' : 'exiting') : undefined}
             className={`fixed z-[200] rounded-xl border shadow-xl overscroll-contain backdrop-blur-md custom-scrollbar${isVirtualized ? '' : ' overflow-y-auto'}`}
             data-wheel-scroll-region
             role="listbox"

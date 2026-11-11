@@ -105,10 +105,12 @@ with sync_playwright() as p:
         like = child.get_by_test_id('local-like')
         like.hover()
         page.mouse.down()
-        page.wait_for_timeout(550)
-        page.mouse.up()
         menu = child.get_by_test_id('local-slot-menu-1')
-        expect(menu).to_be_visible()
+        try:
+            # Keep the pointer pressed until the browser runs the long-press timer.
+            expect(menu).to_be_visible()
+        finally:
+            page.mouse.up()
         assert page.evaluate('isSongLiked(playQueue[currentIdx])') == liked_before
         menu.locator('[data-action="addPlaylist"]').click()
         child.locator('[data-slot-action="addPlaylist"]').click()
