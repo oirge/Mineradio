@@ -1,5 +1,5 @@
 /* Embedded Folia phone surfaces. The host frame supplies Android display cutout insets. */
-.local-mobile { --local-mobile-top: 60px; --local-mobile-nav: 64px; --local-mobile-controls: 144px; }
+.local-mobile { --local-mobile-top: 60px; --local-mobile-nav: 64px; --local-mobile-controls: 144px; --local-mobile-stage-gap: 66px; }
 .local-mobile .local-player, .local-mobile .local-player * { box-sizing: border-box; }
 .local-mobile .local-player { -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
 .local-mobile .local-player button:not(:where(.lattice-root *, .local-record-wall *)) { min-height: 44px; touch-action: manipulation; }
@@ -60,7 +60,7 @@
 .local-mobile .local-visualizer { clip-path: inset(0px); }
 .local-mobile .local-visualizer-content {
     top: 50%; bottom: auto; translate: 0 -50%;
-    height: calc(100dvh - var(--local-mobile-top) - var(--local-mobile-nav) - var(--local-mobile-controls) - 66px);
+    height: calc(100dvh - var(--local-mobile-top) - var(--local-mobile-nav) - var(--local-mobile-controls) - var(--local-mobile-stage-gap));
 }
 .local-mobile .local-visualizer-content [data-visualizer-shell] { overflow: visible; }
 .local-mobile .local-visualizer-content [data-visualizer-background],
@@ -125,7 +125,7 @@
 .local-mobile-keyboard-open .local-player .local-library, .local-mobile-keyboard-open .local-player .local-settings,
 .local-mobile-keyboard-open .local-player .local-tool-panel { bottom: 4px; }
 @media(max-height:500px) and (orientation:landscape) {
-    .local-mobile { --local-mobile-top: 54px; --local-mobile-nav: 52px; --local-mobile-controls: 94px; }
+    .local-mobile { --local-mobile-top: 54px; --local-mobile-nav: 52px; --local-mobile-controls: 94px; --local-mobile-stage-gap: 12px; }
     .local-mobile .local-mobile-header { top: 2px; height: 46px; left: 12px; right: 12px; }
     .local-mobile .local-mobile-nav button { flex-direction: row; gap: 7px; }
     .local-mobile .local-transport { display: flex; gap: 12px; }

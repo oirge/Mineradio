@@ -715,6 +715,19 @@ def verify_folia_mobile(page, checks, out):
             inside(folia.get_by_test_id(surface))
             if view == 'lyrics':
                 lyrics_inside_stage()
+                wake_controls(full_chrome=True)
+                wait_for_stage_rest()
+                geometry = page.evaluate('''() => {
+                    const doc = document.getElementById('folia-frame').contentDocument;
+                    const stage = doc.querySelector('[data-testid=local-visualizer]');
+                    const renderer = stage.querySelector('[data-testid=local-visualizer-content]');
+                    return {hidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
+                        stage: {width: stage.clientWidth, height: stage.clientHeight},
+                        renderer: {width: renderer.clientWidth, height: renderer.clientHeight}};
+                }''')
+                assert not geometry['hidden'] and all(abs(geometry['stage'][key] - geometry['renderer'][key]) <= 1
+                    for key in ['width', 'height']), \
+                    f'Fixed lyric renderer changed the original {width}x{height} safe layout: {geometry}'
             wake_controls()
             inside(folia.get_by_test_id('local-mobile-nav'))
             inside(folia.get_by_test_id('local-controls'))
