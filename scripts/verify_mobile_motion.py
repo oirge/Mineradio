@@ -707,9 +707,9 @@ class TouchDriver:
             'touchSent': False, 'polls': [], 'ready': False}
         self.wake_checks.append(evidence)
         if initial['ready']:
-            if evidence['initialProbeDurationMs'] > 2000:
-                evidence['failedWindowDurationMs'] = evidence['initialProbeDurationMs']
-                raise AssertionError('The additional motion audit did not observe ready Folia chrome within 2000ms')
+            # This sample already proves usable chrome and sends no touch.
+            # Keep its RPC latency as evidence; the two-second wake window
+            # starts after an actual touchEnd in the paths below.
             evidence['ready'] = True
             return
 

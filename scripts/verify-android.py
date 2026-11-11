@@ -944,6 +944,11 @@ with sync_playwright() as p:
 adb('shell', 'am', 'force-stop', APP)
 adb('uninstall', APP)
 subprocess.check_call(['adb', 'install', str(ROOT / ('release/Mineradio-Android-' + ANDROID_VERSION + '.apk'))])
+# The preceding screen-off and notification checks can leave SystemUI above
+# the new Activity. Prepare the real device before inspecting the signed UI.
+adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
+adb('shell', 'wm', 'dismiss-keyguard')
+adb('shell', 'cmd', 'statusbar', 'collapse')
 launch = adb('shell', 'am', 'start', '-W', '-n', APP + '/.MainActivity')
 assert 'Status: ok' in launch, launch
 layout = ''
@@ -965,6 +970,7 @@ for attempt in range(20):
     time.sleep(1)
 else:
     (OUT / 'android-release-window.xml').write_text(layout, encoding='utf-8')
+    (OUT / 'android-release-failed.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=15))
     raise AssertionError('The signed release did not show the offline import UI')
 (OUT / 'android-release.png').write_bytes(subprocess.check_output(['adb', 'exec-out', 'screencap', '-p']))
 completed('exact signed release installs and opens its offline import UI')
