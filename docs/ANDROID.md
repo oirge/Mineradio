@@ -4,8 +4,9 @@ Android 版本基于现有本地音乐播放器，采用 Capacitor 8，安装后
 
 ## 安装
 
-从 [Android 1.0.6 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.6/Mineradio-Android-1.0.6.apk) 下载 `Mineradio-Android-1.0.6.apk`；[发行记录](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.6)。在手机打开并允许浏览器安装此来源的应用。
+从 [Android 1.0.7 APK](https://github.com/oirge/Mineradio/releases/download/android-v1.0.7/Mineradio-Android-1.0.7.apk) 下载 `Mineradio-Android-1.0.7.apk`；[发行记录](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.7)。在手机打开并允许浏览器安装此来源的应用。
 
+- 1.0.7 修复控制栏收放引起的歌词裁切跳变，歌词排版与背景尺寸保持固定，横屏保留原有舞台大小。原签名、公开包摘要及同 run 构建包已核验，可覆盖更新。浏览器最终隐藏/恢复原图正常；Android 系统隐藏原图仍有半透明控件残影，实际手机显示、帧率和本轮中途反向效果未验收；详见[发行与验收记录](ANDROID-HANDOFF.md)。
 - 1.0.6 统一两套手机界面的页面、弹窗、菜单、列表与按钮动效，修复真实触摸按压反馈；响应系统减少动态效果。沿用原签名，可覆盖更新。云端功能/音频检查通过，实际手机帧率与自动隐藏画面仍待实机确认；详细边界见[优化报告](MOBILE-MOTION.md)。
 - 1.0.5 将 Folia 手机控制区隐藏与唤回改为柔和过渡，沿用单一原生音频引擎与签名，可覆盖安装更新。
 - 1.0.4 增加 Folia 手机闲置自动隐藏，原生音频沿用 1.0.3，沿用签名，可覆盖安装更新。

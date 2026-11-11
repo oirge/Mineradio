@@ -1,5 +1,23 @@
 # 手机交互动效规范与优化报告
 
+## Android 1.0.7：控制栏收放时的歌词裁切修复（2026-11-11）
+
+控制栏隐藏和唤回时，歌词内部渲染尺寸保持固定，外层位置与裁切边界平滑过渡，避免开始或收尾时重新布局造成的切割感。横屏沿用原有可见舞台尺寸。
+
+发行提交 [0bccaac42aa3f825b7628ba194cd5109b0b43830](https://github.com/oirge/Mineradio/commit/0bccaac42aa3f825b7628ba194cd5109b0b43830)，tag `android-v1.0.7`，versionName `1.0.7` / versionCode `10007`，发布北京时间 2026-11-11 10:41:05。 [Android 1.0.7 Release](https://github.com/oirge/Mineradio/releases/tag/android-v1.0.7)。
+
+[云端发行验收](https://github.com/oirge/Mineradio/actions/runs/42945867244)成功，attempt 1：Node 1697 项、浏览器 13 项、Android 15 项、DSP 8 项；动效检查分别为浏览器 13、Android 5、长列表 4 项。
+
+最终截图的实际观察：浏览器——隐藏图中顶部导航、歌曲信息、播放控件和底部导航均已消失，背景和歌词舞台铺满视口，未见空白裁切条；恢复图四组控件正常显示，歌词回到原安全区域，文字完整。Android 系统——系统隐藏图中歌词舞台铺满视口，但仍能看到顶部导航、歌曲信息、播放控件和底部导航的半透明残影，与同轮 DOM 隐藏记录不一致；恢复图四组控件正常显示。系统截图不能证明原生画面已完全隐藏，实际手机隐藏效果与帧率仍未验收。视觉结论按这些观察记录，自动化通过不代表截图一致性或实际设备帧率已验收。
+
+功能和动效取证使用同发行提交的 debug APK；签名 release APK 在同一 run 验证安装及离线导入首页。云端使用软件 GPU，未验收实际手机 FPS、高刷新率或低性能设备；模拟器 -noaudio，未做扬声器听感验证。 未覆盖项：宿主“更多”的中途反向未被三次真实触摸覆盖；最终展开与清理已验证。 本轮真实触摸未覆盖闲置隐藏动画的中途反向，不能据最终状态宣称反向平滑度已验收。
+
+浏览器覆盖 320、360、430、768 竖屏及 844、1024 横屏，包括歌词、悬浮唱片和封面拼贴；本轮歌词内容层与背景画布尺寸检查通过。首轮 `42942148889` 失败记录保留；最终成功运行是 `42945867244`。
+
+
+本轮原始证据：[完整发行核验](android-evidence/1.0.7-verification.json)、[原生报告](android-evidence/1.0.7-native.json)、[音频状态](android-evidence/1.0.7-background.json)、[浏览器报告](android-evidence/1.0.7-browser.json)、[DSP](android-evidence/1.0.7-dsp.json)、[隐藏与恢复状态](android-evidence/1.0.7-chrome.json)、[原始闲置动画](android-evidence/1.0.7-animation.json)、[浏览器全局动效](android-evidence/1.0.7-motion-browser.json)、[Android 全局动效](android-evidence/1.0.7-motion-android.json)、[长列表](android-evidence/1.0.7-motion-list.json)、[严格唤回状态](android-evidence/1.0.7-wake-readiness.json)、[浏览器隐藏原图](android-evidence/1.0.7-browser-hidden.png)、[浏览器恢复原图](android-evidence/1.0.7-browser-restored.png)、[Android 隐藏原图](android-evidence/1.0.7-android-hidden.png)、[Android 恢复原图](android-evidence/1.0.7-android-restored.png)。JSON 和 PNG 按原始字节归档，均来自上述固定发行 SHA/run；旧版记录保留。
+
+
 ## 2026-11-11：Android 1.0.7 歌词收放修复（云端验收前）
 
 - 用户反馈：控制栏隐藏和出现导致歌词界面卡顿、有切割感。旧实现只移动中心，隐藏开始立即扩大渲染尺寸，唤回结束再恢复小尺寸，背景边界与歌词排版会突然改变。
