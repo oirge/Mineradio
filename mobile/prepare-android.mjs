@@ -48,7 +48,7 @@ fs.writeFileSync(manifestPath, manifest);
 
 const gradlePath = path.join(android, 'app/build.gradle');
 let gradle = fs.readFileSync(gradlePath, 'utf8');
-gradle = gradle.replace(/versionCode \d+/, 'versionCode 10006').replace(/versionName "[^"]+"/, 'versionName "1.0.6"');
+gradle = gradle.replace(/versionCode \d+/, 'versionCode 10007').replace(/versionName "[^"]+"/, 'versionName "1.0.7"');
 if (!gradle.includes('MOBILE_KEYSTORE_PATH')) {
 gradle = gradle.replace('buildTypes {', `signingConfigs {
         release {

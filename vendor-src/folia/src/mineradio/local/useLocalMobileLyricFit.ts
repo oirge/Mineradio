@@ -2,7 +2,7 @@ import { useLayoutEffect, type RefObject } from 'react';
 import { getGlowWordReach } from '../../components/visualizer/glowWordOverlap';
 import type { Theme } from '../../types';
 
-// Keep Classic's animated words inside the embedded phone stage, including untimed whole lines.
+// Fit Classic against stable phone-safe bounds so revealing chrome never resizes its words.
 export function useLocalMobileLyricFit(stage: RefObject<HTMLDivElement | null>, enabled: boolean,
     lineKey: number | undefined, fontScale: number, theme: Theme) {
     useLayoutEffect(() => {

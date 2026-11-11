@@ -111,9 +111,7 @@
       value = !!value;
       if (doc.body.classList.contains(HIDDEN) === value) return;
       var animate = !instant && enabled() && !doc.hidden && !reducedMotion.matches;
-      var previous = animate ? Array.from(doc.querySelectorAll(STAGES)).map(function (node) {
-        return { node: node, rect: node.getBoundingClientRect() };
-      }) : [];
+      var previous = animate ? Array.from(doc.querySelectorAll(STAGES)).map(measureStage) : [];
       // Measure the current visual position before cancelling, including a
       // partially completed transition, so a quick wake reverses continuously.
       chromeRecovery.clear();
@@ -124,7 +122,19 @@
       animateStages(previous, value);
       if (!value && !instant) rememberChromeRecovery();
     }
-    // Idle and manual focus share the same stage owner and centre-only transition.
+    // Measure the drawn viewport, including a partially animated clip, before reversal.
+    function measureStage(node) {
+      var box = node.getBoundingClientRect();
+      var stable = node.matches('.local-visualizer') && !!node.querySelector(':scope > .local-visualizer-content');
+      var clip = stable && view.getComputedStyle(node).clipPath.match(/^inset\(([^)]+)\)$/);
+      var values = clip ? clip[1].split(/\s+/).map(parseFloat) : [0];
+      var top = values[0], right = values[1] ?? top, bottom = values[2] ?? top, left = values[3] ?? right;
+      return { node: node, stable: stable, rect: {
+        left: box.left + left, top: box.top + top,
+        width: box.width - left - right, height: box.height - top - bottom
+      } };
+    }
+    // Idle and manual focus share one compositor transition. The lyric renderer stays the same size.
     function animateStages(previous, expanding) {
       previous.forEach(function (entry) {
         var node = entry.node;
@@ -134,7 +144,7 @@
         var saved = [], restored = false;
         // Keep the full background while controls fade back in. Restoring the
         // smaller viewport immediately would leave an empty strip above it.
-        if (!expanding && entry.rect.height > next.height + 1
+        if (!entry.stable && !expanding && entry.rect.height > next.height + 1
             && node.matches('.local-visualizer,.local-record-wall,.lattice-root')) {
           ['top', 'right', 'bottom', 'left', 'height'].forEach(function (name) {
             saved.push({ name: name, value: node.style.getPropertyValue(name), priority: node.style.getPropertyPriority(name) });
@@ -154,12 +164,20 @@
         var y = entry.rect.top + entry.rect.height / 2 - layout.top - layout.height / 2;
         var endX = next.left + next.width / 2 - layout.left - layout.width / 2;
         var endY = next.top + next.height / 2 - layout.top - layout.height / 2;
-        if (!saved.length && Math.abs(x) < .5 && Math.abs(y) < .5) return;
-        // Resize the visual runtime once; animate only its centre. Scaling the
-        // stage stretches lyrics, while animating its size reallocates canvases
-        // and reruns lyric fitting every frame. Individual translate preserves
-        // the visualizer's existing transform and word animations.
-        var animation = node.animate([{ translate: x + 'px ' + y + 'px' }, { translate: endX + 'px ' + endY + 'px' }],
+        if (!saved.length && Math.abs(x) < .5 && Math.abs(y) < .5
+            && (!entry.stable || Math.abs(entry.rect.height - next.height) < .5)) return;
+        var first = { translate: x + 'px ' + y + 'px' }, last = { translate: endX + 'px ' + endY + 'px' };
+        if (entry.stable) {
+          // A fixed full-height backdrop covers both viewports. Animate the actual
+          // clipping edges as well as the centre, without resizing or scaling it.
+          var top = entry.rect.top - layout.top - y;
+          var right = layout.left + layout.width + x - entry.rect.left - entry.rect.width;
+          var bottom = layout.top + layout.height + y - entry.rect.top - entry.rect.height;
+          var left = entry.rect.left - layout.left - x;
+          first.clipPath = 'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
+          last.clipPath = 'inset(0px 0px 0px 0px)';
+        }
+        var animation = node.animate([first, last],
           { duration: MOTION, easing: EASING });
         animation.id = 'mineradio-mobile-chrome-stage';
         var record = { animation: animation, restore: restore };
@@ -190,9 +208,7 @@
         doc.querySelectorAll(TRANSPORT).forEach(function (node) { view.getComputedStyle(node).opacity; });
       }
       focusPrevious = enabled() && !doc.hidden && !reducedMotion.matches
-        ? Array.from(doc.querySelectorAll(STAGES.replace(/\[data-panel="closed"\]/g, ''))).map(function (node) {
-          return { node: node, rect: node.getBoundingClientRect() };
-        }) : [];
+        ? Array.from(doc.querySelectorAll(STAGES.replace(/\[data-panel="closed"\]/g, ''))).map(measureStage) : [];
       cancelStageMotion();
       clearTimer();
     }

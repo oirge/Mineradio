@@ -55,6 +55,16 @@
 .local-mobile .local-current-track strong { font-size: 13px; }
 .local-mobile .local-current-track span { font-size: 11px; }
 .local-mobile .local-visualizer { top: var(--local-mobile-top); bottom: calc(var(--local-mobile-nav) + var(--local-mobile-controls) + 66px); }
+/* Chrome changes only the outer clip; foreground layout and backdrop buffers stay stable. */
+.local-visualizer-content { position: absolute; inset: 0; }
+.local-mobile .local-visualizer { clip-path: inset(0px); }
+.local-mobile .local-visualizer-content {
+    top: 50%; bottom: auto; translate: 0 -50%;
+    height: calc(100dvh - var(--local-mobile-top) - var(--local-mobile-nav) - var(--local-mobile-controls) - 66px);
+}
+.local-mobile .local-visualizer-content [data-visualizer-shell] { overflow: visible; }
+.local-mobile .local-visualizer-content [data-visualizer-background],
+.local-mobile .local-visualizer-content .visualizer-still > :first-child { top: calc(50% - 50dvh); bottom: auto; height: 100dvh; }
 .local-mobile .local-visualizer[data-mode=classic] [data-overlap-fit-line] {
     position: relative; scale: var(--local-mobile-lyric-scale, 1);
     translate: var(--local-mobile-lyric-x, 0px) var(--local-mobile-lyric-y, 0px);

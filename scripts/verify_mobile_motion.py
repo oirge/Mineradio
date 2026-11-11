@@ -119,7 +119,7 @@ SNAPSHOT = r"""
             properties: keyframes ? [...new Set(keyframes.flatMap(frame => Object.keys(frame)
                 .filter(key => !['offset','computedOffset','easing','composite'].includes(key))))] : undefined,
             keyframes: keyframes ? keyframes.map(frame => ({opacity: frame.opacity, translate: frame.translate,
-                scale: frame.scale, height: frame.height, marginTop: frame.marginTop})) : undefined,
+                scale: frame.scale, clipPath: frame.clipPath, height: frame.height, marginTop: frame.marginTop})) : undefined,
             target: {nodeId: view.__mineradioMotionAudit?.identify?.(target) ?? null,
                 tag: target.tagName, id: target.id, testid: target.getAttribute('data-testid'), classes: target.className,
                 queueIndex: target.hasAttribute('data-queue-index') ? Number(target.getAttribute('data-queue-index')) : null,
@@ -1092,8 +1092,9 @@ def verify_folia_focus(audit, driver):
         'The focus transition left offsets or a different visual viewport after return'
     stage_animations = [animation for state in trace['samples'] for animation in state['animations']
         if animation['id'] == 'mineradio-mobile-chrome-stage']
-    assert stage_animations and all(animation['duration'] == 560 and animation['properties'] == ['translate']
-        for animation in stage_animations), 'Focus did not reuse the bounded 560ms centre-only stage transition'
+    assert stage_animations and all(animation['duration'] == 560
+        and set(animation['properties']) == {'translate', 'clipPath'}
+        for animation in stage_animations), 'Focus did not reuse the bounded 560ms stable-renderer viewport transition'
     for state in trace['samples']:
         live = [animation for animation in state['animations']
             if animation['id'] == 'mineradio-mobile-chrome-stage' and animation['state'] == 'running']

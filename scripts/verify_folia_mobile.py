@@ -406,10 +406,19 @@ def verify_folia_mobile(page, checks, out):
             const trace = view.__mineradioChromeAnimationTrace = {label, active: true, samples: [], rafTicks: [], lifecycleEvents: []};
             trace.read = () => {
                 const stage = doc.querySelector('[data-testid=local-visualizer]'), box = stage?.getBoundingClientRect();
+                const renderer = stage?.querySelector('[data-testid=local-visualizer-content]');
+                const clipPath = stage && view.getComputedStyle(stage).clipPath;
+                const clip = clipPath?.startsWith('inset(')
+                    ? clipPath.slice(6, -1).split(' ').map(value => Number.parseFloat(value)) : [0];
+                const top = clip[0], right = clip[1] ?? top, bottom = clip[2] ?? top, left = clip[3] ?? right;
                 return {at: view.performance.now(), timelineTime: doc.timeline.currentTime,
                     hidden: doc.body.classList.contains('mineradio-mobile-chrome-hidden'),
                     stage: box && {x: box.x, y: box.y, width: box.width, height: box.height,
                         centerX: box.x + box.width / 2, centerY: box.y + box.height / 2},
+                    clipPath, viewport: box && {x: box.x + left, y: box.y + top,
+                        width: box.width - left - right, height: box.height - top - bottom},
+                    renderer: renderer && {width: renderer.clientWidth, height: renderer.clientHeight,
+                        canvases: [...renderer.querySelectorAll('canvas')].map(canvas => ({width: canvas.width, height: canvas.height}))},
                     animations: stage ? stage.getAnimations().filter(animation => animation.id === 'mineradio-mobile-chrome-stage')
                         .map(animation => ({id: animation.id, currentTime: animation.currentTime, startTime: animation.startTime,
                             pending: animation.pending, playState: animation.playState})) : [],
@@ -485,6 +494,13 @@ def verify_folia_mobile(page, checks, out):
                 and surface['opacity'] is not None and 0 < surface['opacity'] < 1
                 for sample in samples for surface in sample['surfaces']), \
                 f"{trace['label']}: {selector} jumped without a visible intermediate opacity"
+        renderers = [sample['renderer'] for sample in trace['samples'] if sample.get('renderer')]
+        assert renderers and all(renderer == renderers[0] for renderer in renderers), \
+            f"{trace['label']}: chrome resized the lyric renderer or its canvas backing"
+        viewports = [sample['viewport'] for sample in samples if sample.get('viewport')]
+        heights = [viewport['height'] for viewport in viewports]
+        assert heights and any(min(heights) + 1 < height < max(heights) - 1 for height in heights), \
+            f"{trace['label']}: clipping edges jumped without an observed intermediate viewport"
 
     def try_animation_reversal(visible_geometry, visible_center, hidden_center, frame_box, traces):
         # Prebuild the driver, then make one real gesture. Input latency can miss the animation.
@@ -637,6 +653,9 @@ def verify_folia_mobile(page, checks, out):
         expect(folia.get_by_test_id('local-controls')).to_be_visible()
         page.screenshot(path=str(out / 'folia-controls-restored.png'))
         try_animation_reversal(visible_geometry, visible_center, hidden_center, baseline['frameBounds'], animation_traces)
+        renderers = [sample['renderer'] for trace in animation_traces for sample in trace['samples'] if sample.get('renderer')]
+        assert renderers and all(renderer == renderers[0] for renderer in renderers), \
+            'Idle hide, wake and interrupted wake must keep one renderer and unchanged canvas backing dimensions'
         assert page.evaluate('audio.src') == before_idle['source']
         assert page.evaluate('currentIdx') == before_idle['index']
         assert page.evaluate('audio.paused') is before_idle['paused']

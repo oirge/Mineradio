@@ -44,7 +44,8 @@ export default function LocalVisualStage({ player, theme, assets, focus, mobile,
             {player.active && <>{visuals.view === 'records' ? <LocalRecordWall {...wallProps} />
                 : <LocalPosterWall {...wallProps} translation={visuals.translation} />}
                 <WallReady onReady={viewMotion.onReady} /></>}
-        </Suspense> : <div ref={stage} className="local-visualizer" data-testid="local-visualizer" data-mode={visuals.mode}>
+        </Suspense> : <div className="local-visualizer" data-testid="local-visualizer" data-mode={visuals.mode}>
+        <div ref={stage} className="local-visualizer-content" data-testid="local-visualizer-content">
         {/* Replace the mode's Suspense boundary so old GPU resources are destroyed during a lazy switch. */}
         {player.active && <VisualizerRenderer key={visuals.mode} mode={visuals.mode} onReady={viewMotion.onReady} theme={theme} isDaylight={visuals.daylight}
             currentTime={player.currentTime} currentLineIndex={player.currentLineIndex} lines={player.lines}
@@ -64,7 +65,7 @@ export default function LocalVisualStage({ player, theme, assets, focus, mobile,
             subtitleContentMode={visuals.subtitleContentMode} subtitleOverlayLayout={visuals.subtitleLayout} subtitleOverlayBackground={visuals.subtitleBackground}
             showHarmonySubtitle={visuals.harmony} onVisualizerTuningChange={patch => visuals.tune(visuals.mode as never, patch as Record<string, unknown>)} isPlayerChromeHidden={focus}
             onLyricLineSeek={seconds => { void player.command('seek', { seconds }).catch(() => {}); }} />}
-        </div>}
+        </div></div>}
         </div>
         {viewMotion.loading && <div className="local-view-loading" role="status" aria-busy="true" data-testid="local-view-loading">
             <Loader2 size={22} className={viewMotion.reducedMotion ? undefined : 'local-view-loader-spin'} /><span>{t('loading')}</span>
