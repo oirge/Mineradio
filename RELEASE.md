@@ -5,7 +5,16 @@
 - Folia 通过 MotionValue 和 ResizeObserver 读取播放栏实际顶部，译文预留 16px 间距；无需逐帧 React state。预览、导出与唱片／海报墙保持既有上下文。
 - 默认源仅主进程读取构建注入的忽略文件，公开源码不含凭据；IPC 仅提供可用状态，HTTP 成功响应去除模型等元数据，错误隐藏默认源身份。用户源启用时优先，停用或留空时回落默认；解密失败的启用用户源不会静默回落。
 - 云端基线 `43166117498` 保留原始截图和报告：多个宽度复现译文与完整播放栏重叠；首版探针在动画尚未完成前读取了部分几何，不能将该时刻宽度当成稳定错位结论。修复后先保持播放栏展开并在截图后测量。
-- 待完成最终云端验收、构建与公开资产核验。工作分支 `codex/fix-desktop-stage-layout`。
+- [PR #181](https://github.com/oirge/Mineradio/pull/181) 已合并为 `f60252613c67a7822b2ca4077ea9bd60d46e4e8c`，annotated tag `v2.7.1`（tag object `0a42c84aad7674577e636264a009492e560d92d4`）；[Windows Build and Release 43174218582](https://github.com/oirge/Mineradio/actions/runs/43174218582) 成功，私密配置注入、Folia 重建、Windows 打包和 ASAR 内默认源配置核验通过。
+- [v2.7.1 Release 442608688](https://github.com/oirge/Mineradio/releases/tag/v2.7.1) 于北京时间 `2026-11-12 15:26:24` 公开并设 Latest，draft=false／prerelease=false。四资产从草稿完整回下载，大小、SHA256 与 GitHub digest／校验清单一致，安装器 SHA-512 与 latest.yml 两处摘要及 size/path/url 一致；公开后资产元数据保持一致，公开 Latest API 与无认证下载的更新清单逐字节核验通过。安装器只读 ProductVersion／FileVersion 为 2.7.1、ProductName 为 Mineradio 二创，未执行安装。
+- [完整 Windows Verify 43170235385 attempt 2](https://github.com/oirge/Mineradio/actions/runs/43170235385/attempts/2) 在生产源码 `1ecc194b` 成功：Folia 131＋124、Node 1712 通过／0 失败／1 可选跳过，播放、命令工具、默认与自定义翻译、中英文／恢复及全部原有视觉浏览器套件通过。其后仅增加未打包的构建错误脱敏和布局取证顺序修正，发行的生产文件逐字节一致。
+- [最终布局 Verify 43173533884](https://github.com/oirge/Mineradio/actions/runs/43173533884) 在 `794b26bc` 成功：125% 显示比例，1110／920／760／1440 宽度及闲置收起共 9 样本，零页面错误／零违规；人工核对底栏完整、译文与控件分离，保留 SVG 质感。[Windows 原生 43170235414](https://github.com/oirge/Mineradio/actions/runs/43170235414) 成功，artifact `13921518700`，DPAPI 12/12 及四档实际视频／解码通过。原默认接口真实连接和两行合成歌词翻译通过，未显示凭据。
+- 早期记录保留：首次功能提交遗漏服务端响应脱敏，`1ecc194b` 已补齐后复验；完整 Verify attempt 1 在五组播放行为通过后关闭设置面板普通点击超时，同码 attempt 2 全部成功。基线探针的部分几何早于截图落帧，最终闲置读数改为截图后读取，没有放宽超时、画质或行为断言。
+- 验收边界：云端软件 GPU／隔离配置和合成媒体，不代表用户当前安装实例、实际 GPU 组合或稳定高刷新率已验收；本机未开 GUI、安装新版或操作用户播放器与数据。默认配置不在界面／软件备份／当前公开源码中显示，客户端内置凭据仍可能被逆向提取。证据保存于忽略目录 `verification/release-v2.7.1/`、`verification/player-layout-native/` 与 `verification/player-layout-final/`；不重打既有 tag 或替换已公开资产。
+  - `Mineradio-oirge-2.7.1-Setup.exe`：122279285 B，SHA256 `48eda5303facba2ec1ea3a7a496b5896a53aa7583e0e4f25dbfbbb7208dbc2e1`。
+  - `Mineradio-oirge-2.7.1-Setup.exe.blockmap`：128239 B，SHA256 `6269e39dcb785f18728f9d03acfd0c38829eb7d0d30bb047ddec119990538335`。
+  - `latest.yml`：359 B，SHA256 `4aa6553cf0e82b96d93235116e91d805b1dc9274798959d58517ec361816a857`。
+  - `Mineradio-oirge-2.7.1-SHA256SUMS.txt`：282 B，SHA256 `c6c3e97c0844b23d6bbd01505a0bfc8772be084fdfc6fef97a5fa130af09761e`。
 
 # v2.7.0 自定义翻译源与桌面维护
 
