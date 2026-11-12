@@ -17,6 +17,47 @@ if os.environ.get('GITHUB_ACTIONS') != 'true' or os.name != 'nt':
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'artifacts/ui-language/translation-layout'
 OUT.mkdir(parents=True, exist_ok=True)
+
+# Hosted Windows starts at 1024x768 and clamps native windows to that desktop.
+# Select a supported wider mode only on this disposable CI machine, without
+# persisting the choice. Keep the actual BrowserWindow at the reported size.
+def prepare_ci_display():
+    import ctypes
+    from ctypes import wintypes
+
+    class DevMode(ctypes.Structure):
+        _fields_ = [('device', wintypes.WCHAR * 32), ('spec', wintypes.WORD),
+                    ('driver', wintypes.WORD), ('size', wintypes.WORD), ('extra', wintypes.WORD),
+                    ('fields', wintypes.DWORD), ('display', ctypes.c_byte * 16),
+                    ('color', ctypes.c_short), ('duplex', ctypes.c_short), ('yResolution', ctypes.c_short),
+                    ('ttOption', ctypes.c_short), ('collate', ctypes.c_short), ('form', wintypes.WCHAR * 32),
+                    ('logPixels', wintypes.WORD), ('bits', wintypes.DWORD), ('width', wintypes.DWORD),
+                    ('height', wintypes.DWORD), ('flags', wintypes.DWORD), ('frequency', wintypes.DWORD),
+                    ('icmMethod', wintypes.DWORD), ('icmIntent', wintypes.DWORD), ('media', wintypes.DWORD),
+                    ('dither', wintypes.DWORD), ('reserved1', wintypes.DWORD), ('reserved2', wintypes.DWORD),
+                    ('panWidth', wintypes.DWORD), ('panHeight', wintypes.DWORD)]
+
+    assert ctypes.sizeof(DevMode) == 220
+    user32 = ctypes.WinDLL('user32', use_last_error=True)
+    user32.EnumDisplaySettingsW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(DevMode)]
+    user32.EnumDisplaySettingsW.restype = wintypes.BOOL
+    user32.ChangeDisplaySettingsW.argtypes = [ctypes.POINTER(DevMode), wintypes.DWORD]
+    user32.ChangeDisplaySettingsW.restype = wintypes.LONG
+    modes = []
+    for index in range(1024):
+        mode = DevMode(size=ctypes.sizeof(DevMode))
+        if not user32.EnumDisplaySettingsW(None, index, ctypes.byref(mode)):
+            break
+        if mode.width >= 1600 and mode.height >= 900 and mode.bits == 32:
+            modes.append(mode)
+    assert modes, 'CI display has no supported wide desktop mode'
+    chosen = min(modes, key=lambda mode: (mode.width * mode.height, -mode.frequency))
+    result = user32.ChangeDisplaySettingsW(ctypes.byref(chosen), 0)
+    (OUT / 'display.json').write_text(json.dumps({'width':chosen.width, 'height':chosen.height,
+        'frequency':chosen.frequency, 'changeResult':result}, indent=2), encoding='utf-8')
+    assert result == 0, f'CI display mode change failed: {result}'
+
+prepare_ci_display()
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--url', required=True)
 args = parser.parse_args()
@@ -43,7 +84,11 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-', ignore_clean
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
-    env = dict(os.environ, MINERADIO_LAYOUT_PROFILE=str(profile), MINERADIO_LAYOUT_DEBUG_PORT=str(port))
+    # Match the packaged runtime: development-only security warning code in
+    # Electron 43 parses SVG fragment resource names as absolute URLs and throws.
+    # No webPreferences or actual security protections are disabled here.
+    env = dict(os.environ, MINERADIO_LAYOUT_PROFILE=str(profile), MINERADIO_LAYOUT_DEBUG_PORT=str(port),
+               ELECTRON_DISABLE_SECURITY_WARNINGS='1')
     with (OUT / 'native.log').open('w', encoding='utf-8') as native_log:
         native = subprocess.Popen(['node', 'node_modules/electron/cli.js', 'scripts/translation-layout-electron.js'],
                                   cwd=ROOT, env=env, stdout=native_log, stderr=subprocess.STDOUT,
@@ -69,6 +114,7 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-', ignore_clean
                 page.add_init_script(DESKTOP_IPC)
                 page.route('**/api/lyric-translate', lambda route: route.fulfill(status=503, json={'ok':False,'retryable':False}))
                 page.goto(args.url, wait_until='domcontentloaded')
+                assert page.evaluate('[innerWidth,innerHeight]') == [1387,780], 'Native viewport must match the reported window'
                 page.locator('#file-input').set_input_files([str(audio_file), str(lyric_file)])
                 page.wait_for_function('localLibrarySongs.length===1 && audio && audio.src && MineradioTranslationSettings.getState().ready')
                 page.evaluate("audio.pause(); controlsAutoHide=false; document.documentElement.classList.add('desktop-shell-root'); document.body.classList.add('desktop-shell'); applyDiyMode(true,{save:false}); revealBottomControls(60000)")
