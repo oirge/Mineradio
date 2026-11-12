@@ -36,7 +36,7 @@ METRICS = """() => {
     bar:{x:r.x,y:r.y,width:r.width,right:r.right,center:r.x+r.width/2},title:{x:title.x,right:title.right},source:{x:source.x,right:source.right}};
 }"""
 samples, errors, violations = [], [], []
-with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-') as temporary:
+with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-', ignore_cleanup_errors=True) as temporary:
     profile = Path(temporary).resolve()
     assert profile.parent == Path(tempfile.gettempdir()).resolve()
     assert profile.name.startswith('mineradio-native-layout-')
@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-') as temporary
                 context = browser.contexts[0]
                 page = context.pages[0] if context.pages else context.wait_for_event('page', timeout=15000)
                 page.set_default_timeout(20000)
-                page.on('pageerror', lambda error: errors.append(str(error)))
+                page.on('pageerror', lambda error: errors.append(error.stack or str(error)))
                 page.add_init_script(DESKTOP_IPC)
                 page.route('**/api/lyric-translate', lambda route: route.fulfill(status=503, json={'ok':False,'retryable':False}))
                 page.goto(args.url, wait_until='domcontentloaded')
@@ -85,8 +85,9 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-') as temporary
                     page.evaluate("toggleFxPanel(false); document.getElementById('fx-panel').classList.remove('peek')")
                     page.wait_for_timeout(700)
                     before = page.evaluate(METRICS)
-                    assert before['source']['x'] > before['width'], 'Restore target must actually be offscreen'
                     page.screenshot(path=str(OUT / f'{method}-before.png'))
+                    (OUT / f'{method}-before.json').write_text(json.dumps(before,indent=2),encoding='utf-8')
+                    assert before['source']['x'] > before['width'], 'Restore target must actually be offscreen'
                     if method == 'button': page.locator('#translation-source-close').click()
                     elif method == 'escape': page.locator('#translation-source-endpoint').press('Escape')
                     else: page.locator('#translation-source-modal').click(position={'x':5,'y':5})

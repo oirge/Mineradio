@@ -33,7 +33,7 @@ app.on('window-all-closed', () => app.quit());
 app.whenReady().then(async () => {
   const display = screen.getPrimaryDisplay();
   const win = new BrowserWindow({ x: display.workArea.x, y: display.workArea.y,
-    width: Math.min(1387, display.workArea.width - 16), height: Math.min(780, display.workArea.height - 16),
+    width: 1387, height: 780,
     frame: false, transparent: true, backgroundColor: '#00000000', show: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
   const out = path.join(__dirname, '../artifacts/ui-language/translation-layout');
