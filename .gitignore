@@ -28,6 +28,7 @@ backups/
 *.cache
 .env
 .env.*
+desktop/default-translation.json
 
 # Local development noise
 __pycache__/

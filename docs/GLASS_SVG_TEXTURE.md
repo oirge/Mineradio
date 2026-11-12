@@ -99,6 +99,8 @@ var edge = Math.min(width, height) * (borderWidth * 0.5);
 
 ## Safe Change Rules
 
+2026-11-12：贴图尺寸改读元素的 `offsetWidth/offsetHeight`，不能使用带进退动画 scale 的 `getBoundingClientRect()`。底栏用左右 0 与自动外边距居中，进退变换只保留 Y 与 scale，避免居中百分比与玻璃合成相互影响。RGB 折射、偏移与模糊参数保持原值。
+
 - 可以：修复右侧缺块、尺寸缓存、ResizeObserver 更新、特定面板的 SVG map 尺寸。
 - 可以：给搜索栏、小按钮等新增独立 filter/map，避免共享同一个大尺寸 map。
 - 谨慎：调整 filter 区域、offset、scale。改前截图对比。

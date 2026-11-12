@@ -7,6 +7,7 @@ function translationError(code, message, status = 502, retryable = true, retryAf
   return Object.assign(new Error(message), { code, status, retryable, retryAfterMs });
 }
 function redactTranslationMessage(value, configuration) {
+  if (configuration && configuration.builtin) return '默认翻译服务暂不可用，请稍后重试或使用自定义源';
   let message = String(value || '连接翻译服务失败');
   if (configuration && configuration.apiKey) message = message.split(configuration.apiKey).join('[REDACTED]');
   return message.replace(/https?:\/\/[^\s"'<>]+/gi, '[接口地址]').slice(0, 240);

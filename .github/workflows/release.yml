@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v2.7.0)'
+        description: 'Release tag (e.g. v2.7.1)'
         required: true
-        default: 'v2.7.0'
+        default: 'v2.7.1'
 
 jobs:
   build-windows:
@@ -81,8 +81,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
       
+      - name: Prepare private default translation configuration
+        env:
+          MINERADIO_DEFAULT_TRANSLATION_CONFIG: ${{ secrets.MINERADIO_DEFAULT_TRANSLATION_CONFIG }}
+        run: |
+          node scripts/write-default-translation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Private translation configuration is missing or invalid' }
       - name: Build Windows installer
         run: npm run build:win
+      - name: Verify bundled default translation configuration
+        run: node scripts/check-default-translation-bundle.mjs
       
       - name: Generate SHA256 checksums
         run: |

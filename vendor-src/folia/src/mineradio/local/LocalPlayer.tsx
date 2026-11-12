@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Minimize2, Music2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { colorWithAlpha, mixColors } from '../../components/visualizer/colorMix';
@@ -19,6 +19,8 @@ import { LocalActionsContext } from './LocalActionsContext';
 import { useLocalActions } from './useLocalActions';
 import { useLocalVisualAssets } from './useLocalVisualAssets';
 import { useLocalVisualizerPrewarm } from './useLocalVisualizerPrewarm';
+import { useLocalSubtitleBottom } from './useLocalSubtitleBottom';
+import { PlayerSubtitleBottomContext } from '../../components/floating-player/PlayerBottomBarLayoutContext';
 import './local.css';
 
 // src/mineradio/local/LocalPlayer.tsx
@@ -44,6 +46,8 @@ export default function LocalPlayer() {
     const theme = visuals.daylight ? DAYLIGHT_THEME : DEFAULT_THEME;
     const track = player.state?.currentTrack;
     const isLyrics = visuals.view === 'lyrics';
+    const playerRoot = useRef<HTMLElement>(null);
+    const subtitleBottom = useLocalSubtitleBottom(playerRoot, isLyrics && !focus);
     const transparent = isLyrics && visuals.background.transparent === true;
     useEffect(() => {
         document.documentElement.classList.toggle('local-player-transparent', transparent);
@@ -81,9 +85,11 @@ export default function LocalPlayer() {
         return () => window.removeEventListener('keydown', onKey);
     }, [player.command]);
     usePlaylistVisualPreset(track?.id, player.state?.playbackPlaylistId);
-    return <LocalActionsContext.Provider value={tools.context}><main className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
+    return <LocalActionsContext.Provider value={tools.context}><main ref={playerRoot} className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
-            <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+            <PlayerSubtitleBottomContext.Provider value={isLyrics ? subtitleBottom : null}>
+                <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+            </PlayerSubtitleBottomContext.Provider>
         </LocalErrorBoundary>
         {!focus && <LocalHeader view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen} playbackOpen={playbackOpen}
             tool={tools.tool} onTool={tools.open}

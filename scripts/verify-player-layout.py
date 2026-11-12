@@ -46,12 +46,13 @@ with sync_playwright() as playwright:
         page.goto(args.url, wait_until='domcontentloaded')
         page.locator('#file-input').set_input_files([str(audio_file), str(lyric_file)])
         page.wait_for_function('localLibrarySongs.length === 1 && audio && audio.src && lyricsLines.length > 0')
-        page.evaluate("audio.pause(); audio.currentTime=3; document.documentElement.classList.add('desktop-shell-root'); document.body.classList.add('desktop-shell'); applyDiyMode(true,{toast:false})")
+        page.evaluate("audio.pause(); audio.currentTime=3; controlsAutoHide=false; document.documentElement.classList.add('desktop-shell-root'); document.body.classList.add('desktop-shell'); applyDiyMode(true,{toast:false})")
         for width, height in [(1110,780),(920,720),(760,650),(1440,900)]:
             page.set_viewport_size({'width':width,'height':height})
             page.evaluate("MineradioFoliaHost.setInterface('mineradio'); revealBottomControls(60000)")
             page.mouse.move(width / 2, height - 55)
             page.wait_for_timeout(650)
+            capture_screenshot(page, path=str(OUT / f'mineradio-{width}.png'))
             main = page.evaluate(GEOMETRY, '#bottom-bar')
             report.append({'surface':'mineradio','width':width,**main})
             bar = main['bar']
@@ -60,13 +61,14 @@ with sync_playwright() as playwright:
             for control in main['controls']:
                 if control['x'] < bar['x'] - 1 or control['right'] > bar['right'] + 1:
                     violations.append(f'Mineradio {width}: {control["name"]} overflows the bar')
-            capture_screenshot(page, path=str(OUT / f'mineradio-{width}.png'))
             page.evaluate("MineradioFoliaHost.setInterface('folia')")
             child = page.frame_locator('#folia-frame')
             child.get_by_test_id('local-controls').wait_for(state='visible')
             child.locator('[data-subtitle-track="translation"]').wait_for(state='visible')
-            page.mouse.move(width / 2, height - 55)
+            child.get_by_test_id('local-controls').hover()
+            child.get_by_test_id('local-toggle-play').hover()
             page.wait_for_timeout(800)
+            capture_screenshot(page, path=str(OUT / f'folia-{width}.png'))
             child_frame = page.locator('#folia-frame').element_handle().content_frame()
             folia = child_frame.evaluate(GEOMETRY, '.local-controls')
             report.append({'surface':'folia','width':width,**folia})
@@ -74,7 +76,6 @@ with sync_playwright() as playwright:
                 violations.append(f'Folia {width}: bar overflows viewport')
             if folia['subtitle']['bottom'] > folia['bar']['y'] - 8:
                 violations.append(f'Folia {width}: translation overlaps the controls: {folia["subtitle"]}')
-            capture_screenshot(page, path=str(OUT / f'folia-{width}.png'))
     finally:
         (OUT / 'report.json').write_text(json.dumps({'samples':report,'pageErrors':errors,'violations':violations}, ensure_ascii=False, indent=2),encoding='utf-8')
         browser.close()
