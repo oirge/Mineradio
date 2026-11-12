@@ -5,7 +5,16 @@
 - 原生失败基线 [43189728949](https://github.com/oirge/Mineradio/actions/runs/43189728949) 的关闭按钮与 Esc 均记录 shell.scrollLeft=453，标题 x=-453，底栏中心由 693.5 变为 240.5。Electron 43.8.8／Chromium 150、真实透明无边框窗口 1387×780，隔离临时配置与合成媒体。第三种关闭方式的准备阶段超时，因此不能声称基线完整覆盖三种方式。
 - 测试引导失败保留：43183890752 的 Windows TEMP 长短路径别名；43184982244、43187905396 的云端显示器限制；43189237040 在落帧前采样。最终在云端选择系统支持的 1600×900 模式，严格核对实际原生视口尺寸。Electron 开发版警告代码对 SVG 片段资源名 new URL 报错，测试关闭该开发诊断以匹配打包状态，不关闭安全防护。
 - 默认翻译与用户源优先逻辑不变，默认详情仍只来自私密构建输入，不进入界面或备份。
-- 待完成最终云端回归、构建与资产核验。工作分支 fix/translation-focus-scroll；仅后台与云端工作，未操作用户运行实例、安装或用户数据。
+- [PR #183](https://github.com/oirge/Mineradio/pull/183) 合并为 `1a7927cdfb958ea2c648931a6be5f469a889b88e`，annotated tag `v2.7.2`（tag object `594acaf48120b0db2d12dd37c8e43e68543d1d20`）。[Windows Build and Release 43193412187](https://github.com/oirge/Mineradio/actions/runs/43193412187) 成功：依赖审计、Folia 重建、私密默认配置注入、Windows 打包及 ASAR 默认配置校验均通过。
+- [完整 Verify 43190678625](https://github.com/oirge/Mineradio/actions/runs/43190678625) 在 `1cab7e2f19d751bffabdf1565ea9d8087dbce30a` 成功：Folia 131＋124、Node 1713 通过／0 失败／1 可选跳过，播放、工具、默认与自定义翻译、多宽度布局／字幕避让、中英文／恢复和全部视觉浏览器套件通过。合并文件树与该验收提交一致。
+- [原生 43190665737](https://github.com/oirge/Mineradio/actions/runs/43190665737) 与 [PR 原生 43190678479](https://github.com/oirge/Mineradio/actions/runs/43190678479) 均成功。已下载核验前者工件 13930063494：按钮／Esc／遮罩三种关闭均保留源按钮焦点，外壳与页面滚动为 0，1387 宽视口底栏中心均为 693.5；零页面错误／零违规。人工对照修复前后截图，整窗左移与右侧留空消失，原 SVG 质感保留。
+- [v2.7.2 Release 442743490](https://github.com/oirge/Mineradio/releases/tag/v2.7.2) 于北京时间 `2026-11-12 17:45:57` 公开并设 Latest，draft=false／prerelease=false。四资产草稿完整回下载，大小、SHA256 与 GitHub digest／SHA256SUMS 一致，安装器 SHA-512 与 latest.yml 两处摘要及 size/path/url 一致。只读安装器 FileVersion／ProductVersion 为 2.7.2，未执行安装。公开 Latest API 与无认证更新清单逐字节核验通过。
+- 合并后的原生 43193390052 再次成功。重复完整 Verify 43193389959 在既有 playback 脚本第 90 行点击桌面标题栏 local-open-playback 时发生 15000ms／outside of the viewport 超时；同一行、同类超时已存在于 2.7.0 的 verify-8859aaf-playback-failed.log，未放宽超时、断言或画质。发布依据是逐字节相同文件树的完整 PR Verify 成功与三次原生成功；不将该重复运行记为全绿。失败日志和工件另存 verification/release-v2.7.2/。
+- 验收边界：使用云端软件 GPU、合成媒体及脱敏 IPC；未操作用户运行实例或实际 GPU，未在本机开 GUI、安装新版或改用户数据。默认／自定义翻译运行逻辑未改，私密配置仍通过既有构建链注入；本轮未重新调用真实默认或用户翻译服务。保留上述失败证据，不声称每个引导运行均成功。证据在忽略目录 verification/release-v2.7.2、translation-focus-baseline-settled 与 translation-focus-fixed；未替换旧 tag 或公开资产。
+  - `Mineradio-oirge-2.7.2-Setup.exe`：122279416 B，SHA256 `3a9ad9440542bae1aa09995fb224913eb5a1aa053449ba8e7c0903d81c299659`。
+  - `Mineradio-oirge-2.7.2-Setup.exe.blockmap`：128000 B，SHA256 `ae302658a748a65e384e756fe95b0b84b6579db1f295bb2d8d008a46bb425b24`。
+  - `latest.yml`：359 B，SHA256 `3649562bc595793e15d3ae56e4ea8c3351ce02b1f9e305f9e823c9d7a2bb63ab`。
+  - `Mineradio-oirge-2.7.2-SHA256SUMS.txt`：282 B，SHA256 `3216ea0baf002eec1d81ac159b7f3956e7f265208134f2a7d82baec5d6db2da5`。
 
 # v2.7.1 播放栏与默认翻译修复
 
