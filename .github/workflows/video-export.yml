@@ -10,9 +10,11 @@ on:
       - 'desktop/preload.js'
       - 'desktop/main.js'
       - 'desktop/wallpaper-engine-bridge.js'
+      - 'desktop/translation*.js'
       - 'public/video-export.js'
       - 'vendor-src/folia/src/mineradio/**'
       - 'scripts/verify-video-export-electron.js'
+      - 'scripts/verify-desktop-translation-electron.js'
   pull_request:
     paths:
       - '.github/workflows/video-export.yml'
@@ -20,9 +22,11 @@ on:
       - 'desktop/preload.js'
       - 'desktop/main.js'
       - 'desktop/wallpaper-engine-bridge.js'
+      - 'desktop/translation*.js'
       - 'public/video-export.js'
       - 'vendor-src/folia/src/mineradio/**'
       - 'scripts/verify-video-export-electron.js'
+      - 'scripts/verify-desktop-translation-electron.js'
 
 permissions:
   contents: read
@@ -47,6 +51,12 @@ jobs:
           npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
       - name: Build the production Folia export surface
         run: npm run build:folia
+      - name: Verify native Windows translation credential storage
+        timeout-minutes: 2
+        run: |
+          node -e 'const fs=require("fs");new Function("exports","require","module","__filename","__dirname",fs.readFileSync("scripts/verify-desktop-translation-electron.js","utf8"));'
+          if ($LASTEXITCODE -ne 0) { throw 'Translation Electron CommonJS preflight failed' }
+          node node_modules/electron/cli.js scripts/verify-desktop-translation-electron.js
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
