@@ -72,9 +72,12 @@ METRICS = """() => {
   const shell=document.getElementById('desktop-window-shell'), bar=document.getElementById('bottom-bar');
   const r=bar.getBoundingClientRect(), title=document.getElementById('desktop-titlebar').getBoundingClientRect();
   const source=document.getElementById('translation-source-open').getBoundingClientRect();
+  const panel=document.getElementById('fx-panel'), pr=panel.getBoundingClientRect(), ps=getComputedStyle(panel);
   return {width:innerWidth,height:innerHeight,dpr:devicePixelRatio,shellLeft:shell.scrollLeft,shellTop:shell.scrollTop,
     pageLeft:scrollX,pageTop:scrollY,overflow:getComputedStyle(shell).overflow,active:document.activeElement?.id,
-    bar:{x:r.x,y:r.y,width:r.width,right:r.right,center:r.x+r.width/2},title:{x:title.x,right:title.right},source:{x:source.x,right:source.right}};
+    bar:{x:r.x,y:r.y,width:r.width,right:r.right,center:r.x+r.width/2},title:{x:title.x,right:title.right},source:{x:source.x,right:source.right},
+    panel:{x:pr.x,right:pr.right,classes:panel.className,cssRight:ps.right,transform:ps.transform},
+    sourceParent:document.getElementById('translation-source-open').parentElement.outerHTML.slice(0,250)};
 }"""
 samples, errors, violations = [], [], []
 with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-', ignore_cleanup_errors=True) as temporary:
@@ -130,9 +133,11 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-', ignore_clean
                     # The actual panel can retract while the modal is open; retain its connected offscreen trigger.
                     page.evaluate("toggleFxPanel(false); document.getElementById('fx-panel').classList.remove('peek')")
                     page.wait_for_timeout(700)
-                    before = page.evaluate(METRICS)
                     page.screenshot(path=str(OUT / f'{method}-before.png'))
+                    before = page.evaluate(METRICS)
                     (OUT / f'{method}-before.json').write_text(json.dumps(before,indent=2),encoding='utf-8')
+                    page.wait_for_function("document.getElementById('translation-source-open').getBoundingClientRect().x > innerWidth")
+                    before = page.evaluate(METRICS)
                     assert before['source']['x'] > before['width'], 'Restore target must actually be offscreen'
                     if method == 'button': page.locator('#translation-source-close').click()
                     elif method == 'escape': page.locator('#translation-source-endpoint').press('Escape')
