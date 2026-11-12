@@ -1,0 +1,42 @@
+name: Verify native translation layout
+on:
+  push:
+    branches: ['fix/translation-focus-scroll']
+  pull_request:
+    paths:
+      - 'public/app.css'
+      - 'public/translation-settings.js'
+      - 'scripts/*translation*'
+      - '.github/workflows/translation-layout.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-layout:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node node_modules/electron/install.js
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-ui.txt
+      - run: python -m pip install -r scripts/requirements-ui.txt
+      - name: Verify native shell after saving and closing translation settings
+        timeout-minutes: 5
+        run: python scripts/verify-browser-ui.py --suite translation-layout
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-translation-layout
+          path: artifacts/ui-language/translation-layout/
+          if-no-files-found: error
+          retention-days: 14
