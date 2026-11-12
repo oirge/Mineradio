@@ -107,7 +107,8 @@
     var modal = node('translation-source-modal'); if (!modal) return;
     openGeneration += 1;
     modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); node('translation-source-key').value = '';
-    if (previousFocus && previousFocus.isConnected && previousFocus.focus) previousFocus.focus(); previousFocus = null;
+    // The drawer may have retracted offscreen while this modal was open.
+    if (previousFocus && previousFocus.isConnected && previousFocus.focus) previousFocus.focus({ preventScroll: true }); previousFocus = null;
   }
   global.mineradioAuthorizedFetch = authorizedFetch;
   global.isCustomTranslationReady = function () { return state.ready && state.translationReady && !state.unavailable && !testing; };

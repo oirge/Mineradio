@@ -201,11 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
-  ['播放栏与译文更协调，歌词翻译开箱即用。', 'Playback controls and subtitles align, with translation ready to use.'],
-  ['修复播放控制栏偏移与玻璃贴图尺寸不一致。', 'Correct playback bar alignment and glass texture sizing.'],
-  ['Folia 译文跟随播放栏高度避让，展开与收起时保持可读。', 'Folia subtitles follow the transport height and remain clear when it expands or collapses.'],
-  ['恢复默认歌词翻译，未配置自定义源即可使用；启用自定义源后优先使用。', 'Restore default lyric translation; an enabled custom service takes priority.'],
-  ['默认服务配置不在界面显示，用户密钥仍由本机加密保存且不随备份导出。', 'Default service details stay private; user keys remain encrypted locally and excluded from backups.'],
+  ['修复翻译设置关闭后的播放器画面偏移。', 'Fix player displacement after closing translation settings.'],
+  ['修复关闭翻译设置后整个播放器向左偏移、右侧留空的问题。', 'Fix the player shifting left and leaving a blank right edge after closing translation settings.'],
+  ['关闭按钮、Esc 和点击遮罩均保持画面与播放栏位置稳定。', 'Keep the view and playback bar stable when closing with the button, Escape, or backdrop.'],
+  ['保留原有 SVG 玻璃折射质感与窗口过渡效果。', 'Preserve the existing SVG glass refraction and window transitions.'],
+  ['默认歌词翻译继续可用，自定义源启用时优先，默认接口详情不显示。', 'Default lyric translation remains available; enabled custom services take priority and default service details stay hidden.'],
   ['视频导出支持四档帧率。', 'Video export supports four frame rate options.'],
   ['歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。', 'Lyrics and visualization video export now offers 30, 60, 90 and 120 fps, with 30 fps as the default.'],
   ['帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。', 'Your frame rate choice is remembered, included in backups and used for capture and encoding.'],
@@ -2045,7 +2045,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.1';
+var APP_VERSION = '2.7.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2098,12 +2098,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '播放栏与译文更协调，歌词翻译开箱即用。',
+  hero: '修复翻译设置关闭后的播放器画面偏移。',
   notes: [
-    '修复播放控制栏偏移与玻璃贴图尺寸不一致。',
-    'Folia 译文跟随播放栏高度避让，展开与收起时保持可读。',
-    '恢复默认歌词翻译，未配置自定义源即可使用；启用自定义源后优先使用。',
-    '默认服务配置不在界面显示，用户密钥仍由本机加密保存且不随备份导出。'
+    '修复关闭翻译设置后整个播放器向左偏移、右侧留空的问题。',
+    '关闭按钮、Esc 和点击遮罩均保持画面与播放栏位置稳定。',
+    '保留原有 SVG 玻璃折射质感与窗口过渡效果。',
+    '默认歌词翻译继续可用，自定义源启用时优先，默认接口详情不显示。'
   ]
 };
 function readSavedVolume() {

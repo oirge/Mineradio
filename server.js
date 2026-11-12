@@ -87,10 +87,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复播放控制栏偏移与玻璃贴图尺寸不一致。',
-  'Folia 译文跟随播放栏高度避让，展开与收起时保持可读。',
-  '恢复默认歌词翻译，未配置自定义源即可使用；启用自定义源后优先使用。',
-  '默认服务配置不在界面显示，用户密钥仍由本机加密保存且不随备份导出。',
+  '修复关闭翻译设置后整个播放器向左偏移、右侧留空的问题。',
+  '关闭按钮、Esc 和点击遮罩均保持画面与播放栏位置稳定。',
+  '保留原有 SVG 玻璃折射质感与窗口过渡效果。',
+  '默认歌词翻译继续可用，自定义源启用时优先，默认接口详情不显示。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
