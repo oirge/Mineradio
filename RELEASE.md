@@ -5,7 +5,16 @@
 - 凭据：桌面主进程使用系统 safeStorage 保存独立 `translation-settings.json`，IPC 仅回脱敏快照。不可加密时新增密钥仅本次运行有效；旧密文无法解密时保留且停止自动请求。凭据不进入 localStorage、视觉预设或整机备份。
 - 安全与性能：更新／翻译变更请求限定 POST、可信来源及随机会话 token；上游响应流限制 400000 bytes、45 秒超时。全局翻译缓存限 1200 行，逐曲内存按 24 首／2400 行 LRU 回收，保护当前曲及待写数据，切库代号拒绝迟到结果；SQLite 已保存译文按需读取。
 - 依赖：Electron 更新至 43.8.8，Folia 的 Vite／Vitest 及相关间接依赖同步修补，Verify／Release 增加锁文件安全审计。唯一例外为未进入本地 Folia 构建的上游 FTP provider 指定漏洞，其他 high／critical 拦截发布。
-- 验证与发布状态：实现完成，云端验证和 Windows 构建待完成后补录。仅低优先级后台检查与云端工作，未启动本机 GUI、安装新版或操作用户播放器与数据。
+- 完整验证：[Windows Verify 43155780667](https://github.com/oirge/Mineradio/actions/runs/43155780667) 在 `553267c377f121d1baf3a413433671372a3a3e17` 成功，Folia 类型检查及 `131＋124` 项行为测试、Node `1707` 通过／`0` 失败／`1` 可选跳过，播放、命令工具、翻译设置七项、中英文／恢复和全部原有视觉浏览器套件通过。翻译 UI 使用真实 Chromium 和脱敏 IPC 桩；用户实际服务与密钥未测试。
+- 原生验证：[Windows Electron 43155780668](https://github.com/oirge/Mineradio/actions/runs/43155780668) 在相同源码成功，真实 Windows DPAPI 加密／落盘／重载／清钥和实际 Electron fetch 的有钥／无钥服务 `12/12`，四档实际视频导出／独立解码通过。另下载核验了前一相同生产文件提交的 `43154743431` 原生与媒体报告；未宣称复杂效果在软件 GPU 上能稳定达到目标采集帧率。
+- 早期检查保留：首轮提交遗漏 server.js，后续 `e1faa98` 补齐，七项后端门禁随完整 Node 复验通过；新翻译脚本关闭宿主弹窗后未重新打开 DIY，已修正为普通按钮重开再点击。重复 push Verify `43155772240` 在既有快捷按钮菜单定位超时，未放宽断言／超时／画质，不宣称每一轮重跑都全绿。
+- 合并与构建：[PR #179](https://github.com/oirge/Mineradio/pull/179) → merge `81dda6cb6d25aed6728201130e45d3c8b1cf088f`，文件树与完整验证提交一致；annotated tag `v2.7.0`（tag object `856c5e18fe86d7b7adbefbdbb23441828c476876`）。[Windows Build and Release 43157574552](https://github.com/oirge/Mineradio/actions/runs/43157574552) 成功，锁文件安全门禁、Folia 重建及 Windows 打包通过。
+- 正式发布：[v2.7.0](https://github.com/oirge/Mineradio/releases/tag/v2.7.0)（Release `442511923`）于北京时间 `2026-11-12 13:05:31` 公开并设 Latest，`draft=false`／`prerelease=false`。四项官方资产完整回下载，大小、SHA256 与 GitHub digest／SHA256SUMS 一致，安装器 SHA-512 与 latest.yml 两处摘要及 size/path/url 一致；公开 Latest API 与自动更新清单核验通过。安装器只读版本为 `2.7.0`／`Mineradio 二创`。
+  - `Mineradio-oirge-2.7.0-Setup.exe`：122277612 B，SHA256 `c048f45eb28545b64592ccb76171a22462b17b9fe3635705b0660e7b405e638a`。
+  - `Mineradio-oirge-2.7.0-Setup.exe.blockmap`：128173 B，SHA256 `33d07d8009eb1c8f5963773df20fe440b1db0056bfcb7042ecba8079e3420b23`。
+  - `latest.yml`：359 B，SHA256 `05c3636c0a130cd5f9992be818d94e6b2fda01640ebc7730c81a60603e084ed6`。
+  - `Mineradio-oirge-2.7.0-SHA256SUMS.txt`：282 B，SHA256 `832f1337561c266800d84233279b67f1f6d0aa8e66f8e91a3eec2844cf3a42ce`。
+- 仅低优先级后台检查与云端工作，未启动本机 GUI、安装新版或操作用户播放器与数据。证据在忽略目录 `verification/release-v2.7.0/`；不重打旧 tag 或替换已公开资产。
 
 # v2.6.10 视频导出固定帧率
 
