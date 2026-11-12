@@ -18,7 +18,7 @@ const encryptedStorage = { isEncryptionAvailable: () => true,
 const savedInput = { endpoint: 'https://translation.invalid/v1', model: 'user-model', enabled: true, apiKey: 'synthetic-test-credential' };
 test('translation starts unconfigured and never returns credentials', () => {
   const store = createTranslationSettingsStore({ userDataPath: directory(), safeStorage: encryptedStorage });
-  assert.deepEqual(store.get(), { endpoint: '', model: '', enabled: false, revision: 0, hasApiKey: false, configured: false, keyPersistent: false, keyUnavailable: false });
+  assert.deepEqual(store.get(), { endpoint: '', model: '', enabled: false, revision: 0, hasApiKey: false, configured: false, keyPersistent: false, keyUnavailable: false, defaultAvailable: false, translationReady: false });
   assert.equal('apiKey' in store.get(), false);
 });
 test('OpenAI base URLs and full endpoint paths normalize consistently', () => {
@@ -61,9 +61,36 @@ test('local endpoints work without keys and invalid saves preserve the prior con
   const store = createTranslationSettingsStore({ userDataPath: directory(), safeStorage: encryptedStorage });
   store.save({ endpoint: 'http://127.0.0.1:1234/v1', model: 'local-model', enabled: true });
   const prior = store.get(); assert.equal(prior.configured, true); assert.equal(prior.hasApiKey, false);
-  assert.throws(() => store.save({ endpoint: '', model: '', enabled: true }));
+  assert.throws(() => store.save({ endpoint: '', model: 'partial-model', enabled: true }));
   assert.throws(() => store.save({ ...savedInput, apiKey: 'invalid\nheader' }));
   assert.deepEqual(store.get(), prior);
+});
+
+test('private defaults translate without disclosing or persisting service configuration', () => {
+  const root = directory(), defaultConfiguration = { endpoint: 'https://private-default.invalid/v1/chat/completions', model: 'private-model', apiKey: 'private-synthetic-key' };
+  const store = createTranslationSettingsStore({ userDataPath: root, safeStorage: encryptedStorage, defaultConfiguration });
+  const snapshot = store.get();
+  assert.equal(snapshot.translationReady, true); assert.equal(snapshot.defaultAvailable, true);
+  assert.equal(snapshot.endpoint, ''); assert.equal(snapshot.model, ''); assert.equal(snapshot.hasApiKey, false);
+  for (const value of Object.values(defaultConfiguration)) assert.ok(!JSON.stringify(snapshot).includes(value));
+  assert.equal(store.configuration().apiKey, defaultConfiguration.apiKey);
+  store.save({ endpoint: '', model: '', enabled: true });
+  const disk = fs.readFileSync(path.join(root, 'translation-settings.json'), 'utf8');
+  for (const value of Object.values(defaultConfiguration)) assert.ok(!disk.includes(value));
+  store.save(savedInput);
+  assert.equal(store.configuration().model, savedInput.model); assert.equal(store.configuration().builtin, undefined);
+  store.save({ ...savedInput, enabled: false, apiKey: '' });
+  assert.equal(store.configuration().builtin, true);
+  assert.equal(store.get().model, savedInput.model, 'Custom inputs remain available when the default is active');
+});
+
+test('an unreadable custom key does not silently send lyrics to the default service', () => {
+  const root = directory();
+  createTranslationSettingsStore({ userDataPath: root, safeStorage: encryptedStorage }).save(savedInput);
+  const store = createTranslationSettingsStore({ userDataPath: root, safeStorage: { isEncryptionAvailable: () => false },
+    defaultConfiguration: { endpoint: 'https://private-default.invalid/v1/chat/completions', model: 'private-model', apiKey: 'private-synthetic-key' } });
+  assert.equal(store.get().translationReady, false); assert.equal(store.configuration().keyUnavailable, true);
+  assert.equal(store.configuration().builtin, undefined);
 });
 test('temporary OS decryption failure preserves the encrypted credential until explicit replacement or clearing', () => {
   const root = directory();

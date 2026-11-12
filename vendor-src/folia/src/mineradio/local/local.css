@@ -27,7 +27,7 @@ html.local-player-transparent,html.local-player-transparent body,html.local-play
 .local-current-track small{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--local-muted)}
 .local-current-track strong{font-size:14px;font-weight:550;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .local-current-track span{font-size:11px;color:var(--local-muted);white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
-.local-controls{position:absolute;z-index:7;left:50%;bottom:24px;transform:translateX(-50%);width:min(540px,46vw);padding:13px 22px 8px;border-radius:25px;background:var(--local-glass);border:1px solid var(--local-line);backdrop-filter:blur(25px)}
+.local-controls{position:absolute;z-index:7;left:0;right:0;margin-inline:auto;bottom:24px;width:min(540px,46vw);padding:13px 22px 8px;border-radius:25px;background:var(--local-glass);border:1px solid var(--local-line);backdrop-filter:blur(25px)}
 .local-controls.local-playlist-open{z-index:20}
 .local-player .local-playlist-trigger{width:82px;height:34px;min-height:34px;flex:0 0 82px;padding:0 7px;border-radius:8px;gap:4px;background:var(--local-hover);color:var(--local-muted);font-size:11px;letter-spacing:0}
 .local-playlist-trigger>svg{flex-shrink:0}

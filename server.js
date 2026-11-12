@@ -87,10 +87,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '新增自定义翻译源，支持 OpenAI 兼容接口与本地服务，软件不再提供默认接口。',
-  '可设置接口地址、模型和密钥，支持连接测试；密钥在本机加密保存且不随备份导出。',
-  '翻译缓存增加内存上限与切库回收，保留已保存译文并按需重新载入。',
-  '更新 Electron 与构建依赖，增强本地更新和翻译接口授权校验。',
+  '修复播放控制栏偏移与玻璃贴图尺寸不一致。',
+  'Folia 译文跟随播放栏高度避让，展开与收起时保持可读。',
+  '恢复默认歌词翻译，未配置自定义源即可使用；启用自定义源后优先使用。',
+  '默认服务配置不在界面显示，用户密钥仍由本机加密保存且不随备份导出。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -2988,7 +2988,10 @@ async function handleLyricTranslateRequest(req, res) {
     }
     const temperature = Number.isFinite(Number(body.temperature)) ? Math.max(0, Math.min(2, Number(body.temperature))) : 0.1;
     const result = await requestTranslation(configuration, messages, { signal: controller.signal, temperature });
-    if (!res.destroyed) sendJSON(res, { ok: true, status: result.status, body: result.text, revision: configuration.revision });
+    const responseBody = configuration.builtin ? JSON.stringify({ choices: (result.data.choices || []).map(choice => ({
+      message: { content: choice && choice.message && choice.message.content || '' }
+    })) }) : result.text;
+    if (!res.destroyed) sendJSON(res, { ok: true, status: result.status, body: responseBody, revision: configuration.revision });
   } catch (err) {
     if (res.destroyed) return;
     const code = err.code || 'UPSTREAM_NETWORK_ERROR';

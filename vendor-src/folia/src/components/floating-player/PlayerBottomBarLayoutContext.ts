@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type { MotionValue } from 'framer-motion';
 
 // src/components/floating-player/PlayerBottomBarLayoutContext.ts
 // 标记「当前这棵子树是否处于播放页的底栏环境」。
@@ -9,5 +10,8 @@ import { createContext, useContext } from 'react';
  * 只有 App 里播放页那棵树显式 Provider 成 true。
  */
 export const PlayerBottomBarLayoutContext = createContext(false);
+
+// Embedded hosts can reserve their own transport geometry without changing previews or exports.
+export const PlayerSubtitleBottomContext = createContext<MotionValue<number> | null>(null);
 
 export const useIsPlayerBottomBarHost = (): boolean => useContext(PlayerBottomBarLayoutContext);

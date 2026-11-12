@@ -5,6 +5,7 @@ const fs = require('fs');
 const { pathToFileURL } = require('url');
 const crypto = require('crypto');
 const { createTranslationSettingsStore } = require('./translation-settings');
+const { loadDefaultTranslationConfiguration } = require('./default-translation');
 const { testTranslationConfiguration } = require('./translation-client');
 const API_SESSION_TOKEN = crypto.randomBytes(32).toString('hex');
 const { execFile, spawn } = require('child_process');
@@ -107,7 +108,8 @@ const DESKTOP_SHORTCUT_NAME = resolveDesktopShortcutName({
 
 app.setName(INSTANCE_APP_NAME);
 app.setPath('userData', INSTANCE_PROFILE.userDataPath);
-const translationSettings = createTranslationSettingsStore({ userDataPath: app.getPath('userData'), safeStorage });
+const translationSettings = createTranslationSettingsStore({ userDataPath: app.getPath('userData'), safeStorage,
+  defaultConfiguration: loadDefaultTranslationConfiguration() });
 app.setPath('sessionData', INSTANCE_PROFILE.sessionDataPath);
 
 function resolveRuntimeAppRoots() {

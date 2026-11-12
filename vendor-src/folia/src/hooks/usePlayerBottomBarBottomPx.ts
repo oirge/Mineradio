@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useContext, useEffect } from 'react';
 import { useSpring, useTransform, type MotionValue } from 'framer-motion';
 import { playerBottomBarLiveOffset } from '../stores/motionSignals';
 import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
-import { useIsPlayerBottomBarHost } from '../components/floating-player/PlayerBottomBarLayoutContext';
+import { PlayerSubtitleBottomContext, useIsPlayerBottomBarHost } from '../components/floating-player/PlayerBottomBarLayoutContext';
 import { useMediaQuery } from './useMediaQuery';
 import {
     PLAYER_BOTTOM_BAR_BASE_OFFSET_PX,
@@ -57,6 +57,7 @@ const SUBTITLE_PRESENCE_SPRING = { stiffness: 280, damping: 28 } as const;
  * - 跟随基线抬高要跟手，直接读共享信号，不经过 spring，否则会落后于其他组件。
  */
 export const usePlayerSubtitleBottomPx = (isPlayerChromeHidden: boolean): MotionValue<number> => {
+    const hostBottom = useContext(PlayerSubtitleBottomContext);
     const isBottomBarHost = useIsPlayerBottomBarHost();
     const isControlBarHidden = usePlayerChromeSettingsStore(state => state.hidePlayerProgressBar);
     // 底栏被整条关掉只对播放页成立；预览里那个全局开关和它无关。
@@ -68,11 +69,12 @@ export const usePlayerSubtitleBottomPx = (isPlayerChromeHidden: boolean): Motion
         controlBarPresence.set(isControlBarAbsent ? 0 : 1);
     }, [controlBarPresence, isControlBarAbsent]);
 
-    return useTransform(
+    const bottom = useTransform(
         [controlBarPresence, playerBottomBarLiveOffset],
         ([presence, offset]: number[]) => resolvePlayerSubtitleBottomFromPresence(
             isBottomBarHost ? offset : PLAYER_BOTTOM_BAR_BASE_OFFSET_PX,
             presence,
         ),
     );
+    return hostBottom ?? bottom;
 };

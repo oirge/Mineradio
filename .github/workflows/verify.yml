@@ -20,6 +20,7 @@ on:
           - portability
           - tools
           - translation
+          - layout
       ui_diagnostics:
         description: Enable detailed Playwright action logs
         type: boolean
@@ -81,15 +82,22 @@ jobs:
           python -m pip install -r scripts/requirements-ui.txt
           python -m playwright install chromium
       - name: Verify Folia playback and display options
+        if: inputs.browser_suite != 'layout'
         timeout-minutes: 5
         run: python scripts/verify-browser-ui.py --suite playback
       - name: Verify Folia command and audio tools
+        if: inputs.browser_suite != 'layout'
         timeout-minutes: 5
         run: python scripts/verify-browser-ui.py --suite tools
       - name: Verify custom translation source settings
+        if: inputs.browser_suite != 'layout'
         timeout-minutes: 5
         run: python scripts/verify-browser-ui.py --suite translation
+      - name: Verify player layout and subtitle clearance
+        timeout-minutes: 5
+        run: python scripts/verify-browser-ui.py --suite layout
       - name: Verify bilingual UI and Folia recovery
+        if: inputs.browser_suite != 'layout'
         timeout-minutes: 15
         env:
           MINERADIO_UI_DIAGNOSTICS: ${{ inputs.ui_diagnostics && '1' || '' }}

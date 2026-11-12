@@ -22,7 +22,7 @@ function normalizeTranslationEndpoint(value) {
   return url.toString();
 }
 
-function createTranslationSettingsStore({ userDataPath, safeStorage, fileSystem = fs }) {
+function createTranslationSettingsStore({ userDataPath, safeStorage, fileSystem = fs, defaultConfiguration = null }) {
   const filePath = path.join(userDataPath, 'translation-settings.json');
   let loaded = false;
   let settings = { endpoint: '', model: '', enabled: false, revision: 0 };
@@ -51,20 +51,26 @@ function createTranslationSettingsStore({ userDataPath, safeStorage, fileSystem 
           keyUnavailable = !apiKey;
         }
       }
-    } catch (_) { /* An absent/corrupt/undecryptable settings file never enables a default service. */ }
+    } catch (_) { /* User settings and the private bundled service have separate ownership. */ }
   }
   function get() {
     load();
-    return { ...settings, hasApiKey: !!(apiKey || encryptedApiKey), configured: !!(settings.endpoint && settings.model && !keyUnavailable), keyPersistent, keyUnavailable };
+    const effective = configuration();
+    return { ...settings, hasApiKey: !!(apiKey || encryptedApiKey), configured: !!(settings.endpoint && settings.model && !keyUnavailable), keyPersistent, keyUnavailable,
+      defaultAvailable: !!defaultConfiguration, translationReady: !!(effective.enabled && effective.endpoint && effective.model && !effective.keyUnavailable) };
   }
-  function configuration() { load(); return { ...settings, apiKey, keyUnavailable }; }
+  function configuration() {
+    load();
+    if (!settings.enabled && defaultConfiguration) return { ...defaultConfiguration, enabled: true, revision: settings.revision, builtin: true };
+    return { ...settings, apiKey, keyUnavailable };
+  }
   function save(input) {
     load();
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('翻译设置无效');
     const endpoint = normalizeTranslationEndpoint(input.endpoint);
     const model = String(input.model || '').trim();
     if (model.length > 200 || /[\x00-\x1f\x7f]/.test(model)) throw new Error('模型名称无效');
-    if (input.enabled === true && (!endpoint || !model)) throw new Error('启用翻译前请填写接口地址和模型名称');
+    if (input.enabled === true && (endpoint || model) && (!endpoint || !model)) throw new Error('启用翻译前请填写接口地址和模型名称');
     let nextKey = apiKey;
     if (input.clearApiKey === true) nextKey = '';
     else if (input.apiKey != null && input.apiKey !== '') {
@@ -77,7 +83,7 @@ function createTranslationSettingsStore({ userDataPath, safeStorage, fileSystem 
       try { encrypted = safeStorage.encryptString(nextKey).toString('base64'); persistent = true; }
       catch (_) { /* Preserve the key in memory only if OS encryption is unavailable. */ }
     }
-    const next = { endpoint, model, enabled: input.enabled === true, revision: settings.revision + 1 };
+    const next = { endpoint, model, enabled: input.enabled === true && !!(endpoint && model), revision: settings.revision + 1 };
     fileSystem.mkdirSync(userDataPath, { recursive: true });
     const tempPath = filePath + '.' + process.pid + '.tmp';
     try {

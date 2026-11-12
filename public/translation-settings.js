@@ -14,7 +14,8 @@
     if (node('translation-source-open')) node('translation-source-open').textContent = text('自定义翻译源', 'Custom translation source');
     node('translation-source-key').placeholder = state.hasApiKey ? text('已保存；留空保留原密钥', 'Saved; leave empty to keep the key') : text('本地服务可留空', 'Optional for local services');
     var summary = node('translation-source-summary');
-    if (summary) summary.textContent = state.configured && state.enabled ? text('已配置 · ', 'Configured · ') + state.model : text('尚未启用自定义翻译源', 'Custom translation is not enabled');
+    if (summary) summary.textContent = state.configured && state.enabled ? text('已配置 · ', 'Configured · ') + state.model
+      : state.defaultAvailable ? text('使用默认翻译源', 'Using default translation') : text('尚未启用自定义翻译源', 'Custom translation is not enabled');
     node('translation-source-storage').textContent = state.keyUnavailable
       ? text('无法读取保存的密钥，请重新填写或清除后再保存。', 'The saved key cannot be read. Enter it again or clear it, then save.')
       : state.hasApiKey && state.keyPersistent === false
@@ -25,11 +26,13 @@
     value = value || {};
     // An older IPC read must not overwrite settings saved while it was pending.
     if (state.ready && Number(value.revision || 0) < state.revision) return Object.assign({}, state);
-    var changed = !state.ready || state.revision !== Number(value.revision || 0)
+    var translationReady = value.translationReady == null ? !!(value.configured && value.enabled) : !!value.translationReady;
+    var changed = !state.ready || state.revision !== Number(value.revision || 0) || state.translationReady !== translationReady
       || state.configured !== !!value.configured || state.enabled !== !!value.enabled || state.unavailable !== !!value.unavailable;
     state = { ready: true, configured: !!value.configured, enabled: !!value.enabled, revision: Number(value.revision || 0),
       endpoint: String(value.endpoint || ''), model: String(value.model || ''), hasApiKey: !!value.hasApiKey,
-      keyPersistent: !!value.keyPersistent, keyUnavailable: !!value.keyUnavailable, unavailable: !!value.unavailable };
+      keyPersistent: !!value.keyPersistent, keyUnavailable: !!value.keyUnavailable, unavailable: !!value.unavailable,
+      defaultAvailable: !!value.defaultAvailable, translationReady: translationReady };
     render();
     if (changed && typeof global.scheduleLyricLlmTranslation === 'function') global.scheduleLyricLlmTranslation(true);
     return Object.assign({}, state);
@@ -97,7 +100,7 @@
     if (generation !== openGeneration || !modal.classList.contains('show')) return;
     if (node('translation-source-endpoint').value === initialEndpoint) node('translation-source-endpoint').value = state.endpoint || '';
     if (node('translation-source-model').value === initialModel) node('translation-source-model').value = state.model || '';
-    status(state.unavailable ? text('请在电脑版中配置翻译源。', 'Configure translation in the desktop app.') : text('填写你自己的翻译服务；软件不再提供默认接口。', 'Use your own translation service; no default endpoint is supplied.'), !!state.unavailable);
+    status(state.unavailable ? text('请在电脑版中配置翻译源。', 'Configure translation in the desktop app.') : text('未设置或停用自定义源时使用默认翻译；默认配置不在界面显示。', 'Default translation is used when custom translation is empty or disabled; its configuration is private.'), !!state.unavailable);
     render(); node('translation-source-endpoint').focus();
   }
   function close() {
@@ -107,7 +110,7 @@
     if (previousFocus && previousFocus.isConnected && previousFocus.focus) previousFocus.focus(); previousFocus = null;
   }
   global.mineradioAuthorizedFetch = authorizedFetch;
-  global.isCustomTranslationReady = function () { return state.ready && state.configured && state.enabled && !state.unavailable && !testing; };
+  global.isCustomTranslationReady = function () { return state.ready && state.translationReady && !state.unavailable && !testing; };
   global.customTranslationRevision = function () { return state.revision || 0; };
   global.openTranslationSourceSettings = function () { void open(); };
   global.refreshTranslationSourceUi = render;

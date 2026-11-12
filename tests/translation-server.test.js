@@ -8,7 +8,7 @@ const { EventEmitter } = require('node:events');
 const { requestTranslation, testTranslationConfiguration, TRANSLATION_RESPONSE_MAX_BYTES } = require('../desktop/translation-client');
 const configuration = { endpoint: 'https://translation.invalid/v1/chat/completions?api-version=test', model: 'test-model', apiKey: 'synthetic-only-secret', enabled: true, revision: 3 };
 const messages = [{ role: 'user', content: 'Translate a synthetic lyric.' }];
-function response(content = '1. 测试译文', status = 200, headers = {}) { return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status, headers }); }
+function response(content = '1. 测试译文', status = 200, headers = {}) { return new Response(JSON.stringify({ model: 'synthetic-private-upstream-model', choices: [{ message: { content } }] }), { status, headers }); }
 test('requests use the configured endpoint/model/key and preserve UTF-8 split across chunks', async () => {
   let request;
   const data = new TextEncoder().encode(JSON.stringify({ choices: [{ message: { content: '测试译文' } }] }));
@@ -81,4 +81,15 @@ test('HTTP request body cannot replace the saved endpoint, model or credentials'
   const server = serverHarness(), result = await server.call({ messages, endpoint: 'https://external.invalid', model: 'untrusted', apiKey: 'untrusted' });
   assert.equal(result.result.ok, true); assert.equal(result.result.revision, 3);
   assert.equal(server.calls[0].config, configuration);
+});
+
+test('default service responses and errors omit upstream identity and credentials', async () => {
+  const builtin = { ...configuration, builtin: true }, server = serverHarness(() => builtin);
+  const result = await server.call({ messages });
+  assert.equal(result.result.ok, true);
+  const body = JSON.parse(result.result.body);
+  assert.equal(body.choices[0].message.content, '1. 测试译文');
+  assert.equal(body.model, undefined); assert.ok(!result.result.body.includes('synthetic-private-upstream-model'));
+  const failed = await testTranslationConfiguration(builtin, { fetch: async () => new Response(JSON.stringify({error:{message:configuration.model+' '+configuration.endpoint+' '+configuration.apiKey}}),{status:401}) });
+  for (const value of [configuration.model, configuration.endpoint, configuration.apiKey]) assert.ok(!JSON.stringify(failed).includes(value));
 });

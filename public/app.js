@@ -201,11 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
-  ['翻译源由你自由配置。', 'Configure your own translation source.'],
-  ['新增自定义翻译源，支持 OpenAI 兼容接口与本地服务，软件不再提供默认接口。', 'Add your own OpenAI-compatible endpoint or local service; no default translation service is supplied.'],
-  ['可设置接口地址、模型和密钥，支持连接测试；密钥在本机加密保存且不随备份导出。', 'Set the endpoint, model and key, and test the connection. Keys are encrypted locally and excluded from backups.'],
-  ['翻译缓存增加内存上限与切库回收，保留已保存译文并按需重新载入。', 'Bound translation cache memory and release inactive libraries while retaining saved translations for on-demand loading.'],
-  ['更新 Electron 与构建依赖，增强本地更新和翻译接口授权校验。', 'Update Electron and build dependencies, and strengthen authorization for local update and translation requests.'],
+  ['播放栏与译文更协调，歌词翻译开箱即用。', 'Playback controls and subtitles align, with translation ready to use.'],
+  ['修复播放控制栏偏移与玻璃贴图尺寸不一致。', 'Correct playback bar alignment and glass texture sizing.'],
+  ['Folia 译文跟随播放栏高度避让，展开与收起时保持可读。', 'Folia subtitles follow the transport height and remain clear when it expands or collapses.'],
+  ['恢复默认歌词翻译，未配置自定义源即可使用；启用自定义源后优先使用。', 'Restore default lyric translation; an enabled custom service takes priority.'],
+  ['默认服务配置不在界面显示，用户密钥仍由本机加密保存且不随备份导出。', 'Default service details stay private; user keys remain encrypted locally and excluded from backups.'],
   ['视频导出支持四档帧率。', 'Video export supports four frame rate options.'],
   ['歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。', 'Lyrics and visualization video export now offers 30, 60, 90 and 120 fps, with 30 fps as the default.'],
   ['帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。', 'Your frame rate choice is remembered, included in backups and used for capture and encoding.'],
@@ -2045,7 +2045,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.0';
+var APP_VERSION = '2.7.1';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2098,12 +2098,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '翻译源由你自由配置。',
+  hero: '播放栏与译文更协调，歌词翻译开箱即用。',
   notes: [
-    '新增自定义翻译源，支持 OpenAI 兼容接口与本地服务，软件不再提供默认接口。',
-    '可设置接口地址、模型和密钥，支持连接测试；密钥在本机加密保存且不随备份导出。',
-    '翻译缓存增加内存上限与切库回收，保留已保存译文并按需重新载入。',
-    '更新 Electron 与构建依赖，增强本地更新和翻译接口授权校验。'
+    '修复播放控制栏偏移与玻璃贴图尺寸不一致。',
+    'Folia 译文跟随播放栏高度避让，展开与收起时保持可读。',
+    '恢复默认歌词翻译，未配置自定义源即可使用；启用自定义源后优先使用。',
+    '默认服务配置不在界面显示，用户密钥仍由本机加密保存且不随备份导出。'
   ]
 };
 function readSavedVolume() {
@@ -30153,13 +30153,15 @@ function generateControlGlassDisplacementMap(width, height, radius) {
 }
 function updateGlassDisplacementMapForElement(el, img, stateKey) {
   if (!el || !img) return;
-  var rect = el.getBoundingClientRect();
-  if (rect.width < 2 || rect.height < 2) return;
+  // Glass maps use local CSS pixels; entrance/exit transforms must not resize the texture.
+  var width = el.offsetWidth;
+  var height = el.offsetHeight;
+  if (width < 2 || height < 2) return;
   var radius = parseFloat(getComputedStyle(el).borderRadius) || 24;
-  var key = Math.round(rect.width) + 'x' + Math.round(rect.height) + ':' + Math.round(radius);
+  var key = width + 'x' + height + ':' + Math.round(radius);
   if (key === controlGlassState[stateKey]) return;
   controlGlassState[stateKey] = key;
-  var href = generateControlGlassDisplacementMap(rect.width, rect.height, radius);
+  var href = generateControlGlassDisplacementMap(width, height, radius);
   img.setAttribute('href', href);
   try { img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', href); } catch (e) {}
 }

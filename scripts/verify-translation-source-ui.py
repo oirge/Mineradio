@@ -20,7 +20,7 @@ DESKTOP_IPC = r"""(() => {
   if (window.top !== window) return;
   localStorage.setItem('mineradio-visual-guide-seen-v2', '1');
   let savedKey = '';
-  let state = {configured:false, enabled:false, endpoint:'', model:'', hasApiKey:false, keyPersistent:true, revision:0};
+  let state = {configured:false, enabled:false, endpoint:'', model:'', hasApiKey:false, keyPersistent:true, revision:0, defaultAvailable:true, translationReady:true};
   const calls = window.__translationUiCalls = {reads:0, saves:0, tests:0, suppliedKeys:0, clears:0};
   const publicState = () => ({...state});
   window.desktopWindow = {
@@ -35,7 +35,7 @@ DESKTOP_IPC = r"""(() => {
       if (value.clearApiKey) {savedKey=''; calls.clears++;}
       else if (value.apiKey) {savedKey=value.apiKey; calls.suppliedKeys++;}
       state = {configured:true, enabled:!!value.enabled, endpoint:endpoint.href.replace(/\/$/, ''),
-        model:value.model, hasApiKey:!!savedKey, keyPersistent:true, revision:state.revision+1};
+        model:value.model, hasApiKey:!!savedKey, keyPersistent:true, revision:state.revision+1, defaultAvailable:true, translationReady:true};
       return {ok:true,...publicState()};
     },
     testTranslationSettings: async () => {calls.tests++; return {ok:state.configured && state.enabled};}
@@ -100,10 +100,11 @@ with sync_playwright() as playwright:
         expect(page.locator('#translation-source-endpoint')).to_have_value('')
         expect(page.locator('#translation-source-model')).to_have_value('')
         expect(page.locator('#translation-source-key')).to_have_value('')
-        assert page.evaluate('!isCustomTranslationReady()')
+        assert page.evaluate('isCustomTranslationReady()')
         assert translation_requests == []
-        done('Mineradio opens an empty custom source with no built-in endpoint or unsolicited translation request')
+        done('default translation is ready while custom endpoint, model and key remain empty and no lyrics are requested')
 
+        page.locator('#translation-source-endpoint').fill('https://translation-ui.example/v1')
         page.locator('#translation-source-save').click()
         expect(page.locator('#translation-source-status')).to_have_class('translation-source-note error')
         page.locator('#translation-source-endpoint').fill('https://translation-ui.example/v1')
@@ -134,9 +135,9 @@ with sync_playwright() as playwright:
         assert page.evaluate('__translationUiCalls.clears === 1')
         page.locator('#translation-source-enabled').uncheck()
         page.locator('#translation-source-save').click()
-        page.wait_for_function('!isCustomTranslationReady()')
+        page.wait_for_function('isCustomTranslationReady() && !MineradioTranslationSettings.getState().enabled')
         assert_private()
-        done('clear-key removes the saved credential; the enable switch disables future translation')
+        done('clear-key removes the custom credential; disabling the custom service restores default translation')
 
         page.evaluate("setUiLanguage('en')")
         expect(page.locator('#translation-source-title')).to_have_text('Custom translation source')

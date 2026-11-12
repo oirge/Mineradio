@@ -100,6 +100,15 @@ test('renderer state whitelists public metadata and never echoes a credential in
   assert.equal(h.node('endpoint').value, 'https://translation.invalid/v1/chat/completions');
   assert.equal(h.storageWrites(), 0); assert.ok(!JSON.stringify(publicState).includes('unexpected-private-field'));
 });
+
+test('private default availability enables translation while all custom input fields stay empty', async () => {
+  const h = harness({ settings: { endpoint: '', model: '', enabled: false, configured: false, revision: 0,
+    hasApiKey: false, defaultAvailable: true, translationReady: true } });
+  await h.open();
+  assert.equal(h.global.isCustomTranslationReady(), true);
+  assert.equal(h.node('endpoint').value, ''); assert.equal(h.node('model').value, ''); assert.equal(h.node('key').value, '');
+  assert.equal(h.storageWrites(), 0);
+});
 test('save and explicit key clearing use IPC only and remove the typed password', async () => {
   const h = harness(); await h.open(); h.node('endpoint').value = 'https://translation.invalid/v1'; h.node('model').value = 'user-model'; h.node('enabled').checked = true;
   h.node('key').value = 'synthetic-user-key'; await h.click('save');
