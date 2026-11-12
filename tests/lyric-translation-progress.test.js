@@ -13,7 +13,8 @@ const start = source.indexOf('var LYRIC_LLM_TRANSLATE_STORE_KEY =');
 const end = source.indexOf('// ---- 多行舞台行池', start);
 assert.ok(start > 0 && end > start, 'translation subsystem must be present');
 const code = source.slice(start, end);
-const successful = { ok: true, translations: ['A gentle breeze passes by.'] };
+const successfulText = 'A gentle breeze passes by.';
+const successful = { ok: true, body: JSON.stringify({ choices: [{ message: { content: '1. ' + successfulText } }] }) };
 async function settle() { for (let i = 0; i < 80; i++) await Promise.resolve(); }
 
 function classList() {
@@ -50,6 +51,9 @@ function client(options = {}) {
     localStorage: { getItem: () => JSON.stringify(options.cache || {}) },
     setPersistentLocalStorageItem() {},
     fx: { lyricTranslateTarget: '', lyricTranslationMode: 'on', lyricTranslateFallback: 'off' },
+    isCustomTranslationReady: () => options.ready !== false,
+    customTranslationRevision: () => options.revision || 0,
+    mineradioAuthorizedFetch: (url, opts) => scope.fetch(url, opts),
     lyricTranslationWanted: () => scope.fx.lyricTranslationMode === 'on',
     isNoLyricText: text => text === '暂无歌词',
     bumpStageLyricRows() {}, stageLyrics: {}, refreshCurrentLyricStyle() {}, showToast() {},
@@ -155,7 +159,7 @@ test('successful completion stays visible for two seconds across empty reschedul
   const c = client();
   c.scope.scheduleLyricLlmTranslation();
   await c.advance(960);
-  assert.equal(c.scope.lyricsLines[0].translation, successful.translations[0]);
+  assert.equal(c.scope.lyricsLines[0].translation, successfulText);
   assert.equal(c.label.textContent, '翻译完成 1/1');
   assert.equal(c.chip.classList.contains('done'), true);
   const hideTimer = c.scope.lyricTranslateChipHideTimer;

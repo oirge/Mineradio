@@ -10,7 +10,7 @@ import time
 import urllib.request
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--suite', choices=['all', 'visuals', 'portability', 'playback', 'tools'], default='all')
+parser.add_argument('--suite', choices=['all', 'visuals', 'portability', 'playback', 'tools', 'translation'], default='all')
 args = parser.parse_args()
 scripts = ['verify-upstream-visuals.py', 'verify-folia-rhythm-presets.py', 'verify-folia-preset-portability.py']
 if args.suite == 'portability':
@@ -19,6 +19,8 @@ if args.suite == 'playback':
     scripts = ['verify-folia-playback-options.py']
 if args.suite == 'tools':
     scripts = ['verify-folia-command-tools.py']
+if args.suite == 'translation':
+    scripts = ['verify-translation-source-ui.py']
 if args.suite == 'all':
     scripts = ['verify-ui-language.py', 'verify-folia-language.py', 'verify-folia-resilience.py', *scripts]
 

@@ -51,6 +51,10 @@ restorePersistentUiState();
 
 contextBridge.exposeInMainWorld('desktopWindow', {
   isDesktop: true,
+  getApiSessionToken: () => ipcRenderer.invoke('mineradio-api-session-token'),
+  getTranslationSettings: () => ipcRenderer.invoke('mineradio-translation-settings-get'),
+  saveTranslationSettings: payload => ipcRenderer.invoke('mineradio-translation-settings-save', payload || {}),
+  testTranslationSettings: () => ipcRenderer.invoke('mineradio-translation-settings-test'),
   minimize: () => ipcRenderer.invoke('desktop-window-minimize'),
   toggleMaximize: () => ipcRenderer.invoke('desktop-window-toggle-maximize'),
   toggleFullscreen: () => ipcRenderer.invoke('desktop-window-toggle-fullscreen'),

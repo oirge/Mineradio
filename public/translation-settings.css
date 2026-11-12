@@ -1,0 +1,19 @@
+.translation-source-row{display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap}
+#translation-source-summary{font-size:11px;color:rgba(232,236,239,.58)}
+#translation-source-modal{z-index:2147483000;padding:60px 20px 24px;-webkit-app-region:no-drag}
+#translation-source-modal.show{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
+#translation-source-modal .translation-source-dialog{width:min(520px,92vw);max-width:520px;max-height:calc(100vh - 84px);overflow:auto;text-align:left;padding:28px}
+.translation-source-dialog h2{margin:0 32px 12px 0}
+.translation-source-dialog .translation-source-close{position:absolute;right:18px;top:16px;padding:6px 10px}
+.translation-source-dialog .desc{margin-bottom:18px}
+.translation-source-dialog label.translation-source-field{display:flex;flex-direction:column;gap:7px;margin:14px 0;color:rgba(232,236,239,.82);font-size:12px}
+.translation-source-dialog input:not([type=checkbox]){width:100%;box-sizing:border-box;height:36px;padding:0 11px;border-radius:9px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.045);color:#e8ecef;font:inherit;outline:none}
+.translation-source-dialog input:focus-visible{border-color:rgba(var(--fc-accent-rgb),.55);outline:2px solid rgba(var(--fc-accent-rgb),.22);outline-offset:2px}
+.translation-source-dialog .translation-source-toggle{display:flex;align-items:center;gap:10px;font-size:12px;margin:14px 0}
+.translation-source-dialog .translation-source-key-actions{display:flex;justify-content:flex-end;margin-top:-7px}
+.translation-source-dialog .translation-source-key-actions button{font-size:11px;padding:5px 9px}
+.translation-source-dialog .translation-source-note{font-size:11px;line-height:1.6;color:rgba(232,236,239,.56);margin:12px 0}
+#translation-source-status{min-height:34px;color:rgba(232,236,239,.76);overflow-wrap:anywhere}
+#translation-source-status.error{color:#efabb4}
+.translation-source-dialog .btn-row{justify-content:flex-end;flex-wrap:wrap}
+.translation-source-dialog button:disabled{opacity:.45;cursor:wait}

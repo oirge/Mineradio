@@ -18,6 +18,7 @@ export const LOCAL_ACTIONS = [
     { id: 'playback', label: 'playbackSettings', icon: SlidersHorizontal, keywords: 'speed sleep gapless crossfade 倍速 睡眠 定时 淡化 音量 beisu shuimian bs sm', track: false, slot: true },
     { id: 'audio', label: 'audioSettings', icon: AudioLines, keywords: 'eq equalizer device output audio 音效 均衡器 输出设备 yinxiao junhengqi shuchu yx jhq', track: false, slot: true },
     { id: 'subtitles', label: 'subtitleSettings', icon: Captions, keywords: 'subtitle captions translation romanization 字幕 翻译 罗马音 zimu fanyi fy zm', track: false, slot: true },
+    { id: 'translationSource', label: 'customTranslationSource', icon: Captions, keywords: 'custom translation source endpoint api key model 自定义 翻译源 接口 模型 zidingyi fanyiyuan zdy fyy', track: false, slot: false },
     { id: 'videoExport', label: 'videoExport', icon: Film, keywords: 'video export record mp4 webm 视频 导出 录制 歌词 shipin daochu luzhi sp dc', track: false, slot: true },
     { id: 'visuals', label: 'effects', icon: Sparkles, keywords: 'effects visuals styles lyric background 歌词 样式 背景 效果 geci yangshi xiaoguo', track: false, slot: true },
     { id: 'commands', label: 'commands', icon: Command, keywords: 'command palette 命令 搜索 mingling sousuo ml', track: false, slot: true },
@@ -60,6 +61,7 @@ export function executeLocalAction(id: LocalActionId, services: LocalActionServi
     else if (id === 'shuffle') run('shuffleQueue');
     else if (id === 'queue' || id === 'library') services.library(id === 'queue');
     else if (id === 'playback') services.playback();
+    else if (id === 'translationSource') run('openTranslationSettings');
     else if (id === 'visuals') services.visuals();
     else if (id === 'focus') services.focus();
     else if (id === 'lyrics' || id === 'records' || id === 'posters') services.view(id);

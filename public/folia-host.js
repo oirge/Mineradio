@@ -903,6 +903,8 @@
       case 'switchInterface':
         if (params.mode !== 'folia' && params.mode !== 'mineradio') fail('INVALID_INTERFACE', '界面名称无效');
         return setInterface(params.mode);
+      case 'openTranslationSettings':
+        call('openTranslationSourceSettings'); return { ok: true };
       default: fail('METHOD_NOT_FOUND', '不支持的播放器操作');
     }
   }

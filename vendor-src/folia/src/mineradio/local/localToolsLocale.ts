@@ -2,6 +2,7 @@
 // Copy shared by the local command registry, configurable buttons and shortcut panels.
 export const LOCAL_TOOLS_RESOURCES = {
     'zh-CN': {
+        customTranslationSource: '自定义翻译源',
         commands: '命令面板', commandSearch: '搜索歌曲、歌单或操作…', commandHint: '↑↓ 选择 · Enter 执行 · Esc 关闭',
         commandActions: '快捷操作', commandTracks: '本地歌曲', commandPlaylists: '歌单', commandNoResults: '没有匹配的歌曲、歌单或操作',
         commandFailed: '加载失败，请重试。', commandBack: '返回全部歌曲', commandScope: '歌单：{{name}}',
@@ -25,6 +26,7 @@ export const LOCAL_TOOLS_RESOURCES = {
         outputStatus_applied: '输出设备已应用。', outputStatus_fallback: '首选设备暂不可用，已临时使用系统默认，重连后恢复。', outputStatus_error: '设备切换失败，请重试或选择系统默认。',
     },
     en: {
+        customTranslationSource: 'Custom translation source',
         commands: 'Command palette', commandSearch: 'Search songs, playlists or actions…', commandHint: '↑↓ Select · Enter Run · Esc Close',
         commandActions: 'Quick actions', commandTracks: 'Local songs', commandPlaylists: 'Playlists', commandNoResults: 'No matching songs, playlists or actions',
         commandFailed: 'Could not load. Please retry.', commandBack: 'Back to all songs', commandScope: 'Playlist: {{name}}',

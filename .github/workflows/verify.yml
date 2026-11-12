@@ -19,6 +19,7 @@ on:
           - visuals
           - portability
           - tools
+          - translation
       ui_diagnostics:
         description: Enable detailed Playwright action logs
         type: boolean
@@ -44,6 +45,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Install Folia build dependencies
         run: npm ci --prefix vendor-src/folia --ignore-scripts --no-audit --no-fund
+      - name: Audit locked desktop and Folia dependencies
+        run: npm run audit:security
       - name: Build embedded Folia
         run: npm run build:folia
       - name: Save embedded Folia build
@@ -83,6 +86,9 @@ jobs:
       - name: Verify Folia command and audio tools
         timeout-minutes: 5
         run: python scripts/verify-browser-ui.py --suite tools
+      - name: Verify custom translation source settings
+        timeout-minutes: 5
+        run: python scripts/verify-browser-ui.py --suite translation
       - name: Verify bilingual UI and Folia recovery
         timeout-minutes: 15
         env:

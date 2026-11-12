@@ -27,6 +27,7 @@ if (document.fonts && document.fonts.load) {
 <script src="startup-theme-colors.js"></script>
 <script src="plugin-manifest.js"></script>
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="translation-settings.css">
 <link rel="stylesheet" href="wallpaper-engine.css">
 <link rel="stylesheet" href="folia-host.css">
 <script src="startup-plugin-theme.js"></script>
@@ -333,6 +334,7 @@ if (document.fonts && document.fonts.load) {
         <button type="button" data-translation="on" onclick="setLyricTranslationMode('on')">开启</button>
       </div>
       <div class="fx-slider lyric-translate-target-row"><label>目标语言</label><input id="lyric-translate-target" type="text" placeholder="留空=自动（非中→中，中→英）" maxlength="24"><output></output></div>
+      <div class="translation-source-row"><button id="translation-source-open" class="fx-mini-btn" type="button" data-i18n-skip onclick="openTranslationSourceSettings()">自定义翻译源</button><span id="translation-source-summary" data-i18n-skip></span></div>
       <div class="fx-slider"><label>译文间距</label><input id="fx-lyrictranslationgap" type="range" min="0.28" max="2.20" step="0.01"><output></output></div>
       <div class="fx-slider"><label>译文字号</label><input id="fx-lyrictranslationscale" type="range" min="0.46" max="1.12" step="0.01"><output></output></div>
       <div class="fx-slider"><label>译文透明</label><input id="fx-lyrictranslationopacity" type="range" min="0.20" max="1" step="0.01"><output></output></div>
@@ -1372,6 +1374,21 @@ if (document.fonts && document.fonts.load) {
 </div>
 
 <div id="fullscreen-transition-layer" aria-hidden="true"></div>
+<div id="translation-source-modal" class="modal-mask" aria-hidden="true" data-i18n-skip>
+  <section class="modal translation-source-dialog" role="dialog" aria-modal="true" aria-labelledby="translation-source-title">
+    <button id="translation-source-close" type="button" class="modal-btn translation-source-close" aria-label="Close">×</button>
+    <h2 id="translation-source-title" data-translation-zh="自定义翻译源" data-translation-en="Custom translation source">自定义翻译源</h2>
+    <p class="desc" data-translation-zh="使用你自己的 OpenAI 兼容服务或本地服务。接口地址可填写基础地址或完整的 chat/completions 地址。" data-translation-en="Use your own OpenAI-compatible or local service. Enter a base URL or the full chat/completions URL.">使用你自己的 OpenAI 兼容服务或本地服务。接口地址可填写基础地址或完整的 chat/completions 地址。</p>
+    <label class="translation-source-field"><span data-translation-zh="接口地址" data-translation-en="Endpoint URL">接口地址</span><input id="translation-source-endpoint" type="url" maxlength="2048" placeholder="https://your-provider.example/v1" autocomplete="off" spellcheck="false"></label>
+    <label class="translation-source-field"><span data-translation-zh="模型名称" data-translation-en="Model name">模型名称</span><input id="translation-source-model" type="text" maxlength="200" autocomplete="off" spellcheck="false"></label>
+    <label class="translation-source-field"><span>API Key</span><input id="translation-source-key" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false"></label>
+    <div class="translation-source-key-actions"><button id="translation-source-clear-key" class="modal-btn" type="button" data-translation-zh="清除保存的密钥" data-translation-en="Clear saved key">清除保存的密钥</button></div>
+    <label class="translation-source-toggle"><input id="translation-source-enabled" type="checkbox"><span data-translation-zh="启用此翻译源" data-translation-en="Enable this translation source">启用此翻译源</span></label>
+    <p id="translation-source-storage" class="translation-source-note"></p>
+    <p id="translation-source-status" class="translation-source-note" role="status" aria-live="polite"></p>
+    <div class="btn-row"><button id="translation-source-test" class="modal-btn" type="button" data-translation-zh="保存并测试" data-translation-en="Save and test">保存并测试</button><button id="translation-source-save" class="modal-btn primary" type="button" data-translation-zh="保存" data-translation-en="Save">保存</button></div>
+  </section>
+</div>
 <button id="folia-floating-switch" class="on" type="button" data-folia-switch aria-label="Folia" aria-pressed="false">Folia</button>
 <button id="folia-floating-import" type="button" data-folia-import title="导入音乐文件">导入文件</button>
 
@@ -1388,6 +1405,7 @@ if (document.fonts && document.fonts.load) {
 <script src="shelf-classic.js"></script>
 <script src="gesture-controls.js"></script>
 <script src="lyric-vocals.js"></script>
+<script src="translation-settings.js"></script>
 <script src="app.js"></script>
 <script src="wallpaper-engine.js"></script>
 <script src="folia-audio-settings.js"></script>
