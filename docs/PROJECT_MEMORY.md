@@ -2,7 +2,10 @@
 
 - 2.7.1 后用户截图仍有整窗左移／右侧留空。原生 Windows 基线 43189728949 已用关闭按钮和 Esc 复现 shell.scrollLeft=453，整窗标题与底栏同量左移；第三种关闭准备超时的边界保留于 RELEASE.md。
 - 关闭翻译弹窗恢复到已收回的侧栏按钮时必须 focus({preventScroll:true})；桌面外壳 overflow:clip，不能恢复 overflow:hidden 的可滚动容器。保留 SVG 黄金质感、默认翻译、用户启用源优先和私密构建输入。
-- 待完成最终云端与发布核验。沿用后台与云端工作，不启动本机 GUI、不操作用户安装或数据，发布新 2.7.2、不替换既有 2.7.1。
+- 已正式发布：[PR #183](https://github.com/oirge/Mineradio/pull/183) → merge `1a7927cd`，annotated tag `v2.7.2`（tag object `594acaf4`），Build `43193412187` 成功；Release `442743490` 于北京时间 `2026-11-12 17:45:57` 公开并设 Latest，安装器 122279416 B。四资产完整回下载、SHA256／SHA-512、只读安装器版本及公开更新清单核验通过。
+- 完整 Verify 43190678625 成功：Folia 131＋124、Node 1713 通过／0 失败／1 可选跳过及全部浏览器套件通过；原生 43190665737／43190678479 成功，三种关闭 scrollLeft=0、中心 693.5 且焦点恢复。失败基线、引导失败与实际 GPU 未测边界见 RELEASE.md。全程后台与云端，未操作用户安装或数据；沿用私密默认翻译构建链，不覆盖既有 2.7.1。
+
+- 合并后的原生 43193390052 再次成功。重复完整 Verify 43193389959 在既有 playback 脚本第 90 行点击桌面标题栏 local-open-playback 时发生 15000ms／outside of the viewport 超时；同一行、同类超时已存在于 2.7.0 的 verify-8859aaf-playback-failed.log，未放宽超时、断言或画质。发布依据是逐字节相同文件树的完整 PR Verify 成功与三次原生成功；不将该重复运行记为全绿。失败日志和工件另存 verification/release-v2.7.2/。
 
 ## 2026-11-12：v2.7.1 播放栏与默认翻译续修
 
