@@ -71,6 +71,10 @@ with sync_playwright() as playwright:
         print('PASS:', message, flush=True)
 
     def open_mineradio():
+        # The host's existing outside-click behavior can retract DIY while the
+        # source dialog is used. Reopen it through its real button before the tab.
+        if not page.locator('#fx-panel').evaluate("el => el.classList.contains('show') || el.classList.contains('peek')"):
+            page.locator('#fx-fab').click()
         page.locator('#fx-panel-tabs [data-fx-tab="lyrics"]').click()
         entry = page.locator('#fx-lyric-fold button[onclick="openTranslationSourceSettings()"]')
         if not entry.is_visible():
