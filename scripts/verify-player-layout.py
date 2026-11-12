@@ -87,13 +87,15 @@ with sync_playwright() as playwright:
             if width == 1110:
                 page.mouse.move(width / 2, height / 2)
                 page.wait_for_timeout(3300)
+                capture_screenshot(page, path=str(OUT / 'folia-idle.png'))
                 collapsed = child_frame.evaluate(GEOMETRY, '.local-controls')
                 report.append({'surface':'folia-idle','width':width,**collapsed})
                 if collapsed['bar']['height'] >= folia['bar']['height'] - 20:
                     violations.append('Folia idle: transport did not collapse')
                 if collapsed['subtitle']['bottom'] > collapsed['bar']['y'] - 8:
                     violations.append('Folia idle: subtitle overlaps the remaining progress row')
-                capture_screenshot(page, path=str(OUT / 'folia-idle.png'))
+                if collapsed['bar']['y'] - collapsed['subtitle']['bottom'] > 32:
+                    violations.append('Folia idle: subtitle did not follow the collapsed transport')
     finally:
         (OUT / 'report.json').write_text(json.dumps({'samples':report,'pageErrors':errors,'violations':violations}, ensure_ascii=False, indent=2),encoding='utf-8')
         browser.close()
