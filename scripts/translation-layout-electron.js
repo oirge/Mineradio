@@ -7,8 +7,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { app, BrowserWindow, screen } = require('electron');
+const fail = error => { console.error(error && error.stack || String(error)); app.exit(1); };
+process.on('uncaughtException', fail);
+process.on('unhandledRejection', fail);
 const profile = fs.realpathSync(process.env.MINERADIO_LAYOUT_PROFILE);
-assert.equal(path.dirname(profile).toLowerCase(), fs.realpathSync(os.tmpdir()).toLowerCase());
+// Windows can return a long profile path and an 8.3 TEMP alias for the same directory.
+const parent = fs.statSync(path.dirname(profile)), temporary = fs.statSync(os.tmpdir());
+assert.ok(parent.isDirectory() && temporary.isDirectory());
+assert.equal(parent.dev, temporary.dev);
+assert.equal(parent.ino, temporary.ino);
 assert.ok(path.basename(profile).startsWith('mineradio-native-layout-'));
 const port = Number(process.env.MINERADIO_LAYOUT_DEBUG_PORT);
 assert.ok(Number.isInteger(port) && port > 1024 && port < 65536);

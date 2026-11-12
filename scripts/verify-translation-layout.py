@@ -62,7 +62,8 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-') as temporary
                 raise TimeoutError('Native layout debugger did not become ready')
             with sync_playwright() as playwright:
                 browser = playwright.chromium.connect_over_cdp(f'http://127.0.0.1:{port}')
-                page = browser.contexts[0].pages[0]
+                context = browser.contexts[0]
+                page = context.pages[0] if context.pages else context.wait_for_event('page', timeout=15000)
                 page.set_default_timeout(20000)
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.add_init_script(DESKTOP_IPC)
