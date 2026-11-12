@@ -28,10 +28,18 @@ report, errors, violations = [], [], []
 GEOMETRY = """selector => {
   const box = element => { const r = element.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom}; };
   const bar = document.querySelector(selector);
+  const visible = element => {
+    if (!element.getClientRects().length) return false;
+    for (let node = element; node && node !== bar.parentElement; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) < .01) return false;
+    }
+    return true;
+  };
   const subtitle = document.querySelector('[data-subtitle-track="translation"]');
   return {viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},bar:box(bar),
     subtitle:subtitle ? box(subtitle) : null,
-    controls:[...bar.querySelectorAll('button,input,[role="button"]')].filter(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden').map(e=>({name:e.id || e.getAttribute('data-testid') || e.getAttribute('aria-label'),...box(e)}))};
+    controls:[...bar.querySelectorAll('button,input,[role="button"]')].filter(visible).map(e=>({name:e.id || e.getAttribute('data-testid') || e.getAttribute('aria-label'),...box(e)}))};
 }"""
 
 with sync_playwright() as playwright:
@@ -76,6 +84,16 @@ with sync_playwright() as playwright:
                 violations.append(f'Folia {width}: bar overflows viewport')
             if folia['subtitle']['bottom'] > folia['bar']['y'] - 8:
                 violations.append(f'Folia {width}: translation overlaps the controls: {folia["subtitle"]}')
+            if width == 1110:
+                page.mouse.move(width / 2, height / 2)
+                page.wait_for_timeout(3300)
+                collapsed = child_frame.evaluate(GEOMETRY, '.local-controls')
+                report.append({'surface':'folia-idle','width':width,**collapsed})
+                if collapsed['bar']['height'] >= folia['bar']['height'] - 20:
+                    violations.append('Folia idle: transport did not collapse')
+                if collapsed['subtitle']['bottom'] > collapsed['bar']['y'] - 8:
+                    violations.append('Folia idle: subtitle overlaps the remaining progress row')
+                capture_screenshot(page, path=str(OUT / 'folia-idle.png'))
     finally:
         (OUT / 'report.json').write_text(json.dumps({'samples':report,'pageErrors':errors,'violations':violations}, ensure_ascii=False, indent=2),encoding='utf-8')
         browser.close()
