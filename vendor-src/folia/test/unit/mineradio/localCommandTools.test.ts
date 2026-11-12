@@ -38,6 +38,16 @@ it('matches English, Chinese and pinyin without loading the upstream application
     expect(localCommandMatches(audio.keywords, 'nonsense')).toBe(false);
     expect(localActionView('like', { currentTrack: { liked: true } } as HostState).label).toBe('unlike');
 });
+it('finds custom translation settings in both languages and opens only the host settings action', () => {
+    const action = LOCAL_ACTIONS.find(item => item.id === 'translationSource')!;
+    for (const query of ['custom translation', 'api key', '翻译源', 'fyy']) expect(localCommandMatches(action.keywords, query)).toBe(true);
+    const services: LocalActionServices = { state: null, command: vi.fn().mockResolvedValue({}),
+        tool: vi.fn(), library: vi.fn(), playback: vi.fn(), visuals: vi.fn(), focus: vi.fn(), view: vi.fn() };
+    executeLocalAction('translationSource', services);
+    expect(services.command).toHaveBeenCalledWith('openTranslationSettings', undefined);
+    expect(services.tool).not.toHaveBeenCalled();
+    expect(localActionView('translationSource', null).disabled).toBe(false);
+});
 it('migrates old translation choices and saves independent subtitle controls in named presets', () => {
     expect(normalizeVisualPreferences({ translation: false })).toMatchObject({ subtitleHidden: true, subtitleContentMode: 'none' });
     expect(normalizeVisualPreferences({ subtitleContentMode: 'bad' })).toMatchObject({ subtitleHidden: false, subtitleContentMode: 'translation' });

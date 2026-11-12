@@ -21,6 +21,7 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Automatic lyrics encoding detection: UTF-8 / UTF-16 / GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252.
 - Support for MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags, including timestamped LRC lyrics.
 - Support for automatic lyrics translation recognition and display.
+- User-configured lyric translation endpoints, models and API keys, with connection testing; no default endpoint or key is included.
 - Support for cover images in the same directory and embedded audio covers.
 - Visual rhythm effects share the host audio engine, using cached beat maps when available and real-time spectrum estimates otherwise.
 - Mini player optimization with improved animations.
@@ -46,6 +47,14 @@ npm run build:win
 ```
 
 Build artifacts are located in `dist/`.
+
+Run `npm run audit:security` to check both locked dependency trees. Unaccepted high and critical advisories block verification and release; see [Security Policy](./SECURITY.md) for the narrowly reviewed unused upstream dependency exception.
+
+### Custom Lyric Translation Source (v2.7.0)
+
+Open **Custom translation source** from Mineradio's Display & Translation controls or Folia's subtitle settings. Enter an OpenAI Chat Completions compatible endpoint (a `/v1` base URL or a complete `/chat/completions` URL), model name and your own API key, then choose **Save and test**. Local services without authentication can leave the key empty. With both the source and lyric translation enabled, untranslated lyrics are sent to your configured service; existing local translations remain available.
+
+The app supplies no default translation endpoint, model or key. API keys are encrypted with operating-system secure storage. If secure storage is unavailable, the key stays in memory for the current session only and the settings panel explains this. Saved keys are never filled back into the input: saving an empty input keeps the existing key, while **Clear key** removes it. Translation-source settings are excluded from whole-machine backups and must be configured again on another computer. Data handling by your chosen provider follows its privacy policy; see [Privacy](./PRIVACY.md).
 
 ## Features
 
@@ -117,6 +126,14 @@ Build artifacts are located in `dist/`.
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.7.0
+
+- Added a shared custom translation source with endpoint/model/key settings, connection testing and explicit enable/disable controls; removed the built-in endpoint and default credentials.
+- Encrypted API-key storage stays on this computer and is excluded from backups; unavailable secure storage falls back to session memory only.
+- Reclaim persisted translation maps during long sessions and library changes, restoring translated songs from the local database when needed.
+- Protected local translation and update operations with desktop-session authorization and separated retryable translation failures from permanent configuration errors.
+- Updated Electron to 43.8.8, patched build dependencies and added a security-audit gate to verification and release.
+
 ### v2.4.0 (2026-10-10)
 
 - Added Folia local playback with lyric, floating Polaroid record wall, and Lattice cover mosaic views
@@ -128,7 +145,7 @@ See the [Releases](https://github.com/oirge/Mineradio/releases) page for the ful
 
 - New "Display & Translation" controls: lyric line modes (single / dual / triple / cinema / custom), bilingual translation modes (off / current / dual / multi), plus translation gap / size / opacity
 - Multi-line stage lyrics: smooth track scrolling, fading context rows and translation sub-lines, matching the original project
-- Built-in translation source: lyrics without translations are auto-translated and cached locally, each line translated only once
+- This historical release supplied a built-in translation source; v2.7.0 replaces it with a user-configured source and retains local translation reuse.
 - Fixed the Wallpaper Engine "Import" button being pushed out of the panel
 
 Full Node regression suite: `1183/1183` passing.

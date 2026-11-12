@@ -7,6 +7,8 @@
 .local-tool-content label,.local-tool-content select{font-size:12px}
 .local-tool-content select{max-width:60%;background:var(--local-raised);color:var(--local-text);border:1px solid var(--local-line);border-radius:8px;padding:7px}
 .local-tool-hint{font-size:11px;line-height:1.7;color:var(--local-muted);margin:0}
+.local-tool-action{align-self:flex-start;font-size:12px;padding:8px 12px;border:1px solid var(--local-line);border-radius:9px;background:var(--local-raised);color:var(--local-text)}
+.local-tool-action:hover,.local-tool-action:focus-visible{background:var(--local-hover);color:var(--local-accent)}
 .local-tool-content .local-playback-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:12px}
 .local-audio-presets{display:flex;flex-wrap:wrap;gap:5px}
 .local-audio-presets button{font-size:11px;border:1px solid var(--local-line);border-radius:8px;padding:6px 9px}

@@ -1,9 +1,12 @@
-const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, globalShortcut, dialog, Tray, Menu, protocol, session, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, globalShortcut, dialog, Tray, Menu, protocol, session, desktopCapturer, safeStorage } = require('electron');
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const crypto = require('crypto');
+const { createTranslationSettingsStore } = require('./translation-settings');
+const { testTranslationConfiguration } = require('./translation-client');
+const API_SESSION_TOKEN = crypto.randomBytes(32).toString('hex');
 const { execFile, spawn } = require('child_process');
 const { DesktopOverlayStateCache } = require('./desktop-overlay-state-cache');
 const { createDesktopLyricsRecovery } = require('./desktop-lyrics-recovery');
@@ -104,6 +107,7 @@ const DESKTOP_SHORTCUT_NAME = resolveDesktopShortcutName({
 
 app.setName(INSTANCE_APP_NAME);
 app.setPath('userData', INSTANCE_PROFILE.userDataPath);
+const translationSettings = createTranslationSettingsStore({ userDataPath: app.getPath('userData'), safeStorage });
 app.setPath('sessionData', INSTANCE_PROFILE.sessionDataPath);
 
 function resolveRuntimeAppRoots() {
@@ -4484,6 +4488,14 @@ const videoExportManager = createVideoExportManager({
 });
 videoExportManager.registerIpc();
 
+ipcMain.handle('mineradio-api-session-token', trustedMainFrameHandler(() => API_SESSION_TOKEN));
+ipcMain.handle('mineradio-translation-settings-get', trustedMainFrameHandler(() => translationSettings.get()));
+ipcMain.handle('mineradio-translation-settings-save', trustedMainFrameHandler((_event, payload) => {
+  try { return { ok: true, ...translationSettings.save(payload) }; }
+  catch (error) { return { ok: false, message: error.message || '无法保存翻译设置' }; }
+}));
+ipcMain.handle('mineradio-translation-settings-test', trustedMainFrameHandler(() => testTranslationConfiguration(translationSettings.configuration())));
+
 ipcMain.handle('desktop-window-minimize', trustedMainFrameHandler((event) => {
   getSenderWindow(event)?.minimize();
 }));
@@ -5744,6 +5756,8 @@ async function createWindow() {
   }
   // 注入授权校验：让 HTTP 本地文件代理复用与 IPC 相同的授权根目录约束，堵住越权读取任意文件。
   localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
+  localServer.setApiSessionToken(API_SESSION_TOKEN);
+  localServer.setTranslationSettingsProvider(() => translationSettings.configuration());
   await waitForServer(localServer);
   try {
     await migratePrimaryProfileState(port);

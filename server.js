@@ -13,11 +13,7 @@ const { Readable } = require('stream');
 const { fileURLToPath } = require('url');
 
 const PORT = process.env.PORT || 3000;
-// 歌词 LLM 翻译源（OpenAI 兼容端点，用户指定）。浏览器直连会被端点的 CORS 预检拦截，
-// 因此渲染层走 /api/lyric-translate 本地代理，密钥只存在于本进程。
-const LYRIC_TRANSLATE_ENDPOINT = 'http://129.204.9.16:8000/v1/chat/completions';
-const LYRIC_TRANSLATE_API_KEY = 'g2a_752333ba7025_t_S90cSbpFq_9qMEOuXoUl12bctaXvaP';
-const LYRIC_TRANSLATE_MODEL = 'grok-chat-fast';
+// 翻译服务由用户自行配置；凭据仅由可信桌面主进程提供。
 const HOST = process.env.HOST || '0.0.0.0';
 const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
 /**
@@ -45,6 +41,19 @@ function resolveRuntimeAppRoots() {
   return { writableRoot, resourceRoot };
 }
 const { writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT } = resolveRuntimeAppRoots();
+const { authorizeApiMutation } = require(path.join(RESOURCE_ROOT, 'desktop', 'api-session-authorization'));
+const { requestTranslation } = require(path.join(RESOURCE_ROOT, 'desktop', 'translation-client'));
+let apiSessionToken = '';
+let translationSettingsProvider = null;
+function setApiSessionToken(token) {
+  if (typeof token !== 'string' || token.length < 32) throw new TypeError('API_SESSION_TOKEN_INVALID');
+  apiSessionToken = token;
+}
+function setTranslationSettingsProvider(provider) {
+  if (typeof provider !== 'function') throw new TypeError('TRANSLATION_SETTINGS_PROVIDER_INVALID');
+  translationSettingsProvider = provider;
+}
+
 
 /**
  * 注入本地文件代理的授权校验函数（跨进程契约：与主进程 resolveAuthorizedLocalFile 对齐）。
@@ -78,10 +87,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '歌词／可视化视频导出新增 30／60／90／120 帧选择，默认 30 帧。',
-  '帧率选择会记住并纳入整机备份，录制按所选目标采集与编码。',
-  '切歌或跳转默认继续录制，也可选择保存已录片段；设置会记住。',
-  '高帧率会增加录制开销和视频体积，实际帧率取决于电脑、屏幕刷新率与效果。',
+  '新增自定义翻译源，支持 OpenAI 兼容接口与本地服务，软件不再提供默认接口。',
+  '可设置接口地址、模型和密钥，支持连接测试；密钥在本机加密保存且不随备份导出。',
+  '翻译缓存增加内存上限与切库回收，保留已保存译文并按需重新载入。',
+  '更新 Electron 与构建依赖，增强本地更新和翻译接口授权校验。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -2955,158 +2964,40 @@ function readRequestBody(req) {
     req.on('close', () => settle(resolve, {}));
   });
 }
-const LYRIC_MYMEMORY_ENDPOINT = 'https://api.mymemory.translated.net/get';
-const LYRIC_UPSTREAM_TIMEOUT_MS = 45000;
-const LYRIC_MYMEMORY_TIMEOUT_MS = 6000;
-let lyricMyMemoryBlockedUntil = 0;
-
-function lyricProxyError(code, message, status, retryable, retryAfterMs) {
-  const error = new Error(String(message || code).slice(0, 240));
-  error.code = code;
-  error.status = status || 502;
-  error.retryable = retryable !== false;
-  error.retryAfterMs = Math.max(0, Number(retryAfterMs) || 0);
-  return error;
-}
-function lyricRetryAfterMs(value) {
-  const seconds = Number(value);
-  if (value != null && value !== '' && Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
-  const date = Date.parse(value || '');
-  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
-}
-function lyricUpstreamError(data, status, retryAfter) {
-  const detail = data && data.error;
-  const message = typeof detail === 'string' ? detail : detail && detail.message;
-  return lyricProxyError(detail && detail.code || 'UPSTREAM_HTTP_' + status,
-    message || data && (data.message || data.responseDetails) || '翻译服务请求失败（HTTP ' + status + '）',
-    status, status === 408 || status === 429 || status >= 500, lyricRetryAfterMs(retryAfter));
-}
-function lyricMyMemoryPair(text, target) {
-  const language = String(target || '').trim().toLowerCase();
-  const english = /^(en|english|英文|英语)$/.test(language);
-  const chinese = /^(zh|zh-cn|zh-hans|chinese|simplified chinese|简体中文|简体|中文|汉语)$/.test(language);
-  const han = /[㐀-䶿一-鿿豈-﫿]/.test(text);
-  const otherScript = /[ぁ-ヿ가-힣\u0400-\u052f\u0600-\u06ff\u0e00-\u0e7f]/.test(text);
-  if (english && han && !otherScript) return ['zh-CN', 'en'];
-  // MyMemory 不支持 auto；英文常见词检查避免把无法识别的拉丁文字盲报为英语。
-  if (chinese && !han && !otherScript && /^[\x20-\x7e\u2010-\u2027\r\n\t]*$/.test(text)
-      && /\b(?:a|an|the|i|you|we|they|he|she|it|is|are|was|were|be|to|of|and|in|on|my|your|our|with|for|not|this|that|love)\b/i.test(text)) return ['en', 'zh-CN'];
-  throw lyricProxyError('MYMEMORY_UNSUPPORTED_LANGUAGE', '免费备用仅支持可识别的中文与英文互译', 400, false);
-}
-function decodeLyricEntities(text) {
-  return String(text || '').replace(/&(?:amp|lt|gt|quot|apos|#39|#\d+|#x[\da-f]+);/gi, entity => {
-    const named = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&#39;': "'" };
-    if (named[entity.toLowerCase()]) return named[entity.toLowerCase()];
-    const hex = /^&#x/i.test(entity);
-    const code = parseInt(entity.slice(hex ? 3 : 2, -1), hex ? 16 : 10);
-    return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : entity;
-  }).trim();
-}
-async function fetchMyMemoryLyric(item, parentSignal) {
-  const text = String(item && item.text || '').trim();
-  if (!text || Buffer.byteLength(text, 'utf8') > 500) throw lyricProxyError('MYMEMORY_TEXT_TOO_LONG', '免费备用每行最多 500 UTF-8 字节', 400, false);
-  const pair = lyricMyMemoryPair(text, item.target);
-  if (Date.now() < lyricMyMemoryBlockedUntil) throw lyricProxyError('MYMEMORY_QUOTA_EXCEEDED', 'MyMemory 免费额度已用完，请稍后再试', 429, false, lyricMyMemoryBlockedUntil - Date.now());
-  const url = new URL(LYRIC_MYMEMORY_ENDPOINT);
-  url.searchParams.set('q', text);
-  url.searchParams.set('langpair', pair.join('|'));
-  url.searchParams.set('mt', '1');
-  const controller = new AbortController();
-  const cancel = () => controller.abort();
-  if (parentSignal.aborted) cancel();
-  else parentSignal.addEventListener('abort', cancel, { once: true });
-  const timer = setTimeout(cancel, LYRIC_MYMEMORY_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
-    const raw = await response.text();
-    let data;
-    try { data = JSON.parse(raw); }
-    catch (_) { throw lyricProxyError('MYMEMORY_INVALID_RESPONSE', 'MyMemory 返回空内容或无效 JSON', response.status || 502, true); }
-    const status = Number(data.responseStatus);
-    const quota = data.quotaFinished === true || data.quotaFinished === 'true'
-      || response.status === 429 || status === 429
-      || /(?:quota|daily limit|limit exceeded|used all available free)/i.test(String(data.responseDetails || ''));
-    if (quota) {
-      const wait = lyricRetryAfterMs(response.headers.get('retry-after')) || 24 * 60 * 60 * 1000;
-      lyricMyMemoryBlockedUntil = Date.now() + wait;
-      throw lyricProxyError('MYMEMORY_QUOTA_EXCEEDED', 'MyMemory 免费额度已用完，请稍后再试', 429, false, wait);
-    }
-    if (!response.ok || status !== 200) throw lyricProxyError('MYMEMORY_REQUEST_FAILED', 'MyMemory 请求失败（' + (status || response.status) + '）', status || response.status, false);
-    const value = data.responseData && data.responseData.translatedText;
-    const translated = typeof value === 'string' ? decodeLyricEntities(value) : '';
-    const hasHan = /[㐀-䶿一-鿿豈-﫿]/.test(translated);
-    if (!translated || translated === text || (pair[1] === 'en' ? hasHan : !hasHan)) throw lyricProxyError('INVALID_TRANSLATION', 'MyMemory 未返回有效译文', 502, false);
-    return translated;
-  } finally {
-    clearTimeout(timer);
-    parentSignal.removeEventListener('abort', cancel);
-  }
-}
-async function requestMyMemoryLyrics(body, signal) {
-  if (body.fallbackConsent !== true) throw lyricProxyError('FALLBACK_CONSENT_REQUIRED', '请先允许免费备用接收歌词', 403, false);
-  if (!Array.isArray(body.lines) || !body.lines.length || body.lines.length > 6) throw lyricProxyError('INVALID_TRANSLATION_LINES', '备用翻译每次需要 1 至 6 行', 400, false);
-  const translations = new Array(body.lines.length).fill('');
-  const errors = [];
-  for (let index = 0; index < body.lines.length; index++) {
-    if (signal.aborted) throw lyricProxyError('REQUEST_CANCELLED', '翻译已取消', 499, false);
-    try { translations[index] = await fetchMyMemoryLyric(body.lines[index], signal); }
-    catch (err) {
-      const aborted = err && err.name === 'AbortError';
-      const code = aborted ? 'UPSTREAM_TIMEOUT' : err.code || 'MYMEMORY_NETWORK_ERROR';
-      errors.push({ index, code, message: aborted ? '免费备用请求超时' : err.message || '免费备用连接失败', status: err.status || 502, retryable: false, retryAfterMs: err.retryAfterMs || 0 });
-      if (!['INVALID_TRANSLATION', 'MYMEMORY_UNSUPPORTED_LANGUAGE', 'MYMEMORY_TEXT_TOO_LONG'].includes(code)) break;
-    }
-  }
-  return { ok: true, provider: 'mymemory', translations, errors };
-}
 async function handleLyricTranslateRequest(req, res) {
   if (req.method !== 'POST') { sendJSON(res, { ok: false, error: 'METHOD_NOT_ALLOWED', retryable: false }, 405); return; }
   const controller = new AbortController();
   const cancel = () => { if (!res.writableEnded) controller.abort(); };
   res.on('close', cancel);
-  let timer = null;
   try {
-    const body = await readRequestBody(req);
-    if (controller.signal.aborted || res.destroyed) return;
-    timer = setTimeout(() => controller.abort(), LYRIC_UPSTREAM_TIMEOUT_MS);
-    if (body.provider === 'mymemory') {
-      const result = await requestMyMemoryLyrics(body, controller.signal);
-      if (!res.destroyed) sendJSON(res, result);
+    const configuration = translationSettingsProvider && translationSettingsProvider();
+    if (!configuration || !configuration.enabled || !configuration.endpoint || !configuration.model) {
+      sendJSON(res, { ok: false, error: 'NOT_CONFIGURED', code: 'NOT_CONFIGURED', message: '请先在设置中配置并启用自己的翻译源', retryable: false }, 400);
       return;
     }
-    if (body.provider && body.provider !== 'llm') throw lyricProxyError('INVALID_TRANSLATION_PROVIDER', '未知翻译服务', 400, false);
+    const body = await readRequestBody(req);
+    if (controller.signal.aborted || res.destroyed) return;
+    if (body.provider && body.provider !== 'llm') {
+      sendJSON(res, { ok: false, error: 'INVALID_TRANSLATION_PROVIDER', retryable: false }, 400); return;
+    }
     const messages = Array.isArray(body.messages) ? body.messages : null;
     if (!messages || !messages.length || messages.length > 8
         || messages.some(message => !message || typeof message.content !== 'string' || !['system', 'user', 'assistant'].includes(message.role))
         || Buffer.byteLength(JSON.stringify(messages), 'utf8') > 64000) {
-      throw lyricProxyError('MESSAGES_REQUIRED', '翻译请求内容无效', 400, false);
+      sendJSON(res, { ok: false, error: 'MESSAGES_REQUIRED', retryable: false }, 400); return;
     }
     const temperature = Number.isFinite(Number(body.temperature)) ? Math.max(0, Math.min(2, Number(body.temperature))) : 0.1;
-    const upstream = await fetch(LYRIC_TRANSLATE_ENDPOINT, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + LYRIC_TRANSLATE_API_KEY },
-      body: JSON.stringify({ model: LYRIC_TRANSLATE_MODEL, temperature, messages, stream: false }),
-      signal: controller.signal
-    });
-    const text = await upstream.text();
-    let parsed;
-    try { parsed = JSON.parse(text); }
-    catch (_) { throw lyricProxyError('UPSTREAM_INVALID_RESPONSE', '翻译服务返回格式异常', upstream.status || 502, true); }
-    if (!upstream.ok || parsed && parsed.error) throw lyricUpstreamError(parsed, upstream.ok ? 502 : upstream.status, upstream.headers.get('retry-after'));
-    if (text.length > 400000) throw lyricProxyError('UPSTREAM_RESPONSE_TOO_LARGE', '翻译服务响应过大', 502, false);
-    if (!res.destroyed) sendJSON(res, { ok: true, status: upstream.status, body: text });
+    const result = await requestTranslation(configuration, messages, { signal: controller.signal, temperature });
+    if (!res.destroyed) sendJSON(res, { ok: true, status: result.status, body: result.text, revision: configuration.revision });
   } catch (err) {
     if (res.destroyed) return;
-    const aborted = err && err.name === 'AbortError';
-    const code = aborted ? 'UPSTREAM_TIMEOUT' : err.code || 'UPSTREAM_NETWORK_ERROR';
-    const message = aborted ? '翻译服务超过 45 秒未响应' : err.message || '连接翻译服务失败';
+    const code = err.code || 'UPSTREAM_NETWORK_ERROR';
     const status = err.status || 502;
+    // Do not log upstream URLs, responses, credentials, or raw error objects.
     console.warn('[LyricTranslate]', code, 'status=' + status);
-    sendJSON(res, { ok: false, error: code, code, message: String(message).split(LYRIC_TRANSLATE_API_KEY).join('[REDACTED]').slice(0, 240), status,
+    sendJSON(res, { ok: false, error: code, code, message: err.message || '连接翻译服务失败', status,
       retryable: err.retryable !== false, retryAfterMs: err.retryAfterMs || 0 }, status >= 400 && status < 500 ? status : 502);
-  } finally {
-    if (timer) clearTimeout(timer);
-    res.removeListener('close', cancel);
-  }
+  } finally { res.removeListener('close', cancel); }
 }
 
 // ====================================================================
@@ -3115,6 +3006,11 @@ async function handleLyricTranslateRequest(req, res) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost:' + PORT);
   const pn = url.pathname;
+  if (['/api/update/download', '/api/update/cancel', '/api/update/patch', '/api/lyric-translate'].includes(pn)) {
+    const failure = authorizeApiMutation(req, apiSessionToken, server.address().port);
+    if (failure) { sendJSON(res, { ok: false, error: failure.error, retryable: false }, failure.status); return; }
+  }
+
 
   if (pn === '/api/app/version') {
     sendJSON(res, {
@@ -3407,5 +3303,7 @@ server.listen(PORT, HOST, () => {
 });
 
 server.setLocalFileAuthorizer = setLocalFileAuthorizer;
+server.setApiSessionToken = setApiSessionToken;
+server.setTranslationSettingsProvider = setTranslationSettingsProvider;
 
 module.exports = server;

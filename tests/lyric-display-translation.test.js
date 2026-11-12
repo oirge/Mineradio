@@ -104,12 +104,13 @@ test('解析层：双语同时间行写入 line.translation 且保持 text 合�
 });
 
 // ---------- 4. LLM 翻译服务 ----------
-test('翻译服务：端点/模型/调度门控/批处理/缓存齐全', () => {
-  assert.match(serverJs, /const LYRIC_TRANSLATE_ENDPOINT = 'http:\/\/129\.204\.9\.16:8000\/v1\/chat\/completions';/);
-  assert.match(serverJs, /const LYRIC_TRANSLATE_API_KEY = 'g2a_752333ba7025_t_S90cSbpFq_9qMEOuXoUl12bctaXvaP';/);
-  assert.match(serverJs, /const LYRIC_TRANSLATE_MODEL = 'grok-chat-fast';/);
-  assert.match(serverJs, /headers: \{ 'Content-Type': 'application\/json', Authorization: 'Bearer ' \+ LYRIC_TRANSLATE_API_KEY \}/);
-  assert.match(appJs, /fetch\('\/api\/lyric-translate', \{/);
+test('翻译服务：用户配置代理/调度门控/批处理/缓存齐全', () => {
+  assert.doesNotMatch(serverJs, /const LYRIC_TRANSLATE_(?:ENDPOINT|API_KEY|MODEL) =/);
+  assert.doesNotMatch(serverJs, /LYRIC_MYMEMORY_ENDPOINT/);
+  assert.match(serverJs, /translationSettingsProvider && translationSettingsProvider\(\)/);
+  assert.match(serverJs, /requestTranslation\(configuration, messages/);
+  assert.match(appJs, /translateFetch\('\/api\/lyric-translate', \{/);
+  assert.match(appJs, /mineradioAuthorizedFetch/);
   assert.match(appJs, /var LYRIC_LLM_TRANSLATE_STORE_KEY = 'mineradio-lyric-llm-translation-v1';/);
   assert.match(appJs, /function scheduleLyricLlmTranslation\(force\) \{/);
   assert.match(appJs, /var LYRIC_LLM_TRANSLATE_BATCH = 6/);

@@ -3,6 +3,7 @@ import type { SubtitleContentMode } from '../../types';
 import LocalToolPanel from './LocalToolPanel';
 import SubtitleRowsSettings from './SubtitleRowsSettings';
 import { useVisualSettings } from './useVisualSettings';
+import { requestHost } from '../client';
 
 // src/mineradio/local/LocalSubtitleSettings.tsx
 // Bottom overlay visibility, row content and secondary subtitles retain their separate meanings.
@@ -22,5 +23,7 @@ export default function LocalSubtitleSettings({ onClose }: { onClose: () => void
         <label className="local-playback-toggle"><span>{t('harmonySubtitles')}</span><input type="checkbox" data-testid="local-harmony"
             checked={settings.harmony} onChange={event => settings.update({ harmony: event.target.checked })} /></label>
         <p className="local-tool-hint">{t('subtitleHint')}</p>
+        <button type="button" className="local-tool-action" data-testid="local-translation-source"
+            onClick={() => { onClose(); void requestHost('openTranslationSettings').catch(() => {}); }}>{t('customTranslationSource')}</button>
     </LocalToolPanel>;
 }

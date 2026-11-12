@@ -1,3 +1,12 @@
+# v2.7.0 自定义翻译源与桌面维护
+
+- 用户授权：电脑版四项审计维护全部更新，并明确不再提供翻译接口，由用户自定义翻译源；发布版本指定为 `2.7.0`。基线 main `113a7b6126e0ad7836c22833ab2d3bf0594a2522`，工作分支 `codex/desktop-2.7.0-custom-translation`。
+- 翻译：Mineradio DIY 歌词设置和 Folia 字幕设置可配置 OpenAI 兼容服务的基础地址／完整 chat/completions 地址、模型及可选密钥，并保存测试。无默认 endpoint、model、key 或免费备用源；旧备用偏好归一为关闭，已缓存译文保留。
+- 凭据：桌面主进程使用系统 safeStorage 保存独立 `translation-settings.json`，IPC 仅回脱敏快照。不可加密时新增密钥仅本次运行有效；旧密文无法解密时保留且停止自动请求。凭据不进入 localStorage、视觉预设或整机备份。
+- 安全与性能：更新／翻译变更请求限定 POST、可信来源及随机会话 token；上游响应流限制 400000 bytes、45 秒超时。全局翻译缓存限 1200 行，逐曲内存按 24 首／2400 行 LRU 回收，保护当前曲及待写数据，切库代号拒绝迟到结果；SQLite 已保存译文按需读取。
+- 依赖：Electron 更新至 43.8.8，Folia 的 Vite／Vitest 及相关间接依赖同步修补，Verify／Release 增加锁文件安全审计。唯一例外为未进入本地 Folia 构建的上游 FTP provider 指定漏洞，其他 high／critical 拦截发布。
+- 验证与发布状态：实现完成，云端验证和 Windows 构建待完成后补录。仅低优先级后台检查与云端工作，未启动本机 GUI、安装新版或操作用户播放器与数据。
+
 # v2.6.10 视频导出固定帧率
 
 - 30／60／90／120 fps 导出均生成对应 CFR 成片；采集间隙重复前帧，修正 Opus 尾包真实时长，保留音频 bytes／PTS。新增 mediabunny 1.65.1，保持 WebM、唯一宿主音频、continue 默认和受限 tab 捕获授权。

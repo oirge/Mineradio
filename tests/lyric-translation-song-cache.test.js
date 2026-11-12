@@ -33,6 +33,9 @@ function client(options = {}) {
     localStorage: { getItem: () => JSON.stringify(options.cache || {}) },
     setPersistentLocalStorageItem: () => {},
     fx: { lyricTranslateTarget: '', lyricTranslationMode: 'on', lyricTranslateFallback: 'off' },
+    isCustomTranslationReady: () => options.ready !== false,
+    customTranslationRevision: () => options.revision || 0,
+    mineradioAuthorizedFetch: (url, opts) => scope.fetch(url, opts),
     lyricTranslationWanted: () => scope.fx.lyricTranslationMode === 'on',
     isNoLyricText: () => false,
     bumpStageLyricRows() {}, stageLyrics: {}, refreshCurrentLyricStyle() {}, showToast() {},
@@ -77,6 +80,7 @@ function client(options = {}) {
 test('local song replay backfills translations from the per-song SQLite store without any network', async () => {
   const key = 'English\u0000微风轻轻吹过';
   const c = client({
+    ready: false,
     song: { localKey: 'song-1' },
     store: { 'song-1': { id: 'song-1', localLyricText: 'lrc', localLyricTranslations: { v: 1, map: { [key]: 'A gentle breeze passes by.' } } } }
   });
@@ -181,4 +185,27 @@ test('a failed per-song translation write is requeued and persisted on a later f
   assert.ok(rec && rec.localLyricTranslations, '重试后译文必须落盘');
   assert.equal(rec.localLyricTranslations.map[key], 'A gentle breeze passes by.');
   assert.ok(!c.scope.songLyricTranslationState.writeRetries['song-fail'], '落盘成功后应清空该曲重试预算');
+});
+
+test('replaying an evicted song reloads saved translations through the real scheduler without networking', async () => {
+  const song = { localKey: 'song-0' }, store = {};
+  for (let i = 0; i < 30; i++) {
+    const key = 'English\u0000微风 ' + i;
+    store['song-' + i] = { id: 'song-' + i, localLyricTranslations: { v: 1, map: { [key]: 'Cached breeze ' + i } } };
+  }
+  const c = client({ song, store });
+  for (let i = 0; i < 30; i++) {
+    song.localKey = 'song-' + i;
+    c.scope.lyricsLines = [{ text: '微风 ' + i }];
+    await c.schedule();
+  }
+  assert.ok(Object.keys(c.scope.songLyricTranslationState.maps).length <= 24);
+  assert.equal(c.scope.songLyricTranslationState.loaded['song-0'], undefined);
+  delete c.scope.readLyricLlmTranslateCache()['English\u0000微风 0'];
+  song.localKey = 'song-0';
+  c.scope.lyricsLines = [{ text: '微风 0' }];
+  await c.schedule();
+  assert.equal(c.scope.lyricsLines[0].translation, 'Cached breeze 0');
+  assert.equal(c.requests.length, 0, 'A saved translation survives both memory evictions');
+  assert.equal(c.puts.length, 0, 'Reading and evicting maps must leave SQLite intact');
 });
