@@ -109,6 +109,19 @@ test('private default availability enables translation while all custom input fi
   assert.equal(h.node('endpoint').value, ''); assert.equal(h.node('model').value, ''); assert.equal(h.node('key').value, '');
   assert.equal(h.storageWrites(), 0);
 });
+
+test('closing restores its connected drawer trigger without allowing ancestor scrolling', async () => {
+  const h = harness();
+  const restored = [];
+  const trigger = h.node('open');
+  trigger.focus = options => { restored.push(options); h.global.document.activeElement = trigger; };
+  h.global.document.activeElement = trigger;
+  await h.open();
+  await h.click('close');
+  assert.equal(h.global.document.activeElement, trigger);
+  assert.equal(restored.length, 1);
+  assert.equal(restored[0].preventScroll, true);
+});
 test('save and explicit key clearing use IPC only and remove the typed password', async () => {
   const h = harness(); await h.open(); h.node('endpoint').value = 'https://translation.invalid/v1'; h.node('model').value = 'user-model'; h.node('enabled').checked = true;
   h.node('key').value = 'synthetic-user-key'; await h.click('save');

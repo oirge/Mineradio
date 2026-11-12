@@ -131,6 +131,7 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-', ignore_clean
                     page.locator('#translation-source-save').click()
                     expect(page.locator('#translation-source-status')).to_contain_text('已保存')
                     # The actual panel can retract while the modal is open; retain its connected offscreen trigger.
+                    page.mouse.move(693, 390)
                     page.evaluate("toggleFxPanel(false); document.getElementById('fx-panel').classList.remove('peek')")
                     page.wait_for_timeout(700)
                     page.screenshot(path=str(OUT / f'{method}-before.png'))
@@ -138,6 +139,7 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-', ignore_clean
                     (OUT / f'{method}-before.json').write_text(json.dumps(before,indent=2),encoding='utf-8')
                     page.wait_for_function("document.getElementById('translation-source-open').getBoundingClientRect().x > innerWidth")
                     before = page.evaluate(METRICS)
+                    (OUT / f'{method}-before.json').write_text(json.dumps(before,indent=2),encoding='utf-8')
                     assert before['source']['x'] > before['width'], 'Restore target must actually be offscreen'
                     if method == 'button': page.locator('#translation-source-close').click()
                     elif method == 'escape': page.locator('#translation-source-endpoint').press('Escape')
@@ -147,12 +149,14 @@ with tempfile.TemporaryDirectory(prefix='mineradio-native-layout-', ignore_clean
                     page.screenshot(path=str(OUT / f'{method}-after.png'))
                     after = page.evaluate(METRICS)
                     samples.append({'method':method,'before':before,'after':after})
+                    if after['active'] != 'translation-source-open':
+                        violations.append(f'{method}: original trigger did not regain keyboard focus')
                     if any(abs(after[key]) > 1 for key in ['shellLeft','shellTop','pageLeft','pageTop']):
                         violations.append(f'{method}: restoring focus scrolled the player shell')
                     if abs(after['bar']['center'] - after['width']/2) > 1 or after['bar']['x'] < -1 or after['bar']['right'] > after['width']+1:
                         violations.append(f'{method}: playback bar left its centered viewport bounds')
                     # Allow all baseline failure methods to be captured, without hiding their recorded violations.
-                    page.evaluate("document.getElementById('desktop-window-shell').scrollTo(0,0); window.scrollTo(0,0)")
+                    page.evaluate("document.activeElement.blur(); document.getElementById('desktop-window-shell').scrollTo(0,0); window.scrollTo(0,0)")
                 browser.close()
         finally:
             (OUT / 'report.json').write_text(json.dumps({'samples':samples,'pageErrors':errors,'violations':violations,

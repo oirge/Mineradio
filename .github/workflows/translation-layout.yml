@@ -1,12 +1,21 @@
 name: Verify native translation layout
 on:
   push:
-    branches: ['fix/translation-focus-scroll']
+    branches: ['main', 'fix/translation-focus-scroll']
+    paths:
+      - 'public/app.css'
+      - 'public/translation-settings.js'
+      - 'tests/translation-settings-ui.test.js'
+      - 'scripts/*translation*'
+      - 'scripts/verify-browser-ui.py'
+      - '.github/workflows/translation-layout.yml'
   pull_request:
     paths:
       - 'public/app.css'
       - 'public/translation-settings.js'
+      - 'tests/translation-settings-ui.test.js'
       - 'scripts/*translation*'
+      - 'scripts/verify-browser-ui.py'
       - '.github/workflows/translation-layout.yml'
   workflow_dispatch:
 permissions:
