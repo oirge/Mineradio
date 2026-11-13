@@ -1,0 +1,26 @@
+# 启动速度优化（v2.7.3 基线）
+
+基于最新版 `oirge/Mineradio` 主分支 `e445493f`，保持首页、Folia、SVG 玻璃质感、画质与唯一宿主音频不变。
+
+## 改动与证据
+
+- 曲库恢复的顶层入口原来排队等待 700ms，DOMContentLoaded 的 420ms 请求被单次调度门禁忽略。现在只从 DOMContentLoaded 调度，避免尾部脚本尚未加载就开始恢复；等首个 RAF 后用零延时任务开始，没有 RAF 的隐藏窗口由 120ms 定时器兜底。显式传入 delay 的调用仍保留原行为，帧与定时器竞争只会恢复一次。
+- 主进程启动只快照上次迁移留下的目录，递归删除改为后台异步任务。设置恢复、迁移、权限初始化及页面导航顺序保持原样；清理不重新扫描，因此不会删除本次迁移新建的目录。清理失败不阻止启动。
+
+| 局部场景 | 优化前 | 优化后 |
+| --- | ---: | ---: |
+| 生产恢复调度函数，虚拟时钟首个 RAF 在 16ms | 700ms 开始读库 | 16ms 开始读库 |
+| 本机 Node 文件系统样本，2000 个旧迁移文件，启动同步阻塞 | 189.2ms | 4.5ms |
+
+这些数字分别是固定调度等待和旧迁移目录存在时的阻塞时间，不是整机从双击到出声的启动时长。磁盘、GPU、曲库大小及是否记住 Folia 都会影响实际表现。
+
+## 验证
+
+本地 Node 回归 1761 项通过、1 项可选基准跳过、0 失败。恢复单次执行、隐藏窗口兜底、显式延迟、恢复失败和清理所有权均有生产函数行为测试。真实浏览器的首页、记住 Folia、实际音频导入及切换验收在 Windows 云端执行，结果保存为 `artifacts/ui-language/startup-report.json`。
+
+```powershell
+node --test tests/startup-direct-entry.test.js tests/startup-maintenance.test.js tests/auto-playback-startup.test.js
+python scripts/verify-browser-ui.py --suite startup
+```
+
+没有操作正在运行的本机播放器或真实用户数据，也没有测量用户电脑上的完整启动时间。

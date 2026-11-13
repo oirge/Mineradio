@@ -189,7 +189,7 @@ test('DOMContentLoaded directly reveals Home without a splash node, click or ani
 
   assert.deepEqual(harness.marks, ['dom-content-loaded', 'home-revealed']);
   assert.deepEqual(harness.wallpaper, [{ instant: true }]);
-  assert.deepEqual(harness.restoreDelays, [420]);
+  assert.deepEqual(harness.restoreDelays, [undefined]);
   assert.deepEqual(harness.homeUpdates, [{ forceLoad: true }]);
   assert.equal(harness.frames.length, 1);
   assert.deepEqual(harness.timers, []);
@@ -239,7 +239,7 @@ test('direct entry respects active playback while still scheduling local library
     const harness = loadStartupHarness({ ...setup, homeResults: [false] });
     harness.start();
     assert.deepEqual(harness.wallpaper, []);
-    assert.deepEqual(harness.restoreDelays, [420]);
+    assert.deepEqual(harness.restoreDelays, [undefined]);
     assert.deepEqual(harness.marks, ['dom-content-loaded', 'home-revealed']);
     assert.deepEqual(harness.homeUpdates, [{ forceLoad: true }]);
     assert.equal(harness.context.homeForcedOpen, false);
@@ -271,7 +271,7 @@ test('real Home predicates preserve playback, immersive mode and focused shelf c
     assert.equal(harness.context.shouldForceEmptyHome(), false);
     assert.equal(harness.context.homeForcedOpen, false);
     assert.deepEqual(harness.homeUpdates, [{ forceLoad: true }]);
-    assert.deepEqual(harness.restoreDelays, [420]);
+    assert.deepEqual(harness.restoreDelays, [undefined]);
   }
 });
 
@@ -302,6 +302,107 @@ test('existing library restore scheduling stays single-flight without a splash r
   context.scheduleSavedLocalMusicFolderRestore(420);
   assert.equal(timers.length, 1);
   assert.equal(restores, 1);
+});
+
+function loadRestoreScheduler(setup = {}) {
+  const timers = new Map();
+  const frames = new Map();
+  let serial = 0;
+  let now = 0;
+  const calls = [];
+  const warnings = [];
+  const context = {
+    LOCAL_ONLY_MODE: setup.localOnly !== false,
+    localLibraryRestoreScheduled: false,
+    localLibraryRestoreStarted: false,
+    setTimeout(callback, delay) {
+      const id = ++serial;
+      timers.set(id, { callback, at: now + delay, delay });
+      return id;
+    },
+    clearTimeout(id) { timers.delete(id); },
+    restoreSavedLocalMusicFolder() {
+      calls.push(now);
+      return setup.fail ? Promise.reject(new Error('test restore failed')) : Promise.resolve(true);
+    },
+    console: { warn(...args) { warnings.push(args); } }
+  };
+  if (!setup.noRaf) {
+    context.requestAnimationFrame = callback => { const id = ++serial; frames.set(id, callback); return id; };
+    context.cancelAnimationFrame = id => { frames.delete(id); };
+  }
+  vm.runInNewContext(extractFunction('scheduleSavedLocalMusicFolderRestore'), context);
+  return {
+    context, timers, frames, calls, warnings,
+    frame(at) {
+      now = at;
+      const callbacks = [...frames.values()];
+      frames.clear();
+      for (const callback of callbacks) callback(at);
+    },
+    timer() {
+      const [id, timer] = [...timers.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+      now = timer.at;
+      timers.delete(id);
+      timer.callback();
+    }
+  };
+}
+
+test('startup restore begins immediately after the first paint opportunity instead of a fixed 700ms wait', () => {
+  const harness = loadRestoreScheduler();
+  const c = harness.context;
+  // Repeated initialization requests must still share the first scheduled restore.
+  c.scheduleSavedLocalMusicFolderRestore();
+  c.scheduleSavedLocalMusicFolderRestore();
+  assert.deepEqual(harness.calls, []);
+  assert.equal(harness.frames.size, 1);
+  assert.deepEqual([...harness.timers.values()].map(timer => timer.delay), [120]);
+  harness.frame(16);
+  assert.deepEqual(harness.calls, [], 'RAF must yield to painting before database restoration');
+  assert.deepEqual([...harness.timers.values()].map(timer => timer.delay), [0]);
+  harness.timer();
+  assert.deepEqual(harness.calls, [16]);
+  assert.equal(harness.timers.size, 0);
+  assert.equal(harness.frames.size, 0);
+  c.scheduleSavedLocalMusicFolderRestore();
+  assert.equal(harness.timers.size, 0);
+  assert.equal(harness.frames.size, 0);
+  assert.doesNotMatch(appSource, /scheduleSavedLocalMusicFolderRestore\((?:420|700)\)/);
+  assert.equal((appSource.match(/scheduleSavedLocalMusicFolderRestore\(\);/g) || []).length, 1,
+    'Only DOMContentLoaded may schedule restoration, after all blocking tail scripts load');
+});
+
+test('hidden startup and old hosts restore once through the bounded fallback and release frame callbacks', () => {
+  for (const setup of [{}, { noRaf: true }]) {
+    const harness = loadRestoreScheduler(setup);
+    harness.context.scheduleSavedLocalMusicFolderRestore();
+    harness.timer();
+    assert.deepEqual(harness.calls, [120]);
+    assert.equal(harness.frames.size, 0);
+    assert.equal(harness.timers.size, 0);
+    harness.frame(1000);
+    harness.context.scheduleSavedLocalMusicFolderRestore();
+    assert.deepEqual(harness.calls, [120]);
+  }
+  const disabled = loadRestoreScheduler({ localOnly: false });
+  disabled.context.scheduleSavedLocalMusicFolderRestore();
+  assert.equal(disabled.timers.size, 0);
+  assert.equal(disabled.frames.size, 0);
+});
+
+test('failed early restore settles once without leaving a fallback timer or retry frame', async () => {
+  const harness = loadRestoreScheduler({ fail: true });
+  harness.context.scheduleSavedLocalMusicFolderRestore();
+  harness.frame(8);
+  harness.timer();
+  await Promise.resolve();
+  assert.deepEqual(harness.calls, [8]);
+  assert.equal(harness.warnings.length, 1);
+  assert.equal(harness.context.localLibraryRestoreScheduled, false);
+  assert.equal(harness.context.localLibraryRestoreStarted, true);
+  assert.equal(harness.timers.size, 0);
+  assert.equal(harness.frames.size, 0);
 });
 
 test('Home visibility is corrected synchronously and guides wait for the next frame', () => {

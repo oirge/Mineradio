@@ -21,6 +21,7 @@ on:
           - tools
           - translation
           - layout
+          - startup
       ui_diagnostics:
         description: Enable detailed Playwright action logs
         type: boolean
@@ -84,6 +85,9 @@ jobs:
       - name: Verify large-library refresh and search
         timeout-minutes: 5
         run: python scripts/verify-browser-ui.py --suite performance
+      - name: Verify startup and remembered interface
+        timeout-minutes: 5
+        run: python scripts/verify-browser-ui.py --suite startup
       - name: Verify Folia playback and display options
         if: inputs.browser_suite != 'layout'
         timeout-minutes: 5

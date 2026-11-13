@@ -38119,14 +38119,36 @@ async function restoreSavedLocalMusicFolder() {
 function scheduleSavedLocalMusicFolderRestore(delay) {
   if (!LOCAL_ONLY_MODE || localLibraryRestoreStarted || localLibraryRestoreScheduled) return;
   localLibraryRestoreScheduled = true;
-  setTimeout(function(){
+  var restoreTimer = 0;
+  var restoreFrame = 0;
+  function startRestore() {
+    if (!localLibraryRestoreScheduled) return;
+    if (restoreTimer) clearTimeout(restoreTimer);
+    if (restoreFrame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(restoreFrame);
+    restoreTimer = 0;
+    restoreFrame = 0;
     localLibraryRestoreScheduled = false;
     if (localLibraryRestoreStarted) return;
     localLibraryRestoreStarted = true;
     restoreSavedLocalMusicFolder().catch(function(e){
       console.warn('[LocalLibraryRestoreScheduled]', e);
     });
-  }, delay == null ? 450 : delay);
+  }
+  if (delay != null) {
+    restoreTimer = setTimeout(startRestore, delay);
+    return;
+  }
+  // 首帧提交后立即开始异步读库，不再让已恢复的播放会话固定等待 700ms。
+  // 隐藏窗口可能收不到 RAF，短兜底仍保证启动恢复只执行一次。
+  restoreTimer = setTimeout(startRestore, 120);
+  if (typeof requestAnimationFrame === 'function') {
+    restoreFrame = requestAnimationFrame(function(){
+      restoreFrame = 0;
+      if (!localLibraryRestoreScheduled) return;
+      if (restoreTimer) clearTimeout(restoreTimer);
+      restoreTimer = setTimeout(startRestore, 0);
+    });
+  }
 }
 /**
  * 延迟校验已恢复的本地曲库；切库后旧扫描不得写索引或替换当前界面。
@@ -45036,7 +45058,7 @@ function initializePlayerHome() {
   if (shouldPrimeHomeWallpaper && typeof activateHomeWallpaperPreview === 'function') {
     activateHomeWallpaperPreview({ instant: true });
   }
-  if (typeof scheduleSavedLocalMusicFolderRestore === 'function') scheduleSavedLocalMusicFolderRestore(420);
+  if (typeof scheduleSavedLocalMusicFolderRestore === 'function') scheduleSavedLocalMusicFolderRestore();
   var homeShown = updateEmptyHomeVisibility({ forceLoad: true });
   if (!homeShown && shouldForceEmptyHome()) {
     homeSuppressed = false;
@@ -47709,7 +47731,6 @@ initAutoPlaybackControls();
 initReplayGainControls();
 initAudioChainControls();
 initGaplessControls();
-if (LOCAL_ONLY_MODE) scheduleSavedLocalMusicFolderRestore(700);
 initPlaybackRateControls();
 initSleepTimerControls();
 initOutputDeviceControls();

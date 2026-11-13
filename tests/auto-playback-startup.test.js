@@ -301,8 +301,9 @@ test('自动播放开关常驻 DIY 高级页并接在启动恢复链路上', () 
   assert.match(appSource, /'fx-stage-fold','fx-playback-fold'[^\]]*'fx-advanced'/);
   assert.match(
     appSource,
-    /initAutoPlaybackControls\(\);\s*(?:initReplayGainControls\(\);\s*)?(?:initAudioChainControls\(\);\s*)?(?:initGaplessControls\(\);\s*)?if \(LOCAL_ONLY_MODE\) scheduleSavedLocalMusicFolderRestore\(700\);/,
+    /initAutoPlaybackControls\(\);\s*(?:initReplayGainControls\(\);\s*)?(?:initAudioChainControls\(\);\s*)?(?:initGaplessControls\(\);\s*)?initPlaybackRateControls\(\);/,
   );
+  assert.match(appSource, /function initializePlayerHome\(\)[\s\S]*?scheduleSavedLocalMusicFolderRestore\(\);/);
 
   // 启动恢复的两条出口都要接上自动播放，否则被动队列分支永远不出声。
   assert.match(

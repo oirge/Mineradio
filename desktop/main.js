@@ -21,6 +21,7 @@ const {
 } = require('./mini-player-cover-drag');
 const { launchUpdateInstaller } = require('./update-installer-launcher');
 const { createDesktopUiLanguage } = require('./ui-language');
+const { cleanupProfileSessionStagingInBackground } = require('./startup-maintenance');
 const desktopLanguage = createDesktopUiLanguage({
   readValues: () => readDesktopUiState().values,
   onChange: () => refreshTrayMenu(),
@@ -35,7 +36,6 @@ const {
   resolveDesktopShortcutName,
 } = require('./instance-isolation');
 const {
-  cleanupProfileSessionStaging,
   discoverLocalStorageOrigins,
   isProfileMigrationMarkerCurrent,
   mergePersistentUiValues,
@@ -5978,7 +5978,9 @@ if (!gotSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
-    cleanupProfileSessionStaging(PROFILE_STATE_MIGRATION_STAGING_ROOT);
+    void cleanupProfileSessionStagingInBackground(PROFILE_STATE_MIGRATION_STAGING_ROOT).catch((error) => {
+      console.warn('Profile staging cleanup unavailable:', error.message);
+    });
     migratePrimaryDesktopShellSettings();
     applySavedDesktopShellSettings();
     reconcileStartupEntryPath();

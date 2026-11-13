@@ -220,7 +220,7 @@ test('两个功能都归到高级页并在强制展开清单里', () => {
 });
 
 test('两个功能的初始化接在曲库恢复之后，不打断既有启动链', () => {
-  assert.match(APP_SOURCE, /if \(LOCAL_ONLY_MODE\) scheduleSavedLocalMusicFolderRestore\(700\);\s*initPlaybackRateControls\(\);\s*initSleepTimerControls\(\);/);
+  assert.match(APP_SOURCE, /initGaplessControls\(\);\s*initPlaybackRateControls\(\);\s*initSleepTimerControls\(\);/);
 });
 
 test('倍速在切歌装载后补写，且记忆在独立键里', () => {
