@@ -63,7 +63,7 @@ jobs:
         run: |
           npm run typecheck --prefix vendor-src/folia
           npm test --prefix vendor-src/folia -- test/unit/mineradio
-          npm test --prefix vendor-src/folia -- glowWordOverlap partitaLayoutCacheKey lyricRenderQuality machiProgramWarmup textDirection wordSegmentation cjkSemanticLayout latticeLyrics visualSettingsImportExport visualSettingsConfig
+          npm test --prefix vendor-src/folia -- harmonyRuntime glowWordOverlap partitaLayoutCacheKey lyricRenderQuality machiProgramWarmup textDirection wordSegmentation cjkSemanticLayout latticeLyrics visualSettingsImportExport visualSettingsConfig
       - run: node --test --test-concurrency=1 tests/*.test.js tests/*.test.mjs
       - run: |
           node --check desktop/main.js
@@ -81,6 +81,9 @@ jobs:
         run: |
           python -m pip install -r scripts/requirements-ui.txt
           python -m playwright install chromium
+      - name: Verify large-library refresh and search
+        timeout-minutes: 5
+        run: python scripts/verify-browser-ui.py --suite performance
       - name: Verify Folia playback and display options
         if: inputs.browser_suite != 'layout'
         timeout-minutes: 5

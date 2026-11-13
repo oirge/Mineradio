@@ -111,3 +111,60 @@ test('silent gaps after long lyrics do not revisit every past line on each frame
     t.diagnostic(`1,000 lines / 600 gap frames: ${reads} indexed reads`);
     assert.ok(reads < 5000, `silent gaps should not scan past lyrics on every frame, observed ${reads} reads`);
 });
+
+test('small authoritative clock corrections near the end of long lyrics stay bounded', t => {
+    const values = project(Array.from({ length: 10000 }, (_, index) => sourceLine(index * 2, index * 2 + 1.8)));
+    let reads = 0;
+    const lines = new Proxy(values, {
+        get(target, property, receiver) {
+            if (/^\d+$/.test(String(property))) reads++;
+            return Reflect.get(target, property, receiver);
+        },
+    });
+    const at = createLocalActiveLineLookup(lines);
+    reads = 0;
+    for (let frame = 0; frame < 600; frame++) {
+        const time = 15000 + frame / 60 - (frame % 12 === 0 ? 0.015 : 0);
+        assert.equal(at(time), localActiveLineIndex(values, time));
+        if (frame % 12 === 0) assert.equal(at(time - 0.02), localActiveLineIndex(values, time - 0.02));
+    }
+    t.diagnostic(`10,000 lines / 600 frames + 50 host corrections: ${reads} indexed reads`);
+    assert.ok(reads < 7000, `small backward corrections should not restart a full scan, observed ${reads} reads`);
+});
+
+test('clock corrections in late silent gaps do not rescan expired lyrics', t => {
+    const values = project(Array.from({ length: 10000 }, (_, index) => sourceLine(index * 2, index * 2 + 1)));
+    let reads = 0;
+    const lines = new Proxy(values, {
+        get(target, property, receiver) {
+            if (/^\d+$/.test(String(property))) reads++;
+            return Reflect.get(target, property, receiver);
+        },
+    });
+    const at = createLocalActiveLineLookup(lines);
+    reads = 0;
+    for (let correction = 0; correction < 300; correction++) {
+        assert.equal(at(15001.8), -1);
+        assert.equal(at(15001.78), -1);
+    }
+    t.diagnostic(`10,000 lines / 300 late-gap corrections: ${reads} indexed reads`);
+    assert.ok(reads < 7000, `late gaps should use the end-time index, observed ${reads} reads`);
+});
+
+test('an early long voice behind thousands of expired rows stays cheap on every frame', t => {
+    const values = project(Array.from({ length: 10000 }, (_, index) => sourceLine(index, index ? index + 0.01 : 20000)));
+    let reads = 0;
+    const lines = new Proxy(values, {
+        get(target, property, receiver) {
+            if (/^\d+$/.test(String(property))) reads++;
+            return Reflect.get(target, property, receiver);
+        },
+    });
+    const at = createLocalActiveLineLookup(lines);
+    reads = 0;
+    for (let frame = 0; frame < 600; frame++) assert.equal(at(15000 + frame / 60), 0);
+    assert.equal(at(20000), 0);
+    assert.equal(at(20000.001), -1);
+    t.diagnostic(`10,000 overlapping rows / 600 frames: ${reads} indexed reads`);
+    assert.ok(reads < 100, `a surviving early voice should not scan expired rows, observed ${reads} reads`);
+});

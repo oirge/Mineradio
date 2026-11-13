@@ -14,10 +14,11 @@ function block(start, end) {
   return appSource.slice(from, to);
 }
 const queueSource = block('function queueVisibleRows(', 'async function refreshUserPlaylists(');
+const miniSource = block('function renderMiniQueuePanel(', "\ndocument.addEventListener('click'");
 const gateSource = block('function isPlaylistPanelVisibleForRender()', 'function safeSwitchPlaylistTab(');
 const resumeSource = block('function resumeMainRenderLoop(', 'function syncMainRenderLoopPowerState(');
 
-function harness({ count = 128, panelClass = 'show', mini = false } = {}) {
+function harness({ count = 128, panelClass = 'show', mini = false, realMini = false } = {}) {
   const classes = new Set(panelClass ? [panelClass] : []);
   const frames = new Map();
   const calls = { key: 0, subtitle: 0, coverSignature: 0, coverSrc: 0, liked: 0, mini: 0, domWrites: 0 };
@@ -28,12 +29,17 @@ function harness({ count = 128, panelClass = 'show', mini = false } = {}) {
     set innerHTML(value) { html = value; calls.domWrites++; },
   };
   const panel = { classList: { contains: name => classes.has(name) } };
+  const miniList = { children: [], writes: 0, html: '', querySelector: () => null,
+    get innerHTML() { return this.html; },
+    set innerHTML(value) { this.html = value; this.writes++; } };
+  const miniCount = { textContent: '' };
   const noop = () => {};
   const context = vm.createContext({
     Math, console, folia: false, deep: false, document: {
-      getElementById: id => id === 'playlist-panel' ? panel : id === 'queue-list' ? list : null,
+      getElementById: id => id === 'playlist-panel' ? panel : id === 'queue-list' ? list
+        : id === 'mini-queue-list' ? miniList : id === 'mini-queue-count' ? miniCount : null,
     },
-    queuePanelDirty: false, miniQueueOpen: mini, queueRenderSeq: 0,
+    queuePanelDirty: false, playlistPanelDirty: false, miniQueueOpen: mini, queueRenderSeq: 0,
     queuePanelPendingRender: { raf: 0, reason: '', opts: null },
     queuePanelLastDomSignature: '', miniQueueLastDomSignature: '', queueViewTab: 'queue', queueSnapshots: [],
     currentIdx: 0, playMode: 'loop', stopAfterCurrentTrack: false, LOCAL_ONLY_MODE: true,
@@ -49,12 +55,15 @@ function harness({ count = 128, panelClass = 'show', mini = false } = {}) {
     updatePlayModeButtonRow: noop, updateStopAfterCurrentButton: noop, renderMiniQueuePanel: () => { calls.mini++; },
     escHtml: value => String(value || ''), heartIconSvg: () => '<heart>', playlistPlusIconSvg: () => '<plus>',
     animateVisiblePanelList: noop, scheduleNamedAnimationFrame: (key, callback) => frames.set(key, callback),
+    requestAnimationFrame: callback => frames.set('mini-scroll', callback), smoothScrollToItem: noop,
     mainRenderLoopSuspended: true, mainRenderFrameId: 0, prevTime: 0, renderPerfState: { lastRenderAt: 0 },
     performance: { now: () => 1000 }, window: {},
     isFoliaInterfaceActive: () => context.folia, isDeepBackgroundMode: () => context.deep,
+    isPlaylistListTab: () => ['library', 'playlists'].includes(context.queueViewTab),
     scheduleMainRenderFrame: () => { const scheduled = !context.mainRenderFrameId; context.mainRenderFrameId = 1; return scheduled; },
   });
   vm.runInContext(`${queueSource}\n${gateSource}\n${resumeSource}`, context);
+  if (realMini) vm.runInContext(miniSource, context);
   context.queuePanelLastDomSignature = context.queueVisibleDomSignature(count, false, context.queueVisibleRows(count));
   for (const key of Object.keys(calls)) calls[key] = 0;
   function flushFrame() {
@@ -63,8 +72,69 @@ function harness({ count = 128, panelClass = 'show', mini = false } = {}) {
     frames.delete('queue-panel-render');
     callback();
   }
-  return { context, calls, classes, frames, list, flushFrame };
+  return { context, calls, classes, frames, list, miniList, miniCount, flushFrame };
 }
+
+test('browsing another panel tab defers all 10,000-song queue work until the queue returns', () => {
+  const h = harness({ count: 10000 });
+  h.context.queueViewTab = 'library';
+  h.context.safeRenderQueuePanel('cover-ready');
+  h.context.safeRenderQueuePanel('metadata-ready', { immediate: true });
+  h.context.safeRenderQueuePanel('forced-refresh', { immediate: true, deferWhenHidden: false });
+  assert.equal(h.context.queuePanelDirty, true);
+  assert.equal(h.frames.size, 0);
+  assert.deepEqual(h.calls, { key: 0, subtitle: 0, coverSignature: 0, coverSrc: 0, liked: 0, mini: 0, domWrites: 0 });
+  h.context.currentIdx = 9000;
+  h.context.queueViewTab = 'queue';
+  h.context.flushDeferredQueuePanel('queue-tab-open');
+  h.flushFrame();
+  assert.equal(h.context.queuePanelDirty, false);
+  assert.equal(h.calls.key, 10000);
+  assert.equal(h.calls.domWrites, 1);
+  assert.match(h.list.innerHTML, /data-queue-index="9999"/);
+  assert.match(h.list.innerHTML, /queue-item now[^>]*data-queue-index="9000"/);
+});
+
+test('opening only the mini queue never builds the hidden main queue', () => {
+  const h = harness({ count: 10000, panelClass: '', mini: true, realMini: true });
+  h.context.currentIdx = 9000;
+  h.context.safeRenderQueuePanel('mini-current-track', { immediate: true });
+  assert.equal(h.calls.key, 10000, 'only one snapshot is prepared for the visible mini queue');
+  assert.equal(h.calls.domWrites, 0);
+  assert.equal(h.miniList.writes, 1);
+  assert.match(h.miniList.innerHTML, /playQueueAt\(9999\)/);
+  assert.equal(h.miniCount.textContent, '10000 首 · 正在播放 9001');
+  assert.equal(h.context.queuePanelDirty, true, 'the hidden main queue still needs its own refresh');
+  assert.equal(h.context.audio.currentTime, 37);
+  assert.equal(h.context.audio.paused, false);
+});
+
+test('deferred library work coalesces on return and waits if hidden again before the frame', () => {
+  const h = harness({ panelClass: '' });
+  let libraryRenders = 0;
+  h.context.queueViewTab = 'library';
+  h.context.playlistPanelDirty = true;
+  h.context.renderLocalLibraryPlaylistPanel = () => { libraryRenders++; h.context.playlistPanelDirty = false; };
+  h.context.flushDeferredPlaylistPanel();
+  assert.equal(h.frames.size, 0);
+  h.classes.add('peek');
+  h.context.flushDeferredPlaylistPanel();
+  h.context.flushDeferredPlaylistPanel();
+  assert.equal(h.frames.size, 1);
+  h.context.folia = true;
+  const delayed = h.frames.get('playlist-panel-render');
+  h.frames.delete('playlist-panel-render');
+  delayed();
+  assert.equal(libraryRenders, 0);
+  assert.equal(h.context.playlistPanelDirty, true);
+  h.context.folia = false;
+  h.context.resumeMainRenderLoop('folia-interface-return');
+  const returned = h.frames.get('playlist-panel-render');
+  assert.equal(typeof returned, 'function');
+  returned();
+  assert.equal(libraryRenders, 1);
+  assert.equal(h.context.playlistPanelDirty, false);
+});
 
 test('Folia hides every original queue presentation without changing panel or playback state', () => {
   for (const options of [{ panelClass: 'show' }, { panelClass: 'peek' }, { panelClass: 'pinned' }, { panelClass: '', mini: true }]) {

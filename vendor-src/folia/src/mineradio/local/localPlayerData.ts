@@ -43,30 +43,50 @@ export function createLocalActiveLineLookup(lines: Line[]): (time: number) => nu
         previousStart = line.startTime;
     }
 
+    // End-time maxima let overlapping voices fall back to the latest live row
+    // without revisiting every expired row during a seek or a silent gap.
+    let leafCount = 1;
+    while (leafCount < lines.length) leafCount *= 2;
+    const endTree = new Float64Array(leafCount * 2).fill(Number.NEGATIVE_INFINITY);
+    for (let index = 0; index < lines.length; index++) {
+        const end = Number(lines[index].renderHints?.renderEndTime ?? lines[index].endTime);
+        endTree[leafCount + index] = Number.isNaN(end) ? Number.NEGATIVE_INFINITY : end;
+    }
+    for (let node = leafCount - 1; node > 0; node--) {
+        endTree[node] = Math.max(endTree[node * 2], endTree[node * 2 + 1]);
+    }
+    const latestLiveRow = (upperIndex: number, time: number, node = 1, left = 0, right = leafCount - 1): number => {
+        if (left > upperIndex || endTree[node] < time) return -1;
+        if (left === right) return left;
+        const middle = Math.floor((left + right) / 2);
+        const latest = latestLiveRow(upperIndex, time, node * 2 + 1, middle + 1, right);
+        return latest >= 0 ? latest : latestLiveRow(upperIndex, time, node * 2, left, middle);
+    };
+
     let highestStartIndex = -1;
     let previousTime = Number.NEGATIVE_INFINITY;
-    let firstPotentialIndex = 0;
 
     return time => {
         if (!Number.isFinite(time)) return localActiveLineIndex(lines, time);
-        if (time < previousTime) {
-            highestStartIndex = -1;
-            firstPotentialIndex = 0;
+        // Host clock corrections can move backwards by only a few milliseconds.
+        // Binary search also bounds the work for initial and distant forward seeks.
+        if (highestStartIndex < 0 || time < previousTime || time - previousTime > 0.5) {
+            let low = 0, high = lines.length;
+            while (low < high) {
+                const middle = Math.floor((low + high) / 2);
+                if (lines[middle].startTime <= time) low = middle + 1;
+                else high = middle;
+            }
+            highestStartIndex = low - 1;
+        } else {
+            while (highestStartIndex + 1 < lines.length && lines[highestStartIndex + 1].startTime <= time) {
+                highestStartIndex++;
+            }
         }
         previousTime = time;
-
-        while (highestStartIndex + 1 < lines.length && lines[highestStartIndex + 1].startTime <= time) {
-            highestStartIndex++;
-        }
-
-        for (let index = highestStartIndex; index >= firstPotentialIndex; index--) {
-            const line = lines[index];
-            if (time <= (line.renderHints?.renderEndTime ?? line.endTime)) return index;
-        }
-
-        // Once the playhead is past every earlier line, those rows cannot reactivate until a backward seek.
-        firstPotentialIndex = highestStartIndex + 1;
-        return -1;
+        if (highestStartIndex < 0) return -1;
+        if (time <= endTree[leafCount + highestStartIndex]) return highestStartIndex;
+        return latestLiveRow(highestStartIndex, time);
     };
 }
 

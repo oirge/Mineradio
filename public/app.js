@@ -2040,6 +2040,7 @@ var localSearchIndexWarmState = { token: 0, source: null, signature: '', cursor:
 var searchResultsLastDomSignature = '';
 var searchResultsLastAnimateAt = 0;
 var playlistPanelLastDomSignature = '';
+var playlistPanelDirty = false;
 var localSearchResultCache = { signature: '', normalizedQuery: '', results: [], exhaustive: false };
 var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
@@ -9949,6 +9950,7 @@ async function writeLocalAssetCacheForSong(song) {
 function scheduleLocalAssetCacheWrite(song) {
   var record = localAssetCacheSnapshot(song);
   if (!record) return;
+  var ownedLibrarySongs = typeof localLibrarySongs !== 'undefined' ? localLibrarySongs : null;
   var key = record.id;
   var lyricRecord = typeof localLyricCacheSnapshot === 'function' ? localLyricCacheSnapshot(song) : null;
   var pendingLyricRecord = typeof localLyricCacheWriteRecords !== 'undefined' ? localLyricCacheWriteRecords[key] : null;
@@ -9981,8 +9983,20 @@ function scheduleLocalAssetCacheWrite(song) {
     if (ownedRecord === record) delete localAssetCacheWriteRecords[key];
     var ownedLyricRecord = typeof localLyricCacheWriteRecords !== 'undefined' ? localLyricCacheWriteRecords[key] : null;
     if (typeof localLyricCacheWriteRecords !== 'undefined' && ownedLyricRecord === lyricRecord) delete localLyricCacheWriteRecords[key];
-    /** @returns {void} 资产落盘后安排轻量曲库索引同步。 */
+    /** @returns {void} 资产落盘后只同步该歌曲；旧壳仍使用整库防抖保存。 */
     function scheduleIndexAfterAssetWrite() {
+      if (ownedLibrarySongs && ownedLibrarySongs !== localLibrarySongs) return;
+      if (typeof saveLocalLibrarySongIndex === 'function') {
+        saveLocalLibrarySongIndex(song, ownedLibrarySongs).then(function(saved){
+          if (!saved && (!ownedLibrarySongs || ownedLibrarySongs === localLibrarySongs)) {
+            // SQLite 临时失败保留未确认摘要供单曲重试；旧全量入口会提前确认摘要，不能用它恢复失败。
+            if (typeof localLibraryDbActive !== 'function' || !localLibraryDbActive()) {
+              scheduleLocalLibraryIndexSave(savedLocalLibraryFolderPath(), localLibrarySongs || [], 650);
+            }
+          }
+        });
+        return;
+      }
       scheduleLocalLibraryIndexSave(savedLocalLibraryFolderPath(), localLibrarySongs || [], 650);
     }
     var writes = [writeLocalAssetCacheRecord(ownedRecord || record, record.name)];
@@ -16216,10 +16230,12 @@ function sortLocalAssetPreloadQueue(songs) {
   for (var i = 0; i < rankedCount; i++) sorted[i] = songs[ranked[i] % rankStride];
   return sorted;
 }
-function promoteCurrentLocalAssetInQueue(queue, start) {
+function promoteCurrentLocalAssetInQueue(queue, start, searchState) {
   var active = playQueue && currentIdx >= 0 ? playQueue[currentIdx] : null;
   var key = active && active.localKey ? active.localKey : '';
   if (!key || !queue || start >= queue.length) return false;
+  // 此运行的剩余队列只会缩短或提升已有项；已经找不到的当前歌曲无需每首再扫一次。
+  if (searchState && searchState.missingKey === key) return false;
   for (var i = start; i < queue.length; i++) {
     if (queue[i] && queue[i].localKey === key) {
       if (i !== start) {
@@ -16229,6 +16245,7 @@ function promoteCurrentLocalAssetInQueue(queue, start) {
       return true;
     }
   }
+  if (searchState) searchState.missingKey = key;
   return false;
 }
 async function waitForLocalAssetPreloadTurn(token) {
@@ -16300,10 +16317,11 @@ function startLocalLibraryBackgroundProcessing(songs, opts) {
  */
 async function runLocalLibraryBackgroundProcessing(songs, token, opts) {
   opts = opts || {};
+  var assetSearchState = { missingKey: null };
   try {
     for (var i = 0; i < songs.length; i++) {
       if (token !== localLibraryProcessToken) return;
-      promoteCurrentLocalAssetInQueue(songs, i);
+      promoteCurrentLocalAssetInQueue(songs, i, assetSearchState);
       await waitForLocalAssetPreloadTurn(token);
       if (token !== localLibraryProcessToken) return;
       var song = songs[i];
@@ -18683,11 +18701,29 @@ function isPlaylistPanelVisibleForRender() {
   var panelOpen = panel && (panel.classList.contains('show') || panel.classList.contains('peek') || panel.classList.contains('pinned'));
   return !!(panelOpen || miniQueueOpen);
 }
+// 主队列和曲库页共享外层面板，只有当前页可见时才准备整表数据。
+function isMainPlaylistPanelVisibleForRender() {
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) return false;
+  var panel = document.getElementById('playlist-panel');
+  return !!(panel && (panel.classList.contains('show') || panel.classList.contains('peek') || panel.classList.contains('pinned')));
+}
+function isQueuePaneVisibleForRender() {
+  return queueViewTab === 'queue' && isMainPlaylistPanelVisibleForRender();
+}
+function isPlaylistPaneVisibleForRender() {
+  return isPlaylistListTab() && isMainPlaylistPanelVisibleForRender();
+}
+function flushDeferredPlaylistPanel() {
+  if (!playlistPanelDirty || !isPlaylistPaneVisibleForRender()) return;
+  scheduleNamedAnimationFrame('playlist-panel-render', function(){
+    if (playlistPanelDirty && isPlaylistPaneVisibleForRender()) renderLocalLibraryPlaylistPanel({ animate: false });
+  });
+}
 function safeRenderQueuePanel(reason, opts) {
   opts = opts || {};
   // Folia 保留原面板的展开状态，但没有原队列的可见消费者；强制补刷也应等切回后执行。
   var foliaActive = typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive();
-  if (foliaActive || (!isPlaylistPanelVisibleForRender() && opts.deferWhenHidden !== false)) {
+  if (foliaActive || (!(isQueuePaneVisibleForRender() || miniQueueOpen) && opts.deferWhenHidden !== false)) {
     queuePanelDirty = true;
     return true;
   }
@@ -18712,8 +18748,7 @@ function safeRenderQueuePanel(reason, opts) {
     return true;
   }
   try {
-    renderQueuePanel(opts);
-    queuePanelDirty = false;
+    queuePanelDirty = renderQueuePanel(opts) === false;
     return true;
   } catch (e) {
     console.warn('[QueuePanelRender]', reason || 'unknown', e);
@@ -18721,7 +18756,7 @@ function safeRenderQueuePanel(reason, opts) {
   }
 }
 function flushDeferredQueuePanel(reason) {
-  if (!queuePanelDirty) return;
+  if (!queuePanelDirty || !(isQueuePaneVisibleForRender() || miniQueueOpen)) return;
   safeRenderQueuePanel(reason || 'flush-deferred-queue', { animate: false, scrollCurrent: miniQueueOpen, deferWhenHidden: false });
 }
 function safeSwitchPlaylistTab(tab, reason) {
@@ -25066,6 +25101,7 @@ function searchLocalSongs(q) {
   var scanPool = canNarrowPrevious ? previous.results : pool;
   var buckets = [[], [], [], [], [], [], [], [], []];
   var scannedAll = true;
+  var matchCount = 0;
   for (var i = 0; i < scanPool.length; i++) {
     var fields = cachedLocalSongSearchFields(scanPool[i]);
     var rank = localSearchFieldRank(fields.name, nq);
@@ -25077,6 +25113,7 @@ function searchLocalSongs(q) {
       rank = localSearchFieldRank(fields.fileName, nq);
       if (rank >= 0) rank += 6;
     }
+    if (rank >= 0) matchCount++;
     if (rank >= 0 && buckets[rank].length < LOCAL_SEARCH_RESULT_LIMIT) {
       buckets[rank].push(scanPool[i]);
       if (buckets[0].length >= LOCAL_SEARCH_RESULT_LIMIT) {
@@ -25096,7 +25133,8 @@ function searchLocalSongs(q) {
     signature: sourceSignature,
     normalizedQuery: nq,
     results: results,
-    exhaustive: scannedAll
+    // 只有完整保留所有命中时，下一次输入才可安全地只扫描缓存结果。
+    exhaustive: scannedAll && matchCount <= LOCAL_SEARCH_RESULT_LIMIT
   };
   return results;
 }
@@ -31453,6 +31491,7 @@ function togglePlaylistPanel(force) {
     if (window.gsap) window.gsap.fromTo(el, { x: -12, autoAlpha: 0.92 }, { x: 0, autoAlpha: 1, duration: 0.22, ease: 'power2.out', overwrite: true });
     scheduleUiWarmTask(function(){
       flushDeferredQueuePanel('playlist-panel-open');
+      flushDeferredPlaylistPanel();
       if (!playQueue.length && queueViewTab === 'queue' && !queueSnapshots.length) switchPlaylistTab('playlists');
       if (playQueue.length && currentIdx >= 0 && queueViewTab !== 'queue') switchPlaylistTab('queue');
       if (queueViewTab === 'queue') animateVisiblePanelList(document.getElementById('queue-list'), '.queue-item', el, '.queue-item.now', { scrollActive: false });
@@ -31539,6 +31578,7 @@ function switchPlaylistTab(tab) {
   if (podcastPane) podcastPane.style.display = tab === 'podcasts' ? '' : 'none';
   applyPlaylistPaneToolbarMode(tab);
   if (isPlaylistListTab(tab) || tab === 'podcasts') refreshUserPlaylists();
+  if (tab === 'queue' && typeof flushDeferredQueuePanel === 'function') flushDeferredQueuePanel('queue-tab-open');
   if (tab === 'queue') animateVisiblePanelList(document.getElementById('queue-list'), '.queue-item', document.getElementById('playlist-panel'), '.queue-item.now');
   if (isPlaylistListTab(tab)) animateVisiblePanelList(document.getElementById('pl-list'), '.pl-card', document.getElementById('playlist-panel'));
   if (tab === 'podcasts') animateVisiblePanelList(document.getElementById('podcast-list'), '.pl-card', document.getElementById('playlist-panel'));
@@ -31580,6 +31620,7 @@ function openPlaylistPanelTab(tab, preserve) {
  */
 function renderMiniQueuePanel(opts) {
   opts = opts || {};
+  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) return;
   var $list = document.getElementById('mini-queue-list');
   var $count = document.getElementById('mini-queue-count');
   if (!$list || !$count) return;
@@ -31891,6 +31932,11 @@ function queueListApplyIncremental($list, renderLimit, visibleRows, mini, state)
  */
 function renderQueuePanel(opts) {
   opts = opts || {};
+  if (typeof isQueuePaneVisibleForRender === 'function' && !isQueuePaneVisibleForRender()) {
+    // 迷你队列独立更新，主队列保留脏标记，等真正打开队列页再补刷。
+    if (miniQueueOpen) renderMiniQueuePanel({ scrollCurrent: true });
+    return false;
+  }
   var $ql = document.getElementById('queue-list');
   if (!$ql) return;
   var seq = ++queueRenderSeq;
@@ -32158,6 +32204,11 @@ function renderLocalLibraryPlaylistPanel(opts) {
     selectedKind = 'library';
     localLibraryPlaylistSelection = 'library';
   }
+  if (typeof isPlaylistPaneVisibleForRender === 'function' && !isPlaylistPaneVisibleForRender()) {
+    playlistPanelDirty = true;
+    return;
+  }
+  playlistPanelDirty = false;
   var categoryDirectory = !!(selectedCategory && (selectedCategory.mode === 'home' || selectedCategory.mode === 'group'));
   var selectedRoot = selectedKind === 'library';
   var specialSongs = getSpecialLikedSongs();
@@ -37733,6 +37784,58 @@ function saveLocalLibraryIndex(folderPath, songs) {
     return true;
   } catch (e) {
     console.warn('[LocalLibraryIndexSave]', e);
+    return false;
+  }
+}
+var localLibraryDbIndexWriteOwners = {};
+/**
+ * SQLite 已接管时只保存一首资产变更的索引，并原位更新当前根的驻留索引。
+ * 摘要仅在成功写盘后确认，失败保留重试机会；换库后的旧资产回调不写新曲库。
+ * @param {object} song 资产变更的歌曲。
+ * @param {Array<object>|null} ownedSongs 调度资产写入时的曲库数组。
+ * @returns {Promise<boolean>} 是否已处理；SQLite 不可用时允许整库回退，写入失败或无有效根时保留未确认状态。
+ */
+async function saveLocalLibrarySongIndex(song, ownedSongs) {
+  if (ownedSongs && ownedSongs !== localLibrarySongs) return true;
+  if (!song || !song.localKey || !localLibraryDbActive()) return false;
+  try {
+    var folderPath = localLibraryRootForSong(song);
+    if (!folderPath) return false;
+    var generation = localLibraryPersistentGeneration;
+    var digests = localLibraryDbIndexDigests;
+    var record = localLibraryIndexRecord(song);
+    if (!record) return false;
+    var id = localLibraryPersistentKey(folderPath, 'index');
+    var cached = localLibraryPersistentMemory[id];
+    if (cached && cached.data && cached.data.records && cached.folderPath === localLibraryPersistentFolderPath) {
+      if (!Object.prototype.hasOwnProperty.call(cached.data.records, record.key)) cached.data.count = (Number(cached.data.count) || 0) + 1;
+      cached.data.records[record.key] = record;
+      cached.savedAt = record.updatedAt;
+      cached.data.savedAt = record.updatedAt;
+    }
+    var digest = localLibraryDbIndexDigest(record);
+    var previousDigest = digests[record.key];
+    var previousOwner = localLibraryDbIndexWriteOwners[record.key];
+    var pendingCurrentWrite = previousOwner && previousOwner.generation === generation;
+    if (pendingCurrentWrite && previousOwner.digest === digest) return true;
+    if (!pendingCurrentWrite && previousDigest === digest) return true;
+    var owner = { digest: digest, generation: generation };
+    localLibraryDbIndexWriteOwners[record.key] = owner;
+    try {
+      var result = await callLocalLibraryDb('saveLocalLibraryDbIndex', folderPath, [record]);
+      if (!result || !result.ok || result.saved === 0) return false;
+      // 异步回复不能把新代次或更晚成功写入的摘要退回旧值。
+      if (generation === localLibraryPersistentGeneration && digests === localLibraryDbIndexDigests
+          && (!ownedSongs || ownedSongs === localLibrarySongs) && localLibraryDbIndexWriteOwners[record.key] === owner
+          && digests[record.key] === previousDigest) {
+        digests[record.key] = digest;
+      }
+      return true;
+    } finally {
+      if (localLibraryDbIndexWriteOwners[record.key] === owner) delete localLibraryDbIndexWriteOwners[record.key];
+    }
+  } catch (e) {
+    console.warn('[LocalLibrarySongIndexSave]', e);
     return false;
   }
 }
@@ -44553,6 +44656,7 @@ function setPeek(el, on, key) {
     if (key === 'pl' && !wasPeek) {
       scheduleUiWarmTask(function(){
         flushDeferredQueuePanel('playlist-panel-peek');
+        flushDeferredPlaylistPanel();
         if (queueViewTab === 'queue') animateVisiblePanelList(document.getElementById('queue-list'), '.queue-item', el, '.queue-item.now', { scrollActive: false });
       }, 180);
     }
@@ -47609,6 +47713,7 @@ function resumeMainRenderLoop(reason) {
   if (typeof flushDeferredQueuePanel === 'function' && typeof isPlaylistPanelVisibleForRender === 'function' && isPlaylistPanelVisibleForRender()) {
     flushDeferredQueuePanel(reason || 'render-resume');
   }
+  if (typeof flushDeferredPlaylistPanel === 'function') flushDeferredPlaylistPanel();
   if (scheduled && reason && window.__mineradioDebugRenderPower) console.log('[RenderResumed]', reason);
   return scheduled;
 }
