@@ -87,10 +87,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复关闭翻译设置后整个播放器向左偏移、右侧留空的问题。',
-  '关闭按钮、Esc 和点击遮罩均保持画面与播放栏位置稳定。',
-  '保留原有 SVG 玻璃折射质感与窗口过渡效果。',
-  '默认歌词翻译继续可用，自定义源启用时优先，默认接口详情不显示。',
+  '大曲库列表按可见区域更新，保留完整滚动、末项操作、拖动和键盘访问。',
+  '优化曲库启动恢复、后台预载与单曲索引保存，减少重复整库处理。',
+  '优化歌词、和声、搜索与 3D 舞台更新，减少播放时的重复计算。',
+  '封面缩放编码交给后台 Worker，减少主线程停顿，保留现有画质。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
