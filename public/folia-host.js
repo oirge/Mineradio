@@ -970,7 +970,7 @@
       }
       var result = original.apply(this, arguments);
       if (kind === 'queue') queueRevision++;
-      else if (kind === 'lyrics') { lastLyricsAt = 0; lastLyricsSignature = ''; }
+      else if (kind === 'lyrics') { lastLyricsAt = 0; lastLyricsSignature = ''; lyricsSignatureCache = null; }
       else if (kind === 'track-metadata') queueTrackChange(arguments[0], arguments[2] !== false);
       else if (kind === 'track-cover') {
         if (arguments[1] === 'local-cover-prefetch') queueTrackChange(arguments[0], false);

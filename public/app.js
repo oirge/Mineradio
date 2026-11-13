@@ -31662,7 +31662,10 @@ function renderMiniQueuePanel(opts) {
   var total = playQueue.length;
   $count.textContent = total ? (total + ' 首' + (currentIdx >= 0 ? ' · 正在播放 ' + (currentIdx + 1) : '')) : '0 首';
   if (!miniQueueOpen && !opts.animate && !opts.scrollCurrent) return;
-  if (typeof window !== 'undefined' && window.MineradioWindowedList && renderWindowedQueue($list, true, opts)) return;
+  if (typeof window !== 'undefined' && window.MineradioWindowedList && renderWindowedQueue($list, true, opts)) {
+    miniQueueLastDomSignature = 'windowed'; miniQueueIncrementalState = null;
+    return;
+  }
   if (!total) {
     miniQueueLastDomSignature = 'empty';
     miniQueueIncrementalState = null;
@@ -31766,7 +31769,7 @@ function renderWindowedQueue(list, mini, opts) {
   var windows = window.MineradioWindowedList;
   var scroller = mini ? list : document.getElementById('playlist-panel');
   var rendered = windows.render(list, {
-    key: mini ? 'mini-queue' : 'queue', count: playQueue.length, scroller: scroller, stride: mini ? 62 : 62,
+    key: mini ? 'mini-queue' : 'queue', count: playQueue.length, scroller: scroller, stride: 62,
     prepare: function (start, end) {
       var rows = queueVisibleRows(end, null, start);
       return function (index) { return mini ? queueMiniItemHtml(rows[index - start]) : queueItemHtml(rows[index - start]); };

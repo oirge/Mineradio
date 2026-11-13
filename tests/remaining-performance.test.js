@@ -9,7 +9,35 @@ const vm = require('node:vm');
 // Execute production helpers and workers; counters measure actual operations rather than elapsed CI time.
 const read = name => fs.readFileSync(path.join(__dirname, '../public', name), 'utf8');
 const host = read('folia-host.js');
+const app = read('app.js');
 function block(source, start, end) { return source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start))); }
+
+test('a 10,000-song queue prepares only the requested 30-row window with absolute action indices', () => {
+  let coverReads = 0;
+  const context = vm.createContext({ playQueue: Array.from({ length: 10000 }, (_, index) => ({ type: 'local', name: 'Song ' + index, id: index })),
+    currentIdx: 5001, nextQueueIndexPreview: () => 5002, queueItemKey: song => song.id, songArtistText: () => '',
+    songDisplaySubtitle: () => '', songCoverSignature: () => '', songCoverSrc: () => { coverReads++; return ''; }, isSongLiked: () => false });
+  vm.runInContext(block(app, 'function queueVisibleRows(', 'function renderWindowedQueue('), context);
+  const rows = context.queueVisibleRows(5030, null, 5000);
+  assert.equal(rows.length, 30); assert.equal(coverReads, 30);
+  assert.equal(rows[0].index, 5000); assert.equal(rows[29].index, 5029);
+  assert.equal(rows[1].current, true); assert.equal(rows[2].nextUp, true);
+});
+
+test('shrinking a windowed mini queue back to a prior small queue cannot reuse its obsolete DOM signature', () => {
+  const list = { innerHTML: '', querySelector: () => null }, count = { textContent: '' };
+  let large = true;
+  const context = vm.createContext({ window: { MineradioWindowedList: {} },
+    document: { getElementById: id => id === 'mini-queue-list' ? list : count }, playQueue: Array(200).fill({}),
+    currentIdx: 0, miniQueueOpen: true, miniQueueLastDomSignature: 'small', miniQueueIncrementalState: {},
+    renderWindowedQueue: () => large, queueVisibleRows: () => [], queueVisibleDomSignature: () => 'small',
+    queueListApplyIncremental: () => false, queueItemsHtml: () => 'fresh-small-queue', queueListIncrementalState: () => ({}) });
+  vm.runInContext(block(app, 'function renderMiniQueuePanel(', "document.addEventListener('click', function(e){"), context);
+  context.renderMiniQueuePanel();
+  assert.equal(context.miniQueueLastDomSignature, 'windowed');
+  large = false; context.playQueue = [{}, {}]; context.renderMiniQueuePanel();
+  assert.equal(list.innerHTML, 'fresh-small-queue');
+});
 
 test('10,000-row lyric signatures scan once across 75 unchanged checks and invalidate for translation, source and track changes', () => {
   let visits = 0;
@@ -62,6 +90,53 @@ test('window ranges remain bounded at the start, middle and end without truncati
   }
   assert.equal(range(10000, 0, 640, 64).start, 0);
   assert.equal(range(10000, 64 * 10000, 640, 64).end, 10000);
+});
+
+test('windowed DOM reuses unchanged rows, keeps a distant drag source alive, repairs changed rows after dragend and cancels detached work', () => {
+  const frames = new Map(); let frameId = 0, prepared = 0;
+  const document = { createElement(tag) {
+    if (tag !== 'template') return new Element();
+    return { content: {}, set innerHTML(html) { const node = new Element(); node.html = html; this.content.firstElementChild = node; } };
+  } };
+  class Element {
+    constructor() { this.ownerDocument = document; this.children = []; this.style = {}; this.attributes = {}; this.listeners = new Map(); this.isConnected = true; this.clientHeight = 600; this.clientTop = 0; this.scrollTop = 0; }
+    get firstChild() { return this.children[0] || null; }
+    get nextSibling() { return this.parent ? this.parent.children[this.parent.children.indexOf(this) + 1] || null : null; }
+    setAttribute(key, value) { this.attributes[key] = value; }
+    getAttribute(key) { return this.attributes[key]; }
+    removeAttribute(key) { delete this.attributes[key]; }
+    getClientRects() { return [this.getBoundingClientRect()]; }
+    getBoundingClientRect() { return { top: 0, height: 54 }; }
+    addEventListener(name, callback) { this.listeners.set(name, callback); }
+    removeEventListener(name) { this.listeners.delete(name); }
+    closest() { return this; }
+    insertBefore(node, before) { if (node.parent) node.parent.removeChild(node); const index = before ? this.children.indexOf(before) : this.children.length; assert.ok(index >= 0); this.children.splice(index, 0, node); node.parent = this; }
+    removeChild(node) { const index = this.children.indexOf(node); assert.ok(index >= 0); this.children.splice(index, 1); node.parent = null; }
+  }
+  const global = { requestAnimationFrame(callback) { const id = ++frameId; frames.set(id, callback); return id; },
+    cancelAnimationFrame(id) { frames.delete(id); }, getComputedStyle: () => ({ rowGap: '6', marginTop: '0', marginBottom: '0' }) };
+  vm.runInNewContext(read('windowed-list.js'), { window: global });
+  const root = new Element(), list = global.MineradioWindowedList;
+  const songs = Array.from({ length: 10000 }, (_, i) => 'Track ' + i);
+  const options = { key: 'queue', count: songs.length, scroller: root, stride: 60,
+    prepare(start, end) { prepared += end - start; return i => '<div>' + songs[i] + '</div>'; } };
+  list.render(root, options);
+  assert.ok(root.children.length < 30); assert.ok(prepared < 30);
+  const source = root.children.find(node => node.getAttribute('data-windowed-index') === '0');
+  list.render(root, options);
+  assert.equal(root.children[0], source, 'unchanged row nodes must retain focus and decoded covers');
+  root.listeners.get('dragstart')({ target: source });
+  list.reveal(root, 9999);
+  assert.ok(root.children.includes(source)); assert.equal(source.style.position, 'fixed');
+  assert.ok(root.children.some(node => node.getAttribute('data-windowed-index') === '9999'));
+  songs[0] = 'Changed during drag';
+  list.reveal(root, 0);
+  root.listeners.get('dragend')();
+  assert.equal(root.children[0].html, '<div>Changed during drag</div>');
+  assert.notEqual(root.children[0], source, 'a retained drag source must not mark changed HTML as already painted');
+  root.listeners.get('scroll')(); assert.equal(frames.size, 1);
+  list.clear(root);
+  assert.equal(frames.size, 0); assert.equal(root.listeners.size, 0);
 });
 
 function workerClient() {

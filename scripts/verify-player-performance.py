@@ -188,6 +188,26 @@ with sync_playwright() as playwright:
         assert max(abs(left - right) for left, right in zip(worker_metrics['color'], [50, 100, 200, 255])) <= 5, worker_metrics
         checked('real cover worker resizes and encodes at retained quality without main-thread encoding', worker_metrics)
 
+        page.evaluate('''() => {
+          const root = document.getElementById('queue-list'); MineradioWindowedList.reveal(root, 0);
+          window.__dragSource = root.querySelector('[data-queue-index="0"]');
+          window.__dragTransfer = new DataTransfer();
+          __dragSource.dispatchEvent(new DragEvent('dragstart', {bubbles:true, cancelable:true, dataTransfer:__dragTransfer}));
+        }''')
+        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
+        page.wait_for_function('__dragSource.isConnected && __dragSource.style.position === "fixed" && !!document.querySelector("#queue-list [data-queue-index=\\"9999\\"]")')
+        page.evaluate('''() => {
+          const target = document.querySelector('#queue-list [data-queue-index="9999"]'); const rect = target.getBoundingClientRect();
+          target.dispatchEvent(new DragEvent('dragover', {bubbles:true, cancelable:true, clientY:rect.bottom-1, dataTransfer:__dragTransfer}));
+          target.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer:__dragTransfer}));
+          __dragSource.dispatchEvent(new DragEvent('dragend', {bubbles:true, dataTransfer:__dragTransfer}));
+        }''')
+        page.wait_for_function('playQueue[9999].localKey === "performance-0" && currentIdx === 9999 && !queueDragState')
+        page.evaluate('moveQueueItem(9999,0); MineradioWindowedList.reveal(document.getElementById("queue-list"),0)')
+        page.wait_for_function('playQueue[0].localKey === "performance-0" && currentIdx === 0')
+        settle_queue(page)
+        checked('drag event handlers retain an offscreen source and reorder across the full virtual scroll range')
+
         for tab, button in [('library', '#tab-library'), ('playlists', '#tab-pl')]:
             page.locator(button).click()
             page.wait_for_function('(tab) => queueViewTab === tab && !isQueuePaneVisibleForRender()', arg=tab)
