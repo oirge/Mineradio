@@ -137,6 +137,18 @@ test('windowed DOM reuses unchanged rows, keeps a distant drag source alive, rep
   root.listeners.get('scroll')(); assert.equal(frames.size, 1);
   list.clear(root);
   assert.equal(frames.size, 0); assert.equal(root.listeners.size, 0);
+  const live = vm.createContext({ window: global, playQueue: Array.from({length:10000},(_,i)=>({type:'local',id:i,name:'Song '+i})),
+    currentIdx:0, nextQueueIndexPreview:()=>1, queueItemKey:song=>song.id, songDisplaySubtitle:()=>'',
+    songCoverSignature:()=>'', songCoverSrc:()=>'', isSongLiked:()=>false, escHtml:value=>String(value||'') });
+  vm.runInContext(block(app,'function queueVisibleRows(','function queueVisibleDomSignature(')
+    + block(app,'function queueMiniItemHtml(','var queuePanelIncrementalState ='),live);
+  live.renderWindowedQueue(root,true,{});
+  live.playQueue=[]; root.scrollTop=300000;
+  root.listeners.get('scroll')();
+  const callbacks=[...frames.values()]; frames.clear();
+  for(const callback of callbacks) callback();
+  assert.equal(root.children.length,0,'a pending scroll after queue replacement must not index stale row snapshots');
+  list.clear(root);
 });
 
 function workerClient() {

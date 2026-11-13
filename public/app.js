@@ -31769,7 +31769,7 @@ function renderWindowedQueue(list, mini, opts) {
   var windows = window.MineradioWindowedList;
   var scroller = mini ? list : document.getElementById('playlist-panel');
   var rendered = windows.render(list, {
-    key: mini ? 'mini-queue' : 'queue', count: playQueue.length, scroller: scroller, stride: 62,
+    key: mini ? 'mini-queue' : 'queue', get count() { return playQueue.length; }, scroller: scroller, stride: 62,
     prepare: function (start, end) {
       var rows = queueVisibleRows(end, null, start);
       return function (index) { return mini ? queueMiniItemHtml(rows[index - start]) : queueItemHtml(rows[index - start]); };
