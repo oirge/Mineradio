@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`toggle-right`,size:24,node:[[`circle`,{cx:`15`,cy:`12`,r:`3`,key:`1afu0r`}],[`rect`,{width:`20`,height:`14`,x:`2`,y:`5`,rx:`7`,key:`g7kal2`}]]};r.node;var i=t(r);export{n,i as t};

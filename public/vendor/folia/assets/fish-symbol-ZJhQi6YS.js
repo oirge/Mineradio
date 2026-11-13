@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`fish-symbol`,size:24,node:[[`path`,{d:`M2 16s9-15 20-4C11 23 2 8 2 8`,key:`h4oh4o`}]]};r.node;var i=t(r);export{n,i as t};

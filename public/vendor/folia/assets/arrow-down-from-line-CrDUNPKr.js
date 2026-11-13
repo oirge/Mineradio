@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`arrow-down-from-line`,size:24,node:[[`path`,{d:`M19 3H5`,key:`1236rx`}],[`path`,{d:`M12 21V7`,key:`gj6g52`}],[`path`,{d:`m6 15 6 6 6-6`,key:`h15q88`}]]};r.node;var i=t(r);export{n,i as t};

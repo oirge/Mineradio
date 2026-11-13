@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`bluetooth`,size:24,node:[[`path`,{d:`m7 7 10 10-5 5V2l5 5L7 17`,key:`1q5490`}]]};r.node;var i=t(r);export{n,i as t};

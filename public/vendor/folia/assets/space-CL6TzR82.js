@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`space`,size:24,node:[[`path`,{d:`M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1`,key:`lt2kga`}]]};r.node;var i=t(r);export{n,i as t};

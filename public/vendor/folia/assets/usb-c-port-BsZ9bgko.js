@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`usb-c-port`,size:24,node:[[`path`,{d:`M6 12h12`,key:`8npq4p`}],[`rect`,{x:`2`,y:`8`,width:`20`,height:`8`,rx:`4`,key:`86l77p`}]]};r.node;var i=t(r);export{n,i as t};

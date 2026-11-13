@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`chevrons-right-left`,size:24,node:[[`path`,{d:`m20 17-5-5 5-5`,key:`30x0n2`}],[`path`,{d:`m4 17 5-5-5-5`,key:`16spf4`}]]};r.node;var i=t(r);export{n,i as t};

@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`circle-power`,size:24,node:[[`circle`,{cx:`12`,cy:`12`,r:`10`,key:`1mglay`}],[`path`,{d:`M12 7v4`,key:`xawao1`}],[`path`,{d:`M7.998 9.003a5 5 0 1 0 8-.005`,key:`1pek45`}]],aliases:[`power-circle`]};r.node;var i=t(r);export{n,i as t};

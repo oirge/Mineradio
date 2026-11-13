@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`chart-no-axes-gantt`,size:24,node:[[`path`,{d:`M6 5h12`,key:`fvfigv`}],[`path`,{d:`M4 12h10`,key:`oujl3d`}],[`path`,{d:`M12 19h8`,key:`baeox8`}]],aliases:[`gantt-chart`]};r.node;var i=t(r);export{n,i as t};

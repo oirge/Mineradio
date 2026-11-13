@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`wallet-minimal`,size:24,node:[[`path`,{d:`M17 14h.01`,key:`7oqj8z`}],[`path`,{d:`M7 7h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14`,key:`u1rqew`}]],aliases:[`wallet-2`]};r.node;var i=t(r);export{n,i as t};

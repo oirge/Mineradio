@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`test-tube`,size:24,node:[[`path`,{d:`M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5c-1.4 0-2.5-1.1-2.5-2.5V2`,key:`125lnx`}],[`path`,{d:`M8.5 2h7`,key:`csnxdl`}],[`path`,{d:`M14.5 16h-5`,key:`1ox875`}]]};r.node;var i=t(r);export{n,i as t};

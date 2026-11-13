@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`square-stop`,size:24,node:[[`rect`,{width:`18`,height:`18`,x:`3`,y:`3`,rx:`2`,key:`afitv7`}],[`rect`,{x:`9`,y:`9`,width:`6`,height:`6`,rx:`1`,key:`1ssd4o`}]]};r.node;var i=t(r);export{n,i as t};
