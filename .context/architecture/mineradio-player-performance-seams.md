@@ -397,6 +397,8 @@
 - `promoteCurrentLocalAssetInQueue` 使用本轮运行的 `missingKey` 缓存：剩余队列只会缩短或提升已有项，同一已缺失键不重复扫描；换歌与重复键的提升顺序保持原语义，新运行独立创建缓存。
 - SQLite 接管后，资产落盘回调使用 `saveLocalLibrarySongIndex` 只生成单曲记录；仅 SQLite 不可用的旧壳走原保存入口。单曲 SQLite 写入失败时保留未确认摘要供下次重试，不能经旧全量入口预确认失败的摘要。记录写入当前根的驻留索引须就地更新，不复制全表。调度捕获曲库数组身份，成功回复同时匹配代次、摘要表及单键写入 owner 才确认摘要；A→在途 B→A 不能因旧成功摘要跳过最后一次 A，owner 在 finally 按身份释放。
 - 定向行为与规模回归见 `tests/folia-hidden-queue-performance.test.js`、`tests/local-library-background-performance.test.js`、`tests/local-search-cache.test.js`。性能工作量与 Folia 时序优化说明见 `docs/PLAYER_PERFORMANCE.md`。
+- 同根启动的 `loadSingleLocalLibraryRoot` → `handleLocalFolderFiles` 通过一次性标量凭据复用当前加载的索引；凭据匹配根、曲库代次和最新水合 token，不能强引用索引、跨根复用或用于第二次建库。SQL 与旧 IndexedDB 水合回包都须拒绝同根迟到 token；已有文件表的建库水合不保留文件快照。回归见 `tests/local-library-startup-hydration.test.js`。
+- 原版舞台 `public/shelf-classic.js` 的卡片绘制与布局复用本帧外观、详情和时间快照，非帧封面／主题入口回退读取当前设置。稳定帧仅在 Three.js 实际值不相等时写入卡片位置、缩放、颜色和欧拉角，不设精度阈值；普通姿态保留 rotation.z，退出相机四元数姿态后按当前值补正。回归见 `tests/shelf-classic-frame-performance.test.js`。
 
 ## Reference
 

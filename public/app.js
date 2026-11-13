@@ -1948,6 +1948,9 @@ var localLyricCacheWriteRecords = {};
 var localLibraryPersistentMemory = {};
 var localLibraryPersistentFolderPath = '';
 var localLibraryPersistentGeneration = 0;
+// 一次性交接只保留轻量令牌，不能让多根恢复的分组继续强引用整份索引。
+var localLibraryPersistentHydrationSerial = 0;
+var localLibraryPersistentHydrationOwner = 0;
 // 桌面壳 SQLite 曲库存储：探测一次结果就常驻，避免每次读写都过一遍 IPC 才发现桌面壳没这条通道。
 var localLibraryDbState = { probed: false, available: false, promise: null, status: null };
 // loadLocalLibraryDb 的一次性交接：hydrate 阶段取回的文件表交给紧随其后的 readLocalLibrarySnapshot 消费后立即释放，
@@ -8929,9 +8932,10 @@ function releaseLocalLibraryPersistentMemory(folderPath) {
  * 读取本地库持久化记录。优先使用内存缓存，未命中时从 IndexedDB 读取。
  * @param {string} folderPath 本地库文件夹路径。
  * @param {string} kind 记录类型。
+ * @param {number=} hydrationToken 可选恢复代次，阻止同根旧读取覆盖最新索引。
  * @returns {Promise<object|null>} 命中的持久化记录。
  */
-async function readLocalLibraryPersistentRecord(folderPath, kind) {
+async function readLocalLibraryPersistentRecord(folderPath, kind, hydrationToken) {
   var id = localLibraryPersistentKey(folderPath, kind);
   if (!folderPath || !kind) return null;
   if (localLibraryPersistentMemory[id]) return localLibraryPersistentMemory[id];
@@ -8943,7 +8947,9 @@ async function readLocalLibraryPersistentRecord(folderPath, kind) {
       var req = tx.objectStore(LOCAL_LIBRARY_CACHE_STORE).get(id);
       req.onsuccess = function(){
         var record = req.result || null;
-        if (record) rememberLocalLibraryPersistentRecord(record, generation);
+        if (record && (hydrationToken == null || hydrationToken === localLibraryPersistentHydrationSerial)) {
+          rememberLocalLibraryPersistentRecord(record, generation);
+        }
         resolve(record);
       };
       req.onerror = function(){ reject(req.error || new Error('indexedDB library read failed')); };
@@ -9170,18 +9176,33 @@ function syncLocalLibraryDbFavorite(song, favorite) {
 /**
  * 预热本地库索引供后续同步接口读取；大快照由恢复入口按需读取后释放。
  * @param {string} folderPath 本地库文件夹路径。
- * @returns {Promise<void>}
+ * @param {{reuse?:object,snapshot?:boolean}=} opts 一次性交接的索引凭据，以及是否需要快照。
+ * @returns {Promise<object|null>} 供紧随其后的建库步骤复用的轻量凭据。
  */
-async function hydrateLocalLibraryPersistentState(folderPath) {
-  if (!folderPath) return;
+async function hydrateLocalLibraryPersistentState(folderPath, opts) {
+  if (!folderPath) return null;
+  opts = opts || {};
   var generation = activateLocalLibraryPersistentMemory(folderPath);
+  var receipt = opts.reuse;
+  var indexId = localLibraryPersistentKey(folderPath, 'index');
+  if (opts.snapshot === false) localLibraryDbSnapshotHandoff = null;
+  // 仅复用同一代次最近成功加载的一次性交接，普通调用仍从持久层重新加载。
+  if (receipt && !receipt.consumed && receipt.folderPath === folderPath && receipt.generation === generation
+      && receipt.token === localLibraryPersistentHydrationOwner && localLibraryPersistentMemory[indexId]) {
+    receipt.consumed = true;
+    return receipt;
+  }
+  var hydrationToken = ++localLibraryPersistentHydrationSerial;
+  localLibraryPersistentHydrationOwner = 0;
+  localLibraryDbSnapshotHandoff = null;
   resetLocalLibraryDbIndexDigests(generation);
   if (await probeLocalLibraryDb()) {
     var loaded = await callLocalLibraryDb('loadLocalLibraryDb', folderPath, { index: true });
-    if (loaded && loaded.ok && generation === localLibraryPersistentGeneration && folderPath === localLibraryPersistentFolderPath) {
+    if (loaded && loaded.ok && hydrationToken === localLibraryPersistentHydrationSerial
+        && generation === localLibraryPersistentGeneration && folderPath === localLibraryPersistentFolderPath) {
       var records = loaded.index && loaded.index.records ? loaded.index.records : null;
       var indexKeys = records ? Object.keys(records) : [];
-      if (Array.isArray(loaded.files) && loaded.files.length) {
+      if (opts.snapshot !== false && Array.isArray(loaded.files) && loaded.files.length) {
         localLibraryDbSnapshotHandoff = {
           folderPath: folderPath,
           generation: generation,
@@ -9204,11 +9225,19 @@ async function hydrateLocalLibraryPersistentState(folderPath) {
         }, generation);
         // 载入即视为磁盘现状，摘要表随之落位，后续只写真正改动的行。
         for (var i = 0; i < indexKeys.length; i++) localLibraryDbIndexDigests[indexKeys[i]] = localLibraryDbIndexDigest(records[indexKeys[i]]);
-        return;
+        localLibraryPersistentHydrationOwner = hydrationToken;
+        return { folderPath: folderPath, generation: generation, token: hydrationToken, consumed: false };
       }
     }
   }
-  await readLocalLibraryPersistentRecord(folderPath, 'index');
+  if (hydrationToken !== localLibraryPersistentHydrationSerial || generation !== localLibraryPersistentGeneration
+      || folderPath !== localLibraryPersistentFolderPath) return null;
+  await readLocalLibraryPersistentRecord(folderPath, 'index', hydrationToken);
+  var record = localLibraryPersistentMemory[indexId];
+  if (hydrationToken !== localLibraryPersistentHydrationSerial || generation !== localLibraryPersistentGeneration
+      || folderPath !== localLibraryPersistentFolderPath || !record) return null;
+  localLibraryPersistentHydrationOwner = hydrationToken;
+  return { folderPath: folderPath, generation: generation, token: hydrationToken, consumed: false };
 }
 scheduleLocalIndexedDbTrim('startup', 9000);
 /**
@@ -37910,7 +37939,8 @@ async function reloadLocalLibraryFromAllRoots(opts) {
       root: loaded.root || root,
       files: loaded.files,
       directories: loaded.directories,
-      truncated: loaded.truncated
+      truncated: loaded.truncated,
+      persistentState: loaded.persistentState
     });
   }
   if (!groups.length) return false;
@@ -37929,10 +37959,10 @@ async function reloadLocalLibraryFromAllRoots(opts) {
  * 返回该根的一组文件与该根实际的路径（主进程可能把路径 resolve 过）。
  * @param {string} folderPath 该根路径。
  * @param {object} api 桌面壳本地音乐接口。
- * @returns {Promise<{root:string, files:Array<object>, directories:Array<object>, truncated:boolean, snapshot:object|string}|null>} 该根结果，取不到返回 null。
+ * @returns {Promise<{root:string,files:Array<object>,directories:Array<object>,truncated:boolean,snapshot:object|string,persistentState:object|null}|null>} 该根结果及轻量索引交接凭据，取不到返回 null。
  */
 async function loadSingleLocalLibraryRoot(folderPath, api) {
-  await hydrateLocalLibraryPersistentState(folderPath);
+  var persistentState = await hydrateLocalLibraryPersistentState(folderPath);
   var snapshot = await readLocalLibrarySnapshot(folderPath);
   if (snapshot && snapshot.fromDb) {
     try {
@@ -37941,7 +37971,8 @@ async function loadSingleLocalLibraryRoot(folderPath, api) {
         files: snapshot.files,
         directories: snapshot.directories || [],
         truncated: !!snapshot.truncated,
-        snapshot: snapshot
+        snapshot: snapshot,
+        persistentState: persistentState
       };
     } catch (e) {
       console.warn('[LocalLibraryDbRestore]', e);
@@ -37956,7 +37987,8 @@ async function loadSingleLocalLibraryRoot(folderPath, api) {
           files: refreshed.files,
           directories: refreshed.directories || snapshot.directories || [],
           truncated: !!snapshot.truncated,
-          snapshot: snapshot
+          snapshot: snapshot,
+          persistentState: persistentState
         };
       }
     } catch (e) {
@@ -37971,7 +38003,8 @@ async function loadSingleLocalLibraryRoot(folderPath, api) {
       files: result.files || [],
       directories: result.directories || [],
       truncated: !!result.truncated,
-      snapshot: null
+      snapshot: null,
+      persistentState: persistentState
     };
   } catch (e) {
     console.warn('[LocalLibraryRestore]', e);
@@ -37995,7 +38028,8 @@ async function restoreSavedLocalMusicFolder() {
       root: restoredRoot,
       files: loaded.files,
       directories: loaded.directories,
-      truncated: loaded.truncated
+      truncated: loaded.truncated,
+      persistentState: loaded.persistentState
     });
   }
   if (!groups.length) {
@@ -38128,7 +38162,8 @@ function localLibraryRootGroups(opts) {
       root: String(group.root || group.folderPath || ''),
       files: group.files || [],
       directories: group.directories || [],
-      truncated: !!group.truncated
+      truncated: !!group.truncated,
+      persistentState: group.persistentState || null
     });
   }
   return out;
@@ -38158,7 +38193,7 @@ async function handleLocalFolderFiles(files, opts) {
   var anyHasIndex = false;
   for (var groupIdx = 0; groupIdx < groups.length; groupIdx++) {
     var group = groups[groupIdx];
-    if (group.root) await hydrateLocalLibraryPersistentState(group.root);
+    if (group.root) await hydrateLocalLibraryPersistentState(group.root, { reuse: group.persistentState, snapshot: false });
     var groupSongs = createLocalSongsFromFiles(group.files || [], { folderOnly: !!opts.folderOnly });
     var groupSync = syncLocalLibraryIndexWithSongs(group.root, groupSongs);
     noteLocalLibraryAddedAt(groupSongs, groupSync);

@@ -1,6 +1,6 @@
 # 播放器性能优化（v2.7.2 基线）
 
-基线为 `oirge/Mineradio` 的 `50cda772`，产品版本保持 2.7.2。优化内部查询、保存与隐藏列表更新，不改变布局、质感、画质档位和播放引擎。
+基线为 `oirge/Mineradio` 的 `50cda772`，产品版本保持 2.7.2。优化内部查询、保存、启动交接与渲染更新，不改变布局、质感、画质档位和播放引擎。
 
 ## 改动
 
@@ -10,6 +10,8 @@
 - 搜索只有完整保留所有匹配项时才允许在上一轮结果上继续筛选，修复截断结果导致后段歌曲搜不到的问题。
 - Folia 歌词定位使用顺播游标、跳转二分与结束时间索引，避免时间校正和静默间隙重复扫描长歌词。
 - 共享和声层在声部或词状态边界变化时重算快照，连续帧复用已有结果；开始与结束端点语义保持一致。
+- 同根启动恢复用一次性标量凭据把已加载的索引交给建库入口，省去第二次完整数据库读取和摘要计算。普通重载、切根和迟到回包仍校验所有权；多根凭据不持有索引对象，已有文件列表的建库入口不再留下未消费的文件快照。
+- 原版 3D 舞台按帧共享外观、详情和时间快照，卡片仅在 Three.js 当前值变化时写入位置、缩放、颜色与欧拉角。保留动画公式、外部姿态补正和滚转，异步封面及主题入口仍读取最新设置。
 
 ## 可复现的工作量
 
@@ -20,15 +22,20 @@
 | 10,000 行歌词，600 帧及 50 次微小时间校正：行读取 | 466,410 | 1,287 |
 | 隐藏曲库连续 20 次刷新：歌曲枚举、封面读取和 DOM 写入 | 重复执行 | 0 |
 | 同一和声状态下 600 帧：快照重算 | 600 | 1 |
+| 10,000 首同根启动恢复到建库：数据库读取／索引摘要 | 2／20,000 | 1／10,000 |
+| 原版舞台 600 稳定帧、11 张驻留卡片（6 张可见）：位置／缩放／颜色 setter | 各 3,600 | 各 0 |
+| 同一舞台样本：欧拉角回调／详情状态读取 | 7,200／4,200 | 0／600 |
 
 这些数字衡量实际生产函数执行的工作量，不代表特定电脑上的 FPS、启动时长或 CPU 百分比。GPU、驱动、封面大小和磁盘速度仍需实际设备测量。
 
 ## 验证
 
 ```powershell
-node --test tests/local-library-background-performance.test.js tests/folia-hidden-queue-performance.test.js tests/folia-lyric-lookup.test.mjs tests/local-search-cache.test.js tests/library-maintenance.test.js
+node --test tests/local-library-background-performance.test.js tests/local-library-startup-hydration.test.js tests/shelf-classic-frame-performance.test.js tests/folia-hidden-queue-performance.test.js tests/folia-lyric-lookup.test.mjs tests/local-search-cache.test.js tests/library-maintenance.test.js
 npm test --prefix vendor-src/folia -- harmonyRuntime
 python scripts/verify-browser-ui.py --suite performance
 ```
 
-`Verify` 工作流覆盖新增和声回归与隔离浏览器中的大曲库补刷、迷你队列和搜索。浏览器证据保存在 `browser-ui-evidence` 工件的 `performance-report.json`；完整 Folia 构建也由云端执行。
+`Verify` 工作流覆盖新增和声回归与隔离浏览器中的大曲库补刷、迷你队列、搜索和原版舞台切换。浏览器证据保存在 `browser-ui-evidence` 工件的 `performance-report.json` 与 `classic-stage.png`；完整 Folia 构建也由云端执行。原版舞台可选基线实验通过 `MINERADIO_CLASSIC_BASELINE` 指向旧 `public/shelf-classic.js`，对比 300 个变化帧中的卡片、画布绘制及动画状态。
+
+为恢复完整云端验证，将未打入桌面播放器的上游 FTP 依赖固定到已修复的 `basic-ftp 6.2.6`，保留原审计门禁。播放设置浏览器用例会先通过真实鼠标移动唤出自动隐藏标题栏，再普通点击入口。

@@ -6,7 +6,7 @@ from pathlib import Path
 import wave
 
 from playwright.sync_api import expect, sync_playwright
-from ui_browser import launch_browser
+from ui_browser import launch_browser, capture_screenshot
 
 # This script uses a fresh nonpersistent browser context and an in-memory audio fixture.
 # It does not operate the installed player, and the main WebGL loop is suspended during DOM checks.
@@ -253,6 +253,31 @@ with sync_playwright() as playwright:
         page.wait_for_function('playlist.length === 1 && playlist[0].localKey === "performance-9999"')
         expect(page.locator('#search-results .search-result-title')).to_contain_text('Performance Playlist Deferred 9999')
         checked('narrowing a truncated search finds the song beyond the original result limit', broad)
+
+        # Resume the real renderer and exercise both shelf engines after the large-library DOM checks.
+        close_main_panel(page)
+        page.evaluate("""() => {
+          setPeek(document.getElementById('search-area'), false, 'search');
+          __performanceProbe.begin();
+          window.__performanceStageStart = uniforms.uTime.value;
+          setShelfMode('stage');
+          resumeMainRenderLoop('performance-classic-stage');
+        }""")
+        page.wait_for_function("shelfEngineIsClassic() && shelfManager.getMode() === 'stage' && uniforms.uTime.value > __performanceStageStart + 0.5 && shelfManager.getCards().some(card => card.mesh.visible && card.mesh.material.opacity > 0.5)")
+        stage = page.evaluate("""() => {
+          const cards = shelfManager.getCards();
+          return {cards: cards.length, visible: cards.filter(card => card.mesh.visible).length,
+            finite: cards.every(card => [...card.mesh.position.toArray(), ...card.mesh.scale.toArray(),
+              ...card.mesh.quaternion.toArray(), card.mesh.material.opacity].every(Number.isFinite))};
+        }""")
+        assert 0 < stage['visible'] <= stage['cards'] <= 13 and stage['finite'], stage
+        capture_screenshot(page, path=str(OUTPUT.with_name('classic-stage.png')))
+        metrics = read_probe(page)
+        assert all(metrics[key] for key in ['sameAudio', 'sameAudioContext', 'sameQueue', 'audioPaused', 'audioPositionUnchanged']), metrics
+        checked('classic stage renders a bounded 10,000-song card window without replacing audio', stage)
+        page.evaluate("setShelfMode('side')")
+        page.wait_for_function("!shelfEngineIsClassic() && shelfManager.getMode() === 'side'")
+        checked('classic stage returns to the default side shelf without runtime errors')
         report['passed'] = True
     except Exception as error:
         report['failure'] = str(error)
