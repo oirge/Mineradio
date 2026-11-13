@@ -55,6 +55,12 @@ def read_probe(page):
     return page.evaluate('__performanceProbe.read()')
 
 
+def scroll_to_end(page, selector='#playlist-panel'):
+    """Use the production wheel handler so scrolling supersedes a tab's automatic centering tween."""
+    page.locator(selector).hover()
+    page.mouse.wheel(0, COUNT * 100)
+
+
 def close_main_panel(page):
     page.evaluate("""() => {
       setPlaylistPanelPinned(false, true);
@@ -194,7 +200,7 @@ with sync_playwright() as playwright:
           window.__dragTransfer = new DataTransfer();
           __dragSource.dispatchEvent(new DragEvent('dragstart', {bubbles:true, cancelable:true, dataTransfer:__dragTransfer}));
         }''')
-        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
+        scroll_to_end(page)
         page.wait_for_function('__dragSource.isConnected && __dragSource.style.position === "fixed" && !!document.querySelector("#queue-list [data-queue-index=\\"9999\\"]")')
         page.evaluate('''() => {
           const target = document.querySelector('#queue-list [data-queue-index="9999"]'); const rect = target.getBoundingClientRect();
@@ -236,7 +242,7 @@ with sync_playwright() as playwright:
         begin_probe(page)
         page.locator('#tab-queue').click()
         page.wait_for_function('!queuePanelDirty')
-        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
+        scroll_to_end(page)
         page.wait_for_function("document.querySelector('[data-queue-index=\"9999\"] .qi-name')?.textContent === 'Performance Queue Deferred 9999' && !queuePanelDirty")
         settle_queue(page)
         metrics = read_probe(page)
@@ -260,7 +266,7 @@ with sync_playwright() as playwright:
         assert metrics['writes']['main'] == 0 and metrics['writes']['mini'] == 0, metrics
         assert metrics['queueDirty'], metrics
         assert all(metrics[key] for key in ['sameAudio', 'sameAudioContext', 'sameQueue', 'audioPaused', 'audioPositionUnchanged']), metrics
-        page.locator('#mini-queue-list').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
+        scroll_to_end(page, '#mini-queue-list')
         expect(page.locator('#mini-queue-list .mini-queue-item').last).to_contain_text('Performance Mini Deferred 9999')
         checked('mini queue updates alone while the main queue stays deferred', metrics)
         page.locator('#mini-queue-btn').click()
@@ -280,13 +286,13 @@ with sync_playwright() as playwright:
         page.evaluate('setPlaylistPanelPinned(true, true)')
         page.locator('#tab-pl').click()
         page.wait_for_function('!playlistPanelDirty')
-        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
+        scroll_to_end(page)
         page.wait_for_function("document.querySelector('[data-local-library-index=\"9999\"] .pl-name')?.textContent === 'Performance Playlist Deferred 9999' && !playlistPanelDirty")
         assert page.locator('#pl-list [data-local-library-index]').count() < 80
         checked('return to playlist flushes deferred data through the real tab handler')
 
         page.locator('#tab-queue').click()
-        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
+        scroll_to_end(page)
         last_queue = page.locator('#queue-list [data-queue-index="9999"] .qi-name')
         expect(last_queue).to_have_text('Performance Playlist Deferred 9999')
         last_queue.click()
@@ -295,7 +301,7 @@ with sync_playwright() as playwright:
         checked('deferred final queue row remains clickable and starts the real audio engine')
 
         page.locator('#tab-pl').click()
-        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
+        scroll_to_end(page)
         last_library = page.locator('#pl-list [data-local-library-index="9999"] .pl-name')
         last_library.click()
         page.wait_for_function('currentIdx === 9999 && playQueue[currentIdx]?.localKey === "performance-9999" && audio && !audio.paused')
@@ -343,6 +349,18 @@ with sync_playwright() as playwright:
         report['passed'] = True
     except Exception as error:
         report['failure'] = str(error)
+        try:
+            report['failureState'] = page.evaluate('''() => ({
+              tab: queueViewTab, current: currentIdx, queueDirty:queuePanelDirty,
+              top:document.getElementById('playlist-panel').scrollTop,
+              height:document.getElementById('playlist-panel').scrollHeight,
+              indices:[...document.querySelectorAll('#queue-list [data-queue-index]')].map(row=>Number(row.dataset.queueIndex)),
+              lastKey:playQueue[playQueue.length-1]?.localKey,
+              lastName:playQueue[playQueue.length-1]?.name,
+              dragActive:!!queueDragState
+            })''')
+        except Exception:
+            pass
         raise
     finally:
         OUTPUT.parent.mkdir(parents=True, exist_ok=True)
