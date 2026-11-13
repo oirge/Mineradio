@@ -22,6 +22,8 @@
   var coverTransfers = new Map(), coverTransferBytes = 0;
   var playlistMembership = new Map();
   var trackPageIndexes = new WeakMap();
+  var trackSearchFields = new WeakMap();
+  var lyricsSignatureCache = null;
   var currentTrackCache = null;
   var pendingTrackChanges = new Map(), trackChangeTimer = 0;
   // Native metadata and cover hydration mutate these projection inputs in place.
@@ -272,17 +274,26 @@
       return rememberTrackQuery(index, query, { positions: allPositions, total: localCount });
     }
     var positions = [], total = 0;
-    // New searches read live metadata; tags can change in place without replacing the library array.
+    // Compare live scalar fields so unannounced in-place edits also invalidate the normalized text.
     for (var candidate = 0; candidate < index.length; candidate++) {
       var song = songs[candidate];
       if (song && song.type === 'local'
-        && (String(song.name || song.title || '') + '\n' + String(song.artist || '') + '\n' + String(song.album || '')).toLocaleLowerCase().indexOf(query) >= 0) {
+        && trackSearchText(song).indexOf(query) >= 0) {
         positions.push(candidate); total++;
       }
     }
     return rememberTrackQuery(index, query, {
       positions: total === index.length ? null : positions, total: total
     });
+  }
+  /** Cache normalization per song without retaining discarded libraries or projected covers. */
+  function trackSearchText(song) {
+    var name = song.name || song.title || '', artist = song.artist || '', album = song.album || '';
+    var cached = trackSearchFields.get(song);
+    if (cached && cached.name === name && cached.artist === artist && cached.album === album) return cached.text;
+    var text = (String(name) + '\n' + String(artist) + '\n' + String(album)).toLocaleLowerCase();
+    trackSearchFields.set(song, { name: name, artist: artist, album: album, text: text });
+    return text;
   }
   function pageTracks(songs, params) {
     syncRevisions();
@@ -371,16 +382,25 @@
   }
   function lyricsSignature() {
     var lines = global.lyricsLines || [], hash = 2166136261;
+    var id = trackId(currentSong()), revision = global.lyricRowTranslationRevision;
+    // The host publishes new arrays for source changes and bumps this revision for in-place translations.
+    // Legacy hosts without that contract retain the uncached compatibility path.
+    if (typeof revision === 'number' && lyricsSignatureCache && lyricsSignatureCache.lines === lines
+      && lyricsSignatureCache.length === lines.length && lyricsSignatureCache.trackId === id
+      && lyricsSignatureCache.revision === revision) return lyricsSignatureCache.signature;
     function mix(value) {
       var text = String(value == null ? '' : value);
       for (var j = 0; j < text.length; j++) hash = Math.imul(hash ^ text.charCodeAt(j), 16777619);
     }
-    mix(trackId(currentSong()));
+    mix(id);
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i]; if (!line) continue;
       mix(line.t); mix(line.duration); mix(line.text); mix(line.translation); mix(line.romanization); mix(JSON.stringify(line.backgroundVocals || [])); mix(line.fallback); mix((line.words || []).length);
     }
-    return lines.length + ':' + (hash >>> 0);
+    var signature = lines.length + ':' + (hash >>> 0);
+    if (typeof revision === 'number') lyricsSignatureCache = { lines: lines, length: lines.length,
+      trackId: id, revision: revision, signature: signature };
+    return signature;
   }
   function post(payload) {
     if (frame && frame.contentWindow) frame.contentWindow.postMessage(Object.assign({ channel: CHANNEL, version: VERSION }, payload), global.location.origin);
@@ -658,6 +678,7 @@
     if (tickTimer) global.clearTimeout(tickTimer);
     if (audioTimer) global.clearTimeout(audioTimer);
     tickTimer = 0; audioTimer = 0;
+    if (!active) lyricsSignatureCache = null;
   }
   function tick() {
     tickTimer = 0; if (!active) return;
@@ -1024,7 +1045,8 @@
   observeMutation('setCustomCoverForCurrent', 'custom-cover');
   observeMutation('clearCustomCoverForCurrent', 'custom-cover');
   observeMutation('writeSpecialLikedSongRefs', 'favorites');
-  observeMutation('markQueueContentChanged', 'queue'); observeMutation('applyLyricsState', 'lyrics'); global.refreshFoliaUiLanguage();
+  observeMutation('markQueueContentChanged', 'queue'); observeMutation('applyLyricsState', 'lyrics');
+  observeMutation('bumpStageLyricRows', 'lyrics'); global.refreshFoliaUiLanguage();
   if (global.MineradioSonicWorkshop) {
     var workshopPresetChanged = global.MineradioSonicWorkshop.onPresetChange;
     global.MineradioSonicWorkshop.onPresetChange = function () {

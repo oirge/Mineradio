@@ -400,6 +400,14 @@
 - 同根启动的 `loadSingleLocalLibraryRoot` → `handleLocalFolderFiles` 通过一次性标量凭据复用当前加载的索引；凭据匹配根、曲库代次和最新水合 token，不能强引用索引、跨根复用或用于第二次建库。SQL 与旧 IndexedDB 水合回包都须拒绝同根迟到 token；已有文件表的建库水合不保留文件快照。回归见 `tests/local-library-startup-hydration.test.js`。
 - 原版舞台 `public/shelf-classic.js` 的卡片绘制与布局复用本帧外观、详情和时间快照，非帧封面／主题入口回退读取当前设置。稳定帧仅在 Three.js 实际值不相等时写入卡片位置、缩放、颜色和欧拉角，不设精度阈值；普通姿态保留 rotation.z，退出相机四元数姿态后按当前值补正。回归见 `tests/shelf-classic-frame-performance.test.js`。
 
+## 2.7.2 第二轮：可见窗口、歌词桥接、封面 Worker 与搜索字段
+
+- `public/windowed-list.js` 只持有当前窗口的行节点和字符串，保留完整滚动范围及绝对业务索引。原版主／迷你队列的 `queueVisibleRows(end, null, start)` 只准备窗口范围；曲库窗口分支不得先调用全库 `localLibraryPlaylistDomSignature`。隐藏曲库必须 clear 旧窗口，释放回调对旧歌曲数组的引用。禁止用加载更多截断全部歌曲访问。
+- 窗口重排保留未变行节点及原生拖动源；跨窗口拖动时固定到屏外的源节点要在 dragend 还原，缓存必须记录源节点实际 HTML，不能提前把新数据 HTML 记作已绘制。Tab 越过窗口边界时补挂下一行并按原方向恢复按钮焦点，不能滚动外壳。
+- Folia `lyricsSignature` 复用既有 `lyricRowTranslationRevision`，按歌曲、数组身份、行数和 revision 失效。翻译写入必须继续调用 `bumpStageLyricRows`；无 revision 的旧壳走兼容路径，离开 Folia 清除旧数组引用。
+- `cover-thumbnail.js` 串行发送 Worker 任务并限制等待容量和字节；空闲销毁、超时、错误和 unload 都要结算 pending。旧 Worker 的迟到错误／消息须匹配 Worker 身份，不能杀死新实例。Worker 的 ImageBitmap 在 finally 关闭；尺寸、质量、smoothing、旧主线程回退及原有缩略图缓存所有权不可改变。
+- Folia `trackSearchText` 用 WeakMap 保存实时原始标量与归一文本，新查询仍对比实时字段，原地标签修改后必须重新归一化；不能因缓存而漏掉无通知的原地编辑。元数据通知仍负责已有查询结果的失效。
+
 ## Reference
 
 - 相关实现：`public/index.html`、`public/app.js`、`public/mini-player.html`、`desktop/main.js`、`desktop/desktop-overlay-state-cache.js`、`desktop/mini-player-recovery-session.js`、`desktop/mini-player-state-cache.js`、`server.js`、`scripts/test-mini-player-memory.ps1`、`tests/desktop-lyrics-ipc-ownership.test.js`、`tests/desktop-lyrics-mouse-poller.test.js`、`tests/desktop-overlay-state-cache.test.js`、`tests/desktop-overlay-disabled-ipc.test.js`、`tests/desktop-overlay-main-update.test.js`、`tests/desktop-overlay-window-ownership.test.js`、`tests/local-asset-cache-ownership.test.js`、`tests/local-beat-cache-residency.test.js`、`tests/local-cover-thumb-promise-ownership.test.js`、`tests/local-file-range-memory.test.js`、`tests/local-library-persistent-memory.test.js`、`tests/local-library-background-refresh.test.js`、`tests/local-library-background-cancellation.test.js`、`tests/local-library-incremental-truncation.test.js`、`tests/local-lyric-cache-residency.test.js`、`tests/local-media-object-url-residency.test.js`、`tests/playlist-cover-cache-residency.test.js`、`tests/mini-player-main-gates.test.js`、`tests/mini-player-pulse.test.js`、`tests/mini-player-recovery-session.test.js`、`tests/mini-player-state-cache.test.js`、`tests/mini-player-visual.test.js`

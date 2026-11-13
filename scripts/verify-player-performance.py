@@ -114,15 +114,17 @@ with sync_playwright() as playwright:
           safeRenderQueuePanel('performance-initial', {immediate: true, animate: false});
         }""", COUNT)
         settle_queue(page)
-        expect(page.locator('#queue-list .queue-item')).to_have_count(COUNT)
+        page.wait_for_function('document.querySelectorAll("#queue-list .queue-item").length > 0 && document.querySelectorAll("#queue-list .queue-item").length < 80')
+        expect(page.locator('#queue-list')).to_have_attribute('data-windowed-count', str(COUNT))
         page.evaluate("""() => {
           const probe = {snapshotCalls: 0, snapshotItems: 0, writes: {main: 0, mini: 0, playlist: 0}, observers: []};
           const originalRows = queueVisibleRows;
           // Count calls while delegating unchanged to the production renderer.
           queueVisibleRows = function(...args) {
             probe.snapshotCalls++;
-            probe.snapshotItems += args[0] || 0;
-            return originalRows.apply(this, args);
+            const rows = originalRows.apply(this, args);
+            probe.snapshotItems += rows.length;
+            return rows;
           };
           for (const [key, id] of [['main', 'queue-list'], ['mini', 'mini-queue-list'], ['playlist', 'pl-list']]) {
             const observer = new MutationObserver(records => { probe.writes[key] += records.length; });
@@ -153,6 +155,39 @@ with sync_playwright() as playwright:
         }""")
         checked('real imported audio and 10,000-song queue fixture')
 
+        for index in [5000, 9999, 0]:
+            page.evaluate('(index) => MineradioWindowedList.reveal(document.getElementById("queue-list"), index)', index)
+            expect(page.locator(f'#queue-list [data-queue-index="{index}"]')).to_have_count(1)
+            assert page.locator('#queue-list .queue-item').count() < 80
+        page.evaluate('''() => {
+          const rows = document.querySelectorAll('#queue-list [data-windowed-index]');
+          const last = rows[rows.length - 1];
+          window.__keyboardNext = Number(last.dataset.windowedIndex) + 1;
+          const buttons = last.querySelectorAll('button'); buttons[buttons.length - 1].focus({preventScroll:true});
+        }''')
+        page.keyboard.press('Tab')
+        page.wait_for_function('Number(document.activeElement.closest("[data-windowed-index]")?.dataset.windowedIndex) === __keyboardNext')
+        checked('queue viewport windows reach middle and final songs and preserve keyboard continuation')
+
+        worker_metrics = page.evaluate('''async () => {
+          const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 512;
+          const context = canvas.getContext('2d'); context.fillStyle = '#3264c8'; context.fillRect(0, 0, 1024, 512);
+          const source = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          const original = HTMLCanvasElement.prototype.toDataURL;
+          HTMLCanvasElement.prototype.toDataURL = function(){ throw new Error('Thumbnail encoding must stay off the main thread'); };
+          try {
+            const result = await createLocalCoverThumbnailDataUrl(source, {maxSide:128, cacheKey:'worker-browser-acceptance'});
+            const image = await createImageBitmap(await (await fetch(result)).blob());
+            const sample = new OffscreenCanvas(image.width, image.height); const ctx = sample.getContext('2d'); ctx.drawImage(image,0,0);
+            const color = [...ctx.getImageData(1,1,1,1).data];
+            const metrics = {width:image.width, height:image.height, color, mime:result.slice(0,15)};
+            image.close(); return metrics;
+          } finally { HTMLCanvasElement.prototype.toDataURL = original; }
+        }''')
+        assert worker_metrics['width'] == 128 and worker_metrics['height'] == 64, worker_metrics
+        assert max(abs(left - right) for left, right in zip(worker_metrics['color'], [50, 100, 200, 255])) <= 5, worker_metrics
+        checked('real cover worker resizes and encodes at retained quality without main-thread encoding', worker_metrics)
+
         for tab, button in [('library', '#tab-library'), ('playlists', '#tab-pl')]:
             page.locator(button).click()
             page.wait_for_function('(tab) => queueViewTab === tab && !isQueuePaneVisibleForRender()', arg=tab)
@@ -180,6 +215,8 @@ with sync_playwright() as playwright:
         }""")
         begin_probe(page)
         page.locator('#tab-queue').click()
+        page.wait_for_function('!queuePanelDirty')
+        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
         page.wait_for_function("document.querySelector('[data-queue-index=\"9999\"] .qi-name')?.textContent === 'Performance Queue Deferred 9999' && !queuePanelDirty")
         settle_queue(page)
         metrics = read_probe(page)
@@ -189,7 +226,7 @@ with sync_playwright() as playwright:
         close_main_panel(page)
         page.evaluate('revealBottomControls(2000)')
         page.locator('#mini-queue-btn').click()
-        page.wait_for_function('miniQueueOpen && document.querySelectorAll("#mini-queue-list .mini-queue-item").length === 10000')
+        page.wait_for_function('miniQueueOpen && document.querySelectorAll("#mini-queue-list .mini-queue-item").length > 0 && document.querySelectorAll("#mini-queue-list .mini-queue-item").length < 80')
         settle_queue(page)
         begin_probe(page)
         page.evaluate("""() => {
@@ -199,10 +236,11 @@ with sync_playwright() as playwright:
         }""")
         settle_queue(page)
         metrics = read_probe(page)
-        assert metrics['snapshotCalls'] == 1 and metrics['snapshotItems'] == COUNT, metrics
-        assert metrics['writes']['main'] == 0 and metrics['writes']['mini'] >= 1, metrics
+        assert 0 < metrics['snapshotItems'] < 100, metrics
+        assert metrics['writes']['main'] == 0 and metrics['writes']['mini'] == 0, metrics
         assert metrics['queueDirty'], metrics
         assert all(metrics[key] for key in ['sameAudio', 'sameAudioContext', 'sameQueue', 'audioPaused', 'audioPositionUnchanged']), metrics
+        page.locator('#mini-queue-list').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
         expect(page.locator('#mini-queue-list .mini-queue-item').last).to_contain_text('Performance Mini Deferred 9999')
         checked('mini queue updates alone while the main queue stays deferred', metrics)
         page.locator('#mini-queue-btn').click()
@@ -221,11 +259,14 @@ with sync_playwright() as playwright:
         checked('hidden playlist defers 24 refreshes without DOM writes', metrics)
         page.evaluate('setPlaylistPanelPinned(true, true)')
         page.locator('#tab-pl').click()
+        page.wait_for_function('!playlistPanelDirty')
+        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
         page.wait_for_function("document.querySelector('[data-local-library-index=\"9999\"] .pl-name')?.textContent === 'Performance Playlist Deferred 9999' && !playlistPanelDirty")
-        expect(page.locator('#pl-list [data-local-library-index]')).to_have_count(COUNT)
+        assert page.locator('#pl-list [data-local-library-index]').count() < 80
         checked('return to playlist flushes deferred data through the real tab handler')
 
         page.locator('#tab-queue').click()
+        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
         last_queue = page.locator('#queue-list [data-queue-index="9999"] .qi-name')
         expect(last_queue).to_have_text('Performance Playlist Deferred 9999')
         last_queue.click()
@@ -234,6 +275,7 @@ with sync_playwright() as playwright:
         checked('deferred final queue row remains clickable and starts the real audio engine')
 
         page.locator('#tab-pl').click()
+        page.locator('#playlist-panel').evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
         last_library = page.locator('#pl-list [data-local-library-index="9999"] .pl-name')
         last_library.click()
         page.wait_for_function('currentIdx === 9999 && playQueue[currentIdx]?.localKey === "performance-9999" && audio && !audio.paused')

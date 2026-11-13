@@ -9435,6 +9435,12 @@ async function createLocalCoverThumbnailDataUrl(coverSource, opts) {
   var promise = (async function(){
   var imageLease = null;
   try {
+    if (typeof window !== 'undefined' && window.MineradioCoverThumbnail) {
+      var workerResult = await window.MineradioCoverThumbnail.generate(blobSource || dataUrl, {
+        maxSide: maxSide, quality: quality, smoothing: opts.background || pressureLevel >= 1 ? 'medium' : 'high'
+      });
+      if (workerResult !== null) return workerResult;
+    }
     imageLease = await openLocalCoverImageSource(blobSource || dataUrl);
     var img = imageLease.image;
     var width = img.naturalWidth || img.width || maxSide;
@@ -31656,6 +31662,7 @@ function renderMiniQueuePanel(opts) {
   var total = playQueue.length;
   $count.textContent = total ? (total + ' 首' + (currentIdx >= 0 ? ' · 正在播放 ' + (currentIdx + 1) : '')) : '0 首';
   if (!miniQueueOpen && !opts.animate && !opts.scrollCurrent) return;
+  if (typeof window !== 'undefined' && window.MineradioWindowedList && renderWindowedQueue($list, true, opts)) return;
   if (!total) {
     miniQueueLastDomSignature = 'empty';
     miniQueueIncrementalState = null;
@@ -31719,15 +31726,18 @@ function queueRenderFingerprint() {
  * @param {Array<object>=} seedRows 已由同一轮渲染生成的行快照，可用于扩展更大的迷你队列窗口。
  * @returns {Array<object>} 可见歌曲行快照。
  */
-function queueVisibleRows(renderLimit, seedRows) {
+function queueVisibleRows(renderLimit, seedRows, startIndex) {
   var limit = Math.min(playQueue.length, Math.max(0, renderLimit || 0));
-  var rows = seedRows && seedRows.length >= limit ? seedRows : new Array(limit);
-  var start = seedRows ? Math.min(seedRows.length, limit) : 0;
+  var offset = Math.min(limit, Math.max(0, startIndex || 0));
+  var rowCount = limit - offset;
+  var rows = seedRows && seedRows.length >= rowCount ? seedRows : new Array(rowCount);
+  var start = seedRows ? Math.min(seedRows.length, rowCount) : 0;
   var nextIdx = nextQueueIndexPreview();
-  for (var i = start; i < limit; i++) {
+  for (var rowIndex = start; rowIndex < rowCount; rowIndex++) {
+    var i = offset + rowIndex;
     var song = playQueue[i] || {};
     var artist = song.type === 'local' ? '' : songArtistText(song);
-    rows[i] = {
+    rows[rowIndex] = {
       index: i,
       song: song,
       itemKey: queueItemKey(song),
@@ -31750,6 +31760,22 @@ function queueVisibleRows(renderLimit, seedRows) {
     }
   }
   return rows;
+}
+/** Prepare only the viewport's rows; original absolute queue indices still drive all actions and drag/drop. */
+function renderWindowedQueue(list, mini, opts) {
+  var windows = window.MineradioWindowedList;
+  var scroller = mini ? list : document.getElementById('playlist-panel');
+  var rendered = windows.render(list, {
+    key: mini ? 'mini-queue' : 'queue', count: playQueue.length, scroller: scroller, stride: mini ? 62 : 62,
+    prepare: function (start, end) {
+      var rows = queueVisibleRows(end, null, start);
+      return function (index) { return mini ? queueMiniItemHtml(rows[index - start]) : queueItemHtml(rows[index - start]); };
+    }
+  });
+  if (!rendered) return false;
+  if (opts.scrollCurrent || (opts.animate && opts.scrollCurrent !== false)) windows.reveal(list, currentIdx);
+  if (opts.animate) animateVisiblePanelList(list, mini ? '.mini-queue-item' : '.queue-item', scroller, null);
+  return true;
 }
 /**
  * 生成队列可见 DOM 的签名。签名未变化时跳过 innerHTML 重建，降低封面/歌词连续完成时的抖动。
@@ -31975,6 +32001,11 @@ function renderQueuePanel(opts) {
   renderQueueSnapshots();
   updatePlayModeButtonRow();
   updateStopAfterCurrentButton();
+  if (typeof window !== 'undefined' && window.MineradioWindowedList && renderWindowedQueue($ql, false, opts)) {
+    queuePanelLastDomSignature = 'windowed'; queuePanelIncrementalState = null;
+    renderMiniQueuePanel({ scrollCurrent: miniQueueOpen });
+    return;
+  }
   if (!playQueue.length) {
     queuePanelLastDomSignature = 'empty';
     miniQueueLastDomSignature = '';
@@ -32234,6 +32265,10 @@ function renderLocalLibraryPlaylistPanel(opts) {
     localLibraryPlaylistSelection = 'library';
   }
   if (typeof isPlaylistPaneVisibleForRender === 'function' && !isPlaylistPaneVisibleForRender()) {
+    if (typeof window !== 'undefined' && window.MineradioWindowedList && $pl.querySelector) {
+      var hiddenWindow = $pl.querySelector('[data-windowed-library]');
+      if (hiddenWindow) window.MineradioWindowedList.clear(hiddenWindow);
+    }
     playlistPanelDirty = true;
     return;
   }
@@ -32248,8 +32283,10 @@ function renderLocalLibraryPlaylistPanel(opts) {
   var visibleLength = songs.length;
   var specialCoverSignature = specialSongs.length ? songCoverSignature(specialSongs[0]) : '';
   var rowStatMode = localLibraryCategoryStatMode(selectedCategory);
-  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + localLibraryPlaylistDomSignature(songs, visibleLength, rowStatMode) + '|' + localLibraryCategoryDomSignature(selectedCategory);
-  if (domSignature === playlistPanelLastDomSignature) return;
+  var windows = typeof window !== 'undefined' && window.MineradioWindowedList;
+  var useWindow = windows && !categoryDirectory && windows.supported($pl, songs.length);
+  var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + (useWindow ? songs.length : localLibraryPlaylistDomSignature(songs, visibleLength, rowStatMode)) + '|' + localLibraryCategoryDomSignature(selectedCategory);
+  if (domSignature === playlistPanelLastDomSignature && !useWindow) return;
   playlistPanelLastDomSignature = domSignature;
   var html = '';
   if (selectedRoot) {
@@ -32315,7 +32352,7 @@ function renderLocalLibraryPlaylistPanel(opts) {
           : '<span style="display:inline-block;margin-top:8px;font-size:10.5px">可从搜索结果、当前队列或播放栏“+”按钮添加歌曲</span>'));
     html += '<div style="text-align:center;padding:24px 0;color:rgba(255,255,255,.32);font-size:11.5px">' + emptyText + '<br>' + emptyHint + '</div>';
   }
-  for (var i = 0; i < visibleLength; i++) {
+  function renderSongRow(i) {
     var song = songs[i] || {};
     var thumb = songCoverSrc(song, 88);
     var imgTag = thumb ? '<img src="' + escHtml(thumb) + '" alt="" loading="lazy" decoding="async" onerror="this.style.opacity=0.2">' : '<div class="pl-cover-placeholder">♪</div>';
@@ -32328,7 +32365,7 @@ function renderLocalLibraryPlaylistPanel(opts) {
         '<button class="song-action-btn' + (isSongLiked(song) ? ' liked' : '') + '" type="button" data-local-like-index="' + i + '" title="' + (isSongLiked(song) ? '移出特别喜欢' : '加入特别喜欢') + '">' + heartIconSvg() + '</button>' +
       '</div>';
     }
-    html += '<div class="pl-card" data-local-library-index="' + i + '">' +
+    return '<div class="pl-card" data-local-library-index="' + i + '">' +
       imgTag +
       '<div style="flex:1;min-width:0"><div class="pl-name">' + escHtml(song.name || '本地音乐') + '</div><div class="pl-sub">' + escHtml(songDisplaySubtitle(song) || '本地文件') + '</div>' +
       (rowStatMode ? '<div class="pl-sub pl-listen-stat">' + escHtml(songListenStatBrief(song, rowStatMode) || '还没有播放记录') + '</div>' : '') +
@@ -32336,6 +32373,24 @@ function renderLocalLibraryPlaylistPanel(opts) {
       rowActions +
     '</div>';
   }
+  if (useWindow) {
+    var windowRoot = $pl.querySelector('[data-windowed-library]');
+    if (!windowRoot) {
+      $pl.innerHTML = '<div data-windowed-library-head></div><div data-windowed-library></div>';
+      windowRoot = $pl.querySelector('[data-windowed-library]');
+    }
+    var header = $pl.querySelector('[data-windowed-library-head]');
+    if (header.__windowedHtml !== html) { header.innerHTML = html; header.__windowedHtml = html; }
+    windows.render(windowRoot, { key: selectedKind, count: songs.length,
+      scroller: document.getElementById('playlist-panel'), stride: rowStatMode ? 82 : 71, renderRow: renderSongRow });
+    if (opts.animate && seq === playlistRenderSeq) animateVisiblePanelList($pl, '.pl-card', document.getElementById('playlist-panel'));
+    return;
+  }
+  if (windows && $pl.querySelector) {
+    var oldWindow = $pl.querySelector('[data-windowed-library]');
+    if (oldWindow) windows.clear(oldWindow);
+  }
+  for (var i = 0; i < visibleLength; i++) html += renderSongRow(i);
   $pl.innerHTML = html;
   if (opts.animate && seq === playlistRenderSeq) animateVisiblePanelList($pl, '.pl-card', document.getElementById('playlist-panel'));
 }
