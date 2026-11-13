@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`zodiac-aries`,size:24,node:[[`path`,{d:`M12 7.5a4.5 4.5 0 1 1 5 4.5`,key:`k987hv`}],[`path`,{d:`M7 12a4.5 4.5 0 1 1 5-4.5V21`,key:`mjup0w`}]]};r.node;var i=t(r);export{n,i as t};

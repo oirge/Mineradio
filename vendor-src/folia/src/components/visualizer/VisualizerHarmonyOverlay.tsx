@@ -8,8 +8,8 @@ import { colorWithAlpha } from './colorMix';
 import { resolveWordColor } from './wordColoring';
 import {
     getLyricsBackgroundVocals,
+    createHarmonySnapshotLookup,
     resolveHarmonyAlternateText,
-    resolveHarmonySnapshotFromVocals,
     type HarmonySnapshot,
 } from './harmonyRuntime';
 
@@ -179,11 +179,12 @@ const VisualizerHarmonyOverlay: React.FC<VisualizerHarmonyOverlayProps> = ({
     subtitleFontScale = 1,
 }) => {
     const backgroundVocals = useMemo(() => getLyricsBackgroundVocals(lines), [lines]);
+    const harmonyAt = useMemo(() => createHarmonySnapshotLookup(backgroundVocals), [backgroundVocals]);
     const buildSnapshot = useCallback(
         (time: number) => showText && showHarmonySubtitle
-            ? resolveHarmonySnapshotFromVocals(backgroundVocals, time)
+            ? harmonyAt(time)
             : EMPTY_HARMONY_SNAPSHOT,
-        [backgroundVocals, showHarmonySubtitle, showText],
+        [harmonyAt, showHarmonySubtitle, showText],
     );
     const initialSnapshot = buildSnapshot(currentTime.get());
     const [snapshot, setSnapshot] = useState<HarmonySnapshot>(initialSnapshot);

@@ -152,7 +152,7 @@ var shelfVisibility = 0;  // 0..1, 侧栏自动隐藏的整体透明度系数
 var shelfBreathLevel = 1;
 var shelfPlaybackSwitchGuardUntil = 0;
 function shelfPlaybackSwitchGuardActive(now) {
-  return (now || performance.now()) < shelfPlaybackSwitchGuardUntil;
+  return (now == null ? performance.now() : now) < shelfPlaybackSwitchGuardUntil;
 }
 function markShelfPlaybackSwitchGuard(ms) {
   shelfPlaybackSwitchGuardUntil = Math.max(shelfPlaybackSwitchGuardUntil, performance.now() + Math.max(220, ms || 980));
@@ -169,10 +169,10 @@ function markShelfPlaybackSwitchGuard(ms) {
 function isPortraitShelfViewport() {
   return innerHeight > innerWidth * 1.08;
 }
-function shelfLayoutProfile(shelfCtl) {
+function shelfLayoutProfile(shelfCtl, frameSkullShelf) {
   var portrait = isPortraitShelfViewport();
   var narrow = !portrait && innerWidth < 980;
-  var skullShelf = shouldUseSkullSafeShelfCamera();
+  var skullShelf = frameSkullShelf == null ? shouldUseSkullSafeShelfCamera() : frameSkullShelf;
   var detailScale = portrait ? clampRange(innerWidth / 820, 0.70, 0.86) : (narrow ? 0.92 : 1.04);
   shelfCtl = shelfCtl || shelfSettings();
   var detailCtl = shelfDetailSettings();
@@ -314,8 +314,9 @@ function updateShelfHoverCueFromPointer(e) {
   shelfHoverCue.y = e.clientY;
   shelfHoverCue.lastAt = performance.now();
 }
-function tickShelfHoverCue(dt) {
-  if (shelfPlaybackSwitchGuardActive()) {
+function tickShelfHoverCue(dt, frameNow, frameSummon) {
+  var now = frameNow == null ? performance.now() : frameNow;
+  if (shelfPlaybackSwitchGuardActive(now)) {
     shelfHoverCue.target = 0;
     shelfHoverCue.value = 0;
     shelfHoverCue.zoneActive = false;
@@ -326,16 +327,16 @@ function tickShelfHoverCue(dt) {
   if (!shelfHoverCue.guide && shelfHoverCue.zoneActive) {
     var heldPointer = { clientX: shelfHoverCue.x, clientY: shelfHoverCue.y };
     if (canShowShelfHoverCueAt(heldPointer)) {
-      if (performance.now() - shelfHoverCue.enteredAt > 260) shelfHoverCue.target = 1;
+      if (now - shelfHoverCue.enteredAt > 260) shelfHoverCue.target = 1;
     } else {
       shelfHoverCue.zoneActive = false;
       shelfHoverCue.enteredAt = 0;
       shelfHoverCue.target = 0;
     }
   }
-  if (!shelfHoverCue.guide && !shelfHoverCue.zoneActive && performance.now() - shelfHoverCue.lastAt > 650) shelfHoverCue.target = 0;
+  if (!shelfHoverCue.guide && !shelfHoverCue.zoneActive && now - shelfHoverCue.lastAt > 650) shelfHoverCue.target = 0;
   var target = shelfHoverCue.guide ? 1 : shelfHoverCue.target;
-  var summon = shelfSummonSettings();
+  var summon = frameSummon || shelfSummonSettings();
   var duration = target > shelfHoverCue.value
     ? Math.max(0.05, summon.openDuration * 0.50)
     : Math.max(0.05, summon.closeDuration * 0.50);
@@ -520,19 +521,20 @@ function makeShelfManager() {
     if (line && lines.length < maxLines) lines.push(line);
     for (var j = 0; j < lines.length; j++) ctx.fillText(lines[j], x, y + j * lineHeight);
   }
-  function cardDrawSignature(card, item) {
+  function cardDrawSignature(card, item, frameLook) {
     item = item || {};
+    var shelfLook = frameLook || shelfSettings();
     var rec = item.cover ? playlistCoverCache[item.cover] : null;
     var coverState = item.cover ? (rec && rec.loaded ? 'ready' : (rec && rec.failed ? 'fail' : 'wait')) : 'none';
     var pulseBucket = card && card.isCenter ? Math.round((bass + beatPulse * 0.85) * 6) : 0;
     return JSON.stringify([
       item.type || '', item.title || '', item.sub || '', item.tag || '',
       item.cover || '', coverState, card && card.isCenter ? 1 : 0, card && card.selected ? 1 : 0,
-      card && card.dofBucket == null ? -1 : card.dofBucket, pulseBucket, shelfAccentHex(), shelfSettings().bgOpacity
+      card && card.dofBucket == null ? -1 : card.dofBucket, pulseBucket, shelfLook.accent || shelfAccentHex(), shelfLook.bgOpacity
     ]);
   }
 
-  function drawCard(card, item) {
+  function drawCard(card, item, frameLook) {
     if (card.disposed || !group || mode === 'off') return;
     item = item || card.item || {};
     var coverUrl = item.cover || '';
@@ -549,7 +551,8 @@ function makeShelfManager() {
       });
       card.coverWaitRecord = playlistCoverCache[coverUrl];
     }
-    var nextDrawKey = cardDrawSignature(card, item);
+    var shelfLook = frameLook || shelfSettings();
+    var nextDrawKey = cardDrawSignature(card, item, shelfLook);
     if (card.drawKey === nextDrawKey) return;
     card.drawKey = nextDrawKey;
     var cv = card.canvas, ctx = card.ctx;
@@ -557,7 +560,6 @@ function makeShelfManager() {
     ctx.clearRect(0, 0, W, H);
     var pad = 18;
     var isNow = item.type === 'queue' && item.tag === '正在播放';
-    var shelfLook = shelfSettings();
 
     // 卡片底
     makeRoundRect(ctx, pad, pad, W - pad * 2, H - pad * 2, 32);
@@ -568,7 +570,7 @@ function makeShelfManager() {
     ctx.fillStyle = grad; ctx.fill();
 
     if (isNow) {
-      ctx.strokeStyle = shelfAccentRgba(0.72);
+      ctx.strokeStyle = shelfAccentRgba(0.72, null, shelfLook.accent);
       ctx.lineWidth = 1.8 + Math.sin(uniforms.uTime.value * 3) * 0.28 + bass * 1.2;
     } else {
       ctx.strokeStyle = 'rgba(255,255,255,0.14)';
@@ -579,9 +581,9 @@ function makeShelfManager() {
     if (card.selected) {
       ctx.save();
       makeRoundRect(ctx, pad + 2, pad + 2, W - pad * 2 - 4, H - pad * 2 - 4, 30);
-      ctx.shadowColor = shelfAccentRgba(0.58);
+      ctx.shadowColor = shelfAccentRgba(0.58, null, shelfLook.accent);
       ctx.shadowBlur = 18;
-      ctx.strokeStyle = shelfAccentRgba(0.72);
+      ctx.strokeStyle = shelfAccentRgba(0.72, null, shelfLook.accent);
       ctx.lineWidth = 2.2;
       ctx.stroke();
       ctx.restore();
@@ -603,7 +605,7 @@ function makeShelfManager() {
     // 文本区
     var tx = pad + coverSize + 32;
     ctx.font = '700 17px Inter, Arial';
-    ctx.fillStyle = isNow ? shelfAccentRgba(0.92) : 'rgba(255,255,255,0.92)';
+    ctx.fillStyle = isNow ? shelfAccentRgba(0.92, null, shelfLook.accent) : 'rgba(255,255,255,0.92)';
     ctx.fillText(item.tag || '', tx, pad + 36);
 
     ctx.font = '700 30px Inter, Arial';
@@ -615,7 +617,7 @@ function makeShelfManager() {
     wrapText(ctx, item.sub || '', tx, pad + 156, W - tx - pad - 14, 24, 2);
 
     // 律动进度条
-    ctx.strokeStyle = isNow ? shelfAccentRgba(0.90) : 'rgba(255,255,255,0.30)';
+    ctx.strokeStyle = isNow ? shelfAccentRgba(0.90, null, shelfLook.accent) : 'rgba(255,255,255,0.30)';
     ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.moveTo(tx, H - pad - 22);
@@ -628,13 +630,13 @@ function makeShelfManager() {
         makeRoundRect(ctx, tx, actionY, 138, 38, 18);
         var playGrad = ctx.createLinearGradient(tx, actionY, tx + 138, actionY + 38);
         playGrad.addColorStop(0, 'rgba(255,255,255,0.88)');
-        playGrad.addColorStop(0.55, shelfAccentRgba(0.94));
-        playGrad.addColorStop(1, shelfAccentRgba(0.58));
+        playGrad.addColorStop(0.55, shelfAccentRgba(0.94, null, shelfLook.accent));
+        playGrad.addColorStop(1, shelfAccentRgba(0.58, null, shelfLook.accent));
         ctx.fillStyle = playGrad; ctx.fill();
-        ctx.strokeStyle = shelfAccentRgba(0.44);
+        ctx.strokeStyle = shelfAccentRgba(0.44, null, shelfLook.accent);
         ctx.lineWidth = 1.1; ctx.stroke();
         ctx.font = '800 14px Inter, "Microsoft YaHei", Arial';
-        ctx.fillStyle = readableInkForHex(shelfAccentHex());
+        ctx.fillStyle = readableInkForHex(shelfLook.accent || shelfAccentHex());
         ctx.fillText('▶ 播放歌单', tx + 25, actionY + 24);
 
         makeRoundRect(ctx, tx + 150, actionY, 104, 38, 18);
@@ -646,7 +648,7 @@ function makeShelfManager() {
         ctx.fillText('详情', tx + 184, actionY + 24);
       } else if (item.type === 'queue') {
         ctx.font = '600 14px Inter, "Microsoft YaHei", Arial';
-        ctx.fillStyle = shelfAccentRgba(0.84);
+        ctx.fillStyle = shelfAccentRgba(0.84, null, shelfLook.accent);
         ctx.fillText('点击播放', tx, actionY + 25);
       }
     }
@@ -690,7 +692,7 @@ function makeShelfManager() {
         : (item.type === 'queue' ? { kind: 'playQueue', index: item.queueIndex } : { kind: 'empty' }));
   }
 
-  function rebindShelfCard(card, item, index) {
+  function rebindShelfCard(card, item, index, frameLook) {
     var changedBinding = card.index !== index || card.item.key !== item.key || card.item.type !== item.type ||
       card.item.playlistId !== item.playlistId || card.item.podcastKey !== item.podcastKey ||
       card.item.queueIndex !== item.queueIndex || card.item.cover !== item.cover;
@@ -700,7 +702,7 @@ function makeShelfManager() {
     card.selected = index === selectedIdx;
     card.isCenter = Math.abs(index - centerSmooth) < 0.5;
     card.mesh.userData.action = shelfCardAction(item);
-    drawCard(card, item);
+    drawCard(card, item, frameLook);
     return card;
   }
 
@@ -761,7 +763,7 @@ function makeShelfManager() {
     else job.raf = requestAnimationFrame(step);
   }
 
-  function syncRenderedWindow(force, asyncBuild) {
+  function syncRenderedWindow(force, asyncBuild, frameLook) {
     if (!group) return;
     var total = allItems.length;
     if (!total) { disposeRenderedCards(); return; }
@@ -772,7 +774,7 @@ function makeShelfManager() {
     if (!force && start === renderedStart && cards.length === (end - start + 1)) {
       cards.forEach(function (c) {
         var nextItem = shelfItemAt(allItems, c.index) || c.item;
-        rebindShelfCard(c, nextItem, c.index);
+        rebindShelfCard(c, nextItem, c.index, frameLook);
       });
       return;
     }
@@ -790,15 +792,15 @@ function makeShelfManager() {
     for (var itemIdx = start; itemIdx <= end; itemIdx++) {
       var card = existingByIndex[itemIdx] || reusable.shift();
       if (!card) card = buildOneCard(shelfItemAt(allItems, itemIdx), itemIdx);
-      else rebindShelfCard(card, shelfItemAt(allItems, itemIdx), itemIdx);
-      if (!card.drawKey) drawCard(card, card.item);
+      else rebindShelfCard(card, shelfItemAt(allItems, itemIdx), itemIdx, frameLook);
+      if (!card.drawKey) drawCard(card, card.item, frameLook);
       nextCards.push(card);
     }
     reusable.forEach(disposeShelfCard);
     cards = nextCards;
   }
 
-  function rebuild(asyncCards, nextItems, nextSig) {
+  function rebuild(asyncCards, nextItems, nextSig, frameLook) {
     if (!group) return;
     cancelCardBuildQueue();
     if (connectorParticles) {
@@ -821,7 +823,7 @@ function makeShelfManager() {
       centerSmooth = centerTarget;
     }
     if (selectedIdx >= allItems.length) selectedIdx = -1;
-    syncRenderedWindow(true, !!asyncCards);
+    syncRenderedWindow(true, !!asyncCards, frameLook);
     if (mode === 'stage') {
       createStageExtras();
     }
@@ -831,7 +833,27 @@ function makeShelfManager() {
   //  PSP 弧形布局: 以 centerSmooth 为基准, 卡片绕弧排列
   //  i 距离 center 越远 → 越靠后, 越小, 越淡
   // ====================================================
-  function placeCard(card, i, totalCards, modeIs, frameLayout, frameLook, frameSummon) {
+  // 比较 Three.js 当前值，避免稳定帧重复执行 setter；相机四元数或外部写入后仍可即时补正。
+  function setCardPosition(card, x, y, z) {
+    var position = card.mesh.position;
+    if (position.x !== x || position.y !== y || position.z !== z) position.set(x, y, z);
+  }
+  function setCardScale(card, value) {
+    var scale = card.mesh.scale;
+    if (scale.x !== value || scale.y !== value || scale.z !== value) scale.setScalar(value);
+  }
+  function setCardColor(card, value) {
+    var color = card.mesh.material.color;
+    if (color.r !== value || color.g !== value || color.b !== value) color.setScalar(value);
+  }
+  function setCardRotation(card, x, y) {
+    var rotation = card.mesh.rotation;
+    // 保留原版 y 后 x 的写入顺序和现有 z；切出相机四元数姿态时不得清掉滚转。
+    if (rotation.y !== y) rotation.y = y;
+    if (rotation.x !== x) rotation.x = x;
+  }
+
+  function placeCard(card, i, totalCards, modeIs, frameLayout, frameLook, frameSummon, frameContentOpen, frameAlwaysVisible, frameWallpaperShelf, frameSkullShelf, framePointerSelection) {
     var delta = card.index - centerSmooth;     // 正=下方, 负=上方
     var absD = Math.abs(delta);
     // 隐藏太远的卡 (>4 全隐藏)
@@ -850,16 +872,16 @@ function makeShelfManager() {
     if (card.dofBucket !== nextDofBucket) {
       card.dofBucket = nextDofBucket;
       card.dofBlur = nextDof;
-      drawCard(card, card.item);
+      drawCard(card, card.item, frameLook);
     }
 
     if (modeIs === 'side') {
       // 右侧 3D 架: 恢复更靠近、更斜切的打开姿态，让卡片有真正的前后层次。
-      var detailOpenSide = contentList && contentList.isOpen();
+      var detailOpenSide = frameContentOpen;
       var nowT = uniforms.uTime.value;
       var hoverBreath = shelfVisibility * shelfBreathLevel;
-      var passiveAlways = shelfAlwaysVisible() && !shelfPinnedOpen && !detailOpenSide;
-      var liftTarget = card.selected && shelfPointerSelectionForegroundActive() && !detailOpenSide ? 1 : 0;
+      var passiveAlways = frameAlwaysVisible && !shelfPinnedOpen && !detailOpenSide;
+      var liftTarget = card.selected && framePointerSelection && !detailOpenSide ? 1 : 0;
       var liftRate = liftTarget > (card.floatMix || 0) ? 0.20 : 0.13;
       card.floatMix = (card.floatMix || 0) + (liftTarget - (card.floatMix || 0)) * liftRate;
       if (!liftTarget && card.floatMix < 0.004) card.floatMix = 0;
@@ -874,8 +896,8 @@ function makeShelfManager() {
       var entry = (1 - reveal) * (0.82 + absD * 0.075 * summon.stagger) * summon.slide;
       var paneRaw = Math.max(0, Math.min(1, (nowT - paneSwitchAt - absD * 0.030 * summon.stagger) / Math.max(0.12, summon.openDuration * 1.16)));
       var paneEase = 1 - paneRaw * paneRaw * (3 - 2 * paneRaw);
-      var wallpaperShelfPose = shouldUseWallpaperSafeShelfCamera();
-      var skullShelfPose = shouldUseSkullSafeShelfCamera();
+      var wallpaperShelfPose = frameWallpaperShelf;
+      var skullShelfPose = frameSkullShelf;
       var safeShelfPose = wallpaperShelfPose || skullShelfPose;
       var px = layout.sideX + absD * layout.sideXStep - (detailOpenSide ? layout.sideDetailShift : 0) + entry * layout.sideEntryX;
       var py = (layout.sideY || 0) - delta * layout.sideYStep + (1 - reveal) * (delta < 0 ? -0.18 : 0.18) * summon.slide;
@@ -897,7 +919,7 @@ function makeShelfManager() {
       var scale = (absD < 0.5 ? 1.12 : Math.max(0.55, 1.04 - absD * 0.14)) * revealScale * (1 + pulse * 0.056 + breathPulse * 0.026 + lift * (skullShelfPose ? 0.045 : 0.075)) * layout.sideScale;
       if (wallpaperShelfPose) scale *= 1.22;
       else if (skullShelfPose) scale *= 1.04;
-      card.mesh.position.set(px, py, pz);
+      setCardPosition(card, px, py, pz);
       if (skullShelfPose && camera) {
         card.mesh.quaternion.copy(camera.quaternion);
         card.mesh.rotateX(layout.sideRotX - delta * 0.008 - parY * 0.004 * parWeight * summon.parallax);
@@ -905,23 +927,24 @@ function makeShelfManager() {
       } else {
         var safeRotY = wallpaperShelfPose ? 0.12 : layout.sideRotY;
         var safeEntryRotY = wallpaperShelfPose ? 0.05 : 0.16;
-        card.mesh.rotation.y = (safeShelfPose ? safeRotY : layout.sideRotY) + (1 - reveal) * safeEntryRotY * summon.slide + parX * (safeShelfPose ? 0.014 : 0.038) * parWeight * summon.parallax;
+        var rotationY = (safeShelfPose ? safeRotY : layout.sideRotY) + (1 - reveal) * safeEntryRotY * summon.slide + parX * (safeShelfPose ? 0.014 : 0.038) * parWeight * summon.parallax;
         var safeRotX = wallpaperShelfPose ? 0.020 : layout.sideRotX;
-        card.mesh.rotation.x = -delta * (safeShelfPose ? safeRotX : layout.sideRotX) - parY * (safeShelfPose ? 0.010 : 0.024) * parWeight * summon.parallax;
+        var rotationX = -delta * (safeShelfPose ? safeRotX : layout.sideRotX) - parY * (safeShelfPose ? 0.010 : 0.024) * parWeight * summon.parallax;
+        setCardRotation(card, rotationX, rotationY);
       }
-      card.mesh.scale.setScalar(scale);
+      setCardScale(card, scale);
       var disabledByDetail = detailOpenSide;
       var opacity = absD < 0.5 ? 1.0 : Math.max(0.22, 1.0 - absD * 0.30);
       if (disabledByDetail) {
         opacity *= card.index === openCardIdx ? 0.16 : 0.08;
-        card.mesh.material.color.setScalar(card.index === openCardIdx ? 0.42 : 0.25);
+        setCardColor(card, card.index === openCardIdx ? 0.42 : 0.25);
       } else {
         if (passiveAlways) opacity *= 0.92 + lift * 0.08;
-        card.mesh.material.color.setScalar(passiveAlways ? (0.96 + lift * 0.04) : 1);
+        setCardColor(card, passiveAlways ? (0.96 + lift * 0.04) : 1);
       }
       // v8: 自动隐藏 — shelf 不在 focus 区时整体淡化
       card.mesh.material.opacity = Math.min(1, opacity * (shelfVisibility != null ? shelfVisibility : 1) * reveal * (1 - paneEase * 0.24) + pulse * 0.10 * reveal + breathPulse * 0.035) * shelfLook.opacity;
-      setCardCenter(card, absD < 0.5);
+      setCardCenter(card, absD < 0.5, frameLook);
     } else {
       // 舞台 PSP: 水平展开 + center 突出, dock 在底部
       var pxStage = (layout.stageX || 0) + delta * layout.stageXStep;
@@ -938,27 +961,26 @@ function makeShelfManager() {
       var centerWeightS = Math.max(0, 1 - absD);
       centerWeightS = centerWeightS * centerWeightS * (3 - 2 * centerWeightS);
       var scaleS = (Math.max(0.45, 1.0 - absD * 0.22) + 0.20 * centerWeightS) * (1 + pulse * 0.060) * layout.stageScale;
-      card.mesh.position.set(pxStage, pyStage, pzStage);
-      card.mesh.rotation.y = -delta * 0.22 + parX * 0.050 * parWeight;
-      card.mesh.rotation.x = 0.10 - absD * 0.04 - parY * 0.028 * parWeight;
-      card.mesh.scale.setScalar(scaleS);
-      var disabledStage = contentList && contentList.isOpen();
+      setCardPosition(card, pxStage, pyStage, pzStage);
+      setCardRotation(card, 0.10 - absD * 0.04 - parY * 0.028 * parWeight, -delta * 0.22 + parX * 0.050 * parWeight);
+      setCardScale(card, scaleS);
+      var disabledStage = frameContentOpen;
       var opS = Math.max(0.18, 1.0 - absD * 0.32);
       if (disabledStage) {
         opS *= card.index === openCardIdx ? 0.16 : 0.08;
-        card.mesh.material.color.setScalar(card.index === openCardIdx ? 0.42 : 0.25);
+        setCardColor(card, card.index === openCardIdx ? 0.42 : 0.25);
       } else {
-        card.mesh.material.color.setScalar(1);
+        setCardColor(card, 1);
       }
       card.mesh.material.opacity = Math.min(1, opS * (shelfVisibility != null ? shelfVisibility : 1) * (1 - paneEaseS * 0.24) + pulse * 0.10) * shelfLook.opacity;
-      setCardCenter(card, absD < 0.5);
+      setCardCenter(card, absD < 0.5, frameLook);
     }
   }
 
-  function setCardCenter(card, isCenter) {
+  function setCardCenter(card, isCenter, frameLook) {
     if (card.isCenter !== isCenter) {
       card.isCenter = isCenter;
-      drawCard(card, card.item);
+      drawCard(card, card.item, frameLook);
     } else {
       card.isCenter = isCenter;
     }
@@ -1184,45 +1206,46 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
       rebuild(false);
     },
     getMode: function () { return mode; },
-    update: function (dt) {
+    update: function (dt, frameNow, frameShelfState) {
       if (!group) return;
       // PSP 滚动平滑
       var centerEase = mode === 'stage' ? 1 - Math.pow(1 - 0.16, (isFinite(dt) && dt >= 0 ? dt : 1 / 60) * 60) : 0.16;
       centerSmooth += (centerTarget - centerSmooth) * centerEase;
       if (Math.abs(centerSmooth - centerTarget) < 0.001) centerSmooth = centerTarget;
       var px = pointerParallax.x, py = pointerParallax.y;
-      var cueVis = tickShelfHoverCue(dt);
+      var now = frameNow == null ? performance.now() : frameNow;
+      var contentOpen = frameShelfState ? frameShelfState.contentOpen : !!(contentList && contentList.isOpen());
+      var alwaysVisible = frameShelfState ? frameShelfState.alwaysVisible : (mode === 'side' && shelfAlwaysVisible());
+      var summonVis = shelfSummonSettings();
+      var cueVis = tickShelfHoverCue(dt, now, summonVis);
       var targetVis;
       if (mode === 'side') {
-        var contentOpen = contentList && contentList.isOpen();
-        var switchGuard = typeof shelfPlaybackSwitchGuardActive === 'function' && shelfPlaybackSwitchGuardActive();
+        var switchGuard = typeof shelfPlaybackSwitchGuardActive === 'function' && shelfPlaybackSwitchGuardActive(now);
         if (!allItems.length && !contentOpen) targetVis = 0;
         else if (switchGuard && !contentOpen && !shelfPinnedOpen) targetVis = 0;
-        else targetVis = (contentOpen || shelfPinnedOpen || shelfAlwaysVisible()) ? 1.0 : (cueVis > 0.01 ? Math.max(0.16, cueVis * 0.88) : 0);
+        else targetVis = (contentOpen || shelfPinnedOpen || alwaysVisible) ? 1.0 : (cueVis > 0.01 ? Math.max(0.16, cueVis * 0.88) : 0);
       } else {
         targetVis = allItems.length ? 1.0 : 0;
       }
-      var summonVis = shelfSummonSettings();
       var visDuration = targetVis > shelfVisibility
         ? Math.max(0.05, summonVis.openDuration * 0.45)
         : Math.max(0.05, summonVis.closeDuration * 0.65);
       shelfVisibility += (targetVis - shelfVisibility) * durationEaseFactor(visDuration, dt);
       // 悬停呼吸强度缓动：钉开/详情打开时平滑淡出而非瞬停，消除「悬停态→可用态」的手感跳变。
-      var shelfBreathTarget = (shelfPinnedOpen || (contentList && contentList.isOpen())) ? 0 : 1;
+      var shelfBreathTarget = (shelfPinnedOpen || contentOpen) ? 0 : 1;
       shelfBreathLevel += (shelfBreathTarget - shelfBreathLevel) * durationEaseFactor(0.32, dt);
       if (shelfVisibility < 0.01 && targetVis === 0) shelfVisibility = 0;
-      group.visible = (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || (contentList && contentList.isOpen()));
+      group.visible = (mode !== 'side' || shelfVisibility > 0) && (allItems.length > 0 || contentOpen);
       if (connectorParticles) connectorParticles.visible = group.visible && mode === 'stage';
+      var pointerSelectionForeground = mode === 'side' && shelfPointerSelectionForegroundActive();
       if (mode === 'side') {
-        var contentOpenForLayer = !!(contentList && contentList.isOpen());
-        var passiveAlwaysGroup = shelfAlwaysVisible() && !shelfPinnedOpen && !contentOpenForLayer;
-        var pointerSelectionForeground = shelfPointerSelectionForegroundActive();
+        var passiveAlwaysGroup = alwaysVisible && !shelfPinnedOpen && !contentOpen;
         var liftedCardActive = passiveAlwaysGroup && cards.some(function (c) {
           return (pointerSelectionForeground && c.selected) || (c.floatMix || 0) > 0.025;
         });
-        group.renderOrder = (contentOpenForLayer || shelfPinnedOpen || liftedCardActive) ? 300 : 30;
+        group.renderOrder = (contentOpen || shelfPinnedOpen || liftedCardActive) ? 300 : 30;
         group.position.set(0, 0, 0);
-        var bindToCover = (shelfAlwaysVisible() || shelfPinnedOpen || shelfVisibility > 0.06) && particles && particles.rotation && !(contentList && contentList.isOpen());
+        var bindToCover = (alwaysVisible || shelfPinnedOpen || shelfVisibility > 0.06) && particles && particles.rotation && !contentOpen;
         if (bindToCover) {
           var bindEase = uniforms.uTime.value < coverBindResumeUntil ? 0.18 : 0.075;
           group.rotation.x += ((particles.rotation.x - py * 0.010) - group.rotation.x) * bindEase;
@@ -1234,7 +1257,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
           group.rotation.z += (0 - group.rotation.z) * 0.045;
         }
       } else {
-        group.renderOrder = ((contentList && contentList.isOpen()) || selectedIdx >= 0) ? 300 : 30;
+        group.renderOrder = (contentOpen || selectedIdx >= 0) ? 300 : 30;
         var t = uniforms.uTime.value;
         group.position.y = Math.sin(t * 0.3) * 0.04;
         group.position.x = px * 0.10;
@@ -1242,16 +1265,18 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
         group.rotation.x = -py * 0.012;
       }
       var frameLook = shelfSettings();
-      var frameLayout = shelfLayoutProfile(frameLook);
+      var frameSkullShelf = shouldUseSkullSafeShelfCamera();
+      var frameWallpaperShelf = mode === 'side' && shouldUseWallpaperSafeShelfCamera();
+      var frameLayout = shelfLayoutProfile(frameLook, frameSkullShelf);
       for (var i = 0; i < cards.length; i++) {
-        placeCard(cards[i], i, cards.length, mode, frameLayout, frameLook, summonVis);
+        placeCard(cards[i], i, cards.length, mode, frameLayout, frameLook, summonVis, contentOpen, alwaysVisible, frameWallpaperShelf, frameSkullShelf, pointerSelectionForeground);
       }
       // 内容更新 (节流)
       if (uniforms.uTime.value - lastUpdate > 0.8) {
         lastUpdate = uniforms.uTime.value;
         var nextItems = currentItems();
         var nextSig = sig(nextItems);
-        if (nextSig !== lastSig) rebuild(false, nextItems, nextSig);
+        if (nextSig !== lastSig) rebuild(false, nextItems, nextSig, frameLook);
         else {
           var pulseBucket = Math.round((bass + beatPulse * 0.85) * 10);
           var redrawInterval = playing ? 1.35 : 4.0;
@@ -1261,7 +1286,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
             cards.forEach(function (c) {
               c.item = shelfItemAt(allItems, c.index) || c.item;
               c.isCenter = Math.abs(c.index - centerSmooth) < 0.5;
-              if (c.isCenter || c.dofBucket <= 1 || c.index === currentIdx) drawCard(c, c.item);
+              if (c.isCenter || c.dofBucket <= 1 || c.index === currentIdx) drawCard(c, c.item, frameLook);
             });
           }
         }

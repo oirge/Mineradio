@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`flask-round`,size:24,node:[[`path`,{d:`M10 2v6.292a7 7 0 1 0 4 0V2`,key:`1s42pc`}],[`path`,{d:`M5 15h14`,key:`m0yey3`}],[`path`,{d:`M8.5 2h7`,key:`csnxdl`}]]};r.node;var i=t(r);export{n,i as t};

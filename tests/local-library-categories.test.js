@@ -490,6 +490,15 @@ test('切到音乐库 tab 会把选中项摆到分类首页，切回歌单则退
   assert.equal(ctx.els['pl-pane-create-btn'].style.display, '');
 });
 
+test('切回当前队列时补刷延迟的歌曲更新，不改变分类选中项', () => {
+  const ctx = createTabContext('library-value:artist:周杰伦', 'library');
+  const flushes = [];
+  ctx.flushDeferredQueuePanel = reason => flushes.push(reason);
+  ctx.switchTab('queue');
+  assert.deepEqual(flushes, ['queue-tab-open']);
+  assert.equal(ctx.localLibraryPlaylistSelection, 'library-value:artist:周杰伦');
+});
+
 test('从分组或某位艺术家切走再回来不会串页，队列 tab 不动选中项', () => {
   // 停在 library-value 层时切到队列，选中项要原样保留，回来还在音乐库
   const deep = createTabContext('library-value:artist:周杰伦', 'library');

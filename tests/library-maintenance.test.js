@@ -676,6 +676,29 @@ function assertNoLoadMore(html) {
   assert.doesNotMatch(html, /data-pl-load-more|加载更多|加载全部/);
 }
 
+test('隐藏曲库刷新不扫描歌曲或构建HTML，打开后保留全部末行操作', () => {
+  const songs = Array.from({ length: 10000 }, (_, index) => song(`hidden-${index}`));
+  const api = createFullPanelContext(songs, 'library');
+  let visible = false, songLists = 0, coverReads = 0;
+  const localPlaylistSongs = api.localPlaylistSongs;
+  api.isPlaylistPaneVisibleForRender = () => visible;
+  api.localPlaylistSongs = (kind) => { songLists++; return localPlaylistSongs(kind); };
+  api.songCoverSignature = () => { coverReads++; return ''; };
+  for (let i = 0; i < 20; i++) api.renderLocalLibraryPlaylistPanel({ animate: false });
+  assert.equal(api.playlistPanelDirty, true);
+  assert.equal(songLists, 0);
+  assert.equal(coverReads, 0);
+  assert.equal(api.__captured.writes, 0);
+  visible = true;
+  api.renderLocalLibraryPlaylistPanel({ animate: false });
+  assert.equal(api.playlistPanelDirty, false);
+  assert.equal(songLists, 1);
+  assert.equal(api.__captured.writes, 1);
+  assert.match(api.__captured.html, /data-local-library-index="9999"/);
+  assert.match(api.__captured.html, /data-local-collect-index="9999"/);
+  assertNoLoadMore(api.__captured.html);
+});
+
 for (const [field, label] of [['artist', '艺术家'], ['album', '专辑']]) {
   test(`${label}目录首次完整显示700项，重复刷新不截断，增长后末项可进入和播放`, () => {
     const makeSong = (index) => song(`group-${index}`, { [field]: `${label}${index}` });

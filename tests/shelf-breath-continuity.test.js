@@ -14,6 +14,6 @@ test('悬停呼吸强度走缓动系数而非布尔瞬停', () => {
 });
 
 test('钉开/详情打开时呼吸强度缓动淡出（而非瞬间归零）', () => {
-  assert.match(shelfSrc, /shelfBreathTarget = \(shelfPinnedOpen \|\| \(contentList && contentList\.isOpen\(\)\)\) \? 0 : 1;/);
+  assert.match(shelfSrc, /shelfBreathTarget = \(shelfPinnedOpen \|\| contentOpen\) \? 0 : 1;/);
   assert.match(shelfSrc, /shelfBreathLevel \+= \(shelfBreathTarget - shelfBreathLevel\) \* durationEaseFactor\(/);
 });

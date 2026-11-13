@@ -113,6 +113,42 @@ export const resolveHarmonySnapshotFromVocals = (
     return { signature, lines };
 };
 
+/** Reuse an immutable harmony snapshot until a vocal or word changes discrete state. */
+export function createHarmonySnapshotLookup(vocals: LyricBackgroundVocal[]): (time: number) => HarmonySnapshot {
+    const times = new Set<number>();
+    const addBoundary = (value: number) => {
+        const time = Number(value);
+        if (Number.isFinite(time)) times.add(time);
+    };
+    for (const vocal of vocals) {
+        if (!vocal.text.trim()) continue;
+        addBoundary(vocal.startTime); addBoundary(vocal.endTime);
+        for (const word of vocal.words) {
+            addBoundary(word.startTime); addBoundary(word.endTime);
+        }
+    }
+    const boundaries = Array.from(times).sort((left, right) => left - right);
+    times.clear();
+    let previousBucket = -1;
+    let previousSnapshot: HarmonySnapshot | undefined;
+    return time => {
+        if (!Number.isFinite(time)) return resolveHarmonySnapshotFromVocals(vocals, time);
+        let low = 0, high = boundaries.length;
+        while (low < high) {
+            const middle = Math.floor((low + high) / 2);
+            if (boundaries[middle] <= time) low = middle + 1;
+            else high = middle;
+        }
+        // Exact endpoints are their own bucket: a word/vocal ends only AFTER
+        // its endTime, while the next word/vocal starts AT its startTime.
+        const bucket = low * 2 + (low > 0 && boundaries[low - 1] === time ? 0 : 1);
+        if (bucket === previousBucket && previousSnapshot) return previousSnapshot;
+        previousBucket = bucket;
+        previousSnapshot = resolveHarmonySnapshotFromVocals(vocals, time);
+        return previousSnapshot;
+    };
+}
+
 export const resolveHarmonySnapshot = (
     line: Line | null | undefined,
     currentTime: number,

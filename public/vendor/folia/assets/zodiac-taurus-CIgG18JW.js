@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`zodiac-taurus`,size:24,node:[[`circle`,{cx:`12`,cy:`15`,r:`6`,key:`lhqcmb`}],[`path`,{d:`M18 3A6 6 0 0 1 6 3`,key:`1p399e`}]]};r.node;var i=t(r);export{n,i as t};

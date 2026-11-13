@@ -87,6 +87,9 @@ with sync_playwright() as p:
             expect(panel).to_have_count(0)
         # Both normal and desktop titlebar portals retain the same entry point.
         page.evaluate("document.body.classList.add('desktop-shell')")
+        # The desktop titlebar auto-hides after inactivity; reveal it through the real pointer path.
+        page.mouse.move(720, 10)
+        page.wait_for_function("!document.body.classList.contains('folia-chrome-hidden')")
         page.get_by_test_id('local-open-playback').click()
         expect(panel).to_be_visible()
         panel.get_by_role('button', name='Close', exact=True).click()

@@ -1,0 +1,1 @@
+export{BitmapFont}from"./lib-DdiIX0Dd.js";

@@ -205,3 +205,44 @@ test('本地搜索池把同一筛选数组交给预热任务', testLocalSearchPo
 test('空查询搜索结果按曲库签名复用数组', testEmptyLocalSearchResultsReuseIdentity);
 test('local search prioritizes song artist and file name', testLocalSearchPrioritizesSongArtistAndFileName);
 test('曲库恢复不会自动弹出搜索结果面板', testLocalLibraryRefreshKeepsClosedSearchResultsHidden);
+
+function searchCacheHarness(songs, limit = 80) {
+  const source = readRendererSource();
+  const indexSource = readFunctionSource(source, 'function localSongSearchFileName(song)', 'function localSearchDefaultResults(pool)');
+  const searchSource = readFunctionSource(source, 'function cachedLocalSongSearchFields(song)', 'function renderLocalLibraryResults');
+  let fieldReads = 0;
+  const context = {
+    Array, Math, String, LOCAL_SEARCH_RESULT_LIMIT: limit,
+    localSearchPoolCache: { signature: `library:${songs.length}` },
+    localSearchResultCache: { signature: '', normalizedQuery: '', results: [], exhaustive: false },
+    localSearchPool: () => songs,
+    simpleSearchNorm: value => String(value || '').toLowerCase().replace(/\s+/g, ''),
+  };
+  vm.runInNewContext(`${indexSource}\n${searchSource}`, context);
+  const readFields = context.cachedLocalSongSearchFields;
+  context.cachedLocalSongSearchFields = song => { fieldReads++; return readFields(song); };
+  return { context, reads: () => fieldReads };
+}
+
+test('a truncated prefix search keeps later matches reachable when typing a longer query', () => {
+  const songs = Array.from({ length: 10000 }, (_, index) => ({ type: 'local', name: `Alpha ${index}`, artist: 'Artist' }));
+  const h = searchCacheHarness(songs);
+  const broad = h.context.searchLocalSongs('al');
+  assert.equal(broad.length, 80);
+  assert.equal(h.context.localSearchResultCache.exhaustive, false);
+  const same = h.context.searchLocalSongs('al');
+  assert.equal(same, broad, 'an identical query still reuses the cached array');
+  const specific = h.context.searchLocalSongs('alpha 9999');
+  assert.deepEqual(Array.from(specific, song => song.name), ['Alpha 9999']);
+});
+
+test('complete search results still narrow without rescanning the whole library', () => {
+  const songs = Array.from({ length: 10000 }, (_, index) => ({ type: 'local', name: index < 20 ? `Alpha ${index}` : `Other ${index}` }));
+  const h = searchCacheHarness(songs);
+  assert.equal(h.context.searchLocalSongs('al').length, 20);
+  assert.equal(h.context.localSearchResultCache.exhaustive, true);
+  const before = h.reads();
+  const specific = h.context.searchLocalSongs('alpha 19');
+  assert.deepEqual(Array.from(specific, song => song.name), ['Alpha 19']);
+  assert.equal(h.reads() - before, 20, 'only the complete previous result set is scanned');
+});

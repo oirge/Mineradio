@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-hePW80VL.js";import{t}from"./createLucideIcon-BOBf16kC.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`voicemail`,size:24,node:[[`circle`,{cx:`6`,cy:`12`,r:`4`,key:`1ehtga`}],[`circle`,{cx:`18`,cy:`12`,r:`4`,key:`4vafl8`}],[`line`,{x1:`6`,x2:`18`,y1:`16`,y2:`16`,key:`pmt8us`}]]};r.node;var i=t(r);export{n,i as t};

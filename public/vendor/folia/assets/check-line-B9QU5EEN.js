@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`check-line`,size:24,node:[[`path`,{d:`M20 4L9 15`,key:`1qkx8z`}],[`path`,{d:`M21 19L3 19`,key:`100sma`}],[`path`,{d:`M9 15L4 10`,key:`9zxff7`}]]};r.node;var i=t(r);export{n,i as t};

@@ -687,6 +687,7 @@
     "src/mineradio/local/useLocalControlsStore.ts",
     "src/mineradio/local/useLocalLatticeSettingsStore.ts",
     "src/mineradio/local/useLocalPlayer.ts",
+    "src/mineradio/local/useLocalSubtitleBottom.ts",
     "src/mineradio/local/useLocalVisualAssets.ts",
     "src/mineradio/local/useLocalVisualizerPrewarm.ts",
     "src/mineradio/local/usePlaybackPlaylists.ts",

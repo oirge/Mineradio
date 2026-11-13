@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`wifi-zero`,size:24,node:[[`path`,{d:`M12 20h.01`,key:`zekei9`}]]};r.node;var i=t(r);export{n,i as t};

@@ -390,6 +390,24 @@
 - 3D 歌单详情的可见行位置、缩放、旋转、可见性、渲染顺序和材质透明度，以及详情组位置/缩放/普通欧拉姿态和面板透明度，都必须通过运行时稳定值缓存写入；动画目标仍按帧计算，相同目标值不得重复触发 Three.js setter。相机四元数分支必须使详情组欧拉缓存失效，切回普通姿态时重新写入当前目标。回归测试：`tests/frame-hot-path.test.js`。
 - 3D 歌单详情的 `syncRenderedRows()` 每次同步必须只读取一次 `shelfSettings()`，并把同一 `frameShelfLook` 传给 `drawPanelIfNeeded()`、`drawPanel()` 与所有 `drawRow()`；面板和详情行统一复用该快照的 `bgOpacity` 与 `accent`，避免同一帧重复归一化偏好和解析颜色。异步封面回调、主题刷新等非帧入口可省略快照回退读取；快照不得跨帧保存或修改。回归测试：`tests/frame-hot-path.test.js`、`tests/content-list-rendering-hot-path.test.js`。
 
+## 2.7.2 基线补充：隐藏消费者与单曲增量
+
+- 主队列和曲库歌单页必须按当前 tab 与外层面板可见性分别判断；仅迷你队列打开时只准备迷你队列数据。隐藏页保留 dirty，打开、peek 或从 Folia 返回后按命名 RAF 合并补刷，延迟回调再次校验可见性。不能因门控丢失选择归一化、全部歌曲访问或末项操作。
+- 搜索缓存的 `exhaustive` 表示结果包含全部命中，不能仅根据已扫描到数组末尾设置它。超过 `LOCAL_SEARCH_RESULT_LIMIT` 的匹配必须使它为 false，继续输入时回全库筛选，避免丢失截断之外的歌曲。
+- `promoteCurrentLocalAssetInQueue` 使用本轮运行的 `missingKey` 缓存：剩余队列只会缩短或提升已有项，同一已缺失键不重复扫描；换歌与重复键的提升顺序保持原语义，新运行独立创建缓存。
+- SQLite 接管后，资产落盘回调使用 `saveLocalLibrarySongIndex` 只生成单曲记录；仅 SQLite 不可用的旧壳走原保存入口。单曲 SQLite 写入失败时保留未确认摘要供下次重试，不能经旧全量入口预确认失败的摘要。记录写入当前根的驻留索引须就地更新，不复制全表。调度捕获曲库数组身份，成功回复同时匹配代次、摘要表及单键写入 owner 才确认摘要；A→在途 B→A 不能因旧成功摘要跳过最后一次 A，owner 在 finally 按身份释放。
+- 定向行为与规模回归见 `tests/folia-hidden-queue-performance.test.js`、`tests/local-library-background-performance.test.js`、`tests/local-search-cache.test.js`。性能工作量与 Folia 时序优化说明见 `docs/PLAYER_PERFORMANCE.md`。
+- 同根启动的 `loadSingleLocalLibraryRoot` → `handleLocalFolderFiles` 通过一次性标量凭据复用当前加载的索引；凭据匹配根、曲库代次和最新水合 token，不能强引用索引、跨根复用或用于第二次建库。SQL 与旧 IndexedDB 水合回包都须拒绝同根迟到 token；已有文件表的建库水合不保留文件快照。回归见 `tests/local-library-startup-hydration.test.js`。
+- 原版舞台 `public/shelf-classic.js` 的卡片绘制与布局复用本帧外观、详情和时间快照，非帧封面／主题入口回退读取当前设置。稳定帧仅在 Three.js 实际值不相等时写入卡片位置、缩放、颜色和欧拉角，不设精度阈值；普通姿态保留 rotation.z，退出相机四元数姿态后按当前值补正。回归见 `tests/shelf-classic-frame-performance.test.js`。
+
+## 2.7.2 第二轮：可见窗口、歌词桥接、封面 Worker 与搜索字段
+
+- `public/windowed-list.js` 只持有当前窗口的行节点和字符串，保留完整滚动范围及绝对业务索引。原版主／迷你队列的 `queueVisibleRows(end, null, start)` 只准备窗口范围；曲库窗口分支不得先调用全库 `localLibraryPlaylistDomSignature`。隐藏曲库必须 clear 旧窗口，释放回调对旧歌曲数组的引用。禁止用加载更多截断全部歌曲访问。
+- 窗口重排保留未变行节点及原生拖动源；跨窗口拖动时固定到屏外的源节点要在 dragend 还原，缓存必须记录源节点实际 HTML，不能提前把新数据 HTML 记作已绘制。Tab 越过窗口边界时补挂下一行并按原方向恢复按钮焦点，不能滚动外壳。
+- Folia `lyricsSignature` 复用既有 `lyricRowTranslationRevision`，按歌曲、数组身份、行数和 revision 失效。翻译写入必须继续调用 `bumpStageLyricRows`；无 revision 的旧壳走兼容路径，离开 Folia 清除旧数组引用。
+- `cover-thumbnail.js` 串行发送 Worker 任务并限制等待容量和字节；空闲销毁、超时、错误和 unload 都要结算 pending。旧 Worker 的迟到错误／消息须匹配 Worker 身份，不能杀死新实例。Worker 的 ImageBitmap 在 finally 关闭；尺寸、质量、smoothing、旧主线程回退及原有缩略图缓存所有权不可改变。
+- Folia `trackSearchText` 用 WeakMap 保存实时原始标量与归一文本，新查询仍对比实时字段，原地标签修改后必须重新归一化；不能因缓存而漏掉无通知的原地编辑。元数据通知仍负责已有查询结果的失效。
+
 ## Reference
 
 - 相关实现：`public/index.html`、`public/app.js`、`public/mini-player.html`、`desktop/main.js`、`desktop/desktop-overlay-state-cache.js`、`desktop/mini-player-recovery-session.js`、`desktop/mini-player-state-cache.js`、`server.js`、`scripts/test-mini-player-memory.ps1`、`tests/desktop-lyrics-ipc-ownership.test.js`、`tests/desktop-lyrics-mouse-poller.test.js`、`tests/desktop-overlay-state-cache.test.js`、`tests/desktop-overlay-disabled-ipc.test.js`、`tests/desktop-overlay-main-update.test.js`、`tests/desktop-overlay-window-ownership.test.js`、`tests/local-asset-cache-ownership.test.js`、`tests/local-beat-cache-residency.test.js`、`tests/local-cover-thumb-promise-ownership.test.js`、`tests/local-file-range-memory.test.js`、`tests/local-library-persistent-memory.test.js`、`tests/local-library-background-refresh.test.js`、`tests/local-library-background-cancellation.test.js`、`tests/local-library-incremental-truncation.test.js`、`tests/local-lyric-cache-residency.test.js`、`tests/local-media-object-url-residency.test.js`、`tests/playlist-cover-cache-residency.test.js`、`tests/mini-player-main-gates.test.js`、`tests/mini-player-pulse.test.js`、`tests/mini-player-recovery-session.test.js`、`tests/mini-player-state-cache.test.js`、`tests/mini-player-visual.test.js`

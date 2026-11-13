@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`spell-check`,size:24,node:[[`path`,{d:`m20 15-5.5 5.5L12 18`,key:`6ytzne`}],[`path`,{d:`m4 16 6-12 5.115 10.23`,key:`fyukjg`}],[`path`,{d:`M6 12h8`,key:`1hdiqa`}]]};r.node;var i=t(r);export{n,i as t};

@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./createLucideIcon-DtVqhuuX.js";var n=e({__iconData:()=>r,default:()=>i}),r={name:`undo-dot`,size:24,node:[[`path`,{d:`M21 17a9 9 0 0 0-15-6.7L3 13`,key:`8mp6z9`}],[`path`,{d:`M3 7v6h6`,key:`1v2h90`}],[`circle`,{cx:`12`,cy:`17`,r:`1`,key:`1ixnty`}]]};r.node;var i=t(r);export{n,i as t};
