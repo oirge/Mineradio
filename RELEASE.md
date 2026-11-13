@@ -1,11 +1,20 @@
-# v2.7.3 性能优化（发布准备）
+# v2.7.3 性能优化
 
 - 用户于 2026-11-13 明确要求发布新版；本次为 2.7.3，汇集 PR #185 的两轮性能优化，不替换已公开的 2.7.2。
 - 原版主／迷你队列及曲库按可见区域挂载，保留完整滚动、末项、键盘和拖动；歌词桥接按 revision 复用、搜索实时字段缓存、封面 Worker、后台增量索引／预载与单次启动水合、原版舞台稳定属性写入短路。原有布局、SVG 质感、画质、唯一宿主音频、默认翻译／用户源优先及数据身份保留。
 - 最终性能提交 `fe43aab152f99663824a981492f9a3c4d88f8fdc` 通过依赖审计、构建、类型、Folia 131＋134、Node 1754 通过／0 失败／1 可选跳过，以及 15 项一万首浏览器专项；27 项定向回归覆盖旧滚动回调越界、拖动源、窗口逻辑行高及 Worker 生命周期。生产函数对照结果一致：30 行窗口封面读取 10000→30，75 次歌词签名读取 750000→10000，十次搜索归一化 100000→10000。
 - 完整 Verify [43381637281](https://github.com/oirge/Mineradio/actions/runs/43381637281) 不为全绿：attempt 1 在播放交互断言之后的最后截图 15 秒超时；attempt 2 通过播放、工具、翻译和布局，在 verify-ui-language.py 的截图阶段 30 秒超时（字体已加载，页面异常为空）。早期第二轮 `7f8a094e` 的完整 [43377590568](https://github.com/oirge/Mineradio/actions/runs/43377590568) 成功，不能冒充最终提交结论。未放宽断言、超时或画质；相关日志保留于忽略目录 verification/。
-- 发布沿用云端 Windows 构建与既有私密默认翻译配置注入／包内校验。安装器、blockmap、latest.yml 与 SHA256SUMS 草稿完整回下载后核对大小、SHA256、SHA-512 和只读版本，再公开并设 Latest。构建与正式资产事实待本次流程完成后补录。
+- 发布沿用云端 Windows 构建与既有私密默认翻译配置注入／包内校验；草稿资产完整核验后公开，事实与摘要如下。
 - 全程低优先级后台与云端工作，未打开本机可见测试窗口、安装新版或操作用户播放器与数据；真实 GPU／设备帧率未验收。
+
+- [PR #185](https://github.com/oirge/Mineradio/pull/185) 合并为 `d8b77d3a641d88b4dbc3fa98696c03800018acf2`；annotated tag `v2.7.3`（tag object `2d63777710fc6b90476664f5827315b1bb420622`）固定该提交，合并文件树与发布准备提交 `f305045f` 一致。
+- [Windows Build and Release 43386568809](https://github.com/oirge/Mineradio/actions/runs/43386568809) 成功，依赖审计、Folia 重建、私密默认翻译配置注入、Windows 打包及 ASAR 内配置校验通过。发布元数据／打包白名单／编码和性能定向检查 28/28 通过；无新增生产依赖。
+- [v2.7.3 Release 443941122](https://github.com/oirge/Mineradio/releases/tag/v2.7.3) 于北京时间 `2026-11-13 15:40:11` 公开并设 Latest，draft=false／prerelease=false。四资产在草稿阶段完整回下载，大小、SHA256 与 GitHub digest／SHA256SUMS 一致；安装器 SHA-512 与 latest.yml 两处摘要和 size/path/url 一致。只读安装器 FileVersion／ProductVersion 为 2.7.3、ProductName 为 Mineradio 二创，未执行安装器。安装器 122285730 B，比 2.7.2 增加 6314 B。
+- 公开校验：无认证直连 Latest API 返回 2.7.3／443941122，公开 latest.yml 与已核验文件逐字节一致。首次通过显式代理访问匿名 API 遇到 403 限流，保留该响应；改用无认证直连 API 核验成功，公开下载清单通过代理获取成功。不宣称所有访问线路均正常。
+  - `latest.yml`：359 B，SHA256 `5c14287c702a3a6747e124f0c9a5da012869938c7aafc3de1f9b0f78ced53e34`。
+  - `Mineradio-oirge-2.7.3-Setup.exe`：122285730 B，SHA256 `336d637de30b8ce7f4bbf618c3e72d2c4aa5945a9141b342777d0ef75685359c`。
+  - `Mineradio-oirge-2.7.3-Setup.exe.blockmap`：128226 B，SHA256 `32c4d3ace6ff57f4f51856f028d9c52134669126a01ccb64f6b8434e5fd900ad`。
+  - `Mineradio-oirge-2.7.3-SHA256SUMS.txt`：282 B，SHA256 `2b905d176fde9e0e371a257210a611a5250693f71031f8b7fb5bd7b55d6efbe8`。
 
 # v2.7.2 翻译设置关闭后的窗口偏移修复
 
