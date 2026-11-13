@@ -74,7 +74,14 @@
     var first = rows.get(next.start);
     if (first && !measured) {
       var style = global.getComputedStyle(first.node), rect = first.node.getBoundingClientRect();
-      var stride = rect.height + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0) + state.gap;
+      // Collapse-to-mini scales ancestors; its visual rectangle must not shrink the logical row stride.
+      var height = parseFloat(style.height);
+      if (!Number.isFinite(height)) height = rect.height;
+      else if (style.boxSizing !== 'border-box') {
+        height += (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0)
+          + (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+      }
+      var stride = height + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0) + state.gap;
       if (stride > 1 && Math.abs(stride - state.stride) > 0.25) {
         var oldStride = state.stride;
         state.stride = stride;

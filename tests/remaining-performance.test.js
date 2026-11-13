@@ -106,7 +106,7 @@ test('windowed DOM reuses unchanged rows, keeps a distant drag source alive, rep
     getAttribute(key) { return this.attributes[key]; }
     removeAttribute(key) { delete this.attributes[key]; }
     getClientRects() { return [this.getBoundingClientRect()]; }
-    getBoundingClientRect() { return { top: 0, height: 54 }; }
+    getBoundingClientRect() { return { top: 0, height: 27 }; }
     addEventListener(name, callback) { this.listeners.set(name, callback); }
     removeEventListener(name) { this.listeners.delete(name); }
     closest() { return this; }
@@ -114,14 +114,14 @@ test('windowed DOM reuses unchanged rows, keeps a distant drag source alive, rep
     removeChild(node) { const index = this.children.indexOf(node); assert.ok(index >= 0); this.children.splice(index, 1); node.parent = null; }
   }
   const global = { requestAnimationFrame(callback) { const id = ++frameId; frames.set(id, callback); return id; },
-    cancelAnimationFrame(id) { frames.delete(id); }, getComputedStyle: () => ({ rowGap: '6', marginTop: '0', marginBottom: '0' }) };
+    cancelAnimationFrame(id) { frames.delete(id); }, getComputedStyle: () => ({ rowGap: '6', marginTop: '0', marginBottom: '0', height: '54px', boxSizing: 'border-box' }) };
   vm.runInNewContext(read('windowed-list.js'), { window: global });
   const root = new Element(), list = global.MineradioWindowedList;
   const songs = Array.from({ length: 10000 }, (_, i) => 'Track ' + i);
   const options = { key: 'queue', count: songs.length, scroller: root, stride: 60,
     prepare(start, end) { prepared += end - start; return i => '<div>' + songs[i] + '</div>'; } };
   list.render(root, options);
-  assert.ok(root.children.length < 30); assert.ok(prepared < 30);
+  assert.ok(root.children.length < 30, 'ancestor collapse scale must not change the logical row height'); assert.ok(prepared < 30);
   const source = root.children.find(node => node.getAttribute('data-windowed-index') === '0');
   list.render(root, options);
   assert.equal(root.children[0], source, 'unchanged row nodes must retain focus and decoded covers');
