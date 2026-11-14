@@ -110,10 +110,23 @@ def folia_ready(page):
 
 
 def click_switch(page):
-    # Reveal the real auto-hiding chrome through its ordinary pointer path.
-    page.mouse.move(640, 10)
+    # Move onto the actual control so revealing it also establishes the
+    # ordinary hover lock, rather than starting an idle timer elsewhere.
+    button = page.locator('#folia-floating-switch')
+    box = button.bounding_box()
+    assert box is not None, 'Interface switch is not mounted'
+    page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
     page.wait_for_function("!isFoliaInterfaceActive() || !document.body.classList.contains('folia-chrome-hidden')")
-    page.locator('#folia-floating-switch').click()
+    box = button.bounding_box()
+    assert box is not None, 'Revealed interface switch is not mounted'
+    page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+    button.hover()
+    if page.evaluate('isFoliaInterfaceActive()'):
+        # Check that hovering really holds the control beyond its idle hide
+        # delay before sending the actual click.
+        page.wait_for_timeout(3000)
+        assert page.evaluate("!document.body.classList.contains('folia-chrome-hidden')"), 'Hovered interface switch auto-hid'
+    button.click()
 
 
 def click_folia_play_pause(child):
