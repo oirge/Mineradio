@@ -103,11 +103,15 @@ with sync_playwright() as p:
         audio_panel.get_by_role('button', name='关闭', exact=True).click()
         liked_before = page.evaluate('isSongLiked(playQueue[currentIdx])')
         like = child.get_by_test_id('local-like')
+        menu = child.get_by_test_id('local-slot-menu-1')
         like.hover()
         page.mouse.down()
-        page.wait_for_timeout(550)
-        page.mouse.up()
-        menu = child.get_by_test_id('local-slot-menu-1')
+        try:
+            # Keep the real press held until the browser opens the menu,
+            # including when its long-press timer runs late on a busy runner.
+            expect(menu).to_be_visible()
+        finally:
+            page.mouse.up()
         expect(menu).to_be_visible()
         assert page.evaluate('isSongLiked(playQueue[currentIdx])') == liked_before
         menu.locator('[data-action="addPlaylist"]').click()
