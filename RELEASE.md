@@ -1,12 +1,21 @@
-# v2.7.4 启动优化（发布准备）
+# v2.7.4 启动优化
 
 - 用户于 2026-11-14 明确要求「发布新版」。本次发布 2.7.4，包含 PR #187 的启动优化；沿用云端 Windows 构建、私密默认翻译配置注入和 ASAR 内配置校验。
 - 曲库恢复移除固定 700ms 等待，只在 DOMContentLoaded 与尾部依赖就绪后调度首帧，再用零延时任务开始；隐藏窗口保留 120ms 兜底，显式延迟、失败结算与单次恢复保持原行为。主进程先快照旧迁移目录，再后台异步删除，不重新扫描或删除本次启动新建目录。
 - 最终功能与验收提交 `17286c6bd6977b37a6584227ca0d15b0b9754afe` 的 [完整 Verify 43544233780](https://github.com/oirge/Mineradio/actions/runs/43544233780)、[原生布局 43544233597](https://github.com/oirge/Mineradio/actions/runs/43544233597) 及 [实际视频导出／解码 43544233517](https://github.com/oirge/Mineradio/actions/runs/43544233517) 全部成功。Node 1761 项通过／0 失败／1 可选基准跳过；启动专项 10 项和工具专项 7 项通过，完整播放、翻译、9 样本布局、双语／恢复及视觉套件通过。真实 WAV 起播、暂停继续和界面往返保持同一宿主音频、AudioContext 和队列，曲库仅恢复一次。
 - 较早的验收运行遇到自动收起控件与固定 550ms 长按释放的真实鼠标时序竞态，后续只改验收脚本的正常悬停与按住直到菜单出现，保留生产计时、全部断言、超时和画质。失败证据和复验过程保留于 docs/PROJECT_MEMORY.md 与 verification/startup-ci/，不把早期失败记为成功。
 - 局部对照：首 RAF 为 16ms 的虚拟时钟中，恢复排队从 700ms 降为 16ms；2000 个旧迁移文件样本的启动同步阻塞从 189.2ms 降为 4.5ms。两者均不是用户电脑从双击到出声的完整启动时长。
-- 版本与中英文更新公告同步为 2.7.4；版本、打包白名单、更新说明、启动、语言及文档编码定向检查 84/84 通过，server.js／app.js 语法与 git diff --check 通过，五句中英映射及四条前后端／CHANGELOG／实际发布说明经真实更新解析器核对一致。新启动模块已被既有 desktop/**/* 打包白名单覆盖，无新增生产依赖。构建、四资产草稿核验、正式公开与 Latest 结果待完成后补录。
+- 版本与中英文更新公告同步为 2.7.4；版本、打包白名单、更新说明、启动、语言及文档编码定向检查 84/84 通过，server.js／app.js 语法与 git diff --check 通过，五句中英映射及四条前后端／CHANGELOG／实际发布说明经真实更新解析器核对一致。新启动模块已被既有 desktop/**/* 打包白名单覆盖，无新增生产依赖。
+- [PR #187](https://github.com/oirge/Mineradio/pull/187) 于北京时间 `2026-11-14 10:41:08` 合并为 `7e4b72a4d979b5a20ead94da4b40915d9f034079`；annotated tag `v2.7.4`（tag object `11f0bf67e657aa0a343b55570a944c444687b768`）固定该提交，合并文件树与发布准备提交 `adf2593e` 一致。
+- [Windows Build and Release 43547723572](https://github.com/oirge/Mineradio/actions/runs/43547723572) 成功，依赖审计、Folia 重建、私密默认翻译配置注入、Windows 打包、ASAR 内配置校验及四资产上传全部通过。
+- [v2.7.4 Release 444964713](https://github.com/oirge/Mineradio/releases/tag/v2.7.4) 于北京时间 `2026-11-14 10:51:28` 正式公开并设 Latest，draft=false／prerelease=false。四资产在草稿阶段完整回下载，大小、SHA256 与 GitHub digest／SHA256SUMS 一致；安装器 SHA-512 与 latest.yml 两处摘要和 size/path/url 一致。安装器只读 FileVersion／ProductVersion 均为 2.7.4、ProductName 为 Mineradio 二创，未执行安装器。安装器 122286673 B，比 2.7.3 增加 943 B。
+- 公开核验：无认证直连 Latest API 返回 2.7.4／444964713，四资产身份／大小／摘要与已批准草稿一致；无认证经代理取得的 latest.yml 与已核验文件逐字节一致。首次无代理安装器传输因速度低主动停止，随后经 127.0.0.1:7897 完整下载通过；首次匿名 API 经代理返回 HTTP 403，改用无认证直连后通过。各首次结果保留为单独 receipt，不宣称所有网络线路均通过。完整证据在 verification/release-v2.7.4/。
+- 发布时仍执行中的 [完整 Verify 43547664071](https://github.com/oirge/Mineradio/actions/runs/43547664071) 随后完成并成功；与 [原生布局 43547664045](https://github.com/oirge/Mineradio/actions/runs/43547664045)、[实际视频导出／解码 43547664140](https://github.com/oirge/Mineradio/actions/runs/43547664140) 一起，正式发布提交 `7e4b72a4` 的三项自动 main CI 全部成功。Node 1761 通过／0 失败／1 可选跳过，Folia 131＋134 通过，真实启动专项 10 项通过／0 错误。这只描述本提交的这三次运行，早期失败证据仍保留。
 - 全程低优先级后台与云端工作，保持原有 UI、SVG 质感、画质、唯一音频、默认翻译／用户源优先；未安装新版、打开本机可见测试窗口或操作用户播放器与数据，用户硬件完整启动时间未测。
+  - `Mineradio-oirge-2.7.4-Setup.exe`：122286673 B，SHA256 `8b7f5f66b634f038aa2b2c3f04f12f87484e13d685266c56de092b718807ab40`。
+  - `Mineradio-oirge-2.7.4-Setup.exe.blockmap`：127886 B，SHA256 `68390f1184e98ccbea9af0532c9f13746df5acc3de8535bad933c1fa0f81ad38`。
+  - `latest.yml`：359 B，SHA256 `66671c3de9c3aff145fb106927ee9702348f8180a0ab1af2d61c486e10f80386`。
+  - `Mineradio-oirge-2.7.4-SHA256SUMS.txt`：282 B，SHA256 `c54942f66a60810512ac2b5a59ea6577f9da3615070da6a27337d1a836ab4f13`。
 
 # v2.7.3 性能优化
 
