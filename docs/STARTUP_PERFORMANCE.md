@@ -18,6 +18,8 @@
 
 本地及 Windows 云端 Node 回归均为 1761 项通过、1 项可选基准跳过、0 失败。恢复单次执行、隐藏窗口兜底、显式延迟、恢复失败和清理所有权均有生产函数行为测试。`fb416ae1` 的完整 Verify `43403091608`、原生窗口布局 `43403091609` 和视频导出 `43403091764` 全部成功。启动专项的默认／记住 Folia 两场景共 10 项检查通过，覆盖尾脚本延迟 300ms、真实 WAV 起播、暂停继续和音频对象不被替换；结果保存为 `artifacts/ui-language/startup-report.json`。
 
+真实暂停／继续验收先悬停 Folia 保留的进度控制栏，再悬停并点击播放按钮。这样通过正常鼠标事件保持控制栏展开，避免低速测试机等待按钮命中时触发 2500ms 自动收起；所有音频与队列断言继续执行。
+
 ```powershell
 node --test tests/startup-direct-entry.test.js tests/startup-maintenance.test.js tests/auto-playback-startup.test.js
 python scripts/verify-browser-ui.py --suite startup

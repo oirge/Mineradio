@@ -116,6 +116,16 @@ def click_switch(page):
     page.locator('#folia-floating-switch').click()
 
 
+def click_folia_play_pause(child):
+    # Hover the retained progress row to hold the auto-hiding bar open while
+    # its transport expands, including on slower browser runners.
+    child.get_by_test_id('local-controls').hover()
+    child.wait_for_function("!document.body.classList.contains('mineradio-bar-hidden')")
+    button = child.get_by_test_id('local-toggle-play')
+    button.hover()
+    button.click()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--url', default='http://127.0.0.1:3018')
@@ -204,11 +214,9 @@ def main():
                         click_switch(page)
                     child = folia_ready(page)
                     expect(child.get_by_test_id('local-current-track')).to_contain_text('Startup-fixture')
-                    page.mouse.move(640, 780)
-                    child.wait_for_function("!document.body.classList.contains('mineradio-bar-hidden')")
-                    child.get_by_test_id('local-toggle-play').click()
+                    click_folia_play_pause(child)
                     page.wait_for_function('audio.paused && !playToggleBusy')
-                    child.get_by_test_id('local-toggle-play').click()
+                    click_folia_play_pause(child)
                     page.wait_for_function('!audio.paused && !playToggleBusy')
                     child_audio = child.evaluate('window.__startupAudioAudit')
                     assert child_audio is not None and not any(child_audio.values()), child_audio
