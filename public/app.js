@@ -201,6 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['减少启动等待，让曲库更早恢复。', 'Reduce startup waits and restore your library sooner.'],
+  ['页面就绪后更早恢复曲库，减少启动时的固定等待。', 'Restore your library sooner once the page is ready, reducing fixed startup waits.'],
+  ['旧迁移临时文件改为后台清理，减少启动时的磁盘阻塞。', 'Clean up leftover migration files in the background to reduce disk work blocking startup.'],
+  ['启动继续播放与 Mineradio／Folia 切换保持稳定，避免重复恢复曲库。', 'Keep playback resumption and Mineradio/Folia switching stable while restoring the library only once.'],
+  ['保留原有界面、画质、SVG 玻璃质感与默认歌词翻译。', 'Preserve the existing interface, visual quality, SVG glass effects and default lyric translation.'],
   ["减少大曲库、歌词动画与封面处理的重复开销。", "Reduce repeated work in large libraries, lyric animation and cover processing."],
   ["大曲库列表按可见区域更新，保留完整滚动、末项操作、拖动和键盘访问。", "Update large lists by viewport while retaining full scrolling, final-row actions, drag and keyboard access."],
   ["优化曲库启动恢复、后台预载与单曲索引保存，减少重复整库处理。", "Optimize library startup recovery, background preloading and per-song index saves."],
@@ -2054,7 +2059,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.3';
+var APP_VERSION = '2.7.4';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2107,12 +2112,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '减少大曲库、歌词动画与封面处理的重复开销。',
+  hero: '减少启动等待，让曲库更早恢复。',
   notes: [
-    '大曲库列表按可见区域更新，保留完整滚动、末项操作、拖动和键盘访问。',
-    '优化曲库启动恢复、后台预载与单曲索引保存，减少重复整库处理。',
-    '优化歌词、和声、搜索与 3D 舞台更新，减少播放时的重复计算。',
-    '封面缩放编码交给后台 Worker，减少主线程停顿，保留现有画质。'
+    '页面就绪后更早恢复曲库，减少启动时的固定等待。',
+    '旧迁移临时文件改为后台清理，减少启动时的磁盘阻塞。',
+    '启动继续播放与 Mineradio／Folia 切换保持稳定，避免重复恢复曲库。',
+    '保留原有界面、画质、SVG 玻璃质感与默认歌词翻译。'
   ]
 };
 function readSavedVolume() {

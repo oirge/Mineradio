@@ -87,10 +87,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '大曲库列表按可见区域更新，保留完整滚动、末项操作、拖动和键盘访问。',
-  '优化曲库启动恢复、后台预载与单曲索引保存，减少重复整库处理。',
-  '优化歌词、和声、搜索与 3D 舞台更新，减少播放时的重复计算。',
-  '封面缩放编码交给后台 Worker，减少主线程停顿，保留现有画质。',
+  '页面就绪后更早恢复曲库，减少启动时的固定等待。',
+  '旧迁移临时文件改为后台清理，减少启动时的磁盘阻塞。',
+  '启动继续播放与 Mineradio／Folia 切换保持稳定，避免重复恢复曲库。',
+  '保留原有界面、画质、SVG 玻璃质感与默认歌词翻译。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
