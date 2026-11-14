@@ -20,6 +20,8 @@
 
 真实暂停／继续验收先悬停 Folia 保留的进度控制栏，再悬停并点击播放按钮。界面切换先把实际指针移到切换按钮中心，揭示后再次移动到其当前中心并悬停；在 Folia 中实际保持悬停 3s 后确认按钮仍显示，再点击。这样通过正常鼠标事件保持控件显示，避免低速测试机等待按钮命中时触发 2500ms 自动收起；所有音频与队列断言继续执行，悬停等待发生在启动观测完成之后。
 
+完整回归中的快捷槽长按也保持真实按下，直到默认可见性断言观察到菜单后再释放；随后确认菜单仍显示、收藏状态未改变。生产长按仍为 500ms，避免测试固定在 550ms 释放时抢先取消延迟执行的浏览器计时器，所有断言超时保持原值。
+
 ```powershell
 node --test tests/startup-direct-entry.test.js tests/startup-maintenance.test.js tests/auto-playback-startup.test.js
 python scripts/verify-browser-ui.py --suite startup
