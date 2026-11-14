@@ -16,7 +16,7 @@
 
 ## 验证
 
-本地 Node 回归 1761 项通过、1 项可选基准跳过、0 失败。恢复单次执行、隐藏窗口兜底、显式延迟、恢复失败和清理所有权均有生产函数行为测试。真实浏览器的首页、记住 Folia、实际音频导入及切换验收在 Windows 云端执行，结果保存为 `artifacts/ui-language/startup-report.json`。
+本地及 Windows 云端 Node 回归均为 1761 项通过、1 项可选基准跳过、0 失败。恢复单次执行、隐藏窗口兜底、显式延迟、恢复失败和清理所有权均有生产函数行为测试。`fb416ae1` 的完整 Verify `43403091608`、原生窗口布局 `43403091609` 和视频导出 `43403091764` 全部成功。启动专项的默认／记住 Folia 两场景共 10 项检查通过，覆盖尾脚本延迟 300ms、真实 WAV 起播、暂停继续和音频对象不被替换；结果保存为 `artifacts/ui-language/startup-report.json`。
 
 ```powershell
 node --test tests/startup-direct-entry.test.js tests/startup-maintenance.test.js tests/auto-playback-startup.test.js
