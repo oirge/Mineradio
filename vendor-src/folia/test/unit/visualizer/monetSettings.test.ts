@@ -147,15 +147,12 @@ describe('Monet tuning and lyric helpers', () => {
             fontScale: 3,
             portraitSource: 'custom',
         })).toEqual({
+            ...DEFAULT_MONET_TUNING,
             keywordColoringEnabled: false,
             showAudioVisualization: false,
             audioStyle: 'line',
             fontScale: 1.5,
             portraitSource: 'custom',
-            showDescription: true,
-            portraitOffsetX: 0,
-            portraitStyle: 'square',
-            showPortraitDragHanger: true,
         });
 
         expect(resolveStoredMonetTuning({
@@ -166,6 +163,26 @@ describe('Monet tuning and lyric helpers', () => {
         })).toEqual(DEFAULT_MONET_TUNING);
 
         expect(resolveStoredMonetTuning({})).toEqual(DEFAULT_MONET_TUNING);
+    });
+
+    it('restores the extended Monet layout and retains legacy hidden controls', () => {
+        expect(resolveStoredMonetTuning({
+            portraitSource: 'none',
+            mirrorLayout: true,
+            customDescription: 'A mirrored portrait',
+            descriptionVisibility: 'always',
+            showPortraitDragHanger: false,
+            render: { scale: 0.75, antialias: 'off' },
+        })).toEqual({
+            ...DEFAULT_MONET_TUNING,
+            portraitSource: 'none',
+            mirrorLayout: true,
+            customDescription: 'A mirrored portrait',
+            descriptionVisibility: 'always',
+            portraitHangerVisibility: 'hidden',
+            showPortraitDragHanger: false,
+            render: { scale: 0.75, antialias: 'off' },
+        });
     });
 
     it('resolves automatic visualizer background mode', () => {

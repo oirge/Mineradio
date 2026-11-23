@@ -1,4 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { MONET_CHROME_VISIBILITIES, type MonetChromeVisibility } from '../../../types';
+import { MONET_CUSTOM_DESCRIPTION_MAX_LENGTH, resolveMonetChromeVisibility } from '../layoutTuning';
 import { ImagePlus, Trash2 } from 'lucide-react';
 import { DEFAULT_MONET_TUNING, type MonetAudioStyle, type MonetPortraitSource } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
@@ -143,23 +145,22 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const [feedback, setFeedback] = useState<string | null>(null);
     const resolvedTuning = {
         keywordColoringEnabled: monetTuning.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
-        showDescription: monetTuning.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
+        descriptionVisibility: resolveMonetChromeVisibility(monetTuning.descriptionVisibility, monetTuning.showDescription),
         showAudioVisualization: monetTuning.showAudioVisualization ?? DEFAULT_MONET_TUNING.showAudioVisualization,
         audioStyle: monetTuning.audioStyle ?? DEFAULT_MONET_TUNING.audioStyle,
         fontScale: clampValue(monetTuning.fontScale ?? DEFAULT_MONET_TUNING.fontScale, 0.7, 1.5, DEFAULT_MONET_TUNING.fontScale),
         portraitSource: monetTuning.portraitSource ?? DEFAULT_MONET_TUNING.portraitSource,
         portraitStyle: monetTuning.portraitStyle ?? DEFAULT_MONET_TUNING.portraitStyle ?? 'rectangular',
-        showPortraitDragHanger: monetTuning.showPortraitDragHanger ?? DEFAULT_MONET_TUNING.showPortraitDragHanger,
+        portraitHangerVisibility: resolveMonetChromeVisibility(monetTuning.portraitHangerVisibility, monetTuning.showPortraitDragHanger),
     };
 
     const keywordColoringOptions = useMemo<PresetOption<boolean>[]>(() => ([
         { value: true, label: t('options.monetKeywordColoringOn') },
         { value: false, label: t('options.monetKeywordColoringOff') },
     ]), [t]);
-    const showDescriptionOptions = useMemo<PresetOption<boolean>[]>(() => ([
-        { value: true, label: t('options.partitaGuideLinesOn') },
-        { value: false, label: t('options.partitaGuideLinesOff') },
-    ]), [t]);
+    const visibilityOptions = useMemo<PresetOption<MonetChromeVisibility>[]>(() => MONET_CHROME_VISIBILITIES.map(value => ({
+        value, label: t(`options.monetVisibility_${value}`),
+    })), [t]);
     const portraitSourceOptions = useMemo<PresetOption<MonetPortraitSource>[]>(() => ([
         { value: 'cover', label: t('options.monetPortraitSourceCover') },
         {
@@ -167,6 +168,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             label: t('options.monetPortraitSourceCustom'),
             disabled: !monetPortraitImage && !isLoadingMonetPortraitImage,
         },
+        { value: 'none', label: t('options.monetPortraitSourceNone') },
     ]), [isLoadingMonetPortraitImage, monetPortraitImage, t]);
     const audioStyleOptions = useMemo<PresetOption<MonetAudioStyle>[]>(() => ([
         { value: 'bar', label: t('options.monetAudioStyleBar') },
@@ -180,11 +182,6 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
         { value: 'rectangular', label: t('options.monetPortraitStyleRectangular') },
         { value: 'square', label: t('options.monetPortraitStyleSquare') },
     ]), [t]);
-    const showPortraitDragHangerOptions = useMemo<PresetOption<boolean>[]>(() => ([
-        { value: true, label: t('options.monetPortraitDragHangerShow') },
-        { value: false, label: t('options.monetPortraitDragHangerHide') },
-    ]), [t]);
-
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files ?? []);
         event.target.value = '';
@@ -246,12 +243,20 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
                 <PresetGroup
                     label={t('options.monetShowDescription')}
-                    value={resolvedTuning.showDescription}
-                    options={showDescriptionOptions}
-                    onChange={(value) => onMonetTuningChange?.({ showDescription: value })}
+                    value={resolvedTuning.descriptionVisibility}
+                    options={visibilityOptions}
+                    onChange={(value) => onMonetTuningChange?.({ descriptionVisibility: value, showDescription: value !== 'hidden' })}
                     isDaylight={isDaylight}
                     theme={theme}
                 />
+                <label className="local-setting"><span>{t('options.monetCustomDescription')}</span>
+                    <input type="text" data-testid="monet-custom-description" maxLength={MONET_CUSTOM_DESCRIPTION_MAX_LENGTH}
+                        value={monetTuning.customDescription ?? ''} onChange={event => onMonetTuningChange?.({ customDescription: event.target.value })} />
+                </label>
+                <label className="local-setting local-toggle-setting"><span>{t('options.monetMirrorLayout')}</span>
+                    <input type="checkbox" data-testid="monet-mirror-layout" checked={monetTuning.mirrorLayout === true}
+                        onChange={event => onMonetTuningChange?.({ mirrorLayout: event.target.checked })} />
+                </label>
             </div>
 
             {/* Section 2: Portrait Character */}
@@ -280,9 +285,9 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
                 <PresetGroup
                     label={t('options.monetPortraitDragHanger')}
-                    value={resolvedTuning.showPortraitDragHanger}
-                    options={showPortraitDragHangerOptions}
-                    onChange={(value) => onMonetTuningChange?.({ showPortraitDragHanger: value })}
+                    value={resolvedTuning.portraitHangerVisibility}
+                    options={visibilityOptions}
+                    onChange={(value) => onMonetTuningChange?.({ portraitHangerVisibility: value, showPortraitDragHanger: value !== 'hidden' })}
                     isDaylight={isDaylight}
                     theme={theme}
                 />

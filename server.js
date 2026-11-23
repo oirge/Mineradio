@@ -87,10 +87,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '页面就绪后更早恢复曲库，减少启动时的固定等待。',
-  '旧迁移临时文件改为后台清理，减少启动时的磁盘阻塞。',
-  '启动继续播放与 Mineradio／Folia 切换保持稳定，避免重复恢复曲库。',
-  '保留原有界面、画质、SVG 玻璃质感与默认歌词翻译。',
+  'Folia 增加可拖动环顾的影厅（Beta）和「隐喻」歌词样式。影厅荧幕显示当前选择的歌词效果和背景。',
+  '「莫奈」增加左右镜像、隐藏肖像、歌曲描述和拖动挂件的显示选项。「时计」增加镜像、表盘倾斜、分层视差与轮心视角。「回环」可移动圆环并沿环显示翻译。',
+  '底部字幕首行可选当前歌词、翻译或罗马音，可关闭缺少字幕时的后续歌词预览。行级 TTML 折行后按字词顺序高亮。',
+  'Lattice 可切换为电台墙，浏览与点播使用 Mineradio 的实际播放队列。帧率检测可测量当前歌词舞台并比较两组画质。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

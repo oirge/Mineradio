@@ -1,12 +1,13 @@
 import type { AudioBands, Line } from '../../types';
 import type { MotionValue } from 'framer-motion';
 import type { HostAudio, HostLyrics, HostState } from '../client';
+import { buildTimedWords } from '../../utils/lyrics/estimatedLineTiming.ts';
 
 // src/mineradio/local/localPlayerData.ts
 // Pure host projection shared by the isolated local player and its tests.
 const finite = (value: number | undefined, fallback = 0): number => Number.isFinite(value) ? value! : fallback;
 
-/** Keep source words and absolute second timing; line-only lyrics remain one display unit. */
+/** Keep source timing and estimate word boundaries only for line-timed TTML. */
 export function localLyricLines(value: HostLyrics, duration: number): Line[] {
     return value.lines.map((line, index) => {
         const startTime = Math.max(0, finite(line.time));
@@ -19,7 +20,9 @@ export function localLyricLines(value: HostLyrics, duration: number): Line[] {
         return {
             id: `${value.trackId}:${index}`, startTime, endTime,
             fullText: line.text, translation: line.translation, romanization: line.romanization, backgroundVocals: line.backgroundVocals,
-            words: words.length ? words : [{ text: line.text, startTime, endTime }],
+            words: words.length ? words : line.lineTimedTtml && endTime > startTime
+                ? buildTimedWords(line.text, startTime, endTime)
+                : [{ text: line.text, startTime, endTime }],
         };
     });
 }

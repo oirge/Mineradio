@@ -219,6 +219,22 @@ test('Folia queue pages reuse stable membership while refreshing each requested 
     assert.equal((await h.request('getQueue', { limit: 1 })).items[0].cover, 'blob:new-queue-cover');
 });
 
+test('the radio wall reads a bounded repeat-all window and rejects stale play requests', async () => {
+    const h = harness(2500);
+    h.context.playQueue = h.tracks;
+    h.context.currentIdx = 0;
+    h.context.playMode = 'loop';
+    const window = await h.request('getQueue', { aroundCurrent: true });
+    assert.equal(window.items.length, 49);
+    assert.deepEqual(window.items.slice(22, 27).map(item => item.index), [2498, 2499, 0, 1, 2]);
+    assert.equal(window.wrapsAround, false, 'the bounded sequence already includes the repeat-all seam');
+    const selected = window.items[25];
+    h.context.playQueue = [...h.tracks].reverse();
+    await assert.rejects(h.request('playQueue', { index: selected.index, expectedRevision: window.revision,
+        expectedTrackId: selected.track.id }), /播放队列已更新/);
+    assert.equal(h.context.currentIdx, 0, 'the stale card must never play the replacement slot');
+});
+
 test('custom Folia playlist pages reuse indexed ordered membership', async () => {
     const h = harness(2500), ids = [];
     for (let offset = 0; offset < 200; offset += 50) {

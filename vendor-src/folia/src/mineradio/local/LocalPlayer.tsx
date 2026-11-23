@@ -21,6 +21,8 @@ import { useLocalVisualAssets } from './useLocalVisualAssets';
 import { useLocalVisualizerPrewarm } from './useLocalVisualizerPrewarm';
 import { useLocalSubtitleBottom } from './useLocalSubtitleBottom';
 import { PlayerSubtitleBottomContext } from '../../components/floating-player/PlayerBottomBarLayoutContext';
+import { LyricRenderQualityPinContext } from '../../components/visualizer/renderQuality/lyricRenderQualityPin';
+import type { LyricRenderQuality } from '../../types';
 import './local.css';
 
 // src/mineradio/local/LocalPlayer.tsx
@@ -43,12 +45,13 @@ export default function LocalPlayer() {
     // Leave the GPU to the selected effect and live preview while the user edits settings.
     useLocalVisualizerPrewarm(player.active && !settingsOpen);
     const [focus, setFocus] = useState(false);
+    const [probeQuality, setProbeQuality] = useState<LyricRenderQuality | null>(null);
     const theme = visuals.daylight ? DAYLIGHT_THEME : DEFAULT_THEME;
     const track = player.state?.currentTrack;
     const isLyrics = visuals.view === 'lyrics';
     const playerRoot = useRef<HTMLElement>(null);
     const subtitleBottom = useLocalSubtitleBottom(playerRoot, isLyrics && !focus);
-    const transparent = isLyrics && visuals.background.transparent === true;
+    const transparent = isLyrics && visuals.lyricScene === 'flat' && visuals.background.transparent === true;
     useEffect(() => {
         document.documentElement.classList.toggle('local-player-transparent', transparent);
         return () => document.documentElement.classList.remove('local-player-transparent');
@@ -60,6 +63,8 @@ export default function LocalPlayer() {
         playback: () => { setPlaybackOpen(true); setLibraryOpen(false); setSettingsOpen(false); setFocus(false); },
         visuals: () => { setSettingsOpen(true); setLibraryOpen(false); setPlaybackOpen(false); setFocus(false); },
         focus: () => { setFocus(true); setSettingsOpen(false); setLibraryOpen(false); setPlaybackOpen(false); },
+        scene: scene => { visuals.update({ view: 'lyrics', lyricScene: scene }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); setFocus(false); },
+        radioWall: () => { visuals.update({ view: 'posters', latticeWallForm: 'radio' }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); setFocus(false); },
         view: view => { visuals.update({ view }); setLibraryOpen(false); setSettingsOpen(false); setPlaybackOpen(false); },
     });
     const run = (method: string, params?: Record<string, unknown>) => { void player.command(method, params).catch(() => {}); };
@@ -88,7 +93,9 @@ export default function LocalPlayer() {
     return <LocalActionsContext.Provider value={tools.context}><main ref={playerRoot} className={`local-player ${focus ? 'local-player-focus' : ''} ${!isLyrics ? 'local-player-wall' : ''}`} style={style} data-testid="local-player" data-active={player.active} data-view={visuals.view}>
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
             <PlayerSubtitleBottomContext.Provider value={isLyrics ? subtitleBottom : null}>
-                <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+                <LyricRenderQualityPinContext.Provider value={probeQuality}>
+                    <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+                </LyricRenderQualityPinContext.Provider>
             </PlayerSubtitleBottomContext.Provider>
         </LocalErrorBoundary>
         {!focus && <LocalHeader view={visuals.view} libraryOpen={libraryOpen} settingsOpen={settingsOpen} playbackOpen={playbackOpen}
@@ -109,9 +116,10 @@ export default function LocalPlayer() {
             {libraryOpen && <LibraryPanel state={player.state} command={player.command} queue={queue} onTab={setQueue} onClose={() => setLibraryOpen(false)} />}
             {playbackOpen && <LocalPlaybackSettings state={player.state} command={player.command} onClose={closePlayback} />}
             {settingsOpen && <VisualSettings assets={assets} theme={theme} state={player.state} command={player.command} onClose={() => setSettingsOpen(false)}
-                onLanguage={language => run('setUiLanguage', { language })} />}
+                onLanguage={language => run('setUiLanguage', { language })} onFrameRateCheck={() => tools.context.run('frameRate')} />}
         </>}
         <LocalToolDialogs tool={tools.tool} state={player.state} command={player.command} onClose={tools.close}
+            activeLyrics={player.active && isLyrics} setProbeQuality={setProbeQuality}
             onLibrary={() => tools.context.run('library')} />
         <LocalStatusToast />
         {player.error && <div className="local-error" role="alert" data-testid="local-error"><span>{player.error}</span><button aria-label={t('close')} onClick={player.clearError}><X size={16} /></button></div>}

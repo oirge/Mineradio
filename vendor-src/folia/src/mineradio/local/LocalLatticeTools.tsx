@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Crosshair, Focus, Hash, ListMusic, Settings2, X } from 'lucide-react';
+import { Crosshair, EyeOff, Focus, Hash, ListMusic, Radio, Settings2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLatticeControlsStore } from '../../stores/useLatticeControlsStore';
 import { useLatticeSettingsStore } from './useLocalLatticeSettingsStore';
+import { useVisualSettings } from './useVisualSettings';
 import { SlideActionButton } from '../../components/shared/SlideActionButton';
 import '../../components/app/lattice/LatticeFocusButton.css';
 
@@ -16,6 +17,9 @@ export default function LocalLatticeTools({ isDaylight, onOpenQueue }: { isDayli
     const rootRef = useRef<HTMLDivElement>(null);
     const focusCurrentSong = useLatticeControlsStore(state => state.focusCurrentSong);
     const settings = useLatticeSettingsStore();
+    const radio = useVisualSettings(state => state.latticeWallForm === 'radio');
+    const hidesUpcoming = useVisualSettings(state => state.latticeHideUpcoming);
+    const update = useVisualSettings(state => state.update);
     useEffect(() => {
         if (!isOpen) return;
         const close = (event: PointerEvent) => {
@@ -33,13 +37,21 @@ export default function LocalLatticeTools({ isDaylight, onOpenQueue }: { isDayli
             exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="lattice-tools-panel">
             <button type="button" role="menuitem" className="lattice-tools-action" disabled={!focusCurrentSong}
                 onClick={() => { focusCurrentSong?.(); setIsOpen(false); }}><Crosshair /><span>{t('home.latticeFocusCurrent')}</span></button>
-            <button type="button" role="menuitemcheckbox" aria-checked={settings.autoFocusOnSongChange} className="lattice-tools-action"
+            <button type="button" role="menuitemcheckbox" aria-checked={radio} className="lattice-tools-action"
+                data-testid="local-lattice-radio-toggle" onClick={() => update({ latticeWallForm: radio ? 'posters' : 'radio' })}>
+                <Radio /><span>{localText('latticeRadio')}</span>
+                <span className={`lattice-tools-toggle ${radio ? 'is-on' : ''}`} aria-hidden="true"><span /></span></button>
+            {radio ? <button type="button" role="menuitemcheckbox" aria-checked={hidesUpcoming} className="lattice-tools-action"
+                data-testid="local-lattice-radio-hide" onClick={() => update({ latticeHideUpcoming: !hidesUpcoming })}>
+                <EyeOff /><span>{localText('latticeHideUpcoming')}</span>
+                <span className={`lattice-tools-toggle ${hidesUpcoming ? 'is-on' : ''}`} aria-hidden="true"><span /></span></button>
+                : <><button type="button" role="menuitemcheckbox" aria-checked={settings.autoFocusOnSongChange} className="lattice-tools-action"
                 onClick={() => settings.handleToggleAutoFocusOnSongChange(!settings.autoFocusOnSongChange)}><Focus /><span>{t('home.latticeAutoFocusOnSongChange')}</span>
                 <span className={`lattice-tools-toggle ${settings.autoFocusOnSongChange ? 'is-on' : ''}`} aria-hidden="true"><span /></span></button>
             <button type="button" role="menuitemcheckbox" aria-checked={settings.latticeBadgeCurrentOnly} className="lattice-tools-action"
                 data-testid="local-lattice-current-badge" onClick={() => settings.handleToggleLatticeBadgeCurrentOnly(!settings.latticeBadgeCurrentOnly)}>
                 <Hash /><span>{t('home.latticeBadgeCurrentOnly')}</span>
-                <span className={`lattice-tools-toggle ${settings.latticeBadgeCurrentOnly ? 'is-on' : ''}`} aria-hidden="true"><span /></span></button>
+                <span className={`lattice-tools-toggle ${settings.latticeBadgeCurrentOnly ? 'is-on' : ''}`} aria-hidden="true"><span /></span></button></>}
             <button type="button" role="menuitem" className="lattice-tools-action" onClick={openQueue}><ListMusic /><span>{localText('queue')}</span></button>
             <div className="lattice-tools-help-section"><button type="button" role="menuitemcheckbox" aria-checked={settings.latticeLightsOn}
                 aria-label={t('home.latticeLights')} className="lattice-tools-lights-toggle" onClick={() => settings.handleToggleLatticeLights(!settings.latticeLightsOn)}>

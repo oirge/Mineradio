@@ -1,5 +1,5 @@
 import { useVisualSettings } from './useVisualSettings';
-import { useMemo, useRef, type CSSProperties } from 'react';
+import { lazy, Suspense, useMemo, useRef, type CSSProperties } from 'react';
 import { ChevronLeft, Music2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PlayerState, type Theme } from '../../types';
@@ -22,6 +22,8 @@ import './localPosterWall.css';
 
 // src/mineradio/local/LocalPosterWall.tsx
 // The original Lattice wall, camera, reflow and lyric canvas consume the host's local catalog.
+const LocalRadioWall = lazy(() => import('./LocalRadioWall'));
+
 interface Props {
     player: LocalPlayer;
     theme: Theme;
@@ -35,7 +37,9 @@ interface Props {
 export default function LocalPosterWall({ player, theme, isDaylight, onBack, onOpenQueue, onOpenLyrics, translation = true }: Props) {
     const { t } = useTranslation();
     const { t: localText } = useTranslation('localPlayer');
-    const catalog = useLocalWallCatalog(player);
+    const radio = useVisualSettings(state => state.latticeWallForm === 'radio');
+    const hidesUpcoming = useVisualSettings(state => state.latticeHideUpcoming);
+    const catalog = useLocalWallCatalog(player, !radio);
     const settings = useLatticeSettingsStore();
     const focusCurrentSong = useLatticeControlsStore(state => state.focusCurrentSong);
     const track = player.state?.currentTrack;
@@ -43,10 +47,11 @@ export default function LocalPosterWall({ player, theme, isDaylight, onBack, onO
     const songKey = currentSong ? getPlaybackSongKey(currentSong) : '';
     const tilesCache = useRef<PosterWallTiles | undefined>(undefined);
     const tiles = useMemo(() => {
+        if (radio) return [];
         const next = buildPosterWallTiles(catalog.songs, songKey, tilesCache.current);
         tilesCache.current = next;
         return next.tiles;
-    }, [catalog.songs, songKey]);
+    }, [catalog.songs, radio, songKey]);
     const wall = useStableCallbacks({
         onPlay: (tile: LatticeTile) => { void player.command('play', { id: String(tile.song.id), playlistId: catalog.playlistId }).catch(() => {}); },
         onTogglePlayback: () => { void player.command('togglePlay').catch(() => {}); },
@@ -79,15 +84,17 @@ export default function LocalPosterWall({ player, theme, isDaylight, onBack, onO
             <LatticeLyricsProvider source={lyricSource} songKey={songKey} keywordColoringEnabled>
                 <section data-testid="local-poster-wall" aria-label={t('home.latticeLabel')} style={style}
                     className={`lattice-root ${settings.latticeBadgeCurrentOnly ? 'has-badge-current-only' : ''} ${isDaylight ? 'is-daylight' : ''} ${settings.latticeVignette ? 'has-vignette' : ''} ${settings.latticeLightsOn ? '' : 'is-lights-out'} ${settings.latticePosterTintEnabled ? 'has-poster-tint' : ''} ${settings.latticePosterTintUseCustomColor ? 'uses-custom-poster-tint' : ''}`}>
-                    {player.active && <PosterWall tiles={tiles} currentSong={currentSong} onPlay={wall.onPlay}
-                        onTogglePlayback={wall.onTogglePlayback} onSeek={wall.onSeek} onOpenPlayer={wall.onOpenPlayer} onBack={onBack} />}
+                    {player.active && (radio ? <Suspense fallback={null}>
+                        <LocalRadioWall player={player} hidesUpcoming={hidesUpcoming} onBack={onBack} onOpenPlayer={onOpenLyrics} />
+                    </Suspense> : <PosterWall tiles={tiles} currentSong={currentSong} onPlay={wall.onPlay}
+                        onTogglePlayback={wall.onTogglePlayback} onSeek={wall.onSeek} onOpenPlayer={wall.onOpenPlayer} onBack={onBack} />)}
                     <button type="button" className="lattice-back" data-testid="local-poster-back" onClick={onBack}
                         aria-label={t('home.latticeBack')} title={t('home.latticeBack')}><ChevronLeft size={20} /></button>
                     <LocalLatticeTools isDaylight={isDaylight} onOpenQueue={onOpenQueue} />
-                    {!tiles.length && <div className="lattice-empty"><strong>{catalog.loading ? localText('loading') : t('home.latticeEmptyTitle')}</strong>
+                    {!radio && !tiles.length && <div className="lattice-empty"><strong>{catalog.loading ? localText('loading') : t('home.latticeEmptyTitle')}</strong>
                         <span>{catalog.error || t('home.latticeEmptyText')}</span></div>}
                 </section>
-                <LocalCatalogRetry error={catalog.error} retry={catalog.refresh} />
+                {!radio && <LocalCatalogRetry error={catalog.error} retry={catalog.refresh} />}
                 {track && <button type="button" className="local-poster-now-playing" data-testid="local-poster-now-playing" style={style}
                     onClick={() => focusCurrentSong?.()} aria-label={t('home.latticeFocusCurrent')}>
                     {track.cover ? <img src={track.cover} alt="" /> : <Music2 size={25} />}

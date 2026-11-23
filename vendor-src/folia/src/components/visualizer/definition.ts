@@ -30,6 +30,24 @@ import type { VisualizerBackgroundConfig } from './backgrounds/definition';
 // Shared contracts for discoverable visualizer modes.
 export type VisualizerTuningKind = 'none' | 'classic' | 'cadenza' | 'partita' | 'fume' | 'claddagh' | 'cappella' | 'tilt' | 'monet' | 'diorama' | 'pendolo' | 'sonnet' | 'tempera' | 'lumiere';
 
+export interface VisualizerSongHandoff {
+    /** How far the hand-off has come, 0..1: 0 until the blend is announced. */
+    progress: MotionValue<number>;
+    /** The incoming song as the props will name it once the blend settles. */
+    seed: string | number;
+    songTitle?: string | null;
+    songArtist?: string | null;
+    songAlbum?: string | null;
+    coverUrl?: string | null;
+    /** The incoming song's theme, once it has come: the props keep the song on screen's until the blend settles. */
+    theme: Theme;
+    subtitleTheme?: Theme;
+    /** The incoming song's lyrics (none until they load), its own lyric clock and line. */
+    lines: Line[];
+    currentTime: MotionValue<number>;
+    currentLineIndex: number;
+}
+
 export interface VisualizerSharedProps {
     currentTime: MotionValue<number>;
     currentLineIndex: number;
@@ -51,6 +69,7 @@ export interface VisualizerSharedProps {
      */
     temperaLayerImageAssets?: { id: string; name: string; url: string }[];
     seed?: string | number;
+    songHandoff?: VisualizerSongHandoff | null;
     staticMode?: boolean;
     backgroundStaticMode?: boolean;
     visualizerOpacity?: number;

@@ -76,6 +76,7 @@ export interface HostLyrics {
         text: string;
         translation?: string;
         romanization?: string;
+        lineTimedTtml?: boolean;
         backgroundVocals?: import('../types').LyricBackgroundVocal[];
         words?: Array<{ time: number; duration: number; text: string }>;
     }>;

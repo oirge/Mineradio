@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { DEFAULT_CAPPELLA_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_TILT_TUNING, DIORAMA_PARTICLE_DENSITY_MAX, DIORAMA_PARTICLE_DENSITY_MIN, DIORAMA_PARTICLE_GLOW_INTENSITY_MAX, DIORAMA_PARTICLE_GLOW_INTENSITY_MIN, DIORAMA_PARTICLE_SIZE_MAX, DIORAMA_PARTICLE_SIZE_MIN, type CappellaTuning, type ClassicTuning, type CladdaghTuning, type DioramaTuning, type FumeTuning, type PartitaTuning, type TiltColorScheme, type TiltTuning } from '../../types';
 import { colorWithAlpha } from './colorMix';
 import { type VisualizerSettingsPanelProps } from './definition';
+import CladdaghLayoutSettings from './claddagh/CladdaghLayoutSettings';
 import { DioramaGeometrySettings } from './diorama/DioramaGeometrySettings';
 import { DioramaBackgroundParticleSettings } from './diorama/DioramaBackgroundParticleSettings';
 import { DioramaEffectSettings } from './diorama/DioramaEffectSettings';
@@ -1279,6 +1280,7 @@ export const CladdaghSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     className={rangeInputClass}
                 />
             </div>
+            {onCladdaghTuningChange && <CladdaghLayoutSettings tuning={claddaghTuning} change={onCladdaghTuningChange} t={t} />}
         </div>
     );
 };

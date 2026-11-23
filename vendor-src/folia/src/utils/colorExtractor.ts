@@ -8,7 +8,7 @@ interface RGB {
     b: number;
 }
 
-const loadImagePixels = (imageUrl: string): Promise<Uint8ClampedArray | null> => (
+export const loadImagePixels = (imageUrl: string, { silent = false } = {}): Promise<Uint8ClampedArray | null> => (
     new Promise(resolve => {
         const img = new Image();
         img.crossOrigin = "Anonymous";
@@ -27,13 +27,16 @@ const loadImagePixels = (imageUrl: string): Promise<Uint8ClampedArray | null> =>
             canvas.width = width;
             canvas.height = height;
 
-            ctx.drawImage(img, 0, 0, width, height);
-
-            resolve(ctx.getImageData(0, 0, width, height).data);
+            try {
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(ctx.getImageData(0, 0, width, height).data);
+            } catch {
+                resolve(null);
+            }
         };
 
         img.onerror = (e) => {
-            console.warn("Failed to load image for color extraction", e);
+            if (!silent) console.warn("Failed to load image for color extraction", e);
             resolve(null);
         };
         img.src = imageUrl;

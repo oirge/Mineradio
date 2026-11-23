@@ -1,0 +1,1 @@
+export{BitmapFont}from"./lib-ClykfQ0b.js";

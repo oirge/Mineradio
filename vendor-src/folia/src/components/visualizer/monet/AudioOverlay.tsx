@@ -195,6 +195,28 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
             context.setTransform(dpr, 0, 0, dpr, 0, 0);
         };
 
+        // Both gradients depend only on the canvas size and the theme colour (fixed for this effect
+        // run), so they are rebuilt when the size changes rather than on every frame.
+        let gradientSize = '';
+        let inkGradient: CanvasGradient | null = null;
+        let areaGradient: CanvasGradient | null = null;
+        const resolveGradients = (width: number, height: number) => {
+            const size = `${width}x${height}`;
+            if (size !== gradientSize || !inkGradient || !areaGradient) {
+                gradientSize = size;
+                const primaryInk = colorWithAlpha(theme.primaryColor, 0.94);
+                const softInk = colorWithAlpha(theme.primaryColor, 0.72);
+                inkGradient = context.createLinearGradient(0, 0, width, 0);
+                inkGradient.addColorStop(0, softInk);
+                inkGradient.addColorStop(0.5, primaryInk);
+                inkGradient.addColorStop(1, softInk);
+                areaGradient = context.createLinearGradient(0, 0, 0, height);
+                areaGradient.addColorStop(0, colorWithAlpha(theme.primaryColor, 0.24));
+                areaGradient.addColorStop(1, colorWithAlpha(theme.primaryColor, 0.0));
+            }
+            return { gradient: inkGradient, fillGradient: areaGradient };
+        };
+
         const draw = () => {
             const width = canvasWidth;
             const height = canvasHeight;
@@ -213,12 +235,7 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
             const rawSpectrum = audioBands.spectrum?.get() ?? new Uint8Array(0);
             const hasRawSpectrum = rawSpectrum.length > MIN_RAW_SPECTRUM_BIN;
             const energy = Math.min(1, Math.max(0.08, audioPower.get() / 255));
-            const primaryInk = colorWithAlpha(theme.primaryColor, 0.94);
-            const softInk = colorWithAlpha(theme.primaryColor, 0.72);
-            const gradient = context.createLinearGradient(0, 0, width, 0);
-            gradient.addColorStop(0, softInk);
-            gradient.addColorStop(0.5, primaryInk);
-            gradient.addColorStop(1, softInk);
+            const { gradient, fillGradient } = resolveGradients(width, height);
             context.fillStyle = gradient;
             context.strokeStyle = gradient;
             context.lineWidth = 1.5;
@@ -259,9 +276,6 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
                 context.lineTo(width, height);
                 context.lineTo(0, height);
                 context.closePath();
-                const fillGradient = context.createLinearGradient(0, 0, 0, height);
-                fillGradient.addColorStop(0, colorWithAlpha(theme.primaryColor, 0.24));
-                fillGradient.addColorStop(1, colorWithAlpha(theme.primaryColor, 0.0));
                 context.fillStyle = fillGradient;
                 context.fill();
 

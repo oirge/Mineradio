@@ -20,6 +20,7 @@ export const BUILTIN_VISUALIZER_MODES = [
     'diorama',
     'fume',
     'lumiere', 'hanabi', 'nebbia', 'machi',
+    'metaphor',
     'monet',
     'partita',
     'pendolo',

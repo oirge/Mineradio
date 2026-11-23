@@ -27,7 +27,7 @@ export default function LocalRenderQuality() {
 
 // DOM lyric styles use browser text rendering; these modes own a Canvas backing surface.
 const LOCAL_CANVAS_MODES: Record<string, boolean> = {
-    diorama: true, fume: false, monet: false, pendolo: false, sonnet: true, tempera: true, lumiere: true,
+    diorama: true, fume: false, monet: false, sonnet: true, tempera: true, lumiere: true,
 };
 export function LocalStyleRenderQuality() {
     const { mode, tunings, tune } = useVisualSettings();

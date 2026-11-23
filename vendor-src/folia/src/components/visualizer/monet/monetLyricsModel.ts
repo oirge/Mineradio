@@ -1,6 +1,6 @@
 import { clearCache, layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
 import { measureRichInlineStats, prepareRichInline, type RichInlineItem } from '@chenglou/pretext/rich-inline';
-import type { Line, SubtitleContentMode } from '../../../types';
+import type { Line, SubtitleContentMode, Word } from '../../../types';
 import { resolveLyricSubtitleTracks, resolveSubtitleContentMode, type SubtitleTrack, type SubtitleTrackRole } from '../../../utils/lyrics/alternateText';
 import {
     SECONDARY_TRACK_FONT_WEIGHT_FALLBACK,
@@ -8,7 +8,9 @@ import {
     SECONDARY_TRACK_SIZE_FACTOR,
 } from '../../../utils/lyrics/subtitleTrackStyle';
 import { buildLineGraphemeTimeline, buildWordGraphemeTimings, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
+import { buildTimedWords } from '../../../utils/lyrics/estimatedLineTiming';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
+import { measurePrefixOffsets, rememberBounded } from '../textMeasureCache';
 
 // src/components/visualizer/monet/monetLyricsModel.ts
 // Builds the measured, discrete lyric rail state for Monet before Framer Motion animates it.
@@ -273,14 +275,7 @@ const measureMonetLineHeight = (text: string, fontSpec: string, fontPx: number, 
         ? Math.max(defaultLineHeightPx, Math.ceil(glyphHeightPx + MONET_GLYPH_VERTICAL_SAFETY_PX))
         : defaultLineHeightPx;
 
-    if (monetVerticalMetricsCache.size >= MONET_VERTICAL_METRICS_CACHE_LIMIT) {
-        const oldestKey = monetVerticalMetricsCache.keys().next().value;
-        if (oldestKey) {
-            monetVerticalMetricsCache.delete(oldestKey);
-        }
-    }
-    monetVerticalMetricsCache.set(cacheKey, measuredLineHeightPx);
-    return measuredLineHeightPx;
+    return rememberBounded(monetVerticalMetricsCache, cacheKey, measuredLineHeightPx, MONET_VERTICAL_METRICS_CACHE_LIMIT);
 };
 
 /**
@@ -306,17 +301,6 @@ const buildGraphemeOffsetsCacheKey = (text: string, fontPx: number, fontSpec: st
     `${fontPx}|${fontSpec}|${text}`
 );
 
-const rememberGraphemeOffsets = (key: string, offsets: number[]) => {
-    if (monetGraphemeOffsetsCache.size >= MONET_GRAPHEME_OFFSETS_CACHE_LIMIT) {
-        const oldestKey = monetGraphemeOffsetsCache.keys().next().value;
-        if (oldestKey) {
-            monetGraphemeOffsetsCache.delete(oldestKey);
-        }
-    }
-    monetGraphemeOffsetsCache.set(key, offsets);
-    return offsets;
-};
-
 /** Builds cumulative grapheme offsets so the lyric fill edge can sweep through glyphs instead of stepping whole words. */
 export const measureMonetGraphemeOffsets = (text: string, fontPx: number, fontSpec: string): number[] => {
     const cacheKey = buildGraphemeOffsetsCacheKey(text, fontPx, fontSpec);
@@ -325,12 +309,11 @@ export const measureMonetGraphemeOffsets = (text: string, fontPx: number, fontSp
         return cached;
     }
 
-    const graphemes = splitMonetGraphemes(text);
-    const offsets = new Array<number>(graphemes.length + 1).fill(0);
-    for (let index = 1; index <= graphemes.length; index += 1) {
-        offsets[index] = measureTextWidthAtPx(graphemes.slice(0, index).join(''), fontPx, fontSpec);
-    }
-    return rememberGraphemeOffsets(cacheKey, offsets);
+    const offsets = measurePrefixOffsets(
+        splitMonetGraphemes(text),
+        prefix => measureTextWidthAtPx(prefix, fontPx, fontSpec),
+    );
+    return rememberBounded(monetGraphemeOffsetsCache, cacheKey, offsets, MONET_GRAPHEME_OFFSETS_CACHE_LIMIT);
 };
 
 /** Keeps the sweep narrow enough for short CJK lyric tokens to hand off continuously. */
@@ -376,24 +359,42 @@ export const resolveMonetWordStatus = (
     return 'passed';
 };
 
+/**
+ * The words Monet sweeps. A line-level line would be one atomic timed box: the browser wraps inside it
+ * while the sweep mask runs across the whole box, lighting every visual row at once (#1066). Such a line
+ * comes with no words, or with one word spanning the whole text (PlayerCap and mod lyrics without word
+ * timing); both get estimated words, the single word's within its own span.
+ */
+const resolveMonetSweepWords = (line: Line): Word[] => {
+    if (line.words.length === 0) {
+        return buildTimedWords(line.fullText, line.startTime, getLineRenderEndTime(line));
+    }
+
+    const [onlyWord] = line.words;
+    if (line.words.length === 1 && !onlyWord.syllables?.length && onlyWord.text.trim() === line.fullText.trim()) {
+        const estimated = buildTimedWords(onlyWord.text, onlyWord.startTime, onlyWord.endTime);
+        // Stretched back onto the word's own span: its end is a real timestamp, so the sweep still finishes there.
+        const estimatedSpan = (estimated.at(-1)?.endTime ?? onlyWord.startTime) - onlyWord.startTime;
+        if (estimated.length > 1 && estimatedSpan > 0) {
+            const scale = (onlyWord.endTime - onlyWord.startTime) / estimatedSpan;
+            return estimated.map(word => ({
+                text: word.text,
+                startTime: onlyWord.startTime + (word.startTime - onlyWord.startTime) * scale,
+                endTime: onlyWord.startTime + (word.endTime - onlyWord.startTime) * scale,
+            }));
+        }
+    }
+
+    return line.words;
+};
+
 /** Builds a stable display-token list so fullText punctuation and spaces survive around timed lyric words. */
 export const buildMonetDisplayTokens = (line: Line): MonetDisplayToken[] => {
-    if (line.words.length === 0) {
-        return [{
-            text: line.fullText,
-            startTime: line.startTime,
-            endTime: getLineRenderEndTime(line),
-            key: `${line.startTime}-full`,
-            timed: true,
-            startOffset: 0,
-            endOffset: line.fullText.length,
-            graphemeTimings: buildLineGraphemeTimeline(line),
-        }];
-    }
+    const words = resolveMonetSweepWords(line);
 
     const tokens: MonetDisplayToken[] = [];
     let cursor = 0;
-    line.words.forEach((word, index) => {
+    words.forEach((word, index) => {
         const matchIndex = line.fullText.indexOf(word.text, cursor);
         if (matchIndex < 0) {
             return;

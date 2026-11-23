@@ -20,7 +20,10 @@ import type { LocalCommand } from './useLibraryPage';
 
 // src/mineradio/local/VisualSettings.tsx
 // Visual-only controls reuse Folia's registry and tuning panels without its global Settings application.
-export default function VisualSettings({ theme, onClose, assets, onLanguage, state, command }: { theme: Theme; onClose: () => void; assets: LocalVisualAssets; onLanguage: (language: string) => void; state: HostState | null; command: LocalCommand }) {
+export default function VisualSettings({ theme, onClose, assets, onLanguage, state, command, onFrameRateCheck }: {
+    theme: Theme; onClose: () => void; assets: LocalVisualAssets; onLanguage: (language: string) => void;
+    state: HostState | null; command: LocalCommand; onFrameRateCheck: () => void;
+}) {
     const { t, i18n } = useTranslation('localPlayer');
     const { t: translate } = useTranslation();
     const settings = useVisualSettings();
@@ -70,6 +73,7 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage, sta
             <label className="local-setting local-toggle-setting"><span>{t('translation')}</span><input type="checkbox" checked={settings.translation} onChange={(event) => settings.update({ translation: event.target.checked })} /></label>
             <label className="local-setting local-toggle-setting"><span>{t('transparentPlayer')}</span><input data-testid="local-transparent-player" type="checkbox" checked={settings.background.transparent === true} onChange={event => settings.update({ background: { ...settings.background, transparent: event.target.checked } })} /></label>
             <LocalRenderQuality />
+            <button type="button" className="local-reroll" data-testid="local-open-frame-rate-check" onClick={onFrameRateCheck}>{t('frameRateCheck')}</button>
             <label className="local-setting local-toggle-setting"><span>{t('rhythmResponse')}</span><input data-testid="local-rhythm" type="checkbox" checked={settings.rhythm} onChange={event => settings.update({ rhythm: event.target.checked })} /></label>
             <small>{t('rhythmHint')}</small>
             <LocalVisualOptions label={label} />

@@ -201,6 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['Folia 新增可环顾的影厅，并扩展歌词视觉和底部字幕。', 'Folia adds a cinema you can look around in, along with more lyric effects and bottom subtitle controls.'],
+  ['Folia 增加可拖动环顾的影厅（Beta）和「隐喻」歌词样式。影厅荧幕显示当前选择的歌词效果和背景。', 'Folia adds Cinema (Beta) and the Metaphor lyric style. Drag to look around the cinema while the screen shows your current lyric effect and background.'],
+  ['「莫奈」增加左右镜像、隐藏肖像、歌曲描述和拖动挂件的显示选项。「时计」增加镜像、表盘倾斜、分层视差与轮心视角。「回环」可移动圆环并沿环显示翻译。', 'Monet adds mirroring, portrait visibility, a custom description and visibility for the drag handle. Pendolo adds mirroring, tilt, parallax and a hub view. Claddagh lets you position the ring and show translations along it.'],
+  ['底部字幕首行可选当前歌词、翻译或罗马音，可关闭缺少字幕时的后续歌词预览。行级 TTML 折行后按字词顺序高亮。', 'The first bottom subtitle row can show the current lyric, translation or romanization. You can disable the preview of upcoming lyrics. Wrapped line-timed TTML now highlights words in sequence.'],
+  ['Lattice 可切换为电台墙，浏览与点播使用 Mineradio 的实际播放队列。帧率检测可测量当前歌词舞台并比较两组画质。', 'Switch Lattice to the radio wall to browse and play tracks from the Mineradio queue. The frame-rate check measures the active lyric stage and compares two quality settings.'],
   ['减少启动等待，让曲库更早恢复。', 'Reduce startup waits and restore your library sooner.'],
   ['页面就绪后更早恢复曲库，减少启动时的固定等待。', 'Restore your library sooner once the page is ready, reducing fixed startup waits.'],
   ['旧迁移临时文件改为后台清理，减少启动时的磁盘阻塞。', 'Clean up leftover migration files in the background to reduce disk work blocking startup.'],
@@ -2059,7 +2064,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.4';
+var APP_VERSION = '2.7.5';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2112,12 +2117,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '减少启动等待，让曲库更早恢复。',
+  hero: 'Folia 新增可环顾的影厅，并扩展歌词视觉和底部字幕。',
   notes: [
-    '页面就绪后更早恢复曲库，减少启动时的固定等待。',
-    '旧迁移临时文件改为后台清理，减少启动时的磁盘阻塞。',
-    '启动继续播放与 Mineradio／Folia 切换保持稳定，避免重复恢复曲库。',
-    '保留原有界面、画质、SVG 玻璃质感与默认歌词翻译。'
+    'Folia 增加可拖动环顾的影厅（Beta）和「隐喻」歌词样式。影厅荧幕显示当前选择的歌词效果和背景。',
+    '「莫奈」增加左右镜像、隐藏肖像、歌曲描述和拖动挂件的显示选项。「时计」增加镜像、表盘倾斜、分层视差与轮心视角。「回环」可移动圆环并沿环显示翻译。',
+    '底部字幕首行可选当前歌词、翻译或罗马音，可关闭缺少字幕时的后续歌词预览。行级 TTML 折行后按字词顺序高亮。',
+    'Lattice 可切换为电台墙，浏览与点播使用 Mineradio 的实际播放队列。帧率检测可测量当前歌词舞台并比较两组画质。'
   ]
 };
 function readSavedVolume() {

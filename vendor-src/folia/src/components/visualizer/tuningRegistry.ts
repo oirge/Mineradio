@@ -35,6 +35,7 @@ export interface VisualizerTuningMap {
     hanabi: import('./hanabi/types').HanabiTuning;
     nebbia: import('./nebbia/types').NebbiaTuning;
     machi: import('./machi/types').MachiTuning;
+    metaphor: import('./metaphor/types').MetaphorTuning;
 }
 
 export type VisualizerTuningMode = keyof VisualizerTuningMap;

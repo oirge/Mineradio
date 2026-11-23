@@ -9,6 +9,7 @@ import { useVisualSceneSettings } from './useVisualSettings';
 // Each surface owns its visual runtime; transport remains in Mineradio throughout switches.
 const LocalRecordWall = lazy(() => import('./LocalRecordWall'));
 const LocalPosterWall = lazy(() => import('./LocalPosterWall'));
+const LocalCinema = lazy(() => import('./cinema/LocalCinema'));
 interface Props {
     player: LocalPlayer;
     theme: Theme;
@@ -25,13 +26,14 @@ export default function LocalVisualStage({ player, theme, assets, focus, onOpenQ
         {player.active && (visuals.view === 'records' ? <LocalRecordWall {...wallProps} />
             : <LocalPosterWall {...wallProps} translation={visuals.translation} />)}
     </Suspense>;
-    return <div className="local-visualizer" data-testid="local-visualizer" data-mode={visuals.mode}>
-        {/* Replace the mode's Suspense boundary so old GPU resources are destroyed during a lazy switch. */}
-        {player.active && <VisualizerRenderer key={visuals.mode} mode={visuals.mode} theme={theme} isDaylight={visuals.daylight}
+    const cinema = visuals.lyricScene === 'cinema';
+    // Replace the mode's Suspense boundary so old GPU resources are destroyed during a lazy switch.
+    const lyricStage = player.active && <VisualizerRenderer key={visuals.mode} mode={visuals.mode} theme={theme} isDaylight={visuals.daylight}
             currentTime={player.currentTime} currentLineIndex={player.currentLineIndex} lines={player.lines}
             audioPower={player.audioPower} audioBands={player.audioBands} paused={!player.state?.playing}
             seed={track?.id || 'mineradio-local'} coverUrl={track?.cover} songTitle={track?.title} songArtist={track?.artist} songAlbum={track?.album}
-            background={{ ...visuals.background, customImage: assets.background.images[0] ?? null }}
+            background={{ ...visuals.background, transparent: !cinema && visuals.background.transparent,
+                customImage: assets.background.images[0] ?? null }}
             cappellaCustomEmojiImages={assets.emoji.images} cappellaCustomAvatarImages={assets.avatar.images}
             monetPortraitImage={assets.portrait.images[0] ?? null}
             onMonetTuningChange={patch => visuals.tune('monet', patch)}
@@ -44,6 +46,11 @@ export default function LocalVisualStage({ player, theme, assets, focus, onOpenQ
             showText={player.lines.length > 0} showSubtitleTranslation={visuals.translation} hideTranslationSubtitle={visuals.subtitleHidden}
             subtitleContentMode={visuals.subtitleContentMode} subtitleOverlayLayout={visuals.subtitleLayout} subtitleOverlayBackground={visuals.subtitleBackground}
             showHarmonySubtitle={visuals.harmony} onVisualizerTuningChange={patch => visuals.tune(visuals.mode as never, patch as Record<string, unknown>)} isPlayerChromeHidden={focus}
-            onLyricLineSeek={seconds => { void player.command('seek', { seconds }).catch(() => {}); }} />}
+            onLyricLineSeek={seconds => { void player.command('seek', { seconds }).catch(() => {}); }} />;
+    return <div className="local-visualizer" data-testid="local-visualizer" data-mode={visuals.mode}>
+        {player.active && cinema ? <Suspense fallback={lyricStage}>
+            <LocalCinema player={player} theme={theme} lightsUp={visuals.cinemaLights} curtainsOnPause={visuals.cinemaCurtainsOnPause}
+                onClose={() => visuals.update({ lyricScene: 'flat' })}>{lyricStage}</LocalCinema>
+        </Suspense> : lyricStage}
     </div>;
 }

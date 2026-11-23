@@ -238,7 +238,7 @@ with sync_playwright() as p:
         child.get_by_test_id("local-open-settings").click()
         selector = child.get_by_test_id("local-visualizer-mode")
         modes = selector.locator("option").evaluate_all("options => options.map(option => option.value)")
-        expected_modes = {"classic", "partita", "monet", "cadenza", "cappella", "claddagh", "diorama", "fume", "lumiere", "pendolo", "sonnet", "still", "tempera", "tilt", "hanabi", "nebbia", "machi"}
+        expected_modes = {"classic", "partita", "monet", "cadenza", "cappella", "claddagh", "diorama", "fume", "lumiere", "pendolo", "sonnet", "still", "tempera", "tilt", "hanabi", "nebbia", "machi", "metaphor"}
         assert set(modes) == expected_modes, f"Missing or unrelated visualizer modes: {modes}"
         for mode in ["classic", "partita", "monet"] + [mode for mode in modes if mode not in ("classic", "partita", "monet")]:
             selector.select_option(mode)
@@ -285,7 +285,7 @@ with sync_playwright() as p:
         child.get_by_test_id("local-open-settings").click()
         page.screenshot(path=str(OUTPUT / "folia-local-player.png"))
         assert_single_audio()
-        checkpoint("all-17-folia-visualizers-local-backgrounds-and-themes")
+        checkpoint("all-18-folia-visualizers-local-backgrounds-and-themes")
 
         # A larger real local library exercises the original virtualized walls.
         page.locator("#file-input").set_input_files(FILES + WALL_FILES)
