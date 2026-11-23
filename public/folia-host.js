@@ -314,6 +314,23 @@
     }
     return { items: items, total: queryIndex.total, offset: offset, limit: limit };
   }
+  // The radio wall needs neighbors of the playhead, including the repeat-all seam.
+  function getQueueWindow() {
+    syncRevisions();
+    var queue = global.playQueue || [], count = queue.length, current = number(global.currentIdx, -1);
+    var radius = 24, limit = radius * 2 + 1;
+    var complete = count <= limit, loop = global.playMode === 'loop';
+    var centered = !complete && current >= 0 && current < count;
+    var start = centered ? current - radius : 0;
+    var end = centered ? current + radius + 1 : Math.min(count, limit);
+    if (!loop) { start = Math.max(0, start); end = Math.min(count, end); }
+    var items = [];
+    for (var position = start; position < end; position++) {
+      var index = (position + count) % count;
+      items.push({ index: index, track: projectTrack(queue[index], false) });
+    }
+    return { items: items, revision: queueRevision, wrapsAround: complete && loop };
+  }
   function queueTrackChange(song, searchableChanged) {
     if (!song || song.type !== 'local' || !frame || !ready) return;
     syncRevisions();
@@ -371,12 +388,15 @@
       if (!line || line.fallback || !line.text) continue;
       var start = Math.max(0, number(line.t, 0)), next = source[i + 1];
       var end = next && number(next.t, 0) > start ? number(next.t, 0) : start + Math.max(0.1, number(line.duration, 4.8));
+      var lineTimedTtml = /(?:^|-)ttml-line$/.test(line.source || '');
+      if (lineTimedTtml && Number.isFinite(line.duration) && line.duration > 0) end = Math.min(end, start + line.duration);
       var words = (Array.isArray(line.words) ? line.words : []).map(function (word) {
         return { time: Math.max(0, number(word.t, start)), duration: Math.max(0, number(word.d, 0.24)),
           text: String(word.text || word.word || String(line.text).slice(number(word.c0, 0), number(word.c1, 0))) };
       });
       lines.push({ time: start, endTime: end, text: String(line.text), translation: String(line.translation || ''), romanization: String(line.romanization || ''),
-        backgroundVocals: Array.isArray(line.backgroundVocals) ? line.backgroundVocals : [], words: words });
+        backgroundVocals: Array.isArray(line.backgroundVocals) ? line.backgroundVocals : [], words: words,
+        ...(lineTimedTtml ? { lineTimedTtml: true } : {}) });
     }
     return { trackId: trackId(currentSong()), lines: lines };
   }
@@ -395,7 +415,7 @@
     mix(id);
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i]; if (!line) continue;
-      mix(line.t); mix(line.duration); mix(line.text); mix(line.translation); mix(line.romanization); mix(JSON.stringify(line.backgroundVocals || [])); mix(line.fallback); mix((line.words || []).length);
+      mix(line.t); mix(line.duration); mix(line.text); mix(line.translation); mix(line.romanization); mix(JSON.stringify(line.backgroundVocals || [])); mix(line.fallback); mix((line.words || []).length); mix(/(?:^|-)ttml-line$/.test(line.source || ''));
     }
     var signature = lines.length + ':' + (hash >>> 0);
     if (typeof revision === 'number') lyricsSignatureCache = { lines: lines, length: lines.length,
@@ -413,7 +433,7 @@
       try {
         var saved = JSON.parse(arguments.length ? raw : global.localStorage.getItem(VISUALS_KEY));
         var state = saved && saved.state;
-        transparent = !!(state && state.view !== 'records' && state.view !== 'posters'
+        transparent = !!(state && state.view !== 'records' && state.view !== 'posters' && state.lyricScene !== 'cinema'
           && state.background && state.background.transparent === true);
       } catch (_error) {}
     }
@@ -761,6 +781,7 @@
         return getState();
       }
       case 'getQueue': {
+        if (params.aroundCurrent === true) return getQueueWindow();
         syncRevisions();
         var page = pageTracks(global.playQueue || [], params);
         page.currentIndex = number(global.currentIdx, -1); page.revision = queueRevision; return page;
@@ -807,6 +828,13 @@
       case 'playQueue':
         index = number(params.index, -1);
         if (!Number.isInteger(index) || index < 0 || index >= (global.playQueue || []).length) fail('INVALID_INDEX', '队列位置无效');
+        if (params.expectedRevision !== undefined || params.expectedTrackId !== undefined) {
+          syncRevisions();
+          if ((params.expectedRevision !== undefined && params.expectedRevision !== queueRevision)
+            || (params.expectedTrackId !== undefined && params.expectedTrackId !== trackId(global.playQueue[index]))) {
+            fail('QUEUE_CHANGED', '播放队列已更新，请重新选择歌曲');
+          }
+        }
         await call('playQueueAt', index, { manual: true }); return getState();
       case 'togglePlay': await call('togglePlay'); return getState();
       case 'pause': if (global.audio && !global.audio.paused) await call('togglePlay'); return getState();

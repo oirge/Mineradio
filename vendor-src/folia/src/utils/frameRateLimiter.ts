@@ -130,6 +130,17 @@ export const createFrameRateLimitedRaf = (
 
 let installedLimiter: FrameRateLimitedRaf | null = null;
 
+// CSS transforms used for DOM layout settle at the browser cadence.
+export const requestUncappedAnimationFrame = (callback: FrameRequestCallback): number => {
+    const target = window as WindowWithVisualizerFrameRateLimiter;
+    return (target.__foliaNativeRequestAnimationFrame ?? target.requestAnimationFrame).call(target, callback);
+};
+
+export const cancelUncappedAnimationFrame = (handle: number): void => {
+    const target = window as WindowWithVisualizerFrameRateLimiter;
+    (target.__foliaNativeCancelAnimationFrame ?? target.cancelAnimationFrame).call(target, handle);
+};
+
 export const setGlobalVisualizerFrameRate = (frameRate: VisualizerFrameRate) => {
     if (typeof window === 'undefined') {
         return;

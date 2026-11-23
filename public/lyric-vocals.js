@@ -18,18 +18,22 @@
     }
     function track(node, start, end) {
       var words = [], text = '';
-      function visit(element, begin, until) {
+      function visit(element, begin, until, timedSpan) {
         if (element.nodeType === 3) { text += element.nodeValue; return; }
         if (element.nodeType !== 1) return;
         if (element !== node && /^x-(?:bg|translation|roman|lang)/i.test(role(element))) return;
-        begin = clock(element, 'begin', begin); until = clock(element, 'end', until);
+        var ownBegin = clock(element, 'begin', NaN), ownEnd = clock(element, 'end', NaN);
+        var isSpan = element.localName === 'span';
+        timedSpan = timedSpan || (isSpan && (Number.isFinite(ownBegin) || Number.isFinite(ownEnd)));
+        if (Number.isFinite(ownBegin)) begin = ownBegin;
+        if (Number.isFinite(ownEnd)) until = ownEnd;
         var childSpans = Array.from(element.children).filter(function (child) { return child.localName === 'span'; });
-        if (element.localName === 'span' && !childSpans.length && element.textContent && Number.isFinite(begin)) {
+        if (isSpan && timedSpan && !childSpans.length && element.textContent && Number.isFinite(begin)) {
           words.push({ text: element.textContent, startMs: begin, durMs: Math.max(0, until - begin) });
           text += element.textContent;
-        } else Array.from(element.childNodes).forEach(function (child) { visit(child, begin, until); });
+        } else Array.from(element.childNodes).forEach(function (child) { visit(child, begin, until, timedSpan); });
       }
-      visit(node, start, end);
+      visit(node, start, end, false);
       return { text: text.trim(), words: words };
     }
     var lines = paragraphs.map(function (paragraph) {

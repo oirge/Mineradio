@@ -1,1 +1,0 @@
-export{WebGPURenderer}from"./lib-DdiIX0Dd.js";

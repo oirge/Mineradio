@@ -10,7 +10,9 @@ import {
     isBuiltinVisualizerMode,
 } from '../types/visualizerModes';
 import { resolveDioramaMoteCircumference, resolveDioramaMoteRadial } from '../components/visualizer/diorama/dioramaMoteField';
+import { normalizeMonetLayout } from '../components/visualizer/layoutTuning';
 import { parseVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
+import { normalizeLyricRenderOverride } from '../utils/lyricRenderQuality';
 import { sanitizeUrlBackgroundList } from '../utils/urlBackground';
 import { normalizeLumiereTuning } from '../utils/lumiereTuning';
 
@@ -649,7 +651,7 @@ export const normalizeHexColor = (value: unknown, fallback: string) => {
 };
 
 export const resolveMonetPortraitSource = (value: MonetPortraitSource | undefined): MonetPortraitSource => (
-    value === 'custom' ? 'custom' : DEFAULT_MONET_TUNING.portraitSource
+    value === 'custom' || value === 'none' ? value : DEFAULT_MONET_TUNING.portraitSource
 );
 
 export const readStoredVisualizerBackgroundMode = (): VisualizerBackgroundMode | null => {
@@ -928,9 +930,11 @@ export const readStoredSoraBackgroundTuning = (): SoraBackgroundTuning => {
 };
 
 export type StoredMonetTuningInput = Partial<MonetTuning> & StoredMonetBackgroundTuningInput;
-export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetTuning => ({
+export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetTuning => normalizeMonetLayout({
+    render: normalizeLyricRenderOverride(parsed.render),
     keywordColoringEnabled: parsed.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
     showDescription: parsed.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
+    descriptionVisibility: parsed.descriptionVisibility,
     showAudioVisualization: parsed.showAudioVisualization ?? DEFAULT_MONET_TUNING.showAudioVisualization,
     audioStyle: parsed.audioStyle === 'line' ? 'line' : DEFAULT_MONET_TUNING.audioStyle,
     fontScale: clampMonetFontScale(
@@ -943,6 +947,9 @@ export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetT
         : (DEFAULT_MONET_TUNING.portraitOffsetX ?? 0),
     portraitStyle: parsed.portraitStyle === 'rectangular' ? 'rectangular' : DEFAULT_MONET_TUNING.portraitStyle,
     showPortraitDragHanger: parsed.showPortraitDragHanger ?? DEFAULT_MONET_TUNING.showPortraitDragHanger,
+    portraitHangerVisibility: parsed.portraitHangerVisibility,
+    mirrorLayout: parsed.mirrorLayout,
+    customDescription: parsed.customDescription,
 });
 export const readStoredMonetBackgroundTuning = (): MonetBackgroundTuning => {
     if (typeof window === 'undefined') {

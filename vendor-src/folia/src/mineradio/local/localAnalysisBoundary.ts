@@ -73,6 +73,11 @@ export const isBeatFxReady = () => enabled() && clock.events.length > 0;
 export const getBeatEffectStrength = (id?: unknown) => isBeatEffectPlaying(id) ? 1 : 0;
 export const getBeatFxHeard = () => heard;
 export const getBeatFxEvents = () => clock.events;
+export const getBeatFxBeatPeriod = () => {
+    const next = Math.max(1, Math.min(clock.cursor, clock.events.length - 1));
+    const period = (clock.events[next]?.t ?? 0) - (clock.events[next - 1]?.t ?? 0);
+    return period >= 0.15 && period <= 2 ? period : 0.5;
+};
 // Upstream divides the MotionValue envelope by these strengths, not by another envelope.
 export const getBeatFxIntensities = () => ({ beat: enabled() ? 1 : 0, downbeat: enabled() ? 1 : 0 });
 export const getBeatFxRotationSign = () => clock.rotationSign;

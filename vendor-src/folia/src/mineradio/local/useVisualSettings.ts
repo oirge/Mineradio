@@ -1,6 +1,9 @@
 import { DEFAULT_HANABI_TUNING } from '../../components/visualizer/hanabi/types';
 import { DEFAULT_NEBBIA_TUNING } from '../../components/visualizer/nebbia/types';
 import { DEFAULT_MACHI_TUNING } from '../../components/visualizer/machi/types';
+import { DEFAULT_METAPHOR_TUNING } from '../../components/visualizer/metaphor/types';
+import { normalizeMetaphorTuning } from '../../components/visualizer/metaphor/tuning';
+import { normalizeCladdaghLayout, normalizeMonetLayout, normalizePendoloLayout } from '../../components/visualizer/layoutTuning';
 import { normalizeHanabiTuning } from '../../components/visualizer/hanabi/hanabiTuning';
 import { normalizeNebbiaTuning } from '../../components/visualizer/nebbia/tuning';
 import { normalizeMachiTuning } from '../../components/visualizer/machi/machiTuning';
@@ -27,7 +30,7 @@ export const DEFAULT_LOCAL_TUNINGS: VisualizerTuningBundle = {
     monet: presets.DEFAULT_MONET_TUNING, pendolo: presets.DEFAULT_PENDOLO_TUNING,
     sonnet: presets.DEFAULT_SONNET_TUNING, tempera: presets.DEFAULT_TEMPERA_TUNING,
     lumiere: presets.DEFAULT_LUMIERE_TUNING,
-    hanabi: DEFAULT_HANABI_TUNING, nebbia: DEFAULT_NEBBIA_TUNING, machi: DEFAULT_MACHI_TUNING,
+    hanabi: DEFAULT_HANABI_TUNING, nebbia: DEFAULT_NEBBIA_TUNING, machi: DEFAULT_MACHI_TUNING, metaphor: DEFAULT_METAPHOR_TUNING,
 };
 export interface VisualPreferences {
     rhythm: boolean;
@@ -40,6 +43,11 @@ export interface VisualPreferences {
     subtitleContentMode: presets.SubtitleContentMode;
     harmony: boolean;
     view: 'lyrics' | 'records' | 'posters';
+    latticeWallForm: 'posters' | 'radio';
+    latticeHideUpcoming: boolean;
+    lyricScene: 'flat' | 'cinema';
+    cinemaLights: boolean;
+    cinemaCurtainsOnPause: boolean;
     mode: presets.VisualizerMode;
     background: VisualizerBackgroundConfig;
     daylight: boolean;
@@ -68,6 +76,8 @@ const defaults: VisualPreferences = {
     randomMode: false, randomPool: normalizeRandomPool(null), subtitleLayout: 'translation', harmony: true,
     subtitleHidden: false, subtitleBackground: true, subtitleContentMode: 'translation',
     view: 'lyrics',
+    latticeWallForm: 'posters', latticeHideUpcoming: false,
+    lyricScene: 'flat', cinemaLights: false, cinemaCurtainsOnPause: true,
     mode: 'classic', background: { mode: 'latent' }, daylight: false,
     lyricsFontScale: 1, translation: true, tunings: DEFAULT_LOCAL_TUNINGS,
 };
@@ -77,10 +87,16 @@ export function normalizeLocalTuning(mode: string, value: unknown) {
     if (mode === 'hanabi') return normalizeHanabiTuning(patch);
     if (mode === 'nebbia') return normalizeNebbiaTuning(patch);
     if (mode === 'machi') return normalizeMachiTuning(patch);
+    if (mode === 'metaphor') return normalizeMetaphorTuning(patch);
     if (mode === 'tempera') return { ...resolveStoredTemperaTuning(patch),
         render: normalizeLyricRenderOverride((patch as { render?: unknown }).render) };
     const base = DEFAULT_LOCAL_TUNINGS[mode as VisualizerTuningMode];
     const merged = { ...base, ...patch };
+    if (mode === 'claddagh') return normalizeCladdaghLayout(merged as presets.CladdaghTuning);
+    if (mode === 'pendolo' || mode === 'monet') {
+        const tuned = { ...merged, render: normalizeLyricRenderOverride((patch as { render?: unknown }).render) };
+        return mode === 'pendolo' ? normalizePendoloLayout(tuned as presets.PendoloTuning) : normalizeMonetLayout(tuned as presets.MonetTuning);
+    }
     if (mode === 'classic' || mode === 'partita') {
         return { ...merged, avoidOverlap: (patch as { avoidOverlap?: unknown }).avoidOverlap === true };
     }
@@ -102,6 +118,11 @@ export function normalizeVisualPreferences(saved: unknown): VisualPreferences {
         rhythm: value.rhythm !== false,
         lyricRenderQuality: normalizeLyricRenderQuality(value.lyricRenderQuality),
         view: value.view === 'records' || value.view === 'posters' ? value.view : 'lyrics',
+        latticeWallForm: value.latticeWallForm === 'radio' ? 'radio' : 'posters',
+        latticeHideUpcoming: value.latticeHideUpcoming === true,
+        lyricScene: value.lyricScene === 'cinema' ? 'cinema' : 'flat',
+        cinemaLights: value.cinemaLights === true,
+        cinemaCurtainsOnPause: value.cinemaCurtainsOnPause !== false,
         mode: isBuiltinVisualizerMode(value.mode) ? value.mode : defaults.mode,
         background: { ...background, mode: isBuiltinVisualizerBackgroundMode(background.mode) && background.mode !== 'url' ? background.mode : 'latent', url: undefined, customImage: undefined, transparent: background.transparent === true },
         daylight: value.daylight === true,
@@ -195,6 +216,8 @@ export const useVisualSettings = create<VisualSettings>()(persist((set, get) => 
 // Pool edits and named-preset bookkeeping must not rebuild the GPU stage or its preview.
 export function useVisualSceneSettings() {
     return useVisualSettings(useShallow(({ view, mode, background, daylight, lyricsFontScale, translation,
-        harmony, tunings, subtitleLayout, subtitleHidden, subtitleBackground, subtitleContentMode, update, tune }) => ({ view, mode, background, daylight,
-        lyricsFontScale, translation, harmony, tunings, subtitleLayout, subtitleHidden, subtitleBackground, subtitleContentMode, update, tune })));
+        harmony, tunings, subtitleLayout, subtitleHidden, subtitleBackground, subtitleContentMode, lyricScene, cinemaLights,
+        cinemaCurtainsOnPause, update, tune }) => ({ view, mode, background, daylight, lyricsFontScale, translation, harmony,
+        tunings, subtitleLayout, subtitleHidden, subtitleBackground, subtitleContentMode, lyricScene, cinemaLights,
+        cinemaCurtainsOnPause, update, tune })));
 }

@@ -30,5 +30,12 @@
       "52617a26736578cc9731cb4e49b96d3ccd93424c"
     ],
     "scope": "Selective follow-up port: staged/asynchronous Machi program warmup, global lyric rendering quality and per-style overrides, Nebbia preview sizing, whitespace/RTL lyric layout, Nebbia aquarium/rain/dew and transparent player integration. Not a full upstream version upgrade. Selective follow-up: Classic/Partita overlap geometry and local Lattice current-song-only numeric badges. Shared GlowWord/timing/layout helpers extracted as required by the overlap implementation. No Bravais, account, cloud sync or provider application port. Local command search, configurable playback slots and subtitle tools follow PR #1014 using an isolated local registry and the existing host bridge. Audio effects/output are exposed from Mineradio without adopting upstream audio services."
+  },
+  "stableSync": {
+    "retrievedAt": "2026-11-23",
+    "version": "0.7.29",
+    "commit": "4c4c3c3befee3f3305832fff958f14167e8d7537",
+    "sourcePullRequests": [1146, 1174, 1186, 1204, 1235, 1243, 1244, 1251, 1263, 1265, 1269],
+    "scope": "Selective port of the Cinema visual scene, Monet/Pendolo/Claddagh layout controls, subtitle rows, Metaphor, the Lattice radio wall for the host queue, frame-rate comparison, and line-level TTML timing. Cinema and both walls use the Mineradio playback bridge."
   }
 }

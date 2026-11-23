@@ -10,7 +10,7 @@ export { hostTrackToWallSong, type LocalWallSong } from './wallCatalogData';
 const SEARCH_RECHECK_DELAY_MS = 180;
 const SEARCH_RECHECK_INTERVAL_MS = 3000;
 
-export function useLocalWallCatalog(player: LocalPlayer) {
+export function useLocalWallCatalog(player: LocalPlayer, enabled = true) {
     const [snapshot, setSnapshot] = useState(emptyWallCatalog);
     const [playlists, setPlaylists] = useState<HostPlaylist[]>([]);
     const [playlistId, setPlaylistId] = useState('library');
@@ -18,7 +18,7 @@ export function useLocalWallCatalog(player: LocalPlayer) {
     const [refreshKey, setRefreshKey] = useState(0);
     const searchRecheck = useRef({ scope: '', lastRequestedAt: Number.NEGATIVE_INFINITY, skipDelay: false });
     const refresh = useCallback(() => setRefreshKey(value => value + 1), []);
-    const ready = Boolean(player.state);
+    const ready = enabled && Boolean(player.state);
     const revision = player.state?.libraryRevision;
     const command = player.command;
     const scope = JSON.stringify([playlistId, query]);

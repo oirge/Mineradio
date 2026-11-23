@@ -7,8 +7,8 @@ import { parseSubtitleOverlayLayout, withSubtitleOverlayRowCount, withSubtitleOv
 // Stored preferences may be outdated; random picks and row edits must stay valid.
 describe('random lyric styles', () => {
     it('has all 17 modes including the new three', () => {
-        expect(BUILTIN_VISUALIZER_MODES).toHaveLength(17);
-        expect(BUILTIN_VISUALIZER_MODES).toEqual(expect.arrayContaining(['hanabi', 'nebbia', 'machi']));
+        expect(BUILTIN_VISUALIZER_MODES).toHaveLength(18);
+        expect(BUILTIN_VISUALIZER_MODES).toEqual(expect.arrayContaining(['hanabi', 'nebbia', 'machi', 'metaphor']));
     });
     it('removes duplicates and unavailable styles', () => {
         expect(normalizeRandomPool(['classic', 'missing', 'classic', 'hanabi'])).toEqual(['classic', 'hanabi']);

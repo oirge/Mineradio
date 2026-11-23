@@ -43,6 +43,20 @@ describe('isolated Mineradio local display projection', () => {
         expect(localActiveLineIndex(lines, 4.5)).toBe(2);
     });
 
+    it('estimates words inside a line-timed TTML range and keeps native span timing', () => {
+        const lines = localLyricLines({ trackId: 'local:ttml', lines: [{
+            time: 1, endTime: 4, text: 'One long line for wrapping', translation: '翻译', lineTimedTtml: true,
+        }, {
+            time: 6, endTime: 8, text: 'Already timed', lineTimedTtml: true,
+            words: [{ time: 6.4, duration: 0.6, text: 'Already timed' }],
+        }] }, 20);
+        expect(lines[0].words.map(word => word.text)).toEqual(['One', 'long', 'line', 'for', 'wrapping']);
+        expect(lines[0].words[0].startTime).toBe(1);
+        expect(lines[0].words.at(-1)!.endTime).toBeLessThanOrEqual(4);
+        expect(lines[0].translation).toBe('翻译');
+        expect(lines[1].words).toEqual([{ startTime: 6.4, endTime: 7, text: 'Already timed' }]);
+    });
+
     it('bounds interpolation, playback rate, pause, and end of track', () => {
         expect(interpolatedLocalTime(state, 0.2)).toBe(10.2);
         expect(interpolatedLocalTime(state, 100)).toBe(10.5);

@@ -1,0 +1,1 @@
+var e=(e,t,n,r)=>{if(!e.has(t)&&e.size>=r){let t=e.keys().next();t.done||e.delete(t.value)}return e.set(t,n),n},t=(e,t)=>{let n=[0],r=``;for(let i of e)r+=i,n.push(t(r,n.length,n[n.length-1]));return n};export{e as n,t};

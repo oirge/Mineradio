@@ -1,0 +1,1 @@
+export{WebGPURenderer}from"./lib-ClykfQ0b.js";

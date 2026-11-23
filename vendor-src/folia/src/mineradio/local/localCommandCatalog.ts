@@ -1,4 +1,4 @@
-import { AudioLines, Captions, Command, Disc3, Film, FolderOpen, Heart, Images, Library, ListMusic, Maximize2, Music2, Pause, Play, Plus, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { AudioLines, Captions, Command, Disc3, Film, FolderOpen, Gauge, Heart, Images, Library, ListMusic, Maximize2, Music2, Pause, Play, Plus, Radio, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { normalizeSearchText, splitWords } from '../../components/command-palette/search/normalize';
 import type { HostState } from '../client';
 import type { LocalCommand } from './useLibraryPage';
@@ -25,12 +25,15 @@ export const LOCAL_ACTIONS = [
     { id: 'lyrics', label: 'lyricsView', icon: Music2, keywords: 'lyrics view 歌词界面 gecijiemian', track: false, slot: false },
     { id: 'records', label: 'recordsView', icon: Disc3, keywords: 'records view 唱片 悬浮唱片 changpian cp', track: false, slot: false },
     { id: 'posters', label: 'postersView', icon: Images, keywords: 'lattice posters 拼贴 封面墙 fengmianqiang pt', track: false, slot: false },
+    { id: 'radioWall', label: 'latticeRadio', icon: Radio, keywords: 'lattice radio wall 电台墙 翻牌 diantai dtq', track: false, slot: false },
+    { id: 'cinema', label: 'cinemaBeta', icon: Film, keywords: 'cinema theater scene 影厅 场景 yingting yt', track: false, slot: false },
+    { id: 'frameRate', label: 'frameRateCheck', icon: Gauge, keywords: 'fps frame rate performance benchmark 帧率 性能检测 zhenlv xingneng', track: false, slot: false },
     { id: 'focus', label: 'focus', icon: Maximize2, keywords: 'focus immersive 沉浸 chenjin cj', track: false, slot: false },
     { id: 'importFiles', label: 'importFiles', icon: Music2, keywords: 'import files 导入音乐文件 daoru dryy', track: false, slot: false },
     { id: 'importFolder', label: 'importFolder', icon: FolderOpen, keywords: 'import folder 导入文件夹 daoruwenjianjia', track: false, slot: false },
 ] as const;
 export type LocalActionId = typeof LOCAL_ACTIONS[number]['id'];
-export type LocalTool = 'commands' | 'audio' | 'subtitles' | 'addPlaylist' | 'videoExport';
+export type LocalTool = 'commands' | 'audio' | 'subtitles' | 'addPlaylist' | 'videoExport' | 'frameRate';
 export const SLOT_ACTIONS = LOCAL_ACTIONS.filter(action => action.slot);
 export function localActionView(id: LocalActionId, state: HostState | null) {
     const action = LOCAL_ACTIONS.find(item => item.id === id)!;
@@ -50,6 +53,8 @@ export interface LocalActionServices {
     tool: (tool: LocalTool) => void; library: (queue: boolean) => void;
     playback: () => void; visuals: () => void; focus: () => void;
     view: (view: 'lyrics' | 'records' | 'posters') => void;
+    scene?: (scene: 'flat' | 'cinema') => void;
+    radioWall?: () => void;
 }
 export function executeLocalAction(id: LocalActionId, services: LocalActionServices) {
     if (localActionView(id, services.state).disabled) return;
@@ -64,6 +69,9 @@ export function executeLocalAction(id: LocalActionId, services: LocalActionServi
     else if (id === 'translationSource') run('openTranslationSettings');
     else if (id === 'visuals') services.visuals();
     else if (id === 'focus') services.focus();
+    else if (id === 'cinema') services.scene?.('cinema');
+    else if (id === 'radioWall') services.radioWall?.();
+    else if (id === 'frameRate') { services.view('lyrics'); services.tool('frameRate'); }
     else if (id === 'lyrics' || id === 'records' || id === 'posters') services.view(id);
     else if (id === 'commands' || id === 'audio' || id === 'subtitles' || id === 'addPlaylist' || id === 'videoExport') services.tool(id);
     else run(id);
