@@ -59,6 +59,8 @@ test('发布工作流禁用构建器发布并只创建或复用一个 Release', 
   assert.match(releaseWorkflow, /gh release create \$tag/);
   assert.match(releaseWorkflow, /--draft/);
   assert.match(releaseWorkflow, /--verify-tag/);
+  assert.match(releaseWorkflow, /--notes-file \$env:RELEASE_NOTES_PATH/);
+  assert.doesNotMatch(releaseWorkflow, /--generate-notes/);
   assert.ok(releaseWorkflow.indexOf('gh release create') < releaseWorkflow.indexOf('gh release upload'));
   assert.match(releaseWorkflow, /gh release upload \$tag[\s\S]*--clobber/);
   assert.equal((releaseWorkflow.match(/^\s+gh release create \$tag/gm) || []).length, 1);

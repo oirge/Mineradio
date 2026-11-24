@@ -126,6 +126,21 @@ test('连续点击检测更新只发送一个在途请求', async () => {
   assert.deepEqual(harness.toasts, ['当前已是最新版本 v1.4.8']);
 });
 
+test('更新弹窗保留全部说明，且摘要不会重复显示已有条目', () => {
+  const { context, state } = loadUpdateCheckHarness();
+  const notes = ['优化跟词镜头。', '修复导出首帧。', '修复逐词高亮。', '完善浅色模式。'];
+  const data = { configured: true, updateAvailable: true, latestVersion: '1.4.9' };
+
+  context.applyLatestUpdateInfo({ ...data, release: { summary: notes[0], notes } });
+  assert.equal(state.hero, '本次更新');
+  assert.deepEqual(state.notes, notes);
+
+  const summary = '歌词和导出修复';
+  context.applyLatestUpdateInfo({ ...data, release: { summary, notes } });
+  assert.equal(state.hero, summary);
+  assert.deepEqual(state.notes, notes);
+});
+
 test('更新线路失败会给出可重试反馈', async () => {
   const harness = loadUpdateCheckHarness();
   const request = harness.context.checkLatestUpdate({ force: true, announce: true });

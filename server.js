@@ -686,6 +686,7 @@ function cleanReleaseLine(line) {
 }
 function releaseSectionAction(text) {
   const heading = String(text || '').replace(/[：:]+$/, '').trim();
+  if (/^full changelog\s*[:：]/i.test(heading)) return 'skip';
   if (/^(?:what'?s changed|changes|changelog|full changelog|release notes?|highlights?|更新日志|更新内容|本次更新|主要更新|重点更新|修复内容|问题修复|新增功能|功能更新|优化内容)$/i.test(heading)) return 'skip';
   if (/^(?:verification|validation|tests?|downloads?|installation|assets?|checksums?|验证|测试|下载|安装|发布资产|校验|哈希)$/i.test(heading)) return 'stop';
   return '';

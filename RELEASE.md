@@ -1,3 +1,15 @@
+# v2.7.6 歌词视觉与导出修复
+
+- 发布内容为「隐喻」跟词镜头、导出首帧、单时间标签 TTML 逐词高亮、浅色 Lattice 和「莫奈」阴影修复，以及 Electron 43.8.12。用户要求继续发布；正式提交为 `39ddcca7`，annotated tag object 为 `dd4b056a`。
+- [Windows Build and Release 45321380952](https://github.com/oirge/Mineradio/actions/runs/45321380952)、[Verify 45321379705](https://github.com/oirge/Mineradio/actions/runs/45321379705) 和 [视频导出 45321379817](https://github.com/oirge/Mineradio/actions/runs/45321379817) 均成功。早期发布运行 `45320136138` 在旧提交上未能检出新标签。
+- [Release 456280547](https://github.com/oirge/Mineradio/releases/tag/v2.7.6) 于北京时间 2026-11-24 11:47:35 公开并设 Latest，四项资产齐全，安装器 122840552 B。公开下载的 `latest.yml` 和 SHA256 校验清单与 GitHub 摘要匹配，清单所列安装器和 blockmap SHA256 与 GitHub 资产元数据一致，更新清单的版本、路径和安装器大小正确。
+- 用户反馈更新弹窗重复显示 `Full Changelog`。已用 `CHANGELOG.md` 的四条中文说明更正线上 Release，复核发布状态和四项资产的编号、大小及摘要一致。使用 v2.7.5 的真实 `/api/update/latest?force=1` 确认可读到四条说明。发布后补充的源码修复会跳过自动对比链接，对重复的弹窗摘要显示「本次更新」，并从对应标签的 `CHANGELOG.md` 生成新 Release 草稿正文。
+
+# v2.7.5 Folia 影厅与视觉更新
+
+- 新增 Folia 影厅和「隐喻」歌词样式，更新「莫奈」「时计」「回环」、底部字幕和 Lattice 电台墙。正式提交为 PR #189 合并后的 `a645c8af`，annotated tag object 为 `abfee141`。
+- [Windows Build and Release 45106822802](https://github.com/oirge/Mineradio/actions/runs/45106822802)、[Verify 45106802686](https://github.com/oirge/Mineradio/actions/runs/45106802686) 及 [视频导出 45106802687](https://github.com/oirge/Mineradio/actions/runs/45106802687) 均成功。[Release 454958586](https://github.com/oirge/Mineradio/releases/tag/v2.7.5) 于北京时间 2026-11-23 11:40:27 公开，四项资产齐全，安装器 122375134 B。
+
 # v2.7.4 启动优化
 
 - 用户于 2026-11-14 明确要求「发布新版」。本次发布 2.7.4，包含 PR #187 的启动优化；沿用云端 Windows 构建、私密默认翻译配置注入和 ASAR 内配置校验。
