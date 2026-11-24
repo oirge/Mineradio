@@ -5,6 +5,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import struct
 import time
 import wave
@@ -20,7 +21,7 @@ if os.environ.get('MINERADIO_UI_DIAGNOSTICS'):
     os.environ['DEBUG'] = 'pw:api'
 files = []
 ttml = '''<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata"><body><div>
-<p begin="0s" end="12s"><span begin="0s" end="12s">Main lyric</span>
+<p begin="0s" end="12s"><span begin="1s" end="11s"><span>Main</span> lyric</span>
 <span ttm:role="x-translation">主句翻译</span><span ttm:role="x-roman">Main roman</span>
 <span ttm:role="x-bg" begin="1s" end="11s"><span begin="1s" end="11s">Harmony voice</span></span></p>
 </div></body></tt>'''
@@ -66,6 +67,7 @@ with sync_playwright() as p:
         page.wait_for_function('lyricsLines[0]?.backgroundVocals?.length === 1')
         rich = page.evaluate('lyricsLines[0]')
         assert rich['text'] == 'Main lyric' and rich['translation'] == '主句翻译'
+        assert [(word['text'], word['t'], word['d']) for word in rich['words']] == [('Main ', 1, 5), ('lyric', 6, 5)]
         assert rich['backgroundVocals'][0]['text'] == 'Harmony voice'
         done('TTML main, translation, romanization and harmony remain separate')
         page.locator('#folia-floating-switch').click()
@@ -103,6 +105,7 @@ with sync_playwright() as p:
         expect(mode).to_have_value('partita')
         child.get_by_test_id('local-reroll').click()
         expect(mode).to_have_value('classic')
+        child.get_by_test_id('local-theme').select_option('light')
         child.get_by_test_id('local-open-settings').click()
         # The collapsed bar keeps its seek row visible; hovering it locks the real controls open.
         child.get_by_test_id('local-seek').hover()
@@ -112,11 +115,25 @@ with sync_playwright() as p:
         done('custom random pool, reroll and next-song selection never repeat')
 
         child.get_by_test_id('local-view-posters').click()
-        child.get_by_test_id('local-poster-wall').wait_for(timeout=30000)
+        wall = child.get_by_test_id('local-poster-wall')
+        wall.wait_for(timeout=30000)
         expect(child.locator('.lattice-lyrics.is-ready')).to_contain_text('Harmony voice', timeout=20000)
         done('Lattice renders TTML harmony on the current song tile')
+        expect(wall).to_have_class(re.compile(r'\bis-daylight\b'))
+        wall.locator('.lattice-tools button').last.click()
+        lights = wall.locator('.lattice-tools-lights-toggle')
+        lights.click()
+        dimmer = wall.locator('.lattice-poster:not(.is-current) .lattice-poster-lights-out').first
+        expect(dimmer).to_have_css('background-color', 'rgb(0, 0, 0)')
+        expect(dimmer).to_have_css('opacity', '0.82')
+        current_dimmers = wall.locator('.lattice-poster.is-current .lattice-poster-lights-out')
+        expect(current_dimmers.first).to_have_css('opacity', '0')
+        assert current_dimmers.evaluate_all("(nodes) => nodes.every(node => getComputedStyle(node).opacity === '0')")
+        lights.click()
+        done('daylight lights-out dims only the non-current Lattice tiles')
         child.get_by_test_id('local-view-lyrics').click()
         child.get_by_test_id('local-open-settings').click()
+        child.get_by_test_id('local-theme').select_option('dark')
         child.get_by_test_id('local-harmony').uncheck()
         expect(stage).not_to_contain_text('Harmony voice')
         child.get_by_test_id('local-harmony').check()

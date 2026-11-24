@@ -214,10 +214,6 @@
     opacity: 0.82;
 }
 
-.lattice-root.is-daylight.is-lights-out .lattice-poster:not(.is-current) .lattice-poster-lights-out {
-    background: #fff;
-}
-
 .lattice-root.is-lights-out .lattice-poster:not(.is-current) .lattice-poster-tint {
     opacity: 0;
 }

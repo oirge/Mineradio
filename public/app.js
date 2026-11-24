@@ -201,6 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['改善隐喻运镜和视频导出，修复歌词与界面细节。', 'Smoother Metaphor camera motion, more reliable video starts, and fixes for lyrics and visuals.'],
+  ['「隐喻」特写保留后续歌词，跟词镜头移动更平滑。导出会等画布绘出首帧再开始录制。', 'Metaphor close-ups keep upcoming lyrics in view and move more smoothly between groups of words. Video export waits for the first frame before recording.'],
+  ['整句放在单个带时间的 TTML 标签中时，歌词会在原时间范围内逐词高亮。', 'TTML lyrics wrapped in a single timed span highlight word by word within the original time range.'],
+  ['浅色模式下，Lattice 熄灯会压暗非当前卡片。「莫奈」歌名阴影完整显示。', 'Lights out dims non-current Lattice cards in light mode. Monet displays the full song title shadow.'],
+  ['Electron 更新至 43.8.12，并修复构建依赖的中风险安全告警。', 'Updated Electron to 43.8.12 and addressed moderate security advisories in build dependencies.'],
   ['Folia 新增可环顾的影厅，并扩展歌词视觉和底部字幕。', 'Folia adds a cinema you can look around in, along with more lyric effects and bottom subtitle controls.'],
   ['Folia 增加可拖动环顾的影厅（Beta）和「隐喻」歌词样式。影厅荧幕显示当前选择的歌词效果和背景。', 'Folia adds Cinema (Beta) and the Metaphor lyric style. Drag to look around the cinema while the screen shows your current lyric effect and background.'],
   ['「莫奈」增加左右镜像、隐藏肖像、歌曲描述和拖动挂件的显示选项。「时计」增加镜像、表盘倾斜、分层视差与轮心视角。「回环」可移动圆环并沿环显示翻译。', 'Monet adds mirroring, portrait visibility, a custom description and visibility for the drag handle. Pendolo adds mirroring, tilt, parallax and a hub view. Claddagh lets you position the ring and show translations along it.'],
@@ -2064,7 +2069,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.5';
+var APP_VERSION = '2.7.6';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2117,12 +2122,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: 'Folia 新增可环顾的影厅，并扩展歌词视觉和底部字幕。',
+  hero: '改善隐喻运镜和视频导出，修复歌词与界面细节。',
   notes: [
-    'Folia 增加可拖动环顾的影厅（Beta）和「隐喻」歌词样式。影厅荧幕显示当前选择的歌词效果和背景。',
-    '「莫奈」增加左右镜像、隐藏肖像、歌曲描述和拖动挂件的显示选项。「时计」增加镜像、表盘倾斜、分层视差与轮心视角。「回环」可移动圆环并沿环显示翻译。',
-    '底部字幕首行可选当前歌词、翻译或罗马音，可关闭缺少字幕时的后续歌词预览。行级 TTML 折行后按字词顺序高亮。',
-    'Lattice 可切换为电台墙，浏览与点播使用 Mineradio 的实际播放队列。帧率检测可测量当前歌词舞台并比较两组画质。'
+    '「隐喻」特写保留后续歌词，跟词镜头移动更平滑。导出会等画布绘出首帧再开始录制。',
+    '整句放在单个带时间的 TTML 标签中时，歌词会在原时间范围内逐词高亮。',
+    '浅色模式下，Lattice 熄灯会压暗非当前卡片。「莫奈」歌名阴影完整显示。',
+    'Electron 更新至 43.8.12，并修复构建依赖的中风险安全告警。'
   ]
 };
 function readSavedVolume() {
@@ -31337,6 +31342,37 @@ function ttmlClockToMs(value) {
   if (!isFinite(seconds) || !isFinite(minutes) || !isFinite(hours)) return NaN;
   return ((hours * 60 + minutes) * 60 + seconds) * 1000;
 }
+function ttmlEndToMs(begin, end, duration) {
+  var explicitEnd = ttmlClockToMs(end);
+  return Number.isFinite(explicitEnd) ? explicitEnd : begin + ttmlClockToMs(duration);
+}
+var ttmlWordSegmenter;
+/** 整句只有一个带时长的 span 时，在它的时间范围内估算词项，保留正文的字符范围。 */
+function estimateTtmlPhraseWords(rawWords, fullText, endMs) {
+  if (rawWords.length !== 1) return null;
+  var span = rawWords[0];
+  var text = fullText.replace(/\s+/g, ' ').trim();
+  var duration = (span.durMs > 0 ? span.durMs : endMs - span.startMs) / 1000;
+  if (!(duration > 0) || text !== span.text.replace(/\s+/g, ' ').trim()) return null;
+  if (!ttmlWordSegmenter && typeof Intl.Segmenter === 'function') {
+    ttmlWordSegmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
+  }
+  var words = ttmlWordSegmenter
+    ? Array.from(ttmlWordSegmenter.segment(text)).filter(function (part) { return part.isWordLike; })
+    : Array.from(text.matchAll(/\S+/g));
+  if (words.length < 2) return null;
+  var step = duration / words.length;
+  return words.map(function (_word, index) {
+    var c0 = index === 0 ? 0 : words[index].index;
+    var c1 = index + 1 === words.length ? text.length : words[index + 1].index;
+    return { text: text.slice(c0, c1), t: span.startMs / 1000 + index * step, d: step, c0: c0, c1: c1 };
+  });
+}
+function buildTtmlLyricLine(startMs, endMs, rawWords, text) {
+  var line = buildWordTimedLyricLine(startMs, endMs - startMs, rawWords, text, 'ttml-word', 'ttml-line');
+  if (line) line.words = estimateTtmlPhraseWords(rawWords, text, endMs) || line.words;
+  return line;
+}
 /**
  * 解析 TTML（Timed Text Markup Language）歌词，Apple Music 一族用的就是这种。
  * 只取最内层带 `begin` 的 `<span>` 当词项，避免外层整行 span 把正文重复吃一遍；
@@ -31354,7 +31390,7 @@ function parseTtmlText(text) {
     var attrs = pm[1] || '';
     var body = pm[2] || '';
     var lineStartMs = ttmlClockToMs(xmlLyricAttrValue(attrs, 'begin'));
-    var lineEndMs = ttmlClockToMs(xmlLyricAttrValue(attrs, 'end'));
+    var lineEndMs = ttmlEndToMs(lineStartMs, xmlLyricAttrValue(attrs, 'end'), xmlLyricAttrValue(attrs, 'dur'));
     var rawWords = [];
     var plainBody = body;
     // 只匹配内部再没有 span 的那一层，嵌套的整行 span 就不会连同子串一起被当成词项。
@@ -31366,10 +31402,12 @@ function parseTtmlText(text) {
         plainBody = plainBody.replace(sm[0], ' ');
         continue;
       }
-      var spanText = decodeXmlLyricEntities(sm[2]);
+      var spanText = decodeXmlLyricEntities(sm[2].replace(/<[^>]*>/g, ''));
       var spanStart = ttmlClockToMs(xmlLyricAttrValue(spanAttrs, 'begin'));
+      var spanEnd = ttmlEndToMs(Number.isFinite(spanStart) ? spanStart : lineStartMs,
+        xmlLyricAttrValue(spanAttrs, 'end'), xmlLyricAttrValue(spanAttrs, 'dur'));
+      if (!Number.isFinite(spanStart) && Number.isFinite(spanEnd)) spanStart = lineStartMs;
       if (!spanText || !isFinite(spanStart)) continue;
-      var spanEnd = ttmlClockToMs(xmlLyricAttrValue(spanAttrs, 'end'));
       rawWords.push({
         text: spanText,
         startMs: spanStart,
@@ -31385,9 +31423,7 @@ function parseTtmlText(text) {
     }
     if (!isFinite(lineStartMs) && rawWords.length) lineStartMs = rawWords[0].startMs;
     if (!isFinite(lineStartMs)) continue;
-    var lineDurMs = isFinite(lineEndMs) && lineEndMs > lineStartMs ? lineEndMs - lineStartMs : 0;
-    var built = buildWordTimedLyricLine(
-      lineStartMs, lineDurMs, rawWords, decodeXmlLyricEntities(plainBody), 'ttml-word', 'ttml-line');
+    var built = buildTtmlLyricLine(lineStartMs, lineEndMs, rawWords, decodeXmlLyricEntities(plainBody.replace(/<[^>]*>/g, '')));
     if (built) lines.push(built);
   }
   return finalizeLyricLineDurations(lines, true);

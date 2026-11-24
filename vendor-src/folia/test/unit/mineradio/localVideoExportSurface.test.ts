@@ -79,6 +79,28 @@ it('renders pure visualization for tracks with no lyrics and does not change sav
     expect(localStorage.getItem('mineradio-folia-local-visuals-v1')).toBe(before);
 });
 
+it('waits for the Metaphor canvas to draw and become visible before reporting ready', async () => {
+    initial.visuals.mode = 'metaphor';
+    await act(async () => mountVideoExportSurface(mount));
+    for (let count = 0; count < 5; count++) await nextFrame();
+    expect(ready).not.toHaveBeenCalled();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    canvas.style.visibility = 'hidden';
+    mount.querySelector('[data-effect="metaphor"]')!.append(canvas);
+    for (let count = 0; count < 5; count++) await nextFrame();
+    expect(ready).not.toHaveBeenCalled();
+
+    canvas.style.visibility = '';
+    for (let count = 0; count < 3; count++) await nextFrame();
+    expect(ready).not.toHaveBeenCalled();
+    await nextFrame();
+    expect(ready).toHaveBeenCalledOnce();
+    expect(failed).not.toHaveBeenCalled();
+});
+
 it('finalizes the current recording only after unmounting the visualization, releasing assets and stopping animation', async () => {
     await act(async () => mountVideoExportSurface(mount));
     for (let count = 0; count < 5; count++) await nextFrame();

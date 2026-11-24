@@ -182,6 +182,7 @@ export class MetaphorRuntime {
     private pixelRatio = 1;
     /** 摆线稿时用的宽高比。 */
     private layoutAspect = 1.6;
+    private readyToRender = false;
     private raf = 0;
     private disposed = false;
     /** 音量 0..1（起音快、释放慢）；见过大于 1 的值就按 0..255 换算（主播放器是 0..255，预览是 0..1）。 */
@@ -208,8 +209,8 @@ export class MetaphorRuntime {
             if (!runtime.fontReady) await Promise.race([document.fonts.ready, new Promise(resolve => setTimeout(resolve, 400))]);
             options.signal.throwIfAborted();
             runtime.fontReady = runtime.glyphs.fontReady();
+            runtime.readyToRender = true;
             runtime.render();
-            runtime.renderer.domElement.style.visibility = '';
             runtime.requestFrame();
         } catch (error) {
             runtime.destroy();
@@ -700,7 +701,7 @@ export class MetaphorRuntime {
     }
 
     private render() {
-        if (this.disposed || !this.width || !this.height) return;
+        if (this.disposed || !this.readyToRender || !this.width || !this.height) return;
         const still = this.staticMode;
         const tuning = this.tuning;
         const time = this.debugTime ?? this.options.currentTime.get();
@@ -772,11 +773,13 @@ export class MetaphorRuntime {
         this.renderer.render(this.fieldScene, this.camera);
         this.renderer.setRenderTarget(null);
         this.renderer.render(this.developScene, this.developCamera);
+        const canvas = this.renderer.domElement;
+        if (canvas.style.visibility === 'hidden') canvas.style.visibility = '';
     }
 
     private frame = () => {
         this.raf = 0;
-        if (this.disposed) return;
+        if (this.disposed || !this.readyToRender) return;
         this.render();
         if (!this.paused && this.debugTime === null) this.raf = requestAnimationFrame(this.frame);
     };

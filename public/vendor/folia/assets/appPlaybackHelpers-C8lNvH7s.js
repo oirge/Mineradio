@@ -1,0 +1,1 @@
+import"./main-DMs2A0QR.js";var e=(e,t)=>{for(let n=e.length-1;n>=0;--n){let r=e[n];if(!(!r||t<r.startTime)&&t<=(r.renderHints?.renderEndTime??r.endTime))return n}return-1},t=e=>{if(isNaN(e))return`00:00`;let t=Math.floor(e/60),n=Math.floor(e%60);return`${t.toString().padStart(2,`0`)}:${n.toString().padStart(2,`0`)}`};export{t as n,e as t};

@@ -87,10 +87,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Folia 增加可拖动环顾的影厅（Beta）和「隐喻」歌词样式。影厅荧幕显示当前选择的歌词效果和背景。',
-  '「莫奈」增加左右镜像、隐藏肖像、歌曲描述和拖动挂件的显示选项。「时计」增加镜像、表盘倾斜、分层视差与轮心视角。「回环」可移动圆环并沿环显示翻译。',
-  '底部字幕首行可选当前歌词、翻译或罗马音，可关闭缺少字幕时的后续歌词预览。行级 TTML 折行后按字词顺序高亮。',
-  'Lattice 可切换为电台墙，浏览与点播使用 Mineradio 的实际播放队列。帧率检测可测量当前歌词舞台并比较两组画质。',
+  '「隐喻」特写保留后续歌词，跟词镜头移动更平滑。导出会等画布绘出首帧再开始录制。',
+  '整句放在单个带时间的 TTML 标签中时，歌词会在原时间范围内逐词高亮。',
+  '浅色模式下，Lattice 熄灯会压暗非当前卡片。「莫奈」歌名阴影完整显示。',
+  'Electron 更新至 43.8.12，并修复构建依赖的中风险安全告警。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

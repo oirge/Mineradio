@@ -73,9 +73,9 @@ function Surface({ initial, assets, signal }: { initial: VideoExportInitial; ass
         readyStarted.current = true;
         void (async () => {
             await document.fonts.ready;
-            // Imperative GPU runtimes finish after their React component commits. Machi keeps
-            // its canvas hidden until shaders and its first frame are ready; Pixi attaches last.
-            const canvasMode = ['fume', 'machi', 'tempera', 'sonnet', 'diorama', 'lumiere'].includes(visuals.mode);
+            // Imperative GPU runtimes finish after their React component commits. Machi and Metaphor keep
+            // their canvases hidden until the first frame is drawn; Pixi attaches last.
+            const canvasMode = ['fume', 'machi', 'metaphor', 'tempera', 'sonnet', 'diorama', 'lumiere'].includes(visuals.mode);
             const deadline = performance.now() + 45_000;
             let stable = 0;
             while (!signal.aborted) {

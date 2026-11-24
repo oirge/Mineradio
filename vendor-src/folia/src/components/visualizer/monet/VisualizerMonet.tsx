@@ -314,7 +314,8 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                             paddingBlock: '0.25em',
                                             marginTop: '-0.25em',
                                             marginBottom: '-0.12em',
-                                            textShadow: `0 14px 36px ${colorWithAlpha(theme.backgroundColor, 0.28)}`,
+                                            // Shadow the visible glyphs after the two-line clip.
+                                            filter: `drop-shadow(0 14px 18px ${colorWithAlpha(theme.backgroundColor, 0.28)})`,
                                         }}
                                     >
                                         {songTitle || 'Monet'}

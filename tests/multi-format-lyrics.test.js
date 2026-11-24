@@ -210,6 +210,20 @@ test('TTML 逐字与整行都能解析，译文与罗马音不进正文', () => 
   assert.equal(nested[0].text, '外层', '嵌套 span 只取最内层，正文不得重复');
 });
 
+test('TTML 整句只有一个定时 span 时，在 span 的时间内逐词高亮', () => {
+  const { parseTtmlText } = createLyricParsers();
+  const [line] = parseTtmlText(
+    '<tt><body><div><p begin="1s" end="7s">'
+      + '<span begin="2s" dur="3s">Hello   brave world</span>'
+      + '<span role="x-translation">译文</span></p></div></body></tt>',
+  );
+  assert.deepEqual(briefLines([line]), [{ t: 1, duration: 6, text: 'Hello brave world', source: 'ttml-word' }]);
+  assert.deepEqual(
+    Array.from(line.words, word => [word.text, word.t, word.d, word.c0, word.c1]),
+    [['Hello ', 2, 1, 0, 6], ['brave ', 3, 1, 6, 12], ['world', 4, 1, 12, 17]],
+  );
+});
+
 test('歌词格式分流不抢走 LRC、YRC 与字幕格式', () => {
   const parsers = createLyricParsers();
   const lrc = parsers.parseTimedLyricText('[00:01.00]第一行\n[00:05.50]第二行');

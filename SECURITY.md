@@ -31,8 +31,8 @@
 
 ## Dependency Security Gate
 
-v2.7.0 使用 Electron 43.8.8，并更新 Undici、Vite、Vitest 等依赖。`npm run audit:security` 检查根目录及 `vendor-src/folia` 的锁文件，包含随桌面安装包分发的 Electron 内核。Verify 与 Release 在构建前执行该检查；审计请求失败或未接受的 high/critical 漏洞会停止流程，完整报告保存为 CI 工件。检查只在验证与发布时运行，不创建定时任务。
+桌面和 Folia 的锁文件均使用 Electron 43.8.12。`npm run audit:security` 检查这两套锁文件，包含随桌面安装包分发的 Electron 内核。Verify 与 Release 在构建前执行检查。审计请求失败或出现未接受的 high/critical 漏洞会停止流程，完整报告保存为 CI 工件。
 
-当前根依赖仍有 builder/minimatch 的 moderate 公告；Folia 构建工具还涉及 Workbox/glob 与 deepmerge 的中低等级公告。未采用会降级 builder 或强制跨大版本的 `npm audit fix --force`。这些剩余项仍显示在审计报告中，后续兼容修复需单独验证。
+打包链将受影响版本范围内的 `minimatch` 固定到 11.0.9，Folia 将 Workbox 使用的 `glob` 固定到 14.0.6。对应中风险公告见 [minimatch](https://github.com/advisories/GHSA-g3hv-75wg-m249) 和 [glob](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4)。
 
 唯一 high 例外是 Folia 上游未启用 FTP provider 依赖 `basic-ftp 5.x` 的 [GHSA-c475-qrg2-pj4r](https://github.com/advisories/GHSA-c475-qrg2-pj4r)：上游 `get-uri` 仍要求 5.x，目前没有该系列修复版。Mineradio 的选择性本地构建排除在线 provider，相关服务不随桌面本地入口启用。例外限定到 Folia 依赖树、该包、该公告及当前 high 级别和范围；新公告、范围变化或 critical 升级不会自动放行。该漏洞向 `get-uri`、`pac-proxy-agent` 和上游音乐 API 的传播项不代表四个独立运行漏洞。

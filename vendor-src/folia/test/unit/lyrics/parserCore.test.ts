@@ -207,6 +207,17 @@ describe('parserCore', () => {
         expect(lyrics.lines[0].backgroundVocal?.endTime).toBe(6);
     });
 
+    it('estimates a whole-line span within its own timings', () => {
+        const fixture = TTML_AGENT_OVERLAP_FIXTURE.replace(
+            '<span begin="00:01.000" end="00:05.000">Main</span>',
+            '<span begin="00:01.500" end="00:04.000">Sing this line</span>'
+        );
+        const { words } = parseTTML(fixture, '', { includeInterludes: false }).lines[0];
+        expect(words.map(word => word.text)).toEqual(['Sing', 'this', 'line']);
+        expect(words[0].startTime).toBe(1.5);
+        expect(words.at(-1)!.endTime).toBeLessThanOrEqual(4);
+    });
+
     it('does not fold an overlapping TTML line from the same agent', () => {
         const fixture = TTML_AGENT_OVERLAP_FIXTURE.replace(
             'itunes:key="L2" ttm:agent="v2"',

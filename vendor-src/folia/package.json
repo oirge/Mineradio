@@ -249,7 +249,7 @@
     "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
     "dexie": "^4.4.6",
-    "electron": "43.8.8",
+    "electron": "43.8.12",
     "electron-builder": "^26.15.3",
     "fake-indexeddb": "^6.2.5",
     "framer-motion": "^13.4.3",
@@ -281,6 +281,10 @@
     "undici@6": "6.29.1",
     "undici@7": "7.30.1",
     "fast-uri@3": "3.1.9",
+    "minimatch@>=7 <11.0.1": "11.0.9",
+    "workbox-build": {
+      "glob": "14.0.6"
+    },
     "@babel/plugin-transform-runtime": "7.29.7",
     "concurrently": {
       "shell-quote": "1.12.0"

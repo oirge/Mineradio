@@ -100,8 +100,9 @@ MediaRecorder.prototype.start = function() {
 // Record capture constraints without adding a second video consumer or readback.
 const nativeGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
 navigator.mediaDevices.getUserMedia = async function(constraints) {
+  const requestedAt = Date.now();
   const stream = await nativeGetUserMedia(constraints);
-  window.fixtureCaptureInfo = {constraints:constraints,settings:stream.getVideoTracks()[0].getSettings()};
+  window.fixtureCaptureInfo = {requestedAt:requestedAt,constraints:constraints,settings:stream.getVideoTracks()[0].getSettings()};
   return stream;
 };
 function state() {
@@ -139,6 +140,7 @@ window.fixtureHandoff = async function(trackId) {
 // Isolate DOM lyric capture from the CPU-only runner's expensive fluid shader.
 // The Fume and no-lyric cases retain that shader to cover composed backgrounds.
 window.fixtureVisuals = function(mode) { return {mode:mode,view:'lyrics',background:mode==='classic'?{mode:'common',common:{disableGeometricBackground:true}}:{mode:'latent'},daylight:false,lyricsFontScale:1,
+  tunings:mode==='metaphor'?{metaphor:{flip:true,negative:false}}:undefined,
   translation:true,subtitleContentMode:'translation',subtitleBackground:true,subtitleHidden:false,subtitleLayout:'translation',harmony:true,rhythm:true}; };
 // The recorder must reuse an already existing player audio graph.
 initAudio();
@@ -378,6 +380,15 @@ function decodeOutput(filePath, width, height, minDuration, maxDuration, toneCha
   // produce nearly equal frames at two fixed seek points while advancing later.
   const allFrames=execFileSync(ffmpeg,['-v','error','-i',filePath,'-an','-vf','scale=160:90','-fps_mode','passthrough','-enc_time_base','1:30000','-pix_fmt','rgb24','-f','rawvideo','pipe:1'],{maxBuffer:32*1024*1024,windowsHide:true});
   assert.equal(allFrames.length,result.videoTimeline.frameCount*a.length,'every encoded frame must decode');
+  if (stem === 'metaphor-first-frame') {
+    // The fixture flips the default palette, so the first frame must show the light paper.
+    const openingFrame = allFrames.subarray(0, a.length);
+    const topPixels = openingFrame.subarray(0, 160 * 72 * 3);
+    result.openingFrameBrightRatio = topPixels.filter(value => value > 150).length / topPixels.length;
+    saveSampleFrame(openingFrame, `${stem}-frame-000.png`);
+    saveDecode();
+    assert.ok(result.openingFrameBrightRatio > 0.4, 'the first encoded frame must show the Metaphor canvas');
+  }
   let maximumDifference=difference/a.length, changedAt=null;
   let detailFrame={pts:null,mean,deviation,highlights},motionFrame=null;
   for(let index=0;index<result.videoTimeline.frameCount;index++) {
@@ -434,6 +445,7 @@ async function decodeRecordedSegment(filePath, width, height, minimum, toneChang
 
 async function run() {
   const wav = waveFixture(), longWav = waveFixture(30), nextWav = waveFixture(30,48000,660);
+  let metaphorRuntimeServedAt = 0;
   server = http.createServer((request, response) => {
     const pathname = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname);
     if (pathname === '/' || pathname === '/index.html') { response.writeHead(200, {'content-type':'text/html; charset=utf-8'}); response.end(HOST_HTML); return; }
@@ -442,8 +454,15 @@ async function run() {
     if (pathname === '/fixture-next.wav') { response.writeHead(200, {'content-type':'audio/wav','content-length':nextWav.length}); response.end(nextWav); return; }
     const target = path.resolve(PUBLIC, `.${pathname}`);
     if (!target.startsWith(PUBLIC + path.sep) || !fs.existsSync(target) || !fs.statSync(target).isFile()) { response.writeHead(404); response.end(); return; }
-    response.writeHead(200, {'content-type':mime[path.extname(target)] || 'application/octet-stream'});
-    fs.createReadStream(target).pipe(response);
+    const deliver = () => {
+      if (response.destroyed) return;
+      response.writeHead(200, {'content-type':mime[path.extname(target)] || 'application/octet-stream'});
+      fs.createReadStream(target).pipe(response);
+    };
+    if (/^\/vendor\/folia\/assets\/createMetaphorRuntime-[\w-]+\.js$/.test(pathname)) {
+      // Let the React surface commit while its imperative canvas runtime is still loading.
+      setTimeout(() => { metaphorRuntimeServedAt = Date.now(); deliver(); }, 1000);
+    } else deliver();
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
@@ -528,6 +547,18 @@ async function run() {
   assert.ok(mediaExports.at(-1).videoTimeline.frameCount > 20, 'native visual frames must reach the real recorder');
   await playerIdentityPreserved();
   logCheck('whole-song landscape export: real Folia lyrics, moving frames, audio and automatic save');
+
+  await start('metaphor-first-frame',1280,720,'metaphor');
+  const metaphorCapture = frameRateChecks.at(-1).capture;
+  assert.ok(metaphorRuntimeServedAt > 0 && metaphorCapture.requestedAt >= metaphorRuntimeServedAt,
+    'the native capture request must wait for the delayed Metaphor runtime');
+  await until('audio.currentTime > 3.2', 'Metaphor recording advances');
+  await stopWhilePreservingPlayback('metaphor');
+  const metaphor = fs.readdirSync(OUT).find(file => /^metaphor-first-frame\.(mp4|webm)$/.test(file));
+  assert.ok(metaphor, 'Metaphor export must save a video');
+  await decodeRecordedSegment(path.join(OUT,metaphor),1280,720,2.8);
+  await playerIdentityPreserved();
+  logCheck('Metaphor waits through a delayed runtime import and the first encoded frame shows the canvas');
 
   await start('portrait-segment',720,1280,'fume','current',false,undefined,60);
   await until('audio.currentTime > 1.1', 'portrait first segment');

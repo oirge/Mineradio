@@ -5,7 +5,7 @@ import { METAPHOR_TAIL, type MetaphorCue, type MetaphorProgram, type MetaphorSho
 // 隐喻的镜头（纯函数，不碰 three）：一个镜头在某一刻的机位，以及句与句之间转场在这一刻的量（漫墨）、
 // 一句歌词出现和化开的进度。
 // 机位永远正对画面：只有平移、远近、绕视线的滚转，没有偏转和俯仰（不做假 3D）。
-// 一个镜头里机位只极慢地蠕动；要走远的（跟字、拉远、冲镜）不滑过去，分成几档在词开唱的时刻上一格一格跳切。
+// 拉远、冲镜仍然分档跳切；跟词镜头在成组的词之间短暂缓动。
 
 export interface MetaphorPose {
     /** 看向的点（机位在它正前方）。 */
@@ -66,10 +66,46 @@ const emptyFocus = (bounds: MetaphorRect, seed: number): Focus => {
     };
 };
 
-/** 正在唱的词：换词时直接跳过去，不滑。 */
+/** 正在唱的词，用作拉远和冲镜的起止点。 */
 const wordFocus = (layout: MetaphorLayout, time: number, seed: number): Focus => (
     layout.words.length === 0 ? emptyFocus(layout.bounds, seed) : rectFocus(layout.words[wordIndexAt(layout, time)])
 );
+
+/** 把窗口内正在唱或即将开唱的词一起构图。 */
+const lyricFocus = (layout: MetaphorLayout, start: number, end: number, seed: number): Focus => {
+    if (layout.words.length === 0) return emptyFocus(layout.bounds, seed);
+    const bounds = { ...layout.words[wordIndexAt(layout, start)] };
+    for (const word of layout.words) {
+        if (word.t0 >= end || (word.t0 < start && word.t1 <= start)) continue;
+        bounds.x0 = Math.min(bounds.x0, word.x0);
+        bounds.y0 = Math.min(bounds.y0, word.y0);
+        bounds.x1 = Math.max(bounds.x1, word.x1);
+        bounds.y1 = Math.max(bounds.y1, word.y1);
+    }
+    return rectFocus(bounds);
+};
+
+const FOLLOW_HOLD = 0.55;
+const FOLLOW_BLEND = 0.2;
+
+/** 前一组多留出一段缓动时间，让接下来的词在镜头移动时也留在画内。 */
+const followFocus = (layout: MetaphorLayout, shot: MetaphorShot, time: number): Focus => {
+    const index = Math.floor(Math.max(0, time - shot.start) / FOLLOW_HOLD);
+    const start = shot.start + index * FOLLOW_HOLD;
+    const next = shot.start + (index + 1) * FOLLOW_HOLD;
+    const focus = lyricFocus(layout, start, Math.min(shot.end, next + FOLLOW_BLEND), shot.seed);
+    const progress = clamp01((time - start) / FOLLOW_BLEND);
+    if (index === 0 || progress >= 1) return focus;
+    const previousStart = shot.start + (index - 1) * FOLLOW_HOLD;
+    const previous = lyricFocus(layout, previousStart, Math.min(shot.end, start + FOLLOW_BLEND), shot.seed);
+    const amount = progress * progress * (3 - 2 * progress);
+    return {
+        x: lerp(previous.x, focus.x, amount),
+        y: lerp(previous.y, focus.y, amount),
+        width: lerp(previous.width, focus.width, amount),
+        height: lerp(previous.height, focus.height, amount),
+    };
+};
 
 const glyphFocus = (layout: MetaphorLayout, time: number, seed: number): Focus => {
     if (layout.glyphs.length === 0) return emptyFocus(layout.bounds, seed);
@@ -80,8 +116,9 @@ const glyphFocus = (layout: MetaphorLayout, time: number, seed: number): Focus =
     return { x: found.x, y: found.y, width: found.size * 0.9, height: found.size * 0.9 };
 };
 
+const HALF_FOV_TAN = Math.tan((METAPHOR_FOV * Math.PI) / 360);
 const fitDistance = (focus: Focus, margin: number, aspect: number) => (
-    (Math.max(focus.height / 2, focus.width / (2 * Math.max(0.2, aspect))) * margin) / Math.tan((METAPHOR_FOV * Math.PI) / 360)
+    Math.max(focus.height, focus.width / Math.max(0.2, aspect)) * margin / (2 * HALF_FOV_TAN)
 );
 
 /**
@@ -135,11 +172,11 @@ export const resolveMetaphorPose = ({ shot, layout, time, aspect, motion }: Meta
             distance = fitDistance(whole, WIDE_MARGIN, aspect) * creep;
             break;
         case 'close':
-            focus = wordFocus(layout, shot.start, shot.seed);
+            focus = lyricFocus(layout, shot.start, shot.end, shot.seed);
             distance = fitDistance(focus, 1.3, aspect) * creep;
             break;
         case 'follow':
-            focus = wordFocus(layout, time, shot.seed);
+            focus = followFocus(layout, shot, time);
             distance = fitDistance(focus, 1.45, aspect);
             break;
         case 'macro':
@@ -170,14 +207,29 @@ export const resolveMetaphorPose = ({ shot, layout, time, aspect, motion }: Meta
             break;
         }
     }
-    const visible = 2 * distance * Math.tan((METAPHOR_FOV * Math.PI) / 360);
     const phase = shot.seed * 40;
-    const drift = 0.008 * motion * visible;
+    const drift = 0.008 * motion;
+    roll += wobble(time, phase + 23) * 0.004 * motion;
+    let offsetX = wobble(time, phase) * drift - shot.offsetX;
+    let offsetY = wobble(time, phase + 11) * drift - shot.offsetY;
+    if ((shot.kind === 'close' || shot.kind === 'follow') && layout.words.length > 0) {
+        // 滚转和偏心后按屏幕坐标留边，竖屏也不会裁掉目标词。
+        const cos = Math.cos(roll), sin = Math.sin(roll);
+        const screenX = Math.min(aspect * 0.25, Math.max(-aspect * 0.25, offsetX));
+        const screenY = offsetY;
+        const width = Math.abs(cos) * focus.width + Math.abs(sin) * focus.height;
+        const height = Math.abs(sin) * focus.width + Math.abs(cos) * focus.height;
+        const visible = Math.max(width / (aspect - 2 * Math.abs(screenX)), height / (1 - 2 * Math.abs(screenY)));
+        distance = Math.max(distance, visible * 1.08 / (2 * HALF_FOV_TAN));
+        offsetX = cos * screenX - sin * screenY;
+        offsetY = sin * screenX + cos * screenY;
+    }
+    const visible = 2 * distance * HALF_FOV_TAN;
     return {
-        x: focus.x - shot.offsetX * visible + wobble(time, phase) * drift,
-        y: focus.y - shot.offsetY * visible + wobble(time, phase + 11) * drift,
+        x: focus.x + offsetX * visible,
+        y: focus.y + offsetY * visible,
         distance,
-        roll: roll + wobble(time, phase + 23) * 0.004 * motion,
+        roll,
         fov: METAPHOR_FOV,
     };
 };
