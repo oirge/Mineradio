@@ -99,6 +99,10 @@ var edge = Math.min(width, height) * (borderWidth * 0.5);
 
 ## Safe Change Rules
 
+2026-11-25：电脑版设置面板的折射层不能位于内容上方，否则会把文字、开关和分隔线采样成彩色拖影。Folia 的 `localSettingsGlass.css` 使用两个负层级伪元素：`::after`（-2）先采样场景并绘制 9px 折射边缘与高光，`::before`（-1）只负责中心的底色和模糊，正文仍在上方。外壳 `overflow:visible`，标题和内部滚动容器各自裁切圆角，避免外壳提前裁掉 SVG 所需的背景像素；外壳自身的边框、底色和内阴影也不能进入折射输入。宿主 `#fx-panel` 是外壳直接滚动，必须保留它自己的底色与模糊，只把 `settings-glass.css` 的折射层降到内容下方，不能用随内容滚走的伪元素取代整块底色。播放器控制栏的 SVG、色差参数和贴图生成器保持原值。
+
+对应回归为 `python scripts/verify-browser-ui.py --suite settings-glass`：检查真实字幕面板的灰底截图，隐藏文字和控件后边缘像素不变；灰底不能出现彩色接缝；有图案的背景仍须产生仅限边缘的折射差异。另检查主题、窄窗口、原生控件交互和减少透明效果的降级。截图来自隔离 Chromium，不等同于已安装 Electron 或用户显卡的验收。
+
 2026-11-12：贴图尺寸改读元素的 `offsetWidth/offsetHeight`，不能使用带进退动画 scale 的 `getBoundingClientRect()`。底栏用左右 0 与自动外边距居中，进退变换只保留 Y 与 scale，避免居中百分比与玻璃合成相互影响。RGB 折射、偏移与模糊参数保持原值。
 
 - 可以：修复右侧缺块、尺寸缓存、ResizeObserver 更新、特定面板的 SVG map 尺寸。

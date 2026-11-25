@@ -126,6 +126,10 @@ Custom API keys are encrypted with operating-system secure storage. If secure st
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.7.8
+
+- Fixed colored seams, dark borders, and text ghosting around the Folia subtitle settings panel. Settings and dialogs in the main window also render their SVG glass refraction behind the controls.
+
 ### v2.7.7
 
 - Batched local library index reads/writes in SQLite transactions, switched list covers to streamed thumbnails, replaced $O(N^2)$ cross-list sync with linear batched propagation, and windowed large grouped library lists.

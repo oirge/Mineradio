@@ -201,6 +201,8 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['修复设置面板的液态玻璃显示问题。', 'Fixed liquid-glass rendering in settings.'],
+  ['修复 Folia 字幕设置面板边缘的彩线、黑边和文字拖影。主窗口设置与弹窗也将折射层移到控件后方，保留玻璃边缘的 SVG 折射效果。', 'Fixed colored seams, dark borders, and text ghosting around Folia subtitle settings. Main-window settings and dialogs now render SVG glass refraction behind the controls.'],
   ['优化大曲库读写与封面加载，新增设置液态玻璃质感、每日推荐与听歌报告。', 'Faster large-library reads and cover loading, with liquid-glass settings styling, Daily Mix, and a listening report.'],
   ['曲库索引改为事务批量读写，列表封面按缩略图流式按需加载；同步元数据按歌单一次完成，分组列表超百首自动窗口化渲染。', 'Batched library index reads/writes in single SQLite transactions and stream cover thumbnails on demand; sync track metadata in linear passes and window large grouped lists.'],
   ['Folia 内置图标改为分组按需打包，大幅减少本地构建产物碎片文件并降低预加载开销。', 'Grouped bundled Folia icons into shared lazy chunks, drastically cutting static asset file counts and preload overhead.'],
@@ -2104,7 +2106,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.7';
+var APP_VERSION = '2.7.8';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2157,12 +2159,9 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '优化大曲库读写与封面加载，新增设置液态玻璃质感、每日推荐与听歌报告。',
+  hero: '修复设置面板的液态玻璃显示问题。',
   notes: [
-    '曲库索引改为事务批量读写，列表封面按缩略图流式按需加载；同步元数据按歌单一次完成，分组列表超百首自动窗口化渲染。',
-    'Folia 内置图标改为分组按需打包，大幅减少本地构建产物碎片文件并降低预加载开销。',
-    '主窗口及 Folia 设置面板、弹窗新增边缘 SVG 液态玻璃折射质感，保留原有背景与控制栏纹理；同步更新双语与安全隐私文档。',
-    '新增本地「每日推荐」偏好混音、年度听歌热力图报告，以及高级面板可选的无声跳过（Beta）功能。'
+    '修复 Folia 字幕设置面板边缘的彩线、黑边和文字拖影。主窗口设置与弹窗也将折射层移到控件后方，保留玻璃边缘的 SVG 折射效果。'
   ]
 };
 function readSavedVolume() {

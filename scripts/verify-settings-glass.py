@@ -1,5 +1,6 @@
 """Inspect the real settings surfaces, refraction layers and controls in isolated CI Chromium."""
 import argparse
+import base64
 import json
 from pathlib import Path
 import re
@@ -12,6 +13,7 @@ from ui_browser import capture_screenshot, launch_browser
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'artifacts/ui-language/settings-glass'
 OUT.mkdir(parents=True, exist_ok=True)
+SCREENSHOT_TIMEOUT_MS = 30_000
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--url', default='http://127.0.0.1:3018')
 args = parser.parse_args()
@@ -26,6 +28,10 @@ def completed(message):
     assert not report['errors'], report['errors']
     report['checks'].append(message)
     print('PASS:', message, flush=True)
+
+
+def capture_surface(surface, key):
+    capture_screenshot(surface, path=str(OUT / f'{key}.png'), timeout=SCREENSHOT_TIMEOUT_MS)
 
 
 def inspect_shell(shell, key, row_selector):
@@ -44,10 +50,11 @@ def inspect_shell(shell, key, row_selector):
             width: rect.width, height: rect.height, x: rect.x, y: rect.y,
             viewportWidth: innerWidth, viewportHeight: innerHeight,
             clientWidth: el.clientWidth, scrollWidth: el.scrollWidth,
-            radius: css.borderTopLeftRadius, background: css.backgroundColor,
+            radius: css.borderTopLeftRadius, background: css.backdropFilter === 'none' ? before.backgroundColor : css.backgroundColor,
             textColor: css.color, titleColor: title ? getComputedStyle(title).color : null,
             backdrop: css.backdropFilter, refraction,
             beforeBackdrop: before.backdropFilter, afterBackdrop: after.backdropFilter,
+            beforeZIndex: before.zIndex, afterZIndex: after.zIndex,
             afterPointerEvents: after.pointerEvents, afterMask: after.maskImage,
             filterExists: !!filter,
             displacementCount: filter?.querySelectorAll('feDisplacementMap').length || 0,
@@ -60,12 +67,114 @@ def inspect_shell(shell, key, row_selector):
     assert measurements['scrollWidth'] <= measurements['clientWidth'] + 2, (key, measurements)
     assert measurements['x'] >= -2 and measurements['x'] + measurements['width'] <= measurements['viewportWidth'] + 2, (key, measurements)
     assert float(re.match(r'[\d.]+', measurements['radius']).group()) >= 16, (key, measurements)
-    assert 'blur(' in measurements['backdrop'], (key, measurements)
+    if key.startswith('folia-'):
+        assert measurements['backdrop'] == 'none' and 'blur(' in measurements['beforeBackdrop'], (key, measurements)
+        assert int(measurements['afterZIndex']) < int(measurements['beforeZIndex']) < 0, (key, measurements)
+    else:
+        assert 'blur(' in measurements['backdrop'] and int(measurements['afterZIndex']) < 0, (key, measurements)
     assert 'url(' in measurements['afterBackdrop'] and measurements['filterExists'], (key, measurements)
     assert measurements['displacementCount'] >= 1, (key, measurements)
     assert measurements['afterPointerEvents'] == 'none', (key, measurements)
     assert measurements['afterMask'] != 'none', (key, measurements)
     assert all(row['backdrop'] == 'none' for row in measurements['rows']), (key, measurements['rows'])
+
+
+def compare_rim(page, first, second, radius):
+    """Compare real screenshot pixels in Chromium without an additional image library."""
+    return page.evaluate("""async ({first, second, radius}) => {
+        const read = async data => {
+            const image = new Image(); image.src = 'data:image/png;base64,' + data; await image.decode();
+            const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+            const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+            return {width: image.width, height: image.height, data: ctx.getImageData(0, 0, image.width, image.height).data};
+        };
+        const a = await read(first), b = await read(second);
+        if (a.width !== b.width || a.height !== b.height) throw Error('Glass capture dimensions changed');
+        let rimChanged = 0, centerChanged = 0, rimColored = 0, rimPixels = 0;
+        for (let y = 0; y < a.height; y++) for (let x = 0; x < a.width; x++) {
+            const qx = Math.abs(x + .5 - a.width / 2) - a.width / 2 + radius;
+            const qy = Math.abs(y + .5 - a.height / 2) - a.height / 2 + radius;
+            const inset = radius - Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - Math.min(Math.max(qx, qy), 0);
+            const i = (y * a.width + x) * 4;
+            const changed = Math.max(...[0, 1, 2].map(c => Math.abs(a.data[i+c] - b.data[i+c]))) > 2;
+            if (inset >= 2 && inset <= 8) {
+                rimPixels++; if (changed) rimChanged++;
+                const rgb = [a.data[i], a.data[i+1], a.data[i+2]];
+                if (Math.max(...rgb) - Math.min(...rgb) > 12) rimColored++;
+            }
+            if (inset >= 14 && changed) centerChanged++;
+        }
+        return {rimChanged, centerChanged, rimColored, rimPixels};
+    }""", {'first': base64.b64encode(first).decode(), 'second': base64.b64encode(second).decode(), 'radius': radius})
+
+
+def verify_subtitle_rim(page, child):
+    child.get_by_test_id('local-open-subtitles').click()
+    shell = child.get_by_test_id('local-subtitle-settings')
+    inspect_shell(shell, 'folia-subtitles', '.local-setting')
+    frame = page.frame(url=lambda url: '/vendor/folia/' in url)
+    neutral = frame.add_style_tag(content="""
+        .local-player { background: #555 !important; }
+        .local-visualizer { visibility: hidden !important; }
+        .settings-glass-shell { --settings-base: #181818; --settings-ink: #eee; --settings-accent: #eee;
+            --local-text: #eee; --local-muted: #aaa; --local-accent: #eee; --local-bg: #181818; --local-raised: #222; }
+    """)
+    try:
+        visible = shell.screenshot(path=str(OUT / 'folia-subtitles-clean-rim.png'),
+                                   animations='disabled', timeout=SCREENSHOT_TIMEOUT_MS)
+        hidden = frame.add_style_tag(content="""
+            .settings-glass-shell :is(strong, span, input, select, .local-tool-hint, .local-tool-action) { visibility: hidden !important; }
+        """)
+        try:
+            no_content = shell.screenshot(animations='disabled', timeout=SCREENSHOT_TIMEOUT_MS)
+        finally:
+            hidden.evaluate('(el) => el.remove()')
+        radius = shell.evaluate('el => parseFloat(getComputedStyle(el).borderTopLeftRadius)')
+        content = compare_rim(page, visible, no_content, radius)
+        report['surfaces']['folia-subtitles']['contentPixelComparison'] = content
+        assert content['rimPixels'] > 1000 and content['centerChanged'] > 100, content
+        assert content['rimChanged'] == 0 and content['rimColored'] == 0, content
+
+        pattern = frame.add_style_tag(content="""
+            .local-player { background: repeating-linear-gradient(35deg, #171717 0 24px, #c1d1df 26px 46px, #8e8071 50px 70px) !important; }
+        """)
+        try:
+            refracted = shell.screenshot(path=str(OUT / 'folia-subtitles-pattern-refraction.png'),
+                                         animations='disabled', timeout=SCREENSHOT_TIMEOUT_MS)
+            plain = frame.add_style_tag(content=".settings-glass-shell::after { backdrop-filter: none !important; }")
+            try:
+                unfiltered = shell.screenshot(animations='disabled', timeout=SCREENSHOT_TIMEOUT_MS)
+            finally:
+                plain.evaluate('(el) => el.remove()')
+            refraction = compare_rim(page, refracted, unfiltered, radius)
+            report['surfaces']['folia-subtitles']['refractionPixelComparison'] = refraction
+            assert refraction['rimChanged'] > 50 and refraction['centerChanged'] == 0, refraction
+        finally:
+            pattern.evaluate('(el) => el.remove()')
+        toggle = child.get_by_test_id('local-subtitle-background')
+        checked = toggle.is_checked()
+        toggle.set_checked(not checked)
+        expect(toggle).to_be_checked(checked=not checked)
+        toggle.set_checked(checked)
+        cdp = page.context.new_cdp_session(page)
+        try:
+            cdp.send('Emulation.setEmulatedMedia', {'features': [{'name': 'prefers-reduced-transparency', 'value': 'reduce'}]})
+            reduced = shell.evaluate("""el => ({
+                requested: matchMedia('(prefers-reduced-transparency: reduce)').matches,
+                body: getComputedStyle(el, '::before').backdropFilter,
+                rim: getComputedStyle(el, '::after').backdropFilter,
+                background: getComputedStyle(el).backgroundColor,
+            })""")
+            report['surfaces']['folia-subtitles']['reducedTransparency'] = reduced
+            assert reduced['requested'] and reduced['body'] == reduced['rim'] == 'none', reduced
+            assert reduced['background'] == 'rgb(24, 24, 24)', reduced
+        finally:
+            cdp.send('Emulation.setEmulatedMedia', {'features': []})
+            cdp.detach()
+    finally:
+        neutral.evaluate('(el) => el.remove()')
+        shell.get_by_role('button', name='关闭', exact=True).click()
+    completed('Subtitle rim has no content ghosts or colored seams on gray; patterned backdrop still refracts only at the rim')
 
 
 with sync_playwright() as playwright:
@@ -82,7 +191,7 @@ with sync_playwright() as playwright:
         console = page.locator('#fx-panel')
         console.hover()
         inspect_shell(console, 'mineradio-dark', '.fx-slider,.lyric-color-row,.fx-fold,.preset-card')
-        capture_screenshot(page, path=str(OUT / 'mineradio-dark.png'))
+        capture_surface(console, 'mineradio-dark')
         for tab in ['appearance', 'lyrics', 'motion', 'mini', 'advanced']:
             page.locator(f'#fx-panel-tabs [data-fx-tab="{tab}"]').click()
             expect(console).to_have_attribute('data-active-tab', tab)
@@ -112,13 +221,13 @@ with sync_playwright() as playwright:
         }""")
         console.hover()
         inspect_shell(console, 'mineradio-bright-backdrop', '.fx-slider,.lyric-color-row')
-        capture_screenshot(page, path=str(OUT / 'mineradio-bright-backdrop.png'))
+        capture_surface(console, 'mineradio-bright-backdrop')
         page.evaluate("setFxPanelTab('advanced')")
         page.locator('#hotkey-settings-btn').click()
         modal = page.locator('#hotkey-modal .modal')
         inspect_shell(modal, 'mineradio-hotkeys', '.modal-btn')
         assert report['surfaces']['mineradio-hotkeys']['refraction'] != report['surfaces']['mineradio-dark']['refraction']
-        capture_screenshot(page, path=str(OUT / 'mineradio-hotkeys.png'))
+        capture_surface(modal, 'mineradio-hotkeys')
         page.evaluate('closeHotkeySettings()')
         completed('Console and hotkey dialog expose independent masked SVG refraction above a bright image')
 
@@ -126,7 +235,7 @@ with sync_playwright() as playwright:
         page.evaluate('toggleFxPanel(true); setFxPanelTab("appearance")')
         console.hover()
         inspect_shell(console, 'mineradio-narrow', '.fx-slider,.lyric-color-row')
-        capture_screenshot(page, path=str(OUT / 'mineradio-narrow.png'))
+        capture_surface(console, 'mineradio-narrow')
         page.set_viewport_size({'width': 1440, 'height': 960})
         page.evaluate('toggleFxPanel(false); setCustomBackgroundImage("", true); setCustomBackgroundColor("#101216", true)')
         completed('Mineradio settings retain a usable panel width on a 390px viewport')
@@ -143,7 +252,7 @@ with sync_playwright() as playwright:
         child.get_by_test_id('local-open-settings').click(timeout=60000)
         visual = child.get_by_test_id('local-visual-settings')
         inspect_shell(visual, 'folia-dark', '.local-setting')
-        capture_screenshot(page, path=str(OUT / 'folia-dark.png'))
+        capture_surface(visual, 'folia-dark')
         rhythm = child.get_by_test_id('local-rhythm')
         was_checked = rhythm.is_checked()
         rhythm.set_checked(not was_checked)
@@ -169,13 +278,13 @@ with sync_playwright() as playwright:
         inspect_shell(visual, 'folia-light', '.local-setting')
         assert report['surfaces']['folia-light']['background'] != report['surfaces']['folia-dark']['background']
         assert report['surfaces']['folia-light']['textColor'] != report['surfaces']['folia-dark']['textColor']
-        capture_screenshot(page, path=str(OUT / 'folia-light.png'))
+        capture_surface(visual, 'folia-light')
         page.set_viewport_size({'width': 390, 'height': 844})
         inspect_shell(visual, 'folia-narrow-light', '.local-setting')
-        capture_screenshot(page, path=str(OUT / 'folia-narrow-light.png'))
+        capture_surface(visual, 'folia-narrow-light')
         child.get_by_test_id('local-theme').select_option('dark')
         inspect_shell(visual, 'folia-narrow-dark', '.local-setting')
-        capture_screenshot(page, path=str(OUT / 'folia-narrow-dark.png'))
+        capture_surface(visual, 'folia-narrow-dark')
         page.set_viewport_size({'width': 1440, 'height': 960})
         visual.locator('.local-panel-title button[aria-label="关闭"]').click()
         expect(visual).to_have_count(0)
@@ -183,16 +292,18 @@ with sync_playwright() as playwright:
         playback = child.get_by_test_id('local-playback-settings')
         inspect_shell(playback, 'folia-playback', '.local-setting')
         assert report['surfaces']['folia-playback']['refraction'] != report['surfaces']['folia-dark']['refraction']
-        capture_screenshot(page, path=str(OUT / 'folia-playback.png'))
+        capture_surface(playback, 'folia-playback')
         playback.locator('.local-panel-title button[aria-label="关闭"]').click()
         child.get_by_test_id('local-open-commands').click()
         child.get_by_test_id('local-command-search').fill('均衡器')
         child.get_by_test_id('local-command-search').press('Enter')
         audio_panel = child.get_by_test_id('local-audio-settings')
         inspect_shell(audio_panel, 'folia-audio', '.local-setting')
-        capture_screenshot(page, path=str(OUT / 'folia-audio.png'))
+        capture_surface(audio_panel, 'folia-audio')
         audio_panel.get_by_role('button', name='关闭', exact=True).click()
         completed('Folia glass changes with the real theme, fits narrow screens and reaches playback and audio settings')
+
+        verify_subtitle_rim(page, child)
 
         page.emulate_media(reduced_motion='reduce')
         child.get_by_test_id('local-open-settings').click()

@@ -10,39 +10,49 @@
     --settings-fill: color-mix(in srgb, var(--settings-ink) 4%, transparent);
     --settings-highlight: color-mix(in srgb, var(--settings-ink) 10%, transparent);
     isolation: isolate;
-    border: 1px solid var(--settings-line);
+    border: 1px solid transparent;
     border-radius: 28px;
-    background: color-mix(in srgb, var(--settings-base) 76%, transparent);
-    backdrop-filter: blur(20px) saturate(1.35);
-    box-shadow: 0 24px 72px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 -1px 0 var(--settings-line);
+    /* Clipping the shell crops SVG backdrop samples; the scroll children clip their own corners. */
+    overflow: visible;
+    background: transparent;
+    backdrop-filter: none;
+    box-shadow: 0 24px 72px rgba(0, 0, 0, .24);
 }
 
 .settings-glass-shell::before,
 .settings-glass-shell::after {
     content: '';
     position: absolute;
-    inset: 0;
+    inset: -1px;
     border-radius: inherit;
     pointer-events: none;
 }
 
 .settings-glass-shell::before {
-    z-index: 0;
+    z-index: -1;
+    padding: 9px;
     background: radial-gradient(ellipse at 0 0, var(--settings-highlight), transparent 54%),
-        radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--settings-accent) 5%, transparent), transparent 60%);
+        radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--settings-accent) 5%, transparent), transparent 60%),
+        color-mix(in srgb, var(--settings-base) 76%, transparent);
+    backdrop-filter: blur(20px) saturate(1.35);
+    mask-image: linear-gradient(#000, #000);
+    mask-clip: content-box;
 }
 
-/* Keep refraction at the 9px rim outside labels, previews, and controls. */
+/* Sample the scene before the body tint, highlights, labels, or controls are painted. */
 .settings-glass-shell::after {
-    z-index: 30;
+    z-index: -2;
     padding: 9px;
+    background: color-mix(in srgb, var(--settings-base) 76%, transparent);
     mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
     mask-clip: border-box, content-box;
     mask-composite: exclude;
     -webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
     -webkit-mask-clip: border-box, content-box;
     -webkit-mask-composite: xor;
-    box-shadow: inset 0 0 1px 1px rgba(255, 255, 255, .2), inset 0 0 10px rgba(255, 255, 255, .055);
+    box-shadow: inset 0 0 0 1px var(--settings-line), inset 0 1px 0 rgba(255, 255, 255, .16),
+        inset 0 -1px 0 var(--settings-line), inset 0 0 1px 1px rgba(255, 255, 255, .2),
+        inset 0 0 10px rgba(255, 255, 255, .055);
 }
 
 .settings-glass-shell[data-settings-glass-ready='true']::after {
@@ -60,6 +70,8 @@
 }
 
 .local-player .settings-glass-shell .local-panel-title {
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
     min-height: 62px;
     padding: 16px 20px;
     gap: 12px;
@@ -85,6 +97,8 @@
 }
 
 .local-player .settings-glass-shell :is(.local-settings-body, .local-tool-content) {
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
     gap: 12px;
     padding: 16px;
     overscroll-behavior: contain;
@@ -213,6 +227,7 @@
         background: var(--settings-base);
         backdrop-filter: none;
     }
+    .settings-glass-shell::before,
     .settings-glass-shell::after {
         backdrop-filter: none !important;
     }
