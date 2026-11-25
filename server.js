@@ -103,10 +103,7 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '曲库索引改为事务批量读写，列表封面按缩略图流式按需加载；同步元数据按歌单一次完成，分组列表超百首自动窗口化渲染。',
-  'Folia 内置图标改为分组按需打包，大幅减少本地构建产物碎片文件并降低预加载开销。',
-  '主窗口及 Folia 设置面板、弹窗新增边缘 SVG 液态玻璃折射质感，保留原有背景与控制栏纹理；同步更新双语与安全隐私文档。',
-  '新增本地「每日推荐」偏好混音、年度听歌热力图报告，以及高级面板可选的无声跳过（Beta）功能。',
+  '修复 Folia 字幕设置面板边缘的彩线、黑边和文字拖影。主窗口设置与弹窗也将折射层移到控件后方，保留玻璃边缘的 SVG 折射效果。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
