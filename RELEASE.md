@@ -1,3 +1,11 @@
+# v2.7.8 液态玻璃修复
+
+- 修复 Folia 字幕设置面板边缘的彩线、黑边和文字拖影。主窗口设置与弹窗将折射层移到控件后方，保留 SVG 边缘折射。
+- 合并提交 `7ba2776f9977912321fba31255967a04c6b77bf5` 的文件树与验收提交 `d3a68e5b` 一致。Annotated tag `v2.7.8` 的对象为 `95b3ed118317c60c027b284aaad073597a2b0030`。[PR #193](https://github.com/oirge/Mineradio/pull/193)
+- 本地两轮 `settings-glass` 均通过 7 项检查。最终 Windows Verify 通过 Folia 类型、Node 测试、五项玻璃交互检查和灰底边缘像素对照，随后在图案背景的截图等待元素稳定时超时。云端原生布局和视频导出均通过。[Windows Verify](https://github.com/oirge/Mineradio/actions/runs/45573137461) · [原生布局](https://github.com/oirge/Mineradio/actions/runs/45572791027) · [视频导出](https://github.com/oirge/Mineradio/actions/runs/45573137142)
+- Windows 构建通过，并完成 Folia 重建和构建内默认翻译配置校验。v2.7.8 于北京时间 2026-11-25 16:27:59 公开并设为最新版，Release ID 为 `457811130`。[Windows Build and Release](https://github.com/oirge/Mineradio/actions/runs/45573164514) · [v2.7.8](https://github.com/oirge/Mineradio/releases/tag/v2.7.8)
+- 草稿的四项资产完整回下载，文件大小、SHA256 和安装包 SHA-512 与发布元数据和清单一致。安装包为 `122721954` B，FileVersion 和 ProductVersion 均为 `2.7.8`，SHA256 为 `4d6a242115cac172576dbe47b04bf9f0e3d7d31f55deca75d6a29fc14a87ea7d`。匿名 Latest API 确认同一版本及资产，公开 `latest.yml` 和 SHA256 清单与草稿一致。隔离更新服务以 `2.7.7` 请求，成功获取新版安装包信息及中文更新说明。核验记录位于 `verification/release-v2.7.8/`。
+
 # v2.7.7 曲库性能、设置质感与听歌洞察
 
 - 用户要求「还有什么需要优化更新的」→「全部修复更新」→「完成后GitHub上发布新版」。本次发布 `2.7.7`（next patch above `v2.7.6`），保留既有应用身份、唯一宿主 `AudioContext`、SVG 控制栏质感及私密默认翻译配置构建链。
