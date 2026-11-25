@@ -200,6 +200,7 @@ with sync_playwright() as playwright:
         report['surfaces']['folia-reduced-motion']['transitionDuration'] = visual.evaluate('el => getComputedStyle(el).transitionDuration')
         assert all(float(value.strip().rstrip('s')) <= .01 for value in report['surfaces']['folia-reduced-motion']['transitionDuration'].split(','))
         visual.locator('.local-panel-title button[aria-label="关闭"]').click()
+        page.mouse.move(1380, 15)
         page.locator('#folia-floating-switch').click()
         page.evaluate('toggleFxPanel(true)')
         console.hover()
