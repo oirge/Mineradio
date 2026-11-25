@@ -13,6 +13,7 @@ from ui_browser import capture_screenshot, launch_browser
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'artifacts/ui-language/settings-glass'
 OUT.mkdir(parents=True, exist_ok=True)
+SCREENSHOT_TIMEOUT_MS = 30_000
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--url', default='http://127.0.0.1:3018')
 args = parser.parse_args()
@@ -27,6 +28,10 @@ def completed(message):
     assert not report['errors'], report['errors']
     report['checks'].append(message)
     print('PASS:', message, flush=True)
+
+
+def capture_surface(surface, key):
+    capture_screenshot(surface, path=str(OUT / f'{key}.png'), timeout=SCREENSHOT_TIMEOUT_MS)
 
 
 def inspect_shell(shell, key, row_selector):
@@ -115,12 +120,13 @@ def verify_subtitle_rim(page, child):
             --local-text: #eee; --local-muted: #aaa; --local-accent: #eee; --local-bg: #181818; --local-raised: #222; }
     """)
     try:
-        visible = shell.screenshot(path=str(OUT / 'folia-subtitles-clean-rim.png'), animations='disabled')
+        visible = shell.screenshot(path=str(OUT / 'folia-subtitles-clean-rim.png'),
+                                   animations='disabled', timeout=SCREENSHOT_TIMEOUT_MS)
         hidden = frame.add_style_tag(content="""
             .settings-glass-shell :is(strong, span, input, select, .local-tool-hint, .local-tool-action) { visibility: hidden !important; }
         """)
         try:
-            no_content = shell.screenshot(animations='disabled')
+            no_content = shell.screenshot(animations='disabled', timeout=SCREENSHOT_TIMEOUT_MS)
         finally:
             hidden.evaluate('(el) => el.remove()')
         radius = shell.evaluate('el => parseFloat(getComputedStyle(el).borderTopLeftRadius)')
@@ -133,10 +139,11 @@ def verify_subtitle_rim(page, child):
             .local-player { background: repeating-linear-gradient(35deg, #171717 0 24px, #c1d1df 26px 46px, #8e8071 50px 70px) !important; }
         """)
         try:
-            refracted = shell.screenshot(path=str(OUT / 'folia-subtitles-pattern-refraction.png'), animations='disabled')
+            refracted = shell.screenshot(path=str(OUT / 'folia-subtitles-pattern-refraction.png'),
+                                         animations='disabled', timeout=SCREENSHOT_TIMEOUT_MS)
             plain = frame.add_style_tag(content=".settings-glass-shell::after { backdrop-filter: none !important; }")
             try:
-                unfiltered = shell.screenshot(animations='disabled')
+                unfiltered = shell.screenshot(animations='disabled', timeout=SCREENSHOT_TIMEOUT_MS)
             finally:
                 plain.evaluate('(el) => el.remove()')
             refraction = compare_rim(page, refracted, unfiltered, radius)
@@ -184,7 +191,7 @@ with sync_playwright() as playwright:
         console = page.locator('#fx-panel')
         console.hover()
         inspect_shell(console, 'mineradio-dark', '.fx-slider,.lyric-color-row,.fx-fold,.preset-card')
-        capture_screenshot(page, path=str(OUT / 'mineradio-dark.png'))
+        capture_surface(console, 'mineradio-dark')
         for tab in ['appearance', 'lyrics', 'motion', 'mini', 'advanced']:
             page.locator(f'#fx-panel-tabs [data-fx-tab="{tab}"]').click()
             expect(console).to_have_attribute('data-active-tab', tab)
@@ -214,13 +221,13 @@ with sync_playwright() as playwright:
         }""")
         console.hover()
         inspect_shell(console, 'mineradio-bright-backdrop', '.fx-slider,.lyric-color-row')
-        capture_screenshot(page, path=str(OUT / 'mineradio-bright-backdrop.png'))
+        capture_surface(console, 'mineradio-bright-backdrop')
         page.evaluate("setFxPanelTab('advanced')")
         page.locator('#hotkey-settings-btn').click()
         modal = page.locator('#hotkey-modal .modal')
         inspect_shell(modal, 'mineradio-hotkeys', '.modal-btn')
         assert report['surfaces']['mineradio-hotkeys']['refraction'] != report['surfaces']['mineradio-dark']['refraction']
-        capture_screenshot(page, path=str(OUT / 'mineradio-hotkeys.png'))
+        capture_surface(modal, 'mineradio-hotkeys')
         page.evaluate('closeHotkeySettings()')
         completed('Console and hotkey dialog expose independent masked SVG refraction above a bright image')
 
@@ -228,7 +235,7 @@ with sync_playwright() as playwright:
         page.evaluate('toggleFxPanel(true); setFxPanelTab("appearance")')
         console.hover()
         inspect_shell(console, 'mineradio-narrow', '.fx-slider,.lyric-color-row')
-        capture_screenshot(page, path=str(OUT / 'mineradio-narrow.png'))
+        capture_surface(console, 'mineradio-narrow')
         page.set_viewport_size({'width': 1440, 'height': 960})
         page.evaluate('toggleFxPanel(false); setCustomBackgroundImage("", true); setCustomBackgroundColor("#101216", true)')
         completed('Mineradio settings retain a usable panel width on a 390px viewport')
@@ -245,7 +252,7 @@ with sync_playwright() as playwright:
         child.get_by_test_id('local-open-settings').click(timeout=60000)
         visual = child.get_by_test_id('local-visual-settings')
         inspect_shell(visual, 'folia-dark', '.local-setting')
-        capture_screenshot(page, path=str(OUT / 'folia-dark.png'))
+        capture_surface(visual, 'folia-dark')
         rhythm = child.get_by_test_id('local-rhythm')
         was_checked = rhythm.is_checked()
         rhythm.set_checked(not was_checked)
@@ -271,13 +278,13 @@ with sync_playwright() as playwright:
         inspect_shell(visual, 'folia-light', '.local-setting')
         assert report['surfaces']['folia-light']['background'] != report['surfaces']['folia-dark']['background']
         assert report['surfaces']['folia-light']['textColor'] != report['surfaces']['folia-dark']['textColor']
-        capture_screenshot(page, path=str(OUT / 'folia-light.png'))
+        capture_surface(visual, 'folia-light')
         page.set_viewport_size({'width': 390, 'height': 844})
         inspect_shell(visual, 'folia-narrow-light', '.local-setting')
-        capture_screenshot(page, path=str(OUT / 'folia-narrow-light.png'))
+        capture_surface(visual, 'folia-narrow-light')
         child.get_by_test_id('local-theme').select_option('dark')
         inspect_shell(visual, 'folia-narrow-dark', '.local-setting')
-        capture_screenshot(page, path=str(OUT / 'folia-narrow-dark.png'))
+        capture_surface(visual, 'folia-narrow-dark')
         page.set_viewport_size({'width': 1440, 'height': 960})
         visual.locator('.local-panel-title button[aria-label="关闭"]').click()
         expect(visual).to_have_count(0)
@@ -285,14 +292,14 @@ with sync_playwright() as playwright:
         playback = child.get_by_test_id('local-playback-settings')
         inspect_shell(playback, 'folia-playback', '.local-setting')
         assert report['surfaces']['folia-playback']['refraction'] != report['surfaces']['folia-dark']['refraction']
-        capture_screenshot(page, path=str(OUT / 'folia-playback.png'))
+        capture_surface(playback, 'folia-playback')
         playback.locator('.local-panel-title button[aria-label="关闭"]').click()
         child.get_by_test_id('local-open-commands').click()
         child.get_by_test_id('local-command-search').fill('均衡器')
         child.get_by_test_id('local-command-search').press('Enter')
         audio_panel = child.get_by_test_id('local-audio-settings')
         inspect_shell(audio_panel, 'folia-audio', '.local-setting')
-        capture_screenshot(page, path=str(OUT / 'folia-audio.png'))
+        capture_surface(audio_panel, 'folia-audio')
         audio_panel.get_by_role('button', name='关闭', exact=True).click()
         completed('Folia glass changes with the real theme, fits narrow screens and reaches playback and audio settings')
 
