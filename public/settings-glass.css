@@ -28,7 +28,8 @@ html body :is(#fx-panel, .modal, .cover-color-pop, .color-lab-pop)::after {
   border-radius: inherit;
   padding: 9px;
   pointer-events: none;
-  z-index: 30;
+  /* The rim must never sample labels or controls painted above it. */
+  z-index: -1;
   mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
   mask-clip: border-box, content-box;
   mask-composite: exclude;
