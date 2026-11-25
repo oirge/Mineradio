@@ -40,8 +40,23 @@ jobs:
           if ($tag -ne "v$version") {
             throw "Release tag $tag 与 package.json 版本 $version 不一致"
           }
+
+          $changelog = Get-Content -LiteralPath 'CHANGELOG.md' -Raw -Encoding utf8
+          $tagPattern = [regex]::Escape($tag)
+          $section = [regex]::Match($changelog, "(?ms)^##[ \t]+(?<title>$tagPattern(?:[ \t]+[^\r\n]*)?)\r?\n(?<notes>.*?)(?=^#{1,2}[ \t]+|\z)")
+          $notes = $section.Groups['notes'].Value.Trim()
+          if (-not $notes) {
+            throw "CHANGELOG.md 缺少 $tag 的更新说明"
+          }
+          $notesPath = Join-Path $env:RUNNER_TEMP "mineradio-$tag-release-notes.md"
+          $newline = [string][char]10
+          $notes = $notes -replace '\r\n', $newline
+          [IO.File]::WriteAllText($notesPath, "## 更新内容$newline$newline$notes$newline", [Text.UTF8Encoding]::new($false))
+
           "VERSION=$version" >> $env:GITHUB_OUTPUT
           "TAG=$tag" >> $env:GITHUB_OUTPUT
+          "TITLE=$($section.Groups['title'].Value.Trim())" >> $env:GITHUB_OUTPUT
+          "NOTES_PATH=$notesPath" >> $env:GITHUB_OUTPUT
       
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -156,8 +171,8 @@ jobs:
             gh release create $tag `
               --draft `
               --verify-tag `
-              --title $tag `
-              --generate-notes
+              --title $env:RELEASE_TITLE `
+              --notes-file $env:RELEASE_NOTES_PATH
             if ($LASTEXITCODE -ne 0) {
               throw "gh release create 失败，退出码：$LASTEXITCODE"
             }
@@ -186,3 +201,5 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TITLE: ${{ steps.release_meta.outputs.TITLE }}
+          RELEASE_NOTES_PATH: ${{ steps.release_meta.outputs.NOTES_PATH }}

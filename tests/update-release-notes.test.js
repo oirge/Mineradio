@@ -92,6 +92,19 @@ test('更新介绍去除 Markdown 链接、重复项和校验摘要', () => {
   ]);
 });
 
+test('GitHub 自动生成的版本对比链接不进入更新介绍', () => {
+  const { extractReleaseNotes } = loadReleaseNoteHelpers();
+  const url = 'https://github.com/oirge/Mineradio/compare/v2.7.5...v2.7.6';
+  const generated = '**Full Changelog**: ' + url;
+
+  assert.deepEqual(Array.from(extractReleaseNotes(generated)), []);
+  assert.deepEqual(Array.from(extractReleaseNotes([
+    generated,
+    '- 修复导出首帧。',
+    '**Full Changelog**: [版本对比](' + url + ')',
+  ].join('\n'))), ['修复导出首帧。']);
+});
+
 test('更新介绍不再因为条目过长而整条丢弃', () => {
   const { extractReleaseNotes } = loadReleaseNoteHelpers();
   const longBullet = '- ' + '长条目内容'.repeat(30) + '结尾';

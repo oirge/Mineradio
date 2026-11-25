@@ -42759,6 +42759,9 @@ function applyLatestUpdateInfo(data) {
     updatePreviewState.notes = ['请检查网络或代理设置后再次检测。'];
   } else if (Array.isArray(release.notes) && release.notes.length) {
     updatePreviewState.notes = release.notes.slice(0, 4);
+    if (updatePreviewState.updateAvailable && updatePreviewState.notes.includes(updatePreviewState.hero)) {
+      updatePreviewState.hero = '本次更新';
+    }
   } else {
     updatePreviewState.notes = [updatePreviewState.updateAvailable ? '发现可用的新版本' : '当前版本已是最新'];
   }
