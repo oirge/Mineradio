@@ -41,7 +41,7 @@ export default function LocalToolPanel({ id, title, onClose, children, initialFo
         };
     }, [initialFocus, id]);
     return <aside ref={panel} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`}
-        className={`local-tool-panel local-glass ${wide ? 'is-wide' : ''}`} data-testid={id}>
+        className={`local-tool-panel local-glass settings-glass-shell ${wide ? 'is-wide' : ''}`} data-liquid-glass data-testid={id}>
         <div className="local-panel-title"><strong id={`${id}-title`}>{title}</strong>
             <button type="button" aria-label={t('close')} onClick={onClose}><X size={17} /></button></div>
         <div className="local-tool-content">{children}</div>

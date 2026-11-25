@@ -22,6 +22,7 @@ on:
           - translation
           - layout
           - startup
+          - settings-glass
       ui_diagnostics:
         description: Enable detailed Playwright action logs
         type: boolean
@@ -88,6 +89,10 @@ jobs:
       - name: Verify startup and remembered interface
         timeout-minutes: 5
         run: python scripts/verify-browser-ui.py --suite startup
+      - name: Verify liquid glass settings and dialogs
+        if: inputs.browser_suite != 'layout'
+        timeout-minutes: 5
+        run: python scripts/verify-browser-ui.py --suite settings-glass
       - name: Verify Folia playback and display options
         if: inputs.browser_suite != 'layout'
         timeout-minutes: 5

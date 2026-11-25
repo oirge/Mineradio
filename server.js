@@ -23,6 +23,12 @@ const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
  * @type {((filePath: string) => string) | null}
  */
 let localFileAuthorizer = null;
+/**
+ * 本地 SQLite 封面缩略图读取钩子。
+ * 由桌面主进程注入，供 /api/local-cover 按 songKey 直接返回已缓存的缩略图二进制流。
+ * @type {((songKey: string) => ({mime?:string, bytes:Buffer|Uint8Array}|null)) | null}
+ */
+let localCoverReader = null;
 
 function resolveRuntimeAppRoots() {
   const sourceRoot = __dirname;
@@ -65,6 +71,16 @@ function setLocalFileAuthorizer(authorizer) {
   if (typeof authorizer !== 'function') throw new TypeError('LOCAL_FILE_AUTHORIZER_INVALID');
   localFileAuthorizer = authorizer;
 }
+
+/**
+ * 注入本地 SQLite 封面缩略图读取器。
+ * @param {(songKey: string) => ({mime?:string, bytes:Buffer|Uint8Array}|null)} reader 缩略图读取回调。
+ * @returns {void}
+ */
+function setLocalCoverReader(reader) {
+  if (typeof reader !== 'function') throw new TypeError('LOCAL_COVER_READER_INVALID');
+  localCoverReader = reader;
+}
 const UPDATE_WORK_DIR = process.env.MINERADIO_UPDATE_DIR || path.join(APP_ROOT, 'updates');
 const UPDATE_DOWNLOAD_DIR = process.env.MINERADIO_UPDATE_DOWNLOAD_DIR || path.join(UPDATE_WORK_DIR, 'downloads');
 const UPDATE_PATCH_BACKUP_DIR = process.env.MINERADIO_PATCH_BACKUP_DIR || path.join(UPDATE_WORK_DIR, 'backups', 'patches');
@@ -87,10 +103,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '「隐喻」特写保留后续歌词，跟词镜头移动更平滑。导出会等画布绘出首帧再开始录制。',
-  '整句放在单个带时间的 TTML 标签中时，歌词会在原时间范围内逐词高亮。',
-  '浅色模式下，Lattice 熄灯会压暗非当前卡片。「莫奈」歌名阴影完整显示。',
-  'Electron 更新至 43.8.12，并修复构建依赖的中风险安全告警。',
+  '曲库索引改为事务批量读写，列表封面按缩略图流式按需加载；同步元数据按歌单一次完成，分组列表超百首自动窗口化渲染。',
+  'Folia 内置图标改为分组按需打包，大幅减少本地构建产物碎片文件并降低预加载开销。',
+  '主窗口及 Folia 设置面板、弹窗新增边缘 SVG 液态玻璃折射质感，保留原有背景与控制栏纹理；同步更新双语与安全隐私文档。',
+  '新增本地「每日推荐」偏好混音、年度听歌热力图报告，以及高级面板可选的无声跳过（Beta）功能。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -3192,6 +3208,56 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---------- 本地 SQLite 封面缩略图流 ----------
+  if (pn === '/api/local-cover') {
+    try {
+      if (!LOCAL_FILE_TOKEN || url.searchParams.get('token') !== LOCAL_FILE_TOKEN) {
+        res.writeHead(403, { 'Access-Control-Allow-Origin': '*' });
+        res.end('Forbidden');
+        return;
+      }
+      if (!localCoverReader) {
+        res.writeHead(403, { 'Access-Control-Allow-Origin': '*' });
+        res.end('Forbidden');
+        return;
+      }
+      const key = String(url.searchParams.get('key') || '');
+      if (!key) {
+        res.writeHead(400, { 'Access-Control-Allow-Origin': '*' });
+        res.end('Bad Request');
+        return;
+      }
+      const cover = localCoverReader(key);
+      if (!cover || !cover.bytes || !cover.bytes.length) {
+        res.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
+        res.end('Not found');
+        return;
+      }
+      const buffer = Buffer.isBuffer(cover.bytes)
+        ? cover.bytes
+        : Buffer.from(cover.bytes.buffer || cover.bytes, cover.bytes.byteOffset || 0, cover.bytes.byteLength || cover.bytes.length);
+      const rawMime = String(cover.mime || '').trim().toLowerCase();
+      const safeMime = /^image\/(jpeg|jpg|png|webp|gif|bmp|avif)$/.test(rawMime)
+        ? rawMime
+        : (rawMime === 'image/svg+xml' ? 'image/svg+xml' : 'image/jpeg');
+      res.writeHead(200, {
+        'Content-Type': safeMime,
+        'Content-Length': String(buffer.length),
+        'Access-Control-Allow-Origin': '*',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+        'Cache-Control': 'private, max-age=3600',
+      });
+      res.end(buffer);
+    } catch (err) {
+      console.error('[LocalCover]', err);
+      if (!res.headersSent) res.writeHead(500, { 'Access-Control-Allow-Origin': '*' });
+      res.end();
+    }
+    return;
+  }
+
   // ---------- 本地文件代理 (支持 Range，用于持久化本地库) ----------
   if (pn === '/api/local-file') {
     try {
@@ -3216,7 +3282,17 @@ const server = http.createServer(async (req, res) => {
         res.end('Forbidden');
         return;
       }
-      const stat = fs.statSync(target);
+      let stat;
+      try {
+        stat = await fs.promises.stat(target);
+      } catch (statErr) {
+        if (statErr && (statErr.code === 'ENOENT' || statErr.code === 'ENOTDIR')) {
+          res.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
+          res.end('Not found');
+          return;
+        }
+        throw statErr;
+      }
       if (!stat.isFile()) {
         res.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
         res.end('Not found');
@@ -3307,6 +3383,7 @@ server.listen(PORT, HOST, () => {
 });
 
 server.setLocalFileAuthorizer = setLocalFileAuthorizer;
+server.setLocalCoverReader = setLocalCoverReader;
 server.setApiSessionToken = setApiSessionToken;
 server.setTranslationSettingsProvider = setTranslationSettingsProvider;
 

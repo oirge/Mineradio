@@ -19,11 +19,13 @@ import { LocalActionsContext } from './LocalActionsContext';
 import { useLocalActions } from './useLocalActions';
 import { useLocalVisualAssets } from './useLocalVisualAssets';
 import { useLocalVisualizerPrewarm } from './useLocalVisualizerPrewarm';
+import { attachLocalSettingsGlass } from './settingsGlassRim';
 import { useLocalSubtitleBottom } from './useLocalSubtitleBottom';
 import { PlayerSubtitleBottomContext } from '../../components/floating-player/PlayerBottomBarLayoutContext';
 import { LyricRenderQualityPinContext } from '../../components/visualizer/renderQuality/lyricRenderQualityPin';
 import type { LyricRenderQuality } from '../../types';
 import './local.css';
+import './localSettingsGlass.css';
 
 // src/mineradio/local/LocalPlayer.tsx
 // Embedded local-player composition: upstream effects, host transport, and a bounded local catalog.
@@ -35,6 +37,7 @@ export default function LocalPlayer() {
         if (language && language !== i18n.language) void i18n.changeLanguage(language);
     }, [player.state?.uiLanguage, i18n]);
     useEffect(() => { document.title = t('windowTitle'); }, [t]);
+    useEffect(() => attachLocalSettingsGlass(), []);
     const visuals = useVisualSceneSettings();
     const assets = useLocalVisualAssets();
     const [libraryOpen, setLibraryOpen] = useState(false);

@@ -5023,31 +5023,25 @@ ipcMain.handle('mineradio-local-library-db-clear', trustedMainFrameHandler((_eve
   return store.clearRoot(folderPath);
 })));
 
-ipcMain.handle('mineradio-local-library-db-read-assets', trustedMainFrameHandler((_event, keys) => withLocalLibraryStore((store) => store.readAssetRecords(Array.isArray(keys) ? keys : []))));
+function localCoverStreamUrlPrefix() {
+  if (!mainServerPort || !LOCAL_FILE_TOKEN) return '';
+  return `http://127.0.0.1:${mainServerPort}/api/local-cover?token=${encodeURIComponent(LOCAL_FILE_TOKEN)}&key=`;
+}
 
-ipcMain.handle('mineradio-local-library-db-write-assets', trustedMainFrameHandler((_event, records) => withLocalLibraryStore((store) => {
-  const list = Array.isArray(records) ? records : [records];
-  let saved = 0;
-  for (let i = 0; i < list.length; i += 1) {
-    const result = store.writeAssetRecord(list[i]);
-    if (result && result.ok) saved += 1;
-  }
-  return { ok: true, saved: saved, total: list.length };
+ipcMain.handle('mineradio-local-library-db-read-assets', trustedMainFrameHandler((_event, keys) => withLocalLibraryStore((store) => {
+  const coverUrlPrefix = localCoverStreamUrlPrefix();
+  const result = store.readAssetRecords(Array.isArray(keys) ? keys : [], coverUrlPrefix ? { skipInlineCover: true } : undefined);
+  if (result && result.ok && coverUrlPrefix) result.coverUrlPrefix = coverUrlPrefix;
+  return result;
 })));
+
+ipcMain.handle('mineradio-local-library-db-write-assets', trustedMainFrameHandler((_event, records) => withLocalLibraryStore((store) => store.writeAssetRecords(Array.isArray(records) ? records : [records]))));
 
 ipcMain.handle('mineradio-local-library-db-read-lyrics', trustedMainFrameHandler((_event, keys) => withLocalLibraryStore((store) => store.readLyricRecords(Array.isArray(keys) ? keys : []))));
 
 ipcMain.handle('mineradio-local-library-db-restore-lyrics', trustedMainFrameHandler((_event, entries) => withLocalLibraryStore((store) => store.restoreLyricRecords(Array.isArray(entries) ? entries : []))));
 
-ipcMain.handle('mineradio-local-library-db-write-lyrics', trustedMainFrameHandler((_event, records) => withLocalLibraryStore((store) => {
-  const list = Array.isArray(records) ? records : [records];
-  let saved = 0;
-  for (let i = 0; i < list.length; i += 1) {
-    const result = store.writeLyricRecord(list[i]);
-    if (result && result.ok) saved += 1;
-  }
-  return { ok: true, saved: saved, total: list.length };
-})));
+ipcMain.handle('mineradio-local-library-db-write-lyrics', trustedMainFrameHandler((_event, records) => withLocalLibraryStore((store) => store.writeLyricRecords(Array.isArray(records) ? records : [records]))));
 
 ipcMain.handle('mineradio-local-library-db-bump-play', trustedMainFrameHandler((_event, payload) => withLocalLibraryStore((store) => store.bumpPlayStat(payload || {}))));
 
@@ -5758,6 +5752,10 @@ async function createWindow() {
   }
   // 注入授权校验：让 HTTP 本地文件代理复用与 IPC 相同的授权根目录约束，堵住越权读取任意文件。
   localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
+  localServer.setLocalCoverReader((songKey) => {
+    const store = getLocalLibraryStore();
+    return store ? store.readAssetCover(songKey) : null;
+  });
   localServer.setApiSessionToken(API_SESSION_TOKEN);
   localServer.setTranslationSettingsProvider(() => translationSettings.configuration());
   await waitForServer(localServer);

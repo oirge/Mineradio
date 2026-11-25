@@ -64,7 +64,7 @@ export default function LocalPlaybackSettings({ state, command, onClose }: {
         return () => clearInterval(timer);
     }, [sleep?.dueAt]);
     const minutes = Math.max(0, Math.ceil(((sleep?.dueAt ?? 0) - now) / 60_000));
-    return <aside ref={panel} role="dialog" aria-labelledby="local-playback-title" className="local-playback-settings local-glass" data-testid="local-playback-settings">
+    return <aside ref={panel} role="dialog" aria-labelledby="local-playback-title" className="local-playback-settings local-glass settings-glass-shell" data-liquid-glass data-testid="local-playback-settings">
         <div className="local-panel-title"><strong id="local-playback-title">{t('playbackSettings')}</strong>
             <button ref={closeButton} type="button" aria-label={t('close')} onClick={onClose}><X size={17} /></button></div>
         <div className="local-settings-body">

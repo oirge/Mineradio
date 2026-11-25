@@ -2,7 +2,7 @@
 
 - getVideoExportState, startVideoExport({width,height,startMode:'from-start'|'current',transitionBehavior:'continue'|'save',visuals}), stopVideoExport and cancelVideoExport return {supported,status,progress,elapsed,transitionBehavior,fileName?,error?}. The videoExport event publishes job changes independently of the panel lifecycle.
 - The default continue policy records one file across track changes and seeks, replacing display-only track/lyrics/analysis data. save ends the recording before a transition. A completed queue with no next playback is saved automatically. Pausing audio pauses recording. startMode chooses the recording start; continue can then follow subsequent playback.
-- Supported sizes: 1280x720, 1920x1080, 720x1280, 1080x1920 with a target of 30 fps. Actual frame rate depends on hardware and effect complexity. Output uses the built-in WebM/Opus pipeline to preserve the first audio samples. Recording is real time. Speaker volume/mute do not affect the exported audio; EQ, ReplayGain and playback speed do.
+- Supported sizes: 1280x720, 1920x1080, 720x1280, 1080x1920 with selectable 30 / 60 / 90 / 120 constant fps (default 30 fps) and MP4 or WebM output. Actual capture frame rate depends on hardware and effect complexity. Output preserves audio samples cleanly during real-time capture. Speaker volume/mute do not affect the exported audio; EQ, ReplayGain and playback speed do.
 - Desktop privileges remain in the trusted main frame. A separate hidden /vendor/folia/index.html?videoExport=<job-id> receives snapshots and a restricted display-only preload, paints original Folia effects, and never owns an audio element. An ephemeral tab token bound to the trusted owner yields a native video track of this document only. It goes directly to MediaRecorder alongside the existing audio tap; bounded encoded chunk writes avoid retaining the full video in memory. No per-frame JPEG/bitmap/canvas round trip is used.
 - mineradio-video-export-options-v1 persists only {transitionBehavior}. It participates in desktop UI state and machine backup, and does not change visual presets.
 
@@ -10,7 +10,7 @@
 
 The isolated Folia local player runs in the host-owned `/vendor/folia/index.html` iframe, using `src/mineradio/local-entry.tsx`, not the upstream App/bootstrap. Mineradio owns audio, library, playlists and persistence. No Folia audio element may play. Messages are accepted only from the exact iframe window and host origin.
 
-The embedded surface has three local views: `lyrics`, `records` (the floating Polaroid hex wall), and `posters` (the original Lattice poster wall). All three consume the same host state, playhead and commands. Their view switch never creates another audio output or imports the full Folia application, online provider catalog, or playback store. The lyric surface exposes 14 original renderers and the 12 settings panels present upstream, plus local image assets and five local background modes.
+The embedded surface has three local views: `lyrics`, `records` (the floating Polaroid hex wall), and `posters` (the original Lattice poster wall / Radio wall). All three consume the same host state, playhead and commands. Their view switch never creates another audio output or imports the full Folia application, online provider catalog, or playback store. The lyric surface exposes 18 built-in lyric styles, Cinema Hall (Beta) scene, 12 settings panels present upstream, local image assets, and five local background modes.
 
 ```js
 // Folia → parent

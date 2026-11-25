@@ -114,10 +114,21 @@ export default defineConfig({
                 return context.hostType === 'js' ? dependencies.filter(dependency => dependency === filename) : dependencies;
             },
         },
-        rollupOptions: {
+        rolldownOptions: {
             input: { main: path.join(root, 'index.html') },
             output: {
-                manualChunks(id) { return id.includes('/node_modules/three/') ? 'three' : undefined; },
+                manualChunks(id) {
+                    const normalized = id.replaceAll('\\', '/');
+                    if (normalized.includes('/node_modules/three/')) return 'three';
+                    const iconMatch = normalized.match(/\/node_modules\/lucide-react\/dist\/esm\/icons\/([^/.]+)\.(?:m?js)$/);
+                    if (iconMatch) {
+                        const name = iconMatch[1];
+                        let hash = 0;
+                        for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+                        return `lucide-icons-${hash % 8}`;
+                    }
+                    return undefined;
+                },
                 chunkFileNames: 'assets/[name]-[hash].js',
             },
         },

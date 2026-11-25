@@ -201,6 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['优化大曲库读写与封面加载，新增设置液态玻璃质感、每日推荐与听歌报告。', 'Faster large-library reads and cover loading, with liquid-glass settings styling, Daily Mix, and a listening report.'],
+  ['曲库索引改为事务批量读写，列表封面按缩略图流式按需加载；同步元数据按歌单一次完成，分组列表超百首自动窗口化渲染。', 'Batched library index reads/writes in single SQLite transactions and stream cover thumbnails on demand; sync track metadata in linear passes and window large grouped lists.'],
+  ['Folia 内置图标改为分组按需打包，大幅减少本地构建产物碎片文件并降低预加载开销。', 'Grouped bundled Folia icons into shared lazy chunks, drastically cutting static asset file counts and preload overhead.'],
+  ['主窗口及 Folia 设置面板、弹窗新增边缘 SVG 液态玻璃折射质感，保留原有背景与控制栏纹理；同步更新双语与安全隐私文档。', 'Added edge SVG liquid-glass refraction across main and Folia settings panels and dialogs while preserving existing backgrounds and control-bar textures; updated bilingual and security docs.'],
+  ['新增本地「每日推荐」偏好混音、年度听歌热力图报告，以及高级面板可选的无声跳过（Beta）功能。', 'Added a local preference-scored Daily Mix, listening activity heatmap report, and optional Silence Skip (Beta) in Advanced settings.'],
   ['改善隐喻运镜和视频导出，修复歌词与界面细节。', 'Smoother Metaphor camera motion, more reliable video starts, and fixes for lyrics and visuals.'],
   ['「隐喻」特写保留后续歌词，跟词镜头移动更平滑。导出会等画布绘出首帧再开始录制。', 'Metaphor close-ups keep upcoming lyrics in view and move more smoothly between groups of words. Video export waits for the first frame before recording.'],
   ['整句放在单个带时间的 TTML 标签中时，歌词会在原时间范围内逐词高亮。', 'TTML lyrics wrapped in a single timed span highlight word by word within the original time range.'],
@@ -1237,6 +1242,36 @@ var UI_LANGUAGE_PAIRS = [
   ['年代', 'Decades'],
   ['重复检测', 'Duplicate detection'],
   ['R 固定/退出 · WASD 移动 · 鼠标转向 · Shift 加速 · Space/Ctrl 升降 · Q/E 轻微旋转 · 滚轮景深 · K 回正', 'R lock/exit · WASD move · Mouse look · Shift boost · Space/Ctrl up-down · Q/E tilt · Wheel depth · K reset'],
+  ['听歌洞察与辅助', 'Insights & listening tools'],
+  ['本地偏好与无声略过', 'Local mix & silence skip'],
+  ['听歌洞察与混音', 'Listening insights & mix'],
+  ['听歌报告', 'Listening report'],
+  ['统计与热力图', 'Stats & heatmap'],
+  ['今日推荐', 'Daily mix'],
+  ['本地偏好混音', 'Local affinity mix'],
+  ['跳过首尾静音（Beta）', 'Skip head/tail silence (Beta)'],
+  ['关闭中；开启后使用现有音频分析器实时跳过首尾无声片段。', 'Off; uses the existing audio analyzer to skip leading and trailing silence in real time.'],
+  ['已开启（Beta）：自动跳过前 20 秒内超过 2.5 秒的纯静音与末尾静音，不改变循环模式。', 'On (Beta): skips >2.5s silence within the first 20s and trailing silence without altering repeat mode.'],
+  ['已开启跳过首尾静音（Beta）', 'Silence skip enabled (Beta)'],
+  ['已关闭跳过首尾静音', 'Silence skip disabled'],
+  ['今日', 'Today'],
+  ['本周', 'Week'],
+  ['本月', 'Month'],
+  ['今年', 'Year'],
+  ['时间范围', 'Time range'],
+  ['活跃天数', 'Active days'],
+  ['日均收听', 'Daily avg'],
+  ['单日最高', 'Peak day'],
+  ['听歌热力图', 'Activity heatmap'],
+  ['还没有听歌记录，播完或收听半首以上会自动统计。', 'No listening stats yet; played tracks appear after half or full playback.'],
+  ['请先导入本地歌曲再生成推荐混音', 'Import local tracks before generating a mix'],
+  ['已为你生成今日偏好推荐混音', 'Generated today\'s local affinity mix'],
+  ['打开', 'Open'],
+  ['生成混音', 'Play mix'],
+  ['点击日期格查看当日时长', 'Click any day square to inspect listening time'],
+  ['查看日／周／月／年听歌统计、活动热力图与单曲排行', 'View daily, weekly, monthly, and yearly stats, activity heatmap, and top tracks'],
+  ['按红心喜欢、完播与近期收听权重本地生成推荐队列', 'Generate a local queue weighted by favorites, completions, and recency'],
+  ['边播边检测并自动跳过曲首过长无声与曲尾无声（Beta）', 'Detect and skip prolonged leading and trailing silence in real time (Beta)'],
 ];
 
 var uiLanguage = 'zh-CN';
@@ -1248,7 +1283,7 @@ var UI_LANGUAGE_SCOPE_IDS = [
   'fx-panel', 'cover-color-pop', 'color-lab-pop', 'hotkey-modal', 'plugin-modal', 'wallpaper-engine-modal', 'custom-lyric-modal',
   'desktop-titlebar', 'fullscreen-diy-zone', 'search-area', 'empty-home', 'top-right', 'playlist-panel', 'trial-banner', 'gesture-hud', 'bottom-bar',
   'drop-overlay', 'free-camera-hint', 'ai-depth-chip', 'beat-chip', 'lyric-translate-chip', 'cover-crop-modal', 'collect-modal',
-  'local-playlist-delete-modal', 'listen-history-clear-modal', 'local-beat-modal', 'track-detail-modal', 'update-modal', 'visual-guide', 'source-fallback-notice'
+  'local-playlist-delete-modal', 'listen-history-clear-modal', 'local-beat-modal', 'track-detail-modal', 'listen-report-modal', 'update-modal', 'visual-guide', 'source-fallback-notice'
 ];
 var uiLanguageZhToEn = Object.create(null);
 var uiLanguageEnToZh = Object.create(null);
@@ -2069,7 +2104,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.6';
+var APP_VERSION = '2.7.7';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2122,12 +2157,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '改善隐喻运镜和视频导出，修复歌词与界面细节。',
+  hero: '优化大曲库读写与封面加载，新增设置液态玻璃质感、每日推荐与听歌报告。',
   notes: [
-    '「隐喻」特写保留后续歌词，跟词镜头移动更平滑。导出会等画布绘出首帧再开始录制。',
-    '整句放在单个带时间的 TTML 标签中时，歌词会在原时间范围内逐词高亮。',
-    '浅色模式下，Lattice 熄灯会压暗非当前卡片。「莫奈」歌名阴影完整显示。',
-    'Electron 更新至 43.8.12，并修复构建依赖的中风险安全告警。'
+    '曲库索引改为事务批量读写，列表封面按缩略图流式按需加载；同步元数据按歌单一次完成，分组列表超百首自动窗口化渲染。',
+    'Folia 内置图标改为分组按需打包，大幅减少本地构建产物碎片文件并降低预加载开销。',
+    '主窗口及 Folia 设置面板、弹窗新增边缘 SVG 液态玻璃折射质感，保留原有背景与控制栏纹理；同步更新双语与安全隐私文档。',
+    '新增本地「每日推荐」偏好混音、年度听歌热力图报告，以及高级面板可选的无声跳过（Beta）功能。'
   ]
 };
 function readSavedVolume() {
@@ -9579,6 +9614,9 @@ function localAssetCacheSnapshot(song) {
     localCoverFileSignature: localAssetFileSignature(song.localCoverFile),
     localCoverSource: song.localCoverFile ? 'file' : ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? 'embedded' : (song.localCoverLoaded ? 'none' : ''))
   };
+  if (!snapshot.localCoverSource && song.localCoverThumbUrl) snapshot.localCoverSource = 'embedded';
+  // 流式封面模式下主线程不常驻 base64 缩略图；回写元数据/状态时通知 SQLite 保留既有 cover BLOB。
+  if (!song.localCoverThumbDataUrl && song.localCoverThumbUrl) snapshot.preserveExistingCover = true;
   // ReplayGain 走 extra JSON 列，只在解析到时写入，缺省时不占用缓存体积。
   if (song.localReplayGain && typeof song.localReplayGain === 'object') snapshot.localReplayGain = song.localReplayGain;
   return snapshot;
@@ -9626,6 +9664,15 @@ async function readLocalAssetCacheRecords(keys) {
   var dbResult = await callLocalLibraryDb('readLocalLibraryDbAssets', keys);
   if (dbResult && dbResult.ok && dbResult.records) {
     merged = dbResult.records;
+    if (dbResult.coverUrlPrefix) {
+      var mergedKeys = Object.keys(merged);
+      for (var covIdx = 0; covIdx < mergedKeys.length; covIdx++) {
+        var rec = merged[mergedKeys[covIdx]];
+        if (rec && rec.localCoverHasThumb && !rec.localCoverThumbDataUrl && !rec.localCoverThumbUrl) {
+          rec.localCoverThumbUrl = dbResult.coverUrlPrefix + encodeURIComponent(rec.id || mergedKeys[covIdx]);
+        }
+      }
+    }
     var missing = [];
     for (var missIdx = 0; missIdx < keys.length; missIdx++) {
       if (!merged[keys[missIdx]]) missing.push(keys[missIdx]);
@@ -9823,16 +9870,22 @@ function applyLocalAssetCacheToSong(song, record, opts) {
   var canUseCoverCache = song.localCoverFile
     ? (record.localCoverFileSignature && record.localCoverFileSignature === coverFileSig)
     : record.localCoverSource !== 'file';
-  if (includeCover && canUseCoverCache && (record.localCoverThumbDataUrl || record.localCoverDataUrl || record.localCoverLoaded)) {
+  if (includeCover && canUseCoverCache && (record.localCoverThumbDataUrl || record.localCoverThumbUrl || record.localCoverDataUrl || record.localCoverLoaded)) {
     var cachedThumb = record.localCoverThumbDataUrl || record.localCoverDataUrl || '';
-    if (cachedThumb) song.localCoverThumbDataUrl = cachedThumb;
+    var cachedThumbUrl = record.localCoverThumbUrl || '';
+    if (cachedThumb) {
+      song.localCoverThumbDataUrl = cachedThumb;
+      song.localCoverThumbUrl = '';
+    } else if (cachedThumbUrl) {
+      song.localCoverThumbUrl = cachedThumbUrl;
+    }
     song.localCoverLoaded = !!record.localCoverLoaded;
     song.localCoverLightScanned = !!record.localCoverLightScanned;
     song.localCoverFileName = record.localCoverFileName || song.localCoverFileName || '';
     invalidateSongCoverCache(song);
     changed = true;
   }
-  if (changed) {
+  if (changed && !opts.deferCrossListSync) {
     syncLocalSongAssetFields(song);
   }
   if (includeLyrics) song.localLyricCacheHydrated = !song.localLyricResidencyReleased;
@@ -9874,6 +9927,9 @@ async function hydrateLocalAssetCacheForSongRange(songs, start, end, opts) {
     var records = recordPair[0] || {};
     var lyricRecords = recordPair[1] || {};
     var count = 0;
+    var batchSyncSongs = [];
+    var canBatchSync = typeof syncLocalSongAssetFieldsBatch === 'function';
+    var applyOpts = Object.assign({}, opts, { deferCrossListSync: canBatchSync });
     for (var j = start; j < end; j++) {
       var song = songs[j];
       var key = songKeys[j - start];
@@ -9882,9 +9938,16 @@ async function hydrateLocalAssetCacheForSongRange(songs, start, end, opts) {
         song.localAssetCacheHydrated = true;
         song.localAssetCacheMiss = !record;
       }
-      if (record && applyLocalAssetCacheToSong(song, record, Object.assign({}, opts, { lyricRecord: lyricRecords[key] || null }))) count++;
+      if (record) {
+        applyOpts.lyricRecord = lyricRecords[key] || null;
+        if (applyLocalAssetCacheToSong(song, record, applyOpts)) {
+          count++;
+          if (canBatchSync) batchSyncSongs.push(song);
+        }
+      }
       if (song && opts.includeLyrics !== false) song.localLyricCacheHydrated = !song.localLyricResidencyReleased;
     }
+    if (canBatchSync && batchSyncSongs.length) syncLocalSongAssetFieldsBatch(batchSyncSongs);
     return count;
   } catch (e) {
     console.warn('[LocalAssetCacheRead]', e);
@@ -15884,7 +15947,7 @@ function releaseLocalFullCoverData(song) {
   var fullCover = song.localCoverDataUrl;
   song.localCoverDataUrl = '';
   if (song.customCover === fullCover) {
-    if (song.localCoverThumbDataUrl) song.customCover = song.localCoverThumbDataUrl;
+    if (song.localCoverThumbDataUrl || song.localCoverThumbUrl) song.customCover = song.localCoverThumbDataUrl || song.localCoverThumbUrl;
     else delete song.customCover;
   }
   invalidateSongCoverCache(song);
@@ -15904,6 +15967,9 @@ function handoffLocalFullCoverData(previousSong, nextSong) {
   nextSong.localCoverDataUrl = fullCover;
   if (!nextSong.localCoverThumbDataUrl && previousSong.localCoverThumbDataUrl) {
     nextSong.localCoverThumbDataUrl = previousSong.localCoverThumbDataUrl;
+  }
+  if (!nextSong.localCoverThumbUrl && previousSong.localCoverThumbUrl) {
+    nextSong.localCoverThumbUrl = previousSong.localCoverThumbUrl;
   }
   if (previousSong.localCoverLoaded) nextSong.localCoverLoaded = true;
   invalidateSongCoverCache(nextSong);
@@ -16008,66 +16074,166 @@ function syncLocalSongAssetFields(sourceSong, partialMetadataTags) {
   if (!sourceSong || !sourceSong.localKey) return;
   // 资产结论刚变过一次，音乐库维护那几个现算名单要重新算。
   if (typeof noteLocalLibraryMaintenanceAssetChange === 'function') noteLocalLibraryMaintenanceAssetChange();
-  var lists = [localLibrarySongs, playQueue, playlist];
+  var lists = uniqueLocalSongViewLists();
   var retainedLyricSong = shouldRetainLocalLyricText(sourceSong) ? sourceSong : null;
   var partialTags = sourceSong.localMetadataLoaded ? null : partialMetadataTags;
-  var partialTitle = !!(partialTags && partialTags.title && !isLocalSourcePlaceholderMetadata(partialTags.title));
-  var partialArtist = !!(partialTags && partialTags.artist && !isLocalSourcePlaceholderMetadata(partialTags.artist));
-  var partialAlbum = !!(partialTags && partialTags.album && !isLocalSourcePlaceholderMetadata(partialTags.album));
-  var partialAlbumArtist = !!(partialTags && partialTags.albumArtist && !isLocalSourcePlaceholderMetadata(partialTags.albumArtist));
-  // 资产字段仍可跨视图同步，但歌词原文只能写入精确当前对象，避免任一副本阻止大字符串回收。
+  var partialFlags = partialTags ? {
+    title: !!(partialTags.title && !isLocalSourcePlaceholderMetadata(partialTags.title)),
+    artist: !!(partialTags.artist && !isLocalSourcePlaceholderMetadata(partialTags.artist)),
+    album: !!(partialTags.album && !isLocalSourcePlaceholderMetadata(partialTags.album)),
+    albumArtist: !!(partialTags.albumArtist && !isLocalSourcePlaceholderMetadata(partialTags.albumArtist)),
+  } : null;
+  var extraLyricCopies = [];
+  // 资产字段仍可跨视图同步，但歌词原文只能写入精确当前对象，并在同一趟扫描收集多余原文副本。
   for (var listIndex = 0; listIndex < lists.length; listIndex++) {
-    var list = lists[listIndex] || [];
+    var list = lists[listIndex];
     for (var songIndex = 0; songIndex < list.length; songIndex++) {
       var target = list[songIndex];
       if (!target || target === sourceSong || target.localKey !== sourceSong.localKey) continue;
-      var coverChanged = false;
-      if (sourceSong.localUrl && !target.localUrl) target.localUrl = sourceSong.localUrl;
-      if (sourceSong.localCoverThumbDataUrl && target.localCoverThumbDataUrl !== sourceSong.localCoverThumbDataUrl) {
-        target.localCoverThumbDataUrl = sourceSong.localCoverThumbDataUrl;
-        coverChanged = true;
-      }
-      if (sourceSong.localCoverLoaded && !target.localCoverLoaded) { target.localCoverLoaded = true; coverChanged = true; }
-      if (sourceSong.localCoverLightScanned && !target.localCoverLightScanned) { target.localCoverLightScanned = true; coverChanged = true; }
-      if (sourceSong.localCoverFile && !target.localCoverFile) { target.localCoverFile = sourceSong.localCoverFile; coverChanged = true; }
-      if (sourceSong.localCoverFileName && !target.localCoverFileName) { target.localCoverFileName = sourceSong.localCoverFileName; coverChanged = true; }
-      if (sourceSong.localCoverObjectUrl && !target.localCoverObjectUrl) { target.localCoverObjectUrl = sourceSong.localCoverObjectUrl; coverChanged = true; }
-      if (coverChanged) invalidateSongCoverCache(target);
-      if (sourceSong.localLyricText && shouldRetainLocalLyricText(target)) {
-        target.localLyricText = sourceSong.localLyricText;
-        target.localLyricLoaded = true;
-        target.localLyricCacheHydrated = !!sourceSong.localLyricCacheHydrated;
-        target.localIndexedLyricStatus = sourceSong.localIndexedLyricStatus || 'ready';
-        target.localLyricResidencyReleased = false;
-        retainedLyricSong = target;
-      } else if (sourceSong.localLyricLoaded && !sourceSong.localLyricText && !sourceSong.localLyricResidencyReleased) {
-        target.localLyricLoaded = true;
-      }
-      if (sourceSong.localLyricLightScanned) target.localLyricLightScanned = true;
-      if (sourceSong.localLyricFile && !target.localLyricFile) target.localLyricFile = sourceSong.localLyricFile;
-      if (sourceSong.localLyricFileName && !target.localLyricFileName) target.localLyricFileName = sourceSong.localLyricFileName;
-      if (sourceSong.localLyricTagName && !target.localLyricTagName) target.localLyricTagName = sourceSong.localLyricTagName;
-      if (sourceSong.localMetadataLoaded || partialTags) {
-        if (sourceSong.name && (sourceSong.localMetadataLoaded || partialTitle)) target.name = sourceSong.name;
-        if (sourceSong.artist && (sourceSong.localMetadataLoaded || partialArtist)) target.artist = sourceSong.artist;
-        if (sourceSong.album && (sourceSong.localMetadataLoaded || partialAlbum)) target.album = sourceSong.album;
-        if (sourceSong.albumArtist && (sourceSong.localMetadataLoaded || partialAlbumArtist)) target.albumArtist = sourceSong.albumArtist;
-        if (sourceSong.trackNumber && (sourceSong.localMetadataLoaded || partialTags.track)) target.trackNumber = sourceSong.trackNumber;
-        if (sourceSong.year && (sourceSong.localMetadataLoaded || partialTags.year)) target.year = sourceSong.year;
-        if (sourceSong.localMetadataLoaded) {
-          target.localMetadataLoaded = true;
-          target.localMetadataTagSchema = sourceSong.localMetadataTagSchema || 0;
-        }
-      }
-      if (sourceSong.duration && !target.duration) target.duration = sourceSong.duration;
-      if (sourceSong.localFormat && !target.localFormat) target.localFormat = sourceSong.localFormat;
-      if (sourceSong.localFileSize && !target.localFileSize) target.localFileSize = sourceSong.localFileSize;
-      if (sourceSong.localBitrateKbps && !target.localBitrateKbps) target.localBitrateKbps = sourceSong.localBitrateKbps;
+      var claimed = applySyncedSongAssetFields(sourceSong, target, partialTags, partialFlags);
+      if (claimed) retainedLyricSong = claimed;
+      else if (target.localLyricText) extraLyricCopies.push(target);
     }
   }
   var persisted = false;
   if (sourceSong.localLyricText && sourceSong !== retainedLyricSong) persisted = releaseLocalLyricText(sourceSong);
-  trimLocalLyricTextCopies(sourceSong.localKey, retainedLyricSong, persisted);
+  for (var copyIdx = 0; copyIdx < extraLyricCopies.length; copyIdx++) {
+    var copy = extraLyricCopies[copyIdx];
+    if (copy === retainedLyricSong || !copy.localLyricText) continue;
+    if (!persisted) persisted = releaseLocalLyricText(copy);
+    else clearLocalLyricTextResidency(copy);
+  }
+}
+/**
+ * 将源歌曲的轻量资产与元数据字段同步到同键目标对象，返回可能新获取歌词租约的持有者。
+ * @param {object} sourceSong 已更新字段的源歌曲对象。
+ * @param {object} target 同期同一 localKey 的其他视图歌曲对象。
+ * @param {object|null} partialTags 未完成扫描中确认的标签。
+ * @param {object|null} partialFlags 预先计算好的局部标签就绪标记。
+ * @returns {object|null} 若目标对象接管了歌词原文租约则返回该目标，否则返回 null。
+ */
+function applySyncedSongAssetFields(sourceSong, target, partialTags, partialFlags) {
+  var coverChanged = false;
+  if (sourceSong.localUrl && !target.localUrl) target.localUrl = sourceSong.localUrl;
+  if (sourceSong.localCoverThumbDataUrl && target.localCoverThumbDataUrl !== sourceSong.localCoverThumbDataUrl) {
+    target.localCoverThumbDataUrl = sourceSong.localCoverThumbDataUrl;
+    target.localCoverThumbUrl = '';
+    coverChanged = true;
+  } else if (sourceSong.localCoverThumbUrl && !target.localCoverThumbDataUrl && target.localCoverThumbUrl !== sourceSong.localCoverThumbUrl) {
+    target.localCoverThumbUrl = sourceSong.localCoverThumbUrl;
+    coverChanged = true;
+  }
+  if (sourceSong.localCoverLoaded && !target.localCoverLoaded) { target.localCoverLoaded = true; coverChanged = true; }
+  if (sourceSong.localCoverLightScanned && !target.localCoverLightScanned) { target.localCoverLightScanned = true; coverChanged = true; }
+  if (sourceSong.localCoverFile && !target.localCoverFile) { target.localCoverFile = sourceSong.localCoverFile; coverChanged = true; }
+  if (sourceSong.localCoverFileName && !target.localCoverFileName) { target.localCoverFileName = sourceSong.localCoverFileName; coverChanged = true; }
+  if (sourceSong.localCoverObjectUrl && !target.localCoverObjectUrl) { target.localCoverObjectUrl = sourceSong.localCoverObjectUrl; coverChanged = true; }
+  if (coverChanged) invalidateSongCoverCache(target);
+  var claimedLyric = null;
+  if (sourceSong.localLyricText && shouldRetainLocalLyricText(target)) {
+    target.localLyricText = sourceSong.localLyricText;
+    target.localLyricLoaded = true;
+    target.localLyricCacheHydrated = !!sourceSong.localLyricCacheHydrated;
+    target.localIndexedLyricStatus = sourceSong.localIndexedLyricStatus || 'ready';
+    target.localLyricResidencyReleased = false;
+    claimedLyric = target;
+  } else if (sourceSong.localLyricLoaded && !sourceSong.localLyricText && !sourceSong.localLyricResidencyReleased) {
+    target.localLyricLoaded = true;
+  }
+  if (sourceSong.localLyricLightScanned) target.localLyricLightScanned = true;
+  if (sourceSong.localLyricFile && !target.localLyricFile) target.localLyricFile = sourceSong.localLyricFile;
+  if (sourceSong.localLyricFileName && !target.localLyricFileName) target.localLyricFileName = sourceSong.localLyricFileName;
+  if (sourceSong.localLyricTagName && !target.localLyricTagName) target.localLyricTagName = sourceSong.localLyricTagName;
+  if (sourceSong.localMetadataLoaded || partialTags) {
+    if (sourceSong.name && (sourceSong.localMetadataLoaded || (partialFlags && partialFlags.title))) target.name = sourceSong.name;
+    if (sourceSong.artist && (sourceSong.localMetadataLoaded || (partialFlags && partialFlags.artist))) target.artist = sourceSong.artist;
+    if (sourceSong.album && (sourceSong.localMetadataLoaded || (partialFlags && partialFlags.album))) target.album = sourceSong.album;
+    if (sourceSong.albumArtist && (sourceSong.localMetadataLoaded || (partialFlags && partialFlags.albumArtist))) target.albumArtist = sourceSong.albumArtist;
+    if (sourceSong.trackNumber && (sourceSong.localMetadataLoaded || partialTags.track)) target.trackNumber = sourceSong.trackNumber;
+    if (sourceSong.year && (sourceSong.localMetadataLoaded || partialTags.year)) target.year = sourceSong.year;
+    if (sourceSong.localMetadataLoaded) {
+      target.localMetadataLoaded = true;
+      target.localMetadataTagSchema = sourceSong.localMetadataTagSchema || 0;
+    }
+  }
+  if (sourceSong.duration && !target.duration) target.duration = sourceSong.duration;
+  if (sourceSong.localFormat && !target.localFormat) target.localFormat = sourceSong.localFormat;
+  if (sourceSong.localFileSize && !target.localFileSize) target.localFileSize = sourceSong.localFileSize;
+  if (sourceSong.localBitrateKbps && !target.localBitrateKbps) target.localBitrateKbps = sourceSong.localBitrateKbps;
+  return claimedLyric;
+}
+/**
+ * 收集去重后的非空本地歌曲视图数组，避免同数组引用重复扫描。
+ * @returns {Array<Array<object>>} 视图数组列表。
+ */
+function uniqueLocalSongViewLists() {
+  var candidates = [localLibrarySongs, playQueue, playlist];
+  var unique = [];
+  for (var i = 0; i < candidates.length; i++) {
+    var list = candidates[i];
+    if (!Array.isArray(list) || !list.length) continue;
+    var dup = false;
+    for (var j = 0; j < unique.length; j++) {
+      if (unique[j] === list) { dup = true; break; }
+    }
+    if (!dup) unique.push(list);
+  }
+  return unique;
+}
+/**
+ * 批量同步一批已水合歌曲的轻量资产字段；单趟线性扫描同步视图，把整库水合从 O(N²) 降到 O(N)。
+ * @param {Array<object>} sourceSongs 刚完成缓存水合的本地歌曲列表。
+ * @returns {void}
+ */
+function syncLocalSongAssetFieldsBatch(sourceSongs) {
+  var batch = Array.isArray(sourceSongs) ? sourceSongs : [];
+  if (!batch.length) return;
+  if (typeof noteLocalLibraryMaintenanceAssetChange === 'function') noteLocalLibraryMaintenanceAssetChange();
+  var sourceByKey = Object.create(null);
+  var sourceCount = 0;
+  for (var i = 0; i < batch.length; i++) {
+    var src = batch[i];
+    if (!src || !src.localKey) continue;
+    if (!sourceByKey[src.localKey]) sourceCount++;
+    sourceByKey[src.localKey] = src;
+  }
+  if (!sourceCount) return;
+  var lists = uniqueLocalSongViewLists();
+  if (!lists.length) return;
+  var retainedByKey = Object.create(null);
+  var extraLyricCopies = [];
+  for (var srcIdx = 0; srcIdx < batch.length; srcIdx++) {
+    var s = batch[srcIdx];
+    if (s && s.localKey && shouldRetainLocalLyricText(s)) retainedByKey[s.localKey] = s;
+  }
+  for (var listIndex = 0; listIndex < lists.length; listIndex++) {
+    var list = lists[listIndex];
+    for (var songIndex = 0; songIndex < list.length; songIndex++) {
+      var target = list[songIndex];
+      var key = target && target.localKey;
+      if (!key) continue;
+      var sourceSong = sourceByKey[key];
+      if (!sourceSong || target === sourceSong) continue;
+      var claimed = applySyncedSongAssetFields(sourceSong, target, null, null);
+      if (claimed) retainedByKey[key] = claimed;
+      else if (target.localLyricText) extraLyricCopies.push(target);
+    }
+  }
+  var persistedByKey = Object.create(null);
+  for (var j = 0; j < batch.length; j++) {
+    var srcItem = batch[j];
+    if (!srcItem || !srcItem.localKey || !srcItem.localLyricText) continue;
+    if (srcItem !== retainedByKey[srcItem.localKey]) {
+      persistedByKey[srcItem.localKey] = !!releaseLocalLyricText(srcItem) || !!persistedByKey[srcItem.localKey];
+    }
+  }
+  for (var k = 0; k < extraLyricCopies.length; k++) {
+    var copy = extraLyricCopies[k];
+    var copyKey = copy && copy.localKey;
+    if (!copyKey || copy === retainedByKey[copyKey] || !copy.localLyricText) continue;
+    if (!persistedByKey[copyKey]) persistedByKey[copyKey] = !!releaseLocalLyricText(copy);
+    else clearLocalLyricTextResidency(copy);
+  }
 }
 async function readLocalBeatCacheForSong(song, mode) {
   if (!song || !song.localKey) return null;
@@ -16238,7 +16404,7 @@ function localIndexedAssetCanWaitForCache(song, kind) {
 function localSongNeedsAssetPreload(song) {
   if (!song || song.type !== 'local') return false;
   if (!song.localMetadataLoaded) return true;
-  if (!song.localCoverLoaded && !song.localCoverLightScanned && !song.localCoverDataUrl && !song.localCoverThumbDataUrl && (song.localCoverFile || canReadEmbeddedCover(song))) {
+  if (!song.localCoverLoaded && !song.localCoverLightScanned && !song.localCoverDataUrl && !song.localCoverThumbDataUrl && !song.localCoverThumbUrl && (song.localCoverFile || canReadEmbeddedCover(song))) {
     if (localIndexedAssetCanWaitForCache(song, 'cover')) return false;
     return true;
   }
@@ -20708,9 +20874,10 @@ function resolvedCustomCoverForSong(song, key, covers) {
   if (!song) return '';
   if (key && covers[key]) return covers[key];
   if (song.type === 'local' && song.localCoverThumbDataUrl) return song.localCoverThumbDataUrl;
+  if (song.type === 'local' && song.localCoverThumbUrl) return song.localCoverThumbUrl;
   if (song.type === 'local' && song.localCoverDataUrl) return song.localCoverDataUrl;
   if (song.customCover) return song.customCover;
-  return song.localCoverThumbDataUrl || song.localCoverDataUrl || ensureLocalCoverPreviewUrl(song) || '';
+  return song.localCoverThumbDataUrl || song.localCoverThumbUrl || song.localCoverDataUrl || ensureLocalCoverPreviewUrl(song) || '';
 }
 function getCustomCoverForSong(song) {
   if (!song) return '';
@@ -20756,6 +20923,7 @@ function songCoverSrc(song, size) {
     compactCoverSignatureValue(mappedCustom) + '|' +
     compactCoverSignatureValue(song.customCover) + '|' +
     compactCoverSignatureValue(song.localCoverThumbDataUrl) + '|' +
+    (song.localCoverThumbUrl || '') + '|' +
     compactCoverSignatureValue(song.localCoverDataUrl) + '|' +
     (song.localCoverObjectUrl || '') + '|' +
     compactCoverSignatureValue(song.cover);
@@ -20782,6 +20950,7 @@ function songCoverSignature(song) {
     compactCoverSignatureValue(mappedCustom) + '|' +
     compactCoverSignatureValue(song.customCover) + '|' +
     compactCoverSignatureValue(song.localCoverThumbDataUrl) + '|' +
+    (song.localCoverThumbUrl || '') + '|' +
     compactCoverSignatureValue(song.localCoverDataUrl) + '|' +
     (song.localCoverObjectUrl || '') + '|' +
     (song.localCoverFileName || '') + '|' +
@@ -20793,6 +20962,7 @@ function songCoverSignature(song) {
   var result = '';
   if (key && covers[key]) result = 'custom:' + key + ':' + compactCoverSignatureValue(covers[key]);
   else if (song.type === 'local' && song.localCoverThumbDataUrl) result = 'local-thumb:' + compactCoverSignatureValue(song.localCoverThumbDataUrl);
+  else if (song.type === 'local' && song.localCoverThumbUrl) result = 'local-thumb-url:' + song.localCoverThumbUrl;
   else if (song.type === 'local' && song.localCoverDataUrl) result = 'local-data:' + compactCoverSignatureValue(song.localCoverDataUrl);
   else if (song.customCover) result = 'song-custom:' + compactCoverSignatureValue(song.customCover);
   else if (song.localCoverObjectUrl) result = 'local-object:' + compactCoverSignatureValue(song.localCoverObjectUrl);
@@ -21025,6 +21195,7 @@ function finalizeListenSession(completed) {
   });
   saveListenStatsState();
   syncLocalLibraryDbPlayStat(snap, { listenMs: record.listenMs, completed: !!completed, playedAt: now });
+  if (typeof window !== 'undefined' && window.MineradioLocalInsights && typeof window.MineradioLocalInsights.notePlay === 'function') window.MineradioLocalInsights.notePlay(record);
   if (emptyHomeActive) renderHomeDiscover();
 }
 function mostPlayedSong() {
@@ -21441,6 +21612,7 @@ function clearListenHistory(scope) {
     pendingPlaybackSessionResume = { idx: -1, time: 0 };
   }
   syncLocalLibraryDbListenHistoryClear(all ? 'all' : 'recent');
+  if (all && typeof window !== 'undefined' && window.MineradioLocalInsights && typeof window.MineradioLocalInsights.clearDaily === 'function') window.MineradioLocalInsights.clearDaily();
   invalidateLocalLibraryCategoryIndex();
   // 面板有 DOM 签名早退，清空后行内容可能凑巧和旧签名一致，这里直接把签名作废逼它重画。
   playlistPanelLastDomSignature = '';
@@ -22136,7 +22308,7 @@ function localLibraryMaintenanceDuplicateGroup(group) {
  * 已经读完一轮确认没有也算 none；剩下的一律记 unknown 进「待扫描」，不进无封面名单。 */
 function localLibraryMaintenanceCoverState(song) {
   if (!song) return 'unknown';
-  if (song.localCoverThumbDataUrl || song.localCoverDataUrl) return 'has';
+  if (song.localCoverThumbDataUrl || song.localCoverThumbUrl || song.localCoverDataUrl) return 'has';
   if (song.customCover) return 'has';
   if (song.localIndexedCoverStatus === 'ready') return 'has';
   // localCoverLoaded 为真时缩略图必然已经写进去了，走到这儿就是读完确认没有。
@@ -23508,7 +23680,7 @@ function openTrackDetailModal(type, songOverride) {
       ? detailRow(uiText('音质'), detailQuality || uiText('未知')) +
         detailRow(uiText('文件路径'), song.localPath || song.localFile && song.localFile.name || uiText('未知')) +
         detailRow(uiText('歌词文件'), song.localLyricFileName || uiText('未匹配')) +
-        detailRow(uiText('封面文件'), song.localCoverFileName || ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? uiText('内嵌封面') : uiText('未匹配')))
+        detailRow(uiText('封面文件'), song.localCoverFileName || ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? uiText('内嵌封面') : (song.localCoverThumbUrl ? uiText('内嵌封面') : uiText('未匹配'))))
       : '';
     body.innerHTML =
       '<div class="detail-hero">' + coverHtml +
@@ -32338,11 +32510,39 @@ function renderLocalLibraryPlaylistPanel(opts) {
   var specialCoverSignature = specialSongs.length ? songCoverSignature(specialSongs[0]) : '';
   var rowStatMode = localLibraryCategoryStatMode(selectedCategory);
   var windows = typeof window !== 'undefined' && window.MineradioWindowedList;
+  var groupEntries = selectedCategory && selectedCategory.mode === 'group' ? localLibraryGroupEntries(selectedCategory.def.field) : null;
+  var useGroupWindow = !!(windows && groupEntries && windows.supported($pl, groupEntries.length));
   var useWindow = windows && !categoryDirectory && windows.supported($pl, songs.length);
   var domSignature = selectionSignature + '|' + specialSongs.length + '|' + specialCoverSignature + '|' + localPlaylistsDomSignature(playlists) + '|' + (useWindow ? songs.length : localLibraryPlaylistDomSignature(songs, visibleLength, rowStatMode)) + '|' + localLibraryCategoryDomSignature(selectedCategory);
-  if (domSignature === playlistPanelLastDomSignature && !useWindow) return;
+  if (domSignature === playlistPanelLastDomSignature && !useWindow && !useGroupWindow) return;
   playlistPanelLastDomSignature = domSignature;
   var html = '';
+  if (useGroupWindow) {
+    var groupDef = selectedCategory.def;
+    var headHtml = localLibraryCategoryHeadHtml(selectedCategory, songs.length);
+    var groupWindowRoot = $pl.querySelector('[data-windowed-library]');
+    if (!groupWindowRoot) {
+      $pl.innerHTML = '<div data-windowed-library-head></div><div data-windowed-library></div>';
+      groupWindowRoot = $pl.querySelector('[data-windowed-library]');
+    }
+    var groupHeader = $pl.querySelector('[data-windowed-library-head]');
+    if (groupHeader.__windowedHtml !== headHtml) { groupHeader.innerHTML = headHtml; groupHeader.__windowedHtml = headHtml; }
+    windows.render(groupWindowRoot, {
+      key: selectedKind,
+      count: groupEntries.length,
+      scroller: document.getElementById('playlist-panel'),
+      stride: 71,
+      renderRow: function(index) {
+        var entry = groupEntries[index];
+        return localLibraryCategoryCardHtml(localLibraryValueKind(groupDef.field, entry.value), groupDef.icon, entry.value,
+          entry.count + ' 首 · ' + groupDef.title,
+          entry.cover ? songCoverSrc(entry.cover, 88) : '',
+          '播放' + entry.value);
+      }
+    });
+    if (opts.animate && seq === playlistRenderSeq) animateVisiblePanelList($pl, '.pl-card', document.getElementById('playlist-panel'));
+    return;
+  }
   if (selectedRoot) {
     var specialCover = specialSongs.length ? songCoverSrc(specialSongs[0], 88) : '';
     html += '<div class="pl-card" data-special-liked-playlist="1">' +
@@ -37092,10 +37292,10 @@ function ensureLocalCoverForSong(song, opts) {
     : '';
   if (song.localCoverDataUrl) {
     // 当前完整封面可即时显示，但没有缩略图时仍需保留后续可重试状态。
-    song.localCoverLoaded = !!song.localCoverThumbDataUrl;
-    if (!song.localCoverThumbDataUrl) {
+    song.localCoverLoaded = !!(song.localCoverThumbDataUrl || song.localCoverThumbUrl);
+    if (!song.localCoverThumbDataUrl && !song.localCoverThumbUrl) {
       createLocalCoverThumbnailDataUrl(song.localCoverDataUrl, { maxSide: LOCAL_COVER_THUMB_MAX_SIZE, quality: LOCAL_COVER_THUMB_QUALITY }).then(function(thumb){
-        if (!thumb || song.localCoverThumbDataUrl) return;
+        if (!thumb || song.localCoverThumbDataUrl || song.localCoverThumbUrl) return;
         song.localCoverThumbDataUrl = thumb;
         song.localCoverLoaded = true;
         invalidateSongCoverCache(song);
@@ -37111,7 +37311,9 @@ function ensureLocalCoverForSong(song, opts) {
     maybeApplyLocalCoverForSong(song, opts);
     return Promise.resolve(true);
   }
-  if (song.localCoverLoaded && !(opts.applyCurrent && song.localCoverThumbDataUrl)) return Promise.resolve(!!song.localCoverThumbDataUrl);
+  if (song.localCoverLoaded && !(opts.applyCurrent && (song.localCoverThumbDataUrl || song.localCoverThumbUrl))) {
+    return Promise.resolve(!!(song.localCoverThumbDataUrl || song.localCoverThumbUrl));
+  }
   if (song.localCoverPromise) {
     return song.localCoverPromise.then(function(ok){
       maybeApplyLocalCoverForSong(song, opts);
@@ -37648,10 +37850,10 @@ function localLibraryIndexRecord(song) {
     lyricTagName: song.localLyricTagName || '',
     lyricFileSignature: localAssetFileSignature(song.localLyricFile),
     lyricSource: song.localLyricFile ? 'file' : (song.localLyricTagName ? 'embedded' : ''),
-    coverStatus: localLibraryAssetStatus(song.localCoverThumbDataUrl || song.localCoverDataUrl, song.localCoverLoaded, song.localCoverLightScanned),
+    coverStatus: localLibraryAssetStatus(song.localCoverThumbDataUrl || song.localCoverThumbUrl || song.localCoverDataUrl, song.localCoverLoaded, song.localCoverLightScanned),
     coverFileName: song.localCoverFileName || '',
     coverFileSignature: localAssetFileSignature(song.localCoverFile),
-    coverSource: song.localCoverFile ? 'file' : ((song.localCoverThumbDataUrl || song.localCoverDataUrl) ? 'embedded' : ''),
+    coverSource: song.localCoverFile ? 'file' : ((song.localCoverThumbDataUrl || song.localCoverThumbUrl || song.localCoverDataUrl) ? 'embedded' : ''),
     updatedAt: Date.now()
   };
 }
@@ -40979,7 +41181,7 @@ function fxPanelTargetForNode(node, current) {
   if (id === 'fx-lyric-fold') return 'lyrics';
   if (id === 'fx-mini-player-settings') return 'mini';
   if (id === 'fx-overlay-fold' || id === 'fx-stage-fold') return 'motion';
-  if (id === 'fx-playbackrate-fold' || id === 'fx-sleep-fold' || id === 'fx-outputdevice-fold' || id === 'fx-library-fold' || id === 'fx-backup-fold' || id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || node.classList.contains('fx-actions')) return 'advanced';
+  if (id === 'fx-playbackrate-fold' || id === 'fx-sleep-fold' || id === 'fx-outputdevice-fold' || id === 'fx-library-fold' || id === 'fx-backup-fold' || id === 'fx-advanced' || id === 'fx-playback-fold' || id === 'fx-gapless-fold' || id === 'fx-volume-fold' || id === 'fx-eq-fold' || id === 'fx-insights-fold' || node.classList.contains('fx-actions')) return 'advanced';
   if (node.classList.contains('lyric-color-row') || node.classList.contains('cover-color-pop') || node.classList.contains('color-lab-pop') || node.classList.contains('cover-color-loupe')) return 'appearance';
   if (inputId === 'fx-bgopacity' || inputId === 'fx-windowbgopacity' || inputId === 'fx-bgglassopacity' || inputId === 'fx-glassaberration' || /^fx-playlist/.test(inputId)) return 'appearance';
   if (inputId === 'fx-lyricglow') return 'lyrics';
@@ -47786,6 +47988,8 @@ initOutputDeviceControls();
 initShelfEngineControls();
 applyShelfEngineSelection();
 bindMainQuickControls();
+if (typeof initSilenceSkipControls === 'function') initSilenceSkipControls();
+if (typeof initLocalInsightsControls === 'function') initLocalInsightsControls();
 initPluginRuntime();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
 

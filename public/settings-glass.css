@@ -1,0 +1,173 @@
+/* Rim-only liquid glass refraction for settings panels and dialogs; player controls stay independent. */
+:root {
+  --settings-glass-body: color-mix(in srgb, var(--th-panel-bg, #22222c) 68%, transparent);
+  --settings-glass-line: var(--th-panel-border, rgba(255, 255, 255, .16));
+  --settings-glass-text: var(--th-text-strong, #f1f2f8);
+  --settings-glass-muted: var(--th-text-muted, #aeb2c2);
+  --settings-glass-row: color-mix(in srgb, var(--th-row-bg, #c6cbdc) 7%, transparent);
+  --settings-glass-hover: color-mix(in srgb, var(--th-row-hover-bg, #c6cbdc) 13%, transparent);
+  --settings-glass-accent: rgba(var(--fc-accent-rgb), .16);
+}
+
+html body :is(#fx-panel, .modal, .cover-color-pop, .color-lab-pop) {
+  isolation: isolate;
+  background: var(--settings-glass-body) !important;
+  border: 1px solid var(--settings-glass-line) !important;
+  border-radius: 28px;
+  color: var(--settings-glass-text);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(0,0,0,.28),
+    inset 0 0 0 1px rgba(255,255,255,.035), 0 24px 72px rgba(0,0,0,.32) !important;
+  backdrop-filter: blur(20px) saturate(1.35) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.35) !important;
+}
+
+html body :is(#fx-panel, .modal, .cover-color-pop, .color-lab-pop)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 9px;
+  pointer-events: none;
+  z-index: 30;
+  mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+  mask-clip: border-box, content-box;
+  mask-composite: exclude;
+  -webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+  -webkit-mask-clip: border-box, content-box;
+  -webkit-mask-composite: xor;
+  box-shadow: inset 0 0 1px 1px rgba(255,255,255,.2), inset 0 0 10px rgba(255,255,255,.055);
+}
+
+/* #fx-panel has transform + overflow:auto; fixed anchors the refraction rim to its panel viewport instead of scrolled content. */
+html body #fx-panel::after {
+  position: fixed;
+}
+
+html body :is(#fx-panel, .modal, .cover-color-pop, .color-lab-pop)[data-settings-glass-ready='true']::after {
+  backdrop-filter: var(--settings-refraction) saturate(1.15);
+  -webkit-backdrop-filter: var(--settings-refraction) saturate(1.15);
+}
+
+html body .modal-mask { background: rgba(3,4,9,.48); }
+html body #fx-panel { scrollbar-color: rgba(var(--fc-accent-rgb),.4) transparent !important; }
+html body #fx-panel .fx-head {
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--settings-glass-line);
+}
+html body #fx-panel .fx-title { color: var(--settings-glass-text); letter-spacing: .02em; }
+html body #fx-panel :is(.fx-sub, .fx-fold-title small, .fx-color-row-label small, .fx-note, .mini-player-collapse-hint) {
+  color: var(--settings-glass-muted);
+}
+html body #fx-panel :is(.fx-section-label, .fx-color-row-label, .fx-slider label, .fx-fold-title strong) {
+  color: var(--settings-glass-text);
+}
+html body #fx-panel .fx-slider output { color: var(--settings-glass-muted); }
+
+html body #fx-panel .fx-panel-tabs {
+  padding: 5px;
+  border-radius: 18px;
+  border-color: var(--settings-glass-line);
+  background: color-mix(in srgb, var(--th-panel-bg, #22222c) 88%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 6px 18px rgba(0,0,0,.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+html body #fx-panel .fx-panel-tabs button {
+  border-radius: 13px;
+  color: var(--settings-glass-muted);
+}
+html body #fx-panel .fx-panel-tabs button.active {
+  background: var(--settings-glass-accent);
+  color: var(--settings-glass-text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.2), inset 0 0 0 1px rgba(var(--fc-accent-rgb),.26);
+}
+
+html body #fx-panel :is(.fx-fold, .fx-advanced, .gesture-settings-card) {
+  border: 1px solid var(--settings-glass-line);
+  border-radius: 20px;
+  background: var(--settings-glass-row) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.075);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html body #fx-panel :is(.fx-slider, .lyric-color-row) {
+  border-radius: 16px;
+  background: var(--settings-glass-row) !important;
+  border-color: color-mix(in srgb, var(--settings-glass-line) 55%, transparent) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html body #fx-panel :is(.preset-card, .fx-mini-btn, .fx-toggle, .fx-seg button),
+html body .modal .modal-btn {
+  background: var(--settings-glass-row) !important;
+  color: var(--settings-glass-text);
+  border-color: var(--settings-glass-line) !important;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.09) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: background .18s, border-color .18s, color .18s, box-shadow .18s;
+}
+html body #fx-panel :is(.fx-mini-btn, .fx-toggle) { min-height: 32px; }
+html body #fx-panel .fx-seg {
+  border-radius: 15px;
+  padding: 4px;
+  background: var(--settings-glass-row);
+}
+html body #fx-panel :is(.preset-card, .fx-mini-btn, .fx-toggle, .fx-seg button):hover,
+html body .modal .modal-btn:hover {
+  background: var(--settings-glass-hover) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16) !important;
+}
+html body #fx-panel :is(.preset-card.active, .fx-mini-btn.active, .fx-toggle.on, .fx-seg button.active),
+html body .modal .modal-btn.primary {
+  background: var(--settings-glass-accent) !important;
+  border-color: rgba(var(--fc-accent-rgb),.45) !important;
+  color: var(--settings-glass-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 3px 12px rgba(var(--fc-accent-rgb),.06) !important;
+}
+html body .modal .modal-btn.danger {
+  background: rgba(221,62,91,.16) !important;
+  border-color: rgba(240,100,122,.46) !important;
+  color: var(--th-text-strong, #ffd6df) !important;
+}
+html body :is(#fx-panel, .modal) :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid rgba(var(--fc-accent-rgb),.9);
+  outline-offset: 3px;
+}
+html body #fx-panel :is(input:not([type=range]):not([type=color]), select),
+html body .modal :is(input, select, textarea) {
+  background-color: var(--settings-glass-row);
+  color: var(--settings-glass-text);
+  border-color: var(--settings-glass-line);
+}
+html body :is(#fx-panel, .modal) select option {
+  background: var(--th-panel-bg, #22222c);
+  color: var(--settings-glass-text);
+}
+
+@media (max-width: 720px) {
+  html body #fx-panel { width: min(444px, calc(100vw - 24px)); padding: 16px; border-radius: 24px; }
+  html body #fx-panel:is(.show,.peek) { right: 12px; }
+  html body #fx-panel .fx-slider { gap: 6px; grid-template-columns: minmax(64px,82px) minmax(0,1fr) 40px 26px; }
+  html body .modal { border-radius: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body #fx-panel, html body #fx-panel *, html body .modal, html body .modal * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  html body :is(#fx-panel, .modal, .cover-color-pop, .color-lab-pop) {
+    background: var(--th-panel-bg, #22222c) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  html body :is(#fx-panel, .modal, .cover-color-pop, .color-lab-pop)::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
