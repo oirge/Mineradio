@@ -1,0 +1,228 @@
+/* src/mineradio/local/localSettingsGlass.css
+   Embedded Folia settings shells use rim-only SVG refraction on ::after and keep
+   interior typography, sliders, switches, and scroll rows free of filter distortion. */
+
+.settings-glass-shell {
+    --settings-base: var(--local-bg, #18181b);
+    --settings-ink: var(--local-text, var(--text-primary, #f4f4f5));
+    --settings-accent: var(--local-accent, var(--settings-ink));
+    --settings-line: color-mix(in srgb, var(--settings-ink) 14%, transparent);
+    --settings-fill: color-mix(in srgb, var(--settings-ink) 4%, transparent);
+    --settings-highlight: color-mix(in srgb, var(--settings-ink) 10%, transparent);
+    isolation: isolate;
+    border: 1px solid var(--settings-line);
+    border-radius: 28px;
+    background: color-mix(in srgb, var(--settings-base) 76%, transparent);
+    backdrop-filter: blur(20px) saturate(1.35);
+    box-shadow: 0 24px 72px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 -1px 0 var(--settings-line);
+}
+
+.settings-glass-shell::before,
+.settings-glass-shell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.settings-glass-shell::before {
+    z-index: 0;
+    background: radial-gradient(ellipse at 0 0, var(--settings-highlight), transparent 54%),
+        radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--settings-accent) 5%, transparent), transparent 60%);
+}
+
+/* Keep refraction at the 9px rim outside labels, previews, and controls. */
+.settings-glass-shell::after {
+    z-index: 30;
+    padding: 9px;
+    mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+    mask-clip: border-box, content-box;
+    mask-composite: exclude;
+    -webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+    -webkit-mask-clip: border-box, content-box;
+    -webkit-mask-composite: xor;
+    box-shadow: inset 0 0 1px 1px rgba(255, 255, 255, .2), inset 0 0 10px rgba(255, 255, 255, .055);
+}
+
+.settings-glass-shell[data-settings-glass-ready='true']::after {
+    backdrop-filter: var(--settings-refraction) saturate(1.15);
+}
+
+.settings-glass-shell :focus-visible {
+    outline: 2px solid var(--settings-accent);
+    outline-offset: 3px;
+}
+
+.local-player .settings-glass-shell > :is(.local-panel-title, .local-settings-body, .local-tool-content) {
+    position: relative;
+    z-index: 1;
+}
+
+.local-player .settings-glass-shell .local-panel-title {
+    min-height: 62px;
+    padding: 16px 20px;
+    gap: 12px;
+    border-color: var(--settings-line);
+    background: var(--settings-fill);
+}
+
+.local-player .settings-glass-shell .local-panel-title strong {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+
+.local-player .settings-glass-shell .local-panel-title button {
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    border: 1px solid var(--settings-line);
+    border-radius: 50%;
+    background: var(--settings-fill);
+    box-shadow: inset 0 1px 0 var(--settings-highlight);
+}
+
+.local-player .settings-glass-shell :is(.local-settings-body, .local-tool-content) {
+    gap: 12px;
+    padding: 16px;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--settings-line) transparent;
+}
+
+.local-player .settings-glass-shell .local-settings-body > .local-setting,
+.local-player .settings-glass-shell :is(.local-tuning, fieldset) {
+    padding: 14px;
+    border: 1px solid var(--settings-line);
+    border-radius: 16px;
+    background: var(--settings-fill);
+    box-shadow: inset 0 1px 0 var(--settings-highlight);
+}
+
+.local-player .settings-glass-shell .local-tuning {
+    margin: 0;
+}
+
+.local-player .settings-glass-shell .local-tuning summary {
+    margin-bottom: 0;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.6;
+}
+
+.local-player .settings-glass-shell .local-tuning[open] summary {
+    margin-bottom: 14px;
+}
+
+.local-player .settings-glass-shell .local-tuning summary::marker {
+    color: var(--settings-accent);
+}
+
+.local-player .settings-glass-shell :is(select, input:not([type='range'], [type='checkbox'], [type='file']), textarea) {
+    min-width: 0;
+    border: 1px solid var(--settings-line);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--settings-base) 35%, transparent);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .07), 0 1px 0 var(--settings-fill);
+    transition: border-color .18s, background-color .18s;
+}
+
+.local-player .settings-glass-shell :is(select, input, textarea):focus-visible {
+    border-color: var(--settings-accent);
+}
+
+.local-player .settings-glass-shell .local-range-setting output {
+    padding: 3px 7px;
+    border-radius: 8px;
+    background: var(--settings-highlight);
+    color: var(--settings-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.local-player .settings-glass-shell :is(.local-toggle-setting, .local-playback-toggle) input[type='checkbox'] {
+    position: relative;
+    appearance: none;
+    width: 38px;
+    height: 22px;
+    margin: 0;
+    flex: 0 0 38px;
+    border: 1px solid var(--settings-line);
+    border-radius: 999px;
+    background: var(--settings-highlight);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .1);
+    cursor: pointer;
+    transition: background-color .18s, border-color .18s;
+}
+
+.local-player .settings-glass-shell :is(.local-toggle-setting, .local-playback-toggle) input[type='checkbox']::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #f7f7f9;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .2), inset 0 1px 0 #fff;
+    transition: transform .18s cubic-bezier(.2, .7, .2, 1);
+}
+
+.local-player .settings-glass-shell :is(.local-toggle-setting, .local-playback-toggle) input[type='checkbox']:checked {
+    background: color-mix(in srgb, var(--settings-accent) 78%, var(--settings-base));
+    border-color: color-mix(in srgb, var(--settings-accent) 60%, var(--settings-line));
+}
+
+.local-player .settings-glass-shell :is(.local-toggle-setting, .local-playback-toggle) input[type='checkbox']:checked::before {
+    transform: translateX(16px);
+}
+
+.local-player .settings-glass-shell :is(.local-preset-actions, .local-playback-choices, .local-audio-presets) button,
+.local-player .settings-glass-shell .local-reroll {
+    border: 1px solid var(--settings-line);
+    border-radius: 999px;
+    background: var(--settings-fill);
+    box-shadow: inset 0 1px 0 var(--settings-highlight);
+}
+
+.local-player .settings-glass-shell :is(.local-playback-choices, .local-audio-presets) button[aria-pressed='true'] {
+    border-color: color-mix(in srgb, var(--settings-accent) 40%, var(--settings-line));
+    background: color-mix(in srgb, var(--settings-accent) 12%, transparent);
+}
+
+.local-player .settings-glass-shell :is(.local-settings-body > small, .local-tool-hint, .local-playback-settings p) {
+    font-size: 11px;
+    line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+    .settings-glass-shell { border-radius: 24px; }
+    .local-player .settings-glass-shell .local-panel-title { padding: 14px 16px; }
+    .local-player .settings-glass-shell :is(.local-settings-body, .local-tool-content) { padding: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-glass-shell,
+    .local-player .settings-glass-shell input,
+    .local-player .settings-glass-shell input::before { transition: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .settings-glass-shell {
+        background: var(--settings-base);
+        backdrop-filter: none;
+    }
+    .settings-glass-shell::after {
+        backdrop-filter: none !important;
+    }
+}
+
+@media (forced-colors: active) {
+    .local-player .settings-glass-shell input[type='checkbox'] {
+        appearance: auto;
+        width: 22px;
+        flex-basis: 22px;
+    }
+    .local-player .settings-glass-shell input[type='checkbox']::before { content: none; }
+}

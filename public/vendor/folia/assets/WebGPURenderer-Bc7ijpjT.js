@@ -1,0 +1,1 @@
+export{WebGPURenderer}from"./lib-1yqAXRVd.js";

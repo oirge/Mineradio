@@ -30,7 +30,7 @@
   var CURRENT_TRACK_FIELDS = [
     'type', 'localKey', 'id', 'localFilePathAbsolute', 'localPath', 'localFile',
     'name', 'title', 'artist', 'albumArtist', 'album', 'duration', 'durationMs', 'dt',
-    'cover', 'customCoverKey', 'customCover', 'localCoverThumbDataUrl', 'localCoverDataUrl',
+    'cover', 'customCoverKey', 'customCover', 'localCoverThumbDataUrl', 'localCoverThumbUrl', 'localCoverDataUrl',
     'localCoverObjectUrl', 'localCoverFile', '_mineradioCoverCacheVersion', 'format', 'localFormat'
   ];
   var TRACK_QUERY_CACHE_LIMIT = 8;
@@ -984,13 +984,14 @@
         if (!song || song.type !== 'local' || !frame || !ready) return original.apply(this, arguments);
         var nameBefore = song.name, artistBefore = song.artist, albumBefore = song.album;
         var albumArtistBefore = song.albumArtist, durationBefore = song.duration, formatBefore = song.localFormat;
-        var thumbBefore = song.localCoverThumbDataUrl, coverBefore = song.localCoverDataUrl;
+        var thumbBefore = song.localCoverThumbDataUrl, thumbUrlBefore = song.localCoverThumbUrl, coverBefore = song.localCoverDataUrl;
         var coverFileBefore = song.localCoverFile, coverUrlBefore = song.localCoverObjectUrl;
         var changed = original.apply(this, arguments);
         if (changed) {
           var searchableChanged = nameBefore !== song.name || artistBefore !== song.artist || albumBefore !== song.album;
           if (searchableChanged || albumArtistBefore !== song.albumArtist || durationBefore !== song.duration
             || formatBefore !== song.localFormat || thumbBefore !== song.localCoverThumbDataUrl
+            || thumbUrlBefore !== song.localCoverThumbUrl
             || coverBefore !== song.localCoverDataUrl || coverFileBefore !== song.localCoverFile
             || coverUrlBefore !== song.localCoverObjectUrl) queueTrackChange(song, searchableChanged);
         }

@@ -54,7 +54,7 @@ export default function VisualSettings({ theme, onClose, assets, onLanguage, sta
         const current = settings.background as Record<string, any>;
         settings.update({ background: { ...current, [key]: { ...current[key], ...patch } } });
     };
-    return <aside style={settingsTokens(settings.daylight, theme)} className="local-settings local-glass" data-testid="local-visual-settings">
+    return <aside style={settingsTokens(settings.daylight, theme)} className="local-settings local-glass settings-glass-shell" data-liquid-glass data-testid="local-visual-settings">
         <div className="local-panel-title"><strong>{t('visuals')}</strong><div><button aria-label={t('reset')} title={t('reset')} onClick={settings.reset}><RotateCcw size={16} /></button><button aria-label={t('close')} onClick={onClose}><X size={18} /></button></div></div>
         <div className="local-settings-body">
             <label className="local-setting"><span>{t('interfaceLanguage')}</span><select aria-label={t('interfaceLanguage')} data-testid="local-ui-language" value={i18n.resolvedLanguage === 'en' ? 'en' : 'zh-CN'} onChange={event => onLanguage(event.target.value)}>

@@ -32,6 +32,8 @@ if (document.fonts && document.fonts.load) {
 <link rel="stylesheet" href="folia-host.css">
 <script src="startup-plugin-theme.js"></script>
 <link rel="stylesheet" href="upstream-visual-controls.css">
+<link rel="stylesheet" href="settings-glass.css">
+<link rel="stylesheet" href="local-insights.css">
 </head>
 <body class="local-only-mode empty-home-active">
 <div id="desktop-window-shell">
@@ -829,6 +831,29 @@ if (document.fonts && document.fonts.load) {
     </div>
   </div>
 
+  <div class="fx-fold open" id="fx-insights-fold">
+    <div class="fx-fold-head" onclick="document.getElementById('fx-insights-fold').classList.toggle('open')">
+      <span class="fx-fold-title"><strong>听歌洞察与辅助</strong><small>本地偏好与无声略过</small></span><span class="arrow">▶</span>
+    </div>
+    <div class="fx-fold-body">
+      <div class="fx-section-label">听歌洞察与混音</div>
+      <div class="lyric-color-row">
+        <span>听歌报告</span>
+        <strong>统计与热力图</strong>
+        <button type="button" class="fx-mini-btn ghost" id="listen-report-open-btn" onclick="openListenReportModal()" title="查看日／周／月／年听歌统计、活动热力图与单曲排行">打开</button>
+      </div>
+      <div class="lyric-color-row">
+        <span>今日推荐</span>
+        <strong>本地偏好混音</strong>
+        <button type="button" class="fx-mini-btn ghost" id="daily-mix-play-btn" onclick="playRecommendedDailyMix()" title="按红心喜欢、完播与近期收听权重本地生成推荐队列">生成混音</button>
+      </div>
+      <div class="fx-toggle-grid">
+        <div class="fx-toggle" id="t-silenceSkip" onclick="toggleSilenceSkipSetting()" title="边播边检测并自动跳过曲首过长无声与曲尾无声（Beta）"><span>跳过首尾静音（Beta）</span><span class="dot"></span></div>
+      </div>
+      <div class="mini-player-collapse-hint" id="silence-skip-hint">关闭中；开启后使用现有音频分析器实时跳过首尾无声片段。</div>
+    </div>
+  </div>
+
   <div class="fx-actions">
     <button class="fx-mini-btn" onclick="resetFx()">恢复默认</button>
   </div>
@@ -1373,6 +1398,29 @@ if (document.fonts && document.fonts.load) {
 
 </div>
 
+<div id="listen-report-modal" class="modal-mask" aria-hidden="true">
+  <section class="modal listen-report-dialog" role="dialog" aria-modal="true" aria-labelledby="listen-report-title">
+    <div class="lr-head">
+      <h2 id="listen-report-title">听歌报告</h2>
+      <button id="listen-report-close" type="button" class="modal-btn lr-close" onclick="closeListenReportModal()" aria-label="关闭">×</button>
+    </div>
+    <div class="lr-ranges" role="group" aria-label="时间范围">
+      <button type="button" class="modal-btn" data-report-range="day">今日</button>
+      <button type="button" class="modal-btn active" data-report-range="week">本周</button>
+      <button type="button" class="modal-btn" data-report-range="month">本月</button>
+      <button type="button" class="modal-btn" data-report-range="year">今年</button>
+    </div>
+    <div id="listen-report-kpis" class="lr-kpis"></div>
+    <div class="lr-heatmap-wrap">
+      <div class="lr-heatmap-head">
+        <span>听歌热力图</span>
+        <span id="listen-report-day-note" data-i18n-skip>点击日期格查看当日时长</span>
+      </div>
+      <div id="listen-report-heatmap" class="lr-heatmap"></div>
+    </div>
+    <div id="listen-report-top" class="lr-top" data-i18n-skip></div>
+  </section>
+</div>
 <div id="fullscreen-transition-layer" aria-hidden="true"></div>
 <div id="translation-source-modal" class="modal-mask" aria-hidden="true" data-i18n-skip>
   <section class="modal translation-source-dialog" role="dialog" aria-modal="true" aria-labelledby="translation-source-title">
@@ -1409,6 +1457,9 @@ if (document.fonts && document.fonts.load) {
 <script src="cover-thumbnail.js"></script>
 <script src="windowed-list.js"></script>
 <script src="app.js"></script>
+<script src="settings-glass.js" defer></script>
+<script src="silence-skipper.js"></script>
+<script src="local-insights.js"></script>
 <script src="wallpaper-engine.js"></script>
 <script src="folia-audio-settings.js"></script>
 <script src="video-export.js"></script>

@@ -1,1 +1,0 @@
-import{r as e}from"./rolldown-runtime-XKyaHtl9.js";import{t}from"./react-BZk3575t.js";var n=e(t(),1),r=(0,n.createContext)(null),i=()=>{let e=(0,n.useContext)(r);return(0,n.useLayoutEffect)(()=>{e?.claim()},[e]),(0,n.useCallback)(()=>e?.drawn(),[e])};(0,n.createContext)(!1);export{i as t};

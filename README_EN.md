@@ -21,11 +21,11 @@ Original project: [XxHuberrr/Mineradio](https://github.com/XxHuberrr/Mineradio)
 - Automatic lyrics encoding detection: UTF-8 / UTF-16 / GB18030 / Big5 / Shift_JIS / EUC-KR / Windows-1252.
 - Support for MP3 / FLAC / OGG / OPUS / WAV / APE / DSF embedded lyrics tags, including timestamped LRC lyrics.
 - Support for automatic lyrics translation recognition and display.
-- User-configured lyric translation endpoints, models and API keys, with connection testing; no default endpoint or key is included.
+- Built-in default lyric translation in official release packages (via private release configuration; open-source source builds bundle no credentials) plus user-configured OpenAI-compatible endpoints, models, and API keys with connection testing (custom sources take priority when enabled).
 - Support for cover images in the same directory and embedded audio covers.
 - Visual rhythm effects share the host audio engine, using cached beat maps when available and real-time spectrum estimates otherwise.
 - Mini player optimization with improved animations.
-- Folia local playback with lyric, floating Polaroid record wall and Lattice cover mosaic views, 17 lyric effects and 5 backgrounds, sharing Mineradio's library and audio engine.
+- Folia local playback with lyric, floating Polaroid record wall and Lattice cover mosaic views, 18 lyric effects and 5 backgrounds, sharing Mineradio's library and audio engine.
 
 ## Usage
 
@@ -50,23 +50,23 @@ Build artifacts are located in `dist/`.
 
 Run `npm run audit:security` to check both locked dependency trees. Unaccepted high and critical advisories block verification and release; see [Security Policy](./SECURITY.md) for the narrowly reviewed unused upstream dependency exception.
 
-### Custom Lyric Translation Source (v2.7.0)
+### Default & Custom Lyric Translation Sources (v2.7.0 / v2.7.1)
 
-Open **Custom translation source** from Mineradio's Display & Translation controls or Folia's subtitle settings. Enter an OpenAI Chat Completions compatible endpoint (a `/v1` base URL or a complete `/chat/completions` URL), model name and your own API key, then choose **Save and test**. Local services without authentication can leave the key empty. With both the source and lyric translation enabled, untranslated lyrics are sent to your configured service; existing local translations remain available.
+Open **Custom translation source** from Mineradio's Display & Translation controls or Folia's subtitle settings. Enter an OpenAI Chat Completions compatible endpoint (a `/v1` base URL or a complete `/chat/completions` URL), model name and your own API key, then choose **Save and test**. Local services without authentication can leave the key empty. With custom translation enabled, untranslated lyrics are sent to your configured service first; when custom translation is disabled or unconfigured, official release packages fall back to privately injected default configuration (never exposed in settings, saves, or backups, and absent from the public source tree), while existing local translations remain available.
 
-The app supplies no default translation endpoint, model or key. API keys are encrypted with operating-system secure storage. If secure storage is unavailable, the key stays in memory for the current session only and the settings panel explains this. Saved keys are never filled back into the input: saving an empty input keeps the existing key, while **Clear key** removes it. Translation-source settings are excluded from whole-machine backups and must be configured again on another computer. Data handling by your chosen provider follows its privacy policy; see [Privacy](./PRIVACY.md).
+Custom API keys are encrypted with operating-system secure storage. If secure storage is unavailable, the key stays in memory for the current session only and the settings panel explains this. Saved keys are never filled back into the input: saving an empty input keeps the existing key, while **Clear key** removes it. Translation-source settings are excluded from whole-machine backups and must be configured again on another computer. Data handling by your chosen provider follows its privacy policy; see [Privacy](./PRIVACY.md).
 
 ## Features
 
 ### Folia Local Playback and Visual Presets
 
-- **Lyrics / visualization video export**: use the title-bar video button to record a 30 fps landscape or portrait video, at 720p or 1080p, with song audio. Recording continues across track changes and seeks by default, or you can save the recorded segment on a transition. Choose the starting point, stop and save, or cancel. Background recording excludes your desktop.
+- **Lyrics / visualization video export**: use the title-bar video button to record a 30 / 60 / 90 / 120 fps constant-frame-rate landscape or portrait video (30 fps default), at 720p or 1080p, with song audio. Recording continues across track changes and seeks by default, or you can save the recorded segment on a transition. Choose the starting point, stop and save, or cancel. Background recording excludes your desktop.
 - **Ctrl+K command palette**: page through local song searches, browse playlists and run playback/settings actions. Right-click or hold either playback shortcut to customize it.
 - **Subtitle shortcuts**: group row layout, per-row content, translation/romanization, background and visibility; saved with visual presets.
 - **Audio effects and output**: edit Mineradio's 10-band EQ, presets, preamp, limiter, stereo width and output device directly in Folia, with live synchronization.
 
 - Switch between **Mineradio / Folia** in the title bar. Folia offers lyric playback, a floating Polaroid record wall, and a Lattice cover mosaic; music keeps playing as you change views.
-- 17 built-in lyric effects: Classic, Partita, Tempera, Lumiere, Cadenza, Fume, Claddagh, Cappella, Tilt, Diorama, Monet, Pendolo, Sonnet, Still, Hanabi, Nebbia, and Machi.
+- 18 built-in lyric effects: Classic, Partita, Tempera, Lumiere, Cadenza, Fume, Claddagh, Cappella, Tilt, Diorama, Monet, Pendolo, Sonnet, Still, Hanabi, Nebbia, Machi, and Metaphor.
 - Five local backgrounds: Common, Latent, Sora, Monet, and Nomand. Themes, typography, translations, image assets, and visual preferences can be saved.
 - Folia shares Mineradio's local library, favorites, playlists, queue, and audio engine.
 - Live previews, global resolution and antialiasing controls, per-effect quality overrides, random styles per song, and a configurable random pool.
@@ -125,6 +125,42 @@ The app supplies no default translation endpoint, model or key. API keys are enc
 ## Changelog
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
+
+### v2.7.7
+
+- Batched local library index reads/writes in SQLite transactions, switched list covers to streamed thumbnails, replaced $O(N^2)$ cross-list sync with linear batched propagation, and windowed large grouped library lists.
+- Consolidated bundled Folia Lucide icons into 8 lazy chunks, reducing static Folia assets from 2,019 files to 166.
+- Added edge-only SVG liquid-glass rim refraction across settings panels and dialogs in both Mineradio and Folia, and updated bilingual, bridge, security, and privacy documentation.
+- Added local preference-scored Daily Mix, a listening activity heatmap report modal, and optional Silence Skip (Beta) in Advanced settings.
+
+### v2.7.6
+
+- Metaphor closeup preserves upcoming lines with smoother camera motion; video export waits for the first rendered canvas frame before starting capture.
+- Word-by-word highlight within a single timed TTML span progresses smoothly across that line's timing range; Monet song titles keep full shadow in daylight mode and Lattice dims non-active cards when lights are off.
+- Updated Electron to 43.8.12 and resolved moderate dependency security advisories.
+
+### v2.7.5
+
+- Added draggable Cinema Hall (Beta) lyric scene and Metaphor lyric style, plus expanded tuning options for Monet, Pendolo, and Ring/Nebbia.
+- Added per-row subtitle selector (original, translation, or romaji) and toggleable upcoming-line preview fallback; added Lattice Radio Wall mode and live lyric-stage FPS checker.
+
+### v2.7.4
+
+- Earlier local library restoration on startup and non-blocking background cleanup of old migration temp files while preserving startup continuity and SVG glass texture.
+
+### v2.7.3
+
+- Windowed the main queue, mini queue, and large local library lists; reused DB indexes during startup recovery and incrementally persisted per-track assets.
+- Added cursor/time-index lookup for long lyrics, Worker-based thumbnail decoding/encoding, and shared 3D stage frame state updates.
+
+### v2.7.2
+
+- Fixed left-shift layout offset after closing the translation source modal via close button, Esc, or backdrop click, while keeping default translation fallback working.
+
+### v2.7.1
+
+- Fixed control-bar positioning and glass displacement sizing during scale animations; Folia subtitles adapt dynamically to bar height.
+- Restored default lyric translation via private release configuration (priority given to user-configured custom sources when enabled; private default excluded from UI, archives, and backups).
 
 ### v2.7.0
 

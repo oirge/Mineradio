@@ -184,7 +184,7 @@ const LYRIC_COLUMNS = [
 ];
 
 // 除列映射外还需原样保留的字段；其余未知字段统一进 extra JSON，避免将来加字段时静默丢数据。
-const ASSET_RESERVED_FIELDS = new Set(['id', 'localCoverThumbDataUrl', 'localCoverDataUrl']);
+const ASSET_RESERVED_FIELDS = new Set(['id', 'localCoverThumbDataUrl', 'localCoverThumbUrl', 'localCoverDataUrl', 'localCoverHasThumb', 'preserveExistingCover']);
 const LYRIC_RESERVED_FIELDS = new Set(['id', 'localLibraryPathKey', 'localLibraryFileSignature']);
 
 /**
@@ -739,14 +739,37 @@ function createLocalLibraryStore(options) {
   }
 
   /**
+   * 读取单曲缩略图 BLOB；供本地 HTTP 流端点按需吐出二进制图片，不在 IPC 里塞 base64。
+   * @param {string} songKey 歌曲缓存键。
+   * @returns {{mime:string, bytes:Buffer}|null} 缩略图数据或 null。
+   */
+  function readAssetCover(songKey) {
+    const key = toText(songKey);
+    if (!key || !ensureOpen()) return null;
+    const statement = prepare('SELECT cover_mime, cover_data FROM assets WHERE song_key=?');
+    if (!statement) return null;
+    const row = statement.get(key);
+    if (!row || !row.cover_data || !row.cover_data.length) return null;
+    const bytes = Buffer.isBuffer(row.cover_data)
+      ? row.cover_data
+      : Buffer.from(row.cover_data.buffer || row.cover_data, row.cover_data.byteOffset || 0, row.cover_data.byteLength || row.cover_data.length);
+    if (!bytes.length) return null;
+    return { mime: toText(row.cover_mime) || 'image/jpeg', bytes: bytes };
+  }
+
+  /**
    * 读取封面缓存记录。逐键走主键点查，语句只 prepare 一次，读取批量大小不会撑大语句缓存。
+   * 当 options.skipInlineCover 为真时跳过 BLOB 解码，仅返回 localCoverHasThumb 标记供流式按需读取。
    * @param {Array<string>} keys 歌曲缓存键。
+   * @param {{skipInlineCover?:boolean}=} options 读取选项。
    * @returns {object} 以缓存键为索引的记录表。
    */
-  function readAssetRecords(keys) {
+  function readAssetRecords(keys, options) {
     if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
+    const skipInlineCover = !!(options && options.skipInlineCover);
     const statement = prepare('SELECT song_key, ' + ASSET_COLUMNS.map((column) => column.name).join(', ')
-      + ', cover_mime, cover_data, extra FROM assets WHERE song_key=?');
+      + (skipInlineCover ? ', cover_bytes, extra' : ', cover_mime, cover_data, extra')
+      + ' FROM assets WHERE song_key=?');
     if (!statement) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
     const records = {};
     for (const rawKey of keys || []) {
@@ -756,7 +779,12 @@ function createLocalLibraryStore(options) {
       if (!row) continue;
       const record = { id: key };
       for (const column of ASSET_COLUMNS) record[column.field] = recordValueFromColumn(column, row[column.name]);
-      record.localCoverThumbDataUrl = joinCoverDataUrl(row.cover_mime, row.cover_data);
+      if (skipInlineCover) {
+        record.localCoverThumbDataUrl = '';
+        record.localCoverHasThumb = toInt(row.cover_bytes) > 0;
+      } else {
+        record.localCoverThumbDataUrl = joinCoverDataUrl(row.cover_mime, row.cover_data);
+      }
       record.localCoverDataUrl = '';
       mergeExtraFields(record, row.extra);
       records[key] = record;
@@ -765,27 +793,64 @@ function createLocalLibraryStore(options) {
   }
 
   /**
+   * 构造单条资产缓存 upsert 语句与绑定参数。
+   * @param {object} record 渲染层资产缓存记录。
+   * @returns {{sql:string, params:Array}|null} 无效记录返回 null。
+   */
+  function buildAssetUpsert(record) {
+    const songKey = record ? toText(record.id) : '';
+    if (!songKey) return null;
+    const rawThumb = toText(record.localCoverThumbDataUrl);
+    const preserveCover = !!record.preserveExistingCover && !rawThumb;
+    const cover = splitCoverDataUrl(rawThumb);
+    const params = [songKey];
+    for (const column of ASSET_COLUMNS) params.push(columnValue(column.kind, record[column.field]));
+    params.push(toText(cover.mime), cover.bytes && cover.bytes.length ? cover.bytes : null,
+      cover.bytes ? cover.bytes.length : 0, collectExtraFields(record, ASSET_COLUMNS, ASSET_RESERVED_FIELDS));
+    return { sql: preserveCover ? ASSET_UPSERT_PRESERVE_COVER_SQL : ASSET_UPSERT_SQL, params: params };
+  }
+
+  /**
    * 写入封面缓存记录。封面以 BLOB 落盘，不再按 base64 文本存，磁盘占用少三分之一。
    * @param {object} record 渲染层资产缓存记录。
    * @returns {object} 写入结果。
    */
   function writeAssetRecord(record) {
-    const songKey = record ? toText(record.id) : '';
-    if (!songKey) return { ok: false, error: 'LOCAL_LIBRARY_DB_KEY_REQUIRED' };
+    const entry = buildAssetUpsert(record);
+    if (!entry) return { ok: false, error: 'LOCAL_LIBRARY_DB_KEY_REQUIRED' };
     if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
-    const cover = splitCoverDataUrl(record.localCoverThumbDataUrl);
-    const params = [songKey];
-    for (const column of ASSET_COLUMNS) params.push(columnValue(column.kind, record[column.field]));
-    params.push(toText(cover.mime), cover.bytes && cover.bytes.length ? cover.bytes : null,
-      cover.bytes ? cover.bytes.length : 0, collectExtraFields(record, ASSET_COLUMNS, ASSET_RESERVED_FIELDS));
     const done = inTransaction(() => {
-      const upsert = prepare(ASSET_UPSERT_SQL);
+      const upsert = prepare(entry.sql);
       if (!upsert) return null;
-      upsert.run(...params);
+      upsert.run(...entry.params);
       return true;
     });
     if (!done) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_ASSET_FAILED' };
     return { ok: true };
+  }
+
+  /**
+   * 单事务批量写入封面与元数据资产缓存记录。
+   * @param {Array<object>} records 渲染层资产缓存记录数组。
+   * @returns {object} 批量写入统计结果。
+   */
+  function writeAssetRecords(records) {
+    const list = Array.isArray(records) ? records : [];
+    if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
+    const saved = inTransaction(() => {
+      let count = 0;
+      for (let i = 0; i < list.length; i += 1) {
+        const entry = buildAssetUpsert(list[i]);
+        if (!entry) continue;
+        const upsert = prepare(entry.sql);
+        if (!upsert) return null;
+        upsert.run(...entry.params);
+        count += 1;
+      }
+      return count;
+    });
+    if (saved == null) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_ASSET_FAILED' };
+    return { ok: true, saved: saved, total: list.length };
   }
 
   /**
@@ -900,14 +965,13 @@ function createLocalLibraryStore(options) {
   }
 
   /**
-   * 写入歌词缓存记录。
+   * 构造单条歌词缓存绑定参数（保留既有按歌译文 extra 字段）。
    * @param {object} record 渲染层歌词缓存记录。
-   * @returns {object} 写入结果。
+   * @returns {Array|null} 参数数组或 null。
    */
-  function writeLyricRecord(record) {
+  function buildLyricUpsertParams(record) {
     const songKey = record ? toText(record.id) : '';
-    if (!songKey) return { ok: false, error: 'LOCAL_LIBRARY_DB_KEY_REQUIRED' };
-    if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
+    if (!songKey) return null;
     // extra 列每次写入都整体重建：频繁的歌词快照写入不带 localLyricTranslations，
     // 若不先捞回已落盘的按歌译文，就会被这次轻量写入抹掉。缺省时补回，避免误删。
     if (record.localLyricTranslations === undefined) {
@@ -919,14 +983,51 @@ function createLocalLibraryStore(options) {
     for (const column of LYRIC_COLUMNS) params.push(columnValue(column.kind, record[column.field]));
     params.push(normalizeStorePathKey(record.localLibraryPathKey), toText(record.localLibraryFileSignature),
       Buffer.byteLength(text, 'utf8'), collectExtraFields(record, LYRIC_COLUMNS, LYRIC_RESERVED_FIELDS));
+    return params;
+  }
+
+  /**
+   * 写入歌词缓存记录。
+   * @param {object} record 渲染层歌词缓存记录。
+   * @returns {object} 写入结果。
+   */
+  function writeLyricRecord(record) {
+    if (!record || !toText(record.id)) return { ok: false, error: 'LOCAL_LIBRARY_DB_KEY_REQUIRED' };
+    if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
     const done = inTransaction(() => {
       const upsert = prepare(LYRIC_UPSERT_SQL);
       if (!upsert) return null;
+      const params = buildLyricUpsertParams(record);
+      if (!params) return null;
       upsert.run(...params);
       return true;
     });
     if (!done) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_LYRIC_FAILED' };
     return { ok: true };
+  }
+
+  /**
+   * 单事务批量写入歌词缓存记录。
+   * @param {Array<object>} records 渲染层歌词缓存记录数组。
+   * @returns {object} 批量写入统计结果。
+   */
+  function writeLyricRecords(records) {
+    const list = Array.isArray(records) ? records : [];
+    if (!ensureOpen()) return { ok: false, error: openError || 'SQLITE_UNAVAILABLE' };
+    const saved = inTransaction(() => {
+      const upsert = prepare(LYRIC_UPSERT_SQL);
+      if (!upsert) return null;
+      let count = 0;
+      for (let i = 0; i < list.length; i += 1) {
+        const params = buildLyricUpsertParams(list[i]);
+        if (!params) continue;
+        upsert.run(...params);
+        count += 1;
+      }
+      return count;
+    });
+    if (saved == null) return { ok: false, error: openError || 'LOCAL_LIBRARY_DB_LYRIC_FAILED' };
+    return { ok: true, saved: saved, total: list.length };
   }
 
   /**
@@ -1204,11 +1305,14 @@ function createLocalLibraryStore(options) {
     loadRoot: loadRoot,
     saveIndexRecords: saveIndexRecords,
     clearRoot: clearRoot,
+    readAssetCover: readAssetCover,
     readAssetRecords: readAssetRecords,
     writeAssetRecord: writeAssetRecord,
+    writeAssetRecords: writeAssetRecords,
     readLyricRecords: readLyricRecords,
     restoreLyricRecords: restoreLyricRecords,
     writeLyricRecord: writeLyricRecord,
+    writeLyricRecords: writeLyricRecords,
     bumpPlayStat: bumpPlayStat,
     restoreStats: restoreStats,
     clearPlayStats: clearPlayStats,
@@ -1220,6 +1324,12 @@ function createLocalLibraryStore(options) {
 }
 
 const ASSET_UPSERT_SQL = buildCacheUpsertSql('assets', ASSET_COLUMNS, ['cover_mime', 'cover_data', 'cover_bytes', 'extra']);
+const ASSET_UPSERT_PRESERVE_COVER_SQL = (() => {
+  const names = ['song_key'].concat(ASSET_COLUMNS.map((column) => column.name), ['cover_mime', 'cover_data', 'cover_bytes', 'extra']);
+  const assignments = ASSET_COLUMNS.map((column) => column.name + '=excluded.' + column.name).concat(['extra=excluded.extra']);
+  return 'INSERT INTO assets (' + names.join(', ') + ') VALUES (' + names.map(() => '?').join(', ') + ') '
+    + 'ON CONFLICT(song_key) DO UPDATE SET ' + assignments.join(', ');
+})();
 const LYRIC_UPSERT_SQL = buildCacheUpsertSql('lyrics', LYRIC_COLUMNS, ['path_key', 'fingerprint', 'bytes', 'extra']);
 
 /**
