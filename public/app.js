@@ -201,6 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['加快启动和进入 Folia 的速度。', 'Faster startup and entry into Folia.'],
+  ['记住 Folia 时更早载入播放器，从 Mineradio 首次切换到 Folia 的等待也更短。', 'Folia opens sooner when it was the last interface used. The first switch from Mineradio to Folia is also faster.'],
+  ['曲库面板、视觉设置和工具按需加载，主题图标随效果载入，减少 Folia 首屏要读取的资源。', 'The library panel, visual settings, tools and theme icons load on demand, so Folia reads fewer files at startup.'],
+  ['Mineradio 首页就绪后再启动主场景的 3D 渲染，减少着色器编译对启动的影响。', 'The Mineradio home page initializes before the 3D scene compiles its shaders.'],
+  ['过期安装包缓存在后台清理，本地服务可以更早响应首页。', 'The local service clears expired installer caches in the background and can respond to the home page sooner.'],
   ['修复设置面板的液态玻璃显示问题。', 'Fixed liquid-glass rendering in settings.'],
   ['修复 Folia 字幕设置面板边缘的彩线、黑边和文字拖影。主窗口设置与弹窗也将折射层移到控件后方，保留玻璃边缘的 SVG 折射效果。', 'Fixed colored seams, dark borders, and text ghosting around Folia subtitle settings. Main-window settings and dialogs now render SVG glass refraction behind the controls.'],
   ['优化大曲库读写与封面加载，新增设置液态玻璃质感、每日推荐与听歌报告。', 'Faster large-library reads and cover loading, with liquid-glass settings styling, Daily Mix, and a listening report.'],
@@ -2106,7 +2111,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.8';
+var APP_VERSION = '2.7.9';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2159,9 +2164,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '修复设置面板的液态玻璃显示问题。',
+  hero: '加快启动和进入 Folia 的速度。',
   notes: [
-    '修复 Folia 字幕设置面板边缘的彩线、黑边和文字拖影。主窗口设置与弹窗也将折射层移到控件后方，保留玻璃边缘的 SVG 折射效果。'
+    '记住 Folia 时更早载入播放器，从 Mineradio 首次切换到 Folia 的等待也更短。',
+    '曲库面板、视觉设置和工具按需加载，主题图标随效果载入，减少 Folia 首屏要读取的资源。',
+    'Mineradio 首页就绪后再启动主场景的 3D 渲染，减少着色器编译对启动的影响。',
+    '过期安装包缓存在后台清理，本地服务可以更早响应首页。'
   ]
 };
 function readSavedVolume() {
@@ -3272,16 +3280,14 @@ function maybeTrimRuntimeCaches(now) {
   if (now - runtimePerfState.lastCacheTrimAt < gap) return;
   trimRuntimeCaches(deep ? (isBackgroundReleaseMode() ? 'release-frame' : 'deep-frame') : 'active-frame', deep);
 }
-function applyRendererPowerMode() {
-  if (typeof renderer === 'undefined' || !renderer) return;
+function resizeMainSceneRenderer() {
   var deep = isDeepBackgroundMode();
   var width = deep ? 4 : Math.max(1, innerWidth);
   var height = deep ? 4 : Math.max(1, innerHeight);
   var pixelRatio = getRenderPixelRatio();
   var mode = deep ? 'sleep' : 'active';
   if (renderPowerState.mode === mode && renderPowerState.width === width && renderPowerState.height === height && Math.abs(renderPowerState.pixelRatio - pixelRatio) < 0.001) {
-    syncMainRenderLoopPowerState('renderer-power-mode-stable');
-    return;
+    return false;
   }
   renderPowerState.mode = mode;
   renderPowerState.width = width;
@@ -3294,7 +3300,11 @@ function applyRendererPowerMode() {
     if (renderer.renderLists && renderer.renderLists.dispose) renderer.renderLists.dispose();
     scheduleBackgroundCacheTrim();
   }
-  syncMainRenderLoopPowerState('renderer-power-mode');
+  return true;
+}
+function applyRendererPowerMode() {
+  if (!renderer) return;
+  syncMainRenderLoopPowerState(resizeMainSceneRenderer() ? 'renderer-power-mode' : 'renderer-power-mode-stable');
 }
 function updateDesktopRuntimeState(state) {
   state = state || {};
@@ -3524,16 +3534,24 @@ function getRenderLoadTier() {
   if (cssPixels >= 3200000 || renderPixels >= 3600000) return 1;
   return 0;
 }
-var renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' });
-renderer.setClearColor(0x000000, 0);
-renderer.setPixelRatio(getRenderPixelRatio());
-renderer.setSize(innerWidth, innerHeight);
-renderer.domElement.style.background = 'transparent';
-renderer.domElement.style.display = 'block';
-renderer.domElement.style.width = '100%';
-renderer.domElement.style.height = '100%';
-renderer.domElement.tabIndex = 0;
-document.getElementById('canvas-container').appendChild(renderer.domElement);
+var mainSceneCanvas = document.createElement('canvas');
+mainSceneCanvas.style.background = 'transparent';
+mainSceneCanvas.style.display = 'block';
+mainSceneCanvas.style.width = '100%';
+mainSceneCanvas.style.height = '100%';
+mainSceneCanvas.tabIndex = 0;
+document.getElementById('canvas-container').appendChild(mainSceneCanvas);
+var renderer = null;
+function isMainSceneHiddenByFolia() {
+  if (typeof isFoliaInterfaceActive === 'function') return isFoliaInterfaceActive();
+  return document.documentElement.classList.contains('folia-mode-preload');
+}
+function ensureMainSceneRenderer() {
+  if (renderer) return;
+  renderer = new THREE.WebGLRenderer({ canvas: mainSceneCanvas, antialias: false, alpha: true, powerPreference: 'high-performance' });
+  renderer.setClearColor(0x000000, 0);
+  resizeMainSceneRenderer();
+}
 
 // ============================================================
 //  相机系统 v7.1 — 分离 user offset / cinema offset
@@ -3816,7 +3834,7 @@ function resetFreeCameraToDefault() {
   freeCamera.locked = true;
   freeCamera.keys = {};
   if (freeCamera.velocity) freeCamera.velocity.set(0, 0, 0);
-  try { if (document.pointerLockElement === renderer.domElement) document.exitPointerLock(); } catch (e) {}
+  try { if (document.pointerLockElement === mainSceneCanvas) document.exitPointerLock(); } catch (e) {}
   updateFreeCameraHint();
   showToast('自由镜头正在平滑回正');
 }
@@ -3827,7 +3845,7 @@ function toggleFreeCamera() {
     freeCamera.locked = true;
     freeCamera.keys = {};
     if (freeCamera.velocity) freeCamera.velocity.set(0, 0, 0);
-    try { if (document.pointerLockElement === renderer.domElement) document.exitPointerLock(); } catch (e) {}
+    try { if (document.pointerLockElement === mainSceneCanvas) document.exitPointerLock(); } catch (e) {}
     saveFreeCameraState();
     updateFreeCameraHint();
     showToast('自由镜头已固定');
@@ -3840,13 +3858,13 @@ function toggleFreeCamera() {
   freeCamera.keys = {};
   freeCameraPointer.seen = false;
   if (!freeCamera.velocity) freeCamera.velocity = new THREE.Vector3();
-  try { renderer.domElement.focus && renderer.domElement.focus({ preventScroll: true }); } catch (e) {
-    try { renderer.domElement.focus && renderer.domElement.focus(); } catch (ignore) {}
+  try { mainSceneCanvas.focus({ preventScroll: true }); } catch (e) {
+    try { mainSceneCanvas.focus(); } catch (ignore) {}
   }
   saveFreeCameraState();
   updateFreeCameraHint();
   try {
-    var lockResult = renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock();
+    var lockResult = mainSceneCanvas.requestPointerLock && mainSceneCanvas.requestPointerLock();
     if (lockResult && lockResult.catch) lockResult.catch(function(){ freeCameraPointer.seen = false; });
   } catch (e) {
     freeCameraPointer.seen = false;
@@ -5596,12 +5614,12 @@ function beginParticlePointerDrag(e) {
   mouseDownAt.x = e.clientX; mouseDownAt.y = e.clientY;
   mouseDownAt.t = performance.now(); mouseDownAt.hadDrag = false;
 }
-renderer.domElement.addEventListener('mousedown', function(e){
+mainSceneCanvas.addEventListener('mousedown', function(e){
   beginParticlePointerDrag(e);
 });
 window.addEventListener('mousedown', function(e){
   if (!(fx && fx.preset === SKULL_PRESET_INDEX)) return;
-  if (orbit.rotating || e.target === renderer.domElement) return;
+  if (orbit.rotating || e.target === mainSceneCanvas) return;
   beginParticlePointerDrag(e);
 }, true);
 window.addEventListener('mousemove', function(e){
@@ -5657,13 +5675,13 @@ window.addEventListener('mouseup', function(e){
     sonicMod.pointerRipple(nx, nz, strength);
   }
 });
-renderer.domElement.addEventListener('mouseleave', function(){
+mainSceneCanvas.addEventListener('mouseleave', function(){
   particlePointerFrame.dirty = false;
   mouseWorld.set(-999, -999, 0);
   mouseActive = false;
   idleGuidePointerLeave();
 });
-renderer.domElement.addEventListener('wheel', function(e){
+mainSceneCanvas.addEventListener('wheel', function(e){
   if (isPointerOverUi(e)) return;
   e.preventDefault();
   markRenderInteraction('canvas-wheel', 900);
@@ -5683,7 +5701,7 @@ renderer.domElement.addEventListener('wheel', function(e){
 }, { passive:false });
 
 // 双击屏幕回正 — 不命中卡片时
-renderer.domElement.addEventListener('dblclick', function(e){
+mainSceneCanvas.addEventListener('dblclick', function(e){
   if (isPointerOverUi(e)) return;
   if (freeCamera && freeCamera.locked) {
     resetFreeCameraToDefault();
@@ -5926,7 +5944,7 @@ var uniforms = {
   uHandXY:     { value: new THREE.Vector2(-999, -999) },
   uHandActive: { value: 0 },
   uGestureGrip:{ value: 0 },
-  uPixel:      { value: renderer.getPixelRatio() },
+  uPixel:      { value: getRenderPixelRatio() },
   uAlpha:      { value: 0 },          // 整体粒子透明度 (启动 fade-in)
   uParticleDim:{ value: 1 },          // 覆盖层打开时只压低粒子背景, 不影响 3D 卡片
   uFloatAlpha: { value: 0 },          // 空场/浮空粒子透明度
@@ -18753,7 +18771,7 @@ function shelfClassicPushShared(s) {
 function shelfClassicDeps() {
   return {
     THREE: typeof THREE !== 'undefined' ? THREE : null,
-    scene: scene, camera: camera, renderer: renderer, uniforms: uniforms,
+    scene: scene, camera: camera, get renderer() { return renderer; }, uniforms: uniforms,
     particles: particles, pointerParallax: pointerParallax, fx: fx,
     songCoverSrc: songCoverSrc,
     queueItemKey: typeof queueItemKey === 'function' ? queueItemKey : function () { return ''; },
@@ -20414,7 +20432,7 @@ function isShelfPlaylistPlayHit(hit) {
   if (!hit || !hit.card || !hit.uv || !hit.card.item || hit.card.item.type !== 'playlist') return false;
   return hit.uv.x >= 0.49 && hit.uv.x <= 0.72 && hit.uv.y >= 0.13 && hit.uv.y <= 0.42;
 }
-renderer.domElement.addEventListener('click', function(e){
+mainSceneCanvas.addEventListener('click', function(e){
   if (!shelfManager || shelfManager.getMode() === 'off') return;
   if (isPointerOverUi(e)) return;
   if (mouseDownAt.hadDrag) { mouseDownAt.hadDrag = false; return; }
@@ -20485,7 +20503,7 @@ renderer.domElement.addEventListener('click', function(e){
   }
 });
 
-renderer.domElement.addEventListener('contextmenu', function(e){
+mainSceneCanvas.addEventListener('contextmenu', function(e){
   if (isPointerOverUi(e)) return;
   e.preventDefault();
   e.stopPropagation();
@@ -20519,7 +20537,7 @@ renderer.domElement.addEventListener('contextmenu', function(e){
 //   stage 模式: 鼠标 y > 60% 屏幕高
 //   shift + wheel: 强制滚卡片
 var wheelOverShelf = false;
-renderer.domElement.addEventListener('wheel', function(e){
+mainSceneCanvas.addEventListener('wheel', function(e){
   if (isPointerOverUi(e)) return;
   if (!shelfManager || shelfManager.getMode() === 'off') return;
   markRenderInteraction('shelf-wheel', 900);
@@ -30492,12 +30510,14 @@ function nodeTouchesSearchPill(node) {
   return false;
 }
 function scheduleGlassDisplacementMapUpdate(target) {
+  if (isMainSceneHiddenByFolia()) return;
   if (isFullscreenTransitionCovered()) {
     deferFullscreenTransitionWork('glassMap');
     return;
   }
   var key = target ? ('glass-map-' + target) : 'glass-map-all';
   scheduleNamedAnimationFrame(key, function(){
+    if (isMainSceneHiddenByFolia()) return;
     if (!target || target === 'control') updateControlGlassDisplacementMap();
     if (!target || target === 'searchBox') updateSearchBoxGlassDisplacementMap();
     if (!target || target === 'searchPill') updateSearchPillGlassDisplacementMap();
@@ -30506,9 +30526,11 @@ function scheduleGlassDisplacementMapUpdate(target) {
 function initControlGlassSurface() {
   if (supportsControlGlassSvgFilter()) document.documentElement.classList.add('control-glass-svg-ok');
   applyControlGlassChromaticOffset();
-  updateControlGlassDisplacementMap();
-  updateSearchBoxGlassDisplacementMap();
-  updateSearchPillGlassDisplacementMap();
+  if (!isMainSceneHiddenByFolia()) {
+    updateControlGlassDisplacementMap();
+    updateSearchBoxGlassDisplacementMap();
+    updateSearchPillGlassDisplacementMap();
+  }
   var bar = document.getElementById('bottom-bar');
   var searchBox = document.getElementById('search-box');
   var searchTabs = document.getElementById('search-mode-tabs');
@@ -47920,12 +47942,6 @@ bindVolumeControls();
 bindLocalPlaybackPlaylistPicker();
 initControlGlassSurface();
 bindPlayerControlAnimations();
-scheduleUiWarmTask(function(){
-  scheduleGlassDisplacementMapUpdate();
-  try {
-    if (renderer && renderer.compile && scene && camera) renderer.compile(scene, camera);
-  } catch (e) {}
-}, 900);
 applyUserCapsuleAutoHideState();
 applyHomeBtnAutoHideState();
 applyFxFabAutoHideState();
@@ -48015,6 +48031,7 @@ window.__mineradioPerf = renderPerfState;
 var mainRenderFrameId = 0;
 var mainRenderScheduleKind = '';
 var mainRenderLoopSuspended = false;
+var mainRenderStartupReady = false;
 /**
  * 取消主场景当前的调度句柄，兼容空闲定时器和交互态 RAF 两种调度方式。
  * @returns {void}
@@ -48041,7 +48058,7 @@ function mainRenderScheduleKindForState(frameFps) {
  * @returns {boolean} 是否创建了新的调度句柄。
  */
 function scheduleMainRenderFrame(frameFps) {
-  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) return false;
+  if (!mainRenderStartupReady || isMainSceneHiddenByFolia()) return false;
   if (mainRenderLoopSuspended || isDeepBackgroundMode()) return false;
   var targetFps = frameFps == null && typeof getAdaptiveRenderFps === 'function' ? getAdaptiveRenderFps() : frameFps;
   var scheduleKind = mainRenderScheduleKindForState(targetFps);
@@ -48071,7 +48088,7 @@ function suspendMainRenderLoop(reason) {
   if (reason && window.__mineradioDebugRenderPower) console.log('[RenderSuspended]', reason);
 }
 function resumeMainRenderLoop(reason) {
-  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) return false;
+  if (!mainRenderStartupReady || isMainSceneHiddenByFolia()) return false;
   if (isDeepBackgroundMode()) return false;
   var wasSuspended = mainRenderLoopSuspended;
   mainRenderLoopSuspended = false;
@@ -48090,7 +48107,7 @@ function resumeMainRenderLoop(reason) {
 }
 function syncMainRenderLoopPowerState(reason) {
   if (typeof renderPerfState === 'undefined' || !renderPerfState) return;
-  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) {
+  if (isMainSceneHiddenByFolia()) {
     suspendMainRenderLoop('folia-interface');
     return;
   }
@@ -48231,7 +48248,7 @@ function consumeAudioAnalysisDelta(now, fallbackDt) {
 function animate() {
   mainRenderFrameId = 0;
   mainRenderScheduleKind = '';
-  if (typeof isFoliaInterfaceActive === 'function' && isFoliaInterfaceActive()) {
+  if (isMainSceneHiddenByFolia()) {
     suspendMainRenderLoop('folia-interface-frame');
     return;
   }
@@ -48239,6 +48256,7 @@ function animate() {
     suspendMainRenderLoop('deep-background-frame');
     return;
   }
+  ensureMainSceneRenderer();
   var now = performance.now();
   var frameFps = getAdaptiveRenderFps(now);
   scheduleMainRenderFrame(frameFps);
@@ -48554,4 +48572,14 @@ function animate() {
 
   renderer.render(scene, camera);
 }
-resumeMainRenderLoop('startup');
+
+function startMainRenderLoopAfterHome() {
+  function start() {
+    mainRenderStartupReady = true;
+    resumeMainRenderLoop('startup');
+  }
+  if (document.hidden) start();
+  // Give the controls and startup restore a frame before WebGL links the visible shaders.
+  else requestAnimationFrame(function(){ setTimeout(start, 0); });
+}
+document.addEventListener('DOMContentLoaded', startMainRenderLoopAfterHome);

@@ -126,6 +126,13 @@ Custom API keys are encrypted with operating-system secure storage. If secure st
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.7.9
+
+- Folia opens sooner when it was the last interface used. The first switch from Mineradio to Folia is also faster.
+- The library panel, visual settings, tools and theme icons load on demand, so Folia reads fewer files at startup.
+- The Mineradio home page initializes before the 3D scene compiles its shaders.
+- The local service clears expired installer caches in the background and can respond to the home page sooner.
+
 ### v2.7.8
 
 - Fixed colored seams, dark borders, and text ghosting around the Folia subtitle settings panel. Settings and dialogs in the main window also render their SVG glass refraction behind the controls.

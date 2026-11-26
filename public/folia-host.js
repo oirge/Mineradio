@@ -452,15 +452,15 @@
     if (frame) return;
     var mount = document.getElementById('folia-interface');
     if (!mount) fail('HOST_NOT_READY', 'Folia 容器未加载');
-    frame = document.createElement('iframe');
-    frame.id = 'folia-frame'; frame.title = uiText('Folia 本地播放器'); frame.src = '/vendor/folia/index.html?host=mineradio&surface=local-player-v3';
-    frame.setAttribute('allow', 'fullscreen');
+    var earlyFrame = document.getElementById('folia-frame');
+    frame = earlyFrame || document.getElementById('folia-frame-template').content.firstElementChild.cloneNode(true);
+    frame.title = uiText('Folia 本地播放器');
     frame.addEventListener('load', function () {
       event('visibility', { active: active });
       if (!ready) updateStatus('正在连接播放器…', false);
       if (active) attachFrameActivity();
     });
-    mount.appendChild(frame);
+    if (!earlyFrame) mount.appendChild(frame);
     loadTimer = global.setTimeout(function () {
       if (!ready) { loadFailed = true; updateStatus('Folia 界面未能加载。可以切回 Mineradio 后重试。', true); }
     }, 20000);
@@ -491,6 +491,7 @@
       pausedVideos.clear();
       call('resumeMainRenderLoop', 'folia-interface-return');
       if (typeof global.scheduleMainRendererViewportRefresh === 'function') global.scheduleMainRendererViewportRefresh('folia-interface-return');
+      if (typeof global.scheduleGlassDisplacementMapUpdate === 'function') global.scheduleGlassDisplacementMapUpdate();
     }
     if (global.wallpaperBoardEffect && typeof global.wallpaperBoardEffect.setPaused === 'function') global.wallpaperBoardEffect.setPaused(!visible);
   }
@@ -689,6 +690,7 @@
       if (typeof global.setPersistentLocalStorageItem === 'function') global.setPersistentLocalStorageItem(MODE_KEY, active ? 'folia' : 'mineradio');
       else global.localStorage.setItem(MODE_KEY, active ? 'folia' : 'mineradio');
     } catch (_error) {}
+    if (active && frame) frame.removeAttribute('data-folia-host-pending');
     event('visibility', { active: active }); stopTimers();
     if (!active) trackPageIndexes = new WeakMap();
     if (active) { tick(); audioTick(); if (frame) frame.focus(); }
@@ -1084,7 +1086,20 @@
     };
   }
   try { if (global.localStorage.getItem(MODE_KEY) === 'folia') setInterface('folia'); } catch (error) { console.warn('[FoliaHostRestore]', error); }
-  finally { if (document.documentElement) document.documentElement.classList.remove('folia-mode-preload'); }
+  finally {
+    if (!active) {
+      var earlyFrame = document.getElementById('folia-frame');
+      if (earlyFrame) earlyFrame.remove();
+    }
+    var root = document.documentElement;
+    if (root && root.classList.contains('folia-mode-preload')) {
+      root.classList.remove('folia-mode-preload');
+      if (!active) {
+        if (typeof global.resumeMainRenderLoop === 'function') global.resumeMainRenderLoop('folia-startup-fallback');
+        if (typeof global.scheduleGlassDisplacementMapUpdate === 'function') global.scheduleGlassDisplacementMapUpdate();
+      }
+    }
+  }
   global.addEventListener('beforeunload', function () {
     stopTimers(); stopChromeAutoHide(); if (loadTimer) global.clearTimeout(loadTimer);
     if (trackChangeTimer) global.clearTimeout(trackChangeTimer);

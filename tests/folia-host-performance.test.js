@@ -46,7 +46,7 @@ assert.ok(assetUiRefreshStart >= 0 && assetUiRefreshEnd > assetUiRefreshStart);
 const assetUiRefreshSource = appSource.slice(assetUiRefreshStart, assetUiRefreshEnd);
 
 function node(id) {
-    return { id, children: [], classList: { toggle() {}, remove() {}, contains() { return false; } }, setAttribute() {}, addEventListener() {}, focus() {},
+    return { id, children: [], classList: { toggle() {}, remove() {}, contains() { return false; } }, setAttribute() {}, removeAttribute() {}, addEventListener() {}, focus() {},
         appendChild(child) { this.children.push(child); } };
 }
 
@@ -62,12 +62,13 @@ function harness(count = 2500, favoriteCount = 0, realMetadata = false) {
     const mount = node('folia-interface'), status = node('folia-load-status'), shell = node('desktop-window-shell');
     const elements = new Map([mount, status, shell].map(element => [element.id, element]));
     let timerId = 0, requestId = 0;
+    elements.set('folia-frame-template', { content: { firstElementChild: { cloneNode() {
+        const frame = node('folia-frame');
+        frame.contentWindow = { postMessage(message, origin) { messages.push({ ...structuredClone(message), origin }); } };
+        return frame;
+    } } } });
     const document = { hidden: false, body: node('body'), documentElement: node('html'), querySelectorAll: () => [], addEventListener() {},
-        getElementById: id => elements.get(id), createElement: () => {
-            const element = node('frame');
-            element.contentWindow = { postMessage(message, origin) { messages.push({ ...structuredClone(message), origin }); } };
-            return element;
-        } };
+        getElementById: id => elements.get(id) };
     const customPlaylist = { id: 'local-playlist:test', name: 'Custom', songRefs: tracks.slice(0, 200).map(song => ({ key: `local-key:${song.localKey}` })) };
     const context = vm.createContext({ console, document, URL, Blob, location: { origin: 'http://127.0.0.1:3000' },
         addEventListener: (name, callback) => listeners.set(name, callback),

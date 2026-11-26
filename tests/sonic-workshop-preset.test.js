@@ -724,7 +724,7 @@ test('壁纸层是独立脚本，必须先于 app.js 求值，且 app.js 只通�
 });
 
 test('主循环只给壁纸层喂数据，粒子层等专属层盖住再让位', () => {
-  const animate = readSourceBlock(app, 'function animate() {', "resumeMainRenderLoop('startup');");
+  const animate = readSourceBlock(app, 'function animate() {', 'function startMainRenderLoopAfterHome()');
   assert.match(animate, /workshopMod\.update\(dt, sonicWorkshopCtx\);/);
   // 上下文预分配, 60fps 下不能每帧新建对象。
   assert.doesNotMatch(animate, /workshopMod\.update\(dt, \{/);

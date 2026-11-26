@@ -1,1 +1,0 @@
-var e=(e,t)=>{if(typeof window>`u`)return t;let n=localStorage.getItem(e);return n===null?t:n===`true`},t=(e,t)=>{typeof window<`u`&&localStorage.setItem(e,String(t))};export{t as n,e as t};

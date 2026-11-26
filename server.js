@@ -103,7 +103,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '修复 Folia 字幕设置面板边缘的彩线、黑边和文字拖影。主窗口设置与弹窗也将折射层移到控件后方，保留玻璃边缘的 SVG 折射效果。',
+  '记住 Folia 时更早载入播放器，从 Mineradio 首次切换到 Folia 的等待也更短。',
+  '曲库面板、视觉设置和工具按需加载，主题图标随效果载入，减少 Folia 首屏要读取的资源。',
+  'Mineradio 首页就绪后再启动主场景的 3D 渲染，减少着色器编译对启动的影响。',
+  '过期安装包缓存在后台清理，本地服务可以更早响应首页。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -1499,16 +1502,16 @@ function installerCacheVersionFromName(fileName) {
  * - 校验失败被 `moveInvalidUpdateFile` 挪开的 `.invalid-*` 残留删除；
  * - 版本号解析不出来的文件原样不动，避免误删用户自己放进来的文件。
  * @param {string} currentVersion 当前运行版本，通常是 `APP_VERSION`。
- * @returns {{removed: Array<string>, removedBytes: number}} 实际删掉的文件名与释放字节数。
+ * @returns {Promise<{removed: Array<string>, removedBytes: number}>} 实际删掉的文件名与释放字节数。
  */
-function pruneUpdateDownloadCache(currentVersion) {
+async function pruneUpdateDownloadCache(currentVersion) {
   const result = { removed: [], removedBytes: 0 };
   const current = normalizeVersion(currentVersion);
   // 读不到当前版本就一个都不删，否则会把整个缓存误判成“旧版本”清空。
   if (!current) return result;
   let names;
   try {
-    names = fs.readdirSync(UPDATE_DOWNLOAD_DIR);
+    names = await fs.promises.readdir(UPDATE_DOWNLOAD_DIR);
   } catch (err) {
     if (!err || err.code !== 'ENOENT') {
       console.warn('[UpdateDownload] failed to scan installer cache:', err && err.message || err);
@@ -1517,24 +1520,26 @@ function pruneUpdateDownloadCache(currentVersion) {
   }
   for (let i = 0; i < names.length; i++) {
     const name = names[i];
-    const filePath = path.join(UPDATE_DOWNLOAD_DIR, name);
-    let stat;
-    try {
-      stat = fs.statSync(filePath);
-    } catch (_statError) {
-      continue;
-    }
-    if (!stat.isFile()) continue;
     if (!/\.invalid-\d+/.test(name)) {
       const version = installerCacheVersionFromName(name);
       if (!version || compareVersions(version, current) >= 0) continue;
     }
+    const filePath = path.join(UPDATE_DOWNLOAD_DIR, name);
+    let stat;
     try {
-      fs.unlinkSync(filePath);
+      stat = await fs.promises.stat(filePath);
+    } catch (_statError) {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    try {
+      await fs.promises.unlink(filePath);
       result.removed.push(name);
       result.removedBytes += stat.size || 0;
     } catch (err) {
-      console.warn('[UpdateDownload] failed to remove cached installer:', name, err && err.message || err);
+      if (!err || err.code !== 'ENOENT') {
+        console.warn('[UpdateDownload] failed to remove cached installer:', name, err && err.message || err);
+      }
     }
   }
   if (result.removed.length) {
@@ -2516,7 +2521,7 @@ async function startUpdateDownloadJob(info, opts) {
   const filePath = path.join(UPDATE_DOWNLOAD_DIR, fileName);
   // 新包动辄上百兆，开工前先回收旧版本安装包腾地方。待装新版本（含它的续传半包）版本号
   // 不低于当前版本，不会被清掉，下面的缓存复用和续传照常命中。
-  pruneUpdateDownloadCache(APP_VERSION);
+  await pruneUpdateDownloadCache(APP_VERSION);
   const downloadCandidates = uniqueDownloadCandidates(downloadCandidateInputs(downloadUrl, asset), {
     useMirrors: route !== 'direct' && route !== 'proxy',
   });
@@ -3372,11 +3377,9 @@ server.listen(PORT, HOST, () => {
   console.log(' 粒子音乐可视化 v2  →  http://localhost:' + PORT);
   console.log('======================================================');
   // 升级装完后新版本会从这里起来，上一版的安装包此时已经没用，顺手回收。
-  try {
-    pruneUpdateDownloadCache(APP_VERSION);
-  } catch (err) {
+  void pruneUpdateDownloadCache(APP_VERSION).catch((err) => {
     console.warn('[UpdateDownload] installer cache prune failed:', err && err.message || err);
-  }
+  });
 });
 
 server.setLocalFileAuthorizer = setLocalFileAuthorizer;

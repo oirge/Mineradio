@@ -79,7 +79,7 @@ function testShelfFrameStateCache() {
  */
 function testFrameTimestampForwarding() {
   const source = readRendererSource();
-  const animateSource = readSourceBetween(source, 'function animate() {', "\nresumeMainRenderLoop('startup');");
+  const animateSource = readSourceBetween(source, 'function animate() {', '\nfunction startMainRenderLoopAfterHome()');
   const hoverSource = readSourceBetween(source, 'function tickShelfHoverCue(', '\nfunction setShelfPinnedOpen');
   const homeWaveSource = readSourceBetween(source, 'function updateHomeAudioVisual(', '\nfunction setRange(');
   assert.match(animateSource, /var frameShelfState = refreshShelfRenderFrameState\(\);/);
@@ -111,7 +111,7 @@ function testFrameTimestampForwarding() {
 function testShelfRenderFrameSnapshotGetterReuse() {
   const source = readRendererSource();
   const snapshotSource = readSourceBetween(source, 'function refreshShelfRenderFrameState() {', '\nfunction isPortraitShelfViewport');
-  const animateSource = readSourceBetween(source, 'function animate() {', "\nresumeMainRenderLoop('startup');");
+  const animateSource = readSourceBetween(source, 'function animate() {', '\nfunction startMainRenderLoopAfterHome()');
   const managerSource = readSourceBetween(source, 'function makeShelfManager() {', '\nvar shelfManagerDefault = makeShelfManager();');
   const managerUpdateSource = readSourceBetween(managerSource, '    update: function(dt, frameNow, frameShelfState) {', '\n    onCoverChange: function()');
   const skullCameraSource = readSourceBetween(source, 'function applySkullCameraPose(dt, frameShelfState) {', '\nfunction updateSkullParticleLayer');

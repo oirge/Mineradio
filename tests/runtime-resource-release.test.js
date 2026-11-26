@@ -39,6 +39,42 @@ test('直接启动不再创建独立音效 AudioContext 或解锁监听', () => 
   assert.doesNotMatch(extractFunction('initializePlayerHome'), /AudioContext|pointerdown|keydown/);
 });
 
+test('记住 Folia 启动时不创建主场景 WebGL，切回后只在既有画布初始化一次', () => {
+  const allocations = [];
+  const sizes = [];
+  const canvas = { style: {} };
+  const mounted = [];
+  const context = vm.createContext({
+    document: {
+      documentElement: { classList: { contains: name => name === 'folia-mode-preload' } },
+      createElement: tag => { assert.equal(tag, 'canvas'); return canvas; },
+      getElementById: id => { assert.equal(id, 'canvas-container'); return { appendChild: child => mounted.push(child) }; },
+    },
+    THREE: { WebGLRenderer: function (options) {
+      allocations.push(options);
+      this.domElement = options.canvas;
+      this.setClearColor = (color, alpha) => assert.deepEqual([color, alpha], [0, 0]);
+    } },
+    resizeMainSceneRenderer: () => sizes.push('initial-viewport'),
+  });
+  const init = appSource.indexOf("var mainSceneCanvas = document.createElement('canvas');");
+  const end = appSource.indexOf('function isMainSceneHiddenByFolia()', init);
+  assert.ok(init >= 0 && end > init);
+  vm.runInContext([appSource.slice(init, end), extractFunction('isMainSceneHiddenByFolia'), extractFunction('ensureMainSceneRenderer')].join('\n'), context);
+  assert.deepEqual(mounted, [canvas]);
+  assert.equal(context.renderer, null);
+  assert.equal(allocations.length, 0);
+  context.isFoliaInterfaceActive = () => true;
+  assert.equal(context.isMainSceneHiddenByFolia(), true);
+  context.isFoliaInterfaceActive = () => false;
+  assert.equal(context.isMainSceneHiddenByFolia(), false);
+  context.ensureMainSceneRenderer();
+  context.ensureMainSceneRenderer();
+  assert.equal(context.renderer.domElement, canvas);
+  assert.equal(allocations.length, 1);
+  assert.deepEqual(sizes, ['initial-viewport']);
+});
+
 test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
   const schedulerSource = extractFunction('scheduleMainRenderFrame');
   const animationRequests = schedulerSource.match(/requestAnimationFrame\(function\(\)\s*\{/g) || [];
@@ -59,6 +95,7 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
     mainRenderFrameId: 0,
     mainRenderScheduleKind: '',
     mainRenderLoopSuspended: false,
+    mainRenderStartupReady: false,
     renderPerfState: { mode: 'vsync', lastRenderAt: 55 },
     prevTime: 0,
     RENDER_IDLE_FPS: 30,
@@ -70,12 +107,13 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
     },
     cancelAnimationFrame(id) { cancelled.push(id); },
     isDeepBackgroundMode() { return deep; },
-    isFoliaInterfaceActive() { return folia; },
+    document: { documentElement: { classList: { contains: name => name === 'folia-mode-preload' } } },
     performance: { now() { return 1234; } },
     window: {},
     clearTimeout() {}
   };
   vm.runInNewContext([
+    extractFunction('isMainSceneHiddenByFolia'),
     extractFunction('cancelMainRenderFrame'),
     extractFunction('mainRenderScheduleKindForState'),
     extractFunction('scheduleMainRenderFrame'),
@@ -84,6 +122,13 @@ test('深后台取消主 3D RAF 并由恢复入口单次重启', () => {
     extractFunction('syncMainRenderLoopPowerState')
   ].join('\n'), context);
 
+  assert.equal(context.resumeMainRenderLoop('test-start'), false);
+  assert.equal(requested.length, 0);
+  context.isFoliaInterfaceActive = () => folia;
+  assert.equal(context.resumeMainRenderLoop('test-before-home'), false);
+  assert.equal(context.scheduleMainRenderFrame(), false);
+  assert.equal(requested.length, 0, '首页就绪前不能排队编译 GPU 着色器');
+  context.mainRenderStartupReady = true;
   assert.equal(context.resumeMainRenderLoop('test-start'), true);
   assert.equal(requested.length, 1);
   assert.equal(context.resumeMainRenderLoop('duplicate'), false);

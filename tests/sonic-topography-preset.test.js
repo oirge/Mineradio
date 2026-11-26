@@ -477,7 +477,7 @@ test('没有场景 / 不在这个预设时 update 不建任何东西', () => {
   assert.equal(other.mod.INDEX, 7);
 });
 test('主循环把地形层挂在粒子旋转之后，音频帧按本项目的量纲折算', () => {
-  const animate = readSourceBlock(app, 'function animate() {', "resumeMainRenderLoop('startup');");
+  const animate = readSourceBlock(app, 'function animate() {', 'function startMainRenderLoopAfterHome()');
   // 必须排在 particles.rotation 同步之后, 否则地形要慢一帧才跟上手势。
   assert.ok(animate.indexOf('particles.rotation.x +=') < animate.indexOf('sonicMod.update(dt, sonicTopographyCtx)'));
   assert.match(animate, /sonicTopographyCtx\.visualRotation = particles \? particles\.rotation : null;/);
@@ -496,7 +496,7 @@ test('主循环把地形层挂在粒子旋转之后，音频帧按本项目的�
 });
 
 test('单击画布转成地形涟漪，进出预设都重建地形层', () => {
-  const mouseup = readSourceBlock(app, "window.addEventListener('mouseup', function(e){", "renderer.domElement.addEventListener('mouseleave'");
+  const mouseup = readSourceBlock(app, "window.addEventListener('mouseup', function(e){", "mainSceneCanvas.addEventListener('mouseleave'");
   assert.match(mouseup, /sonicMod\.isActive\(fx\) && e && !mouseDownAt\.hadDrag && !isPointerOverUi\(e\)/, '拖动和点 UI 都不该打涟漪');
   assert.match(mouseup, /var strength = Math\.min\(0\.25 \+ \(pressMs \/ 1000\) \* 2\.6, 3\.0\);/);
   assert.match(mouseup, /var nx = \(e\.clientX \/ Math\.max\(1, innerWidth\) - 0\.5\) \* 34;/);

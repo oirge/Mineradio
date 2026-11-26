@@ -42,7 +42,7 @@ test('安魂点云没盖住前不算 opaque，主粒子不能先让位', () => {
 
 test('主循环等安魂点云盖住再收粒子，资产加载失败也不会空窗', () => {
   const source = readRendererSource();
-  const animate = readSourceBetween(source, 'function animate() {', "\nresumeMainRenderLoop('startup');");
+  const animate = readSourceBetween(source, 'function animate() {', '\nfunction startMainRenderLoopAfterHome()');
   assert.match(animate, /var skullLayerOpaque = isSkullParticleLayerOpaque\(\);/);
   assert.match(
     animate,

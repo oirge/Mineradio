@@ -48,7 +48,7 @@ function readRenderPerfSource() {
 function readAnimateSource() {
   const source = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
   const start = source.indexOf('function animate() {');
-  const end = source.indexOf("\nresumeMainRenderLoop('startup');", start);
+  const end = source.indexOf('\nfunction startMainRenderLoopAfterHome()', start);
   assert.ok(start >= 0 && end > start, '未找到主循环实现');
   return source.slice(start, end);
 }
@@ -58,6 +58,7 @@ test('主渲染器空闲态使用定时器，交互态切回 RAF', () => {
   const rafs = [];
   const context = {
     RENDER_IDLE_FPS: 30,
+    isMainSceneHiddenByFolia: () => false,
     isDeepBackgroundMode: () => false,
     getAdaptiveRenderFps: () => 30,
     setTimeout: (fn, delay) => {
@@ -73,6 +74,7 @@ test('主渲染器空闲态使用定时器，交互态切回 RAF', () => {
     animate: () => {}
   };
   vm.runInNewContext(`${readMainSchedulerSource()}\nthis.schedule = scheduleMainRenderFrame;`, context);
+  context.mainRenderStartupReady = true;
 
   assert.equal(context.schedule(), true);
   assert.equal(context.mainRenderScheduleKind, 'idle-timeout');

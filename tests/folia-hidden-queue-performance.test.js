@@ -56,9 +56,10 @@ function harness({ count = 128, panelClass = 'show', mini = false, realMini = fa
     escHtml: value => String(value || ''), heartIconSvg: () => '<heart>', playlistPlusIconSvg: () => '<plus>',
     animateVisiblePanelList: noop, scheduleNamedAnimationFrame: (key, callback) => frames.set(key, callback),
     requestAnimationFrame: callback => frames.set('mini-scroll', callback), smoothScrollToItem: noop,
-    mainRenderLoopSuspended: true, mainRenderFrameId: 0, prevTime: 0, renderPerfState: { lastRenderAt: 0 },
+    mainRenderStartupReady: true, mainRenderLoopSuspended: true, mainRenderFrameId: 0, prevTime: 0, renderPerfState: { lastRenderAt: 0 },
     performance: { now: () => 1000 }, window: {},
-    isFoliaInterfaceActive: () => context.folia, isDeepBackgroundMode: () => context.deep,
+    isFoliaInterfaceActive: () => context.folia, isMainSceneHiddenByFolia: () => context.folia,
+    isDeepBackgroundMode: () => context.deep,
     isPlaylistListTab: () => ['library', 'playlists'].includes(context.queueViewTab),
     scheduleMainRenderFrame: () => { const scheduled = !context.mainRenderFrameId; context.mainRenderFrameId = 1; return scheduled; },
   });
