@@ -1,3 +1,14 @@
+# v2.7.9 启动与 Folia 首屏优化
+
+- 记住 Folia 时提前加载播放器，曲库面板、设置、工具和主题图标按需加载。Mineradio 首页初始化后再启用主场景 3D，更新缓存清理移到后台。
+- 同机无头 Chromium 使用空曲库逐轮交替测试，每个版本 10 次。Folia 直启到首页可交互的中位数从上一轮的 912.1 ms 降至 772.6 ms，首屏解码后 JavaScript 从 2.21 MB 降至 1.53 MB。Windows 安装版的双击到出声耗时未实测。详见 [启动速度优化](docs/STARTUP_PERFORMANCE.md)。
+- 本地 1774 项 Node 回归、133 项 Folia 单测、Folia 类型和产物校验通过。最终版本的无头浏览器验收通过启动 10 项、玻璃 7 项、播放 6 项、工具 7 项和布局 9 组样本。云端原生布局和实际视频导出通过。[原生布局](https://github.com/oirge/Mineradio/actions/runs/45789558292) · [视频导出](https://github.com/oirge/Mineradio/actions/runs/45789439530)
+- PR Verify 通过云端启动专项。玻璃专项等候字幕设置的关闭按钮稳定时超时，同一提交的分支 Verify 和本地都通过该专项。发布时分支及合并提交的完整 Verify 仍在运行。[PR Verify](https://github.com/oirge/Mineradio/actions/runs/45789439431) · [分支 Verify](https://github.com/oirge/Mineradio/actions/runs/45789425576) · [合并后 Verify](https://github.com/oirge/Mineradio/actions/runs/45790638750)
+- 合并提交 `90ae8186e0762ac615f8ce167ba874d969740531` 的文件树与验收提交 `2b3db753` 一致。Annotated tag `v2.7.9` 的对象为 `5334afdef91d64b9b3b96e9709184d9b02e027eb`。[PR #195](https://github.com/oirge/Mineradio/pull/195)
+- Windows 构建通过依赖审计、Folia 重建和包内默认翻译配置校验。v2.7.9 于北京时间 2026-11-26 17:23:16 公开并设为最新版，Release ID 为 `459186659`。[Windows Build and Release](https://github.com/oirge/Mineradio/actions/runs/45790772201) · [v2.7.9](https://github.com/oirge/Mineradio/releases/tag/v2.7.9)
+- 草稿四项文件完整回下载，文件大小、SHA256 及安装包 SHA-512 与发布元数据和清单一致。Windows 安装包大小为 `122563511` B，FileVersion 和 ProductVersion 均为 `2.7.9`，SHA256 为 `8c1baa2f2594f5230cd0b300597675521f83a117445ff092a7a13e0da52de00d`。
+- 匿名 Latest API 确认同一版本及四项资产，公开 `latest.yml` 和 SHA256 清单均与草稿逐字节一致。用 v2.7.8 标签的源码在隔离服务请求真实更新接口，成功识别新版、正确的安装包和四条中文更新说明。核验记录位于 `verification/release-v2.7.9/`。
+
 # v2.7.8 液态玻璃修复
 
 - 修复 Folia 字幕设置面板边缘的彩线、黑边和文字拖影。主窗口设置与弹窗将折射层移到控件后方，保留 SVG 边缘折射。
