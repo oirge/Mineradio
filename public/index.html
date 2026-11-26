@@ -80,7 +80,17 @@ if (document.fonts && document.fonts.load) {
   <button id="fullscreen-exit-btn" class="desktop-mode-btn" type="button" onclick="toggleFullscreen()" title="退出全屏" aria-label="退出全屏">退出全屏</button>
 </div>
 <canvas id="wallpaper-board" aria-hidden="true"></canvas>
-<div id="folia-interface" hidden aria-hidden="true"><div id="folia-load-status" role="status">正在加载 Folia…</div></div>
+<div id="folia-interface" hidden aria-hidden="true">
+  <div id="folia-load-status" role="status">正在加载 Folia…</div>
+  <template id="folia-frame-template"><iframe id="folia-frame" title="Folia 本地播放器" src="/vendor/folia/index.html?host=mineradio&amp;surface=local-player-v3" allow="fullscreen"></iframe></template>
+</div>
+<script>
+if (document.documentElement.classList.contains('folia-mode-preload')) {
+  const frame = document.getElementById('folia-frame-template').content.firstElementChild.cloneNode(true);
+  frame.setAttribute('data-folia-host-pending', '');
+  document.getElementById('folia-interface').appendChild(frame);
+}
+</script>
 <div id="custom-bg"><video id="custom-bg-video" muted loop playsinline preload="metadata"></video></div>
 <div id="wallpaper-engine-layer" aria-hidden="true">
   <img id="wallpaper-engine-image" alt="">

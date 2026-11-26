@@ -29,6 +29,26 @@ export default defineConfig({
     plugins: [
         nebbiaStrokesPlugin(),
         {
+            name: 'mineradio-local-translations',
+            enforce: 'pre',
+            transform(source, id) {
+                if (!/\/src\/i18n\/locales\/(?:en|zh-CN)\.ts$/.test(id.replaceAll('\\', '/'))) return;
+                const literal = /^\s*export default\s*(\{[\s\S]*\})\s*;?\s*$/.exec(source)?.[1];
+                if (!literal) return;
+                try {
+                    // The embedded player uses its own commands and never opens the upstream release history or Ponder.
+                    const resources = JSON.parse(literal);
+                    delete resources.commandPalette;
+                    delete resources.releaseNotes;
+                    delete resources.ponder;
+                    return { code: 'export default ' + JSON.stringify(resources) + ';', map: null };
+                } catch {
+                    // A future upstream locale may stop being a JSON literal.
+                    return;
+                }
+            },
+        },
+        {
             name: 'mineradio-visual-asset-cache',
             enforce: 'pre',
             resolveId(source, importer) {
@@ -82,6 +102,7 @@ export default defineConfig({
         },
     ],
     resolve: { alias: [
+        { find: /^(?:.*\/)?i18n\/config(?:\.ts)?$/, replacement: path.join(root, 'src/mineradio/local-i18n.ts') },
         { find: /^(?:.*\/)?services\/(?:beatFx\/beatFxLive|analysis\/(?:drumHits|vocalEnvelope))(?:\.ts)?$/, replacement: path.join(root, 'src/mineradio/local/localAnalysisBoundary.ts') },
         { find: /^(?:.*\/)?stores\/useLatticeSettingsStore(?:\.ts)?$/, replacement: path.join(root, 'src/mineradio/local/useLocalLatticeSettingsStore.ts') },
         { find: /^(?:.*\/)?services\/ponder\/loopShuffleHint(?:\.ts)?$/, replacement: path.join(root, 'src/mineradio/local/localPlayerHints.ts') },
@@ -111,25 +132,37 @@ export default defineConfig({
             // Vite scan thousands of existing links for each dependency (quadratic main-thread work).
             // Preload the requested JS chunk; native imports load its dependencies and Vite retains CSS.
             resolveDependencies(filename, dependencies, context) {
-                return context.hostType === 'js' ? dependencies.filter(dependency => dependency === filename) : dependencies;
+                if (context.hostType !== 'js') return dependencies;
+                if (path.basename(filename).startsWith('local-mount-')) return dependencies.slice(0, 10);
+                return dependencies.filter(dependency => dependency === filename);
             },
         },
         rolldownOptions: {
             input: { main: path.join(root, 'index.html') },
             output: {
-                manualChunks(id) {
-                    const normalized = id.replaceAll('\\', '/');
-                    if (normalized.includes('/node_modules/three/')) return 'three';
-                    const iconMatch = normalized.match(/\/node_modules\/lucide-react\/dist\/esm\/icons\/([^/.]+)\.(?:m?js)$/);
-                    if (iconMatch) {
-                        const name = iconMatch[1];
-                        let hash = 0;
-                        for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-                        return `lucide-icons-${hash % 8}`;
-                    }
-                    return undefined;
+                codeSplitting: {
+                    groups: [
+                        { name: 'three', test: /node_modules[\\/]three[\\/]/ },
+                        {
+                            name: 'lucide-runtime',
+                            test: /node_modules[\\/]lucide-react[\\/]dist[\\/]esm[\\/]createLucideIcon\.m?js$/,
+                            // Claim the factory and its React dependencies before the icon groups.
+                            priority: 1,
+                        },
+                        {
+                            name: 'lucide-icons',
+                            test: /node_modules[\\/]lucide-react[\\/]dist[\\/]esm[\\/]icons[\\/][^\\/]+\.(?:m?js)$/,
+                            // Separate the player chrome from optional theme icons while bundling small shards.
+                            entriesAware: true,
+                            entriesAwareMergeThreshold: 24 * 1024,
+                        },
+                    ],
                 },
-                chunkFileNames: 'assets/[name]-[hash].js',
+                chunkFileNames({ name }) {
+                    // Each dynamic icon loader embeds the chunk path, so keep these paths short.
+                    if (name.startsWith('lucide-icons~')) return 'assets/lucide-icons-[hash].js';
+                    return 'assets/[name]-[hash].js';
+                },
             },
         },
     },

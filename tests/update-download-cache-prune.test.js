@@ -77,9 +77,9 @@ function remaining(dir) {
 
 /**
  * 验证比当前版本旧的安装包全部清掉，当前版本本体保留，并且释放字节数如实统计。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testRemovesSupersededInstallers() {
+async function testRemovesSupersededInstallers() {
   const dir = makeTempDownloadDir();
   try {
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.6-Setup.exe', 1024);
@@ -88,7 +88,7 @@ function testRemovesSupersededInstallers() {
     writeFakeInstaller(dir, 'Mineradio-1.7.23-Setup.exe', 512);
 
     const { prune, logs } = loadPruneUpdateDownloadCache(dir);
-    const result = prune('2.4.8');
+    const result = await prune('2.4.8');
 
     assert.deepEqual(remaining(dir), ['Mineradio-oirge-2.4.8-Setup.exe'], '只应留下当前版本安装包');
     assert.equal(result.removed.length, 3, '三个旧版本安装包都应被删除');
@@ -101,9 +101,9 @@ function testRemovesSupersededInstallers() {
 
 /**
  * 验证比当前版本更新的安装包和它的续传半包绝不删除——那是用户还没装的更新。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testKeepsPendingNewerInstallers() {
+async function testKeepsPendingNewerInstallers() {
   const dir = makeTempDownloadDir();
   try {
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.7-Setup.exe', 1024);
@@ -112,7 +112,7 @@ function testKeepsPendingNewerInstallers() {
     writeFakeInstaller(dir, 'Mineradio-oirge-2.5.0-Setup.exe.download', 256);
 
     const { prune } = loadPruneUpdateDownloadCache(dir);
-    const result = prune('2.4.8');
+    const result = await prune('2.4.8');
 
     assert.deepEqual(remaining(dir), [
       'Mineradio-oirge-2.4.8-Setup.exe',
@@ -128,16 +128,16 @@ function testKeepsPendingNewerInstallers() {
 
 /**
  * 验证旧版本遗留的续传半包一起清掉——它已经续不成任何有效更新。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testRemovesSupersededPartialDownload() {
+async function testRemovesSupersededPartialDownload() {
   const dir = makeTempDownloadDir();
   try {
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.7-Setup.exe.download', 2048);
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.8-Setup.exe', 1024);
 
     const { prune } = loadPruneUpdateDownloadCache(dir);
-    const result = prune('2.4.8');
+    const result = await prune('2.4.8');
 
     assert.deepEqual(remaining(dir), ['Mineradio-oirge-2.4.8-Setup.exe'], '旧版本半包应被删除');
     assert.equal(result.removedBytes, 2048, '半包字节数应计入释放量');
@@ -148,16 +148,16 @@ function testRemovesSupersededPartialDownload() {
 
 /**
  * 验证校验失败被挪开的 `.invalid-*` 残留一律清掉，即使它的版本号不比当前版本旧。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testRemovesInvalidLeftovers() {
+async function testRemovesInvalidLeftovers() {
   const dir = makeTempDownloadDir();
   try {
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.9-Setup.invalid-1789957646846.exe', 4096);
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.8-Setup.exe', 1024);
 
     const { prune } = loadPruneUpdateDownloadCache(dir);
-    const result = prune('2.4.8');
+    const result = await prune('2.4.8');
 
     assert.deepEqual(remaining(dir), ['Mineradio-oirge-2.4.8-Setup.exe'], '损坏残留应被删除');
     assert.equal(result.removed.length, 1, '只应删掉那一个 .invalid 残留');
@@ -168,16 +168,16 @@ function testRemovesInvalidLeftovers() {
 
 /**
  * 验证版本号认不出来的文件原样不动，避免误删用户自己放进来的东西。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testKeepsUnparseableNames() {
+async function testKeepsUnparseableNames() {
   const dir = makeTempDownloadDir();
   try {
     writeFakeInstaller(dir, 'README.txt', 32);
     writeFakeInstaller(dir, 'Mineradio-Setup.exe', 64);
 
     const { prune, warnings, logs } = loadPruneUpdateDownloadCache(dir);
-    const result = prune('2.4.8');
+    const result = await prune('2.4.8');
 
     assert.deepEqual(remaining(dir), ['Mineradio-Setup.exe', 'README.txt'], '认不出版本的文件应原样保留');
     assert.equal(result.removed.length, 0, '不应删除任何文件');
@@ -190,15 +190,15 @@ function testKeepsUnparseableNames() {
 
 /**
  * 验证名字像旧版本安装包的子目录不会被当成文件删除。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testSkipsDirectories() {
+async function testSkipsDirectories() {
   const dir = makeTempDownloadDir();
   try {
     fs.mkdirSync(path.join(dir, 'Mineradio-oirge-2.0.0-Setup.exe'), { recursive: true });
 
     const { prune, warnings } = loadPruneUpdateDownloadCache(dir);
-    const result = prune('2.4.8');
+    const result = await prune('2.4.8');
 
     assert.deepEqual(remaining(dir), ['Mineradio-oirge-2.0.0-Setup.exe'], '子目录不应被删除');
     assert.equal(result.removed.length, 0, '子目录不计入删除');
@@ -210,14 +210,13 @@ function testSkipsDirectories() {
 
 /**
  * 验证下载目录尚未创建时静默返回，不抛异常也不报警。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testMissingDirIsNoop() {
+async function testMissingDirIsNoop() {
   const root = makeTempDownloadDir();
   try {
     const { prune, warnings } = loadPruneUpdateDownloadCache(path.join(root, 'downloads'));
-    let result;
-    assert.doesNotThrow(() => { result = prune('2.4.8'); });
+    const result = await prune('2.4.8');
     assert.equal(result.removed.length, 0, '目录不存在时无删除');
     assert.equal(warnings.length, 0, '目录不存在属正常首启，不应报警');
   } finally {
@@ -227,17 +226,17 @@ function testMissingDirIsNoop() {
 
 /**
  * 验证当前版本读不到时一个都不删，杜绝把整个缓存误判成旧版本清空。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testGuardsAgainstMissingCurrentVersion() {
+async function testGuardsAgainstMissingCurrentVersion() {
   const dir = makeTempDownloadDir();
   try {
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.7-Setup.exe', 1024);
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.8-Setup.exe', 1024);
 
     const { prune } = loadPruneUpdateDownloadCache(dir);
-    const blank = prune('');
-    const nullish = prune(null);
+    const blank = await prune('');
+    const nullish = await prune(null);
 
     assert.equal(remaining(dir).length, 2, '缺少当前版本时不得删除任何安装包');
     assert.equal(blank.removed.length, 0, '空版本号应原样返回');
@@ -249,21 +248,21 @@ function testGuardsAgainstMissingCurrentVersion() {
 
 /**
  * 验证单个文件删除失败只记录警告、不向上抛出，也不虚报释放字节数。
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function testDeleteFailureIsSwallowed() {
+async function testDeleteFailureIsSwallowed() {
   const dir = makeTempDownloadDir();
   try {
     writeFakeInstaller(dir, 'Mineradio-oirge-2.4.7-Setup.exe', 1024);
-    const fsOverride = Object.assign({}, fs, {
-      unlinkSync: () => {
-        throw new Error('EBUSY: resource busy');
+    const fsOverride = {
+      promises: {
+        ...fs.promises,
+        unlink: async () => { throw new Error('EBUSY: resource busy'); },
       },
-    });
+    };
 
     const { prune, warnings } = loadPruneUpdateDownloadCache(dir, fsOverride);
-    let result;
-    assert.doesNotThrow(() => { result = prune('2.4.8'); });
+    const result = await prune('2.4.8');
 
     assert.equal(warnings.length, 1, '删除失败应记录一次警告');
     assert.equal(result.removed.length, 0, '删除失败不得计入已删除列表');

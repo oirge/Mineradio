@@ -20,7 +20,7 @@ PROBE = r"""
 ;(() => {
   const probe = window.__startupProbe = {
     attachedAt: performance.now(), restores: [], scheduleRequests: [], domContentAt: null,
-    firstFrameAfterDomAt: null, paint: []
+    firstFrameAfterDomAt: null, rendererAtDomContent: null, paint: []
   };
   const schedule = scheduleSavedLocalMusicFolderRestore;
   scheduleSavedLocalMusicFolderRestore = function (...args) {
@@ -45,6 +45,7 @@ PROBE = r"""
   };
   document.addEventListener('DOMContentLoaded', () => {
     probe.domContentAt = performance.now();
+    probe.rendererAtDomContent = !!renderer;
     requestAnimationFrame(() => { probe.firstFrameAfterDomAt = performance.now(); });
   });
   if (typeof PerformanceObserver === 'function') {
@@ -72,6 +73,14 @@ INITIALIZE = r"""
     });
   }
   if (window !== window.top) return;
+  window.__earlyFoliaRequests = [];
+  window.addEventListener('message', event => {
+    const frame = document.getElementById('folia-frame');
+    if (frame && event.source === frame.contentWindow && event.origin === location.origin &&
+        event.data?.channel === 'mineradio-folia' && event.data.type === 'request' && !window.MineradioFoliaHost) {
+      window.__earlyFoliaRequests.push(event.data.method);
+    }
+  });
   localStorage.setItem('mineradio-visual-guide-seen-v2', '1');
   localStorage.setItem('mineradio-ui-language-v1', 'zh-CN');
 })();
@@ -95,6 +104,7 @@ def read_startup(page):
         domContentLoadedEventEnd: entry.domContentLoadedEventEnd, loadEventEnd: entry.loadEventEnd
       })),
       interface: MineradioFoliaHost.getState().interface,
+      mainRendererAllocated: !!renderer, earlyFoliaRequests: window.__earlyFoliaRequests,
       bodyClasses: document.body.className, restoreStarted: localLibraryRestoreStarted,
       restoreScheduled: localLibraryRestoreScheduled
     })""")
@@ -158,6 +168,8 @@ def main():
                 page = context.new_page()
                 page.set_default_timeout(30000)
                 page.on('pageerror', lambda error, current=mode: report['errors'].append({'mode': current, 'message': str(error)}))
+                folia_requests = []
+                page.on('request', lambda request: folia_requests.append(request.url) if '/vendor/folia/' in request.url else None)
                 page.route('**/api/lyric-translate', lambda route: route.fulfill(status=200, json={'translations': []}))
 
                 def instrument_app(route):
@@ -194,6 +206,7 @@ def main():
                     assert restored_at >= max(marks['dom-content-loaded'], marks['home-revealed']) - 1, startup
                     assert restored_at >= probe['domContentAt'], startup
                     assert len(probe['scheduleRequests']) == 1, startup
+                    assert probe['rendererAtDomContent'] is False, startup
                     request = probe['scheduleRequests'][0]
                     assert request['delay'] is None, startup
                     frame_at = probe['firstFrameAfterDomAt']
@@ -209,11 +222,17 @@ def main():
                         expect(page.locator('#empty-home')).to_be_visible()
                         expect(page.locator('#empty-home .home-local-action').first).to_be_visible()
                         assert page.locator('#folia-frame').count() == 0, 'Default startup must keep Folia lazy'
+                        assert not folia_requests, folia_requests
                         assert not page.evaluate('isFoliaInterfaceActive()')
                     else:
-                        folia_ready(page)
+                        child = folia_ready(page)
                         expect(page.locator('#folia-interface')).to_be_visible()
                         assert page.evaluate('isFoliaInterfaceActive()')
+                        frame_start = child.evaluate('performance.timeOrigin') - page.evaluate('performance.timeOrigin')
+                        scenario['foliaFrameStartMs'] = frame_start
+                        assert 0 <= frame_start <= probe['attachedAt'], (frame_start, startup)
+                        assert page.evaluate('window.__earlyFoliaRequests.length === 0')
+                        assert page.evaluate('renderer === null'), 'Folia does not need the hidden Mineradio WebGL renderer'
                     checked('saved interface displays its real initial player')
 
                     page.locator('#file-input').set_input_files(audio_fixture())
@@ -226,6 +245,8 @@ def main():
                     if mode == 'mineradio':
                         click_switch(page)
                     child = folia_ready(page)
+                    for panel in ('LibraryPanel', 'VisualSettings', 'LocalPlaybackSettings', 'LocalToolDialogs', 'LocalVideoExportSurface'):
+                        assert not any(f'/assets/{panel}-' in url for url in folia_requests), folia_requests
                     expect(child.get_by_test_id('local-current-track')).to_contain_text('Startup-fixture')
                     click_folia_play_pause(child)
                     page.wait_for_function('audio.paused && !playToggleBusy')
@@ -234,10 +255,14 @@ def main():
                     child_audio = child.evaluate('window.__startupAudioAudit')
                     assert child_audio is not None and not any(child_audio.values()), child_audio
                     assert child.locator('audio').count() == 0
+                    if mode == 'folia':
+                        assert page.evaluate('renderer === null'), 'Playback in Folia must not need Mineradio WebGL'
                     checked('Folia pause and resume control the unique host audio')
 
                     click_switch(page)
                     page.wait_for_function('!isFoliaInterfaceActive()')
+                    page.wait_for_function('renderer?.domElement === mainSceneCanvas && renderer.info.render.frame > 0')
+                    page.evaluate('window.__startupEngine.renderer = renderer;')
                     page.mouse.move(640, 780)
                     page.locator('#play-btn').click()
                     page.wait_for_function('audio.paused && !playToggleBusy')
@@ -249,11 +274,12 @@ def main():
                       sameAudio: audio === __startupEngine.audio,
                       sameContext: audioCtx === __startupEngine.audioCtx,
                       sameQueue: playQueue === __startupEngine.queue,
+                      sameRenderer: renderer === __startupEngine.renderer,
                       playing: !audio.paused, restores: __startupProbe.restores.length,
                       scheduled: localLibraryRestoreScheduled
                     })""")
                     scenario['afterSwitches'] = stable
-                    assert all(stable[key] for key in ['sameAudio', 'sameContext', 'sameQueue', 'playing']), stable
+                    assert all(stable[key] for key in ['sameAudio', 'sameContext', 'sameQueue', 'sameRenderer', 'playing']), stable
                     assert stable['restores'] == 1 and not stable['scheduled'], stable
                     checked('both interfaces round-trip without restarting restoration or replacing audio')
                 except Exception as error:

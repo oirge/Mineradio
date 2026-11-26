@@ -216,12 +216,13 @@ function testTrustedFoliaFrameUrl() {
 
 function testFoliaFramePathStaysInSync() {
   const whitelist = /const TRUSTED_FOLIA_FRAME_PATH = '([^']+)';/.exec(readMainSource());
-  const bridge = fs.readFileSync(path.join(__dirname, '..', 'public', 'folia-host.js'), 'utf8');
-  const frameSrc = /frame\.src = '([^']+)'/.exec(bridge);
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const frameSrc = /<iframe id="folia-frame"[^>]*\bsrc="([^"]+)"/.exec(html);
   assert.ok(whitelist && frameSrc, '必须同时找到 Folia 导航白名单与 iframe 地址');
-  const parsed = new URL(frameSrc[1], TRUSTED_MAIN_URL);
+  const parsed = new URL(frameSrc[1].replaceAll('&amp;', '&'), TRUSTED_MAIN_URL);
   assert.equal(parsed.pathname, whitelist[1]);
   assert.equal(parsed.searchParams.get('host'), 'mineradio');
+  assert.equal(parsed.searchParams.get('surface'), 'local-player-v3');
   assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', ...whitelist[1].split('/'))));
 }
 

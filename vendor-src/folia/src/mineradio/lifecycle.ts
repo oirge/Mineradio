@@ -1,6 +1,17 @@
 import { isMineradioEmbedded, requestHost, subscribeHost } from './client';
 
 // src/mineradio/lifecycle.ts
+// A saved Folia frame can load its modules while Mineradio is still starting the host.
+export function waitForMineradioHost(): Promise<void> | undefined {
+    if (!window.frameElement?.hasAttribute('data-folia-host-pending')) return;
+    return new Promise(resolve => {
+        const unsubscribe = subscribeHost('visibility', () => {
+            unsubscribe();
+            resolve();
+        });
+    });
+}
+
 // Pause the embedded surface's animation work while the other interface is visible.
 export function installMineradioSurfaceLifecycle(): void {
     if (!isMineradioEmbedded()) return;

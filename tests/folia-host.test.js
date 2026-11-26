@@ -29,6 +29,7 @@ function element(id, tagName = 'DIV') {
             remove(name) { classes.delete(name); }, contains(name) { return classes.has(name); },
         },
         setAttribute(name, value) { this.attributes[name] = value; },
+        removeAttribute(name) { delete this.attributes[name]; },
         addEventListener(name, callback) { this.listeners.set(name, callback); },
         appendChild(child) { this.children.push(child); child.parent = this; },
         remove() { this.parent.children.splice(this.parent.children.indexOf(this), 1); this.isConnected = false; },
@@ -54,21 +55,26 @@ function harness(options = {}) {
     video.play = () => { video.paused = false; calls.push('video-play'); return Promise.resolve(); };
     const shell = element('desktop-window-shell'); shell.children = [titlebar, original, video, fileInput, mount, updateModal];
     const nodes = new Map([shell, mount, status, fileInput].map(node => [node.id, node]));
+    function cloneFrame() {
+        if (options.frameError) throw new Error('Frame creation failed');
+        const frame = element('folia-frame', 'IFRAME');
+        frame.contentWindow = { postMessage(data, origin) { messages.push({ ...structuredClone(data), origin }); } };
+        return frame;
+    }
+    nodes.set('folia-frame-template', { content: { firstElementChild: { cloneNode: cloneFrame } } });
+    const earlyFrame = options.earlyFrame ? cloneFrame() : null;
+    if (earlyFrame) {
+        earlyFrame.setAttribute('data-folia-host-pending', '');
+        mount.appendChild(earlyFrame);
+    }
     const buttons = ['folia-switch-btn', 'folia-floating-switch'].map(id => element(id, 'BUTTON'));
     let timerId = 0, requestId = 0;
     const tracks = ['a', 'b', 'c'].map(id => ({ type: 'local', localKey: id, localPath: `D:/Music/${id}.flac`, name: `Track ${id}`, artist: 'Artist', album: 'Album', duration: 200, localFile: { privateAudio: true } }));
     const document = {
         hidden: false, documentElement, body: element('body'), listeners: new Map(),
-        getElementById: id => nodes.get(id) || null,
+        getElementById: id => id === 'folia-frame' ? mount.children[0] || null : nodes.get(id) || null,
         querySelectorAll: query => query === '[data-folia-switch]' ? buttons : query === '#desktop-window-shell video' ? [video] : [],
         addEventListener(name, callback) { this.listeners.set(name, callback); },
-        createElement(tag) {
-            assert.equal(tag, 'iframe', 'the bridge must never create an audio element');
-            if (options.frameError) throw new Error('Frame creation failed');
-            const frame = element('', 'IFRAME');
-            frame.contentWindow = { postMessage(data, origin) { messages.push({ ...structuredClone(data), origin }); } };
-            return frame;
-        },
     };
     const context = vm.createContext({
         console: { ...console, warn() { calls.push('restore-warning'); } },
@@ -101,6 +107,7 @@ function harness(options = {}) {
         markQueueContentChanged() {}, updateLikeButtons() {}, showToast() {}, updateVolumeUi() {}, scheduleVolumePreference() {},
         suspendMainRenderLoop: () => calls.push('suspend-render'), resumeMainRenderLoop: () => calls.push('resume-render'),
         scheduleMainRendererViewportRefresh: () => calls.push('refresh-viewport'),
+        scheduleGlassDisplacementMapUpdate: () => calls.push('refresh-glass'),
         syncBeatMapPlaybackCursor() {}, schedulePlaybackProgressUi() {},
         applyVolumeToAudio: () => { context.audio.muted = false; },
         getPlaybackCurrentSeconds: () => context.audio.currentTime,
@@ -146,7 +153,7 @@ function harness(options = {}) {
         assert.ok(entry, `Expected timer with ${delay}ms delay`);
         timers.delete(entry[0]); entry[1].callback();
     }
-    return { context, tracks, document, mount, frame, status, original, titlebar, updateModal, video, fileInput, storage, messages, calls, dbFavorites, preloadReleases, timers, listeners, request, runTimer };
+    return { context, tracks, document, mount, frame, earlyFrame, status, original, titlebar, updateModal, video, fileInput, storage, messages, calls, dbFavorites, preloadReleases, timers, listeners, request, runTimer };
 }
 
 test('Folia one-shot shuffle keeps the loaded song, position and playback mode', async () => {
@@ -287,7 +294,10 @@ test('Folia language commands use the host preference without changing playback 
 });
 
 test('saved Folia startup takes ownership before releasing the first-paint state', () => {
-    const h = harness({ savedMode: 'folia', preloadFolia: true, activate: false });
+    const h = harness({ savedMode: 'folia', preloadFolia: true, earlyFrame: true, activate: false });
+    assert.deepEqual(h.mount.children, [h.earlyFrame], 'Reuse the frame whose navigation already started');
+    assert.equal(h.earlyFrame.attributes['data-folia-host-pending'], undefined);
+    assert.ok(h.messages.some(message => message.event === 'visibility' && message.data.active), 'Wake a waiting child');
     assert.equal(h.document.documentElement.classList.contains('folia-mode-preload'), false);
     assert.equal(h.context.isFoliaInterfaceActive(), true);
     assert.equal(h.document.body.classList.contains('folia-interface-active'), true);
@@ -309,6 +319,7 @@ test('saved Folia startup takes ownership before releasing the first-paint state
     assert.equal(h.mount.hidden, true);
     assert.equal(h.original.inert, false);
     assert.equal(h.calls.includes('resume-render'), true);
+    assert.equal(h.calls.includes('refresh-glass'), true);
 });
 
 test('startup switches remain usable after a Folia timeout and allow a fresh retry', () => {
@@ -347,7 +358,7 @@ test('升级面板在 Folia 激活时保持可交互，不被 inert 清扫', () 
 
 test('unavailable Folia startup always releases the first-paint state back to Home', () => {
     for (const options of [
-        { savedMode: 'mineradio' }, { savedMode: 'invalid' },
+        { savedMode: 'mineradio' }, { savedMode: 'mineradio', earlyFrame: true }, { savedMode: 'invalid' },
         { savedMode: 'folia', modeReadError: true },
         { savedMode: 'folia', frameError: true }
     ]) {
@@ -356,9 +367,12 @@ test('unavailable Folia startup always releases the first-paint state back to Ho
         assert.equal(h.context.isFoliaInterfaceActive(), false);
         assert.equal(h.document.body.classList.contains('folia-interface-active'), false);
         assert.equal(h.mount.hidden, true);
+        assert.equal(h.frame(), undefined);
         assert.equal(h.mount.attributes['aria-hidden'], 'true');
         assert.equal(h.original.inert, false);
         assert.equal(h.calls.includes('suspend-render'), false);
+        assert.ok(h.calls.includes('resume-render'), 'Fallback must wake the deferred native renderer');
+        assert.ok(h.calls.includes('refresh-glass'), 'Fallback must refresh the visible glass maps');
         assert.equal(h.context.audio.currentTime, 37);
     }
 });

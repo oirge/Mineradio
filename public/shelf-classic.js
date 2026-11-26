@@ -7,7 +7,7 @@ window.MineradioShelfClassic = (function () {
 
   // ---- 宿主绑定（由 createEngine 注入） ----
   var D = null;
-  var THREE, scene, camera, renderer, uniforms, particles, pointerParallax, fx,
+  var THREE, scene, camera, uniforms, particles, pointerParallax, fx,
     playQueue, currentIdx, playlistCoverCache, bass, beatPulse, playing,
     songCoverSrc, queueItemKey, compactCount, requestPlaylistCover, readableInkForHex,
     shelfAccentHex, shelfAccentRgba, shelfSettings, shelfAlwaysVisible,
@@ -718,6 +718,7 @@ function makeShelfManager() {
   }
 
   function warmTextureUpload(tex) {
+    var renderer = D.renderer;
     if (!tex || !renderer || typeof renderer.initTexture !== 'function') return;
     try { renderer.initTexture(tex); } catch (e) { }
   }
@@ -1406,7 +1407,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
     if (shelfManager) shelfManager.setMode('off');
     engineGeneration++;
     D = deps || {};
-    THREE = D.THREE; scene = D.scene; camera = D.camera; renderer = D.renderer;
+    THREE = D.THREE; scene = D.scene; camera = D.camera;
     uniforms = D.uniforms; particles = D.particles; pointerParallax = D.pointerParallax; fx = D.fx;
     playQueue = D.playQueue; currentIdx = D.currentIdx; playlistCoverCache = D.playlistCoverCache;
     bass = D.bass; beatPulse = D.beatPulse; playing = D.playing;

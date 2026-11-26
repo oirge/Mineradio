@@ -659,11 +659,8 @@
     "src/hooks/useStableCallbacks.ts",
     "src/hooks/useTrackTitlePreview.ts",
     "src/hooks/useViewportSettle.ts",
-    "src/i18n/config.ts",
     "src/i18n/locales/en.ts",
-    "src/i18n/locales/in.ts",
     "src/i18n/locales/zh-CN.ts",
-    "src/i18n/missingTranslation.ts",
     "src/index.css",
     "src/library/core/model/trackLinks.ts",
     "src/library/suites/grid/shared/PolaroidCard.tsx",
@@ -675,6 +672,8 @@
     "src/mineradio/client.ts",
     "src/mineradio/lifecycle.ts",
     "src/mineradio/local-entry.tsx",
+    "src/mineradio/local-i18n.ts",
+    "src/mineradio/local-mount.tsx",
     "src/mineradio/local/LibraryPanel.tsx",
     "src/mineradio/local/LocalActionsContext.ts",
     "src/mineradio/local/LocalAddToPlaylist.tsx",
@@ -828,7 +827,7 @@
   ],
   "thirdPartyLicenses": {
     "fileName": "THIRD-PARTY-LICENSES.txt",
-    "sha256": "3277c3b955147618fb9d48f102bc918dd14830e4114f1671dbc1d8bce3a165de",
+    "sha256": "98780daa09396a7e2a315122d2c5c76038ae66da4fc72059ebd71fb4d6a49365",
     "packages": [
       {
         "name": "@chenglou/pretext",
@@ -995,18 +994,6 @@
           {
             "path": "LICENSE",
             "sha256": "1cd0a2b02a6cc40ef8ee16310d13eeffdd7b5de4a562fd3ee7c921d8eb54f60a"
-          }
-        ]
-      },
-      {
-        "name": "i18next-browser-languagedetector",
-        "version": "8.2.1",
-        "directory": "node_modules/i18next-browser-languagedetector",
-        "license": "MIT",
-        "files": [
-          {
-            "path": "LICENSE",
-            "sha256": "95bdba2cfae72e5337ecc7ccc33154492e33a533549628e385d32d98d1642859"
           }
         ]
       },

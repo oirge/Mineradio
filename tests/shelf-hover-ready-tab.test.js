@@ -50,7 +50,7 @@ test('打开视觉控制台前先归还借走的歌单架分组', () => {
 });
 
 test('主场景右键仍是原有「钉开/收起歌单架」行为（未被改动）', () => {
-  const start = appSource.indexOf("renderer.domElement.addEventListener('contextmenu', function(e){");
+  const start = appSource.indexOf("mainSceneCanvas.addEventListener('contextmenu', function(e){");
   const end = appSource.indexOf('// 滚轮', start);
   assert.ok(start >= 0 && end > start, 'missing scene contextmenu handler');
   const handler = appSource.slice(start, end);

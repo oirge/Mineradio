@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Minimize2, Music2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { colorWithAlpha, mixColors } from '../../components/visualizer/colorMix';
@@ -6,15 +6,11 @@ import { DEFAULT_THEME, DAYLIGHT_THEME } from '../../services/baseThemes';
 import { useLocalPlayer } from './useLocalPlayer';
 import { useVisualSceneSettings } from './useVisualSettings';
 import { usePlaylistVisualPreset } from './usePlaylistVisualPreset';
-import LibraryPanel from './LibraryPanel';
 import PlayerControls from './PlayerControls';
-import VisualSettings from './VisualSettings';
 import LocalVisualStage from './LocalVisualStage';
 import LocalErrorBoundary from './LocalErrorBoundary';
 import LocalStatusToast from './LocalStatusToast';
 import LocalHeader from './LocalHeader';
-import LocalPlaybackSettings from './LocalPlaybackSettings';
-import LocalToolDialogs from './LocalToolDialogs';
 import { LocalActionsContext } from './LocalActionsContext';
 import { useLocalActions } from './useLocalActions';
 import { useLocalVisualAssets } from './useLocalVisualAssets';
@@ -29,6 +25,11 @@ import './localSettingsGlass.css';
 
 // src/mineradio/local/LocalPlayer.tsx
 // Embedded local-player composition: upstream effects, host transport, and a bounded local catalog.
+const LibraryPanel = lazy(() => import('./LibraryPanel'));
+const VisualSettings = lazy(() => import('./VisualSettings'));
+const LocalPlaybackSettings = lazy(() => import('./LocalPlaybackSettings'));
+const LocalToolDialogs = lazy(() => import('./LocalToolDialogs'));
+
 export default function LocalPlayer() {
     const { t, i18n } = useTranslation('localPlayer');
     const player = useLocalPlayer();
@@ -116,14 +117,16 @@ export default function LocalPlayer() {
             {isLyrics && <PlayerControls state={player.state} currentTime={player.currentTime} command={player.command}
                 onLibrary={() => { setQueue(false); setLibraryOpen(true); setSettingsOpen(false); setPlaybackOpen(false); }}
                 onQueue={() => { setQueue(true); setLibraryOpen(!libraryOpen || !queue); setSettingsOpen(false); setPlaybackOpen(false); }} />}
-            {libraryOpen && <LibraryPanel state={player.state} command={player.command} queue={queue} onTab={setQueue} onClose={() => setLibraryOpen(false)} />}
-            {playbackOpen && <LocalPlaybackSettings state={player.state} command={player.command} onClose={closePlayback} />}
-            {settingsOpen && <VisualSettings assets={assets} theme={theme} state={player.state} command={player.command} onClose={() => setSettingsOpen(false)}
-                onLanguage={language => run('setUiLanguage', { language })} onFrameRateCheck={() => tools.context.run('frameRate')} />}
         </>}
-        <LocalToolDialogs tool={tools.tool} state={player.state} command={player.command} onClose={tools.close}
-            activeLyrics={player.active && isLyrics} setProbeQuality={setProbeQuality}
-            onLibrary={() => tools.context.run('library')} />
+        <Suspense fallback={null}>
+            {!focus && libraryOpen && <LibraryPanel state={player.state} command={player.command} queue={queue} onTab={setQueue} onClose={() => setLibraryOpen(false)} />}
+            {!focus && playbackOpen && <LocalPlaybackSettings state={player.state} command={player.command} onClose={closePlayback} />}
+            {!focus && settingsOpen && <VisualSettings assets={assets} theme={theme} state={player.state} command={player.command} onClose={() => setSettingsOpen(false)}
+                onLanguage={language => run('setUiLanguage', { language })} onFrameRateCheck={() => tools.context.run('frameRate')} />}
+            {tools.tool && <LocalToolDialogs tool={tools.tool} state={player.state} command={player.command} onClose={tools.close}
+                activeLyrics={player.active && isLyrics} setProbeQuality={setProbeQuality}
+                onLibrary={() => tools.context.run('library')} />}
+        </Suspense>
         <LocalStatusToast />
         {player.error && <div className="local-error" role="alert" data-testid="local-error"><span>{player.error}</span><button aria-label={t('close')} onClick={player.clearError}><X size={16} /></button></div>}
     </main></LocalActionsContext.Provider>;
