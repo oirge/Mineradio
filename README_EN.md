@@ -126,6 +126,11 @@ Custom API keys are encrypted with operating-system secure storage. If secure st
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.8.1
+
+- The Windows player binds its local service directly instead of probing the port first. If the port is occupied, it still tries the next available one.
+- Folia keeps the latest language choice when a dictionary from an earlier switch finishes loading late.
+
 ### v2.8.0
 
 - Mineradio renders the Simple and DIY views fewer times at startup and creates the hotkey dialog when you open it.

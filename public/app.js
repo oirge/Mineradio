@@ -201,6 +201,9 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['优化 Windows 启动流程，修复 Folia 语言切换。', 'Improved Windows startup and fixed Folia language switching.'],
+  ['Windows 播放器启动时由本地服务直接绑定端口，省去一次探测绑定；端口占用时继续选择下一个可用端口。', 'The Windows player binds its local service directly instead of probing the port first. If the port is occupied, it still tries the next available one.'],
+  ['修复 Folia 快速切换中英文时，较早请求的词表迟到而让界面短暂切回旧语言的问题。', 'Folia keeps the latest language choice when a dictionary from an earlier switch finishes loading late.'],
   ['加快 Mineradio 和 Folia 各界面的启动。', 'Faster startup across Mineradio and Folia views.'],
   ['Mineradio 简洁与 DIY 界面减少启动时的重复渲染，热键弹窗在打开时创建。', 'Mineradio renders the Simple and DIY views fewer times at startup and creates the hotkey dialog when you open it.'],
   ['Folia 普通歌词页提前加载播放器所需资源，启动时只载入当前语言的完整词表。', 'Folia preloads the resources for its standard lyrics view and loads only the full dictionary for the active language at startup.'],
@@ -2121,7 +2124,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.8.0';
+var APP_VERSION = '2.8.1';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2174,12 +2177,10 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '加快 Mineradio 和 Folia 各界面的启动。',
+  hero: '优化 Windows 启动流程，修复 Folia 语言切换。',
   notes: [
-    'Mineradio 简洁与 DIY 界面减少启动时的重复渲染，热键弹窗在打开时创建。',
-    'Folia 普通歌词页提前加载播放器所需资源，启动时只载入当前语言的完整词表。',
-    '启动时优先准备上次使用的唱片墙、海报墙或电台墙，让对应墙面更快显示。',
-    'Folia 影厅并行加载控件和 3D 资源，设置面板的液态玻璃贴图生成也更快。'
+    'Windows 播放器启动时由本地服务直接绑定端口，省去一次探测绑定；端口占用时继续选择下一个可用端口。',
+    '修复 Folia 快速切换中英文时，较早请求的词表迟到而让界面短暂切回旧语言的问题。'
   ]
 };
 function readSavedVolume() {

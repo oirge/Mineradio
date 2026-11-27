@@ -88,7 +88,7 @@ test('第一次 GPU 崩溃只写盘计数，不重启', () => {
 /** 跑完整的启动→GPU信息→故障/稳定提交接线，持久化状态在多次启动间传递。 */
 function createStartupHarness(options = {}) {
   const start = MAIN_SOURCE.indexOf('// GPU 守卫。历史上');
-  const end = MAIN_SOURCE.indexOf('function findOpenPort(', start);
+  const end = MAIN_SOURCE.indexOf('const LOCAL_LIBRARY_EXTS', start);
   assert.ok(start >= 0 && end > start);
   let now = options.at || 1000000;
   let saved = { ...(options.saved || {}) };
