@@ -9,6 +9,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 import statistics
@@ -216,6 +217,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--releases', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--baseline', default='2.7.9')
+    parser.add_argument('--candidate', default='2.8.0')
+    parser.add_argument('--candidate-executable', type=Path)
     parser.add_argument('--songs', type=int, default=5000)
     parser.add_argument('--repeats', type=int, default=6)
     args = parser.parse_args()
@@ -223,8 +227,12 @@ def main():
         parser.error('Native startup measurement is restricted to GitHub-hosted Windows Actions')
     if not 1 <= args.songs <= 10000 or not 1 <= args.repeats <= 20:
         parser.error('Use 1–10,000 songs and 1–20 repetitions')
-    versions = ('2.7.9', '2.8.0')
-    releases = {version: (args.releases / version / 'Mineradio-oirge.exe').resolve(strict=True) for version in versions}
+    versions = (args.baseline, args.candidate)
+    if versions[0] == versions[1] or not all(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version) for version in versions):
+        parser.error('Use two different three-part release versions')
+    baseline = args.releases / args.baseline / 'Mineradio-oirge.exe'
+    candidate = args.candidate_executable or args.releases / args.candidate / 'Mineradio-oirge.exe'
+    releases = {version: executable.resolve(strict=True) for version, executable in zip(versions, (baseline, candidate))}
     args.output.mkdir(parents=True, exist_ok=True)
     folder, audio = make_library(args.releases / 'generated-media', args.songs)
     unique = uuid4().hex[:12]
