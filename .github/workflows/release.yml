@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v2.8.0)'
+        description: 'Release tag (e.g. v2.8.1)'
         required: true
-        default: 'v2.8.0'
+        default: 'v2.8.1'
+      compare_startup:
+        description: 'Compare the packaged candidate with v2.8.0 on hosted Windows before uploading'
+        type: boolean
+        default: false
 
 jobs:
   build-windows:
@@ -106,6 +110,46 @@ jobs:
         run: npm run build:win
       - name: Verify bundled default translation configuration
         run: node scripts/check-default-translation-bundle.mjs
+
+      - uses: actions/setup-python@v5
+        if: inputs.compare_startup
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-ui.txt
+      - name: Measure startup of the packaged Windows candidate
+        if: inputs.compare_startup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.VERSION }}
+        run: |
+          python -m pip install -r scripts/requirements-ui.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to install benchmark dependencies' }
+          $baseline = '2.8.0'
+          $name = "Mineradio-oirge-$baseline-Setup.exe"
+          $installer = Join-Path $env:RUNNER_TEMP $name
+          gh release download "v$baseline" --repo "$env:GITHUB_REPOSITORY" --pattern $name --dir "$env:RUNNER_TEMP"
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to download startup baseline' }
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ine '8d8f4ad44b42fa87c1fdfae088c9ad08669e2d23ed8fc3e07ef025f621f1c734') {
+            throw 'Startup baseline SHA256 mismatch'
+          }
+          $workspace = Join-Path $env:RUNNER_TEMP 'native-startup-release'
+          $target = Join-Path $workspace $baseline
+          $seven = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+          $PSNativeCommandUseErrorActionPreference = $false
+          & $seven x '-t7z' '-y' "-o$target" $installer
+          if ($LASTEXITCODE -gt 1 -or !(Test-Path -LiteralPath (Join-Path $target 'Mineradio-oirge.exe') -PathType Leaf)) {
+            throw 'Failed to unpack startup baseline'
+          }
+          python scripts/measure-native-startup.py --releases $workspace --baseline $baseline --candidate $env:RELEASE_VERSION --candidate-executable dist/win-unpacked/Mineradio-oirge.exe --output artifacts/ui-language/native-startup-release
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.compare_startup
+        with:
+          name: packaged-startup-evidence
+          path: artifacts/ui-language/native-startup-release/
+          if-no-files-found: ignore
+          retention-days: 14
       
       - name: Generate SHA256 checksums
         run: |

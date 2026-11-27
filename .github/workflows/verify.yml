@@ -32,6 +32,57 @@ permissions:
   contents: read
 
 jobs:
+  native-startup:
+    if: github.event_name == 'workflow_dispatch' && inputs.browser_suite == 'startup'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-ui.txt
+      - run: python -m pip install -r scripts/requirements-ui.txt
+      - name: Download and unpack verified releases without installing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $hashes = [ordered]@{
+            '2.7.9' = '8c1baa2f2594f5230cd0b300597675521f83a117445ff092a7a13e0da52de00d'
+            '2.8.0' = '8d8f4ad44b42fa87c1fdfae088c9ad08669e2d23ed8fc3e07ef025f621f1c734'
+          }
+          $seven = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+          foreach ($version in $hashes.Keys) {
+            $name = "Mineradio-oirge-$version-Setup.exe"
+            $installer = Join-Path $env:RUNNER_TEMP $name
+            gh release download "v$version" --repo "$env:GITHUB_REPOSITORY" --pattern "$name" --dir "$env:RUNNER_TEMP"
+            if ($LASTEXITCODE -ne 0) { throw "Download failed for $version" }
+            if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ine $hashes[$version]) {
+              throw "Release SHA256 mismatch for $version"
+            }
+            $target = Join-Path $env:RUNNER_TEMP "mineradio-startup\$version"
+            $PSNativeCommandUseErrorActionPreference = $false
+            & $seven x '-t7z' '-y' "-o$target" $installer
+            if ($LASTEXITCODE -gt 1 -or !(Test-Path -LiteralPath (Join-Path $target 'Mineradio-oirge.exe') -PathType Leaf)) {
+              throw "Unpack failed for $version"
+            }
+          }
+          exit 0
+      - name: Measure native startup and playback
+        shell: pwsh
+        run: python scripts/measure-native-startup.py --releases "$env:RUNNER_TEMP/mineradio-startup" --output artifacts/ui-language/native-startup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-startup-evidence
+          path: artifacts/ui-language/native-startup/
+          if-no-files-found: ignore
+          retention-days: 14
+
   verify:
     runs-on: windows-latest
     env:

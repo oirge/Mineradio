@@ -13,6 +13,7 @@ const { Readable } = require('stream');
 const { fileURLToPath } = require('url');
 
 const PORT = process.env.PORT || 3000;
+let listeningPort = PORT;
 // 翻译服务由用户自行配置；凭据仅由可信桌面主进程提供。
 const HOST = process.env.HOST || '0.0.0.0';
 const LOCAL_FILE_TOKEN = process.env.MINERADIO_LOCAL_FILE_TOKEN || '';
@@ -49,6 +50,7 @@ function resolveRuntimeAppRoots() {
 const { writableRoot: APP_ROOT, resourceRoot: RESOURCE_ROOT } = resolveRuntimeAppRoots();
 const { authorizeApiMutation } = require(path.join(RESOURCE_ROOT, 'desktop', 'api-session-authorization'));
 const { requestTranslation } = require(path.join(RESOURCE_ROOT, 'desktop', 'translation-client'));
+const { listenOnLoopback } = require(path.join(RESOURCE_ROOT, 'desktop', 'local-server-listener'));
 let apiSessionToken = '';
 let translationSettingsProvider = null;
 function setApiSessionToken(token) {
@@ -103,10 +105,8 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  'Mineradio 简洁与 DIY 界面减少启动时的重复渲染，热键弹窗在打开时创建。',
-  'Folia 普通歌词页提前加载播放器所需资源，启动时只载入当前语言的完整词表。',
-  '启动时优先准备上次使用的唱片墙、海报墙或电台墙，让对应墙面更快显示。',
-  'Folia 影厅并行加载控件和 3D 资源，设置面板的液态玻璃贴图生成也更快。',
+  'Windows 播放器启动时由本地服务直接绑定端口，省去一次探测绑定；端口占用时继续选择下一个可用端口。',
+  '修复 Folia 快速切换中英文时，较早请求的词表迟到而让界面短暂切回旧语言的问题。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();
@@ -3026,7 +3026,7 @@ async function handleLyricTranslateRequest(req, res) {
 //  HTTP Server
 // ====================================================================
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://localhost:' + PORT);
+  const url = new URL(req.url, 'http://localhost:' + listeningPort);
   const pn = url.pathname;
   if (['/api/update/download', '/api/update/cancel', '/api/update/patch', '/api/lyric-translate'].includes(pn)) {
     const failure = authorizeApiMutation(req, apiSessionToken, server.address().port);
@@ -3372,19 +3372,37 @@ const server = http.createServer(async (req, res) => {
   serveStatic(req, res, filePath, vendorCacheControl);
 });
 
-server.listen(PORT, HOST, () => {
+function onServerListening(port) {
+  listeningPort = port;
   console.log('======================================================');
-  console.log(' 粒子音乐可视化 v2  →  http://localhost:' + PORT);
+  console.log(' 粒子音乐可视化 v2  →  http://localhost:' + port);
   console.log('======================================================');
   // 升级装完后新版本会从这里起来，上一版的安装包此时已经没用，顺手回收。
   void pruneUpdateDownloadCache(APP_VERSION).catch((err) => {
     console.warn('[UpdateDownload] installer cache prune failed:', err && err.message || err);
   });
-});
+  return port;
+}
+
+let desktopListenPromise = null;
+function startDesktopListening(preferredPort) {
+  if (server.listening && !desktopListenPromise) return Promise.resolve(server.address().port);
+  if (!desktopListenPromise) {
+    desktopListenPromise = listenOnLoopback(server, preferredPort).then(onServerListening).finally(() => {
+      desktopListenPromise = null;
+    });
+  }
+  return desktopListenPromise;
+}
+
+if (process.env.MINERADIO_DESKTOP_MANUAL_LISTEN !== '1') {
+  server.listen(PORT, HOST, () => onServerListening(server.address().port));
+}
 
 server.setLocalFileAuthorizer = setLocalFileAuthorizer;
 server.setLocalCoverReader = setLocalCoverReader;
 server.setApiSessionToken = setApiSessionToken;
 server.setTranslationSettingsProvider = setTranslationSettingsProvider;
+server.startDesktopListening = startDesktopListening;
 
 module.exports = server;

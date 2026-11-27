@@ -1,5 +1,4 @@
 const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, globalShortcut, dialog, Tray, Menu, protocol, session, desktopCapturer, safeStorage } = require('electron');
-const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -420,39 +419,6 @@ app.on('gpu-info-update', () => {
   }, GPU_RECOVERY_STABLE_MS);
   if (typeof gpuRecoveryStabilityTimer.unref === 'function') gpuRecoveryStabilityTimer.unref();
 });
-
-function findOpenPort(startPort) {
-  return new Promise((resolve, reject) => {
-    function tryPort(port) {
-      const tester = net.createServer();
-
-      tester.once('error', (err) => {
-        if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
-          tryPort(port + 1);
-          return;
-        }
-        reject(err);
-      });
-
-      tester.once('listening', () => {
-        tester.close(() => resolve(port));
-      });
-
-      tester.listen(port, '127.0.0.1');
-    }
-
-    tryPort(startPort);
-  });
-}
-
-function waitForServer(server) {
-  if (!server || server.listening) return Promise.resolve();
-
-  return new Promise((resolve, reject) => {
-    server.once('listening', resolve);
-    server.once('error', reject);
-  });
-}
 
 const LOCAL_LIBRARY_EXTS = new Set([
   '.mp3', '.mp2', '.flac', '.m4a', '.m4b', '.wav', '.ogg', '.oga', '.aac', '.opus', '.webm', '.weba', '.aif', '.aiff', '.aifc',
@@ -5730,19 +5696,25 @@ async function createWindow() {
     instanceId: INSTANCE_ID,
     port: process.env.MINERADIO_PORT,
   });
-  const port = await findOpenPort(preferredPort);
-  mainServerPort = port;
-
   process.env.HOST = '127.0.0.1';
-  process.env.PORT = String(port);
+  process.env.MINERADIO_DESKTOP_MANUAL_LISTEN = '1';
   process.env.MINERADIO_UPDATE_DIR = getUpdateDownloadDir();
   process.env.MINERADIO_LOCAL_FILE_TOKEN = LOCAL_FILE_TOKEN;
 
   // 本地服务加载失败时必须显式报出来。这里 throw 会被 createWindow 的调用方吞成
   // 未处理的 Promise rejection：进程还活着，但窗口和本地服务都没有，用户看到的就是
   // 「双击了没反应」。v1.7.0 就是这么炸的：新增的 server.js 同级模块没进打包白名单。
+  let port;
   try {
     localServer = require(path.join(APP_ROOT, 'server.js'));
+    localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
+    localServer.setLocalCoverReader((songKey) => {
+      const store = getLocalLibraryStore();
+      return store ? store.readAssetCover(songKey) : null;
+    });
+    localServer.setApiSessionToken(API_SESSION_TOKEN);
+    localServer.setTranslationSettingsProvider(() => translationSettings.configuration());
+    port = await localServer.startDesktopListening(preferredPort);
   } catch (e) {
     const detail = (e && e.stack) || String(e);
     console.error('[Mineradio] 本地服务加载失败:', detail);
@@ -5750,15 +5722,8 @@ async function createWindow() {
     app.quit();
     return;
   }
-  // 注入授权校验：让 HTTP 本地文件代理复用与 IPC 相同的授权根目录约束，堵住越权读取任意文件。
-  localServer.setLocalFileAuthorizer(resolveAuthorizedLocalFile);
-  localServer.setLocalCoverReader((songKey) => {
-    const store = getLocalLibraryStore();
-    return store ? store.readAssetCover(songKey) : null;
-  });
-  localServer.setApiSessionToken(API_SESSION_TOKEN);
-  localServer.setTranslationSettingsProvider(() => translationSettings.configuration());
-  await waitForServer(localServer);
+  mainServerPort = port;
+  process.env.PORT = String(port);
   try {
     await migratePrimaryProfileState(port);
   } catch (e) {
