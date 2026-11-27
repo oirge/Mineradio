@@ -1,7 +1,7 @@
 import React, { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useMotionValue } from 'framer-motion';
-import '../local-i18n';
+import { localI18nReady } from '../local-i18n';
 import type { AudioBands } from '../../types';
 import VisualizerRenderer from '../../components/visualizer/VisualizerRenderer';
 import { LyricRenderQualityPinContext } from '../../components/visualizer/renderQuality/lyricRenderQualityPin';
@@ -135,7 +135,7 @@ export async function mountVideoExportSurface(mount: HTMLElement) {
     window.addEventListener('pagehide', stopFinalize, { once: true });
     window.addEventListener('pagehide', dispose, { once: true });
     try {
-        const initial = await bridge.getInitial();
+        const [initial] = await Promise.all([bridge.getInitial(), localI18nReady]);
         const token = new URLSearchParams(location.search).get('videoExport');
         if (!token || token !== initial.id || !initial.state.currentTrack) throw new Error('Invalid video export session');
         initial.visuals = normalizeVisualPreferences(initial.visuals);

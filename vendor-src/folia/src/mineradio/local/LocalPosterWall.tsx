@@ -32,12 +32,14 @@ interface Props {
     onOpenQueue: () => void;
     onOpenLyrics: () => void;
     translation?: boolean;
+    initialRadioWall?: typeof import('./LocalRadioWall')['default'];
 }
 
-export default function LocalPosterWall({ player, theme, isDaylight, onBack, onOpenQueue, onOpenLyrics, translation = true }: Props) {
+export default function LocalPosterWall({ player, theme, isDaylight, onBack, onOpenQueue, onOpenLyrics, translation = true, initialRadioWall }: Props) {
     const { t } = useTranslation();
     const { t: localText } = useTranslation('localPlayer');
     const radio = useVisualSettings(state => state.latticeWallForm === 'radio');
+    const RadioWall = initialRadioWall ?? LocalRadioWall;
     const hidesUpcoming = useVisualSettings(state => state.latticeHideUpcoming);
     const catalog = useLocalWallCatalog(player, !radio);
     const settings = useLatticeSettingsStore();
@@ -85,7 +87,7 @@ export default function LocalPosterWall({ player, theme, isDaylight, onBack, onO
                 <section data-testid="local-poster-wall" aria-label={t('home.latticeLabel')} style={style}
                     className={`lattice-root ${settings.latticeBadgeCurrentOnly ? 'has-badge-current-only' : ''} ${isDaylight ? 'is-daylight' : ''} ${settings.latticeVignette ? 'has-vignette' : ''} ${settings.latticeLightsOn ? '' : 'is-lights-out'} ${settings.latticePosterTintEnabled ? 'has-poster-tint' : ''} ${settings.latticePosterTintUseCustomColor ? 'uses-custom-poster-tint' : ''}`}>
                     {player.active && (radio ? <Suspense fallback={null}>
-                        <LocalRadioWall player={player} hidesUpcoming={hidesUpcoming} onBack={onBack} onOpenPlayer={onOpenLyrics} />
+                        <RadioWall player={player} hidesUpcoming={hidesUpcoming} onBack={onBack} onOpenPlayer={onOpenLyrics} />
                     </Suspense> : <PosterWall tiles={tiles} currentSong={currentSong} onPlay={wall.onPlay}
                         onTogglePlayback={wall.onTogglePlayback} onSeek={wall.onSeek} onOpenPlayer={wall.onOpenPlayer} onBack={onBack} />)}
                     <button type="button" className="lattice-back" data-testid="local-poster-back" onClick={onBack}

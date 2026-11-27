@@ -1,0 +1,1 @@
+import{u as e}from"./main-BYTO5pPb.js";import{a as t}from"./lucide-runtime-D3yF5mD3.js";var n=e(t(),1),r=(0,n.createContext)(!1),i=(0,n.createContext)(null),a=()=>(0,n.useContext)(r);export{a as n,i as t};

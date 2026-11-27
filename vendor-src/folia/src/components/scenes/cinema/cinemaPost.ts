@@ -232,17 +232,20 @@ export const createCinemaPost = (volume: THREE.ShaderMaterial): CinemaPost => {
         pass(renderer, blur, pair[0]);
     };
 
-    const render = (renderer: THREE.WebGLRenderer, scene: THREE.Object3D, camera: THREE.Camera, frame: CinemaPostFrame) => {
+    const resizeTargets = (renderer: THREE.WebGLRenderer) => {
         renderer.getDrawingBufferSize(size);
-        if (size.x !== width || size.y !== height) {
-            width = size.x;
-            height = size.y;
-            main.setSize(width, height);
-            const halfW = Math.max(1, Math.floor(width / 2));
-            const halfH = Math.max(1, Math.floor(height / 2));
-            [...half, air].forEach(item => item.setSize(halfW, halfH));
-            [...quarter, ...bloom].forEach(item => item.setSize(Math.max(1, Math.floor(halfW / 2)), Math.max(1, Math.floor(halfH / 2))));
-        }
+        if (size.x === width && size.y === height) return;
+        width = size.x;
+        height = size.y;
+        main.setSize(width, height);
+        const halfW = Math.max(1, Math.floor(width / 2));
+        const halfH = Math.max(1, Math.floor(height / 2));
+        [...half, air].forEach(item => item.setSize(halfW, halfH));
+        [...quarter, ...bloom].forEach(item => item.setSize(Math.max(1, Math.floor(halfW / 2)), Math.max(1, Math.floor(halfH / 2))));
+    };
+
+    const render = (renderer: THREE.WebGLRenderer, scene: THREE.Object3D, camera: THREE.Camera, frame: CinemaPostFrame) => {
+        resizeTargets(renderer);
         const autoClear = renderer.autoClear;
         renderer.autoClear = true;
         // Cleared opaque: only a surface that writes alpha 0 makes a hole.
@@ -279,6 +282,9 @@ export const createCinemaPost = (volume: THREE.ShaderMaterial): CinemaPost => {
     const compile = async (renderer: THREE.WebGLRenderer, scene: THREE.Object3D, camera: THREE.Camera) => {
         const passes = new THREE.Scene();
         [down, blur, volume].forEach(shader => passes.add(new THREE.Mesh(geometry, shader)));
+        // Allocate the main target at its visible size once. Binding its 1×1 placeholder here
+        // would allocate a framebuffer that the first render immediately discards.
+        resizeTargets(renderer);
         renderer.setRenderTarget(main);
         const intoTargets = [renderer.compileAsync(scene, camera), renderer.compileAsync(passes, quadCamera)];
         renderer.setRenderTarget(null);

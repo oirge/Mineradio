@@ -2,12 +2,15 @@ import { Buffer } from 'buffer';
 import '../index.css';
 import { installGlobalVisualizerFrameRateLimiter } from '../utils/frameRateLimiter';
 import { installMineradioSurfaceLifecycle, waitForMineradioHost } from './lifecycle';
+import { loadLocalTranslations, readLocalLanguage } from './local-language';
 
 // src/mineradio/local-entry.tsx
 // The local player mounts independently of Folia's application bootstrap and services.
 Object.assign(globalThis, { Buffer });
 const mount = document.getElementById('root');
 if (!mount) throw new Error('Local player mount is missing');
+// Fetch the language alongside the renderer. i18next handles the result when it initializes.
+void loadLocalTranslations(readLocalLanguage()).catch(() => {});
 if (new URLSearchParams(location.search).has('videoExport')) {
     // The hidden export document never starts the interactive player or its host lifecycle.
     // Its native capture controls the FPS; the interactive player's saved RAF cap must not limit exports.
@@ -18,7 +21,6 @@ if (new URLSearchParams(location.search).has('videoExport')) {
 } else {
     installMineradioSurfaceLifecycle();
     installGlobalVisualizerFrameRateLimiter();
-    void Promise.all([import('./local-mount'), waitForMineradioHost()]).then(([{ mountLocalPlayer }]) => {
-        mountLocalPlayer(mount);
-    });
+    void Promise.all([import('./local-mount'), waitForMineradioHost()])
+        .then(([{ mountLocalPlayer }]) => mountLocalPlayer(mount));
 }

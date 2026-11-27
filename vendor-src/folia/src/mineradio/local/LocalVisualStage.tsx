@@ -3,28 +3,52 @@ import VisualizerRenderer from '../../components/visualizer/VisualizerRenderer';
 import type { Theme } from '../../types';
 import type { LocalPlayer } from './playerTypes';
 import type { LocalVisualAssets } from './useLocalVisualAssets';
-import { useVisualSceneSettings } from './useVisualSettings';
+import { useVisualSceneSettings, useVisualSettings } from './useVisualSettings';
 
 // src/mineradio/local/LocalVisualStage.tsx
 // Each surface owns its visual runtime; transport remains in Mineradio throughout switches.
-const LocalRecordWall = lazy(() => import('./LocalRecordWall'));
-const LocalPosterWall = lazy(() => import('./LocalPosterWall'));
-const LocalCinema = lazy(() => import('./cinema/LocalCinema'));
+const loadRecordWall = () => import('./LocalRecordWall');
+const loadPosterWall = () => import('./LocalPosterWall');
+const loadCinema = () => import('./cinema/LocalCinema');
+const LocalRecordWall = lazy(loadRecordWall);
+const LocalPosterWall = lazy(loadPosterWall);
+const LocalCinema = lazy(loadCinema);
+
+export type InitialLocalStage =
+    | { view: 'records'; Wall: typeof import('./LocalRecordWall')['default'] }
+    | { view: 'posters'; Wall: typeof import('./LocalPosterWall')['default']; Radio?: typeof import('./LocalRadioWall')['default'] };
+
+// Load the saved surface while the host connects, so its first render can skip a Suspense reveal.
+export function prepareInitialLocalStage(): Promise<InitialLocalStage> | undefined {
+    const { view, lyricScene, latticeWallForm } = useVisualSettings.getState();
+    if (view === 'records') return loadRecordWall().then(({ default: Wall }) => ({ view, Wall }));
+    if (view === 'posters') {
+        return Promise.all([loadPosterWall(), latticeWallForm === 'radio' ? import('./LocalRadioWall') : undefined])
+            .then(([wall, radio]) => ({ view, Wall: wall.default, Radio: radio?.default }));
+    }
+    // Let the lyric controls mount while the hall's Three.js bundle is loading.
+    if (lyricScene === 'cinema') void loadCinema().catch(() => {});
+}
+
 interface Props {
     player: LocalPlayer;
     theme: Theme;
     assets: LocalVisualAssets;
     focus: boolean;
     onOpenQueue: () => void;
+    initialStage?: InitialLocalStage;
 }
-export default function LocalVisualStage({ player, theme, assets, focus, onOpenQueue }: Props) {
+export default function LocalVisualStage({ player, theme, assets, focus, onOpenQueue, initialStage }: Props) {
     const visuals = useVisualSceneSettings();
     const track = player.state?.currentTrack;
     const lyrics = () => visuals.update({ view: 'lyrics' });
     const wallProps = { player, theme, isDaylight: visuals.daylight, onBack: lyrics, onOpenQueue, onOpenLyrics: lyrics };
+    const RecordWall = initialStage?.view === 'records' ? initialStage.Wall : LocalRecordWall;
+    const PosterWall = initialStage?.view === 'posters' ? initialStage.Wall : LocalPosterWall;
+    const initialRadioWall = initialStage?.view === 'posters' ? initialStage.Radio : undefined;
     if (visuals.view !== 'lyrics') return <Suspense key={visuals.view} fallback={null}>
-        {player.active && (visuals.view === 'records' ? <LocalRecordWall {...wallProps} />
-            : <LocalPosterWall {...wallProps} translation={visuals.translation} />)}
+        {player.active && (visuals.view === 'records' ? <RecordWall {...wallProps} />
+            : <PosterWall {...wallProps} translation={visuals.translation} initialRadioWall={initialRadioWall} />)}
     </Suspense>;
     const cinema = visuals.lyricScene === 'cinema';
     // Replace the mode's Suspense boundary so old GPU resources are destroyed during a lazy switch.

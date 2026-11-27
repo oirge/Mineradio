@@ -46,6 +46,9 @@ with sync_playwright() as p:
       localStorage.setItem('i18nextLng','zh-CN');
       if (!localStorage.getItem('mineradio-ui-language-v1')) localStorage.setItem('mineradio-ui-language-v1','en');""")
     page.on('pageerror', lambda e: report['errors'].append({'message':str(e), 'stack':e.stack, 'after':list(report['audits'])[-1:]}))
+    locale_requests = []
+    page.on('request', lambda request: locale_requests.append(request.url)
+            if any(f'/vendor/folia/assets/{lang}-' in request.url for lang in ('en', 'zh-CN')) else None)
     try:
         page.goto(args.url, wait_until='domcontentloaded')
         page.wait_for_function("typeof MineradioFoliaHost === 'object'")
@@ -57,6 +60,8 @@ with sync_playwright() as p:
         expect(frame.get_by_test_id('local-view-lyrics')).to_have_text('Lyric player')
         assert frame.evaluate('document.documentElement.lang') == 'en'
         assert frame.title() == 'Folia Local Player · Mineradio'
+        assert any('/assets/en-' in url for url in locale_requests), locale_requests
+        assert not any('/assets/zh-CN-' in url for url in locale_requests), locale_requests
         audit(frame, 'initial-english-overrides-legacy-chinese')
         for view in ['lyrics','records','posters']:
             frame.get_by_test_id(f'local-view-{view}').click()
@@ -80,6 +85,8 @@ with sync_playwright() as p:
         expect(language).to_have_value('zh-CN')
         page.evaluate("setUiLanguage('en')")
         expect(language).to_have_value('en')
+        assert sum('/assets/en-' in url for url in locale_requests) == 1, locale_requests
+        assert sum('/assets/zh-CN-' in url for url in locale_requests) == 1, locale_requests
         report['checks'].append('Folia and main settings synchronize language in both directions')
 
         modes = frame.get_by_test_id('local-visualizer-mode').locator('option').evaluate_all('(els) => els.map(e=>e.value)')
