@@ -7,7 +7,7 @@ import { useLocalPlayer } from './useLocalPlayer';
 import { useVisualSceneSettings } from './useVisualSettings';
 import { usePlaylistVisualPreset } from './usePlaylistVisualPreset';
 import PlayerControls from './PlayerControls';
-import LocalVisualStage from './LocalVisualStage';
+import LocalVisualStage, { type InitialLocalStage } from './LocalVisualStage';
 import LocalErrorBoundary from './LocalErrorBoundary';
 import LocalStatusToast from './LocalStatusToast';
 import LocalHeader from './LocalHeader';
@@ -30,7 +30,7 @@ const VisualSettings = lazy(() => import('./VisualSettings'));
 const LocalPlaybackSettings = lazy(() => import('./LocalPlaybackSettings'));
 const LocalToolDialogs = lazy(() => import('./LocalToolDialogs'));
 
-export default function LocalPlayer() {
+export default function LocalPlayer({ initialStage }: { initialStage?: InitialLocalStage }) {
     const { t, i18n } = useTranslation('localPlayer');
     const player = useLocalPlayer();
     useEffect(() => {
@@ -98,7 +98,7 @@ export default function LocalPlayer() {
         <LocalErrorBoundary surface={`${visuals.view}:${visuals.mode}`} captureRuntime>
             <PlayerSubtitleBottomContext.Provider value={isLyrics ? subtitleBottom : null}>
                 <LyricRenderQualityPinContext.Provider value={probeQuality}>
-                    <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} />
+                    <LocalVisualStage player={player} theme={theme} assets={assets} focus={focus} onOpenQueue={openQueue} initialStage={initialStage} />
                 </LyricRenderQualityPinContext.Provider>
             </PlayerSubtitleBottomContext.Provider>
         </LocalErrorBoundary>

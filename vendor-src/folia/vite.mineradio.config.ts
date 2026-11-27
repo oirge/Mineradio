@@ -13,6 +13,29 @@ const upstream = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'ut
 const { collectBundledLicenses } = createRequire(import.meta.url)(path.resolve(root, '../../scripts/folia-licenses.cjs'));
 const workerModules = new Set<string>();
 
+function isTranslationObject(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readLocalTranslations(source: string): Record<string, unknown> {
+    const literal = /^\s*export default\s*(\{[\s\S]*\})\s*;?\s*$/.exec(source)?.[1];
+    if (!literal) throw new Error('Expected a literal translation resource');
+    const resources = JSON.parse(literal);
+    // The embedded player uses its own commands and never opens the upstream release history or Ponder.
+    delete resources.commandPalette;
+    delete resources.releaseNotes;
+    delete resources.ponder;
+    return resources;
+}
+
+function fillTranslationFallbacks(resources: Record<string, unknown>, fallback: Record<string, unknown>) {
+    for (const [key, value] of Object.entries(fallback)) {
+        const existing = resources[key];
+        if (!Object.hasOwn(resources, key)) resources[key] = value;
+        else if (isTranslationObject(existing) && isTranslationObject(value)) fillTranslationFallbacks(existing, value);
+    }
+}
+
 export default defineConfig({
     root,
     logLevel: 'warn',
@@ -32,20 +55,12 @@ export default defineConfig({
             name: 'mineradio-local-translations',
             enforce: 'pre',
             transform(source, id) {
-                if (!/\/src\/i18n\/locales\/(?:en|zh-CN)\.ts$/.test(id.replaceAll('\\', '/'))) return;
-                const literal = /^\s*export default\s*(\{[\s\S]*\})\s*;?\s*$/.exec(source)?.[1];
-                if (!literal) return;
-                try {
-                    // The embedded player uses its own commands and never opens the upstream release history or Ponder.
-                    const resources = JSON.parse(literal);
-                    delete resources.commandPalette;
-                    delete resources.releaseNotes;
-                    delete resources.ponder;
-                    return { code: 'export default ' + JSON.stringify(resources) + ';', map: null };
-                } catch {
-                    // A future upstream locale may stop being a JSON literal.
-                    return;
-                }
+                const language = /\/src\/i18n\/locales\/(en|zh-CN)\.ts$/.exec(id.replaceAll('\\', '/'))?.[1];
+                if (!language) return;
+                const fallback = language === 'en' ? 'zh-CN' : 'en';
+                const resources = readLocalTranslations(source);
+                fillTranslationFallbacks(resources, readLocalTranslations(fs.readFileSync(path.join(root, 'src/i18n/locales', fallback + '.ts'), 'utf8')));
+                return { code: 'export default ' + JSON.stringify(resources) + ';', map: null };
             },
         },
         {
@@ -64,6 +79,37 @@ export default defineConfig({
             },
         },
         react(),
+        {
+            name: 'mineradio-interactive-preload',
+            transformIndexHtml: {
+                order: 'post',
+                handler(_html, { bundle }) {
+                    if (!bundle) return;
+                    const mount = Object.values(bundle).find(chunk => chunk.type === 'chunk'
+                        && chunk.facadeModuleId?.replaceAll('\\', '/').endsWith('/mineradio/local-mount.tsx'));
+                    if (mount?.type !== 'chunk') return;
+                    // Start the renderer's biggest dependencies during HTML parsing.
+                    // Leave the export document on its own module graph.
+                    const dependencies = mount.imports.map(name => bundle[name])
+                        .filter(chunk => chunk?.type === 'chunk')
+                        .sort((a, b) => b.code.length - a.code.length)
+                        .slice(0, 2);
+                    const urls = [mount, ...dependencies].map(chunk => './' + chunk.fileName);
+                    return [{ tag: 'script', injectTo: 'head-prepend', children: `
+                        if (!new URLSearchParams(location.search).has('videoExport')) {
+                            for (const url of ${JSON.stringify(urls)}) {
+                                const link = document.createElement('link');
+                                link.rel = 'modulepreload';
+                                link.crossOrigin = 'anonymous';
+                                link.referrerPolicy = 'no-referrer';
+                                link.href = url;
+                                document.head.appendChild(link);
+                            }
+                        }
+                    ` }];
+                },
+            },
+        },
         {
             name: 'mineradio-local-entry',
             transformIndexHtml: {

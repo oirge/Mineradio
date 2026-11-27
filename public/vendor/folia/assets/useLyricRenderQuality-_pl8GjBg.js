@@ -1,1 +1,0 @@
-import{c as e}from"./main-Bamo5Rsd.js";import{a as t}from"./lucide-runtime-CZo6iGLR.js";import{Ft as n,It as r,vi as i}from"./localPlayerData-DYFG8ofg.js";var a=e(t(),1),o=e=>{let t=r(),o=n(),s=t?void 0:e?.scale,c=t?void 0:e?.antialias;return(0,a.useMemo)(()=>i(o,s&&c?{scale:s,antialias:c}:null),[o,s,c])};export{o as t};

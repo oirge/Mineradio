@@ -34,31 +34,31 @@
     if (maps.has(key)) return maps.get(key);
     var resolution = Math.min(1, 640 / Math.max(width, height), Math.sqrt(150000 / (width * height)));
     var canvas = document.createElement('canvas');
-    canvas.width = Math.max(2, Math.round(width * resolution));
-    canvas.height = Math.max(2, Math.round(height * resolution));
+    var columns = canvas.width = Math.max(2, Math.round(width * resolution));
+    var rows = canvas.height = Math.max(2, Math.round(height * resolution));
     var context = canvas.getContext('2d');
     if (!context) return null;
-    var pixels = context.createImageData(canvas.width, canvas.height);
+    var pixels = context.createImageData(columns, rows);
+    var rgba = pixels.data;
     var halfWidth = width / 2, halfHeight = height / 2;
     var rim = Math.min(18, radius, halfWidth / 2, halfHeight / 2);
-    for (var y = 0; y < canvas.height; y++) {
-      for (var x = 0; x < canvas.width; x++) {
-        var px = (x + .5) * width / canvas.width - halfWidth;
-        var py = (y + .5) * height / canvas.height - halfHeight;
-        var qx = Math.abs(px) - halfWidth + radius;
-        var qy = Math.abs(py) - halfHeight + radius;
-        var ox = Math.max(qx, 0), oy = Math.max(qy, 0);
+    for (var y = 0, i = 0; y < rows; y++) {
+      var py = (y + .5) * height / rows - halfHeight;
+      var oy = Math.max(Math.abs(py) - halfHeight + radius, 0);
+      var signY = Math.sign(py);
+      for (var x = 0; x < columns; x++, i += 4) {
+        rgba[i] = rgba[i + 1] = rgba[i + 2] = 128;
+        rgba[i + 3] = 255;
+        var px = (x + .5) * width / columns - halfWidth;
+        var ox = Math.max(Math.abs(px) - halfWidth + radius, 0);
+        // The rim is no wider than the corner radius; the centre stays neutral.
+        if (ox === 0 && oy === 0) continue;
         var length = Math.sqrt(ox * ox + oy * oy);
-        var distance = length + Math.min(Math.max(qx, qy), 0) - radius;
-        var inset = -distance;
-        var bend = inset > 0 && inset < rim ? Math.sin(inset / rim * Math.PI) * .7 : 0;
-        var nx = length > 0 ? ox / length : (qx > qy ? 1 : 0);
-        var ny = length > 0 ? oy / length : (qx > qy ? 0 : 1);
-        var i = (y * canvas.width + x) * 4;
-        pixels.data[i] = Math.round(128 + Math.sign(px) * nx * bend * 127);
-        pixels.data[i + 1] = Math.round(128 + Math.sign(py) * ny * bend * 127);
-        pixels.data[i + 2] = 128;
-        pixels.data[i + 3] = 255;
+        var inset = radius - length;
+        if (inset <= 0 || inset >= rim) continue;
+        var bend = Math.sin(inset / rim * Math.PI) * .7;
+        rgba[i] = Math.round(128 + Math.sign(px) * (ox / length) * bend * 127);
+        rgba[i + 1] = Math.round(128 + signY * (oy / length) * bend * 127);
       }
     }
     context.putImageData(pixels, 0, 0);

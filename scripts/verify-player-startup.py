@@ -216,6 +216,7 @@ def main():
                     scenario['restoreScheduling'] = 'after-frame' if painted else 'bounded-fallback'
                     assert not probe['restores'][0].get('error'), startup
                     assert startup['restoreStarted'] and not startup['restoreScheduled'], startup
+                    assert page.locator('#hotkey-modal').count() == 0, 'The unopened hotkey dialog must stay unmounted'
                     checked('restore waits for dependencies and DOMContentLoaded, then uses a frame or bounded fallback')
 
                     if mode == 'mineradio':
@@ -232,7 +233,8 @@ def main():
                         scenario['foliaFrameStartMs'] = frame_start
                         assert 0 <= frame_start <= probe['attachedAt'], (frame_start, startup)
                         assert page.evaluate('window.__earlyFoliaRequests.length === 0')
-                        assert page.evaluate('renderer === null'), 'Folia does not need the hidden Mineradio WebGL renderer'
+                        assert page.evaluate('renderer === null && particleDotUniform.value === null'), 'Folia must leave the hidden scene unallocated'
+                        assert page.evaluate('deferredShelfSceneMode === shelfModeValue() && !shelfManager.canInteract()'), 'Saved shelf stays deferred while Folia is visible'
                     checked('saved interface displays its real initial player')
 
                     page.locator('#file-input').set_input_files(audio_fixture())
@@ -245,8 +247,11 @@ def main():
                     if mode == 'mineradio':
                         click_switch(page)
                     child = folia_ready(page)
-                    for panel in ('LibraryPanel', 'VisualSettings', 'LocalPlaybackSettings', 'LocalToolDialogs', 'LocalVideoExportSurface'):
+                    for panel in ('LibraryPanel', 'VisualSettings', 'LocalPlaybackSettings', 'LocalToolDialogs',
+                                  'LocalVideoExportSurface', 'LocalRecordWall', 'LocalPosterWall', 'LocalRadioWall', 'LocalCinema'):
                         assert not any(f'/assets/{panel}-' in url for url in folia_requests), folia_requests
+                    assert any('/assets/zh-CN-' in url for url in folia_requests), folia_requests
+                    assert not any('/assets/en-' in url for url in folia_requests), folia_requests
                     expect(child.get_by_test_id('local-current-track')).to_contain_text('Startup-fixture')
                     click_folia_play_pause(child)
                     page.wait_for_function('audio.paused && !playToggleBusy')
@@ -256,12 +261,13 @@ def main():
                     assert child_audio is not None and not any(child_audio.values()), child_audio
                     assert child.locator('audio').count() == 0
                     if mode == 'folia':
-                        assert page.evaluate('renderer === null'), 'Playback in Folia must not need Mineradio WebGL'
+                        assert page.evaluate('renderer === null && particleDotUniform.value === null'), 'Playback in Folia must keep Mineradio visuals dormant'
                     checked('Folia pause and resume control the unique host audio')
 
                     click_switch(page)
                     page.wait_for_function('!isFoliaInterfaceActive()')
                     page.wait_for_function('renderer?.domElement === mainSceneCanvas && renderer.info.render.frame > 0')
+                    assert page.evaluate('particleDotUniform.value?.isCanvasTexture && deferredShelfSceneMode === null && shelfManager.getMode() === shelfModeValue()'), 'First Mineradio frame must use the original texture and saved shelf mode'
                     page.evaluate('window.__startupEngine.renderer = renderer;')
                     page.mouse.move(640, 780)
                     page.locator('#play-btn').click()

@@ -1,12 +1,25 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
+    <script>
+                        if (!new URLSearchParams(location.search).has('videoExport')) {
+                            for (const url of ["./assets/local-mount-CAHkQn_3.js","./assets/localPlayerData-B-nVBO-Y.js","./assets/visualAssetCache-Cf4DDuMo.js"]) {
+                                const link = document.createElement('link');
+                                link.rel = 'modulepreload';
+                                link.crossOrigin = 'anonymous';
+                                link.referrerPolicy = 'no-referrer';
+                                link.href = url;
+                                document.head.appendChild(link);
+                            }
+                        }
+                    </script>
+
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
     <meta name="mineradio-surface" content="folia-local-player" />
     <title>Folia 本地播放器 · Mineradio</title>
-    <script type="module" crossorigin src="./assets/main-Bamo5Rsd.js"></script>
+    <script type="module" crossorigin src="./assets/main-BYTO5pPb.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/main-DlaAdrC2.css">
   </head>
   <body>

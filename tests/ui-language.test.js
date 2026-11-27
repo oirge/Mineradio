@@ -69,6 +69,19 @@ test('设置标签中英往返后保持各自原文，不受同译文影响', ()
   });
 });
 
+test('关闭按钮移进弹窗时按新上下文翻译', () => {
+  const context = languageContext();
+  const label = textElement(' 关闭 ');
+  let inDialog = false;
+  label.closest = selector => inDialog && selector === '[data-window-action="close"], .modal-mask' ? label : null;
+  context.setUiLanguage('en');
+  context.translateUiElement(label);
+  assert.equal(label.firstChild.nodeValue, ' Off ');
+  inDialog = true;
+  context.translateUiElement(label);
+  assert.equal(label.firstChild.nodeValue, ' Close ');
+});
+
 test('设置中的用户数据与输入值不受语言切换影响', () => {
   const context = languageContext();
   const userLabel = textElement('歌词', { 'data-i18n-skip': '', title: '默认' });
@@ -253,10 +266,14 @@ test('设置面板的主要分组都有英文目录文案', () => {
   });
 });
 
-test('重标记和动态设置节点会重新应用当前语言', () => {
+test('设置初始化翻译整页，热键重绘只翻译自身弹窗', () => {
   assert.match(APP, /function applyUiLanguage\(\)/);
   assert.match(APP, /function observeUiLanguagePanel\(\)/);
-  assert.match(APP, /relabelFxPanelControls\(\)[\s\S]{0,6000}applyUiLanguage\(\)/);
+  assert.match(APP, /function initUiLanguageControls\(\)[\s\S]{0,1000}refreshUiLanguageSettings\(\);\s*applyUiLanguage\(\);/);
+  const hotkeyRender = APP.slice(APP.indexOf('function renderHotkeySettings()'), APP.indexOf('function setHotkeyCaptureNotice('));
+  assert.match(hotkeyRender, /translateUiElement\(modal\)/);
+  assert.match(hotkeyRender, /translateUiAttributesIn\(modal\)/);
+  assert.doesNotMatch(hotkeyRender, /applyUiLanguage\(/);
   assert.match(APP, /MutationObserver/);
   assert.match(APP, /data-i18n/);
   assert.match(APP, /plugin-item-main" data-i18n-skip/);

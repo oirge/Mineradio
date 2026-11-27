@@ -673,6 +673,7 @@
     "src/mineradio/lifecycle.ts",
     "src/mineradio/local-entry.tsx",
     "src/mineradio/local-i18n.ts",
+    "src/mineradio/local-language.ts",
     "src/mineradio/local-mount.tsx",
     "src/mineradio/local/LibraryPanel.tsx",
     "src/mineradio/local/LocalActionsContext.ts",

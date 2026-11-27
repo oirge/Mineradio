@@ -126,6 +126,13 @@ Custom API keys are encrypted with operating-system secure storage. If secure st
 
 See the [Releases](https://github.com/oirge/Mineradio/releases) page for the full history.
 
+### v2.8.0
+
+- Mineradio renders the Simple and DIY views fewer times at startup and creates the hotkey dialog when you open it.
+- Folia preloads the resources for its standard lyrics view and loads only the full dictionary for the active language at startup.
+- Folia prepares the last-used Record, Poster, or Radio Wall during startup so it appears sooner.
+- Folia Cinema loads its controls and 3D assets in parallel. Settings also generate liquid-glass textures faster.
+
 ### v2.7.9
 
 - Folia opens sooner when it was the last interface used. The first switch from Mineradio to Folia is also faster.

@@ -39,11 +39,14 @@ test('直接启动不再创建独立音效 AudioContext 或解锁监听', () => 
   assert.doesNotMatch(extractFunction('initializePlayerHome'), /AudioContext|pointerdown|keydown/);
 });
 
-test('记住 Folia 启动时不创建主场景 WebGL，切回后只在既有画布初始化一次', () => {
+test('记住 Folia 启动时不创建主场景 WebGL 和贴图，切回后只初始化一次', () => {
   const allocations = [];
   const sizes = [];
   const canvas = { style: {} };
   const mounted = [];
+  const shelfModes = [];
+  const dotTexture = {};
+  let textureAllocations = 0;
   const context = vm.createContext({
     document: {
       documentElement: { classList: { contains: name => name === 'folia-mode-preload' } },
@@ -55,6 +58,9 @@ test('记住 Folia 启动时不创建主场景 WebGL，切回后只在既有画�
       this.domElement = options.canvas;
       this.setClearColor = (color, alpha) => assert.deepEqual([color, alpha], [0, 0]);
     } },
+    makeDotTexture: () => { textureAllocations++; return dotTexture; },
+    deferredShelfSceneMode: 'stage',
+    shelfManager: { setMode: mode => shelfModes.push(mode) },
     resizeMainSceneRenderer: () => sizes.push('initial-viewport'),
   });
   const init = appSource.indexOf("var mainSceneCanvas = document.createElement('canvas');");
@@ -64,6 +70,9 @@ test('记住 Folia 启动时不创建主场景 WebGL，切回后只在既有画�
   assert.deepEqual(mounted, [canvas]);
   assert.equal(context.renderer, null);
   assert.equal(allocations.length, 0);
+  assert.equal(context.particleDotUniform.value, null);
+  assert.equal(textureAllocations, 0);
+  assert.deepEqual(shelfModes, []);
   context.isFoliaInterfaceActive = () => true;
   assert.equal(context.isMainSceneHiddenByFolia(), true);
   context.isFoliaInterfaceActive = () => false;
@@ -72,6 +81,10 @@ test('记住 Folia 启动时不创建主场景 WebGL，切回后只在既有画�
   context.ensureMainSceneRenderer();
   assert.equal(context.renderer.domElement, canvas);
   assert.equal(allocations.length, 1);
+  assert.equal(context.particleDotUniform.value, dotTexture);
+  assert.equal(textureAllocations, 1);
+  assert.deepEqual(shelfModes, ['stage']);
+  assert.equal(context.deferredShelfSceneMode, null);
   assert.deepEqual(sizes, ['initial-viewport']);
 });
 

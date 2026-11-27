@@ -103,10 +103,10 @@ const UPDATE_VERIFY_CHUNK_BYTES = 1024 * 1024;
 const PATCH_ALLOWED_ROOTS = new Set(['public', 'desktop', 'build']);
 const PATCH_ALLOWED_FILES = new Set(['server.js', 'package.json', 'package-lock.json']);
 const UPDATE_FALLBACK_NOTES = [
-  '记住 Folia 时更早载入播放器，从 Mineradio 首次切换到 Folia 的等待也更短。',
-  '曲库面板、视觉设置和工具按需加载，主题图标随效果载入，减少 Folia 首屏要读取的资源。',
-  'Mineradio 首页就绪后再启动主场景的 3D 渲染，减少着色器编译对启动的影响。',
-  '过期安装包缓存在后台清理，本地服务可以更早响应首页。',
+  'Mineradio 简洁与 DIY 界面减少启动时的重复渲染，热键弹窗在打开时创建。',
+  'Folia 普通歌词页提前加载播放器所需资源，启动时只载入当前语言的完整词表。',
+  '启动时优先准备上次使用的唱片墙、海报墙或电台墙，让对应墙面更快显示。',
+  'Folia 影厅并行加载控件和 3D 资源，设置面板的液态玻璃贴图生成也更快。',
 ];
 const updateDownloadJobs = new Map();
 const installerReusePromises = new Map();

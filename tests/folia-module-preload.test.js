@@ -4,8 +4,36 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const assets = path.resolve(__dirname, '../public/vendor/folia/assets');
+
+test('Folia warms the entry dependencies early while the export document skips interactive preloads', () => {
+  const html = fs.readFileSync(path.join(assets, '../index.html'), 'utf8');
+  const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .find(([, body]) => body.includes("link.rel = 'modulepreload'"))?.[1];
+  assert.ok(inline, 'inspect the built early preload script');
+
+  function preloads(search) {
+    const links = [];
+    vm.runInNewContext(inline, {
+      location: { search }, URLSearchParams,
+      document: { createElement: () => ({}), head: { appendChild: link => links.push(link) } },
+    });
+    return links;
+  }
+
+  const early = preloads('?host=mineradio&surface=local-player-v3');
+  assert.match(early[0]?.href, /^\.\/assets\/local-mount-.*\.js$/);
+  assert.ok(early.length <= 3);
+  for (const link of early) {
+    assert.equal(link.rel, 'modulepreload');
+    assert.equal(link.crossOrigin, 'anonymous');
+    assert.equal(link.referrerPolicy, 'no-referrer');
+    assert.ok(fs.existsSync(path.join(assets, path.basename(link.href))), link.href);
+  }
+  assert.deepEqual(preloads('?videoExport=fixture'), []);
+});
 
 // tests/folia-module-preload.test.js
 // Check the shipped chunks: a transitive icon graph previously produced ~1,900 scans per import.

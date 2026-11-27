@@ -201,6 +201,11 @@ var PERSISTENT_UI_STATE_KEYS = [
 // 主窗口设置面板的语言层只翻译固定 UI 文案。歌曲名、歌单名、路径、设备名和插件元数据
 // 不在这里登记，因此不会被语言切换改写。
 var UI_LANGUAGE_PAIRS = [
+  ['加快 Mineradio 和 Folia 各界面的启动。', 'Faster startup across Mineradio and Folia views.'],
+  ['Mineradio 简洁与 DIY 界面减少启动时的重复渲染，热键弹窗在打开时创建。', 'Mineradio renders the Simple and DIY views fewer times at startup and creates the hotkey dialog when you open it.'],
+  ['Folia 普通歌词页提前加载播放器所需资源，启动时只载入当前语言的完整词表。', 'Folia preloads the resources for its standard lyrics view and loads only the full dictionary for the active language at startup.'],
+  ['启动时优先准备上次使用的唱片墙、海报墙或电台墙，让对应墙面更快显示。', 'Folia prepares the last-used Record, Poster, or Radio Wall during startup so it appears sooner.'],
+  ['Folia 影厅并行加载控件和 3D 资源，设置面板的液态玻璃贴图生成也更快。', 'Folia Cinema loads its controls and 3D assets in parallel. Settings also generate liquid-glass textures faster.'],
   ['加快启动和进入 Folia 的速度。', 'Faster startup and entry into Folia.'],
   ['记住 Folia 时更早载入播放器，从 Mineradio 首次切换到 Folia 的等待也更短。', 'Folia opens sooner when it was the last interface used. The first switch from Mineradio to Folia is also faster.'],
   ['曲库面板、视觉设置和工具按需加载，主题图标随效果载入，减少 Folia 首屏要读取的资源。', 'The library panel, visual settings, tools and theme icons load on demand, so Folia reads fewer files at startup.'],
@@ -1426,6 +1431,7 @@ function translateUiStoredValue(node, field, value, source) {
   var values = uiLanguageSources.get(node);
   if (!values) { values = {}; uiLanguageSources.set(node, values); }
   var record = values[field];
+  if (source == null && record && record.last === value && record.language === uiLanguage && !record.contextualClose) return value;
   // Keep each node's source: several distinct Chinese labels share an English translation.
   if (!record || record.last !== value || source != null) {
     record = { source: source == null ? value : source, last: value };
@@ -1435,8 +1441,9 @@ function translateUiStoredValue(node, field, value, source) {
   var trimmed = raw.trim();
   var translated = uiText(trimmed);
   var element = node.nodeType === 1 ? node : node.parentElement;
-  if (trimmed === '关闭' && uiLanguageCloseControl(element)) {
-    translated = uiLanguage === 'en' ? 'Close' : '关闭';
+  if (trimmed === '关闭') {
+    record.contextualClose = true;
+    if (uiLanguageCloseControl(element)) translated = uiLanguage === 'en' ? 'Close' : '关闭';
   }
   record.last = trimmed ? raw.slice(0, raw.indexOf(trimmed)) + translated + raw.slice(raw.indexOf(trimmed) + trimmed.length) : raw;
   record.language = uiLanguage;
@@ -1448,13 +1455,14 @@ function uiLanguageTextSkipNode(node) {
   return !!(element && element.closest && element.closest('[data-i18n-skip], [data-i18n-attrs]'));
 }
 function translateUiTextNode(node) {
-  if (!node || node.nodeType !== 3 || uiLanguageTextSkipNode(node)) return;
+  if (!node || node.nodeType !== 3) return;
   var raw = String(node.nodeValue || '');
+  if ((!raw.trim() && !uiLanguageSources.has(node)) || uiLanguageTextSkipNode(node)) return;
   var translated = translateUiStoredValue(node, 'text', raw);
   if (translated !== raw) node.nodeValue = translated;
 }
 function translateUiAttribute(element, attr) {
-  if (uiLanguageSkipNode(element) || !element.hasAttribute(attr)) return;
+  if (!element.hasAttribute(attr) || uiLanguageSkipNode(element)) return;
   var value = element.getAttribute(attr);
   var translated = translateUiStoredValue(element, attr, value);
   if (translated !== value) element.setAttribute(attr, translated);
@@ -1474,8 +1482,10 @@ function translateUiAttributesIn(root) {
   }
 }
 function translateUiElement(element) {
-  if (!element || element.nodeType !== 1 || uiLanguageSkipNode(element) || /^(SCRIPT|STYLE)$/.test(element.tagName)) return;
-  ['title', 'aria-label', 'placeholder'].forEach(function(attr){ translateUiAttribute(element, attr); });
+  if (!element || element.nodeType !== 1 || element.tagName === 'SCRIPT' || element.tagName === 'STYLE' || uiLanguageSkipNode(element)) return;
+  translateUiAttribute(element, 'title');
+  translateUiAttribute(element, 'aria-label');
+  translateUiAttribute(element, 'placeholder');
   if (element.hasAttribute('data-i18n-attrs')) return;
   if (element.hasAttribute('data-i18n')) {
     var key = element.getAttribute('data-i18n');
@@ -2111,7 +2121,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.7.9';
+var APP_VERSION = '2.8.0';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -2164,12 +2174,12 @@ var updatePreviewState = {
   lastContentSignature: '',
   lastClassSignature: '',
   lastProgressSignature: '',
-  hero: '加快启动和进入 Folia 的速度。',
+  hero: '加快 Mineradio 和 Folia 各界面的启动。',
   notes: [
-    '记住 Folia 时更早载入播放器，从 Mineradio 首次切换到 Folia 的等待也更短。',
-    '曲库面板、视觉设置和工具按需加载，主题图标随效果载入，减少 Folia 首屏要读取的资源。',
-    'Mineradio 首页就绪后再启动主场景的 3D 渲染，减少着色器编译对启动的影响。',
-    '过期安装包缓存在后台清理，本地服务可以更早响应首页。'
+    'Mineradio 简洁与 DIY 界面减少启动时的重复渲染，热键弹窗在打开时创建。',
+    'Folia 普通歌词页提前加载播放器所需资源，启动时只载入当前语言的完整词表。',
+    '启动时优先准备上次使用的唱片墙、海报墙或电台墙，让对应墙面更快显示。',
+    'Folia 影厅并行加载控件和 3D 资源，设置面板的液态玻璃贴图生成也更快。'
   ]
 };
 function readSavedVolume() {
@@ -3542,14 +3552,21 @@ mainSceneCanvas.style.height = '100%';
 mainSceneCanvas.tabIndex = 0;
 document.getElementById('canvas-container').appendChild(mainSceneCanvas);
 var renderer = null;
+// All dot shaders share the texture, which only needs pixels when the main scene is first rendered.
+var particleDotUniform = { value: null };
 function isMainSceneHiddenByFolia() {
   if (typeof isFoliaInterfaceActive === 'function') return isFoliaInterfaceActive();
   return document.documentElement.classList.contains('folia-mode-preload');
 }
 function ensureMainSceneRenderer() {
   if (renderer) return;
+  if (!particleDotUniform.value) particleDotUniform.value = makeDotTexture();
   renderer = new THREE.WebGLRenderer({ canvas: mainSceneCanvas, antialias: false, alpha: true, powerPreference: 'high-performance' });
   renderer.setClearColor(0x000000, 0);
+  if (deferredShelfSceneMode !== null) {
+    shelfManager.setMode(deferredShelfSceneMode);
+    deferredShelfSceneMode = null;
+  }
   resizeMainSceneRenderer();
 }
 
@@ -5735,7 +5752,6 @@ function makeDotTexture() {
   tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
   return tex;
 }
-var dotTexture = makeDotTexture();
 
 // ============================================================
 //  主粒子系统
@@ -5878,32 +5894,33 @@ var sonicWorkshopCtx = {
   audio: { bass: 0, mid: 0, treble: 0, beat: 0, energy: 0 }
 };
 
-// 封面纹理 + 边缘/深度纹理
-var coverTex = new THREE.Texture();
+// Solid placeholder pixels don't need a Canvas2D context. These stay ordinary
+// textures so real cover canvases can still replace their images on playback.
+function solidCoverPixels(red, green, blue) {
+  var pixels = new Uint8ClampedArray(4 * 4 * 4);
+  for (var i = 0; i < pixels.length; i += 4) {
+    pixels[i] = red;
+    pixels[i + 1] = green;
+    pixels[i + 2] = blue;
+    pixels[i + 3] = 255;
+  }
+  return new ImageData(pixels, 4, 4);
+}
+
+var idleCoverPixels = solidCoverPixels(28, 28, 40);
+var coverTex = new THREE.Texture(idleCoverPixels);
 coverTex.minFilter = THREE.LinearFilter; coverTex.magFilter = THREE.LinearFilter;
 coverTex.wrapS = THREE.ClampToEdgeWrapping; coverTex.wrapT = THREE.ClampToEdgeWrapping;
+coverTex.needsUpdate = true;
 
-var coverEdgeTex = new THREE.Texture();  // R=depth, G=edge, B=fg-mask, A=lum
+var coverEdgeTex = new THREE.Texture(solidCoverPixels(128, 0, 0));  // R=depth, G=edge, B=fg-mask, A=lum
 coverEdgeTex.minFilter = THREE.LinearFilter; coverEdgeTex.magFilter = THREE.LinearFilter;
-
-// 初始 1×1 像素
-(function(){
-  var c = document.createElement('canvas'); c.width = c.height = 4;
-  var x = c.getContext('2d'); x.fillStyle = '#1c1c28'; x.fillRect(0,0,4,4);
-  coverTex.image = c; coverTex.needsUpdate = true;
-  var d = document.createElement('canvas'); d.width = d.height = 4;
-  var dx = d.getContext('2d'); dx.fillStyle = 'rgba(128,0,0,255)'; dx.fillRect(0,0,4,4);
-  coverEdgeTex.image = d; coverEdgeTex.needsUpdate = true;
-})();
+coverEdgeTex.needsUpdate = true;
 
 // 前一首封面纹理 (用于切歌渐变)
-var prevCoverTex = new THREE.Texture();
+var prevCoverTex = new THREE.Texture(idleCoverPixels);
 prevCoverTex.minFilter = THREE.LinearFilter; prevCoverTex.magFilter = THREE.LinearFilter;
-(function(){
-  var c = document.createElement('canvas'); c.width = c.height = 4;
-  var x = c.getContext('2d'); x.fillStyle = '#1c1c28'; x.fillRect(0,0,4,4);
-  prevCoverTex.image = c; prevCoverTex.needsUpdate = true;
-})();
+prevCoverTex.needsUpdate = true;
 
 var uniforms = {
   uTime:       { value: 0 },
@@ -5934,7 +5951,7 @@ var uniforms = {
   uEdgeTex:    { value: coverEdgeTex },
   uRippleTex:  { value: rippleTex },
   uRippleCount:{ value: 0 },
-  uDotTex:     { value: dotTexture },
+  uDotTex:     particleDotUniform,
   uHasCover:   { value: 0 },
   uHasDepth:   { value: 0 },
   uEdgeEnabled:{ value: 1 },
@@ -7041,7 +7058,7 @@ function createSkullParticleLayer() {
   }
   var mat = new THREE.ShaderMaterial({
     uniforms: {
-      uMap: { value: dotTexture },
+      uMap: particleDotUniform,
       uTime: uniforms.uTime,
       uPixel: uniforms.uPixel,
       uBass: uniforms.uBass,
@@ -7675,7 +7692,7 @@ function ensureLyricStarRiver() {
   geo.setAttribute('depthSeed', new THREE.BufferAttribute(depths, 1));
   var mat = new THREE.ShaderMaterial({
     uniforms: {
-      uMap: { value: dotTexture },
+      uMap: particleDotUniform,
       uTime: uniforms.uTime,
       uPixel: uniforms.uPixel,
       uBass: uniforms.uBass,
@@ -11393,7 +11410,7 @@ function buildLyricMesh(text, opts) {
   pgeo.setAttribute('seed', new THREE.BufferAttribute(pseed, 1));
   var pmat = new THREE.ShaderMaterial({
     uniforms: {
-      uMap: { value: dotTexture },
+      uMap: particleDotUniform,
       uSize: { value: 0.052 },
       uOpacity: { value: 0 },
       uColor: { value: lyricThreeColor(pal.highlight || pal.secondary || pal.primary, '#fff7d2', 0.30) },
@@ -18638,6 +18655,7 @@ void main(){ vec4 t = texture2D(uDotTex, gl_PointCoord); if (t.a < 0.02) discard
 }
 var shelfManagerDefault = makeShelfManager();
 var shelfManagerClassic = null;
+var deferredShelfSceneMode = null;
 shelfManager = shelfManagerDefault;
 // ---- 歌单架实现切换：现有精修版（default）与上游原版（classic） ----
 function shelfClassicModule() {
@@ -18685,7 +18703,15 @@ function applyShelfEngineForMode(mode) {
   fx.shelf = mode;
   if (wantClassic) shelfManager = createClassicShelfEngineIfNeeded() || shelfManagerDefault;
   else shelfManager = shelfManagerDefault;
-  if (shelfManager && typeof shelfManager.setMode === 'function') shelfManager.setMode(mode);
+  if (shelfManager && typeof shelfManager.setMode === 'function') {
+    // Decode and draw the initial shelf when its scene is starting to render.
+    if (mode !== 'off' && !renderer) {
+      deferredShelfSceneMode = mode;
+    } else {
+      deferredShelfSceneMode = null;
+      shelfManager.setMode(mode);
+    }
+  }
   updateShelfClassicParamsVisibility();
 }
 function updateShelfClassicParamsVisibility() {
@@ -40463,8 +40489,16 @@ function setVisualTintCustom(color, silent) {
 var coverColorPickerState = { target: 'visualTint', canvas: null, loupeImageCss: '' };
 function currentCoverPickerCanvas() {
   if (coverPickerCanvas && coverPickerCanvas.getContext) return coverPickerCanvas;
-  if (coverTex && coverTex.image && coverTex.image.getContext) return coverTex.image;
-  return null;
+  if (!coverTex || !coverTex.image) return null;
+  if (coverTex.image.getContext) return coverTex.image;
+  if (coverTex.image !== idleCoverPixels) return null;
+  var canvas = document.createElement('canvas');
+  canvas.width = idleCoverPixels.width;
+  canvas.height = idleCoverPixels.height;
+  var context = canvas.getContext('2d');
+  if (!context) return null;
+  context.putImageData(idleCoverPixels, 0, 0);
+  return canvas;
 }
 function coverPickerSwatchColors() {
   var pal = stageLyrics.coverPalette || stageLyrics.palette || {};
@@ -41420,7 +41454,6 @@ function relabelFxPanelControls() {
   setFxSliderLabel('fx-bloom', '光晕强度');
   setFxSliderLabel('fx-scatter', '离散感');
   setFxSliderLabel('fx-bgfade', '背景压暗');
-  applyUiLanguage();
 }
 
 function getHotkeyDefaults() {
@@ -41756,7 +41789,8 @@ function renderHotkeyScope(scope) {
   wrap.innerHTML = html;
 }
 function renderHotkeySettings() {
-  var modal = ensureHotkeyModal();
+  var modal = document.getElementById('hotkey-modal');
+  if (!modal) return;
   var active = modal.getAttribute('data-scope') || 'local';
   modal.classList.toggle('capturing', !!hotkeyCaptureState);
   modal.classList.toggle('warn', !!hotkeyCaptureNotice);
@@ -41779,7 +41813,8 @@ function renderHotkeySettings() {
   if (global) global.classList.toggle('active', active === 'global');
   renderHotkeyScope('local');
   renderHotkeyScope('global');
-  if (typeof applyUiLanguage === 'function') applyUiLanguage();
+  translateUiElement(modal);
+  translateUiAttributesIn(modal);
 }
 /**
  * 更新录入区提示。传空串恢复默认提示并撤掉告警配色。
@@ -41943,7 +41978,6 @@ var globalHotkeyListenerBound = false;
 var globalHotkeyFailureNotified = false;
 function bindHotkeySettings() {
   ensureHotkeySettingsButton();
-  ensureHotkeyModal();
   if (!globalHotkeyListenerBound) {
     var api = getDesktopWindowApi && getDesktopWindowApi();
     if (api && typeof api.onGlobalHotkey === 'function') {
@@ -42033,9 +42067,6 @@ function bindFxPanel() {
   organizeFxPanel();
   relabelFxPanelControls();
   bindHotkeySettings();
-  buildPresetGrid();
-  renderUserFxArchives();
-  buildLyricColorControls();
   var ids = [
     ['fx-intensity','intensity'],['fx-depth','depth'],['fx-coverres','coverResolution'],['fx-cineshake','cinemaShake'],['fx-lyricglow','lyricGlowStrength'],['fx-bgopacity','backgroundOpacity'],['fx-windowbgopacity','windowBackgroundOpacity'],['fx-bgglassopacity','backgroundGlassOpacity'],['fx-glassaberration','controlGlassChromaticOffset'],
     ['fx-playlistblur','playlistPanelGlassBlur'],['fx-playlistdensity','playlistPanelGlassDensity'],['fx-playlistopen','playlistPanelOpenDuration'],['fx-playlistclose','playlistPanelCloseDuration'],
@@ -47940,7 +47971,6 @@ applySavedLyricPaletteState();
 bindQualityControl();
 bindVolumeControls();
 bindLocalPlaybackPlaylistPicker();
-initControlGlassSurface();
 bindPlayerControlAnimations();
 applyUserCapsuleAutoHideState();
 applyHomeBtnAutoHideState();
@@ -47967,7 +47997,6 @@ if (LOCAL_ONLY_MODE) {
   homeDiscoverState.playlists = [];
   homeDiscoverState.podcasts = [];
   renderUserBtn();
-  updateEmptyHomeVisibility({ forceLoad: false });
 }
 var collectNameInput = document.getElementById('collect-new-name');
 if (collectNameInput) {
@@ -48006,6 +48035,8 @@ bindMainQuickControls();
 if (typeof initSilenceSkipControls === 'function') initSilenceSkipControls();
 if (typeof initLocalInsightsControls === 'function') initLocalInsightsControls();
 initPluginRuntime();
+// Measure the initial glass after the startup controls have set their classes and sizes.
+initControlGlassSurface();
 setTimeout(initUpdatePreview, LOCAL_ONLY_MODE ? 12000 : 9000);
 
 // ============================================================
