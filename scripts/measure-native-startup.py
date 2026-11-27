@@ -9,6 +9,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import socket
 import statistics
 import struct
@@ -46,9 +47,12 @@ def make_library(folder, songs):
         png = (b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', struct.pack('>IIBBBBB', 48, 48, 8, 2, 0, 0, 0))
                + png_chunk(b'IDAT', zlib.compress(pixels)) + png_chunk(b'IEND', b''))
         (album / 'cover.png').write_bytes(png)
+        first_track = album / f'Track-{first:05d}.wav'
+        shutil.copyfile(audio, first_track)
         for index in range(first, min(first + 100, songs)):
             track = album / f'Track-{index:05d}.wav'
-            os.link(audio, track)
+            if index != first:
+                os.link(first_track, track)
             track.with_suffix('.lrc').write_text(f'[00:00.00]Track {index}\n[00:04.00]Second line\n', encoding='utf-8')
     return library, audio
 
