@@ -3,12 +3,12 @@
 - Mineradio 简洁与 DIY 界面减少重复首页及设置渲染，热键弹窗按需创建，封面占位与设置液态玻璃保留原有像素。Folia 提前加载当前语言与播放器资源，优先准备上次使用的唱片墙、海报墙或电台墙，影厅控件与 3D 资源并行启动。
 - 同机空曲库无头 Chromium 对比已发布的 v2.7.9，普通歌词页就绪中位数由 804 ms 降至 666 ms，8 组中 7 组缩短。对比上一轮本地候选，简洁与 DIY 分别从 630、1,308 ms 降至 526、1,163 ms，三种墙面减少 135–253 ms，影厅真实 3D 首帧由 3,289 ms 降至 2,008 ms。Windows 安装版冷启动未计时。详见 [启动复测](docs/STARTUP_PERFORMANCE.md)。
 - 本地 Node 1776 项通过、0 失败、1 项可选跳过。Folia 类型、产物与 133 项单测通过，启动实播、中英文、墙面及七项玻璃检查通过。云端原生翻译布局通过，PR 与合并提交的实际视频导出及独立解码通过。[原生布局](https://github.com/oirge/Mineradio/actions/runs/45929775830) · [PR 视频导出](https://github.com/oirge/Mineradio/actions/runs/45929751518) · [合并后视频导出](https://github.com/oirge/Mineradio/actions/runs/45930418445)
-- PR Verify 通过启动专项，随后在点击字幕设置关闭按钮时超时，与 v2.7.9 的同一位置一致。相同提交的分支 Verify 通过启动、液态玻璃、播放、工具、翻译和布局，完整浏览器回归在发布时仍在运行。发布后的主分支 Verify 首次运行在已经打开的播放设置切换英文时超过 5 秒，本地对同一版本的播放专项复测通过全部六项。[PR Verify](https://github.com/oirge/Mineradio/actions/runs/45929751532) · [分支 Verify](https://github.com/oirge/Mineradio/actions/runs/45929742556) · [合并后 Verify 首次运行](https://github.com/oirge/Mineradio/actions/runs/45930418415/attempts/1)
+- PR Verify 通过启动专项，随后在点击字幕设置关闭按钮时超时，与 v2.7.9 的同一位置一致。相同提交的分支 Verify 最终通过完整回归。发布后的主分支 Verify 首次运行在已经打开的播放设置切换英文时超过 5 秒，本地对同一版本的播放专项复测通过全部六项。[PR Verify](https://github.com/oirge/Mineradio/actions/runs/45929751532) · [分支 Verify](https://github.com/oirge/Mineradio/actions/runs/45929742556) · [合并后 Verify 首次运行](https://github.com/oirge/Mineradio/actions/runs/45930418415/attempts/1)
 - 合并提交 `54cbdce8045f31c13d0402fcee70d302df2d3c93` 与验收提交 `41e5600be3de9ec5e87cc4f1c2ea09f2b3ecd306` 的文件树一致。Annotated tag `v2.8.0` 的对象为 `375dcd13b1f5bedbe46e94e0a6ea9e7e785520e8`。[PR #197](https://github.com/oirge/Mineradio/pull/197)
 - Windows 构建通过依赖审计、Folia 重建和包内默认翻译配置校验。v2.8.0 于北京时间 2026-11-27 10:52:37 公开并设为最新版，Release ID 为 `460108223`。[Windows 构建](https://github.com/oirge/Mineradio/actions/runs/45930461300) · [v2.8.0](https://github.com/oirge/Mineradio/releases/tag/v2.8.0)
 - 发行标题与四条更新说明核对通过。草稿四项文件完整回下载，文件大小和 SHA256 与清单及 GitHub 元数据一致，安装包 SHA-512 与 `latest.yml` 一致。安装包为 `122573618` B，只读 FileVersion 和 ProductVersion 均为 `2.8.0`，SHA256 为 `8d8f4ad44b42fa87c1fdfae088c9ad08669e2d23ed8fc3e07ef025f621f1c734`。
 - 匿名 Latest API 确认相同版本和四项资产，公开 `latest.yml` 与 SHA256 清单均与草稿逐字节一致。隔离运行 v2.7.9 的更新服务，确认可获取 v2.8.0 安装包信息和四条中文更新说明。核验记录位于 `verification/release-v2.8.0/`。
-- 发布后在隔离浏览器中延迟首次英文词表请求，复现了一个独立问题。切成英文后立刻切回中文，英文词表到达时 Folia 会短暂应用英文，随后恢复当前选择的中文。
+- 发布后在隔离浏览器中延迟首次英文词表请求，复现了一个独立问题。切成英文后立刻切回中文，英文词表到达时 Folia 会短暂应用英文，随后恢复当前选择的中文。后续源码按最近一次语言请求处理，延迟词表复现用例和 134 项 Folia 单测通过。
 
 # v2.7.9 启动与 Folia 首屏优化
 

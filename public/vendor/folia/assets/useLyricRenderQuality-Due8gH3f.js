@@ -1,0 +1,1 @@
+import{u as e}from"./main-BnhFKVI6.js";import{a as t}from"./lucide-runtime-BjHQqonp.js";import{Ft as n,It as r,vi as i}from"./localPlayerData-C0yChhmF.js";var a=e(t(),1),o=e=>{let t=r(),o=n(),s=t?void 0:e?.scale,c=t?void 0:e?.antialias;return(0,a.useMemo)(()=>i(o,s&&c?{scale:s,antialias:c}:null),[o,s,c])};export{o as t};

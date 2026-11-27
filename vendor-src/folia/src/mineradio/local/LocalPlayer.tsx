@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { colorWithAlpha, mixColors } from '../../components/visualizer/colorMix';
 import { DEFAULT_THEME, DAYLIGHT_THEME } from '../../services/baseThemes';
 import { useLocalPlayer } from './useLocalPlayer';
+import { syncLocalLanguage } from '../local-i18n';
 import { useVisualSceneSettings } from './useVisualSettings';
 import { usePlaylistVisualPreset } from './usePlaylistVisualPreset';
 import PlayerControls from './PlayerControls';
@@ -31,12 +32,10 @@ const LocalPlaybackSettings = lazy(() => import('./LocalPlaybackSettings'));
 const LocalToolDialogs = lazy(() => import('./LocalToolDialogs'));
 
 export default function LocalPlayer({ initialStage }: { initialStage?: InitialLocalStage }) {
-    const { t, i18n } = useTranslation('localPlayer');
+    const { t } = useTranslation('localPlayer');
     const player = useLocalPlayer();
-    useEffect(() => {
-        const language = player.state?.uiLanguage;
-        if (language && language !== i18n.language) void i18n.changeLanguage(language);
-    }, [player.state?.uiLanguage, i18n]);
+    const language = player.state?.uiLanguage;
+    useEffect(() => { syncLocalLanguage(language); }, [language]);
     useEffect(() => { document.title = t('windowTitle'); }, [t]);
     useEffect(() => attachLocalSettingsGlass(), []);
     const visuals = useVisualSceneSettings();

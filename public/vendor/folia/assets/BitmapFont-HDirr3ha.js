@@ -1,1 +1,0 @@
-export{BitmapFont}from"./lib-CHMoIMh0.js";
