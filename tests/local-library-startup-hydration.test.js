@@ -31,6 +31,8 @@ function databaseResult(root, count = 1, label = root) {
 /** 在无 GUI 和真实用户数据的环境中运行完整的建库入口。 */
 function harness(options = {}) {
   const counts = { loads: 0, digests: 0, legacyReads: 0, constructed: 0 };
+  const signatureInputs = [];
+  const backgroundRefreshes = [];
   const noop = () => {};
   const context = {
     console: { warn: noop }, Date, Object, Array, Promise,
@@ -55,12 +57,14 @@ function harness(options = {}) {
     },
     localLibraryDbIndexDigest: (record) => { counts.digests++; return record.key; },
     resetLocalLibraryDbIndexDigests: noop, localLibraryDbIndexDigests: {},
-    localLibrarySnapshotSignature: (files) => String(files.length),
+    window: { desktopWindow: { isDesktop: true, scanLocalMusicFolder: options.scan || noop } },
     localStorage: { getItem: () => null },
     createLocalSongsFromFiles: (files) => { counts.constructed += files.length; return files; },
     syncLocalLibraryIndexWithSongs: (_root, songs) => ({ stats: { total: songs.length, unchanged: songs.length, hasIndex: true } }),
     noteLocalLibraryAddedAt: noop,
     savedLocalLibraryFolderPath: () => 'A',
+    savedLocalLibraryFolderPaths: () => ['A'],
+    refreshSavedLocalMusicFolderInBackground: (root, snapshot) => backgroundRefreshes.push({ root, snapshot }),
     hydrateLocalAssetCacheForSongs: async () => 0,
     hydrateLocalAssetCacheForSongsChunked: async () => 0,
     yieldToIdle: async () => {}, localAssetInitialBatchSize: () => 1,
@@ -83,15 +87,44 @@ function harness(options = {}) {
   ]) context[name] = noop;
   vm.createContext(context);
   vm.runInContext(
-    slice('function localLibraryPersistentKey(', 'async function readLocalLibraryPersistentRecord(')
+    slice('var LOCAL_AUDIO_FILE_RE =', 'function normalizeLocalLibraryPathKey(')
+      + slice('function isLocalAudioFile(', 'function isLocalLyricFile(')
+      + slice('function localLibrarySnapshotSignature(', 'function normalizeLocalLibrarySnapshotInput(')
+      + slice('function localLibraryPersistentKey(', 'async function readLocalLibraryPersistentRecord(')
       + slice('async function hydrateLocalLibraryPersistentState(', "scheduleLocalIndexedDbTrim('startup', 9000);")
       + slice('async function readLocalLibrarySnapshot(', '/* ---- 入库时间 ----')
-      + slice('async function loadSingleLocalLibraryRoot(', 'async function restoreSavedLocalMusicFolder(')
+      + slice('async function loadSingleLocalLibraryRoot(', 'function scheduleSavedLocalMusicFolderRestore(')
       + slice('function localLibraryRootGroups(', '/**\n * 清理成功扫描到空文件夹后的旧本地曲库状态。'),
     context,
   );
-  return { context, counts };
+  const snapshotSignature = context.localLibrarySnapshotSignature;
+  context.localLibrarySnapshotSignature = (files) => {
+    signatureInputs.push(files);
+    return snapshotSignature(files);
+  };
+  return { context, counts, signatureInputs, backgroundRefreshes };
 }
+
+test('SQLite 启动恢复只为后台增量校验计算一次文件快照签名', async () => {
+  const result = databaseResult('A', 2);
+  result.files[0].size = 12;
+  result.files[0].lastModified = 20;
+  result.files.push({ name: 'A1.lrc', size: 5, lastModified: 25 });
+  let scans = 0;
+  const { context, counts, signatureInputs, backgroundRefreshes } = harness({
+    load: () => result,
+    scan: async () => { scans++; },
+  });
+
+  assert.equal(await context.restoreSavedLocalMusicFolder(), true);
+  assert.equal(counts.loads, 1);
+  assert.equal(scans, 0);
+  assert.equal(signatureInputs.length, 1);
+  assert.equal(signatureInputs[0], result.files);
+  assert.equal(backgroundRefreshes.length, 1);
+  assert.equal(backgroundRefreshes[0].root, 'A');
+  assert.equal(backgroundRefreshes[0].snapshot.signature, '3|2|17|25|A0.mp3|A1.mp3');
+});
 
 test('一万首同根恢复到建库只读取一次数据库和构造一次摘要，不留下文件快照', async () => {
   const { context: c, counts } = harness({ count: 10000 });

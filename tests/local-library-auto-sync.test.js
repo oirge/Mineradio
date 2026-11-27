@@ -25,7 +25,7 @@ function sliceSource(startMarker, endMarker) {
 
 const PATH_KEY_SOURCE = sliceSource(
   'function normalizeLocalLibraryPathKey(value) {',
-  'function localPathDir(file) {'
+  'function localFileBaseName('
 );
 const AUTO_SYNC_SOURCE = sliceSource(
   'var LOCAL_LIBRARY_WATCH_SYNC_DELAY_MS = 700;',

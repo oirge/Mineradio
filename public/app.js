@@ -2124,7 +2124,7 @@ var smoothWheelScrollBound = false;
 var coverProcessToken = 0, aiDepthPipeline = null, aiDepthReady = false, aiDepthBusy = false, aiDepthFailUntil = 0;
 var coverDepthCache = Object.create(null), coverDepthCacheKeys = [], coverDepthCacheKeysHead = 0;
 var aiDepthLastRunAt = 0, aiDepthMinGapMs = 18000;
-var APP_VERSION = '2.8.1';
+var APP_VERSION = '2.8.2';
 var updatePreviewState = {
   visible: true,
   open: false,
@@ -33730,23 +33730,26 @@ function localLibraryFileSignatureFromSong(song) {
     (Number(song.localFileSize || (song.localFile && localFileSize(song.localFile)) || 0) || 0) + '|' +
     (Number(song.localFileLastModified || (song.localFile && localFileLastModified(song.localFile)) || 0) || 0);
 }
-function localPathDir(file) {
-  var p = localFilePath(file);
-  var idx = p.lastIndexOf('/');
-  return idx >= 0 ? p.slice(0, idx + 1) : '';
-}
-function localFileBaseName(file) {
-  var p = localFilePath(file);
-  var idx = p.lastIndexOf('/');
-  var name = (idx >= 0 ? p.slice(idx + 1) : p) || (file && file.name) || '';
+function localFileBaseName(file, filePath, directoryEnd) {
+  if (filePath == null) filePath = localFilePath(file);
+  if (directoryEnd == null) directoryEnd = filePath.lastIndexOf('/') + 1;
+  var name = filePath.slice(directoryEnd) || (file && file.name) || '';
   var dot = name.lastIndexOf('.');
   return dot >= 0 ? name.slice(0, dot) : name;
 }
-function localPathStem(file) {
-  return (localPathDir(file) + localFileBaseName(file)).toLowerCase();
-}
-function localBaseStem(file) {
-  return localFileBaseName(file).toLowerCase();
+function localAssetMatchKeys(file) {
+  var filePath = localFilePath(file);
+  var directoryEnd = filePath.lastIndexOf('/') + 1;
+  var directory = filePath.slice(0, directoryEnd);
+  var stem = localFileBaseName(file, filePath, directoryEnd);
+  return {
+    filePath: filePath,
+    stem: stem,
+    pathKey: (directory + stem).toLowerCase(),
+    baseKey: stem.toLowerCase(),
+    looseKey: normalizeLocalAssetName(stem),
+    dirKey: directory.toLowerCase()
+  };
 }
 function normalizeLocalAssetName(text) {
   return String(text || '')
@@ -33776,9 +33779,10 @@ function buildLocalLyricMaps(files) {
   for (var i = 0; i < length; i++) {
     var file = files[i];
     if (!isLocalLyricFile(file)) continue;
-    pushLocalLyricCandidate(maps.byPath, localPathStem(file), file);
-    pushLocalLyricCandidate(maps.byBase, localBaseStem(file), file);
-    pushLocalLyricCandidate(maps.byLoose, normalizeLocalAssetName(localFileBaseName(file)), file);
+    var keys = localAssetMatchKeys(file);
+    pushLocalLyricCandidate(maps.byPath, keys.pathKey, file);
+    pushLocalLyricCandidate(maps.byBase, keys.baseKey, file);
+    pushLocalLyricCandidate(maps.byLoose, keys.looseKey, file);
   }
   sortLocalLyricCandidateBuckets(maps.byPath);
   sortLocalLyricCandidateBuckets(maps.byBase);
@@ -33853,14 +33857,16 @@ function localLyricCandidateBucket(bucketMap, key) {
  * 找出与音频对应的全部歌词候选。先精确路径，再同目录同名，最后模糊名，同一层内按格式优先级排序。
  * @param {object} audioFile 音频文件。
  * @param {{byPath: object, byBase: object, byLoose: object}} maps 歌词匹配索引。
+ * @param {object} [keys] 已准备的音频文件匹配键。
  * @returns {Array<object>} 候选歌词文件列表，最优先的排在最前。
  */
-function findLocalLyricCandidates(audioFile, maps) {
+function findLocalLyricCandidates(audioFile, maps, keys) {
   maps = maps || {};
+  keys = keys || localAssetMatchKeys(audioFile);
   var buckets = [
-    localLyricCandidateBucket(maps.byPath, localPathStem(audioFile)),
-    localLyricCandidateBucket(maps.byBase, localBaseStem(audioFile)),
-    localLyricCandidateBucket(maps.byLoose, normalizeLocalAssetName(localFileBaseName(audioFile)))
+    localLyricCandidateBucket(maps.byPath, keys.pathKey),
+    localLyricCandidateBucket(maps.byBase, keys.baseKey),
+    localLyricCandidateBucket(maps.byLoose, keys.looseKey)
   ];
   var out = [];
   for (var i = 0; i < buckets.length; i++) {
@@ -33892,31 +33898,25 @@ function buildLocalCoverMaps(files) {
   coverFiles.sort(compareLocalFilePath);
   for (var j = 0; j < coverFiles.length; j++) {
     var file = coverFiles[j];
-    var pathKey = localPathStem(file);
-    var baseKey = localBaseStem(file);
-    var looseKey = normalizeLocalAssetName(localFileBaseName(file));
-    var dirKey = localPathDir(file).toLowerCase();
-    if (pathKey && !maps.byPath[pathKey]) maps.byPath[pathKey] = file;
-    if (baseKey && !maps.byBase[baseKey]) maps.byBase[baseKey] = file;
-    if (looseKey && !maps.byLoose[looseKey]) maps.byLoose[looseKey] = file;
-    if (LOCAL_COVER_NAME_RE.test(localFileBaseName(file)) && !maps.byDirNamed[dirKey]) maps.byDirNamed[dirKey] = file;
+    var keys = localAssetMatchKeys(file);
+    if (keys.pathKey && !maps.byPath[keys.pathKey]) maps.byPath[keys.pathKey] = file;
+    if (keys.baseKey && !maps.byBase[keys.baseKey]) maps.byBase[keys.baseKey] = file;
+    if (keys.looseKey && !maps.byLoose[keys.looseKey]) maps.byLoose[keys.looseKey] = file;
+    if (LOCAL_COVER_NAME_RE.test(keys.stem) && !maps.byDirNamed[keys.dirKey]) maps.byDirNamed[keys.dirKey] = file;
   }
   return maps;
 }
-function findLocalCoverFile(audioFile, maps) {
+function findLocalCoverFile(audioFile, maps, keys) {
   maps = maps || {};
-  var pathKey = localPathStem(audioFile);
-  var baseKey = localBaseStem(audioFile);
-  var looseKey = normalizeLocalAssetName(localFileBaseName(audioFile));
-  var dirKey = localPathDir(audioFile).toLowerCase();
-  return (maps.byPath && maps.byPath[pathKey]) ||
-    (maps.byBase && maps.byBase[baseKey]) ||
-    (maps.byLoose && maps.byLoose[looseKey]) ||
-    (maps.byDirNamed && maps.byDirNamed[dirKey]) ||
+  keys = keys || localAssetMatchKeys(audioFile);
+  return (maps.byPath && maps.byPath[keys.pathKey]) ||
+    (maps.byBase && maps.byBase[keys.baseKey]) ||
+    (maps.byLoose && maps.byLoose[keys.looseKey]) ||
+    (maps.byDirNamed && maps.byDirNamed[keys.dirKey]) ||
     null;
 }
-function localTrackInfoFromFile(file) {
-  var title = localFileBaseName(file) || '本地音乐';
+function localTrackInfoFromFile(file, stem) {
+  var title = (stem == null ? localFileBaseName(file) : stem) || '本地音乐';
   var artist = '';
   var match = title.match(/^\s*(.+?)\s+-\s+(.+?)\s*$/);
   if (match) {
@@ -33930,21 +33930,22 @@ function localSongKeyFromFile(file) {
     (file && file.size || 0) + ':' +
     (file && file.lastModified || 0);
 }
-function makeLocalSongFromFile(file, lyricFile, coverFile, lyricCandidates) {
-  var info = localTrackInfoFromFile(file);
+function makeLocalSongFromFile(file, lyricFile, coverFile, lyricCandidates, keys) {
+  var info = localTrackInfoFromFile(file, keys && keys.stem);
+  var filePath = keys ? keys.filePath : localFilePath(file);
   var candidates = Array.isArray(lyricCandidates) ? lyricCandidates : [];
   var song = hydrateCustomCover({
     type: 'local',
     name: info.title,
     artist: info.artist,
     localKey: localSongKeyFromFile(file),
-    localPath: localFilePath(file),
+    localPath: filePath,
     localFilePathAbsolute: localFullPath(file),
     localFileSize: localFileSize(file),
     localFileLastModified: localFileLastModified(file),
     localLibraryPathKey: localLibraryPathKeyFromFile(file),
     localLibraryFileSignature: localLibraryFileSignatureFromFile(file),
-    localFormat: localAudioFormatLabel({ type:'local', localFile:file, localPath:localFilePath(file), name:info.title }),
+    localFormat: localAudioFormatLabel({ type:'local', localFile:file, localPath:filePath, name:info.title }),
     localFileUrl: localFileUrlFromEntry(file),
     localFile: file,
     localUrl: '',
@@ -33991,20 +33992,22 @@ function applyStoredLocalLyricPick(song) {
  */
 function createLocalSongsFromFiles(files, opts) {
   opts = opts || {};
-  var list = fileListToArray(files);
+  var list = files || [];
   var lyricMaps = buildLocalLyricMaps(list);
   var coverMaps = buildLocalCoverMaps(list);
   var folderOnly = !!opts.folderOnly;
   var audioFiles = [];
-  for (var i = 0; i < list.length; i++) {
+  var length = Number(list.length) || 0;
+  for (var i = 0; i < length; i++) {
     if (isLocalAudioFile(list[i], folderOnly)) audioFiles.push(list[i]);
   }
   audioFiles.sort(compareLocalFilePath);
   var songs = new Array(audioFiles.length);
   for (var j = 0; j < audioFiles.length; j++) {
     var file = audioFiles[j];
-    var lyricCandidates = findLocalLyricCandidates(file, lyricMaps);
-    songs[j] = makeLocalSongFromFile(file, lyricCandidates[0] || null, findLocalCoverFile(file, coverMaps), lyricCandidates);
+    var keys = localAssetMatchKeys(file);
+    var lyricCandidates = findLocalLyricCandidates(file, lyricMaps, keys);
+    songs[j] = makeLocalSongFromFile(file, lyricCandidates[0] || null, findLocalCoverFile(file, coverMaps, keys), lyricCandidates, keys);
   }
   return songs;
 }
@@ -37749,7 +37752,6 @@ async function readLocalLibrarySnapshot(folderPath) {
       folderPath: folderPath,
       savedAt: Date.now(),
       truncated: !!handoff.truncated,
-      signature: localLibrarySnapshotSignature(handoff.files),
       directories: handoff.directories || [],
       files: handoff.files,
       fromDb: true
