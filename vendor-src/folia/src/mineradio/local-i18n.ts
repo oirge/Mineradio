@@ -16,9 +16,10 @@ const localTranslations: BackendModule = {
     },
 };
 
+let requestedLanguage = readLocalLanguage();
 i18n.on('languageChanged', value => { document.documentElement.lang = value; });
 export const localI18nReady = i18n.use(localTranslations).use(initReactI18next).init({
-    lng: readLocalLanguage(),
+    lng: requestedLanguage,
     supportedLngs: ['en', 'zh-CN'],
     // Each locale includes any missing strings from the other at build time.
     fallbackLng: false,
@@ -30,5 +31,12 @@ export const localI18nReady = i18n.use(localTranslations).use(initReactI18next).
     },
     interpolation: { escapeValue: false },
 });
+
+export function syncLocalLanguage(language: typeof requestedLanguage | undefined) {
+    if (!language || language === requestedLanguage) return;
+    // The displayed language can lag behind while a new dictionary loads.
+    requestedLanguage = language;
+    void i18n.changeLanguage(language);
+}
 
 export default i18n;
