@@ -68,24 +68,24 @@ function createLocalLyricParser() {
 }
 
 /**
- * 加载生产文件分类函数，避免只按源码文本判断后缀是否真正可用。
- * @returns {{isLocalAudioFile:(file:object,folderOnly:boolean)=>boolean,isLocalLyricFile:(file:object)=>boolean,isLocalCoverFile:(file:object)=>boolean,buildLocalLyricMaps:(files:Array<object>)=>object,findLocalLyricFile:(file:object,maps:object)=>object|null,buildLocalCoverMaps:(files:Array<object>)=>object,findLocalCoverFile:(file:object,maps:object)=>object|null}} 文件分类和关联入口。
+ * 加载生产文件分类、匹配及歌曲构造函数。
+ * @returns {object} 文件分类、关联和建库入口。
  */
 function createLocalFileClassifier() {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const start = source.indexOf('var LOCAL_AUDIO_FILE_RE =');
-  const end = source.indexOf('function localTrackInfoFromFile(', start);
+  const end = source.indexOf('function countTextReplacementChars(', start);
+  const labelStart = source.indexOf('function localAudioFormatLabel(');
+  const labelEnd = source.indexOf('function localAudioFileBytes(', labelStart);
   assert.ok(start >= 0 && end > start, '未找到本地文件分类实现');
-  const context = { Array, Intl, Math, Number, Object, RegExp, String };
+  assert.ok(labelStart >= 0 && labelEnd > labelStart, '未找到本地音频格式标签实现');
+  const context = {
+    Array, Intl, Math, Number, Object, RegExp, String,
+    hydrateCustomCover: (song) => song,
+    localLyricPickForSong: () => '',
+  };
   vm.runInNewContext(
-    source.slice(start, end)
-      + '\nthis.isLocalAudioFile = isLocalAudioFile;'
-      + '\nthis.isLocalLyricFile = isLocalLyricFile;'
-      + '\nthis.isLocalCoverFile = isLocalCoverFile;'
-      + '\nthis.buildLocalLyricMaps = buildLocalLyricMaps;'
-      + '\nthis.findLocalLyricFile = findLocalLyricFile;'
-      + '\nthis.buildLocalCoverMaps = buildLocalCoverMaps;'
-      + '\nthis.findLocalCoverFile = findLocalCoverFile;',
+    source.slice(start, end) + source.slice(labelStart, labelEnd),
     context,
   );
   return context;
@@ -298,4 +298,60 @@ test('目录内任意杂图不再顶替曲目内嵌封面', () => {
     namedCover,
     '目录同时存在杂图与规范封面时必须选规范封面',
   );
+});
+
+test('稀疏类 FileList 建库保留自然排序、歌词优先级和封面回退，不修改文件条目', () => {
+  const classifier = createLocalFileClassifier();
+  const entry = (folder, name) => Object.freeze({ name, relativePath: `${folder}\\${name}`, size: 8, lastModified: 12 });
+  const track2 = entry('Album', '歌手 - Track 2.WAV');
+  const track10 = entry('Album', '歌手 - Track 10.WAV');
+  const exactLrc = entry('album', '歌手 - Track 2.lrc');
+  const exactVtt = entry('Album', '歌手 - Track 2.vtt');
+  const crossAlbumQrc = entry('Other', '歌手 - Track 2.qrc');
+  const looseLrc = entry('Other', '歌手 - Track 10 (Live).lrc');
+  const trackCover = entry('Album', '歌手 - Track 2.png');
+  const albumCover = entry('Album', 'cover.jpg');
+  const files = Object.freeze({
+    length: 11, 0: track10, 2: exactVtt, 3: trackCover, 4: crossAlbumQrc, 5: null,
+    6: albumCover, 7: track2, 8: exactLrc, 9: looseLrc, 10: entry('Album', 'notes.pdf'),
+  });
+
+  const songs = classifier.createLocalSongsFromFiles(files, { folderOnly: true });
+  assert.deepEqual(Array.from(songs, (song) => [song.artist, song.name, song.localFormat]), [
+    ['歌手', 'Track 2', 'WAV'], ['歌手', 'Track 10', 'WAV'],
+  ]);
+  assert.equal(songs[0].localFile, track2);
+  assert.equal(songs[1].localFile, track10);
+  assert.equal(songs[0].localPath, 'Album/歌手 - Track 2.WAV');
+  assert.equal(songs[0].localLibraryFileSignature, 'album/歌手 - track 2.wav|8|12');
+  assert.equal(songs[0].localLyricFile, exactLrc);
+  assert.deepEqual(Array.from(songs[0].localLyricCandidates), [exactLrc, exactVtt, crossAlbumQrc]);
+  assert.equal(songs[1].localLyricFile, looseLrc);
+  assert.equal(songs[0].localCoverFile, trackCover);
+  assert.equal(songs[1].localCoverFile, albumCover);
+});
+
+test('五千首曲库建库时每个音频及歌词封面只计算一次模糊匹配名', () => {
+  const classifier = createLocalFileClassifier();
+  const files = [];
+  for (let album = 0; album < 50; album++) {
+    files.push({ name: 'cover.jpg', relativePath: `Album ${album}/cover.jpg` });
+    for (let track = 0; track < 100; track++) {
+      const stem = `Track ${album * 100 + track}`;
+      files.push({ name: `${stem}.wav`, relativePath: `Album ${album}/${stem}.wav` });
+      files.push({ name: `${stem}.lrc`, relativePath: `Album ${album}/${stem}.lrc` });
+    }
+  }
+  let normalizations = 0;
+  const normalize = classifier.normalizeLocalAssetName;
+  classifier.normalizeLocalAssetName = (stem) => {
+    normalizations++;
+    return normalize(stem);
+  };
+
+  const songs = classifier.createLocalSongsFromFiles(files, { folderOnly: true });
+  assert.equal(songs.length, 5000);
+  assert.equal(normalizations, files.length);
+  assert.ok(songs.every((song) => song.localLyricFile.relativePath === song.localPath.replace(/\.wav$/, '.lrc')));
+  assert.ok(songs.every((song) => song.localCoverFile.relativePath === song.localPath.replace(/[^/]+$/, 'cover.jpg')));
 });
